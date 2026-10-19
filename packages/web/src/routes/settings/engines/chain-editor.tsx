@@ -3,8 +3,8 @@ import type { FallbackLink } from "@jinn/fallback-chain-wire"
 import { Plus } from "@/components/ui/icon"
 import { Button } from "@/components/ui/button"
 import { engineDisplayName } from "@/lib/engine-names"
-import { blankLink, moveLink, removeLink, replaceLink, type ChainContext } from "./chain-links"
-import { rowProblems, validatorContext } from "./chain-problems"
+import { blankLink, moveLink, removeLink, replaceLink, selfSpellings, type ChainContext } from "./chain-links"
+import { rowProblemsAgainst } from "./chain-problems"
 import { ChainRow, type RowFields } from "./chain-row"
 import { rowShift, useChainDrag } from "./use-chain-drag"
 import { useRowIds } from "./use-row-ids"
@@ -17,7 +17,8 @@ export interface ChainEditorProps {
   /** The engine the chain falls back from. */
   ownEngine: string
   /** The target the chain falls back from, which a link may not repeat. */
-  self: FallbackLink | undefined
+  /** Every spelling of it the gateway refuses: an employee's, with its model and without. */
+  self: FallbackLink | readonly FallbackLink[] | undefined
   /** Where the chain is written, so a refusal names it as the config loader would. */
   where: string
   links: FallbackLink[]
@@ -101,7 +102,8 @@ export function ChainEditor(props: ChainEditorProps) {
   const moves = useChainMoves(links, onChange)
   const { drag, listRef, liftPointerDown, reducedMotion } = useChainDrag(moves.move)
   const ctx: ChainContext = { engines: Object.values(fields.registry.engines), profiles: fields.profiles }
-  const problems = rowProblems(where, links, validatorContext(ctx, self))
+  const selves = selfSpellings(self)
+  const problems = rowProblemsAgainst(where, links, ctx, selves)
   const rowFields: RowFields = { ...fields, ownEngine, chainName }
 
   return (
@@ -137,7 +139,7 @@ export function ChainEditor(props: ChainEditorProps) {
         size="sm"
         className="mt-[var(--space-2)]"
         aria-label={`Add a target to the ${chainName}`}
-        onClick={() => onChange([...links, blankLink(ctx, links, self)])}
+        onClick={() => onChange([...links, blankLink(ctx, links, selves)])}
       >
         <Plus size={14} aria-hidden />
         Add a fallback target

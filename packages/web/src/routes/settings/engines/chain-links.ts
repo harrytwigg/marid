@@ -127,13 +127,20 @@ export function rowLabel(link: FallbackLink): string {
  * is not `self`. The latter is a duplicate, which the row says so the operator
  * changes it.
  */
-export function blankLink(ctx: ChainContext, links: FallbackLink[], self: FallbackLink | undefined): FallbackLink {
-  const taken = new Set(links.map(fallbackLinkKey))
-  if (self) taken.add(fallbackLinkKey(self))
+export function blankLink(ctx: ChainContext, links: FallbackLink[], self: FallbackLink | readonly FallbackLink[] | undefined): FallbackLink {
+  const selves = selfSpellings(self)
+  const taken = new Set([...links, ...selves].map(fallbackLinkKey))
   const names = ctx.engines.map((e) => e.name)
   const installed = ctx.engines.filter((e) => e.available).map((e) => e.name)
   const free = installed.find((name) => !taken.has(fallbackLinkKey({ engine: name })))
-  return { engine: free ?? names.find((name) => name !== self?.engine) ?? names[0] ?? "claude" }
+  const own = new Set(selves.map((s) => s.engine))
+  return { engine: free ?? names.find((name) => !own.has(name)) ?? names[0] ?? "claude" }
+}
+
+/** The target a chain falls back from, as every spelling a link may not repeat. */
+export function selfSpellings(self: FallbackLink | readonly FallbackLink[] | undefined): readonly FallbackLink[] {
+  if (self === undefined) return []
+  return Array.isArray(self) ? self : [self as FallbackLink]
 }
 
 /**

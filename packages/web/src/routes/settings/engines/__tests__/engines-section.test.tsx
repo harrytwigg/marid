@@ -20,6 +20,7 @@ const apiMocks = vi.hoisted(() => ({
 const fetchTalkCapability = vi.hoisted(() => vi.fn())
 const registry = vi.hoisted(() => ({ current: undefined as unknown }))
 const chains = vi.hoisted(() => ({ current: undefined as unknown }))
+// `'failed'` stands for a chains request that errored.
 
 vi.mock('@/lib/api', () => ({ api: apiMocks }))
 vi.mock('@/lib/talk-capability', () => ({ fetchTalkCapability }))
@@ -44,7 +45,7 @@ vi.mock('@/hooks/use-model-registry', async (importActual) => ({
 }))
 vi.mock('@/hooks/use-fallback-chains', async (importActual) => ({
   ...(await importActual<typeof import('@/hooks/use-fallback-chains')>()),
-  useFallbackChains: () => ({ data: chains.current }),
+  useFallbackChains: () => ({ data: chains.current, isError: chains.current === 'failed' }),
 }))
 vi.mock('@/hooks/use-onboarding', () => ({ useOnboarding: () => ({ data: undefined }) }))
 vi.mock('@/components/ui/emoji-picker', () => ({ EmojiPicker: () => null }))
@@ -251,6 +252,16 @@ describe('Engine Fallbacks section', () => {
     await renderSettings()
 
     expect(document.querySelector('[data-engine-card="claude"] [data-chain-loading]')).toBeTruthy()
+    expect(engineRows('claude')).toEqual([])
+  })
+
+  it('says the gateway could not be read, rather than loading for ever, when the chains request fails', async () => {
+    loadConfig({ engines: { claude: { fallback: ['codex', { engine: 'opencode', model: 'x/two' }] } } })
+    chains.current = 'failed'
+    await renderSettings()
+
+    expect(document.querySelector('[data-engine-card="claude"] [data-chain-unreadable]')?.textContent).toContain('could not say how this chain runs')
+    expect(document.querySelector('[data-engine-card="claude"] [data-chain-loading]')).toBeNull()
     expect(engineRows('claude')).toEqual([])
   })
 

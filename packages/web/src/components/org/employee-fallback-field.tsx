@@ -90,8 +90,8 @@ function ChainChoice({ custom, ready, inherited, onChange }: {
 export function EmployeeFallbackField({ employee, engine, value, onChange, onBlockedChange }: EmployeeFallbackFieldProps) {
   const { data: registry } = useModelRegistry()
   const { data: chains } = useFallbackChains(employee.name)
-  const { inherited, self, shown, own, subject, changed } = fallbackFieldState(employee, engine, value, chains)
-  const blocked = chainBlocked(registry, own, self, chains, changed)
+  const { inherited, self, selves, shown, own, subject, changed } = fallbackFieldState(employee, engine, value, chains)
+  const blocked = chainBlocked(registry, own, selves, chains, changed)
   useEffect(() => { onBlockedChange?.(blocked) }, [blocked, onBlockedChange])
   if (!registry) return null
 
@@ -106,7 +106,7 @@ export function EmployeeFallbackField({ employee, engine, value, onChange, onBlo
           <ChainEditor
             chainName={`${employee.displayName || employee.name} chain`}
             ownEngine={engine}
-            self={self}
+            self={selves}
             where="fallback"
             links={own.links}
             expanded={own.expanded}

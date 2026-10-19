@@ -198,3 +198,12 @@ describe("the gateway's source decides an employee's inherited chain", () => {
     expect(onChange).toHaveBeenCalledWith([{ engine: "claude", profile: "B" }, { engine: "codex" }])
   })
 })
+
+describe("before the gateway has answered", () => {
+  it("marks nothing as a preview: nothing is unsaved", () => {
+    chains.current = undefined
+    render(<EmployeeFallbackField employee={{ ...EMP, claudeProfile: null }} engine="claude" value={null} onChange={() => {}} />)
+    expect(document.querySelector("[data-chain-preview]")).toBeNull()
+  })
+})
+

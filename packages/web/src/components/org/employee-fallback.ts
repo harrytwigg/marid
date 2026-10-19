@@ -10,7 +10,7 @@ import type { Employee } from "@/lib/api"
 import { engineDisplayName } from "@/lib/engine-names"
 import type { EnginesResponse } from "@/lib/api"
 import { linkOfResolved } from "@/routes/settings/engines/chain-links"
-import { rowProblems, validatorContext } from "@/routes/settings/engines/chain-problems"
+import { rowProblemsAgainst } from "@/routes/settings/engines/chain-problems"
 
 /* What the employee screens need to know about a chain: whether it is the
  * employee's own, where an inherited one comes from, and what would run. */
@@ -72,10 +72,10 @@ export function inheritedChain(
   chains: FallbackChainsResponse | undefined,
 ): InheritedChain {
   if (engine === "claude" && account) {
-    return { label: inheritedLabel("account", account, engine), links: subjectOf(chains, "account", account)?.effective.map(linkOfResolved) ?? [], preview: true, source: "account" }
+    return { label: inheritedLabel("account", account, engine), links: subjectOf(chains, "account", account)?.effective.map(linkOfResolved) ?? [], preview: false, source: "account" }
   }
-  if (engine === "claude" && claudeProfile) return { label: inheritedLabel("none", undefined, engine), links: [], preview: true, source: "none" }
-  return { label: inheritedLabel("engine", engine, engine), links: subjectOf(chains, "engine", engine)?.effective.map(linkOfResolved) ?? [], preview: true, source: "engine" }
+  if (engine === "claude" && claudeProfile) return { label: inheritedLabel("none", undefined, engine), links: [], preview: false, source: "none" }
+  return { label: inheritedLabel("engine", engine, engine), links: subjectOf(chains, "engine", engine)?.effective.map(linkOfResolved) ?? [], preview: false, source: "engine" }
 }
 
 export function employeeSubject(chains: FallbackChainsResponse | undefined, name: string): FallbackChainSubject | undefined {
@@ -89,10 +89,14 @@ export function employeeSubject(chains: FallbackChainsResponse | undefined, name
  * when the operator has just chosen "use the default" over one; only in those two cases is the chain
  * worked out here, and it is marked a preview.
  */
-function serverInherited(subject: FallbackChainSubject | undefined, derived: InheritedChain, unsaved: boolean): InheritedChain {
-  const source = subject?.source
-  if (subject === undefined || unsaved || source === undefined || source === "employee") return derived
-  return { label: inheritedLabel(source, subject.sourceId, derived.label), links: subject.effective.map(linkOfResolved), preview: false, source }
+function serverInherited(subject: FallbackChainSubject | undefined, derived: InheritedChain, unsaved: boolean, engine: string): InheritedChain {
+  // A subject that writes a chain is the employee's own, whether or not it says so in `source`.
+  const source = subject?.source ?? (subject && subject.configured !== null ? "employee" : undefined)
+  // Worked out here for an unsaved change: an engine the gateway has not seen, or "use the default" over a stored custom chain.
+  if (unsaved || source === "employee") return { ...derived, preview: true }
+  // No answer from the gateway yet (or none at all): nothing unsaved to preview.
+  if (subject === undefined || source === undefined) return derived
+  return { label: inheritedLabel(source, subject.sourceId, engine), links: subject.effective.map(linkOfResolved), preview: false, source }
 }
 
 /** The chain the editor shows and edits. */
@@ -126,24 +130,26 @@ export function fallbackFieldState(
 ) {
   const account = engine === "claude" ? declaredAccountOf(employee.claudeProfile, chains) : undefined
   const subject = employeeSubject(chains, employee.name)
-  const inherited = serverInherited(subject, inheritedChain(engine, employee.claudeProfile, account, chains), engine !== employee.engine)
+  const inherited = serverInherited(subject, inheritedChain(engine, employee.claudeProfile, account, chains), engine !== employee.engine, engine)
   // The employee's own target, as the gateway refuses a link to it: with its model while the engine is the saved one.
   const ownModel = engine === employee.engine && employee.model ? { model: employee.model } : {}
   const self: FallbackLink = { engine, ...(account ? { profile: account } : {}), ...ownModel }
+  // The gateway refuses a link to the own target with the model and without it: both are checked.
+  const selves: FallbackLink[] = ownModel.model ? [self, { engine, ...(account ? { profile: account } : {}) }] : [self]
   const own = value === null ? null : ownChainOf(employee, value, subject)
   const changed = !sameChain(value, employeeChainOf(employee))
-  return { inherited, self, shown: own?.links ?? inherited.links, own, subject, changed }
+  return { inherited, self, selves, shown: own?.links ?? inherited.links, own, subject, changed }
 }
 
 /** How many problems the validator finds in an employee's own chain: a chain with any is not saved. */
 export function chainProblemCount(
   links: FallbackLink[],
-  self: FallbackLink,
+  selves: readonly FallbackLink[],
   registry: EnginesResponse,
   chains: FallbackChainsResponse | undefined,
 ): number {
   const ctx = { engines: Object.values(registry.engines), profiles: chains?.profiles.map((p) => p.name) ?? [] }
-  const found = rowProblems("fallback", links, validatorContext(ctx, self))
+  const found = rowProblemsAgainst("fallback", links, ctx, selves)
   return found.byRow.flat().length + found.general.length
 }
 
@@ -158,9 +164,9 @@ export { subjectProblems } from "@/hooks/use-fallback-chains"
 export function chainBlocked(
   registry: EnginesResponse | undefined,
   own: OwnChain | null,
-  self: FallbackLink,
+  selves: readonly FallbackLink[],
   chains: FallbackChainsResponse | undefined,
   changed: boolean,
 ): boolean {
-  return changed && registry !== undefined && own !== null && chainProblemCount(own.links, self, registry, chains) > 0
+  return changed && registry !== undefined && own !== null && chainProblemCount(own.links, selves, registry, chains) > 0
 }

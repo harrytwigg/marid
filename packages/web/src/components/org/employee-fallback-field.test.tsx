@@ -102,10 +102,23 @@ describe("EmployeeFallbackField", () => {
     )
   })
 
-  it("accepts the own profile with no model, as the gateway does: it is not the own target as written", () => {
+  it("refuses the own profile with no model too, as the gateway does: it runs the own model on the own account", () => {
     render(<EmployeeFallbackField employee={EMP} engine="claude" value={[{ engine: "claude", profile: "work" }]} onChange={() => {}} />)
 
-    expect(document.querySelector("[data-chain-problem]")).toBeNull()
+    expect(document.querySelector("[data-chain-problem]")?.textContent).toBe(
+      "fallback[0] (claude · work) is the target this chain falls back from; give it another profile or model",
+    )
+  })
+
+  it("refuses a bare link to the own engine of an employee on the default profile", () => {
+    const onDefault = { ...EMP, engine: "codex", model: "m", claudeProfile: null }
+    const onBlockedChange = vi.fn()
+    render(<EmployeeFallbackField employee={onDefault} engine="codex" value={[{ engine: "codex" }]} onChange={() => {}} onBlockedChange={onBlockedChange} />)
+
+    expect(document.querySelector("[data-chain-problem]")?.textContent).toBe(
+      "fallback[0] (codex) is the target this chain falls back from; give it another profile or model",
+    )
+    expect(onBlockedChange).toHaveBeenLastCalledWith(true)
   })
 
   it("shows the gateway's problems with the stored employee chain", () => {

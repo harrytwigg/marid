@@ -185,3 +185,16 @@ describe('writeLinks', () => {
     expect(out[2]).toEqual({ engine: 'grok' })
   })
 })
+
+describe('blankLink against every spelling of the own target', () => {
+  it('never proposes the own engine, bare or with its model', () => {
+    const ctx: ChainContext = {
+      engines: [{ name: 'claude', available: true }, { name: 'opencode', available: true }, { name: 'codex', available: true }] as ChainContext['engines'],
+      profiles: [],
+    }
+    const selves = [{ engine: 'opencode', model: 'p/m' }, { engine: 'opencode' }]
+    expect(blankLink(ctx, [{ engine: 'claude' }], selves)).toEqual({ engine: 'codex' })
+    expect(blankLink(ctx, [{ engine: 'claude' }, { engine: 'codex' }], selves).engine).not.toBe('opencode')
+  })
+})
+

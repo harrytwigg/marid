@@ -32,6 +32,7 @@ interface SectionContext {
   engines: EnginesConfig | undefined
   registry: EnginesResponse
   chains: FallbackChainsResponse | undefined
+  chainsFailed: boolean
   onChange: EnginesSectionProps["onChange"]
 }
 
@@ -39,6 +40,7 @@ function bodyForEngine(name: string, ctx: SectionContext): ChainBodyProps {
   return {
     entries: chainEntriesFor(ctx.engines, name),
     subject: findSubject(ctx.chains?.subjects, "engine", name),
+    chainsFailed: ctx.chainsFailed,
     chainName: chainNameOf(name),
     ownEngine: name,
     self: { engine: name },
@@ -53,6 +55,7 @@ function bodyForAccount(account: string, ctx: SectionContext): ChainBodyProps {
   return {
     entries: accountEntriesFor(ctx.engines, account),
     subject: findSubject(ctx.chains?.subjects, "account", account),
+    chainsFailed: ctx.chainsFailed,
     chainName: chainNameOf("claude", account),
     ownEngine: "claude",
     self: { engine: "claude", profile: account },
@@ -89,8 +92,8 @@ export function EnginesSection({ engines, sessions, onChange }: EnginesSectionPr
 
 /** The section once the registry is known: reads the gateway's view of the chains beside it. */
 function EnginesBody({ engines, sessions, onChange, registry }: EnginesSectionProps & { registry: EnginesResponse }) {
-  const { data: chains } = useFallbackChains()
-  const ctx: SectionContext = { engines, registry, chains, onChange }
+  const { data: chains, isError: chainsFailed } = useFallbackChains()
+  const ctx: SectionContext = { engines, registry, chains, chainsFailed, onChange }
   const legacy = legacyFallbackEngine(sessions)
 
   return (

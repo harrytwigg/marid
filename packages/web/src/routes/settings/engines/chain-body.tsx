@@ -11,6 +11,8 @@ export interface ChainBodyProps {
   entries: FallbackChainEntry[]
   /** What the gateway says of this chain; absent until it has answered. */
   subject: FallbackChainSubject | undefined
+  /** The gateway's chains could not be read. */
+  chainsFailed?: boolean
   chainName: string
   ownEngine: string
   self: FallbackLink
@@ -37,7 +39,9 @@ export function ChainBody(props: ChainBodyProps) {
   // A chain written in engine names is edited as it runs, which only the gateway can say: an edit
   // before its answer would save the bare names' links and drop what they expand to.
   if (shown.legacy && !props.subject) {
-    return <p data-chain-loading className="mt-[var(--space-2)] text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">Loading the chain as it runs…</p>
+    return props.chainsFailed
+      ? <p data-chain-unreadable role="alert" className="mt-[var(--space-2)] text-[length:var(--text-caption1)] text-[var(--text-secondary)]">The gateway could not say how this chain runs, so it can't be edited here. Reload to try again.</p>
+      : <p data-chain-loading className="mt-[var(--space-2)] text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">Loading the chain as it runs…</p>
   }
   return (
     <>

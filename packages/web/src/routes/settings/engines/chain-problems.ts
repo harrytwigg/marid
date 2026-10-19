@@ -77,3 +77,23 @@ export function chainSaveBlocker(
     .flatMap(({ where, chain, self }) => fallbackChainProblems(where, chain, { ...ctx, self }))
   return problems.length > 0 ? `Cannot save: ${problems.join("; ")}` : null
 }
+
+/**
+ * The problems of each row against every spelling of the target the chain falls back from.
+ * An employee's own target has two: with its model, and without one (a link with no model runs
+ * the own model on the own engine), and the gateway refuses both. A sentence found twice is kept once.
+ */
+export function rowProblemsAgainst(
+  where: string,
+  links: FallbackLink[],
+  ctx: ChainContext,
+  selves: readonly FallbackLink[],
+): { byRow: string[][]; general: string[] } {
+  const runs = (selves.length > 0 ? selves : [undefined]).map((self) => rowProblems(where, links, validatorContext(ctx, self)))
+  const unique = (lists: string[][]) => [...new Set(lists.flat())]
+  return {
+    byRow: links.map((_, i) => unique(runs.map((run) => run.byRow[i] ?? []))),
+    general: unique(runs.map((run) => run.general)),
+  }
+}
+
