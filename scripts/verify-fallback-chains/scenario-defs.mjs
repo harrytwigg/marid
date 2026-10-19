@@ -10,7 +10,9 @@ import { expectEqual, expectTrue, triesBy, walkOf } from "./lib.mjs";
 const RATE_LIMITS = ["rate-limit", "quota"];
 const WALK_A = "claude/profile-a/opus:rate-limit -> claude/profile-b/sonnet:rate-limit -> opencode/x-provider/model-x:rate-limit -> opencode/y-provider/model-y:ok";
 const linkKey = (link) => `${link.engine}|${link.profile ?? ""}|${link.model ?? ""}`;
-const hopTargets = (session) => [...(session.transportMeta?.fallbackHops ?? [])].reverse().map((hop) => hop.to);
+/** The hops the session API reports (`fallback.chain.hops`, most recent first), oldest first. */
+const chainHops = (session) => [...(session.fallback?.chain?.hops ?? [])].reverse();
+const hopTargets = (session) => chainHops(session).map((hop) => hop.to);
 
 /** The session API's own account of where a session was served and how it got there. */
 function expectServedBy(session, link) {
@@ -31,7 +33,7 @@ async function fourLinkWalk(h) {
   expectEqual("the walk the ledger recorded", walkOf(rows), WALK_A);
   expectEqual("profile directories", [rows[0].profileDir, rows[1].profileDir], [profileDirs.A, profileDirs.B]);
   expectEqual("hop targets in order", hopTargets(session), [claudeB, opencodeX, opencodeY].map(linkKey));
-  expectTrue("every hop is a limit", (session.transportMeta?.fallbackHops ?? []).every((hop) => RATE_LIMITS.includes(hop.reason)));
+  expectTrue("every hop is a limit", chainHops(session).every((hop) => RATE_LIMITS.includes(hop.reason)));
   expectServedBy(session, opencodeY);
   expectEqual("session status", session.status, "idle");
 }
@@ -46,9 +48,8 @@ async function everyLinkLimited(h) {
   const rows = h.rowsFor(tag);
   expectEqual("each target tried exactly once", triesBy(rows), { "claude|profile-a|opus": 1, "claude|profile-b|sonnet": 1, "opencode|x-provider/model-x": 1, "opencode|y-provider/model-y": 1 });
   expectEqual("session status", session.status, "waiting");
-  expectEqual("the run out of chain is recorded", session.transportMeta?.fallbackHops?.[0]?.to, null);
-  await new Promise((resolve) => setTimeout(resolve, 4000));
-  expectEqual("no target retried while it waits", h.rowsFor(tag).length, rows.length);
+  expectEqual("the run out of chain is recorded", session.fallback?.chain?.hops?.[0]?.to, null);
+  // settled() already held the ledger still for its quiet window, and the wait is for the reset an hour away.
 }
 
 async function loopGuard(h) {
@@ -64,8 +65,6 @@ async function loopGuard(h) {
   const rows = h.rowsFor(tag);
   expectEqual("each target of the cycle tried once", triesBy(rows), { "claude|default|opus": 1, "claude|profile-a|opus": 1, [`opencode|${h.layout.opencodeModels.own}`]: 1 });
   expectEqual("session status", session.status, "waiting");
-  await new Promise((resolve) => setTimeout(resolve, 4000));
-  expectEqual("no target retried", h.rowsFor(tag).length, rows.length);
 }
 
 async function employeeOverride(h) {

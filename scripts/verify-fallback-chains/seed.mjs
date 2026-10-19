@@ -26,6 +26,13 @@ if (mode !== "run" && mode !== "server") throw new Error(`seed.mjs: --mode is ru
 // The instance home is a child of the temporary host home, the way jinn-sandbox.sh lays it out.
 if (path.dirname(sandboxHome) !== hostHome) throw new Error(`seed.mjs: ${sandboxHome} is not directly inside the temporary host home ${hostHome}`);
 
+/** own, x, y: the model the opencode employee runs on, and the two a chain hops through. */
+function opencodeModelsFromEnv() {
+  const [own, x, y] = (process.env.FAKE_PROVIDER_OPENCODE_MODELS ?? "").split(",").map((model) => model.trim());
+  if (!own || !x || !y) throw new Error("seed.mjs: FAKE_PROVIDER_OPENCODE_MODELS must list the own, x and y models");
+  return { own, x, y };
+}
+
 export const LAYOUT = {
   profiles: { A: path.join(hostHome, "profile-a"), B: path.join(hostHome, "profile-b") },
   defaultProfile: path.join(sandboxHome, ".claude-sandbox"),
@@ -34,7 +41,8 @@ export const LAYOUT = {
     opencode: path.join(harnessRoot, "packages/jinn/src/engines/__tests__/fixtures/fake-opencode.mjs"),
   },
   // The opencode models the scenarios use: the session's own, and the two a chain hops through.
-  opencodeModels: { own: "own-provider/model-own", x: "x-provider/model-x", y: "y-provider/model-y" },
+  // From the script (FAKE_PROVIDER_OPENCODE_MODELS), which also hands them to the fake `opencode models`.
+  opencodeModels: opencodeModelsFromEnv(),
   employees: {
     onA: "dev-on-a", onDefault: "dev-on-default", onOpencode: "dev-on-opencode", override: "dev-override",
   },

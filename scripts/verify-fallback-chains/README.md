@@ -112,7 +112,7 @@ scripts/verify-fallback-chains.sh --skip-build --mode run --only a --keep --reta
 `--keep` leaves the last instance running and prints its URL, home (the token is
 `gateway.json` there) and the teardown command; redirect its output to a file, as above, or a
 caller waiting on the pipe waits on the gateway. Drive a browser at it (headless Firefox, or
-Chromium with the DRM device hidden on a host with a wedged GPU), then:
+Chromium), then:
 
 ```sh
 scripts/verify-fallback-chains.sh --teardown <verification root>

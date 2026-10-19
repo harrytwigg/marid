@@ -28,9 +28,14 @@
 //
 // Every invocation that takes an outcome is appended to the JSONL ledger
 // (FAKE_PROVIDER_LEDGER=<path>), which is also how the nth invocation is counted, so the
-// ledger is the single source of truth for what ran.
+// ledger is the single source of truth for what ran. A scenario file may carry a
+// `_generation` marker: rows are stamped with it and only rows of the current generation
+// are counted, so a rewritten scenario starts every sequence over.
 import fs from "node:fs";
 import path from "node:path";
+
+/** The marker a scenario file may carry to start every sequence over. */
+export const GENERATION_KEY = "_generation";
 
 export const OUTCOMES = ["ok", "rate-limit", "hang", "fail", "signed-out", "retry-abandon"];
 
@@ -65,7 +70,7 @@ function sectionProblems(engine, section) {
 /** Problems with a scenario document (empty = valid). */
 export function scenarioProblems(scenario) {
   if (!isMapping(scenario)) return ["a scenario is an object with a claude and an opencode section"];
-  return Object.entries(scenario).flatMap(([engine, section]) => sectionProblems(engine, section));
+  return Object.entries(scenario).filter(([engine]) => engine !== GENERATION_KEY).flatMap(([engine, section]) => sectionProblems(engine, section));
 }
 
 /** The scenario file named by the environment, or an empty scenario when none is. */
@@ -116,7 +121,8 @@ export function pickOutcome(scenario, engine, keys, ledger = readLedger()) {
   const key = keys.find((candidate) => Object.hasOwn(section, candidate));
   if (key === undefined) return { outcome: { outcome: "ok" }, scenarioKey: null, step: 0 };
   const items = Array.isArray(section[key]) ? section[key] : [section[key]];
-  const step = ledger.filter((row) => row.engine === engine && row.scenarioKey === key && row.consumed).length;
+  const generation = scenario[GENERATION_KEY] ?? null;
+  const step = ledger.filter((row) => row.engine === engine && row.scenarioKey === key && row.consumed && (row.generation ?? null) === generation).length;
   const parsed = parseOutcome(items[Math.min(step, items.length - 1)]);
   if (parsed.problem) throw new Error(`${engine}["${key}"]: ${parsed.problem}`);
   return { outcome: parsed.outcome, scenarioKey: key, step };

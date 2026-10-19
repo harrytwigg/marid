@@ -121,10 +121,11 @@ function limited(outcome) {
   fire("StopFailure", stopFailurePayload(base, "rate_limit", message, message));
 }
 
-function failed(outcome, error, details) {
-  const message = details ?? "fake provider failure";
+/** A failure that is not a limit: `error` is the StopFailure code, the outcome's own `error` its text. */
+function failed(outcome, error, text) {
+  const message = outcome.error ?? text;
   record("assistant", message, true);
-  fire("StopFailure", stopFailurePayload(base, error, outcome.error ?? message, message));
+  fire("StopFailure", stopFailurePayload(base, error, message, message));
 }
 
 function answered(text) {
@@ -137,7 +138,7 @@ function answered(text) {
 function turn(text) {
   const { outcome, scenarioKey, step } = pickOutcome(scenario, "claude", claudeKeys(profile, model));
   ledger({
-    outcome: outcome.outcome, scenarioKey, step, consumed: true, warm: turns > 0, sessionId,
+    outcome: outcome.outcome, scenarioKey, step, generation: scenario._generation ?? null, consumed: true, warm: turns > 0, sessionId,
     promptHead: promptHead(text), tag: promptTag(text), marks: promptMarks(text),
   });
   turns += 1;
@@ -146,7 +147,7 @@ function turn(text) {
   if (outcome.outcome === "hang") { hanging = true; return; }
   if (outcome.outcome === "rate-limit") limited(outcome);
   else if (outcome.outcome === "signed-out") failed(outcome, "authentication_failed", "Invalid API key · Please run /login");
-  else if (outcome.outcome === "fail") failed(outcome, outcome.error ?? "max_output_tokens");
+  else if (outcome.outcome === "fail") failed(outcome, "max_output_tokens", "fake provider failure");
   else answered(text);
 }
 

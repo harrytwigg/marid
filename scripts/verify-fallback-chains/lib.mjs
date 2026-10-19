@@ -58,9 +58,15 @@ export class Harness {
     if (result.status !== 200) throw new Error(`PUT /api/config refused (${result.status}): ${result.body?.error ?? JSON.stringify(result.body)}`);
   }
 
-  /** The fake providers read the scenario file on every invocation. */
+  /**
+   * The fake providers read the scenario file on every invocation, so it is replaced in one rename. Each
+   * write is a new generation: the fakes count a sequence's nth invocation within the generation only.
+   */
   writeScenario(scenario) {
-    fs.writeFileSync(this.args.scenarioFile, `${JSON.stringify(scenario, null, 2)}\n`);
+    this.generation = (this.generation ?? 0) + 1;
+    const staged = `${this.args.scenarioFile}.tmp`;
+    fs.writeFileSync(staged, `${JSON.stringify({ ...scenario, _generation: `${process.pid}-${this.generation}` }, null, 2)}\n`);
+    fs.renameSync(staged, this.args.scenarioFile);
   }
 
   ledger() {

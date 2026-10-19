@@ -23,10 +23,11 @@ const DIRECTIVES = { ok: "", "rate-limit": "PROVIDERGIVEUP", "retry-abandon": "P
 
 /** The outcome for one turn, recorded in the ledger. */
 export function takeOutcome({ model, resume, text, mode, sessionId }) {
-  const { outcome, scenarioKey, step } = pickOutcome(loadScenario(), "opencode", opencodeKeys(model));
+  const scenario = loadScenario();
+  const { outcome, scenarioKey, step } = pickOutcome(scenario, "opencode", opencodeKeys(model));
   appendLedger({
     engine: "opencode", mode, profileDir: null, profile: null, model, resume: resume ?? null,
-    sessionId: sessionId ?? resume ?? null, promptHead: promptHead(text), tag: promptTag(text), marks: promptMarks(text), outcome: outcome.outcome, scenarioKey, step, consumed: true,
+    sessionId: sessionId ?? resume ?? null, promptHead: promptHead(text), tag: promptTag(text), marks: promptMarks(text), outcome: outcome.outcome, scenarioKey, step, generation: scenario._generation ?? null, consumed: true,
   });
   return outcome;
 }
@@ -70,10 +71,15 @@ export function runTurnLines(outcome, { sessionID, model, version }) {
   }
 }
 
-/** `opencode models [--verbose]`: every model the scenario names, so no chain link reads as unserved. */
+/**
+ * `opencode models [--verbose]`: the models the instance was seeded with (FAKE_PROVIDER_OPENCODE_MODELS,
+ * comma separated) and any the scenario names, so a chain link never reads as unserved because of
+ * which scenario happened to be loaded when the gateway last refreshed its listing.
+ */
 export function modelsListing(verbose) {
-  const keys = Object.keys(loadScenario().opencode ?? {}).filter((key) => key.includes("/") && !key.includes("*"));
-  const models = [...new Set([...keys, "opencode/fake-default"])];
+  const seeded = (process.env.FAKE_PROVIDER_OPENCODE_MODELS ?? "").split(",").map((model) => model.trim()).filter(Boolean);
+  const named = Object.keys(loadScenario().opencode ?? {}).filter((key) => key.includes("/") && !key.includes("*"));
+  const models = [...new Set([...seeded, ...named, "opencode/fake-default"])];
   return models.map((key) => {
     const [providerID, ...rest] = key.split("/");
     const record = JSON.stringify({ id: rest.join("/"), providerID, name: rest.join("/"), limit: { context: 200000, output: 8192 }, variants: {} }, null, 2);

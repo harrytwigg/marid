@@ -62,6 +62,15 @@ describe("scenario parsing", () => {
     expect(pickOutcome(scenario, "claude", claudeKeys("a", "opus"), unconsumed).outcome.outcome).toBe("rate-limit");
   });
 
+  it("counts a sequence within the scenario's generation only, so a rewritten scenario starts over", () => {
+    const scenario = { _generation: "g2", claude: { "a|opus": ["ok", "rate-limit"] } };
+    const older = [{ engine: "claude", scenarioKey: "a|opus", consumed: true, generation: "g1" }];
+    const pick = (rows: object[]) => pickOutcome(scenario, "claude", claudeKeys("a", "opus"), rows).outcome.outcome;
+    expect(pick(older)).toBe("ok");
+    expect(pick([...older, { engine: "claude", scenarioKey: "a|opus", consumed: true, generation: "g2" }])).toBe("rate-limit");
+    expect(scenarioProblems(scenario)).toEqual([]);
+  });
+
   it("keys an opencode turn by provider/model and labels the gateway's own profile as default", () => {
     expect(opencodeKeys("x-provider/model-x")).toEqual(["x-provider/model-x", "x-provider/*", "*"]);
     expect(profileLabel(undefined)).toBe("default");
@@ -228,5 +237,9 @@ describe("the fakes as processes", { timeout: 30_000 }, () => {
     const models = spawnSync(process.execPath, [FAKE_OPENCODE, "models"], { env: env(), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     expect(models.stdout.split("\n")).toContain("x/limited");
     expect(modelsListing(true)).toContain("\"providerID\": \"opencode\"");
+    // The seeded models are listed whatever scenario is loaded, so a link never reads as unserved for want of a mention.
+    fs.writeFileSync(files().scenario, "{}");
+    const seeded = spawnSync(process.execPath, [FAKE_OPENCODE, "models"], { env: { ...env(), FAKE_PROVIDER_OPENCODE_MODELS: "own/m, x/y" }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    expect(seeded.stdout.split("\n")).toEqual(expect.arrayContaining(["own/m", "x/y"]));
   });
 });

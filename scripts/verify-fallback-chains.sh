@@ -2,7 +2,7 @@
 # Throwaway gateway with fake providers, and the fallback chain scenarios driven against it.
 #
 #   scripts/verify-fallback-chains.sh [--mode run|server|both] [--only a,b] [--pending a,b]
-#                                     [--port N] [--keep] [--retain DIR] [--skip-build]
+#                                     [--port N] [--keep] [--retain DIR] [--skip-build] [--strict]
 #   scripts/verify-fallback-chains.sh --teardown <verify root printed by --keep>
 #
 # Nothing here uses real usage or quota. Only the upstream providers are fake: the real
@@ -33,9 +33,8 @@
 # from, e.g. main, with this checkout's fakes and scenarios).
 set -euo pipefail
 
-# The caller's shell may carry a live instance (a Marid session exports its home, port and
-# gateway identity). None of it is inert here, so it is dropped before anything reads it, and
-# the instance itself starts under `env -i`.
+# The caller's environment may name a gateway instance (home, port, identity). None of it is
+# inert here, so it is dropped before anything reads it, and the instance starts under `env -i`.
 unset JINN_HOME JINN_PORT JINN_HOST JINN_INSTANCE JINN_GATEWAY_URL JINN_GATEWAY_TOKEN JINN_SESSION_ID \
   JINN_SESSION_CAPABILITY JINN_TAKE_PORT JINN_BINDING_HOME JINN_HOME_IDENTITY CLAUDE_CONFIG_DIR
 
@@ -59,7 +58,7 @@ while [[ $# -gt 0 ]]; do
     --skip-build) SKIP_BUILD=1; shift ;;
     --strict) STRICT=1; shift ;;
     --teardown) TEARDOWN="${2:?--teardown needs the verification root}"; shift 2 ;;
-    -h|--help) sed -n '2,38p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help) sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d'; exit 0 ;;
     *) die "unknown flag: $1" ;;
   esac
 done
@@ -104,6 +103,7 @@ check_port() {
 instance_env() {
   env -i PATH="$VERIFY_ROOT/bin:$NODE_DIR:/usr/bin:/bin" HOME="$HOST_HOME" LANG=C.UTF-8 TERM=dumb TMPDIR="$VERIFY_ROOT/tmp" \
     XDG_CONFIG_HOME="$HOST_HOME/.config" XDG_DATA_HOME="$HOST_HOME/.local/share" XDG_CACHE_HOME="$HOST_HOME/.cache" XDG_STATE_HOME="$HOST_HOME/.local/state" \
+    FAKE_PROVIDER_OPENCODE_MODELS="own-provider/model-own,x-provider/model-x,y-provider/model-y" \
     FAKE_PROVIDER_SCENARIO="$VERIFY_ROOT/scenario.json" FAKE_PROVIDER_LEDGER="$VERIFY_ROOT/ledger.jsonl" FAKE_PROVIDER_NET_LOG="$VERIFY_ROOT/network-refusals.jsonl" \
     JINN_CLAUDE_USAGE_API=off NODE_OPTIONS="--require $DRIVER_DIR/network-guard.cjs" JINN_REPO="$GATEWAY_REPO" JINN_SANDBOX_NODE_BIN="$NODE_BIN" "$@"
 }
@@ -132,6 +132,8 @@ if [[ -n "$TEARDOWN" ]]; then
 fi
 
 [[ -x "$HELPER" ]] || die "sandbox helper not found: $HELPER"
+# NODE_OPTIONS carries the guard's path unquoted; a space would make node drop the option and the guard never load.
+[[ "$DRIVER_DIR" != *[[:space:]]* ]] || die "the checkout path must not contain whitespace: $DRIVER_DIR"
 [[ -f "$GATEWAY_REPO/packages/jinn/package.json" ]] || die "JINN_VERIFY_GATEWAY_REPO is not a checkout: $GATEWAY_REPO"
 if [[ -z "$PORT" ]]; then
   for candidate in $(seq $((8060 + RANDOM % 100)) 8199); do port_listening "$candidate" || { PORT="$candidate"; break; }; done
@@ -190,10 +192,11 @@ run_mode() {
     "$PORT" "$HOST_HOME" "$SANDBOX_HOME" "$INSTANCE" "$NODE_BIN" "$NODE_DIR" "$VERIFY_ROOT" "$GATEWAY_REPO" "$HELPER" "$DRIVER_DIR" > "$VERIFY_ROOT/instance.env"
 
   echo "== opencode mode: $mode (port $PORT)"
-  sandbox create "$INSTANCE" --port "$PORT" >/dev/null
-  instance_env "$NODE_BIN" "$DRIVER_DIR/seed.mjs" --sandbox-home "$SANDBOX_HOME" --host-home "$HOST_HOME" \
-    --gateway-repo "$GATEWAY_REPO" --harness-root "$REPO" --mode "$mode" > "$VERIFY_ROOT/layout-$mode.json"
+  # Set before create: a sandbox that is only partly made is still torn down (destroy checks its own marker).
   STARTED=1
+  sandbox create "$INSTANCE" --port "$PORT" >/dev/null || return 1
+  instance_env "$NODE_BIN" "$DRIVER_DIR/seed.mjs" --sandbox-home "$SANDBOX_HOME" --host-home "$HOST_HOME" \
+    --gateway-repo "$GATEWAY_REPO" --harness-root "$REPO" --mode "$mode" > "$VERIFY_ROOT/layout-$mode.json" || return 1
   # The helper's health wait prints a curl error per poll while the gateway boots; only what else it says matters.
   sandbox start "$INSTANCE" >/dev/null 2>"$VERIFY_ROOT/start.err" || { grep -v "^curl: (7)" "$VERIFY_ROOT/start.err" >&2; return 1; }
   local driver_status=0
