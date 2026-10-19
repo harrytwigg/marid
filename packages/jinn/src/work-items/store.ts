@@ -885,9 +885,7 @@ export function getWorkItemSpend(id: string): number {
  * redundant re-link (e.g. a cron re-fire re-linking the same item to the same session)
  * does not churn `work_items.updated_at` or the event log.
  *
- * `via` records which path made the link (`delegation` or `dispatch`) on the
- * `session_linked` event, which is what board hooks key `todo.delegated` and
- * `todo.dispatched` on; a link with neither fires neither.
+ * `via` (`delegation` | `dispatch`) is recorded on the event: board hooks key on it.
  *
  * `selfStarted` marks the link as one a session made by starting its own Todo
  * with no dispatch (`gateway/todo-self-start.ts`); any other link clears the

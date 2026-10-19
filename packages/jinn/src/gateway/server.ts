@@ -912,7 +912,6 @@ export async function startGateway(
   // Comment routing wakes a mentioned employee; like the walk, it starts
   // sessions through apiContext.
   const stopCommentRouting = installTodoCommentRouting(apiContext);
-  // Board hooks react to board events from the config's `hooks` block (docs/board-hooks.md).
   installBoardHooks(apiContext);
 
   // Re-read config.yaml into memory. Used by both the file-watcher (debounced)
