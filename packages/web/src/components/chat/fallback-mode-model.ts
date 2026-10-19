@@ -21,6 +21,16 @@ export interface SessionFallbackView {
   chain?: SessionFallbackChainView
 }
 
+/** "claude · B · sonnet": the target that served the session's latest turn, or null when none did or the gateway does not say. */
+export function servedByLabel(view: SessionFallbackView | null | undefined): string | null {
+  const chain = view?.chain
+  if (!chain?.servedBy) return null
+  const link = chain.links?.find((l) => l.key === chain.servedBy)
+  if (link) return link.label
+  const [engine = '', profile = '', model = ''] = chain.servedBy.split('|')
+  return [engine, profile, model].filter(Boolean).join(' · ') || null
+}
+
 /** A fallback target the operator picks: what PUT /api/sessions/:id takes. */
 export interface FallbackTargetChoice {
   engine: string

@@ -11,6 +11,7 @@ import { blockFallbackContent, isActiveDelegationStatus, type LiveBlockArrival }
 import { isToolDone, ToolGroup, type OpenSubagentCard } from './tool-group'
 import { parseTeammateReply, TeammateReply } from './teammate-reply'
 import { parseAgentRelay, AgentRelay } from './agent-relay'
+import { FallbackHopCard, parseFallbackHop } from './fallback-hop'
 import { DispatchRow } from './dispatch-row'
 import { BURST_WINDOW_MS, CallbackBurst, type BurstEntry } from './callback-burst'
 import { FoldRegion } from './fold-region'
@@ -610,6 +611,7 @@ const MessageRow = React.memo(function MessageRow({ msg, index: i, showTimestamp
   const hasBlocks = blocks.length > 0
   const teammate = useMemo(() => parseTeammateReply(msg), [msg])
   const relay = useMemo(() => (teammate ? null : parseAgentRelay(msg)), [msg, teammate])
+  const hop = useMemo(() => parseFallbackHop(msg), [msg])
 
   // Strip media URLs from text for display
   let textContent = msg.content
@@ -659,7 +661,9 @@ const MessageRow = React.memo(function MessageRow({ msg, index: i, showTimestamp
       )}
 
       {/* Notification message — centered system-style banner */}
-      {isNotification && !teammate && !relay && (
+      {hop && <FallbackHopCard hop={hop} />}
+
+      {isNotification && !teammate && !relay && !hop && (
         <div className="flex justify-center px-[var(--space-4)] mb-[var(--space-1)]">
           <div className="notification-msg-bubble flex items-start gap-[var(--space-2)] py-[var(--space-3)] px-[var(--space-4)] rounded-[var(--radius-md)] bg-[var(--fill-secondary)] text-[var(--text-secondary)] text-[length:var(--text-caption1)] leading-[var(--leading-relaxed)] max-w-[85%]">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5 opacity-60">

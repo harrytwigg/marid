@@ -82,13 +82,15 @@ describe("EmployeeFallbackField", () => {
 
   it("edits a custom chain on the same rows an engine chain has", () => {
     const onChange = vi.fn()
-    render(<EmployeeFallbackField employee={EMP} engine="claude" value={[{ engine: "codex" }]} onChange={onChange} />)
+    render(<EmployeeFallbackField employee={EMP} engine="claude" value={[{ engine: "claude" }]} onChange={onChange} />)
+
+    // A Claude row takes a profile, from the declared accounts.
+    const profile = screen.getByRole("combobox", { name: "Profile of link 1 of the Writer chain" })
+    fireEvent.change(profile, { target: { value: "work" } })
+    expect(onChange).toHaveBeenCalledWith([{ engine: "claude", profile: "work" }])
 
     fireEvent.click(screen.getByRole("button", { name: "Add a target to the Writer chain" }))
-
-    // The default Claude profile is a different target from the employee account.
-    expect(onChange).toHaveBeenCalledWith([{ engine: "codex" }, { engine: "claude" }])
-    expect(screen.getByRole("combobox", { name: "Profile of link 1 of the Writer chain" })).toBeTruthy()
+    expect(onChange).toHaveBeenLastCalledWith([{ engine: "claude" }, { engine: "codex" }])
   })
 
   it("refuses the employee own target in the loader sentence", () => {
