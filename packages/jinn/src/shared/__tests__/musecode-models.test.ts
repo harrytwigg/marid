@@ -5,7 +5,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { JinnConfig } from "../types.js";
 import { discoverMusecodeModels, knownMusecodeModels, parseMusecodeModelList, resolveMusecodeCatalog } from "../musecode-models.js";
-import { getModelRegistry, invalidateModelRegistry, musecodeModelCost, refreshMusecodeModels } from "../models.js";
+import { buildRegistry, exactEffortLevelsForModel, getModelRegistry, invalidateModelRegistry, musecodeModelCost, refreshMusecodeModels } from "../models.js";
+import { museTurnEffort } from "../../engines/musecode-protocol.js";
 
 const FAKE = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "engines", "__tests__", "fixtures", "fake-muse.mjs");
 
@@ -163,5 +164,66 @@ describe("the registry's Muse Code entry", () => {
     await refreshMusecodeModels(cfg);
     expect(getModelRegistry(cfg).musecode!.models).toHaveLength(4);
     expect(musecodeModelCost(undefined)).toBeUndefined();
+  });
+});
+
+describe("config models.musecode over a discovered catalog", () => {
+  let tmp: string;
+  const configWith = (block: Record<string, unknown> | undefined, model?: string) =>
+    ({ engines: { default: "claude", musecode: { bin: FAKE, ...(model ? { model } : {}) } }, ...(block ? { models: { musecode: block } } : {}) }) as unknown as JinnConfig;
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "musecode-registry-block-"));
+    vi.stubEnv("FAKE_MUSE_STATE_DIR", path.join(tmp, "state"));
+    vi.stubEnv("FAKE_MUSE_MODELS", "");
+  });
+  afterEach(async () => {
+    await refreshMusecodeModels(configWith(undefined));
+    invalidateModelRegistry();
+    vi.unstubAllEnvs();
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  const block = {
+    default: "muse-spark-1.2",
+    hidden: ["muse-spark-1.3"],
+    models: [
+      { id: "muse-spark-1.2", label: "Spark Classic", contextWindow: 1000, supportsEffort: true, effortLevels: ["low"] },
+      { id: "my-own", label: "My Own", supportsEffort: false },
+    ],
+  };
+
+  it("lets the block relabel, resize and narrow a discovered model, hide one, add one and name the default", async () => {
+    const cfg = configWith(block);
+    await refreshMusecodeModels(cfg);
+    const entry = buildRegistry(cfg).musecode!;
+    expect(entry.models.map((m) => m.id)).toEqual(["muse-spark-1.2", "my-own"]);
+    expect(entry.models[0]).toMatchObject({ label: "Spark Classic", contextWindow: 1000, effortLevels: ["low"] });
+    expect(entry.models[1]).toMatchObject({ label: "My Own", supportsEffort: false, effortLevels: [] });
+    expect(entry.defaultModel).toBe("muse-spark-1.2");
+    expect(entry.effortMechanism).toBe("musecode-turn");
+  });
+
+  it("keeps a pinned engine model as the default, and falls back to the catalog's when the block's is hidden", async () => {
+    const pinned = configWith(block, "my-own");
+    await refreshMusecodeModels(pinned);
+    expect(buildRegistry(pinned).musecode!.defaultModel).toBe("my-own");
+
+    const hiddenDefault = configWith({ ...block, default: "muse-spark-1.3" });
+    expect(buildRegistry(hiddenDefault).musecode!.defaultModel).toBe("muse-spark-1.2");
+  });
+
+  it("leaves the discovered catalog alone without a block", async () => {
+    const cfg = configWith(undefined);
+    await refreshMusecodeModels(cfg);
+    expect(buildRegistry(cfg).musecode!.models.map((m) => m.id)).toEqual(["muse-spark-1.3", "muse-spark-1.2"]);
+  });
+
+  it("stops a level the block narrows from being sent", async () => {
+    const cfg = configWith({ models: [{ id: "muse-spark-1.3", supportsEffort: true, effortLevels: ["low", "high"] }] });
+    await refreshMusecodeModels(cfg);
+    const levels = (model: string | undefined) => exactEffortLevelsForModel(cfg, "musecode", model);
+    expect(levels("muse-spark-1.3")).toEqual(["low", "high"]);
+    expect(museTurnEffort({ model: "muse-spark-1.3", effortLevel: "high" }, levels)).toBe("high");
+    expect(museTurnEffort({ model: "muse-spark-1.3", effortLevel: "max" }, levels)).toBeUndefined();
   });
 });

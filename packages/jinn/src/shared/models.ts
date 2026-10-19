@@ -716,7 +716,7 @@ export function synthesizeFromEngineConfig(config: JinnConfig): ModelRegistry {
   return registry;
 }
 
-function mergeDiscoveredModels(
+export function mergeDiscoveredModels(
   discovered: ModelInfo[],
   block: EngineModelsConfig | undefined,
   opts: { configuredOverridesDiscovered: boolean },
