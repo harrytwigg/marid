@@ -70,16 +70,11 @@
 //               and no error, and the session goes idle
 //   PROVIDERWAIT    a retry status whose next attempt is an hour away; the
 //               session stays in it until aborted
-//   FALLBACKIDLE    the first reply closes with nothing written and the
+//   NEWERREPLYIDLE  the first reply closes with nothing written and the
 //               session goes idle; 300 ms later it is busy again with a new
 //               reply to the same prompt, which answers
-//   FALLBACKREPLY   the first reply finishes "stop" with nothing written; 300 ms
+//   NEWERREPLYDONE  the first reply finishes "stop" with nothing written; 300 ms
 //               later a new reply to the same prompt opens and answers
-//   FALLBACKPROMPT  what the opencode-rate-limit plugin (1.4.0) does on 1.19.0:
-//               a retry status an hour off, then its abort (the reply closes
-//               with nothing written and no error; idle), then 300 ms later
-//               a new user message repeating the prompt's text parts without
-//               their metadata, whose reply answers
 // Directives are read from the prompt's own text only, never from a synthetic
 // part (which may quote another prompt's directives).
 // Test hooks: FAKE_OPENCODE_SERVE_FAIL=1 makes `serve` exit at once;
@@ -221,7 +216,7 @@ function serve() {
       return;
     }
     if (text.includes("MIDFAIL")) return midTurnFailure(sessionID, turn);
-    if (/PROVIDER|FALLBACK/.test(text) && await providerTrouble(sessionID, turn)) return;
+    if (/PROVIDER|NEWERREPLY/.test(text) && await providerTrouble(sessionID, turn)) return;
     if (text.includes("MULTISTEP")) { toolRound(sessionID, turn, 1); toolRound(sessionID, turn, 2); }
     if (text.includes("TOOLONLY")) {
       toolRound(sessionID, turn, 1);
@@ -290,7 +285,7 @@ function serve() {
     turn.reply.info.tokens = { input: 1200, output: 2, cache: { read: 20000, write: 600 } };
   }
 
-  /** The PROVIDER* and FALLBACK* directives. True when the turn is over. */
+  /** The PROVIDER* and NEWERREPLY* directives. True when the turn is over. */
   async function providerTrouble(sessionID, turn) {
     const { text } = turn;
     const retry = (attempt, inMs) => publish("session.status", {
@@ -308,7 +303,7 @@ function serve() {
       while (!turn.aborted) await sleep(20);
       return true;
     }
-    for (let attempt = 1; attempt <= (text.includes("PROVIDERGIVEUP") ? 2 : 1) && !text.includes("FALLBACK"); attempt++) {
+    for (let attempt = 1; attempt <= (text.includes("PROVIDERGIVEUP") ? 2 : 1) && !text.includes("NEWERREPLY"); attempt++) {
       retry(attempt, 100);
       await sleep(100);
       if (!text.includes("PROVIDERDROP")) setStatus(sessionID, "busy");
@@ -329,42 +324,19 @@ function serve() {
       setStatus(sessionID, "idle");
       return true;
     }
-    if (text.includes("FALLBACKIDLE")) {
+    if (text.includes("NEWERREPLYIDLE")) {
       closeEmpty();
       setStatus(sessionID, "idle");
       await sleep(300);
       setStatus(sessionID, "busy");
       newReply(sessionID, turn);
     }
-    if (text.includes("FALLBACKPROMPT")) {
-      retry(1, 3_600_000);
-      await sleep(100);
-      closeEmpty();
-      setStatus(sessionID, "idle");
-      await sleep(300);
-      repostPrompt(sessionID, turn);
-      setStatus(sessionID, "busy");
-      newReply(sessionID, turn);
-    }
-    if (text.includes("FALLBACKREPLY")) {
+    if (text.includes("NEWERREPLYDONE")) {
       closeEmpty("stop");
       await sleep(300);
       newReply(sessionID, turn);
     }
     return false;
-  }
-
-  /** FALLBACKPROMPT: the plugin posts the last user message's text parts again,
-   *  without metadata, and the turn's next reply answers that copy. */
-  function repostPrompt(sessionID, turn) {
-    const userId = newId("msg");
-    const parts = (turn.body.parts ?? []).filter((p) => p.type === "text")
-      .map((p) => ({ id: newId("prt"), type: "text", text: p.text, messageID: userId, sessionID }));
-    const user = { info: { id: userId, sessionID, role: "user", time: { created: Date.now() } }, parts };
-    sessions.get(sessionID).messages.push(user);
-    messageUpdated(sessionID, user);
-    for (const p of parts) publish("message.part.updated", { sessionID, part: p, time: Date.now() });
-    turn.userId = userId;
   }
 
   /** MIDFAIL: the turn ends itself, in the order its prompt asks for. */

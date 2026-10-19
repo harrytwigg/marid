@@ -45,8 +45,7 @@ import { sameModelRef, unsupportedServerFlags, variantOf, type V2ModelRef } from
  * Approval matches 1.x: a permission this turn's steps ask for is granted
  * once; the `question` tool is denied on the sessions the turn creates (which
  * takes it out of the tool list), and a question that still comes is
- * dismissed. A provider fallback on 2.x switches the session's model in
- * place (see examples/opencode-plugins), so its answer is the turn's own steps.
+ * dismissed.
  */
 
 /** The turn's error when its execution ended without ever delivering the prompt. */
@@ -74,15 +73,15 @@ function reportKey(line: string): string | undefined {
   return undefined;
 }
 
-/** The replies (assistant items) answering any of `prompts`, oldest first,
- *  from a history listed newest first: what follows one of the prompts up to
- *  the next input someone else sent. */
-export function ownStoredReplies(newestFirst: V2Message[], prompts: ReadonlySet<string>): V2Message[] {
+/** The replies (assistant items) answering `prompt`, oldest first, from a
+ *  history listed newest first: what follows the prompt up to the next input
+ *  someone else sent. */
+export function ownStoredReplies(newestFirst: V2Message[], prompt: string): V2Message[] {
   const replies: V2Message[] = [];
   let ours = false;
   for (const message of [...newestFirst].reverse()) {
     const id = str(message.id) ?? "";
-    if (prompts.has(id)) ours = true;
+    if (id === prompt) ours = true;
     else if (message.type === "user" || message.type === "compaction") ours = false;
     else if (ours && message.type === "assistant") replies.push(message);
   }
@@ -408,7 +407,7 @@ export class OpencodeV2ServerTurn {
   /** The stream did not say how the turn ended: read its replies from the store. */
   private async recover(): Promise<void> {
     const history = await v2Messages(this.server, this.sessionId, HISTORY_LIMIT);
-    const replies = ownStoredReplies(history, new Set([this.promptId]));
+    const replies = ownStoredReplies(history, this.promptId);
     if (replies.length) this.ownReply = replies.at(-1);
     if (!replies.length && !(await this.mayStillRun())) {
       this.turn.readLine(JSON.stringify({ type: "error", sessionID: this.sessionId, error: PROMPT_NOT_RUN }), this.onStream);
@@ -602,13 +601,12 @@ export class OpencodeV2ServerTurn {
   }
 
   /** The session's execution ended: the turn is over once its prompt is out.
-   *  Without a text answer it waits a moment, as 1.x does after an idle: a
-   *  fallback plugin re-posts the prompt just after the execution it stopped. */
+   *  Without a text answer it waits a moment, as 1.x does after an idle. */
   private onExecutionEnded(): void {
     if (!this.posting) return;
     this.ownInput = false;
     if (this.lastAnswer === "text" && !this.newestOwnOpen) return this.finish();
-    this.settle.arm("idle", this.providerRetry ? SERVER_TURN_TIMING.fallbackWaitMs : SERVER_TURN_TIMING.closeWaitMs);
+    this.settle.arm("idle", SERVER_TURN_TIMING.closeWaitMs);
   }
 
   private onReplyEnded(): void {

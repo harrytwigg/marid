@@ -7,8 +7,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
  * what it says. Real processes, as in opencode-server-mode.test.ts: the fake
  * `opencode` (fixtures/fake-opencode.mjs) plays the event orders real 1.18.35
  * and 1.19.0 emit for a provider answering 429 "Go usage limit exceeded", and
- * the fallback shapes where opencode takes the turn up again after a reply
- * that wrote nothing.
+ * the shapes where opencode takes the turn up again after a reply that wrote
+ * nothing.
  */
 
 vi.mock("../../shared/logger.js", () => ({
@@ -17,9 +17,8 @@ vi.mock("../../shared/logger.js", () => ({
 
 import { OpencodeEngine } from "../opencode.js";
 import { OpencodeServerPool, basicAuthHeader } from "../opencode-server.js";
-import { cancelledRequests, SERVER_TURN_TIMING } from "../opencode-server-turn.js";
-import { USER_STOP_INTERRUPTION_REASON } from "../../sessions/interruption-reasons.js";
-import { abandonedRetryError, providerRetryOf, repeatsPrompt, SettleWait } from "../opencode-server-settle.js";
+import { SERVER_TURN_TIMING } from "../opencode-server-turn.js";
+import { abandonedRetryError, providerRetryOf, SettleWait } from "../opencode-server-settle.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
 import { JINN_HOME } from "../../shared/paths.js";
 import type { EngineRunOpts } from "../../shared/types.js";
@@ -86,46 +85,18 @@ describe("a provider error in a server turn", { timeout: 20_000 }, () => {
     expect(result.rateLimit).toEqual({ status: "rejected" });
   });
 
-  it("does not end the turn at an idle that opencode follows with a fallback reply", async () => {
+  it("does not end the turn at an idle that opencode follows with a newer reply", async () => {
     const { engine } = harness();
-    const result = await engine.run(runOpts("FALLBACKIDLE build it"));
+    const result = await engine.run(runOpts("NEWERREPLYIDLE build it"));
     expect(result.error).toBeUndefined();
-    expect(result.result).toContain("answer:FALLBACKIDLE build it");
+    expect(result.result).toContain("answer:NEWERREPLYIDLE build it");
   });
 
   it("does not end the turn at a reply that finished with nothing written when a newer reply follows", async () => {
     const { engine } = harness();
-    const result = await engine.run(runOpts("FALLBACKREPLY build it"));
+    const result = await engine.run(runOpts("NEWERREPLYDONE build it"));
     expect(result.error).toBeUndefined();
-    expect(result.result).toContain("answer:FALLBACKREPLY build it");
-  });
-
-  it("takes the answer to the prompt a fallback plugin re-sent after aborting the turn as this turn's answer", async () => {
-    const { pool, engine } = harness();
-    const result = await engine.run(runOpts("FALLBACKPROMPT build it"));
-    expect(result.error).toBeUndefined();
-    expect(result.result).toContain("answer:FALLBACKPROMPT build it");
-    expect((await serverLog(pool)).filter((e) => e.url.endsWith("/abort"))).toEqual([]); // nothing of it was stopped
-  });
-
-  it("makes a re-sent prompt a Jinn prompt, so a stop after the fallback is named once, by its request", async () => {
-    const { pool, engine } = harness();
-    // A first turn: the prompt's text carries the system prompt, which a notice must never quote.
-    const turn = engine.run({ ...runOpts("FALLBACKPROMPT HANG build it"), systemPrompt: "You are Ada." });
-    const marked = async () => Boolean(pool.get("sess-1")) && (await serverLog(pool)).some((e) => e.method === "PATCH");
-    for (let i = 0; i < 400 && !(await marked()); i++) await new Promise((r) => setTimeout(r, 25));
-    engine.kill("sess-1", USER_STOP_INTERRUPTION_REASON);
-    const result = await turn;
-    expect(result.error).toBe(USER_STOP_INTERRUPTION_REASON);
-
-    const server = pool.get("sess-1")!;
-    const stored = await (await fetch(`${server.apiUrl}/session/${result.sessionId}/message`, {
-      headers: { authorization: basicAuthHeader(server.password) },
-    })).json() as Array<{ info: Record<string, unknown>; parts: Array<{ text?: string; metadata?: Record<string, unknown> }> }>;
-    const prompts = stored.filter((m) => m.info.role === "user");
-    expect(prompts).toHaveLength(2);
-    expect(prompts[1]!.parts[0]!.metadata).toEqual({ jinn: "prompt", stopped: "user", request: "FALLBACKPROMPT HANG build it" });
-    expect(cancelledRequests(stored, false)).toEqual({ cancelled: [], stopped: ["FALLBACKPROMPT HANG build it"] });
+    expect(result.result).toContain("answer:NEWERREPLYDONE build it");
   });
 
   it("ends a turn whose provider retry is too far off, with the provider's words and when it resets, and stops the retry on the server", async () => {
@@ -176,14 +147,6 @@ describe("a provider error in a server turn", { timeout: 20_000 }, () => {
 });
 
 describe("opencode-server-settle", () => {
-  it("knows a re-sent copy of the prompt: the same text, with no Jinn metadata", () => {
-    expect(repeatsPrompt({ type: "text", text: "build it" }, "build it")).toBe(true);
-    expect(repeatsPrompt({ type: "text", text: "build it", metadata: { jinn: "prompt" } }, "build it")).toBe(false);
-    expect(repeatsPrompt({ type: "text", text: "build it again" }, "build it")).toBe(false);
-    expect(repeatsPrompt({ type: "file", text: "build it" }, "build it")).toBe(false);
-    expect(repeatsPrompt({ type: "text", text: "" }, "")).toBe(false);
-  });
-
   it("reads a retry status, and nothing else", () => {
     expect(providerRetryOf({ type: "retry", attempt: 1, message: "Go usage limit exceeded", next: 5 })).toEqual({ message: "Go usage limit exceeded", next: 5 });
     expect(providerRetryOf({ type: "retry" })).toEqual({ message: "the provider failed and opencode is retrying it" });

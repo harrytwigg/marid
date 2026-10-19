@@ -18,7 +18,7 @@ A session with no mode of its own follows the config default (below), which is `
 - A new session does not start on a fallback engine because its preferred engine is out of allowance. It starts where it prefers and waits.
 - A stand-in from before (a substitute that was already running) is reverted at the next turn start. Changing the mode of a session does not move its engine by itself; the revert happens when its next turn begins.
 
-In-engine fallback plugins that Marid does not control (for example an opencode rate-limit plugin) are out of scope: they switch models inside the engine, and the gateway cannot stop them.
+opencode no longer falls back between models by itself: model and provider hops are gateway [fallback chains](fallback-chains.md), and an `auto-resume` session never moves along one. An opencode fallback plugin an operator installed is not under the gateway's control (it would switch models inside the engine even for an `auto-resume` session), so `jinn doctor`, the gateway's start-up log and `/api/engines` report it; see [opencode internal fallback is removed](fallback-chains.md#opencode-internal-fallback-is-removed).
 
 ## Where the mode comes from
 

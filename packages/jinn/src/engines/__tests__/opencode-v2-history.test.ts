@@ -130,14 +130,14 @@ describe("ownStoredReplies", () => {
     const a1 = assistant("tool-calls");
     const a2 = assistant("stop");
     const history = newestFirst(user("earlier"), assistant(), prompt, a1, a2, idle("succeeded"), user("someone else"), assistant());
-    expect(ownStoredReplies(history, new Set([prompt.id as string]))).toEqual([a1, a2]);
+    expect(ownStoredReplies(history, prompt.id as string)).toEqual([a1, a2]);
   });
 
   it("stops at a compaction item", () => {
     const prompt = user("mine");
     const a1 = assistant();
     const history = newestFirst(prompt, a1, { id: id("msg"), type: "compaction", status: "completed", time: { created: ++seq } }, assistant());
-    expect(ownStoredReplies(history, new Set([prompt.id as string]))).toEqual([a1]);
+    expect(ownStoredReplies(history, prompt.id as string)).toEqual([a1]);
   });
 
   it("steps over idle and model-switched items between the prompt and its replies", () => {
@@ -151,29 +151,20 @@ describe("ownStoredReplies", () => {
       idle("failed"),
       a2,
     );
-    expect(ownStoredReplies(history, new Set([prompt.id as string]))).toEqual([a1, a2]);
-  });
-
-  it("follows a re-sent copy of the prompt as well", () => {
-    const prompt = user("mine");
-    const copy = user("mine");
-    const a1 = assistant("error");
-    const a2 = assistant("stop");
-    const history = newestFirst(prompt, a1, copy, a2);
-    expect(ownStoredReplies(history, new Set([prompt.id as string, copy.id as string]))).toEqual([a1, a2]);
+    expect(ownStoredReplies(history, prompt.id as string)).toEqual([a1, a2]);
   });
 
   it("returns nothing when the prompt is not in the history, or has no replies yet", () => {
     const prompt = user("mine");
-    expect(ownStoredReplies(newestFirst(user("other"), assistant()), new Set([prompt.id as string]))).toEqual([]);
-    expect(ownStoredReplies(newestFirst(prompt), new Set([prompt.id as string]))).toEqual([]);
+    expect(ownStoredReplies(newestFirst(user("other"), assistant()), prompt.id as string)).toEqual([]);
+    expect(ownStoredReplies(newestFirst(prompt), prompt.id as string)).toEqual([]);
   });
 
   it("does not reorder the history it is given", () => {
     const prompt = user("mine");
     const history = newestFirst(prompt, assistant(), assistant());
     const copy = [...history];
-    ownStoredReplies(history, new Set([prompt.id as string]));
+    ownStoredReplies(history, prompt.id as string);
     expect(history).toEqual(copy);
   });
 });

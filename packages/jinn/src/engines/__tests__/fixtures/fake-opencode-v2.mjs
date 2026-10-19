@@ -43,9 +43,6 @@
 //               (step.started, same assistantMessageID) whose text takes 800 ms
 //   RETRYLOOP   five retry.scheduled an hour ahead, 200 ms apart, then the step
 //               ends and the text `fake:retryloop` answers
-//   FALLBACK    session.model.selected (a fallback model), retry.scheduled, a step
-//               on the fallback model with the same assistantMessageID that answers,
-//               execution.succeeded, then model.selected back
 //   PERMISSION  a tool step that asks permission.asked and waits (1.5 s at most)
 //               for the reply; the answer is `permission:<decision>`
 //   QUESTION    a question tool step that raises form.created and waits (1.5 s at
@@ -101,7 +98,6 @@ if (verb !== "serve") {
 
 const COST = 0.01;
 const TOKENS = { input: 1200, output: 30, reasoning: 0, cache: { read: 0, write: 0 } };
-const FALLBACK_MODEL = { providerID: "mock", id: "fallback", variant: "default" };
 const DEFAULT_MODEL = { providerID: "mock", id: "m1", variant: "default" };
 const PROMPT_WAIT_MS = 1500;
 
@@ -325,26 +321,6 @@ function serve() {
     return failAborted(s, item);
   }
 
-  async function fallbackTurn(s) {
-    const original = { ...s.model };
-    const item = startStep(s);
-    s.model = { ...FALLBACK_MODEL };
-    s.items.push({ id: newId("msg"), time: { created: now() }, type: "model-switched", model: s.model, previous: original });
-    publish("session.model.selected", { sessionID: s.id, model: s.model, previous: original });
-    publish("session.retry.scheduled", { sessionID: s.id, assistantMessageID: item.id, attempt: 2, at: now() + 50, error: RATE_LIMIT });
-    if (await sleep(s, 50)) return failAborted(s, item);
-    item.model = { ...s.model };
-    publish("session.step.started", { sessionID: s.id, agent: item.agent, model: item.model, assistantMessageID: item.id, snapshot: "0".repeat(40), started: now() });
-    const outcome = await textStep(s, `fallback answer on ${s.model.id}`, { item });
-    s.afterExecution = () => {
-      const previous = { ...s.model };
-      s.model = original;
-      s.items.push({ id: newId("msg"), time: { created: now() }, type: "model-switched", model: original, previous });
-      publish("session.model.selected", { sessionID: s.id, model: original, previous });
-    };
-    return outcome;
-  }
-
   async function permissionTurn(s) {
     let decision = "timeout";
     const first = await toolStep(s, {
@@ -469,7 +445,6 @@ function serve() {
     ["RETRYLOOP", retryLoopTurn],
     ["RETRYSLOW", retrySlowTurn],
     ["NOTEXT", noTextTurn],
-    ["FALLBACK", fallbackTurn],
     ["PERMISSION", permissionTurn],
     ["QUESTION", questionTurn],
     ["NOIDLE", noIdleTurn],
@@ -503,7 +478,6 @@ function serve() {
     s.running = true;
     s.interrupted = false;
     s.noExecutionEvent = false;
-    s.afterExecution = undefined;
     publish("session.execution.started", { sessionID: s.id });
     let outcome = "succeeded";
     let error;
@@ -524,7 +498,6 @@ function serve() {
       else if (outcome === "failed") publish("session.execution.failed", { sessionID: s.id, error });
       else publish("session.execution.succeeded", { sessionID: s.id });
     }
-    s.afterExecution?.();
   }
 
   // ── HTTP ──────────────────────────────────────────────────────────────────

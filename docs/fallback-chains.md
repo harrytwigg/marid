@@ -160,7 +160,53 @@ profile, and could not be seen or edited in the dashboard. It is removed:
 - opencode model and provider hops are chain links:
   `{engine: opencode, model: openrouter/x}`;
 - a host still running a fallback plugin is reported by `jinn doctor`, at
-  gateway start, and in Settings, so there is never a double fallback.
+  gateway start, and in Settings, so a double fallback is never silent.
+
+### A configured plugin is reported, not neutralised
+
+The gateway cannot switch an operator's fallback plugin off for its own
+sessions alone, so it detects and reports one. Checked on the real binaries
+(opencode 1.19.0 with `opencode-rate-limit@1.4.0`, and 2.0.29 with the example
+`model-fallback.js`, against a provider answering 429):
+
+| Lever | 1.19.0 | 2.0.29 |
+|---|---|---|
+| a staged `OPENCODE_CONFIG` with an empty plugin list | the plugin still switches models: plugin lists are concatenated, not replaced | the same |
+| a staged plugin with the same name as the operator's | the plugin still switches models | not applicable: 2.x reads no local module path from config |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`, `OPENCODE_DISABLE_PROJECT_CONFIG` | the plugin still switches models | no such variable |
+| `OPENCODE_PURE=1` | stops the plugin, and every other external plugin with it: the operator's provider-auth plugins and the gateway's own staged plugin (the command-timeout cap) | no such variable |
+| `OPENCODE_CONFIG_DIR` pointing elsewhere | not tried | replaces the operator's config directory, so the provider config goes too (`provider.no-route`) |
+| the plugin's own `"enabled": false` | read from the project's `.opencode/`, then `~/.opencode/`, then the config directory: the gateway would have to write into the operator's project or home | the same |
+
+What is checked, and where:
+
+- the plugin in a `plugin` or `plugins` list of the operator's opencode config
+  (`opencode.json`, `opencode.jsonc` or `config.json` in the config directory
+  and `~/.opencode/`, `OPENCODE_CONFIG`, a project's `opencode.json` and
+  `.opencode/`);
+- a `model-fallback` or `opencode-rate-limit` file or directory in a `plugin`
+  or `plugins` directory of those;
+- a `rate-limit-fallback.json` without `"enabled": false` in `.opencode/`,
+  `opencode/` or the directory itself, under the project, `~` and
+  `$XDG_CONFIG_HOME`: the places the plugin reads.
+
+`GET /api/engines` carries the reading on the opencode entry:
+
+```json
+"internalFallback": { "detected": true, "neutralised": false, "sources": ["…/rate-limit-fallback.json"] }
+```
+
+`sources` are the operator's own paths: they are in `jinn doctor`'s output and
+at debug level in the log, never in an info-level line. Nothing is ever
+written to the operator's files.
+
+A remote host is read best effort, through the facts the gateway already
+collects when it first reaches the host: a shell probe for the same markers
+(a `grep` for the plugin's name in the opencode config files, so a comment that
+merely mentions it counts; the plugin files; a settings file that is not
+disabled). Its findings are added to `sources` as `host: path`, and the first
+one for a host logs the same warning. A project directory is not read on a
+remote host, since the host does not know which project a session will run in.
 
 ### Migrating a host
 
@@ -175,9 +221,12 @@ profile, and could not be seen or edited in the dashboard. It is removed:
    `rate-limit-fallback.json`.
 3. `jinn doctor` confirms no internal fallback is left.
 
-The plugin's `cooldownMs`, `circuitBreaker`, `fallbackMode` and `restoreModel`
-have no setting of their own: engine health, the once-per-run rule and the
-return to the session's own target at its reset cover them.
+The plugin's `cooldownMs`, `circuitBreaker`, `fallbackMode`, `restoreModel`
+and `retryPolicy` have no setting of their own: engine health, the
+once-per-run rule (a chain's length bounds the hops) and the return to the
+session's own target at its reset cover them. `jinn fallback migrate-opencode`
+lists each such key it finds, with this reason. `--write` merges only the
+engine default, and refuses when `engines.opencode.fallback` is already set.
 
 ## Testing without real providers
 

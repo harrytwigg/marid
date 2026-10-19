@@ -556,15 +556,6 @@ describe("a turn that goes wrong", { timeout: 40_000 }, () => {
     expect(result.numTurns).toBe(1);
   });
 
-  it("follows a fallback model's step on the same reply, and answers with its text", async () => {
-    const h = harness();
-    const { result } = await streamed(h, { prompt: "FALLBACK please" });
-    expect(result.error).toBeUndefined();
-    expect(result.result).toBe("fallback answer on fallback");
-    // The session is put back on its own model afterwards.
-    await waitFor(async () => (await call(h, `/api/session/${result.sessionId}`)).body.data.model.id === "deepseek-v4.1-flash");
-  });
-
   it("ends a turn whose provider retry is far off after the grace window, with the reset time", async () => {
     SERVER_TURN_TIMING.retryGraceMs = 300;
     const h = harness();
