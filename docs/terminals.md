@@ -58,7 +58,7 @@ terminal:
       label: Build host
       host: 10.0.0.5  # hostname, address or ~/.ssh/config alias
       user: builder          # optional; ssh's own resolution otherwise
-      cwd: /srv/jinn-work  # optional absolute start directory
+      cwd: /srv/agents  # optional absolute start directory
 ```
 
 A host whose `host`/`user` could reach ssh's option parser (a leading `-`, odd
