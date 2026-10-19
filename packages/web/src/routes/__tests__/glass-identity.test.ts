@@ -219,18 +219,43 @@ describe("reduced transparency", () => {
   })
 })
 
+describe("the Talk orb palette", () => {
+  const ORB = ["--orb-core", "--orb-base", "--orb-bloom", "--orb-lobe-a", "--orb-lobe-b", "--orb-lobe-c", "--orb-shadow", "--orb-specular", "--orb-rim"]
+  const GLOBALS = readFileSync(path.join(ROUTES, "globals.css"), "utf8")
+
+  it("is one light-dark() pair per token in the shared block", () => {
+    for (const token of ORB) expect(SHARED.get(token), token).toMatch(/^light-dark\(.+\)$/)
+  })
+
+  it("is registered as a colour, so script reads back a plain colour", () => {
+    for (const token of ORB) expect(GLOBALS, token).toContain(`@property ${token} {`)
+  })
+
+  it("gives Reduced transparency solid twins, from the OS preference and from the setting", () => {
+    const solid = /^light-dark\(#[0-9A-F]{6}, #[0-9A-F]{6}\)$/
+    const media = IDENTITY.slice(IDENTITY.indexOf("@media (prefers-reduced-transparency: reduce)"))
+    const fromOs = declarations(ruleBody(media, ":root, [data-theme]"))
+    const fromAttribute = declarations(ruleBody(IDENTITY, '[data-transparency="reduced"], [data-transparency="reduced"] [data-theme]'))
+    // the shadow and the specular are gradient stops that fade to nothing, so they stay translucent
+    const SOLID = ORB.filter((t) => t !== "--orb-shadow" && t !== "--orb-specular")
+    for (const decls of [fromOs, fromAttribute]) for (const token of SOLID) expect(decls.get(token), token).toMatch(solid)
+  })
+
+  it("leaves no upstream warm orb colour behind", () => {
+    expect(IDENTITY + GLOBALS).not.toMatch(/255,206,132|255,182,88/)
+  })
+})
+
 describe("the shell", () => {
-  it("is loaded after globals.css and theme-overrides.css so it wins on source order", () => {
-    // main.tsx loads the one stylesheet root, which pulls globals.css and then
-    // theme-overrides.css in; the identity comes after the whole root.
+  it("is loaded after globals.css so it wins on source order", () => {
+    // main.tsx loads the one stylesheet root, which pulls globals.css in; the
+    // identity comes after the whole root.
     const main = readFileSync(path.resolve(ROUTES, "../main.tsx"), "utf8")
     const root = readFileSync(path.resolve(ROUTES, "app.css"), "utf8")
     const imports = ["app.css", "glass-identity.css"].map((f) => main.indexOf(`./routes/${f}`))
     expect(imports[0]).toBeGreaterThanOrEqual(0)
     expect(imports[1]).toBeGreaterThan(imports[0])
-    const inRoot = ["globals.css", "theme-overrides.css"].map((f) => root.indexOf(`@import "./${f}"`))
-    expect(inRoot[0]).toBeGreaterThanOrEqual(0)
-    expect(inRoot[1]).toBeGreaterThan(inRoot[0])
+    expect(root.indexOf('@import "./globals.css"')).toBeGreaterThanOrEqual(0)
   })
 
 })
@@ -382,5 +407,34 @@ describe.each(SCHEMES)("system colours in %s", (scheme) => {
     for (const { label, colour: ground } of surfaces(scheme)) {
       expect(ratio(colour(name, scheme), ground), `${name} on ${label}`).toBeGreaterThanOrEqual(AA)
     }
+  })
+})
+
+describe("controls that do not blur", () => {
+  // A bare --glass-overlay background is translucent on a touch screen and inside the reading sheet, where
+  // --material-thick-opaque is the sheet's own colour. These sit over text, video or a terminal.
+  const SRC = path.resolve(ROUTES, "..")
+  const FILES = [
+    "components/chat/cli-keybar.tsx",
+    "components/chat/file-view.tsx",
+    "components/talk/media-preview-chrome.tsx",
+    "components/talk/media-preview.tsx",
+    "components/ui/image-lightbox.tsx",
+    "components/ui/notices.tsx",
+    "components/ui/video-player.tsx",
+    "routes/todos/pickers/picker-shell.tsx",
+    "routes/todos/task-page/attachment-preview.tsx",
+    "routes/todos/task-page/attachments.tsx",
+  ]
+
+  it.each(FILES)("%s draws on the opaque overlay material, not a bare translucent token", (file) => {
+    const source = readFileSync(path.join(SRC, file), "utf8")
+    expect(source).toContain("var(--material-thick-opaque)")
+    expect(source).not.toMatch(/var\(--glass-(overlay|float)\)/)
+  })
+
+  it("resolves --material-thick-opaque to the sheet's own colour inside the sheet", () => {
+    const sheet = declarations(ruleBody(IDENTITY, '[data-shell="sheet"]'))
+    expect(sheet.get("--material-thick-opaque")).toBe("var(--glass-sheet-opaque)")
   })
 })

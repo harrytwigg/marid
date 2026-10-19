@@ -186,7 +186,9 @@ for (const theme of ['light', 'dark']) {
 
 {
   // The settings page's native selects: photographed, on a desktop and a phone.
-  for (const [name, viewport] of [['desktop', { width: 1440, height: 900 }], ['phone', { width: 390, height: 844 }]]) {
+  /** @type {Array<[string, { width: number, height: number }]>} */
+  const viewports = [['desktop', { width: 1440, height: 900 }], ['phone', { width: 390, height: 844 }]]
+  for (const [name, viewport] of viewports) {
     const context = await browser.newContext({ viewport, extraHTTPHeaders: headers })
     await context.addInitScript(() => { localStorage.setItem('jinn-onboarded', 'true') })
     const page = await context.newPage()

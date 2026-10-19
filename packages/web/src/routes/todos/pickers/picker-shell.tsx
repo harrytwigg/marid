@@ -121,11 +121,11 @@ export function PickerPopover({
       role="menu"
       aria-label={label}
       data-testid={testId}
-      className="absolute z-30 w-[314px] cursor-default rounded-[14px] p-1.5 backdrop-blur-[20px]"
+      className="absolute z-30 w-[314px] cursor-default rounded-[14px] p-1.5"
       style={{
         top: -7 - currentIndex * ROW_H + shift,
         left: -6,
-        background: "var(--material-thick)",
+        background: "var(--material-thick-opaque)",
         boxShadow: "var(--shadow-overlay)",
       }}
     >

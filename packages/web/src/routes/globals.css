@@ -265,11 +265,9 @@
   :root { --chat-header-band: 88px; }
 }
 
-/* LEDGER — warm charcoal + amber (dark, the default) and warm paper + ochre
-   (light). Every colour is written once as light-dark(<light>, <dark>) and the
-   root's color-scheme picks the side, so a palette cannot be edited in one
-   theme and forgotten in the other. Only what light-dark() cannot take (it
-   accepts colours, not box-shadows or filters) keeps a block per theme below. */
+/* The root's color-scheme picks the side of every light-dark() colour. The
+   palette itself is in glass-identity.css, written once per token; only what
+   light-dark() cannot take (box-shadows, gradients) keeps a block per theme. */
 :root, [data-theme] { color-scheme: dark; }
 [data-theme="light"] { color-scheme: light; }
 /* SYSTEM: media-query fallback before JS hydration. The bootstrap in index.html
@@ -296,100 +294,12 @@
 @property --orb-shadow { syntax: "<color>"; inherits: true; initial-value: transparent; }
 @property --orb-specular { syntax: "<color>"; inherits: true; initial-value: transparent; }
 @property --orb-rim { syntax: "<color>"; inherits: true; initial-value: transparent; }
+/* Motion curves and the tab bar height; the palette is in glass-identity.css. */
 :root, [data-theme] {
-  --bg: light-dark(#F4F1E8, #14130F);
-  --bg-secondary: light-dark(#FBF9F2, #1E1C16);
-  --bg-tertiary: light-dark(#ECE8DC, #2A2720);
-  --material-regular: light-dark(rgba(251,249,242,0.94), rgba(30,28,22,0.92));
-  --material-thick: light-dark(rgba(244,241,232,0.97), rgba(20,18,15,0.96));
-  --material-thick-opaque: light-dark(#F4F1E8, #14120F);
-  --material-thin: light-dark(rgba(33,30,22,0.04), rgba(255,255,255,0.05));
-  --material-ultra-thin: light-dark(rgba(33,30,22,0.02), rgba(255,255,255,0.03));
-  --fill-primary: light-dark(rgba(33,30,22,0.08), rgba(255,255,255,0.10));
-  --fill-secondary: light-dark(rgba(33,30,22,0.06), rgba(255,255,255,0.07));
-  --fill-tertiary: light-dark(rgba(33,30,22,0.045), rgba(255,255,255,0.05));
-  --fill-quaternary: light-dark(rgba(33,30,22,0.028), rgba(255,255,255,0.035));
-  --separator: light-dark(rgba(33,30,22,0.14), rgba(255,255,255,0.09));
-  --separator-opaque: light-dark(#DED8C7, #38342B);
-  --scrim: light-dark(rgba(40,34,20,0.18), rgba(0,0,0,0.32));
-  --text-primary: light-dark(#211E16, #E8E4D8);
-  --text-secondary: light-dark(rgba(33,30,22,0.66), rgba(232,228,216,0.62));
-  --text-tertiary: light-dark(rgba(33,30,22,0.56), rgba(232,228,216,0.38));
-  --text-quaternary: light-dark(rgba(33,30,22,0.30), rgba(232,228,216,0.22));
-  --accent: light-dark(#926516, #E0A33C);
-  --accent-fill: light-dark(rgba(146,101,22,0.14), rgba(224,163,60,0.14));
-  --danger-fill: light-dark(rgba(178,59,51,0.14), rgba(224,103,90,0.14));
-  --accent-contrast: light-dark(#FBF9F2, #14130F);
-  --talk-focus-ring: light-dark(rgba(146,101,22,0.55), rgba(224,163,60,0.55));
-  --system-blue: light-dark(#2D6CB5, #5B9BD5);
-  --system-indigo: light-dark(#5155A6, #8586D8);
-  --system-green: light-dark(#597648, #7DBE6A);
-  --system-red: light-dark(#B23B33, #E0675A);
-  --system-orange: light-dark(#B5701A, #E89B45);
-  --system-yellow: light-dark(#9C7A10, #E3C34C);
-  --system-purple: light-dark(#7A5A9E, #B98AD6);
-  --pill-border: light-dark(rgba(33,30,22,0.10), rgba(255,255,255,0.14));
-  --code-bg: light-dark(rgba(33,30,22,0.05), rgba(255,255,255,0.05));
-  --code-border: light-dark(rgba(33,30,22,0.10), rgba(255,255,255,0.09));
-  --code-text: light-dark(#4A4030, #E8E4D8);
-  --ribbon-bg: light-dark(#E4DFD0, #232019);
-  --sidebar-bg: light-dark(#ECE8DC, #1C1A14);
-  --orb-core: light-dark(rgba(255,244,216,0.94), rgba(255,206,132,0.78));
-  --orb-base: light-dark(rgba(184,132,61,0.85), rgba(56,32,80,0.90));
-  --orb-bloom: light-dark(rgba(222,168,91,0.88), rgba(172,84,138,0.64));
-  --orb-lobe-a: light-dark(rgba(255,232,174,0.78), rgba(255,182,88,0.84));
-  --orb-lobe-b: light-dark(rgba(223,175,202,0.62), rgba(198,110,204,0.62));
-  --orb-lobe-c: light-dark(rgba(177,167,221,0.55), rgba(120,110,222,0.54));
-  --orb-shadow: light-dark(rgba(96,64,26,0.55), rgba(14,7,26,0.95));
-  --orb-specular: light-dark(rgba(255,252,244,0.70), rgba(255,250,236,0.88));
-  --orb-rim: light-dark(rgba(138,102,182,0.52), rgba(222,188,255,0.64));
   --tab-bar-height: 56px;
-  --font-ui: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  --font-display: "Sora", "Geist", -apple-system, system-ui, sans-serif;
-  --font-code: "Geist Mono", "SF Mono", Menlo, monospace;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 18px;
-  --radius-2xl: 24px;
   --ease-spring: cubic-bezier(0.34,1.56,0.64,1);
   --ease-smooth: cubic-bezier(0.4,0,0.2,1);
   --ease-snappy: cubic-bezier(0.2,0,0,1);
-}
-
-/* Shadows and filters, dark (default). Tonal staircase (chrome recedes, content
-   leads): Ribbon (lightest chrome) > Chat List (mid) > Thread (--bg, deepest). */
-:root, [data-theme="dark"] {
-  --inset-shine: inset 0 1px 0 rgba(255,255,255,0.06);
-  --shadow-subtle: 0 1px 2px rgba(0,0,0,0.30);
-  --shadow-ambient: 0 0 0 0.5px rgba(0,0,0,0.30);
-  --shadow-key: 0 4px 16px rgba(0,0,0,0.50);
-  --shadow-card: 0 0 0 0.5px rgba(0,0,0,0.30), 0 4px 16px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05);
-  --shadow-overlay: 0 0 0 0.5px rgba(0,0,0,0.40), 0 16px 48px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.05);
-  --sidebar-backdrop: blur(40px) saturate(160%);
-}
-
-/* Shadows and filters, light. The staircase steps DOWN from the content here:
-   Ribbon (greyest chrome) > Chat List (mid) > Thread (--bg, paper-white). */
-[data-theme="light"] {
-  --inset-shine: inset 0 1px 0 rgba(255,255,255,0.70);
-  --shadow-subtle: 0 1px 2px rgba(40,34,20,0.06);
-  --shadow-ambient: 0 0 0 0.5px rgba(40,34,20,0.10);
-  --shadow-key: 0 2px 8px rgba(40,34,20,0.10), 0 8px 24px rgba(40,34,20,0.08);
-  --shadow-card: 0 0 0 0.5px rgba(40,34,20,0.08), 0 1px 3px rgba(40,34,20,0.07), 0 4px 12px rgba(40,34,20,0.06), inset 0 1px 0 rgba(255,255,255,0.70);
-  --shadow-overlay: 0 0 0 0.5px rgba(40,34,20,0.10), 0 4px 16px rgba(40,34,20,0.10), 0 16px 48px rgba(40,34,20,0.14), inset 0 1px 0 rgba(255,255,255,0.80);
-  --sidebar-backdrop: blur(20px) saturate(150%);
-}
-@media (prefers-color-scheme: light) {
-  [data-theme="system"] {
-    --inset-shine: inset 0 1px 0 rgba(255,255,255,0.70);
-    --shadow-subtle: 0 1px 2px rgba(40,34,20,0.06);
-    --shadow-ambient: 0 0 0 0.5px rgba(40,34,20,0.10);
-    --shadow-key: 0 2px 8px rgba(40,34,20,0.10), 0 8px 24px rgba(40,34,20,0.08);
-    --shadow-card: 0 0 0 0.5px rgba(40,34,20,0.08), 0 1px 3px rgba(40,34,20,0.07), 0 4px 12px rgba(40,34,20,0.06), inset 0 1px 0 rgba(255,255,255,0.70);
-    --shadow-overlay: 0 0 0 0.5px rgba(40,34,20,0.10), 0 4px 16px rgba(40,34,20,0.10), 0 16px 48px rgba(40,34,20,0.14), inset 0 1px 0 rgba(255,255,255,0.80);
-    --sidebar-backdrop: blur(20px) saturate(150%);
-  }
 }
 
 /* ============================================
@@ -1145,10 +1055,10 @@ h1, h2, h3, h4, h5, h6 {
 .apple-btn-secondary:hover { filter: brightness(1.08); }
 
 /* ============================================
-   Ledger Theme Specifics
+   Org map
    ============================================ */
 
-/* Org map (react-flow) edges follow the separator token */
+/* react-flow edges follow the separator token */
 .react-flow__edge-path { stroke: var(--separator-opaque); }
 
 /* ============================================

@@ -286,6 +286,7 @@ export const SCREENS = [
   ...CHAT_SCREENS,
 ]
 
+/** @type {Array<'light' | 'dark'>} */
 export const THEMES = ['light', 'dark']
 
 export const VIEWPORTS = [

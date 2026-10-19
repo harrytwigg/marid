@@ -33,7 +33,8 @@ const assert = (condition, message) => { if (!condition) throw new Error(message
 /** Where every column and card is, to the pixel. */
 const layout = (page) =>
   page.evaluate(() =>
-    [...document.querySelectorAll('[data-board-column], [data-board-card]')].map((el) => {
+    [...document.querySelectorAll('[data-board-column], [data-board-card]')].map((node) => {
+      const el = /** @type {HTMLElement} */ (node)
       const r = el.getBoundingClientRect()
       return `${el.dataset.boardColumn ?? el.dataset.boardCard}:${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.width)},${Math.round(r.height)}`
     }).join('|'))
@@ -54,6 +55,7 @@ for (const [name, viewport, touch] of [['desktop', { width: 1440, height: 900 },
   console.log(`${name} (${process.env.JINN_CAPTURE_BROWSER === 'chromium' ? 'Chromium' : 'Firefox'})`)
   const context = await open(viewport, touch)
   const page = await context.newPage()
+  /** @type {(value?: unknown) => void} */
   let release = () => {}
   const held = new Promise((resolve) => { release = resolve })
   await page.route(CHUNK, async (route) => {

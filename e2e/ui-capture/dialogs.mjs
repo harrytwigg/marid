@@ -25,7 +25,7 @@ const PHONE = { width: 390, height: 844 }
 const tid = (page, id) => page.getByTestId(id)
 const gone = (page, id) => tid(page, id).waitFor({ state: 'detached', timeout: 5000 })
 const insideDialog = (page, id) => tid(page, id).evaluate((el) => el.contains(document.activeElement))
-const press = (page, locator, phone) => (phone ? locator.tap() : locator.click())
+const press = (_page, locator, phone) => (phone ? locator.tap() : locator.click())
 const shot = (page, name) => page.screenshot({ path: path.join(outDir, `${name}.png`) })
 const newTodo = (page) => page.locator('[data-testid="todo-new"], [data-testid="todo-new-fab"]').locator('visible=true').first()
 
@@ -137,7 +137,7 @@ async function sprintAndLightboxChecks() {
     await page.keyboard.press('Escape')
     await gone(page, 'attachment-lightbox')
     await page.waitForTimeout(300)
-    assert((await page.evaluate(() => document.activeElement?.dataset?.testid ?? '')).startsWith('attachment-tile-'), `focus ${await focusedLabel(page)}`)
+    assert((await page.evaluate(() => /** @type {HTMLElement | null} */ (document.activeElement)?.dataset?.testid ?? '')).startsWith('attachment-tile-'), `focus ${await focusedLabel(page)}`)
   })
 }
 

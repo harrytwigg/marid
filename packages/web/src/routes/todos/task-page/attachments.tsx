@@ -97,7 +97,7 @@ export function AttachmentsSection({
                 dense
                 action={removeButton(
                   attachment,
-                  "absolute right-1 top-1 size-[34px] rounded-full bg-[var(--material-thick)] text-[var(--text-secondary)] shadow-[var(--shadow-subtle)] backdrop-blur-[20px] hover:text-[var(--text-primary)] group-hover/tile:opacity-100",
+                  "absolute right-1 top-1 size-[34px] rounded-full bg-[var(--material-thick-opaque)] text-[var(--text-secondary)] shadow-[var(--shadow-subtle)] hover:text-[var(--text-primary)] group-hover/tile:opacity-100",
                 )}
               />
             ) : (

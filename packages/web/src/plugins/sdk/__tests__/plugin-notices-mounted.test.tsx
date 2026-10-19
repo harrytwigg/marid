@@ -154,7 +154,7 @@ it('raises a titled notice and a plain one into the one stack', () => {
     })
   })
 
-  const stacks = document.querySelectorAll('[data-plugin-notices]')
+  const stacks = document.querySelectorAll('[data-notices]')
   expect(stacks).toHaveLength(1)
   expect(stacks[0]!.textContent).toContain('the mailbox is unreachable')
   expect(stacks[0]!.textContent).toContain('Import finished')

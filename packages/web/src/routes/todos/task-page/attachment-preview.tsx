@@ -121,7 +121,7 @@ export function AttachmentTile({
           />
         )}
         {video && !posterFailed && (
-          <span className="pointer-events-none absolute left-1/2 top-1/2 grid size-10 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[var(--material-thick)] text-[var(--text-primary)] shadow-[var(--shadow-overlay)] backdrop-blur-xl">
+          <span className="pointer-events-none absolute left-1/2 top-1/2 grid size-10 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[var(--material-thick-opaque)] text-[var(--text-primary)] shadow-[var(--shadow-overlay)]">
             <Play size={16} filled aria-hidden className="ml-0.5" />
           </span>
         )}
@@ -206,7 +206,7 @@ function AttachmentVideoDialog({
           type="button"
           aria-label="Close video"
           onClick={onClose}
-          className="focus-outline absolute -right-1 -top-11 grid size-10 place-items-center rounded-[var(--radius-md)] bg-[var(--material-thick)] text-[var(--text-primary)] shadow-[var(--shadow-overlay)] outline-none backdrop-blur-xl transition-transform active:scale-[0.96]"
+          className="focus-outline absolute -right-1 -top-11 grid size-10 place-items-center rounded-[var(--radius-md)] bg-[var(--material-thick-opaque)] text-[var(--text-primary)] shadow-[var(--shadow-overlay)] outline-none transition-transform active:scale-[0.96]"
         >
           <X size={18} aria-hidden />
         </button>

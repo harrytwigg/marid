@@ -272,7 +272,7 @@ export function ImageLightbox({
               data-testid="attachment-lightbox-prev"
               aria-label="Previous image"
               onClick={() => navigate(-1)}
-              className="focus-outline absolute left-3 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-full bg-[var(--material-thick)] text-[var(--text-secondary)] shadow-[var(--shadow-overlay)] outline-none backdrop-blur-[20px] transition-transform duration-150 ease-out hover:text-[var(--text-primary)] active:scale-[0.96] sm:left-6"
+              className="focus-outline absolute left-3 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-full bg-[var(--material-thick-opaque)] text-[var(--text-secondary)] shadow-[var(--shadow-overlay)] outline-none transition-transform duration-150 ease-out hover:text-[var(--text-primary)] active:scale-[0.96] sm:left-6"
             >
               <ChevronLeft size={19} aria-hidden />
             </button>
@@ -281,15 +281,15 @@ export function ImageLightbox({
               data-testid="attachment-lightbox-next"
               aria-label="Next image"
               onClick={() => navigate(1)}
-              className="focus-outline absolute right-3 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-full bg-[var(--material-thick)] text-[var(--text-secondary)] shadow-[var(--shadow-overlay)] outline-none backdrop-blur-[20px] transition-transform duration-150 ease-out hover:text-[var(--text-primary)] active:scale-[0.96] sm:right-6"
+              className="focus-outline absolute right-3 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-full bg-[var(--material-thick-opaque)] text-[var(--text-secondary)] shadow-[var(--shadow-overlay)] outline-none transition-transform duration-150 ease-out hover:text-[var(--text-primary)] active:scale-[0.96] sm:right-6"
             >
               <ChevronRight size={19} aria-hidden />
             </button>
           </>
         )}
         <div
-          className="absolute bottom-[max(16px,env(safe-area-inset-bottom))] left-1/2 flex w-fit max-w-[calc(100vw-24px)] -translate-x-1/2 items-center gap-1 rounded-full py-1.5 pl-4 pr-1.5 backdrop-blur-[20px]"
-          style={{ background: "var(--material-thick)", boxShadow: "var(--shadow-overlay)" }}
+          className="absolute bottom-[max(16px,env(safe-area-inset-bottom))] left-1/2 flex w-fit max-w-[calc(100vw-24px)] -translate-x-1/2 items-center gap-1 rounded-full py-1.5 pl-4 pr-1.5"
+          style={{ background: "var(--material-thick-opaque)", boxShadow: "var(--shadow-overlay)" }}
         >
           <span className="min-w-0 truncate pr-2 text-[13px] font-medium text-[var(--text-primary)]">{image.name}</span>
           <button

@@ -1,9 +1,9 @@
 /*
  * AERO — the glass identity.
  *
- * Loaded after globals.css and theme-overrides.css, so it re-declares the
- * shared tokens every screen already reads (--bg, --material-*, --fill-*,
- * --text-*, --accent …) and adds the glass vocabulary below. Colours are
+ * Loaded after globals.css, and the one place the palette is written: the
+ * shared tokens every screen reads (--bg, --material-*, --fill-*, --text-*,
+ * --accent …), the Talk orb's colours, and the glass vocabulary below. Colours are
  * written once with light-dark(); color-scheme on the root (globals.css)
  * picks the side. Gradients cannot use light-dark(), so the backdrop and the
  * sheen keep a block per theme; shadows are built from --glass-shadow and so
@@ -125,6 +125,23 @@
   --code-border: light-dark(rgba(16,52,92,0.10), rgba(200,228,255,0.10));
   --code-text: light-dark(#16304D, #E8F1FB);
 
+  /* The Talk orb: aqua, lagoon and iris, the same three hues as the backdrop
+     behind the glass. Light keeps a deep lagoon base so the sphere holds its
+     shape on the near-white sheet; dark lets the aqua glow against navy.
+     These are <color> registered tokens (globals.css), which script reads back
+     for the canvas. Firefox resolves a registered token against the PARENT's
+     color-scheme, so a read inside a nested opposite-theme subtree would see
+     the page's side; the orb is never drawn in one. */
+  --orb-core: light-dark(rgba(232,252,255,0.94), rgba(150,240,236,0.78));
+  --orb-base: light-dark(rgba(14,110,140,0.86), rgba(8,36,64,0.92));
+  --orb-bloom: light-dark(rgba(52,184,200,0.88), rgba(24,150,190,0.66));
+  --orb-lobe-a: light-dark(rgba(150,240,236,0.80), rgba(84,226,210,0.84));
+  --orb-lobe-b: light-dark(rgba(96,170,235,0.64), rgba(58,148,232,0.64));
+  --orb-lobe-c: light-dark(rgba(62,50,186,0.96), rgba(128,112,244,0.58));
+  --orb-shadow: light-dark(rgba(8,52,86,0.55), rgba(2,10,22,0.95));
+  --orb-specular: light-dark(rgba(246,255,255,0.72), rgba(236,255,255,0.88));
+  --orb-rim: light-dark(rgba(30,100,170,0.52), rgba(150,214,255,0.64));
+
   /* Glass tints, weakest to strongest. */
   --glass-chrome: light-dark(rgba(255,255,255,0.52), rgba(14,26,44,0.50));
   --glass-float: light-dark(rgba(255,255,255,0.64), rgba(20,34,54,0.62));
@@ -156,9 +173,7 @@
   --material-thin: light-dark(rgba(255,255,255,0.40), rgba(200,228,255,0.05));
   --material-ultra-thin: light-dark(rgba(255,255,255,0.24), rgba(200,228,255,0.03));
   --pill-border: var(--glass-edge);
-  --ribbon-bg: transparent;
   --sidebar-bg: var(--glass-chrome);
-  --sidebar-backdrop: none;
 
   --inset-shine: inset 0 1px 0 var(--glass-specular);
   --shadow-subtle: 0 1px 2px var(--glass-shadow);
@@ -205,8 +220,10 @@
 }
 
 /* Reduced transparency: every glass token becomes its opaque twin and nothing
-   blurs. Honoured from the OS and from data-transparency="reduced", which a
-   setting can write on <html>. */
+   blurs, and the layers the orb is built from become solid so the sphere reads
+   the same on the flat sheet (its shadow and specular stay translucent: they
+   are gradient stops that fade to nothing). Honoured from the OS and from
+   data-transparency="reduced", which a setting can write on <html>. */
 @media (prefers-reduced-transparency: reduce) {
   :root, [data-theme] {
     --glass-chrome: var(--glass-chrome-opaque);
@@ -216,6 +233,13 @@
     --glass-blur: none;
     --glass-blur-strong: none;
     --glass-live: 0;
+    --orb-core: light-dark(#EEFEFF, #9AF0EA);
+    --orb-base: light-dark(#1E6F8C, #0A2B4A);
+    --orb-bloom: light-dark(#3FB5C6, #1B86A8);
+    --orb-lobe-a: light-dark(#9CEDEA, #54DCCB);
+    --orb-lobe-b: light-dark(#86B9EC, #3A86D6);
+    --orb-lobe-c: light-dark(#4E40B8, #6A5EDB);
+    --orb-rim: light-dark(#4F86C0, #8CC8F0);
   }
 }
 [data-transparency="reduced"], [data-transparency="reduced"] [data-theme] {
@@ -226,6 +250,13 @@
   --glass-blur: none;
   --glass-blur-strong: none;
   --glass-live: 0;
+  --orb-core: light-dark(#EEFEFF, #9AF0EA);
+  --orb-base: light-dark(#1E6F8C, #0A2B4A);
+  --orb-bloom: light-dark(#3FB5C6, #1B86A8);
+  --orb-lobe-a: light-dark(#9CEDEA, #54DCCB);
+  --orb-lobe-b: light-dark(#86B9EC, #3A86D6);
+  --orb-lobe-c: light-dark(#4E40B8, #6A5EDB);
+  --orb-rim: light-dark(#4F86C0, #8CC8F0);
 }
 
 body {

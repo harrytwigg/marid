@@ -44,7 +44,7 @@ try {
           img.onerror = () => reject(new Error("svg did not load"))
           img.src = src
         }),
-      [`data:image/svg+xml;base64,${data}`, size],
+      /** @type {[string, number]} */ ([`data:image/svg+xml;base64,${data}`, size]),
     )
     await writeFile(join(publicDir, png), Buffer.from(url.split(",")[1], "base64"))
     await page.close()

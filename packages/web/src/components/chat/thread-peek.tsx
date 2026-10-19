@@ -268,7 +268,7 @@ export function ThreadPeek({ peek, onClose, onOpenFullChat, renderContent, onExi
         aria-label={`${displayPeek.displayName} report`}
         aria-hidden={phase === 'revealing' ? true : undefined}
         tabIndex={-1}
-        className="peek-panel absolute flex flex-col bg-[var(--material-thick)] shadow-[var(--shadow-overlay)] backdrop-blur-2xl"
+        className="peek-panel glass-overlay absolute flex flex-col"
         data-testid="thread-peek"
         onTransitionEnd={(event) => {
           if (event.target !== event.currentTarget || event.propertyName !== 'transform') return

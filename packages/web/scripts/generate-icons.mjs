@@ -78,6 +78,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 `
 
+/** @param {string} name @param {{ layer?: string, line: string }} glyph */
 function moduleSource(name, { layer, line }) {
   const layerProp = layer === undefined ? "" : ` layer="${layer}"`
   return (
@@ -113,7 +114,7 @@ export async function buildOutput() {
 
 async function existing() {
   const names = await readdir(outDir).catch(() => [])
-  return new Map(await Promise.all(names.map(async (n) => [n, await readFile(path.join(outDir, n), "utf8")])))
+  return new Map(await Promise.all(names.map(async (n) => /** @type {[string, string]} */ ([n, await readFile(path.join(outDir, n), "utf8")]))))
 }
 
 function staleFiles(wanted, have) {

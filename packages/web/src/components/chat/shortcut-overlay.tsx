@@ -41,7 +41,7 @@ export function ShortcutOverlay({ shortcuts, onClose }: ShortcutOverlayProps) {
       ref={ref}
       role="complementary"
       aria-label="Keyboard shortcuts"
-      className={`fixed bottom-4 right-4 z-40 w-[280px] overflow-hidden rounded-[var(--radius-lg)] border border-border bg-[var(--material-thick)] shadow-[var(--shadow-overlay)] backdrop-blur-xl transition-opacity duration-150 ${isClosing ? 'opacity-0' : 'animate-fade-in'}`}
+      className={`fixed bottom-4 right-4 z-40 w-[280px] overflow-hidden rounded-[var(--radius-lg)] border border-border glass-overlay transition-opacity duration-150 ${isClosing ? 'opacity-0' : 'animate-fade-in'}`}
     >
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-border">
         <span className="text-subheadline font-semibold text-foreground">Keyboard Shortcuts</span>

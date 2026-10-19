@@ -2,7 +2,7 @@ import "@/test/preload-menus"
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { clearHostBridge, registerHostNotificationSink } from "@/plugins/sdk/host-bridge"
+import { clearNoticeSink, registerNoticeSink } from "@/lib/notices"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../dropdown-menu"
 import { preloadMenuPopup } from "../menu-root"
 
@@ -36,7 +36,7 @@ function Example({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {
 
 afterEach(() => {
   control.fail = true
-  clearHostBridge()
+  clearNoticeSink()
   vi.restoreAllMocks()
 })
 
@@ -46,7 +46,7 @@ describe("a menu whose popup fails", () => {
     vi.spyOn(console, "error").mockImplementation(() => {})
     const onOpenChange = vi.fn()
     const notice = vi.fn()
-    registerHostNotificationSink(notice)
+    registerNoticeSink(notice)
     render(<Example onOpenChange={onOpenChange} />)
     const trigger = screen.getByRole("button", { name: "Actions" })
 

@@ -136,12 +136,10 @@ export function UndoStrip() {
         // `lg:hidden`, so from `lg` up the strip goes back to the screen edge.
         "bottom-[calc(49px+max(var(--safe-bottom),6px)+var(--space-3))] lg:bottom-[calc(var(--space-3)+var(--safe-bottom))]",
         "flex max-w-[420px] items-center gap-[var(--space-3)]",
-        // `--material-regular` rather than the sheet's `--material-thick`: the
-        // sheet reads as a surface because of the scrim behind it, and this has
-        // none. Regular is the one material that sits lighter than `--bg` in
-        // both themes, so the strip lifts off the page instead of tinting it.
-        "rounded-[var(--radius-xl)] bg-[var(--material-regular)] py-[var(--space-2)] pl-[var(--space-4)] pr-[var(--space-2)]",
-        "shadow-[var(--shadow-overlay)] backdrop-blur-2xl",
+        // The overlay material rather than the sheet's tint: the sheet reads as
+        // a surface because of the scrim behind it, and this has none, so it has
+        // to lift off the page instead of tinting it.
+        "glass-overlay rounded-[var(--radius-xl)] py-[var(--space-2)] pl-[var(--space-4)] pr-[var(--space-2)]",
       )}
     >
       <StripLine failure={failure} performed={offer?.performed} />

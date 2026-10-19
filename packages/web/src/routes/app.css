@@ -21,7 +21,6 @@
 @import "./heroui-theme-restore.css";
 @import "@heroui/styles/utilities";
 @import "@heroui/styles/base/base.css" layer(base);
-@import "./theme-overrides.css";
 @import "./heroui-bridge.css";
 /* One import per HeroUI component an adapter in components/ui draws. A control
    whose adapter is added later adds its line here. */

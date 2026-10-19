@@ -38,64 +38,71 @@ function ringOf(node, isSwitch) {
   return { outline, shadow: style.boxShadow }
 }
 
-for (const theme of THEMES) {
-  for (const control of CONTROLS) {
-    const isSwitch = control.name === 'switch'
-    const context = await browser.newContext({
-      viewport: { width: 1440, height: 900 },
-      deviceScaleFactor: 3,
-      colorScheme: theme,
-      reducedMotion: 'reduce',
-      extraHTTPHeaders: { authorization: `Bearer ${token}` },
-    })
-    await context.addInitScript(([t]) => {
-      localStorage.setItem('jinn-theme', t)
-      localStorage.setItem('jinn-onboarded', 'true')
-    }, [theme])
-    const page = await context.newPage()
-    try {
-      await page.goto(baseUrl + control.url, { waitUntil: 'networkidle' })
-      await page.getByText(control.ready, { exact: false }).locator('visible=true').first().waitFor({ timeout: 15_000 })
-      await page.evaluate(() => document.fonts.ready)
-      const el = control.locate(page)
-      await el.scrollIntoViewIfNeeded()
-      const handle = await el.elementHandle()
-      const shoot = async (state) => {
-        await page.waitForTimeout(350)
-        const box = await handle.evaluate(pressBox, isSwitch)
-        const pad = 14
-        await page.screenshot({
-          path: path.join(outDir, `${control.name}-${theme}-${state}.png`),
-          clip: { x: Math.max(0, box.x - pad), y: Math.max(0, box.y - pad), width: box.width + pad * 2, height: box.height + pad * 2 },
-        })
-      }
-      await page.mouse.move(5, 5)
-      await shoot('rest')
+async function openContext(theme) {
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 900 },
+    deviceScaleFactor: 3,
+    colorScheme: theme,
+    reducedMotion: 'reduce',
+    extraHTTPHeaders: { authorization: `Bearer ${token}` },
+  })
+  await context.addInitScript(([t]) => {
+    localStorage.setItem('jinn-theme', t)
+    localStorage.setItem('jinn-onboarded', 'true')
+  }, [theme])
+  return context
+}
+
+async function photograph(theme, control) {
+  const isSwitch = control.name === 'switch'
+  const context = await openContext(theme)
+  const page = await context.newPage()
+  try {
+    await page.goto(baseUrl + control.url, { waitUntil: 'networkidle' })
+    await page.getByText(control.ready, { exact: false }).locator('visible=true').first().waitFor({ timeout: 15_000 })
+    await page.evaluate(() => document.fonts.ready)
+    const el = control.locate(page)
+    await el.scrollIntoViewIfNeeded()
+    const handle = await el.elementHandle()
+    const shoot = async (state) => {
+      await page.waitForTimeout(350)
       const box = await handle.evaluate(pressBox, isSwitch)
-      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-      await shoot('hover')
-      await page.mouse.down()
-      await shoot('pressed')
-      // Release away from the control so nothing is toggled or opened.
-      await page.mouse.move(5, 5)
-      await page.mouse.up()
-      await page.evaluate(() => document.activeElement?.blur?.())
-      // A real Tab marks the page as keyboard-driven (:focus-visible); focus() then moves to the
-      // control, which on Settings sits behind dozens of other tab stops.
-      await page.keyboard.press('Tab')
-      await handle.evaluate((node) => node.focus())
-      if (!(await handle.evaluate((node) => node.matches(':focus-visible')))) throw new Error('the control is not :focus-visible after a keyboard focus')
-      await shoot('focus-visible')
-      const ring = await handle.evaluate(ringOf, isSwitch)
-      const shadowLayers = ring.shadow === 'none' ? 0 : ring.shadow.split(/,(?![^(]*\))/).length
-      console.log(`  ${control.name} ${theme} focus ring: outline ${ring.outline}, ${shadowLayers} shadow layers`)
-      if (!ring.outline && shadowLayers < 1) failures.push(`${control.name} ${theme}: no ring when focused by the keyboard`)
-    } catch (err) {
-      failures.push(`${control.name} ${theme}: ${String(err.message).split('\n')[0]}`)
-    } finally {
-      await context.close()
+      const pad = 14
+      await page.screenshot({
+        path: path.join(outDir, `${control.name}-${theme}-${state}.png`),
+        clip: { x: Math.max(0, box.x - pad), y: Math.max(0, box.y - pad), width: box.width + pad * 2, height: box.height + pad * 2 },
+      })
     }
+    await page.mouse.move(5, 5)
+    await shoot('rest')
+    const box = await handle.evaluate(pressBox, isSwitch)
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await shoot('hover')
+    await page.mouse.down()
+    await shoot('pressed')
+    // Release away from the control so nothing is toggled or opened.
+    await page.mouse.move(5, 5)
+    await page.mouse.up()
+    await page.evaluate(() => /** @type {HTMLElement | null} */ (document.activeElement)?.blur?.())
+    // A real Tab marks the page as keyboard-driven (:focus-visible); focus() then moves to the
+    // control, which on Settings sits behind dozens of other tab stops.
+    await page.keyboard.press('Tab')
+    await handle.evaluate((node) => node.focus())
+    if (!(await handle.evaluate((node) => node.matches(':focus-visible')))) throw new Error('the control is not :focus-visible after a keyboard focus')
+    await shoot('focus-visible')
+    const ring = await handle.evaluate(ringOf, isSwitch)
+    const shadowLayers = ring.shadow === 'none' ? 0 : ring.shadow.split(/,(?![^(]*\))/).length
+    console.log(`  ${control.name} ${theme} focus ring: outline ${ring.outline}, ${shadowLayers} shadow layers`)
+    if (!ring.outline && shadowLayers < 1) failures.push(`${control.name} ${theme}: no ring when focused by the keyboard`)
+  } catch (err) {
+    failures.push(`${control.name} ${theme}: ${String(err.message).split('\n')[0]}`)
+  } finally {
+    await context.close()
   }
+}
+
+for (const theme of THEMES) {
+  for (const control of CONTROLS) await photograph(theme, control)
   console.log(`photographed ${theme}`)
 }
 await browser.close()
