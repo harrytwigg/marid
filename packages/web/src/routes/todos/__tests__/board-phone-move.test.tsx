@@ -150,6 +150,79 @@ describe("moving a card on a phone", () => {
     expect(screen.queryByTestId("task-probe")).toBeNull()
   })
 
+  it("keeps the card in its destination column while the board refetches the move", async () => {
+    setViewport(true)
+    const moving = compact("PLA-3", "executing")
+    setWorkItemStatus.mockResolvedValue({ workItem: { ...moving, status: "in_review", version: 4 }, escalated: false })
+    // Left in flight: the rank follow-up is a second write, and the frame this
+    // pins is the status lane's alone.
+    updateWorkItem.mockImplementation(() => new Promise(() => {}))
+    const view = renderBoard()
+    await screen.findByTestId("board-card-PLA-3")
+
+    /* Every commit the move causes is recorded, not only the states the test stops
+     * at, so no render in between may leave the card in no column. */
+    const commits: string[] = []
+    const record = () => {
+      const holders = [...view.container.querySelectorAll("[data-board-column]")]
+        .filter((column) => column.querySelector('[data-board-card="PLA-3"]'))
+        .map((column) => column.getAttribute("data-board-column"))
+      commits.push(holders.join(","))
+    }
+    // The state the move starts from, then every commit it causes. The menu itself
+    // is portalled outside this container, so its open leaves no record.
+    record()
+    const observer = new MutationObserver(record)
+    observer.observe(view.container, { childList: true, subtree: true })
+
+    tap(screen.getByTestId("board-move-PLA-3"))
+    await screen.findByRole("menu")
+
+    /* Hold the refetches the confirmed move starts, so the columns land one at a
+     * time: the order the gateway answers them in is not the UI's to choose. */
+    const refetches: Array<{ status?: WorkItemStatusWire; release: () => void }> = []
+    listWorkItems.mockImplementation((params: { status?: WorkItemStatusWire }) => new Promise((resolve) => {
+      refetches.push({ status: params.status, release: () => resolve(listResponse(params)) })
+    }))
+
+    tap(screen.getByRole("menuitemradio", { name: "In review" }))
+    const destinationColumn = () => screen.getByTestId("board-column-in_review")
+    const card = () => screen.getByTestId("board-card-PLA-3")
+    await waitFor(() => expect(destinationColumn().contains(card())).toBe(true))
+
+    // The confirmed revision is banked: the gateway now serves the card under
+    // its new status only, and every column is asked again.
+    rows.executing = []
+    rows.in_review = [{ ...moving, status: "in_review", version: 5 }]
+    await waitFor(() => expect(refetches.filter((request) => request.status === "executing")).toHaveLength(1))
+
+    // The column it left answers first, without it. The card must still be in the
+    // column it moved to — this is the frame the board used to blink on.
+    await act(async () => {
+      refetches.filter((request) => request.status === "executing").forEach((request) => request.release())
+    })
+    // Every commit up to here is on the record, and none of them left the card in no column.
+    expect(commits).not.toContain("")
+    expect(screen.getAllByTestId("board-card-PLA-3")).toHaveLength(1)
+    expect(destinationColumn().contains(card())).toBe(true)
+    expect(screen.getByTestId("board-column-executing").contains(card())).toBe(false)
+
+    // Then the rest, the destination's own refetch among them: one card, in place.
+    await act(async () => { refetches.splice(0).forEach((request) => request.release()) })
+    await waitFor(() => {
+      const cards = screen.getAllByTestId("board-card-PLA-3")
+      expect(cards).toHaveLength(1)
+      expect(destinationColumn().contains(cards[0])).toBe(true)
+    })
+
+    observer.disconnect()
+    // The recorder watched the move — the card in its old column, then its new one —
+    // and no commit along the way left it in neither.
+    expect(commits).toContain("executing")
+    expect(commits).toContain("in_review")
+    expect(commits).not.toContain("")
+  })
+
   it("a move into Blocked opens the task page on its reason field, as a drop does", async () => {
     setViewport(true)
     setWorkItemStatus.mockResolvedValue({ workItem: { ...compact("PLA-3", "blocked"), version: 4 }, escalated: false })
