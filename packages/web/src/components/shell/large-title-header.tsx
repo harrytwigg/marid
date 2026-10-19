@@ -32,12 +32,13 @@ function Subtitle({ children, className }: { children: ReactNode; className?: st
 }
 
 /** The chrome the large title collapses into: page-wide material, the inline
- *  title, and whatever the route puts on the trailing side. */
+ *  title, and whatever the route puts on the trailing side. The material is the
+ *  reading sheet's own opaque colour, so there is nothing for a blur to show. */
 function TitleBar({ title, trailing }: { title: ReactNode; trailing: ReactNode }) {
   return (
     <div
       data-slot="large-title-bar"
-      className="jinn-title-bar sticky z-20 grid min-h-11 grid-cols-[1fr_minmax(0,auto)_1fr] items-center gap-2 bg-[var(--material-thick)] backdrop-blur"
+      className="jinn-title-bar sticky z-20 grid min-h-11 grid-cols-[1fr_minmax(0,auto)_1fr] items-center gap-2 bg-[var(--material-thick)]"
     >
       {/* Three columns, and which of the two outer ones gives way decides where
           the title sits. While the title fits, both `1fr` tracks take an equal

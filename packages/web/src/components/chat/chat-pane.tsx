@@ -458,7 +458,7 @@ export function ChatPane({
         background: 'var(--bg)',
         position: 'relative',
       }}
-      data-chat-pane-session={sessionId ?? 'new'} data-chat-pane-active={String(isActive)}
+      data-chat-pane-session={sessionId ?? 'new'} data-chat-pane-active={String(isActive)} data-chat-multi-pane={multiPane ? '' : undefined}
       onClick={(event) => { if (!(event.target as Element).closest('[data-pane-focus-preserving]')) onFocus() }} onFocusCapture={(event) => { if (!(event.target as Element).closest('[data-pane-focus-preserving]')) onFocus() }}
       className="group/chat-pane"
       {...fileDrop.handlers}
@@ -471,7 +471,7 @@ export function ChatPane({
       {showSessionHydration && !shownFile && <ChatHydrationOverlay />}
 
       <div style={PANE_REGION}>
-      <div data-chat-pane-body inert={shownFile ? true : undefined} style={PANE_REGION}>
+      <div data-chat-pane-body data-composer-float={!multiPane && !terminalPane && !(viewMode === 'cli' && sessionId) ? '' : undefined} inert={shownFile ? true : undefined} style={PANE_REGION}>
 
       {/* Messages / CLI transcript — CliTerminal is display-only; ChatInput below
           sends. The transcript mounts on a blank composer too, with the employee

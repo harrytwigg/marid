@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkItemDetailWire, WorkItemFullWire, WorkItemTreeNodeWire } from "@/lib/api"
 import TaskPage from "../task-page/task-page"
-
+import "@/test/preload-menus"
 /* Todos v2 slice 6 stage B — the task page (design-doc §7, task-detail.html).
  * Anatomy: breadcrumb trail from the root tree, banner precedence
  * (blocked only), the banner's asked-for-after

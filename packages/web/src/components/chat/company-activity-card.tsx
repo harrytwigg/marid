@@ -1,6 +1,6 @@
 import { useId, useRef, useState, type ComponentType, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, ArrowUpRight, Check, ChevronDown, ListChecks, Play, Workflow } from 'lucide-react'
+import { AlertTriangle, ArrowUpRight, Check, ChevronDown, ListChecks, Play, Workflow } from '@/components/ui/icon'
 import type { ChatBlock, JsonValue } from '@/lib/blocks'
 import { todoPath } from '@/lib/todo-id'
 import { useOpenTodo } from '@/components/chat/file-open-context'
@@ -102,8 +102,8 @@ function StateMark({ tone }: { tone: Tone }) {
   // The mark carries the semantic tone (decorative, aria-hidden); the status
   // WORD conveys the same state to assistive tech, so these colors are exempt
   // from the 4.5:1 text rule and keep tone off the readable copy.
-  if (tone === 'done') return <Check size={12} strokeWidth={2.5} aria-hidden="true" className="mt-[2px] shrink-0 text-[var(--text-tertiary)]" />
-  if (tone === 'error') return <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" className="mt-[2px] shrink-0 text-[var(--system-red)]" />
+  if (tone === 'done') return <Check size={12} aria-hidden="true" className="mt-[2px] shrink-0 text-[var(--text-tertiary)]" />
+  if (tone === 'error') return <AlertTriangle size={12} aria-hidden="true" className="mt-[2px] shrink-0 text-[var(--system-red)]" />
   if (tone === 'working') {
     return (
       <span
@@ -202,7 +202,7 @@ export function CompanyActivityCard({ block }: { block: ChatBlock }) {
       data-block-type={block.type}
       data-todo-id={todoId || undefined}
       onKeyDown={handleKeyDown}
-      className="my-[var(--space-2)] w-[min(480px,calc(100vw-var(--space-6)))] max-w-full rounded-[var(--radius-xl)] bg-[var(--fill-tertiary)] shadow-[var(--shadow-subtle)]"
+      className="my-[var(--space-2)] w-[min(480px,calc(100vw-var(--space-6)))] max-w-full glass-card rounded-[var(--radius-xl)]"
     >
       <div className="flex min-h-16 flex-wrap items-center gap-[var(--space-3)] py-[var(--space-3)] pl-[var(--space-3)] pr-[var(--space-2)] max-[504px]:pb-[var(--space-2)]">
         <span
@@ -240,7 +240,6 @@ export function CompanyActivityCard({ block }: { block: ChatBlock }) {
               Preview
               <ChevronDown
                 size={12}
-                strokeWidth={2.25}
                 aria-hidden="true"
                 className={`shrink-0 text-[var(--text-tertiary)] transition-transform duration-150 ease-[var(--ease-smooth)] motion-reduce:transition-none ${open ? 'rotate-180' : 'rotate-0'}`}
               />
@@ -254,7 +253,7 @@ export function CompanyActivityCard({ block }: { block: ChatBlock }) {
             className="inline-flex min-h-10 items-center gap-1 rounded-[var(--radius-md)] border-none bg-transparent px-[var(--space-2)] text-[length:var(--text-caption1)] font-[var(--weight-medium)] text-[var(--text-secondary)] transition-[background-color,scale] duration-150 ease-[var(--ease-smooth)] hover:bg-[var(--fill-secondary)] active:scale-[0.96] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] motion-reduce:transition-none"
           >
             Open
-            <ArrowUpRight size={12} strokeWidth={2.25} aria-hidden="true" className="shrink-0 text-[var(--text-tertiary)]" />
+            <ArrowUpRight size={12} aria-hidden="true" className="shrink-0 text-[var(--text-tertiary)]" />
           </button>
           )}
         </span>

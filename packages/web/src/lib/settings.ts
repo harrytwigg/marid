@@ -25,13 +25,23 @@ export function isTextScale(value: unknown): value is number {
   return TEXT_SCALES.some((step) => step.value === value)
 }
 
+export type Transparency = "full" | "reduced"
+
+export const TRANSPARENCIES: readonly { label: string; value: Transparency }[] = [
+  { label: "Full", value: "full" },
+  { label: "Reduced", value: "reduced" },
+]
+
+export function isTransparency(value: unknown): value is Transparency {
+  return value === "full" || value === "reduced"
+}
+
 export interface JinnSettings {
   accentColor: string | null
   companyName: string | null
   portalName: string | null
   portalSubtitle: string | null
   portalEmoji: string | null
-  portalIcon: string | null
   iconBgHidden: boolean
   emojiOnly: boolean
   operatorName: string | null
@@ -47,6 +57,9 @@ export interface JinnSettings {
   /** Multiplier on every type step. Per-device on purpose — it tracks the screen
    *  being read, not the account. */
   textScale: number
+  /** "reduced" swaps every glass surface for its opaque twin. "full" leaves the
+   *  choice to the OS, whose reduced-transparency preference applies either way. */
+  transparency: Transparency
   employeeOverrides: Record<string, EmployeeOverride>
 }
 
@@ -56,7 +69,6 @@ export const DEFAULTS: JinnSettings = {
   portalName: null,
   portalSubtitle: null,
   portalEmoji: null,
-  portalIcon: null,
   iconBgHidden: false,
   emojiOnly: false,
   operatorName: null,
@@ -66,6 +78,7 @@ export const DEFAULTS: JinnSettings = {
   talkOrbVariant: "mist",
   talkOrbIntensity: "standard",
   textScale: 1,
+  transparency: "full",
   employeeOverrides: {},
 }
 
@@ -78,9 +91,12 @@ export function loadSettings(): JinnSettings {
     if (!raw) return { ...DEFAULTS }
     const parsed = JSON.parse(raw)
     const merged = { ...DEFAULTS, ...parsed } as JinnSettings
+    // Retired: nothing writes it, and a saved copy would be written back for ever.
+    delete (merged as { portalIcon?: unknown }).portalIcon
     if (!isOrbVariant(merged.talkOrbVariant)) merged.talkOrbVariant = DEFAULTS.talkOrbVariant
     if (!isOrbIntensity(merged.talkOrbIntensity)) merged.talkOrbIntensity = DEFAULTS.talkOrbIntensity
     if (!isTextScale(merged.textScale)) merged.textScale = DEFAULTS.textScale
+    if (!isTransparency(merged.transparency)) merged.transparency = DEFAULTS.transparency
     return merged
   } catch {
     return { ...DEFAULTS }

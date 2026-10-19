@@ -59,6 +59,22 @@ describe('ChatMessages jump affordance', () => {
     expect(within(jump).queryByText(/jump to latest/i)).toBeNull()
   })
 
+  it('is floating glass and rides above the composer that overlaps the transcript', () => {
+    render(<ChatMessages messages={messages} loading={false} />)
+
+    const jump = screen.getByRole('button', { name: 'Jump to latest' })
+    expect(jump.classList.contains('glass-float')).toBe(true)
+    expect(jump.className).not.toMatch(/backdrop-blur/)
+    expect(jump.className).toContain('var(--composer-overlap,0px)')
+  })
+
+  it('pads the transcript by the composer overlap, which is 0 wherever the composer does not float', () => {
+    const { container } = render(<ChatMessages messages={messages} loading={false} />)
+
+    const column = container.querySelector('.chat-messages-scroll > div')!
+    expect(column.className).toContain('var(--composer-overlap,0px)')
+  })
+
   it('keeps the touch affordance at 40px and shrinks only for fine pointers', () => {
     render(<ChatMessages messages={messages} loading={false} />)
 

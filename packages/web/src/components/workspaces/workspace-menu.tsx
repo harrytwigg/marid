@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from "react"
-import { Check, ChevronRight, Layers3, LoaderCircle, Plus, X } from "lucide-react"
+import { Check, ChevronRight, Layers3, LoaderCircle, Plus, X } from "@/components/ui/icon"
 import type { WorkspaceInfo } from "@/lib/api"
 import { useStartWorkspace, useWorkspaces } from "@/hooks/use-workspaces"
 import { cn } from "@/lib/utils"
@@ -58,27 +58,33 @@ function WorkspaceRow({
   if (!workspace.current && workspace.running) {
     if (onOpen) {
       if (onRemove) {
+        // Remove is a button inside the row: a menu's list holds only items, so it cannot sit beside one.
+        // Its presses are its own, never the row's.
         return (
-          <div className="flex min-h-12 items-center rounded-[10px] focus-within:bg-[var(--fill-secondary)]">
-            <DropdownMenuItem
-              aria-label={`Open ${workspace.displayName}`}
-              onSelect={(event) => {
-                event.preventDefault()
-                onOpen(workspace)
-              }}
-              className="min-h-12 min-w-0 flex-1 rounded-[10px] p-2.5 focus:bg-transparent"
-            >
-              {content}
-            </DropdownMenuItem>
+          <DropdownMenuItem
+            aria-label={`Open ${workspace.displayName}`}
+            onSelect={(event) => {
+              event.preventDefault()
+              onOpen(workspace)
+            }}
+            className="min-h-12 rounded-[10px] p-2.5 focus:bg-[var(--fill-secondary)]"
+          >
+            {content}
             <button
               type="button"
+              tabIndex={-1}
               aria-label={`Remove ${workspace.displayName}`}
-              onClick={() => onRemove(workspace)}
-              className="mr-2 flex size-7 shrink-0 items-center justify-center rounded-md text-[var(--text-quaternary)] hover:bg-[var(--fill-tertiary)] hover:text-[var(--system-red)]"
+              onPointerDown={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation()
+                onRemove(workspace)
+              }}
+              className="-mr-1 flex size-7 shrink-0 items-center justify-center rounded-md text-[var(--text-quaternary)] hover:bg-[var(--fill-tertiary)] hover:text-[var(--system-red)]"
             >
               <X size={14} aria-hidden />
             </button>
-          </div>
+          </DropdownMenuItem>
         )
       }
       return (
@@ -176,7 +182,7 @@ export function WorkspaceLauncher({
           aria-label="Switch workspace"
           title="Switch workspace"
           className={cn(
-            "group/row relative flex size-11 shrink-0 items-center justify-center rounded-[12px] text-[var(--text-secondary)] transition-colors duration-150 hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)] data-[state=open]:bg-[var(--fill-secondary)] data-[state=open]:text-[var(--text-primary)]",
+            "group/row relative flex size-11 shrink-0 items-center justify-center rounded-[12px] text-[var(--text-secondary)] transition-colors duration-150 hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)] data-[menu-open]:bg-[var(--fill-secondary)] data-[menu-open]:text-[var(--text-primary)]",
             className,
           )}
         >
@@ -194,7 +200,7 @@ export function WorkspaceLauncher({
         side="right"
         align="end"
         sideOffset={8}
-        className="w-[238px] rounded-[var(--radius-lg)] border-0 bg-[var(--material-thick)] p-1.5 shadow-[var(--shadow-overlay)] [backdrop-filter:blur(20px)_saturate(1.2)]"
+        className="w-[238px] rounded-[var(--radius-lg)] p-1.5"
       >
         <DropdownMenuLabel className="px-2.5 pb-1 pt-2 text-[length:var(--text-caption2)] font-[var(--weight-bold)] uppercase tracking-[0.08em] text-[var(--text-tertiary)]">
           Workspaces

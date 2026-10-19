@@ -1,5 +1,6 @@
-import { ArrowRight } from "lucide-react"
+import { ArrowRight } from "@/components/ui/icon"
 import { engineDisplayName } from "@/lib/engine-names"
+import { Button } from "@/components/ui/button"
 
 /** The deprecated `sessions.rateLimitStrategy` / `sessions.fallbackEngine` pair,
  *  read-only: the chains above are the current spelling, and editing the old one
@@ -12,20 +13,16 @@ export function LegacyFallbackRow({ engine, onMigrate }: { engine: string; onMig
         <div className="min-w-0">
           <div className="flex items-center gap-[6px] text-[length:var(--text-footnote)] text-[var(--text-primary)]">
             Claude
-            <ArrowRight size={13} strokeWidth={2.2} aria-hidden className="shrink-0 text-[var(--text-quaternary)]" />
+            <ArrowRight size={13} aria-hidden className="shrink-0 text-[var(--text-quaternary)]" />
             {engineDisplayName(engine)}
           </div>
           <div className="mt-[2px] text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">
             An older setting still routes Claude here. Migrate it into the chain above.
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onMigrate}
-          className="inline-flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-[var(--fill-tertiary)] px-4 text-[length:var(--text-footnote)] font-[var(--weight-medium)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)]"
-        >
+        <Button variant="secondary" size="sm" onClick={onMigrate}>
           Migrate
-        </button>
+        </Button>
       </div>
     </div>
   )

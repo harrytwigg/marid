@@ -1,4 +1,4 @@
-import { Loader2, type LucideIcon } from "lucide-react"
+import { Loader2, type IconComponent } from "@/components/ui/icon"
 
 const iconMotion =
   "absolute inset-0 flex items-center justify-center transition-[opacity,filter,scale] duration-300 [transition-timing-function:cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none"
@@ -8,8 +8,8 @@ const labelMotion =
 
 interface AuthStateIconProps {
   busy: boolean
-  idleIcon: LucideIcon
-  busyIcon?: LucideIcon
+  idleIcon: IconComponent
+  busyIcon?: IconComponent
   size?: number
 }
 

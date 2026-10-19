@@ -137,22 +137,22 @@ After upgrading, the gateway re-syncs the skills Marid ships on every boot; `jin
 
 ## The company model
 
-Marid exposes a small set of building blocks and handles the machinery underneath. The screenshots below are from upstream Jinn's dashboard.
+Marid exposes a small set of building blocks and handles the machinery underneath. The screenshots below are from Marid's dashboard, in its Aero glass look.
 
 **Employees** are editable YAML roles with a name, department, rank, and engine. One employee can run several sessions; different roles can use different engines.
 
 **Todos** are the durable work ledger. They track assignee, priority, status, sub-tasks, discussion, approvals, and reviewer-owned completion across sessions.
 
 <div align="center">
-  <img src="assets/todos.png" alt="The Todos ledger - tickets assigned to AI employees across To do, in-progress, review, and done" width="880" />
+  <img src="assets/todos.png" alt="The Todos board - tickets across To do, Blocked, In progress, In review, and Closed columns" width="880" />
 </div>
 
 **Chat** operates the company. Delegations, callbacks, and Todo changes appear beside the conversation as durable activity receipts.
 
 <div align="center">
-  <img src="assets/chat.png" alt="Chat (upstream Jinn UI) - an engineering employee diagnosing and fixing a flaky test, with company activity receipts" width="880" />
+  <img src="assets/chat.png" alt="Chat - the COO drafting a release checklist with a code block and a linked Todo" width="880" />
 </div>
-<div align="center"><sub>An Engineering employee triages a flaky test, ships the fix, and opens a PR, with each delegation and callback rendered as an activity receipt.</sub></div>
+<div align="center"><sub>A conversation with the COO: formatted replies, code, and a Todo reference. Delegations and callbacks show up beside the conversation as activity receipts.</sub></div>
 
 **Notes** are durable Markdown knowledge: plain `.md` files under `~/.jinn/knowledge/`, in folders of your choosing. Typed tools read and write them, and every update carries the revision it expects, so two sessions cannot silently overwrite each other.
 
@@ -441,22 +441,22 @@ After upgrading, the gateway re-syncs the skills Marid ships on every boot; `jin
 
 ## The company model
 
-Marid exposes a small set of building blocks and handles the machinery underneath. The screenshots below are from upstream Jinn's dashboard.
+Marid exposes a small set of building blocks and handles the machinery underneath. The screenshots below are from Marid's dashboard, in its Aero glass look.
 
 **Employees** are editable YAML roles with a name, department, rank, and engine. One employee can run several sessions; different roles can use different engines.
 
 **Todos** are the durable work ledger. They track assignee, priority, status, sub-tasks, discussion, approvals, and reviewer-owned completion across sessions.
 
 <div align="center">
-  <img src="assets/todos.png" alt="The Todos ledger - tickets assigned to AI employees across To do, in-progress, review, and done" width="880" />
+  <img src="assets/todos.png" alt="The Todos board - tickets across To do, Blocked, In progress, In review, and Closed columns" width="880" />
 </div>
 
 **Chat** operates the company. Delegations, callbacks, and Todo changes appear beside the conversation as durable activity receipts.
 
 <div align="center">
-  <img src="assets/chat.png" alt="Chat (upstream Jinn UI) - an engineering employee diagnosing and fixing a flaky test, with company activity receipts" width="880" />
+  <img src="assets/chat.png" alt="Chat - the COO drafting a release checklist with a code block and a linked Todo" width="880" />
 </div>
-<div align="center"><sub>An Engineering employee triages a flaky test, ships the fix, and opens a PR, with each delegation and callback rendered as an activity receipt.</sub></div>
+<div align="center"><sub>A conversation with the COO: formatted replies, code, and a Todo reference. Delegations and callbacks show up beside the conversation as activity receipts.</sub></div>
 
 **Notes** are durable Markdown knowledge: plain `.md` files under `~/.jinn/knowledge/`, in folders of your choosing. Typed tools read and write them, and every update carries the revision it expects, so two sessions cannot silently overwrite each other.
 

@@ -1,5 +1,5 @@
 import { memo, useState } from "react"
-import { Plus } from "lucide-react"
+import { Plus } from "@/components/ui/icon"
 import type { WorkItemTreeNodeWire, WorkItemTreeWire } from "@/lib/api"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { StateCircle } from "../state-glyph"
