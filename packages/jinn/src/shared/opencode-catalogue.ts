@@ -36,6 +36,8 @@ interface Landing {
   changed: () => void;
   /** Whether a first detailed answer gets its second look (see {@link land}). */
   secondLook: boolean;
+  /** The environment of every opencode this refresh starts, its second look included. */
+  env?: Record<string, string>;
 }
 
 /** The discovered models, or null before any discovery found one. */
@@ -46,14 +48,20 @@ export function opencodeCatalogue(): ModelInfo[] | null {
 /** Discover the models `bin` (null: opencode is not installed) can reach and
  *  keep them. Resolves once the catalogue to serve now is in; details that
  *  outlive the discovery timeout land later and tell {@link onLateOpencodeDetails}.
- *  `secondLook` is the gateway's: a CLI command reads the catalogue once and exits. */
-export async function refreshOpencodeCatalogue(bin: string | null, changed: () => void, secondLook = false): Promise<void> {
+ *  `secondLook` is the gateway's: a CLI command reads the catalogue once and exits.
+ *  `env` is what the opencode runs start with (see `DiscoveryOptions`). */
+export async function refreshOpencodeCatalogue(
+  bin: string | null,
+  changed: () => void,
+  secondLook = false,
+  env?: Record<string, string>,
+): Promise<void> {
   generation += 1;
   if (!detailed && bin !== null) beginPending();
-  const at: Landing = { refresh: generation, bin: bin ?? "", changed, secondLook };
+  const at: Landing = { refresh: generation, bin: bin ?? "", changed, secondLook, ...(env ? { env } : {}) };
   if (bin === null) return land(at, null, false);
   try {
-    const discovery = await discoverOpencodeModels(bin);
+    const discovery = await discoverOpencodeModels(bin, { env });
     logger.info(`opencode model discovery: ${discovery.models.length} model(s)`);
     const { details } = discovery;
     if (!details) return land(at, discovery.models, discovery.detailed);
@@ -110,7 +118,7 @@ function land(at: Landing, models: ModelInfo[] | null, isDetailed: boolean): voi
 }
 
 async function confirm(at: Landing): Promise<void> {
-  const again = await discoverOpencodeModels(at.bin);
+  const again = await discoverOpencodeModels(at.bin, { env: at.env });
   const models = again.detailed ? again.models : await again.details;
   confirming = false;
   // A newer refresh's detailed answer outranks this look; one that brought

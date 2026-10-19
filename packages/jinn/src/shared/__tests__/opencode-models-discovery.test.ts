@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { withConfiguredOverrides } from "../opencode-models.js";
 import { discoverOpencodeModels } from "../opencode-discovery.js";
 import type { EngineModelsConfig, ModelInfo } from "../types.js";
@@ -164,6 +164,37 @@ describe("discoverOpencodeModels on OpenCode 2.x", () => {
       const models = (await discoverOpencodeModels(v2(answer))).models;
       expect(models.map((m) => [m.id, m.supportsEffort])).toEqual([["opencode/alpha", false], ["opencode/beta", false]]);
     }
+  });
+});
+
+describe("discoverOpencodeModels environment", () => {
+  // Records the variable on every run, then behaves like a 2.x whose API gives
+  // nothing: `--verbose` is rejected, `api model.list` fails and the plain list
+  // needs `--standalone`, so three spawns are made.
+  const RECORDS_ENV = [
+    'echo "DISABLE_FFF=${OPENCODE_DISABLE_FFF-unset} GATEWAY_ONLY=${GATEWAY_ONLY-unset}" >> "$ENV_LOG"',
+    'if [ "$2" = "--verbose" ]; then exit 1; fi',
+    'if [ "$2" != "--standalone" ]; then exit 1; fi',
+    "echo opencode/alpha",
+  ].join("\n");
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("starts every run with the env it is given, not the gateway's", async () => {
+    vi.stubEnv("GATEWAY_ONLY", "leaked");
+    const envLog = path.join(dir, "env.log");
+    const { models } = await discoverOpencodeModels(fakeBin(RECORDS_ENV), {
+      env: { PATH: process.env.PATH ?? "", ENV_LOG: envLog, OPENCODE_DISABLE_FFF: "1" },
+    });
+    expect(models.map((m) => m.id)).toEqual(["opencode/alpha"]);
+    expect(fs.readFileSync(envLog, "utf8").trim().split("\n")).toEqual(Array(3).fill("DISABLE_FFF=1 GATEWAY_ONLY=unset"));
+  });
+
+  it("inherits the gateway's env when none is given", async () => {
+    vi.stubEnv("ENV_LOG", path.join(dir, "env.log"));
+    vi.stubEnv("GATEWAY_ONLY", "inherited");
+    await discoverOpencodeModels(fakeBin(RECORDS_ENV));
+    expect(fs.readFileSync(path.join(dir, "env.log"), "utf8").trim().split("\n")[0]).toBe("DISABLE_FFF=unset GATEWAY_ONLY=inherited");
   });
 });
 

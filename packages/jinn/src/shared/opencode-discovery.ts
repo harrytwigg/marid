@@ -27,10 +27,17 @@ export interface OpencodeDiscovery {
   details?: Promise<ModelInfo[] | undefined>;
 }
 
-/** The two budgets, overridable so tests need not wait for real ones. */
-export interface DiscoveryTimeouts {
+/** What shapes one discovery: the two budgets, overridable so tests need not
+ *  wait for real ones, and the environment every opencode it starts gets.
+ *
+ *  `shared/` may not import `engines/`, where Marid's own opencode variables
+ *  (`OPENCODE_DISABLE_FFF`) are defined, so the caller builds `env` and hands it
+ *  in. It is the whole environment of the child; omitted, the gateway's own is
+ *  inherited. */
+export interface DiscoveryOptions {
   timeoutMs?: number;
   detailsTimeoutMs?: number;
+  env?: Record<string, string>;
 }
 
 /** SIGTERM now, SIGKILL a second later if that was not enough. Returns the
@@ -70,8 +77,9 @@ interface RunningModels {
 }
 
 /** Run `opencode <args>` once. Best-effort, the shape every other discovery in
- *  this directory uses: any failure resolves to an empty run, never a throw. */
-function startOpencodeModels(bin: string, args: string[], timeoutMs: number): RunningModels {
+ *  this directory uses: any failure resolves to an empty run, never a throw.
+ *  `env` is the child's whole environment; absent, it inherits the gateway's. */
+function startOpencodeModels(bin: string, args: string[], timeoutMs: number, env: Record<string, string> | undefined): RunningModels {
   let proc: ChildProcess | undefined;
   let timer: NodeJS.Timeout | undefined;
   const done = new Promise<ModelsRun>((resolve) => {
@@ -91,7 +99,7 @@ function startOpencodeModels(bin: string, args: string[], timeoutMs: number): Ru
     };
 
     try {
-      proc = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
+      proc = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"], ...(env ? { env } : {}) });
       const child = proc;
       child.stdout?.on("data", (d: Buffer) => (stdout += d.toString()));
       child.stderr?.on("data", (d: Buffer) => (stderr += d.toString()));
@@ -150,12 +158,12 @@ const PLAIN_MODELS_ARGS: string[][] = [["models", "--standalone"], ["models"]];
 
 /** What to serve when `--verbose` gave nothing (yet): 2.x's API records, with
  *  their windows and variants, else the plain list without them. */
-async function fallbackModels(bin: string, timeoutMs: number): Promise<{ models: ModelInfo[]; detailed: boolean }> {
-  const api = await startOpencodeModels(bin, API_MODELS_ARGS, timeoutMs).done;
+async function fallbackModels(bin: string, timeoutMs: number, env: Record<string, string> | undefined): Promise<{ models: ModelInfo[]; detailed: boolean }> {
+  const api = await startOpencodeModels(bin, API_MODELS_ARGS, timeoutMs, env).done;
   const fromApi = api.code === 0 ? parseOpencodeApiModels(api.stdout) : [];
   if (fromApi.length > 0) return { models: fromApi, detailed: true };
   for (const args of PLAIN_MODELS_ARGS) {
-    const plain = parseOpencodeModels((await startOpencodeModels(bin, args, timeoutMs).done).stdout);
+    const plain = parseOpencodeModels((await startOpencodeModels(bin, args, timeoutMs, env).done).stdout);
     if (plain.length > 0) return { models: plain, detailed: false };
   }
   return { models: [], detailed: false };
@@ -176,13 +184,14 @@ function verboseModels(run: ModelsRun): ModelInfo[] | undefined {
  *  or variants, so such a build still keeps its catalogue. A `--verbose` that is
  *  merely slow is not given up on: the fallback is served at the discovery
  *  timeout and the run goes on, its catalogue arriving through `details`. */
-export async function discoverOpencodeModels(bin: string, timeouts: DiscoveryTimeouts = {}): Promise<OpencodeDiscovery> {
-  const timeoutMs = timeouts.timeoutMs ?? DISCOVERY_TIMEOUT_MS;
-  const verbose = startOpencodeModels(bin, ["models", "--verbose"], timeouts.detailsTimeoutMs ?? DETAILS_TIMEOUT_MS);
+export async function discoverOpencodeModels(bin: string, options: DiscoveryOptions = {}): Promise<OpencodeDiscovery> {
+  const timeoutMs = options.timeoutMs ?? DISCOVERY_TIMEOUT_MS;
+  const { env } = options;
+  const verbose = startOpencodeModels(bin, ["models", "--verbose"], options.detailsTimeoutMs ?? DETAILS_TIMEOUT_MS, env);
   const finished = await settledWithin(verbose.done, timeoutMs);
   if (!finished) {
     verbose.detach();
-    const fallback = await fallbackModels(bin, timeoutMs);
+    const fallback = await fallbackModels(bin, timeoutMs, env);
     if (fallback.detailed) {
       verbose.stop(); // the API's records answered for it
       return fallback;
@@ -192,6 +201,6 @@ export async function discoverOpencodeModels(bin: string, timeouts: DiscoveryTim
   }
   const withWindows = verboseModels(finished);
   if (withWindows) return { models: withWindows, detailed: true };
-  const fallback = await fallbackModels(bin, timeoutMs);
+  const fallback = await fallbackModels(bin, timeoutMs, env);
   return fallback.models.length > 0 ? fallback : { models: parseOpencodeModels(finished.stdout), detailed: false };
 }

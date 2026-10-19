@@ -313,11 +313,16 @@ export async function refreshPiModels(config: JinnConfig): Promise<void> {
  * and refresh the registry. Async — populates a snapshot the synchronous
  * registry reads (`opencode-catalogue.ts`, which also lands details that arrive
  * after this returns). Never throws; degrades to the config/synthesized
- * fallback when opencode is absent or discovery fails.
+ * fallback when opencode is absent or discovery fails. `opts.env` is what the
+ * discovery runs start with (`opencodeDiscoveryEnv`), supplied by callers
+ * because `shared/` cannot import the engine that defines it.
  */
-export async function refreshOpencodeModels(config: JinnConfig, opts: { secondLook?: boolean } = {}): Promise<void> {
+export async function refreshOpencodeModels(
+  config: JinnConfig,
+  opts: { secondLook?: boolean; env?: Record<string, string> } = {},
+): Promise<void> {
   const bin = engineAvailable(config, "opencode") ? resolveBin("opencode", engineBinOverride(config, "opencode")) : null;
-  await refreshOpencodeCatalogue(bin, invalidateModelRegistry, opts.secondLook);
+  await refreshOpencodeCatalogue(bin, invalidateModelRegistry, opts.secondLook, opts.env);
 }
 
 /**

@@ -339,6 +339,7 @@ import { setWorkItemSprint, type Sprint } from "../work-items/sprints.js";
 import { readCreateSprint, sprintRow } from "./work-item-create-sprint.js";
 import { mayOrganiseTags, mayRetagTodo } from "./work-item-standing.js";
 import { handleBoardWalkApi } from "./board-walk-api.js";
+import { opencodeDiscoveryEnv } from "../engines/opencode-launch.js";
 
 /** Max bytes accepted on /api/internal/hook (loopback-only relay payloads are tiny). */
 const HOOK_BODY_MAX_BYTES = 64 * 1024;
@@ -4220,7 +4221,7 @@ export async function handleApiRequest(
         refreshCodexModels(config),
         refreshAntigravityModels(config),
         refreshPiModels(config),
-        refreshOpencodeModels(config, { secondLook: true }),
+        refreshOpencodeModels(config, { secondLook: true, env: opencodeDiscoveryEnv(config) }),
         refreshGrokModels(config),
         refreshHermesModels(config),
       ]);

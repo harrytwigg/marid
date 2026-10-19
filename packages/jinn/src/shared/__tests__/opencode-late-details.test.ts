@@ -158,6 +158,14 @@ describe("the gateway's second look at a first detailed answer", () => {
     expect(effortLevelsPending("opencode", "opencode/new")).toBe(false);
   });
 
+  it("starts the second look with the same env as the first run", async () => {
+    const env = { OPENCODE_DISABLE_FFF: "1" };
+    discoveries.push(answer(detailed()), answer(detailed()));
+    await refreshOpencodeModels(config, { ...gateway, env });
+    await flush();
+    expect(vi.mocked(discoverOpencodeModels).mock.calls.map(([, options]) => options?.env)).toEqual([env, env]);
+  });
+
   it("leaves a model the first answer lists alone while it runs, and holds one it does not", async () => {
     const second = deferred<OpencodeDiscovery>();
     discoveries.push(answer(detailed()), () => second.promise);
