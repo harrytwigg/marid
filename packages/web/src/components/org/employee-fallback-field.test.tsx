@@ -102,12 +102,13 @@ describe("EmployeeFallbackField", () => {
     )
   })
 
-  it("shows the gateway's problems with the employee chain, whichever way it is set", () => {
+  it("shows the gateway's problems with the stored employee chain", () => {
     chains.current = {
       profiles: [],
       subjects: [{ ...subject("employee", "writer", true, []), problems: ["fallback[0]: \"nope\" is not a known engine (claude, codex)"] }],
     }
-    render(<EmployeeFallbackField employee={EMP} engine="claude" value={[{ engine: "codex" }]} onChange={() => {}} />)
+    const stored = { ...EMP, fallback: [{ engine: "codex" }] } as Employee
+    render(<EmployeeFallbackField employee={stored} engine="claude" value={[{ engine: "codex" }]} onChange={() => {}} />)
 
     expect(screen.getByText('fallback[0]: "nope" is not a known engine (claude, codex)').getAttribute("role")).toBe("alert")
   })
@@ -197,7 +198,67 @@ describe("sameChain", () => {
   })
 })
 
+describe("the chain an employee inherits, in the gateway's order", () => {
+  const profiles = [{ name: "work", account: "claude:k", configDir: "/profiles/work" }]
+  const engineChain = subject("engine", "claude", true, [resolved("codex")])
+
+  it("on a declared account that writes no chain is none, not the engine's", () => {
+    chains.current = { profiles, subjects: [engineChain, subject("account", "work", false, [])] }
+    render(<EmployeeFallbackField employee={EMP} engine="claude" value={null} onChange={() => {}} />)
+
+    expect(screen.getByRole("option", { name: "Use the default (from Claude · work)" })).toBeTruthy()
+    expect(screen.getByText("No fallback. Claude waits for its own limit to reset.")).toBeTruthy()
+    expect(screen.queryByText("Codex")).toBeNull()
+  })
+
+  it("on a named profile that is not declared is none, and says so", () => {
+    chains.current = { profiles, subjects: [engineChain] }
+    const undeclared = { ...EMP, claudeProfile: { path: "/profiles/other", key: "o" } }
+    render(<EmployeeFallbackField employee={undeclared} engine="claude" value={null} onChange={() => {}} />)
+
+    expect(screen.getByRole("option", { name: "Use the default (from Claude · a profile with no declared account)" })).toBeTruthy()
+    expect(screen.getByText("No fallback. Claude waits for its own limit to reset.")).toBeTruthy()
+  })
+
+  it("on the default profile is the engine's chain", () => {
+    chains.current = { profiles, subjects: [engineChain] }
+    render(<EmployeeFallbackField employee={{ ...EMP, claudeProfile: null }} engine="claude" value={null} onChange={() => {}} />)
+
+    expect(screen.getByText("Codex")).toBeTruthy()
+  })
+})
+
+describe("the gateway's sentence about a stored employee chain", () => {
+  const sentence = "fallback[1] duplicates fallback[0] (codex): a chain tries each target once, so list it once"
+  const stored = { ...EMP, fallback: [{ engine: "codex" }, { engine: "codex" }] } as Employee
+  const dup = [{ engine: "codex" }, { engine: "codex" }]
+
+  beforeEach(() => {
+    chains.current = { profiles: [], subjects: [{ ...subject("employee", "writer", true, []), problems: [sentence] }] }
+  })
+
+  it("shows once while the chain is as stored, with the row's own sentence", () => {
+    render(<EmployeeFallbackField employee={stored} engine="claude" value={dup} onChange={() => {}} />)
+
+    expect(screen.getAllByText(sentence)).toHaveLength(1)
+  })
+
+  it("is gone once the operator has edited the chain, since it describes what was stored", () => {
+    render(<EmployeeFallbackField employee={stored} engine="claude" value={[{ engine: "codex" }]} onChange={() => {}} />)
+
+    expect(screen.queryByText(sentence)).toBeNull()
+  })
+})
+
 describe("EmployeeFallbackRow for a system employee", () => {
+  it("still says why when the chain it follows is empty, and that there is no fallback", () => {
+    chains.current = { profiles: [], subjects: [subject("employee", "writer", false, [])] }
+    render(<EmployeeFallbackRow employee={EMP} engine="claude" value={null} onChange={() => {}} locked />)
+
+    expect(document.querySelector("[data-employee-fallback-locked]")?.textContent).toContain("set by the gateway")
+    expect(screen.getByText("No fallback. Claude waits for its own limit to reset.")).toBeTruthy()
+  })
+
   it("shows the chain it follows, with nothing to edit, because the gateway refuses to set it", () => {
     chains.current = { profiles: [], subjects: [subject("employee", "writer", false, [resolved("codex")])] }
     render(<EmployeeFallbackRow employee={EMP} engine="claude" value={null} onChange={() => {}} locked />)

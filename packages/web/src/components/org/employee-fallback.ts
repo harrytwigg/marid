@@ -49,16 +49,22 @@ function subjectOf(chains: FallbackChainsResponse | undefined, kind: FallbackCha
 }
 
 /**
- * The chain an employee with none of its own follows: its account's when it runs
- * on a declared account that writes one, else its engine's.
+ * The chain an employee with none of its own follows, in the gateway's order: a Claude employee on a
+ * declared account follows that account's chain, which is empty when the account writes none; on a
+ * named profile that is not declared it follows none; the engine's chain is for the default profile
+ * and for every other engine.
  */
-export function inheritedChain(engine: string, account: string | undefined, chains: FallbackChainsResponse | undefined): InheritedChain {
-  const accountSubject = engine === "claude" && account ? subjectOf(chains, "account", account) : undefined
-  if (account && accountSubject?.configured?.length) {
-    return { label: `${engineDisplayName(engine)} · ${account}`, links: accountSubject.effective.map(linkOfResolved) }
+export function inheritedChain(
+  engine: string,
+  claudeProfile: Employee["claudeProfile"],
+  account: string | undefined,
+  chains: FallbackChainsResponse | undefined,
+): InheritedChain {
+  if (engine === "claude" && account) {
+    return { label: `${engineDisplayName(engine)} · ${account}`, links: subjectOf(chains, "account", account)?.effective.map(linkOfResolved) ?? [] }
   }
-  const links = subjectOf(chains, "engine", engine)?.effective.map(linkOfResolved) ?? []
-  return { label: engineDisplayName(engine), links }
+  if (engine === "claude" && claudeProfile) return { label: `${engineDisplayName(engine)} · a profile with no declared account`, links: [] }
+  return { label: engineDisplayName(engine), links: subjectOf(chains, "engine", engine)?.effective.map(linkOfResolved) ?? [] }
 }
 
 export function employeeSubject(chains: FallbackChainsResponse | undefined, name: string): FallbackChainSubject | undefined {
@@ -95,11 +101,12 @@ export function fallbackFieldState(
   chains: FallbackChainsResponse | undefined,
 ) {
   const account = engine === "claude" ? declaredAccountOf(employee.claudeProfile, chains) : undefined
-  const inherited = inheritedChain(engine, account, chains)
+  const inherited = inheritedChain(engine, employee.claudeProfile, account, chains)
   const self: FallbackLink = { engine, ...(account ? { profile: account } : {}) }
   const subject = employeeSubject(chains, employee.name)
   const own = value === null ? null : ownChainOf(employee, value, subject)
-  return { inherited, self, shown: own?.links ?? inherited.links, own, subject }
+  const changed = !sameChain(value, employeeChainOf(employee))
+  return { inherited, self, shown: own?.links ?? inherited.links, own, subject, changed }
 }
 
 /** How many problems the validator finds in an employee's own chain: a chain with any is not saved. */

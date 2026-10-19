@@ -85,26 +85,13 @@ function ChainChoice({ custom, ready, inherited, onChange }: {
   )
 }
 
-/** What the gateway itself says is wrong with a chain. */
-function GatewayProblems({ problems }: { problems: string[] }) {
-  return (
-    <>
-      {problems.map((problem) => (
-        <p key={problem} data-chain-problem role="alert" className="m-0 text-[length:var(--text-caption2)]" style={{ color: "var(--system-red)" }}>
-          {problem}
-        </p>
-      ))}
-    </>
-  )
-}
-
 /** "Use the default" or "Custom": the default's chain read-only, or the same rows an
  *  engine's chain has. Switching to Custom starts from the chain the default runs. */
 export function EmployeeFallbackField({ employee, engine, value, onChange, onBlockedChange }: EmployeeFallbackFieldProps) {
   const { data: registry } = useModelRegistry()
   const { data: chains } = useFallbackChains(employee.name)
-  const { inherited, self, shown, own, subject } = fallbackFieldState(employee, engine, value, chains)
-  const blocked = chainBlocked(registry, own, self, chains, !sameChain(value, employeeChainOf(employee)))
+  const { inherited, self, shown, own, subject, changed } = fallbackFieldState(employee, engine, value, chains)
+  const blocked = chainBlocked(registry, own, self, chains, changed)
   useEffect(() => { onBlockedChange?.(blocked) }, [blocked, onBlockedChange])
   if (!registry) return null
 
@@ -125,11 +112,12 @@ export function EmployeeFallbackField({ employee, engine, value, onChange, onBlo
             expanded={own.expanded}
             fields={{ registry, profiles: chains?.profiles.map((p) => p.name) ?? [] }}
             waitsAs={engineDisplayName(engine)}
+            // The gateway's own sentences about the stored chain, only while it is the stored chain: once edited they describe what was.
+            serverProblems={changed ? [] : subjectProblems(subject)}
             onChange={onChange}
           />
         </>
       )}
-      <GatewayProblems problems={subjectProblems(subject)} />
       {shown.length > 0 && <ChainFlowDisclosure links={resolveForFlow(self, shown, subject, originsOf(own))} />}
     </div>
   )
@@ -137,10 +125,12 @@ export function EmployeeFallbackField({ employee, engine, value, onChange, onBlo
 
 /** The default's chain as plain text: it is read here, and edited where it is written. */
 function InheritedRows({ links, engine }: { links: FallbackLink[]; engine: string }) {
-  if (links.length === 0) {
-    return <p className="m-0 text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">No fallback. {engineDisplayName(engine)} waits for its own limit to reset.</p>
-  }
-  return <FallbackList links={links} />
+  return links.length === 0 ? <NoFallback engine={engine} /> : <FallbackList links={links} />
+}
+
+/** Said where a chain would be, when there is none. */
+function NoFallback({ engine }: { engine: string }) {
+  return <p className="m-0 text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">No fallback. {engineDisplayName(engine)} waits for its own limit to reset.</p>
 }
 
 /** An ordered, read-only chain: the same words a row's label uses. */
@@ -161,7 +151,7 @@ export function FallbackList({ links }: { links: FallbackLink[] }) {
 export function EmployeeFallbackSummary({ employee }: { employee: Employee }) {
   const { data: chains } = useFallbackChains(employee.name)
   const subject = employeeSubject(chains, employee.name)
-  if (!subject || subject.effective.length === 0) return null
+  if (!subject) return null
   const links = subject.effective.map((l) => ({ engine: l.engine, ...(l.profile ? { profile: l.profile } : {}), ...(l.model ? { model: l.model } : {}) }))
   const own = subject.configured !== null
   return (
@@ -169,8 +159,8 @@ export function EmployeeFallbackSummary({ employee }: { employee: Employee }) {
       <p className="mb-[var(--space-1)] text-[length:var(--text-caption2)] font-[var(--weight-semibold)] uppercase tracking-[var(--tracking-wide)] text-[var(--text-tertiary)]">
         Fallback chain <span className="font-normal normal-case tracking-normal text-[var(--text-quaternary)]">· {own ? "custom" : "the default"}</span>
       </p>
-      <FallbackList links={links} />
-      <ChainFlowDisclosure links={resolveForFlow(subject.primary ?? { engine: employee.engine }, links, subject)} />
+      {links.length === 0 ? <NoFallback engine={employee.engine} /> : <FallbackList links={links} />}
+      {links.length > 0 && <ChainFlowDisclosure links={resolveForFlow(subject.primary ?? { engine: employee.engine }, links, subject)} />}
     </div>
   )
 }
