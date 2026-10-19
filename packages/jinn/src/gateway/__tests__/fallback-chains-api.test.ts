@@ -183,14 +183,22 @@ describe("PUT /api/config", () => {
     expect(put.body.error).toContain("engines.claude.fallback[1] duplicates engines.claude.fallback[0] (codex)");
   });
 
-  it("lets an unrelated edit through a file whose legacy chain already repeats a string, and refuses the repeat once the request writes that chain", async () => {
+  it.each([
+    ["a legacy string", ["codex", "codex"]],
+    ["a mapping", [{ engine: "codex", model: "gpt-mapped" }, { engine: "codex", model: "gpt-mapped" }]],
+  ])("lets an unrelated edit through a file whose chain repeats %s, leaves the repeat in the file and still reports it", async (_form, repeated) => {
     const file = path.join(home, "config.yaml");
-    fs.writeFileSync(file, yaml.dump({ gateway: { port: 7798, host: "127.0.0.1" }, engines: { default: "claude", claude: { bin: "claude", model: "opus", fallback: ["codex", "codex"] }, codex: { bin: "codex", model: "gpt" } } }));
+    const written = { gateway: { port: 7798, host: "127.0.0.1" }, engines: { default: "claude", claude: { bin: "claude", model: "opus", fallback: repeated }, codex: { bin: "codex", model: "gpt-5.6-sol" } } };
+    fs.writeFileSync(file, yaml.dump(written));
+    setConfig(chainConfig(repeated));
     try {
       expect((await call("PUT", "/api/config", { portal: { portalName: "Renamed" } })).status).toBe(200);
-      const touched = await call("PUT", "/api/config", { engines: { claude: { fallback: ["codex", "grok", "grok"] } } });
+      expect((yaml.load(fs.readFileSync(file, "utf-8")) as any).engines.claude.fallback).toEqual(repeated);
+      const claude = subject((await call("GET", "/api/fallback-chains")).body, "engine", "claude");
+      expect(claude.problems).toEqual([expect.stringContaining("engines.claude.fallback[1] duplicates engines.claude.fallback[0]")]);
+      const touched = await call("PUT", "/api/config", { engines: { claude: { fallback: [...(repeated as unknown[]), "grok", "grok"] } } });
       expect(touched.status).toBe(400);
-      expect(touched.body.error).toContain("engines.claude.fallback[2] duplicates engines.claude.fallback[1] (grok)");
+      expect(touched.body.error).toContain("duplicates");
     } finally {
       fs.rmSync(file, { force: true });
     }
