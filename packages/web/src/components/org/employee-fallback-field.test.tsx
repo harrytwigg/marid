@@ -169,6 +169,25 @@ describe("a chain with a problem", () => {
   })
 })
 
+describe("a chain stored with a repeated target", () => {
+  const stored = { ...EMP, fallback: [{ engine: "codex" }, { engine: "codex" }] } as Employee
+
+  it("does not hold a save of something else: the chain was not touched", () => {
+    const onBlockedChange = vi.fn()
+    render(<EmployeeFallbackField employee={stored} engine="claude" value={[{ engine: "codex" }, { engine: "codex" }]} onChange={() => {}} onBlockedChange={onBlockedChange} />)
+
+    expect(document.querySelector("[data-chain-problem]")).toBeTruthy()
+    expect(onBlockedChange).toHaveBeenLastCalledWith(false)
+  })
+
+  it("holds the save once the chain is edited and still repeats the target", () => {
+    const onBlockedChange = vi.fn()
+    render(<EmployeeFallbackField employee={stored} engine="claude" value={[{ engine: "codex" }, { engine: "codex" }, { engine: "opencode" }]} onChange={() => {}} onBlockedChange={onBlockedChange} />)
+
+    expect(onBlockedChange).toHaveBeenLastCalledWith(true)
+  })
+})
+
 describe("sameChain", () => {
   it("compares links, not the order their fields were written in", () => {
     expect(sameChain([{ engine: "claude", model: "opus", profile: "A" }], [{ engine: "claude", profile: "A", model: "opus" }])).toBe(true)

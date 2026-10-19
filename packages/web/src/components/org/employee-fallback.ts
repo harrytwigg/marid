@@ -116,12 +116,18 @@ export function chainProblemCount(
 
 export { subjectProblems } from "@/hooks/use-fallback-chains"
 
-/** Whether the editor must hold the save: the employee's own chain, once the registry is known, has a problem. */
+/**
+ * Whether the editor must hold the save: the employee's own chain, once the registry is known,
+ * has a problem and the operator has changed it. A chain stored with a repeated target is the
+ * gateway's to report on load; it does not stop an edit to something else from saving, and only
+ * an edit to the chain itself is refused until the chain is fixed.
+ */
 export function chainBlocked(
   registry: EnginesResponse | undefined,
   own: OwnChain | null,
   self: FallbackLink,
   chains: FallbackChainsResponse | undefined,
+  changed: boolean,
 ): boolean {
-  return registry !== undefined && own !== null && chainProblemCount(own.links, self, registry, chains) > 0
+  return changed && registry !== undefined && own !== null && chainProblemCount(own.links, self, registry, chains) > 0
 }

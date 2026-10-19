@@ -94,7 +94,7 @@ export function EmployeeFallbackField({ employee, engine, value, onChange, onBlo
   const { data: registry } = useModelRegistry()
   const { data: chains } = useFallbackChains(employee.name)
   const { inherited, self, shown, own, subject } = fallbackFieldState(employee, engine, value, chains)
-  const blocked = chainBlocked(registry, own, self, chains)
+  const blocked = chainBlocked(registry, own, self, chains, !sameChain(value, employeeChainOf(employee)))
   useEffect(() => { onBlockedChange?.(blocked) }, [blocked, onBlockedChange])
   if (!registry) return null
 
