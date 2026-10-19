@@ -88,7 +88,7 @@ function seedOrg(home) {
   ]
   for (const [name, displayName, rank, persona] of employees) {
     fs.writeFileSync(path.join(directory, `${name}.yaml`), YAML.stringify({
-      name, displayName, department: "platform", rank, engine: "codex", model: "gpt-5.5",
+      name, displayName, department: "tasks", rank, engine: "codex", model: "gpt-5.5",
       ...(name === "sandbox-coordinator" ? {} : { reportsTo: "sandbox-coordinator" }), persona,
     }))
   }
@@ -118,7 +118,7 @@ function seedNote(home) {
 
 /** @param {ReturnType<typeof loadRuntime> extends Promise<infer T> ? T : never} runtime */
 function seedTodos(runtime) {
-  const create = (input) => createOrReuseTodo(runtime, { department: "platform", source: "session", createdBy: "operator", ...input })
+  const create = (input) => createOrReuseTodo(runtime, { department: "tasks", source: "session", createdBy: "operator", ...input })
   const blocker = create({ title: "Confirm sandbox access window", body: "Confirm the local-only window before the checklist can resume.", status: "assigned", assignee: "sandbox-coordinator", sourceRef: "talk-driving-fixture:access-window", acceptance: "A visible comment names the confirmed sandbox window." })
   const blocked = create({ title: "Publish sandbox release checklist", body: "Blocked by the access-window dependency; no external release is allowed.", status: "blocked", assignee: "sandbox-builder", sourceRef: "talk-driving-fixture:blocked-release", acceptance: "The blocker, linked chat, and verification result are visible." })
   const delegated = create({ title: "Collect responsive Talk evidence", body: "Capture desktop/mobile and light/dark evidence in the sandbox.", status: "executing", assignee: "sandbox-builder", sourceRef: "talk-driving-fixture:delegated-qa", acceptance: "Four UI states are recorded without private data." })

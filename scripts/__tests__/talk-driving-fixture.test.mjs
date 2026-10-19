@@ -22,9 +22,9 @@ const disposable = path.join(os.tmpdir(), ".jinn-talk-driving-fixture")
 test("declares nine durable topics with stable unique identities", () => {
   const topics = fixtureTopics({
     todoIds: {
-      blocked: "TSK-1",
-      blocker: "TSK-2",
-      delegated: "TSK-3",
+      blocked: "TAS-1",
+      blocker: "TAS-2",
+      delegated: "TAS-3",
     },
   })
 
@@ -42,9 +42,9 @@ test("declares nine durable topics with stable unique identities", () => {
 test("uses a fixed fixture clock so cold-reload ordering is reproducible", () => {
   assert.equal(FIXTURE_CLOCK, Date.parse("2026-08-18T09:00:00.000Z"))
   assert.deepEqual(fixtureTopics({
-    todoIds: { blocked: "TSK-1", blocker: "TSK-2", delegated: "TSK-3" },
+    todoIds: { blocked: "TAS-1", blocker: "TAS-2", delegated: "TAS-3" },
   }), fixtureTopics({
-    todoIds: { blocked: "TSK-1", blocker: "TSK-2", delegated: "TSK-3" },
+    todoIds: { blocked: "TAS-1", blocker: "TAS-2", delegated: "TAS-3" },
   }))
 })
 
@@ -84,7 +84,7 @@ test("seeding the same stopped home twice reuses every durable identity", async 
   assert.equal(sessions.prepare("SELECT COUNT(*) FROM work_items").pluck().get(), 3)
   assert.equal(sessions.prepare("SELECT COUNT(*) FROM talk_topics").pluck().get(), 9)
   assert.equal(sessions.prepare("SELECT COUNT(*) FROM talk_proactive_receipts").pluck().get(), 2)
-  assert.equal(sessions.prepare("SELECT high_water FROM work_item_id_allocator WHERE prefix = 'TSK'").pluck().get(), 3)
+  assert.equal(sessions.prepare("SELECT high_water FROM work_item_id_allocator WHERE prefix = 'TAS'").pluck().get(), 3)
   sessions.close()
   assert.equal(fs.existsSync(path.join(home, "workflows")), false)
 })
