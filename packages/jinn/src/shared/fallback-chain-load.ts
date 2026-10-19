@@ -28,23 +28,39 @@ export function warnDuplicates(warn: (message: string) => void = (message) => lo
   };
 }
 
-function chainsOf(config: unknown): string[] {
-  const engines = (config as { engines?: Record<string, { fallback?: unknown; accounts?: Record<string, { fallback?: unknown } | null> } | null> } | null)?.engines;
-  if (typeof engines !== "object" || engines === null) return [];
-  const chains = Object.values(engines).flatMap((section) => [section?.fallback, ...Object.values(section?.accounts ?? {}).map((account) => account?.fallback)]);
-  return chains.filter(Array.isArray).map((chain) => JSON.stringify(chain));
-}
-
-/** On a write: a duplicate in a chain the request leaves as the file has it is not the writer's to fix, so it must not block an unrelated save. */
-export function unchangedDuplicates(existing: unknown): DuplicateTolerance {
-  const unchanged = new Set(chainsOf(existing));
-  return ({ chain }) => unchanged.has(JSON.stringify(chain));
-}
-
 type Section = { fallback?: unknown; accounts?: unknown } | undefined;
 
 function isMapping(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** An engine or account chain, by its config path and the target it falls back from. */
+interface ConfiguredChain {
+  where: string;
+  chain: unknown;
+  self: { engine: string; profile?: string };
+}
+
+/** Every engine and declared-account chain of an `engines` mapping. */
+function configuredChains(engines: unknown): ConfiguredChain[] {
+  if (!isMapping(engines)) return [];
+  const chains: ConfiguredChain[] = [];
+  for (const name of ENGINE_NAMES) {
+    const section = engines[name] as Section;
+    if (!isMapping(section)) continue;
+    chains.push({ where: `engines.${name}.fallback`, chain: section.fallback, self: { engine: name } });
+    if (name !== "claude" || !isMapping(section.accounts)) continue;
+    for (const [account, entry] of Object.entries(section.accounts)) {
+      if (isMapping(entry)) chains.push({ where: `engines.claude.accounts.${account}.fallback`, chain: entry.fallback, self: { engine: "claude", profile: account } });
+    }
+  }
+  return chains;
+}
+
+/** On a write: a duplicate in a chain the request leaves as the file has it, at the same path, is not the writer's to fix, so it must not block an unrelated save. */
+export function unchangedDuplicates(existing: unknown): DuplicateTolerance {
+  const before = new Map(configuredChains((existing as { engines?: unknown } | null)?.engines).map(({ where, chain }) => [where, JSON.stringify(chain)]));
+  return ({ where, chain }) => before.get(where) === JSON.stringify(chain);
 }
 
 /**
@@ -53,21 +69,11 @@ function isMapping(value: unknown): value is Record<string, unknown> {
  * in the wire module's words. Only duplicates: other problems are the validator's.
  */
 export function duplicateProblemsByChain(engines: unknown): Record<string, string[]> {
-  if (!isMapping(engines)) return {};
   const profiles = accountNames(engines);
   const found: Record<string, string[]> = {};
-  const scan = (where: string, chain: unknown, self: { engine: string; profile?: string }): void => {
+  for (const { where, chain, self } of configuredChains(engines)) {
     const onDuplicate = ({ problem }: FallbackChainDuplicate): boolean => { (found[where] ??= []).push(problem); return true; };
     fallbackChainProblems(where, chain, { engines: ENGINE_NAMES, profiles, self, onDuplicate });
-  };
-  for (const name of ENGINE_NAMES) {
-    const section = engines[name] as Section;
-    if (!isMapping(section)) continue;
-    scan(`engines.${name}.fallback`, section.fallback, { engine: name });
-    if (name !== "claude" || !isMapping(section.accounts)) continue;
-    for (const [account, entry] of Object.entries(section.accounts)) {
-      if (isMapping(entry)) scan(`engines.claude.accounts.${account}.fallback`, entry.fallback, { engine: "claude", profile: account });
-    }
   }
   return found;
 }

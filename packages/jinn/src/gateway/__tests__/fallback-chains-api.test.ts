@@ -109,18 +109,28 @@ describe("GET /api/fallback-chains", () => {
   });
 
   it("shows why a chain written in the employee's YAML was ignored, and drops it once a valid one is saved", async () => {
-    writeEmployee([{ engine: "codex" }, { engine: "codex" }]);
+    writeEmployee([{ engine: "claude", profile: "nobody" }]);
     const { refreshOrg } = await import("../org-registry.js");
     refreshOrg(chainConfig());
     const ignored = subject((await call("GET", "/api/fallback-chains?employee=a-worker")).body, "employee", "a-worker");
     expect(ignored.configured).toBeNull();
-    expect(ignored.problems).toEqual(["fallback[1] duplicates fallback[0] (codex): a chain tries each target once, so list it once"]);
+    expect(ignored.problems).toEqual(['fallback[0]: profile "nobody" names no account under engines.claude.accounts']);
     expect(keys(ignored.effective)).toHaveLength(4);
 
     await call("PATCH", "/api/org/employees/a-worker", { fallback: [{ engine: "codex" }] });
     const fixed = subject((await call("GET", "/api/fallback-chains?employee=a-worker")).body, "employee", "a-worker");
     expect(fixed).not.toHaveProperty("problems");
     expect(keys(fixed.effective)).toEqual(["codex||"]);
+  });
+
+  it("keeps a repeated target in the employee's YAML, lists it once and reports it", async () => {
+    writeEmployee([{ engine: "codex", model: "gpt-mapped" }, { engine: "codex", model: "gpt-mapped" }]);
+    const { refreshOrg } = await import("../org-registry.js");
+    refreshOrg(chainConfig());
+    const twice = subject((await call("GET", "/api/fallback-chains?employee=a-worker")).body, "employee", "a-worker");
+    expect(twice.configured).toHaveLength(2);
+    expect(twice.problems).toEqual(["fallback[1] duplicates fallback[0] (codex · gpt-mapped): a chain tries each target once, so list it once"]);
+    expect(keys(twice.effective)).toEqual(["codex||gpt-mapped"]);
   });
 
   it("answers 404 for an employee that does not exist", async () => {
@@ -199,6 +209,27 @@ describe("PUT /api/config", () => {
       const touched = await call("PUT", "/api/config", { engines: { claude: { fallback: [...(repeated as unknown[]), "grok", "grok"] } } });
       expect(touched.status).toBe(400);
       expect(touched.body.error).toContain("duplicates");
+    } finally {
+      fs.rmSync(file, { force: true });
+    }
+  });
+
+  it("writes exactly the chain it is sent over a stored object chain: no profile or model carried over from the link it replaces", async () => {
+    const file = path.join(home, "config.yaml");
+    const stored = [{ engine: "claude", profile: "A", model: "opus" }, { engine: "claude", profile: "B", model: "sonnet" }];
+    const onDisk = () => (yaml.load(fs.readFileSync(file, "utf-8")) as any).engines.claude.fallback;
+    fs.writeFileSync(file, yaml.dump({ gateway: { port: 7798, host: "127.0.0.1" }, engines: { default: "claude", claude: { bin: "claude", model: "opus", accounts: { A: { configDir: DIR_A }, B: { configDir: DIR_B } }, fallback: stored } } }));
+    try {
+      for (const chain of [
+        [{ engine: "claude", model: "sonnet" }],
+        [{ engine: "opencode", model: "opencode-go/x" }],
+        [{ engine: "claude", profile: "A", model: "opus" }, { engine: "claude", profile: "B", model: "sonnet" }, { engine: "opencode", model: "openrouter/x" }, { engine: "opencode", model: "opencode-go/y" }],
+        [{ engine: "claude", profile: "B" }, { engine: "claude", model: "sonnet" }],
+      ]) {
+        const put = await call("PUT", "/api/config", { engines: { claude: { fallback: chain } } });
+        expect({ chain, status: put.status }).toEqual({ chain, status: 200 });
+        expect(onDisk()).toEqual(chain);
+      }
     } finally {
       fs.rmSync(file, { force: true });
     }

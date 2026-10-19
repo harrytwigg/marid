@@ -108,6 +108,13 @@ describe("an employee's chain", () => {
     expect(employeeFallbackProblems(config, worker, ["codex"])[0]).toContain("fallback[0] must be a mapping");
   });
 
+  it("reports a string entry beside every other problem instead of hiding them", () => {
+    const found = employeeFallbackProblems(config, worker, ["codex", { engine: "claude", profile: "nobody" }, { engine: "gemini" }]).join("\n");
+    expect(found).toContain("fallback[0] must be a mapping");
+    expect(found).toContain('profile "nobody" names no account');
+    expect(found).toContain('"gemini" is not a known engine');
+  });
+
   it("an update normalises to links, takes null as inherit and reports the refusal", () => {
     expect(employeeFallbackUpdate(config, worker, [{ engine: " codex ", model: " m " }])).toEqual({ ok: true, value: [{ engine: "codex", model: "m" }] });
     expect(employeeFallbackUpdate(config, worker, null)).toEqual({ ok: true, value: null });

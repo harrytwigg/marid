@@ -50,7 +50,7 @@ describe("employee fallback at load", () => {
   });
 
   it("an invalid chain is logged and left out; the employee still loads and inherits", () => {
-    employee("bad", [{ engine: "codex" }, { engine: "codex" }]);
+    employee("bad", [{ engine: "gemini" }]);
     employee("ghost", [{ engine: "claude", profile: "nobody" }]);
     employee("strings", ["codex"]);
     const roster = scanOrg(config);
@@ -61,9 +61,25 @@ describe("employee fallback at load", () => {
     expect(warn).toHaveBeenCalledTimes(3);
     // The warning names the employee and the problem, and the problem stays on the roster entry.
     expect(String(warn.mock.calls[0]?.[0])).toContain("employee bad");
-    expect(String(warn.mock.calls[0]?.[0])).toContain("duplicates fallback[0] (codex)");
-    expect(roster.get("bad")?.fallbackProblems).toEqual(["fallback[1] duplicates fallback[0] (codex): a chain tries each target once, so list it once"]);
+    expect(String(warn.mock.calls[0]?.[0])).toContain('"gemini" is not a known engine');
+    expect(roster.get("bad")?.fallbackProblems?.[0]).toContain('"gemini" is not a known engine');
     expect(roster.get("ghost")?.fallbackProblems?.[0]).toContain('profile "nobody" names no account');
     expect(roster.get("strings")?.fallbackProblems?.[0]).toContain("must be a mapping");
+  });
+
+  it("a repeated target is kept like config.yaml's: warned about by employee, listed once, and reported", () => {
+    employee("twice", [{ engine: "codex", model: "m" }, { engine: "codex", model: "m" }]);
+    const worker = scanOrg(config).get("twice");
+    expect(worker?.fallback).toEqual([{ engine: "codex", model: "m" }, { engine: "codex", model: "m" }]);
+    expect(worker?.fallbackProblems).toEqual(["fallback[1] duplicates fallback[0] (codex · m): a chain tries each target once, so list it once"]);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).toContain("Employee twice");
+  });
+
+  it("reports every problem at once: a string entry does not hide an undeclared profile", () => {
+    employee("both", ["codex", { engine: "claude", profile: "nobody" }]);
+    const problems = scanOrg(config).get("both")?.fallbackProblems?.join("\n") ?? "";
+    expect(problems).toContain("fallback[0] must be a mapping");
+    expect(problems).toContain('profile "nobody" names no account');
   });
 });

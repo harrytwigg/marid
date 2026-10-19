@@ -84,6 +84,16 @@ describe("on write, a duplicate the file already has and the request leaves alon
   });
 });
 
+describe("on write, an unchanged duplicate is tolerated only at its own path", () => {
+  it("the same repeated list added under another engine is a newly added duplicate", () => {
+    const repeated = ["grok", { engine: "grok" }];
+    const existing = { engines: { default: "claude", claude: { bin: "claude", model: "opus" }, codex: { bin: "codex", model: "gpt", fallback: repeated } } };
+    const moved = { engines: { ...existing.engines, opencode: { bin: "opencode", model: "x", fallback: repeated } } };
+    expect(validateConfigShape(existing, { tolerateDuplicates: unchangedDuplicates(existing) })).toEqual([]);
+    expect(validateConfigShape(moved, { tolerateDuplicates: unchangedDuplicates(existing) }).join("\n")).toContain("engines.opencode.fallback[1] duplicates engines.opencode.fallback[0] (grok)");
+  });
+});
+
 describe("loadConfig", () => {
   let tmpHome: string;
   const prevHome = process.env.JINN_HOME;
