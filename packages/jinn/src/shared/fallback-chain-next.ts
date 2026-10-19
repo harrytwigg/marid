@@ -24,16 +24,18 @@ export interface NextFallbackLink {
 }
 
 /**
- * Where the run stands on `links` now: the recorded position, or past the
- * furthest tried target when the chain was edited since and the position no
- * longer points at the target the session is on. Never moves backwards, so an
- * edit cannot send a run to a target it already tried.
+ * Where the run stands on `links` now: the recorded position while it points at
+ * a fallback link the run has tried (the target the session is on, which may lie
+ * behind others when the walk went back to a link it had passed over for its
+ * health); otherwise past the furthest tried target, as when the chain was
+ * edited since. An edit cannot send a run to a target it already tried.
  */
 export function effectivePosition(links: readonly ResolvedFallbackLink[], run: FallbackRunCursor | undefined): number {
   if (!run) return 0;
   const tried = new Set(run.tried);
-  const triedAt = links.reduce((furthest, link, index) => (tried.has(link.key) ? index : furthest), 0);
   const recorded = Number.isFinite(run.position) ? Math.trunc(run.position) : 0;
+  if (recorded > 0 && recorded < links.length && tried.has(links[recorded]!.key)) return recorded;
+  const triedAt = links.reduce((furthest, link, index) => (tried.has(link.key) ? index : furthest), 0);
   return Math.min(Math.max(recorded, triedAt, 0), Math.max(links.length - 1, 0));
 }
 
@@ -53,10 +55,19 @@ function scan(
   return undefined;
 }
 
+/** A link behind the cursor that the walk passed over for its health and never tried: untried and not ruled out. */
+function passedOverBehind(links: readonly ResolvedFallbackLink[], cursor: FallbackRunCursor): NextFallbackLink | undefined {
+  const tried = new Set(cursor.tried);
+  const index = links.findIndex((link, at) => at > 0 && at < cursor.position && !tried.has(link.key) && link.skip === undefined);
+  return index < 0 ? undefined : { index, link: links[index]!, skipped: [] };
+}
+
 /**
  * The first link after the cursor that has not been tried, is not ruled out for
  * this session and is not at its limit. When that finds nothing, a second pass
- * ignores health only: a record can order a chain but never empty one.
+ * ignores health; and before the run counts as run out, a link the walk passed
+ * over for its health earlier is taken too. A health record can order a chain
+ * but never empty one. The own target is always tried, so it is never the answer.
  */
 export function nextFallbackLink(
   links: readonly ResolvedFallbackLink[],
@@ -64,5 +75,5 @@ export function nextFallbackLink(
   health: EngineHealthReading,
   now: Date = new Date(),
 ): NextFallbackLink | undefined {
-  return scan(links, cursor, (link) => isLinkExhausted(health, link, now)) ?? scan(links, cursor, () => false);
+  return scan(links, cursor, (link) => isLinkExhausted(health, link, now)) ?? scan(links, cursor, () => false) ?? passedOverBehind(links, cursor);
 }

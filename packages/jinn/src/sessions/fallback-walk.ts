@@ -1,12 +1,11 @@
 import { awaitEffortLevels } from "../shared/effort-wait.js";
-import { UNSTATED_RESET_WINDOW_MS } from "../shared/engine-health.js";
 import type { FallbackChainSource, FallbackHop, FallbackHopReason, ResolvedFallbackLink } from "../shared/fallback-chain-wire.js";
 import { logger } from "../shared/logger.js";
-import { computeNextRetryDelayMs, rateLimitEngineLabel } from "../shared/rateLimit.js";
+import { rateLimitEngineLabel } from "../shared/rateLimit.js";
 import type { EngineName } from "../shared/models.js";
 import type { EngineResult, Session } from "../shared/types.js";
 import { claudeLinkRefusal, linkFailure, noteLinkAuthFailure, recordLinkLimit, runLink } from "./fallback-link-run.js";
-import { buildHop, chainExhaustedReason, hopLogLine, limitReason, type HopEnd } from "./fallback-hop.js";
+import { buildHop, chainExhaustedReason, hopLogLine, limitReason, windowOf, type HopEnd } from "./fallback-hop.js";
 import { metaOf, readFallbackRun, servedBy, targetOfLink, withHop, withRun, withServedBy, type FallbackRunState } from "./fallback-run.js";
 import { abandonEngineSubstitution, beginEngineSubstitution, standingOverrideUntil, type EngineSubstitution } from "./engine-override.js";
 import { chooseSubstituteOrReason, type SubstituteDecision } from "./rate-limit-substitute.js";
@@ -165,11 +164,6 @@ function startInfo(w: Walk, choice: Found["choice"], hop: FallbackHop) {
   const { resetsAt } = w.failure;
   const { resumeAt, until } = windowOf(resetsAt);
   return { resumeAt: resumeAt ?? null, until, substitute: choice.engine, ...(choice.model ? { model: choice.model } : {}), hop };
-}
-
-function windowOf(resetsAt: number | undefined): { resumeAt: Date | undefined; until: Date } {
-  const { resumeAt } = computeNextRetryDelayMs(resetsAt);
-  return { resumeAt, until: resumeAt ?? new Date(Date.now() + UNSTATED_RESET_WINDOW_MS) };
 }
 
 function labelOf(choice: Found["choice"]): string {

@@ -25,6 +25,7 @@ function runFacts(home: string): Record<string, string> {
   const stdout = execFileSync("sh", ["-s"], {
     input: FACTS_SCRIPT,
     env: { PATH: `${bin}:/usr/bin:/bin`, HOME: home },
+    stdio: ["pipe", "pipe", "ignore"],
     encoding: "utf-8",
   });
   const kv: Record<string, string> = {};

@@ -56,6 +56,25 @@ describe("nextFallbackLink", () => {
     expect(nextFallbackLink(links, { position: 2, tried: [own.key, "grok||"] }, everyoneSpent, now)?.link.engine).toBe("pi");
   });
 
+  it("comes back for a link it passed over for its health before the run counts as run out", () => {
+    // B was at its limit, so the walk went from A to x and then y; with y limited too, B is still untried.
+    const links = [own, link("codex"), link("grok"), link("pi")];
+    const health = { codex: spent };
+    const first = nextFallbackLink(links, { position: 0, tried: [own.key] }, health, now);
+    expect(first).toMatchObject({ index: 2, skipped: [{ key: "codex||", reason: "exhausted" }] });
+    const second = nextFallbackLink(links, { position: 2, tried: [own.key, "grok||"] }, health, now);
+    expect(second?.link.engine).toBe("pi");
+    const third = nextFallbackLink(links, { position: 3, tried: [own.key, "grok||", "pi||"] }, health, now);
+    expect(third).toMatchObject({ index: 1, link: { engine: "codex" } });
+    // And once it has been tried there is nothing left.
+    expect(nextFallbackLink(links, { position: 1, tried: [own.key, "grok||", "pi||", "codex||"] }, health, now)).toBeUndefined();
+  });
+
+  it("never comes back for a link ruled out for the session, behind the cursor or not", () => {
+    const links = [own, link("codex", { skip: "scoped" }), link("grok")];
+    expect(nextFallbackLink(links, { position: 2, tried: [own.key, "grok||"] }, {}, now)).toBeUndefined();
+  });
+
   it("is undefined when every link is tried or ruled out", () => {
     expect(nextFallbackLink(chain, { position: 0, tried: [own.key, "codex||", "grok||", "pi||"] }, {}, now)).toBeUndefined();
     expect(nextFallbackLink([own], { position: 0, tried: [own.key] }, {}, now)).toBeUndefined();
@@ -80,5 +99,9 @@ describe("effectivePosition", () => {
 
   it("never lies behind a target the run has tried, so an edited chain cannot send a run back", () => {
     expect(effectivePosition(chain, { position: 0, tried: [own.key, "grok||"] })).toBe(2);
+  });
+
+  it("keeps a recorded position on a tried link behind others: the walk went back to a link it had passed over", () => {
+    expect(effectivePosition(chain, { position: 1, tried: [own.key, "grok||", "pi||", "codex||"] })).toBe(1);
   });
 });

@@ -175,8 +175,8 @@ function settingsFindings(base: string): FallbackFinding[] {
 }
 
 /** The opencode config directories of an operator, and the project directories that add their own. */
-function layout(options: DetectOptions): { configDirs: string[]; configFiles: string[]; bases: string[]; projectDirs: string[] } {
-  const env = options.env ?? process.env;
+function layout(options: DetectOptions, processEnv: NodeJS.ProcessEnv = process.env): { configDirs: string[]; configFiles: string[]; bases: string[]; projectDirs: string[] } {
+  const env = options.env ?? processEnv;
   const home = options.home ?? env.HOME ?? os.homedir();
   const xdg = env.XDG_CONFIG_HOME || path.join(home, ".config");
   const projectDirs = options.projectDirs ?? [];

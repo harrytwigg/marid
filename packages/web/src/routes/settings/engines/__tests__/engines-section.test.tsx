@@ -250,7 +250,6 @@ describe('Engine Fallbacks section', () => {
   it('waits for the gateway before offering a chain written in engine names for editing', async () => {
     loadConfig({ engines: { claude: { fallback: ['codex', { engine: 'opencode', model: 'x/two' }] } } })
     await renderSettings()
-
     expect(document.querySelector('[data-engine-card="claude"] [data-chain-loading]')).toBeTruthy()
     expect(engineRows('claude')).toEqual([])
   })
@@ -259,7 +258,6 @@ describe('Engine Fallbacks section', () => {
     loadConfig({ engines: { claude: { fallback: ['codex', { engine: 'opencode', model: 'x/two' }] } } })
     chains.current = 'failed'
     await renderSettings()
-
     expect(document.querySelector('[data-engine-card="claude"] [data-chain-unreadable]')?.textContent).toContain('could not say how this chain runs')
     expect(document.querySelector('[data-engine-card="claude"] [data-chain-loading]')).toBeNull()
     expect(engineRows('claude')).toEqual([])
@@ -268,20 +266,13 @@ describe('Engine Fallbacks section', () => {
   it('reads a chain of mixed string and object entries, whichever way each was written', async () => {
     loadConfig({ engines: { claude: { fallback: ['codex', { engine: 'opencode', model: 'x/two' }, { engine: 'codex', model: 'gpt-5.6-sol' }] } } })
     // As the gateway answers: each link with the model it would run, and the link as written.
-    const run = (written: { engine: string; model?: string }, model: string) =>
-      ({ ...written, model, key: `${written.engine}||${model}`, account: written.engine, label: written.engine, origin: 'config' as const, written })
-    chains.current = {
-      profiles: [],
-      subjects: [{ kind: 'engine', id: 'claude', primary: null, configured: null, legacy: true, effective: [
-        run({ engine: 'codex' }, 'gpt-mapped'), run({ engine: 'opencode', model: 'x/two' }, 'x/two'), run({ engine: 'codex', model: 'gpt-5.6-sol' }, 'gpt-5.6-sol'),
-      ] }],
-    }
+    const run = (written: { engine: string; model?: string }, model: string) => ({ ...written, model, key: `${written.engine}||${model}`, account: written.engine, label: written.engine, origin: 'config' as const, written })
+    const effective = [run({ engine: 'codex' }, 'gpt-mapped'), run({ engine: 'opencode', model: 'x/two' }, 'x/two'), run({ engine: 'codex', model: 'gpt-5.6-sol' }, 'gpt-5.6-sol')]
+    chains.current = { profiles: [], subjects: [{ kind: 'engine', id: 'claude', primary: null, configured: null, legacy: true, effective }] }
     await renderSettings()
-
     expect(engineRows('claude')).toEqual(['codex', 'opencode · x/two', 'codex · gpt-5.6-sol'])
     expect(document.querySelector('[data-engine-card="claude"] [data-chain-legacy-notice]')).toBeTruthy()
-    // The map follows the links that name no model and leave the engine: only the bare "codex" one.
-    expect(document.querySelector('[data-engine-card="claude"] [data-model-map-floor]')?.textContent).toContain("Codex's own default")
+    expect(document.querySelector('[data-engine-card="claude"] [data-model-map-floor]')?.textContent).toContain("Codex's own default") // only the bare "codex" link names no model
   })
 
   it('hides the map when every link names a model, since it would translate nothing', async () => {

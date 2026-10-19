@@ -168,7 +168,7 @@ cleanup() {
   if (( KEEP && STARTED && code != 130 )); then
     echo
     echo "Instance kept on http://127.0.0.1:$PORT (home $SANDBOX_HOME; its token is in gateway.json there)."
-    echo "Tear it down with: $0 --teardown $VERIFY_ROOT"
+    echo "Tear it down with: JINN_VERIFY_TMP_ROOT=$TMP_BASE $0 --teardown $VERIFY_ROOT"
     exit "$code"
   fi
   if (( STARTED )); then teardown_instance "$VERIFY_ROOT" || code=3; fi

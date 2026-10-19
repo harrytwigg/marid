@@ -107,10 +107,10 @@ describe("--write", () => {
   const save = (config: unknown) => fs.writeFileSync(configPath, yaml.dump(config));
 
   it("merges the engine chain into the config and keeps the rest", () => {
-    fs.writeFileSync(configPath, yaml.dump({ gateway: { port: 7777 }, engines: { default: "claude", opencode: { model: "opencode-go/m1" } } }));
+    fs.writeFileSync(configPath, yaml.dump({ gateway: { port: 18080 }, engines: { default: "claude", opencode: { model: "opencode-go/m1" } } }));
     expect(writeEngineChain(chain, configPath, save)).toEqual({ written: true });
     expect(yaml.load(fs.readFileSync(configPath, "utf-8"))).toEqual({
-      gateway: { port: 7777 },
+      gateway: { port: 18080 },
       engines: { default: "claude", opencode: { model: "opencode-go/m1", fallback: chain } },
     });
   });

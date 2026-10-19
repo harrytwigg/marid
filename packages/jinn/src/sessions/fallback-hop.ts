@@ -1,6 +1,8 @@
 import { classifyEngineFailureText, hasEngineFailureClass } from "../shared/engine-failure.js";
+import { UNSTATED_RESET_WINDOW_MS } from "../shared/engine-health.js";
 import type { FallbackHop, FallbackHopReason, FallbackSkipReason } from "../shared/fallback-chain-wire.js";
 import { isModelAvailabilityError } from "../shared/model-fallback.js";
+import { computeNextRetryDelayMs } from "../shared/rateLimit.js";
 import type { EngineResult } from "../shared/types.js";
 import { formatResumeTime } from "./turn/text.js";
 
@@ -103,4 +105,10 @@ export function chainExhaustedNotice(exhausted: { tried: readonly string[]; own:
 export function chainExhaustedLastError(ownLabel: string, resumeAt: Date | null | undefined): string {
   const when = formatResumeTime(resumeAt);
   return `${ownLabel} usage limit, ${when ? `resumes ${when}` : "reset time unknown"}`;
+}
+
+/** The window a hop's stand-in holds the session for: until the failing target's stated reset, else a default window. */
+export function windowOf(resetsAt: number | undefined): { resumeAt: Date | undefined; until: Date } {
+  const { resumeAt } = computeNextRetryDelayMs(resetsAt);
+  return { resumeAt, until: resumeAt ?? new Date(Date.now() + UNSTATED_RESET_WINDOW_MS) };
 }

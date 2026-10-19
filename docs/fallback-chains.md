@@ -171,12 +171,17 @@ session API reports the chain, its position, the next hop and the hops under
 ## API
 
 - `GET /api/fallback-chains`: declared profiles, plus every engine and account
-  chain as written and as effective, each link with its limit state.
-  `?employee=<name>` adds that employee's chain.
+  chain as written and as effective. Each link carries its limit state, its
+  `written` form (what an editor writes back) and why it would be skipped.
+  `?employee=<name>` adds that employee's chain, with the `source` it comes from.
+  The route is the operator's: a department-scoped caller is refused.
 - Engine and account chains are written through `PUT /api/config`; an
   employee's through `PATCH /api/org/employees/<name>` with `fallback` (a list,
   or `null` to inherit).
-- `GET /api/sessions/<id>`: `fallback.chain` (`SessionFallbackChainView`).
+- `GET /api/sessions/<id>`: `fallback.chain` (`SessionFallbackChainView`): the
+  links, the position, the next hop, the hops and `servedBy`. A
+  department-scoped session reading its own session gets each link's `state`
+  and `until`, but not `usedPercent` or `window`.
 
 ## opencode internal fallback is removed
 

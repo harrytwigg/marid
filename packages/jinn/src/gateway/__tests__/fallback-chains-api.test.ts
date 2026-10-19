@@ -84,15 +84,11 @@ describe("GET /api/fallback-chains", () => {
   it("carries each link as written beside the model it would run, so an editor never writes back a resolved model", async () => {
     setConfig(chainConfig(["claude:B", { engine: "codex" }]));
     const claude = subject((await call("GET", "/api/fallback-chains")).body, "engine", "claude");
-    expect(claude.effective.map((l: any) => [l.key, l.written])).toEqual([
-      ["claude|B|opus", { engine: "claude", profile: "B" }],
-      ["codex||", { engine: "codex" }],
-    ]);
+    expect(claude.effective.map((l: any) => [l.key, l.written])).toEqual([["claude|B|opus", { engine: "claude", profile: "B" }], ["codex||", { engine: "codex" }]]);
     expect(claude.primary.written).toEqual({ engine: "claude", model: "opus" });
 
     setConfig(chainConfig([{ engine: "claude", profile: "B" }, { engine: "codex" }]));
-    writeEmployee(undefined);
-    fs.writeFileSync(WORKER_FILE, yaml.dump({ ...(yaml.load(fs.readFileSync(WORKER_FILE, "utf-8")) as object), model: "sonnet" }));
+    fs.writeFileSync(WORKER_FILE, yaml.dump({ name: "a-worker", displayName: "A Worker", department: "platform", rank: "employee", engine: "claude", model: "sonnet", persona: "Fallback mode fixture" }));
     const { refreshOrg } = await import("../org-registry.js");
     refreshOrg(chainConfig([{ engine: "claude", profile: "B" }, { engine: "codex" }]));
     const sonnet = subject((await call("GET", "/api/fallback-chains?employee=a-worker")).body, "employee", "a-worker");

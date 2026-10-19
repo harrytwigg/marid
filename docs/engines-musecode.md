@@ -39,7 +39,7 @@ engines:
     bin: muse                  # optional: PATH-resolved when absent
     model: muse-spark-1.2      # a catalog id; see Model discovery
     effortLevel: medium        # sent as reasoningEffort when the turn's model lists it
-    fallback: [claude]         # engines to try when Muse Code cannot serve a turn
+    fallback: [claude]         # chain targets to try when Muse Code cannot serve a turn (docs/fallback-chains.md)
 ```
 
 An employee can carry `cliFlags` in its YAML. They are appended to `muse serve` after Marid's own flags, so `cliFlags: ["-c", "run.reminder_roster=[]"]` reaches every turn that employee runs.
@@ -143,7 +143,7 @@ The snapshot is the only source: its status is `snapshot`, and it is `stale` whe
 
 Muse Code also has a `usage/read` method, which answers only for usage the host process has itself observed. A host started just to be asked has observed none (checked on 1.4.8), so Marid does not ask. Whether it answers against real credentials is unverified, and a live read is a follow-up; until it is checked, Muse Code is not one of the engines the Limits page treats as live.
 
-A window at 100% or more counts as spent until its reset, as it does for Claude and Codex. Marid records Muse Code as exhausted, and a new session that would have started on it starts on its `fallback` engine instead, until the window reopens.
+A window at 100% or more counts as spent until its reset, as it does for Claude and Codex. Marid records Muse Code as exhausted, and a new session that would have started on it starts on the first healthy link of its chain instead, until the window reopens.
 
 ---
 
