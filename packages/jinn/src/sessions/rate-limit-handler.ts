@@ -36,6 +36,7 @@ import {
 } from "../shared/rateLimit.js";
 import { rateLimitAccount, recordAccountRateLimit } from "./rate-limit-account.js";
 import { walkFallbackChain } from "./fallback-walk.js";
+import { chainExhaustedLastError } from "./fallback-hop.js";
 import { standingOverrideUntil } from "./engine-override.js";
 import { earlier, handBack, handBackAt as accountHandBackAt } from "./rate-limit-handback.js";
 import { getSession, updateSessionForAttempt, nextEngineSessionFields } from "./registry.js";
@@ -120,7 +121,8 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
     ...threadFields,
     status: "waiting",
     lastActivity: new Date().toISOString(),
-    lastError: (resumeAt
+    // A chain that ran out names the own target and when it reopens; any other wait keeps its wording.
+    lastError: walk.exhausted ? chainExhaustedLastError(walk.exhausted.own, resumeAt) : (resumeAt
       ? `${engineLabel} usage limit — resumes ${resumeAt.toISOString()}`
       : `${engineLabel} usage limit — waiting for reset`) + (targetReason ? `; ${targetReason}` : ""),
   });
@@ -129,7 +131,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
     return { kind: "cancelled" };
   }
 
-  await hooks.onWaitingStart?.({ resumeAt: resumeAt ?? null, rateLimit, ...(targetReason ? { reason: targetReason } : {}), ...(walk.hop ? { hop: walk.hop } : {}) });
+  await hooks.onWaitingStart?.({ resumeAt: resumeAt ?? null, rateLimit, ...(targetReason ? { reason: targetReason } : {}), ...(walk.hop ? { hop: walk.hop } : {}), ...(walk.exhausted ? { exhausted: walk.exhausted } : {}) });
 
   // Keep lastActivity fresh while waiting (UI / status endpoints).
   const heartbeat = setInterval(() => {

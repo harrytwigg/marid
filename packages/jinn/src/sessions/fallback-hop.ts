@@ -87,3 +87,20 @@ export function hopNoticeText(hop: FallbackHop): string {
 export function chainExhaustedReason(triedLabels: readonly string[], ownLabel: string): string {
   return `every target in its fallback chain was tried (${triedLabels.join(", ")}); waiting for ${ownLabel} to reset`;
 }
+
+/** The own target's reset as a notice says it: "at <time>", or "(time unknown)" when none is known. */
+function resetClause(resumeAt: Date | null | undefined): string {
+  const when = formatResumeTime(resumeAt);
+  return when ? `at ${when}` : "(time unknown)";
+}
+
+/** The notice for a run that ran out of chain: plainly that no hop is left, what was tried, and what the session waits for. */
+export function chainExhaustedNotice(exhausted: { tried: readonly string[]; own: string }, resumeAt: Date | null | undefined): string {
+  return `⏳ Every target in this session's chain is at its limit (tried: ${exhausted.tried.join(", ")}). Waiting for ${exhausted.own} to reset ${resetClause(resumeAt)}.`;
+}
+
+/** The session's `lastError` while it waits on its own target after the chain ran out. */
+export function chainExhaustedLastError(ownLabel: string, resumeAt: Date | null | undefined): string {
+  const when = formatResumeTime(resumeAt);
+  return `${ownLabel} usage limit, ${when ? `resumes ${when}` : "reset time unknown"}`;
+}

@@ -12,7 +12,7 @@ import { settleTurn, type SettleTurnInput } from "./completion.js";
 import { formatResumeTime, turnDisplayText } from "./text.js";
 import type { TurnInput, TurnPlan, TurnSurface } from "./types.js";
 import { withBoardReminder } from "./board-reminder.js";
-import { hopNoticeText } from "../fallback-hop.js";
+import { chainExhaustedNotice, hopNoticeText } from "../fallback-hop.js";
 import type { FallbackHop, FallbackHopNoticeMeta } from "../../shared/fallback-chain-wire.js";
 import type { JsonObject } from "../../shared/types.js";
 import { postEngineNotices } from "./engine-notices.js";
@@ -105,8 +105,10 @@ async function announceFallback(
   }
 }
 
-async function announceWaiting(args: RateLimitTurnArgs, resumeAt: Date | null, why: { reason?: string; hop?: FallbackHop } = {}): Promise<void> {
-  const { reason, hop } = why;
+async function announceWaiting(
+  args: RateLimitTurnArgs, resumeAt: Date | null, why: { reason?: string; hop?: FallbackHop; exhausted?: { tried: string[]; own: string } } = {},
+): Promise<void> {
+  const { reason, hop, exhausted } = why;
   const session = args.input.session;
   const engineLabel = rateLimitEngineLabel(session.engine);
   const resumeText = formatResumeTime(resumeAt);
@@ -116,7 +118,10 @@ async function announceWaiting(args: RateLimitTurnArgs, resumeAt: Date | null, w
     getSession(session.id) ?? session,
     resumeAt ? resumeAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : undefined,
   );
-  const text = `⏳ ${engineLabel} usage limit reached${resumeText ? `. Resets ${resumeText}` : ""}${reason ? `. Not switching: ${reason}.` : " —"} I'll continue automatically.`;
+  // A chain that ran out says plainly that no hop is left; any other wait keeps its wording.
+  const text = exhausted
+    ? chainExhaustedNotice(exhausted, resumeAt)
+    : `⏳ ${engineLabel} usage limit reached${resumeText ? `. Resets ${resumeText}` : ""}${reason ? `. Not switching: ${reason}.` : " —"} I'll continue automatically.`;
   if (hop) await noticeHop(args, text, hop);
   else await args.surface.notice(text);
 }
@@ -159,7 +164,7 @@ function rateLimitHooks(args: RateLimitTurnArgs): RateLimitHandlerHooks {
         meta: { model: plan.model, effortLevel: plan.effortLevel },
       } : undefined, ran.model);
     },
-    onWaitingStart: ({ resumeAt, reason, hop }) => announceWaiting(args, resumeAt, { reason, hop }),
+    onWaitingStart: ({ resumeAt, reason, hop, exhausted }) => announceWaiting(args, resumeAt, { reason, hop, exhausted }),
     onRetryAttempt: () => surface.waiting(false),
     onStillLimited: () => surface.waiting(true),
     onRetryStream: (delta) => surface.delta(delta),

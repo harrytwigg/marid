@@ -23,6 +23,9 @@ export function sessionFallbackChainView(options: SessionFallbackChainOptions): 
   const run = readFallbackRun(meta);
   const position = effectivePosition(links, run);
   const tried = [...(run?.tried ?? []), links[0]!.key, links[position]!.key];
+  const hops = readFallbackHops(meta);
+  // A session waiting on its own target after the chain ran out has nothing next: the wait is what comes before any new run.
+  const ranOut = hops[0]?.to === null && options.session.status === "waiting";
   const served = meta.fallbackServedBy;
   const servedKey = typeof served === "object" && served !== null ? (served as { key?: unknown }).key : undefined;
   return {
@@ -30,7 +33,7 @@ export function sessionFallbackChainView(options: SessionFallbackChainOptions): 
     links,
     position,
     servedBy: typeof servedKey === "string" ? servedKey : null,
-    next: nextFallbackLink(links, { position, tried }, options.health, options.now)?.link.key ?? null,
-    hops: readFallbackHops(meta),
+    next: ranOut ? null : nextFallbackLink(links, { position, tried }, options.health, options.now)?.link.key ?? null,
+    hops,
   };
 }

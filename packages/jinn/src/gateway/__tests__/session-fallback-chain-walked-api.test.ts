@@ -60,4 +60,40 @@ describe("GET /api/sessions/:id after a walked turn", () => {
     expect(got.body.transportMeta.fallbackServedBy).toMatchObject({ key: "codex||gpt-mapped" });
     expect(got.body.transportMeta.fallbackRun).toMatchObject({ position: 2 });
   });
+
+  it("reads waiting on the own target when the chain ran out: lastError names it and its reset, the last hop has no target and nothing is next", async () => {
+    setConfig({
+      ...baseConfig,
+      engines: { ...baseConfig.engines, claude: { bin: "claude", model: "opus", fallback: [{ engine: "codex", model: "gpt-5.6-sol" }, { engine: "codex", model: "gpt-mapped" }] } },
+    } as unknown as JinnConfig);
+    const { handleRateLimit } = await import("../../sessions/rate-limit-handler.js");
+    const registry = await import("../../sessions/registry.js");
+    const session = makeParent(null);
+    const started = registry.beginSessionAttempt(session.id)!;
+    const codex = { name: "codex", async run() { return limited(); } } as unknown as Engine;
+    const claude = { name: "claude", async run() { return limited(); } } as unknown as Engine;
+    const waiting: Array<{ hop?: unknown }> = [];
+
+    const outcome = handleRateLimit({
+      session: registry.getSession(session.id)!, attemptToken: started.attemptToken!, prompt: "go", engineConfig: { model: "opus" },
+      config: (await import("./session-fallback-api-harness.js")).config, engines: new Map([["claude", claude], ["codex", codex]]), engine: claude,
+      rateLimit: { resetsAt: Math.floor(Date.now() / 1000) + 3600 }, originalResult: limited(), hooks: { onWaitingStart: (info) => { waiting.push(info); } },
+    });
+    for (let i = 0; i < 100 && registry.getSession(session.id)!.status !== "waiting"; i++) await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const got = await call("GET", `/api/sessions/${session.id}`);
+    expect(got.body.status).toBe("waiting");
+    expect(got.body.lastError).toMatch(/^claude · opus usage limit, resumes .+\d\d:\d\d$/);
+    const chain = got.body.fallback.chain;
+    expect(chain.hops[0]).toMatchObject({ from: "codex||gpt-mapped", to: null, toLabel: null, reason: "rate-limit" });
+    expect(chain.next).toBeNull();
+    // Back on its own target: no run, no stand-in.
+    expect(chain.position).toBe(0);
+    expect(got.body.transportMeta.fallbackRun).toBeUndefined();
+    expect(waiting).toHaveLength(1);
+
+    // Let the wait go: a stopped session leaves it.
+    registry.updateSession(session.id, { status: "idle" } as never);
+    expect((await outcome).kind).toBe("cancelled");
+  }, 20_000);
 });

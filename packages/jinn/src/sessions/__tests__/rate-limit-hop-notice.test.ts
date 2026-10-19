@@ -87,15 +87,23 @@ describe("a hop that did not serve the turn", () => {
 describe("the chain running out", () => {
   const ran = { ...hop, to: null, toLabel: null };
 
-  it("says what was tried and carries the hop that records it", async () => {
-    await (await hooks()).onWaitingStart!({
-      resumeAt: null, rateLimit: {}, reason: "every target in its fallback chain was tried (a, b); waiting for claude · work · opus to reset", hop: ran,
-    });
+  const exhausted = { tried: ["claude · spare · sonnet", "opencode · x"], own: "claude · work · opus" };
+
+  it("says plainly that no hop is left, what was tried and what it waits for, and carries the hop that records it", async () => {
+    const resumeAt = new Date("2026-10-19T16:00:00.000Z");
+    await (await hooks()).onWaitingStart!({ resumeAt, rateLimit: {}, reason: "every target in its fallback chain was tried", hop: ran, exhausted });
 
     expect(notice).toHaveBeenCalledTimes(1);
     const [text, meta] = notice.mock.calls[0]!;
-    expect(text).toContain("Not switching: every target in its fallback chain was tried (a, b); waiting for claude · work · opus to reset.");
+    expect(text).toMatch(/^⏳ Every target in this session's chain is at its limit \(tried: claude · spare · sonnet, opencode · x\)\. Waiting for claude · work · opus to reset at .+\d\d:\d\d\.$/);
+    expect(text).not.toMatch(/switch|moving|another/i);
     expect(meta).toEqual({ fallbackHop: ran });
+  });
+
+  it("says the time is unknown when the own target's reset is not", async () => {
+    await (await hooks()).onWaitingStart!({ resumeAt: null, rateLimit: {}, hop: ran, exhausted });
+
+    expect(notice.mock.calls[0]![0]).toBe("⏳ Every target in this session's chain is at its limit (tried: claude · spare · sonnet, opencode · x). Waiting for claude · work · opus to reset (time unknown).");
   });
 
   it("keeps the plain wait notice free of a hop", async () => {

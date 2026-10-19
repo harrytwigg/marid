@@ -40,7 +40,7 @@ export type WalkOutcome =
   | { kind: "served"; result: EngineResult }
   | { kind: "cancelled" }
   /** Nothing served the turn: it waits on its own target. `reason` says why no one else did, `hop` is the record that the chain ran out. */
-  | { kind: "unserved"; reason?: string; hop?: FallbackHop; walked: boolean };
+  | { kind: "unserved"; reason?: string; hop?: FallbackHop; walked: boolean; exhausted?: { tried: string[]; own: string } };
 
 /** The target that just failed, and how. */
 interface Failure {
@@ -243,15 +243,21 @@ async function served(w: Walk, found: Found, model: string | undefined, result: 
 /** Nothing left to move to. A session that left its own target goes back to where this turn found it; the run's hops are kept either way. */
 async function unserved(w: Walk, decision: SubstituteDecision): Promise<WalkOutcome> {
   const walked = decision.chain !== undefined;
-  const tried = w.tried.size > 1;
-  const reason = decision.reason ?? (walked && tried ? chainExhaustedReason(w.triedLabels, w.ownLabel) : undefined);
-  const hop = walked && tried ? exhaustedHop(w, decision) : undefined;
+  const ranOut = walked && w.tried.size > 1;
+  const hop = ranOut ? exhaustedHop(w, decision) : undefined;
   if (hop) {
     w.hops.push(hop);
     logger.info(hopLogLine(w.input.opts.session.id, hop));
   }
   if (!(await settleExhausted(w))) return { kind: "cancelled" };
-  return { kind: "unserved", ...(reason ? { reason } : {}), ...(hop ? { hop } : {}), walked };
+  return { kind: "unserved", ...whyUnserved(w, decision, ranOut), ...(hop ? { hop } : {}), walked };
+}
+
+/** Why nothing took the turn: the session target's own reason, or that the chain ran out, naming what was tried and what the session waits for. */
+function whyUnserved(w: Walk, decision: SubstituteDecision, ranOut: boolean): { reason?: string; exhausted?: { tried: string[]; own: string } } {
+  if (decision.reason) return { reason: decision.reason };
+  if (!ranOut) return {};
+  return { reason: chainExhaustedReason(w.triedLabels, w.ownLabel), exhausted: { tried: [...w.triedLabels], own: w.ownLabel } };
 }
 
 /** The hop that records the chain ran out: what was left after the cursor, and why none of it could be used. */

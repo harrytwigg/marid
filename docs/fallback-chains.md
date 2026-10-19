@@ -120,7 +120,10 @@ reset, as before.
   or its model is not served. A link whose health says it is at its limit is
   passed over first, and tried only when nothing healthier is left.
 - When the chain runs out, the session waits for its own target's reset and
-  resumes there. If a stand-in held the session when it ran out, the wait ends
+  resumes there. It reads `waiting` (its `lastError` names the own target and
+  when it reopens, e.g. "claude · work · opus usage limit, resumes …"), its last
+  hop has no target, and the notice says plainly that no hop is left and what
+  was tried. If a stand-in held the session when it ran out, the wait ends
   where the stand-in's window does (the own target's reset), and the turn runs
   again on the own target.
 - At its own target's reset the session goes back to it and the run ends, as

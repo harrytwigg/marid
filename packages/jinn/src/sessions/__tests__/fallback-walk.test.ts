@@ -103,14 +103,14 @@ function newSession(opts: { ref: string; employeeName?: string; model?: string; 
 }
 
 function recordingHooks() {
-  const seen = { starts: [] as Array<{ substitute: string; model?: string; hop?: FallbackHop }>, waiting: [] as Array<{ reason?: string; hop?: FallbackHop }>, completes: [] as Array<{ engine: string; model?: string }>, failed: [] as EngineResult[] };
+  const seen = { starts: [] as Array<{ substitute: string; model?: string; hop?: FallbackHop }>, waiting: [] as Array<{ reason?: string; hop?: FallbackHop; exhausted?: { tried: string[]; own: string } }>, completes: [] as Array<{ engine: string; model?: string }>, failed: [] as EngineResult[] };
   return {
     seen,
     hooks: {
       onFallbackStart: (info: { substitute: string; model?: string; hop?: FallbackHop }) => { seen.starts.push(info); },
       onFallbackFailed: (result: EngineResult) => { seen.failed.push(result); },
       onFallbackComplete: (_result: EngineResult, ran: { engine: string; model?: string }) => { seen.completes.push(ran); },
-      onWaitingStart: (info: { reason?: string; hop?: FallbackHop }) => { seen.waiting.push(info); },
+      onWaitingStart: (info: { reason?: string; hop?: FallbackHop; exhausted?: { tried: string[]; own: string } }) => { seen.waiting.push(info); },
     },
   };
 }
@@ -247,6 +247,9 @@ describe("a chain that runs out", () => {
     expect(calls.map(who)).toEqual(["B/sonnet", "x-provider/model-x", "y-provider/model-y"]);
     expect(reg.getSession(id)!.status).toBe("waiting");
     expect(seen.waiting).toHaveLength(1);
+    expect(seen.waiting[0]!.exhausted).toEqual({ tried: ["claude · B · sonnet", "opencode · x-provider/model-x", "opencode · y-provider/model-y"], own: "claude · A · opus" });
+    // The session's own words for it: whose limit, and when it reopens.
+    expect(reg.getSession(id)!.lastError).toMatch(/^claude · A · opus usage limit, resumes .+\d\d:\d\d$/);
     expect(seen.waiting[0]!.reason).toMatch(/every target in its fallback chain was tried \(claude · B · sonnet, opencode · x-provider\/model-x, opencode · y-provider\/model-y\); waiting for claude · A · opus to reset/);
     // Nothing is tried a second time while it waits.
     reg.updateSession(id, { status: "idle" } as never);
