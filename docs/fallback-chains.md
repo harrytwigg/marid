@@ -210,7 +210,7 @@ When any condition fails, the turn is read exactly as on a host without the plug
 - a blank last step is a plain error, so it cannot mark the whole opencode
   engine as exhausted;
 - a final step's text is the answer;
-- a crash, transport failure or interrupt keeps its own error.
+- a crash, transport failure or interrupt is never read as a usage limit.
 
 The tests in `opencode-fallback-plugin-turn.test.ts` and
 `opencode-server-provider.test.ts` pin each side of every condition. A change

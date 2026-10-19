@@ -1141,7 +1141,7 @@ export class OpencodeServerTurn {
    *  last, and the turn waits as it would with nothing written, so the copy is seen. */
   private hasAnswer(): boolean {
     if (this.lastAnswer !== "text") return false;
-    return !(this.deps.fallbackPluginAbortsTurns?.() && this.turn.answerIsNarration);
+    return true;
   }
 
   /** One of the turn's replies finished, or the idle session's newest one
