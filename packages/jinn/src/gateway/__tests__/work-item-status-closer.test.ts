@@ -18,6 +18,8 @@ let refreshOrg: (config?: unknown) => unknown;
 let listComments: typeof import("../../work-items/comments.js").listComments;
 let listWorkItemEvents: typeof import("../../work-items/event-log.js").listWorkItemEvents;
 let transition: typeof import("../../work-items/transitions.js").transition;
+let deleteSession: typeof import("../../sessions/registry.js").deleteSession;
+let initDb: typeof import("../../shared/db.js").initDb;
 
 function writeEmployee(directory: string, name: string, extra: string[] = []): void {
   const file = path.join(home, "org", directory, `${name}.yaml`);
@@ -35,6 +37,8 @@ beforeAll(async () => {
   ({ listComments } = await import("../../work-items/comments.js"));
   ({ listWorkItemEvents } = await import("../../work-items/event-log.js"));
   ({ transition } = await import("../../work-items/transitions.js"));
+  ({ deleteSession } = await import("../../sessions/registry.js"));
+  ({ initDb } = await import("../../shared/db.js"));
   writeEmployee("engineering", "closer-dev", grant);
   writeEmployee("engineering", "plain-dev");
   writeEmployee("side-project", "side-closer", grant);
@@ -175,6 +179,32 @@ describe("an employee granted closeTodos", () => {
     const res = await as(second.id)("POST", `/api/work-items/${item.id}/status`, closeBody);
 
     expect([res.status, statusOf(item.id)]).toEqual([403, "in_review"]);
+  });
+
+  it("cannot close it once the session that executed it has been unlinked and deleted", async () => {
+    const item = workItems.createWorkItem({ title: "Delegated to the closer", status: "executing", assignee: "closer-dev" });
+    const executor = await sessionOf("closer-dev");
+    workItems.linkSession(item.id, executor.id, null, "execute", { via: "delegation" });
+    expect((await as(executor.id)("POST", `/api/work-items/${item.id}/status`, { status: "in_review", note: "done" })).status).toBe(200);
+    initDb().prepare("UPDATE sessions SET work_item_id = NULL, work_item_role = NULL WHERE id = ?").run(executor.id);
+    expect(deleteSession(executor.id)).toBe(true);
+
+    const res = await closeAs("closer-dev", item.id);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/a session of closer-dev was linked to work on it/);
+    expect(statusOf(item.id)).toBe("in_review");
+  });
+
+  it("still reads an older link event, recorded without the employee, through the session row", async () => {
+    const item = reviewTodo("Linked before the employee was stamped");
+    const executor = await sessionOf("closer-dev");
+    workItems.appendWorkItemEvent({ workItemId: item.id, kind: "session_linked", detail: { sessionId: executor.id, role: "execute" } });
+
+    const res = await closeAs("closer-dev", item.id);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/a session of closer-dev was linked to work on it/);
   });
 
   it("cannot close it once the session that worked it has moved on to other work", async () => {

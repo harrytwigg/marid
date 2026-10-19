@@ -904,8 +904,8 @@ export function linkSession(
   const now = new Date().toISOString();
   const txn = db.transaction(() => {
     const session = db
-      .prepare('SELECT work_item_id, work_item_role FROM sessions WHERE id = ?')
-      .get(sessionId) as { work_item_id: string | null; work_item_role: string | null } | undefined;
+      .prepare('SELECT work_item_id, work_item_role, employee FROM sessions WHERE id = ?')
+      .get(sessionId) as { work_item_id: string | null; work_item_role: string | null; employee: string | null } | undefined;
     if (!session) throw new Error(`linkSession: session ${sessionId} not found`);
     const workItemExists = db.prepare('SELECT 1 FROM work_items WHERE id = ?').get(todoId);
     if (!workItemExists) throw new Error(`linkSession: work item ${todoId} not found`);
@@ -920,11 +920,13 @@ export function linkSession(
     db.prepare(`UPDATE sessions SET work_item_id = ?, work_item_role = ?, transport_meta = ${meta} WHERE id = ?`)
       .run(todoId, role, ...(opts.selfStarted ? [todoId] : []), sessionId);
     db.prepare('UPDATE work_items SET updated_at = ?, version = version + 1 WHERE id = ?').run(now, todoId);
+    // The employee is stamped at link time: the self-review ban reads who
+    // worked a Todo from this event, and a session row can be deleted later.
     appendWorkItemEvent({
       workItemId: todoId,
       kind: 'session_linked',
       actor,
-      detail: { sessionId, role, ...(opts.selfStarted ? { selfStarted: true } : {}), ...(opts.via ? { via: opts.via } : {}) },
+      detail: { sessionId, role, ...(session.employee ? { employee: session.employee } : {}), ...(opts.selfStarted ? { selfStarted: true } : {}), ...(opts.via ? { via: opts.via } : {}) },
     });
   });
   txn();

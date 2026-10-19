@@ -111,9 +111,12 @@ function closerHandIn(employee: string, item: WorkItem): string | undefined {
   return handoff && moveEmployee(handoff) === employee ? `${employee} handed it to review` : undefined;
 }
 
+/** A link to execute the Todo by a session of `employee`: the employee stamped
+ *  on the event, or for an event older than the stamp, the session's own row. */
 function workedBy(event: WorkItemEvent, employee: string): boolean {
-  return event.kind === "session_linked" && toWorkItemLinkRole(event.detail?.role) === "execute"
-    && sessionEmployee(event.detail?.sessionId) === employee;
+  if (event.kind !== "session_linked" || toWorkItemLinkRole(event.detail?.role) !== "execute") return false;
+  const linked = typeof event.detail?.employee === "string" ? event.detail.employee : sessionEmployee(event.detail?.sessionId);
+  return linked === employee;
 }
 
 function startedBy(event: WorkItemEvent, employee: string): boolean {
