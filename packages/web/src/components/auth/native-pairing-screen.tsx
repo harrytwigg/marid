@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react"
-import { KeyRound, LoaderCircle, PlugZap, RefreshCw, ShieldCheck, Trash2 } from "@/components/ui/icon"
+import { KeyRound, LoaderCircle, PlugZap, RefreshCw, Trash2 } from "@/components/ui/icon"
 import type { NativeGatewayProfile, NativeGatewayProfilesSnapshot } from "@/lib/native-gateway-profiles"
 import {
   nativeGatewayProfiles,
@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { BrandMark } from "@/components/brand-mark-image"
 import { PRODUCT_NAME } from "@/lib/brand"
 
 const INPUT_SHELL =
@@ -21,7 +22,7 @@ const INPUT_SHELL =
 const INPUT =
   "min-w-0 flex-1 bg-transparent text-[length:var(--text-subheadline)] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
 const LABEL = "text-[length:var(--text-caption1)] font-[var(--weight-semibold)] text-[var(--text-tertiary)]"
-const PANEL = "rounded-[var(--radius-lg)] bg-[var(--bg-secondary)] p-[var(--space-4)]"
+const PANEL = "rounded-[var(--radius-lg)] bg-[var(--fill-quaternary)] p-[var(--space-4)]"
 const ACCENT_BUTTON =
   "inline-flex h-11 items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--accent)] px-[var(--space-4)] text-[length:var(--text-subheadline)] font-[var(--weight-semibold)] text-[var(--accent-contrast)] transition-[transform,filter,opacity] duration-150 [transition-timing-function:var(--ease-snappy)] hover:brightness-[1.04] active:scale-[0.96] disabled:opacity-55 disabled:hover:brightness-100 disabled:active:scale-100"
 const QUIET_BUTTON =
@@ -179,9 +180,7 @@ function PairedGateways({ profiles, activeId, busy, onUse, onRemove }: {
 function ScreenHeader({ unreachableName }: { unreachableName?: string }) {
   return (
     <div className="mb-[var(--space-5)] flex items-center gap-[var(--space-3)] px-[var(--space-2)]">
-      <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-[var(--accent-fill)] text-[var(--accent)]">
-        <ShieldCheck size={22} aria-hidden />
-      </div>
+      <BrandMark size={44} className="shrink-0" />
       <div className="min-w-0">
         <h1 className="brand-wordmark text-balance text-[length:var(--text-title3)]">
           {unreachableName ? `Cannot reach ${unreachableName}` : `Connect ${PRODUCT_NAME}`}
@@ -282,7 +281,7 @@ export function NativePairingScreen({ onPaired }: { onPaired?: (origin: string) 
 
   return (
     <main className="h-dvh overflow-y-auto bg-[var(--bg)] text-[var(--text-primary)] flex items-start sm:items-center justify-center px-[var(--space-4)] py-[max(var(--safe-top),var(--space-8))]">
-      <section className="w-full max-w-[560px] rounded-[var(--radius-xl)] bg-[var(--material-regular)] p-[var(--space-6)] shadow-[var(--shadow-card)]">
+      <section className="w-full max-w-[560px] glass-card rounded-[var(--radius-xl)] p-[var(--space-6)]">
         <ScreenHeader unreachableName={unreachable?.name} />
         <PairedGateways
           profiles={profiles}

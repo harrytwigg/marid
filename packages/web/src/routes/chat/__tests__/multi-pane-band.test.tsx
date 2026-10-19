@@ -1,15 +1,9 @@
+import "@/test/preload-menus"
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { waitFor } from '@testing-library/react'
 import { installVirtualLayout, type VirtualLayout } from '@/test/virtual-layout'
 import { WORKING_SET_STORAGE_KEY } from '../working-set'
-import { gateway, pane, renderRoute, sessionIds } from './multi-pane-page-harness'
-
-function openChatBeside() {
-  const desktopNewChat = screen.getAllByRole('button', { name: 'New chat' })[0]
-  const actionsPill = desktopNewChat.parentElement!
-  fireEvent.click(within(actionsPill).getByRole('button', { name: 'More options' }))
-  fireEvent.click(within(actionsPill).getByRole('button', { name: 'Open beside' }))
-}
+import { gateway, pane, renderRoute, sessionIds, openChatBeside } from './multi-pane-page-harness'
 
 describe('the routed chat band', () => {
   let pickerLayout: VirtualLayout | null = null
@@ -48,7 +42,7 @@ describe('the routed chat band', () => {
     expect(thread.querySelector('[data-chat-top-scrim]')).toBeTruthy()
     expect(mobileNav).toBeTruthy()
 
-    openChatBeside()
+    await openChatBeside()
 
     await waitFor(() => expect(document.querySelectorAll('[data-chat-grid-pane]')).toHaveLength(2))
     expect(thread.querySelector('[data-chat-desktop-title]')).toBeNull()
@@ -70,7 +64,7 @@ describe('the routed chat band', () => {
     expect(thread.querySelector('[data-chat-top-scrim]')!.className).toContain('h-[var(--chat-top-scrim)]')
     expect(thread.hasAttribute('data-floating-header')).toBe(true)
 
-    openChatBeside()
+    await openChatBeside()
 
     // Two panes: no pills, no scrim, and each pane's own title bar is in flow.
     await waitFor(() => expect(document.querySelectorAll('[data-chat-grid-pane]')).toHaveLength(2))
