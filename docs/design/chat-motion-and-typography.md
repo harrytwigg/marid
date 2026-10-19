@@ -1,4 +1,4 @@
-# ICI-818 — Chat motion and typography
+# Chat motion and typography
 
 Design spec. No product code. Base SHA `4f11638c`.
 

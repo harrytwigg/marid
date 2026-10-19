@@ -1,7 +1,7 @@
-# ICI-823 — QA verification pass: chat refine
+# QA verification pass: chat refine
 
 Verification report for the five operator defects behind ICI-817, measured against the numbers
-in `docs/design/ICI-818-chat-motion-and-typography.md`. No product code was changed by this
+in `docs/design/chat-motion-and-typography.md`. No product code was changed by this
 pass; a failing defect is handed back to the child that owns it. The one other thing this pass
 adds is `scripts/device-scroll-fixture.mjs`, which exists so defect 3's blocked checklist can
 hand the operator a URL that actually reaches a phone — see that section for why it has to be
@@ -420,20 +420,9 @@ inside itself by design — the page does not move.
 ### Screenshots
 
 1440×900 and 390×844, in both light and dark, on a transcript carrying a one-word message, a bare
-long URL, a fenced code block, and an inline-code run, plus the long transcript at rest:
+long URL, a fenced code block, and an inline-code run, plus the long transcript at rest: eight screenshots in all.
 
-```
-tmp/ICI-823-chat-refine-qa/typography-1440x900-light.png
-tmp/ICI-823-chat-refine-qa/typography-1440x900-dark.png
-tmp/ICI-823-chat-refine-qa/typography-390x844-light.png
-tmp/ICI-823-chat-refine-qa/typography-390x844-dark.png
-tmp/ICI-823-chat-refine-qa/transcript-1440x900-light.png
-tmp/ICI-823-chat-refine-qa/transcript-1440x900-dark.png
-tmp/ICI-823-chat-refine-qa/transcript-390x844-light.png
-tmp/ICI-823-chat-refine-qa/transcript-390x844-dark.png
-```
-
-Paths are relative to the instance home; the same eight images are attached to the ICI-823 Todo.
+The images were kept in a QA scratch directory under the instance home and attached to the QA Todo.
 They are not committed here — this repository is public and does not carry QA raster output.
 
 `chat-bubble-type-scale.test.tsx` is green.

@@ -1,7 +1,7 @@
-# PLA-118 platform foundation QA
+# Platform foundation QA
 
 - Date: 2026-08-23
-- Branch: `feature/PLA-118`
+- Branch: merged; name not recorded here
 - Product SHA exercised: `f882cf21` — the whole journey was re-run at that head, after the `main` reconciliation, the `failedProfileId` fix, and the restored build-lane proofs
 - Reconciled onto: `main` at `2402dabd` — the commit this branch is actually merged onto; `git rev-list --count HEAD..main` is 0 and `git diff --name-only main...HEAD` lists only `docs/qa/` paths. `main` had independently landed the same two fixes (`7628ebf2` for `failedProfileId`/retry, `bdb9b6c8` for the startup and credential proofs) plus a size-cap split of the profile module (`66a829b1`), so this branch dropped its own copies and carries only this QA evidence on top of `main`. The earlier reconciliation point was `aaa5f48e`; across the whole range `aaa5f48e..2402dabd` the only drift on a PLA-118 surface is `packages/shell` CI test infrastructure — `packages/shell/package.json`, `packages/shell/scripts/test-native.mjs`, and `packages/shell/tauri.config.test.ts`. The three commits after `76be9932` retire `POST /api/files/transfer`, the `remotes` config key, and the Discord cross-gateway proxy, and touch no PLA-118 surface at all. No product file this journey exercised changed in that range
 - Product-code drift from the exercised head: the reconciled tree is **not** identical to `f882cf21`. `packages/shell/src-tauri/src/credentials.rs` and `packages/web/src/platform/__tests__/contracts.test.ts` are byte-identical, and the pairing screen's `unreachable` derivation is byte-identical (only its comment changed), but three behavioural deltas sit in `packages/web/src/lib/native-gateway-profiles.ts`, each visible in `git diff f882cf21..HEAD -- packages/web/src/lib/native-gateway-profiles.ts`:
@@ -26,7 +26,7 @@ and sandbox data are not retained.
 | 2 | Open `/todos` and a Todo in the same browser | Verified | Opened `/todos`, switched to the Everything board and clicked generic `QAA-1`, landing on `/todos/QAA-1` with the dashboard chrome unchanged |
 | 3 | Browser workspace switch A→B isolates A authentication | Verified | The switcher menu listed both workspaces and choosing QA Beta navigated the browser to B's `switchUrl` `http://127.0.0.1:7815/`; B rendered its own Pair This Browser screen and returned 401 for `/api/sessions` while A still returned 200 |
 | 4 | PWA hard-refresh `/todos` and `/settings`; API remains same-origin | Verified | After a reload both routes reported an active controlling service worker scoped to A's origin and a same-origin `/api/status` 200 |
-| 5 | Chat, Todos, Settings, switcher screenshots at both sizes/themes | Verified | Twenty regenerated PNGs under `docs/qa/PLA-118-evidence/`: sixteen browser captures plus four bundled-native gateway-screen captures; every file measures exactly 1440×900 or 390×844 and shows only generic sandbox data |
+| 5 | Chat, Todos, Settings, switcher screenshots at both sizes/themes | Verified | Twenty regenerated PNGs under `docs/qa/platform-foundation-evidence/`: sixteen browser captures plus four bundled-native gateway-screen captures; every file measures exactly 1440×900 or 390×844 and shows only generic sandbox data |
 | 6 | Bundled Tauri loads local assets; menu/icon/geometry work | Verified | A fresh unsigned `Jinn.app` opened its embedded Connect Jinn screen before any profile existed, kept the Jinn/Edit/View/Window menu bar and `icon.icns`, and was driven between 1440×900 and 390×844 repeatedly; `tauri.conf.json` sets `frontendDist` and the window opens `WebviewUrl::App("index.html")` |
 | 7 | Pair A and B independently | Verified | Pairing A then adding B through the app's Add gateway dialog stored two Keychain accounts that are exactly `sha256("http://127.0.0.1:7814")` and `sha256("http://127.0.0.1:7815")`; after pairing, B showed as Online while QA Alpha stayed Current |
 | 8 | A→B changes HTTP, WS, cache, auth, identity; route remains `/todos` | Verified | Switching A→B in the bundled app left the Todos Home route in place and moved all traffic: B's access log grew while A's grew by zero bytes, and the switcher then named QA Beta the current workspace. Switching back reversed both. Generation isolation for cache and sockets is covered by the focused manager suite |
@@ -117,7 +117,7 @@ application state restored from the backup taken before the run.
   described B only inside the switcher instead of activating B and rendering
   the B-named retry screen. The regression is tracked as PLA-241
 - Fresh evidence: the row ledger and screenshots are in
-  `docs/qa/PLA-118-evidence/reconfirm-2026-08-24/`. The four-way screenshot
+  `docs/qa/platform-foundation-evidence/reconfirm-2026-08-24/`. The four-way screenshot
   matrix is complete for the browser A/Todos state and the live row-10 failure,
   but not for every earlier human-visible row; the evidence README says so
   explicitly and does not restate the 2026-08-23 captures as freshly driven

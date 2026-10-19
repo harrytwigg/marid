@@ -1,4 +1,4 @@
-# PLA-190 — Jinn Shell primitives
+# Jinn Shell primitives
 
 Design spec. No product code. Base SHA `76be9932`.
 
