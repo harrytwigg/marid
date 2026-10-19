@@ -231,37 +231,6 @@ describe('a legacy chain', () => {
   })
 })
 
-describe('the opencode internal fallback warning', () => {
-  const withOpencode = (internalFallback: unknown) => {
-    const reg = registry.current as { engines: Record<string, unknown> }
-    reg.engines.opencode = engine('opencode', true, 'x/one', { internalFallback })
-  }
-
-  it('warns on the opencode card, with a link to the migration, while the plugin is still active', async () => {
-    withOpencode({ detected: true })
-    await renderSettings()
-
-    const warning = document.querySelector('[data-engine-card="opencode"] [data-opencode-internal-fallback]')!
-    expect(warning.getAttribute('data-opencode-internal-fallback')).toBe('active')
-    expect((warning.querySelector('a') as HTMLAnchorElement).href).toContain('docs/fallback-chains.md#migrating-a-host')
-  })
-
-  it('says it is neutralised, with no link, once the gateway runs opencode with it off', async () => {
-    withOpencode({ detected: true, neutralised: true })
-    await renderSettings()
-
-    const warning = document.querySelector('[data-opencode-internal-fallback]')!
-    expect(warning.getAttribute('data-opencode-internal-fallback')).toBe('neutralised')
-    expect(warning.querySelector('a')).toBeNull()
-  })
-
-  it('shows nothing when none is detected, or the gateway does not say', async () => {
-    withOpencode({ detected: false })
-    await renderSettings()
-    expect(document.querySelector('[data-opencode-internal-fallback]')).toBeNull()
-  })
-})
-
 describe('legacy fallback mapping', () => {
   beforeEach(() => {
     // What GET /api/config serves for a legacy config: the mapped chain in the

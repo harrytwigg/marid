@@ -23,12 +23,15 @@ export interface EngineHealth {
   reason?: string;
   observedAt?: string;
 }
-/** opencode's own model switching (a rate-limit plugin on the host), reported by the
- *  gateway so the dashboard can say the host would fall back twice. */
+/** opencode's own model switching (a rate-limit plugin on the host), as `/api/engines` reports it, so the dashboard
+ *  can say the host would fall back twice. `sources` are the operator's own paths: counted here, never shown. */
 export interface InternalFallbackStatus {
   detected: boolean;
-  /** The gateway already runs opencode with the plugin switched off. */
-  neutralised?: boolean;
+  /** The gateway runs opencode with the plugin switched off. Never, today. */
+  neutralised: boolean;
+  sources: string[];
+  /** The remote hosts' share of `sources`, by host label. */
+  remote?: Array<{ host: string; sources: string[] }>;
 }
 export interface EngineRegistryEntry {
   name: string;
