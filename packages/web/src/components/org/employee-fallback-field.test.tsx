@@ -94,12 +94,18 @@ describe("EmployeeFallbackField", () => {
     expect(onChange).toHaveBeenLastCalledWith([{ engine: "claude" }, { engine: "codex" }])
   })
 
-  it("refuses the employee own target in the loader sentence", () => {
-    render(<EmployeeFallbackField employee={EMP} engine="claude" value={[{ engine: "claude", profile: "work" }]} onChange={() => {}} />)
+  it("refuses the employee own target, model included, in the loader sentence", () => {
+    render(<EmployeeFallbackField employee={EMP} engine="claude" value={[{ engine: "claude", profile: "work", model: "sonnet" }]} onChange={() => {}} />)
 
     expect(document.querySelector("[data-chain-problem]")?.textContent).toBe(
-      "fallback[0] (claude · work) is the target this chain falls back from; give it another profile or model",
+      "fallback[0] (claude · work · sonnet) is the target this chain falls back from; give it another profile or model",
     )
+  })
+
+  it("accepts the own profile with no model, as the gateway does: it is not the own target as written", () => {
+    render(<EmployeeFallbackField employee={EMP} engine="claude" value={[{ engine: "claude", profile: "work" }]} onChange={() => {}} />)
+
+    expect(document.querySelector("[data-chain-problem]")).toBeNull()
   })
 
   it("shows the gateway's problems with the stored employee chain", () => {
@@ -162,7 +168,7 @@ describe("choosing Custom before the gateway has answered", () => {
 describe("a chain with a problem", () => {
   it("tells the editor to hold the save, and lets go once it is valid", () => {
     const onBlockedChange = vi.fn()
-    const { rerender } = render(<EmployeeFallbackField employee={EMP} engine="claude" value={[{ engine: "claude", profile: "work" }]} onChange={() => {}} onBlockedChange={onBlockedChange} />)
+    const { rerender } = render(<EmployeeFallbackField employee={EMP} engine="claude" value={[{ engine: "claude", profile: "work", model: "sonnet" }]} onChange={() => {}} onBlockedChange={onBlockedChange} />)
     expect(onBlockedChange).toHaveBeenLastCalledWith(true)
 
     rerender(<EmployeeFallbackField employee={EMP} engine="claude" value={[{ engine: "codex" }]} onChange={() => {}} onBlockedChange={onBlockedChange} />)

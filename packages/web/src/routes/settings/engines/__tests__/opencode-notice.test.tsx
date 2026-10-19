@@ -114,13 +114,22 @@ describe('the opencode internal fallback warning', () => {
     expect(warning.textContent).not.toContain('/home/op')
   })
 
-  it('says how many remote hosts carry it too, when the gateway reports some', async () => {
-    withOpencode({ detected: true, neutralised: false, sources: [], remote: [{ host: 'build-1', sources: ['x'] }, { host: 'build-2', sources: ['y'] }] })
+  it('says only the remote hosts when this host does not carry it', async () => {
+    // As the gateway reports it: a remote host's findings are part of `sources`, as "host: path".
+    withOpencode({ detected: true, neutralised: false, sources: ['build-1: x', 'build-2: y'], remote: [{ host: 'build-1', sources: ['x'] }, { host: 'build-2', sources: ['y'] }] })
     await renderSettings()
 
     const warning = document.querySelector('[data-opencode-internal-fallback]')!
-    expect(warning.textContent).toContain('here and on 2 remote hosts')
+    expect(warning.textContent).toContain('installed on 2 remote hosts')
+    expect(warning.textContent).not.toContain('here and')
     expect(warning.textContent).not.toContain('build-1')
+  })
+
+  it('says here and how many remote hosts, when both carry it', async () => {
+    withOpencode({ detected: true, neutralised: false, sources: ['/local/opencode.json', 'build-1: x'], remote: [{ host: 'build-1', sources: ['x'] }] })
+    await renderSettings()
+
+    expect(document.querySelector('[data-opencode-internal-fallback]')!.textContent).toContain('here and on 1 remote host')
   })
 
   it('says it is neutralised, with no link, once the gateway runs opencode with it off', async () => {

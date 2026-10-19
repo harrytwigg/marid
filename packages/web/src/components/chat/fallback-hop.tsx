@@ -28,7 +28,15 @@ export function parseFallbackHop(message: Message): FallbackHop | null {
   const hop = (message.meta as Partial<FallbackHopNoticeMeta> | undefined)?.fallbackHop as Partial<FallbackHop> | undefined
   if (!hop || typeof hop !== 'object') return null
   if (!text(hop.from) || !text(hop.fromLabel) || !text(hop.reason)) return null
-  return hop as FallbackHop
+  return { ...(hop as FallbackHop), skipped: skippedOf(hop.skipped) }
+}
+
+/** The passed-over links a hop names, keeping only well-formed ones: a malformed list must not take the transcript down. */
+function skippedOf(value: unknown): FallbackHop['skipped'] {
+  if (!Array.isArray(value)) return undefined
+  const items = value.filter((item): item is { key: string; reason: NonNullable<FallbackHop['skipped']>[number]['reason'] } =>
+    typeof item === 'object' && item !== null && text((item as { key?: unknown }).key) && text((item as { reason?: unknown }).reason))
+  return items.length > 0 ? items : undefined
 }
 
 /** A link key (`engine|profile|model`) as the label a row would carry. */

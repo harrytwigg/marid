@@ -35,9 +35,10 @@ export function hasLegacyEntries(entries: readonly unknown[] | undefined): boole
   return (entries ?? []).some((entry) => typeof entry === "string")
 }
 
-/** A resolved link as the plain link config would hold it. */
-export function linkOfResolved(resolved: FallbackLink): FallbackLink {
-  const { engine, profile, model } = resolved
+/** A resolved link as config holds it: the gateway's `written` form, never the model it
+ *  filled in to run (writing that back would pin a model the operator did not choose). */
+export function linkOfResolved(resolved: FallbackLink & { written?: FallbackLink }): FallbackLink {
+  const { engine, profile, model } = resolved.written ?? resolved
   return { engine, ...(profile ? { profile } : {}), ...(model ? { model } : {}) }
 }
 

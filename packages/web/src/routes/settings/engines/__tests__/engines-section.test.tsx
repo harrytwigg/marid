@@ -246,8 +246,25 @@ describe('Engine Fallbacks section', () => {
       .toContain("Codex's own default")
   })
 
+  it('waits for the gateway before offering a chain written in engine names for editing', async () => {
+    loadConfig({ engines: { claude: { fallback: ['codex', { engine: 'opencode', model: 'x/two' }] } } })
+    await renderSettings()
+
+    expect(document.querySelector('[data-engine-card="claude"] [data-chain-loading]')).toBeTruthy()
+    expect(engineRows('claude')).toEqual([])
+  })
+
   it('reads a chain of mixed string and object entries, whichever way each was written', async () => {
     loadConfig({ engines: { claude: { fallback: ['codex', { engine: 'opencode', model: 'x/two' }, { engine: 'codex', model: 'gpt-5.6-sol' }] } } })
+    // As the gateway answers: each link with the model it would run, and the link as written.
+    const run = (written: { engine: string; model?: string }, model: string) =>
+      ({ ...written, model, key: `${written.engine}||${model}`, account: written.engine, label: written.engine, origin: 'config' as const, written })
+    chains.current = {
+      profiles: [],
+      subjects: [{ kind: 'engine', id: 'claude', primary: null, configured: null, legacy: true, effective: [
+        run({ engine: 'codex' }, 'gpt-mapped'), run({ engine: 'opencode', model: 'x/two' }, 'x/two'), run({ engine: 'codex', model: 'gpt-5.6-sol' }, 'gpt-5.6-sol'),
+      ] }],
+    }
     await renderSettings()
 
     expect(engineRows('claude')).toEqual(['codex', 'opencode · x/two', 'codex · gpt-5.6-sol'])

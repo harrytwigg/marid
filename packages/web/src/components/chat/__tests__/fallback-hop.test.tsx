@@ -35,6 +35,19 @@ describe('parseFallbackHop', () => {
     expect(parseFallbackHop(hopMessage('nope'))).toBeNull()
     expect(parseFallbackHop({ ...hopMessage(), role: 'assistant' })).toBeNull()
   })
+
+  it('keeps only the well-formed passed-over links, so a malformed list cannot crash the transcript', () => {
+    const skipped = ['nope', { reason: 'scoped' }, null, { key: 'codex||', reason: 'scoped' }]
+    expect(parseFallbackHop(hopMessage({ ...HOP, skipped }))?.skipped).toEqual([{ key: 'codex||', reason: 'scoped' }])
+    expect(parseFallbackHop(hopMessage({ ...HOP, skipped: 'all of them' }))?.skipped).toBeUndefined()
+  })
+
+  it('renders a hop whose passed-over list was malformed, expanded, without throwing', () => {
+    const hop = parseFallbackHop(hopMessage({ ...HOP, skipped: ['nope', { key: 'codex||', reason: 'scoped' }] }))!
+    render(<FallbackHopCard hop={hop} />)
+    fireEvent.click(screen.getByRole('button', { name: /passed over/ }))
+    expect(document.querySelectorAll('[data-fallback-hop-skipped] li')).toHaveLength(1)
+  })
 })
 
 describe('hopSentence', () => {

@@ -27,8 +27,12 @@ const EMP: Employee = {
   engine: "claude", model: "sonnet", persona: "p", claudeProfile: { path: "/profiles/work", key: "k" },
 }
 
-const subject = (kind: "engine" | "account" | "employee", id: string, configured: boolean, effective: ResolvedFallbackLink[]) => ({
+const subject = (
+  kind: "engine" | "account" | "employee", id: string, configured: boolean, effective: ResolvedFallbackLink[],
+  from?: { source: "employee" | "account" | "engine" | "none"; sourceId?: string },
+) => ({
   kind, id, primary: null, configured: configured ? effective.map(({ engine, profile, model: m }) => ({ engine, profile, model: m })) : null, legacy: false, effective,
+  ...(from ?? {}),
 })
 
 beforeEach(() => {
@@ -73,7 +77,10 @@ describe("the chain an employee inherits, in the gateway's order", () => {
     render(<EmployeeFallbackField employee={undeclared} engine="claude" value={null} onChange={() => {}} />)
 
     expect(screen.getByRole("option", { name: "Use the default (from Claude · a profile with no declared account)" })).toBeTruthy()
-    expect(screen.getByText("No fallback. Claude waits for its own limit to reset.")).toBeTruthy()
+    expect(document.querySelector("[data-no-fallback]")?.getAttribute("data-no-fallback")).toBe("undeclared")
+    expect(screen.getByText(/not a declared account\. Declare it under engines\.claude\.accounts/)).toBeTruthy()
+    // Never the plain wording, which reads as a deliberate choice.
+    expect(screen.queryByText("No fallback. Claude waits for its own limit to reset.")).toBeNull()
   })
 
   it("on the default profile is the engine's chain", () => {
@@ -92,18 +99,21 @@ describe("the chain an employee inherits comes from the gateway", () => {
       subjects: [
         subject("engine", "claude", true, [resolved("codex")]),
         subject("account", "work", true, [resolved("codex")]),
-        subject("employee", "writer", false, [resolved("opencode", { model: "x/y" }), resolved("grok")]),
+        subject("employee", "writer", false, [resolved("opencode", { model: "x/y" }), resolved("grok")], { source: "account", sourceId: "work" }),
       ],
     }
     render(<EmployeeFallbackField employee={EMP} engine="claude" value={null} onChange={() => {}} />)
+    expect(screen.getByRole("option", { name: "Use the default (from Claude · work)" })).toBeTruthy()
 
     expect(Array.from(document.querySelectorAll("[data-fallback-list] li")).map((li) => li.textContent)).toEqual(["1. opencode · x/y", "2. Grok"])
+    // The gateway is the source here, so it is not presented as a preview.
+    expect(document.querySelector("[data-chain-preview]")).toBeNull()
   })
 
   it("starts Custom from that chain, and says none when the gateway reports none", () => {
     chains.current = {
       profiles: [],
-      subjects: [subject("engine", "claude", true, [resolved("codex")]), subject("employee", "writer", false, [])],
+      subjects: [subject("engine", "claude", true, [resolved("codex")]), subject("employee", "writer", false, [], { source: "engine", sourceId: "claude" })],
     }
     const onChange = vi.fn()
     render(<EmployeeFallbackField employee={{ ...EMP, claudeProfile: null }} engine="claude" value={null} onChange={onChange} />)
@@ -111,6 +121,21 @@ describe("the chain an employee inherits comes from the gateway", () => {
 
     fireEvent.change(screen.getByRole("combobox", { name: "Fallback chain" }), { target: { value: "custom" } })
     expect(onChange).toHaveBeenCalledWith([])
+  })
+
+  it("is a marked preview, worked out here, when the engine on screen is not the saved one", () => {
+    chains.current = {
+      profiles: [],
+      subjects: [
+        subject("engine", "claude", true, [resolved("opencode")]),
+        subject("engine", "codex", true, [resolved("grok")]),
+        subject("employee", "writer", false, [resolved("opencode")]),
+      ],
+    }
+    render(<EmployeeFallbackField employee={{ ...EMP, claudeProfile: null }} engine="codex" value={null} onChange={() => {}} />)
+
+    expect(Array.from(document.querySelectorAll("[data-fallback-list] li")).map((li) => li.textContent)).toEqual(["1. Grok"])
+    expect(document.querySelector("[data-chain-preview]")?.textContent).toBe("(preview, until you save)")
   })
 
   it("is worked out from the account or engine only for a draft: the stored chain is custom and the operator chose the default", () => {
@@ -121,6 +146,7 @@ describe("the chain an employee inherits comes from the gateway", () => {
     render(<EmployeeFallbackField employee={{ ...EMP, claudeProfile: null, fallback: [{ engine: "opencode" }] } as Employee} engine="claude" value={null} onChange={() => {}} />)
 
     expect(Array.from(document.querySelectorAll("[data-fallback-list] li")).map((li) => li.textContent)).toEqual(["1. Codex"])
+    expect(document.querySelector("[data-chain-preview]")?.textContent).toBe("(preview, until you save)")
   })
 })
 
@@ -147,3 +173,28 @@ describe("the gateway's sentence about a stored employee chain", () => {
   })
 })
 
+describe("the gateway's source decides an employee's inherited chain", () => {
+  it("shows a named profile the gateway reports as none with the undeclared wording, whatever the account subjects say", () => {
+    chains.current = {
+      profiles: [{ name: "work", account: "claude:k", configDir: "/profiles/work" }],
+      subjects: [subject("account", "work", true, [resolved("codex")]), subject("employee", "writer", false, [], { source: "none" })],
+    }
+    render(<EmployeeFallbackField employee={EMP} engine="claude" value={null} onChange={() => {}} />)
+    expect(document.querySelector("[data-no-fallback]")?.getAttribute("data-no-fallback")).toBe("undeclared")
+    expect(document.querySelector("[data-chain-preview]")).toBeNull()
+  })
+
+  it("starts Custom from the links as written, never the models the gateway filled in to run", () => {
+    chains.current = {
+      profiles: [{ name: "B", account: "claude:b", configDir: "/profiles/b" }],
+      subjects: [subject("employee", "writer", false, [
+        resolved("claude", { profile: "B", model: "sonnet", key: "claude|B|sonnet", written: { engine: "claude", profile: "B" } }),
+        resolved("codex", { model: "gpt-mapped", key: "codex||gpt-mapped", written: { engine: "codex" } }),
+      ], { source: "engine", sourceId: "claude" })],
+    }
+    const onChange = vi.fn()
+    render(<EmployeeFallbackField employee={{ ...EMP, claudeProfile: null }} engine="claude" value={null} onChange={onChange} />)
+    fireEvent.change(screen.getByRole("combobox", { name: "Fallback chain" }), { target: { value: "custom" } })
+    expect(onChange).toHaveBeenCalledWith([{ engine: "claude", profile: "B" }, { engine: "codex" }])
+  })
+})

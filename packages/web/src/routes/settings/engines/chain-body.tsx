@@ -34,6 +34,11 @@ export function LegacyNotice() {
 /** One subject's chain: the notice when it is legacy, the editor, then the diagram. */
 export function ChainBody(props: ChainBodyProps) {
   const shown = shownChain(props.entries, props.subject?.effective)
+  // A chain written in engine names is edited as it runs, which only the gateway can say: an edit
+  // before its answer would save the bare names' links and drop what they expand to.
+  if (shown.legacy && !props.subject) {
+    return <p data-chain-loading className="mt-[var(--space-2)] text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">Loading the chain as it runs…</p>
+  }
   return (
     <>
       {shown.legacy && <LegacyNotice />}

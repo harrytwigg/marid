@@ -1,5 +1,5 @@
 import { useEffect } from "react"
-import type { FallbackLink } from "@jinn/fallback-chain-wire"
+import type { FallbackChainSubject, FallbackLink } from "@jinn/fallback-chain-wire"
 import { ChainFlowDisclosure } from "@/components/fallback/chain-flow-disclosure"
 import { resolveForFlow } from "@/components/fallback/resolve-links"
 import { useModelRegistry } from "@/hooks/use-model-registry"
@@ -9,7 +9,7 @@ import { engineDisplayName } from "@/lib/engine-names"
 import { ChainEditor } from "@/routes/settings/engines/chain-editor"
 import { LegacyNotice } from "@/routes/settings/engines/chain-body"
 import { SettingsSelect } from "@/routes/settings/shared"
-import { chainBlocked, employeeChainOf, employeeSubject, fallbackFieldState, sameChain, subjectProblems, type InheritedChain, type OwnChain } from "./employee-fallback"
+import { chainBlocked, employeeChainOf, employeeSubject, fallbackFieldState, inheritedLabel, sameChain, subjectProblems, type InheritedChain, type OwnChain } from "./employee-fallback"
 
 export { employeeChainOf, sameChain }
 export { refreshFallbackChains } from "@/hooks/use-fallback-chains"
@@ -99,7 +99,7 @@ export function EmployeeFallbackField({ employee, engine, value, onChange, onBlo
     <div className="flex flex-col gap-[var(--space-1)]" data-employee-fallback>
       <ChainChoice custom={own !== null} ready={Boolean(chains)} inherited={inherited} onChange={onChange} />
       {own === null ? (
-        <InheritedRows links={inherited.links} engine={engine} />
+        <InheritedRows links={inherited.links} engine={engine} preview={inherited.preview} source={inherited.source} />
       ) : (
         <>
           {own.legacy && <LegacyNotice />}
@@ -118,19 +118,32 @@ export function EmployeeFallbackField({ employee, engine, value, onChange, onBlo
           />
         </>
       )}
-      {shown.length > 0 && <ChainFlowDisclosure links={resolveForFlow(self, shown, subject, originsOf(own))} />}
+      {/* The gateway's reading is of the saved engine: an unsaved engine change draws its own target plain. */}
+      {shown.length > 0 && <ChainFlowDisclosure links={resolveForFlow(self, shown, engine === employee.engine ? subject : undefined, originsOf(own))} />}
     </div>
   )
 }
 
 /** The default's chain as plain text: it is read here, and edited where it is written. */
-function InheritedRows({ links, engine }: { links: FallbackLink[]; engine: string }) {
-  return links.length === 0 ? <NoFallback engine={engine} /> : <FallbackList links={links} />
+function InheritedRows({ links, engine, preview, source }: { links: FallbackLink[]; engine: string; preview: boolean; source?: InheritedChain["source"] }) {
+  return (
+    <>
+      {links.length === 0 ? <NoFallback engine={engine} why={source === "none" ? "undeclared" : "default"} /> : <FallbackList links={links} />}
+      {preview && <p data-chain-preview className="m-0 text-[length:var(--text-caption2)] text-[var(--text-quaternary)]">(preview, until you save)</p>}
+    </>
+  )
 }
 
+/** Why there is no chain: the default has none, the employee set none, or its Claude profile is not a declared account. */
+export const NO_FALLBACK_TEXT = {
+  default: (engine: string) => `No fallback. ${engineDisplayName(engine)} waits for its own limit to reset.`,
+  own: () => "No fallback (set for this employee).",
+  undeclared: () => "No fallback: this employee's Claude profile is not a declared account. Declare it under engines.claude.accounts to give it a chain.",
+} as const
+
 /** Said where a chain would be, when there is none. */
-function NoFallback({ engine }: { engine: string }) {
-  return <p className="m-0 text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">No fallback. {engineDisplayName(engine)} waits for its own limit to reset.</p>
+function NoFallback({ engine, why }: { engine: string; why: keyof typeof NO_FALLBACK_TEXT }) {
+  return <p data-no-fallback={why} className="m-0 text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">{NO_FALLBACK_TEXT[why](engine)}</p>
 }
 
 /** An ordered, read-only chain: the same words a row's label uses. */
@@ -147,19 +160,27 @@ export function FallbackList({ links }: { links: FallbackLink[] }) {
   )
 }
 
+/** Where the summary's chain comes from, as the gateway says, and why it may be empty. */
+function summaryOrigin(subject: FallbackChainSubject, engine: string): { from: string; why: keyof typeof NO_FALLBACK_TEXT } {
+  const source = subject.source ?? (subject.configured !== null ? "employee" : undefined)
+  if (source === "employee") return { from: "custom", why: "own" }
+  return { from: `the default (${inheritedLabel(source, subject.sourceId, engine)})`, why: source === "none" ? "undeclared" : "default" }
+}
+
 /** On the employee's detail card: the chain that would run, read-only, and where it comes from. */
 export function EmployeeFallbackSummary({ employee }: { employee: Employee }) {
   const { data: chains } = useFallbackChains(employee.name)
   const subject = employeeSubject(chains, employee.name)
   if (!subject) return null
+  // What would run, so the resolved models: this is read, never written back.
   const links = subject.effective.map((l) => ({ engine: l.engine, ...(l.profile ? { profile: l.profile } : {}), ...(l.model ? { model: l.model } : {}) }))
-  const own = subject.configured !== null
+  const { from, why } = summaryOrigin(subject, employee.engine)
   return (
     <div className="mt-[var(--space-4)]" data-employee-fallback-summary>
       <p className="mb-[var(--space-1)] text-[length:var(--text-caption2)] font-[var(--weight-semibold)] uppercase tracking-[var(--tracking-wide)] text-[var(--text-tertiary)]">
-        Fallback chain <span className="font-normal normal-case tracking-normal text-[var(--text-quaternary)]">· {own ? "custom" : "the default"}</span>
+        Fallback chain <span className="font-normal normal-case tracking-normal text-[var(--text-quaternary)]">· {from}</span>
       </p>
-      {links.length === 0 ? <NoFallback engine={employee.engine} /> : <FallbackList links={links} />}
+      {links.length === 0 ? <NoFallback engine={employee.engine} why={why} /> : <FallbackList links={links} />}
       {links.length > 0 && <ChainFlowDisclosure links={resolveForFlow(subject.primary ?? { engine: employee.engine }, links, subject)} />}
     </div>
   )

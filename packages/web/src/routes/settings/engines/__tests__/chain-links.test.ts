@@ -48,6 +48,19 @@ describe('shownChain', () => {
     })
   })
 
+  it('shows a legacy chain as written, not with the models the gateway filled in to run it', () => {
+    // ["claude:B", "codex"] on a session model of opus: the gateway resolves claude·B to opus and codex
+    // to its model-map translation, but the operator wrote neither model.
+    const effective = [
+      resolved('claude', { profile: 'B', model: 'opus', key: 'claude|B|opus', written: { engine: 'claude', profile: 'B' } }),
+      resolved('codex', { model: 'gpt-mapped', key: 'codex||gpt-mapped', origin: 'legacy', written: { engine: 'codex' } }),
+    ]
+    const shown = shownChain(['claude:B'], effective)
+    expect(shown.links).toEqual([{ engine: 'claude', profile: 'B' }, { engine: 'codex' }])
+    // The first edit writes those links, so no model is pinned.
+    expect(writeLinks(['claude:B'], [shown.links[1], shown.links[0]])).toEqual([{ engine: 'codex' }, { engine: 'claude', profile: 'B' }])
+  })
+
   it('shows a legacy chain as the gateway expands it, marking the links another chain contributed', () => {
     const effective = [
       resolved('codex', { model: undefined }),

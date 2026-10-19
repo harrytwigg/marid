@@ -15,7 +15,10 @@ export const FALLBACK_MIGRATION_URL = "https://github.com/harrytwigg/marid/blob/
 function noticeSentence(status: InternalFallbackStatus): string {
   if (status.neutralised) return "This host has an opencode fallback plugin installed. The gateway runs opencode with it off, so only the chain below falls back."
   const hosts = status.remote?.length ?? 0
-  const where = hosts === 0 ? "" : `, here and on ${hosts === 1 ? "1 remote host" : `${hosts} remote hosts`}`
+  const remoteSources = status.remote?.reduce((n, host) => n + host.sources.length, 0) ?? 0
+  const here = status.sources.length > remoteSources
+  const remote = hosts === 1 ? "1 remote host" : `${hosts} remote hosts`
+  const where = hosts === 0 ? "" : here ? `, here and on ${remote}` : ` on ${remote}`
   return `opencode's own fallback plugin is installed${where}: it switches models by itself when a provider reaches its limit, on top of the chain below. `
 }
 

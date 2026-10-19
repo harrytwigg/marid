@@ -74,6 +74,18 @@ describe('resolveForFlow', () => {
   })
 })
 
+describe('resolveForFlow, rows with no model', () => {
+  it('finds the gateway reading of a row written without a model, by the link as written', () => {
+    // The gateway resolves claude·B to the subject's model, so its key carries a model the row does not.
+    const exhausted = link('claude', { key: 'claude|B|sonnet', profile: 'B', model: 'sonnet', health: { state: 'exhausted' }, written: { engine: 'claude', profile: 'B' } })
+    const subject = { kind: 'engine' as const, id: 'claude', primary: null, configured: null, legacy: false, effective: [exhausted] }
+
+    const out = resolveForFlow({ engine: 'claude' }, [{ engine: 'claude', profile: 'B' }], subject)
+
+    expect(out[1].health?.state).toBe('exhausted')
+  })
+})
+
 describe('resolveForFlow, own target', () => {
   it('takes the own node from the subject primary, whose key carries the default model, so it keeps its health', () => {
     const primary = link('claude', { key: 'claude||sonnet', model: 'sonnet', label: 'claude · sonnet', health: { state: 'exhausted', usedPercent: 97, window: 'weekly' } })

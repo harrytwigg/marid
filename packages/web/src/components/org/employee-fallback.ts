@@ -42,6 +42,17 @@ export interface InheritedChain {
   /** "Claude · work" or "Codex": what the default is called. */
   label: string
   links: FallbackLink[]
+  /** Worked out here, not read from the gateway: an unsaved change, shown as what would run once saved. */
+  preview: boolean
+  /** Where it comes from; `none` is a named Claude profile that is not a declared account. */
+  source?: "account" | "engine" | "none"
+}
+
+/** What an inherited chain is called, from where the gateway says it comes from. */
+export function inheritedLabel(source: InheritedChain["source"], sourceId: string | undefined, engine: string): string {
+  if (source === "account") return `${engineDisplayName("claude")} · ${sourceId ?? ""}`
+  if (source === "none") return `${engineDisplayName("claude")} · a profile with no declared account`
+  return engineDisplayName(sourceId ?? engine)
 }
 
 function subjectOf(chains: FallbackChainsResponse | undefined, kind: FallbackChainSubject["kind"], id: string) {
@@ -61,10 +72,10 @@ export function inheritedChain(
   chains: FallbackChainsResponse | undefined,
 ): InheritedChain {
   if (engine === "claude" && account) {
-    return { label: `${engineDisplayName(engine)} · ${account}`, links: subjectOf(chains, "account", account)?.effective.map(linkOfResolved) ?? [] }
+    return { label: inheritedLabel("account", account, engine), links: subjectOf(chains, "account", account)?.effective.map(linkOfResolved) ?? [], preview: true, source: "account" }
   }
-  if (engine === "claude" && claudeProfile) return { label: `${engineDisplayName(engine)} · a profile with no declared account`, links: [] }
-  return { label: engineDisplayName(engine), links: subjectOf(chains, "engine", engine)?.effective.map(linkOfResolved) ?? [] }
+  if (engine === "claude" && claudeProfile) return { label: inheritedLabel("none", undefined, engine), links: [], preview: true, source: "none" }
+  return { label: inheritedLabel("engine", engine, engine), links: subjectOf(chains, "engine", engine)?.effective.map(linkOfResolved) ?? [], preview: true, source: "engine" }
 }
 
 export function employeeSubject(chains: FallbackChainsResponse | undefined, name: string): FallbackChainSubject | undefined {
@@ -72,14 +83,16 @@ export function employeeSubject(chains: FallbackChainsResponse | undefined, name
 }
 
 /**
- * What an employee that writes no chain follows, as the gateway says: the employee subject's own
- * `effective`, when the stored chain is none. Only an unsaved draft (the operator has just chosen
- * "use the default" over a stored custom chain, so the subject describes that chain, not the
- * default) falls back to working it out from the account or engine subject.
+ * What an employee that writes no chain follows, as the gateway says it: the employee subject's own
+ * `effective`. The gateway is the source whenever it has a subject for what is on screen. It has none
+ * for an unsaved engine change, and its subject describes the stored custom chain, not the default,
+ * when the operator has just chosen "use the default" over one; only in those two cases is the chain
+ * worked out here, and it is marked a preview.
  */
-function serverInherited(subject: FallbackChainSubject | undefined, derived: InheritedChain): InheritedChain {
-  if (subject === undefined || subject.configured !== null) return derived
-  return { label: derived.label, links: subject.effective.map(linkOfResolved) }
+function serverInherited(subject: FallbackChainSubject | undefined, derived: InheritedChain, unsaved: boolean): InheritedChain {
+  const source = subject?.source
+  if (subject === undefined || unsaved || source === undefined || source === "employee") return derived
+  return { label: inheritedLabel(source, subject.sourceId, derived.label), links: subject.effective.map(linkOfResolved), preview: false, source }
 }
 
 /** The chain the editor shows and edits. */
@@ -113,8 +126,10 @@ export function fallbackFieldState(
 ) {
   const account = engine === "claude" ? declaredAccountOf(employee.claudeProfile, chains) : undefined
   const subject = employeeSubject(chains, employee.name)
-  const inherited = serverInherited(subject, inheritedChain(engine, employee.claudeProfile, account, chains))
-  const self: FallbackLink = { engine, ...(account ? { profile: account } : {}) }
+  const inherited = serverInherited(subject, inheritedChain(engine, employee.claudeProfile, account, chains), engine !== employee.engine)
+  // The employee's own target, as the gateway refuses a link to it: with its model while the engine is the saved one.
+  const ownModel = engine === employee.engine && employee.model ? { model: employee.model } : {}
+  const self: FallbackLink = { engine, ...(account ? { profile: account } : {}), ...ownModel }
   const own = value === null ? null : ownChainOf(employee, value, subject)
   const changed = !sameChain(value, employeeChainOf(employee))
   return { inherited, self, shown: own?.links ?? inherited.links, own, subject, changed }

@@ -154,8 +154,14 @@ describe('what a save leaves alone', () => {
     expect(JSON.stringify(sent.engines.claude.accounts.work.fallback)).toBe(JSON.stringify(RAW_ACCOUNT))
   })
 
-  it('reorders a chain of mixed string and object entries into the expected objects', async () => {
+  it('reorders a chain of mixed string and object entries into the expected objects, never pinning a model the gateway filled in', async () => {
     loadConfig({ engines: { claude: { fallback: ['codex', { engine: 'opencode', model: 'x/two' }] } } })
+    const run = (written: { engine: string; model?: string }, model: string) =>
+      ({ ...written, model, key: `${written.engine}||${model}`, account: written.engine, label: written.engine, origin: 'config' as const, written })
+    chains.current = {
+      profiles: [],
+      subjects: [{ kind: 'engine', id: 'claude', primary: null, configured: null, legacy: true, effective: [run({ engine: 'codex' }, 'gpt-mapped'), run({ engine: 'opencode', model: 'x/two' }, 'x/two')] }],
+    }
     await renderSettings()
     fireEvent.click(screen.getByRole('button', { name: 'Move opencode · x/two earlier in the Claude chain' }))
 
