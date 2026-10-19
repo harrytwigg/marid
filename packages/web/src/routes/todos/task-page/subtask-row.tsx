@@ -1,4 +1,4 @@
-import { ArrowUpRight, UserRound } from "lucide-react"
+import { ArrowUpRight, UserRound } from "@/components/ui/icon"
 import type { Employee, WorkItemStatusWire, WorkItemTreeNodeWire } from "@/lib/api"
 import { STATUS_LABEL, stateKeyOf } from "@/lib/todos"
 import { closeGateCounts, legalTargets } from "@/lib/legal-targets"
@@ -17,7 +17,7 @@ const ROW =
   "group/sub relative -mx-2.5 flex min-h-[38px] items-center gap-[9px] rounded-[10px] px-2.5 py-[5px] text-[14.5px]"
 
 const ICON_BUTTON =
-  "focus-ring grid size-[26px] place-items-center rounded-lg text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)]"
+  "focus-outline grid size-[26px] place-items-center rounded-lg text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)]"
 
 type PickerKind = "status" | "assign"
 
@@ -50,7 +50,7 @@ export function SubTaskRow({ child, employees, mobile, picking, onPick, onOpenCh
         aria-label={`Change status of ${child.id} (${STATUS_LABEL[child.status]})`}
         data-testid={`subtask-status-${child.id}`}
         onClick={() => onPick(picking === "status" ? null : "status")}
-        className="focus-ring mr-[5px] flex-none rounded-full outline-none transition-shadow duration-120 group-hover/sub:shadow-[0_0_0_3px_var(--fill-secondary)]"
+        className="focus-outline mr-[5px] flex-none rounded-full outline-none transition-shadow duration-120 group-hover/sub:shadow-[0_0_0_3px_var(--fill-secondary)]"
       >
         <StateCircle keyOf={stateKeyOf(child.status)} size={16} />
       </button>
@@ -63,7 +63,7 @@ export function SubTaskRow({ child, employees, mobile, picking, onPick, onOpenCh
       <button
         type="button"
         onClick={(event) => onOpenChild(child.id, event)}
-        className={`focus-ring min-w-0 flex-1 truncate text-left outline-none ${
+        className={`focus-outline min-w-0 flex-1 truncate text-left outline-none ${
           closed ? "font-normal text-[var(--text-tertiary)]" : "font-medium text-[var(--text-primary)]"
         }`}
       >
@@ -103,10 +103,10 @@ function QuickActions({
       }`}
     >
       <button type="button" aria-label={`Assign ${id}`} data-testid={`subtask-assign-${id}`} onClick={onAssign} className={ICON_BUTTON}>
-        <UserRound size={14} strokeWidth={2} aria-hidden />
+        <UserRound size={14} aria-hidden />
       </button>
       <button type="button" aria-label={`Open ${id}`} data-testid={`subtask-open-${id}`} onClick={(event) => onOpen(id, event)} className={ICON_BUTTON}>
-        <ArrowUpRight size={14} strokeWidth={2} aria-hidden />
+        <ArrowUpRight size={14} aria-hidden />
       </button>
     </span>
   )

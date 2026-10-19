@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { skipToken, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ArrowUp, ChevronRight, FileText, Image as ImageIcon, Paperclip, X } from "lucide-react"
+import { ArrowUp, ChevronRight, FileText, Image as ImageIcon, Paperclip, X } from "@/components/ui/icon"
 import {
   api,
   type Employee,
@@ -107,14 +107,14 @@ function CommentBlock({
                 setEditing(false)
                 if (draft.trim() && draft !== comment.body) onEdit?.(draft)
               }}
-              className="focus-ring inline-flex items-center rounded outline-none hover:text-[var(--text-secondary)] disabled:opacity-50 max-[700px]:min-h-[34px]"
+              className="focus-outline inline-flex items-center rounded outline-none hover:text-[var(--text-secondary)] disabled:opacity-50 max-[700px]:min-h-[34px]"
             >
               Save
             </button>
             <button
               type="button"
               onClick={() => setEditing(false)}
-              className="focus-ring inline-flex items-center rounded outline-none hover:text-[var(--text-secondary)] max-[700px]:min-h-[34px]"
+              className="focus-outline inline-flex items-center rounded outline-none hover:text-[var(--text-secondary)] max-[700px]:min-h-[34px]"
             >
               Cancel
             </button>
@@ -147,12 +147,11 @@ function CommentBlock({
               type="button"
               aria-expanded={expanded}
               onClick={() => setExpanded((open) => !open)}
-              className="focus-ring mt-1 flex min-h-[34px] items-center gap-1.5 rounded-full px-2 text-[12px] font-semibold text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]"
+              className="focus-outline mt-1 flex min-h-[34px] items-center gap-1.5 rounded-full px-2 text-[12px] font-semibold text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]"
             >
               {expanded ? "Show less" : "Show more"}
               <ChevronRight
                 size={11}
-                strokeWidth={2.2}
                 aria-hidden
                 className={`transition-transform duration-150 ${expanded ? "-rotate-90" : "rotate-90"}`}
               />
@@ -164,7 +163,7 @@ function CommentBlock({
       {!tombstoned && !editing && (
         <div className="ml-[38px] mt-0.5 flex gap-3.5 text-[11.5px] font-medium text-[var(--text-quaternary)]">
           {onReply && (
-            <button type="button" data-testid={`activity-reply-${comment.id}`} onClick={onReply} className="focus-ring inline-flex items-center rounded outline-none hover:text-[var(--text-secondary)] max-[700px]:min-h-[34px]">
+            <button type="button" data-testid={`activity-reply-${comment.id}`} onClick={onReply} className="focus-outline inline-flex items-center rounded outline-none hover:text-[var(--text-secondary)] max-[700px]:min-h-[34px]">
               Reply
             </button>
           )}
@@ -177,7 +176,7 @@ function CommentBlock({
                 setDraft(comment.body)
                 setEditing(true)
               }}
-              className="focus-ring inline-flex items-center rounded outline-none hover:text-[var(--text-secondary)] disabled:opacity-50 max-[700px]:min-h-[34px]"
+              className="focus-outline inline-flex items-center rounded outline-none hover:text-[var(--text-secondary)] disabled:opacity-50 max-[700px]:min-h-[34px]"
             >
               Edit
             </button>
@@ -188,7 +187,7 @@ function CommentBlock({
               data-testid={`activity-delete-${comment.id}`}
               disabled={busy}
               onClick={onDelete}
-              className="focus-ring inline-flex items-center rounded outline-none hover:text-[var(--text-secondary)] disabled:opacity-50 max-[700px]:min-h-[34px]"
+              className="focus-outline inline-flex items-center rounded outline-none hover:text-[var(--text-secondary)] disabled:opacity-50 max-[700px]:min-h-[34px]"
             >
               Delete
             </button>
@@ -333,7 +332,7 @@ export function ActivitySection({
             onClick={() => setPending((current) => current.filter((candidate) => candidate.key !== entry.key))}
             className="absolute -right-1.5 -top-1.5 grid size-[18px] place-items-center rounded-full bg-[var(--bg-tertiary)] text-[var(--text-secondary)] shadow-[var(--shadow-subtle)]"
           >
-            <X size={10} strokeWidth={2.4} aria-hidden />
+            <X size={10} aria-hidden />
           </button>
         </span>
       ))}
@@ -346,7 +345,7 @@ export function ActivitySection({
       <button
         type="button"
         onClick={() => setReplyTo(null)}
-        className="focus-ring rounded-full px-1.5 font-semibold text-[var(--text-secondary)] outline-none hover:bg-[var(--fill-tertiary)]"
+        className="focus-outline rounded-full px-1.5 font-semibold text-[var(--text-secondary)] outline-none hover:bg-[var(--fill-tertiary)]"
       >
         Cancel
       </button>
@@ -395,9 +394,9 @@ export function ActivitySection({
           aria-label="Attach"
           data-testid="composer-attach"
           onClick={() => fileRef.current?.click()}
-          className="focus-ring grid size-[34px] flex-none place-items-center rounded-[10px] text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-secondary)]"
+          className="focus-outline grid size-[34px] flex-none place-items-center rounded-[10px] text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-secondary)]"
         >
-          <Paperclip size={15} strokeWidth={2} aria-hidden />
+          <Paperclip size={15} aria-hidden />
         </button>
         <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-quaternary)] max-[700px]:hidden">
           ↩ to send · ⇧↩ new line · markdown
@@ -408,10 +407,10 @@ export function ActivitySection({
           data-testid="composer-send"
           disabled={send.isPending || !draft.trim()}
           onClick={submit}
-          className="focus-ring grid size-[34px] flex-none place-items-center rounded-full outline-none disabled:opacity-40"
+          className="focus-outline grid size-[34px] flex-none place-items-center rounded-full outline-none disabled:opacity-40"
           style={{ background: "var(--accent-fill)", color: "var(--accent)", boxShadow: "var(--inset-shine)" }}
         >
-          <ArrowUp size={15} strokeWidth={2.2} aria-hidden />
+          <ArrowUp size={15} aria-hidden />
         </button>
       </div>
     </div>
@@ -493,11 +492,10 @@ export function ActivitySection({
                     return next
                   })
                 }
-                className="focus-ring flex items-center py-1.5 text-[12.5px] font-medium text-[var(--text-quaternary)] outline-none hover:text-[var(--text-secondary)] max-[700px]:min-h-[34px]"
+                className="focus-outline flex items-center py-1.5 text-[12.5px] font-medium text-[var(--text-quaternary)] outline-none hover:text-[var(--text-secondary)] max-[700px]:min-h-[34px]"
               >
                 <ChevronRight
                   size={11}
-                  strokeWidth={2.2}
                   aria-hidden
                   className={`ml-0.5 mr-[16.5px] transition-transform duration-150 ${open ? "rotate-90" : ""}`}
                 />

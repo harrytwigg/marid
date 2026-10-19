@@ -113,4 +113,72 @@ describe("NavRibbon", () => {
       expect(onToggleList).not.toHaveBeenCalled()
     })
   })
+
+  describe("the label that reveals beside an icon", () => {
+    it("is the visible text of a link that is already named, and stays out of the accessibility tree", () => {
+      renderRibbon({ listOpen: true })
+      const todos = screen.getByLabelText("Todos")
+      const pill = todos.querySelector(".rail-reveal")!
+
+      expect(pill.textContent).toBe("Todos")
+      expect(pill.closest("[aria-hidden]")).not.toBeNull()
+      // The one name a screen reader gets is the link's own, once.
+      expect(screen.getAllByRole("link", { name: "Todos" })).toHaveLength(1)
+    })
+
+    it("is shown by CSS alone, so the rail needs no script and no tooltip library", () => {
+      renderRibbon({ listOpen: true })
+      const pill = screen.getByLabelText("Todos").querySelector(".rail-reveal")!
+
+      expect(pill.className).toContain("opacity-0")
+      expect(pill.className).toContain("group-hover/row:opacity-100")
+      expect(pill.className).toContain("group-focus-within/row:opacity-100")
+    })
+
+    it("is dismissed by Escape on the focused row, and comes back when focus returns", () => {
+      renderRibbon({ listOpen: true })
+      const todos = screen.getByLabelText("Todos")
+      const org = screen.getByLabelText("Organization")
+      todos.focus()
+
+      fireEvent.keyDown(document, { key: "Escape" })
+
+      expect(todos.hasAttribute("data-label-dismissed")).toBe(true)
+      expect(org.hasAttribute("data-label-dismissed")).toBe(false)
+      fireEvent.blur(todos)
+      expect(todos.hasAttribute("data-label-dismissed")).toBe(false)
+    })
+
+    it("is shown again when keyboard focus lands on a row whose label was dismissed", () => {
+      renderRibbon({ listOpen: true })
+      const todos = screen.getByLabelText("Todos")
+      // Escape while the pointer is over Todos, then Tab to it.
+      todos.setAttribute("data-label-dismissed", "")
+
+      todos.focus()
+
+      expect(todos.hasAttribute("data-label-dismissed")).toBe(false)
+    })
+
+    it("is shown again when the pointer re-enters a row whose label was dismissed", () => {
+      renderRibbon({ listOpen: true })
+      const todos = screen.getByLabelText("Todos")
+      // jsdom has no hover to dismiss under; mark the row as Escape would.
+      todos.setAttribute("data-label-dismissed", "")
+
+      fireEvent.pointerEnter(todos)
+
+      expect(todos.hasAttribute("data-label-dismissed")).toBe(false)
+    })
+
+    it("ignores other keys", () => {
+      renderRibbon({ listOpen: true })
+      const todos = screen.getByLabelText("Todos")
+      todos.focus()
+
+      fireEvent.keyDown(document, { key: "Enter" })
+
+      expect(todos.hasAttribute("data-label-dismissed")).toBe(false)
+    })
+  })
 })

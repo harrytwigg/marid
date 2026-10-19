@@ -1,6 +1,8 @@
+import { Button } from "@/components/ui/button"
 import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { STARTED_BY_LABEL, type StartedSession } from "@/lib/api-auto-dispatch"
+import { engineDisplayName } from "@/lib/engine-names"
 import { agoLabel } from "./format"
 
 /**
@@ -22,15 +24,17 @@ function EngineTabs({ engines, engine, onPick }: { engines: string[]; engine: st
   return (
     <div role="tablist" aria-label="Engine" className="flex gap-[var(--space-1)]">
       {engines.map((name) => (
-        <button
+        <Button
           key={name}
+          variant="ghost"
+          size="xs"
           role="tab"
           aria-selected={name === engine}
           onClick={() => onPick(name)}
-          className={`focus-ring rounded-full px-[10px] py-[2px] text-[length:var(--text-caption1)] outline-none ${name === engine ? "bg-[var(--accent)] text-white" : "bg-[var(--fill-tertiary)] text-[var(--text-secondary)]"}`}
+          className={name === engine ? "[--button-bg:var(--accent-fill)] [--button-bg-hover:var(--accent-fill)] text-[var(--accent)]" : "[--button-bg:var(--fill-tertiary)] [--button-bg-hover:var(--fill-secondary)] text-[var(--text-secondary)]"}
         >
-          {name}
-        </button>
+          {engineDisplayName(name)}
+        </Button>
       ))}
     </div>
   )
@@ -40,7 +44,7 @@ function SessionRow({ session, now }: { session: StartedSession; now: number }) 
   return (
     <li className="py-[var(--space-2)]" data-testid="session-row">
       <div className="flex flex-wrap items-baseline gap-x-[var(--space-3)] gap-y-[var(--space-1)]">
-        <Link to={`/chat/${session.id}`} className="focus-ring min-w-0 flex-1 truncate rounded text-[length:var(--text-footnote)] text-[var(--text-primary)] outline-none hover:text-[var(--accent)]">
+        <Link to={`/chat/${session.id}`} className="focus-outline min-w-0 flex-1 truncate rounded text-[length:var(--text-footnote)] text-[var(--text-primary)] outline-none hover:text-[var(--accent)]">
           {session.title ?? session.id}
         </Link>
         <span className={`text-[length:var(--text-caption1)] ${session.startedBy === "board-walk-dispatch" ? "font-[var(--weight-semibold)] text-[var(--system-green)]" : "text-[var(--text-secondary)]"}`}>
@@ -63,7 +67,7 @@ export function SessionsList({ sessions, now }: { sessions: StartedSession[]; no
   const engine = picked && available.includes(picked) ? picked : available[0]
   const rows = sessions.filter((session) => session.engine === engine)
   return (
-    <section data-testid="sessions" className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[var(--space-5)] shadow-[var(--shadow-card)]">
+    <section data-testid="sessions" className="glass-card rounded-[var(--radius-xl)] p-[var(--space-5)]">
       <div className="flex flex-wrap items-baseline justify-between gap-[var(--space-2)]">
         <h2 className="text-[length:var(--text-body)] font-[var(--weight-semibold)] text-[var(--text-primary)]">Sessions started this week</h2>
         <EngineTabs engines={available} engine={engine} onPick={setPicked} />

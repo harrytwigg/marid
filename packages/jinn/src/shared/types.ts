@@ -92,6 +92,10 @@ export interface StreamDelta {
   /** Stable server-authored activity block id carried only by a successful
    * matching tool result. Persisted onto that exact tool row for reload. */
   activityReceiptId?: string;
+  /** The background sub-agent an `Agent`/`Task` call launched, carried only by its
+   *  successful tool result (`status: "async_launched"`). Persisted on the tool row's
+   *  meta so the card can open the sub-agent's transcript once the popup row is gone. */
+  agentId?: string;
   /** First 200 chars of the stringified tool input. Present on PreToolUse-sourced
    *  `tool_use` deltas (fired just before the tool runs, full input assembled).
    *  Absent on the SSE-proxy `content_block_start` delta (input not yet known). */
@@ -746,7 +750,7 @@ export interface ConnectorInstance {
  */
 
 /** How an engine conveys reasoning-effort to its CLI. */
-export type EffortMechanism = "claude-flag" | "codex-config" | "grok-flag" | "pi-flag" | "none";
+export type EffortMechanism = "claude-flag" | "codex-config" | "grok-flag" | "pi-flag" | "opencode-variant" | "none";
 
 /** A single model and its capabilities, as exposed to the UI / validation. */
 export interface ModelInfo {

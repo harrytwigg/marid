@@ -9,15 +9,18 @@
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <meta name="description" content="AI Gateway Dashboard" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="icon" type="image/png" href="/icons/icon-192.png" />
+    <link rel="icon" type="image/svg+xml" sizes="any" href="/icons/marid-favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Marid" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <!-- Dark background, matching the manifest and the theme the bootstrap below
-         falls back to. ThemeProvider rewrites this from the live --bg token on
-         mount, so an explicitly light install gets a light titlebar. -->
-    <meta name="theme-color" content="#0F1719" />
+    <!-- The sheet colour of each theme (--bg in glass-identity.css), so the
+         browser chrome matches before any script runs. ThemeProvider rewrites
+         these from the live --bg token on mount, so an explicit theme choice
+         still wins over the OS scheme. -->
+    <meta name="theme-color" content="#F6FAFE" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0B1422" media="(prefers-color-scheme: dark)" />
     <title>Marid</title>
     <script>if(typeof crypto!=='undefined'&&!crypto.randomUUID){crypto.randomUUID=function(){return'10000000-1000-4000-8000-100000000000'.replace(/[018]/g,function(c){var r=crypto.getRandomValues(new Uint8Array(1))[0];return(c^(r&(15>>(c/4)))).toString(16)})}}</script>
     <!-- Blocking on purpose: the theme and the Text size step both decide how the

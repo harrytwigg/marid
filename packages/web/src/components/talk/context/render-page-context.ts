@@ -41,7 +41,6 @@ const SURFACE_LABEL: Record<PageKind, string> = {
   file: "File",
   more: "More",
   "talk-orb": "Talk orb bench",
-  redesign: "Design bench",
   plugin: "Plugin",
   other: "Page",
 }

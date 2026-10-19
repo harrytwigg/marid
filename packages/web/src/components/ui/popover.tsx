@@ -1,39 +1,122 @@
 import * as React from "react"
-import { Popover as PopoverPrimitive } from "radix-ui"
+import { Slot } from "./slot"
+import { Dialog, DialogTrigger, OverlayTriggerStateContext } from "react-aria-components/Dialog"
+import { Popover as AriaPopover, PopoverContext } from "react-aria-components/Popover"
+import { Pressable } from "react-aria-components/Pressable"
 
 import { cn } from "@/lib/utils"
+import { useClosesOnOutsidePress } from "./use-closes-on-outside-press"
+import { placementOf, type Align, type OverlayDomProps, type Side } from "./overlay-placement"
+
+/**
+ * A click-to-open popover over React Aria's Popover and Dialog, in HeroUI's
+ * popover classes (not its component, which adds a variants runtime for the same
+ * markup). The content is a `dialog` named by `aria-label`: focus moves into it
+ * on open and returns to the trigger on close, Escape closes it, and the trigger
+ * carries `aria-expanded`, `aria-controls` and `aria-haspopup`.
+ *
+ * It is not modal, as the Radix popover it replaces was not: the page behind it
+ * stays live and unhidden, and a press outside closes it and goes on to what it
+ * landed on. React Aria's modal popover would put an underlay over the page,
+ * which swallows that press, and, being a React child of the trigger's
+ * ancestors, would hand it to their handlers (a chat pane would take focus from
+ * the pane the user clicked). So the outside press is closed here instead.
+ *
+ * Same parts and props as the Radix popover, except `collisionPadding` is the
+ * `containerPadding` React Aria takes and `className` lands on the dialog (the
+ * card's content: its width, padding, a `max-h-*` and `overflow-*`), because
+ * React Aria sets an inline `max-height` on the surface that no class beats.
+ * The trigger is a `Pressable`: it must be a native button or link, or
+ * something that passes `ref` and the DOM props through.
+ */
 
 function Popover({
-  ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Root>) {
-  return <PopoverPrimitive.Root data-slot="popover" {...props} />
+  open,
+  defaultOpen,
+  onOpenChange,
+  children,
+}: {
+  open?: boolean
+  defaultOpen?: boolean
+  onOpenChange?: (open: boolean) => void
+  children?: React.ReactNode
+}) {
+  return (
+    <DialogTrigger isOpen={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange}>
+      {children}
+    </DialogTrigger>
+  )
 }
 
 function PopoverTrigger({
+  asChild = false,
   ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Trigger>) {
-  return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />
+}: React.ComponentProps<"button"> & { asChild?: boolean }) {
+  const Comp = asChild ? Slot : "button"
+  return (
+    <Pressable>
+      <Comp data-slot="popover-trigger" aria-haspopup="dialog" type={asChild ? undefined : "button"} {...props} />
+    </Pressable>
+  )
+}
+
+/** The popover's trigger, from the context React Aria's trigger provides. */
+function useTriggerRef(): React.RefObject<Element | null> | undefined {
+  const context = React.useContext(PopoverContext) as { triggerRef?: React.RefObject<Element | null> } | null
+  return context?.triggerRef
+}
+
+/** Closes the popover on a press that lands outside both it and its trigger (a press on the trigger is the
+ *  trigger's own toggle). */
+function useClosesOnOutsideOf(surface: React.RefObject<HTMLElement | null>, triggerRef: React.RefObject<Element | null> | undefined) {
+  const state = React.useContext(OverlayTriggerStateContext)
+  useClosesOnOutsidePress({
+    isOpen: state?.isOpen ?? false,
+    close: state?.close,
+    isInside: (target) => Boolean(surface.current?.contains(target) || triggerRef?.current?.contains(target)),
+  })
+}
+
+type PopoverContentProps = OverlayDomProps & {
+  children?: React.ReactNode
+  side?: Side
+  align?: Align
+  sideOffset?: number
+  collisionPadding?: number
+  "aria-label": string
 }
 
 function PopoverContent({
   className,
+  side = "bottom",
   align = "start",
   sideOffset = 8,
+  collisionPadding = 8,
+  "aria-label": ariaLabel,
+  children,
   ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Content>) {
+}: PopoverContentProps) {
+  const surface = React.useRef<HTMLElement | null>(null)
+  const triggerRef = useTriggerRef()
+  useClosesOnOutsideOf(surface, triggerRef)
   return (
-    <PopoverPrimitive.Portal>
-      <PopoverPrimitive.Content
-        data-slot="popover-content"
-        align={align}
-        sideOffset={sideOffset}
-        className={cn(
-          "z-50 rounded-[14px] outline-none backdrop-blur-[20px]",
-          className,
-        )}
-        {...props}
-      />
-    </PopoverPrimitive.Portal>
+    <AriaPopover
+      ref={surface}
+      data-slot="popover-content"
+      isNonModal
+      // Focus moving from the dialog to the trigger is the start of the trigger's own press, which
+      // toggles the popover shut; closing on that blur would let the press open it again.
+      shouldCloseOnInteractOutside={(element) => !triggerRef?.current?.contains(element)}
+      placement={placementOf(side, align)}
+      offset={sideOffset}
+      containerPadding={collisionPadding}
+      className="popover glass-overlay overflow-hidden"
+      {...props}
+    >
+      <Dialog aria-label={ariaLabel} className={cn("outline-none", className)}>
+        {children}
+      </Dialog>
+    </AriaPopover>
   )
 }
 

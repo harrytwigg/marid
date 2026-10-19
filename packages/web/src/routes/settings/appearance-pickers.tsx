@@ -17,6 +17,8 @@ export const ACCENT_PRESETS: { label: string; value: string | null }[] = [
   { label: "Pink", value: "#EC4899" },
 ]
 
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { TEXT_SCALES, TRANSPARENCIES } from "@/lib/settings"
 import { THEMES } from "@/lib/themes"
 import { useTheme } from "@/routes/providers"
@@ -50,14 +52,16 @@ function StepButton({
   onClick: () => void
 }) {
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
       onClick={onClick}
       aria-pressed={isActive}
-      className="flex cursor-pointer flex-col items-center gap-[var(--space-1)] rounded-[13px] border-none px-[var(--space-2)] py-[var(--space-3)] transition-colors duration-150 ease-[var(--ease-smooth)]"
-      style={{
-        background: isActive ? "var(--accent-fill)" : "var(--fill-quaternary)",
-      }}
+      className={cn(
+        "h-auto min-h-0 w-full flex-col gap-[var(--space-1)] rounded-[13px] px-[var(--space-2)] py-[var(--space-3)] md:h-auto",
+        isActive
+          ? "[--button-bg:var(--accent-fill)] [--button-bg-hover:var(--accent-fill)]"
+          : "[--button-bg:var(--fill-quaternary)] [--button-bg-hover:var(--fill-tertiary)]",
+      )}
     >
       {glyph}
       <span
@@ -69,7 +73,7 @@ function StepButton({
       >
         {label}
       </span>
-    </button>
+    </Button>
   )
 }
 

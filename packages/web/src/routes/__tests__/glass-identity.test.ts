@@ -219,17 +219,163 @@ describe("reduced transparency", () => {
   })
 })
 
-describe("the shell", () => {
-  it("is loaded after globals.css and theme-overrides.css so it wins on source order", () => {
-    const main = readFileSync(path.resolve(ROUTES, "../main.tsx"), "utf8")
-    const order = ["globals.css", "theme-overrides.css", "glass-identity.css"].map((f) => main.indexOf(`./routes/${f}`))
-    expect(order[0]).toBeGreaterThanOrEqual(0)
-    expect(order[1]).toBeGreaterThan(order[0])
-    expect(order[2]).toBeGreaterThan(order[1])
+describe("the Talk orb palette", () => {
+  const ORB = ["--orb-core", "--orb-base", "--orb-bloom", "--orb-lobe-a", "--orb-lobe-b", "--orb-lobe-c", "--orb-shadow", "--orb-specular", "--orb-rim"]
+  const GLOBALS = readFileSync(path.join(ROUTES, "globals.css"), "utf8")
+
+  it("is one light-dark() pair per token in the shared block", () => {
+    for (const token of ORB) expect(SHARED.get(token), token).toMatch(/^light-dark\(.+\)$/)
   })
 
-  it("adds no backdrop-filter surface: blur lives in tokens the floating slices consume", () => {
-    expect(IDENTITY.match(/backdrop-filter/g) ?? []).toHaveLength(0)
+  it("is registered as a colour, so script reads back a plain colour", () => {
+    for (const token of ORB) expect(GLOBALS, token).toContain(`@property ${token} {`)
+  })
+
+  it("gives Reduced transparency solid twins, from the OS preference and from the setting", () => {
+    const solid = /^light-dark\(#[0-9A-F]{6}, #[0-9A-F]{6}\)$/
+    const media = IDENTITY.slice(IDENTITY.indexOf("@media (prefers-reduced-transparency: reduce)"))
+    const fromOs = declarations(ruleBody(media, ":root, [data-theme]"))
+    const fromAttribute = declarations(ruleBody(IDENTITY, '[data-transparency="reduced"], [data-transparency="reduced"] [data-theme]'))
+    // the shadow and the specular are gradient stops that fade to nothing, so they stay translucent
+    const SOLID = ORB.filter((t) => t !== "--orb-shadow" && t !== "--orb-specular")
+    for (const decls of [fromOs, fromAttribute]) for (const token of SOLID) expect(decls.get(token), token).toMatch(solid)
+  })
+
+  it("leaves no upstream warm orb colour behind", () => {
+    expect(IDENTITY + GLOBALS).not.toMatch(/255,206,132|255,182,88/)
+  })
+})
+
+describe("the shell", () => {
+  it("is loaded after globals.css so it wins on source order", () => {
+    // main.tsx loads the one stylesheet root, which pulls globals.css in; the
+    // identity comes after the whole root.
+    const main = readFileSync(path.resolve(ROUTES, "../main.tsx"), "utf8")
+    const root = readFileSync(path.resolve(ROUTES, "app.css"), "utf8")
+    const imports = ["app.css", "glass-identity.css"].map((f) => main.indexOf(`./routes/${f}`))
+    expect(imports[0]).toBeGreaterThanOrEqual(0)
+    expect(imports[1]).toBeGreaterThan(imports[0])
+    expect(root.indexOf('@import "./globals.css"')).toBeGreaterThanOrEqual(0)
+  })
+
+})
+
+/** Top-level @media blocks of a stylesheet, with the stylesheet minus them. */
+function splitMedia(css: string): { rest: string; blocks: Array<{ query: string; body: string }> } {
+  const blocks: Array<{ query: string; body: string }> = []
+  let rest = ""
+  let i = 0
+  while (i < css.length) {
+    const at = css.indexOf("@media", i)
+    if (at < 0) break
+    rest += css.slice(i, at)
+    const open = css.indexOf("{", at)
+    let depth = 0
+    let end = open
+    for (; end < css.length; end++) {
+      if (css[end] === "{") depth++
+      else if (css[end] === "}" && --depth === 0) break
+    }
+    blocks.push({ query: css.slice(at + 6, open).trim(), body: css.slice(open + 1, end) })
+    i = end + 1
+  }
+  return { rest: rest + css.slice(i), blocks }
+}
+
+describe("floating glass", () => {
+  const { rest, blocks } = splitMedia(IDENTITY)
+  const MAX_RADIUS = 32
+
+  it("keeps every blur radius within 32px, in the tokens and anywhere else", () => {
+    const radii = [...IDENTITY.matchAll(/blur\((\d+(?:\.\d+)?)px\)/g)].map((m) => Number(m[1]))
+    expect(radii.length).toBeGreaterThan(0)
+    for (const radius of radii) expect(radius).toBeLessThanOrEqual(MAX_RADIUS)
+  })
+
+  it("applies a backdrop filter only for a fine pointer, so a coarse pointer gets the opaque tint", () => {
+    // Outside a media query a filter may only be switched off (the several-panes rule).
+    for (const m of rest.matchAll(/backdrop-filter:\s*([^;]+);/g)) expect(m[1].trim()).toBe("none")
+    for (const block of blocks.filter((b) => /backdrop-filter/.test(b.body))) {
+      expect(block.query).toContain("pointer: fine")
+    }
+    expect(ruleBody(rest, ".glass-float, .glass-float-bar, .glass-tint, .glass-tint-bar")).toMatch(/background:\s*var\(--glass-float-opaque\)/)
+  })
+
+  it("filters through the blur token, which reduced transparency sets to none", () => {
+    const fine = blocks.filter((b) => b.query.includes("pointer: fine"))
+    const filters = fine.flatMap((b) => [...b.body.matchAll(/(?<!-webkit-)backdrop-filter:\s*([^;]+);/g)].map((m) => m[1].trim()))
+    expect(filters.length).toBeGreaterThan(0)
+    // Anything but `none` goes through a token that Reduced sets to none: the surface blur or,
+    // for an overlay, the strong one; `none` only switches a surface off.
+    for (const value of filters.filter((v) => v !== "none")) expect(["var(--glass-blur)", "var(--glass-blur-strong)"]).toContain(value)
+  })
+
+  it("draws an overlay as the overlay tint with the strong blur and the overlay shadow, opaque for a coarse pointer", () => {
+    expect(ruleBody(rest, ".glass-overlay")).toMatch(/background:\s*var\(--glass-overlay-opaque\)/)
+    expect(ruleBody(rest, ".glass-overlay")).toMatch(/box-shadow:\s*var\(--shadow-overlay\)/)
+    const fine = blocks.find((b) => b.query.includes("pointer: fine") && b.body.includes(".glass-overlay"))!
+    const body = ruleBody(fine.body, ".glass-overlay")
+    expect(body).toMatch(/background:\s*var\(--glass-overlay\)/)
+    expect(body).toMatch(/(?<!-webkit-)backdrop-filter:\s*var\(--glass-blur-strong\)/)
+  })
+
+  it("shows a tooltip and a popover without animation under reduced motion", () => {
+    const reduced = blocks.find((b) => b.query.includes("prefers-reduced-motion") && b.body.includes(".tooltip, .popover"))
+    expect(reduced, "a reduced-motion block for .tooltip and .popover").toBeTruthy()
+    expect(ruleBody(reduced!.body, ".tooltip, .popover")).toMatch(/animation:\s*none/)
+  })
+
+  it("blurs the nav rail's label only while it shows, so one label is one blurred surface", () => {
+    expect(rest).not.toMatch(/\.rail-reveal\s*\{[^}]*backdrop-filter/)
+    const fine = blocks.find((b) => b.query.includes("pointer: fine") && b.body.includes(".rail-reveal"))!
+    expect(fine.body).toMatch(/\.group\\\/row:is\(:hover, :focus-within\) \.rail-reveal\s*\{[^}]*backdrop-filter:\s*var\(--glass-blur-strong\)/)
+  })
+
+  it("scales geometry and gradients with --glass-live: 1 normally, 0 under reduced transparency", () => {
+    expect(SHARED.get("--glass-live")).toBe("1")
+    const media = IDENTITY.slice(IDENTITY.indexOf("@media (prefers-reduced-transparency: reduce)"))
+    const fromOs = declarations(ruleBody(media, ":root, [data-theme]"))
+    const fromAttribute = declarations(ruleBody(IDENTITY, '[data-transparency="reduced"], [data-transparency="reduced"] [data-theme]'))
+    expect(fromOs.get("--glass-live")).toBe("0")
+    expect(fromAttribute.get("--glass-live")).toBe("0")
+  })
+
+  it("lets the composer overlap the transcript only with the glass live and a fine pointer", () => {
+    const floats = blocks.find((b) => b.query === "(pointer: fine)" && b.body.includes("--composer-overlap"))
+    expect(floats, "the composer's pointer: fine block").toBeTruthy()
+    expect(declarations(ruleBody(rest, "[data-composer-float]")).get("--composer-overlap")).toBe("0px")
+    expect(declarations(ruleBody(floats!.body, "[data-composer-float]")).get("--composer-overlap")).toBe("calc(var(--glass-live) * 56px)")
+  })
+
+  it("lets the empty parts of the composer band pass the wheel and clicks to the text under it", () => {
+    const fine = blocks.find((b) => b.query === "(pointer: fine)" && b.body.includes("--composer-overlap"))!
+    const bandRule = ruleBody(fine.body, "[data-composer-float] [data-chat-composer],\n  [data-composer-float] [data-chat-composer-measure]")
+    expect(bandRule).toMatch(/pointer-events:\s*none/)
+    expect(ruleBody(fine.body, "[data-composer-float] [data-chat-composer-measure] > *")).toMatch(/pointer-events:\s*auto/)
+  })
+
+  it("keeps the several-panes tint behind a fine pointer, so a coarse pointer stays opaque", () => {
+    expect(rest).toMatch(/\[data-chat-multi-pane\] \.glass-float \{[^}]*backdrop-filter:\s*none/)
+    expect(rest).not.toMatch(/\[data-chat-multi-pane\] \.glass-float \{[^}]*background/)
+    const fine = blocks.find((b) => b.query === "(pointer: fine)" && b.body.includes("[data-chat-multi-pane]"))
+    expect(fine, "the multi-pane tint's pointer: fine block").toBeTruthy()
+  })
+
+  it("keeps the plain fade on the top scrim in a CLI view", () => {
+    const fine = blocks.find((b) => b.query === "(pointer: fine)" && b.body.includes("[data-chat-top-scrim]"))!
+    expect(fine.body).toContain("[data-chat-top-scrim]:not([data-chat-scrim-flat])")
+    expect(fine.body).not.toMatch(/\[data-chat-top-scrim\] \{/)
+  })
+
+  it("lets the loading ring win over the float shadow", () => {
+    const fine = blocks.find((b) => b.query === "(pointer: fine)" && b.body.includes("composer-card-loading"))
+    expect(fine, "the loading ring rule").toBeTruthy()
+  })
+
+  it("is tint only on the top scrim below lg, where the header bar is the blurred surface", () => {
+    const narrow = blocks.find((b) => b.query.includes("max-width") && b.body.includes("[data-chat-top-scrim]"))
+    expect(narrow, "the narrow scrim block").toBeTruthy()
+    expect(declarations(ruleBody(narrow!.body, "[data-chat-top-scrim]:not([data-chat-scrim-flat])").replace(/opacity:\s*([^;]+);/, "--opacity: $1;")).get("--opacity")).toBe("calc(1 - var(--glass-live))")
   })
 })
 
@@ -261,5 +407,34 @@ describe.each(SCHEMES)("system colours in %s", (scheme) => {
     for (const { label, colour: ground } of surfaces(scheme)) {
       expect(ratio(colour(name, scheme), ground), `${name} on ${label}`).toBeGreaterThanOrEqual(AA)
     }
+  })
+})
+
+describe("controls that do not blur", () => {
+  // A bare --glass-overlay background is translucent on a touch screen and inside the reading sheet, where
+  // --material-thick-opaque is the sheet's own colour. These sit over text, video or a terminal.
+  const SRC = path.resolve(ROUTES, "..")
+  const FILES = [
+    "components/chat/cli-keybar.tsx",
+    "components/chat/file-view.tsx",
+    "components/talk/media-preview-chrome.tsx",
+    "components/talk/media-preview.tsx",
+    "components/ui/image-lightbox.tsx",
+    "components/ui/notices.tsx",
+    "components/ui/video-player.tsx",
+    "routes/todos/pickers/picker-shell.tsx",
+    "routes/todos/task-page/attachment-preview.tsx",
+    "routes/todos/task-page/attachments.tsx",
+  ]
+
+  it.each(FILES)("%s draws on the opaque overlay material, not a bare translucent token", (file) => {
+    const source = readFileSync(path.join(SRC, file), "utf8")
+    expect(source).toContain("var(--material-thick-opaque)")
+    expect(source).not.toMatch(/var\(--glass-(overlay|float)\)/)
+  })
+
+  it("resolves --material-thick-opaque to the sheet's own colour inside the sheet", () => {
+    const sheet = declarations(ruleBody(IDENTITY, '[data-shell="sheet"]'))
+    expect(sheet.get("--material-thick-opaque")).toBe("var(--glass-sheet-opaque)")
   })
 })

@@ -1,17 +1,16 @@
 import { useState } from "react"
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import "@/test/preload-dialogs"
 import { TodoDialog } from "../todo-dialog"
 
-/** Both the dialog and Radix ask the node what animation it is running. jsdom
- *  computes none at all, so a test that wants an exit has to say so. */
-function stubExitAnimation(animationName: string): void {
-  const computed = window.getComputedStyle
-  vi.spyOn(window, "getComputedStyle").mockImplementation((element, pseudo) => {
-    const style = computed.call(window, element, pseudo)
-    Object.defineProperty(style, "animationName", { value: animationName, configurable: true })
-    return style
-  })
+/** React Aria asks each element it is about to drop what it is animating. jsdom runs no animation, so a test that
+ *  wants an exit has to hand it one, and says when it ends. */
+function stubExitAnimation(): () => void {
+  let end: () => void = () => {}
+  const finished = new Promise<void>((resolve) => { end = resolve })
+  vi.spyOn(Element.prototype, "getAnimations").mockReturnValue([{ playState: "running", finished }] as unknown as Animation[])
+  return end
 }
 
 function Harness({ onClosed }: { onClosed?: () => void }) {
@@ -61,24 +60,25 @@ describe("TodoDialog focus scope", () => {
 
     fireEvent.keyDown(dialog, { key: "Escape" })
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
-    expect(document.activeElement).toBe(opener)
+    await waitFor(() => expect(document.activeElement).toBe(opener))
   })
 })
 
 describe("TodoDialog exit", () => {
-  it("stays on screen under data-state=closed until its exit animation ends", async () => {
-    stubExitAnimation("jinn-sheet-out")
+  it("stays on screen, marked as leaving, until its exit animation ends", async () => {
     const onClosed = vi.fn()
     render(<Harness onClosed={onClosed} />)
     open()
     const dialog = await screen.findByTestId("todo-details")
+    const endExit = stubExitAnimation()
 
     fireEvent.keyDown(dialog, { key: "Escape" })
 
-    await waitFor(() => expect(dialog.dataset.state).toBe("closed"))
+    await waitFor(() => expect(document.querySelector("[data-exiting]")).not.toBeNull())
+    expect(screen.queryByTestId("todo-details")).not.toBeNull()
     expect(onClosed).not.toHaveBeenCalled()
 
-    fireEvent.animationEnd(dialog, { animationName: "jinn-sheet-out" })
+    await act(async () => endExit())
 
     await waitFor(() => expect(onClosed).toHaveBeenCalledTimes(1))
     expect(screen.queryByTestId("todo-details")).toBeNull()

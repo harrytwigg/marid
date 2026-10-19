@@ -4,12 +4,13 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const GLOBALS = readFileSync(path.resolve(__dirname, '../../../routes/globals.css'), 'utf8')
+const IDENTITY = readFileSync(path.resolve(__dirname, '../../../routes/glass-identity.css'), 'utf8')
 
-/** One declaration serves every theme: light-dark() picks the side from the
- *  root's color-scheme, so the system-theme fallback needs no copy of its own.
- *  Each side is that theme's `--system-red` at the alpha its `--accent-fill`
- *  already uses against `--accent`. */
-const DANGER_FILL = '--danger-fill: light-dark(rgba(178,59,51,0.14), rgba(224,103,90,0.14));'
+/** One declaration, in the identity that owns the palette, serves every theme:
+ *  light-dark() picks the side from the root's color-scheme, so the system-theme
+ *  fallback needs no copy of its own. Each side is that theme's `--system-red`
+ *  at the alpha its `--accent-fill` already uses against `--accent`. */
+const DANGER_FILL = '--danger-fill: light-dark(rgba(196,50,62,0.12), rgba(255,122,130,0.16));'
 
 /** Everything from the opening of `selector` to the next block at the same
  *  nesting depth, so an assertion about one palette cannot be satisfied by a
@@ -27,8 +28,9 @@ function block(selector: string): string {
 
 describe('--danger-fill', () => {
   it('is declared once, for light and dark together', () => {
-    expect(GLOBALS.split(DANGER_FILL)).toHaveLength(2)
-    expect(GLOBALS.match(/--danger-fill:/g)).toHaveLength(1)
+    expect(IDENTITY.split(DANGER_FILL)).toHaveLength(2)
+    expect(IDENTITY.match(/--danger-fill:/g)).toHaveLength(1)
+    expect(GLOBALS).not.toContain('--danger-fill:')
   })
 
   it('is the only source of the failed bubble colour — no hardcoded value in the rules', () => {

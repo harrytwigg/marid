@@ -51,10 +51,9 @@ export function MobileTabBar() {
         // Named so a route change snapshots the bar on its own rather than
         // cross-fading the one surface that is on both sides of every tap.
         "[view-transition-name:jinn-tab-bar]",
-        "border-t-[0.5px] border-[var(--separator)] bg-[var(--material-thick-opaque)]",
-        "[@media(pointer:fine)]:bg-[var(--material-thick)]",
-        "[@media(pointer:fine)]:[backdrop-filter:blur(20px)_saturate(1.3)]",
-        "[@media(pointer:fine)]:[-webkit-backdrop-filter:blur(20px)_saturate(1.3)]",
+        // Floating glass: blurs the page that scrolls beneath it on a fine
+        // pointer; a coarse pointer gets the same tint opaque.
+        "glass-float-bar border-t-[0.5px]",
         "py-1.5 pb-[max(var(--safe-bottom),6px)]",
       )}
     >

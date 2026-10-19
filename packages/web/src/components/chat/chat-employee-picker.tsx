@@ -1,10 +1,10 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Search, X } from 'lucide-react'
+import { Search, X } from '@/components/ui/icon'
 import { EmployeeAvatar } from '@/components/ui/employee-avatar'
 import { cn } from '@/lib/utils'
 import type { Employee } from '@/lib/api'
-import { PRODUCT_EMOJI } from "@/lib/brand"
+import { PortalMark } from "@/components/brand-mark"
 
 type PickerEmployee = Pick<Employee, 'name' | 'displayName' | 'department' | 'rank'>
 
@@ -245,7 +245,9 @@ export function ChatEmployeePicker({
               : ''
           )}
         >
-          <span className="text-title3 shrink-0">{PRODUCT_EMOJI}</span>
+          <span className="flex size-6 shrink-0 items-center justify-center text-title3">
+            <PortalMark size={24} />
+          </span>
           <div className="flex-1 min-w-0">
             <span className="text-[length:var(--text-footnote)] font-[var(--weight-semibold)] text-[var(--text-primary)]">
               {portalName}

@@ -2,6 +2,7 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import { useEffect } from 'react'
@@ -72,24 +73,29 @@ function describeSelection(registry: EnginesResponse, engine: string, value: Sel
   const modelId = shownModelId(registry, engine, value)
   const efforts = effortLevelsFor(registry, engine, modelId)
   const label = registry.engines[engine]?.models.find((m) => m.id === modelId)?.label
-  return { modelId, efforts, effort: value.effortLevel ?? defaultEffort(efforts), modelLabel: label ?? modelId ?? 'Model' }
+  // Only a chosen level is a real selection. With none set the engine sends
+  // nothing and runs its own default, so the chip says "Default" instead of
+  // naming a tier (medium) the engine will not run.
+  const effort = value.effortLevel
+  const effortLabel = effort ? effortLabelOf(effort) : efforts.length > 0 ? 'Default' : undefined
+  return { modelId, efforts, effort, effortLabel, modelLabel: label ?? modelId ?? 'Model' }
 }
 
 /** The chip: `✦ Model · Effort ▾`. */
-function SelectorTrigger({ modelLabel, effort, disabled }: { modelLabel: string; effort: string | undefined; disabled?: boolean }) {
+function SelectorTrigger({ modelLabel, effortLabel, disabled }: { modelLabel: string; effortLabel: string | undefined; disabled?: boolean }) {
   return (
     <DropdownMenuTrigger asChild disabled={disabled}>
       <button
         type="button"
         disabled={disabled}
-        aria-label={`Model and effort: ${modelLabel}${effort ? ` · ${effortLabelOf(effort)}` : ''}`}
+        aria-label={`Model and effort: ${modelLabel}${effortLabel ? ` · ${effortLabel}` : ''}`}
         className="group inline-flex min-h-[40px] md:min-h-0 min-w-0 max-w-full items-center gap-1.5 rounded-lg border-none bg-transparent px-1.5 py-1 text-[length:var(--text-footnote)] transition-colors hover:bg-[var(--fill-secondary)] disabled:cursor-default disabled:opacity-60 cursor-pointer"
       >
         <span aria-hidden className="shrink-0 text-[var(--accent)] text-[11px] leading-none">✦</span>
         <span className="truncate font-[var(--weight-semibold)] tracking-[-0.2px] text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors">{modelLabel}</span>
-        {effort && (
+        {effortLabel && (
           // First thing to drop on a narrow composer — measured against the composer container, so a narrow PANE drops it too, not just a narrow viewport.
-          <span className="shrink-0 text-[var(--text-tertiary)] @max-[340px]/composer:hidden">· {effortLabelOf(effort)}</span>
+          <span className="shrink-0 text-[var(--text-tertiary)] @max-[340px]/composer:hidden">· {effortLabel}</span>
         )}
         <span aria-hidden className="shrink-0 text-[8px] leading-none text-[var(--text-quaternary)] group-hover:text-[var(--text-tertiary)]">▾</span>
       </button>
@@ -103,12 +109,12 @@ function EffortRow({ efforts, effort, onPick }: { efforts: string[]; effort: str
   return (
     <>
       <DropdownMenuSeparator className="bg-[var(--separator)]" />
-      <div className="px-2 pt-0.5 pb-1 text-[length:var(--text-caption2)] font-[var(--weight-bold)] uppercase tracking-[0.4px] text-[var(--text-quaternary)]">
+      <DropdownMenuLabel className="pt-0.5 pb-1 text-[length:var(--text-caption2)] font-[var(--weight-bold)] uppercase tracking-[0.4px] text-[var(--text-quaternary)]">
         Effort
-      </div>
-      <div
+      </DropdownMenuLabel>
+      <DropdownMenuLabel
         data-testid="effort-levels"
-        className={`flex gap-1 px-1 pb-1 ${efforts.length > 4 ? 'overflow-x-auto [-webkit-overflow-scrolling:touch]' : ''}`}
+        className={`flex gap-1 px-1 pt-0 pb-1 font-normal ${efforts.length > 4 ? 'overflow-x-auto [-webkit-overflow-scrolling:touch]' : ''}`}
       >
         {efforts.map((lvl) => {
           const on = lvl === effort
@@ -128,7 +134,7 @@ function EffortRow({ efforts, effort, onPick }: { efforts: string[]; effort: str
             </button>
           )
         })}
-      </div>
+      </DropdownMenuLabel>
     </>
   )
 }
@@ -139,7 +145,7 @@ function ContextFooter({ usage }: { usage: ContextUsage | null }) {
   return (
     <>
       <DropdownMenuSeparator className="bg-[var(--separator)]" />
-      <div className="px-2 pt-0.5 pb-1.5">
+      <DropdownMenuLabel className="pt-0.5 pb-1.5 font-normal">
         <div className="flex items-center justify-between text-[length:var(--text-caption1)]">
           <span className="text-[var(--text-tertiary)]">Context</span>
           {usage.tokens > 0 ? (
@@ -164,7 +170,7 @@ function ContextFooter({ usage }: { usage: ContextUsage | null }) {
             />
           </div>
         )}
-      </div>
+      </DropdownMenuLabel>
     </>
   )
 }
@@ -172,9 +178,9 @@ function ContextFooter({ usage }: { usage: ContextUsage | null }) {
 /** The notes under the effort row of a persisted chat: a rejected update, or "applies to your next message". */
 function SelectorNotes({ mode, errorNote, pendingNote }: Pick<ModelSelectorRowProps, 'mode' | 'errorNote' | 'pendingNote'>) {
   if (mode !== 'existing') return null
-  if (errorNote) return <div className="px-2 pb-1 text-[length:var(--text-caption2)] text-[var(--system-red)]">{errorNote}</div>
+  if (errorNote) return <DropdownMenuLabel className="pt-0 pb-1 text-[length:var(--text-caption2)] font-normal text-[var(--system-red)]">{errorNote}</DropdownMenuLabel>
   if (!pendingNote) return null
-  return <div className="px-2 pb-1 text-[length:var(--text-caption2)] italic text-[var(--text-quaternary)]">Applies to your next message</div>
+  return <DropdownMenuLabel className="pt-0 pb-1 text-[length:var(--text-caption2)] font-normal italic text-[var(--text-quaternary)]">Applies to your next message</DropdownMenuLabel>
 }
 
 /**
@@ -197,7 +203,7 @@ export function ModelSelectorRow({ mode, value, onChange, pendingNote, errorNote
   const engine = useResolvedEngine(registry, mode, value, onChange)
   if (isLoading || !registry) return null
 
-  const { modelId, efforts, effort, modelLabel } = describeSelection(registry, engine, value)
+  const { modelId, efforts, effort, effortLabel, modelLabel } = describeSelection(registry, engine, value)
   const pickEngine = (next: string) => {
     const ne = registry.engines[next]
     const nextModel = ne?.defaultModel ?? ne?.models[0]?.id
@@ -207,12 +213,12 @@ export function ModelSelectorRow({ mode, value, onChange, pendingNote, errorNote
 
   return (
     <DropdownMenu>
-      <SelectorTrigger modelLabel={modelLabel} effort={effort} disabled={disabled} />
+      <SelectorTrigger modelLabel={modelLabel} effortLabel={effortLabel} disabled={disabled} />
       <DropdownMenuContent
         side="top"
         align="start"
         sideOffset={8}
-        className="w-64 max-w-[calc(100vw-2rem)] overflow-hidden rounded-[var(--radius-lg)] border-0 bg-[var(--bg-tertiary)] p-1.5 shadow-[var(--shadow-overlay)]"
+        className="w-64 max-w-[calc(100vw-2rem)] rounded-[var(--radius-lg)] p-1.5"
       >
         <ModelPicker registry={registry} engine={engine} modelId={modelId} onPickEngine={pickEngine} onPickModel={pickModel}>
           <EffortRow efforts={efforts} effort={effort} onPick={(level) => onChange({ engine, model: modelId, effortLevel: level })} />
