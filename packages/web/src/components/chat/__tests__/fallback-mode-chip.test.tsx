@@ -34,9 +34,14 @@ describe('FallbackModeChip labels', () => {
     render(<FallbackModeChip sessionId="s1" view={view({ mode: 'fallback-children' })} />)
     expect(screen.getByTestId('fallback-children-marker').textContent).toContain('children')
   })
-  it('shows disabled for a null target', () => {
+  it('shows none for a session with no fallback target', () => {
     render(<FallbackModeChip sessionId="s1" view={view({ target: null })} />)
-    expect(screen.getByTestId('fallback-mode-chip').textContent).toContain('Fallback: disabled')
+    expect(screen.getByTestId('fallback-mode-chip').textContent).toContain('Fallback: none')
+  })
+  it('shows none left once the session has walked to the end of its chain', () => {
+    const chain = { source: 'account' as const, links: [], position: 3, servedBy: 'opencode||y', next: null, hops: [] }
+    render(<FallbackModeChip sessionId="s1" view={view({ target: null, chain })} />)
+    expect(screen.getByTestId('fallback-mode-chip').textContent).toContain('Fallback: none left')
   })
   it('shows off for auto-resume', () => {
     render(<FallbackModeChip sessionId="s1" view={view({ mode: 'auto-resume' })} />)

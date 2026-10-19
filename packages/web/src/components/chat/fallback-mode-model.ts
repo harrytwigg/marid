@@ -50,8 +50,9 @@ export const FALLBACK_MODE_OPTIONS: ReadonlyArray<{
 /** Visible chip text. */
 export function fallbackChipText(view: SessionFallbackView): string {
   if (view.mode === 'auto-resume') return 'Fallback: off (auto-resume)'
-  if (!view.target) return 'Fallback: disabled'
-  return `Fallback: ${view.target.label}`
+  if (view.target) return `Fallback: ${view.target.label}`
+  // No next target: the session has used up its chain (it is on a later link), or it has none at all.
+  return (view.chain?.position ?? 0) > 0 ? 'Fallback: none left' : 'Fallback: none'
 }
 
 const MODES: ReadonlyArray<string> = ['fallback', 'fallback-children', 'auto-resume']
