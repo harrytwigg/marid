@@ -15,7 +15,7 @@ const REGISTRY: EnginesResponse = {
 
 let latest: FallbackLink[] = []
 
-function Harness({ initial }: { initial: FallbackLink[] }) {
+function Harness({ initial, serverProblems }: { initial: FallbackLink[]; serverProblems?: string[] }) {
   const [links, setLinks] = useState(initial)
   latest = links
   return (
@@ -28,6 +28,7 @@ function Harness({ initial }: { initial: FallbackLink[] }) {
       expanded={links.map(() => false)}
       fields={{ registry: REGISTRY, profiles: ['A'] }}
       waitsAs="Claude"
+      serverProblems={serverProblems}
       onChange={setLinks}
     />
   )
@@ -78,5 +79,15 @@ describe('moving a link with the buttons', () => {
 
     expect(order()).toEqual(['codex', 'claude · A'])
     expect(Array.from(document.querySelectorAll('[data-chain-row]'))).toEqual([rows[0], rows[2]])
+  })
+})
+
+describe('the gateway sentences about a chain', () => {
+  it('shows each once, and not again when the editor already shows it under a row', () => {
+    const duplicate = 'engines.claude.fallback[1] duplicates engines.claude.fallback[0] (codex): a chain tries each target once, so list it once'
+    render(<Harness initial={[{ engine: 'codex' }, { engine: 'codex' }]} serverProblems={[duplicate, 'the gateway says so twice', 'the gateway says so twice']} />)
+
+    expect(screen.getAllByText(duplicate)).toHaveLength(1)
+    expect(screen.getAllByText('the gateway says so twice')).toHaveLength(1)
   })
 })

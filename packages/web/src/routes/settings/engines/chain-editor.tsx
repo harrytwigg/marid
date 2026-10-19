@@ -55,6 +55,12 @@ function GeneralProblems({ problems }: { problems: string[] }) {
   )
 }
 
+/** The chain's own sentences, then the gateway's that the editor is not already showing (under a row or among its own), each once. */
+function unshownProblems(own: { byRow: string[][]; general: string[] }, serverProblems: string[]): string[] {
+  const shown = new Set([...own.byRow.flat(), ...own.general])
+  return [...own.general, ...new Set(serverProblems.filter((problem) => !shown.has(problem)))]
+}
+
 /** What a reorder does, kept together: the links, the ids that travel with the rows, and where focus goes. */
 function useChainMoves(links: FallbackLink[], onChange: (links: FallbackLink[]) => void) {
   const rows = useRowIds(links.length)
@@ -125,7 +131,7 @@ export function ChainEditor(props: ChainEditorProps) {
           ))}
         </div>
       )}
-      <GeneralProblems problems={[...problems.general, ...serverProblems.filter((p) => !problems.byRow.flat().includes(p))]} />
+      <GeneralProblems problems={unshownProblems(problems, serverProblems)} />
       <Button
         variant="secondary"
         size="sm"
