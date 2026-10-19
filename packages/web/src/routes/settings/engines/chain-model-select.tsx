@@ -32,7 +32,7 @@ export function ChainModelSelect({ registry, engine, value, noModelText, ariaLab
           type="button"
           aria-label={`${ariaLabel}: ${shown}`}
           title={value || undefined}
-          className="select__trigger relative min-h-[40px] w-full cursor-pointer appearance-none pe-8 text-left text-[length:var(--text-footnote)] md:min-h-0"
+          className="select__trigger relative min-h-[40px] w-full cursor-pointer appearance-none pe-8 text-left text-[length:var(--text-footnote)] max-md:text-[length:max(1rem,var(--text-body))] md:min-h-0"
         >
           <span className="block truncate">{shown}</span>
           <ChevronDownIcon aria-hidden className="select__indicator pointer-events-none size-4" />

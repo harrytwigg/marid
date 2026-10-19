@@ -66,7 +66,7 @@ export function ChainEditor(props: ChainEditorProps) {
   const rowFields: RowFields = { ...fields, ownEngine, chainName }
 
   return (
-    <div className="mt-[var(--space-2)]">
+    <div className="@container/chain mt-[var(--space-2)]">
       {links.length === 0 ? (
         <p className="text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">
           No fallback. {waitsAs} waits for its own limit to reset.

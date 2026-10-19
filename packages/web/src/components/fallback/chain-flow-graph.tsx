@@ -1,21 +1,26 @@
 import "@xyflow/react/dist/style.css"
-import { useEffect, useMemo, useState, type CSSProperties } from "react"
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react"
 import { Handle, MarkerType, Position, ReactFlow, type NodeProps } from "@xyflow/react"
 import { buildChainFlow, FLOW_NODE_H, type ChainFlowInput, type FlowOrientation, type FlowTargetData } from "./chain-flow-model"
 
-/** Below this width the chain runs top to bottom; a row of targets would not fit a phone. */
-const NARROW_QUERY = "(max-width: 639px)"
+/** A horizontal chain needs about this much room per target to stay readable. */
+const ROOM_PER_TARGET_PX = 150
 
-function useOrientation(): FlowOrientation {
-  const [narrow, setNarrow] = useState(() => window.matchMedia?.(NARROW_QUERY).matches ?? false)
+/** Left to right while the room the diagram has allows it, top to bottom otherwise: a
+ *  phone, or a narrow column on a wide screen. Before the first measurement (and where
+ *  nothing can be measured) it is horizontal. */
+function useOrientation(count: number): [RefObject<HTMLDivElement | null>, FlowOrientation] {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const [width, setWidth] = useState(0)
   useEffect(() => {
-    const query = window.matchMedia?.(NARROW_QUERY)
-    if (!query) return
-    const onChange = (event: MediaQueryListEvent) => setNarrow(event.matches)
-    query.addEventListener("change", onChange)
-    return () => query.removeEventListener("change", onChange)
+    const el = ref.current
+    if (!el || typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(() => setWidth(el.getBoundingClientRect().width))
+    observer.observe(el)
+    setWidth(el.getBoundingClientRect().width)
+    return () => observer.disconnect()
   }, [])
-  return narrow ? "vertical" : "horizontal"
+  return [ref, width > 0 && width < count * ROOM_PER_TARGET_PX ? "vertical" : "horizontal"]
 }
 
 const DOT_COLOR: Record<FlowTargetData["health"], string> = {
@@ -100,7 +105,7 @@ const nodeTypes = { chainTarget: ChainTargetNode }
 
 /** The chain as a flow: the own target, then each link, joined by "on limit" edges. */
 export default function ChainFlowGraph(input: ChainFlowInput) {
-  const orientation = useOrientation()
+  const [ref, orientation] = useOrientation(input.links.length)
   const graph = useMemo(() => buildChainFlow(input, orientation), [input.links, input.position, input.servedBy, input.now, orientation])
   const edges = useMemo(() => graph.edges.map((edge) => ({
     ...edge,
@@ -110,8 +115,10 @@ export default function ChainFlowGraph(input: ChainFlowInput) {
     labelBgStyle: { fill: "var(--fill-quaternary)" },
   })), [graph])
   return (
-    <div data-chain-flow={orientation} style={{ height: Math.min(graph.height, 560), minHeight: 96 }}>
+    <div ref={ref} data-chain-flow={orientation} style={{ height: Math.min(graph.height, 560), minHeight: 96 }}>
+      {/* Keyed by orientation: fitView runs when the flow mounts, and a layout that turns the chain on its side needs the fit again. */}
       <ReactFlow
+        key={orientation}
         nodes={graph.nodes}
         edges={edges}
         nodeTypes={nodeTypes}

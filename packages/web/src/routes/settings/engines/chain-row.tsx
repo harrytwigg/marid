@@ -44,8 +44,8 @@ function RowTarget({ link, index, fields, onChange }: {
   const at = `link ${index + 1} of the ${fields.chainName}`
   const profiles = profileOptionsFor(link.engine, fields.profiles)
   return (
-    <div className="flex w-full min-w-0 flex-col gap-[var(--space-1)] sm:flex-1 sm:flex-row sm:items-center">
-      <div className="min-w-0 sm:w-[28%] sm:shrink-0">
+    <div className="flex w-full min-w-0 flex-col gap-[var(--space-1)] @[560px]/chain:flex-1 @[560px]/chain:flex-row @[560px]/chain:items-center">
+      <div className="min-w-0 @[560px]/chain:w-[28%] @[560px]/chain:min-w-[7.5rem] @[560px]/chain:shrink-0">
         <SettingsSelect
           value={link.engine}
           ariaLabel={`Engine of ${at}`}
@@ -54,7 +54,7 @@ function RowTarget({ link, index, fields, onChange }: {
         />
       </div>
       {profiles && (
-        <div className="min-w-0 sm:w-[24%] sm:shrink-0">
+        <div className="min-w-0 @[560px]/chain:w-[24%] @[560px]/chain:min-w-[5rem] @[560px]/chain:shrink-0">
           <SettingsSelect
             value={link.profile ?? ""}
             ariaLabel={`Profile of ${at}`}
@@ -63,7 +63,7 @@ function RowTarget({ link, index, fields, onChange }: {
           />
         </div>
       )}
-      <div className="min-w-0 sm:flex-1">
+      <div className="min-w-0 @[560px]/chain:flex-1">
         <ChainModelSelect
           registry={fields.registry}
           engine={link.engine}
@@ -126,19 +126,19 @@ export function ChainRow({ link, index, count, fields, problems, expanded, style
         data-invalid={problems.length > 0 || undefined}
         onPointerDown={onPointerDown}
         style={style}
-        className="flex flex-wrap items-center gap-[var(--space-1)] rounded-[10px] bg-[var(--fill-tertiary)] py-[3px] pl-[var(--space-2)] pr-[3px] sm:flex-nowrap"
+        className="flex flex-wrap items-center gap-[var(--space-1)] rounded-[10px] bg-[var(--fill-tertiary)] py-[3px] pl-[var(--space-2)] pr-[3px] @[560px]/chain:flex-nowrap"
       >
         <GripVertical size={14} aria-hidden className="shrink-0 cursor-grab text-[var(--text-quaternary)]" />
         <span className="w-[14px] shrink-0 text-[length:var(--text-caption2)] text-[var(--text-quaternary)] [font-variant-numeric:tabular-nums]">
           {index + 1}
         </span>
-        <span className="min-w-0 flex-1 sm:hidden" />
-        {expanded && <ExpandedBadge />}
-        <div className="order-last flex w-full sm:order-none sm:contents">
+        <span className="min-w-0 flex-1 @[560px]/chain:hidden" />
+        <div className="order-last flex w-full @[560px]/chain:order-none @[560px]/chain:contents">
           <RowTarget link={link} index={index} fields={fields} onChange={onChange} />
         </div>
         <RowActions label={label} chainName={fields.chainName} index={index} count={count} onMove={onMove} onRemove={onRemove} />
       </div>
+      {expanded && <ExpandedNote />}
       {problems.map((problem) => (
         <p key={problem} data-chain-problem role="alert" className="px-[var(--space-2)] text-[length:var(--text-caption2)]" style={{ color: "var(--system-red)" }}>
           {problem}
@@ -149,14 +149,10 @@ export function ChainRow({ link, index, count, fields, problems, expanded, style
 }
 
 /** Marks a link that runs because another entry's own chain expanded to it. */
-function ExpandedBadge() {
+function ExpandedNote() {
   return (
-    <span
-      data-chain-expanded
-      title="Expanded from another entry's own chain; saving writes it as a link of this chain"
-      className="shrink-0 rounded-[5px] bg-[var(--fill-secondary)] px-1 py-px text-[length:var(--text-caption2)] text-[var(--text-tertiary)]"
-    >
-      from another chain
-    </span>
+    <p data-chain-expanded className="m-0 px-[var(--space-2)] text-[length:var(--text-caption2)] text-[var(--text-tertiary)]">
+      From another chain: saving writes it as a link of this one.
+    </p>
   )
 }
