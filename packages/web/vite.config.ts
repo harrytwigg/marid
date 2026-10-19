@@ -1,7 +1,21 @@
 import { defineConfig, type Plugin, type ProxyOptions } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import { VitePWA } from 'vite-plugin-pwa'
+import { createRequire } from 'node:module'
 import path from 'node:path'
+
+const require = createRequire(import.meta.url)
+
+/**
+ * @heroui/styles exports its shared theme map under a pattern with two
+ * wildcards, which no resolver accepts, so the file has no importable name.
+ * The alias below gives it one, found by where the package resolves rather than
+ * by a relative node_modules path that a change in pnpm's hoisting would break.
+ */
+const herouiThemeMap = path.join(
+  path.dirname(require.resolve('@heroui/styles/package.json')),
+  'dist/themes/shared/theme.css',
+)
 
 /**
  * The UI face is only discoverable once the stylesheet has downloaded and
@@ -129,6 +143,7 @@ export default defineConfig(() => {
     ],
     resolve: {
       alias: {
+        'heroui-theme-map': herouiThemeMap,
         '@': path.resolve(__dirname, 'src'),
         // The plugin SDK is a specifier, not a package: a real package would
         // need its own build and its own React peer, and the singleton the SDK
