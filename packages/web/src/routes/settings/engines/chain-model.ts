@@ -1,16 +1,28 @@
+import type { FallbackChainEntry } from "@jinn/fallback-chain-wire"
 import type { EngineHealth } from "@/lib/api"
+import { linksOfEntries } from "./chain-links"
 
 /** One engine's block under `engines.` in config.yaml. */
 export interface EngineSettings {
   bin?: string
   model?: string
   effortLevel?: string
-  fallback?: string[]
+  /** The chain as written: object links, or the legacy string forms. */
+  fallback?: FallbackChainEntry[]
+  /** Claude only: the declared accounts, each with a chain of its own. */
+  accounts?: Record<string, AccountSettings>
   /** `<model this engine serves>: <model the stand-in serves>`, applied when a
    *  turn falls through the chain. Edited on the card by model-map-editor.tsx,
    *  and by hand in config.yaml; the two agree because both refuse an entry in
    *  the same words, off `@jinn/fallback-map-wire`. */
   fallbackModelMap?: Record<string, string>
+}
+
+/** A declared Claude account under `engines.claude.accounts`. */
+export interface AccountSettings {
+  configDir?: string
+  fallback?: FallbackChainEntry[]
+  [key: string]: unknown
 }
 
 /** The `engines` block. `default` names an engine; every other key is one. */
@@ -28,9 +40,31 @@ export interface SessionsFallbackConfig {
   fallbackEngine?: string | null
 }
 
-export function chainFor(engines: EnginesConfig | undefined, engine: string): string[] {
+/** The entries an engine's block states for its chain, in the order written. */
+export function chainEntriesFor(engines: EnginesConfig | undefined, engine: string): FallbackChainEntry[] {
   const entry = engines?.[engine]
   return (typeof entry === "object" ? entry.fallback : undefined) ?? []
+}
+
+/** The entries a declared Claude account states for its chain. */
+export function accountEntriesFor(engines: EnginesConfig | undefined, account: string): FallbackChainEntry[] {
+  return engines?.claude?.accounts?.[account]?.fallback ?? []
+}
+
+/** The declared Claude account names, in the order config.yaml states them. */
+export function accountNames(engines: EnginesConfig | undefined): string[] {
+  return Object.keys(engines?.claude?.accounts ?? {})
+}
+
+/**
+ * The engines the model map carries a turn onto: those of the chain's links that
+ * leave the model unnamed and sit on another engine. A link that names a model
+ * ignores the map, and a link on the engine itself keeps the session's own model.
+ */
+export function substituteChainFor(engines: EnginesConfig | undefined, engine: string): string[] {
+  return linksOfEntries(chainEntriesFor(engines, engine))
+    .filter((link) => link.model === undefined && link.engine !== engine)
+    .map((link) => link.engine)
 }
 
 /** The model translations configured for one engine, as `[from, to]` pairs in
@@ -39,28 +73,6 @@ export function modelMapFor(engines: EnginesConfig | undefined, engine: string):
   const entry = engines?.[engine]
   const map = typeof entry === "object" ? entry.fallbackModelMap : undefined
   return Object.entries(map ?? {})
-}
-
-/** Engines the add control may offer: never the card's own engine, never one
- *  the chain already holds. Both are rejected by the gateway's validator, so
- *  offering them would only produce a save that fails. */
-export function addOptionsFor(registryEngines: string[], engine: string, chain: string[]): string[] {
-  return registryEngines.filter((name) => name !== engine && !chain.includes(name))
-}
-
-export function removeFromChain(chain: string[], index: number): string[] {
-  return chain.filter((_, i) => i !== index)
-}
-
-/** Move one entry, keeping every other entry's relative order. An index outside
- *  the chain returns it unchanged rather than dropping or duplicating an entry. */
-export function moveInChain(chain: string[], from: number, to: number): string[] {
-  if (from === to) return chain
-  if (from < 0 || from >= chain.length || to < 0 || to >= chain.length) return chain
-  const next = [...chain]
-  const [moved] = next.splice(from, 1)
-  next.splice(to, 0, moved)
-  return next
 }
 
 export type EngineHealthTone = "healthy" | "exhausted" | "degraded"
@@ -123,7 +135,7 @@ export function legacyFallbackEngine(sessions: SessionsFallbackConfig | undefine
  *  PUT omits — only an explicit null deletes one. */
 export function legacyMigrationMutations(fallbackEngine: string): ConfigMutation[] {
   return [
-    { path: ["engines", "claude", "fallback"], value: [fallbackEngine] },
+    { path: ["engines", "claude", "fallback"], value: [{ engine: fallbackEngine }] },
     { path: ["sessions", "rateLimitStrategy"], value: null },
     { path: ["sessions", "fallbackEngine"], value: null },
   ]

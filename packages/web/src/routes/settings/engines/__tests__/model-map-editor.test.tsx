@@ -26,7 +26,14 @@ vi.mock('@/routes/settings-provider', () => ({
     setLanguage: vi.fn(), resetAll: vi.fn(),
   }),
 }))
-vi.mock('@/hooks/use-model-registry', () => ({ useModelRegistry: () => ({ data: registry.current }) }))
+vi.mock('@/hooks/use-model-registry', async (importActual) => ({
+  ...(await importActual<typeof import('@/hooks/use-model-registry')>()),
+  useModelRegistry: () => ({ data: registry.current }),
+}))
+vi.mock('@/hooks/use-fallback-chains', async (importActual) => ({
+  ...(await importActual<typeof import('@/hooks/use-fallback-chains')>()),
+  useFallbackChains: () => ({ data: undefined }),
+}))
 vi.mock('@/hooks/use-onboarding', () => ({ useOnboarding: () => ({ data: undefined }) }))
 vi.mock('@/components/ui/emoji-picker', () => ({ EmojiPicker: () => null }))
 vi.mock('@/components/auth/remote-access-panel', () => ({ RemoteAccessPanel: () => null }))

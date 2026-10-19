@@ -8,6 +8,7 @@ import { emojiForName } from "@/lib/emoji-pool";
 import { EmojiPicker } from "@/components/ui/emoji-picker";
 import { EmployeeEditor } from "@/components/org/employee-editor";
 import { ClaudeProfileRow } from "@/components/org/claude-profile";
+import { EmployeeFallbackSummary } from "@/components/org/employee-fallback-field";
 
 interface SessionData {
   id: string;
@@ -202,6 +203,7 @@ export function EmployeeDetail({
           </div>
         </div>
         <ClaudeProfileRow profile={employee.claudeProfile} />
+        <EmployeeFallbackSummary employee={employee} />
 
         {persona && (
           <div className="mt-[var(--space-4)] pt-[var(--space-4)] border-t border-[var(--separator)]">

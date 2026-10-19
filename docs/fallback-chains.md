@@ -157,14 +157,16 @@ Each account (and each non-Claude engine) keeps its own conversation thread.
 
 Each hop is recorded on the session (most recent 20) with its time, from and
 to targets, reason, the failing target's reset and any links passed over, and
-announced in the transcript as a notice that carries the hop
-(`meta.fallbackHop`). A chain that runs out records a last hop with no target.
-The target that served the latest turn is recorded too, for a session that has
-walked a chain. In `transportMeta`: `fallbackRun` (`source`, `position`,
-`tried`, `startedAt`, present only while the session is off its own target),
-`fallbackHops` and `fallbackServedBy`; the override record names the stand-in
-as `substituteTarget {engine, profile?, model?}`. The session API reports the
-chain, its position, the next hop and the hops under `fallback.chain`.
+announced in the transcript as a notice: a `notification` message whose
+`meta.fallbackHop` is the hop (`FallbackHopNoticeMeta`), which the dashboard
+shows as a card with the links passed over. A chain that runs out records a
+last hop with no target. The target that served the latest turn is recorded
+too, for a session that has walked a chain. In `transportMeta`: `fallbackRun`
+(`source`, `position`, `tried`, `startedAt`, present only while the session is
+off its own target), `fallbackHops` and `fallbackServedBy`; the override record
+names the stand-in as `substituteTarget {engine, profile?, model?}`. The
+session API reports the chain, its position, the next hop and the hops under
+`fallback.chain`.
 
 ## API
 

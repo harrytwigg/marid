@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { api } from "@/lib/api"
 import type { Employee, EmployeeUpdate } from "@/lib/api"
+import { EmployeeFallbackRow, employeeChainOf, refreshFallbackChains, sameChain } from "./employee-fallback-field"
 import { isConfined, type DepartmentScopeWire } from "@/lib/department-api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -86,6 +87,8 @@ export function EmployeeEditor({
     model: employee.model,
     effortLevel: employee.effortLevel,
   })
+  const [fallback, setFallback] = useState(() => employeeChainOf(employee))
+  const [fallbackBlocked, setFallbackBlocked] = useState(false)
   const isSystem = employee.system === true
 
   // Department + reportsTo option lists come from the live org.
@@ -109,7 +112,7 @@ export function EmployeeEditor({
 
   const personaInvalid = persona.trim().length === 0
   const displayNameInvalid = displayName.trim().length === 0
-  const canSave = !saving && !personaInvalid && !displayNameInvalid
+  const canSave = !saving && !personaInvalid && !displayNameInvalid && !fallbackBlocked
 
   // Build a patch of only the changed fields.
   const patch = useMemo<EmployeeUpdate>(() => {
@@ -126,8 +129,9 @@ export function EmployeeEditor({
     if (selector.engine !== employee.engine) p.engine = selector.engine
     if (selector.model !== employee.model) p.model = selector.model
     if (selector.effortLevel !== employee.effortLevel) p.effortLevel = selector.effortLevel
+    if (!sameChain(fallback, employeeChainOf(employee))) p.fallback = fallback
     return p
-  }, [displayName, department, rank, reportsTo, persona, alwaysNotify, cliFlags, selector, employee])
+  }, [displayName, department, rank, reportsTo, persona, alwaysNotify, cliFlags, selector, fallback, employee])
 
   const dirty = Object.keys(patch).length > 0
 
@@ -137,6 +141,7 @@ export function EmployeeEditor({
     setError(null)
     try {
       const res = await api.updateEmployee(employee.name, patch)
+      refreshFallbackChains()
       if (res.employee) onSaved(res.employee)
       else onSaved({ ...employee, ...patch } as Employee)
     } catch (e) {
@@ -265,6 +270,8 @@ export function EmployeeEditor({
           <ModelSelectorRow mode="new" value={selector} onChange={setSelector} />
         </div>
       </Field>
+
+      <EmployeeFallbackRow employee={employee} engine={selector.engine ?? employee.engine} value={fallback} onChange={setFallback} onBlockedChange={setFallbackBlocked} locked={isSystem} />
 
       <Field label="Persona / instructions">
         {isSystem ? (
