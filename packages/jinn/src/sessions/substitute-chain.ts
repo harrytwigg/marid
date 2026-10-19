@@ -1,6 +1,6 @@
 import { accountForEmployee, DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
 import type { EngineHealthReading } from "../shared/engine-health.js";
-import { resolveLinkModel, sessionFallbackChain } from "../shared/fallback-chain.js";
+import { sessionFallbackChain } from "../shared/fallback-chain.js";
 import type { FallbackChainSource, ResolvedFallbackLink } from "../shared/fallback-chain-wire.js";
 import { engineAvailable, engineSupportsRemote, getModelRegistry, type EngineName } from "../shared/models.js";
 import { sshDestination } from "../shared/remote-target.js";
@@ -29,7 +29,7 @@ export interface SubstituteChain {
   links: ResolvedFallbackLink[];
   /** The chain's expansion mode: a local Claude session walks accounts, any other session engines. */
   accountMode: boolean;
-  /** The model a link itself names, as opposed to the one it inherits from the session or the engine's `fallbackModelMap`. */
+  /** The model a link's entry wrote, as opposed to the one it inherits from the session or the engine's `fallbackModelMap` (which a swap derives itself). */
   namedModel: (link: ResolvedFallbackLink) => string | undefined;
 }
 
@@ -60,10 +60,7 @@ export function resolveSubstituteChain(input: ChooseSubstituteInput, health: Eng
   const scope = { scoped: substituteScoped(session, input.remoteTarget), remote: Boolean(remote) };
   const registry = runtimeRegistry(input);
   const { source, links } = sessionFallbackChain({ config, employee, session: own, registry, health, scope });
+  const namedModel = (link: ResolvedFallbackLink): string | undefined => (link.modelNamed ? link.model : undefined);
   const accountMode = own.engine === "claude" && !remote;
-  const namedModel = (link: ResolvedFallbackLink): string | undefined => {
-    const inherited = resolveLinkModel(config, registry, own, { engine: link.engine, ...(link.profile === undefined ? {} : { profile: link.profile }) });
-    return link.model !== inherited ? link.model : undefined;
-  };
   return { source, links: judgedOnEmployeeAccount(links, input, accountMode), accountMode, namedModel };
 }

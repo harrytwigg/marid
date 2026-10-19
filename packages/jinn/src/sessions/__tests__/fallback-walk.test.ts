@@ -14,11 +14,12 @@ import type { FallbackHop } from "../../shared/fallback-chain-wire.js";
  */
 
 const signedOut = vi.hoisted(() => ({ dirs: new Set<string>() }));
+const catalogue = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
 // No catalogue is listed for any engine, so a link's model is never "not served": what a walk does with a model is not about discovery.
 vi.mock("../../shared/models.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../shared/models.js")>()),
   engineAvailable: () => true,
-  getModelRegistry: () => ({}),
+  getModelRegistry: () => catalogue.value,
 }));
 vi.mock("../../shared/claude-profile-signin.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../shared/claude-profile-signin.js")>()),
@@ -137,6 +138,7 @@ beforeEach(async () => {
   fs.rmSync(path.join(tmp, "tmp", "engine-health.json"), { force: true });
   registerEmployeeAccountResolver((name) => (name === "worker-a" ? ACCOUNT_A : undefined));
   signedOut.dirs.clear();
+  catalogue.value = {};
   authSeen.errors.length = 0;
 });
 
@@ -598,4 +600,138 @@ describe("what a hop's thread carries (docs/fallback-chains.md, Context across a
     expect(calls[0]).toMatchObject({ engine: "opencode", resume: undefined });
     expect(calls[0]!.prompt).toMatch(/^Continue this conversation/);
   });
+});
+
+describe("an ordinary failure on a link is the turn's failure, not a service", () => {
+  it("is handed back as the result, keeps the thread id the link minted, and does not record the link as having served", async () => {
+    const { engines } = scripted((call) => (who(call) === "B/sonnet" ? { sessionId: "b-thread", result: "", error: "socket hang up ECONNRESET" } : limited()));
+    const id = newSession();
+    const outcome = await handleRateLimit(limitedTurn(id, employee(), engines).opts);
+
+    expect(outcome).toMatchObject({ kind: "fallback", result: { error: "socket hang up ECONNRESET" } });
+    const row = reg.getSession(id)!;
+    expect(row.engineSessions?.[`claude:${claudeProfileFromDir(DIR_B).key}`]?.id).toBe("b-thread");
+    expect((row.transportMeta as Record<string, unknown>).fallbackServedBy).toBeUndefined();
+  });
+});
+
+describe("what a run that ran out names", () => {
+  async function standingOnB() {
+    const first = scripted((call) => (who(call) === "B/sonnet" ? answer("on B", "b-thread") : limited()));
+    const id = newSession();
+    await handleRateLimit(limitedTurn(id, employee(), first.engines).opts);
+    reg.updateSession(id, { status: "idle" } as never);
+    fs.rmSync(path.join(tmp, "tmp", "engine-health.json"), { force: true });
+    return id;
+  }
+
+  it("includes the stand-in the turn started on, first, then each link tried in the walk", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+    const id = await standingOnB();
+    const { engines } = scripted(() => limited());
+    const turn = limitedTurn(id, employee(), engines);
+    const outcome = handleRateLimit(turn.opts);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(turn.seen.waiting[0]!.exhausted?.tried).toEqual(["claude · B · sonnet", "opencode · x-provider/model-x", "opencode · y-provider/model-y"]);
+    expect(turn.seen.waiting[0]!.reason).toMatch(/was tried \(claude · B · sonnet, opencode · x-provider\/model-x, opencode · y-provider\/model-y\)/);
+    reg.updateSession(id, { status: "idle" } as never);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await outcome;
+  });
+
+  it("names the stand-in alone when it was the chain's only link", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+    const only = employee({ fallback: [CLAUDE_B] });
+    const first = scripted((call) => (who(call) === "B/sonnet" ? answer("on B", "b-thread") : limited()));
+    const id = newSession();
+    await handleRateLimit(limitedTurn(id, only, first.engines).opts);
+    reg.updateSession(id, { status: "idle" } as never);
+
+    const turn = limitedTurn(id, only, scripted(() => limited()).engines);
+    const outcome = handleRateLimit(turn.opts);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(turn.seen.waiting[0]!.exhausted?.tried).toEqual(["claude · B · sonnet"]);
+    expect(turn.seen.waiting[0]!.reason).toMatch(/was tried \(claude · B · sonnet\)/);
+    reg.updateSession(id, { status: "idle" } as never);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await outcome;
+  });
+});
+
+describe("a session's own fallback target is one link", () => {
+  async function standingOnBWithTarget(target: { engine: string; model: string }) {
+    const first = scripted((call) => (who(call) === "B/sonnet" ? answer("on B", "b-thread") : limited()));
+    const id = newSession();
+    await handleRateLimit(limitedTurn(id, employee(), first.engines).opts);
+    reg.updateSession(id, { status: "idle", fallbackTarget: target } as never);
+    fs.rmSync(path.join(tmp, "tmp", "engine-health.json"), { force: true });
+    return id;
+  }
+
+  it("ends the walk when that link cannot be launched (its profile is signed out), instead of choosing it again", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+    catalogue.value = { claude: { models: [{ id: "opus" }, { id: "sonnet" }, { id: "haiku" }] } };
+    const id = await standingOnBWithTarget({ engine: "claude", model: "haiku" });
+    signedOut.dirs.add(DIR_B);
+    const { engines, calls } = scripted(() => limited());
+    const turn = limitedTurn(id, employee(), engines);
+    const outcome = handleRateLimit(turn.opts);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(calls).toHaveLength(0);
+    expect(turn.seen.starts).toHaveLength(1);
+    expect(turn.seen.waiting[0]!.reason).toBe("the chosen fallback claude (haiku) is signed out");
+    expect(hopsOf(id).length).toBeLessThanOrEqual(4);
+    reg.updateSession(id, { status: "idle" } as never);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await outcome;
+  });
+
+  it("says how the target failed: a model it does not serve is not 'limited too'", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+    catalogue.value = { codex: { models: [{ id: "gpt-mini" }] } };
+    const first = scripted((call) => (who(call) === "B/sonnet" ? answer("on B") : limited()));
+    const id = newSession();
+    await handleRateLimit(limitedTurn(id, employee(), first.engines).opts);
+    reg.updateSession(id, { status: "idle", fallbackTarget: { engine: "codex", model: "gpt-mini" } } as never);
+    fs.rmSync(path.join(tmp, "tmp", "engine-health.json"), { force: true });
+
+    const { engines } = scripted((call) => (call.engine === "codex" ? failed("invalid model: gpt-mini") : limited()));
+    const turn = limitedTurn(id, employee(), engines);
+    const outcome = handleRateLimit(turn.opts);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(turn.seen.starts).toHaveLength(1);
+    expect(turn.seen.waiting[0]!.reason).toBe("the chosen fallback codex (gpt-mini) does not serve this model");
+    reg.updateSession(id, { status: "idle" } as never);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await outcome;
+  });
+});
+
+describe("an engine stand-in holds the session when the chain runs out", () => {
+  it("hands back at the override's until, as an account stand-in does", async () => {
+    const chain = employee({ fallback: [OPENCODE_X] });
+    const first = scripted((call) => (who(call) === "x-provider/model-x" ? answer("on X", "x-thread") : limited()));
+    const id = newSession();
+    await handleRateLimit(limitedTurn(id, chain, first.engines).opts);
+    reg.updateSession(id, { status: "idle" } as never);
+    expect(reg.getSession(id)!.engine).toBe("opencode");
+    const standing = (reg.getSession(id)!.transportMeta as Record<string, Record<string, unknown>>).engineOverride!;
+    const until = new Date(Date.now() + 1500);
+    reg.updateSession(id, { transportMeta: { ...(reg.getSession(id)!.transportMeta as object), engineOverride: { ...standing, until: until.toISOString() } } } as never);
+
+    const second = scripted(() => limited(resetsIn(5 * 24 * HOUR)));
+    const outcome = await handleRateLimit(limitedTurn(id, chain, second.engines, { resetsAt: resetsIn(5 * 24 * HOUR) }).opts);
+
+    expect(outcome.kind).toBe("handback");
+    expect(Date.now()).toBeGreaterThanOrEqual(until.getTime());
+    expect(second.calls).toHaveLength(0);
+    const row = reg.getSession(id)!;
+    expect(row).toMatchObject({ engine: "claude", model: "opus" });
+    expect(overrideOf(id)).toBeUndefined();
+    expect(runOf(id)).toBeUndefined();
+  }, 15_000);
 });

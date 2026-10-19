@@ -96,4 +96,19 @@ describe("GET /api/sessions/:id after a walked turn", () => {
     registry.updateSession(session.id, { status: "idle" } as never);
     expect((await outcome).kind).toBe("cancelled");
   }, 20_000);
+
+  it("an API reset ends the run and keeps the hops", async () => {
+    const registry = await import("../../sessions/registry.js");
+    const session = makeParent(null);
+    const run = { source: "engine", position: 1, tried: ["claude||opus"], startedAt: "2026-10-19T10:00:00.000Z" };
+    const hops = [{ at: "2026-10-19T10:00:00.000Z", from: "claude||opus", to: "codex||", fromLabel: "claude · opus", toLabel: "codex", reason: "rate-limit" }];
+    registry.updateSession(session.id, { transportMeta: { engineOverride: { originalEngine: "claude", originalModel: "opus", until: "2999-01-01T00:00:00Z" }, fallbackRun: run, fallbackHops: hops } } as never);
+
+    expect((await call("POST", `/api/sessions/${session.id}/reset`)).status).toBe(200);
+
+    const meta = registry.getSession(session.id)!.transportMeta as Record<string, unknown>;
+    expect(meta.fallbackRun).toBeUndefined();
+    expect(meta.engineOverride).toBeUndefined();
+    expect(meta.fallbackHops).toEqual(hops);
+  });
 });

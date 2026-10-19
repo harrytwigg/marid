@@ -167,6 +167,21 @@ describe("a string entry keeps the old derivation of its model", () => {
   });
 });
 
+describe("a model an entry wrote is a choice, even when it equals the session's", () => {
+  const mapped = configWith({ fallbackModelMap: { opus: "haiku" }, accounts: { friend: { configDir: FRIEND, fallback: [] }, other: { configDir: path.join(os.tmpdir(), "claude-chain-other") } } });
+
+  it("runs as written: the account's fallbackModelMap does not rewrite it", () => {
+    const config = { ...mapped, engines: { ...mapped.engines, claude: { ...mapped.engines.claude, fallback: [{ engine: "claude", profile: "friend", model: "opus" }] } } } as JinnConfig;
+    expect(decide(config).choice?.model).toBe("opus");
+  });
+
+  it("while an entry that wrote none still leaves it to the swap, through the map", () => {
+    const config = { ...mapped, engines: { ...mapped.engines, claude: { ...mapped.engines.claude, fallback: [{ engine: "claude", profile: "friend" }, "codex"] } } } as JinnConfig;
+    expect(decide(config).choice?.model).toBeUndefined();
+    expect(decide(config).choice?.accounts?.fallbackModelMap).toEqual({ opus: "haiku" });
+  });
+});
+
 describe("a session with its own fallback target", () => {
   it("takes exactly that, as one link after its own target, and never the chain", () => {
     const session = makeSession({ engine: "claude", fallbackTarget: { engine: "codex", model: "gpt-mini" } });

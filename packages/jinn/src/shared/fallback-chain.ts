@@ -113,7 +113,7 @@ export function resolveFallbackLinks(env: FallbackChainEnv, subject: FallbackCha
   const links: ResolvedFallbackLink[] = [own];
   for (const { link, origin } of expanded) {
     const target = withModel(env, subject, link);
-    const resolved = resolvedLink(env, target, origin);
+    const resolved = { ...resolvedLink(env, target, origin), ...(link.model === undefined ? {} : { modelNamed: true as const }) };
     if (seen.has(resolved.key)) continue;
     seen.add(resolved.key);
     const skip = skipReason(env, subject, target);

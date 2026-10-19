@@ -1,7 +1,7 @@
 import { declaredAccountByKey } from "../shared/claude-accounts-config.js";
 import { accountForEmployee, DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
 import { exhaustedEngineReturnsAt, type EngineHealthReading } from "../shared/engine-health.js";
-import { resolveLinkModel, sessionFallbackChain } from "../shared/fallback-chain.js";
+import { sessionFallbackChain } from "../shared/fallback-chain.js";
 import { isLinkExhausted, linkHealthKey } from "../shared/fallback-chain-health.js";
 import type { FallbackChainSource, ResolvedFallbackLink } from "../shared/fallback-chain-wire.js";
 import type { EngineName } from "../shared/models.js";
@@ -51,12 +51,6 @@ function swapsAccount(own: ResolvedFallbackLink, link: ResolvedFallbackLink): bo
   return own.engine === "claude" ? link.account !== own.account : link.profile !== undefined;
 }
 
-/** The model a link names for itself: one it inherits from the session is the target left's, and means nothing on the link. */
-function namedModelOf(args: RerouteArgs, session: Session, link: ResolvedFallbackLink): string | undefined {
-  const inherited = resolveLinkModel(args.config, args.registry, session, { engine: link.engine, ...(link.profile === undefined ? {} : { profile: link.profile }) });
-  return link.model !== undefined && link.model !== inherited ? link.model : undefined;
-}
-
 /** The account swap a link makes, when it is another Claude account than the session would run. */
 function accountSwapOf(args: RerouteArgs, own: ResolvedFallbackLink, link: ResolvedFallbackLink): SessionReroute["account"] {
   if (!swapsAccount(own, link)) return undefined;
@@ -91,6 +85,7 @@ export function rerouteAtCreation(args: RerouteArgs): RerouteChoice | undefined 
   const index = links.findIndex((link, at) => at > 0 && link.skip === undefined && !isLinkExhausted(health, link, now));
   if (index < 1) return undefined;
   const link = links[index]!;
-  const model = namedModelOf(args, session, link);
+  // A model the entry wrote is the session's; one it inherits is the target left's, and means nothing on the link.
+  const model = link.modelNamed ? link.model : undefined;
   return { engine: link.engine as EngineName, ...(model === undefined ? {} : { model }), reroute: rerouteRecord(args, { own, link, index, source }) };
 }

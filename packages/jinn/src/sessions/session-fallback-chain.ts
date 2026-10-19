@@ -16,6 +16,13 @@ import { metaOf, readFallbackHops, readFallbackRun, sessionAtOwnTarget } from ".
  * Persisted state is read defensively: a malformed field reads as absent. `next`
  * is what the runtime would pick (`nextFallbackLink`), so the two cannot disagree.
  */
+/** The key of the target that served the latest turn, when the session records one. */
+function servedKeyOf(meta: Record<string, unknown>): string | null {
+  const served = meta.fallbackServedBy;
+  const key = typeof served === "object" && served !== null ? (served as { key?: unknown }).key : undefined;
+  return typeof key === "string" ? key : null;
+}
+
 export function sessionFallbackChainView(options: SessionFallbackChainOptions): SessionFallbackChainView {
   // A session standing on a stand-in has the chain of the target it was moved off: resolve against that.
   const { source, links } = sessionFallbackChain({ ...options, session: sessionAtOwnTarget(options.session) });
@@ -26,13 +33,11 @@ export function sessionFallbackChainView(options: SessionFallbackChainOptions): 
   const hops = readFallbackHops(meta);
   // A session waiting on its own target after the chain ran out has nothing next: the wait is what comes before any new run.
   const ranOut = hops[0]?.to === null && options.session.status === "waiting";
-  const served = meta.fallbackServedBy;
-  const servedKey = typeof served === "object" && served !== null ? (served as { key?: unknown }).key : undefined;
   return {
     source,
     links,
     position,
-    servedBy: typeof servedKey === "string" ? servedKey : null,
+    servedBy: servedKeyOf(meta),
     next: ranOut ? null : nextFallbackLink(links, { position, tried }, options.health, options.now)?.link.key ?? null,
     hops,
   };

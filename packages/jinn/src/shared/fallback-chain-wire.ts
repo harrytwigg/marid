@@ -73,6 +73,8 @@ export interface ResolvedFallbackLink extends FallbackLink {
   /** Present when the link cannot be used at all for this subject or session. */
   skip?: FallbackSkipReason;
   health?: FallbackLinkHealth;
+  /** True when the entry wrote a model itself (as opposed to inheriting the session's or a `fallbackModelMap` translation): that model is the link's choice. */
+  modelNamed?: true;
 }
 
 /** One move along a chain, recorded on the session and announced in its transcript. */

@@ -63,6 +63,8 @@ interface Walk {
   hops: FallbackHop[];
   written: number;
   flipped: boolean;
+  /** A link has failed in a way that moves the walk on. */
+  failedOver: boolean;
   failure: Failure;
   triedLabels: string[];
   ownLabel: string;
@@ -102,6 +104,8 @@ function adopt(w: Walk, decision: SubstituteDecision): void {
   w.tried.add(here.key);
   w.failure.end = endOf(here);
   for (const key of w.runAtStart?.tried ?? []) w.tried.add(key);
+  // What the run has tried so far, own target apart, in chain order: the notice names it all.
+  w.triedLabels = chain.links.slice(1).filter((link) => w.tried.has(link.key)).map((link) => link.label);
 }
 
 function startWalk(input: WalkInput): Walk {
@@ -109,7 +113,7 @@ function startWalk(input: WalkInput): Walk {
   const metaBefore = (getSession(session.id) ?? session).transportMeta;
   return {
     input, metaBefore, runAtStart: readFallbackRun(metaOf({ transportMeta: metaBefore })), tried: new Set(), cursor: 0, source: undefined,
-    hops: [], written: 0, flipped: false, triedLabels: [], ownLabel: "", startedAt: new Date().toISOString(),
+    hops: [], written: 0, flipped: false, failedOver: false, triedLabels: [], ownLabel: "", startedAt: new Date().toISOString(),
     failure: { engine: input.limited.engine, account: input.limited.account, reason: limitReason(originalResult), resetsAt: rateLimit.resetsAt },
   };
 }
@@ -120,7 +124,8 @@ export async function walkFallbackChain(input: WalkInput): Promise<WalkOutcome> 
   for (let pass = 0; pass < 64; pass++) {
     const decision = choose(w);
     adopt(w, decision);
-    if (w.source === "session" && w.flipped) return await unserved(w, { ...decision, reason: sessionTargetLimited(w) });
+    // A session's own target is one link: once it has failed there is nothing else, and the reason says how it failed.
+    if (w.source === "session" && w.failedOver) return await unserved(w, { ...decision, reason: sessionTargetFailed(w) });
     if (!decision.choice || !decision.next || !decision.chain) return await unserved(w, decision);
     const outcome = await moveOnto(w, decision as Found);
     if (outcome) return outcome;
@@ -128,9 +133,15 @@ export async function walkFallbackChain(input: WalkInput): Promise<WalkOutcome> 
   return await unserved(w, {});
 }
 
-function sessionTargetLimited(w: Walk): string {
+const TARGET_FAILED: Record<FallbackHopReason, string> = {
+  "rate-limit": "is limited too", quota: "is limited too", "retry-exhausted": "is limited too",
+  "invalid-model": "does not serve this model", auth: "is signed out",
+};
+
+function sessionTargetFailed(w: Walk): string {
   const target = w.input.opts.session.fallbackTarget ?? getSession(w.input.opts.session.id)?.fallbackTarget;
-  return target ? `the chosen fallback ${target.engine} (${target.model}) is limited too` : "the chosen fallback is limited too";
+  const how = TARGET_FAILED[w.failure.reason];
+  return target ? `the chosen fallback ${target.engine} (${target.model}) ${how}` : `the chosen fallback ${how}`;
 }
 
 /** Move the turn onto the chosen link and run it there. Undefined: that link failed in a way that moves on, so the walk goes round again. */
@@ -219,6 +230,7 @@ async function launch(w: Walk, found: Found, hop: FallbackHop): Promise<WalkOutc
 /** The link failed in a way that moves the walk on: remember it, and hold a limit against its target. */
 function failedOver(w: Walk, found: Found, failure: { reason: FallbackHopReason; resetsAt?: number; isLimit: boolean }, result?: EngineResult): void {
   const { link } = found.next;
+  w.failedOver = true;
   w.tried.add(link.key);
   w.triedLabels.push(link.label);
   w.cursor = found.next.index;
@@ -234,7 +246,9 @@ async function served(w: Walk, found: Found, model: string | undefined, result: 
   if (live) {
     // The live row carries the override, so an account substitute's id lands in its own account's slot.
     const thread = result.sessionId ? nextEngineSessionFields(live, found.choice.engine, result.sessionId) : {};
-    updateSessionForAttempt(session.id, attemptToken, { ...thread, transportMeta: withServedBy(metaOf(live), servedBy(found.next.link)) as never });
+    // A link that failed in an ordinary way (a dropped connection, say) did not serve the turn; its thread id is still kept.
+    const served = result.error ? {} : { transportMeta: withServedBy(metaOf(live), servedBy(found.next.link)) as never };
+    updateSessionForAttempt(session.id, attemptToken, { ...thread, ...served });
   }
   await hooks.onFallbackComplete?.(result, { engine: found.choice.engine as EngineName, model });
   return { kind: "served", result };
