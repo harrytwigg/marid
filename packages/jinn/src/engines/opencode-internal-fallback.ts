@@ -68,7 +68,8 @@ function endOfComment(text: string, start: number): number {
 }
 
 /** JSON with `//` and block comments and trailing commas, as `opencode.jsonc` allows. */
-export function parseJsonc(text: string): unknown {
+export function parseJsonc(raw: string): unknown {
+  const text = raw.replace(/^\uFEFF/, "");
   let out = "";
   let i = 0;
   while (i < text.length) {
@@ -92,13 +93,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** The name a plugin entry goes by: the package without its version, or a file path's base name. */
+/** The package or file a plugin entry names: a string, a `[name, options]` tuple (1.x), or `{ package }` (2.x). */
+export function pluginEntrySpec(entry: unknown): string | undefined {
+  if (typeof entry === "string") return entry;
+  if (Array.isArray(entry)) return typeof entry[0] === "string" ? entry[0] : undefined;
+  return isRecord(entry) && typeof entry.package === "string" ? entry.package : undefined;
+}
+
+/** The name a plugin entry goes by: the package without its version (and `npm:`), or a file path's base name. */
 export function pluginEntryName(entry: unknown): string | undefined {
-  const spec = typeof entry === "string" ? entry : isRecord(entry) && typeof entry.package === "string" ? entry.package : undefined;
+  const spec = pluginEntrySpec(entry);
   if (!spec) return undefined;
   if (/^(?:file:|[./~]|[a-z]:[\\/])/i.test(spec)) return path.basename(spec).replace(/\.[cm]?[jt]s$/, "").toLowerCase();
-  const at = spec.lastIndexOf("@");
-  return (at > 0 ? spec.slice(0, at) : spec).toLowerCase();
+  const bare = spec.replace(/^npm:/i, "");
+  const at = bare.lastIndexOf("@");
+  return (at > 0 ? bare.slice(0, at) : bare).toLowerCase();
+}
+
+/** A plugin name without its npm scope: a fork under another scope is the same plugin. */
+function unscoped(name: string): string {
+  return name.startsWith("@") ? name.slice(name.indexOf("/") + 1) : name;
 }
 
 /** One place a fallback is configured, as `jinn doctor` tells the operator what to change. */
@@ -131,8 +145,8 @@ function isDirectory(dir: string): boolean {
 
 function configFindings(file: string): FallbackFinding[] {
   return configEntries(readJson(file))
-    .filter(({ entry }) => FALLBACK_PLUGINS.includes(pluginEntryName(entry) ?? ""))
-    .map(({ key, entry }): FallbackFinding => ({ kind: "config-plugin", file, key, entry: typeof entry === "string" ? entry : JSON.stringify(entry) }));
+    .filter(({ entry }) => FALLBACK_PLUGINS.includes(unscoped(pluginEntryName(entry) ?? "")))
+    .map(({ key, entry }): FallbackFinding => ({ kind: "config-plugin", file, key, entry: pluginEntrySpec(entry) ?? "" }));
 }
 
 function pluginDirFindings(dir: string): FallbackFinding[] {

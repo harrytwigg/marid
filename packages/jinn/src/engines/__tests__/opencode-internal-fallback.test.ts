@@ -49,6 +49,10 @@ describe("detectOpencodeInternalFallback", () => {
     { name: "the plugin in a .jsonc config with comments and a trailing comma", files: { "home/.config/opencode/opencode.jsonc": '{\n // fallback\n "plugin": ["opencode-rate-limit", /* x */],\n}' }, sourceIncludes: "opencode.jsonc" },
     { name: "the plugin in ~/.opencode/opencode.json", files: { "home/.opencode/opencode.json": '{"plugin": ["opencode-rate-limit@1.4.0"]}' }, sourceIncludes: path.join(".opencode", "opencode.json") },
     { name: "the plugin in a project opencode.json", files: { "project/opencode.json": '{"plugin": ["opencode-rate-limit"]}' }, sourceIncludes: path.join("project", "opencode.json") },
+    { name: "the plugin as a [name, options] tuple", files: { "home/.config/opencode/opencode.json": '{"plugin": [["opencode-rate-limit", {"fallbackModels": []}]]}' }, sourceIncludes: "opencode.json" },
+    { name: "a fork of the plugin under another npm scope", files: { "home/.config/opencode/opencode.json": '{"plugin": ["@acme/opencode-rate-limit@1.0.0"]}' }, sourceIncludes: "opencode.json" },
+    { name: "the plugin with an npm: prefix", files: { "home/.config/opencode/opencode.json": '{"plugin": ["npm:opencode-rate-limit"]}' }, sourceIncludes: "opencode.json" },
+    { name: "a config file that starts with a byte-order mark", files: { "home/.config/opencode/opencode.json": '\uFEFF{"plugin": ["opencode-rate-limit"]}' }, sourceIncludes: "opencode.json" },
     { name: "the plugin named in a 2.x plugins entry with options", files: { "home/.config/opencode/opencode.json": '{"plugins": [{"package": "opencode-rate-limit@1.4.0", "options": {}}]}' }, sourceIncludes: "opencode.json" },
     { name: "a model-fallback.js plugin file in the config dir", files: { "home/.config/opencode/plugin/model-fallback.js": "export default {}" }, sourceIncludes: path.join("plugin", "model-fallback.js") },
     { name: "a model-fallback plugin directory under plugins/", files: { "home/.config/opencode/plugins/model-fallback/index.js": "export default {}" }, sourceIncludes: path.join("plugins", "model-fallback") },
@@ -84,6 +88,13 @@ describe("detectOpencodeInternalFallback", () => {
     expect(detect().detected).toBe(false);
   });
 
+  it("names only the package of an entry that carries options, not the options", () => {
+    put("home/.config/opencode/opencode.json", '{"plugin": [["opencode-rate-limit@1.4.0", {"apiKey": "secret-value"}]], "plugins": [{"package": "model-fallback", "options": {"token": "secret-value"}}]}');
+    const found = detect();
+    expect(found.sources.some((s) => s.includes("secret-value"))).toBe(false);
+    expect(found.sources.map((s) => s.replace(/^.*\(plugin (.*)\)$/, "$1"))).toEqual(["opencode-rate-limit@1.4.0", "model-fallback"]);
+  });
+
   it("lists each source once, and changes nothing on disk", () => {
     const settings = put("home/.opencode/rate-limit-fallback.json", "{}");
     const before = fs.readFileSync(settings, "utf-8");
@@ -99,6 +110,8 @@ describe("helpers", () => {
     expect(pluginEntryName("@scope/thing@2.0.0")).toBe("@scope/thing");
     expect(pluginEntryName({ package: "opencode-rate-limit@1.4.0" })).toBe("opencode-rate-limit");
     expect(pluginEntryName("file:///a/b/model-fallback.js")).toBe("model-fallback");
+    expect(pluginEntryName(["opencode-rate-limit@1.4.0", {}])).toBe("opencode-rate-limit");
+    expect(pluginEntryName("npm:opencode-rate-limit")).toBe("opencode-rate-limit");
     expect(pluginEntryName(42)).toBeUndefined();
   });
 

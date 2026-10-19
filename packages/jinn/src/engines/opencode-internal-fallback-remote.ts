@@ -18,10 +18,16 @@ export const FALLBACK_FACTS_SNIPPET = `
   ocfb() { n=$((n+1)); printf 'opencodefallback.%s=%s\\n' "$n" "$1"; }
   for d in "$xdg/opencode" "$HOME/.opencode"; do
     for f in "$d/opencode.json" "$d/opencode.jsonc" "$d/config.json"; do
-      if [ -f "$f" ] && grep -q -E '"(opencode-rate-limit|[^"]*model-fallback)' "$f" 2>/dev/null; then ocfb "$f"; fi
+      if [ -f "$f" ] && grep -q -E '"(npm:)?(@[^"/]*/)?(opencode-rate-limit|[^"]*model-fallback)' "$f" 2>/dev/null; then ocfb "$f"; fi
     done
-    for f in "$d"/plugin/model-fallback.* "$d"/plugin/opencode-rate-limit.* "$d"/plugins/model-fallback "$d"/plugins/opencode-rate-limit; do
-      if [ -e "$f" ]; then ocfb "$f"; fi
+    for p in "$d/plugin" "$d/plugins"; do
+      for f in "$p"/*; do
+        [ -e "$f" ] || continue
+        case "$f" in
+          */model-fallback.js|*/model-fallback.mjs|*/model-fallback.cjs|*/model-fallback.ts|*/opencode-rate-limit.js|*/opencode-rate-limit.mjs|*/opencode-rate-limit.cjs|*/opencode-rate-limit.ts) ocfb "$f" ;;
+          */model-fallback|*/opencode-rate-limit) if [ -d "$f" ]; then ocfb "$f"; fi ;;
+        esac
+      done
     done
   done
   for d in "$HOME/.opencode" "$HOME/opencode" "$HOME" "$xdg/.opencode" "$xdg/opencode" "$xdg"; do

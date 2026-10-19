@@ -156,7 +156,7 @@ export function registerFallbackCommand(program: Command): void {
     .command("migrate-opencode")
     .description("Print the gateway fallback chain equivalent to this host's opencode rate-limit-fallback.json")
     .option("--file <path>", "Read this settings file instead of searching the plugin's paths")
-    .option("--write", "Merge the engine default chain into config.yaml (refuses when engines.opencode.fallback is already set)")
+    .option("--write", "Add the engine default chain to config.yaml, creating engines.opencode if needed (refuses when engines.opencode.fallback is already set; YAML comments in config.yaml are not kept)")
     .action(async (opts) => {
       await runMigrateOpencode({ file: opts.file, write: opts.write });
     });

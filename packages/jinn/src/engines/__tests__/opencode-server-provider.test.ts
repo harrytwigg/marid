@@ -171,6 +171,25 @@ describe("a host whose opencode has a model-fallback plugin", { timeout: 20_000 
     expect((await serverLog(pool)).some((e) => /^\/session\/[^/]+\/abort$/.test(e.url))).toBe(true);
   });
 
+  it("marks the stopped copy as a Jinn prompt, so the next turn is not told the request was cancelled", async () => {
+    SERVER_TURN_TIMING.closeWaitMs = 300;
+    pluginOnHost.value = true;
+    const { pool, engine } = harness();
+    const first = await engine.run(runOpts(limited));
+    expect(first.error).toContain("model-fallback plugin");
+    const second = await engine.run({ ...runOpts("PROVIDERRETRY build it again"), resumeSessionId: first.sessionId });
+    expect(second.error).toBeUndefined();
+    const server = pool.get("sess-1")!;
+    const stored = await (await fetch(`${server.apiUrl}/session/${first.sessionId}/message`, {
+      headers: { authorization: basicAuthHeader(server.password) },
+    })).json() as Array<{ info: Record<string, unknown>; parts: Array<{ text?: string; metadata?: Record<string, unknown> }> }>;
+    const prompts = stored.filter((m) => m.info.role === "user");
+    // the turn's own prompt, the plugin's copy (now a Jinn prompt), and the second turn's
+    expect(prompts).toHaveLength(3);
+    expect(prompts[1]!.parts[0]!.metadata).toEqual({ jinn: "prompt" });
+    expect(prompts.flatMap((m) => m.parts).some((p) => /cancelled the request/.test(p.text ?? ""))).toBe(false);
+  });
+
   it("leaves a host without the plugin's error, and the copy, as they were", async () => {
     SERVER_TURN_TIMING.closeWaitMs = 300;
     const { pool, engine } = harness();

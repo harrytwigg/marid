@@ -69,6 +69,26 @@ describe("the facts script's opencode fallback probe", () => {
     expect(remoteFallbackSources(runFacts(home))).toEqual([]);
   });
 
+  it("follows the local rules for plugin files: a renamed file is not the plugin, a plugins/ file and a plugin/ directory are", () => {
+    put(".config/opencode/plugin/model-fallback.js.disabled", "x");
+    put(".config/opencode/plugin/model-fallback.test.js", "x");
+    put(".config/opencode/plugin/model-fallback.js.bak", "x");
+    expect(remoteFallbackSources(runFacts(home))).toEqual([]);
+    const inPlugins = put(".config/opencode/plugins/model-fallback.js", "x");
+    const dir = put(".config/opencode/plugin/opencode-rate-limit/index.js", "x");
+    const found = remoteFallbackSources(runFacts(home));
+    expect(found).toHaveLength(2);
+    expect(found).toEqual(expect.arrayContaining([path.dirname(dir), inPlugins]));
+  });
+
+  it("finds the plugin in a config as a tuple, under a scope, or with an npm: prefix", () => {
+    for (const entry of ['[["opencode-rate-limit", {}]]', '["@acme/opencode-rate-limit@1.0.0"]', '["npm:opencode-rate-limit"]']) {
+      fs.rmSync(path.join(home, ".config"), { recursive: true, force: true });
+      const config = put(".config/opencode/opencode.json", `{"plugin": ${entry}}`);
+      expect(remoteFallbackSources(runFacts(home))).toEqual([config]);
+    }
+  });
+
   it("reads a plugin directory under plugins/", () => {
     const dir = put(".opencode/plugins/model-fallback/index.js", "x");
     expect(remoteFallbackSources(runFacts(home))).toEqual([path.dirname(dir)]);

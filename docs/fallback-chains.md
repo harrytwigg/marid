@@ -176,7 +176,7 @@ sessions alone, so it detects and reports one. Checked on the real binaries
 | `OPENCODE_DISABLE_DEFAULT_PLUGINS`, `OPENCODE_DISABLE_PROJECT_CONFIG` | the plugin still switches models | no such variable |
 | `OPENCODE_PURE=1` | stops the plugin, and every other external plugin with it: the operator's provider-auth plugins and the gateway's own staged plugin (the command-timeout cap) | no such variable |
 | `OPENCODE_CONFIG_DIR` pointing elsewhere | not tried | replaces the operator's config directory, so the provider config goes too (`provider.no-route`) |
-| the plugin's own `"enabled": false` | read from the project's `.opencode/`, then `~/.opencode/`, then the config directory: the gateway would have to write into the operator's project or home | the same |
+| the plugin's own `"enabled": false` | the plugin reads the first existing file of the project, `~` and the config directory (each under `.opencode/`, `opencode/`, then bare): the gateway would have to write into the operator's project or home | the same |
 
 What a gateway turn does on a host that still has the plugin (real binaries, the
 same 429 upstream, through the gateway's opencode engine; the default model's
@@ -241,7 +241,7 @@ and `retryPolicy` have no setting of their own: engine health, the
 once-per-run rule (a chain's length bounds the hops) and the return to the
 session's own target at its reset cover them. `jinn fallback migrate-opencode`
 lists each such key it finds, with this reason. `--write` merges only the
-engine default, and refuses when `engines.opencode.fallback` is already set.
+engine default, and refuses when `engines.opencode.fallback` is already set. It goes through the atomic config save, so YAML comments in `config.yaml` are not kept, and an `engines.opencode` block is created when there is none.
 
 ## Testing without real providers
 

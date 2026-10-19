@@ -636,6 +636,32 @@ export class OpencodeServerTurn {
   private async stopPluginCopy(): Promise<void> {
     if (!this.deps.fallbackPluginOnHost?.() || this.lastAnswer === "text" || this.terminationReason) return;
     await this.stopOnServer();
+    await this.markPromptCopies();
+  }
+
+  /**
+   * Give the stopped copy the metadata every Jinn prompt carries. A later turn's
+   * history walk reads an unmarked user message as the operator's request and, the
+   * copy being unanswered, tells the model it was cancelled and quotes it. Best effort.
+   */
+  private async markPromptCopies(): Promise<void> {
+    try {
+      const prompt = buildOpencodePrompt(this.opts);
+      for (const message of await this.messages()) {
+        if (message.info?.role === "user" && message.info.id !== this.userMessageId) await this.markCopyParts(message, prompt);
+      }
+    } catch (err) {
+      logger.warn(`opencode server turn could not mark the prompt a host plugin re-sent in ${this.sessionId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  /** The text parts of one user message that repeat `prompt` without a Jinn tag, tagged. */
+  private async markCopyParts(message: StoredMessage, prompt: string): Promise<void> {
+    const copies = textParts(message).filter((part) => part.text === prompt && readMetadataTag(record(part.metadata)) === undefined);
+    for (const part of copies) {
+      const route = `/session/${encodeURIComponent(this.sessionId)}/message/${encodeURIComponent(str(message.info?.id) ?? "")}/part/${encodeURIComponent(str(part.id) ?? "")}`;
+      await this.request("PATCH", route, { ...part, metadata: { ...record(part.metadata), ...JINN_PROMPT_METADATA } }, AbortSignal.timeout(MARK_TIMEOUT_MS));
+    }
   }
 
   /** What a failed turn adds to its result: when a usage window ends, and that
