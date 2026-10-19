@@ -103,12 +103,13 @@ export default function SettingsPage() {
   /** The document the next write is built from. Held beside the state because two
    *  edits in one tick both have to reach the writer, not just the last render. */
   const configRef = useRef<Config>({})
+  const loadedEnginesRef = useRef<Config["engines"]>(undefined)
   const [configLoading, setConfigLoading] = useState(true)
   const [configError, setConfigError] = useState<string | null>(null)
   const [conflict, setConflict] = useState<{ message: string; remedy?: string } | null>(null)
   const { voiceCapability, reloadVoiceCapability } = useVoiceCapability()
   const { saveState, commit, adoptRevision } = useConfigCommit({
-    blocker: (next) => configSaveBlocker(next.engines, modelRegistry?.engines),
+    blocker: (next) => configSaveBlocker(next.engines, modelRegistry?.engines, loadedEnginesRef.current),
     onSaved: reloadVoiceCapability,
     onConflict: setConflict,
   })
@@ -152,6 +153,7 @@ export default function SettingsPage() {
       .getConfig()
       .then(({ config: loaded, revision }) => {
         configRef.current = loaded as Config
+        loadedEnginesRef.current = (loaded as Config).engines
         setConfig(loaded as Config)
         adoptRevision(revision)
         // Reloading is the way out of a conflict, so it is also what clears it.

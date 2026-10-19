@@ -58,13 +58,22 @@ function chainsOf(engines: EnginesConfig | undefined, names: string[]): { where:
  * Why this config cannot be saved yet because of a chain, or null. Asked before
  * the PUT, as the model-map blocker is, so the document the loader would refuse
  * never goes out. Asks nothing until the registry has said which engines exist.
+ * With `loaded` (the engines block as last read), only chains that differ from it are
+ * asked: one already stored with a problem still shows it on its card, and does not
+ * stop an edit to another chain from saving.
  */
-export function chainSaveBlocker(engines: EnginesConfig | undefined, registry: RegistryEngines | undefined): string | null {
+export function chainSaveBlocker(
+  engines: EnginesConfig | undefined,
+  registry: RegistryEngines | undefined,
+  loaded?: EnginesConfig,
+): string | null {
   const names = Object.keys(registry ?? {})
   if (names.length === 0) return null
   const ctx = { engines: names, profiles: new Set(accountNames(engines)) }
-  const problems = chainsOf(engines, names).flatMap(({ where, chain, self }) =>
-    fallbackChainProblems(where, chain, { ...ctx, self }),
-  )
+  const before = new Map(chainsOf(loaded, names).map(({ where, chain }) => [where, JSON.stringify(chain)]))
+  const problems = chainsOf(engines, names)
+    // A chain this edit did not change is the gateway's to report, not a reason to refuse an unrelated save.
+    .filter(({ where, chain }) => loaded === undefined || before.get(where) !== JSON.stringify(chain))
+    .flatMap(({ where, chain, self }) => fallbackChainProblems(where, chain, { ...ctx, self }))
   return problems.length > 0 ? `Cannot save: ${problems.join("; ")}` : null
 }

@@ -67,3 +67,22 @@ describe('chainSaveBlocker', () => {
     expect(chainSaveBlocker({ claude: { fallback: [{ engine: 'codex' }] } }, {})).toBeNull()
   })
 })
+
+describe('chainSaveBlocker with the engines as last read', () => {
+  const registry = { claude: { name: 'claude' }, codex: { name: 'codex' }, opencode: { name: 'opencode' } }
+  const stored = { claude: { fallback: [{ engine: 'codex' }], accounts: { work: { fallback: [{ engine: 'codex' }, { engine: 'codex' }] } } } }
+
+  it('leaves a chain it did not change alone, even with a problem already in it', () => {
+    const edited = { claude: { ...stored.claude, fallback: [{ engine: 'codex' }, { engine: 'opencode' }] } }
+    expect(chainSaveBlocker(edited, registry, stored)).toBeNull()
+  })
+
+  it('still refuses the chain that changed while a problem is in it', () => {
+    const edited = { claude: { ...stored.claude, accounts: { work: { fallback: [{ engine: 'codex' }, { engine: 'codex' }, { engine: 'opencode' }] } } } }
+    expect(chainSaveBlocker(edited, registry, stored)).toContain('engines.claude.accounts.work.fallback[1] duplicates')
+  })
+
+  it('asks every chain when nothing was read', () => {
+    expect(chainSaveBlocker(stored, registry)).toContain('engines.claude.accounts.work.fallback[1] duplicates')
+  })
+})

@@ -130,8 +130,9 @@ export function allModelMapProblems(engines: EnginesConfig | undefined, served: 
 export function configSaveBlocker(
   engines: EnginesConfig | undefined,
   registryEngines: Record<string, { name: string; models: { id: string }[] }> | undefined,
+  loaded?: EnginesConfig,
 ): string | null {
-  const chainBlocker = chainSaveBlocker(engines, registryEngines)
+  const chainBlocker = chainSaveBlocker(engines, registryEngines, loaded)
   if (chainBlocker) return chainBlocker
   const served: ServedModels = Object.fromEntries(
     Object.values(registryEngines ?? {}).map((engine) => [engine.name, engine.models.map((model) => model.id)]),
