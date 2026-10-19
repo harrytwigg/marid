@@ -22,6 +22,13 @@ describe("decodeGatewayEvent", () => {
     })).toBeNull()
   })
 
+  it("accepts a board hook run frame and rejects one with a missing field", () => {
+    const payload = { id: "bhr_1", hook: "review-merge", status: "running" }
+    expect(decodeGatewayEvent({ event: "hooks:run", payload })).toEqual({ event: "hooks:run", payload })
+    expect(decodeGatewayEvent({ event: "hooks:run", payload: { id: "bhr_1", hook: "review-merge" } })).toBeNull()
+    expect(decodeGatewayEvent({ event: "hooks:run", payload: { ...payload, status: 3 } })).toBeNull()
+  })
+
   it("accepts the status a session reports while its background sub-agents work", () => {
     const payload = {
       sessionId: "s-1",

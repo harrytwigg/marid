@@ -159,7 +159,7 @@ export function relinkRole(session: Session, role: WorkItemLinkRole): WorkItemLi
 export function landInLiveSession(input: LandInLiveSessionInput): void {
   const { workItem, session } = input;
   rehomeAttachmentsToSession(input.attachments, session.id);
-  linkSession(workItem.id, session.id, input.actor, relinkRole(session, input.role));
+  linkSession(workItem.id, session.id, input.actor, relinkRole(session, input.role), { via: "delegation" });
   input.claim.bind(session.id);
   if (input.delegateEmployee?.displayName) {
     updateSession(session.id, { transportMeta: { ...(session.transportMeta ?? {}), delegationEmployeeDisplay: input.delegateEmployee.displayName } });

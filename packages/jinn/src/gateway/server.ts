@@ -47,6 +47,7 @@ import { boardWalkCronHandler } from "../board-walk/job.js";
 import { setCronActionHandler } from "../cron/actions.js";
 import { describeSeed, seedBoardWalk } from "../board-walk/seed.js";
 import { installTodoCommentRouting } from "./todo-comment-routing.js";
+import { installBoardHooks, stopBoardHooks } from "../board-hooks/index.js";
 import { HookRegistry } from "./hook-registry.js";
 import { writeGatewayInfo, readGatewayInfo, updateGatewayPtyPids, recordedByAnotherHome, gatewayBaseUrl } from "./gateway-info.js";
 import { authenticateGatewayRequest, authRequiredForRequest, ensureGatewayAuthToken, shouldRequireGatewayAuth, validateGatewayExposure, verifyGatewayAuth } from "./auth.js";
@@ -911,6 +912,8 @@ export async function startGateway(
   // Comment routing wakes a mentioned employee; like the walk, it starts
   // sessions through apiContext.
   const stopCommentRouting = installTodoCommentRouting(apiContext);
+  // Board hooks react to board events from the config's `hooks` block (docs/board-hooks.md).
+  installBoardHooks(apiContext);
 
   // Re-read config.yaml into memory. Used by both the file-watcher (debounced)
   // and by API handlers that write config.yaml and need getConfig() to reflect
@@ -1260,7 +1263,7 @@ export async function startGateway(
 
     // Stop the periodic sweeps before we start marking sessions interrupted below — a mid-shutdown sweep must not race the teardown.
     stopStatusReconciler(); stopWorkItemReconciler(); stopTodoSweeps(); stopSessionSchedulers();
-    backgroundRefreshes.stop(); stopCommentRouting();
+    backgroundRefreshes.stop(); stopCommentRouting(); stopBoardHooks();
 
     // Stop caffeinate
     if (caffeinate && caffeinate.exitCode === null) {

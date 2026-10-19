@@ -339,6 +339,7 @@ import { setWorkItemSprint, type Sprint } from "../work-items/sprints.js";
 import { readCreateSprint, sprintRow } from "./work-item-create-sprint.js";
 import { mayOrganiseTags, mayRetagTodo } from "./work-item-standing.js";
 import { handleBoardWalkApi } from "./board-walk-api.js";
+import { handleBoardHooksApi } from "./board-hooks-api.js";
 
 /** Max bytes accepted on /api/internal/hook (loopback-only relay payloads are tiny). */
 const HOOK_BODY_MAX_BYTES = 64 * 1024;
@@ -3645,7 +3646,7 @@ export async function handleApiRequest(
       //    preserved ids (backlog item + idle, undispatched, re-linkable session)
       //    instead of dispatching an untracked turn.
       try {
-        linkSession(workItem.id, session.id, delegationActor, resolveDelegationLinkRole(intent, workItem.status));
+        linkSession(workItem.id, session.id, delegationActor, resolveDelegationLinkRole(intent, workItem.status), { via: "delegation" });
         claim.bind(session.id);
         if (employeeName) recordNewDelegateSession(workItem.id, employeeName, session.id, parentSessionId);
       } catch (linkErr) {
@@ -4237,6 +4238,7 @@ export async function handleApiRequest(
     }
 
     if (await handleBoardWalkApi(req, res, { method, pathname, url }, context)) return;
+    if (await handleBoardHooksApi(req, res, { method, pathname, url }, context)) return;
 
     // POST /api/engine-limits/refresh — currently identical to GET for live
     // sources. Kept as a command-shaped endpoint so the UI/CLI can request a

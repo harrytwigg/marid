@@ -18,6 +18,7 @@ import { toWorkItemLinkRole, type WorkItemLinkRole } from './link-role.js';
 import { searchWorkItemIds, workItemMatchReasons, type WorkItemMatch } from './search.js';
 import type { WorkItemEventKind } from './event-log.js';
 import { OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from './operator-assignee.js';
+import { tapBoardEvent } from './board-event-tap.js';
 
 /**
  * Work-item store — the substrate of the Todos ledger (GRS-002, elevated by
@@ -281,7 +282,9 @@ export function appendWorkItemEvent(input: AppendWorkItemEventInput): WorkItemEv
     );
     return event;
   });
-  return txn();
+  const written = txn();
+  tapBoardEvent(written);
+  return written;
 }
 
 /** Reading the trail back lives in event-log.ts, along with the actors whose
@@ -882,6 +885,10 @@ export function getWorkItemSpend(id: string): number {
  * redundant re-link (e.g. a cron re-fire re-linking the same item to the same session)
  * does not churn `work_items.updated_at` or the event log.
  *
+ * `via` records which path made the link (`delegation` or `dispatch`) on the
+ * `session_linked` event, which is what board hooks key `todo.delegated` and
+ * `todo.dispatched` on; a link with neither fires neither.
+ *
  * `selfStarted` marks the link as one a session made by starting its own Todo
  * with no dispatch (`gateway/todo-self-start.ts`); any other link clears the
  * mark. A marked link holds only while the Todo is being worked: the move that
@@ -892,7 +899,7 @@ export function linkSession(
   sessionId: string,
   actor?: string | null,
   role: WorkItemLinkRole = 'execute',
-  opts: { selfStarted?: boolean } = {},
+  opts: { selfStarted?: boolean; via?: 'delegation' | 'dispatch' } = {},
 ): void {
   const db = initDb();
   const todoId = parseTodoId(workItemId);
@@ -919,7 +926,7 @@ export function linkSession(
       workItemId: todoId,
       kind: 'session_linked',
       actor,
-      detail: { sessionId, role, ...(opts.selfStarted ? { selfStarted: true } : {}) },
+      detail: { sessionId, role, ...(opts.selfStarted ? { selfStarted: true } : {}), ...(opts.via ? { via: opts.via } : {}) },
     });
   });
   txn();

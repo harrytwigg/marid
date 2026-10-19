@@ -220,7 +220,7 @@ export function startTodoDispatcher(
   const session = createDispatcherSession(item, plan, context, opts.transportMeta);
   insertMessage(session.id, "user", plan.prompt);
   try {
-    linkSession(item.id, session.id);
+    linkSession(item.id, session.id, undefined, "execute", { via: "dispatch" });
     plan.claim.bind(session.id);
   } catch (error) {
     plan.claim.release();
