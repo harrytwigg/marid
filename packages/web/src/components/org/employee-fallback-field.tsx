@@ -7,7 +7,12 @@ import type { Employee } from "@/lib/api"
 import { engineDisplayName } from "@/lib/engine-names"
 import { ChainEditor } from "@/routes/settings/engines/chain-editor"
 import { SettingsSelect } from "@/routes/settings/shared"
-import { declaredAccountOf, employeeSubject, inheritedChain } from "./employee-fallback"
+import type { EmployeeFallbackFields } from "@/lib/fallback-chains-api"
+import { employeeChainOf, employeeSubject, fallbackFieldState, sameChain } from "./employee-fallback"
+
+export { employeeChainOf, sameChain }
+/** What the editor adds to its PATCH. */
+export type FallbackPatch = EmployeeFallbackFields
 
 interface EmployeeFallbackFieldProps {
   employee: Employee
@@ -16,6 +21,21 @@ interface EmployeeFallbackFieldProps {
   /** The employee's own chain; null inherits. */
   value: FallbackLink[] | null
   onChange: (next: FallbackLink[] | null) => void
+}
+
+/** The editor's labelled row for the chain, shaped like its other fields. */
+export function EmployeeFallbackRow(props: EmployeeFallbackFieldProps) {
+  return (
+    <div className="flex flex-col gap-[var(--space-1)]">
+      <span className="text-[length:var(--text-caption2)] font-[var(--weight-semibold)] uppercase tracking-[var(--tracking-wide)] text-[var(--text-tertiary)]">
+        Fallback chain
+      </span>
+      <EmployeeFallbackField {...props} />
+      <span className="text-[length:var(--text-caption2)] text-[var(--text-quaternary)]">
+        Where this employee&apos;s sessions go when its own target reaches a limit.
+      </span>
+    </div>
+  )
 }
 
 const INHERIT = "inherit"
@@ -28,11 +48,7 @@ export function EmployeeFallbackField({ employee, engine, value, onChange }: Emp
   const { data: chains } = useFallbackChains(employee.name)
   if (!registry) return null
 
-  const account = engine === "claude" ? declaredAccountOf(employee.claudeProfile, chains) : undefined
-  const inherited = inheritedChain(engine, account, chains)
-  const self: FallbackLink = { engine, ...(account ? { profile: account } : {}) }
-  const shown = value ?? inherited.links
-  const subject = employeeSubject(chains, employee.name)
+  const { inherited, self, shown, subject } = fallbackFieldState(employee, engine, value, chains)
 
   return (
     <div className="flex flex-col gap-[var(--space-1)]" data-employee-fallback>

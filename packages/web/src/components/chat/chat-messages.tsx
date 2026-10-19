@@ -662,7 +662,6 @@ const MessageRow = React.memo(function MessageRow({ msg, index: i, showTimestamp
 
       {/* Notification message — centered system-style banner */}
       {hop && <FallbackHopCard hop={hop} />}
-
       {isNotification && !teammate && !relay && !hop && (
         <div className="flex justify-center px-[var(--space-4)] mb-[var(--space-1)]">
           <div className="notification-msg-bubble flex items-start gap-[var(--space-2)] py-[var(--space-3)] px-[var(--space-4)] rounded-[var(--radius-md)] bg-[var(--fill-secondary)] text-[var(--text-secondary)] text-[length:var(--text-caption1)] leading-[var(--leading-relaxed)] max-w-[85%]">

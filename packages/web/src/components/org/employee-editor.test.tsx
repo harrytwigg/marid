@@ -21,8 +21,9 @@ vi.mock("@/components/chat/model-selector-row", () => ({
 
 // The fallback chain field reads the registry and the chains API; its own tests cover it.
 // The stub drives the editor's side of it: what it patches.
-vi.mock("./employee-fallback-field", () => ({
-  EmployeeFallbackField: ({ onChange }: { onChange: (next: { engine: string }[] | null) => void }) => (
+vi.mock("./employee-fallback-field", async (importActual) => ({
+  ...(await importActual<typeof import("./employee-fallback-field")>()),
+  EmployeeFallbackRow: ({ onChange }: { onChange: (next: { engine: string }[] | null) => void }) => (
     <>
       <button type="button" onClick={() => onChange([{ engine: "codex" }])}>Set custom chain</button>
       <button type="button" onClick={() => onChange(null)}>Inherit chain</button>

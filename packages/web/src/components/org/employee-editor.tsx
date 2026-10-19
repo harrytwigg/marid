@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { api } from "@/lib/api"
 import type { Employee, EmployeeUpdate } from "@/lib/api"
-import type { EmployeeFallbackFields } from "@/lib/fallback-chains-api"
-import { employeeChainOf, sameChain } from "./employee-fallback"
-import { EmployeeFallbackField } from "./employee-fallback-field"
+import { EmployeeFallbackRow, employeeChainOf, sameChain, type FallbackPatch } from "./employee-fallback-field"
 import { isConfined, type DepartmentScopeWire } from "@/lib/department-api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -117,7 +115,7 @@ export function EmployeeEditor({
 
   // Build a patch of only the changed fields.
   const patch = useMemo<EmployeeUpdate>(() => {
-    const p: EmployeeUpdate & EmployeeFallbackFields = {}
+    const p: EmployeeUpdate & FallbackPatch = {}
     if (displayName !== (employee.displayName || employee.name)) p.displayName = displayName.trim()
     if (department !== (employee.department || "")) p.department = department
     if (rank !== employee.rank) p.rank = rank
@@ -271,9 +269,7 @@ export function EmployeeEditor({
         </div>
       </Field>
 
-      <Field label="Fallback chain" hint="Where this employee's sessions go when its own target reaches a limit.">
-        <EmployeeFallbackField employee={employee} engine={selector.engine} value={fallback} onChange={setFallback} />
-      </Field>
+      <EmployeeFallbackRow employee={employee} engine={selector.engine ?? employee.engine} value={fallback} onChange={setFallback} />
 
       <Field label="Persona / instructions">
         {isSystem ? (

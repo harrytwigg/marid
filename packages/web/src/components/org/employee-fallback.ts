@@ -60,3 +60,16 @@ export function inheritedChain(engine: string, account: string | undefined, chai
 export function employeeSubject(chains: FallbackChainsResponse | undefined, name: string): FallbackChainSubject | undefined {
   return subjectOf(chains, "employee", name)
 }
+
+/** What the field shows for an employee on `engine`, with `value` as its own chain (null inherits). */
+export function fallbackFieldState(
+  employee: Employee,
+  engine: string,
+  value: FallbackLink[] | null,
+  chains: FallbackChainsResponse | undefined,
+) {
+  const account = engine === "claude" ? declaredAccountOf(employee.claudeProfile, chains) : undefined
+  const inherited = inheritedChain(engine, account, chains)
+  const self: FallbackLink = { engine, ...(account ? { profile: account } : {}) }
+  return { inherited, self, shown: value ?? inherited.links, subject: employeeSubject(chains, employee.name) }
+}

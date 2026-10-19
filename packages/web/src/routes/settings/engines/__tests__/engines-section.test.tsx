@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type React from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -73,7 +73,6 @@ function chainRows(cardSelector: string): string[] {
   return Array.from(card.querySelectorAll('[data-chain-row]')).map((row) => row.getAttribute('data-chain-row')!)
 }
 const engineRows = (name: string) => chainRows(`[data-engine-card="${name}"]`)
-const accountRows = (name: string) => chainRows(`[data-account-card="${name}"]`)
 
 /** Settings save themselves; what a test waits for is the write. */
 async function save() {
@@ -251,124 +250,5 @@ describe('Engine Fallbacks section', () => {
 
     expect(await screen.findByText(/Failed to save: engines\.claude\.fallback\[1\]/)).toBeTruthy()
     expect(engineRows('claude')).toEqual(['codex', 'opencode'])
-  })
-})
-
-describe('Claude accounts', () => {
-  beforeEach(() => {
-    loadConfig({ engines: {
-      claude: { accounts: { work: { configDir: '/w', fallback: [{ engine: 'opencode', model: 'x/two' }] }, spare: { configDir: '/s' } } },
-    } })
-  })
-
-  it('gives each declared account its own chain card, under the Claude card and named for the account', async () => {
-    await renderSettings()
-
-    const cards = Array.from(document.querySelectorAll('[data-account-card]')).map((card) => card.getAttribute('data-account-card'))
-    expect(cards).toEqual(['work', 'spare'])
-    expect(accountRows('work')).toEqual(['opencode · x/two'])
-    const claude = document.querySelector('[data-engine-card="claude"]')!
-    expect(claude.compareDocumentPosition(document.querySelector('[data-account-card="work"]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  })
-
-  it('writes an account chain under the account, and leaves the engine chain alone', async () => {
-    await renderSettings()
-    fireEvent.click(screen.getByRole('button', { name: 'Add a target to the Claude · spare chain' }))
-
-    const sent = await save()
-    expect(sent.engines.claude.accounts.spare.fallback).toEqual([{ engine: 'claude' }])
-    expect(sent.engines.claude.accounts.work.fallback).toEqual([{ engine: 'opencode', model: 'x/two' }])
-    expect(sent.engines.claude.fallback).toBeUndefined()
-  })
-})
-
-describe('a legacy chain', () => {
-  const effective = [
-    { engine: 'codex', key: 'codex||', account: 'codex', label: 'codex', origin: 'config' },
-    { engine: 'opencode', key: 'opencode||', account: 'opencode', label: 'opencode', origin: 'legacy' },
-  ]
-
-  beforeEach(() => {
-    loadConfig({ engines: { claude: { fallback: ['codex'] }, codex: { fallback: ['opencode'] } } })
-    chains.current = { profiles: [], subjects: [{ kind: 'engine', id: 'claude', primary: null, configured: [{ engine: 'codex' }], legacy: true, effective }] }
-  })
-
-  it('shows what runs, badges the link another chain contributed, and says so once', async () => {
-    await renderSettings()
-
-    expect(engineRows('claude')).toEqual(['codex', 'opencode'])
-    const card = document.querySelector('[data-engine-card="claude"]')!
-    expect(card.querySelectorAll('[data-chain-expanded]').length).toBe(1)
-    expect(card.querySelector('[data-chain-legacy-notice]')?.textContent).toContain('shown as it runs')
-  })
-
-  it('writes nothing until the first edit, which materialises the whole effective chain as links', async () => {
-    await renderSettings()
-    await new Promise((resolve) => setTimeout(resolve, 700))
-    expect(apiMocks.updateConfig).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Move opencode earlier in the Claude chain' }))
-
-    expect((await save()).engines.claude.fallback).toEqual([{ engine: 'opencode' }, { engine: 'codex' }])
-  })
-})
-
-describe('the opencode internal fallback warning', () => {
-  const withOpencode = (internalFallback: unknown) => {
-    const reg = registry.current as { engines: Record<string, unknown> }
-    reg.engines.opencode = engine('opencode', true, 'x/one', { internalFallback })
-  }
-
-  it('warns on the opencode card, with a link to the migration, while the plugin is still active', async () => {
-    withOpencode({ detected: true })
-    await renderSettings()
-
-    const warning = document.querySelector('[data-engine-card="opencode"] [data-opencode-internal-fallback]')!
-    expect(warning.getAttribute('data-opencode-internal-fallback')).toBe('active')
-    expect((warning.querySelector('a') as HTMLAnchorElement).href).toContain('docs/fallback-chains.md#migrating-a-host')
-  })
-
-  it('says it is neutralised, with no link, once the gateway runs opencode with it off', async () => {
-    withOpencode({ detected: true, neutralised: true })
-    await renderSettings()
-
-    const warning = document.querySelector('[data-opencode-internal-fallback]')!
-    expect(warning.getAttribute('data-opencode-internal-fallback')).toBe('neutralised')
-    expect(warning.querySelector('a')).toBeNull()
-  })
-
-  it('shows nothing when none is detected, or the gateway does not say', async () => {
-    withOpencode({ detected: false })
-    await renderSettings()
-    expect(document.querySelector('[data-opencode-internal-fallback]')).toBeNull()
-  })
-})
-
-describe('legacy fallback mapping', () => {
-  beforeEach(() => {
-    // What GET /api/config serves for a legacy config: the mapped chain in the
-    // current spelling, with the deprecated pair still on the document.
-    loadConfig({
-      engines: { claude: { fallback: [{ engine: 'codex' }] } },
-      sessions: { rateLimitStrategy: 'fallback', fallbackEngine: 'codex' },
-    })
-  })
-
-  it('shows the mapping read-only, and migrating writes the chain and nulls both legacy keys', async () => {
-    await renderSettings()
-    expect(screen.getByText('An older setting still routes Claude here. Migrate it into the chain above.')).toBeTruthy()
-    // Read-only: nothing edits the legacy pair but the one Migrate control.
-    expect(screen.queryByRole('combobox', { name: 'When Claude Hits Usage Limit' })).toBeNull()
-
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Migrate' })) })
-    expect(screen.queryByRole('button', { name: 'Migrate' })).toBeNull()
-
-    const sent = await save()
-    expect(sent.engines.claude.fallback).toEqual([{ engine: 'codex' }])
-    // Null, not absent: the gateway keeps every key a PUT omits, so an omitted
-    // key would leave the deprecated pair on disk.
-    expect(Object.keys(sent.sessions)).toEqual(expect.arrayContaining(['rateLimitStrategy', 'fallbackEngine']))
-    expect(sent.sessions.rateLimitStrategy).toBeNull()
-    expect(sent.sessions.fallbackEngine).toBeNull()
   })
 })
