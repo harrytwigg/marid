@@ -1,4 +1,4 @@
-import { Check, Loader2, TriangleAlert } from "lucide-react"
+import { Check, Loader2, TriangleAlert } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
 import type { ConfigSaveState } from "./use-config-commit"
 

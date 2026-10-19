@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Play, Trash2 } from "lucide-react"
+import { Play, Trash2 } from "@/components/ui/icon"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import type { SprintWire } from "@/lib/sprint-api"
 import { CompletePanel } from "./sprint-complete-panel"
@@ -16,7 +16,7 @@ import { sprintDates, useDeleteSprint, useSprints, useStartSprint, sprintErrorMe
 const SECTION_LABEL_CLASS =
   "px-1 pb-1.5 pt-4 text-[length:var(--text-caption1)] font-semibold uppercase tracking-[0.06em] text-[var(--text-tertiary)]"
 const ROW_BUTTON_CLASS =
-  "focus-ring inline-flex h-[30px] flex-none items-center gap-1.5 rounded-full px-3 text-[12px] font-medium outline-none transition-colors disabled:opacity-50"
+  "focus-outline inline-flex h-[30px] flex-none items-center gap-1.5 rounded-full px-3 text-[12px] font-medium outline-none transition-colors disabled:opacity-50"
 const QUIET_BUTTON_CLASS = `${ROW_BUTTON_CLASS} bg-[var(--fill-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]`
 const ACCENT_BUTTON_CLASS = `${ROW_BUTTON_CLASS} bg-[var(--accent-fill)] text-[var(--accent)] hover:bg-[var(--fill-secondary)]`
 const ERROR_CLASS = "rounded-[var(--radius-md)] p-[10px_13px] text-[length:var(--text-footnote)] text-[var(--system-red)]"
@@ -41,8 +41,7 @@ export function SprintsDialog({ open, onOpenChange, onShowOnBoard, completing: c
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[calc(100dvh-32px)] max-w-[560px] overflow-y-auto border-0 bg-[var(--bg-secondary)] p-6"
-        overlayClassName="bg-[var(--scrim)]"
+        className="max-h-[calc(100dvh-32px)] max-w-[560px] overflow-y-auto p-6"
         data-testid="sprints-dialog"
       >
         <PlannerHeading />
@@ -200,7 +199,7 @@ function SprintRow({ sprint, onShow, children }: { sprint: SprintWire; onShow: (
       <button
         type="button"
         onClick={() => onShow(sprint.id)}
-        className="focus-ring min-w-0 flex-1 rounded-[10px] text-left outline-none"
+        className="focus-outline min-w-0 flex-1 rounded-[10px] text-left outline-none"
         title="Show this sprint on the board"
       >
         <div className="flex items-center gap-2">

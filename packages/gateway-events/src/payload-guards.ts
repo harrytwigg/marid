@@ -122,6 +122,7 @@ function hasOptionalDeltaToolFields(value: Record<string, unknown>): boolean {
   return isOptionalString(value.toolName)
     && isOptionalString(value.toolId)
     && isOptionalString(value.activityReceiptId)
+    && isOptionalString(value.agentId)
     && isOptionalString(value.input)
     && isOptionalBoolean(value.sidechain)
 }

@@ -23,7 +23,6 @@ interface SettingsContextValue {
   setPortalName: (name: string | null) => void
   setPortalSubtitle: (subtitle: string | null) => void
   setPortalEmoji: (emoji: string | null) => void
-  setPortalIcon: (icon: string | null) => void
   setIconBgHidden: (hidden: boolean) => void
   setEmojiOnly: (emojiOnly: boolean) => void
   setOperatorName: (name: string | null) => void
@@ -47,7 +46,6 @@ const SettingsContext = createContext<SettingsContextValue>({
   setPortalName: () => {},
   setPortalSubtitle: () => {},
   setPortalEmoji: () => {},
-  setPortalIcon: () => {},
   setIconBgHidden: () => {},
   setEmojiOnly: () => {},
   setOperatorName: () => {},
@@ -159,12 +157,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     },
     [update],
   )
-  const setPortalIcon = useCallback(
-    (icon: string | null) => {
-      update((prev) => ({ ...prev, portalIcon: icon }))
-    },
-    [update],
-  )
   const setIconBgHidden = useCallback(
     (hidden: boolean) => {
       update((prev) => ({ ...prev, iconBgHidden: hidden }))
@@ -260,7 +252,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         setPortalName,
         setPortalSubtitle,
         setPortalEmoji,
-        setPortalIcon,
         setIconBgHidden,
         setEmojiOnly,
         setOperatorName,

@@ -1,4 +1,5 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 export const PRIMARY_ACTION_SLOT = "primary-action"
@@ -46,33 +47,31 @@ type ActionProps = {
   onClick: () => void
   disabled?: boolean
   testId?: string
+  /** Handlers that warm what the press opens: pointer arrival, focus and touch, which run before the press. */
+  warm?: { onPointerEnter?: () => void; onFocus?: () => void; onTouchStart?: () => void }
 }
 
-function TrailingAction({ "aria-label": ariaLabel, label, icon, onClick, disabled, testId }: ActionProps) {
+function TrailingAction({ "aria-label": ariaLabel, label, icon, onClick, disabled, testId, warm }: ActionProps) {
   return (
-    <button
+    <Button
       type="button"
+      variant="secondary"
       data-slot={PRIMARY_ACTION_SLOT}
       data-primary-action="trailing"
       data-testid={testId}
       aria-label={ariaLabel}
       disabled={disabled}
       onClick={onClick}
-      className={cn(
-        "hidden h-9 shrink-0 items-center gap-1.5 rounded-full bg-[var(--fill-secondary)] px-3.5",
-        "text-[length:var(--text-subheadline)] font-[var(--weight-medium)] text-[var(--text-primary)]",
-        "lg:inline-flex",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]",
-        "disabled:text-[var(--text-quaternary)]",
-      )}
+      {...warm}
+      className="hidden shrink-0 lg:inline-flex"
     >
       {icon}
       {label}
-    </button>
+    </Button>
   )
 }
 
-function FabAction({ "aria-label": ariaLabel, icon, onClick, disabled, testId, hideMobileTabBar }: ActionProps & { hideMobileTabBar: boolean }) {
+function FabAction({ "aria-label": ariaLabel, icon, onClick, disabled, testId, warm, hideMobileTabBar }: ActionProps & { hideMobileTabBar: boolean }) {
   return (
     <button
       type="button"
@@ -82,6 +81,7 @@ function FabAction({ "aria-label": ariaLabel, icon, onClick, disabled, testId, h
       aria-label={ariaLabel}
       disabled={disabled}
       onClick={onClick}
+      {...warm}
       className={cn(
         // --space-3 is the mobile page gutter (`.jinn-scrollport`'s --jinn-gutter
         // floor, and what the external-scroll routes pad by), so the disc's

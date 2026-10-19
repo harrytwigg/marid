@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { Link } from "react-router-dom"
+import { Button } from "@/components/ui/button"
 import { OrbVariantPicker } from "@/components/talk/orb-variant-picker"
 import type { OrbIntensity } from "@/components/talk/orb-motion"
 import type { OrbVariant } from "@/components/talk/orb-motion"
@@ -79,13 +80,9 @@ function KeyField({
   return (
     <div className="flex items-center justify-between gap-[var(--space-3)] sm:justify-end">
       <span className="text-[length:var(--text-footnote)] text-[var(--text-secondary)]">Stored</span>
-      <button
-        type="button"
-        onClick={onReplace}
-        className="min-h-[34px] cursor-pointer rounded-full border-none bg-[var(--fill-tertiary)] px-[var(--space-3)] text-[length:var(--text-footnote)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)]"
-      >
+      <Button variant="secondary" size="sm" onClick={onReplace}>
         Replace
-      </button>
+      </Button>
     </div>
   )
 }
@@ -109,13 +106,9 @@ function KeyGuidance({
       {replacing && !stored && (
         <>
           {" "}
-          <button
-            type="button"
-            onClick={onKeepCurrent}
-            className="cursor-pointer border-none bg-transparent p-0 text-[length:var(--text-caption1)] text-[var(--system-blue)]"
-          >
+          <Button variant="link" size="xs" className="h-auto px-0 align-baseline md:h-auto" onClick={onKeepCurrent}>
             Keep the current key
-          </button>
+          </Button>
         </>
       )}
     </div>

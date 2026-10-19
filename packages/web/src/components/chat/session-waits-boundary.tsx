@@ -8,7 +8,7 @@ export function WaitsNote({ children }: { children: ReactNode }) {
 /** The popup's code is its own chunk, so a chunk gone stale after a deploy fails here, in the popup,
  *  and the chat around it stays up. The boundary starts clean on each open, but `lazy` keeps a
  *  rejected import, so the popup reads as failed until the page is reloaded. */
-export class SessionWaitsBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+export class SessionWaitsBoundary extends Component<{ children: ReactNode; failure?: ReactNode }, { failed: boolean }> {
   override state = { failed: false }
   static getDerivedStateFromError() { return { failed: true } }
   override componentDidCatch(error: Error, info: ErrorInfo) {
@@ -16,6 +16,6 @@ export class SessionWaitsBoundary extends Component<{ children: ReactNode }, { f
   }
   override render() {
     if (!this.state.failed) return this.props.children
-    return <WaitsNote>Could not load what this session is waiting on.</WaitsNote>
+    return this.props.failure ?? <WaitsNote>Could not load what this session is waiting on.</WaitsNote>
   }
 }

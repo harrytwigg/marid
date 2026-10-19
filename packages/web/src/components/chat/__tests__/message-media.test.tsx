@@ -1,3 +1,4 @@
+import "@/test/preload-dialogs"
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MessageMedia } from '../message-media'
@@ -52,7 +53,7 @@ describe('MessageMedia (multi-file)', () => {
     const messageRow = container.querySelector('[data-message-id="message-1"]')
     const dialog = screen.getByRole('dialog')
     expect(messageRow?.contains(dialog)).toBe(false)
-    expect(dialog.parentElement).toBe(document.body)
+    expect(dialog.closest('[data-slot="dialog-overlay"]')?.parentElement).toBe(document.body)
   })
 
   it('navigates and wraps a message image gallery with buttons and arrow keys', () => {

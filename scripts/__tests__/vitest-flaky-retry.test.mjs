@@ -13,6 +13,7 @@ import {
   readReport,
   selectFailedFiles,
   toRetryFilter,
+  withLeasedWorkers,
 } from "../vitest-flaky-retry.mjs"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -259,7 +260,7 @@ function retryRecoversOneAssertion(pkgDir) {
 
 function runWrapper({ pkgDir, planPath, logPath, summaryPath }, extraEnv) {
   /** @type {NodeJS.ProcessEnv} */
-  const env = { ...process.env, JINN_TEST_MAX_CONCURRENT: "0", STUB_PLAN: planPath, STUB_LOG: logPath }
+  const env = { ...process.env, JINN_TEST_GLOBAL_CORES: "0", STUB_PLAN: planPath, STUB_LOG: logPath }
   delete env.CI
   delete env.GITHUB_STEP_SUMMARY
   Object.assign(env, extraEnv)
@@ -385,4 +386,11 @@ test("without GITHUB_STEP_SUMMARY the flaky report still prints and nothing thro
   assert.match(run.stdout, /⚠ FLAKY/)
   assert.doesNotMatch(run.stderr, /Error/)
   assert.equal(run.summary, "")
+})
+
+test("withLeasedWorkers adds the leased count, defers to an explicit one, and no-ops without a lease", () => {
+  assert.deepEqual(withLeasedWorkers(["--testTimeout=30000"], 8), ["--testTimeout=30000", "--maxWorkers=8"])
+  assert.deepEqual(withLeasedWorkers(["--maxWorkers=2"], 8), ["--maxWorkers=2"])
+  assert.deepEqual(withLeasedWorkers(["--maxWorkers", "2"], 8), ["--maxWorkers", "2"])
+  assert.deepEqual(withLeasedWorkers(["--testTimeout=30000"], null), ["--testTimeout=30000"])
 })

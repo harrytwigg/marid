@@ -1,4 +1,5 @@
 import type { EngineLimitsResponse } from "@/lib/api"
+import { engineDisplayName } from "@/lib/engine-names"
 import { EngineCard } from "./engine-card"
 
 /**
@@ -28,7 +29,7 @@ export function EngineCards({ data, now }: { data: EngineLimitsResponse | null; 
     <div className="grid gap-6">
       {grouped.map((engine) => (
         <section key={engine.name} data-testid="account-group" className="grid gap-4">
-          <h2 className={`${HEADING} capitalize`}>{engine.name}</h2>
+          <h2 className={HEADING}>{engineDisplayName(engine.name)}</h2>
           <div className="grid items-start gap-4 md:grid-cols-2">
             {accounts![engine.name]!.map((account, index) => (
               <EngineCard key={account.account} engine={account} account={account} title={index === 0 ? account.name : account.label} now={now} />

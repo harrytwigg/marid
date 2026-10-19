@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react"
-import { LoaderCircle, Mic } from "lucide-react"
+import { LoaderCircle, Mic } from "@/components/ui/icon"
 import { useGateway } from "@/hooks/use-gateway"
 import { useStt } from "@/hooks/use-stt"
 import { MicWaveform } from "@/components/chat/mic-waveform"
@@ -85,7 +85,7 @@ export function NoteMic({ onTranscript }: { onTranscript: (text: string) => void
             aria-label={`Transcription language: ${stt.selectedLanguage.toUpperCase()}. Click to switch.`}
             title="Change transcription language"
             onClick={stt.cycleLanguage}
-            className="pointer-events-auto absolute right-[calc(100%+8px)] flex size-10 items-center justify-center rounded-full bg-[var(--bg-secondary)] font-[family-name:var(--font-code)] text-[length:var(--text-caption2)] font-[var(--weight-semibold)] uppercase tracking-[0.05em] text-[var(--text-secondary)] shadow-[var(--shadow-key)] transition-[scale,background-color,color] duration-150 active:scale-[0.96] hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)]"
+            className="pointer-events-auto absolute right-[calc(100%+8px)] flex size-10 items-center justify-center rounded-full glass-tint font-[family-name:var(--font-code)] text-[length:var(--text-caption2)] font-[var(--weight-semibold)] uppercase tracking-[0.05em] text-[var(--text-secondary)] transition-[scale,color] duration-150 active:scale-[0.96] hover:text-[var(--text-primary)]"
           >
             {stt.selectedLanguage}
           </button>
@@ -101,10 +101,10 @@ export function NoteMic({ onTranscript }: { onTranscript: (text: string) => void
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerCancel}
           className={cn(
-            "pointer-events-auto flex h-[52px] items-center justify-center rounded-full border-0 shadow-[var(--shadow-overlay)] touch-none select-none transition-[width,scale,background-color,color,opacity] duration-150 [transition-timing-function:var(--ease-snappy)] active:scale-[0.96]",
+            "pointer-events-auto flex h-[52px] items-center justify-center rounded-full border-0 touch-none select-none transition-[width,scale,background-color,color,opacity] duration-150 [transition-timing-function:var(--ease-snappy)] active:scale-[0.96]",
             recording
-              ? "w-[136px] gap-2.5 bg-[var(--system-red)] px-[18px] text-[var(--bg-secondary)]"
-              : "size-[52px] bg-[var(--bg-secondary)] text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]",
+              ? "w-[136px] gap-2.5 bg-[var(--system-red)] px-[18px] text-[var(--bg-secondary)] shadow-[var(--shadow-overlay)]"
+              : "glass-tint size-[52px] text-[var(--text-primary)]",
             stt.state === "transcribing" && "cursor-wait",
           )}
         >
@@ -128,7 +128,7 @@ export function NoteMic({ onTranscript }: { onTranscript: (text: string) => void
           )}
         </button>
         {stt.error && (
-          <div className="pointer-events-auto absolute bottom-[calc(100%+10px)] left-1/2 w-max max-w-[min(320px,calc(100vw-32px))] -translate-x-1/2 rounded-[var(--radius-lg)] bg-[var(--bg-secondary)] px-3 py-2 text-pretty text-center text-[length:var(--text-footnote)] text-[var(--system-red)] shadow-[var(--shadow-overlay)]">
+          <div className="pointer-events-auto absolute bottom-[calc(100%+10px)] left-1/2 w-max max-w-[min(320px,calc(100vw-32px))] -translate-x-1/2 rounded-[var(--radius-lg)] glass-tint px-3 py-2 text-pretty text-center text-[length:var(--text-footnote)] text-[var(--system-red)]">
             {stt.error}
             <button type="button" onClick={stt.dismissError} className="ml-2 min-h-10 font-[var(--weight-semibold)] text-[var(--text-primary)]">Dismiss</button>
           </div>

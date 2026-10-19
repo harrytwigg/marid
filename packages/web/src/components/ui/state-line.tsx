@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, Check } from 'lucide-react'
+import { AlertTriangle, Check } from '@/components/ui/icon'
 
 export type StateLineState = 'dispatched' | 'working' | 'waiting' | 'replied' | 'error'
 
@@ -63,8 +63,8 @@ export function StateLine({ state, dispatchedAt, repliedAt, label, className = '
       {state === 'dispatched' && (
         <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-[var(--text-quaternary)]" />
       )}
-      {state === 'replied' && <Check size={12} strokeWidth={2.5} aria-hidden="true" className="shrink-0" />}
-      {state === 'error' && <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" className="shrink-0" />}
+      {state === 'replied' && <Check size={12} aria-hidden="true" className="shrink-0" />}
+      {state === 'error' && <AlertTriangle size={12} aria-hidden="true" className="shrink-0" />}
       <span>{text}{minutes !== null ? ` · ${minutes}m` : ''}</span>
     </span>
   )

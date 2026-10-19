@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Filter, MoreHorizontal } from "lucide-react"
+import { Filter, MoreHorizontal } from "@/components/ui/icon"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,7 +24,7 @@ import { assigneeFilterLabel, OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from "./uti
 import { ActiveChip, BoardActiveChip, MenuCheck, SUBMENU_CLASS, ValueChip } from "./filter-chips"
 
 const MENU_CLASS =
-  "w-[min(320px,calc(100vw-24px))] rounded-[var(--radius-xl)] border-0 bg-[var(--material-thick)] p-2 shadow-[var(--shadow-overlay)] backdrop-blur-xl"
+  "w-[min(320px,calc(100vw-24px))] rounded-[var(--radius-xl)] p-2"
 const ITEM_CLASS =
   "min-h-11 cursor-pointer rounded-[10px] px-3 text-[length:var(--text-subheadline)] text-[var(--text-primary)] focus:bg-[var(--fill-secondary)]"
 
@@ -180,7 +180,7 @@ export function FilterBar({
             </DropdownMenuItem>
           ))}
           {(labelRegistry.data ?? []).length === 0 && (
-            <div className="px-3 py-2 text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">No labels yet.</div>
+            <DropdownMenuLabel className="px-3 py-2 text-[length:var(--text-caption1)] font-normal text-[var(--text-tertiary)]">No labels yet.</DropdownMenuLabel>
           )}
         </ValueChip>
 
@@ -209,7 +209,7 @@ export function FilterBar({
               type="button"
               aria-label="More filters"
               data-testid="filter-chip-more"
-              className="focus-ring grid h-[30px] w-[34px] flex-none place-items-center rounded-[15px] bg-[var(--fill-tertiary)] text-[var(--text-tertiary)] outline-none transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-secondary)]"
+              className="focus-outline grid h-[30px] w-[34px] flex-none place-items-center rounded-[15px] bg-[var(--fill-tertiary)] text-[var(--text-tertiary)] outline-none transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-secondary)]"
             >
               <MoreHorizontal size={14} aria-hidden />
             </button>
@@ -307,7 +307,7 @@ export function FilterBar({
                 : "bg-[var(--fill-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]"
             }`}
           >
-            <Filter size={16} strokeWidth={1.9} aria-hidden />
+            <Filter size={16} aria-hidden />
             <span className="max-[420px]:sr-only">Filter</span>
             {active > 0 && <span className="tabular-nums">{active}</span>}
           </button>
@@ -325,7 +325,7 @@ export function FilterBar({
                     : "bg-[var(--fill-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]"
                 }`}
               >
-                <Filter size={16} strokeWidth={1.9} aria-hidden />
+                <Filter size={16} aria-hidden />
                 <span className="max-[420px]:sr-only">Filter</span>
                 {active > 0 && <span className="tabular-nums">{active}</span>}
               </button>

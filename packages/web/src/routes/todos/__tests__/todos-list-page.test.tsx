@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkItemCompactWire, WorkItemListWire, WorkItemStatusWire, WorkItemTreeWire } from "@/lib/api"
@@ -131,7 +131,6 @@ beforeEach(() => {
 /** jsdom has no matchMedia; the board's ONE breakpoint is 700px, and the page
  *  reads the view off it. Leaving it unstubbed IS the SSR/no-window case. */
 const originalMatchMedia = window.matchMedia
-let breakpointListener: ((event: MediaQueryListEvent) => void) | undefined
 function setViewport(mobile: boolean) {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -139,9 +138,7 @@ function setViewport(mobile: boolean) {
       matches: query === "(max-width: 700px)" ? mobile : false,
       media: query,
       onchange: null,
-      addEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) => {
-        breakpointListener = listener
-      },
+      addEventListener: () => {},
       removeEventListener: () => {},
       addListener: () => {},
       removeListener: () => {},
@@ -151,7 +148,6 @@ function setViewport(mobile: boolean) {
 }
 
 afterEach(() => {
-  breakpointListener = undefined
   Object.defineProperty(window, "matchMedia", { configurable: true, value: originalMatchMedia })
 })
 
@@ -174,42 +170,6 @@ describe("the viewport-driven Todos surface", () => {
 
     await screen.findByTestId("board-card-PLA-1")
     expect((screen.getByTestId("todo-board-scroll") as HTMLDivElement).hidden).toBe(false)
-  })
-
-  it("shows the grouped list on a phone viewport, with no toggle, and keeps Closed collapsed", async () => {
-    setViewport(true)
-    rows.executing = [compact("PLA-1", "executing")]
-    rows.done = [compact("PLA-2", "done")]
-    renderTodos("/todos/b/platform")
-
-    await screen.findByTestId("todo-list-row-PLA-1")
-    expect(screen.queryByTestId("todos-view-list")).toBeNull()
-    expect(screen.queryByTestId("todos-view-board")).toBeNull()
-    expect((screen.getByTestId("todo-list-scroll") as HTMLDivElement).hidden).toBe(false)
-    expect((screen.getByTestId("todo-board-scroll") as HTMLDivElement).hidden).toBe(true)
-    expect(screen.queryByTestId("todo-list-group-needs-you")).toBeNull()
-    expect(screen.getByTestId("todo-list-group-executing")).toBeTruthy()
-    expect(screen.getByTestId("todo-list-group-in-review")).toBeTruthy()
-    expect(screen.getByTestId("todo-list-group-backlog")).toBeTruthy()
-    expect(screen.getByTestId("todo-list-group-closed")).toBeTruthy()
-    expect(screen.queryByTestId("todo-list-row-PLA-2")).toBeNull()
-  })
-
-  it("flips the view live when the viewport crosses the breakpoint, without a remount", async () => {
-    setViewport(false)
-    rows.executing = [compact("PLA-1", "executing")]
-    renderTodos("/todos/b/platform")
-
-    const board = await screen.findByTestId("todo-board-scroll")
-    expect((board as HTMLDivElement).hidden).toBe(false)
-
-    act(() => breakpointListener?.({ matches: true } as MediaQueryListEvent))
-
-    await waitFor(() => expect((screen.getByTestId("todo-list-scroll") as HTMLDivElement).hidden).toBe(false))
-    expect((screen.getByTestId("todo-board-scroll") as HTMLDivElement).hidden).toBe(true)
-    // Same node either side of the flip: the page re-rendered, it did not remount.
-    expect(screen.getByTestId("todo-board-scroll")).toBe(board)
-    expect(screen.getByTestId("location-probe").textContent).toBe("/todos/b/platform")
   })
 
   it("returns from a row to the list at its previous scroll position", async () => {

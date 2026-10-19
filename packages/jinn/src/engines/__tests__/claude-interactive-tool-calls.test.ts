@@ -256,6 +256,34 @@ describe("InteractiveClaudeEngine — tool calls reach the registry", () => {
     ]);
   });
 
+  it("an Agent launch's async result puts the sub-agent id on its card row", async () => {
+    const sid = "local-agent-launch";
+    const turn = await startTurn(sid);
+    const sse = hoisted.sseSinks[0]!;
+    sse({ type: "message_start" });
+    sse(sseToolStart("Agent", "tu-agent"));
+    sse({ type: "message_stop" });
+    hooks.deliver(sid, preTool("Agent", "tu-agent"));
+    hooks.deliver(sid, {
+      hook_event_name: "PostToolUse",
+      tool_name: "Agent",
+      tool_use_id: "tu-agent",
+      tool_input: { description: "scan the repo" },
+      tool_response: { status: "async_launched", agentId: "agent-42" },
+    });
+    await turn.finish("done");
+
+    expect(toolRows(sid)).toEqual([
+      {
+        tool_call: "Agent",
+        tool_id: "tu-agent",
+        content: "Used Agent",
+        partial: null,
+        meta: JSON.stringify({ agentId: "agent-42" }),
+      },
+    ]);
+  });
+
   it("a PreToolUse replayed from before the turn is not reported again", async () => {
     const sid = "local-replay";
     // Buffered with no turn registered: it belongs to whatever ran before.

@@ -377,7 +377,7 @@ export class OpencodeInteractiveEngine implements InterruptibleEngine, PtyViewEn
   private spawnView(sessionId: string, server: OpencodeServer, engineSessionId: string | undefined): pty.IPty {
     const geom = this.lastGeom.get(sessionId);
     const size = { cols: geom?.cols ?? 120, rows: geom?.rows ?? 40 };
-    const args = buildOpencodeViewArgs(server.hostUrl, engineSessionId);
+    const args = buildOpencodeViewArgs(server.hostUrl, engineSessionId, server.api);
     logger.info(
       `OpenCode terminal attaching for session ${sessionId} to ${server.hostKey} ${server.hostUrl} `
       + `(opencode session: ${engineSessionId ?? "none yet"})`,
