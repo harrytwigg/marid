@@ -1,10 +1,7 @@
 import { useCallback } from "react"
 import { useSearchParams } from "react-router-dom"
 import { isHookRunStatus, type HookRunStatus } from "@/lib/api-hooks"
-
-/** A Todo filter is only a filter once it is a whole id; a half-typed one
- *  stays in the URL and in the field but is not sent to the gateway. */
-const TODO_FILTER_PATTERN = /^[A-Z]{3}-\d+$/
+import { isTodoId } from "@/lib/todo-id"
 
 export type HookOutcomeFilter = HookRunStatus | ""
 
@@ -41,7 +38,8 @@ export function useHookRunParams() {
   return { hook, outcome, todo, setHook, setOutcome, setTodo }
 }
 
-/** The Todo filter as the API takes it: the id when it is whole, else nothing. */
+/** The Todo filter as the API takes it: the id when it is whole, else nothing.
+ *  A half-typed id stays in the URL and the field but is not sent. */
 export function appliedTodo(todo: string): string | undefined {
-  return TODO_FILTER_PATTERN.test(todo) ? todo : undefined
+  return isTodoId(todo) ? todo : undefined
 }

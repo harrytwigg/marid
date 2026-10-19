@@ -144,6 +144,10 @@ export function useQueryInvalidation() {
           case 'status':
             qc.invalidateQueries({ queryKey: queryKeys.status })
             break
+          case 'hooks':
+            // The hook list, the run log and an open run's detail all follow a run.
+            qc.invalidateQueries({ queryKey: queryKeys.hooks.all })
+            break
         }
       }
       pendingRef.current = kept
@@ -256,6 +260,11 @@ export function useQueryInvalidation() {
           pendingRef.current.add('config')
           pendingRef.current.add('engines')
           pendingRef.current.add('status')
+          // Hooks live in config.yaml: an edit or an enabled toggle changes the list.
+          pendingRef.current.add('hooks')
+          break
+        case GATEWAY_EVENTS.hooksRun:
+          pendingRef.current.add('hooks')
           break
         case 'engines:updated':
           pendingRef.current.add('engines')

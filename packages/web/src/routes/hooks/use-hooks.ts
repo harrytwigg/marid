@@ -13,11 +13,10 @@ import { describeFailure } from "./format"
 
 /**
  * The Hooks page's data layer. The gateway broadcasts `hooks:run` when a run is
- * written or finishes and the parent wires that event to a refetch; until then
- * the page polls, so the log still moves for anyone reading it without the
- * socket.
+ * written or finishes, and `useQueryInvalidation` refetches on it; the slow poll
+ * is only a backstop for a socket that missed one.
  */
-export const HOOKS_REFRESH_INTERVAL_MS = 15_000
+export const HOOKS_REFRESH_INTERVAL_MS = 60_000
 export const RUNS_PAGE_SIZE = 50
 
 export function useHooks() {
