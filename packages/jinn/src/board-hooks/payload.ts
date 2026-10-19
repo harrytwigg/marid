@@ -3,7 +3,7 @@ import type { BoardHookEvent } from "../shared/board-hooks-config.js";
 import { commentsTail, getComment, type WorkItemComment } from "../work-items/comments.js";
 import { getWorkItemLabels } from "../work-items/labels.js";
 import { getWorkItem, listWorkItems, type WorkItem, type WorkItemEvent } from "../work-items/store.js";
-import { actorOf } from "./actor.js";
+import { actorOf, creatorOf } from "./actor.js";
 import type { BasePayload } from "./types.js";
 
 /** Comments scanned for a pull-request link, newest first. */
@@ -75,7 +75,7 @@ export function buildBasePayload(event: WorkItemEvent, name: BoardHookEvent): Ba
     todo: todoOf(item),
     from: status ? event.fromStatus : null,
     to: status ? event.toStatus : null,
-    actor: actorOf(event, comment),
+    actor: event.kind === "created" ? creatorOf(event, item) : actorOf(event, comment),
     text,
     prUrl: prUrlFor(item, text),
     sessionId: linkedSessionId(event),

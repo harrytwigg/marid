@@ -53,6 +53,10 @@ export interface StartTodoDispatcherOptions {
   /** Stamped on the Dispatcher's session, so the registry can say what started
    *  it (the board walk marks its own starts this way). */
   transportMeta?: Record<string, string>;
+  /** Who asked for the start (`operator`, `session:<id>`, `board-walk`), recorded
+   *  on the link's audit event so board hooks can tell, and loop-guard, a start
+   *  a hook session made. */
+  actor?: string;
 }
 
 /** Everything a spawn needs, resolved and claimed, before a session exists. */
@@ -220,7 +224,7 @@ export function startTodoDispatcher(
   const session = createDispatcherSession(item, plan, context, opts.transportMeta);
   insertMessage(session.id, "user", plan.prompt);
   try {
-    linkSession(item.id, session.id, undefined, "execute", { via: "dispatch" });
+    linkSession(item.id, session.id, opts.actor, "execute", { via: "dispatch" });
     plan.claim.bind(session.id);
   } catch (error) {
     plan.claim.release();

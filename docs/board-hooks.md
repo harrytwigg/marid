@@ -120,6 +120,14 @@ hook and the event.
 `prUrl` is the first GitHub pull-request URL found in, in order: the event's text,
 the Todo's latest 20 comments (newest first), the Todo body.
 
+`actor` is who made the write. For a comment it is the comment's author and
+authoring session. For `todo.created` the event row records only the source kind
+(`human`, `session`, `delegation`, …), so the creator comes from the Todo itself:
+`operator` for an operator's Todo, otherwise the creating session named in its
+`sourceRef` (`session:<id>:…`, `delegate:<id>:…`) and that session's employee. A
+`todo.dispatched` actor is whoever asked for the start (`operator`, the session, or
+`board-walk`). A session with no employee, and every other source, is `system`.
+
 ## Loop guard
 
 A hook's `spawn` action starts its session with provenance `source: "hook"`,
@@ -127,8 +135,7 @@ A hook's `spawn` action starts its session with provenance `source: "hook"`,
 the event's upstream chain plus this hook (the same value as `payload.chain` and
 `JINN_HOOK_CHAIN`).
 
-When an event's actor resolves to a session (an actor of `session:<id>`, or a comment
-whose meta records the authoring session), the dispatcher walks that session and its
+When an event's actor resolves to a session (see `actor` above), the dispatcher walks that session and its
 `parentSessionId` ancestors (at most 10 levels). Every ancestor with `source: "hook"`
 contributes the chain stored on its run row; the union is the event's upstream chain.
 `from`/`to` are null on non-status events, and a `from`/`to` matcher never matches them.
@@ -139,7 +146,10 @@ hook is skipped once the chain holds `MAX_HOOK_CHAIN` names. Skips are logged as
 
 Limits: a `command` action's own API calls carry no session, so they are not
 chain-tracked; its environment carries `JINN_HOOK_CHAIN` for scripts that want to
-guard themselves. `notify` cannot write to the board.
+guard themselves. Moves the gateway derives on its own (the reconciler, park expiry)
+carry no session either, even when a hook session's work caused them. `notify`
+cannot write to the board. Nothing caps how many hooks fire at once: a cascade that
+closes many Todos fires a hook for each.
 
 ## Actions
 

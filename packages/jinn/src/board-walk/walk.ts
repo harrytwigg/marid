@@ -198,6 +198,7 @@ interface Walker {
 
 function defaultDispatch(deps: BoardWalkDeps): Walker["dispatch"] {
   return (item, decision) => startTodoDispatcher(item, deps.context, {
+    actor: BOARD_WALK_STARTED_BY,
     promptSuffix: dispatcherSuffix(decision, exhaustedAdvice(deps.getConfig())),
     transportMeta: { startedBy: BOARD_WALK_STARTED_BY },
     ...(deps.emitProjectionEvent ? { emitProjectionEvent: deps.emitProjectionEvent } : {}),

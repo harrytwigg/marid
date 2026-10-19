@@ -2796,6 +2796,7 @@ export async function handleApiRequest(
       }
 
       const started = startTodoDispatcher(item, context, {
+        actor: workItemActor(caller),
         emitProjectionEvent: (id, action) => emitTodoProjectionEvent(context, id, action),
       });
       return json(res, started.body, started.status);
