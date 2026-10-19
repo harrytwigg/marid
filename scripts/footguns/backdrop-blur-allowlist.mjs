@@ -13,14 +13,12 @@ const DIALOG = "dialog or sheet with a scrim; moves to the overlay primitives"
 
 /** @type {ReadonlyMap<string, string>} */
 export const BACKDROP_BLUR_ALLOWLIST = new Map([
-  ["packages/web/src/components/activity/log-browser.tsx", "sticky filter bar in the activity screen; moves with that screen's pass"],
   ["packages/web/src/components/chat/cli-keybar.tsx", "popover over the terminal key bar; moves to the overlay primitives"],
   ["packages/web/src/components/chat/file-view.tsx", "controls floating over a file viewer; moves with the chat screen's pass"],
   ["packages/web/src/components/chat/shortcut-overlay.tsx", "floating shortcut card; moves to the overlay primitives"],
   ["packages/web/src/components/chat/thread-peek.tsx", DIALOG],
   ["packages/web/src/components/global-search.tsx", DIALOG],
   ["packages/web/src/components/live-stream-widget.tsx", "floating widget pinned over every page; moves with the overlay primitives"],
-  ["packages/web/src/components/onboarding-wizard.tsx", DIALOG],
   ["packages/web/src/components/talk/media-preview-chrome.tsx", "controls floating over a media preview; moves with the voice screen's pass"],
   ["packages/web/src/components/talk/media-preview.tsx", DIALOG],
   ["packages/web/src/components/talk/situation-sheet.tsx", DIALOG],
@@ -31,7 +29,6 @@ export const BACKDROP_BLUR_ALLOWLIST = new Map([
   ["packages/web/src/components/ui/video-player.tsx", "controls over a video; moves to the overlay primitives"],
   ["packages/web/src/plugins/sdk/plugin-notices.tsx", TOAST],
   ["packages/web/src/routes/chat/chat-header-menu.tsx", MENU],
-  ["packages/web/src/routes/logs/page.tsx", "floating bar on the logs screen; moves with that screen's pass"],
   ["packages/web/src/routes/redesign/page.tsx", "self-contained design experiment with its own stylesheet"],
   ["packages/web/src/routes/todos/board/board-page.tsx", TOAST],
   ["packages/web/src/routes/todos/needs-you-view.tsx", "toast on the Todos screen; moves to the overlay primitives"],

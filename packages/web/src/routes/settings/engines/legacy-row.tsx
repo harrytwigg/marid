@@ -1,5 +1,6 @@
 import { ArrowRight } from "@/components/ui/icon"
 import { engineDisplayName } from "@/lib/engine-names"
+import { Button } from "@/components/ui/button"
 
 /** The deprecated `sessions.rateLimitStrategy` / `sessions.fallbackEngine` pair,
  *  read-only: the chains above are the current spelling, and editing the old one
@@ -19,13 +20,9 @@ export function LegacyFallbackRow({ engine, onMigrate }: { engine: string; onMig
             An older setting still routes Claude here. Migrate it into the chain above.
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onMigrate}
-          className="inline-flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-[var(--fill-tertiary)] px-4 text-[length:var(--text-footnote)] font-[var(--weight-medium)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)]"
-        >
+        <Button variant="secondary" size="sm" onClick={onMigrate}>
           Migrate
-        </button>
+        </Button>
       </div>
     </div>
   )

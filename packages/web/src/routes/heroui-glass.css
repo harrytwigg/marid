@@ -35,6 +35,21 @@
     --button-bg-pressed: var(--fill-secondary);
   }
 
+  /* A button that is one segment of a group (the cron lens, the appearance row):
+     the pressed or selected one wears what a tab's indicator wears. */
+  .button.segment {
+    --button-bg: transparent;
+    --button-bg-hover: var(--fill-secondary);
+    color: var(--text-secondary);
+  }
+
+  .button.segment:is([aria-pressed="true"], [aria-selected="true"]) {
+    --button-bg: var(--glass-sheet);
+    --button-bg-hover: var(--glass-sheet);
+    color: var(--text-primary);
+    box-shadow: 0 1px 6px var(--glass-shadow), inset 0 1px 0 var(--glass-specular);
+  }
+
   .tabs__list {
     border-radius: inherit;
     box-shadow: inset 0 0 0 1px var(--glass-edge);
