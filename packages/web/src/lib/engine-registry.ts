@@ -27,7 +27,7 @@ export interface EngineRegistryEntry {
   name: string;
   available: boolean;
   defaultModel: string;
-  effortMechanism: "claude-flag" | "codex-config" | "grok-flag" | "pi-flag" | "none";
+  effortMechanism: "claude-flag" | "codex-config" | "grok-flag" | "pi-flag" | "opencode-variant" | "none";
   models: ModelInfo[];
   supportsPty?: boolean; // interactive PTY/CLI view (`/ws/pty`)
   health?: EngineHealth;

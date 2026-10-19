@@ -7,7 +7,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import zlib from 'node:zlib'
 import { createRequire } from 'node:module'
+import { writeOrg } from './seed-org.mjs'
+import { writePages } from './seed-pages.mjs'
 
 const [mode, sandboxHome, third, fourth] = process.argv.slice(2)
 if (!mode || !sandboxHome || !third) {
@@ -56,6 +59,42 @@ function conversation() {
   return rows
 }
 
+// The "Delegation flow" chat: a short exchange with delegation cards in each state, for the card's
+// capture. The cards open the "Design pass" chat, so the block needs its id.
+function delegationBlocks(childId, now) {
+  const card = (id, status, title, extra) => ({
+    id, type: 'delegation', version: 1, status, title,
+    payload: { employee: 'reviewer', employeeDisplay: 'Reviewer', title, childSessionId: childId, workItemId: 'fixture-item', dispatchedAt: now - 5 * 60_000, ...extra },
+  })
+  return [
+    card('card-done', 'done', 'Review the release checklist for gaps', { repliedAt: now - 2 * 60_000 }),
+    card('card-running', 'running', 'Check the changelog wording against the style notes'),
+    {
+      id: 'row-follow-up', type: 'dispatch', version: 1,
+      payload: { targetSessionId: childId, employee: 'reviewer', employeeDisplay: 'Reviewer', preview: 'Any word on the changelog notes?', sentAt: now - 60_000 },
+    },
+    {
+      id: 'activity-todo', type: 'todo-activity', version: 1, status: 'running', title: 'Draft the release checklist',
+      payload: { todoId: 'SAN-1', action: 'status', status: 'executing', assignee: 'reviewer', updatedAt: new Date(now - 90_000).toISOString(), preview: 'Moved to executing' },
+    },
+  ]
+}
+
+function seedDelegationChat(db) {
+  const session = db.prepare("SELECT id FROM sessions WHERE source_ref = 'sandbox:2'").get()
+  const child = db.prepare("SELECT id FROM sessions WHERE source_ref = 'sandbox:3'").get()
+  if (!session || !child) return
+  const now = Date.now()
+  const insert = db.prepare('INSERT INTO messages (id, session_id, role, content, timestamp, seq, blocks) VALUES (?, ?, ?, ?, ?, ?, ?)')
+  const rows = [
+    ['user', 'Ask the reviewer to look over the checklist and check the changelog wording too.', null],
+    ['assistant', 'Done. I handed both to the reviewer:', JSON.stringify(delegationBlocks(child.id, now))],
+    ['assistant', 'I will fold their notes into the checklist when they reply.', null],
+  ]
+  rows.forEach(([role, content, blocks], i) => insert.run(crypto.randomUUID(), session.id, role, content, now - (rows.length - i) * 60_000, i + 1, blocks))
+  db.prepare('UPDATE sessions SET total_turns = 2, last_activity = ? WHERE id = ?').run(new Date().toISOString(), session.id)
+}
+
 function openDb(repo) {
   const requireFromJinn = createRequire(path.join(repo, 'packages/jinn/package.json'))
   const Database = requireFromJinn('better-sqlite3')
@@ -63,6 +102,8 @@ function openDb(repo) {
 }
 
 function seedDb(repo) {
+  if (process.env.JINN_CAPTURE_SEED_ORG) writeOrg(sandboxHome)
+  if (process.env.JINN_CAPTURE_SEED_PAGES) writePages(sandboxHome)
   const db = openDb(repo)
   const session = db.prepare("SELECT id FROM sessions WHERE source_ref = 'sandbox:1'").get()
   if (!session) throw new Error('the sandbox --seed session sandbox:1 is missing')
@@ -72,6 +113,7 @@ function seedDb(repo) {
     insert.run(crypto.randomUUID(), session.id, role, content, start + i * 60_000, i + 1)
   })
   db.prepare('UPDATE sessions SET total_turns = ?, last_activity = ? WHERE id = ?').run(conversation().length === CONVERSATION.length ? 2 : Math.ceil(conversation().length / 2), new Date().toISOString(), session.id)
+  seedDelegationChat(db)
   db.close()
 }
 
@@ -94,7 +136,76 @@ const TODOS = [
   { title: 'Add keyboard shortcuts to the board', priority: 3 },
   { title: 'Investigate slow search results', priority: 1, status: 'blocked' },
   { title: 'Write the accessibility notes', priority: 2 },
+  { title: 'Publish the changelog', priority: 2, status: 'done' },
+  { title: 'Retire the old export option', priority: 3, status: 'cancelled' },
 ]
+
+// A plain gradient picture, written as a PNG so the lightbox has something to show without a binary in the
+// repository. `hue` tells two apart.
+function gradientPng(width, height, hue) {
+  const rows = []
+  for (let y = 0; y < height; y += 1) {
+    const row = Buffer.alloc(1 + width * 3)
+    for (let x = 0; x < width; x += 1) {
+      const t = (x / width + y / height) / 2
+      row[1 + x * 3] = Math.round(40 + 160 * t * (hue === 0 ? 1 : 0.4))
+      row[2 + x * 3] = Math.round(90 + 110 * (1 - t))
+      row[3 + x * 3] = Math.round(200 - 120 * t * (hue === 0 ? 0.5 : 1.2))
+    }
+    rows.push(row)
+  }
+  const chunk = (type, data) => {
+    const head = Buffer.alloc(8)
+    head.writeUInt32BE(data.length, 0)
+    head.write(type, 4, 'ascii')
+    const crc = Buffer.alloc(4)
+    crc.writeUInt32BE(zlib.crc32(Buffer.concat([head.subarray(4), data])), 0)
+    return Buffer.concat([head, data, crc])
+  }
+  const header = Buffer.alloc(13)
+  header.writeUInt32BE(width, 0)
+  header.writeUInt32BE(height, 4)
+  header.set([8, 2, 0, 0, 0], 8)
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', header),
+    chunk('IDAT', zlib.deflateSync(Buffer.concat(rows))),
+    chunk('IEND', Buffer.alloc(0)),
+  ])
+}
+
+async function seedAttachments(baseUrl, token, todoId) {
+  for (const [index, name] of ['overview.png', 'detail.png'].entries()) {
+    const form = new FormData()
+    form.append('file', new File([gradientPng(960, 600, index)], name, { type: 'image/png' }))
+    const res = await fetch(`${baseUrl}/api/work-items/${todoId}/attachments`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}` },
+      body: form,
+    })
+    if (!res.ok) console.warn(`attachment ${name} skipped: ${res.status}`)
+  }
+}
+
+// Two sprints, one running with a Todo in it, so the planner has a list to show.
+async function seedSprints(call, todoIds) {
+  const active = await call('POST', '/api/sprints', { name: 'Sprint 1', goal: 'Ship the release candidate' })
+  await call('POST', '/api/sprints', { name: 'Sprint 2', goal: 'Polish the board' })
+  await call('PUT', `/api/work-items/${todoIds[0]}/sprint`, { sprint: active.sprint.id }).catch(() => {})
+  await call('POST', `/api/sprints/${active.sprint.id}/start`).catch((err) => console.warn(`sprint start skipped: ${err.message}`))
+}
+
+const sandboxSession = (list, n, title) => list.find((s) => s.sourceRef === `sandbox:${n}` || s.title === `#${n} - ${title}`)
+
+// The capture reads ids from here so screens can be addressed without printing them anywhere a
+// screenshot could show.
+function writeFixtures(repo, list, todos) {
+  const chat = sandboxSession(list, 1, 'Chat layout QA')
+  const delegation = sandboxSession(list, 2, 'Delegation flow')
+  if (chat && todos[0]) mentionTodo(repo, chat.id, todos[0])
+  const ids = { todos, chatSession: chat?.id ?? null, delegationSession: delegation?.id ?? null }
+  fs.writeFileSync(path.join(sandboxHome, 'ui-capture-fixtures.json'), JSON.stringify(ids, null, 2))
+}
 
 async function seedApi(baseUrl, repo) {
   const { token } = JSON.parse(fs.readFileSync(path.join(sandboxHome, 'gateway.json'), 'utf8'))
@@ -122,13 +233,11 @@ async function seedApi(baseUrl, repo) {
       })
     }
   }
+  await seedAttachments(baseUrl, token, created[0])
+  await seedSprints(call, created).catch((err) => console.warn(`sprints skipped: ${err.message}`))
   const sessions = await call('GET', '/api/sessions')
   const list = Array.isArray(sessions) ? sessions : sessions.sessions ?? []
-  const chat = list.find((s) => s.sourceRef === 'sandbox:1' || s.title === '#1 - Chat layout QA')
-  if (chat && created[0]) mentionTodo(repo, chat.id, created[0])
-  // The capture reads ids from here so screens can be addressed without
-  // printing them anywhere a screenshot could show.
-  fs.writeFileSync(path.join(sandboxHome, 'ui-capture-fixtures.json'), JSON.stringify({ todos: created, chatSession: chat?.id ?? null }, null, 2))
+  writeFixtures(repo, list, created)
 }
 
 if (mode === 'db') seedDb(third)

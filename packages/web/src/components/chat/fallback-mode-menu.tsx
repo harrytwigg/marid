@@ -1,6 +1,7 @@
-import { CheckIcon, ChevronRightIcon } from 'lucide-react'
+import { CheckIcon, ChevronRightIcon } from '@/components/ui/icon'
 import {
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
@@ -16,7 +17,7 @@ function ModeOptions({ local, onPick }: { local: SessionFallbackView; onPick: (m
           key={o.mode}
           value={o.mode}
           onSelect={(e) => e.preventDefault()}
-          className="items-start justify-between gap-2 rounded-[9px] py-1.5 pl-2 pr-2 text-[length:var(--text-footnote)] text-[var(--text-secondary)] data-[state=checked]:text-[var(--text-primary)] [&>span:first-child]:hidden"
+          className="items-start justify-between gap-2 rounded-[9px] py-1.5 pl-2 pr-2 text-[length:var(--text-footnote)] text-[var(--text-secondary)] data-[selected]:text-[var(--text-primary)] [&>span:first-child]:hidden"
         >
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="font-[var(--weight-semibold)]">
@@ -67,20 +68,20 @@ export function FallbackModeMenu({ local, error, onPick, onChooseModel, onUseCon
 }) {
   return (
     <>
-      <div className="px-2 pt-1 pb-1.5 text-[length:var(--text-caption2)] font-[var(--weight-bold)] uppercase tracking-[0.4px] text-[var(--text-quaternary)]">
+      <DropdownMenuLabel className="pt-1 pb-1.5 text-[length:var(--text-caption2)] font-[var(--weight-bold)] uppercase tracking-[0.4px] text-[var(--text-quaternary)]">
         When the usage limit is hit
-      </div>
+      </DropdownMenuLabel>
       <ModeOptions local={local} onPick={onPick} />
       <TargetRows local={local} onChooseModel={onChooseModel} onUseConfig={onUseConfig} />
       {!local.target && (
-        <div className="px-2 pt-1 pb-0.5 text-[length:var(--text-caption2)] text-[var(--text-quaternary)]">
+        <DropdownMenuLabel className="pt-1 pb-0.5 text-[length:var(--text-caption2)] font-normal text-[var(--text-quaternary)]">
           No fallback configured for this model
-        </div>
+        </DropdownMenuLabel>
       )}
       {error && (
-        <div role="alert" className="px-2 pt-1 pb-0.5 text-[length:var(--text-caption2)] text-[var(--system-red)]">
-          {error}
-        </div>
+        <DropdownMenuLabel className="pt-1 pb-0.5 text-[length:var(--text-caption2)] font-normal text-[var(--system-red)]">
+          <div role="alert">{error}</div>
+        </DropdownMenuLabel>
       )}
     </>
   )

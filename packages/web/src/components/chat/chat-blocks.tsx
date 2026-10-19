@@ -1,4 +1,4 @@
-import { AlertTriangle, Check, Circle, Loader2 } from 'lucide-react'
+import { AlertTriangle, Check, Circle, Loader2 } from '@/components/ui/icon'
 import type { CSSProperties } from 'react'
 import type { ChatBlock, LiveBlockArrival, JsonObject, JsonValue } from '@/lib/blocks'
 import { HandoffCard } from './handoff-card'

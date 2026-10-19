@@ -1,6 +1,6 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Search, X } from 'lucide-react'
+import { Search, X } from '@/components/ui/icon'
 import { EmployeeAvatar } from '@/components/ui/employee-avatar'
 import { cn } from '@/lib/utils'
 import type { Employee } from '@/lib/api'

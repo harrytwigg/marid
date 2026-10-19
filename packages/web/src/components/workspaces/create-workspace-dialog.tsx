@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react"
-import { LoaderCircle } from "lucide-react"
+import { LoaderCircle } from "@/components/ui/icon"
 import { api, type CreateWorkspaceResult } from "@/lib/api"
 import { gatewayTransport } from "@/lib/gateway-transport"
 import {
@@ -54,7 +54,7 @@ export function CreateWorkspaceDialog({
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!pending) onOpenChange(next) }}>
       <DialogContent
-        className="w-[min(420px,calc(100vw-24px))] gap-0 rounded-[var(--radius-xl)] border-0 bg-[var(--material-regular)] p-2 shadow-[var(--shadow-overlay)]"
+        className="w-[min(420px,calc(100vw-24px))] gap-0 rounded-[var(--radius-xl)] p-2"
         onOpenAutoFocus={(event) => event.preventDefault()}
       >
         <form onSubmit={submit}>

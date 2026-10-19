@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { Plus } from "lucide-react"
+import { Plus } from "@/components/ui/icon"
 import { describe, expect, it, vi } from "vitest"
 import { LargeTitleHeader } from "../large-title-header"
 import { PageScaffold } from "../page-scaffold"

@@ -1,7 +1,9 @@
 import { lazy, Suspense, useState } from "react"
-import { MoreHorizontal } from "lucide-react"
+import { MoreHorizontal } from "@/components/ui/icon"
+import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { SESSION_MENU_CONTENT_CLASS, SESSION_MENU_ITEM_CLASS } from "@/components/chat/session-row-menu"
+import { LoadBoundary } from "@/components/ui/lazy-overlay"
 import type { ArchiveStage } from "./department-archive-dialog"
 
 /* A department board's `⋯`: archive the department, or take it back. Archiving is
@@ -12,18 +14,15 @@ import type { ArchiveStage } from "./department-archive-dialog"
 
 const ArchiveDialog = lazy(() => import("./department-archive-dialog").then((module) => ({ default: module.ArchiveDialog })))
 
-const TRIGGER_CLASS =
-  "focus-outline inline-flex size-10 items-center justify-center rounded-full bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-[var(--shadow-ambient),var(--shadow-subtle),var(--inset-shine)] outline-none transition-transform hover:scale-[0.96] motion-reduce:transition-none"
-
 export function DepartmentArchiveMenu({ slug, prefix, archived }: { slug: string; prefix: string | undefined; archived: boolean }) {
   const [stage, setStage] = useState<ArchiveStage | "closed">("closed")
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button type="button" data-testid="department-board-menu" aria-label="Department actions" className={TRIGGER_CLASS}>
+          <Button variant="secondary" size="icon" data-testid="department-board-menu" aria-label="Department actions" className="size-10 rounded-full">
             <MoreHorizontal className="size-4" aria-hidden />
-          </button>
+          </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className={SESSION_MENU_CONTENT_CLASS}>
           <DropdownMenuItem
@@ -36,9 +35,11 @@ export function DepartmentArchiveMenu({ slug, prefix, archived }: { slug: string
         </DropdownMenuContent>
       </DropdownMenu>
       {stage !== "closed" && (
-        <Suspense fallback={null}>
-          <ArchiveDialog key={stage} slug={slug} prefix={prefix} stage={stage} onClose={() => setStage("closed")} />
-        </Suspense>
+        <LoadBoundary what="The archive dialog" onFailed={() => setStage("closed")}>
+          <Suspense fallback={null}>
+            <ArchiveDialog key={stage} slug={slug} prefix={prefix} stage={stage} onClose={() => setStage("closed")} />
+          </Suspense>
+        </LoadBoundary>
       )}
     </>
   )

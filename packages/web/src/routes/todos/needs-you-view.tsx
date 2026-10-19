@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { Check, MessageSquareText } from "lucide-react"
+import { Check, MessageSquareText } from "@/components/ui/icon"
 import { AttachmentRefText } from "@/components/attachment-ref-preview"
 import type { Employee, WorkItemCompactWire, WorkItemOpenDetailWire, WorkItemStatusWire } from "@/lib/api"
 import {
@@ -8,6 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Button } from "@/components/ui/button"
 import { EmployeeChip } from "@/components/ui/employee-chip"
 import { STATUS_LABEL, operatorSafeTodoError, provenanceLabel, publicWorkItemReference } from "@/lib/todos"
 import { legalTargets } from "@/lib/legal-targets"
@@ -49,7 +50,7 @@ function WorkRef({ item }: { item: WorkItemCompactWire }) {
     const sessionRef = publicWorkItemReference(item.sessionRef.ref) ?? publicWorkItemReference(item.sessionRef.sessionId)
     return (
       <span className="inline-flex min-w-0 items-center gap-1.5 text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">
-        <MessageSquareText size={12.5} strokeWidth={1.75} aria-hidden />
+        <MessageSquareText size={12.5} aria-hidden />
         <span className="truncate">{sessionRef ? `Session · ${shortRef(sessionRef)}` : "Session"}</span>
       </span>
     )
@@ -78,10 +79,7 @@ export function attentionIdLine(
   return parts.join(" · ")
 }
 
-const BTN =
-  "focus-outline flex h-[34px] items-center gap-[7px] whitespace-nowrap rounded-[17px] px-3.5 text-[13px] font-semibold outline-none transition-colors disabled:opacity-40"
-const BTN_QUIET = `${BTN} text-[var(--text-tertiary)] hover:bg-[var(--fill-tertiary)]`
-const BTN_FILLED = `${BTN} bg-[var(--fill-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]`
+const BTN = "h-[34px] whitespace-nowrap rounded-[17px] px-3.5 text-[13px] font-semibold"
 
 /** Legal-exit menu (Route… / Unblock…): the same legalTargets() map the board
  *  drag and the pickers consume; every row carries its reason, gated ones at 50%. */
@@ -104,13 +102,13 @@ function RouteMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button type="button" data-testid={testId} disabled={busy} className={BTN_FILLED}>
+        <Button variant="secondary" data-testid={testId} disabled={busy} className={BTN}>
           {label}
-        </button>
+        </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
-        className="min-w-[220px] rounded-[var(--radius-lg)] border-0 bg-[var(--material-thick)] p-1.5 shadow-[var(--shadow-overlay)] backdrop-blur-xl"
+        className="min-w-[220px] rounded-[var(--radius-lg)] p-1.5"
       >
         {targets.map((target) => (
           <DropdownMenuItem
@@ -218,9 +216,9 @@ function NeedsYouCard({
           onTransition={onTransition}
           testId="needs-unblock"
         />
-        <button type="button" data-testid="needs-open" onClick={() => onOpen(item.id)} className={BTN_QUIET}>
+        <Button variant="ghost" data-testid="needs-open" onClick={() => onOpen(item.id)} className={`${BTN} text-[var(--text-tertiary)]`}>
           Open
-        </button>
+        </Button>
       </div>
     </div>
   )
@@ -240,7 +238,7 @@ export function NeedsYouEmpty() {
           }}
           aria-hidden
         >
-          <Check size={26} strokeWidth={2.4} />
+          <Check size={26} />
         </div>
         <h2 className="mt-4 text-[20px] font-bold tracking-[-0.41px] text-[var(--text-primary)]">All quiet.</h2>
         <p className="mt-1.5 text-[14px] leading-[1.5] text-[var(--text-tertiary)]">

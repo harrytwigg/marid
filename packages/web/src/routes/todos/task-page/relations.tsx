@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Plus, X } from "lucide-react"
+import { Plus, X } from "@/components/ui/icon"
 import { api, type WorkItemCompactWire, type WorkItemRelationKindWire, type WorkItemRelationWire } from "@/lib/api"
 import { StatusCircle } from "../state-glyph"
 
@@ -128,7 +128,7 @@ export function RelationsSection({
               onClick={() => onRemove(relation)}
               className="focus-outline ml-auto grid size-6 flex-none place-items-center rounded-md text-[var(--text-quaternary)] opacity-0 outline-none transition-opacity hover:text-[var(--text-secondary)] focus-visible:opacity-100 group-hover/rel:opacity-100"
             >
-              <X size={12} strokeWidth={2.2} aria-hidden />
+              <X size={12} aria-hidden />
             </button>
           </div>
         )
@@ -215,7 +215,7 @@ function AddRow({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       className="focus-outline -mx-2.5 flex min-h-9 w-[calc(100%+20px)] items-center rounded-[10px] px-2.5 text-left text-[13.5px] font-medium text-[var(--text-quaternary)] outline-none transition-colors hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]"
     >
-      <Plus size={12} strokeWidth={2.2} aria-hidden className="mr-4" />
+      <Plus size={12} aria-hidden className="mr-4" />
       Add relation
     </button>
   )

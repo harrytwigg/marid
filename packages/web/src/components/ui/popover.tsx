@@ -1,10 +1,11 @@
 import * as React from "react"
-import { Slot } from "radix-ui"
+import { Slot } from "./slot"
 import { Dialog, DialogTrigger, OverlayTriggerStateContext } from "react-aria-components/Dialog"
 import { Popover as AriaPopover, PopoverContext } from "react-aria-components/Popover"
 import { Pressable } from "react-aria-components/Pressable"
 
 import { cn } from "@/lib/utils"
+import { useClosesOnOutsidePress } from "./use-closes-on-outside-press"
 import { placementOf, type Align, type OverlayDomProps, type Side } from "./overlay-placement"
 
 /**
@@ -51,7 +52,7 @@ function PopoverTrigger({
   asChild = false,
   ...props
 }: React.ComponentProps<"button"> & { asChild?: boolean }) {
-  const Comp = asChild ? Slot.Root : "button"
+  const Comp = asChild ? Slot : "button"
   return (
     <Pressable>
       <Comp data-slot="popover-trigger" aria-haspopup="dialog" type={asChild ? undefined : "button"} {...props} />
@@ -65,23 +66,15 @@ function useTriggerRef(): React.RefObject<Element | null> | undefined {
   return context?.triggerRef
 }
 
-/** Closes the popover on a press that lands outside both it and its trigger (a
- *  press on the trigger is the trigger's own toggle). Listens in the capture
- *  phase, so a handler that stops propagation cannot hide the press from it. */
-function useClosesOnOutsidePress(surface: React.RefObject<HTMLElement | null>, triggerRef: React.RefObject<Element | null> | undefined) {
+/** Closes the popover on a press that lands outside both it and its trigger (a press on the trigger is the
+ *  trigger's own toggle). */
+function useClosesOnOutsideOf(surface: React.RefObject<HTMLElement | null>, triggerRef: React.RefObject<Element | null> | undefined) {
   const state = React.useContext(OverlayTriggerStateContext)
-  const isOpen = state?.isOpen ?? false
-  const close = state?.close
-  React.useEffect(() => {
-    if (!isOpen || !close) return
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null
-      if (target && (surface.current?.contains(target) || triggerRef?.current?.contains(target))) return
-      close()
-    }
-    document.addEventListener("pointerdown", onPointerDown, true)
-    return () => document.removeEventListener("pointerdown", onPointerDown, true)
-  }, [isOpen, close, surface, triggerRef])
+  useClosesOnOutsidePress({
+    isOpen: state?.isOpen ?? false,
+    close: state?.close,
+    isInside: (target) => Boolean(surface.current?.contains(target) || triggerRef?.current?.contains(target)),
+  })
 }
 
 type PopoverContentProps = OverlayDomProps & {
@@ -105,7 +98,7 @@ function PopoverContent({
 }: PopoverContentProps) {
   const surface = React.useRef<HTMLElement | null>(null)
   const triggerRef = useTriggerRef()
-  useClosesOnOutsidePress(surface, triggerRef)
+  useClosesOnOutsideOf(surface, triggerRef)
   return (
     <AriaPopover
       ref={surface}

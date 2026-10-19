@@ -2342,13 +2342,18 @@ export function updatePartialMessage(id: string, content: string): void {
   db.prepare('UPDATE messages SET content = ? WHERE id = ? AND partial = 1').run(content, id);
 }
 
-/** Settle one exact partial tool row and attach its durable activity receipt. */
-export function settlePartialToolMessage(id: string, content: string, activityReceiptId?: string): void {
+/** Settle one exact partial tool row and attach its durable activity receipt and,
+ *  for an `Agent`/`Task` launch, the sub-agent id its result carries. */
+export function settlePartialToolMessage(id: string, content: string, activityReceiptId?: string, agentId?: string): void {
   const db = initDb();
   const row = db.prepare('SELECT meta FROM messages WHERE id = ? AND partial = 1').get(id) as { meta: string | null } | undefined;
   if (!row) return;
   const current = parseMetaColumn(row.meta) ?? {};
-  const meta = activityReceiptId ? { ...current, activityReceiptId } : current;
+  const meta = {
+    ...current,
+    ...(activityReceiptId ? { activityReceiptId } : {}),
+    ...(agentId ? { agentId } : {}),
+  };
   db.prepare('UPDATE messages SET content = ?, meta = ? WHERE id = ? AND partial = 1').run(
     content,
     Object.keys(meta).length > 0 ? JSON.stringify(meta) : null,

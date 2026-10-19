@@ -1,6 +1,6 @@
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
-import { Slot } from "radix-ui"
+import { Slot } from "./slot"
 
 import { cn } from "@/lib/utils"
 
@@ -50,7 +50,7 @@ function Badge({
   }) {
   const v = variant ?? "default"
   const { color, variant: chipVariant } = CHIP[v]
-  const Comp = asChild ? Slot.Root : "span"
+  const Comp = asChild ? Slot : "span"
   // As HeroUI's Chip does, a bare string or number gets its label wrapper.
   const label = typeof children === "string" || typeof children === "number" ? <span className="chip__label">{children}</span> : children
 
