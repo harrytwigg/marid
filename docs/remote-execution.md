@@ -487,7 +487,7 @@ them at the workspace root, where every repo can see them and none of them owns
 the file.
 
 ```
-/srv/agents/main/                <- remoteCwd
+/srv/agents/main/                  <- remoteCwd
   CLAUDE.md                   <- linked to the gateway's, never in a repo
   some-service/               <- cloned here
   another-repo/               <- and here
