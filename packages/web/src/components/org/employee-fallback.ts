@@ -7,7 +7,6 @@ import {
   type FallbackLink,
 } from "@jinn/fallback-chain-wire"
 import type { Employee } from "@/lib/api"
-import type { EmployeeFallbackFields } from "@/lib/fallback-chains-api"
 import { engineDisplayName } from "@/lib/engine-names"
 import type { EnginesResponse } from "@/lib/api"
 import { linkOfResolved } from "@/routes/settings/engines/chain-links"
@@ -17,8 +16,9 @@ import { rowProblems, validatorContext } from "@/routes/settings/engines/chain-p
  * employee's own, where an inherited one comes from, and what would run. */
 
 /** The links an employee writes, or null when it writes none and inherits. */
-export function employeeChainOf(employee: Employee & EmployeeFallbackFields): FallbackLink[] | null {
-  const entries: FallbackChainEntry[] | null | undefined = employee.fallback
+export function employeeChainOf(employee: Employee): FallbackLink[] | null {
+  // Links, or entries as written: either reads the same.
+  const entries: readonly FallbackChainEntry[] | null | undefined = employee.fallback
   if (!Array.isArray(entries)) return null
   return entries.flatMap((entry) => fallbackLinkOf(entry) ?? [])
 }
@@ -80,7 +80,7 @@ export interface OwnChain {
  * edit: that edit then writes what runs, as explicit links, rather than the names alone.
  */
 function ownChainOf(employee: Employee, value: FallbackLink[], subject: FallbackChainSubject | undefined): OwnChain {
-  const written = employeeChainOf(employee as Employee & EmployeeFallbackFields)
+  const written = employeeChainOf(employee)
   if (subject?.legacy && sameChain(value, written)) {
     return { links: subject.effective.map(linkOfResolved), expanded: subject.effective.map((l) => l.origin === "legacy"), legacy: true }
   }

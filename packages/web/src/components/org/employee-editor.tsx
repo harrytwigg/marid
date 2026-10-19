@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { api } from "@/lib/api"
 import type { Employee, EmployeeUpdate } from "@/lib/api"
-import { EmployeeFallbackRow, employeeChainOf, refreshFallbackChains, sameChain, type FallbackPatch } from "./employee-fallback-field"
+import { EmployeeFallbackRow, employeeChainOf, refreshFallbackChains, sameChain } from "./employee-fallback-field"
 import { isConfined, type DepartmentScopeWire } from "@/lib/department-api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -116,7 +116,7 @@ export function EmployeeEditor({
 
   // Build a patch of only the changed fields.
   const patch = useMemo<EmployeeUpdate>(() => {
-    const p: EmployeeUpdate & FallbackPatch = {}
+    const p: EmployeeUpdate = {}
     if (displayName !== (employee.displayName || employee.name)) p.displayName = displayName.trim()
     if (department !== (employee.department || "")) p.department = department
     if (rank !== employee.rank) p.rank = rank

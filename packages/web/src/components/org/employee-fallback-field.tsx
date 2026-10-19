@@ -4,18 +4,17 @@ import { ChainFlowDisclosure } from "@/components/fallback/chain-flow-disclosure
 import { resolveForFlow } from "@/components/fallback/resolve-links"
 import { useModelRegistry } from "@/hooks/use-model-registry"
 import { useFallbackChains } from "@/hooks/use-fallback-chains"
-import type { Employee } from "@/lib/api"
+import type { Employee, EmployeeUpdate } from "@/lib/api"
 import { engineDisplayName } from "@/lib/engine-names"
 import { ChainEditor } from "@/routes/settings/engines/chain-editor"
 import { LegacyNotice } from "@/routes/settings/engines/chain-body"
 import { SettingsSelect } from "@/routes/settings/shared"
-import type { EmployeeFallbackFields } from "@/lib/fallback-chains-api"
 import { chainBlocked, employeeChainOf, employeeSubject, fallbackFieldState, sameChain, subjectProblems, type InheritedChain, type OwnChain } from "./employee-fallback"
 
 export { employeeChainOf, sameChain }
 export { refreshFallbackChains } from "@/hooks/use-fallback-chains"
 /** What the editor adds to its PATCH. */
-export type FallbackPatch = EmployeeFallbackFields
+export type FallbackPatch = Pick<EmployeeUpdate, "fallback">
 
 interface EmployeeFallbackFieldProps {
   employee: Employee

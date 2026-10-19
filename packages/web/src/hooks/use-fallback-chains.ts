@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import type { FallbackChainSubject } from '@jinn/fallback-chain-wire'
-import { fetchFallbackChains } from '@/lib/fallback-chains-api'
+import { fetchFallbackChains } from '@/lib/api-fallback-chains'
 import { queryClient } from '@/lib/query-client'
 import { queryKeys } from '@/lib/query-keys'
 
@@ -30,7 +30,7 @@ export function findSubject(
 
 /** The gateway's sentences about a chain it refused part of or could not use (a duplicate it loaded with a warning, say); none when it has no complaint. */
 export function subjectProblems(subject: FallbackChainSubject | undefined): string[] {
-  return (subject as (FallbackChainSubject & { problems?: string[] }) | undefined)?.problems ?? []
+  return subject?.problems ?? []
 }
 
 /** What the gateway says of a chain (its effective links, their health, who it is the default for) moves with every config or employee write: read it again. Covers the employee variants too. */

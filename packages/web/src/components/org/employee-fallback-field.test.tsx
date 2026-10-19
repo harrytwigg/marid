@@ -120,7 +120,8 @@ describe("EmployeeFallbackField", () => {
 })
 
 describe("an employee chain written in engine names", () => {
-  const legacy = { ...EMP, fallback: ["codex"] } as Employee
+  // The gateway may hand an employee chain back as the names it was written in.
+  const legacy = { ...EMP, fallback: ["codex"] } as unknown as Employee
   const effective = [resolved("codex"), resolved("opencode", { model: "x/y", origin: "legacy" })]
 
   beforeEach(() => {
