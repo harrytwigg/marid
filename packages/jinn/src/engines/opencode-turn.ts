@@ -193,7 +193,7 @@ export class OpencodeTurn {
    *  and a host's fallback plugin then aborted the next step: that abort carries no error. */
   private acceptsAnswer(outcome: { code: number | null; failure?: string }): boolean {
     if (outcome.failure || !this.resultText.trim() || this.endedInError) return false;
-    return true;
+    return !(this.answerIsNarration && this.endedByFallbackPlugin(outcome));
   }
 
   /** The error of a turn with no accepted answer, and whether a host's fallback plugin ended it. */
