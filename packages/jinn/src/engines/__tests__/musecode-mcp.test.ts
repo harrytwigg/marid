@@ -1,0 +1,95 @@
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { McpGlobalConfig, ResolvedMcpConfig } from "../../shared/types.js";
+import { resolveMcpServers } from "../../mcp/resolver.js";
+import { setJinnAttachGate } from "../../mcp/attachment.js";
+import { attachSessionIdentity } from "../../mcp/identity.js";
+import { buildMuseSessionConfig, projectMuseMcpServer } from "../musecode-mcp.js";
+
+describe("projectMuseMcpServer", () => {
+  it("projects a stdio server with its args and env", () => {
+    expect(projectMuseMcpServer({ command: "node", args: ["a.js"], env: { K: "v" } })).toEqual({
+      transport: "stdio", command: "node", args: ["a.js"], env: { K: "v" }, mode: "optional",
+    });
+  });
+
+  it("leaves out empty args and env", () => {
+    expect(projectMuseMcpServer({ command: "node", args: [], env: {} })).toEqual({ transport: "stdio", command: "node", mode: "optional" });
+  });
+
+  it("projects a URL server as streamableHttp with its headers", () => {
+    expect(projectMuseMcpServer({ url: "https://x.test/mcp", headers: { Authorization: "Bearer t" } })).toEqual({
+      transport: "streamableHttp", url: "https://x.test/mcp", headers: { Authorization: "Bearer t" }, mode: "optional",
+    });
+    expect(projectMuseMcpServer({ type: "sse", url: "https://x.test/sse" })).toEqual({ transport: "streamableHttp", url: "https://x.test/sse", mode: "optional" });
+  });
+
+  it("makes every server optional, in either transport, so one that will not start cannot fail the turn", () => {
+    expect(projectMuseMcpServer({ command: "node" })).toMatchObject({ mode: "optional" });
+    expect(projectMuseMcpServer({ url: "https://x.test" })).toMatchObject({ mode: "optional" });
+  });
+
+  it("is null for a spec Muse cannot run", () => {
+    for (const spec of [null, undefined, "node", 7, [], {}, { command: "" }, { url: "" }]) {
+      expect(projectMuseMcpServer(spec)).toBeNull();
+    }
+  });
+
+  it("copies the spec rather than sharing its objects", () => {
+    const env = { K: "v" };
+    const projected = projectMuseMcpServer({ command: "node", env }) as { env: Record<string, string> };
+    projected.env.K = "changed";
+    expect(env.K).toBe("v");
+  });
+});
+
+describe("buildMuseSessionConfig", () => {
+  it("marks each of the session's servers optional, whatever its name", () => {
+    const resolved = { mcpServers: { jinn: { command: "node" }, "jinn-other": { command: "node" }, docs: { url: "https://x.test" } } } as unknown as ResolvedMcpConfig;
+    expect(Object.values(buildMuseSessionConfig(resolved)!.mcpServers).map((server) => server.mode)).toEqual(["optional", "optional", "optional"]);
+  });
+
+  it("keeps the servers it can project and drops the rest", () => {
+    const resolved = { mcpServers: { jinn: { command: "node" }, docs: { url: "https://x.test" }, broken: {} } } as unknown as ResolvedMcpConfig;
+    expect(Object.keys(buildMuseSessionConfig(resolved)!.mcpServers)).toEqual(["jinn", "docs"]);
+  });
+
+  it("is undefined when there is nothing to send", () => {
+    expect(buildMuseSessionConfig(undefined)).toBeUndefined();
+    expect(buildMuseSessionConfig({ mcpServers: {} })).toBeUndefined();
+    expect(buildMuseSessionConfig({ mcpServers: { broken: {} } } as unknown as ResolvedMcpConfig)).toBeUndefined();
+  });
+});
+
+/** The jinn server a real resolver payload hands this adapter (the engine-wiring seam for musecode). */
+describe("the company toolset, resolved for real", () => {
+  const GATEWAY_URL = "http://127.0.0.1:56789";
+  const TOKEN = "wiring-test-secret-token";
+  const SID = "sess-wiring-0123";
+  const ON = { browser: { enabled: false }, gateway: { enabled: true } } as McpGlobalConfig;
+  const saved = { url: process.env.JINN_GATEWAY_URL, token: process.env.JINN_GATEWAY_TOKEN };
+
+  beforeEach(() => {
+    process.env.JINN_GATEWAY_URL = GATEWAY_URL;
+    process.env.JINN_GATEWAY_TOKEN = TOKEN;
+    setJinnAttachGate({ ok: true });
+  });
+  afterEach(() => {
+    setJinnAttachGate(null);
+    for (const [key, value] of [["JINN_GATEWAY_URL", saved.url], ["JINN_GATEWAY_TOKEN", saved.token]] as const) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  it("reaches the session config as an optional stdio server carrying the session's identity, and never the token", () => {
+    const resolved = attachSessionIdentity(resolveMcpServers(ON, undefined), SID);
+    const jinn = buildMuseSessionConfig(resolved)?.mcpServers.jinn as { transport: string; mode?: string; env?: Record<string, string> };
+    expect(jinn).toMatchObject({ transport: "stdio", mode: "optional", env: { JINN_SESSION_ID: SID, JINN_GATEWAY_URL: GATEWAY_URL } });
+    expect(jinn.env?.JINN_SESSION_CAPABILITY).toBeTruthy();
+    expect(JSON.stringify(jinn)).not.toContain(TOKEN);
+  });
+
+  it("is absent when the kill switch is on", () => {
+    expect(buildMuseSessionConfig(resolveMcpServers({ browser: { enabled: false }, gateway: { enabled: false } } as McpGlobalConfig, undefined))).toBeUndefined();
+  });
+});

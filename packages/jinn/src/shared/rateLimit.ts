@@ -26,6 +26,7 @@ const RATE_LIMIT_ENGINE_LABELS: Record<string, string> = {
   hermes: "Hermes",
   // Lowercase on purpose: it is how the project spells its own name.
   opencode: "opencode",
+  musecode: "Muse Code",
 };
 
 /** Human-facing provider/engine name for rate-limit state and notifications. */
@@ -51,6 +52,7 @@ const DEAD_SESSION_PATTERNS = [
  */
 export function isDeadSessionError(result: EngineResult): boolean {
   if (!result.error) return false;
+  if (result.conversationIntact) return false;
 
   // A process that never started its session did no work for a reason of its
   // own (an exec refusal, a dropped ssh connection, a crash on boot), and its

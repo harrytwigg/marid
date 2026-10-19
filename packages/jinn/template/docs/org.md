@@ -27,7 +27,7 @@ persona: |
 | `displayName` | string | no | Human-readable name (default: `name`) |
 | `department` | string | no | Department directory name (default: the directory the file sits in) |
 | `rank` | string | no | One of: executive, manager, senior, employee (default: `employee`) |
-| `engine` | string | no | One of: claude, codex, antigravity, grok, pi, hermes, opencode (default: `claude`) |
+| `engine` | string | no | One of: claude, codex, antigravity, grok, pi, hermes, opencode, musecode (default: `claude`) |
 | `model` | string | no | Engine-compatible model override (default: `sonnet`) |
 | `persona` | string | yes | System prompt defining personality and behavior (required for a new employee; a file that only tunes a built-in system employee may omit it) |
 | `reportsTo` | string or list | no | Who this employee reports to; unset means the root |

@@ -22,6 +22,7 @@ import {
   refreshHermesModels,
   refreshPiModels,
   refreshOpencodeModels,
+  refreshMusecodeModels,
 } from "../shared/models.js";
 import { opencodeDiscoveryEnv } from "../engines/opencode-launch.js";
 
@@ -61,6 +62,7 @@ export function startBackgroundRefreshes(getConfig: () => JinnConfig, emit: Gate
       refreshPiModels(config),
       refreshOpencodeModels(config, { secondLook: true, env: opencodeDiscoveryEnv(config) }),
       refreshGrokModels(config),
+      refreshMusecodeModels(config),
       refreshHermesModels(config),
     ])
       .finally(() => emit("engines:updated", {}));

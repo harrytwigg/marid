@@ -12,6 +12,9 @@ import { resolveBin, isInstalled } from "./resolve-bin.js";
 import { discoverPiModels } from "./pi-models.js";
 import { withConfiguredOverrides } from "./opencode-models.js";
 import { opencodeCatalogue, refreshOpencodeCatalogue } from "./opencode-catalogue.js";
+import { MUSECODE_EFFORT_LEVELS } from "./musecode-effort.js";
+import { buildMusecodeEntry } from "./musecode-registry.js";
+export { musecodeEngineOptions, musecodeModelCost, refreshMusecodeModels } from "./musecode-registry.js";
 import {
   CLAUDE_ALIAS_IDS,
   discoverClaudeEffortLevels,
@@ -55,9 +58,9 @@ import {
  */
 
 /** Engines registered in this build (mirrors server.ts engine map). */
-export const ENGINE_NAMES = ["claude", "codex", "antigravity", "grok", "pi", "hermes", "opencode"] as const;
+export const ENGINE_NAMES = ["claude", "codex", "antigravity", "grok", "pi", "hermes", "opencode", "musecode"] as const;
 export type EngineName = (typeof ENGINE_NAMES)[number];
-export const PTY_VIEW_ENGINE_NAMES = ["claude", "codex", "antigravity", "grok", "hermes", "opencode"] as const; // engines with a /ws/pty view
+export const PTY_VIEW_ENGINE_NAMES = ["claude", "codex", "antigravity", "grok", "hermes", "opencode", "musecode"] as const; // engines with a /ws/pty view
 export type PtyViewEngineName = (typeof PTY_VIEW_ENGINE_NAMES)[number];
 
 /**
@@ -102,7 +105,7 @@ export function engineSupportsRemote(name: string): name is RemoteEngineName {
  * Engines whose model catalog exists ONLY once discovery has run.
  *
  * Every engine here discovers its models from its CLI, but the others also ship
- * a known offline catalog, so an id outside it really is a typo. These two have
+ * a known offline catalog, so an id outside it really is a typo. These have
  * nothing to fall back on: the catalog is whatever providers the operator
  * configured on this machine, and it is empty for the first moments after a
  * restart and whenever discovery fails. Refusing an unrecognised id there would
@@ -110,7 +113,7 @@ export function engineSupportsRemote(name: string): name is RemoteEngineName {
  * with the model — so the id is allowed through with a warning, and the engine
  * reports the real error if it turns out to be wrong.
  */
-const DYNAMIC_CATALOG_ENGINES: ReadonlySet<string> = new Set(["pi", "opencode"]);
+const DYNAMIC_CATALOG_ENGINES: ReadonlySet<string> = new Set(["pi", "opencode", "musecode"]);
 
 /** Whether an unrecognised model id for `engine` should be allowed through. */
 export function hasDynamicModelCatalog(engine: string): boolean {
@@ -126,6 +129,7 @@ const ENGINE_BIN: Record<EngineName, string> = {
   pi: "pi",
   hermes: "hermes",
   opencode: "opencode",
+  musecode: "muse",
 };
 
 const EFFORT_MECHANISM: Record<EngineName, EffortMechanism> = {
@@ -137,6 +141,7 @@ const EFFORT_MECHANISM: Record<EngineName, EffortMechanism> = {
   hermes: "none",
   // A model's variants are its effort levels; opencode lists them per model.
   opencode: "opencode-variant",
+  musecode: "musecode-turn",
 };
 
 export const CODEX_DEFAULT_MODEL = "gpt-5.5";
@@ -154,6 +159,7 @@ const SYNTH_DEFAULTS: Record<EngineName, { supportsEffort: boolean; effortLevels
   // Placeholder shown only in the brief window before opencode discovery
   // completes; the provider/id form is what the engine hands back to `-m`.
   opencode: { supportsEffort: false, effortLevels: [], fallbackModel: "anthropic/claude-sonnet-5" },
+  musecode: { supportsEffort: true, effortLevels: [...MUSECODE_EFFORT_LEVELS], fallbackModel: "muse-spark-1.2" },
 };
 
 /** Optional per-engine `bin` override from config. */
@@ -183,6 +189,7 @@ const ENGINE_INSTALL_HINT: Record<EngineName, string> = {
   pi: "install the Pi CLI",
   hermes: "install the Hermes CLI: curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash",
   opencode: "install the opencode CLI: curl -fsSL https://opencode.ai/install | bash, then run `opencode auth login`",
+  musecode: "install Muse Code: curl -fsSL https://dev.meta.ai/install.sh | bash, then run `muse login` or set META_API_KEY",
 };
 
 /** Actionable error message for a session blocked by a missing engine binary. */
@@ -449,6 +456,7 @@ export function buildRegistry(config: JinnConfig): ModelRegistry {
       registry[name] = buildOpencodeEntry(config, block?.opencode, synthesized[name], available);
       continue;
     }
+    if (name === "musecode") { registry[name] = buildMusecodeEntry(config, block?.musecode, synthesized[name], available, (b, p) => fromEngineModelsConfig(name, b, available, p)); continue }
     const engineBlock = block?.[name];
     registry[name] = engineBlock
       ? fromEngineModelsConfig(name, engineBlock, available)
