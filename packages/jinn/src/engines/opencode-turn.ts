@@ -66,7 +66,7 @@ export class OpencodeTurn {
         this.readStepFinish(part);
         break;
       case "error":
-        this.turnError = opencodeErrorText(event) ?? "opencode reported an error with no message";
+        this.turnError = opencodeErrorText(event);
         this.endedInError = true;
         break;
     }

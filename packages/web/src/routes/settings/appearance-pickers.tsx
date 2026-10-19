@@ -1,6 +1,8 @@
-/** The accent swatches the picker offers, beside the picker that renders them. */
-export const ACCENT_PRESETS = [
-  { label: "Marid teal", value: "#3DBFB2" },
+/** The accent swatches the picker offers, beside the picker that renders them.
+ *  The first has no value: it clears the override, so the theme's own accent
+ *  (a light-dark() pair, readable on both sheets) applies. */
+export const ACCENT_PRESETS: { label: string; value: string | null }[] = [
+  { label: "Default", value: null },
   { label: "Red", value: "#EF4444" },
   { label: "Orange", value: "#F97316" },
   { label: "Amber", value: "#F59E0B" },
@@ -15,7 +17,9 @@ export const ACCENT_PRESETS = [
   { label: "Pink", value: "#EC4899" },
 ]
 
-import { TEXT_SCALES } from "@/lib/settings"
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+import { TEXT_SCALES, TRANSPARENCIES } from "@/lib/settings"
 import { THEMES } from "@/lib/themes"
 import { useTheme } from "@/routes/providers"
 import { useSettings } from "@/routes/settings-provider"
@@ -48,14 +52,16 @@ function StepButton({
   onClick: () => void
 }) {
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
       onClick={onClick}
       aria-pressed={isActive}
-      className="flex cursor-pointer flex-col items-center gap-[var(--space-1)] rounded-[13px] border-none px-[var(--space-2)] py-[var(--space-3)] transition-colors duration-150 ease-[var(--ease-smooth)]"
-      style={{
-        background: isActive ? "var(--accent-fill)" : "var(--fill-quaternary)",
-      }}
+      className={cn(
+        "h-auto min-h-0 w-full flex-col gap-[var(--space-1)] rounded-[13px] px-[var(--space-2)] py-[var(--space-3)] md:h-auto",
+        isActive
+          ? "[--button-bg:var(--accent-fill)] [--button-bg-hover:var(--accent-fill)]"
+          : "[--button-bg:var(--fill-quaternary)] [--button-bg-hover:var(--fill-tertiary)]",
+      )}
     >
       {glyph}
       <span
@@ -67,7 +73,7 @@ function StepButton({
       >
         {label}
       </span>
-    </button>
+    </Button>
   )
 }
 
@@ -117,6 +123,39 @@ export function TextSizePicker() {
             label={step.label}
             isActive={settings.textScale === step.value}
             onClick={() => setTextScale(step.value)}
+          />
+        ))}
+      </div>
+    </>
+  )
+}
+
+export function TransparencyPicker() {
+  const { settings, setTransparency } = useSettings()
+
+  return (
+    <>
+      <PickerLabel>Transparency</PickerLabel>
+      <div className="grid grid-cols-2 gap-[var(--space-2)] mb-[var(--space-4)]">
+        {TRANSPARENCIES.map((option) => (
+          <StepButton
+            key={option.value}
+            // The same panel drawn both ways, so the choice reads before it is made.
+            glyph={
+              <span
+                aria-hidden="true"
+                className="h-[30px] w-[44px] rounded-[8px] border border-[var(--separator)]"
+                style={{
+                  background:
+                    option.value === "full"
+                      ? "linear-gradient(135deg, var(--accent-fill), var(--fill-quaternary))"
+                      : "var(--bg-secondary)",
+                }}
+              />
+            }
+            label={option.label}
+            isActive={settings.transparency === option.value}
+            onClick={() => setTransparency(option.value)}
           />
         ))}
       </div>

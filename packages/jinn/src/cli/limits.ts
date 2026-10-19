@@ -85,7 +85,7 @@ export async function runLimits(opts: LimitsOptions = {}): Promise<void> {
 
   const config = loadConfig();
   await refreshPiModels(config);
-  await refreshOpencodeModels(config, opencodeDiscoveryEnv(config));
+  await refreshOpencodeModels(config, { env: opencodeDiscoveryEnv(config) });
   await refreshGrokModels(config);
   await refreshHermesModels(config);
   const snapshot = await collectEngineLimits(config, { engine: opts.engine });

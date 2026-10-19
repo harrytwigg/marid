@@ -10,7 +10,8 @@ import { logger } from "./logger.js";
 import { keepClaudeCatalogAfter, logClaudeCatalogShortfall, readClaudeCredentialStatus } from "./claude-auth.js";
 import { resolveBin, isInstalled } from "./resolve-bin.js";
 import { discoverPiModels } from "./pi-models.js";
-import { discoverOpencodeModels, withConfiguredOverrides } from "./opencode-models.js";
+import { withConfiguredOverrides } from "./opencode-models.js";
+import { opencodeCatalogue, refreshOpencodeCatalogue } from "./opencode-catalogue.js";
 import {
   CLAUDE_ALIAS_IDS,
   discoverClaudeEffortLevels,
@@ -204,8 +205,6 @@ let discoveredAntigravityModels: AntigravityModelDiscovery | null = null;
 let discoveredGrokModels: GrokModelDiscovery | null = null;
 /** Snapshot of dynamically-discovered Hermes models (null until first discovery). */
 let discoveredHermesModels: HermesModelDiscovery | null = null;
-/** Snapshot of dynamically-discovered opencode models (null until first discovery). */
-let discoveredOpencodeModels: ModelInfo[] | null = null;
 
 /**
  * Discover Claude's catalog through Claude Code OAuth. This is best-effort and
@@ -312,27 +311,18 @@ export async function refreshPiModels(config: JinnConfig): Promise<void> {
 /**
  * Discover the models the installed opencode CLI can reach (`opencode models`)
  * and refresh the registry. Async — populates a snapshot the synchronous
- * registry reads. Never throws; degrades to the config/synthesized fallback
- * when opencode is absent or discovery fails. `env` is what the discovery runs
- * start with (`opencodeDiscoveryEnv`), supplied by callers because `shared/`
- * cannot import the engine that defines it.
+ * registry reads (`opencode-catalogue.ts`, which also lands details that arrive
+ * after this returns). Never throws; degrades to the config/synthesized
+ * fallback when opencode is absent or discovery fails. `opts.env` is what the
+ * discovery runs start with (`opencodeDiscoveryEnv`), supplied by callers
+ * because `shared/` cannot import the engine that defines it.
  */
-export async function refreshOpencodeModels(config: JinnConfig, env?: Record<string, string>): Promise<void> {
-  if (!engineAvailable(config, "opencode")) {
-    discoveredOpencodeModels = null;
-    invalidateModelRegistry();
-    return;
-  }
-  try {
-    const bin = resolveBin("opencode", engineBinOverride(config, "opencode"));
-    discoveredOpencodeModels = await discoverOpencodeModels(bin, env);
-    logger.info(`opencode model discovery: ${discoveredOpencodeModels.length} model(s)`);
-  } catch (err) {
-    logger.warn(`opencode model discovery failed: ${err instanceof Error ? err.message : err}`);
-    discoveredOpencodeModels = null;
-  } finally {
-    invalidateModelRegistry();
-  }
+export async function refreshOpencodeModels(
+  config: JinnConfig,
+  opts: { secondLook?: boolean; env?: Record<string, string> } = {},
+): Promise<void> {
+  const bin = engineAvailable(config, "opencode") ? resolveBin("opencode", engineBinOverride(config, "opencode")) : null;
+  await refreshOpencodeCatalogue(bin, invalidateModelRegistry, opts.secondLook, opts.env);
 }
 
 /**
@@ -631,6 +621,7 @@ function buildOpencodeEntry(
   available: boolean,
 ): EngineRegistryEntry {
   const pinned = config.engines.opencode?.model;
+  const discoveredOpencodeModels = opencodeCatalogue();
   if (discoveredOpencodeModels && discoveredOpencodeModels.length > 0) {
     let models = discoveredOpencodeModels;
     // A pinned model discovery has not caught up with still has to be

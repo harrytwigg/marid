@@ -2,7 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, it, expect } from "vitest";
-import { discoverOpencodeModels, parseOpencodeModels } from "../opencode-models.js";
+import { parseOpencodeModels } from "../opencode-models.js";
+import { discoverOpencodeModels } from "../opencode-discovery.js";
 import { parseOpencodeApiModels } from "../opencode-model-records.js";
 
 /** `opencode models --verbose` on 1.19.0, cut to three models. */
@@ -226,6 +227,23 @@ describe("parseOpencodeApiModels", () => {
     expect(models).toEqual([{ id: "p/on", label: "on", supportsEffort: true, effortLevels: ["high"] }]);
   });
 
+  it("keeps the first record for a repeated id and takes nothing from the later one", () => {
+    const models = parseOpencodeApiModels(list(
+      { providerID: "p", id: "z", variants: [] },
+      { providerID: "p", id: "dup", limit: { context: 1000 }, variants: [{ id: "high" }] },
+      { providerID: "p", id: "a", variants: [] },
+      { providerID: "p", id: "dup", limit: { context: 2000 }, variants: [{ id: "low" }, { id: "medium" }] },
+      { providerID: "p", id: "bare" },
+      { providerID: "p", id: "bare", limit: { context: 3000 }, variants: [{ id: "max" }] },
+    ));
+    expect(models).toEqual([
+      { id: "p/a", label: "a", supportsEffort: false, effortLevels: [] },
+      { id: "p/bare", label: "bare", supportsEffort: false, effortLevels: [] },
+      { id: "p/dup", label: "dup", supportsEffort: true, effortLevels: ["high"], contextWindow: 1000 },
+      { id: "p/z", label: "z", supportsEffort: false, effortLevels: [] },
+    ]);
+  });
+
   it("gives no models for output that is not the API's answer", () => {
     for (const output of ["", "not json", "[]", "null", JSON.stringify({ data: "x" }), JSON.stringify([{ providerID: "p", id: "m" }]), "opencode/plain\n"]) {
       expect(parseOpencodeApiModels(output)).toEqual([]);
@@ -241,7 +259,7 @@ describe("discoverOpencodeModels", () => {
       // Prints the fixture only for the exact arguments; anything else is the
       // plain list a build without --verbose would print.
       fs.writeFileSync(bin, `#!/bin/sh\nif [ "$1 $2" = "models --verbose" ]; then cat "${path.join(__dirname, "fixtures", "opencode-models-verbose.txt")}"; else echo opencode/plain; fi\n`, { mode: 0o755 });
-      const models = await discoverOpencodeModels(bin);
+      const models = (await discoverOpencodeModels(bin)).models;
       expect(models.map((m) => m.contextWindow)).toEqual([200000, 1048576, 1000000]);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });

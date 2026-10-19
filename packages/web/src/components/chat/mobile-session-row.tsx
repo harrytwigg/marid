@@ -1,5 +1,5 @@
 import React from "react"
-import { Pin } from "lucide-react"
+import { Pin } from "@/components/ui/icon"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { SessionDepartmentBadge } from "@/components/session-department-badge"
 import { cleanPreview } from "@/lib/clean-preview"
@@ -187,7 +187,7 @@ function RowSurface({
       }}
       className={cn(
         "relative flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left data-[pressed]:bg-[var(--fill-primary)]",
-        isActive ? "bg-[var(--fill-secondary)]" : "bg-[var(--sidebar-bg)]",
+        isActive ? "bg-[var(--accent-fill)] shadow-[inset_3px_0_0_var(--accent)]" : "bg-[var(--sidebar-bg)]",
       )}
     >
       {children}

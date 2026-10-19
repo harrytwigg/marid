@@ -1,3 +1,4 @@
+import "@/test/preload-menus"
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { FallbackModeChip } from '../fallback-mode-chip'

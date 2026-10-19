@@ -37,7 +37,8 @@ export interface PortalConfig {
 }
 
 export interface JinnConfig {
-  jinn?: { version?: string };
+  /** The instance's own record, keyed by the codename in either spelling: version, and the built-in MCP server's name. */
+  jinn?: { version?: string; mcpServerName?: string };
   gateway: {
     port: number;
     host: string;

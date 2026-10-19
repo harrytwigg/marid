@@ -22,7 +22,7 @@ export function RemoveButton({
       data-testid={testId}
       aria-label={label}
       onClick={onClick}
-      className={`focus-ring grid place-items-center rounded-full text-[var(--text-quaternary)] outline-none hover:text-[var(--text-secondary)] ${className ?? ""}`}
+      className={`focus-outline grid place-items-center rounded-full text-[var(--text-quaternary)] outline-none hover:text-[var(--text-secondary)] ${className ?? ""}`}
     >
       ×
     </button>

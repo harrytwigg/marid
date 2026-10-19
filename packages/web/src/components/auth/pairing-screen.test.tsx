@@ -1,8 +1,21 @@
 import { describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen } from "@testing-library/react"
+import { PRODUCT_NAME } from "@/lib/brand"
 import { PairingScreen } from "./pairing-screen"
 
 describe("PairingScreen", () => {
+  it("shows the product name as the wordmark, read from the brand module", () => {
+    render(
+      <PairingScreen
+        authState={{ authRequired: true, authenticated: false, canBootstrapLocal: false, networkExposed: false }}
+        pairing={false}
+        onPair={() => {}}
+      />,
+    )
+
+    expect(screen.getByText(PRODUCT_NAME, { selector: "p.brand-wordmark" })).toBeTruthy()
+  })
+
   it("submits the entered remote access code", () => {
     const onPair = vi.fn()
     render(

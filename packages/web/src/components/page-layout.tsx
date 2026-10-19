@@ -144,12 +144,12 @@ export function PageLayout({ children, chromeless, hideMobileTabBar }: { childre
   const coarsePointer = useCoarsePointer()
   return (
     <SearchOverlayProvider>
-      <div className="flex h-dvh overflow-hidden bg-background">
+      <div data-shell="root" className="flex h-dvh overflow-hidden bg-background">
         <DeferredGlobalSearch />
         {/* Global desktop nav rail (hidden < lg from inside NavRibbon). Sibling of
             <main> so its per-icon label pills can escape rightward over content. */}
         {!chromeless && <NavRibbon />}
-        <main className="relative flex flex-1 flex-col overflow-hidden">
+        <main data-shell={chromeless ? undefined : "sheet"} className="relative flex flex-1 flex-col overflow-hidden">
           {/* Before the live view in DOM order, which is what puts the previous
               view underneath it while the drag is running. */}
           {coarsePointer && <EdgeBackLayer contentRef={content} />}

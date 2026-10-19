@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { ArrowUp, Pencil, X } from 'lucide-react'
+import { ArrowUp, Pencil, X } from '@/components/ui/icon'
 import { type MediaAttachment } from '@/lib/conversations'
 import { MessageMedia } from './message-media'
 import { SessionQueueContext, type QueuedMessage } from './use-session-queue'

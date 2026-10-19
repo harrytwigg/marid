@@ -17,6 +17,8 @@
 /** Top-level entries staged as real host-local directories, not links. */
 export const FARM_REAL_ENTRIES = ["gateway.json", "tmp"] as const;
 
+import { LEGACY_CODENAME, NAMES } from "./codename.js";
+
 /** Top-level directories staged as real directories whose children are linked
  *  one by one, minus {@link isFarmExcludedChild} entries. `workflows/` only
  *  exists on homes upgraded from a release that still had Workflows. */
@@ -25,7 +27,10 @@ export const FARM_FILTERED_DIRS = ["sessions", "workflows"] as const;
 /** A real file FARM_SCRIPT writes into every staged home. Its presence is how
  *  Marid code knows the home it was handed is a remote session's stage, whose
  *  linked entries lead to the gateway's live data. */
-export const REMOTE_STAGE_MARKER = ".jinn-remote-stage";
+export const REMOTE_STAGE_MARKER = `.${NAMES.codename}-remote-stage`;
+
+/** The marker an earlier codename wrote. A staged home an older gateway built still carries only that one. */
+export const LEGACY_REMOTE_STAGE_MARKER = `.${LEGACY_CODENAME}-remote-stage`;
 
 /** SQLite database files and their sidecars. Keep in step with the `case`
  *  patterns in FARM_SCRIPT. */
@@ -42,7 +47,7 @@ export function isFarmExcludedChild(name: string): boolean {
 export function isLinkedInFarm(relSegments: readonly string[]): boolean {
   const [top, child] = relSegments;
   if (!top) return false;
-  if ((FARM_REAL_ENTRIES as readonly string[]).includes(top) || top === REMOTE_STAGE_MARKER) return false;
+  if ((FARM_REAL_ENTRIES as readonly string[]).includes(top) || top === REMOTE_STAGE_MARKER || top === LEGACY_REMOTE_STAGE_MARKER) return false;
   if ((FARM_FILTERED_DIRS as readonly string[]).includes(top)) {
     return child !== undefined && !isFarmExcludedChild(child);
   }

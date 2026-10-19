@@ -4,18 +4,13 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const GLOBALS = readFileSync(path.resolve(__dirname, '../../../routes/globals.css'), 'utf8')
+const IDENTITY = readFileSync(path.resolve(__dirname, '../../../routes/glass-identity.css'), 'utf8')
 
-/** The palette lives in FOUR blocks, not two: a token defined only in the
- *  `[data-theme]` pair is missing for a reader who never picked a theme and is
- *  on the OS preference. Each expected value is that block's own `--system-red`
- *  at the alpha that block already uses to relate `--accent-fill` to `--accent`,
- *  which is why the light media block is 0.12 and not 0.14. */
-const DANGER_FILL_BY_BLOCK: Array<[string, string]> = [
-  [':root, [data-theme="dark"]', 'rgba(224,103,90,0.14)'],
-  ['[data-theme="light"]', 'rgba(178,59,51,0.14)'],
-  ['@media (prefers-color-scheme: light)', 'rgba(178,59,51,0.12)'],
-  ['@media (prefers-color-scheme: dark)', 'rgba(224,103,90,0.14)'],
-]
+/** One declaration, in the identity that owns the palette, serves every theme:
+ *  light-dark() picks the side from the root's color-scheme, so the system-theme
+ *  fallback needs no copy of its own. Each side is that theme's `--system-red`
+ *  at the alpha its `--accent-fill` already uses against `--accent`. */
+const DANGER_FILL = '--danger-fill: light-dark(rgba(196,50,62,0.12), rgba(255,122,130,0.16));'
 
 /** Everything from the opening of `selector` to the next block at the same
  *  nesting depth, so an assertion about one palette cannot be satisfied by a
@@ -32,8 +27,10 @@ function block(selector: string): string {
 }
 
 describe('--danger-fill', () => {
-  it.each(DANGER_FILL_BY_BLOCK)('is defined in %s', (selector, value) => {
-    expect(block(selector)).toContain(`--danger-fill: ${value};`)
+  it('is declared once, for light and dark together', () => {
+    expect(IDENTITY.split(DANGER_FILL)).toHaveLength(2)
+    expect(IDENTITY.match(/--danger-fill:/g)).toHaveLength(1)
+    expect(GLOBALS).not.toContain('--danger-fill:')
   })
 
   it('is the only source of the failed bubble colour — no hardcoded value in the rules', () => {

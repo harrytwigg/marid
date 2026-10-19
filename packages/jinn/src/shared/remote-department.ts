@@ -2,6 +2,7 @@ import path from "node:path";
 import type { Employee } from "./types.js";
 import type { RemoteExecutionConfig } from "./config-types.js";
 import { isUnderRoot } from "./remote-target.js";
+import { LEGACY_CODENAME, NAMES } from "./codename.js";
 
 /**
  * Department-scoped employees on remote hosts (FR-060 to FR-066): where their stage
@@ -15,7 +16,10 @@ import { isUnderRoot } from "./remote-target.js";
  */
 
 /** Directory under `remote.root` that holds one stage directory per scoped department. */
-export const REMOTE_DEPARTMENTS_DIR = ".jinn-departments";
+export const REMOTE_DEPARTMENTS_DIR = `.${NAMES.codename}-departments`;
+
+/** The directory an earlier codename named: where the stage directories are on a host until the next scoped spawn moves them. */
+export const LEGACY_REMOTE_DEPARTMENTS_DIR = `.${LEGACY_CODENAME}-departments`;
 
 /**
  * What `employeeRemoteTarget` needs to place a scoped session (FR-061): the non-open
@@ -68,6 +72,11 @@ export function remoteDepartmentsRoot(remoteRoot: string): string {
   return path.posix.join(remoteRoot, REMOTE_DEPARTMENTS_DIR);
 }
 
+/** Both roots a host may hold stage directories under, the current one first: what a guard must keep clear of. */
+export function remoteDepartmentsRoots(remoteRoot: string): string[] {
+  return [...new Set([remoteDepartmentsRoot(remoteRoot), path.posix.join(remoteRoot, LEGACY_REMOTE_DEPARTMENTS_DIR)])];
+}
+
 /** `<remote.root>/.jinn-departments/<slug>`. A slug is one directory name under `org/`, never a path. */
 export function remoteDepartmentStageDir(remoteRoot: string, slug: string): string {
   if (!slug || slug.includes("/") || slug.startsWith(".")) throw new Error(`"${slug}" is not a department name`);
@@ -83,14 +92,15 @@ export function remoteDepartmentStageDir(remoteRoot: string, slug: string): stri
  */
 export function scopedRemoteTargetProblem(workArea: string | undefined, remote: RemoteExecutionConfig | undefined): string | null {
   if (!remote?.root || !remote.mount) return null; // validateRemoteTarget reports the missing config
-  const departments = remoteDepartmentsRoot(remote.root);
-  if (remotePathsOverlap(departments, remote.mount)) {
-    return `remote.mount "${remote.mount}" overlaps "${departments}", where department-scoped employees' stage directories are synced`;
+  for (const departments of remoteDepartmentsRoots(remote.root)) {
+    if (remotePathsOverlap(departments, remote.mount)) {
+      return `remote.mount "${remote.mount}" overlaps "${departments}", where department-scoped employees' stage directories are synced`;
+    }
+    if (workArea && remotePathsOverlap(workArea, departments)) {
+      return `its remoteCwd "${workArea}" overlaps "${departments}", where department stage directories are synced`;
+    }
   }
   if (!workArea) return null;
-  if (remotePathsOverlap(workArea, departments)) {
-    return `its remoteCwd "${workArea}" overlaps "${departments}", where department stage directories are synced`;
-  }
   if (remotePathsOverlap(workArea, remote.mount)) {
     return `its remoteCwd "${workArea}" overlaps remote.mount "${remote.mount}", the mounted gateway home`;
   }

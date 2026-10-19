@@ -37,8 +37,8 @@ tool list:
 - It holds no approval authority, and it is never treated as the COO portal.
 - It never runs an engine itself, and never reads arbitrary instance files
   (`read_knowledge`).
-- Messages it sends go through the ordinary agent-to-agent guards (a per-sender rate cap
-  and a relay hop budget).
+- Messages it sends go through the ordinary agent-to-agent guards (no self-messages and a
+  relay hop budget).
 
 ## 1. Configure the gateway
 

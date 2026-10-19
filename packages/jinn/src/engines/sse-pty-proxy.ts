@@ -10,6 +10,9 @@ import {
   retryBackoffMs,
   type InflightUpstream,
 } from "./upstream-pool.js";
+import { hasMainAgentSentinel } from "./main-agent-sentinel.js";
+
+export { MAIN_AGENT_SENTINEL } from "./main-agent-sentinel.js";
 
 /** Kill an upstream connection that goes silent this long (no bytes). Long enough
  *  for extended-thinking/tool gaps, while still reaping genuinely stuck sockets. */
@@ -20,13 +23,6 @@ export interface SseDataEvent {
   type?: string;
   [k: string]: unknown;
 }
-
-/** Gateway-controlled marker injected into the MAIN agent's appended system prompt.
- *  The proxy tees only requests whose system carries it — Task sub-agents get Claude
- *  Code's own system prompt (no sentinel) and are therefore suppressed. This is the
- *  one main-vs-sub signal the gateway fully owns, so it cannot drift like a request
- *  fingerprint does. It is an HTML comment so the model ignores it. */
-export const MAIN_AGENT_SENTINEL = "<!-- jinn-main-agent:5c1f -->";
 
 /** Signature of `https.request`/`http.request` — the seam we inject in tests so
  *  the proxy can target a local fake upstream instead of api.anthropic.com. */
@@ -410,12 +406,12 @@ export class SsePtyProxy {
 /** Does the request's `system` (a string or a content-block array) carry the
  *  gateway's main-agent sentinel? */
 function systemHasSentinel(system: unknown): boolean {
-  if (typeof system === "string") return system.includes(MAIN_AGENT_SENTINEL);
+  if (typeof system === "string") return hasMainAgentSentinel(system);
   if (Array.isArray(system)) {
     return system.some(
       (b) =>
         typeof (b as { text?: unknown })?.text === "string" &&
-        (b as { text: string }).text.includes(MAIN_AGENT_SENTINEL),
+        hasMainAgentSentinel((b as { text: string }).text),
     );
   }
   return false;

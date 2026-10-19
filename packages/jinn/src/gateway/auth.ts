@@ -4,10 +4,26 @@ import { isIP } from "node:net";
 import path from "node:path";
 import type { IncomingMessage } from "node:http";
 import type { JinnConfig } from "../shared/types.js";
-import { resolveDefaultJinnHome, resolveJinnInstance } from "../shared/home.js";
-export const AUTH_COOKIE = "jinn_auth";
-export const AUTH_DEVICE_COOKIE = "jinn_device";
-export const LOCAL_BOOTSTRAP_GRANT_HEADER = "x-jinn-bootstrap-grant";
+import { resolveJinnInstance } from "../shared/home.js";
+import { wireHeader } from "../shared/wire-names.js";
+import { parseCookieHeader, requestAuthCookies } from "./auth-cookies.js";
+
+// The cookie names and headers moved to auth-cookies.ts; they are still exported from here.
+export {
+  AUTH_COOKIE,
+  AUTH_DEVICE_COOKIE,
+  authCookieHeader,
+  authCookieHeaders,
+  authCookieName,
+  authDeviceCookieHeader,
+  authDeviceCookieName,
+  clearAuthCookieHeader,
+  clearAuthCookieHeaders,
+  clearAuthDeviceCookieHeader,
+  legacyAuthCookieMigration,
+  parseCookieHeader,
+} from "./auth-cookies.js";
+export const LOCAL_BOOTSTRAP_GRANT_HEADER = wireHeader("bootstrap-grant");
 export const LOCAL_BOOTSTRAP_GRANT_TTL_MS = 60_000;
 const PAIRING_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 export const PAIRING_CODE_TTL_MS = 5 * 60 * 1000;
@@ -158,24 +174,6 @@ export function ensureGatewayAuthToken(jinnHome: string): string {
   return token;
 }
 
-export function parseCookieHeader(cookieHeader: string | undefined): Record<string, string> {
-  if (!cookieHeader) return {};
-  const out: Record<string, string> = {};
-  for (const part of cookieHeader.split(";")) {
-    const idx = part.indexOf("=");
-    if (idx < 0) continue;
-    const key = part.slice(0, idx).trim();
-    if (!key) continue;
-    const rawValue = part.slice(idx + 1).trim();
-    try {
-      out[key] = decodeURIComponent(rawValue);
-    } catch {
-      out[key] = rawValue;
-    }
-  }
-  return out;
-}
-
 function safeEqual(a: string, b: string): boolean {
   if (!a || !b) return false;
   const ab = Buffer.from(a);
@@ -197,8 +195,7 @@ export function verifyGatewayAuth(
   const cookieRaw = headers.cookie;
   const cookie = Array.isArray(cookieRaw) ? cookieRaw[0] : cookieRaw;
   const parsed = parseCookieHeader(cookie);
-  const token = parsed[authCookieName(jinnHome)];
-  const deviceId = parsed[authDeviceCookieName(jinnHome)];
+  const { secret: token, deviceId } = requestAuthCookies(parsed, jinnHome);
   if (jinnHome && typeof token === "string" && typeof deviceId === "string" && verifyAuthSession(jinnHome, deviceId, token)) {
     return true;
   }
@@ -283,33 +280,6 @@ export function validateGatewayExposure(config: Pick<JinnConfig, "gateway">): { 
 }
 
 /**
- * Cookies are scoped by host but NOT by port (RFC 6265), so two gateway
- * instances on the same host (e.g. one behind `tailscale serve`) would clobber
- * each other's `jinn_auth`/`jinn_device` cookie and log each other out. Namespace
- * the cookie name per instance to keep their sessions independent. The default
- * `~/.jinn` home keeps the bare names (no forced re-pair on upgrade); every
- * other explicit home is namespaced, including throwaway sandbox homes.
- */
-function cookieNamespace(jinnHome?: string): string {
-  const home = jinnHome ?? process.env.JINN_HOME;
-  if (!home) return "";
-  const resolved = path.resolve(home);
-  if (resolved === resolveDefaultJinnHome()) return "";
-  const base = path.basename(resolved).replace(/^\./, "");
-  return base.replace(/[^A-Za-z0-9_-]/g, "") || "instance";
-}
-
-export function authCookieName(jinnHome?: string): string {
-  const ns = cookieNamespace(jinnHome);
-  return ns ? `${AUTH_COOKIE}_${ns}` : AUTH_COOKIE;
-}
-
-export function authDeviceCookieName(jinnHome?: string): string {
-  const ns = cookieNamespace(jinnHome);
-  return ns ? `${AUTH_DEVICE_COOKIE}_${ns}` : AUTH_DEVICE_COOKIE;
-}
-
-/**
  * True when the request reached us over HTTPS — either directly, or through a
  * reverse proxy that terminated TLS and said so.
  *
@@ -327,49 +297,6 @@ export function requestArrivedOverHttps(
   const raw = req.headers["x-forwarded-proto"];
   const proto = Array.isArray(raw) ? raw[0] : raw;
   return typeof proto === "string" && proto.split(",")[0]!.trim().toLowerCase() === "https";
-}
-
-/**
- * `Secure` is conditional, not unconditional, and the condition matters.
- *
- * Marking the cookie `Secure` always would break every plain-HTTP listener the
- * gateway still legitimately serves — `http://<lan-ip>:7777` is not a secure
- * context, so the browser would silently drop the cookie and the operator could
- * never log in there. Marking it only when the session was established over
- * HTTPS gives a browser paired through a tunnel a cookie it will never send in
- * cleartext, while a browser paired over the LAN keeps working exactly as before.
- *
- * This matters because the cookie's `Max-Age` is a year: once a browser has
- * paired through a public hostname, any later plaintext request to that host —
- * a typed URL, a stale bookmark, an `http://` link — would otherwise put a
- * long-lived credential on the wire before the redirect to HTTPS arrives.
- */
-function cookieAttributes(secure: boolean): string {
-  return `Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000${secure ? "; Secure" : ""}`;
-}
-
-export function authCookieHeader(token: string, jinnHome?: string, secure = false): string {
-  return `${authCookieName(jinnHome)}=${encodeURIComponent(token)}; ${cookieAttributes(secure)}`;
-}
-
-export function authDeviceCookieHeader(deviceId: string, jinnHome?: string, secure = false): string {
-  return `${authDeviceCookieName(jinnHome)}=${encodeURIComponent(deviceId)}; ${cookieAttributes(secure)}`;
-}
-
-export function authCookieHeaders(secret: string, deviceId: string, jinnHome?: string, secure = false): string[] {
-  return [authCookieHeader(secret, jinnHome, secure), authDeviceCookieHeader(deviceId, jinnHome, secure)];
-}
-
-export function clearAuthCookieHeader(jinnHome?: string): string {
-  return `${authCookieName(jinnHome)}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
-}
-
-export function clearAuthDeviceCookieHeader(jinnHome?: string): string {
-  return `${authDeviceCookieName(jinnHome)}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
-}
-
-export function clearAuthCookieHeaders(jinnHome?: string): string[] {
-  return [clearAuthCookieHeader(jinnHome), clearAuthDeviceCookieHeader(jinnHome)];
 }
 
 export function createAuthState(
@@ -521,8 +448,7 @@ export function touchAuthSession(
   const cookieRaw = req.headers.cookie;
   const cookie = Array.isArray(cookieRaw) ? cookieRaw[0] : cookieRaw;
   const parsed = parseCookieHeader(cookie);
-  const secret = parsed[authCookieName(jinnHome)];
-  const deviceId = parsed[authDeviceCookieName(jinnHome)];
+  const { secret, deviceId } = requestAuthCookies(parsed, jinnHome);
   if (!verifyAuthSession(jinnHome, deviceId, secret)) return null;
   const devices = loadStoredAuthSessions(jinnHome);
   const idx = devices.findIndex((d) => d.id === deviceId);
@@ -559,7 +485,7 @@ export function currentAuthDeviceId(
 ): string | undefined {
   const cookieRaw = headers.cookie;
   const cookie = Array.isArray(cookieRaw) ? cookieRaw[0] : cookieRaw;
-  return parseCookieHeader(cookie)[authDeviceCookieName(jinnHome)];
+  return requestAuthCookies(parseCookieHeader(cookie), jinnHome).deviceId;
 }
 
 export function listAuthSessions(jinnHome: string, currentDeviceId?: string, now = Date.now()): PublicAuthSessionDevice[] {

@@ -760,6 +760,7 @@ export function useLiveSession(
             const activityReceiptId = typeof p.activityReceiptId === 'string' && p.activityReceiptId
               ? p.activityReceiptId
               : undefined
+            const agentId = typeof p.agentId === 'string' && p.agentId ? p.agentId : undefined
             let targetIndex = -1
             if (toolId) {
               targetIndex = updated.findIndex((m) =>
@@ -786,8 +787,14 @@ export function useLiveSession(
               updated[targetIndex] = {
                 ...target,
                 content: `Used ${target.toolCall}`,
-                ...(activityReceiptId
-                  ? { meta: { ...(target.meta ?? {}), activityReceiptId } }
+                ...(activityReceiptId || agentId
+                  ? {
+                      meta: {
+                        ...(target.meta ?? {}),
+                        ...(activityReceiptId ? { activityReceiptId } : {}),
+                        ...(agentId ? { agentId } : {}),
+                      },
+                    }
                   : {}),
               }
             }

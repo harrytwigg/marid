@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Bot } from 'lucide-react'
+import { Bot } from '@/components/ui/icon'
 import { queryKeys } from '@/lib/query-keys'
 import { formatElapsed } from '@/lib/session-waits'
 import { subagentMessages } from '@/lib/subagent-messages'

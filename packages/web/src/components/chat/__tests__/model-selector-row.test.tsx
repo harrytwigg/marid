@@ -1,10 +1,10 @@
+import "@/test/preload-menus"
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactElement } from 'react'
 import type { EnginesResponse } from '@/lib/api'
-
 // ModelSelectorRow calls useQueryClient() (for refreshModels), so renders must
 // be wrapped in a QueryClientProvider — otherwise the hook throws on mount.
 function renderRow(ui: ReactElement) {

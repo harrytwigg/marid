@@ -12,6 +12,7 @@ import { logger } from "../shared/logger.js";
 import { collectEngineLimits } from "../shared/engine-limits.js";
 import { readEngineHealth } from "../shared/engine-health.js";
 import { engineAvailable } from "../shared/models.js";
+import { onLateOpencodeDetails } from "../shared/opencode-catalogue.js";
 import { checkClaudeRefreshExpiry, observeClaudeCredentialsValid } from "../sessions/claude-auth-watch.js";
 import {
   refreshAntigravityModels,
@@ -58,7 +59,7 @@ export function startBackgroundRefreshes(getConfig: () => JinnConfig, emit: Gate
       refreshCodexModels(config),
       refreshAntigravityModels(config),
       refreshPiModels(config),
-      refreshOpencodeModels(config, opencodeDiscoveryEnv(config)),
+      refreshOpencodeModels(config, { secondLook: true, env: opencodeDiscoveryEnv(config) }),
       refreshGrokModels(config),
       refreshHermesModels(config),
     ])
@@ -82,6 +83,9 @@ export function startBackgroundRefreshes(getConfig: () => JinnConfig, emit: Gate
       .catch((error) => logger.warn(`Engine health refresh failed: ${String(error)}`));
   };
 
+  // A slow first `opencode models --verbose` lands its details after the refresh announced the plain list.
+  const stopLateDetails = onLateOpencodeDetails(() => emit("engines:updated", {}));
+
   refreshModels();
   refreshEngineHealth();
   const timers = [
@@ -90,5 +94,5 @@ export function startBackgroundRefreshes(getConfig: () => JinnConfig, emit: Gate
   ];
   for (const timer of timers) timer.unref?.();
 
-  return { refreshModels, stop: () => { for (const timer of timers) clearInterval(timer); } };
+  return { refreshModels, stop: () => { for (const timer of timers) clearInterval(timer); stopLateDetails(); } };
 }

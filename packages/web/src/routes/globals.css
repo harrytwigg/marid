@@ -1,86 +1,5 @@
 @import "tailwindcss";
 
-/* Self-hosted so the shell has no third-party dependency and paints its own
-   type offline. Vite hashes these into /assets/, which the gateway serves
-   immutable — a public/ font would revalidate on every load instead. */
-/* Hanken Grotesk — variable wght 400..600, normal — SIL OFL 1.1 (see src/fonts/OFL-hanken-grotesk.txt) */
-
-/* latin-ext */
-@font-face {
-  font-family: 'Hanken Grotesk';
-  font-style: normal;
-  font-weight: 400 600;
-  font-display: swap;
-  src: url('../fonts/hanken-grotesk-latin-ext-var.woff2') format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-/* latin */
-@font-face {
-  font-family: 'Hanken Grotesk';
-  font-style: normal;
-  font-weight: 400 600;
-  font-display: swap;
-  src: url('../fonts/hanken-grotesk-latin-var.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
-/* IBM Plex Mono — 400 / 500 / 600, normal — SIL OFL 1.1 (see src/fonts/OFL-ibm-plex-mono.txt) */
-
-/* latin-ext */
-@font-face {
-  font-family: 'IBM Plex Mono';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('../fonts/ibm-plex-mono-latin-ext-400.woff2') format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-/* latin */
-@font-face {
-  font-family: 'IBM Plex Mono';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('../fonts/ibm-plex-mono-latin-400.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-/* latin-ext */
-@font-face {
-  font-family: 'IBM Plex Mono';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('../fonts/ibm-plex-mono-latin-ext-500.woff2') format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-/* latin */
-@font-face {
-  font-family: 'IBM Plex Mono';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('../fonts/ibm-plex-mono-latin-500.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-/* latin-ext */
-@font-face {
-  font-family: 'IBM Plex Mono';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url('../fonts/ibm-plex-mono-latin-ext-600.woff2') format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-/* latin */
-@font-face {
-  font-family: 'IBM Plex Mono';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url('../fonts/ibm-plex-mono-latin-600.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
 /* :where() has zero specificity so shadcn's dark: utilities remain overridable.
    data-theme is never "system" after JS hydration — ThemeProvider resolves it to dark/light. */
 @custom-variant dark (:where([data-theme="dark"]) &);
@@ -346,313 +265,41 @@
   :root { --chat-header-band: 88px; }
 }
 
-/* LEDGER DARK — warm charcoal + amber (default) */
-:root, [data-theme="dark"] {
-  --tab-bar-height: 56px;
-  --font-ui: "Hanken Grotesk", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --font-display: "Hanken Grotesk", -apple-system, system-ui, sans-serif;
-  --font-code: "IBM Plex Mono", "SF Mono", Monaco, Menlo, monospace;
-  --bg: #14130F;
-  --bg-secondary: #1E1C16;
-  --bg-tertiary: #2A2720;
-  --material-regular: rgba(30,28,22,0.92);
-  --material-thick: rgba(20,18,15,0.96);
-  /* --material-thick composited over --bg at alpha 1, for the coarse-pointer
-     bars that drop the backdrop filter (see --pill-bg-opaque). */
-  --material-thick-opaque: #14120F;
-  --material-thin: rgba(255,255,255,0.05);
-  --material-ultra-thin: rgba(255,255,255,0.03);
-  --fill-primary: rgba(255,255,255,0.10);
-  --fill-secondary: rgba(255,255,255,0.07);
-  --fill-tertiary: rgba(255,255,255,0.05);
-  --fill-quaternary: rgba(255,255,255,0.035);
-  --separator: rgba(255,255,255,0.09);
-  --separator-opaque: #38342B;
-  --scrim: rgba(0,0,0,0.32);
-  --text-primary: #E8E4D8;
-  --text-secondary: rgba(232,228,216,0.62);
-  --text-tertiary: rgba(232,228,216,0.38);
-  --text-quaternary: rgba(232,228,216,0.22);
-  --accent: #E0A33C;
-  --accent-fill: rgba(224,163,60,0.14);
-  --danger-fill: rgba(224,103,90,0.14);
-  --accent-contrast: #14130F;
-  --talk-focus-ring: rgba(224,163,60,0.55);
-  --system-blue: #5B9BD5;
-  --system-indigo: #8586D8;
-  --system-green: #7DBE6A;
-  --system-red: #E0675A;
-  --system-orange: #E89B45;
-  --system-yellow: #E3C34C;
-  --system-purple: #B98AD6;
-  --inset-shine: inset 0 1px 0 rgba(255,255,255,0.06);
-  --shadow-subtle: 0 1px 2px rgba(0,0,0,0.30);
-  --shadow-ambient: 0 0 0 0.5px rgba(0,0,0,0.30);
-  --shadow-key: 0 4px 16px rgba(0,0,0,0.50);
-  --shadow-card: 0 0 0 0.5px rgba(0,0,0,0.30), 0 4px 16px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05);
-  --shadow-overlay: 0 0 0 0.5px rgba(0,0,0,0.40), 0 16px 48px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.05);
-  /* Frosted header-pill material (theme-aware). Dark bumped for legibility — the
-     0.55/0.10 pill nearly vanished on the near-black bg. */
-  --pill-bg: rgba(34,31,24,0.64);
-  /* Same material with the blur baked out: --pill-bg composited over --bg at
-     alpha 1. Coarse pointers get this instead of the backdrop filter, so the
-     pill reads as the colour it already reads as over a plain page. */
-  --pill-bg-opaque: #1D1B15;
-  --pill-border: rgba(255,255,255,0.14);
-  --code-bg: rgba(255,255,255,0.05);
-  --code-border: rgba(255,255,255,0.09);
-  --code-text: #E8E4D8;
-  /* Tonal staircase (chrome recedes, content leads): Ribbon (lightest chrome)
-     > Chat List (mid) > Thread (--bg, deepest). Quiet ~8 L* steps; no rest
-     hairlines — the only line is the list's scroll-activated header separator. */
-  --ribbon-bg: #232019;
-  --sidebar-bg: #1C1A14;
-  --sidebar-backdrop: blur(40px) saturate(160%);
-  /* Talk orb material: a lit sphere, not a coloured shape. --orb-shadow is the
-     limb the light never reaches, --orb-specular the highlight where it lands,
-     --orb-rim the fresnel that brightens at the edge. All four theme blocks
-     carry the full set — light is a shipped state, not a fallback. */
-  --orb-core: rgba(255,206,132,0.78);
-  --orb-base: rgba(56,32,80,0.90);
-  --orb-bloom: rgba(172,84,138,0.64);
-  --orb-lobe-a: rgba(255,182,88,0.84);
-  --orb-lobe-b: rgba(198,110,204,0.62);
-  --orb-lobe-c: rgba(120,110,222,0.54);
-  --orb-shadow: rgba(14,7,26,0.95);
-  --orb-specular: rgba(255,250,236,0.88);
-  --orb-rim: rgba(222,188,255,0.64);
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 18px;
-  --radius-2xl: 24px;
-  --ease-spring: cubic-bezier(0.34,1.56,0.64,1);
-  --ease-smooth: cubic-bezier(0.4,0,0.2,1);
-  --ease-snappy: cubic-bezier(0.2,0,0,1);
-}
-
-/* LEDGER LIGHT — warm paper + ochre */
-[data-theme="light"] {
-  --tab-bar-height: 56px;
-  --font-ui: "Hanken Grotesk", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --font-display: "Hanken Grotesk", -apple-system, system-ui, sans-serif;
-  --font-code: "IBM Plex Mono", "SF Mono", Monaco, Menlo, monospace;
-  --bg: #F4F1E8;
-  --bg-secondary: #FBF9F2;
-  --bg-tertiary: #ECE8DC;
-  --material-regular: rgba(251,249,242,0.94);
-  --material-thick: rgba(244,241,232,0.97);
-  --material-thick-opaque: #F4F1E8;
-  --material-thin: rgba(33,30,22,0.04);
-  --material-ultra-thin: rgba(33,30,22,0.02);
-  --fill-primary: rgba(33,30,22,0.08);
-  --fill-secondary: rgba(33,30,22,0.06);
-  --fill-tertiary: rgba(33,30,22,0.045);
-  --fill-quaternary: rgba(33,30,22,0.028);
-  --separator: rgba(33,30,22,0.14);
-  --separator-opaque: #DED8C7;
-  --scrim: rgba(40,34,20,0.18);
-  --text-primary: #211E16;
-  --text-secondary: rgba(33,30,22,0.66);
-  --text-tertiary: rgba(33,30,22,0.56);
-  --text-quaternary: rgba(33,30,22,0.30);
-  --accent: #926516;
-  --accent-fill: rgba(146,101,22,0.14);
-  --danger-fill: rgba(178,59,51,0.14);
-  --accent-contrast: #FBF9F2;
-  --talk-focus-ring: rgba(146,101,22,0.55);
-  --system-blue: #2D6CB5;
-  --system-indigo: #5155A6;
-  --system-green: #597648;
-  --system-red: #B23B33;
-  --system-orange: #B5701A;
-  --system-yellow: #9C7A10;
-  --system-purple: #7A5A9E;
-  --inset-shine: inset 0 1px 0 rgba(255,255,255,0.70);
-  --shadow-subtle: 0 1px 2px rgba(40,34,20,0.06);
-  --shadow-ambient: 0 0 0 0.5px rgba(40,34,20,0.10);
-  --shadow-key: 0 2px 8px rgba(40,34,20,0.10), 0 8px 24px rgba(40,34,20,0.08);
-  --shadow-card: 0 0 0 0.5px rgba(40,34,20,0.08), 0 1px 3px rgba(40,34,20,0.07), 0 4px 12px rgba(40,34,20,0.06), inset 0 1px 0 rgba(255,255,255,0.70);
-  --shadow-overlay: 0 0 0 0.5px rgba(40,34,20,0.10), 0 4px 16px rgba(40,34,20,0.10), 0 16px 48px rgba(40,34,20,0.14), inset 0 1px 0 rgba(255,255,255,0.80);
-  /* Frosted header-pill material (theme-aware) */
-  --pill-bg: rgba(251,249,242,0.72);
-  --pill-bg-opaque: #F9F7EF;
-  --pill-border: rgba(33,30,22,0.10);
-  --code-bg: rgba(33,30,22,0.05);
-  --code-border: rgba(33,30,22,0.10);
-  --code-text: #4A4030;
-  /* Tonal staircase (light): Ribbon (greyest chrome) > Chat List (mid) >
-     Thread (--bg, paper-white). Steps step DOWN from the content. */
-  --ribbon-bg: #E4DFD0;
-  --sidebar-bg: #ECE8DC;
-  --sidebar-backdrop: blur(20px) saturate(150%);
-  /* Talk orb, light: honey pearl pushed toward white, with enough ochre and
-     lavender weight for thin Ring/Pulse geometry to survive on paper. */
-  --orb-core: rgba(255,244,216,0.94);
-  --orb-base: rgba(184,132,61,0.85);
-  --orb-bloom: rgba(222,168,91,0.88);
-  --orb-lobe-a: rgba(255,232,174,0.78);
-  --orb-lobe-b: rgba(223,175,202,0.62);
-  --orb-lobe-c: rgba(177,167,221,0.55);
-  --orb-shadow: rgba(96,64,26,0.55);
-  --orb-specular: rgba(255,252,244,0.70);
-  --orb-rim: rgba(138,102,182,0.52);
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 18px;
-  --radius-2xl: 24px;
-  --ease-spring: cubic-bezier(0.34,1.56,0.64,1);
-  --ease-smooth: cubic-bezier(0.4,0,0.2,1);
-  --ease-snappy: cubic-bezier(0.2,0,0,1);
-}
-
-/* SYSTEM: media-query fallback before JS hydration */
+/* The root's color-scheme picks the side of every light-dark() colour. The
+   palette itself is in glass-identity.css, written once per token; only what
+   light-dark() cannot take (box-shadows, gradients) keeps a block per theme. */
+:root, [data-theme] { color-scheme: dark; }
+[data-theme="light"] { color-scheme: light; }
+/* SYSTEM: media-query fallback before JS hydration. The bootstrap in index.html
+   resolves data-theme to dark/light, so this only matters until it runs. */
 @media (prefers-color-scheme: light) {
-  [data-theme="system"] {
-    --tab-bar-height: 56px;
-    --font-ui: "Hanken Grotesk", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-    --font-display: "Hanken Grotesk", -apple-system, system-ui, sans-serif;
-    --font-code: "IBM Plex Mono", "SF Mono", Monaco, Menlo, monospace;
-    --bg: #F4F1E8;
-    --bg-secondary: #FBF9F2;
-    --bg-tertiary: #ECE8DC;
-    --material-regular: rgba(251,249,242,0.94);
-    --material-thick: rgba(244,241,232,0.97);
-    --material-thick-opaque: #F4F1E8;
-    --material-thin: rgba(33,30,22,0.04);
-    --material-ultra-thin: rgba(33,30,22,0.02);
-    --fill-primary: rgba(33,30,22,0.08);
-    --fill-secondary: rgba(33,30,22,0.06);
-    --fill-tertiary: rgba(33,30,22,0.045);
-    --fill-quaternary: rgba(33,30,22,0.028);
-    --separator: rgba(33,30,22,0.14);
-    --separator-opaque: #DED8C7;
-    --scrim: rgba(40,34,20,0.18);
-    --text-primary: #211E16;
-    --text-secondary: rgba(33,30,22,0.66);
-    --text-tertiary: rgba(33,30,22,0.56);
-    --text-quaternary: rgba(33,30,22,0.30);
-    --accent: #B07A1A;
-    --accent-fill: rgba(176,122,26,0.12);
-    --danger-fill: rgba(178,59,51,0.12);
-    --accent-contrast: #FBF9F2;
-    --talk-focus-ring: rgba(176,122,26,0.55);
-    --system-blue: #2D6CB5;
-    --system-indigo: #5155A6;
-    --system-green: #597648;
-    --system-red: #B23B33;
-    --system-orange: #B5701A;
-    --system-yellow: #9C7A10;
-    --system-purple: #7A5A9E;
-    --inset-shine: inset 0 1px 0 rgba(255,255,255,0.70);
-    --shadow-subtle: 0 1px 2px rgba(40,34,20,0.06);
-    --shadow-ambient: 0 0 0 0.5px rgba(40,34,20,0.10);
-    --shadow-key: 0 2px 8px rgba(40,34,20,0.10), 0 8px 24px rgba(40,34,20,0.08);
-    --shadow-card: 0 0 0 0.5px rgba(40,34,20,0.08), 0 1px 3px rgba(40,34,20,0.07), 0 4px 12px rgba(40,34,20,0.06), inset 0 1px 0 rgba(255,255,255,0.70);
-    --shadow-overlay: 0 0 0 0.5px rgba(40,34,20,0.10), 0 4px 16px rgba(40,34,20,0.10), 0 16px 48px rgba(40,34,20,0.14), inset 0 1px 0 rgba(255,255,255,0.80);
-    /* Frosted header-pill material (theme-aware) */
-    --pill-bg: rgba(251,249,242,0.72);
-    --pill-bg-opaque: #F9F7EF;
-    --pill-border: rgba(33,30,22,0.10);
-    --code-bg: rgba(33,30,22,0.05);
-    --code-border: rgba(33,30,22,0.10);
-    --code-text: #4A4030;
-    /* Tonal staircase (system → light): mirror [data-theme="light"]. */
-    --ribbon-bg: #E4DFD0;
-    --sidebar-bg: #ECE8DC;
-    --sidebar-backdrop: blur(20px) saturate(150%);
-    --orb-core: rgba(255,244,216,0.94);
-    --orb-base: rgba(184,132,61,0.85);
-    --orb-bloom: rgba(222,168,91,0.88);
-    --orb-lobe-a: rgba(255,232,174,0.78);
-    --orb-lobe-b: rgba(223,175,202,0.62);
-    --orb-lobe-c: rgba(177,167,221,0.55);
-    --orb-shadow: rgba(96,64,26,0.55);
-    --orb-specular: rgba(255,252,244,0.70);
-    --orb-rim: rgba(138,102,182,0.52);
-    --radius-sm: 6px;
-    --radius-md: 10px;
-    --radius-lg: 14px;
-    --radius-xl: 18px;
-    --radius-2xl: 24px;
-    --ease-spring: cubic-bezier(0.34,1.56,0.64,1);
-    --ease-smooth: cubic-bezier(0.4,0,0.2,1);
-    --ease-snappy: cubic-bezier(0.2,0,0,1);
-  }
+  [data-theme="system"] { color-scheme: light; }
 }
-@media (prefers-color-scheme: dark) {
-  [data-theme="system"] {
-    --tab-bar-height: 56px;
-    --font-ui: "Hanken Grotesk", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-    --font-display: "Hanken Grotesk", -apple-system, system-ui, sans-serif;
-    --font-code: "IBM Plex Mono", "SF Mono", Monaco, Menlo, monospace;
-    --bg: #14130F;
-    --bg-secondary: #1E1C16;
-    --bg-tertiary: #2A2720;
-    --material-regular: rgba(30,28,22,0.92);
-    --material-thick: rgba(20,18,15,0.96);
-    --material-thick-opaque: #14120F;
-    --material-thin: rgba(255,255,255,0.05);
-    --material-ultra-thin: rgba(255,255,255,0.03);
-    --fill-primary: rgba(255,255,255,0.10);
-    --fill-secondary: rgba(255,255,255,0.07);
-    --fill-tertiary: rgba(255,255,255,0.05);
-    --fill-quaternary: rgba(255,255,255,0.035);
-    --separator: rgba(255,255,255,0.09);
-    --separator-opaque: #38342B;
-    --scrim: rgba(0,0,0,0.32);
-    --text-primary: #E8E4D8;
-    --text-secondary: rgba(232,228,216,0.62);
-    --text-tertiary: rgba(232,228,216,0.38);
-    --text-quaternary: rgba(232,228,216,0.22);
-    --accent: #E0A33C;
-    --accent-fill: rgba(224,163,60,0.14);
-    --danger-fill: rgba(224,103,90,0.14);
-    --accent-contrast: #14130F;
-    --talk-focus-ring: rgba(224,163,60,0.55);
-    --system-blue: #5B9BD5;
-    --system-indigo: #8586D8;
-    --system-green: #7DBE6A;
-    --system-red: #E0675A;
-    --system-orange: #E89B45;
-    --system-yellow: #E3C34C;
-    --system-purple: #B98AD6;
-    --inset-shine: inset 0 1px 0 rgba(255,255,255,0.06);
-    --shadow-subtle: 0 1px 2px rgba(0,0,0,0.30);
-    --shadow-ambient: 0 0 0 0.5px rgba(0,0,0,0.30);
-    --shadow-key: 0 4px 16px rgba(0,0,0,0.50);
-    --shadow-card: 0 0 0 0.5px rgba(0,0,0,0.30), 0 4px 16px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05);
-    --shadow-overlay: 0 0 0 0.5px rgba(0,0,0,0.40), 0 16px 48px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.05);
-    /* Frosted header-pill material (theme-aware). Dark bumped (see :root dark block). */
-    --pill-bg: rgba(34,31,24,0.64);
-    --pill-bg-opaque: #1D1B15;
-    --pill-border: rgba(255,255,255,0.14);
-    --code-bg: rgba(255,255,255,0.05);
-    --code-border: rgba(255,255,255,0.09);
-    --code-text: #E8E4D8;
-    /* Tonal staircase (system → dark): mirror [data-theme="dark"]. */
-    --ribbon-bg: #232019;
-    --sidebar-bg: #1C1A14;
-    --sidebar-backdrop: blur(40px) saturate(160%);
-    --orb-core: rgba(255,206,132,0.78);
-    --orb-base: rgba(56,32,80,0.90);
-    --orb-bloom: rgba(172,84,138,0.64);
-    --orb-lobe-a: rgba(255,182,88,0.84);
-    --orb-lobe-b: rgba(198,110,204,0.62);
-    --orb-lobe-c: rgba(120,110,222,0.54);
-    --orb-shadow: rgba(14,7,26,0.95);
-    --orb-specular: rgba(255,250,236,0.88);
-    --orb-rim: rgba(222,188,255,0.64);
-    --radius-sm: 6px;
-    --radius-md: 10px;
-    --radius-lg: 14px;
-    --radius-xl: 18px;
-    --radius-2xl: 24px;
-    --ease-spring: cubic-bezier(0.34,1.56,0.64,1);
-    --ease-smooth: cubic-bezier(0.4,0,0.2,1);
-    --ease-snappy: cubic-bezier(0.2,0,0,1);
-  }
+
+/* Custom properties that script reads back with getComputedStyle (the talk
+   orb paints them onto a canvas, the PWA titlebar copies --bg). A registered
+   <color> resolves light-dark() into a plain colour at computed-value time;
+   an unregistered one would hand script the literal "light-dark(...)" text.
+   Firefox resolves a registered token against the PARENT's color-scheme, so a
+   nested opposite-theme subtree (a light panel inside a dark page) must not
+   read these; Chromium resolves them against the element itself. */
+@property --bg { syntax: "<color>"; inherits: true; initial-value: transparent; }
+@property --system-red { syntax: "<color>"; inherits: true; initial-value: transparent; }
+@property --orb-core { syntax: "<color>"; inherits: true; initial-value: transparent; }
+@property --orb-base { syntax: "<color>"; inherits: true; initial-value: transparent; }
+@property --orb-bloom { syntax: "<color>"; inherits: true; initial-value: transparent; }
+@property --orb-lobe-a { syntax: "<color>"; inherits: true; initial-value: transparent; }
+@property --orb-lobe-b { syntax: "<color>"; inherits: true; initial-value: transparent; }
+@property --orb-lobe-c { syntax: "<color>"; inherits: true; initial-value: transparent; }
+@property --orb-shadow { syntax: "<color>"; inherits: true; initial-value: transparent; }
+@property --orb-specular { syntax: "<color>"; inherits: true; initial-value: transparent; }
+@property --orb-rim { syntax: "<color>"; inherits: true; initial-value: transparent; }
+/* Motion curves and the tab bar height; the palette is in glass-identity.css. */
+:root, [data-theme] {
+  --tab-bar-height: 56px;
+  --ease-spring: cubic-bezier(0.34,1.56,0.64,1);
+  --ease-smooth: cubic-bezier(0.4,0,0.2,1);
+  --ease-snappy: cubic-bezier(0.2,0,0,1);
 }
 
 /* ============================================
@@ -707,6 +354,27 @@ h1, h2, h3, h4, h5, h6 {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(120,120,128,0.36); border-radius: 4px; border: 2px solid transparent; background-clip: content-box; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(120,120,128,0.60); border: 2px solid transparent; background-clip: content-box; }
+
+/* A ScrollArea's own bar (components/ui/scroll-area.tsx): invisible at rest, drawn while the pointer or focus is
+   in the area. `scrollbar-width` and `scrollbar-color` are the standard properties (Firefox, Chromium 121+, Safari 18.2+),
+   and where they are set Chromium ignores the pseudo-elements; the pseudo-elements are for older WebKit. */
+.scroll-area {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 150ms var(--ease-smooth);
+}
+.scroll-area:is(:hover, :focus-within) { scrollbar-color: var(--fill-primary) transparent; }
+.scroll-area::-webkit-scrollbar { width: 10px; height: 10px; }
+.scroll-area::-webkit-scrollbar-track,
+.scroll-area::-webkit-scrollbar-corner { background: transparent; }
+.scroll-area::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  background-clip: content-box;
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  transition: background-color 150ms var(--ease-smooth);
+}
+.scroll-area:is(:hover, :focus-within)::-webkit-scrollbar-thumb { background-color: var(--fill-primary); }
 
 /* Selection */
 ::selection { background: var(--accent-fill); color: var(--text-primary); }
@@ -1159,16 +827,6 @@ h1, h2, h3, h4, h5, h6 {
   .tool-arrive { animation: none; }
 }
 
-/* The hover glance on a Todo mention. It is portalled over the page, so it can
-   animate on transform and opacity alone and nothing around it reflows. */
-.todo-glance[data-state="open"] { animation: jinn-glance-in 120ms var(--ease-snappy) both; }
-.todo-glance[data-state="closed"] { animation: jinn-glance-out 80ms var(--ease-snappy) both; }
-@keyframes jinn-glance-in { from { opacity: 0; transform: translateY(-3px); } }
-@keyframes jinn-glance-out { to { opacity: 0; transform: translateY(-3px); } }
-@media (prefers-reduced-motion: reduce) {
-  .todo-glance[data-state="open"], .todo-glance[data-state="closed"] { animation: none; }
-}
-
 /* ============================================
    Utility Animation Classes
    ============================================ */
@@ -1281,7 +939,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Focus ring — keyboard only */
-.focus-ring:focus-visible {
+.focus-outline:focus-visible {
   outline: 2px solid var(--system-blue);
   outline-offset: 2px;
 }
@@ -1305,10 +963,11 @@ h1, h2, h3, h4, h5, h6 {
 
 .react-flow__background { background: var(--bg) !important; }
 /* No rest hairlines on RF chrome — --shadow-overlay carries the faint ring. */
-.react-flow__minimap { background: var(--material-regular) !important; border: none; border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-overlay); }
-.react-flow__controls { background: var(--material-regular) !important; border: none !important; border-radius: var(--radius-md) !important; overflow: hidden; box-shadow: var(--shadow-overlay); }
-.react-flow__controls-button { background: var(--material-regular) !important; border: none !important; color: var(--text-secondary) !important; }
-.react-flow__controls-button:hover { background: var(--material-thin) !important; color: var(--text-primary) !important; }
+/* The controls carry .glass-tint (set in org-map.tsx): tint, no blur. React Flow's own stylesheet loads
+   after this one with the same specificity for its box-shadow, so the selector is doubled. */
+.react-flow__controls.glass-tint { border: none !important; border-radius: var(--radius-md) !important; overflow: hidden; box-shadow: var(--shadow-overlay); }
+.react-flow__controls-button { background: transparent !important; border: none !important; color: var(--text-secondary) !important; }
+.react-flow__controls-button:hover { background: var(--fill-secondary) !important; color: var(--text-primary) !important; }
 /* Edge stroke/width/opacity are set per-edge inline by the layout seam. */
 .react-flow__node { transition: transform 200ms var(--ease-spring); }
 /* React Flow stamps inline pointer-events:none on nodes that are not
@@ -1342,8 +1001,6 @@ h1, h2, h3, h4, h5, h6 {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   border: 1px solid var(--separator);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
 }
 
 /* ============================================
@@ -1398,10 +1055,10 @@ h1, h2, h3, h4, h5, h6 {
 .apple-btn-secondary:hover { filter: brightness(1.08); }
 
 /* ============================================
-   Ledger Theme Specifics
+   Org map
    ============================================ */
 
-/* Org map (react-flow) edges follow the separator token */
+/* react-flow edges follow the separator token */
 .react-flow__edge-path { stroke: var(--separator-opaque); }
 
 /* ============================================

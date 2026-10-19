@@ -1,3 +1,4 @@
+import './lib/legacy-storage-entry'
 import { Component, Suspense, useSyncExternalStore, type ComponentType, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Navigate, Outlet, RouterProvider, createBrowserRouter, type RouteObject } from 'react-router-dom'
@@ -10,14 +11,15 @@ import { registerRoutePrefetch } from './lib/route-prefetch'
 import { startKeyboardInset } from './platform'
 import { RouteLoading } from './components/route-loading'
 import { RouteFailure } from './components/route-failure'
+import { AriaRouter } from './components/ui/aria-router'
 import { TodosIndexRedirect, todosIndexLoader } from './routes/todos/board/todos-index-redirect'
 import { LegacyChatRedirect } from './routes/chat/legacy-chat-redirect'
 import { useFeatures } from './hooks/use-features'
 import { APP_ROUTES, type AppRouteId } from './lib/app-routes'
 import type { NativeGatewayProfiles, NativeGatewayProfilesSnapshot } from './lib/native-gateway-profiles'
 import { nativeBridge } from './platform/native-bridge'
-import './routes/globals.css'
-import './routes/theme-overrides.css'
+import './routes/app.css'
+import './routes/glass-identity.css'
 
 let profiles: NativeGatewayProfiles | undefined
 let initialNativeOrigin: string | undefined
@@ -39,7 +41,6 @@ const SkillsPage = lazyRoute(() => import('./routes/skills/page'), 'skills')
 const SkillDetailPage = lazyRoute(() => import('./routes/skills/detail'), 'skill-detail')
 const FilePage = lazyRoute(() => import('./routes/file/page'), 'file')
 const MorePage = lazyRoute(() => import('./routes/more/page'), 'more')
-const RedesignPage = lazyRoute(() => import('./routes/redesign/page'), 'redesign')
 const TalkOrbHarnessPage = lazyRoute(() => import('./routes/talk-orb-harness/page'), 'talk-orb-harness')
 
 registerRoutePrefetch('/', ChatPage.prefetch)
@@ -85,11 +86,13 @@ function AppShell() {
     () => 0,
   )
   return (
-    <ClientProviders key={`gateway:${generation}`}>
-      <Suspense fallback={<RouteLoading />}>
-        <Outlet />
-      </Suspense>
-    </ClientProviders>
+    <AriaRouter>
+      <ClientProviders key={`gateway:${generation}`}>
+        <Suspense fallback={<RouteLoading />}>
+          <Outlet />
+        </Suspense>
+      </ClientProviders>
+    </AriaRouter>
   )
 }
 
@@ -127,7 +130,6 @@ const routeElements: Partial<Record<AppRouteId, ReactNode>> = {
   // server pointed at a live gateway, so it has to survive the build. It is a
   // lazy route: nothing of it loads until someone types the path.
   "talk-orb": <TalkOrbHarnessPage />,
-  redesign: <RedesignPage />,
 }
 
 // Redirect routes resolve at the ROUTER level so they never commit an
@@ -140,7 +142,7 @@ const routeLoaders: Partial<Record<AppRouteId, RouteObject["loader"]>> = {
 }
 
 const appRoutes: RouteObject[] = APP_ROUTES.flatMap((route) => {
-  if (route.id === "plugin-contributed" || (route.availability === "development" && !import.meta.env.DEV)) return []
+  if (route.id === "plugin-contributed") return []
   const element = routeElements[route.id]
   const loader = routeLoaders[route.id]
   return element ? [{ path: route.path, element, ...(loader ? { loader } : {}) }] : []
@@ -149,7 +151,8 @@ const appRoutes: RouteObject[] = APP_ROUTES.flatMap((route) => {
 const router = createBrowserRouter([
   {
     element: <AppShell />,
-    errorElement: <RouteFailure />,
+    // Outside AppShell, so it needs its own router provider for a link in it.
+    errorElement: <AriaRouter><RouteFailure /></AriaRouter>,
     children: [
       ...appRoutes,
       // A plugin's page, last and on the splat so the app's own routes are

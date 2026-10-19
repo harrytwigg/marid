@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import yaml from "js-yaml";
 import { CONFIG_PATH, TEMPLATE_DIR } from "./paths.js";
+import { nameAliases } from "./codename.js";
 
 /** True only for a plain `X.Y.Z` release version (no prerelease/build suffix). */
 export function isStrictSemver(v: string): boolean {
@@ -63,7 +64,11 @@ export function getInstanceVersion(): string {
   if (!fs.existsSync(CONFIG_PATH)) return "0.0.0";
   try {
     const config = yaml.load(fs.readFileSync(CONFIG_PATH, "utf-8")) as any;
-    return config?.jinn?.version ?? "0.0.0";
+    // The marker sits under the codename, in whichever spelling this instance's file uses.
+    for (const key of nameAliases((n) => n.codename)) {
+      if (config?.[key]?.version !== undefined) return config[key].version;
+    }
+    return "0.0.0";
   } catch {
     return "0.0.0";
   }

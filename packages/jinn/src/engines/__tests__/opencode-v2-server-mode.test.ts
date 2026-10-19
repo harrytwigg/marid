@@ -110,7 +110,7 @@ async function waitDelivered(h: Harness): Promise<void> {
   await new Promise((r) => setTimeout(r, 200));
 }
 
-const ENV_HOOKS = ["FAKE_V2_OPERATOR_BUSY_MS", "FAKE_V2_LOG", "FAKE_V2_VERSION", "FAKE_V2_CLI_VERSION", "FAKE_V2_SERVE_FAIL", "FAKE_V2_HEARTBEAT_MS"];
+const ENV_HOOKS = ["FAKE_V2_OPERATOR_BUSY_MS", "FAKE_V2_LOG", "FAKE_V2_VERSION", "FAKE_V2_CLI_VERSION", "FAKE_V2_SERVE_FAIL", "FAKE_V2_HEARTBEAT_MS", "FAKE_V2_API_INFO_FAIL"];
 
 beforeEach(() => {
   for (const name of ENV_HOOKS) delete process.env[name];
@@ -128,6 +128,23 @@ afterEach(async () => {
 });
 
 describe("an OpenCode 2 server in the pool", { timeout: 30_000 }, () => {
+  it("keeps asking /api/info while it fails, and does not mark the host unsupported", async () => {
+    process.env.FAKE_V2_API_INFO_FAIL = "4";
+    const h = harness();
+    const server = await h.pool.acquire("sess-1", { cwd: JINN_HOME, bin: FAKE_V2, resolvedMcp: COMPANY_MCP });
+    expect(server.api).toBe(2);
+    expect(h.pool.unsupportedReason("local")).toBeUndefined();
+    const probes = (await logOf(h)).filter((e) => e.path === "/api/info");
+    expect(probes).toHaveLength(5);
+  });
+
+  it("refuses a server whose /api/info route is not there, once it has answered", async () => {
+    process.env.FAKE_V2_API_INFO_FAIL = "1000:404";
+    const h = harness();
+    await expect(h.pool.acquire("sess-1", { cwd: JINN_HOME, bin: FAKE_V2, resolvedMcp: COMPANY_MCP })).rejects.toThrow(/refused.*did not report its version on \/api\/info/);
+    expect(h.pool.unsupportedReason("local")).toMatch(/did not report its version/);
+  });
+
   it("is recognised by its web-page health answer and /api/info, and answers a turn", async () => {
     const logFile = path.join(os.tmpdir(), `fake-opencode-v2-${process.pid}-${Date.now()}.log`);
     process.env.FAKE_V2_LOG = logFile;

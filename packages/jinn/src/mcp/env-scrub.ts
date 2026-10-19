@@ -1,11 +1,10 @@
 // packages/jinn/src/mcp/env-scrub.ts
 import { fileURLToPath } from "node:url";
 import type { McpServerConfig, McpServerStdioConfig } from "../shared/types.js";
+import { isBuiltinMcpName } from "./builtin-name.js";
 
-/** The reserved built-in gateway server key (matches mcp/resolver.ts, which
- *  reserves this name so no custom server can occupy it). Exempt from scrubbing:
- *  its inherited token is the proven auth path. */
-const JINN_BUILTIN_SERVER = "jinn";
+/* The built-in gateway server (mcp/builtin-name.ts, whose reserved names no custom server can
+ * occupy) is exempt from scrubbing: its inherited token is the proven auth path. */
 
 /**
  * GRS-018 hardening (§3a) — env-scrub wrap for THIRD-PARTY MCP servers.
@@ -78,7 +77,7 @@ export function wrapServersWithScrub(servers: Record<string, McpServerConfig>): 
   for (const [name, spec] of Object.entries(servers)) {
     // Builtin jinn: exempt (proven auth path). URL servers: no command to wrap.
     const stdio = spec as McpServerStdioConfig & { url?: unknown };
-    if (name === JINN_BUILTIN_SERVER || typeof stdio.command !== "string" || !stdio.command || stdio.url !== undefined) {
+    if (isBuiltinMcpName(name) || typeof stdio.command !== "string" || !stdio.command || stdio.url !== undefined) {
       out[name] = spec;
       continue;
     }

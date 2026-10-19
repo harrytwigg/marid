@@ -4,6 +4,7 @@ import { logger } from "../shared/logger.js";
 import { basicAuthHeader, type OpencodeServer } from "./opencode-server.js";
 import { agentFromCliFlags, promptModel } from "./opencode-server-turn.js";
 import { contextTokensFromStep, type StepTokens } from "./opencode-protocol.js";
+import { metadataTag } from "./opencode-metadata-tag.js";
 
 /**
  * A `/compact` turn on an opencode server: opencode's own compaction
@@ -33,7 +34,7 @@ import { contextTokensFromStep, type StepTokens } from "./opencode-protocol.js";
  */
 
 /** Metadata on the re-seeded system prompt (see the header). */
-export const JINN_RESEED_METADATA = { jinn: "context-reseed" } as const;
+export const JINN_RESEED_METADATA = metadataTag("context-reseed");
 
 /** Summarizing a long session is one model call over all of it. */
 export const COMPACTION_TIMEOUT_MS = 15 * 60_000;

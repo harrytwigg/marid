@@ -3,12 +3,9 @@ import {
   deriveExistingSessionCapability,
   JINN_SESSION_CAPABILITY_ENV,
   JINN_SESSION_ID_ENV,
-  MCP_GATEWAY_URL_ARG,
-  MCP_HOME_ARG,
-  MCP_SESSION_ID_ARG,
-  MCP_TOOLSET_ARG,
 } from "./identity.js";
 import { resolveMcpSessionCapabilityKeyFile } from "../shared/home.js";
+import { mcpFlagAliases } from "../shared/wire-names.js";
 
 export interface McpServerBootstrap {
   callerSessionId?: string;
@@ -21,17 +18,21 @@ export interface McpServerBootstrap {
 
 /** Resolve the built-in MCP server's scoped identity from non-secret argv, and the env the gateway stamped. */
 export function resolveMcpServerBootstrap(argv: readonly string[], env: NodeJS.ProcessEnv = process.env): McpServerBootstrap {
-  const valueAfter = (flag: string): string | undefined => {
-    const index = argv.indexOf(flag);
-    const value = index >= 0 ? argv[index + 1]?.trim() : undefined;
-    return value || undefined;
+  // A config staged by an earlier build names its flags under that build's codename.
+  const valueAfter = (suffix: string): string | undefined => {
+    for (const candidate of mcpFlagAliases(suffix)) {
+      const index = argv.indexOf(candidate);
+      const value = index >= 0 ? argv[index + 1]?.trim() : undefined;
+      if (value) return value;
+    }
+    return undefined;
   };
-  const callerSessionId = valueAfter(MCP_SESSION_ID_ARG);
-  const homeArg = valueAfter(MCP_HOME_ARG);
+  const callerSessionId = valueAfter("session-id");
+  const homeArg = valueAfter("home");
   const jinnHome = homeArg ? path.resolve(homeArg) : undefined;
-  const gatewayUrl = valueAfter(MCP_GATEWAY_URL_ARG);
+  const gatewayUrl = valueAfter("gateway-url");
   const sessionCapability = callerSessionId ? boundCapability(callerSessionId, jinnHome, env) : undefined;
-  const toolset = valueAfter(MCP_TOOLSET_ARG);
+  const toolset = valueAfter("toolset");
   return { callerSessionId, sessionCapability, gatewayUrl, jinnHome, ...(toolset ? { toolset } : {}) };
 }
 

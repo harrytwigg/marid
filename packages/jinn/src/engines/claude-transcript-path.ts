@@ -3,14 +3,9 @@ import path from "node:path";
 import { claudeProjectsDirFor, type ClaudeProfile } from "../shared/claude-profile.js";
 import { resolveClaudeConfigDir } from "../shared/home.js";
 import { JINN_HOME } from "../shared/paths.js";
+import { claudeProjectSlug } from "../shared/claude-project-slug.js";
 
-/** The project key Claude Code files a cwd's transcripts under: the cwd with every
- *  non-alphanumeric character replaced by "-" (so `~/.jinn` is `…--jinn`). The cwd is
- *  the Jinn home, or a scoped session's stage directory (FR-020), and the forks and
- *  the transcript readers must agree on it. */
-export function claudeProjectSlug(cwd: string): string {
-  return cwd.replace(/[^a-zA-Z0-9]/g, "-");
-}
+export { claudeProjectSlug };
 
 /** Claude Code stores per-project transcripts at
  *  ~/.claude/projects/<cwd-slug>/<claudeSessionId>.jsonl. Derive that path from the

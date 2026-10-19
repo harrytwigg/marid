@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronRight, Lock, X } from 'lucide-react'
+import { ChevronRight, Lock, X } from '@/components/ui/icon'
 import { EmployeeChip } from '@/components/ui/employee-chip'
 import {
   finishedLabel,
@@ -217,7 +217,7 @@ export function ThreadPeek({ peek, onClose, onOpenFullChat, renderContent, onExi
           onClick={requestClose}
           className="inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-[var(--text-tertiary)] transition-[background-color,color,scale] duration-150 ease-[var(--ease-smooth)] hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)] active:scale-[0.96]"
         >
-          <X size={16} strokeWidth={2} aria-hidden="true" />
+          <X size={16} aria-hidden="true" />
         </button>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-4 pt-1" data-scrollable>
@@ -227,7 +227,7 @@ export function ThreadPeek({ peek, onClose, onOpenFullChat, renderContent, onExi
       </div>
       <footer className="flex shrink-0 items-center gap-[var(--space-3)] px-[18px] pb-[calc(16px+env(safe-area-inset-bottom))] pt-3">
         <span className="inline-flex flex-1 items-center gap-1.5 text-[length:var(--text-caption1)] text-[var(--text-quaternary)]">
-          <Lock size={12} strokeWidth={2} aria-hidden="true" />
+          <Lock size={12} aria-hidden="true" />
           Read-only
         </span>
         {displayPeek.sessionId && onOpenFullChat && (
@@ -239,7 +239,7 @@ export function ThreadPeek({ peek, onClose, onOpenFullChat, renderContent, onExi
             className="inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-full border-none bg-[var(--fill-tertiary)] px-[15px] py-[7px] text-[length:var(--text-footnote)] font-[var(--weight-medium)] text-[var(--text-primary)] shadow-[var(--shadow-subtle)] transition-[background-color,scale,opacity] duration-150 ease-[var(--ease-smooth)] hover:bg-[var(--fill-secondary)] active:scale-[0.96] aria-disabled:cursor-wait aria-disabled:opacity-60"
           >
             Open full chat
-            <ChevronRight size={12} strokeWidth={2.25} aria-hidden="true" />
+            <ChevronRight size={12} aria-hidden="true" />
           </button>
         )}
       </footer>
@@ -268,7 +268,7 @@ export function ThreadPeek({ peek, onClose, onOpenFullChat, renderContent, onExi
         aria-label={`${displayPeek.displayName} report`}
         aria-hidden={phase === 'revealing' ? true : undefined}
         tabIndex={-1}
-        className="peek-panel absolute flex flex-col bg-[var(--material-thick)] shadow-[var(--shadow-overlay)] backdrop-blur-2xl"
+        className="peek-panel glass-overlay absolute flex flex-col"
         data-testid="thread-peek"
         onTransitionEnd={(event) => {
           if (event.target !== event.currentTarget || event.propertyName !== 'transform') return

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { cleanEnv, localOpencodeLaunch, opencodeDiscoveryEnv, opencodeProcessEnv } from "../opencode-launch.js";
-import { discoverOpencodeModels } from "../../shared/opencode-models.js";
+import { discoverOpencodeModels } from "../../shared/opencode-discovery.js";
 import type { JinnConfig } from "../../shared/config-types.js";
 import type { EngineRunOpts } from "../../shared/types.js";
 
@@ -135,7 +135,7 @@ describe("opencodeDiscoveryEnv", () => {
       fs.writeFileSync(bin, `#!/bin/sh\necho "\${OPENCODE_DISABLE_FFF-unset}" >> "${log}"\necho opencode/alpha\n`, { mode: 0o755 });
       const seen = async (config: JinnConfig) => {
         fs.rmSync(log, { force: true });
-        await discoverOpencodeModels(bin, opencodeDiscoveryEnv(config));
+        await discoverOpencodeModels(bin, { env: opencodeDiscoveryEnv(config) });
         return fs.readFileSync(log, "utf8").trim();
       };
       expect(await seen(cfg())).toBe("1");

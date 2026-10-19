@@ -27,6 +27,8 @@ import { opencodeApiOf } from "./opencode-version.js";
 import { commandTimeoutPluginEntry, remoteAssetsDir } from "./opencode-command-timeout.js";
 import { parseOpencodeVersion } from "../shared/opencode-bin-version.js";
 import { employeeSessionEnv } from "../sessions/employee-env.js";
+import { readHostAsset, relayStampShellCheck } from "../shared/host-assets.js";
+import { NAMES, nameAliases } from "../shared/codename.js";
 
 /**
  * Everything the gateway does to a remote host that is NOT the interactive
@@ -260,9 +262,9 @@ printf 'opencode=%s\\n' "$(command -v opencode 2>/dev/null || true)"
 if command -v opencode >/dev/null 2>&1; then
   printf 'opencodeversion=%s\\n' "$(OPENCODE_DISABLE_AUTOUPDATE=1 opencode --version 2>/dev/null | tr -d '\\r' | head -n 1)"
 fi
-jinnbin=$(command -v jinn 2>/dev/null || true)
+jinnbin=$(${nameAliases((n) => n.codename).map((cli) => `command -v ${cli} 2>/dev/null`).join(" || ")} || true)
 if [ -n "$jinnbin" ]; then
-  printf 'jinnversion=%s\\n' "$(jinn --version 2>/dev/null | tr -d '\\r' | head -n 1)"
+  printf 'jinnversion=%s\\n' "$(${NAMES.renamed ? '"$jinnbin"' : "jinn"} --version 2>/dev/null | tr -d '\\r' | head -n 1)"
   printf 'entrydir=%s\\n' "$(node -e 'const fs=require("fs"),path=require("path");try{const b=fs.realpathSync(process.argv[1]);process.stdout.write(path.resolve(path.dirname(b),"..","src","mcp"))}catch(e){}' "$jinnbin" 2>/dev/null || true)"
 fi
 `;
@@ -908,7 +910,7 @@ function safeSessionSegment(segment: string): string {
 async function ensureAssets(destination: string, facts: RemoteFacts, present: Set<string>): Promise<void> {
   for (const name of HOST_ASSETS) {
     if (present.has(name)) continue;
-    const content = fs.readFileSync(assetPath(name), "utf-8");
+    const content = readHostAsset(assetPath(name));
     await stageRemoteFile(destination, path.posix.join(facts.stageDir, name), content);
   }
 }
@@ -1108,7 +1110,7 @@ fi
 # already happening — and it is what lets a wiped stage restage itself instead
 # of relying on a cache that outlives the directory it describes.
 for a in hook-relay.mjs remote-trust-seed.mjs; do
-  if [ -f "$root/$a" ] && [ ! -L "$root/$a" ]; then printf 'asset=%s\\n' "$a"; fi
+  if [ -f "$root/$a" ] && [ ! -L "$root/$a" ]${relayStampShellCheck(shq)}; then printf 'asset=%s\\n' "$a"; fi
 done
 `;
 
@@ -1333,7 +1335,7 @@ async function stageHostState(opts: PrepareRemoteSessionOpts, destination: strin
       ? await rebuildScopedHome(destination, facts, sessionHome, SESSION_STAGE_TTL_DAYS, target.remoteWorkArea)
       : await rebuildHomeFarm(destination, facts, remote.mount, sessionHome, target.remoteCwd);
     await ensureAssets(destination, facts, present);
-    const realStageDir = department ? await syncRemoteDepartmentStage(destination, facts, remote, department) : undefined;
+    const realStageDir = department ? await syncRemoteDepartmentStage(destination, facts, remote, department, resolveRemoteClaudeConfigDir(target, remote)) : undefined;
     // Claude Code's folder-trust dialog is the thing being pre-empted here, and
     // it is Claude Code's alone: `pi -p` reads its prompt from stdin and prints
     // JSON, with no first-run dialog to hang on and no `.claude.json` to write.
