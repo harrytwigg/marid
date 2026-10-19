@@ -62,18 +62,31 @@ export function resolveLinkModel(
   return resolveSubstituteModel(config, registry, { from: session.engine, to: link.engine, model: session.model });
 }
 
+/** A profile that is not a declared account, or sits on a link that cannot take one. */
+function profileUnknown(config: JinnConfig, link: FallbackLink): boolean {
+  if (link.profile === undefined) return false;
+  return link.engine !== "claude" || !declaredClaudeAccounts(config).some((account) => account.name === link.profile);
+}
+
+/** Why the subject's department or host rules the link out: a scoped session takes Claude only, a remote one an engine that runs on a host and no local profile. */
+function scopeSkip(scope: FallbackChainSpec["scope"], link: FallbackLink): "scoped" | "remote" | undefined {
+  const engine = link.engine as EngineName;
+  if (!engineAllowedAsSubstitute({ scoped: scope.scoped, remote: false }, engine)) return "scoped";
+  const remoteRefused = !engineAllowedAsSubstitute({ scoped: false, remote: scope.remote }, engine) || (scope.remote && link.profile !== undefined);
+  return remoteRefused ? "remote" : undefined;
+}
+
+/** A model the link names that the registry, which lists models for the engine, does not serve. */
+function modelNotServed(entry: ModelRegistry[string], link: FallbackLink): boolean {
+  return link.model !== undefined && entry.models.length > 0 && !entry.models.some((model) => model.id === link.model);
+}
+
 /** Why a link cannot be used by this subject at all, if it cannot; `exhausted` and `tried` are the walk's to say, not this. */
 function skipReason(env: FallbackChainEnv, subject: FallbackChainSpec, link: FallbackLink): FallbackSkipReason | undefined {
-  const declared = declaredClaudeAccounts(env.config).some((account) => account.name === link.profile);
-  if (link.profile !== undefined && (link.engine !== "claude" || !declared)) return "profile-unknown";
+  if (profileUnknown(env.config, link)) return "profile-unknown";
   const entry = env.registry[link.engine];
   if (!entry?.available) return "not-installed";
-  const engine = link.engine as EngineName;
-  const { scope } = subject;
-  if (!engineAllowedAsSubstitute({ scoped: scope.scoped, remote: false }, engine)) return "scoped";
-  if (!engineAllowedAsSubstitute({ scoped: false, remote: scope.remote }, engine) || (scope.remote && link.profile !== undefined)) return "remote";
-  if (link.model !== undefined && entry.models.length > 0 && !entry.models.some((model) => model.id === link.model)) return "model-not-served";
-  return undefined;
+  return scopeSkip(subject.scope, link) ?? (modelNotServed(entry, link) ? "model-not-served" : undefined);
 }
 
 function resolvedLink(env: FallbackChainEnv, link: FallbackLink, origin: ResolvedFallbackLink["origin"]): ResolvedFallbackLink {

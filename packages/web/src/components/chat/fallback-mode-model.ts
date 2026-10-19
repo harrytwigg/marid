@@ -1,3 +1,5 @@
+import type { SessionFallbackChainView } from '@jinn/fallback-chain-wire'
+
 export type SessionFallbackMode = 'fallback' | 'fallback-children' | 'auto-resume'
 
 export interface SessionFallbackTarget {
@@ -15,6 +17,8 @@ export interface SessionFallbackView {
   targetSource?: 'session' | 'config'
   /** Installed engines the session may pick as its fallback. Absent on an older gateway: no limit. */
   allowedEngines?: string[]
+  /** The session's resolved chain, where it is on it and its hops. Absent on an older gateway. */
+  chain?: SessionFallbackChainView
 }
 
 /** A fallback target the operator picks: what PUT /api/sessions/:id takes. */

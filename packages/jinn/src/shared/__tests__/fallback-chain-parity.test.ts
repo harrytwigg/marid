@@ -78,6 +78,12 @@ describe("legacy expansion visits targets in the old walkers' order", () => {
     }
   });
 
+  it("really is breadth first, so the parity above is not vacuous", () => {
+    const c = config({ claude: { fallback: ["codex", "grok"] }, codex: { fallback: ["opencode"] }, grok: { fallback: ["pi"] } });
+    expect(oldAccountOrder(c, "claude")).toEqual(["codex", "grok", "opencode", "pi"]);
+    expect(expandFallbackChain(c, ["codex", "grok"], { mode: "account", selfAccount: "claude" }).map(({ link }) => link.engine)).toEqual(["codex", "grok", "opencode", "pi"]);
+  });
+
   it("marks the written entries config and what their own chains brought in legacy", () => {
     const c = config({ claude: { fallback: ["codex", "grok"] }, codex: { fallback: ["opencode"] } });
     const out = expandFallbackChain(c, ["codex", "grok"], { mode: "engine", selfAccount: "claude" });
