@@ -506,7 +506,8 @@ describe("scoped sessions", () => {
 
     expect(outcome.kind).toBe("fallback");
     expect(calls.map(who)).toEqual(["C/opus"]);
-    expect(hopsOf(id)[0]).toMatchObject({ to: key(chain[1]!), skipped: [{ key: key(OPENCODE_X), reason: "scoped" }] });
+    expect(hopsOf(id)[0]).toMatchObject({ from: key({ engine: "claude", profile: "A", model: "opus" }), to: key(chain[1]!), reason: "rate-limit", skipped: [{ key: key(OPENCODE_X), reason: "scoped" }] });
+    expect((reg.getSession(id)!.transportMeta as Record<string, unknown>).fallbackServedBy).toMatchObject({ key: key(chain[1]!) });
   });
 });
 
@@ -528,6 +529,20 @@ describe("what a hop's thread carries (docs/fallback-chains.md, Context across a
     await handleRateLimit(limitedTurn(id, worker, engines).opts);
 
     expect(calls).toEqual([{ engine: "opencode", profileDir: null, model: "y-provider/model-y", resume: "oc-thread", prompt: "now publish them" }]);
+  });
+
+  it("hops from one provider to another for the same model, in the same opencode session, and records who served", async () => {
+    const { engines, calls } = scripted((call) => (call.model === "openrouter/glm-5" ? answer("served", "oc-thread") : limited()));
+    const id = newSession({ ref: "web:oc-provider", employeeName: "oc-worker", engine: "opencode", model: "opencode-go/glm-5" });
+    reg.recordEngineSessionId(id, "opencode", "oc-thread");
+    const worker = { name: "oc-worker", engine: "opencode", fallback: [{ engine: "opencode", model: "openrouter/glm-5" }] } as Employee;
+    await handleRateLimit(limitedTurn(id, worker, engines).opts);
+
+    expect(calls.map((call) => [call.model, call.resume])).toEqual([["openrouter/glm-5", "oc-thread"]]);
+    expect(hopsOf(id).map((hop) => [hop.from, hop.to, hop.reason])).toEqual([["opencode||opencode-go/glm-5", "opencode||openrouter/glm-5", "rate-limit"]]);
+    expect((reg.getSession(id)!.transportMeta as Record<string, unknown>).fallbackServedBy).toMatchObject({ key: "opencode||openrouter/glm-5" });
+    // The limit is held against the provider that hit it, not the engine: the other provider's link stayed healthy.
+    expect(Object.keys(readEngineHealth())).toEqual(["opencode/opencode-go"]);
   });
 
   it("resumes another account's own thread, with what it has not seen put in front", async () => {
