@@ -4220,7 +4220,7 @@ export async function handleApiRequest(
         refreshCodexModels(config),
         refreshAntigravityModels(config),
         refreshPiModels(config),
-        refreshOpencodeModels(config),
+        refreshOpencodeModels(config, { secondLook: true }),
         refreshGrokModels(config),
         refreshHermesModels(config),
       ]);

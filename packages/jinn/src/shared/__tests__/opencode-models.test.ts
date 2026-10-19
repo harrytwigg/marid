@@ -2,7 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, it, expect } from "vitest";
-import { discoverOpencodeModels, parseOpencodeModels } from "../opencode-models.js";
+import { parseOpencodeModels } from "../opencode-models.js";
+import { discoverOpencodeModels } from "../opencode-discovery.js";
 import { parseOpencodeApiModels } from "../opencode-model-records.js";
 
 /** `opencode models --verbose` on 1.19.0, cut to three models. */
@@ -258,7 +259,7 @@ describe("discoverOpencodeModels", () => {
       // Prints the fixture only for the exact arguments; anything else is the
       // plain list a build without --verbose would print.
       fs.writeFileSync(bin, `#!/bin/sh\nif [ "$1 $2" = "models --verbose" ]; then cat "${path.join(__dirname, "fixtures", "opencode-models-verbose.txt")}"; else echo opencode/plain; fi\n`, { mode: 0o755 });
-      const models = await discoverOpencodeModels(bin);
+      const models = (await discoverOpencodeModels(bin)).models;
       expect(models.map((m) => m.contextWindow)).toEqual([200000, 1048576, 1000000]);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
