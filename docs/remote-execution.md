@@ -110,7 +110,7 @@ In `config.yaml`:
 ```yaml
 remote:
   # Every remoteCwd must resolve under this prefix on the remote host.
-  root: /srv/jinn-work
+  root: /srv/agents
   # Where the gateway's own instance home is sshfs-mounted over there.
   mount: /mnt/jinn-home
   # Optional. Bring a sleeping host up. wakeCommand wins over wakeMac.
@@ -140,7 +140,7 @@ engine: claude
 model: opus
 remoteHost: build-box
 remoteUser: jinn
-remoteCwd: /srv/jinn-work/main
+remoteCwd: /srv/agents/main
 persona: |
   You are Builder. You work on the main repository checked out at your
   working directory. Build and test there; record findings as Notes.
@@ -279,7 +279,7 @@ engine: pi
 model: ollama/gemma4:12b   # the provider/id the REMOTE host serves
 remoteHost: build-box
 remoteUser: jinn
-remoteCwd: /srv/jinn-work/main
+remoteCwd: /srv/agents/main
 ```
 
 The model id names a provider configured on the **remote** host's
@@ -332,7 +332,7 @@ engine: opencode
 model: anthropic/claude-sonnet-5   # opencode's provider/model, as that host resolves it
 remoteHost: build-box
 remoteUser: jinn
-remoteCwd: /srv/jinn-work/main
+remoteCwd: /srv/agents/main
 ```
 
 The login that matters is the **remote** one: `opencode auth login` on that
@@ -487,7 +487,7 @@ them at the workspace root, where every repo can see them and none of them owns
 the file.
 
 ```
-/srv/jinn-work/main/          <- remoteCwd
+/srv/agents/main/             <- remoteCwd
   CLAUDE.md                   <- linked to the gateway's, never in a repo
   some-service/               <- cloned here
   another-repo/               <- and here
@@ -549,8 +549,8 @@ still reach the mounted instance home.
 
 `remoteCwd` must resolve under `remote.root`, checked when the org loads and
 again immediately before the spawn command is built. Traversal is normalized
-away first, and a sibling that merely shares a prefix (`/srv/jinn-work-other`
-against `/srv/jinn-work`) is refused.
+away first, and a sibling that merely shares a prefix (`/srv/agents-other`
+against `/srv/agents`) is refused.
 
 This does not stop a determined prompt from `cd ..`-ing out of the directory
 once the session is running. It is not a sandbox. What it does is bound the
