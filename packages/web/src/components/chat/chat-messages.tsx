@@ -1131,7 +1131,7 @@ export function ChatMessages({
       {/* Not while hydrating: a transcript still on its way is not an empty one. */}
       {messages.length === 0 && !loading && !hydrating && <TranscriptEmptyState>{emptyState}</TranscriptEmptyState>}
       <div ref={setScrollContainerRef} style={{ overflowAnchor: 'auto' }} className="chat-messages-scroll h-full overflow-y-auto overflow-x-hidden bg-[var(--bg)] min-h-0">
-        <div className={`mx-auto w-full max-w-[var(--chat-measure)] pt-[var(--chat-header-band)] ${footer ? 'flex min-h-full flex-col justify-end pb-0' : 'pb-[var(--space-6)]'}`}>
+        <div className={`mx-auto w-full max-w-[var(--chat-measure)] pt-[var(--chat-header-band)] ${footer ? 'flex min-h-full flex-col justify-end pb-[var(--composer-overlap,0px)]' : 'pb-[calc(var(--space-6)_+_var(--composer-overlap,0px))]'}`}>
           {hasOlderMessages && <OlderPageRow loading={loadingOlderMessages} error={olderMessagesError} />}
           {virtualized ? (
             <div ref={virtualBlockRef} style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>

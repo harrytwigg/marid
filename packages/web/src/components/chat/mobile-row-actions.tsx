@@ -1,4 +1,4 @@
-import { Archive, ArchiveRestore, EllipsisVertical, Pin, PinOff, Trash2 } from "lucide-react"
+import { Archive, ArchiveRestore, EllipsisVertical, Pin, PinOff, Trash2 } from "@/components/ui/icon"
 import {
   DropdownMenu,
   DropdownMenuTrigger,

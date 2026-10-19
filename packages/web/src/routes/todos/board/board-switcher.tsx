@@ -1,4 +1,4 @@
-import { Archive, Bell, ChevronDown, Globe } from "lucide-react"
+import { Archive, Bell, ChevronDown, Globe } from "@/components/ui/icon"
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import {
@@ -27,7 +27,7 @@ import { useBoardMenuCounts } from "./use-board"
  * "Show archived" asks for them; their boards and Todos are unchanged. */
 
 const MENU_CLASS =
-  "w-[min(300px,calc(100vw-24px))] rounded-[var(--radius-xl)] border-0 bg-[var(--material-thick)] p-1.5 shadow-[var(--shadow-overlay)] backdrop-blur-xl"
+  "w-[min(300px,calc(100vw-24px))] rounded-[var(--radius-xl)] p-1.5"
 const ROW_CLASS =
   "min-h-10 cursor-pointer gap-2.5 rounded-[9px] px-2.5 text-[length:var(--text-subheadline)] text-[var(--text-primary)] focus:bg-[var(--fill-tertiary)]"
 
@@ -65,7 +65,7 @@ export function BoardSwitcher({ board, title, departments, attentionCount }: Boa
           <h1>
             {title}
           </h1>
-          <ChevronDown size={18} strokeWidth={2.2} aria-hidden className="mt-1.5 text-[var(--text-quaternary)]" />
+          <ChevronDown size={18} aria-hidden className="mt-1.5 text-[var(--text-quaternary)]" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className={MENU_CLASS}>
@@ -162,7 +162,7 @@ export function ArchivedTag() {
 /** The lens rows' leading glyph. Departments use their mono prefix instead —
  *  a place has a name in the ID scheme, a lens does not. */
 function LensIcon({ of: Icon }: { of: typeof Bell }) {
-  return <Icon size={15} strokeWidth={2} aria-hidden className="flex-none text-[var(--text-tertiary)]" />
+  return <Icon size={15} aria-hidden className="flex-none text-[var(--text-tertiary)]" />
 }
 
 export function departmentTitle(slug: string): string {

@@ -14,7 +14,6 @@ export function FileDropOverlay() {
         alignItems: 'center',
         justifyContent: 'center',
         background: 'color-mix(in srgb, var(--bg) 85%, transparent)',
-        backdropFilter: 'blur(4px)',
         transition: 'opacity 150ms ease-in-out',
       }}
     >

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest"
 import { PALETTE_TOKENS } from "../../components/talk/orb-painters"
 
 const ROUTES = path.resolve(__dirname, "..")
-const FILES = ["globals.css", "theme-overrides.css"].map((f) => ({
+const FILES = ["globals.css", "glass-identity.css"].map((f) => ({
   name: f,
   css: readFileSync(path.join(ROUTES, f), "utf8").replace(/\/\*[\s\S]*?\*\//g, ""),
 }))
@@ -104,7 +104,7 @@ function matches(rule: Rule, ctx: (typeof CONTEXTS)[number]): boolean {
   })
 }
 
-/** Both files' palette rules, in cascade order: globals.css, then the overrides. */
+/** Every file's palette rules, in cascade order: globals.css, then the identity. */
 const ALL_RULES = FILES.flatMap(({ css }) => paletteRules(css))
 
 /** The color-scheme each context ends up with, from the same rules. */
@@ -117,8 +117,9 @@ function schemeOf(ctx: (typeof CONTEXTS)[number]): Scheme {
   return scheme
 }
 
-/** The cascade for one context: globals.css then theme-overrides.css, later
- *  rules winning. The rule order within a file is the source order. */
+/** The cascade for one context: globals.css, then glass-identity.css, later
+ *  rules winning. The rule order within a file is the
+ *  source order. */
 function resolved(ctx: (typeof CONTEXTS)[number]): Map<string, string> {
   const scheme = schemeOf(ctx)
   const out = new Map<string, string>()
@@ -131,7 +132,7 @@ function resolved(ctx: (typeof CONTEXTS)[number]): Map<string, string> {
 
 /** Tokens light-dark() cannot carry (it takes colours only), so they keep a
  *  block per theme. */
-const PER_THEME = /^--(shadow-|inset-shine|sidebar-backdrop)/
+const PER_THEME = /^--(shadow-|inset-shine|app-backdrop|glass-sheen)/
 
 const ALL = new Set(ALL_RULES.flatMap((r) => [...r.decls.keys()]))
 ALL.delete("color-scheme")

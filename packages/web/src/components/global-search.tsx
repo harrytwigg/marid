@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Search } from "lucide-react"
+import { Search } from "@/components/ui/icon"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { useSettings } from "@/routes/settings-provider"
 import type { QueryFacetWire, SearchKind } from "@/lib/search-api"
@@ -30,13 +30,12 @@ const PALETTE = [
   // `sm:max-w-lg` is in the dialog's own base class, so the wide cap needs the
   // same breakpoint to win — a bare max-width loses to it above 640px.
   "top-[88px] translate-y-0 w-[880px] max-w-[calc(100%-2rem)] sm:max-w-[880px] h-[560px]",
-  "rounded-[var(--radius-2xl)] bg-[var(--material-thick)] shadow-[var(--shadow-overlay)]",
-  "backdrop-blur-[40px] backdrop-saturate-[1.8]",
+  "glass-overlay rounded-[var(--radius-2xl)]",
   "max-[480px]:top-0 max-[480px]:left-0 max-[480px]:translate-x-0",
   "max-[480px]:h-[100dvh] max-[480px]:w-full max-[480px]:max-w-full max-[480px]:rounded-none",
 ].join(" ")
 
-const SCRIM = "bg-[var(--scrim)] backdrop-blur-[14px] backdrop-saturate-[1.2]"
+const SCRIM = "bg-[var(--scrim)]"
 const PILL = "inline-flex flex-none items-center gap-1.5 rounded-lg bg-[var(--accent-fill)] px-[9px] py-1 text-[13px] font-medium text-[var(--accent)]"
 const FOOTER = "flex items-center gap-[15px] bg-[var(--material-thin)] px-5 py-[9px] text-[11.5px] text-[var(--text-quaternary)] max-[480px]:hidden"
 const FOOTER_KEY = "font-medium text-[var(--text-tertiary)]"
@@ -161,11 +160,10 @@ export function GlobalSearch({ initialOpen = false, initialScope, initialQuery }
           showCloseButton={false}
           aria-describedby={undefined}
           onEscapeKeyDown={event => {
-            // A workbench picker owns Escape while it is up. Radix registers this
-            // handler in the same capture phase the picker's own listener runs in,
-            // so the picker's stopPropagation() cannot reach it — the overlay has
-            // to stand down here instead, or one Escape closes the picker AND
-            // throws the query away with it.
+            // A workbench picker owns Escape while it is up. It listens on the
+            // document in capture and stops the key, which normally never reaches
+            // the dialog; if one does not, the overlay stands down here instead,
+            // or one Escape closes the picker AND throws the query away with it.
             if (pickerOpen) {
               event.preventDefault()
               return
@@ -176,7 +174,7 @@ export function GlobalSearch({ initialOpen = false, initialScope, initialQuery }
           }}
           onKeyDown={handleKeyDown}
         >
-          {/* Radix requires an accessible title; the field is the visible one. */}
+          {/* The dialog is named by a title; the field is the visible one. */}
           <DialogTitle className="sr-only">Search {portalName}</DialogTitle>
 
           <div className="flex items-center gap-[11px] px-5 pb-[15px] pt-[17px] max-[480px]:px-4 max-[480px]:pb-3 max-[480px]:pt-3.5">

@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import { AlertTriangle, ChevronRight } from 'lucide-react'
+import { AlertTriangle, ChevronRight } from '@/components/ui/icon'
 import { EmployeeChip } from '@/components/ui/employee-chip'
 
 /**
@@ -68,7 +68,7 @@ export function CommsLedgerRow({
       <span className={`shrink-0 text-[length:var(--text-caption1)] font-[var(--weight-medium)] ${error ? 'text-[var(--system-red)]' : 'text-[var(--text-secondary)]'}`}>
         {displayName}
       </span>
-      {error && <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" className="shrink-0 text-[var(--system-red)]" />}
+      {error && <AlertTriangle size={12} aria-hidden="true" className="shrink-0 text-[var(--system-red)]" />}
       {hopBadge && (
         <span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--fill-secondary)] px-1.5 py-px text-[length:var(--text-caption2)] font-[var(--weight-medium)] text-[var(--text-tertiary)]">
           {hopBadge}
@@ -81,7 +81,7 @@ export function CommsLedgerRow({
         {time}
       </span>
       {interactive && (
-        <ChevronRight size={12} strokeWidth={2.25} aria-hidden="true" className="shrink-0 -translate-x-0.5 text-[var(--text-quaternary)] opacity-0 transition-[opacity,transform] duration-150 ease-[var(--ease-smooth)] group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100 [@media(hover:none)]:translate-x-0 [@media(hover:none)]:opacity-100" />
+        <ChevronRight size={12} aria-hidden="true" className="shrink-0 -translate-x-0.5 text-[var(--text-quaternary)] opacity-0 transition-[opacity,transform] duration-150 ease-[var(--ease-smooth)] group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100 [@media(hover:none)]:translate-x-0 [@media(hover:none)]:opacity-100" />
       )}
     </>
   )

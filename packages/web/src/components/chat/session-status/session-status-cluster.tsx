@@ -7,7 +7,7 @@ import { ContextMeter, type ContextMeterProps } from './context-meter'
  */
 export function SessionStatusCluster(props: ContextMeterProps) {
   return (
-    <div data-testid="session-status-cluster" className="flex shrink-0 items-center gap-1 empty:hidden">
+    <div data-testid="session-status-cluster" className="session-status-cluster flex shrink-0 items-center gap-1 empty:hidden">
       <ContextMeter {...props} />
     </div>
   )

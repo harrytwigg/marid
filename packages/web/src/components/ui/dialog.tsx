@@ -1,85 +1,30 @@
+/**
+ * A dialog over React Aria's modal, under the parts and props the Radix dialog had. What is always loaded is
+ * this file and the three beside it: the open state and the trigger's wiring (`dialog-root.tsx`), the title and
+ * description's ids, the box's host (`dialog-content.tsx`) and the loader (`dialog-load.ts`) of everything that
+ * is React Aria (`dialog-popup.tsx`), which a dialog in the shell would otherwise put on the initial path.
+ * The popup is fetched when the pointer reaches a trigger, a trigger takes focus or is touched, and once when
+ * the page has gone idle, so it is normally there by the press; a dialog opened before it lands shows the
+ * scrim, and one whose chunk cannot be fetched closes.
+ *
+ * Same parts and props as the Radix dialog, except:
+ *  - `DialogPortal` and `DialogOverlay` are gone (nothing imported them: the content draws its own scrim and
+ *    portals itself), and `modal={false}` is accepted and ignored: a dialog is always modal.
+ *  - `onEscapeKeyDown` and `onOpenAutoFocus` get a native event, as they did, but no `onCloseAutoFocus`
+ *    (React Aria returns focus, and a trigger gets it back when the browser would not have given it).
+ *  - `DialogContent` takes `material="none"` for a dialog that draws its own surface; the default is the
+ *    overlay glass. `role="alertdialog"` and `dismissable={false}` make a confirmation that a press outside
+ *    does not dismiss.
+ */
+
 import * as React from "react"
-import { XIcon } from "lucide-react"
-import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-
-function Dialog({
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
-}
-
-function DialogTrigger({
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Trigger>) {
-  return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />
-}
-
-function DialogPortal({
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Portal>) {
-  return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />
-}
-
-function DialogClose({
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Close>) {
-  return <DialogPrimitive.Close data-slot="dialog-close" {...props} />
-}
-
-function DialogOverlay({
-  className,
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
-  return (
-    <DialogPrimitive.Overlay
-      data-slot="dialog-overlay"
-      className={cn(
-        "fixed inset-0 z-50 bg-black/50 motion-safe:data-[state=closed]:animate-overlay-out motion-safe:data-[state=open]:animate-overlay-in",
-        className
-      )}
-      {...props}
-    />
-  )
-}
-
-function DialogContent({
-  className,
-  children,
-  showCloseButton = true,
-  overlayClassName,
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content> & {
-  showCloseButton?: boolean
-  overlayClassName?: string
-}) {
-  return (
-    <DialogPortal data-slot="dialog-portal">
-      <DialogOverlay className={overlayClassName} />
-      <DialogPrimitive.Content
-        data-slot="dialog-content"
-        className={cn(
-          "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-6 shadow-lg outline-none motion-safe:data-[state=closed]:animate-pop-out motion-safe:data-[state=open]:animate-pop-in sm:max-w-lg",
-          className
-        )}
-        {...props}
-      >
-        {children}
-        {showCloseButton && (
-          <DialogPrimitive.Close
-            data-slot="dialog-close"
-            className="absolute top-4 right-4 rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-[var(--fill-secondary)] data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
-          >
-            <XIcon />
-            <span className="sr-only">Close</span>
-          </DialogPrimitive.Close>
-        )}
-      </DialogPrimitive.Content>
-    </DialogPortal>
-  )
-}
+import { DialogClose, useDialogRoot } from "./dialog-root"
+export { Dialog, DialogClose, DialogTrigger } from "./dialog-root"
+export { DialogContent } from "./dialog-content"
+export { preloadDialogPopup } from "./dialog-load"
 
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
@@ -110,49 +55,52 @@ function DialogFooter({
     >
       {children}
       {showCloseButton && (
-        <DialogPrimitive.Close asChild>
+        <DialogClose asChild>
           <Button variant="outline">Close</Button>
-        </DialogPrimitive.Close>
+        </DialogClose>
       )}
     </div>
   )
 }
 
-function DialogTitle({
-  className,
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Title>) {
+/** Marks a part as present for as long as it is mounted, so the dialog names itself by it only then. */
+function usePresence(set: (present: boolean) => void) {
+  React.useLayoutEffect(() => {
+    set(true)
+    return () => set(false)
+  }, [set])
+}
+
+function DialogTitle({ className, id, ...props }: React.ComponentProps<"h2">) {
+  const root = useDialogRoot()
+  usePresence(root.setHasTitle)
   return (
-    <DialogPrimitive.Title
+    <h2
       data-slot="dialog-title"
+      id={id ?? root.titleId}
       className={cn("text-lg leading-none font-semibold", className)}
       {...props}
     />
   )
 }
 
-function DialogDescription({
-  className,
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Description>) {
+function DialogDescription({ className, id, ...props }: React.ComponentProps<"p">) {
+  const root = useDialogRoot()
+  usePresence(root.setHasDescription)
   return (
-    <DialogPrimitive.Description
+    <p
       data-slot="dialog-description"
+      id={id ?? root.descriptionId}
       className={cn("text-sm text-muted-foreground", className)}
       {...props}
     />
   )
 }
 
+
 export {
-  Dialog,
-  DialogClose,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogOverlay,
-  DialogPortal,
   DialogTitle,
-  DialogTrigger,
 }

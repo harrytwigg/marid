@@ -1,4 +1,5 @@
-import { FolderOpen } from "lucide-react"
+import { FolderOpen } from "@/components/ui/icon"
+import { Button } from "@/components/ui/button"
 import { ToggleSwitch } from "../shared"
 import type { PluginInventoryRow, PluginStatus } from "./inventory"
 
@@ -93,14 +94,9 @@ export function PluginRow({
       <PluginIdentity plugin={plugin} />
 
       <span className="flex flex-none items-center gap-1">
-        <button
-          type="button"
-          aria-label={`Open the ${plugin.name} folder`}
-          onClick={onReveal}
-          className="grid size-[34px] place-items-center rounded-full text-[var(--text-tertiary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)]"
-        >
-          <FolderOpen size={15} strokeWidth={2.1} aria-hidden />
-        </button>
+        <Button variant="ghost" size="icon-sm" aria-label={`Open the ${plugin.name} folder`} onClick={onReveal} className="size-[34px] min-h-0 text-[var(--text-tertiary)]">
+          <FolderOpen size={15} aria-hidden />
+        </Button>
         {/* The switch's width is held whether or not there is a switch, so the
             reveal buttons stay in one column down the list. */}
         <span className="flex w-[44px] flex-none justify-end">
