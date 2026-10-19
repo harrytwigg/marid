@@ -30,18 +30,33 @@ export function parseFallbackModePatch(value: unknown): { ok: true; mode?: Sessi
   return value === null ? { ok: true, mode: null } : parseFallbackModeParam(value);
 }
 
-/** The view for one session, from the live config, the roster, engine health and the cached limits readings (never probed). */
-export function fallbackViewFor(session: Session, context: ApiContext): SessionFallbackView {
+/** A department-scoped caller keeps each link's state and reset but not the company's usage numbers (the same line /api/engine-limits* draws: refused to scoped callers). */
+function withoutUsage(view: SessionFallbackView): SessionFallbackView {
+  const links = view.chain.links.map((link) => {
+    if (!link.health) return link;
+    const { usedPercent: _used, window: _window, ...health } = link.health;
+    return { ...link, health };
+  });
+  return { ...view, chain: { ...view.chain, links } };
+}
+
+/**
+ * The view for one session, from the live config, the roster, engine health and the cached limits
+ * readings (never probed). `scopedCaller`: the caller is a department-scoped session, which is not
+ * shown usage percentages or windows.
+ */
+export function fallbackViewFor(session: Session, context: ApiContext, scopedCaller = false): SessionFallbackView {
   const config = context.getConfig();
   const employee = session.employee ? orgRegistry(config).get(session.employee) : undefined;
   const health = engineHealthForTarget(readEngineHealth(), isRemoteTarget(employee) ? employee : undefined);
   const limits = latestLimitReadings(config, [accountForEmployee(employee, session.engine)]);
-  return sessionFallbackView(config, getModelRegistry(config), session, employee, { health, limits });
+  const view = sessionFallbackView(config, getModelRegistry(config), session, employee, { health, limits });
+  return scopedCaller ? withoutUsage(view) : view;
 }
 
 /** A single-session response body with its fallback view. */
-export function withFallbackView<T extends object>(body: T, session: Session, context: ApiContext): T & { fallback: SessionFallbackView } {
-  return { ...body, fallback: fallbackViewFor(session, context) };
+export function withFallbackView<T extends object>(body: T, session: Session, context: ApiContext, scopedCaller = false): T & { fallback: SessionFallbackView } {
+  return { ...body, fallback: fallbackViewFor(session, context, scopedCaller) };
 }
 
 /**

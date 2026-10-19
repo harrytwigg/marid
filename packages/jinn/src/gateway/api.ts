@@ -1876,7 +1876,7 @@ export async function handleApiRequest(
         ...serializeSessionResponse(session, context),
         ...(includeMessages ? { messages } : {}),
         ...(page ? { messagesPage: { hasOlder: page.hasOlder } } : {}),
-      }, session, context));
+      }, session, context, resolveScopedCaller(resolveScopedWriteCallerIdentity(req, context)) !== null));
     }
 
     // PUT|PATCH /api/sessions/:id — update title and/or mid-chat model/effort
