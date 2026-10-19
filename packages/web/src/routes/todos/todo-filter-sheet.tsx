@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react"
-import { ArrowLeft, Check, ChevronRight, X } from "lucide-react"
+import { ArrowLeft, Check, ChevronRight, X } from "@/components/ui/icon"
 import type { Employee } from "@/lib/api"
 import { activeFilterCount, type TodoFilters } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
@@ -15,7 +15,7 @@ const ROW_CLASS =
   "flex min-h-11 w-full min-w-0 items-center gap-3 rounded-[12px] px-3 text-left text-[length:var(--text-subheadline)] text-[var(--text-primary)] transition-[background-color,transform] active:scale-[0.96] hover:bg-[var(--fill-tertiary)]"
 
 function Selection({ selected }: { selected: boolean }) {
-  return <Check size={15} strokeWidth={2.5} className={`ml-auto flex-none text-[var(--accent)] ${selected ? "opacity-100" : "opacity-0"}`} aria-hidden />
+  return <Check size={15} className={`ml-auto flex-none text-[var(--accent)] ${selected ? "opacity-100" : "opacity-0"}`} aria-hidden />
 }
 
 export function TodoFilterSheet({
@@ -65,7 +65,8 @@ export function TodoFilterSheet({
       onRequestClose={leave}
       onClosed={onClose}
       testId="todo-filter-sheet"
-      className="inset-x-0 bottom-0 flex max-h-[82vh] min-w-0 flex-col overflow-hidden rounded-t-[var(--radius-2xl)] bg-[var(--bg-secondary)] p-2 pb-[max(8px,env(safe-area-inset-bottom))] shadow-[var(--shadow-overlay)] motion-safe:data-[state=closed]:animate-sheet-out motion-safe:data-[state=open]:animate-sheet-in"
+      motion="sheet"
+      className="inset-x-0 bottom-0 flex max-h-[82vh] min-w-0 flex-col overflow-hidden rounded-t-[var(--radius-2xl)] p-2 pb-[max(8px,env(safe-area-inset-bottom))]"
     >
       <div className="flex justify-center py-1.5">
         <span className="h-[5px] w-9 rounded-full bg-[var(--fill-primary)]" aria-hidden />
@@ -73,12 +74,12 @@ export function TodoFilterSheet({
       <div className="flex min-h-11 items-center gap-1 px-1">
         {panel !== "root" ? (
           <button type="button" aria-label="Back to filters" onClick={() => setPanel("root")} className="grid min-h-11 min-w-11 place-items-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--fill-tertiary)]">
-            <ArrowLeft size={18} strokeWidth={1.9} aria-hidden />
+            <ArrowLeft size={18} aria-hidden />
           </button>
         ) : <span className="min-w-11" aria-hidden />}
         <h2 className="min-w-0 flex-1 text-center text-[length:var(--text-headline)] font-semibold text-[var(--text-primary)]">{title}</h2>
         <button type="button" aria-label="Close filters" onClick={leave} className="grid min-h-11 min-w-11 place-items-center rounded-full bg-[var(--fill-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]">
-          <X size={14} strokeWidth={2.2} aria-hidden />
+          <X size={14} aria-hidden />
         </button>
       </div>
 

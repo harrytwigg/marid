@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react"
 import type { NavigationType } from "react-router-dom"
 import { ANCHOR_ATTRIBUTE, useScrollAnchor } from "@/hooks/use-scroll-anchor"
-import { recallBoardScroll, rememberBoardScroll } from "./board-route"
+import { recallBoardScroll, recallBoardScrollLeft, rememberBoardScroll, rememberBoardScrollLeft } from "./board-route"
 
 /** Attribute a board card is identified by; `BoardCard` stamps it. */
 const BOARD_CARD_ATTRIBUTE = "data-board-card"
@@ -32,7 +32,10 @@ export function useBoardScroll(
 
   const onBoardScroll = useCallback(() => {
     const el = boardScrollRef.current
-    if (el) rememberBoardScroll(key, el.scrollTop)
+    if (el) {
+      rememberBoardScroll(key, el.scrollTop)
+      rememberBoardScrollLeft(key, el.scrollLeft)
+    }
     reanchorBoard()
   }, [key, reanchorBoard])
   const onListScroll = useCallback(() => {
@@ -43,7 +46,11 @@ export function useBoardScroll(
 
   useEffect(() => {
     const scrollTop = navigationType === "POP" ? recallBoardScroll(key) : 0
-    if (boardScrollRef.current) boardScrollRef.current.scrollTop = scrollTop
+    if (boardScrollRef.current) {
+      boardScrollRef.current.scrollTop = scrollTop
+      // On a phone the strip is the sideways scroller: back from a card, it is on the column it was on.
+      boardScrollRef.current.scrollLeft = navigationType === "POP" ? recallBoardScrollLeft(key) : 0
+    }
     if (listScrollRef.current) listScrollRef.current.scrollTop = scrollTop
   }, [key, navigationType])
 

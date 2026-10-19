@@ -30,6 +30,7 @@ import { AttachmentDropSurface, AttachmentsSection } from "./attachments"
 import { useTaskAttachments } from "./use-task-attachments"
 import { ActivitySection } from "./activity"
 import { TaskEmpty, TaskPageSkeleton } from "./task-page-fallbacks"
+import { Button } from "@/components/ui/button"
 import { Slot } from "@/contrib/slot"
 import { AREAS } from "@/contrib/types"
 
@@ -227,14 +228,9 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
           <p className="max-w-[340px] text-[14px] leading-[1.5] text-[var(--text-tertiary)]">
             {operatorSafeTodoError(detailQuery.error, "The gateway didn't answer. It may be restarting.")}
           </p>
-          <button
-            type="button"
-            data-testid="task-load-retry"
-            onClick={() => void detailQuery.refetch()}
-            className="focus-ring rounded-full px-4 py-2 text-[13px] font-semibold text-[var(--accent)] outline-none hover:bg-[var(--accent-fill)]"
-          >
+          <Button variant="secondary" data-testid="task-load-retry" onClick={() => void detailQuery.refetch()} className="rounded-full">
             Retry
-          </button>
+          </Button>
         </div>
       </TaskFrame>
     )
@@ -315,14 +311,15 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
                     onCommitReason={commitBannerReason}
                     actions={
                       detail.workItem.status === "blocked" ? (
-                        <button
-                          type="button"
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           data-testid="task-banner-unblock"
                           onClick={() => pickers.setOpenPicker("status")}
-                          className="focus-ring min-h-8 rounded-full bg-[var(--fill-tertiary)] px-3 text-[12.5px] font-semibold text-[var(--text-secondary)] outline-none hover:bg-[var(--fill-secondary)]"
+                          className="rounded-full"
                         >
                           Unblock…
-                        </button>
+                        </Button>
                       ) : undefined
                     }
                   />
@@ -336,7 +333,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
                   data-testid="task-copy-id-mobile"
                   aria-label={`Copy ${id}`}
                   onClick={copyId}
-                  className="focus-ring relative -mx-1 mb-1 block w-fit rounded-md px-1 text-[12px] tracking-[.04em] text-[var(--text-tertiary)] outline-none after:absolute after:bottom-0 after:left-0 after:h-[34px] after:w-full after:content-[''] hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]"
+                  className="focus-outline relative -mx-1 mb-1 block w-fit rounded-md px-1 text-[12px] tracking-[.04em] text-[var(--text-tertiary)] outline-none after:absolute after:bottom-0 after:left-0 after:h-[34px] after:w-full after:content-[''] hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]"
                   style={{ fontFamily: "var(--font-code)" }}
                 >
                   {id}
@@ -449,7 +446,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
         <div
           role="status"
           data-testid="task-callout"
-          className="pointer-events-none fixed bottom-6 left-1/2 z-[130] -translate-x-1/2 rounded-[var(--radius-lg)] bg-[var(--material-thick)] px-4 py-2.5 text-[length:var(--text-footnote)] text-[var(--text-primary)] shadow-[var(--shadow-overlay)] backdrop-blur-xl"
+          className="pointer-events-none fixed bottom-6 left-1/2 z-[130] -translate-x-1/2 rounded-[var(--radius-lg)] glass-overlay px-4 py-2.5 text-[length:var(--text-footnote)] text-[var(--text-primary)]"
         >
           {callout}
         </div>

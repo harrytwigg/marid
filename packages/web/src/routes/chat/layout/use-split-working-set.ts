@@ -33,6 +33,7 @@ import {
 } from './split-layout'
 import { loadSplitLayout, persistSplitLayout } from './split-layout-storage'
 import { fileTabId, type FileTabRef } from './file-tab'
+import { subagentTabId, type SubagentTabRef } from './subagent-tab'
 import { isChatTabId, isNewChatTabId, todoTabId } from './tab-kind'
 import { forgetNewChatDraft } from '@/components/chat/use-chat-draft'
 import { capWindowWidth, savedSidebarWidth } from '../sidebar-width-store'
@@ -229,6 +230,8 @@ function useTabOpeners(
   const openFile = useCallback((ownerSessionId: string | null, file: FileTabRef) => openDoc(ownerSessionId, fileTabId(file)), [openDoc])
   /** A Todo opened as a tab beside the chat that linked it, as openFile does for a file. */
   const openTodo = useCallback((ownerSessionId: string | null, todoId: string) => openDoc(ownerSessionId, todoTabId(todoId)), [openDoc])
+  /** A background sub-agent's conversation as a tab beside the chat that launched it. */
+  const openSubagent = useCallback((ownerSessionId: string | null, subagent: SubagentTabRef) => openDoc(ownerSessionId, subagentTabId(subagent)), [openDoc])
   /** A new chat (addressed to `employee`, if given) as a tab of the focused pane. False when the layout
    *  holds no chat to open it beside, or has yet to load, so the caller falls back to the route's own
    *  composer. */
@@ -238,7 +241,7 @@ function useTabOpeners(
     return true
   }, [hydrated, project, shown])
 
-  return { openFile, openTodo, openNewChat }
+  return { openFile, openTodo, openSubagent, openNewChat }
 }
 
 /**
@@ -272,7 +275,7 @@ export function useSplitWorkingSet(
    * prediction (removeWorkingSetSession on `state`) cannot see a group's hidden tabs, which is
    * what the pane falls back to. */
   const afterRemove = useCallback((sessionId: string) => workingSetFromLayout(closeSession(shown, sessionId)), [shown])
-  const { openFile, openTodo, openNewChat } = useTabOpeners(shown, hydrated, project, setLayout)
+  const { openFile, openTodo, openSubagent, openNewChat } = useTabOpeners(shown, hydrated, project, setLayout)
 
-  return { state, add, focus, remove, drop, split, afterRemove, openFile, openTodo, openNewChat, hydrated }
+  return { state, add, focus, remove, drop, split, afterRemove, openFile, openTodo, openSubagent, openNewChat, hydrated }
 }

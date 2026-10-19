@@ -1,7 +1,7 @@
 import {
   MessageSquare, Users, ListChecks, Clock,
   Activity, Zap, Settings, Gauge, NotebookPen, Rocket,
-} from "lucide-react"
+} from "@/components/ui/icon"
 
 // Every top-level destination, so the command palette can reach anything the
 // mobile tab bar / More overflow reaches (kept in step with lib/nav NAV_ITEMS).

@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkItemOpenDetailWire, WorkItemStatusWire } from "@/lib/api"
@@ -218,12 +219,37 @@ describe("the hover glance on a Todo mention", () => {
     expect(stripFor("Back for a second look")).toBeTruthy()
   })
 
-  it("holds nothing focusable, so tabbing never stops inside it", async () => {
+  it("is a tooltip the mention is described by while it is open, so a screen reader reads it with the link", async () => {
+    rows.set("ICI-7112", { title: "Read with the link", status: "backlog" })
+    renderMentions(["ICI-7112"])
+    const link = screen.getByRole("link", { name: "ICI-7112" })
+    expect(link.hasAttribute("aria-describedby")).toBe(false)
+
+    await openGlance("ICI-7112")
+
+    const tip = screen.getByRole("tooltip")
+    expect(tip.textContent).toContain("Read with the link")
+    expect(link.getAttribute("aria-describedby")).toBe(tip.id)
+  })
+
+  it("opens when the keyboard reaches the mention", async () => {
+    rows.set("ICI-7113", { title: "Opened by Tab", status: "executing" })
+    renderMentions(["ICI-7113"])
+
+    await userEvent.tab()
+
+    expect(document.activeElement).toBe(screen.getByRole("link", { name: "ICI-7113" }))
+    await screen.findByText("Opened by Tab")
+  })
+
+  it("holds nothing in the tab order, so tabbing never stops inside it", async () => {
     rows.set("ICI-7108", { title: "Nothing to tab to", status: "in_review" })
     renderMentions(["ICI-7108"])
     await openGlance("ICI-7108")
 
     const strip = stripFor("Nothing to tab to")
-    expect(strip.querySelectorAll("a, button, input, select, textarea, [tabindex]")).toHaveLength(0)
+    // React Aria adds a visually hidden dismiss button, which is `tabindex="-1"`.
+    const focusable = [...strip.querySelectorAll<HTMLElement>("a, button, input, select, textarea, [tabindex]")]
+    expect(focusable.filter((element) => element.tabIndex >= 0)).toHaveLength(0)
   })
 })

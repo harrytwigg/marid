@@ -1,5 +1,6 @@
 import { useState } from "react"
-import { ChevronDown, Plus } from "lucide-react"
+import { ChevronDown, Plus } from "@/components/ui/icon"
+import { Button } from "@/components/ui/button"
 import type { Employee, WorkItemStatusWire, WorkItemTreeNodeWire } from "@/lib/api"
 import { PendingSubTaskRow, SubTaskRow } from "./subtask-row"
 import { PENDING_SUBTASK_PREFIX } from "./use-subtask-mutations"
@@ -88,7 +89,7 @@ export function SubTasksSection({
             if (expanded) closeField()
             setExpanded(!expanded)
           }}
-          className="focus-ring -ml-1.5 flex min-h-[34px] min-w-0 items-center gap-2 rounded-[var(--radius-sm)] px-1.5 text-left text-[11px] font-semibold uppercase tracking-[.15em] text-[var(--text-secondary)] outline-none"
+          className="focus-outline -ml-1.5 flex min-h-[34px] min-w-0 items-center gap-2 rounded-[var(--radius-sm)] px-1.5 text-left text-[11px] font-semibold uppercase tracking-[.15em] text-[var(--text-secondary)] outline-none"
           style={{ fontFamily: "var(--font-code)" }}
         >
           <ChevronDown
@@ -113,18 +114,19 @@ export function SubTasksSection({
           )}
         </button>
         {!atCap && (
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="icon-sm"
             aria-label="Add sub-task"
             data-testid="subtask-add"
             onClick={() => {
               setExpanded(true)
               setAdding(true)
             }}
-            className="focus-ring grid size-9 flex-none place-items-center rounded-full text-[var(--text-quaternary)] outline-none transition-[background-color,color,scale] duration-150 hover:bg-[var(--fill-secondary)] hover:text-[var(--text-secondary)] active:scale-[0.96]"
+            className="size-9 flex-none rounded-full text-[var(--text-quaternary)]"
           >
-            <Plus size={15} strokeWidth={2.2} aria-hidden />
-          </button>
+            <Plus size={15} aria-hidden />
+          </Button>
         )}
       </div>
 
@@ -164,7 +166,7 @@ export function SubTasksSection({
                 data-testid="subtask-add-row"
                 className="-mx-2.5 flex min-h-9 items-center px-2.5 py-[5px] motion-safe:animate-capture-step-in"
               >
-                <Plus size={12} strokeWidth={2.2} aria-hidden className="mr-4 flex-none text-[var(--text-quaternary)]" />
+                <Plus size={12} aria-hidden className="mr-4 flex-none text-[var(--text-quaternary)]" />
                 <input
                   autoFocus
                   value={title}

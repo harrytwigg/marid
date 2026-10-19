@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { Search } from "lucide-react"
+import { Search } from "@/components/ui/icon"
 
 /* The cards a board shows instead of columns when it has nothing to draw.
  *
@@ -35,7 +35,7 @@ function EmptyCard(
             type="button"
             data-testid={action.testId}
             onClick={action.onClick}
-            className="focus-ring mt-3 rounded-full px-2.5 py-1 text-[13px] font-semibold text-[var(--accent)] outline-none hover:bg-[var(--accent-fill)]"
+            className="focus-outline mt-3 rounded-full px-2.5 py-1 text-[13px] font-semibold text-[var(--accent)] outline-none hover:bg-[var(--accent-fill)]"
           >
             {action.label}
           </button>
@@ -63,7 +63,7 @@ export function FilteredEmptyCard({
     : `${count} filters are set on this board.`
   return (
     <EmptyCard
-      icon={<Search size={24} strokeWidth={2} />}
+      icon={<Search size={24} />}
       title="No todos match."
       caption={caption}
       action={{ label: "Clear filters", onClick: onClear, testId: clearTestId }}

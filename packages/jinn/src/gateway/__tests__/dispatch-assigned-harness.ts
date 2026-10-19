@@ -162,17 +162,26 @@ export function dispatch(workItemId: string) {
   return call("POST", `/api/work-items/${workItemId}/dispatch`, {});
 }
 
+/** `dispatch_work_item`, as the given session. */
+export function dispatchAs(callerSessionId: string, workItemId: string) {
+  return call("POST", `/api/work-items/${workItemId}/dispatch`, {}, toolCallHeaders(callerSessionId));
+}
+
+function toolCallHeaders(callerSessionId: string): Record<string, string> {
+  return {
+    [TOOL_CALL_HEADER]: TOOL_CALL_HEADER_VALUE,
+    [CALLER_SESSION_HEADER]: callerSessionId,
+    [CALLER_SESSION_CAPABILITY_HEADER]: ensureSessionCapability(callerSessionId),
+  };
+}
+
 /** `delegate_task` onto an existing Todo, as the given session. */
 export function delegate(callerSessionId: string, workItemId: string, employee: string) {
   return call(
     "POST",
     "/api/delegations",
     { workItemId, employee, task: "Complete the Todo acceptance criteria and report evidence." },
-    {
-      [TOOL_CALL_HEADER]: TOOL_CALL_HEADER_VALUE,
-      [CALLER_SESSION_HEADER]: callerSessionId,
-      [CALLER_SESSION_CAPABILITY_HEADER]: ensureSessionCapability(callerSessionId),
-    },
+    toolCallHeaders(callerSessionId),
   );
 }
 

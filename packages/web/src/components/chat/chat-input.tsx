@@ -711,12 +711,12 @@ export function ChatInput({
       {/* Soft top scrim — fades scrolling content into the composer instead of a
           hard 1px divider. Borderless, readable over the thread in both themes.
           Stays full-bleed (spans the whole thread width). */}
-      <div aria-hidden className="pointer-events-none absolute -top-5 left-0 right-0 h-5 bg-gradient-to-b from-transparent to-[var(--bg)]" />
+      <div aria-hidden data-chat-composer-fade className="pointer-events-none absolute -top-5 left-0 right-0 h-5 bg-gradient-to-b from-transparent to-[var(--bg)]" />
       {/* Centered measure — caps the composer to the same column as the message
           text (--chat-measure + the message rows' space-3/space-8 side insets), so
           the card lines up edge-for-edge with the thread content instead of
           spanning the full pane. Mobile stays effectively full-width. */}
-      <div className="relative mx-auto w-full max-w-[var(--chat-measure)] px-3 lg:px-8">
+      <div data-chat-composer-measure className="relative mx-auto w-full max-w-[var(--chat-measure)] px-3 lg:px-8">
       {/* Slash command autocomplete */}
       {showCommands && filteredCommands.length > 0 && (
         <div className="absolute bottom-full left-3 right-3 lg:left-8 lg:right-8 mb-1 border-0 bg-[var(--bg-tertiary)] rounded-[var(--radius-lg)] shadow-[var(--shadow-overlay)] max-h-60 overflow-y-auto z-10">
@@ -1069,6 +1069,8 @@ export function ChatInput({
            streaming so the brighter loading ring takes precedence. */
         .composer-card-active { box-shadow: var(--shadow-card); }
         .composer-card-active:focus-within { box-shadow: var(--shadow-card), 0 0 0 4px var(--accent-fill); }
+        .composer-card-active.composer-card-loading,
+        .composer-card-active.composer-card-loading:focus-within { box-shadow: var(--shadow-card), 0 0 0 1.5px color-mix(in srgb, var(--accent) 38%, transparent); }
       `}</style>
     </div>
   )

@@ -32,6 +32,20 @@ const ROOT_TREES = [
 
 export const LINTED = [...PACKAGE_TREES, ...ROOT_TREES]
 
+// The web app draws its icons from `@/components/ui/icon`, whose modules are
+// generated from Phosphor's duotone sources. Lucide has left the dependency
+// tree, and `scripts/check-footguns.mjs` rejects it (and Radix and cmdk) in CI.
+const WEB_SOURCES = ["packages/web/**/*.{ts,tsx}"]
+const HEROUI_BARREL = {
+  name: "@heroui/react",
+  message: "Import the component by deep path, for example `@heroui/react/switch`: the barrel pulls in every component.",
+}
+const LUCIDE_PATH = {
+  name: "lucide-react",
+  message: "Import icons from \"@/components/ui/icon\"; its modules are generated from Phosphor's duotone sources (pnpm --filter @jinn/web icons).",
+}
+const LUCIDE_PATTERN = { group: ["lucide-react/*"], message: "Import icons from \"@/components/ui/icon\"." }
+
 // Every tree in `LINTED` names its tests, because a test left out of this list
 // is a test judged by the size caps the ones beside it are excused from. Each
 // entry stays inside a `LINTED` tree on purpose: a file that matches here but
@@ -126,6 +140,36 @@ export const enforcement = tseslint.config(
         project: ["./tsconfig.e2e.json", "./tsconfig.scripts.json"],
         tsconfigRootDir: import.meta.dirname,
       },
+    },
+  },
+  {
+    // HeroUI reaches the app through `src/components/ui` only, so a control can
+    // be swapped without touching its call sites, and always by deep path
+    // (`@heroui/react/switch`): the barrel entry would put every component
+    // into whichever chunk imports it.
+    files: WEB_SOURCES,
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [HEROUI_BARREL, LUCIDE_PATH],
+          patterns: [
+            {
+              group: ["@heroui/react/*"],
+              message: "Only `src/components/ui` imports HeroUI. Wrap the control there and import that wrapper.",
+            },
+            LUCIDE_PATTERN,
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // `no-restricted-imports` replaces rather than merges, so the ui layer, which
+    // may import HeroUI by deep path, restates the barrel and icon-library bans.
+    files: ["packages/web/src/components/ui/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": ["error", { paths: [HEROUI_BARREL, LUCIDE_PATH], patterns: [LUCIDE_PATTERN] }],
     },
   },
   {
