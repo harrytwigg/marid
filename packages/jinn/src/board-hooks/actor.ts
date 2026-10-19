@@ -61,7 +61,6 @@ function creatingSessionId(item: WorkItem): string | undefined {
   return item.createdBy.startsWith(SESSION_ACTOR) ? item.createdBy.slice(SESSION_ACTOR.length) : undefined;
 }
 
-
 /**
  * Who created a Todo. A `created` row records only the source kind as its actor
  * (`human`, `session`, `delegation`, `cron`, …); the creator is on the Todo itself,
