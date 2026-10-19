@@ -186,4 +186,5 @@ with a temporary home, fake Claude profiles and stub `claude` and `opencode`
 binaries that succeed, report a usage limit, stall or fail on command, per
 profile and model, in the formats the gateway classifies. Its scenarios walk a
 four-link chain hop by hop, run a chain out, and check the loop guard. No
-provider is contacted.
+provider is contacted. `scripts/verify-fallback-chains/README.md` says how to run it, keep the
+instance up for screenshots, and add a scenario.
