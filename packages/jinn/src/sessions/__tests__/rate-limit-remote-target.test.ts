@@ -85,7 +85,7 @@ import { handleRateLimit, type RateLimitHandlerOpts } from "../rate-limit-handle
 import { JINN_HOME } from "../../shared/paths.js";
 import type { Employee, EngineResult, Session } from "../../shared/types.js";
 
-const REMOTE = { remoteHost: "build-box", remoteUser: "jinn", remoteCwd: "/srv/jinn-work/repo" };
+const REMOTE = { remoteHost: "build-box", remoteUser: "jinn", remoteCwd: "/srv/agents/repo" };
 
 function employee(overrides: Partial<Employee> = {}): Employee {
   return { name: "ada", ...overrides } as Employee;

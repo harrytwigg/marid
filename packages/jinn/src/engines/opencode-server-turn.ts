@@ -14,7 +14,7 @@ import { metadataTag, readMetadataTag } from "./opencode-metadata-tag.js";
  * Not `opencode run --attach`, although that was the first design: opencode
  * 1.18.31's attached client prints `step_start` and exits 0 before the answer
  * whenever the session's directory is not a git repository (5/5 reproduced on
- * build-host, 0/5 in a repo; `--dir` does not help), while the server itself
+ * a remote host, 0/5 in a repo; `--dir` does not help), while the server itself
  * finishes the turn correctly. A remote employee's working root is exactly such
  * a directory. So Jinn is the client:
  *

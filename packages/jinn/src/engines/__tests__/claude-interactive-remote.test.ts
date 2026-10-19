@@ -129,8 +129,8 @@ import { cleanupSessionSettings } from "../../shared/claude-settings.js";
 
 const flush = () => new Promise((r) => setTimeout(r, 20));
 const SID = "remote-sess";
-const REMOTE_CONFIG = { root: "/srv/jinn-work", mount: "/mnt/jinn-home" };
-const TARGET = { remoteHost: "build-box", remoteUser: "builder", remoteCwd: "/srv/jinn-work/proj" };
+const REMOTE_CONFIG = { root: "/srv/agents", mount: "/mnt/jinn-home" };
+const TARGET = { remoteHost: "build-box", remoteUser: "builder", remoteCwd: "/srv/agents/proj" };
 
 /** The remote command ssh would run — the last argv element, after `--`. */
 function remoteCommandOf(args: string[]): string {
@@ -200,7 +200,7 @@ describe("InteractiveClaudeEngine — remote branch", () => {
       expect(args[args.indexOf("-R") + 1]).toBe("44321:127.0.0.1:8722");
       expect(args).toContain("builder@build-box");
       // The gateway's own working directory is irrelevant; the remote command cds.
-      expect(remoteCommandOf(args)).toContain("cd '/srv/jinn-work/proj' &&");
+      expect(remoteCommandOf(args)).toContain("cd '/srv/agents/proj' &&");
     });
 
     it("never starts an SSE forward proxy", async () => {
@@ -330,7 +330,7 @@ describe("InteractiveClaudeEngine — remote branch", () => {
         prompt: "hi",
         cwd: "/tmp",
         remoteHost: "build-box",
-        remoteCwd: "/srv/jinn-work-evil/proj",
+        remoteCwd: "/srv/agents-evil/proj",
       } as any)).rejects.toThrow(/Refusing to spawn a remote session/);
       expect(hoisted.spawns).toHaveLength(0);
     });
@@ -369,7 +369,7 @@ describe("InteractiveClaudeEngine — remote branch", () => {
       expect(opts.cols).toBe(100);
       expect(opts.rows).toBe(30);
       const cmd = remoteCommandOf(args);
-      expect(cmd).toContain("cd '/srv/jinn-work/proj' &&");
+      expect(cmd).toContain("cd '/srv/agents/proj' &&");
       expect(remoteFlagValue(cmd, "--resume")).toBe("cc-1");
       expect(hoisted.proxyConstructions).toBe(0);
     });

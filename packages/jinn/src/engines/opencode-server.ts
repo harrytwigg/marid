@@ -145,7 +145,7 @@ export interface OpencodeServerPoolDeps {
 
 /**
  * The oldest opencode server mode runs against: the version its HTTP API, event
- * stream and Part shapes were verified on (build-host, 2026-09-24). Server mode
+ * stream and Part shapes were verified on (a remote host, 2026-09-24). Server mode
  * reads those shapes rather than the CLI's `--format json` contract, so an
  * older or unknown server is refused and that host's turns use `run` mode.
  */

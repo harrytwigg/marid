@@ -94,7 +94,7 @@ import { OpencodeEngine } from "../opencode.js";
 import { JINN_HOME } from "../../shared/paths.js";
 import type { EngineRunOpts, ResolvedMcpConfig } from "../../shared/types.js";
 
-const REMOTE_CONFIG = { root: "/srv/jinn-work", mount: "/mnt/jinn-home" };
+const REMOTE_CONFIG = { root: "/srv/agents", mount: "/mnt/jinn-home" };
 const GATEWAY_PORT = 8722;
 const MCP: ResolvedMcpConfig = {
   mcpServers: {
@@ -144,8 +144,8 @@ const CASES: Array<{ name: string; opts: Partial<EngineRunOpts>; withConfig?: bo
   { name: "local fresh, jinn tools", opts: { resolvedMcp: MCP, systemPrompt: "You are Ada." } },
   { name: "local resumed, no tools", opts: { resumeSessionId: "ses_prev" } },
   { name: "local with cli flags", opts: { cliFlags: ["--agent", "build"], resolvedMcp: MCP } },
-  { name: "remote fresh, jinn tools", opts: { remoteHost: "build-box", remoteUser: "builder", remoteCwd: "/srv/jinn-work/proj", resolvedMcp: MCP } },
-  { name: "remote resumed, no config", opts: { remoteHost: "build-box", remoteUser: "builder", remoteCwd: "/srv/jinn-work/proj", resumeSessionId: "ses_prev" }, withConfig: false },
+  { name: "remote fresh, jinn tools", opts: { remoteHost: "build-box", remoteUser: "builder", remoteCwd: "/srv/agents/proj", resolvedMcp: MCP } },
+  { name: "remote resumed, no config", opts: { remoteHost: "build-box", remoteUser: "builder", remoteCwd: "/srv/agents/proj", resumeSessionId: "ses_prev" }, withConfig: false },
 ];
 
 function baseOpts(over: Partial<EngineRunOpts>): EngineRunOpts {

@@ -40,7 +40,7 @@ afterEach(() => {
  */
 describe("engineHealthForTarget", () => {
   const GATEWAY = hostname();
-  const REMOTE = { remoteHost: "build-box", remoteUser: "jinn", remoteCwd: "/srv/jinn-work/main" };
+  const REMOTE = { remoteHost: "build-box", remoteUser: "jinn", remoteCwd: "/srv/agents/main" };
 
   it("keeps a record about the gateway for a session that runs on the gateway", () => {
     recordEngineUnavailable("claude", "authentication failed", secondsAt(90), NOW, { host: GATEWAY });
@@ -95,7 +95,7 @@ describe("engineHealthForTarget", () => {
  */
 describe("engineHealthForTarget — a host stamp must not outlive its observation", () => {
   const GATEWAY = hostname();
-  const REMOTE = { remoteHost: "build-box", remoteUser: "jinn", remoteCwd: "/srv/jinn-work/main" };
+  const REMOTE = { remoteHost: "build-box", remoteUser: "jinn", remoteCwd: "/srv/agents/main" };
 
   it("does not carry a host onto a later account-wide observation", () => {
     // The gateway's login dies, then a usage limit that states no reset arrives.

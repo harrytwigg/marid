@@ -7,7 +7,7 @@ function employee(name: string, extra: Partial<Employee> = {}): Employee {
   return { name, displayName: name, department: "general", rank: "employee", engine: "claude", model: "opus", persona: "", ...extra } as Employee;
 }
 
-const remote = { root: "/srv/jinn-work", mount: "/mnt/jinn-home" };
+const remote = { root: "/srv/agents", mount: "/mnt/jinn-home" };
 
 describe("listTerminalHosts", () => {
   it("offers the gateway alone when nothing else is configured", () => {
@@ -19,15 +19,15 @@ describe("listTerminalHosts", () => {
 
   it("derives one host per distinct employee destination, starting in remote.root", () => {
     const list = listTerminalHosts({ remote }, [
-      employee("senior", { remoteHost: "10.0.0.5", remoteCwd: "/srv/jinn-work/main" }),
-      employee("junior", { remoteHost: "10.0.0.5", remoteCwd: "/srv/jinn-work/main" }),
-      employee("qa", { remoteHost: "10.0.0.5", remoteUser: "ci", remoteCwd: "/srv/jinn-work/main" }),
+      employee("senior", { remoteHost: "10.0.0.5", remoteCwd: "/srv/agents/main" }),
+      employee("junior", { remoteHost: "10.0.0.5", remoteCwd: "/srv/agents/main" }),
+      employee("qa", { remoteHost: "10.0.0.5", remoteUser: "ci", remoteCwd: "/srv/agents/main" }),
       employee("local-one"),
     ]);
     expect(list.hosts.map((h) => [h.id, h.destination, h.cwd, h.detail])).toEqual([
       ["local", undefined, undefined, "This gateway"],
-      ["ssh:10.0.0.5", "10.0.0.5", "/srv/jinn-work", "Runs senior, junior"],
-      ["ssh:ci@10.0.0.5", "ci@10.0.0.5", "/srv/jinn-work", "Runs qa"],
+      ["ssh:10.0.0.5", "10.0.0.5", "/srv/agents", "Runs senior, junior"],
+      ["ssh:ci@10.0.0.5", "ci@10.0.0.5", "/srv/agents", "Runs qa"],
     ]);
   });
 
@@ -36,13 +36,13 @@ describe("listTerminalHosts", () => {
       remote,
       terminal: {
         localLabel: "Pi",
-        hosts: [{ id: "build", label: "Build host", host: "10.0.0.5", cwd: "/srv/jinn-work/main" }],
+        hosts: [{ id: "build", label: "Build host", host: "10.0.0.5", cwd: "/srv/agents/main" }],
       },
     };
-    const list = listTerminalHosts(config, [employee("senior", { remoteHost: "10.0.0.5", remoteCwd: "/srv/jinn-work/x" })]);
+    const list = listTerminalHosts(config, [employee("senior", { remoteHost: "10.0.0.5", remoteCwd: "/srv/agents/x" })]);
     expect(list.hosts.map((h) => [h.id, h.label, h.cwd])).toEqual([
       ["local", "Pi", undefined],
-      ["build", "Build host", "/srv/jinn-work/main"],
+      ["build", "Build host", "/srv/agents/main"],
     ]);
   });
 
@@ -68,8 +68,8 @@ describe("listTerminalHosts", () => {
 
   it("keeps derived ids apart that differ only in punctuation", () => {
     const list = listTerminalHosts({ remote }, [
-      employee("a", { remoteHost: "box", remoteUser: "ops", remoteCwd: "/srv/jinn-work" }),
-      employee("b", { remoteHost: "ops-box", remoteCwd: "/srv/jinn-work" }),
+      employee("a", { remoteHost: "box", remoteUser: "ops", remoteCwd: "/srv/agents" }),
+      employee("b", { remoteHost: "ops-box", remoteCwd: "/srv/agents" }),
     ]);
     expect(list.hosts.map((h) => h.id)).toEqual(["local", "ssh:ops@box", "ssh:ops-box"]);
   });
@@ -92,7 +92,7 @@ describe("listTerminalHosts", () => {
 
   it("offers nothing when disabled, and can skip employee hosts", () => {
     expect(listTerminalHosts({ terminal: { enabled: false } }, [])).toMatchObject({ enabled: false, hosts: [], problems: [] });
-    const list = listTerminalHosts({ remote, terminal: { employeeHosts: false } }, [employee("s", { remoteHost: "10.0.0.5", remoteCwd: "/srv/jinn-work" })]);
+    const list = listTerminalHosts({ remote, terminal: { employeeHosts: false } }, [employee("s", { remoteHost: "10.0.0.5", remoteCwd: "/srv/agents" })]);
     expect(list.hosts.map((h) => h.id)).toEqual(["local"]);
   });
 

@@ -22,7 +22,7 @@ vi.mock("../../shared/config.js", () => ({
   // always carries it.
   loadConfig: vi.fn(() => ({
     engines: { default: "claude" },
-    remote: { root: "/srv/jinn-work", mount: "/mnt/jinn-home", wakeMac: "aa:bb:cc:dd:ee:ff" },
+    remote: { root: "/srv/agents", mount: "/mnt/jinn-home", wakeMac: "aa:bb:cc:dd:ee:ff" },
   })),
 }));
 
@@ -32,7 +32,7 @@ vi.mock("../../gateway/org.js", () => ({
     displayName: "Builder",
     remoteHost: "build-box",
     remoteUser: "builder",
-    remoteCwd: "/srv/jinn-work/proj",
+    remoteCwd: "/srv/agents/proj",
   }]])),
 }));
 
@@ -61,7 +61,7 @@ describe("jinn remote", () => {
     expect(hoisted.targets).toHaveLength(1);
     expect(hoisted.targets[0].remoteUser).toBe("builder");
     expect(hoisted.targets[0].remoteHost).toBe("build-box");
-    expect(hoisted.targets[0].remoteCwd).toBe("/srv/jinn-work/proj");
+    expect(hoisted.targets[0].remoteCwd).toBe("/srv/agents/proj");
   });
 
   it("keeps the user on the wake path too", async () => {

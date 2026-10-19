@@ -130,7 +130,7 @@ import { JINN_HOME } from "../../shared/paths.js";
 import type { OpencodeServerConfig } from "../../shared/config-types.js";
 import type { EngineRunOpts } from "../../shared/types.js";
 
-const REMOTE_CONFIG = { root: "/srv/jinn-work", mount: "/mnt/jinn-home" };
+const REMOTE_CONFIG = { root: "/srv/agents", mount: "/mnt/jinn-home" };
 const GATEWAY_PORT = 8722;
 
 function setup(disableFff?: () => boolean, limits?: OpencodeServerConfig) {
@@ -154,7 +154,7 @@ function runOpts(over: Partial<EngineRunOpts> = {}): EngineRunOpts {
     model: "opencode-go/deepseek-v4.1-flash",
     remoteHost: "build-box",
     remoteUser: "builder",
-    remoteCwd: "/srv/jinn-work/proj",
+    remoteCwd: "/srv/agents/proj",
     ...over,
   };
 }
@@ -393,7 +393,7 @@ describe("opencode servers on a remote host and the gateway's idle PTY cap", { t
 });
 
 describe("a remote host whose opencode was upgraded since its facts were read", () => {
-  const spec = { cwd: JINN_HOME, remoteHost: "build-box", remoteUser: "builder", remoteCwd: "/srv/jinn-work/proj" };
+  const spec = { cwd: JINN_HOME, remoteHost: "build-box", remoteUser: "builder", remoteCwd: "/srv/agents/proj" };
   /** A stop ends the fake server, as the group signal would end the real one. */
   function serversExitOnSignal(): void {
     killSpy.mockImplementation(((pid: number) => {

@@ -177,7 +177,7 @@ import { REMOTE_KILL_SCRIPT } from "../remote-stage.js";
 import { JINN_HOME } from "../../shared/paths.js";
 import type { EngineRunOpts } from "../../shared/types.js";
 
-const REMOTE_CONFIG = { root: "/srv/jinn-work", mount: "/mnt/jinn-home" };
+const REMOTE_CONFIG = { root: "/srv/agents", mount: "/mnt/jinn-home" };
 const GATEWAY_PORT = 8722;
 
 function engine(gatewayPort = GATEWAY_PORT, disableFff?: () => boolean): OpencodeEngine {
@@ -192,7 +192,7 @@ function runOpts(over: Partial<EngineRunOpts> = {}): EngineRunOpts {
     model: "anthropic/claude-sonnet-5",
     remoteHost: "build-box",
     remoteUser: "builder",
-    remoteCwd: "/srv/jinn-work/proj",
+    remoteCwd: "/srv/agents/proj",
     ...over,
   };
 }
@@ -237,7 +237,7 @@ describe("OpencodeEngine — a remote employee's turn runs on the other machine"
     expect(hoisted.spawns[0]!.bin).toMatch(/(^|[\\/])ssh(\.exe)?$/);
     // The opencode that runs is the REMOTE install's, found on that host's PATH.
     expect(remoteCommand()).toContain(REMOTE_BIN);
-    expect(remoteCommand()).toContain("cd '/srv/jinn-work/proj'");
+    expect(remoteCommand()).toContain("cd '/srv/agents/proj'");
   });
 
   it("asks the host about opencode's CLI, not another engine's", async () => {
