@@ -12,175 +12,54 @@
 //      directory, a host registry entry, and Claude conversations filed under both working directories;
 //   2. starts and stops it with the OLD build, as the operator's service would have;
 //   3. starts the NEW build against the OLD home path and instance name, exactly as that service's unit
-//      would (`JINN_HOME=<old path>`), so the home has to move on its own;
+//      would (`JINN_HOME=<old path>`), so the home has to move on its own. With `--restart` the old gateway is
+//      left running instead and the NEW build's restart helper is run over it, as `restart` after an upgrade
+//      would: the home has to move between the old gateway stopping and the new one starting;
 //   4. checks one identity (home, stage root, registry entry), that the conversations followed, and that
 //      sessions resume, fork and auto-compact through the real gateway against a stand-in `claude` that
 //      refuses a conversation not filed under the physical directory it runs in;
-//   5. restarts the NEW build again, checks nothing moves twice, and runs `doctor`.
+//   5. restarts the NEW build again, checks nothing moves twice, and runs `doctor`;
+//   6. switches the instance over (`doctor --rename --apply`, gateway stopped): the skill, cron prompt and
+//      permission list that say `mcp__jinn__*` are rewritten with their originals kept, the built-in MCP
+//      server is registered under the new name from the next start, and a session still resumes.
 //
 // Nothing outside the scratch host is read or written, and the port must be one a live gateway cannot own.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import net from "node:net";
-import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const here = path.dirname(fileURLToPath(import.meta.url));
-const args = Object.fromEntries(process.argv.slice(2).flatMap((value, index, all) => (value.startsWith("--") ? [[value.slice(2), all[index + 1]?.startsWith("--") || all[index + 1] === undefined ? true : all[index + 1]]] : [])));
-const fail = (message, code = 2) => { console.error(`verify-codename-upgrade: ${message}`); process.exit(code); };
-const oldRepo = args.old && path.resolve(String(args.old));
-const newRepo = args.new && path.resolve(String(args.new));
-const codename = String(args.codename ?? "");
-const port = Number(args.port);
-if (!oldRepo || !newRepo || !/^[a-z][a-z0-9]*$/.test(codename) || codename === "jinn") fail("usage: --old <repo> --new <repo> --codename <word, not jinn> --port <port>");
-if (!Number.isInteger(port) || port < 8060 || port > 65535 || [7777, 7788].includes(port)) fail("--port must be an integer from 8060, never 7777 or 7788"); // footgun: ok the refusal set itself
-const bin = (repo) => path.join(repo, "packages/jinn/dist/bin/jinn.js");
-for (const repo of [oldRepo, newRepo]) if (!fs.existsSync(bin(repo))) fail(`not built: ${repo}`);
-// A build from before the constant existed is the oldest install there is: it has no file to check.
-const constantFile = (repo) => path.join(repo, "packages/jinn/dist/src/shared/codename-constant.js");
-const constantOf = (repo) => (fs.existsSync(constantFile(repo)) ? /CODENAME = "([a-z0-9]+)"/.exec(fs.readFileSync(constantFile(repo), "utf8"))?.[1] : "jinn");
-if (constantOf(oldRepo) !== "jinn") fail(`--old must be built with the legacy codename (it says ${constantOf(oldRepo)})`);
-if (constantOf(newRepo) !== codename) fail(`--new must be built with codename "${codename}" (it says ${constantOf(newRepo)})`);
-
-const NODE = process.execPath;
-const host = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "codename-upgrade-")));
-const claudeProfile = path.join(host, "claude-profile");
-const standIn = path.join(host, "bin", "claude");
-const instance = "up";
-const oldHome = path.join(host, `.jinn-${instance}`);
-const newHome = path.join(host, `.${codename}-${instance}`);
-const log = path.join(claudeProfile, "stand-in.log");
-const results = [];
-let started = null;
-const baseEnv = () => ({ PATH: `${path.dirname(NODE)}:/usr/bin:/bin`, HOME: host, LANG: "C.UTF-8", CLAUDE_CONFIG_DIR: claudeProfile, JINN_NO_OPEN: "1" });
-const slug = (value) => value.replace(/[^a-zA-Z0-9]/g, "-");
-
-function check(name, ok, detail = "") {
-  results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? `  (${detail})` : ""}`);
-}
-
-function run(file, fileArgs, options = {}) {
-  const result = spawnSync(file, fileArgs, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 180_000, ...options });
-  return { status: result.status ?? 1, out: `${result.stdout ?? ""}${result.stderr ?? ""}` };
-}
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-async function until(predicate, what, ms = 60_000) {
-  const deadline = Date.now() + ms;
-  for (;;) {
-    let value;
-    try { value = await predicate(); } catch { value = undefined; }
-    if (value) return value;
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
-    await sleep(300);
-  }
-}
-
-function portFree() {
-  return new Promise((resolve) => {
-    const server = net.createServer();
-    server.once("error", () => resolve(false));
-    server.listen(port, "127.0.0.1", () => server.close(() => resolve(true)));
-  });
-}
-
-async function api(method, route, body) {
-  const token = JSON.parse(fs.readFileSync(path.join(started.home, "gateway.json"), "utf8")).token;
-  const response = await fetch(`http://127.0.0.1:${port}${route}`, {
-    method,
-    headers: { authorization: `Bearer ${token}`, ...(body ? { "content-type": "application/json" } : {}) },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  });
-  const text = await response.text();
-  let json;
-  try { json = JSON.parse(text); } catch { json = undefined; }
-  return { status: response.status, json, text };
-}
-
-function startGateway(repo, env, home) {
-  const result = run(NODE, [bin(repo), "start", "--daemon", "--port", String(port)], { env: { ...baseEnv(), ...env } });
-  started = { repo, home };
-  return result;
-}
-
-async function stopGateway(repo, env) {
-  run(NODE, [bin(repo), "stop", "--port", String(port)], { env: { ...baseEnv(), ...env } });
-  await until(portFree, `port ${port} to free`, 20_000);
-}
-
-function readJson(file) { return JSON.parse(fs.readFileSync(file, "utf8")); }
-
-function seedOld() {
-  const helper = path.join(oldRepo, "scripts/jinn-sandbox.sh");
-  const created = run("bash", [helper, "create", instance, "--port", String(port), "--seed"], { env: { PATH: baseEnv().PATH, HOME: host, JINN_REPO: oldRepo } });
-  if (created.status !== 0) fail(`could not create the old instance:\n${created.out}`, 1);
-  const seeded = run(NODE, [path.join(oldRepo, "scripts/seed-departments.mjs"), oldHome], { env: baseEnv() });
-  if (seeded.status !== 0) fail(`could not seed departments:\n${seeded.out}`, 1);
-  fs.mkdirSync(path.dirname(standIn), { recursive: true });
-  fs.copyFileSync(path.join(here, "verify-codename-upgrade-claude.cjs"), standIn);
-  fs.chmodSync(standIn, 0o755);
-  fs.mkdirSync(path.join(oldHome, "attachments", "2026-10"), { recursive: true });
-  fs.writeFileSync(path.join(oldHome, "attachments", "2026-10", "note.txt"), "an attachment from before the move");
-  const configFile = path.join(oldHome, "config.yaml");
-  fs.writeFileSync(configFile, fs.readFileSync(configFile, "utf8").replace(/^(\s+)bin: claude$/m, `$1bin: ${standIn}`));
-}
-
-/** What the old build writes that a move has to carry, written by the old build running turns against the stand-in. */
-async function seedOldState(oldEnv) {
-  const record = run(NODE, ["--input-type=module", "-e", `
-    import path from "node:path";
-    import { pathToFileURL } from "node:url";
-    const directory = await import(pathToFileURL(path.join(${JSON.stringify(oldRepo)}, "packages/jinn/dist/src/instances/directory.js")).href);
-    directory.saveInstances([{ name: "jinn-${instance}", home: process.env.JINN_HOME, port: ${port}, createdAt: new Date().toISOString(), kind: "workspace", pinned: true }]);
-  `], { env: { ...baseEnv(), ...oldEnv } });
-  if (record.status !== 0) fail(`could not register the old instance:\n${record.out}`, 1);
-
-  const oldRun = startGateway(oldRepo, oldEnv, oldHome);
-  check("the old build starts on the old home", oldRun.status === 0, oldRun.out.trim().split("\n").pop());
-  await until(async () => (await api("GET", "/api/status")).status === 200, "the old gateway");
-  const created = {};
-  for (const [key, body] of [["plain", { prompt: "an earlier turn", engine: "claude" }], ["scoped", { prompt: "an earlier department turn", engine: "claude", employee: "side-dev" }]]) {
-    const response = await api("POST", "/api/sessions", body);
-    if (response.status >= 300) fail(`the old gateway refused a ${key} session: ${response.status} ${response.text.slice(0, 160)}`, 1);
-    created[key] = response.json.id;
-  }
-  const conversations = {};
-  for (const key of ["plain", "scoped"]) {
-    const session = await until(async () => {
-      const found = (await api("GET", `/api/sessions/${created[key]}`)).json;
-      return found?.engineSessionId && found.status === "idle" ? found : undefined;
-    }, `the old ${key} session to settle with a conversation`, 90_000);
-    conversations[key] = session.engineSessionId;
-  }
-  const scopedSession = (await api("GET", `/api/sessions/${created.scoped}`)).json;
-  check("the old build bound the second session to its department", scopedSession.scopeDepartment === "side-project", String(scopedSession.scopeDepartment));
-  const stageDir = fs.realpathSync(path.join(host, ".jinn-departments", ".instances", `.jinn-${instance}`, "side-project"));
-  const file = (cwd, id) => path.join(claudeProfile, "projects", slug(fs.realpathSync(cwd)), `${id}.jsonl`);
-  check("the old build filed both conversations under their physical directories", fs.existsSync(file(oldHome, conversations.plain)) && fs.existsSync(file(stageDir, conversations.scoped)));
-  await stopGateway(oldRepo, oldEnv);
-  return { plain: created.plain, scoped: created.scoped, stageDir, conversations, file };
-}
-
-async function sendAndAwait(sessionId, message, marker) {
-  const before = fs.existsSync(log) ? fs.readFileSync(log, "utf8").length : 0;
-  const sent = await api("POST", `/api/sessions/${sessionId}/message`, { message });
-  if (![200, 201, 202].includes(sent.status)) return { ok: false, detail: `POST message answered ${sent.status}: ${sent.text.slice(0, 120)}` };
-  try {
-    await until(() => (fs.existsSync(log) ? fs.readFileSync(log, "utf8").slice(before).includes(marker) : false), `the stand-in to see ${marker}`, 45_000);
-  } catch (error) {
-    return { ok: false, detail: error.message };
-  }
-  await until(async () => ["idle", "error"].includes((await api("GET", `/api/sessions/${sessionId}`)).json?.status), "the turn to settle", 45_000).catch(() => undefined);
-  const session = (await api("GET", `/api/sessions/${sessionId}`)).json;
-  return { ok: true, session, log: fs.readFileSync(log, "utf8").slice(before) };
-}
-
-const exists = (...segments) => fs.existsSync(path.join(...segments));
-const awaitStatus = (what) => until(async () => (await api("GET", "/api/status")).status === 200, what);
-// The service unit's environment still names the old path and the old instance.
-const newEnv = { JINN_HOME: oldHome, JINN_INSTANCE: `jinn-${instance}` };
+import {
+  NODE,
+  api,
+  args,
+  awaitStatus,
+  baseEnv,
+  bin,
+  check,
+  claudeProfile,
+  codename,
+  exists,
+  host,
+  instance,
+  until,
+  live,
+  log,
+  newEnv,
+  newHome,
+  newRepo,
+  oldHome,
+  oldRepo,
+  port,
+  portFree,
+  readJson,
+  results,
+  run,
+  seedOld,
+  seedOldState,
+  sendAndAwait,
+  slug,
+  startGateway,
+  stopGateway,
+} from "./verify-codename-upgrade-lib.mjs";
 
 /** What the move did to the disk and the registry. */
 async function checkTheMove(state, newStage) {
@@ -242,21 +121,76 @@ async function checkARestart(state) {
   await stopGateway(newRepo, newEnv);
 }
 
+/** The switch-over command: what it reports, what it rewrites, what it keeps. */
+async function applyTheSwitchover(doctor) {
+  const report = doctor("--rename");
+  check("doctor --rename reports what it would change and changes nothing", report.status === 0 && report.out.includes("would change") && fs.readFileSync(path.join(newHome, "skills/triage/SKILL.md"), "utf8").includes("mcp__jinn__"), report.out.split("\n")[0]);
+  const applied = doctor("--rename", "--apply");
+  console.log(applied.out.trim());
+  check("doctor --rename --apply switches the instance over", applied.status === 0 && applied.out.includes("Switched over"));
+  const skill = fs.readFileSync(path.join(newHome, "skills/triage/SKILL.md"), "utf8");
+  const settings = readJson(path.join(newHome, ".claude/settings.json"));
+  check("the skill and the permission list now name the new tools", skill.includes(`mcp__${codename}__list_employees`) && settings.permissions.allow[0] === `mcp__${codename}__*`);
+  const copies = fs.readdirSync(path.join(newHome, ".migration-backups")).filter((name) => name.startsWith("rename-"));
+  check("the originals are kept", copies.length === 1 && fs.readFileSync(path.join(newHome, ".migration-backups", copies[0], "skills/triage/SKILL.md"), "utf8").includes("mcp__jinn__list_employees"));
+  const block = fs.readFileSync(path.join(newHome, "config.yaml"), "utf8");
+  check("config.yaml now keys the instance block by the new name", new RegExp(`^${codename}:`, "m").test(block) && !/^jinn:/m.test(block) && block.includes(`mcpServerName: ${codename}`));
+}
+
+/** Start the switched-over gateway and use it: sessions resume, and the server has the new name. */
+async function useTheSwitchedOverInstance(state, doctor) {
+  startGateway(newRepo, newEnv, newHome);
+  await awaitStatus("the switched-over gateway");
+  const stage = path.join(host, `.${codename}-departments`, ".instances", `.${codename}-${instance}`, "side-project");
+  const turn = await sendAndAwait(state.plain, "after the switch-over", "after the switch-over");
+  check("a session still resumes after the switch-over", turn.ok && !turn.log.includes("refused"), turn.detail ?? "");
+  const scoped = await sendAndAwait(state.scoped, "scoped after the switch-over", "scoped after the switch-over");
+  check("and so does a department-scoped one", scoped.ok && scoped.log.includes(`cwd=${stage}`) && !scoped.log.includes("refused"), scoped.detail ?? "");
+  const mcpDir = path.join(newHome, "tmp", "mcp");
+  const newest = fs.readdirSync(mcpDir).map((dir) => path.join(mcpDir, dir, "config.json")).filter((file) => fs.existsSync(file)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
+  const servers = readJson(newest).mcpServers ?? {};
+  check("the built-in MCP server is registered under the new name, and only that", Boolean(servers[codename]) && !servers.jinn, Object.keys(servers).join(","));
+  const after = doctor();
+  check("doctor reports the instance switched over, with nothing left to do", !after.out.includes("ACTION") && after.out.includes("switched over"), after.out.split("\n").filter((line) => line.includes("MCP")).join(" | "));
+  await stopGateway(newRepo, newEnv);
+}
+
+async function checkTheSwitchover(state) {
+  const doctor = (...flags) => run(NODE, [bin(newRepo), "doctor", ...flags], { env: { ...baseEnv(), ...newEnv } });
+  await applyTheSwitchover(doctor);
+  await useTheSwitchedOverInstance(state, doctor);
+}
+
+/** The new build's restart helper, run over the old build's live gateway: it stops it, settles the home, and starts the new one. */
+async function restartOverTheRunningGateway() {
+  const helper = path.join(newRepo, "packages/jinn/dist/src/gateway/restart-entry.js");
+  const started = run(NODE, [helper, "--port", String(port)], { env: { ...baseEnv(), ...newEnv } });
+  console.log(started.out.trim());
+  check("the restart helper ran", started.status === 0, started.out.trim().split("\n").pop());
+  live.started = { repo: newRepo, home: newHome };
+  await until(async () => exists(newHome, "sessions", "registry.db") && (await api("GET", "/api/status")).status === 200, "the gateway to come back from the moved home");
+}
+
 async function main() {
   console.log(`host ${host}`);
   seedOld();
-  const state = await seedOldState({ JINN_HOME: oldHome, JINN_INSTANCE: `jinn-${instance}` });
+  const state = await seedOldState({ JINN_HOME: oldHome, JINN_INSTANCE: `jinn-${instance}` }, { leaveRunning: Boolean(args.restart) });
   console.log(`old home ${oldHome}\nscoped department stage ${state.stageDir}`);
-  const upgraded = startGateway(newRepo, newEnv, newHome);
-  console.log(upgraded.out.trim());
-  check("the new build starts", upgraded.status === 0);
-  started.home = newHome;
+  if (args.restart) {
+    await restartOverTheRunningGateway();
+  } else {
+    const upgraded = startGateway(newRepo, newEnv, newHome);
+    console.log(upgraded.out.trim());
+    check("the new build starts", upgraded.status === 0);
+    live.started.home = newHome;
+  }
   await awaitStatus("the new gateway");
   const newStage = path.join(host, `.${codename}-departments`, ".instances", `.${codename}-${instance}`, "side-project");
   await checkTheMove(state, newStage);
   await checkSessions(state, newStage);
   checkTheRest(state);
   await checkARestart(state);
+  await checkTheSwitchover(state);
 }
 
 try {
@@ -264,7 +198,7 @@ try {
 } catch (error) {
   check("the rehearsal ran to the end", false, error instanceof Error ? error.message : String(error));
 } finally {
-  if (started && !(await portFree())) { try { await stopGateway(started.repo, started.repo === newRepo ? { JINN_HOME: newHome } : { JINN_HOME: oldHome }); } catch { /* reported below */ } }
+  if (live.started && !(await portFree())) { try { await stopGateway(live.started.repo, live.started.repo === newRepo ? { JINN_HOME: newHome } : { JINN_HOME: oldHome }); } catch { /* reported below */ } }
   const leaked = !(await portFree());
   if (leaked) console.error(`FAIL  port ${port} is still listening`);
   if (args.keep) console.log(`kept ${host}`);
@@ -273,3 +207,4 @@ try {
   console.log(`\n${results.length - failed}/${results.length} checks passed`);
   process.exit(failed || leaked ? 1 : 0);
 }
+
