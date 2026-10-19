@@ -13,7 +13,7 @@ import { formatResumeTime, turnDisplayText } from "./text.js";
 import type { TurnInput, TurnPlan, TurnSurface } from "./types.js";
 import { withBoardReminder } from "./board-reminder.js";
 import { hopNoticeText } from "../fallback-hop.js";
-import type { FallbackHop } from "../../shared/fallback-chain-wire.js";
+import type { FallbackHop, FallbackHopNoticeMeta } from "../../shared/fallback-chain-wire.js";
 import type { JsonObject } from "../../shared/types.js";
 
 export interface RateLimitTurnArgs {
@@ -75,7 +75,8 @@ async function settleRecoveredTurn(
 
 /** The notification a hop leaves in the transcript: its readable text, and the hop itself for the dashboard. */
 async function noticeHop(args: RateLimitTurnArgs, text: string, hop: FallbackHop): Promise<void> {
-  await args.surface.notice(text, { fallbackHop: hop as unknown as JsonObject });
+  const meta: FallbackHopNoticeMeta = { fallbackHop: hop };
+  await args.surface.notice(text, meta as unknown as JsonObject);
 }
 
 async function announceFallback(
@@ -206,7 +207,7 @@ export async function runRateLimitTurn(args: RateLimitTurnArgs): Promise<Session
     // The parent and the operator channel were told this session paused; tell them it is moving again.
     await args.surface.waiting(false);
     notifyRateLimitResumed(outcome.session);
-    notifyOperatorChannel(`✅ ${describe(input.session)} back on its own Claude account and resumed.`);
+    notifyOperatorChannel(`✅ ${describe(input.session)} back on its own ${accountOverride(input.session) ? "Claude account" : "target"} and resumed.`);
   }
   await args.surface.notice(accountOverride(input.session) ? "↩️ Back on this session's own Claude account — continuing there." : "↩️ Back on this session's own target — continuing there.");
   return outcome.session;

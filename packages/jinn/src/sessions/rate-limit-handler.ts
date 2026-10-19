@@ -113,7 +113,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
 
   logger.info(
     `Session ${session.id} hit ${engineLabel} usage limit — will auto-retry ${resumeAt ? `at ${resumeAt.toISOString()}` : `in ${Math.round(delayMs / 1000)}s`}`
-    + (handBackAt && resumeAt === handBackAt ? " on its own Claude account" : ""),
+    + (handBackAt && resumeAt === handBackAt ? " on its own target" : ""),
   );
 
   const enteredWaiting = updateSessionForAttempt(session.id, attemptToken, {

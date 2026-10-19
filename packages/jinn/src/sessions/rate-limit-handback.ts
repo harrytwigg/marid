@@ -42,7 +42,7 @@ export async function handBack(
     await hooks.onCancelled?.();
     return { kind: "cancelled" };
   }
-  logger.info(`Session ${sessionId} back on its own Claude account after ${from.waited ? "waiting on" : "hitting"} a substitute's usage limit`);
+  logger.info(`Session ${sessionId} back on its own target after ${from.waited ? "waiting on" : "hitting"} a substitute's usage limit`);
   return { kind: "handback", session: maybeRevertEngineOverride(running), waited: from.waited };
 }
 

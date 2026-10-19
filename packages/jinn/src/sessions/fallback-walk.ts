@@ -249,7 +249,7 @@ async function unserved(w: Walk, decision: SubstituteDecision): Promise<WalkOutc
     w.hops.push(hop);
     logger.info(hopLogLine(w.input.opts.session.id, hop));
   }
-  if (!(await settleExhausted(w, hop))) return { kind: "cancelled" };
+  if (!(await settleExhausted(w))) return { kind: "cancelled" };
   return { kind: "unserved", ...(reason ? { reason } : {}), ...(hop ? { hop } : {}), walked };
 }
 
@@ -263,7 +263,7 @@ function exhaustedHop(w: Walk, decision: SubstituteDecision): FallbackHop {
 }
 
 /** Write what the walk decided that is not on the session yet. False when the attempt fence was lost. */
-async function settleExhausted(w: Walk, hop: FallbackHop | undefined): Promise<boolean> {
+async function settleExhausted(w: Walk): Promise<boolean> {
   const { session, attemptToken } = w.input.opts;
   if (w.flipped) {
     // Back where the turn began: the engine, thread and model it ran on, with the hops this walk made on top.
@@ -271,9 +271,10 @@ async function settleExhausted(w: Walk, hop: FallbackHop | undefined): Promise<b
     if (w.runAtStart) meta = withRun(meta, { ...w.runAtStart, tried: [...w.tried] });
     return abandonEngineSubstitution(session, attemptToken, meta as Session["transportMeta"]);
   }
-  if (!hop) return true;
+  const unwritten = w.hops.slice(w.written);
+  if (unwritten.length === 0) return true;
   const ended = (current: Session) => {
-    const meta = withHop(metaOf(current), hop);
+    const meta = unwritten.reduce(withHop, metaOf(current));
     return (w.runAtStart ? withRun(meta, { ...w.runAtStart, tried: [...w.tried] }) : meta) as never;
   };
   return Boolean(updateSessionForAttempt(session.id, attemptToken, (current) => ({ transportMeta: ended(current) })));

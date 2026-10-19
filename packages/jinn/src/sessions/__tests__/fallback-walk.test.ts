@@ -450,6 +450,26 @@ describe("failures that move a fallback link on, and the own target's that do no
     ]);
   });
 
+  it("records the hops of a chain whose every link was passed over before the session ever moved", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+    signedOut.dirs.add(DIR_B);
+    const { engines, calls } = scripted(() => limited());
+    const id = newSession();
+    const { opts, seen } = limitedTurn(id, employee({ fallback: [CLAUDE_B] }), engines);
+    const outcome = handleRateLimit(opts);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(calls).toHaveLength(0);
+    expect(hopsOf(id).map((hop) => [hop.to, hop.reason]).reverse()).toEqual([[key(CLAUDE_B), "rate-limit"], [null, "auth"]]);
+    // The session never left its own target, so there is no run and no override to show for it.
+    expect(runOf(id)).toBeUndefined();
+    expect(overrideOf(id)).toBeUndefined();
+    expect(seen.waiting[0]!.reason).toMatch(/every target in its fallback chain was tried \(claude · B · sonnet\)/);
+    reg.updateSession(id, { status: "idle" } as never);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await outcome;
+  });
+
   it("does not move on from the session's own target: its model refusal is the turn's failure, not a hop", async () => {
     // The wait's retry runs the own target again; an invalid-model answer there settles the turn as it always did.
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
