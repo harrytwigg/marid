@@ -4,7 +4,6 @@ import path from "node:path";
 import yaml from "js-yaml";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { doctorFindings, opencodeFallbackFindings } from "../doctor.js";
 import { findSettings, renderMigration, runMigrateOpencode, settingsSearchPaths, writeEngineChain } from "../opencode-fallback-command.js";
 import { migrateOpencodeFallback, modelOfEntry, type OpencodeEmployee } from "../opencode-fallback-migration.js";
 
@@ -178,21 +177,5 @@ describe("finding the settings file", () => {
       process.exitCode = saved;
       fs.rmSync(dir, { recursive: true, force: true });
     }
-  });
-});
-
-describe("doctor", () => {
-  it("reports a configured internal fallback as a problem with its sources, and a clean host as ok", () => {
-    const found = opencodeFallbackFindings({ detected: true, neutralised: false, sources: ["/a/rate-limit-fallback.json"] });
-    expect(found[0]).toMatchObject({ level: "problem" });
-    expect(found[0]!.message).toContain("jinn fallback migrate-opencode");
-    expect(found[1]!.message).toContain("/a/rate-limit-fallback.json");
-    expect(opencodeFallbackFindings({ detected: false, neutralised: false, sources: [] })).toEqual([{ level: "ok", message: "opencode has no internal model fallback configured." }]);
-  });
-
-  it("adds the finding to doctor's report only when given a reading", () => {
-    const without = doctorFindings({ env: {}, home: "/nowhere", instances: [] });
-    const withReading = doctorFindings({ env: {}, home: "/nowhere", instances: [], opencodeFallback: { detected: false, neutralised: false, sources: [] } });
-    expect(withReading).toHaveLength(without.length + 1);
   });
 });

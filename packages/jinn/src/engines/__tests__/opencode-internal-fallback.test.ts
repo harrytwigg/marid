@@ -116,9 +116,13 @@ describe("reporting", () => {
     expect(withInternalFallback({ claude: {} }, () => found)).toEqual({ claude: {} });
   });
 
-  it("warns at start without the operator's paths, which stay at debug", () => {
+  it("warns at start, naming where and what to run, without the operator's paths, which stay at debug", () => {
+    vi.mocked(logger.warn).mockClear();
     warnOpencodeInternalFallback(() => found);
     expect(vi.mocked(logger.warn)).toHaveBeenCalledOnce();
+    expect(String(vi.mocked(logger.warn).mock.calls[0]![0])).toBe(
+      "opencode internal fallback detected on local: run `jinn doctor` for the files to change, then `jinn fallback migrate-opencode`",
+    );
     expect(String(vi.mocked(logger.warn).mock.calls[0]![0])).not.toContain("/operator/path");
     expect(String(vi.mocked(logger.debug).mock.calls[0]![0])).toContain("/operator/path");
   });

@@ -28,6 +28,8 @@ export interface OpencodeInternalFallback {
   neutralised: boolean;
   /** Where it was found: the operator's own paths, so keep them out of info-level logs. */
   sources: string[];
+  /** The remote hosts' share of `sources`, by host label (additive; absent when none reported one). */
+  remote?: Array<{ host: string; sources: string[] }>;
 }
 
 /** Plugin names (a package name, or a plugin file's name without extension) that are a model fallback. */
@@ -99,9 +101,24 @@ export function pluginEntryName(entry: unknown): string | undefined {
   return (at > 0 ? spec.slice(0, at) : spec).toLowerCase();
 }
 
-function configEntries(config: unknown): unknown[] {
+/** One place a fallback is configured, as `jinn doctor` tells the operator what to change. */
+export type FallbackFinding =
+  | { kind: "config-plugin"; file: string; key: "plugin" | "plugins"; entry: string }
+  | { kind: "plugin-file"; path: string }
+  | { kind: "settings"; file: string };
+
+/** The finding as one `sources` string: the operator's own path. */
+export function describeFinding(finding: FallbackFinding): string {
+  if (finding.kind === "config-plugin") return `${finding.file} (plugin ${finding.entry})`;
+  return finding.kind === "plugin-file" ? finding.path : finding.file;
+}
+
+function configEntries(config: unknown): Array<{ key: "plugin" | "plugins"; entry: unknown }> {
   if (!isRecord(config)) return [];
-  return [config.plugin, config.plugins].flatMap((list) => (Array.isArray(list) ? list : []));
+  return (["plugin", "plugins"] as const).flatMap((key) => {
+    const list = config[key];
+    return Array.isArray(list) ? list.map((entry) => ({ key, entry })) : [];
+  });
 }
 
 function isDirectory(dir: string): boolean {
@@ -112,21 +129,20 @@ function isDirectory(dir: string): boolean {
   }
 }
 
-function configSources(file: string): string[] {
-  const entries = configEntries(readJson(file));
-  return entries
-    .filter((entry) => FALLBACK_PLUGINS.includes(pluginEntryName(entry) ?? ""))
-    .map((entry) => `${file} (plugin ${typeof entry === "string" ? entry : JSON.stringify(entry)})`);
+function configFindings(file: string): FallbackFinding[] {
+  return configEntries(readJson(file))
+    .filter(({ entry }) => FALLBACK_PLUGINS.includes(pluginEntryName(entry) ?? ""))
+    .map(({ key, entry }): FallbackFinding => ({ kind: "config-plugin", file, key, entry: typeof entry === "string" ? entry : JSON.stringify(entry) }));
 }
 
-function pluginDirSources(dir: string): string[] {
-  const found: string[] = [];
+function pluginDirFindings(dir: string): FallbackFinding[] {
+  const found: FallbackFinding[] = [];
   for (const sub of PLUGIN_DIRS) {
     const pluginDir = path.join(dir, sub);
     if (!isDirectory(pluginDir)) continue;
     for (const name of fs.readdirSync(pluginDir)) {
       if (PLUGIN_FILE_RE.test(name) || (FALLBACK_PLUGINS.includes(name) && isDirectory(path.join(pluginDir, name)))) {
-        found.push(path.join(pluginDir, name));
+        found.push({ kind: "plugin-file", path: path.join(pluginDir, name) });
       }
     }
   }
@@ -134,13 +150,14 @@ function pluginDirSources(dir: string): string[] {
 }
 
 /** The plugin looks for its settings at `<base>/.opencode/`, `<base>/opencode/` and `<base>/`. */
-function settingsSources(base: string): string[] {
+function settingsFindings(base: string): FallbackFinding[] {
   return [path.join(base, ".opencode"), path.join(base, "opencode"), base]
     .map((dir) => path.join(dir, FALLBACK_SETTINGS))
     .filter((file) => {
       const settings = readJson(file);
       return isRecord(settings) && settings.enabled !== false;
-    });
+    })
+    .map((file): FallbackFinding => ({ kind: "settings", file }));
 }
 
 /** The opencode config directories of an operator, and the project directories that add their own. */
@@ -159,26 +176,39 @@ function layout(options: DetectOptions): { configDirs: string[]; configFiles: st
 }
 
 /**
- * Whether the host's opencode carries a model fallback of its own, and where.
+ * Where the host's opencode carries a model fallback of its own.
  * Reads the operator's opencode config (plugin lists), plugin directories and
  * `rate-limit-fallback.json` files; changes nothing.
  */
-export function detectOpencodeInternalFallback(options: DetectOptions = {}): OpencodeInternalFallback {
+export function detectOpencodeInternalFallbackFindings(options: DetectOptions = {}): FallbackFinding[] {
   const { configDirs, configFiles, bases } = layout(options);
-  const sources = [
-    ...configFiles.flatMap(configSources),
-    ...configDirs.flatMap(pluginDirSources),
-    ...bases.flatMap(settingsSources),
+  const found = [
+    ...configFiles.flatMap(configFindings),
+    ...configDirs.flatMap(pluginDirFindings),
+    ...bases.flatMap(settingsFindings),
   ];
-  const unique = [...new Set(sources)];
-  return { detected: unique.length > 0, neutralised: false, sources: unique };
+  const seen = new Set<string>();
+  return found.filter((finding) => {
+    const key = JSON.stringify(finding);
+    return seen.has(key) ? false : (seen.add(key), true);
+  });
 }
 
-/** The sentence `jinn doctor` and the gateway's start-up warning use; no paths. */
+/** Whether the host's opencode carries a model fallback of its own, and where (the operator's own paths). */
+export function detectOpencodeInternalFallback(options: DetectOptions = {}): OpencodeInternalFallback {
+  const sources = [...new Set(detectOpencodeInternalFallbackFindings(options).map(describeFinding))];
+  return { detected: sources.length > 0, neutralised: false, sources };
+}
+
+/** What `jinn doctor` says first about an internal fallback; the fix lines follow it. */
 export const INTERNAL_FALLBACK_WARNING =
-  "opencode has an internal model fallback configured on this host (the opencode-rate-limit plugin or a model-fallback.js plugin). "
-  + "It switches models on a usage limit without the gateway knowing, beside the gateway's own fallback chains. "
-  + "Run `jinn fallback migrate-opencode` to turn its settings into a chain, then remove the plugin.";
+  "opencode has an internal model fallback configured (the opencode-rate-limit plugin or a model-fallback.js plugin). "
+  + "It switches models on a usage limit without the gateway knowing, beside the gateway's own fallback chains. To fix it:";
+
+/** The start-up (and first-contact) warning: where, and what to run. No paths. */
+export function internalFallbackWarning(label: string): string {
+  return `opencode internal fallback detected on ${label}: run \`jinn doctor\` for the files to change, then \`jinn fallback migrate-opencode\``;
+}
 
 /** Detection results are cached: they are read by every `/api/engines` request. */
 let cached: { at: number; value: OpencodeInternalFallback } | undefined;
@@ -200,7 +230,7 @@ export function recordRemoteInternalFallback(destination: string, sources: strin
   const had = (remoteSources.get(destination) ?? []).length > 0;
   remoteSources.set(destination, sources);
   if (sources.length === 0 || had) return;
-  logger.warn(`${INTERNAL_FALLBACK_WARNING} (found on the remote host ${destination})`);
+  logger.warn(internalFallbackWarning(`remote host ${destination}`));
   logger.debug(`opencode internal fallback on ${destination}: ${sources.join("; ")}`);
 }
 
@@ -209,7 +239,8 @@ export function combinedOpencodeInternalFallback(): OpencodeInternalFallback {
   const local = currentOpencodeInternalFallback();
   const remote = [...remoteSources].flatMap(([host, sources]) => sources.map((source) => `${host}: ${source}`));
   const sources = [...local.sources, ...remote];
-  return { detected: sources.length > 0, neutralised: false, sources };
+  const hosts = [...remoteSources].filter(([, found]) => found.length > 0).map(([host, found]) => ({ host, sources: found }));
+  return { detected: sources.length > 0, neutralised: false, sources, ...(hosts.length ? { remote: hosts } : {}) };
 }
 
 /** Test hook: forget the cached reading and the remote reports. */
@@ -231,7 +262,7 @@ export function withInternalFallback<T extends Record<string, object>>(
 export function warnOpencodeInternalFallback(read: () => OpencodeInternalFallback = currentOpencodeInternalFallback): OpencodeInternalFallback {
   const found = read();
   if (!found.detected) return found;
-  logger.warn(INTERNAL_FALLBACK_WARNING);
+  logger.warn(internalFallbackWarning("local"));
   logger.debug(`opencode internal fallback found in: ${found.sources.join("; ")}`);
   return found;
 }

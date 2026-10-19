@@ -85,11 +85,14 @@ describe("remote reports", () => {
     recordRemoteInternalFallback("builder", ["/home/op/.opencode/rate-limit-fallback.json"]);
     recordRemoteInternalFallback("builder", ["/home/op/.opencode/rate-limit-fallback.json"]);
     expect(vi.mocked(logger.warn)).toHaveBeenCalledOnce();
-    expect(String(vi.mocked(logger.warn).mock.calls[0]![0])).toContain("builder");
+    expect(String(vi.mocked(logger.warn).mock.calls[0]![0])).toBe(
+      "opencode internal fallback detected on remote host builder: run `jinn doctor` for the files to change, then `jinn fallback migrate-opencode`",
+    );
     expect(String(vi.mocked(logger.warn).mock.calls[0]![0])).not.toContain("/home/op");
     const combined = combinedOpencodeInternalFallback();
     expect(combined.detected).toBe(true);
     expect(combined.sources).toContain("builder: /home/op/.opencode/rate-limit-fallback.json");
+    expect(combined.remote).toEqual([{ host: "builder", sources: ["/home/op/.opencode/rate-limit-fallback.json"] }]);
     expect(withInternalFallback({ opencode: {} }).opencode).toMatchObject({ internalFallback: { detected: true, neutralised: false } });
   });
 

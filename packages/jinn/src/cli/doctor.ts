@@ -9,7 +9,7 @@ import { readPendingMove } from "../instances/home-pending.js";
 import { stageRootFor } from "../instances/stage-rename.js";
 import { readSwitchoverReceipt } from "../instances/switchover.js";
 import { loadInstances, type Instance } from "../instances/directory.js";
-import { INTERNAL_FALLBACK_WARNING, detectOpencodeInternalFallback, type OpencodeInternalFallback } from "../engines/opencode-internal-fallback.js";
+import { collectOpencodeFallback, opencodeFallbackFindings, type OpencodeFallbackReading } from "./doctor-opencode-fallback.js";
 import yaml from "js-yaml";
 import path from "node:path";
 
@@ -29,7 +29,7 @@ export interface DoctorInput {
   home?: string;
   instances?: Instance[];
   /** An opencode internal-fallback reading to report; without one the report has no such finding. */
-  opencodeFallback?: OpencodeInternalFallback;
+  opencodeFallback?: OpencodeFallbackReading;
 }
 
 const HOME_STATE_FINDINGS: Record<HomeState, (home: string, current: string, legacy: string) => DoctorFinding> = {
@@ -82,15 +82,6 @@ function legacyEnvFindings(env: NodeJS.ProcessEnv, names: Names): DoctorFinding[
   return legacyVariables.length === 0 ? [] : [{ level: "info", message: `Set under the old prefix (still read, with a warning): ${legacyVariables.sort().join(", ")}.` }];
 }
 
-/** The opencode internal-fallback finding: it would fall back beside the gateway's own chains. */
-export function opencodeFallbackFindings(found: OpencodeInternalFallback): DoctorFinding[] {
-  if (!found.detected) return [{ level: "ok", message: "opencode has no internal model fallback configured." }];
-  return [
-    { level: "problem", message: INTERNAL_FALLBACK_WARNING },
-    ...found.sources.map((source) => ({ level: "info" as const, message: `  found: ${source}` })),
-  ];
-}
-
 /** The findings, in the order they are printed. */
 export function doctorFindings(input: DoctorInput = {}, processEnv: NodeJS.ProcessEnv = process.env): DoctorFinding[] {
   return [...codenameFindings(input, processEnv), ...(input.opencodeFallback ? opencodeFallbackFindings(input.opencodeFallback) : [])];
@@ -127,7 +118,7 @@ export async function runDoctor(options: { json?: boolean; rename?: boolean; app
     if (report.blockers.length > 0) process.exitCode = 1;
     return;
   }
-  const findings = doctorFindings({ opencodeFallback: detectOpencodeInternalFallback({ projectDirs: [process.cwd()] }) });
+  const findings = doctorFindings({ opencodeFallback: await collectOpencodeFallback() });
   if (options.json) console.log(JSON.stringify(findings, null, 2));
   else for (const finding of findings) console.log(`${MARK[finding.level]}${finding.message}`);
   if (findings.some((finding) => finding.level === "problem")) process.exitCode = 1;
