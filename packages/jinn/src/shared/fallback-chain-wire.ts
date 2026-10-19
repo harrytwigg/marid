@@ -138,6 +138,13 @@ export interface FallbackChainSubject {
   legacy: boolean;
   /** What would run, in order, after legacy expansion and de-duplication. */
   effective: ResolvedFallbackLink[];
+  /** An employee only: where `effective` comes from. `employee` is its own chain; an
+   *  inherited one is its declared account's (`account`, named by `sourceId`) or its
+   *  engine's (`engine`, named by `sourceId`); `none` is a named profile that is not
+   *  declared, which has no fallback. The gateway decides this, so a client never
+   *  reconstructs it. */
+  source?: Exclude<FallbackChainSource, "session">;
+  sourceId?: string;
   /** What is wrong with the chain the subject wrote. A repeated target is tolerated (the
    *  chain is kept and lists it once); an employee whose YAML chain failed validation at
    *  load inherits instead. Absent when nothing is wrong. */
