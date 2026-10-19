@@ -52,7 +52,8 @@ function capSource(notices: readonly Notice[], source: Source): readonly Notice[
   return notices.filter((notice) => !dropped.has(notice))
 }
 
-export function Notices() {
+/** The stack and its timers, fed by both sinks for as long as it is mounted. */
+function useNoticeStack() {
   const [notices, setNotices] = useState<readonly Notice[]>([])
   const nextId = useRef(0)
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>())
@@ -79,6 +80,12 @@ export function Notices() {
       pending.clear()
     }
   }, [])
+
+  return [notices, setNotices] as const
+}
+
+export function Notices() {
+  const [notices, setNotices] = useNoticeStack()
 
   if (notices.length === 0) return null
 
