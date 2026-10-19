@@ -8,8 +8,8 @@ import { remoteScopeFor, spawnCwd } from "../sessions/session-cwd.js";
 import { localScopedClaudeRefusal } from "../sessions/turn/scoped-turn.js";
 import { logger } from "../shared/logger.js";
 import type { JinnConfig } from "../shared/types.js";
+import { RAW_KEY_INPUTS, validGeometry } from "./pty-ws-input.js";
 
-const RAW_KEY_INPUTS = new Set(["\r", "\x1b", "\t", "\x03", "\x1b[A", "\x1b[B", "\x1b[C", "\x1b[D"]);
 /** Largest `input` frame accepted. The web client chunks a bigger paste below
  *  this, so a frame over it is a misbehaving client, not a long paste. */
 export const PTY_INPUT_MAX_CHARS = 64 * 1024;
@@ -291,15 +291,4 @@ export function attachPtyWebSocket(
   };
   ws.on("close", onDisconnect);
   ws.on("error", onDisconnect);
-}
-
-function validGeometry(cols: unknown, rows: unknown): cols is number {
-  return typeof cols === "number"
-    && typeof rows === "number"
-    && Number.isFinite(cols)
-    && Number.isFinite(rows)
-    && cols > 0
-    && rows > 0
-    && cols <= 500
-    && rows <= 250;
 }
