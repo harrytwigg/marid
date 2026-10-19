@@ -111,6 +111,7 @@ export const REFUSED_ROUTES: Readonly<Record<string, string>> = {
   "/api/engine-limits*": "company limits",
   "/api/auto-dispatch*": "company dispatch",
   "/api/board-walk*": "company dispatch",
+  "/api/hooks*": "board hooks",
   "/api/cron*": "cron",
   "/api/cost/report": "cost",
   "/api/connectors*": "connectors",

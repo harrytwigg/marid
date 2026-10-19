@@ -90,7 +90,7 @@ function delegateSession(input: TalkDelegationInput, key: string, existing: Sess
     if (loop) throw new Error(loop);
   }
   // Handing an `in_review` Todo to someone is handing it to a reviewer.
-  linkSession(input.todoId, session.id, null, relinkRole(session, resolveDelegationLinkRole(undefined, todoStatus)));
+  linkSession(input.todoId, session.id, null, relinkRole(session, resolveDelegationLinkRole(undefined, todoStatus)), { via: "delegation" });
   if (!existing && !reused) recordNewDelegateSession(input.todoId, input.employee.name, session.id, input.sourceSessionId);
   return session;
 }
