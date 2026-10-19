@@ -71,6 +71,17 @@ export function employeeSubject(chains: FallbackChainsResponse | undefined, name
   return subjectOf(chains, "employee", name)
 }
 
+/**
+ * What an employee that writes no chain follows, as the gateway says: the employee subject's own
+ * `effective`, when the stored chain is none. Only an unsaved draft (the operator has just chosen
+ * "use the default" over a stored custom chain, so the subject describes that chain, not the
+ * default) falls back to working it out from the account or engine subject.
+ */
+function serverInherited(subject: FallbackChainSubject | undefined, derived: InheritedChain): InheritedChain {
+  if (subject === undefined || subject.configured !== null) return derived
+  return { label: derived.label, links: subject.effective.map(linkOfResolved) }
+}
+
 /** The chain the editor shows and edits. */
 export interface OwnChain {
   links: FallbackLink[]
@@ -101,9 +112,9 @@ export function fallbackFieldState(
   chains: FallbackChainsResponse | undefined,
 ) {
   const account = engine === "claude" ? declaredAccountOf(employee.claudeProfile, chains) : undefined
-  const inherited = inheritedChain(engine, employee.claudeProfile, account, chains)
-  const self: FallbackLink = { engine, ...(account ? { profile: account } : {}) }
   const subject = employeeSubject(chains, employee.name)
+  const inherited = serverInherited(subject, inheritedChain(engine, employee.claudeProfile, account, chains))
+  const self: FallbackLink = { engine, ...(account ? { profile: account } : {}) }
   const own = value === null ? null : ownChainOf(employee, value, subject)
   const changed = !sameChain(value, employeeChainOf(employee))
   return { inherited, self, shown: own?.links ?? inherited.links, own, subject, changed }
