@@ -202,7 +202,7 @@ export function CompanyActivityCard({ block }: { block: ChatBlock }) {
       data-block-type={block.type}
       data-todo-id={todoId || undefined}
       onKeyDown={handleKeyDown}
-      className="my-[var(--space-2)] w-[min(480px,calc(100vw-var(--space-6)))] max-w-full rounded-[var(--radius-xl)] bg-[var(--fill-tertiary)] shadow-[var(--shadow-subtle)]"
+      className="my-[var(--space-2)] w-[min(480px,calc(100vw-var(--space-6)))] max-w-full glass-card rounded-[var(--radius-xl)]"
     >
       <div className="flex min-h-16 flex-wrap items-center gap-[var(--space-3)] py-[var(--space-3)] pl-[var(--space-3)] pr-[var(--space-2)] max-[504px]:pb-[var(--space-2)]">
         <span

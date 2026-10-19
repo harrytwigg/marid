@@ -1,4 +1,5 @@
 import { RefreshCw } from "@/components/ui/icon"
+import { Button } from "@/components/ui/button"
 import { PageLayout } from "@/components/page-layout"
 import { LargeTitleHeader } from "@/components/shell/large-title-header"
 import { PageScaffold } from "@/components/shell/page-scaffold"
@@ -18,14 +19,9 @@ export default function LimitsPage() {
             title="Limits"
             subtitle="Engine usage windows and quotas"
             trailing={
-              <button
-                onClick={refresh}
-                aria-label="Refresh engine limits"
-                aria-busy={refreshing}
-                className="inline-flex size-[38px] shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)]"
-              >
+              <Button variant="ghost" size="icon" onClick={refresh} aria-label="Refresh engine limits" aria-busy={refreshing}>
                 <RefreshCw size={17} className={refreshing ? "animate-spin" : ""} />
-              </button>
+              </Button>
             }
           />
         }

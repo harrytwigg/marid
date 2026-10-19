@@ -187,7 +187,7 @@ function RowSurface({
       }}
       className={cn(
         "relative flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left data-[pressed]:bg-[var(--fill-primary)]",
-        isActive ? "bg-[var(--fill-secondary)]" : "bg-[var(--sidebar-bg)]",
+        isActive ? "bg-[var(--accent-fill)] shadow-[inset_3px_0_0_var(--accent)]" : "bg-[var(--sidebar-bg)]",
       )}
     >
       {children}

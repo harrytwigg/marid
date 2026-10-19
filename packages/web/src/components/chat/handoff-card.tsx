@@ -88,7 +88,7 @@ export function HandoffCard({ block, onPeek }: HandoffCardProps) {
 
   return (
     <div
-      className={`${layout} rounded-[var(--radius-xl)] bg-[var(--fill-tertiary)] shadow-[var(--shadow-subtle)]`}
+      className={`${layout} glass-card rounded-[var(--radius-xl)]`}
       data-handoff-state={visual.state}
       data-handoff-interactive="false"
       data-block-id={block.id}

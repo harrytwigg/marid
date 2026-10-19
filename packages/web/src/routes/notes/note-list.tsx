@@ -1,3 +1,5 @@
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { ChevronLeft, PenSquare, Search } from "@/components/ui/icon"
 import type { NoteSummary } from "./types"
 import { cn } from "@/lib/utils"
@@ -31,15 +33,15 @@ function formatUpdatedAt(value: string): string {
 
 function SearchField({ query, onQueryChange }: { query: string; onQueryChange: (q: string) => void }) {
   return (
-    <label className="flex h-9 shrink-0 items-center gap-2 rounded-[var(--radius-md)] bg-[var(--fill-secondary)] px-3 text-[var(--text-tertiary)] focus-within:shadow-[0_0_0_3px_var(--accent-fill)]">
-      <Search size={17} aria-hidden />
+    <label className="relative flex shrink-0 items-center text-[var(--text-tertiary)]">
+      <Search size={17} className="pointer-events-none absolute left-3" aria-hidden />
       <span className="sr-only">Search notes</span>
-      <input
+      <Input
         type="search"
         value={query}
         onChange={(event) => onQueryChange(event.target.value)}
         placeholder="Search"
-        className="min-w-0 flex-1 border-0 bg-transparent text-[length:var(--text-subheadline)] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
+        className="pl-9"
       />
     </label>
   )
@@ -72,14 +74,10 @@ export function NoteList({
       <section className="relative flex h-full min-w-0 flex-col overflow-hidden bg-[var(--bg)]">
         <header className="px-4 pt-1">
           {onBack && (
-            <button
-              type="button"
-              onClick={onBack}
-              className="-ml-1 mb-1 flex items-center gap-0.5 text-[length:var(--text-body)] text-[var(--accent)] transition-opacity active:opacity-60"
-            >
+            <Button variant="ghost" onClick={onBack} className="-ml-1 mb-1 gap-0.5 px-1 text-[length:var(--text-body)] text-[var(--accent)]">
               <ChevronLeft size={22} aria-hidden />
               <span>Folders</span>
-            </button>
+            </Button>
           )}
           <h1 className="px-1 text-[length:var(--text-title1)] font-[var(--weight-bold)] leading-[var(--leading-tight)] tracking-[var(--tracking-tight)]">
             {title}
@@ -92,7 +90,7 @@ export function NoteList({
           {showEmpty ? (
             <QuietState label={emptyLabel} />
           ) : (
-            <div className="overflow-hidden rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[5px] shadow-[var(--shadow-card)]">
+            <div className="glass-card overflow-hidden rounded-[var(--radius-xl)] p-[5px]">
               {notes.map((note) => (
                 <NoteRow
                   key={note.path}
@@ -105,32 +103,22 @@ export function NoteList({
             </div>
           )}
         </div>
-        <button
-          type="button"
-          aria-label="New note"
-          onClick={onCreate}
-          className="absolute bottom-5 right-5 flex size-14 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--accent-contrast)] shadow-[var(--shadow-overlay)] transition-[scale] duration-150 active:scale-[0.94]" // jinn-shell: ok notes list FAB, not page chrome
-        >
+        <Button size="icon-lg" aria-label="New note" onClick={onCreate} className="absolute bottom-5 right-5 size-14 rounded-full shadow-[var(--shadow-overlay)]">
           <PenSquare size={24} aria-hidden />
-        </button>
+        </Button>
       </section>
     )
   }
 
   return (
-    <section className="flex h-full min-w-0 flex-col overflow-hidden bg-[var(--bg-secondary)] px-3 pb-4 pt-5 lg:px-3.5">
+    <section className="flex h-full min-w-0 flex-col overflow-hidden bg-[var(--glass-float-opaque)] px-3 pb-4 pt-5 lg:px-3.5">
       <header className="flex min-h-9 items-center justify-between px-2.5">
         <h1 className="truncate text-[length:var(--text-title2)] font-[var(--weight-bold)] leading-[var(--leading-tight)] tracking-[var(--tracking-tight)]">
           {title}
         </h1>
-        <button
-          type="button"
-          aria-label="New note"
-          onClick={onCreate}
-          className="-mr-1 flex size-9 shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--accent)] transition-[scale,background-color] duration-150 active:scale-[0.96] hover:bg-[var(--fill-secondary)]"
-        >
+        <Button variant="ghost" size="icon" aria-label="New note" onClick={onCreate} className="-mr-1 text-[var(--accent)]">
           <PenSquare size={19} aria-hidden />
-        </button>
+        </Button>
       </header>
 
       <div className="px-2.5 py-3">

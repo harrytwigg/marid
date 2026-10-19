@@ -1053,10 +1053,11 @@ h1, h2, h3, h4, h5, h6 {
 
 .react-flow__background { background: var(--bg) !important; }
 /* No rest hairlines on RF chrome — --shadow-overlay carries the faint ring. */
-.react-flow__minimap { background: var(--material-regular) !important; border: none; border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-overlay); }
-.react-flow__controls { background: var(--material-regular) !important; border: none !important; border-radius: var(--radius-md) !important; overflow: hidden; box-shadow: var(--shadow-overlay); }
-.react-flow__controls-button { background: var(--material-regular) !important; border: none !important; color: var(--text-secondary) !important; }
-.react-flow__controls-button:hover { background: var(--material-thin) !important; color: var(--text-primary) !important; }
+/* The controls carry .glass-tint (set in org-map.tsx): tint, no blur. React Flow's own stylesheet loads
+   after this one with the same specificity for its box-shadow, so the selector is doubled. */
+.react-flow__controls.glass-tint { border: none !important; border-radius: var(--radius-md) !important; overflow: hidden; box-shadow: var(--shadow-overlay); }
+.react-flow__controls-button { background: transparent !important; border: none !important; color: var(--text-secondary) !important; }
+.react-flow__controls-button:hover { background: var(--fill-secondary) !important; color: var(--text-primary) !important; }
 /* Edge stroke/width/opacity are set per-edge inline by the layout seam. */
 .react-flow__node { transition: transform 200ms var(--ease-spring); }
 /* React Flow stamps inline pointer-events:none on nodes that are not

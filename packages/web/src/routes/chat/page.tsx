@@ -20,6 +20,7 @@ import type { FreshChatSourceSession } from '@/components/chat/chat-pane'
 import { ThreadPeek, type CommsPeekData } from '@/components/chat/thread-peek'
 import { ChatErrorBoundary } from './chat-error-boundary'
 import { ChatHeaderMenu } from './chat-header-menu'
+import './glass-chat.css'
 import { MultiChatGrid } from './multi-chat-grid'
 import { deriveChatGridIds } from './grid-placement'
 import { usePaneIdentity } from './pane-identity'
@@ -164,8 +165,14 @@ function ChatPage() {
   // wanted (the operator is culling a list, not switching chats), but a pane or
   // tab still holding a removed session would go stale, so close each one; the
   // route follows the active tab if it was among them.
+  //
+  // A pane still showing a removed session can take focus after the removal (the composer's
+  // focus after a switch lands a frame late), and focus selects the pane's chat: that reopened
+  // the closed tab and pulled the route back. So the ids removed here are remembered until an
+  // explicit selection opens one again, and a pane's own focus does not select them.
+  const removedSessionIdsRef = useRef(new Set<string>())
   const handleSessionsRemoved = useCallback((ids: string[]) => {
-    for (const id of ids) { removeWorkingSetPane(id); closeSessionTab(id) }
+    for (const id of ids) { removedSessionIdsRef.current.add(id); removeWorkingSetPane(id); closeSessionTab(id) }
   }, [closeSessionTab, removeWorkingSetPane])
   const duplicateSessionMutation = useDuplicateSession()
   const focusedDelegatedActivity = useMemo(
@@ -177,23 +184,6 @@ function ChatPage() {
   const sidebarOrderRef = useRef<SidebarOrder>({ sessionIds: [], employeeNames: [], employeeSessionMap: {} })
   const handleOrderComputed = useCallback((order: SidebarOrder) => { sidebarOrderRef.current = order }, [])
 
-
-  // Close more menu on outside click. The moreMenu JSX is shared between the
-  // desktop tab bar and the mobile header (rendered twice in the DOM, one
-  // hidden via CSS), so a single ref points to only one copy — mobile taps
-  // would be seen as "outside" and close the menu. Use a data-attribute
-  // ancestor check instead so both copies count as "inside".
-  useEffect(() => {
-    if (!showMoreMenu) return
-    function handleClick(e: MouseEvent) {
-      const target = e.target as HTMLElement | null
-      if (showMoreMenu && target && !target.closest('[data-more-menu]')) {
-        setShowMoreMenu(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [showMoreMenu])
 
   // D4: open the existing global search (⌘K). GlobalSearch listens for a
   // meta/ctrl+K keydown on window, so synthesize one — same mechanism the old
@@ -276,6 +266,7 @@ function ChatPage() {
   // history state for the back chip.
   const handleSelect = useCallback(
     (id: string, opts?: { navigateMobile?: boolean; replace?: boolean; from?: ThreadOrigin; system?: boolean }) => {
+      removedSessionIdsRef.current.delete(id)
       const currentId = selectedIdRef.current
       const currentScroller = document.querySelector<HTMLElement>('.chat-messages-scroll') // display-toggled away on a phone, where it reports scrollTop 0
       if (currentId && currentScroller?.clientHeight) sessionScrollRef.current.set(currentId, currentScroller.scrollTop)
@@ -311,6 +302,12 @@ function ChatPage() {
     }
   }, [handleSelect, workingSet])
 
+  // Focus that reaches a pane itself, as opposed to a deliberate move to a chat (the next/previous
+  // shortcut, closing a pane): a pane for a chat removed in bulk is not a selection.
+  const handlePaneFocus = useCallback((sessionId: string) => {
+    if (!removedSessionIdsRef.current.has(sessionId)) handleFocusPane(sessionId)
+  }, [handleFocusPane])
+
   const handleMobileWorkingSetSelect = useCallback((sessionId: string) => {
     handleSelect(sessionId, { navigateMobile: false })
   }, [handleSelect])
@@ -334,6 +331,7 @@ function ChatPage() {
     if (navigationType === 'POP') setSystemPrimedId(null)
     if (selectedId) {
       newChatIntentRef.current = false
+      removedSessionIdsRef.current.delete(selectedId) // the route came to it again (back, deep link)
       chatTabs.openTab({ sessionId: selectedId, label: 'Loading...', status: 'idle', unread: false })
     } else if (didMountRef.current) {
       // Landed on bare `/` mid-session. On history traversal, arm the new-chat
@@ -953,7 +951,7 @@ function ChatPage() {
                   delegatedActivity: focusedDelegatedActivity,
                 }}
                 viewport={viewport}
-                onFocus={handleFocusPane}
+                onFocus={handlePaneFocus}
                 onRemove={handleRemovePane}
                 metaById={paneState.metaById} sessionTitleFor={(id) => sessionsQuery.data?.find((session) => String(session.id ?? '') === id)?.title}
                 runtime={{ portalName, subscribe, engineRegistry, connectionSeq, skillsVersion, events }}

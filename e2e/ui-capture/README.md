@@ -69,6 +69,21 @@ choice sticks, and a phone tap. It runs against any build, so the same command
 gives the before and the after, exits non-zero when a check fails, and
 photographs the closed and open states and the settings page's native selects.
 
+## Org screens
+
+`org-map`, `org-employee`, `org-employee-editor` and `org-department` show a seeded org (`seed-org.mjs`:
+four departments, one scoped, managers with reports). `capture-ui.sh` writes it only when one of those
+screens is named, or no screen is, so the other screens' fixtures and baselines do not move.
+
+## Settings-family screens
+
+`settings`, `settings-engines`, `settings-connectors`, `settings-plugins`, `skills`, `skill-detail`, `cron`,
+`cron-detail`, `logs`, `limits`, `auto-dispatch`, `notes`, `notes-editor` and `more` (`screens-pages.mjs`).
+Skills, cron jobs with run history and a small notes folder come from `seed-pages.mjs`, written (with
+notes switched on) only when one of the skills, cron or notes screens is named, or no screen is. The logs
+screen filters to the cron lines and the auto-dispatch screen rewrites the rules path, because the
+gateway's own lines name the sandbox's paths.
+
 ## Settings
 
 | Variable | Default | Meaning |

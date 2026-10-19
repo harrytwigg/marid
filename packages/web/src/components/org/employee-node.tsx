@@ -18,9 +18,11 @@ export function EmployeeNode({ data, selected }: NodeProps) {
   const employee = data as EmployeeNodeData
   const isExec = employee.rank === "executive"
 
+  // Glass tint, no blur: a map holds many nodes, and blur costs per node. The inline shadow below
+  // wins over the class's, so the class supplies the tinted background only.
   return (
     <div
-      className="group hover-lift relative w-[200px] h-[64px] flex items-center gap-[var(--space-2)] px-[var(--space-3)] rounded-[var(--radius-md)] bg-[var(--material-regular)] backdrop-blur-[20px] backdrop-saturate-[180%] [-webkit-backdrop-filter:blur(20px)_saturate(180%)] cursor-pointer overflow-hidden"
+      className="group hover-lift relative w-[200px] h-[64px] flex items-center gap-[var(--space-2)] px-[var(--space-3)] rounded-[var(--radius-md)] glass-tint cursor-pointer overflow-hidden"
       style={{
         border: `1px solid ${selected ? "var(--accent)" : isExec ? "color-mix(in srgb, var(--accent) 45%, var(--separator))" : "var(--separator)"}`,
         boxShadow: selected

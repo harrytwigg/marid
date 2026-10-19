@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ChevronRight } from "@/components/ui/icon"
 import { api } from "@/lib/api"
 import { agoLabel, describeCron, formatNextRun, nextCronDate } from "@/lib/cron-utils"
+import { Button } from "@/components/ui/button"
 import { PageLayout } from "@/components/page-layout"
 import { PageScaffold } from "@/components/shell/page-scaffold"
 import { CronListHeader } from "./list-header"
@@ -192,25 +193,21 @@ export default function CronPage() {
         <div>
           {/* Lens control — fixed geometry, only the region below swaps. */}
           <div className="mb-3.5 flex max-md:justify-center">
-            <div className="inline-flex gap-0.5 rounded-[12px] bg-[var(--fill-tertiary)] p-[3px]" role="tablist">
+            <div className="inline-flex gap-0.5 rounded-[12px] bg-[var(--fill-tertiary)] p-[3px] shadow-[inset_0_0_0_1px_var(--glass-edge)]" role="tablist">
               {([
                 { id: "jobs", label: "Jobs", count: jobsQuery.isSuccess ? jobs.length : null },
                 { id: "week", label: "Week", count: null },
               ] as { id: Lens; label: string; count: number | null }[]).map((it) => {
                 const active = lens === it.id
                 return (
-                  <button
+                  <Button
                     key={it.id}
-                    type="button"
+                    variant="ghost"
                     role="tab"
                     aria-selected={active}
                     data-testid={`cron-tab-${it.id}`}
                     onClick={() => setLens(it.id)}
-                    className={`inline-flex h-[34px] items-center gap-1.5 rounded-[9px] px-[15px] text-[length:var(--text-subheadline)] transition-colors ${
-                      active
-                        ? "bg-[var(--bg-secondary)] font-semibold text-[var(--text-primary)] shadow-[var(--shadow-subtle)]"
-                        : "font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                    }`}
+                    className={`segment h-[34px] rounded-[9px] px-[15px] md:h-[34px] ${active ? "font-semibold" : ""}`}
                   >
                     {it.label}
                     {it.count != null && it.count > 0 && (
@@ -225,7 +222,7 @@ export default function CronPage() {
                         {it.count}
                       </span>
                     )}
-                  </button>
+                  </Button>
                 )
               })}
             </div>
@@ -245,16 +242,12 @@ export default function CronPage() {
                 style={{ background: "color-mix(in srgb, var(--system-red) 8%, transparent)" }}
               >
                 {jobsQuery.error instanceof Error ? jobsQuery.error.message : "Failed to load cron jobs"}
-                <button
-                  type="button"
-                  onClick={() => void jobsQuery.refetch()}
-                  className="ml-3 font-medium underline"
-                >
+                <Button variant="link" size="sm" className="ml-3" onClick={() => void jobsQuery.refetch()}>
                   Retry
-                </button>
+                </Button>
               </div>
             ) : jobs.length === 0 ? (
-              <div className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] shadow-[var(--shadow-card)]" data-testid="cron-empty">
+              <div className="glass-card rounded-[var(--radius-xl)]" data-testid="cron-empty">
                 <div className="px-6 py-12 text-center">
                   <h3 className="text-[length:var(--text-title3)] font-bold tracking-[var(--tracking-tight)] text-[var(--text-primary)]">
                     No cron jobs yet
@@ -270,21 +263,22 @@ export default function CronPage() {
                   {filters.map((f) => {
                     const active = filter === f.id
                     return (
-                      <button
+                      <Button
                         key={f.id}
-                        type="button"
+                        variant="ghost"
+                        size="xs"
                         data-testid={`cron-filter-${f.id}`}
                         aria-pressed={active}
                         onClick={() => setFilter(f.id)}
-                        className={`inline-flex h-[28px] items-center gap-[5px] rounded-full px-[13px] text-[length:var(--text-footnote)] transition-colors ${
+                        className={`h-[28px] gap-[5px] px-[13px] md:h-[28px] ${
                           active
-                            ? "bg-[var(--accent-fill)] font-semibold text-[var(--accent)]"
-                            : "bg-[var(--fill-tertiary)] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                            ? "font-semibold text-[var(--accent)] [--button-bg:var(--accent-fill)] [--button-bg-hover:var(--accent-fill)]"
+                            : "text-[var(--text-secondary)] [--button-bg:var(--fill-tertiary)] [--button-bg-hover:var(--fill-secondary)]"
                         }`}
                       >
                         {f.label}
                         <span className="text-[length:var(--text-caption2)] tabular-nums opacity-75">{f.count}</span>
-                      </button>
+                      </Button>
                     )
                   })}
                 </div>
@@ -292,13 +286,9 @@ export default function CronPage() {
                 {shown.length === 0 ? (
                   <div className="px-6 py-14 text-center" data-testid="cron-no-match">
                     <p className="text-[length:var(--text-subheadline)] text-[var(--text-tertiary)]">No jobs match.</p>
-                    <button
-                      type="button"
-                      onClick={() => setFilter("all")}
-                      className="mt-2 text-[length:var(--text-footnote)] font-medium text-[var(--accent)] transition-opacity hover:opacity-80"
-                    >
+                    <Button variant="link" className="mt-2" onClick={() => setFilter("all")}>
                       Clear filter
-                    </button>
+                    </Button>
                   </div>
                 ) : (
                   groups.map((group) => (
@@ -318,7 +308,7 @@ export default function CronPage() {
                           {group.jobs.length}
                         </span>
                       </div>
-                      <div className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[5px] shadow-[var(--shadow-card)]">
+                      <div className="glass-card rounded-[var(--radius-xl)] p-[5px]">
                         {group.jobs.map((job) => (
                           <CronRow key={job.id} job={job} now={now} onToggle={onToggle} onOpen={onOpen} />
                         ))}

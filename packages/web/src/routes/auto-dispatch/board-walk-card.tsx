@@ -82,7 +82,7 @@ function Tick({ tick, now }: { tick: TickRecord; now: number }) {
 
 export function BoardWalkCard({ status, ticks, absent, now }: { status: BoardWalkStatus | null; ticks: TickRecord[]; absent: boolean; now: number }) {
   return (
-    <section data-testid="board-walk" className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[var(--space-5)] shadow-[var(--shadow-card)]">
+    <section data-testid="board-walk" className="glass-card rounded-[var(--radius-xl)] p-[var(--space-5)]">
       <h2 className="text-[length:var(--text-body)] font-[var(--weight-semibold)] text-[var(--text-primary)]">Board walk</h2>
       {absent || !status
         ? <p className="mt-[var(--space-2)] text-[length:var(--text-footnote)] text-[var(--text-tertiary)]">The board walk is not running in this gateway.</p>
