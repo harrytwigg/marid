@@ -38,7 +38,7 @@ vi.mock("../org-registry.js", () => ({
       displayName: "Builder",
       remoteHost: "build-box",
       remoteUser: "builder",
-      remoteCwd: "/srv/jinn-work/proj",
+      remoteCwd: "/srv/agents/proj",
     }]]);
   }),
 }));
@@ -68,7 +68,7 @@ class FakeEngine implements PtyViewEngine {
   setViewing(): void {}
 }
 
-const CONFIG = { remote: { root: "/srv/jinn-work", mount: "/mnt/jinn-home" } } as any;
+const CONFIG = { remote: { root: "/srv/agents", mount: "/mnt/jinn-home" } } as any;
 
 function attach(engine: FakeEngine, options: Record<string, unknown>): FakeWebSocket {
   const ws = new FakeWebSocket();
@@ -87,7 +87,7 @@ describe("the dashboard PTY resolves the employee against the live config", () =
     const opts = engine.spawnCalls[0] as any;
     expect(opts.remoteHost).toBe("build-box");
     expect(opts.remoteUser).toBe("builder");
-    expect(opts.remoteCwd).toBe("/srv/jinn-work/proj");
+    expect(opts.remoteCwd).toBe("/srv/agents/proj");
   });
 
   it("passes the config through to the org registry rather than asking blind", () => {

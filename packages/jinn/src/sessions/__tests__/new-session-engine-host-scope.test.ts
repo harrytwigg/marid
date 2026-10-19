@@ -53,7 +53,7 @@ const remote: Employee = {
   engine: "claude",
   remoteHost: "build-box",
   remoteUser: "jinn",
-  remoteCwd: "/srv/jinn-work/main",
+  remoteCwd: "/srv/agents/main",
 } as Employee;
 
 beforeEach(() => {

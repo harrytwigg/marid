@@ -68,7 +68,7 @@ describe("work-item attachments from a session on another host", () => {
   it("uploads a session-host file as bytes the gateway never reads from disk (sha256 intact)", async () => {
     const dev = registry.createSession({ engine: "claude", source: "web", sourceRef: "gen140-remote", title: "remote", employee: "platform-dev" });
     const item = store.createWorkItem({ title: "gen140 remote upload", assignee: "platform-dev" });
-    const buildHost = fs.mkdtempSync(path.join(os.tmpdir(), "gen140-build-host-"));
+    const buildHost = fs.mkdtempSync(path.join(os.tmpdir(), "gen140-build-box-"));
     const source = path.join(buildHost, "evidence.bin");
     const sourceBytes = Buffer.from(Array.from({ length: 70_000 }, (_, i) => (i * 31) % 256)); // > the 64 KiB JSON cap
     fs.writeFileSync(source, sourceBytes);

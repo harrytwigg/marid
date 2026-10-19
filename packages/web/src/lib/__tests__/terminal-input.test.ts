@@ -13,7 +13,7 @@ import {
 } from "../terminal-input";
 
 /** The queries a TUI sends at startup, as captured from opencode 1.18.31 and
- *  claude 2.1.283 on build-host, plus the rest of the reply family. */
+ *  claude 2.1.283 on a remote host, plus the rest of the reply family. */
 const QUERIES = [
   "\x1b[c", // DA1
   "\x1b[>c", // DA2

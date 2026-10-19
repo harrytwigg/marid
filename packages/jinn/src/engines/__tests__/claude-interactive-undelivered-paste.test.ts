@@ -167,7 +167,7 @@ describe("InteractiveClaudeEngine — a paste the TUI never took (JIN-3)", () =>
     // As the gateway wires it: releasing a PTY unregisters the session's hooks.
     lifecycle = new PtyLifecycleManager({ maxLivePtys: 10, onCleanup: (id) => hookRegistry.unregister(id) });
     engine = new InteractiveClaudeEngine(lifecycle, hookRegistry, {
-      remote: () => ({ root: "/srv/jinn-work", mount: "/mnt/jinn-home" }),
+      remote: () => ({ root: "/srv/agents", mount: "/mnt/jinn-home" }),
       gatewayPort: () => 7777,
     });
   });
@@ -176,7 +176,7 @@ describe("InteractiveClaudeEngine — a paste the TUI never took (JIN-3)", () =>
     vi.useRealTimers();
   });
 
-  const REMOTE = { remoteHost: "box", remoteUser: "b", remoteCwd: "/srv/jinn-work/proj" };
+  const REMOTE = { remoteHost: "box", remoteUser: "b", remoteCwd: "/srv/agents/proj" };
 
   async function warmSession(sessionId: string, target: object = {}): Promise<FakePty> {
     const turn = engine.run({ sessionId, prompt: "first", cwd: "/tmp", resumeSessionId: "c1", ...target } as any);

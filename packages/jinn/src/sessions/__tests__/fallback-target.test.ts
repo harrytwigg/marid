@@ -135,7 +135,7 @@ describe("chooseSubstituteOrReason with a target", () => {
   });
 
   it("parks for a remote session when the target engine cannot run on a host", () => {
-    const remote = { remoteHost: "build-host", remoteUser: "ci", remoteCwd: "/work" } as never;
+    const remote = { remoteHost: "build-box", remoteUser: "ci", remoteCwd: "/work" } as never;
     expect(choose(withTarget(), { remote, remoteTarget: remote }).reason).toMatch(/cannot run on this session's remote host/);
     expect(choose(withTarget({ fallbackTarget: { engine: "opencode", model: "opencode/big-pickle" } }), { remote, remoteTarget: remote }).choice)
       .toMatchObject({ engine: "opencode" });
@@ -184,7 +184,7 @@ describe("the fallback view", () => {
     expect(sessionFallbackView(config, reg, makeSession()).allowedEngines).toEqual(["claude", "codex", "opencode"]);
     // A department-scoped session stays on claude; a remote one takes the engines that run on a host.
     expect(sessionFallbackView(config, reg, makeSession({ scopeDepartment: "ops" })).allowedEngines).toEqual(["claude"]);
-    const remoteEmployee = { name: "w", remoteHost: "build-host", remoteUser: "ci", remoteCwd: "/work" } as never;
+    const remoteEmployee = { name: "w", remoteHost: "build-box", remoteUser: "ci", remoteCwd: "/work" } as never;
     expect(sessionFallbackView(config, reg, makeSession(), remoteEmployee).allowedEngines).toEqual(["claude", "opencode"]);
   });
 
