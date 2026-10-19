@@ -11,6 +11,7 @@ import { logger } from "./logger.js";
 import { isSpellableModelId } from "./model-id.js";
 import { ENGINE_NAMES, isKnownEngine, type EngineName } from "./models.js";
 import { accountNames } from "./claude-accounts-config.js";
+import type { DuplicateTolerance } from "./fallback-chain-load.js";
 import { fallbackChainProblems } from "./fallback-chain-wire.js";
 import type { JinnConfig, ModelRegistry } from "./types.js";
 
@@ -23,12 +24,12 @@ import type { JinnConfig, ModelRegistry } from "./types.js";
  * engines are deliberately accepted: they are how "either of these two" reads in
  * config, and the expansion carries a visited set.
  */
-export function validateEngineFallbackChains(engines: Record<string, unknown>): string[] {
+export function validateEngineFallbackChains(engines: Record<string, unknown>, onDuplicate?: DuplicateTolerance): string[] {
   const profiles = accountNames(engines);
   return ENGINE_NAMES.flatMap((name) => {
     const section = engines[name];
     if (!isYamlMapping(section)) return [];
-    return fallbackChainProblems(`engines.${name}.fallback`, section.fallback, { engines: ENGINE_NAMES, profiles, self: { engine: name } });
+    return fallbackChainProblems(`engines.${name}.fallback`, section.fallback, { engines: ENGINE_NAMES, profiles, self: { engine: name }, onDuplicate });
   });
 }
 

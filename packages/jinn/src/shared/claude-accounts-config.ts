@@ -2,7 +2,14 @@ import path from "node:path";
 import { canonicalClaudeConfigDir, claudeProfileFromDir, validateEmployeeClaudeConfigDir, type ClaudeProfile } from "./claude-profile.js";
 import { claudeAccountKey, DEFAULT_CLAUDE_ACCOUNT } from "./engine-account.js";
 import { ENGINE_NAMES } from "./models.js";
+import type { DuplicateTolerance } from "./fallback-chain-load.js";
 import { fallbackChainProblems, type FallbackChainEntry } from "./fallback-chain-wire.js";
+
+/** What an account is validated with beyond its own entry. */
+interface AccountValidation {
+  jinnHome: string | undefined;
+  onDuplicate: DuplicateTolerance | undefined;
+}
 
 /**
  * Declared Claude accounts (spec FR-079): `engines.claude.accounts.<name>`,
@@ -101,13 +108,13 @@ function configDirProblems(where: string, configDir: unknown, seenDirs: Map<stri
   return problems;
 }
 
-function accountProblems(name: string, raw: unknown, names: ReadonlySet<string>, seenDirs: Map<string, string>, jinnHome: string | undefined): string[] {
+function accountProblems(name: string, raw: unknown, names: ReadonlySet<string>, seenDirs: Map<string, string>, options: AccountValidation): string[] {
   const where = `engines.claude.accounts.${name}`;
   const problems = ACCOUNT_NAME_RE.test(name) ? [] : [`${where}: an account name is letters, digits, ".", "_" and "-"`];
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [...problems, `${where} must be a mapping with configDir`];
   const entry = raw as Record<string, unknown>;
-  problems.push(...configDirProblems(where, entry.configDir, seenDirs, name, jinnHome));
-  problems.push(...fallbackChainProblems(`${where}.fallback`, entry.fallback, { engines: ENGINE_NAMES, profiles: names, self: { engine: "claude", profile: name } }));
+  problems.push(...configDirProblems(where, entry.configDir, seenDirs, name, options.jinnHome));
+  problems.push(...fallbackChainProblems(`${where}.fallback`, entry.fallback, { engines: ENGINE_NAMES, profiles: names, self: { engine: "claude", profile: name }, onDuplicate: options.onDuplicate }));
   const map = entry.fallbackModelMap;
   if (map !== undefined && (!map || typeof map !== "object" || Array.isArray(map))) {
     problems.push(`${where}.fallbackModelMap must be a mapping of model ids`);
@@ -122,7 +129,7 @@ function accountProblems(name: string, raw: unknown, names: ReadonlySet<string>,
  * profile), two accounts on one canonical directory, and chains naming unknown
  * engines or accounts, or themselves. Cycles are tolerated, as for engines.
  */
-export function validateClaudeAccounts(engines: Record<string, unknown>, jinnHome?: string): string[] {
+export function validateClaudeAccounts(engines: Record<string, unknown>, jinnHome?: string, onDuplicate?: DuplicateTolerance): string[] {
   const claude = engines.claude as { accounts?: unknown } | undefined;
   if (claude?.accounts === undefined) return [];
   if (!claude.accounts || typeof claude.accounts !== "object" || Array.isArray(claude.accounts)) {
@@ -131,5 +138,5 @@ export function validateClaudeAccounts(engines: Record<string, unknown>, jinnHom
   const accounts = claude.accounts as Record<string, unknown>;
   const names = new Set(Object.keys(accounts));
   const seenDirs = new Map<string, string>();
-  return Object.entries(accounts).flatMap(([name, raw]) => accountProblems(name, raw, names, seenDirs, jinnHome));
+  return Object.entries(accounts).flatMap(([name, raw]) => accountProblems(name, raw, names, seenDirs, { jinnHome, onDuplicate }));
 }

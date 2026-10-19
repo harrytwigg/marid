@@ -175,6 +175,19 @@ describe("PUT /api/config", () => {
     expect(put.body.error).toContain("engines.claude.fallback[1] duplicates engines.claude.fallback[0] (codex)");
   });
 
+  it("lets an unrelated edit through a file whose legacy chain already repeats a string, and refuses the repeat once the request writes that chain", async () => {
+    const file = path.join(home, "config.yaml");
+    fs.writeFileSync(file, yaml.dump({ gateway: { port: 7798, host: "127.0.0.1" }, engines: { default: "claude", claude: { bin: "claude", model: "opus", fallback: ["codex", "codex"] }, codex: { bin: "codex", model: "gpt" } } }));
+    try {
+      expect((await call("PUT", "/api/config", { portal: { portalName: "Renamed" } })).status).toBe(200);
+      const touched = await call("PUT", "/api/config", { engines: { claude: { fallback: ["codex", "grok", "grok"] } } });
+      expect(touched.status).toBe(400);
+      expect(touched.body.error).toContain("engines.claude.fallback[2] duplicates engines.claude.fallback[1] (grok)");
+    } finally {
+      fs.rmSync(file, { force: true });
+    }
+  });
+
   it("refuses an account chain naming the account itself", async () => {
     const put = await call("PUT", "/api/config", { engines: { claude: { accounts: { A: { configDir: DIR_A, fallback: [{ engine: "claude", profile: "A" }] } } } } });
     expect(put.status).toBe(400);

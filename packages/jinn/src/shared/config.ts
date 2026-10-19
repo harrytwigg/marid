@@ -3,6 +3,7 @@ import yaml from "js-yaml";
 import { CONFIG_PATH } from "./paths.js";
 import { applyLegacyFallbackMigration, validateEngineFallbackChains, validateEngineFallbackModelMaps } from "./engine-fallback.js";
 import { validateClaudeAccounts } from "./claude-accounts-config.js";
+import { warnLegacyDuplicates, type DuplicateTolerance } from "./fallback-chain-load.js";
 import { opencodeUsageLimitsProblems } from "./opencode-usage-limits-config.js";
 import { autoCompactProblems } from "./auto-compact-config.js";
 import { contextConfigProblems } from "./context-config.js";
@@ -32,7 +33,7 @@ export function normalizeClaudeEngineConfig(raw: ClaudeEngineConfig): Required<P
  * accepts everything the loader accepts, and nothing that would leave the
  * operator with a config.yaml the gateway can no longer boot from.
  */
-export function validateConfigShape(config: unknown): string[] {
+export function validateConfigShape(config: unknown, options: { tolerateDuplicates?: DuplicateTolerance } = {}): string[] {
   if (config === null || config === undefined) {
     return ["file is empty or parsed to null — expected a YAML mapping"];
   }
@@ -91,7 +92,7 @@ export function validateConfigShape(config: unknown): string[] {
     if (typeof c.engines.claude !== "object" || c.engines.claude === null || Array.isArray(c.engines.claude)) {
       problems.push("engines.claude must be a mapping");
     }
-    problems.push(...validateEngineFallbackChains(c.engines), ...validateClaudeAccounts(c.engines));
+    problems.push(...validateEngineFallbackChains(c.engines, options.tolerateDuplicates), ...validateClaudeAccounts(c.engines, undefined, options.tolerateDuplicates));
     problems.push(...validateEngineFallbackModelMaps(c.engines));
     problems.push(...opencodeUsageLimitsProblems(c.engines), ...autoCompactProblems(c.engines));
   }
@@ -185,7 +186,7 @@ export function loadConfig(): JinnConfig {
   } catch (err) {
     throw new Error(`Invalid YAML in ${CONFIG_PATH}: ${(err as Error).message}`);
   }
-  const problems = validateConfigShape(parsed);
+  const problems = validateConfigShape(parsed, { tolerateDuplicates: warnLegacyDuplicates() });
   if (problems.length > 0) {
     throw new Error(
       `Invalid config at ${CONFIG_PATH}:\n  - ${problems.join("\n  - ")}`

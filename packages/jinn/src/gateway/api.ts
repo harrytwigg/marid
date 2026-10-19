@@ -135,6 +135,7 @@ export { matchRoute } from "./route-helpers.js";
 import { handleCronApi } from "./cron-api.js";
 import { handleOrgApi } from "./org-api.js";
 import { handleFallbackChainsApi } from "./fallback-chains-api.js";
+import { unchangedLegacyDuplicates } from "../shared/fallback-chain-load.js";
 import { handleTodoCaptureApi } from "./todo-capture-api.js";
 import { handleSkillsApi } from "./skills-api.js";
 import { handleSearchApi, type NeedsAttentionTarget } from "./search-api.js";
@@ -4307,7 +4308,7 @@ export async function handleApiRequest(
       }
       const merged = deepMerge(existing, body);
       // A value the shape validator would reject must not reach the file: loadConfig() then throws and the gateway cannot restart.
-      const problems = validateConfigShape(merged);
+      const problems = validateConfigShape(merged, { tolerateDuplicates: unchangedLegacyDuplicates(existing) });
       if (problems.length > 0) return badRequest(res, `Invalid config: ${problems.join("; ")}`);
       saveConfigAtomic(merged);
       context.reloadConfig?.(); // refresh in-memory config now (don't wait on the watcher)

@@ -190,6 +190,18 @@ export interface FallbackChainContext {
    *  is refused. For an engine default it is `{engine}`, for an account
    *  `{engine: "claude", profile}`. */
   self?: FallbackLink;
+  /** Asked about each duplicate; returning true tolerates it (the first entry stays and
+   *  no problem is reported). The loader tolerates what the legacy validator accepted. */
+  onDuplicate?: (duplicate: FallbackChainDuplicate) => boolean;
+}
+
+/** A chain entry that repeats an earlier one, as {@link FallbackChainContext.onDuplicate} sees it. */
+export interface FallbackChainDuplicate {
+  where: string;
+  chain: readonly unknown[];
+  index: number;
+  first: number;
+  problem: string;
 }
 
 function profileProblems(where: string, link: FallbackLink, ctx: FallbackChainContext): string[] {
@@ -237,7 +249,8 @@ export function fallbackChainProblems(where: string, chain: unknown, ctx: Fallba
     }
     const first = seen.get(key);
     if (first !== undefined) {
-      problems.push(`${at} duplicates ${where}[${first}] (${fallbackLinkLabel(link)}): a chain tries each target once, so list it once`);
+      const problem = `${at} duplicates ${where}[${first}] (${fallbackLinkLabel(link)}): a chain tries each target once, so list it once`;
+      if (!ctx.onDuplicate?.({ where, chain, index, first, problem })) problems.push(problem);
     } else {
       seen.set(key, index);
     }
