@@ -2,6 +2,7 @@ import type { Employee, JinnConfig, ResolvedMcpConfig, Session } from "../shared
 import { MusecodeEngine, type MusecodeEngineOptions } from "../engines/musecode.js";
 import { MusecodeInteractiveEngine, type MusecodeInteractiveDeps } from "../engines/musecode-interactive.js";
 import type { PtyLifecycleManager, PtyLifecycleOpts } from "../engines/pty-lifecycle.js";
+import { exactEffortLevelsForModel, getModelRegistry } from "../shared/models.js";
 import { resolveSessionEngineMcp } from "../sessions/engine-run-mcp.js";
 import { getSession } from "../sessions/registry.js";
 import { orgRegistry } from "./org-registry.js";
@@ -27,6 +28,17 @@ function viewDeps(getConfig: () => JinnConfig): MusecodeInteractiveDeps {
 }
 
 /**
+ * The effort levels a turn may send, from the registry as configured now. An
+ * unset model means Muse runs its own default, so that is the model judged.
+ */
+function turnEffortLevels(getConfig: () => JinnConfig): () => (model: string | undefined) => readonly string[] {
+  return () => (model) => {
+    const config = getConfig();
+    return exactEffortLevelsForModel(config, "musecode", model ?? getModelRegistry(config).musecode?.defaultModel);
+  };
+}
+
+/**
  * Muse Code's two engines: the headless one that runs turns, and the view-only
  * one behind the dashboard terminal. They are made together because a turn has
  * to let go of a terminal that holds its session (Muse allows one owner), which
@@ -41,6 +53,6 @@ export function createMusecodeEnginePair(gateway: {
 }): { work: MusecodeEngine; pty: MusecodeInteractiveEngine } {
   const lifecycle = gateway.createLifecycle({ onAdopt: gateway.refreshPids, onCleanup: gateway.refreshPids });
   const pty: MusecodeInteractiveEngine = new MusecodeInteractiveEngine(lifecycle, { ...viewDeps(gateway.getConfig), turnRunning: (id) => work.hasLiveRun(id) });
-  const work: MusecodeEngine = new MusecodeEngine({ ...gateway.engineOptions, releaseView: (id) => pty.releaseUnviewed(id) });
+  const work: MusecodeEngine = new MusecodeEngine({ ...gateway.engineOptions, effortLevels: turnEffortLevels(gateway.getConfig), releaseView: (id) => pty.releaseUnviewed(id) });
   return { work, pty };
 }

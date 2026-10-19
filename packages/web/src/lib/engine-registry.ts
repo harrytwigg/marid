@@ -2,6 +2,8 @@
 // field here should not mean touching the file every other call lives in.
 // Re-exported from `lib/api` so the existing importers are unchanged.
 
+import type { EffortMechanism } from "@jinn/effort-mechanism"
+
 export interface ModelInfo {
   id: string;
   label: string;
@@ -27,9 +29,10 @@ export interface EngineRegistryEntry {
   name: string;
   available: boolean;
   defaultModel: string;
-  effortMechanism: "claude-flag" | "codex-config" | "grok-flag" | "pi-flag" | "opencode-variant" | "musecode-turn" | "none";
+  effortMechanism: EffortMechanism;
   models: ModelInfo[];
   supportsPty?: boolean; // interactive PTY/CLI view (`/ws/pty`)
+  ptyLockedDuringTurn?: boolean; // the view switch locks while a turn runs
   health?: EngineHealth;
 }
 export interface EnginesResponse {
