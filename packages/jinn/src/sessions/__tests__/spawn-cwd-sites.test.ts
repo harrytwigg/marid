@@ -44,6 +44,7 @@ describe("hard-coded `cwd: JINN_HOME` at session-spawn sites", () => {
   it.each([
     "sessions/turn/engine-run.ts",
     "sessions/rate-limit-handler.ts",
+    "sessions/fallback-walk.ts",
     "gateway/pty-ws.ts",
   ])("%s takes its cwd from the helper", (file) => {
     const text = fs.readFileSync(path.join(SRC, file), "utf-8");
@@ -51,10 +52,14 @@ describe("hard-coded `cwd: JINN_HOME` at session-spawn sites", () => {
     expect(text).not.toMatch(HARD_CODED_CWD);
   });
 
-  it("calls the helper at both rate-limit spawn sites", () => {
-    const text = fs.readFileSync(path.join(SRC, "sessions/rate-limit-handler.ts"), "utf-8");
-    expect((text.match(/\bspawnCwd\(/g) ?? []).length).toBe(2);
-    expect(text).toMatch(/cwd: substituteCwd,/);
-    expect(text).toMatch(/cwd: spawnCwd\(session, Boolean\(remote\)\),/);
+  it("calls the helper at both rate-limit spawn sites: the chain walk's substitute and the handler's retry", () => {
+    const handler = fs.readFileSync(path.join(SRC, "sessions/rate-limit-handler.ts"), "utf-8");
+    expect((handler.match(/\bspawnCwd\(/g) ?? []).length).toBe(1);
+    expect(handler).toMatch(/cwd: spawnCwd\(session, Boolean\(remote\)\),/);
+    const walk = fs.readFileSync(path.join(SRC, "sessions/fallback-walk.ts"), "utf-8");
+    expect((walk.match(/\bspawnCwd\(/g) ?? []).length).toBe(1);
+    expect(walk).toMatch(/const cwd = spawnCwd\(session, Boolean\(remote\)\)/);
+    // The substitute's engine call takes it as `cwd`, never a literal.
+    expect(fs.readFileSync(path.join(SRC, "sessions/fallback-link-run.ts"), "utf-8")).toMatch(/\n\s+cwd,\n/);
   });
 });

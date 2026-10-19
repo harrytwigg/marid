@@ -144,7 +144,11 @@ describe("a new session started while the primary is out of allowance", () => {
         originalModel: "opus",
         until: reset.toISOString(),
         syncSince: START.toISOString(),
+        // The chain link the session started on, as a mid-turn swap records it.
+        substituteTarget: { engine: "codex" },
       },
+      // The run starts at that link: the next limit moves on from it, never back to the target it left.
+      fallbackRun: { source: "engine", position: 1, tried: ["claude||opus"], startedAt: START.toISOString() },
     });
   });
 

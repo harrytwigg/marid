@@ -1152,6 +1152,7 @@ export function switchSessionEngine(
     transportMeta.engineSyncSince = target.lastSyncedAt ?? session.createdAt;
   }
   delete transportMeta.engineOverride;
+  delete transportMeta.fallbackRun; // a manual switch is the session leaving the run; the hops stay
 
   return updateSession(sessionId, {
     engine: nextEngine,

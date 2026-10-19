@@ -5,11 +5,16 @@ import { getSession, insertMessage, type UpdateSessionFields } from "../registry
 import { notifyOperatorChannel, notifyRateLimited, notifyRateLimitResumed } from "../callbacks.js";
 import { handleRateLimit, type RateLimitHandlerHooks, type RateLimitInfo } from "../rate-limit-handler.js";
 import { remoteScopeFor } from "../session-cwd.js";
+import { accountOverride } from "../session-account.js";
+import { servedFields } from "./served-fields.js";
 import { employeeRemoteTarget } from "../../shared/remote-target.js";
 import { settleTurn, type SettleTurnInput } from "./completion.js";
 import { formatResumeTime, turnDisplayText } from "./text.js";
 import type { TurnInput, TurnPlan, TurnSurface } from "./types.js";
 import { withBoardReminder } from "./board-reminder.js";
+import { hopNoticeText } from "../fallback-hop.js";
+import type { FallbackHop } from "../../shared/fallback-chain-wire.js";
+import type { JsonObject } from "../../shared/types.js";
 
 export interface RateLimitTurnArgs {
   input: TurnInput;
@@ -40,6 +45,7 @@ async function settleRecoveredTurn(
   recovered: EngineResult,
   engineSession: EngineSession | undefined,
   ranOn: string | undefined,
+  recordServed = false,
 ): Promise<Session | undefined> {
   const sessionId = args.input.session.id;
   const text = turnDisplayText(recovered.result, recovered.error);
@@ -55,10 +61,11 @@ async function settleRecoveredTurn(
     durationMs: recovered.durationMs,
     accounting: { cost: recovered.cost, numTurns: recovered.numTurns, ...(ranOn ? { model: ranOn } : {}) },
     ...(engineSession ? { engineSession } : {}),
-    fields: {
+    // The retry that waited out a limit was answered by the target the session is on; a hop records its own.
+    fields: servedFields(args.input, {
       ...args.terminalFields(),
       ...(typeof recovered.contextTokens === "number" ? { lastContextTokens: recovered.contextTokens } : {}),
-    },
+    }, recordServed && !recovered.error),
     employee: args.input.employee,
     surface: args.surface,
   });
@@ -66,16 +73,27 @@ async function settleRecoveredTurn(
   return settled;
 }
 
-async function announceFallback(args: RateLimitTurnArgs, resumeAt: Date | null, substitute: EngineName, model?: string): Promise<void> {
+/** The notification a hop leaves in the transcript: its readable text, and the hop itself for the dashboard. */
+async function noticeHop(args: RateLimitTurnArgs, text: string, hop: FallbackHop): Promise<void> {
+  await args.surface.notice(text, { fallbackHop: hop as unknown as JsonObject });
+}
+
+async function announceFallback(
+  args: RateLimitTurnArgs, resumeAt: Date | null, substitute: EngineName, opts: { model?: string; hop?: FallbackHop } = {},
+): Promise<void> {
+  const { model, hop } = opts;
   const session = args.input.session;
   // The handler rewrites session.engine to the substitute only after this hook
-  // returns, so what is read here is still the engine that was limited.
-  const limitedEngine = session.engine;
+  // returns, so what is read here is still the engine that was limited. A later
+  // hop of a chain walk moves on from the link before it: the hop names that one.
+  const limitedEngine = hop?.from.split("|")[0] || session.engine;
   const limitedLabel = rateLimitEngineLabel(limitedEngine);
   const substituteLabel = model ? `${rateLimitEngineLabel(substitute)} (${model})` : rateLimitEngineLabel(substitute);
   const resumeText = formatResumeTime(resumeAt);
   notifyOperatorChannel(`⚠️ ${limitedLabel} usage limit reached. ${describe(session)} switching to ${substituteLabel}.`);
-  await args.surface.notice(`⚠️ ${limitedLabel} usage limit reached${resumeText ? `. Resets ${resumeText}` : ""}. Switching to ${substituteLabel} for now.`);
+  // A chain hop names both targets in full (account, profile and model) and carries its record; any other swap keeps its own wording.
+  if (hop) await noticeHop(args, hopNoticeText(hop), hop);
+  else await args.surface.notice(`⚠️ ${limitedLabel} usage limit reached${resumeText ? `. Resets ${resumeText}` : ""}. Switching to ${substituteLabel} for now.`);
 
   // Drop the LIMITED engine's warm PTY AND its armed late-recovery listener, so
   // the abandoned turn can't double-answer after the substitute delivers.
@@ -85,7 +103,8 @@ async function announceFallback(args: RateLimitTurnArgs, resumeAt: Date | null, 
   }
 }
 
-async function announceWaiting(args: RateLimitTurnArgs, resumeAt: Date | null, reason?: string): Promise<void> {
+async function announceWaiting(args: RateLimitTurnArgs, resumeAt: Date | null, why: { reason?: string; hop?: FallbackHop } = {}): Promise<void> {
+  const { reason, hop } = why;
   const session = args.input.session;
   const engineLabel = rateLimitEngineLabel(session.engine);
   const resumeText = formatResumeTime(resumeAt);
@@ -95,9 +114,9 @@ async function announceWaiting(args: RateLimitTurnArgs, resumeAt: Date | null, r
     getSession(session.id) ?? session,
     resumeAt ? resumeAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : undefined,
   );
-  await args.surface.notice(
-    `⏳ ${engineLabel} usage limit reached${resumeText ? `. Resets ${resumeText}` : ""}${reason ? `. Not switching: ${reason}.` : " —"} I'll continue automatically.`,
-  );
+  const text = `⏳ ${engineLabel} usage limit reached${resumeText ? `. Resets ${resumeText}` : ""}${reason ? `. Not switching: ${reason}.` : " —"} I'll continue automatically.`;
+  if (hop) await noticeHop(args, text, hop);
+  else await args.surface.notice(text);
 }
 
 /** The limit never lifted inside the deadline: settle out of `waiting`. */
@@ -122,7 +141,7 @@ async function settleTimedOutTurn(args: RateLimitTurnArgs): Promise<void> {
 function rateLimitHooks(args: RateLimitTurnArgs): RateLimitHandlerHooks {
   const { plan, surface } = args;
   return {
-    onFallbackStart: ({ resumeAt, substitute, model }) => announceFallback(args, resumeAt, substitute, model),
+    onFallbackStart: ({ resumeAt, substitute, model, hop }) => announceFallback(args, resumeAt, substitute, { model, hop }),
     onFallbackStream: (delta) => surface.delta(delta),
     onFallbackComplete: async (fallbackResult, ran) => {
       // The fallback answered on a DIFFERENT engine, so its native id is filed
@@ -135,7 +154,7 @@ function rateLimitHooks(args: RateLimitTurnArgs): RateLimitHandlerHooks {
         meta: { model: plan.model, effortLevel: plan.effortLevel },
       } : undefined, ran.model);
     },
-    onWaitingStart: ({ resumeAt, reason }) => announceWaiting(args, resumeAt, reason),
+    onWaitingStart: ({ resumeAt, reason, hop }) => announceWaiting(args, resumeAt, { reason, hop }),
     onRetryAttempt: () => surface.waiting(false),
     onStillLimited: () => surface.waiting(true),
     onRetryStream: (delta) => surface.delta(delta),
@@ -144,7 +163,7 @@ function rateLimitHooks(args: RateLimitTurnArgs): RateLimitHandlerHooks {
         engine: plan.engineName,
         nativeId: retryResult.sessionId,
         meta: { model: plan.model, effortLevel: plan.effortLevel, platformContextFingerprint: args.platformContextFingerprint },
-      } : undefined, plan.model);
+      } : undefined, plan.model, true);
       if (!settled) return;
       notifyRateLimitResumed(settled);
       notifyOperatorChannel(`✅ ${rateLimitEngineLabel(args.input.session.engine)} usage limit cleared. ${describe(args.input.session)} resumed.`);
@@ -189,6 +208,6 @@ export async function runRateLimitTurn(args: RateLimitTurnArgs): Promise<Session
     notifyRateLimitResumed(outcome.session);
     notifyOperatorChannel(`✅ ${describe(input.session)} back on its own Claude account and resumed.`);
   }
-  await args.surface.notice("↩️ Back on this session's own Claude account — continuing there.");
+  await args.surface.notice(accountOverride(input.session) ? "↩️ Back on this session's own Claude account — continuing there." : "↩️ Back on this session's own target — continuing there.");
   return outcome.session;
 }

@@ -146,9 +146,20 @@ describe("resolveSessionFallbackTarget: Claude accounts", () => {
 
   it("a declared account with an empty chain has nothing to fall back to", () => {
     const config = cfg({ claude: { accounts } });
-    const onFriend = makeSession({ transportMeta: { engineOverride: { substituteAccount: `claude:${friendKey}`, originalAccount: "claude", originalEngine: "claude", until: "2999-01-01T00:00:00Z" } } });
-    // The session stands on the friend account now, whose chain is empty.
-    expect(resolveSessionFallbackTarget(config, registry, onFriend)).toBeNull();
+    // The employee's own account is friend, whose chain is empty (the default account's chain does not apply to it).
+    const onFriend = { name: "e", engine: "claude", claudeConfigDir: FRIEND } as Employee;
+    expect(resolveSessionFallbackTarget(config, registry, makeSession(), onFriend)).toBeNull();
+  });
+
+  it("a session standing on a stand-in goes on from there along its own target's chain, not back to a target it tried", () => {
+    const config = cfg({ claude: { fallback: ["claude:friend", "codex"], accounts } });
+    const onFriend = makeSession({
+      transportMeta: {
+        engineOverride: { substituteAccount: `claude:${friendKey}`, originalAccount: "claude", originalEngine: "claude", until: "2999-01-01T00:00:00Z" },
+        fallbackRun: { source: "engine", position: 1, tried: ["claude||opus"], startedAt: "2026-10-19T10:00:00.000Z" },
+      },
+    });
+    expect(resolveSessionFallbackTarget(config, registry, onFriend)).toMatchObject({ engine: "codex" });
   });
 
   it("an account chain may end on an engine, which is then an engine target", () => {

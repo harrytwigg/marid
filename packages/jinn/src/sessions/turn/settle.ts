@@ -25,6 +25,7 @@ import { rateLimitEngineLabel } from "../../shared/rateLimit.js";
 import { rateLimitAccount, recordAccountRateLimit } from "../rate-limit-account.js";
 import type { EngineResult } from "../../shared/types.js";
 import { recordRefusedBeforeEngine } from "../engine-reach.js";
+import { servedFields } from "./served-fields.js";
 import type { TurnInput, TurnRun, TurnSurface } from "./types.js";
 
 /**
@@ -248,7 +249,7 @@ function answeredReceipt(
     durationMs: result.durationMs,
     accounting: { cost: result.cost, numTurns: result.numTurns, ...(model ? { model } : {}) },
     ...filed,
-    fields: buildTerminalFields(run, meteredContextTokens(run, result), verdict, !resumesAfter(run, filed)),
+    fields: servedFields(run.input, buildTerminalFields(run, meteredContextTokens(run, result), verdict, !resumesAfter(run, filed)), !result.error && !quietPreempted),
     employee: run.input.employee,
     // An interrupted turn stays silent upward: whoever interrupted it reports.
     notifyParent: !quietPreempted,
@@ -356,6 +357,7 @@ export function clearDeadEngineSession(sessionId: string, engineName: string, op
   logger.warn(`Dead session detected for ${sessionId} — clearing stale engine IDs`);
   const meta = { ...(getSession(sessionId)?.transportMeta || {}) } as Record<string, unknown>;
   delete meta["engineOverride"];
+  delete meta["fallbackRun"];
   // A conversation that had been running is gone: whatever runs next on this
   // engine starts a fresh one, and this has it handed the session so far.
   if (opts.lostConversation) meta[LOST_CONVERSATION_META_KEY] = engineName;

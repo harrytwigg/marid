@@ -1,5 +1,4 @@
 import { hostname } from "node:os";
-import { resolveFallbackEngine } from "./engine-fallback.js";
 import {
   isSpent,
   readEngineHealth,
@@ -8,9 +7,8 @@ import {
   type EngineHealth,
   type EngineHealthReading,
 } from "./engine-health-store.js";
-import type { EngineName } from "./models.js";
 import { isRemoteTarget } from "./remote-target.js";
-import type { EngineLimitWindow, JinnConfig, ModelRegistry, RemoteTarget } from "./types.js";
+import type { EngineLimitWindow, ModelRegistry, RemoteTarget } from "./types.js";
 
 // Re-exported so the store split is invisible to callers: every consumer of this
 // module reads a record and asks a question about it in the same breath.
@@ -207,43 +205,6 @@ export function recordExhaustedWindows(
     binding = window;
   }
   if (binding) recordEngineUnavailable(engine, "quota window spent", binding.resetsAt, now, { window: binding.name });
-}
-
-/**
- * The first engine in `from`'s chain that can take the turn: one the caller
- * accepts AND whose allowance has not run out.
- *
- * A chain the health filter empties is walked again without it. Installed
- * availability stays the only hard gate, so a record that has gone stale can
- * reorder a chain but can never empty one the caller would have accepted.
- */
-export function resolveHealthyFallbackEngine(
-  config: JinnConfig,
-  from: string,
-  isUsable: (engine: EngineName) => boolean,
-  health: EngineHealthReading,
-): EngineName | null {
-  return resolveFallbackEngine(config, from, (engine) => isUsable(engine) && !isEngineExhausted(health, engine))
-    ?? resolveFallbackEngine(config, from, isUsable);
-}
-
-/**
- * The engine a NEW session should start on, given the one it prefers.
- *
- * Only ever asked about a preference the caller did not state outright — an
- * engine named in the request runs, spent allowance or not. Ordering, never
- * refusal: when nothing left in the chain can serve either, the preference is
- * handed straight back and the session starts exactly where it would have.
- */
-export function preferHealthySessionEngine(
-  config: JinnConfig,
-  preferred: EngineName,
-  isUsable: (engine: EngineName) => boolean,
-  health: EngineHealthReading,
-): EngineName {
-  if (!isEngineExhausted(health, preferred)) return preferred;
-  return resolveFallbackEngine(config, preferred, (engine) => isUsable(engine) && !isEngineExhausted(health, engine))
-    ?? preferred;
 }
 
 /** The registry as an API consumer reads it: installed availability from the

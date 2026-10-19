@@ -9,6 +9,7 @@
 
 import type { Employee, Engine, EngineResult, JinnConfig, RemoteTarget, ResolvedMcpConfig, Session, StreamDelta } from "../shared/types.js";
 import type { EngineName } from "../shared/models.js";
+import type { FallbackHop } from "../shared/fallback-chain-wire.js";
 
 /** What detectRateLimit returned for the original turn. */
 export interface RateLimitInfo {
@@ -36,8 +37,10 @@ export interface RateLimitHandlerHooks {
    * `substitute` is the engine the switch actually landed on. It is passed rather
    * than re-derived because the chain walk that chose it already happened here,
    * and a transport re-walking it could disagree with the engine that then runs.
+   *
+   * A walk along a fallback chain calls this once per hop, with the hop that is made.
    */
-  onFallbackStart?: (info: { resumeAt: Date | null; until: Date; substitute: EngineName; model?: string }) => void | Promise<void>;
+  onFallbackStart?: (info: { resumeAt: Date | null; until: Date; substitute: EngineName; model?: string; hop?: FallbackHop }) => void | Promise<void>;
 
   /**
    * Optional stream callback for the fallback engine's run (web emits deltas here).
@@ -55,10 +58,11 @@ export interface RateLimitHandlerHooks {
    * Called once when entering the wait-and-retry loop. Use this to: switch UI
    * to "waiting", post a "I'll continue automatically" message, notify Discord, etc.
    *
-   * `reason` is set when the session has a fallback target of its own that could not
-   * take the turn, so the notice can say why it waited instead of switching.
+   * `reason` is set when nothing in the session's fallback chain could take the turn (its own
+   * fallback target could not, or every link was tried), so the notice can say why it waited
+   * instead of switching; `hop` is then the record that the chain ran out.
    */
-  onWaitingStart?: (info: { resumeAt: Date | null; rateLimit: RateLimitInfo; reason?: string }) => void | Promise<void>;
+  onWaitingStart?: (info: { resumeAt: Date | null; rateLimit: RateLimitInfo; reason?: string; hop?: FallbackHop }) => void | Promise<void>;
 
   /**
    * Called each retry iteration BEFORE the retry engine.run — switch UI back

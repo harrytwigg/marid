@@ -4,7 +4,7 @@
 // on the ledger the fakes wrote, which proves which profile and model actually served each hop.
 //
 // To add one: append an entry to SCENARIOS (see README.md). Ids are single letters; the shell
-// script's --pending list names the ones that wait on runtime work not yet merged.
+// script's --pending list names the ones that wait on runtime work not yet merged (none now).
 import { expectEqual, expectTrue, triesBy, walkOf } from "./lib.mjs";
 
 const RATE_LIMITS = ["rate-limit", "quota"];
