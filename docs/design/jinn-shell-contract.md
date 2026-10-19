@@ -6,7 +6,7 @@ Page chrome is a contract, not a convention. Every headed route under
 
 The design spec that settled the four open questions (keep `PageLayout`,
 icon-only 56px FAB, scaffold-owned scrollport, CSS `animation-timeline`
-collapse) is `docs/design/PLA-190-jinn-shell-primitives.md`. This file is
+collapse) is `docs/design/jinn-shell-primitives.md`. This file is
 the shipped surface: the three primitives, the gate, and the escape hatch.
 
 Composition:

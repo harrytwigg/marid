@@ -1,4 +1,4 @@
-# PLA-118 live re-confirmation evidence — 2026-08-24
+# Platform foundation live re-confirmation evidence — 2026-08-24
 
 Head: `58908f607b2661e935996c3b5c69494fad483f33`
 

@@ -1,4 +1,4 @@
-# ICI-225 — System employees, Todo dispatch, shipped workflows
+# System employees, Todo dispatch, shipped workflows
 
 Brainstorm round. No product code. Base SHA `23df25ed`.
 
