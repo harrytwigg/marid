@@ -43,6 +43,7 @@ describe("employee fallback at load", () => {
     expect(roster.get("linked")?.fallback).toEqual([{ engine: "claude", profile: "A", model: "opus" }, { engine: "codex" }]);
     expect(roster.get("none")?.fallback).toEqual([]);
     expect(roster.get("plain")?.fallback).toBeUndefined();
+    expect(roster.get("linked")?.fallbackProblems).toBeUndefined();
     expect(roster.get("blank")).toBeDefined();
     expect(roster.get("blank")?.fallback).toBeUndefined();
     expect(warn).not.toHaveBeenCalled();
@@ -58,6 +59,11 @@ describe("employee fallback at load", () => {
       expect(roster.get(name)?.fallback, name).toBeUndefined();
     }
     expect(warn).toHaveBeenCalledTimes(3);
+    // The warning names the employee and the problem, and the problem stays on the roster entry.
+    expect(String(warn.mock.calls[0]?.[0])).toContain("employee bad");
     expect(String(warn.mock.calls[0]?.[0])).toContain("duplicates fallback[0] (codex)");
+    expect(roster.get("bad")?.fallbackProblems).toEqual(["fallback[1] duplicates fallback[0] (codex): a chain tries each target once, so list it once"]);
+    expect(roster.get("ghost")?.fallbackProblems?.[0]).toContain('profile "nobody" names no account');
+    expect(roster.get("strings")?.fallbackProblems?.[0]).toContain("must be a mapping");
   });
 });

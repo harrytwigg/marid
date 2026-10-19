@@ -129,6 +129,9 @@ export interface FallbackChainSubject {
   legacy: boolean;
   /** What would run, in order, after legacy expansion and de-duplication. */
   effective: ResolvedFallbackLink[];
+  /** Why the chain the subject wrote was ignored (an employee whose YAML chain failed
+   *  validation at load inherits instead). Absent when nothing was ignored. */
+  problems?: string[];
 }
 
 /** `GET /api/fallback-chains` (with `?employee=<name>` an employee subject is added). */

@@ -72,7 +72,8 @@ export function employeeSubject(env: FallbackChainEnv, employee: Employee, scope
   const mode: FallbackExpansionMode = employee.engine === "claude" && !scope.remote ? "account" : "engine";
   const entries = employee.fallback ?? inheritedChain(env.config, employee.engine, mode, ownAccount).entries;
   const own = employeeOwnLink(env.config, employee);
-  return subjectOf(env, { kind: "employee", id: employee.name }, { own, ownAccount, entries, mode, scope }, employee.fallback);
+  const subject = subjectOf(env, { kind: "employee", id: employee.name }, { own, ownAccount, entries, mode, scope }, employee.fallback);
+  return employee.fallbackProblems?.length ? { ...subject, problems: employee.fallbackProblems } : subject;
 }
 
 /** The whole response: profiles, every engine and every declared account, and the employee when one is asked for. */

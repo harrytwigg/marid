@@ -99,8 +99,9 @@ export function scanOrg(config?: JinnConfig, scopeOf: (slug: string) => Departme
               .map((s: any) => ({ name: s.name as string, description: s.description as string }))
             : undefined,
         };
-        const fallback = loadEmployeeFallback(data.fallback, employee, config, fullPath);
-        if (fallback) employee.fallback = fallback;
+        const chain = loadEmployeeFallback(data.fallback, employee, config, fullPath);
+        if (chain.fallback) employee.fallback = chain.fallback;
+        if (chain.problems) employee.fallbackProblems = chain.problems;
         const departmentProblem = departmentDisagreement(orgDir, fullPath, employee.department, scopeOf) ?? scopedEmployeeRefusal(employee, scopeOf, config?.remote);
         if (departmentProblem) {
           // Same containment as a bad remote target: this employee does not load, the

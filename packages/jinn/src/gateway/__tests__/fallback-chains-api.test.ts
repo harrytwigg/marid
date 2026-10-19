@@ -100,6 +100,21 @@ describe("GET /api/fallback-chains", () => {
     expect(keys(view.links)).toEqual(["claude||opus", "claude|B|sonnet"]);
   });
 
+  it("shows why a chain written in the employee's YAML was ignored, and drops it once a valid one is saved", async () => {
+    writeEmployee([{ engine: "codex" }, { engine: "codex" }]);
+    const { refreshOrg } = await import("../org-registry.js");
+    refreshOrg(chainConfig());
+    const ignored = subject((await call("GET", "/api/fallback-chains?employee=a-worker")).body, "employee", "a-worker");
+    expect(ignored.configured).toBeNull();
+    expect(ignored.problems).toEqual(["fallback[1] duplicates fallback[0] (codex): a chain tries each target once, so list it once"]);
+    expect(keys(ignored.effective)).toHaveLength(4);
+
+    await call("PATCH", "/api/org/employees/a-worker", { fallback: [{ engine: "codex" }] });
+    const fixed = subject((await call("GET", "/api/fallback-chains?employee=a-worker")).body, "employee", "a-worker");
+    expect(fixed).not.toHaveProperty("problems");
+    expect(keys(fixed.effective)).toEqual(["codex||"]);
+  });
+
   it("answers 404 for an employee that does not exist", async () => {
     expect((await call("GET", "/api/fallback-chains?employee=nobody")).status).toBe(404);
   });

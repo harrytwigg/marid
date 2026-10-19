@@ -4,7 +4,11 @@ import { claudeProfileFromDir } from "../claude-profile.js";
 import { resolveFallbackEngine } from "../engine-fallback.js";
 import { expandFallbackChain } from "../fallback-chain-expand.js";
 import { linkAccount } from "../fallback-chain.js";
-import type { JinnConfig } from "../types.js";
+import { claudeAccountKey } from "../engine-account.js";
+import { declaredClaudeAccounts } from "../claude-accounts-config.js";
+import { sessionFallbackChain } from "../fallback-chain.js";
+import { makeSession } from "../../sessions/__tests__/helpers/session-fixture.js";
+import type { JinnConfig, ModelRegistry } from "../types.js";
 
 /**
  * A chain written only in the legacy strings must come out of the expansion in the
@@ -95,5 +99,23 @@ describe("legacy expansion visits targets in the old walkers' order", () => {
     const out = expandFallbackChain(c, [{ engine: "codex", model: "gpt-mini" }, "codex", { engine: "codex", model: "gpt-mini" }], { mode: "engine", selfAccount: "claude" });
     // The object is the codex target on gpt-mini and brings no chain; the string is codex itself, which then brings codex's chain.
     expect(out.map(({ link }) => `${link.engine}/${link.model ?? ""}`)).toEqual(["codex/gpt-mini", "codex/"]);
+  });
+});
+
+describe("a legacy-only config through the whole resolver", () => {
+  const registry = Object.fromEntries(["claude", "codex", "opencode", "grok", "pi", "hermes"].map((name) => [name, { name, available: true, defaultModel: "", effortMechanism: "none", models: [] }])) as unknown as ModelRegistry;
+
+  it.each(CASES)("a default-account Claude session's links are the old account walk, in order: %s", (_name, engines) => {
+    const c = config(engines);
+    const { links } = sessionFallbackChain({ config: c, session: makeSession({ model: "opus" }), registry, health: {} });
+    expect(links.slice(1).map((link) => link.account)).toEqual(oldAccountOrder(c, "claude"));
+  });
+
+  it("keeps string entries as strings in both chains, and reads them back as declared", () => {
+    const c = config({ claude: { fallback: ["claude:friend", "codex"], accounts: ACCOUNTS } });
+    expect((c.engines.claude as { fallback?: unknown }).fallback).toEqual(["claude:friend", "codex"]);
+    expect(declaredClaudeAccounts(c).map((account) => [account.name, account.fallback, account.key === claudeAccountKey(account.profile)])).toEqual([
+      ["friend", ["claude:work2", "opencode"], true], ["work2", ["claude", "codex"], true],
+    ]);
   });
 });

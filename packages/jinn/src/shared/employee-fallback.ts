@@ -51,16 +51,19 @@ export function employeeFallbackUpdate(
 
 /**
  * An employee YAML's `fallback`, as the roster holds it. Absent (or an empty key)
- * inherits. An invalid chain is logged and left out, so the employee still
- * loads and inherits: a typo in a chain must not take a roster entry away, and
- * the chain is advice about a limit, not a boundary like a remote target.
+ * inherits. An invalid chain is left out and its problems are kept: they are
+ * logged naming the employee and carried on the roster entry (`fallbackProblems`,
+ * shown with the employee's chain), so the employee still loads and inherits and
+ * the typo does not vanish silently. A typo in a chain must not take a roster
+ * entry away, and the chain is advice about a limit, not a boundary like a
+ * remote target.
  */
-export function loadEmployeeFallback(raw: unknown, employee: EmployeeTarget, config: JinnConfig | undefined, source: string): FallbackLink[] | undefined {
-  if (raw === undefined || raw === null) return undefined;
+export function loadEmployeeFallback(
+  raw: unknown, employee: EmployeeTarget & { name: string }, config: JinnConfig | undefined, source: string,
+): { fallback?: FallbackLink[]; problems?: string[] } {
+  if (raw === undefined || raw === null) return {};
   const problems = employeeFallbackProblems(config, employee, raw);
-  if (problems.length > 0) {
-    logger.warn(`Ignoring the fallback of employee file ${source}, which inherits instead: ${problems.join("; ")}`);
-    return undefined;
-  }
-  return linksOf(raw as unknown[]);
+  if (problems.length === 0) return { fallback: linksOf(raw as unknown[]) };
+  logger.warn(`Ignoring the fallback of employee ${employee.name} (${source}), which inherits its account's or engine's chain instead: ${problems.join("; ")}`);
+  return { problems };
 }
