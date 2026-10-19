@@ -89,9 +89,9 @@ function skipReason(env: FallbackChainEnv, subject: FallbackChainSpec, link: Fal
   return scopeSkip(subject.scope, link) ?? (modelNotServed(entry, link) ? "model-not-served" : undefined);
 }
 
-function resolvedLink(env: FallbackChainEnv, link: FallbackLink, origin: ResolvedFallbackLink["origin"]): ResolvedFallbackLink {
+function resolvedLink(env: FallbackChainEnv, link: FallbackLink, origin: ResolvedFallbackLink["origin"], written: FallbackLink): ResolvedFallbackLink {
   const account = linkAccount(link, env.config);
-  const identity = { ...link, key: fallbackLinkKey(link), account, label: fallbackLinkLabel(link), origin };
+  const identity = { ...link, key: fallbackLinkKey(link), account, label: fallbackLinkLabel(link), origin, written: { ...written } };
   return { ...identity, health: linkHealth(env, identity) };
 }
 
@@ -108,13 +108,13 @@ function withModel(env: FallbackChainEnv, subject: FallbackChainSpec, link: Fall
  * (the own one included) is dropped: it is the same target.
  */
 export function resolveFallbackLinks(env: FallbackChainEnv, subject: FallbackChainSpec): ResolvedFallbackLink[] {
-  const own = resolvedLink(env, subject.own, "config");
+  const own = resolvedLink(env, subject.own, "config", subject.own);
   const seen = new Set<string>([own.key]);
   const expanded = expandFallbackChain(env.config, subject.entries, { mode: subject.mode, selfAccount: subject.ownAccount, selfKey: own.key });
   const links: ResolvedFallbackLink[] = [own];
   for (const { link, origin } of expanded) {
     const target = withModel(env, subject, link);
-    const resolved = resolvedLink(env, target, origin);
+    const resolved = resolvedLink(env, target, origin, link);
     if (seen.has(resolved.key)) continue;
     seen.add(resolved.key);
     const skip = skipReason(env, subject, target);

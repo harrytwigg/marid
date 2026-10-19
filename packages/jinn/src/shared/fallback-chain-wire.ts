@@ -70,6 +70,11 @@ export interface ResolvedFallbackLink extends FallbackLink {
   label: string;
   /** "config" for a written link; "legacy" for one expanded from a string entry's own chain. */
   origin: "config" | "legacy";
+  /** The link as config spells it, before the gateway filled in the model it would run
+   *  (`model` above is that resolved model). This is what an editor shows as the
+   *  operator's choice and writes back; writing `engine`/`profile`/`model` instead would
+   *  pin a model the operator never chose. Always set by the gateway. */
+  written?: FallbackLink;
   /** Present when the link cannot be used at all for this subject or session. */
   skip?: FallbackSkipReason;
   health?: FallbackLinkHealth;

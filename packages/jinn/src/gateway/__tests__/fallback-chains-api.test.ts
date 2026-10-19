@@ -81,6 +81,25 @@ describe("GET /api/fallback-chains", () => {
     expect(keys(claude.effective)).toEqual(["codex||", "claude|A|opus"]);
   });
 
+  it("carries each link as written beside the model it would run, so an editor never writes back a resolved model", async () => {
+    setConfig(chainConfig(["claude:B", { engine: "codex" }]));
+    const claude = subject((await call("GET", "/api/fallback-chains")).body, "engine", "claude");
+    expect(claude.effective.map((l: any) => [l.key, l.written])).toEqual([
+      ["claude|B|opus", { engine: "claude", profile: "B" }],
+      ["codex||", { engine: "codex" }],
+    ]);
+    expect(claude.primary.written).toEqual({ engine: "claude", model: "opus" });
+
+    setConfig(chainConfig([{ engine: "claude", profile: "B" }, { engine: "codex" }]));
+    writeEmployee(undefined);
+    fs.writeFileSync(WORKER_FILE, yaml.dump({ ...(yaml.load(fs.readFileSync(WORKER_FILE, "utf-8")) as object), model: "sonnet" }));
+    const { refreshOrg } = await import("../org-registry.js");
+    refreshOrg(chainConfig([{ engine: "claude", profile: "B" }, { engine: "codex" }]));
+    const sonnet = subject((await call("GET", "/api/fallback-chains?employee=a-worker")).body, "employee", "a-worker");
+    expect(sonnet.effective[0]).toMatchObject({ key: "claude|B|sonnet", model: "sonnet", written: { engine: "claude", profile: "B" } });
+    expect(sonnet.effective[0].written).not.toHaveProperty("model");
+  });
+
   it("reports a repeated target as the chain's problems, and lists it once in the effective chain", async () => {
     setConfig(chainConfig([{ engine: "codex", model: "gpt-mapped" }, "grok", { engine: "codex", model: "gpt-mapped" }]));
     const claude = subject((await call("GET", "/api/fallback-chains")).body, "engine", "claude");
