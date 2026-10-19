@@ -88,7 +88,7 @@ export function ChainTargetNode({ data }: NodeProps) {
       <Handle type="target" position={vertical ? Position.Top : Position.Left} isConnectable={false} className="!opacity-0" />
       <div className="flex min-w-0 items-center gap-[6px]">
         <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: DOT_COLOR[target.health] }} />
-        <span className="min-w-0 flex-1 truncate text-[length:var(--text-footnote)] font-[var(--weight-medium)] text-[var(--text-primary)]">
+        <span title={target.label} className="min-w-0 flex-1 line-clamp-2 [overflow-wrap:anywhere] text-[length:var(--text-footnote)] leading-tight font-[var(--weight-medium)] text-[var(--text-primary)]">
           {target.label}
         </span>
       </div>

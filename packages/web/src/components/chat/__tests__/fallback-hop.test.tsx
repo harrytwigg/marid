@@ -57,7 +57,7 @@ describe('hopSentence', () => {
 
   it('says the chain ran out, and that the session waits, when there was nowhere to go', () => {
     expect(hopSentence({ ...HOP, to: null, toLabel: null })).toBe(
-      'Fallback chain ran out from claude · A · opus: usage limit, resets 16:00. Waiting for it to reset.',
+      "Fallback chain ran out at claude · A · opus: usage limit, resets 16:00. Waiting for this session's own target to reset.",
     )
   })
 

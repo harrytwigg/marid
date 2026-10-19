@@ -49,7 +49,7 @@ export function labelOfLinkKey(key: string): string {
 export function hopSentence(hop: FallbackHop): string {
   const reset = formatReset(hop.resetsAt)
   const why = `${REASON_TEXT[hop.reason] ?? hop.reason}${reset ? `, resets ${reset}` : ''}`
-  if (hop.to === null || !hop.toLabel) return `Fallback chain ran out from ${hop.fromLabel}: ${why}. Waiting for it to reset.`
+  if (hop.to === null || !hop.toLabel) return `Fallback chain ran out at ${hop.fromLabel}: ${why}. Waiting for this session's own target to reset.`
   return `Fell back from ${hop.fromLabel} to ${hop.toLabel}: ${why}`
 }
 

@@ -6,7 +6,7 @@ import { formatReset, formatUsed, SKIP_REASON_TEXT } from "@/lib/fallback-format
 /* The chain diagram's data and layout, apart from the component that draws it. */
 
 export const FLOW_NODE_W = 176
-export const FLOW_NODE_H = 68
+export const FLOW_NODE_H = 76
 
 export type FlowOrientation = "horizontal" | "vertical"
 

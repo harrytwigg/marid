@@ -75,7 +75,7 @@ export function FallbackModeMenu({ local, error, onPick, onChooseModel, onUseCon
       <TargetRows local={local} onChooseModel={onChooseModel} onUseConfig={onUseConfig} />
       {!local.target && (
         <DropdownMenuLabel className="pt-1 pb-0.5 text-[length:var(--text-caption2)] font-normal text-[var(--text-quaternary)]">
-          No fallback configured for this model
+          {(local.chain?.position ?? 0) > 0 ? "No fallback left in this session's chain" : 'No fallback configured for this model'}
         </DropdownMenuLabel>
       )}
       {servedByLabel(local) && (
