@@ -65,6 +65,25 @@ describe("a run turn that a fallback plugin ended", () => {
     expect(result.rateLimit).toEqual({ status: "rejected" });
   });
 
+  it("keeps a crash, a lost transport and an interrupt after a narrated tool step as what they were, not a usage limit", () => {
+    const narration = JSON.stringify({ type: "text", sessionID: "ses_1", part: { id: "p0", type: "text", text: "Let me read the file.", time: { start: 1, end: 2 } } });
+    const narrated = () => {
+      const turn = new OpencodeTurn("ses_1", () => true);
+      turn.readLine(narration, null);
+      turn.readLine(toolStep, null);
+      return turn;
+    };
+    const crashed = narrated().result({ code: 1, terminationReason: null, stderr: "boom" });
+    expect(crashed.error).toBe("opencode exited with code 1: boom");
+    expect(crashed.rateLimit).toBeUndefined();
+    const lost = narrated().result({ ...noEvents, failure: "stream lost" });
+    expect(lost.error).toBe("stream lost");
+    expect(lost.rateLimit).toBeUndefined();
+    const stopped = narrated().result({ ...noEvents, terminationReason: "opencode turn timed out" });
+    expect(stopped.error).toBe("opencode turn timed out");
+    expect(stopped.rateLimit).toBeUndefined();
+  });
+
   it("keeps a tool step's narration as the answer on a host without the plugin, as before", () => {
     const narration = JSON.stringify({ type: "text", sessionID: "ses_1", part: { id: "p0", type: "text", text: "Let me read the file.", time: { start: 1, end: 2 } } });
     const turn = new OpencodeTurn("ses_1");

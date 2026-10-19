@@ -189,11 +189,32 @@ provider answers 429 and the plugin's fallback provider answers normally):
 | 2.0.29 + `model-fallback.js` | server | The plugin switches the session's model inside the turn. The fallback model answers it in about 3 s. No hop is recorded and the chain is not walked, but the turn says so: a warning in the gateway log and one session notice, "Answered by <provider/model> through the host's opencode fallback plugin, not the gateway's chain. Run `jinn doctor` to remove it." |
 | 2.0.29 + `model-fallback.js` | run | The same answer from the fallback model, invisibly to the chain; the notice is posted only for a server turn, which sees which model each step ran on. |
 
-The usage-limit reading of a 1.x turn needs the plugin's abort as evidence: it is
-applied only when the host has the plugin, the binary is 1.x, and no model step
-of the turn finished. A blank answer from a finished step is the model's own and
-stays a plain error (so it cannot mark the whole opencode engine as exhausted),
-and 2.x turns are never read this way, since the 2.x plugin does not abort a turn.
+**How a 1.x turn's outcome is decided on a plugin host.** The plugin's abort
+carries no error, so the gateway reads it from evidence. Every condition below must
+hold before a turn becomes the plugin's usage limit:
+
+- the host has the plugin and the binary is 1.x. 2.x turns are never read this
+  way, because the 2.x plugin switches models instead of aborting;
+- the process exited 0, the transport did not fail, and the gateway did not stop
+  the turn itself (an interrupt or a timeout keeps its own error);
+- no error other than a usage limit was reported;
+- the turn stopped while a model step was still due: no step finished, or the
+  last one finished on a tool call. opencode only stops there when something
+  aborts it. A turn the model ended itself closes on a `stop` step.
+
+When all hold, any text the turn wrote came from a step that ended on a tool call.
+That text is narration ("Let me read the file") and is not taken for the answer.
+The turn ends as a usage limit, and its error names the plugin.
+
+When any condition fails, the turn is read exactly as on a host without the plugin:
+- a blank last step is a plain error, so it cannot mark the whole opencode
+  engine as exhausted;
+- a final step's text is the answer;
+- a crash, transport failure or interrupt keeps its own error.
+
+The tests in `opencode-fallback-plugin-turn.test.ts` and
+`opencode-server-provider.test.ts` pin each side of every condition. A change
+here must keep both sides covered.
 The 2.x notice is posted wherever the turn takes the engine's result: the first
 attempt, a chain hop's substitute and a parked retry.
 
