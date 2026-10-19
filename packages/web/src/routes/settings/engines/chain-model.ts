@@ -28,11 +28,6 @@ export interface SessionsFallbackConfig {
   fallbackEngine?: string | null
 }
 
-/** An engine name as the operator reads it, matching the Default Engine picker. */
-export function engineLabel(name: string): string {
-  return name.charAt(0).toUpperCase() + name.slice(1)
-}
-
 export function chainFor(engines: EnginesConfig | undefined, engine: string): string[] {
   const entry = engines?.[engine]
   return (typeof entry === "object" ? entry.fallback : undefined) ?? []

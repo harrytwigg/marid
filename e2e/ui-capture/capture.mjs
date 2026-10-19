@@ -43,7 +43,7 @@ async function leaks(page) {
   // innerText leaves out form values, so read inputs and textareas too.
   const text = await page.evaluate(() => [
     document.body.innerText,
-    ...[...document.querySelectorAll('input, textarea')].map((field) => field.value),
+    ...[...document.querySelectorAll('input, textarea')].map((field) => /** @type {HTMLInputElement} */ (field).value),
   ].join('\n'))
   const found = []
   if (token && text.includes(token)) found.push('the sandbox token')
@@ -60,7 +60,10 @@ const browser = await browserType.launch()
 const failures = []
 const reduced = process.env.JINN_CAPTURE_TRANSPARENCY === 'reduced'
 const axeReport = []
-const jobs = screens.flatMap((screen) => THEMES.flatMap((theme) => VIEWPORTS.map((viewport) => ({ screen, theme, viewport }))))
+// A screen can name the viewports it makes sense at (the rail and the hover glance are desktop only).
+const jobs = screens.flatMap((screen) => THEMES.flatMap((theme) => VIEWPORTS
+  .filter((viewport) => !screen.viewports || screen.viewports.includes(viewport.name))
+  .map((viewport) => ({ screen, theme, viewport }))))
 
 // Report-only: a failure of the audit itself is logged, never thrown.
 async function audit(page, label) {
@@ -82,18 +85,20 @@ async function shootFirstPaint(page, screen, label) {
   await page.screenshot({ path: path.join(outDir, 'firstpaint', `${label}.png`) })
 }
 
+/** @typedef {Window & { __rootAtParse?: string | null }} RootMarkedWindow */
+
 // The bootstrap marked <html> before React mounted, and hydration kept it.
 async function assertRootReduced(page) {
-  const atParse = await page.evaluate(() => window.__rootAtParse)
+  const atParse = await page.evaluate(() => /** @type {RootMarkedWindow} */ (window).__rootAtParse)
   if (atParse !== 'reduced') throw new Error(`root was not reduced at DOMContentLoaded (${atParse})`)
   const now = await page.evaluate(() => document.documentElement.getAttribute('data-transparency'))
   if (now !== 'reduced') throw new Error(`root lost data-transparency after hydration (${now})`)
 }
 
-async function captureOne({ screen, theme, viewport }) {
-  const label = `${screen.name}-${theme}-${viewport.name}`
+// A fresh browser context per capture: theme, size, persisted settings and the screen's own network setup.
+async function openPage({ screen, theme, viewport }) {
   const context = await browser.newContext({
-    viewport: { width: viewport.width, height: viewport.height },
+    viewport: { width: viewport.width, height: screen.heights?.[viewport.name] ?? viewport.height },
     deviceScaleFactor: 2,
     colorScheme: theme,
     // Captures compare states, not transitions.
@@ -105,7 +110,7 @@ async function captureOne({ screen, theme, viewport }) {
     if (onboarded) localStorage.setItem('jinn-onboarded', 'true')
     if (isReduced) localStorage.setItem('jinn-settings', JSON.stringify({ transparency: 'reduced' }))
     document.addEventListener('DOMContentLoaded', () => {
-      window.__rootAtParse = document.documentElement.getAttribute('data-transparency')
+      /** @type {RootMarkedWindow} */ (window).__rootAtParse = document.documentElement.getAttribute('data-transparency')
     })
   }, [theme, reduced, !screen.onboarding])
   const page = await context.newPage()
@@ -116,16 +121,29 @@ async function captureOne({ screen, theme, viewport }) {
       await route.fulfill({ response, json: { ...(await response.json()), onboarded: false, needed: true } })
     })
   }
+  if (screen.setup) await screen.setup(page)
+  return { context, page }
+}
+
+async function showScreen(page, screen) {
+  await page.goto(baseUrl + screen.url(fixtures), { waitUntil: screen.waitUntil ?? 'networkidle' })
+  const ready = screen.readyLocator ? screen.readyLocator(page) : page.getByText(screen.ready, { exact: false }).locator('visible=true').first()
+  await ready.waitFor({ timeout: 15_000 })
+  await page.evaluate(() => document.fonts.ready)
+  if (reduced) await assertRootReduced(page)
+  await page.waitForTimeout(400)
+  if (screen.prepare) await screen.prepare(page)
+}
+
+async function captureOne(job) {
+  const { screen, theme, viewport } = job
+  const label = `${screen.name}-${theme}-${viewport.name}`
+  const { context, page } = await openPage(job)
   const errors = []
   page.on('pageerror', (err) => errors.push(String(err)))
   try {
     if (reduced && screen.name === 'settings' && viewport.name === 'desktop') await shootFirstPaint(page, screen, label)
-    await page.goto(baseUrl + screen.url(fixtures), { waitUntil: 'networkidle' })
-    await page.getByText(screen.ready, { exact: false }).locator('visible=true').first().waitFor({ timeout: 15_000 })
-    await page.evaluate(() => document.fonts.ready)
-    if (reduced) await assertRootReduced(page)
-    await page.waitForTimeout(400)
-    if (screen.prepare) await screen.prepare(page)
+    await showScreen(page, screen)
     const leaked = await leaks(page)
     if (leaked.length) throw new Error(`shows ${leaked.join(' and ')}`)
     if (errors.length) throw new Error(`page error: ${errors[0]}`)

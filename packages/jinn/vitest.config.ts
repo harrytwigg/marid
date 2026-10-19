@@ -8,10 +8,21 @@ import { defineConfig } from 'vitest/config'
 // finish in milliseconds locally blow past the default 5s test / 10s hook
 // timeouts on CI — producing cascading "step-timeout" / "socket lost" failures.
 //
-// So we scale vitest down ONLY in CI: fewer concurrent forks (less peak CPU/mem
+// So we scale vitest down in CI: fewer concurrent forks (less peak CPU/mem
 // contention) and generous timeouts (slow-but-correct boots don't get killed).
-// Local runs keep full parallelism and the snappy default timeouts.
+//
+// Locally the worker count is not set here. scripts/vitest-flaky-retry.mjs leases
+// cores from a machine-wide budget shared by every session (scripts/test-core-budget.mjs)
+// and passes the grant as --maxWorkers, so a run takes up to eight cores when the
+// pool has them and fewer when other sessions hold them. Running vitest by hand
+// keeps vitest's own default.
+//
+// A niced run also widens the timeouts. nice 19 in the idle I/O class means 5s is
+// no longer generous on a core something else is using, and a false red at nice 19
+// is worse than a slow green. scripts/low-priority.mjs sets JINN_TEST_LOW_PRIORITY,
+// so the widening follows the priority rather than the environment.
 const isCI = !!process.env.CI
+const isLowPriority = process.env.JINN_TEST_LOW_PRIORITY === '1'
 
 // Windows needs the same headroom, for a different reason: it has no fork(), so
 // every pool worker is a full process spawn that re-resolves the module graph
@@ -38,13 +49,13 @@ export default defineConfig({
     // Cap concurrency on CI so heavy integration tests don't contend for the
     // runner's handful of cores and its limited memory. In vitest v4 the pool
     // concurrency is set via top-level maxWorkers/minWorkers (the old
-    // poolOptions.forks.maxForks was removed). Locally we omit these so vitest
-    // uses every available core.
+    // poolOptions.forks.maxForks was removed). Locally the core budget decides.
     ...(isCI ? { minWorkers: 1, maxWorkers: 2 } : {}),
-    // Give slow, resource-starved CI runners enough headroom to boot real
-    // servers/workers/PTYs without tripping spurious timeouts.
-    testTimeout: isCI || isWindows ? 30000 : 5000,
-    hookTimeout: isCI || isWindows ? 30000 : 10000,
+    // Give slow, resource-starved CI runners — and a niced run sharing this
+    // machine with an editor — enough headroom to boot real servers/workers/PTYs
+    // without tripping spurious timeouts.
+    testTimeout: isCI || isWindows || isLowPriority ? 30000 : 5000,
+    hookTimeout: isCI || isWindows || isLowPriority ? 30000 : 10000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

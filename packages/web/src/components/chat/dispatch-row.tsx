@@ -1,4 +1,4 @@
-import { ChevronRight, Redo2 } from 'lucide-react'
+import { ChevronRight, Redo2 } from '@/components/ui/icon'
 import type { CSSProperties } from 'react'
 import { EmployeeChip } from '@/components/ui/employee-chip'
 import { stripMarkdown } from '@/lib/strip-markdown'
@@ -35,7 +35,7 @@ export function DispatchRow({ employee, employeeDisplay, preview, targetSessionI
   const interactive = Boolean(targetSessionId && onPeek)
   const body = (
     <>
-      <Redo2 size={13} strokeWidth={2} aria-hidden="true" className="shrink-0 text-[var(--text-tertiary)]" />
+      <Redo2 size={13} aria-hidden="true" className="shrink-0 text-[var(--text-tertiary)]" />
       <span className="shrink-0 text-[length:var(--text-caption1)] font-[var(--weight-medium)] text-[var(--text-secondary)]">
         {employeeDisplay ? 'Followed up' : 'Messaged'}
       </span>
@@ -51,7 +51,7 @@ export function DispatchRow({ employee, employeeDisplay, preview, targetSessionI
         {preview ? `“${stripMarkdown(preview)}”` : 'another session'}
       </span>
       {interactive && (
-        <ChevronRight size={11} strokeWidth={2.25} aria-hidden="true" className="shrink-0 text-[var(--text-quaternary)]" />
+        <ChevronRight size={11} aria-hidden="true" className="shrink-0 text-[var(--text-quaternary)]" />
       )}
     </>
   )

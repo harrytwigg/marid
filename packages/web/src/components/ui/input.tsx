@@ -3,7 +3,13 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 /**
- * A single-line text field.
+ * A single-line text field in HeroUI's `input` classes.
+ *
+ * It stays a native input. A text field that swapped for another element when
+ * React Aria finished loading would drop the caret from a field the user had
+ * already clicked into, and everything React Aria's Input adds (hover, focus,
+ * disabled and invalid state) HeroUI's stylesheet also reads from the
+ * element's own pseudo-classes and `aria-invalid`.
  *
  * Separation is a fill rather than a hairline: at rest the field is a tinted
  * well on its surface, and focus deepens the fill and adds the accent ring. 34px
@@ -14,10 +20,7 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
     <input
       type={type}
       data-slot="input"
-      className={cn(
-        "flex h-[34px] w-full rounded-[var(--radius-md)] bg-[var(--fill-quaternary)] px-[var(--space-3)] text-[length:var(--text-footnote)] text-[var(--text-primary)] outline-none transition-[background-color,box-shadow] duration-150 ease-[var(--ease-smooth)] placeholder:text-[var(--text-tertiary)] hover:bg-[var(--fill-tertiary)] focus-visible:bg-[var(--fill-tertiary)] focus-visible:ring-[3px] focus-visible:ring-[var(--accent-fill)] disabled:cursor-not-allowed disabled:opacity-50",
-        className
-      )}
+      className={cn("input input--primary flex h-[34px] w-full text-[length:var(--text-footnote)]", className)}
       {...props}
     />
   )

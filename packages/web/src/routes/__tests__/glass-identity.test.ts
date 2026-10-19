@@ -219,13 +219,43 @@ describe("reduced transparency", () => {
   })
 })
 
+describe("the Talk orb palette", () => {
+  const ORB = ["--orb-core", "--orb-base", "--orb-bloom", "--orb-lobe-a", "--orb-lobe-b", "--orb-lobe-c", "--orb-shadow", "--orb-specular", "--orb-rim"]
+  const GLOBALS = readFileSync(path.join(ROUTES, "globals.css"), "utf8")
+
+  it("is one light-dark() pair per token in the shared block", () => {
+    for (const token of ORB) expect(SHARED.get(token), token).toMatch(/^light-dark\(.+\)$/)
+  })
+
+  it("is registered as a colour, so script reads back a plain colour", () => {
+    for (const token of ORB) expect(GLOBALS, token).toContain(`@property ${token} {`)
+  })
+
+  it("gives Reduced transparency solid twins, from the OS preference and from the setting", () => {
+    const solid = /^light-dark\(#[0-9A-F]{6}, #[0-9A-F]{6}\)$/
+    const media = IDENTITY.slice(IDENTITY.indexOf("@media (prefers-reduced-transparency: reduce)"))
+    const fromOs = declarations(ruleBody(media, ":root, [data-theme]"))
+    const fromAttribute = declarations(ruleBody(IDENTITY, '[data-transparency="reduced"], [data-transparency="reduced"] [data-theme]'))
+    // the shadow and the specular are gradient stops that fade to nothing, so they stay translucent
+    const SOLID = ORB.filter((t) => t !== "--orb-shadow" && t !== "--orb-specular")
+    for (const decls of [fromOs, fromAttribute]) for (const token of SOLID) expect(decls.get(token), token).toMatch(solid)
+  })
+
+  it("leaves no upstream warm orb colour behind", () => {
+    expect(IDENTITY + GLOBALS).not.toMatch(/255,206,132|255,182,88/)
+  })
+})
+
 describe("the shell", () => {
-  it("is loaded after globals.css and theme-overrides.css so it wins on source order", () => {
+  it("is loaded after globals.css so it wins on source order", () => {
+    // main.tsx loads the one stylesheet root, which pulls globals.css in; the
+    // identity comes after the whole root.
     const main = readFileSync(path.resolve(ROUTES, "../main.tsx"), "utf8")
-    const order = ["globals.css", "theme-overrides.css", "glass-identity.css"].map((f) => main.indexOf(`./routes/${f}`))
-    expect(order[0]).toBeGreaterThanOrEqual(0)
-    expect(order[1]).toBeGreaterThan(order[0])
-    expect(order[2]).toBeGreaterThan(order[1])
+    const root = readFileSync(path.resolve(ROUTES, "app.css"), "utf8")
+    const imports = ["app.css", "glass-identity.css"].map((f) => main.indexOf(`./routes/${f}`))
+    expect(imports[0]).toBeGreaterThanOrEqual(0)
+    expect(imports[1]).toBeGreaterThan(imports[0])
+    expect(root.indexOf('@import "./globals.css"')).toBeGreaterThanOrEqual(0)
   })
 
 })
@@ -275,8 +305,30 @@ describe("floating glass", () => {
     const fine = blocks.filter((b) => b.query.includes("pointer: fine"))
     const filters = fine.flatMap((b) => [...b.body.matchAll(/(?<!-webkit-)backdrop-filter:\s*([^;]+);/g)].map((m) => m[1].trim()))
     expect(filters.length).toBeGreaterThan(0)
-    // Anything but `none` goes through the token; `none` only switches a surface off.
-    for (const value of filters.filter((v) => v !== "none")) expect(value).toBe("var(--glass-blur)")
+    // Anything but `none` goes through a token that Reduced sets to none: the surface blur or,
+    // for an overlay, the strong one; `none` only switches a surface off.
+    for (const value of filters.filter((v) => v !== "none")) expect(["var(--glass-blur)", "var(--glass-blur-strong)"]).toContain(value)
+  })
+
+  it("draws an overlay as the overlay tint with the strong blur and the overlay shadow, opaque for a coarse pointer", () => {
+    expect(ruleBody(rest, ".glass-overlay")).toMatch(/background:\s*var\(--glass-overlay-opaque\)/)
+    expect(ruleBody(rest, ".glass-overlay")).toMatch(/box-shadow:\s*var\(--shadow-overlay\)/)
+    const fine = blocks.find((b) => b.query.includes("pointer: fine") && b.body.includes(".glass-overlay"))!
+    const body = ruleBody(fine.body, ".glass-overlay")
+    expect(body).toMatch(/background:\s*var\(--glass-overlay\)/)
+    expect(body).toMatch(/(?<!-webkit-)backdrop-filter:\s*var\(--glass-blur-strong\)/)
+  })
+
+  it("shows a tooltip and a popover without animation under reduced motion", () => {
+    const reduced = blocks.find((b) => b.query.includes("prefers-reduced-motion") && b.body.includes(".tooltip, .popover"))
+    expect(reduced, "a reduced-motion block for .tooltip and .popover").toBeTruthy()
+    expect(ruleBody(reduced!.body, ".tooltip, .popover")).toMatch(/animation:\s*none/)
+  })
+
+  it("blurs the nav rail's label only while it shows, so one label is one blurred surface", () => {
+    expect(rest).not.toMatch(/\.rail-reveal\s*\{[^}]*backdrop-filter/)
+    const fine = blocks.find((b) => b.query.includes("pointer: fine") && b.body.includes(".rail-reveal"))!
+    expect(fine.body).toMatch(/\.group\\\/row:is\(:hover, :focus-within\) \.rail-reveal\s*\{[^}]*backdrop-filter:\s*var\(--glass-blur-strong\)/)
   })
 
   it("scales geometry and gradients with --glass-live: 1 normally, 0 under reduced transparency", () => {
@@ -355,5 +407,34 @@ describe.each(SCHEMES)("system colours in %s", (scheme) => {
     for (const { label, colour: ground } of surfaces(scheme)) {
       expect(ratio(colour(name, scheme), ground), `${name} on ${label}`).toBeGreaterThanOrEqual(AA)
     }
+  })
+})
+
+describe("controls that do not blur", () => {
+  // A bare --glass-overlay background is translucent on a touch screen and inside the reading sheet, where
+  // --material-thick-opaque is the sheet's own colour. These sit over text, video or a terminal.
+  const SRC = path.resolve(ROUTES, "..")
+  const FILES = [
+    "components/chat/cli-keybar.tsx",
+    "components/chat/file-view.tsx",
+    "components/talk/media-preview-chrome.tsx",
+    "components/talk/media-preview.tsx",
+    "components/ui/image-lightbox.tsx",
+    "components/ui/notices.tsx",
+    "components/ui/video-player.tsx",
+    "routes/todos/pickers/picker-shell.tsx",
+    "routes/todos/task-page/attachment-preview.tsx",
+    "routes/todos/task-page/attachments.tsx",
+  ]
+
+  it.each(FILES)("%s draws on the opaque overlay material, not a bare translucent token", (file) => {
+    const source = readFileSync(path.join(SRC, file), "utf8")
+    expect(source).toContain("var(--material-thick-opaque)")
+    expect(source).not.toMatch(/var\(--glass-(overlay|float)\)/)
+  })
+
+  it("resolves --material-thick-opaque to the sheet's own colour inside the sheet", () => {
+    const sheet = declarations(ruleBody(IDENTITY, '[data-shell="sheet"]'))
+    expect(sheet.get("--material-thick-opaque")).toBe("var(--glass-sheet-opaque)")
   })
 })

@@ -1,12 +1,12 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { ChevronRightIcon } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { ChevronRightIcon } from "@/components/ui/icon"
 import { useQueryClient } from '@tanstack/react-query'
 import { DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { api, type EnginesResponse } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 import { engineList } from '@/hooks/use-model-registry'
 import { useModelList } from './use-model-list'
-import { BackRow, EnginePanel, ModelListPanel, SlidePanel, usePrefersReducedMotion } from './model-picker-panels'
+import { BackRow, EnginePanel, ModelListPanel } from './model-picker-panels'
 
 export interface ModelPickerProps {
   registry: EnginesResponse
@@ -26,51 +26,11 @@ export interface ModelPickerProps {
   children?: ReactNode
 }
 
-/** The picker's navigation between its panels, with the focus-parking and height animation the single surface needs. */
+/** Which panel is showing inside the one surface: 'main' (models) or 'engine' (the engine list). Switching swaps the
+ *  items in place; React Aria moves focus to the list when the item that had it is gone. */
 function usePickerNav() {
-  // Which panel is showing inside the one surface ('main' = models, 'engine' = engine list).
-  // `dir` drives the slide direction (forward / back).
   const [panel, setPanel] = useState<'main' | 'engine'>('main')
-  const [dir, setDir] = useState<1 | -1>(1)
-  // Focus-parking target: a tabindex=-1 wrapper INSIDE the menu layer. Parking
-  // focus here before a panel swap keeps focus within the layer so Radix's
-  // focus-outside dismissal never fires when the active item unmounts.
-  const panelWrapRef = useRef<HTMLDivElement>(null)
-  // Animated height of the surface as panels of different sizes swap in.
-  const [surfaceH, setSurfaceH] = useState<number>()
-  // Skip the focus-confirm on mount (Radix focuses the content itself).
-  const firstPanel = useRef(true)
-
-  // Track the surface height across panel swaps / content changes so the height
-  // animates instead of snapping. ResizeObserver covers panel swaps AND any
-  // model/effort/context content changes within a panel.
-  useLayoutEffect(() => {
-    const el = panelWrapRef.current
-    if (!el) return
-    setSurfaceH(el.offsetHeight)
-    const ro = new ResizeObserver(() => setSurfaceH(el.offsetHeight))
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-
-  // After a panel change (not the initial mount), re-park focus inside the layer
-  // so keyboard users can arrow into the new panel and Esc still closes.
-  useLayoutEffect(() => {
-    if (firstPanel.current) {
-      firstPanel.current = false
-      return
-    }
-    panelWrapRef.current?.focus()
-  }, [panel])
-
-  // Park focus inside the layer, then move to the requested panel. Parking is
-  // synchronous so the unmounting active item never drops focus to <body>.
-  const goToPanel = (next: 'main' | 'engine') => {
-    setDir(next === 'engine' ? 1 : -1)
-    panelWrapRef.current?.focus()
-    setPanel(next)
-  }
-  return { panel, dir, panelWrapRef, surfaceH, goToPanel }
+  return { panel, goToPanel: setPanel }
 }
 
 /** Re-discover dynamic (pi) models without a restart, then update the cache. */
@@ -116,7 +76,6 @@ function EngineSwitchRow({ canSwitch, onSwitch, onRefresh }: { canSwitch: boolea
  * search; what a pick means (apply at once, or just browse) is the parent's.
  */
 export function ModelPicker({ registry, engine, modelId, onPickEngine, onPickModel, isEngineAllowed, keepOpenOnPick, onBack, children }: ModelPickerProps) {
-  const reduceMotion = usePrefersReducedMotion()
   const list = useModelList(registry, engine, modelId)
   const nav = usePickerNav()
   const refreshModels = useRefreshModels()
@@ -124,7 +83,7 @@ export function ModelPicker({ registry, engine, modelId, onPickEngine, onPickMod
 
   // Choose an engine from the engine panel, then auto-return to the model panel
   // (now reflecting that engine's models). Re-picking the current engine is a
-  // no-op selection: just slide back.
+  // no-op selection: just go back.
   const chooseEngine = (next: string) => {
     // The old engine's filter means nothing for the new one — drop it, or the
     // new engine's models render as an empty "no match" list.
@@ -133,33 +92,18 @@ export function ModelPicker({ registry, engine, modelId, onPickEngine, onPickMod
     nav.goToPanel('main')
   }
 
-  return (
-    // Single surface; height animates as the two panels swap in place.
-    <div
-      style={{
-        height: nav.surfaceH != null ? `${nav.surfaceH}px` : undefined,
-        overflow: 'hidden',
-        transition: reduceMotion ? 'none' : 'height 200ms var(--ease-smooth)',
-      }}
-    >
-      <div ref={nav.panelWrapRef} tabIndex={-1} className="outline-none">
-        <SlidePanel key={nav.panel} dir={nav.dir} reduceMotion={reduceMotion}>
-          {nav.panel === 'main' ? (
-            <>
-              {onBack && <BackRow onBack={onBack} />}
-              <ModelListPanel engine={engine} modelId={modelId} list={list} onPickModel={onPickModel} keepOpenOnPick={keepOpenOnPick} />
-              {children}
-              <EngineSwitchRow
-                canSwitch={engines.some((e) => e.name !== engine)}
-                onSwitch={() => nav.goToPanel('engine')}
-                onRefresh={refreshModels}
-              />
-            </>
-          ) : (
-            <EnginePanel engines={engines} engine={engine} onBack={() => nav.goToPanel('main')} onChoose={chooseEngine} onRefresh={refreshModels} />
-          )}
-        </SlidePanel>
-      </div>
-    </div>
+  return nav.panel === 'main' ? (
+    <>
+      {onBack && <BackRow onBack={onBack} />}
+      <ModelListPanel engine={engine} modelId={modelId} list={list} onPickModel={onPickModel} keepOpenOnPick={keepOpenOnPick} />
+      {children}
+      <EngineSwitchRow
+        canSwitch={engines.some((e) => e.name !== engine)}
+        onSwitch={() => nav.goToPanel('engine')}
+        onRefresh={refreshModels}
+      />
+    </>
+  ) : (
+    <EnginePanel engines={engines} engine={engine} onBack={() => nav.goToPanel('main')} onChoose={chooseEngine} onRefresh={refreshModels} />
   )
 }

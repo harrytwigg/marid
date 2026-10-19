@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { Check, ChevronRight } from "lucide-react"
+import { Check, ChevronRight } from "@/components/ui/icon"
 import { StateCircle } from "../state-glyph"
 
 /* Todos v2 slice 6 — the folded Closed rail (design-doc §2.1). Done and
@@ -13,11 +13,13 @@ export function ClosedRail({ count, onExpand }: { count: number; onExpand: () =>
     <button
       type="button"
       data-testid="board-closed-rail"
+      data-board-rail=""
+      data-board-snap=""
       aria-label={`Closed, ${count} items — expand`}
       onClick={onExpand}
-      className="focus-ring flex min-h-[220px] w-11 flex-none cursor-pointer flex-col items-center gap-2.5 rounded-[var(--radius-lg)] bg-[var(--fill-quaternary)] px-0 pb-3.5 pt-2 transition-colors hover:bg-[var(--fill-tertiary)] max-[700px]:hidden"
+      className="focus-outline flex min-h-[220px] w-11 flex-none cursor-pointer flex-col items-center gap-2.5 rounded-[var(--radius-lg)] bg-[var(--fill-quaternary)] px-0 pb-3.5 pt-2 transition-colors hover:bg-[var(--fill-tertiary)] max-[700px]:snap-start"
     >
-      <Check size={13} strokeWidth={2.4} aria-hidden className="text-[var(--system-green)]" />
+      <Check size={13} aria-hidden className="text-[var(--system-green)]" />
       <span className="text-[12px] font-semibold tracking-[.02em] text-[var(--text-tertiary)]" style={{ writingMode: "vertical-rl" }}>
         Closed
       </span>
@@ -69,9 +71,10 @@ export function ClosedColumnHeader({ count, onCollapse }: { count: number; onCol
       data-testid="board-closed-collapse"
       aria-label="Collapse the closed column"
       onClick={onCollapse}
-      className="focus-ring sticky top-0 z-[2] flex items-center gap-2 bg-[var(--bg)] px-[11px] pb-2.5 pt-0.5 text-left"
+      data-board-column-head=""
+      className="focus-outline sticky top-0 z-[2] flex items-center gap-2 px-[11px] pb-2.5 pt-0.5 text-left max-[700px]:static"
     >
-      <Check size={13} strokeWidth={2.4} aria-hidden className="text-[var(--system-green)]" />
+      <Check size={13} aria-hidden className="text-[var(--system-green)]" />
       <span className="text-[13px] font-semibold text-[var(--text-secondary)]">Closed</span>
       <span className="text-[12px] tabular-nums text-[var(--text-quaternary)]">{count}</span>
       <ChevronRight size={12} aria-hidden className="ml-auto rotate-180 text-[var(--text-quaternary)]" />

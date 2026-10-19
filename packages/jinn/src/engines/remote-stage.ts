@@ -22,7 +22,10 @@ import type { RemoteExecutionConfig } from "../shared/config-types.js";
 import { remapMcpConfigForRemote } from "../mcp/remote-config.js";
 import { confineMcpToDepartment } from "../gateway/department-scope/mcp-servers.js";
 import { piJinnMcpAttachable, piJinnSessionEnv, remotePiExtensionSource } from "./pi-mcp.js";
-import { buildOpencodeSessionConfig, serializeOpencodeSessionConfig } from "./opencode-mcp.js";
+import { buildOpencodeSessionConfigFor, serializeOpencodeSessionConfig } from "./opencode-mcp.js";
+import { opencodeApiOf } from "./opencode-version.js";
+import { commandTimeoutPluginEntry, remoteAssetsDir } from "./opencode-command-timeout.js";
+import { parseOpencodeVersion } from "../shared/opencode-bin-version.js";
 import { employeeSessionEnv } from "../sessions/employee-env.js";
 
 /**
@@ -206,6 +209,8 @@ export interface RemoteFacts {
   claudeBin?: string;
   piBin?: string;
   opencodeBin?: string;
+  /** What that opencode's `--version` said: which config shape it reads. */
+  opencodeVersion?: string;
   jinnVersion: string;
   /** Directory holding the remote install's `server-entry.js` / `scrub-entry.js`. */
   entryDir: string;
@@ -252,6 +257,9 @@ printf 'node=%s\\n' "$(command -v node 2>/dev/null || true)"
 printf 'claude=%s\\n' "$(command -v claude 2>/dev/null || true)"
 printf 'pi=%s\\n' "$(command -v pi 2>/dev/null || true)"
 printf 'opencode=%s\\n' "$(command -v opencode 2>/dev/null || true)"
+if command -v opencode >/dev/null 2>&1; then
+  printf 'opencodeversion=%s\\n' "$(OPENCODE_DISABLE_AUTOUPDATE=1 opencode --version 2>/dev/null | tr -d '\\r' | head -n 1)"
+fi
 jinnbin=$(command -v jinn 2>/dev/null || true)
 if [ -n "$jinnbin" ]; then
   printf 'jinnversion=%s\\n' "$(jinn --version 2>/dev/null | tr -d '\\r' | head -n 1)"
@@ -277,6 +285,12 @@ const factsCache = new Map<string, RemoteFacts>();
 /** Exported for tests: drop cached host facts. */
 export function clearRemoteFactsCache(): void {
   factsCache.clear();
+}
+
+/** Drop one host's cached facts: what was installed there has changed (an
+ *  opencode upgraded while the gateway ran), and the next probe reads it again. */
+export function forgetRemoteFacts(destination: string): void {
+  factsCache.delete(destination);
 }
 
 /**
@@ -395,6 +409,17 @@ export function assertRemoteVersion(destination: string, versionLine: string, lo
   return remote;
 }
 
+/** The agent CLIs the facts script found, and what the opencode one is. */
+function engineFacts(kv: Record<string, string>): Pick<RemoteFacts, "claudeBin" | "piBin" | "opencodeBin" | "opencodeVersion"> {
+  const opencodeVersion = parseOpencodeVersion(kv.opencodeversion ?? "");
+  return {
+    ...(kv.claude ? { claudeBin: kv.claude } : {}),
+    ...(kv.pi ? { piBin: kv.pi } : {}),
+    ...(kv.opencode ? { opencodeBin: kv.opencode } : {}),
+    ...(opencodeVersion ? { opencodeVersion } : {}),
+  };
+}
+
 export async function gatherFacts(destination: string): Promise<RemoteFacts> {
   const cached = factsCache.get(destination);
   if (cached) return cached;
@@ -422,9 +447,7 @@ export async function gatherFacts(destination: string): Promise<RemoteFacts> {
     home: kv.home,
     stageDir: path.posix.join(kv.home, REMOTE_STAGE_DIR),
     nodeBin: kv.node,
-    ...(kv.claude ? { claudeBin: kv.claude } : {}),
-    ...(kv.pi ? { piBin: kv.pi } : {}),
-    ...(kv.opencode ? { opencodeBin: kv.opencode } : {}),
+    ...engineFacts(kv),
     jinnVersion: remoteVersion,
     entryDir: kv.entrydir,
   };
@@ -1182,6 +1205,9 @@ export interface PrepareRemoteSessionOpts {
    *  authenticate without the secret ever reaching a remote command line. Pi's
    *  own belt is computed below and ignores this. */
   sessionEnv?: Record<string, string>;
+  /** opencode only: list Marid's command-timeout plugin in the staged config
+   *  (opencode-command-timeout.ts), from this host's own jinn-cli install. */
+  opencodeCommandTimeout?: boolean;
 }
 
 interface RemoteSessionStagingBase {
@@ -1280,7 +1306,7 @@ export async function prepareRemoteSession(opts: PrepareRemoteSessionOpts): Prom
   }
 
   if (engine === "opencode") {
-    const opencodeConfigPath = await stageOpencodeConfig(destination, facts, sessionHome, tunnelPort, resolvedMcp);
+    const opencodeConfigPath = await stageOpencodeConfig(destination, facts, sessionHome, tunnelPort, { resolvedMcp, commandTimeout: opts.opencodeCommandTimeout === true });
     return { ...base, engine, ...(opencodeConfigPath ? { opencodeConfigPath } : {}) };
   }
 
@@ -1479,16 +1505,22 @@ async function stageOpencodeConfig(
   facts: RemoteFacts,
   sessionHome: string,
   tunnelPort: number,
-  resolvedMcp: ResolvedMcpConfig | undefined,
+  staged: { resolvedMcp: ResolvedMcpConfig | undefined; commandTimeout: boolean },
 ): Promise<string | undefined> {
-  if (!resolvedMcp || Object.keys(resolvedMcp.mcpServers ?? {}).length === 0) return undefined;
-  const remapped = remapMcpConfigForRemote(resolvedMcp, {
-    remoteNode: facts.nodeBin,
-    remoteEntryDir: facts.entryDir,
-    remoteHome: sessionHome,
-    gatewayUrl: `http://127.0.0.1:${tunnelPort}`,
-  });
-  const config = buildOpencodeSessionConfig(remapped);
+  const { resolvedMcp } = staged;
+  const hasMcp = Boolean(resolvedMcp && Object.keys(resolvedMcp.mcpServers ?? {}).length > 0);
+  if (!hasMcp && !staged.commandTimeout) return undefined;
+  const remapped = hasMcp
+    ? remapMcpConfigForRemote(resolvedMcp!, {
+      remoteNode: facts.nodeBin,
+      remoteEntryDir: facts.entryDir,
+      remoteHome: sessionHome,
+      gatewayUrl: `http://127.0.0.1:${tunnelPort}`,
+    })
+    : undefined;
+  const api = opencodeApiOf(facts.opencodeVersion);
+  const plugins = staged.commandTimeout ? [commandTimeoutPluginEntry(api, remoteAssetsDir(facts.entryDir), path.posix.join)] : [];
+  const config = buildOpencodeSessionConfigFor(remapped, api, plugins);
   if (!config) return undefined;
   const configPath = path.posix.join(sessionHome, "tmp", "opencode.json");
   await stageRemoteFile(destination, configPath, serializeOpencodeSessionConfig(config));

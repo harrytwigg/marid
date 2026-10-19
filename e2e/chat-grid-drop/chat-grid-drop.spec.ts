@@ -238,10 +238,13 @@ test('Open beside follows the view toggle and opens the picker in both themes', 
     const { context, page } = await openGridPage(browser, { theme })
     const [sessionId] = await seededSessionIds(page)
     await page.locator(`[data-chat-session-row="${sessionId}"]`).first().click()
-    const more = page.locator('[data-more-menu]:visible').first()
-    await more.getByRole('button', { name: 'More options' }).click()
-    const buttons = more.getByRole('button')
-    const labels = await buttons.allTextContents()
+    await page.locator('[data-more-menu]:visible').first().click()
+    const menu = page.getByRole('menu')
+    await expect(menu).toBeVisible()
+    const labels = await menu.evaluate((element) => (
+      Array.from(element.querySelectorAll('[role="menuitem"], [role="menuitemradio"], button'))
+        .map((item) => item.textContent?.trim() ?? '')
+    ))
     const cliIndex = labels.findIndex((label) => label.trim() === 'CLI')
     const openIndex = labels.findIndex((label) => label.trim() === 'Open beside')
     const newTabIndex = labels.findIndex((label) => label.trim() === 'Open in new tab')
@@ -252,7 +255,7 @@ test('Open beside follows the view toggle and opens the picker in both themes', 
     expect(newTabIndex).toBe(openIndex + 1)
     expect(pinIndex).toBe(newTabIndex + 1)
     await page.screenshot({ path: artifactPath(`pla-174-${theme}-menu-1440.png`) })
-    await buttons.nth(openIndex).click()
+    await menu.getByRole('menuitem', { name: 'Open beside' }).click()
     await expect(page.getByTestId('session-picker-scroll')).toBeVisible()
     await context.close()
   }
@@ -275,7 +278,7 @@ test('the pane title-bar menu reads the same as the header in both themes', asyn
     await expect(menu.getByRole('menuitem', { name: 'Open beside' })).toBeVisible()
 
     const order = await menu.evaluate((element) => (
-      Array.from(element.querySelectorAll('[role="menuitem"], button'))
+      Array.from(element.querySelectorAll('[role="menuitem"], [role="menuitemradio"], button'))
         .map((item) => item.textContent?.trim() ?? '')
     ))
     expect(order.indexOf('Open beside')).toBe(order.indexOf('CLI') + 1)

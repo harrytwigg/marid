@@ -46,6 +46,18 @@ export function rememberBoardScroll(key: string, top: number): void {
   scrollByBoard.set(key, top)
 }
 
+// The phone's strip scrolls sideways, so the column the reader was on is remembered too.
+const scrollLeftByBoard = new Map<string, number>()
+
+export function rememberBoardScrollLeft(key: string, left: number): void {
+  if (!Number.isFinite(left) || left < 0) return
+  scrollLeftByBoard.set(key, left)
+}
+
+export function recallBoardScrollLeft(key: string): number {
+  return scrollLeftByBoard.get(key) ?? 0
+}
+
 export function recallBoardScroll(key: string): number {
   return scrollByBoard.get(key) ?? 0
 }
@@ -53,4 +65,5 @@ export function recallBoardScroll(key: string): number {
 /** Test-only: reset the module cache between cases. */
 export function clearBoardScrollCache(): void {
   scrollByBoard.clear()
+  scrollLeftByBoard.clear()
 }

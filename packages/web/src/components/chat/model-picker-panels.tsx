@@ -1,60 +1,15 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
-import { CheckIcon, ChevronLeftIcon } from 'lucide-react'
+import { CheckIcon, ChevronLeftIcon } from "@/components/ui/icon"
 import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import { providerOf, providerLabel } from '@/hooks/use-model-registry'
 import type { EngineRegistryEntry, ModelInfo } from '@/lib/api'
+import { engineDisplayName } from '@/lib/engine-names'
 import type { ModelList } from './use-model-list'
-
-export const engineLabelOf = (e: string) => (e ? e.charAt(0).toUpperCase() + e.slice(1) : '')
-
-/** Live `prefers-reduced-motion` flag; transitions collapse to instant when true. */
-export function usePrefersReducedMotion(): boolean {
-  const [reduce, setReduce] = useState(false)
-  useEffect(() => {
-    const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)')
-    if (!mq) return
-    setReduce(mq.matches)
-    const on = () => setReduce(mq.matches)
-    mq.addEventListener('change', on)
-    return () => mq.removeEventListener('change', on)
-  }, [])
-  return reduce
-}
-
-/**
- * One panel of the picker surface. Mounts with a crisp directional fade+slide
- * (incoming from the right when going forward, from the left when going back);
- * `prefers-reduced-motion` swaps instantly. Keyed by the active panel in the
- * parent, so each panel change replays the entrance.
- */
-export function SlidePanel({ dir, reduceMotion, children }: { dir: 1 | -1; reduceMotion: boolean; children: ReactNode }) {
-  const [entered, setEntered] = useState(reduceMotion)
-  useEffect(() => {
-    if (reduceMotion) {
-      setEntered(true)
-      return
-    }
-    const r = requestAnimationFrame(() => setEntered(true))
-    return () => cancelAnimationFrame(r)
-  }, [reduceMotion])
-  return (
-    <div
-      style={{
-        opacity: entered ? 1 : 0,
-        transform: entered ? 'translateX(0)' : `translateX(${dir * 10}px)`,
-        transition: reduceMotion ? 'none' : 'opacity 180ms var(--ease-smooth), transform 200ms var(--ease-snappy)',
-        willChange: 'opacity, transform',
-      }}
-    >
-      {children}
-    </div>
-  )
-}
 
 const SECTION_LABEL = 'px-2 pt-0.5 pb-1 text-[length:var(--text-caption2)] font-[var(--weight-bold)] uppercase tracking-[0.4px] text-[var(--text-quaternary)]'
 
@@ -71,12 +26,12 @@ export function BackRow({ onBack }: { onBack: () => void }) {
   )
 }
 
-/** The search field. Radix reads printable keys as menu typeahead and ignores arrows from a nested
- *  input, so printable keys stay in the field, Escape and Tab pass through, and ArrowDown/Up hand focus
- *  to the first/last result (`listRef`), or the field is a keyboard dead end. */
-function ModelSearchBox({ list, listRef }: { list: ModelList; listRef: RefObject<HTMLDivElement | null> }) {
+/** The search field. The menu reads printable keys as typeahead, so they stay in the field (Escape and
+ *  Tab pass through), and ArrowDown/Up hand focus to the first/last result, or the field is a keyboard
+ *  dead end. It sits in a label, the one part of the menu's list that holds a field. */
+function ModelSearchBox({ list }: { list: ModelList }) {
   return (
-    <div className="px-1 pb-1">
+    <DropdownMenuLabel className="px-1 pb-1 pt-0 font-normal">
       <input
         type="search"
         value={list.query}
@@ -85,7 +40,7 @@ function ModelSearchBox({ list, listRef }: { list: ModelList; listRef: RefObject
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             e.preventDefault()
             e.stopPropagation()
-            const items = listRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+            const items = e.currentTarget.closest('[role="menu"]')?.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
             if (items && items.length) {
               items[e.key === 'ArrowDown' ? 0 : items.length - 1].focus()
             }
@@ -98,7 +53,7 @@ function ModelSearchBox({ list, listRef }: { list: ModelList; listRef: RefObject
         aria-label="Search models"
         className="w-full rounded-[8px] bg-[var(--fill-tertiary)] px-2 py-1.5 text-[length:var(--text-footnote)] text-[var(--text-primary)] placeholder:text-[var(--text-quaternary)] outline-none focus:bg-[var(--fill-secondary)]"
       />
-    </div>
+    </DropdownMenuLabel>
   )
 }
 
@@ -109,7 +64,7 @@ function ModelRow({ model, selected, keepOpenOnPick }: { model: ModelInfo; selec
     <DropdownMenuRadioItem
       value={model.id}
       onSelect={keepOpenOnPick ? (e) => e.preventDefault() : undefined}
-      className="justify-between gap-2 rounded-[9px] py-1.5 pl-2 pr-2 text-[length:var(--text-footnote)] text-[var(--text-secondary)] data-[state=checked]:font-[var(--weight-semibold)] data-[state=checked]:text-[var(--text-primary)] [&>span:first-child]:hidden"
+      className="justify-between gap-2 rounded-[9px] py-1.5 pl-2 pr-2 text-[length:var(--text-footnote)] text-[var(--text-secondary)] data-[selected]:font-[var(--weight-semibold)] data-[selected]:text-[var(--text-primary)] [&>span:first-child]:hidden"
     >
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span className="truncate">{model.label}</span>
@@ -124,29 +79,26 @@ function ModelRow({ model, selected, keepOpenOnPick }: { model: ModelInfo; selec
   )
 }
 
-/** The results: a fixed-height scroller, so even the expanded opencode catalog stays inside the composer. */
-function ModelRows({ list, modelId, onPickModel, keepOpenOnPick, listRef }: {
+/** The results. A long (expanded) catalog scrolls with the rest of the menu, whose height is capped by its content. */
+function ModelRows({ list, modelId, onPickModel, keepOpenOnPick }: {
   list: ModelList
   modelId: string
   onPickModel: (model: string) => void
   keepOpenOnPick?: boolean
-  listRef: RefObject<HTMLDivElement | null>
 }) {
   if (list.visibleModels.length === 0) {
     return (
-      <div className="px-2 py-1.5 text-[length:var(--text-caption1)] text-[var(--text-secondary)]">
+      <DropdownMenuLabel className="py-1.5 text-[length:var(--text-caption1)] font-normal text-[var(--text-secondary)]">
         No models match “{list.trimmedQuery}”.
-      </div>
+      </DropdownMenuLabel>
     )
   }
   return (
-    <div ref={listRef} className="max-h-[min(50vh,270px)] overflow-y-auto">
-      <DropdownMenuRadioGroup value={modelId} onValueChange={onPickModel}>
-        {list.visibleModels.map((m) => (
-          <ModelRow key={m.id} model={m} selected={m.id === modelId} keepOpenOnPick={keepOpenOnPick} />
-        ))}
-      </DropdownMenuRadioGroup>
-    </div>
+    <DropdownMenuRadioGroup value={modelId} onValueChange={onPickModel} aria-label="Models">
+      {list.visibleModels.map((m) => (
+        <ModelRow key={m.id} model={m} selected={m.id === modelId} keepOpenOnPick={keepOpenOnPick} />
+      ))}
+    </DropdownMenuRadioGroup>
   )
 }
 
@@ -159,21 +111,19 @@ export function ModelListPanel({ engine, modelId, list, onPickModel, keepOpenOnP
   /** A model pick leaves the menu open (the parent closes it when the pick has been taken). */
   keepOpenOnPick?: boolean
 }) {
-  // The results scroller, so the search field can hand focus to it.
-  const listRef = useRef<HTMLDivElement>(null)
   return (
     <>
-      <div className="px-2 pt-1 pb-1.5 text-[length:var(--text-caption2)] font-[var(--weight-bold)] uppercase tracking-[0.4px] text-[var(--text-quaternary)]">
-        Engine · {engineLabelOf(engine)}
-      </div>
+      <DropdownMenuLabel className={`${SECTION_LABEL} pt-1 pb-1.5`}>
+        Engine · {engineDisplayName(engine)}
+      </DropdownMenuLabel>
       {list.models.length === 0 ? (
-        <div className="px-2 py-1.5 text-[length:var(--text-caption1)] leading-snug text-[var(--text-secondary)]">
+        <DropdownMenuLabel className="py-1.5 text-[length:var(--text-caption1)] font-normal leading-snug text-[var(--text-secondary)]">
           No models discovered yet.
-        </div>
+        </DropdownMenuLabel>
       ) : (
         <>
-          <ModelSearchBox list={list} listRef={listRef} />
-          <ModelRows list={list} modelId={modelId} onPickModel={onPickModel} keepOpenOnPick={keepOpenOnPick} listRef={listRef} />
+          <ModelSearchBox list={list} />
+          <ModelRows list={list} modelId={modelId} onPickModel={onPickModel} keepOpenOnPick={keepOpenOnPick} />
           {list.showExpandToggle && (
             <DropdownMenuItem
               onSelect={(e) => { e.preventDefault(); list.toggleExpanded() }}
@@ -199,7 +149,7 @@ export function EnginePanel({ engines, engine, onBack, onChoose, onRefresh }: {
   return (
     <>
       <BackRow onBack={onBack} />
-      <div className={SECTION_LABEL}>Switch engine</div>
+      <DropdownMenuLabel className={SECTION_LABEL}>Switch engine</DropdownMenuLabel>
       {engines.map((e) => {
         const on = e.name === engine
         return (
@@ -210,7 +160,7 @@ export function EnginePanel({ engines, engine, onBack, onChoose, onRefresh }: {
             className="justify-between rounded-[9px] py-1.5 pl-2 pr-2 text-[length:var(--text-footnote)] text-[var(--text-secondary)]"
           >
             <span className={on ? 'font-[var(--weight-semibold)] text-[var(--text-primary)]' : undefined}>
-              {engineLabelOf(e.name)}
+              {engineDisplayName(e.name)}
             </span>
             {on && <CheckIcon className="size-3.5 shrink-0 text-[var(--accent)]" />}
           </DropdownMenuItem>

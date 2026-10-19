@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom"
-import { ArrowUpRight, CornerDownRight, Eye, MessageCircle } from "lucide-react"
+import { ArrowUpRight, CornerDownRight, Eye, MessageCircle } from "@/components/ui/icon"
 import type { Employee } from "@/lib/api"
 import type { SessionTreeNodeWire, SessionTreeWire } from "@/lib/session-tree-api"
 import { pendingCaption, usePendingWork, type PendingWork } from "@/components/chat/pending-work"
@@ -93,7 +93,7 @@ function NodeTodo({ id, todoId }: { id: string; todoId: string }) {
         }
         void navigate(`/todos/${encodeURIComponent(todoId)}`)
       }}
-      className="focus-ring group/todo flex min-w-0 flex-none items-center gap-[3px] rounded-[5px] text-[11.5px] text-[var(--text-tertiary)] outline-none hover:text-[var(--text-secondary)]"
+      className="focus-outline group/todo flex min-w-0 flex-none items-center gap-[3px] rounded-[5px] text-[11.5px] text-[var(--text-tertiary)] outline-none hover:text-[var(--text-secondary)]"
     >
       {todoId}
       <ArrowUpRight size={10} aria-hidden className="opacity-0 group-hover/todo:opacity-100" />

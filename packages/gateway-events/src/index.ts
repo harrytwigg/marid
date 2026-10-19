@@ -31,6 +31,8 @@ export interface GatewayEventMap {
     toolName?: string
     toolId?: string
     activityReceiptId?: string
+    /** The background sub-agent an `Agent`/`Task` result launched, for its card to open. */
+    agentId?: string
     input?: string
     /** A tool call made inside a sub-agent rather than by the main agent. */
     sidechain?: boolean

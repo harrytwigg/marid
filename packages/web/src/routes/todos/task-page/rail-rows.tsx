@@ -1,5 +1,5 @@
 import { forwardRef } from "react"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown } from "@/components/ui/icon"
 
 /* The rail's shared row vocabulary, lifted out of props-rail.tsx when that file
  * reached the 300-line limit. Rows are flat at rest; interactive rows wash on
@@ -39,14 +39,13 @@ export const RailRow = forwardRef<HTMLButtonElement, {
       aria-haspopup="menu"
       aria-expanded={open || false}
       onClick={onOpen}
-      className={`${base} ${ink} focus-ring group/rail w-[calc(100%+20px)] text-left outline-none hover:bg-[var(--fill-quaternary)] ${
+      className={`${base} ${ink} focus-outline group/rail w-[calc(100%+20px)] text-left outline-none hover:bg-[var(--fill-quaternary)] ${
         open ? "bg-[var(--fill-quaternary)]" : ""
       }`}
     >
       {children}
       <ChevronDown
         size={11}
-        strokeWidth={2.2}
         aria-hidden
         className={`ml-auto flex-none text-[var(--text-quaternary)] transition-opacity duration-120 ${
           open ? "opacity-100" : "opacity-0 group-hover/rail:opacity-100"
