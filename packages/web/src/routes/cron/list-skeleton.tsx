@@ -10,7 +10,7 @@ export function ListSkeleton() {
         <span className="size-5 rounded-full bg-[var(--fill-tertiary)] motion-safe:animate-[skeletonPulse_1.6s_var(--ease-smooth)_infinite]" />
         <span className="h-3 w-16 rounded-[6px] bg-[var(--fill-tertiary)] motion-safe:animate-[skeletonPulse_1.6s_var(--ease-smooth)_infinite]" />
       </div>
-      <div className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[5px] shadow-[var(--shadow-card)]">
+      <div className="glass-card rounded-[var(--radius-xl)] p-[5px]">
         {widths.map((w, i) => (
           <div key={i} className="flex min-h-[56px] items-center gap-2.5 py-2 pl-2.5 pr-3">
             <span

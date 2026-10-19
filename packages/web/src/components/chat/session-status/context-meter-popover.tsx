@@ -1,4 +1,4 @@
-import { LoaderCircleIcon } from 'lucide-react'
+import { LoaderCircleIcon } from "@/components/ui/icon"
 import type { ReactNode } from 'react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { ContextUsageWire } from '@/lib/api-context-usage'

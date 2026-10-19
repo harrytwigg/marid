@@ -1,5 +1,6 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import type { BackgroundActivity, DelegatedActivity } from '@/lib/api'
+import type { SubagentRef } from '@/lib/subagent-transcript'
 import { SessionWaitsBoundary, WaitsNote } from '@/components/chat/session-waits-boundary'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { titleCaseSlug } from '@/lib/session-waits'
@@ -125,11 +126,14 @@ export function BackgroundActivityStatus({
   delegatedActivity = null,
   employeeDisplayNames = {},
   sessionId = null,
+  onOpenSubagent,
 }: {
   activity: BackgroundActivity | null
   delegatedActivity?: DelegatedActivity | null
   employeeDisplayNames?: Record<string, string>
   sessionId?: string | null
+  /** Shows a sub-agent's conversation, held by whoever outlives this status: without it a sub-agent row is plain text. */
+  onOpenSubagent?: (agent: SubagentRef, returnFocusTo: HTMLElement | null) => void
 }) {
   const currentCopy = activityCopy(activity, delegatedActivity, employeeDisplayNames)
   const active = currentCopy !== null
@@ -139,6 +143,7 @@ export function BackgroundActivityStatus({
   const [popupOpen, setPopupOpen] = useState(false)
   // Stable: the popup's timers depend on it, and this component re-renders often.
   const closePopup = useCallback(() => setPopupOpen(false), [])
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
   // Copy shown while exiting is frozen so the label does not flash to an idle
   // value during the fade-out.
   const [shownCopy, setShownCopy] = useState<ActivityCopy | null>(currentCopy)
@@ -198,6 +203,7 @@ export function BackgroundActivityStatus({
         <Popover open={popupOpen} onOpenChange={setPopupOpen}>
           <PopoverTrigger asChild>
             <button
+              ref={triggerRef}
               type="button"
               data-pane-focus-preserving
               data-testid="background-activity-trigger"
@@ -218,7 +224,7 @@ export function BackgroundActivityStatus({
           >
             <SessionWaitsBoundary>
               <Suspense fallback={<WaitsNote>Loading…</WaitsNote>}>
-                <SessionWaitsPopup key={sessionId} sessionId={sessionId} onClose={closePopup} />
+                <SessionWaitsPopup key={sessionId} sessionId={sessionId} onClose={closePopup} onOpenSubagent={onOpenSubagent && ((agent) => onOpenSubagent(agent, triggerRef.current))} />
               </Suspense>
             </SessionWaitsBoundary>
           </PopoverContent>

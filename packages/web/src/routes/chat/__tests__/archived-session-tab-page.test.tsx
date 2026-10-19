@@ -53,12 +53,15 @@ vi.mock('@/components/page-layout', () => ({
 
 /** The sidebar reduced to a search result for an unlisted chat and a bulk archive of it. */
 vi.mock('@/components/chat/chat-sidebar', () => ({
-  ChatSidebar: ({ onSelect, onSessionsRemoved }: {
+  ChatSidebar: ({ onSelect, onSessionsRemoved, onOrderComputed }: {
     onSelect: (id: string) => void
     onSessionsRemoved?: (ids: string[]) => void
+    onOrderComputed?: (order: { sessionIds: string[]; employeeNames: string[]; employeeSessionMap: Record<string, string[]> }) => void
   }) => (
     <div data-testid="chat-sidebar">
       <button type="button" data-testid="open-unlisted" onClick={() => onSelect('z')} />
+      <button type="button" data-testid="open-listed" onClick={() => onSelect('a')} />
+      <button type="button" data-testid="order-a-z" onClick={() => onOrderComputed?.({ sessionIds: ['a', 'z'], employeeNames: [], employeeSessionMap: {} })} />
       <button type="button" data-testid="bulk-archive" onClick={() => onSessionsRemoved?.(['z'])} />
     </div>
   ),
@@ -215,5 +218,47 @@ describe('a chat the session list does not carry', () => {
     fireEvent.click(screen.getAllByTestId('bulk-archive')[0])
     await waitFor(() => expect(storedTabIds()).not.toContain('z'))
     await waitFor(() => expect(location()).not.toBe('/?session=z'))
+  })
+
+  it('does not bring its tab back when its pane takes focus after the archive', async () => {
+    renderRoute()
+    await waitFor(() => expect(location()).toBe('/?session=a'))
+
+    fireEvent.click(screen.getAllByTestId('open-unlisted')[0])
+    await waitFor(() => expect(location()).toBe('/?session=z'))
+    const pane = await waitFor(() => {
+      const element = document.querySelector('[data-chat-pane-session="z"]')
+      expect(element).not.toBeNull()
+      return element as Element
+    })
+
+    // The pane is still mounted when the archive lands, and a focus that was scheduled when the
+    // chat opened (the composer takes it a frame later, so under load it arrives late) reaches it.
+    // That focus selected the chat again: its tab reopened and the route went back to it.
+    fireEvent.click(screen.getAllByTestId('bulk-archive')[0])
+    fireEvent.focusIn(pane)
+
+    await waitFor(() => expect(location()).not.toBe('/?session=z'))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)) })
+    expect(storedTabIds()).not.toContain('z')
+    expect(location()).not.toBe('/?session=z')
+  })
+
+  it('is still reached by the next-chat shortcut once it is back in the list', async () => {
+    renderRoute()
+    await waitFor(() => expect(location()).toBe('/?session=a'))
+    fireEvent.click(screen.getAllByTestId('order-a-z')[0])
+
+    fireEvent.click(screen.getAllByTestId('open-unlisted')[0])
+    await waitFor(() => expect(location()).toBe('/?session=z'))
+    fireEvent.click(screen.getAllByTestId('bulk-archive')[0])
+    await waitFor(() => expect(location()).not.toBe('/?session=z'))
+    fireEvent.click(screen.getAllByTestId('open-listed')[0])
+    await waitFor(() => expect(location()).toBe('/?session=a'))
+
+    // Unarchived from the list, it is adjacent to the open chat again; the shortcut moves there.
+    fireEvent.keyDown(window, { key: 'j' })
+    await waitFor(() => expect(location()).toBe('/?session=z'))
+    expect(storedTabIds()).toContain('z')
   })
 })

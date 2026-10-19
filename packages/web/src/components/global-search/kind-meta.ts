@@ -1,11 +1,11 @@
-import { Clock, Hash, ListChecks, MessageSquare, NotebookPen, Users, Zap, type LucideIcon } from "lucide-react"
+import { Clock, Hash, ListChecks, MessageSquare, NotebookPen, Users, Zap, type IconComponent } from "@/components/ui/icon"
 import type { SearchKind, SearchMatchFieldWire } from "@/lib/search-api"
 
 export interface KindMeta {
   label: string
   /** The group head above a run of this kind. */
   plural: string
-  Icon: LucideIcon
+  Icon: IconComponent
 }
 
 export const KIND_META: Record<SearchKind, KindMeta> = {

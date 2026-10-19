@@ -1,5 +1,5 @@
 import * as React from "react"
-import { CheckIcon, ChevronDownIcon } from "lucide-react"
+import { CheckIcon, ChevronDownIcon } from "@/components/ui/icon"
 import { Button } from "react-aria-components/Button"
 import { Header } from "react-aria-components/Header"
 import { ListBox, ListBoxItem, ListBoxSection } from "react-aria-components/ListBox"

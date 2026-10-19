@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Slot } from "radix-ui"
+import { Slot } from "./slot"
 
 import { returnFocusTo } from "./menu-focus"
 import { preloadQuietly, warmPopupOnce } from "./dialog-load"
@@ -85,7 +85,7 @@ export function DialogTrigger({
   ...props
 }: React.ComponentProps<"button"> & { asChild?: boolean }) {
   const root = useDialogRoot()
-  const Comp = asChild ? Slot.Root : "button"
+  const Comp = asChild ? Slot : "button"
   const setRef = React.useCallback(
     (node: HTMLButtonElement | null) => {
       root.triggerRef.current = node
@@ -121,7 +121,7 @@ export function DialogClose({
   ...props
 }: React.ComponentProps<"button"> & { asChild?: boolean }) {
   const root = useDialogRoot()
-  const Comp = asChild ? Slot.Root : "button"
+  const Comp = asChild ? Slot : "button"
   return (
     <Comp
       data-slot="dialog-close"

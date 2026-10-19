@@ -1,4 +1,4 @@
-import { ArrowRightLeft } from "lucide-react"
+import { ArrowRightLeft } from "@/components/ui/icon"
 import type { WorkItemCompactWire, WorkItemStatusWire } from "@/lib/api"
 import { STATUS_LABEL } from "@/lib/todos"
 import { legalTargets } from "@/lib/legal-targets"

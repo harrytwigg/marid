@@ -7,7 +7,7 @@ import {
   GitBranch,
   Tags,
   UserRound,
-} from "lucide-react"
+} from "@/components/ui/icon"
 import {
   api,
   type DepartmentSummaryWire,

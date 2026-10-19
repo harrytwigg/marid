@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Slot } from "radix-ui"
+import { Slot } from "./slot"
 import { Dialog, DialogTrigger, OverlayTriggerStateContext } from "react-aria-components/Dialog"
 import { Popover as AriaPopover, PopoverContext } from "react-aria-components/Popover"
 import { Pressable } from "react-aria-components/Pressable"
@@ -52,7 +52,7 @@ function PopoverTrigger({
   asChild = false,
   ...props
 }: React.ComponentProps<"button"> & { asChild?: boolean }) {
-  const Comp = asChild ? Slot.Root : "button"
+  const Comp = asChild ? Slot : "button"
   return (
     <Pressable>
       <Comp data-slot="popover-trigger" aria-haspopup="dialog" type={asChild ? undefined : "button"} {...props} />

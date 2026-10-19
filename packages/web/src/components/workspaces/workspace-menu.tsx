@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from "react"
-import { Check, ChevronRight, Layers3, LoaderCircle, Plus, X } from "lucide-react"
+import { Check, ChevronRight, Layers3, LoaderCircle, Plus, X } from "@/components/ui/icon"
 import type { WorkspaceInfo } from "@/lib/api"
 import { useStartWorkspace, useWorkspaces } from "@/hooks/use-workspaces"
 import { cn } from "@/lib/utils"

@@ -140,14 +140,14 @@ const CSS = String.raw`
   --ink:#E8E4D8;--soft:#A8A290;--faint:#6E6957;--line:rgba(255,255,255,.09);
   --surface:rgba(255,255,255,.045);--surface2:rgba(255,255,255,.07);
   --accent:#E0A33C;--accentText:#14130F;--ok:#7DBE6A;
-  --font:"Hanken Grotesk",system-ui,sans-serif;--mono:"IBM Plex Mono",monospace;
+  --font:var(--font-ui);--mono:var(--font-code);
   --railBg:rgba(0,0,0,.25);--code:rgba(224,163,60,.14);--ovl:rgba(0,0,0,.5);
   background:#14130F}
 .dk2[data-theme="light"]{
   --ink:#211E16;--soft:#6B6655;--faint:#9A937F;--line:#DED8C7;
   --surface:#FBF9F2;--surface2:#ECE8DC;
   --accent:#B07A1A;--accentText:#FBF9F2;--ok:#5C7A4A;
-  --font:"Hanken Grotesk",system-ui,sans-serif;--mono:"IBM Plex Mono",monospace;
+  --font:var(--font-ui);--mono:var(--font-code);
   --railBg:#EDE9DD;--code:rgba(176,122,26,.16);--ovl:rgba(40,34,20,.28);
   background:#F4F1E8}
 

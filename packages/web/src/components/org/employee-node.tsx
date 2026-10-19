@@ -4,6 +4,7 @@ import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { deptHue } from "@/components/org/layout/dept-color"
 import { ClaudeProfileBadge } from "@/components/org/claude-profile"
 import { DepartmentScopeBadge } from "@/components/department-scope-badge"
+import { engineDisplayName } from "@/lib/engine-names"
 import type { DepartmentScopeWire } from "@/lib/department-api"
 
 type EmployeeNodeData = Employee & Record<string, unknown>
@@ -17,9 +18,11 @@ export function EmployeeNode({ data, selected }: NodeProps) {
   const employee = data as EmployeeNodeData
   const isExec = employee.rank === "executive"
 
+  // Glass tint, no blur: a map holds many nodes, and blur costs per node. The inline shadow below
+  // wins over the class's, so the class supplies the tinted background only.
   return (
     <div
-      className="group hover-lift relative w-[200px] h-[64px] flex items-center gap-[var(--space-2)] px-[var(--space-3)] rounded-[var(--radius-md)] bg-[var(--material-regular)] backdrop-blur-[20px] backdrop-saturate-[180%] [-webkit-backdrop-filter:blur(20px)_saturate(180%)] cursor-pointer overflow-hidden"
+      className="group hover-lift relative w-[200px] h-[64px] flex items-center gap-[var(--space-2)] px-[var(--space-3)] rounded-[var(--radius-md)] glass-tint cursor-pointer overflow-hidden"
       style={{
         border: `1px solid ${selected ? "var(--accent)" : isExec ? "color-mix(in srgb, var(--accent) 45%, var(--separator))" : "var(--separator)"}`,
         boxShadow: selected
@@ -54,7 +57,7 @@ export function EmployeeNode({ data, selected }: NodeProps) {
       {/* Engine always; model revealed on hover/selected to keep nodes quiet */}
       <div className="flex flex-col items-end gap-[2px] shrink-0">
         <span className="text-[length:var(--text-caption2)] font-[var(--weight-semibold)] text-[var(--accent)] bg-[var(--accent-fill)] py-px px-[7px] rounded-[10px]">
-          {employee.engine}
+          {engineDisplayName(employee.engine)}
         </span>
         {employee.model && (
           <span

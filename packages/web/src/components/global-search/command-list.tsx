@@ -1,4 +1,4 @@
-import { Play, Plus, SquareArrowRight, UserRoundPlus, type LucideIcon } from "lucide-react"
+import { Play, Plus, SquareArrowRight, UserRoundPlus, type IconComponent } from "@/components/ui/icon"
 import type { Verb, VerbName } from "./verbs"
 
 /* The verb list, in the pane the results usually sit in. It wears the result
@@ -7,7 +7,7 @@ import type { Verb, VerbName } from "./verbs"
 const GROUP_HEAD = "px-[10px] pt-3 pb-[5px] text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--text-quaternary)]"
 const ROW = "flex min-h-[42px] cursor-default items-center gap-[11px] rounded-[var(--radius-md)] px-[10px] py-2"
 
-const VERB_ICON: Record<VerbName, LucideIcon> = {
+const VERB_ICON: Record<VerbName, IconComponent> = {
   assign: UserRoundPlus,
   move: SquareArrowRight,
   run: Play,

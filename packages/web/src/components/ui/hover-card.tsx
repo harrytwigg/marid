@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Slot } from "radix-ui"
+import { Slot } from "./slot"
 import { Popover } from "react-aria-components/Popover"
 
 import { cn } from "@/lib/utils"
@@ -146,7 +146,7 @@ function HoverCardTrigger({
   ...props
 }: React.ComponentProps<"a"> & { asChild?: boolean }) {
   const { open, id, triggerRef, intend } = useHoverCardState()
-  const Comp = asChild ? Slot.Root : "a"
+  const Comp = asChild ? Slot : "a"
   return (
     <Comp
       data-slot="hover-card-trigger"

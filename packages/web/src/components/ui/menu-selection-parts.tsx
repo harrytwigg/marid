@@ -1,5 +1,5 @@
 import * as React from "react"
-import { CheckIcon, CircleIcon } from "lucide-react"
+import { CheckIcon, CircleIcon } from "@/components/ui/icon"
 import { MenuSection } from "react-aria-components/Menu"
 
 import { cn } from "@/lib/utils"
@@ -46,7 +46,7 @@ export function MenuRadioItemPart({ value, onSelect, ...props }: Selectable & { 
     <SelectableItem
       {...props}
       id={value}
-      mark={<CircleIcon className="size-2 fill-current" />}
+      mark={<CircleIcon filled className="size-2" />}
       onSelect={(event) => {
         onSelect?.(event)
         group?.onValueChange?.(value)

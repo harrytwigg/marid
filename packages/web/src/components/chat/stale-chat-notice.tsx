@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MessageSquarePlus } from 'lucide-react'
+import { MessageSquarePlus } from '@/components/ui/icon'
 
 function formatIdleMinutes(minutes: number): string {
   const wholeMinutes = Math.max(0, Math.floor(minutes))
@@ -42,7 +42,7 @@ export function StaleChatNotice({
     >
       <div className="flex items-start gap-[var(--space-3)]">
         <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--fill-secondary)] text-[var(--text-secondary)]">
-          <MessageSquarePlus size={18} strokeWidth={1.8} aria-hidden="true" />
+          <MessageSquarePlus size={18} aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="text-balance text-[length:var(--text-subheadline)] font-[var(--weight-semibold)] text-[var(--text-primary)]">

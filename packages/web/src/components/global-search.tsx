@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Search } from "lucide-react"
+import { Search } from "@/components/ui/icon"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { useSettings } from "@/routes/settings-provider"
 import type { QueryFacetWire, SearchKind } from "@/lib/search-api"

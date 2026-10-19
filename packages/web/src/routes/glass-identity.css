@@ -26,7 +26,10 @@
  *   - Reduced transparency swaps every glass token for its opaque twin.
  */
 
-/* Geist (UI) and Geist Mono (code), variable 100..900; Sora (headings),
+/* Self-hosted so the shell has no third-party dependency and paints its own
+   type offline. Vite hashes these into /assets/, which the gateway serves
+   immutable — a public/ font would revalidate on every load instead.
+   Geist (UI) and Geist Mono (code), variable 100..900; Sora (headings),
    variable 100..800 — all SIL OFL 1.1 (see src/fonts/OFL-*.txt) */
 @font-face {
   font-family: 'Geist';
@@ -353,6 +356,18 @@ body {
     -webkit-backdrop-filter: var(--glass-blur);
     backdrop-filter: var(--glass-blur);
   }
+}
+/* A card of grouped content on the reading sheet (a settings section, a list of
+   rows, a stat). The sheet is flat and opaque, so there is nothing behind a card
+   to blur and a page of cards must not spend the blur budget: the material is the
+   float tint in its opaque form, the sheen, the lit edge and the card shadow.
+   Children that draw a gap in the card's own colour (a swatch's selection ring)
+   read it from --bg-secondary. */
+.glass-card {
+  --bg-secondary: var(--glass-float-opaque);
+  background-color: var(--glass-float-opaque);
+  background-image: var(--glass-sheen);
+  box-shadow: var(--shadow-card);
 }
 /* A glass control keeps its hover wash: the fill rides on top of the tint. */
 .glass-float:is(button, a):hover {

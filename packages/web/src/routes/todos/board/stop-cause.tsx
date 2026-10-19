@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Pause } from "lucide-react"
+import { Pause } from "@/components/ui/icon"
 import type { WorkItemCompactWire } from "@/lib/api"
 import { isParked, type TodoStopCauseWire } from "@/lib/parked"
 import { formatCountdown } from "../util"

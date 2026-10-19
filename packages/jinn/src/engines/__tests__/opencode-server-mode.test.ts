@@ -26,11 +26,11 @@ import {
   MIN_OPENCODE_SERVER_VERSION,
   opencodeMode,
   serverFingerprint,
-  UNSUPPORTED_RETRY_MS,
   unsupportedVersionReason,
 } from "../opencode-server.js";
 import { noAnswerReason, SERVER_TURN_TIMING } from "../opencode-server-turn.js";
-import { needsStandalone } from "../opencode-version.js";
+import { MIN_OPENCODE_V2_SERVER_VERSION, needsStandalone } from "../opencode-version.js";
+import { clearOpencodeVersionCache } from "../../shared/opencode-bin-version.js";
 import { USER_MESSAGE_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON } from "../../sessions/interruption-reasons.js";
 import { HELD_FOR_TURN_NOTICE, OpencodeInteractiveEngine, OPENCODE_VIEW_NEEDS_SERVER_MODE } from "../opencode-interactive.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
@@ -105,6 +105,8 @@ beforeEach(() => {
   delete process.env.FAKE_OPENCODE_PATCH_DELAY_MS;
   delete process.env.FAKE_OPENCODE_SUMMARIZE_DELAY_MS;
   delete process.env.FAKE_OPENCODE_BOOTSTRAP_MS;
+  // The fake's --version follows FAKE_OPENCODE_VERSION; the probe caches per file.
+  clearOpencodeVersionCache();
   SERVER_TURN_TIMING.statusPollMs = 30_000;
   SERVER_TURN_TIMING.connectMs = 15_000;
   SERVER_TURN_TIMING.closeWaitMs = 2_000;
@@ -1323,8 +1325,9 @@ describe("coupling to the server API: a version pin, and drift degrades to run",
   const serveLog = () => path.join(JINN_HOME, "serve-starts.log");
   const starts = () => (fs.existsSync(serveLog()) ? fs.readFileSync(serveLog(), "utf8").trim().split("\n").filter(Boolean).length : 0);
 
-  it("compares versions numerically and pins the minimum", () => {
+  it("compares versions numerically and pins the minimum of each API", () => {
     expect(MIN_OPENCODE_SERVER_VERSION).toBe("1.18.31");
+    expect(MIN_OPENCODE_V2_SERVER_VERSION).toBe("2.0.28");
     expect(compareVersions("1.18.31", "1.18.31")).toBe(0);
     expect(compareVersions("1.18.4", "1.18.31")).toBeLessThan(0);
     expect(compareVersions("1.19.0", "1.18.31")).toBeGreaterThan(0);
@@ -1332,7 +1335,9 @@ describe("coupling to the server API: a version pin, and drift degrades to run",
     expect(unsupportedVersionReason("1.18.31")).toBeUndefined();
     expect(unsupportedVersionReason("1.17.9")).toMatch(/older than 1\.18\.31/);
     expect(unsupportedVersionReason(undefined)).toMatch(/did not report its version/);
-    expect(unsupportedVersionReason("2.0.28")).toMatch(/OpenCode 2 \(2\.0\.28\) is not supported by server mode/);
+    expect(unsupportedVersionReason("2.0.28")).toBeUndefined();
+    expect(unsupportedVersionReason("v2.1.0")).toBeUndefined();
+    expect(unsupportedVersionReason("2.0.27")).toMatch(/older than 2\.0\.28/);
     expect(unsupportedVersionReason("v3.1.0")).toMatch(/OpenCode 3 \(v3\.1\.0\) is not supported by server mode/);
   });
 
@@ -1354,10 +1359,9 @@ describe("coupling to the server API: a version pin, and drift degrades to run",
     expect(h.pool.unsupportedReason("local")).toMatch(/did not report its version/);
   });
 
-  describe("OpenCode 2", () => {
+  describe("OpenCode 2 and later", () => {
     const runLog = () => path.join(JINN_HOME, "run-args.log");
     const runs = () => (fs.existsSync(runLog()) ? fs.readFileSync(runLog(), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l) as string[]) : []);
-    const lingering = () => fs.existsSync(serveLog()) ? fs.readFileSync(serveLog(), "utf8").trim().split("\n").filter(Boolean).length : 0;
 
     beforeEach(() => {
       fs.rmSync(runLog(), { force: true });
@@ -1368,109 +1372,56 @@ describe("coupling to the server API: a version pin, and drift degrades to run",
     });
     afterEach(() => { delete process.env.FAKE_OPENCODE_RUN_LOG; });
 
-    it("names OpenCode 2 as the reason when the health answer is a web page and /api/info says 2.x", async () => {
+    it("reads the API from /api/info when the health answer is a web page, and refuses a major past 2", async () => {
+      process.env.FAKE_OPENCODE_VERSION = "v2:3.0.0";
       const h = harness();
-      await h.engine.run(runOpts());
-      const reason = h.pool.unsupportedReason("local");
-      expect(reason).toMatch(/OpenCode 2 \(2\.0\.28\) is not supported by server mode/);
-      expect(reason).not.toMatch(/did not report its version/);
+      expect((await h.engine.run(runOpts())).result).toBe("plain:build it");
+      expect(h.pool.unsupportedReason("local")).toMatch(/OpenCode 3 \(3\.0\.0\) is not supported by server mode/);
+      expect(h.pool.size()).toBe(0);
     });
 
-    it("runs the turns of a refused OpenCode 2 host as `run --standalone`, once, and leaves no server", async () => {
+    it("refuses a non-JSON health answer that /api/info does not explain", async () => {
+      process.env.FAKE_OPENCODE_VERSION = "v2:";
       const h = harness();
       expect((await h.engine.run(runOpts())).result).toBe("plain:build it");
+      expect(h.pool.unsupportedReason("local")).toMatch(/something other than JSON.*did not report its version on \/api\/info/);
+    });
+
+    it("asks /api/info once more when the first request is dropped", async () => {
+      process.env.FAKE_OPENCODE_VERSION = "v2:3.0.0";
+      process.env.FAKE_OPENCODE_API_INFO_DROP = "1";
+      try {
+        const h = harness();
+        await h.engine.run(runOpts());
+        expect(h.pool.unsupportedReason("local")).toMatch(/OpenCode 3 \(3\.0\.0\)/);
+      } finally {
+        delete process.env.FAKE_OPENCODE_API_INFO_DROP;
+      }
+    });
+
+    it("runs an OpenCode 2 binary's run turns with --standalone, once, from its --version", async () => {
+      const h = harness();
+      h.setMode("run");
       expect((await h.engine.run(runOpts())).result).toBe("plain:build it");
+      await h.engine.run(runOpts({ cliFlags: ["--standalone"] }));
       const argvs = runs();
       expect(argvs).toHaveLength(2);
       for (const argv of argvs) {
         expect(argv.slice(0, 3)).toEqual(["run", "--format", "json"]);
         expect(argv.filter((a) => a === "--standalone")).toHaveLength(1);
       }
-      // One refused start, no retry inside the window, nothing left running.
-      expect(lingering()).toBe(1);
-      expect(h.pool.size()).toBe(0);
-      expect(h.pool.runNeedsStandalone({})).toBe(true);
     });
 
-    it("does not add --standalone twice when cliFlags already carry it", async () => {
+    it("leaves 1.x and later majors' run turns without the flag", async () => {
       const h = harness();
-      await h.engine.run(runOpts({ cliFlags: ["--standalone"] }));
-      expect(runs()[0]!.filter((a) => a === "--standalone")).toHaveLength(1);
-    });
-
-    it("refuses a non-JSON health answer that /api/info does not explain, without --standalone", async () => {
-      process.env.FAKE_OPENCODE_VERSION = "v2:";
-      const h = harness();
-      expect((await h.engine.run(runOpts())).result).toBe("plain:build it");
-      expect(h.pool.unsupportedReason("local")).toMatch(/something other than JSON.*OpenCode 2 is not supported by server mode/);
-      expect(h.pool.runNeedsStandalone({})).toBe(false);
-      expect(runs()[0]).not.toContain("--standalone");
-    });
-
-    it("leaves a 1.x host's run turns without the flag", async () => {
-      process.env.FAKE_OPENCODE_VERSION = "1.17.0";
-      const h = harness();
+      h.setMode("run");
+      process.env.FAKE_OPENCODE_VERSION = "1.19.0";
       await h.engine.run(runOpts());
-      expect(h.pool.runNeedsStandalone({})).toBe(false);
-      expect(runs()[0]).not.toContain("--standalone");
-    });
-
-    it("stops adding the flag once the retry window has passed", () => {
-      const h = harness();
-      h.pool.markUnsupported("local", "OpenCode 2 is not supported by server mode", { version: "2.0.28", bin: FAKE, now: 1000 });
-      expect(h.pool.runNeedsStandalone({ bin: FAKE }, 1000 + UNSUPPORTED_RETRY_MS - 1)).toBe(true);
-      expect(h.pool.runNeedsStandalone({ bin: FAKE }, 1000 + UNSUPPORTED_RETRY_MS)).toBe(false);
-    });
-
-    it("the verdict is the binary's: a turn naming another binary on the same host gets no flag", async () => {
-      const h = harness();
+      clearOpencodeVersionCache();
+      process.env.FAKE_OPENCODE_VERSION = "v2:3.0.0";
       await h.engine.run(runOpts());
-      expect(h.pool.runNeedsStandalone({ bin: FAKE })).toBe(true);
-      expect(h.pool.runNeedsStandalone({ bin: "/opt/opencode-1/bin/opencode" })).toBe(false);
-      expect(h.pool.runNeedsStandalone({})).toBe(true);
-    });
-
-    it("a later refusal that learned no version (API drift) keeps the recorded OpenCode 2 version", () => {
-      const h = harness();
-      h.pool.markUnsupported("local", "OpenCode 2 is not supported by server mode", { version: "2.0.28", bin: FAKE });
-      h.pool.markUnsupported("local", "opencode local server API drift: x");
-      expect(h.pool.unsupportedReason("local")).toMatch(/API drift/);
-      expect(h.pool.runNeedsStandalone({ bin: FAKE })).toBe(true);
-    });
-
-    it("a refusal of another binary with no version does not hand it the first binary's OpenCode 2 verdict", () => {
-      const h = harness();
-      const other = "/opt/opencode-1/bin/opencode";
-      h.pool.markUnsupported("local", "OpenCode 2 is not supported by server mode", { version: "2.0.28", bin: FAKE });
-      h.pool.markUnsupported("local", "the server did not report its version", { bin: other });
-      expect(h.pool.unsupportedReason("local")).toMatch(/did not report its version/);
-      expect(h.pool.runNeedsStandalone({ bin: other })).toBe(false);
-    });
-
-    it("a concurrent refusal of the same binary that learned no version keeps the OpenCode 2 verdict", () => {
-      const h = harness();
-      h.pool.markUnsupported("local", "OpenCode 2 is not supported by server mode", { version: "2.0.28", bin: FAKE });
-      h.pool.markUnsupported("local", "the server answered /global/health with something other than JSON", { bin: FAKE });
-      expect(h.pool.unsupportedReason("local")).toMatch(/other than JSON/);
-      expect(h.pool.runNeedsStandalone({ bin: FAKE })).toBe(true);
-    });
-
-    it("an expired verdict is not carried into a later refusal", () => {
-      const h = harness();
-      h.pool.markUnsupported("local", "OpenCode 2 is not supported by server mode", { version: "2.0.28", bin: FAKE, now: 1000 });
-      const later = 1000 + UNSUPPORTED_RETRY_MS;
-      h.pool.markUnsupported("local", "opencode local server API drift: x", { now: later });
-      expect(h.pool.unsupportedReason("local", later)).toMatch(/API drift/);
-      expect(h.pool.runNeedsStandalone({ bin: FAKE }, later)).toBe(false);
-    });
-
-    it("a remote verdict belongs to the ssh user whose binary was refused", () => {
-      const h = harness();
-      const target = { remoteHost: "build-box", remoteUser: "alice" };
-      h.pool.markUnsupported("build-box", "OpenCode 2 is not supported by server mode", { version: "2.0.28", bin: h.pool.binKey(target) });
-      expect(h.pool.runNeedsStandalone(target)).toBe(true);
-      expect(h.pool.runNeedsStandalone({ ...target, bin: "/elsewhere/opencode" })).toBe(true);
-      expect(h.pool.runNeedsStandalone({ remoteHost: "build-box", remoteUser: "bob" })).toBe(false);
+      expect(runs()[0]).not.toContain("--standalone");
+      expect(runs()[1]).not.toContain("--standalone");
     });
 
     it("adds --standalone only for OpenCode 2, not for a later major", () => {
@@ -1481,20 +1432,9 @@ describe("coupling to the server API: a version pin, and drift degrades to run",
       expect(needsStandalone(undefined)).toBe(false);
     });
 
-    it("asks /api/info once more when the first request is dropped", async () => {
-      process.env.FAKE_OPENCODE_API_INFO_DROP = "1";
-      try {
-        const h = harness();
-        await h.engine.run(runOpts());
-        expect(h.pool.unsupportedReason("local")).toMatch(/OpenCode 2 \(2\.0\.28\) is not supported by server mode/);
-        expect(h.pool.runNeedsStandalone({})).toBe(true);
-      } finally {
-        delete process.env.FAKE_OPENCODE_API_INFO_DROP;
-      }
-    });
-
     it.each(["--standalone=true", "--standalone=false", "--no-standalone"])("leaves --standalone to the operator when cliFlags carry %s", async (flag) => {
       const h = harness();
+      h.setMode("run");
       await h.engine.run(runOpts({ cliFlags: [flag] }));
       expect(runs()[0]!.some((a) => a === "--standalone")).toBe(false);
     });

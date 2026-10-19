@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from "react"
-import { FileText } from "lucide-react"
+import { FileText } from "@/components/ui/icon"
 import { ImageLightbox, type ImageLightboxItem } from "@/components/ui/image-lightbox"
 import { api } from "@/lib/api"
 import { parseAttachmentRef, splitAttachmentRefs, type AttachmentRef } from "@/lib/attachment-ref"
@@ -27,7 +27,7 @@ function AttachmentRefRow({ attachment }: { attachment: AttachmentRef }) {
       data-testid={`attachment-ref-file-${attachment.attachmentId}`}
       className="focus-outline inline-flex min-h-[34px] max-w-full items-center gap-2 rounded-[10px] bg-[var(--fill-tertiary)] px-2.5 text-[13px] text-[var(--text-secondary)] no-underline outline-none transition-colors hover:bg-[var(--fill-secondary)]"
     >
-      <FileText size={15} strokeWidth={1.8} aria-hidden className="shrink-0 text-[var(--text-tertiary)]" />
+      <FileText size={15} aria-hidden className="shrink-0 text-[var(--text-tertiary)]" />
       <span className="truncate font-medium">{kindLabel(attachment.mime)}</span>
       <span className="shrink-0 text-[11px] text-[var(--text-quaternary)]" style={{ fontFamily: "var(--font-code)" }}>
         {attachment.attachmentId}

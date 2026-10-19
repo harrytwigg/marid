@@ -78,3 +78,28 @@ describe.skipIf(process.platform === "win32")("a remote session's session-env.sh
     });
   }
 });
+
+describe.skipIf(process.platform === "win32")("a remote opencode session's staged config", { timeout: 60_000 }, () => {
+  async function stagedConfig(opencodeVersion: string | undefined, commandTimeout: boolean): Promise<Record<string, unknown> | undefined> {
+    const staging = await prepareRemoteSession({
+      target: { remoteHost: "box", remoteCwd: path.join(tmp, "root", "work") },
+      remote,
+      facts: { ...facts, ...(opencodeVersion ? { opencodeVersion } : {}) },
+      engine: "opencode",
+      jinnSessionId: session("opencode"),
+      gatewayPort: 40123,
+      ...(commandTimeout ? { opencodeCommandTimeout: true } : {}),
+    } as never) as { opencodeConfigPath?: string };
+    return staging.opencodeConfigPath ? JSON.parse(fs.readFileSync(staging.opencodeConfigPath, "utf-8")) as Record<string, unknown> : undefined;
+  }
+
+  it("lists the command-timeout plugin from the host's own jinn-cli install, in the API's shape", async () => {
+    const assets = path.posix.join(facts.entryDir, "..", "..", "..", "assets");
+    expect(await stagedConfig("2.0.29", true)).toMatchObject({ plugins: [`file:${assets}/opencode/command-timeout/v2`], mcp: { servers: {} } });
+    expect(await stagedConfig("1.19.0", true)).toMatchObject({ plugin: [`file://${assets}/opencode/command-timeout/v1.js`] });
+  });
+
+  it("stages no config without the ceiling or MCP servers", async () => {
+    expect(await stagedConfig("2.0.29", false)).toBeUndefined();
+  });
+});

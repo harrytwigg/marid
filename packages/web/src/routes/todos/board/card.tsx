@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo } from "react"
-import { ChevronRight } from "lucide-react"
+import { ChevronRight } from "@/components/ui/icon"
 import type { Employee, WorkItemCompactWire, WorkItemOpenDetailWire, WorkItemStatusWire, WorkItemTreeWire } from "@/lib/api"
 import { stateKeyOf } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
