@@ -42,6 +42,27 @@ export function effortLevelsOf(record: Record<string, unknown>): string[] {
   return [...new Set(names.filter((n): n is string => typeof n === "string" && n.trim() !== ""))];
 }
 
+/** One `model.list` record as a model, or undefined when it is not a usable,
+ *  enabled `providerID` + `id` record. */
+function modelFromApiRecord(item: unknown): ModelInfo | undefined {
+  if (!item || typeof item !== "object" || Array.isArray(item)) return undefined;
+  const record = item as Record<string, unknown>;
+  if (record.enabled === false) return undefined;
+  const { providerID, id: modelId } = record;
+  if (typeof providerID !== "string" || typeof modelId !== "string") return undefined;
+  const id = `${providerID}/${modelId}`;
+  if (!MODEL_LINE.test(id)) return undefined;
+  const model: ModelInfo = { id, label: modelId, supportsEffort: false, effortLevels: [] };
+  const window = contextWindowOf(record);
+  if (window !== undefined) model.contextWindow = window;
+  const levels = effortLevelsOf(record);
+  if (levels.length > 0) {
+    model.supportsEffort = true;
+    model.effortLevels = levels;
+  }
+  return model;
+}
+
 /**
  * Parse `opencode api model.list` output (OpenCode 2.x): `{data: [record…]}`,
  * where each record names its model as `providerID` plus `id` and carries the
@@ -59,21 +80,8 @@ export function parseOpencodeApiModels(output: string): ModelInfo[] {
   if (!Array.isArray(data)) return [];
   const models = new Map<string, ModelInfo>();
   for (const item of data) {
-    const record = item && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>) : undefined;
-    if (!record || record.enabled === false) continue;
-    const { providerID, id: modelId } = record;
-    if (typeof providerID !== "string" || typeof modelId !== "string") continue;
-    const id = `${providerID}/${modelId}`;
-    if (!MODEL_LINE.test(id) || models.has(id)) continue;
-    const model: ModelInfo = { id, label: modelId, supportsEffort: false, effortLevels: [] };
-    const window = contextWindowOf(record);
-    if (window !== undefined) model.contextWindow = window;
-    const levels = effortLevelsOf(record);
-    if (levels.length > 0) {
-      model.supportsEffort = true;
-      model.effortLevels = levels;
-    }
-    models.set(id, model);
+    const model = modelFromApiRecord(item);
+    if (model && !models.has(model.id)) models.set(model.id, model);
   }
   return [...models.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
