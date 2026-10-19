@@ -178,6 +178,21 @@ sessions alone, so it detects and reports one. Checked on the real binaries
 | `OPENCODE_CONFIG_DIR` pointing elsewhere | not tried | replaces the operator's config directory, so the provider config goes too (`provider.no-route`) |
 | the plugin's own `"enabled": false` | read from the project's `.opencode/`, then `~/.opencode/`, then the config directory: the gateway would have to write into the operator's project or home | the same |
 
+What a gateway turn does on a host that still has the plugin (real binaries, the
+same 429 upstream, through the gateway's opencode engine; the default model's
+provider answers 429 and the plugin's fallback provider answers normally):
+
+| opencode | Mode | What happens |
+|---|---|---|
+| 1.19.0 + `opencode-rate-limit@1.4.0` | server | The plugin aborts the turn and re-sends the prompt as a new message, which the gateway no longer adopts. The turn ends in about 5 s as a usage limit (`rateLimit: rejected`) whose error names the plugin, so the chain takes over. The re-sent copy has usually reached the fallback model by then (one request); the gateway aborts it, and its answer is never delivered. |
+| 1.19.0 + `opencode-rate-limit@1.4.0` | run | The plugin's abort ends the process with exit 0, no answer and no error of its own, before any re-send, so no request reaches the fallback model. The turn ends as a usage limit whose error names the plugin. |
+| 2.0.29 + `model-fallback.js` | server | The plugin switches the session's model inside the turn. The fallback model answers it in about 3 s, and the gateway sees a normal answer: no hop is recorded and the chain is not walked. |
+| 2.0.29 + `model-fallback.js` | run | The same: answered by the fallback model, invisibly to the chain. |
+
+Before this was handled, a 1.x server turn also ended as a usage limit but left the copy running, and a 1.x run turn
+ended with `opencode exited successfully without a final assistant response` and no rate limit, so the chain
+never took over.
+
 What is checked, and where:
 
 - the plugin in a `plugin` or `plugins` list of the operator's opencode config

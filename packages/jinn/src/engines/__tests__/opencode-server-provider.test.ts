@@ -11,6 +11,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
  * nothing.
  */
 
+// Whether the host's opencode has a model-fallback plugin: the real detection reads the machine running the tests.
+const pluginOnHost = vi.hoisted(() => ({ value: false }));
+vi.mock("../opencode-internal-fallback.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../opencode-internal-fallback.js")>()),
+  hostHasInternalFallback: () => pluginOnHost.value,
+}));
+
 vi.mock("../../shared/logger.js", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
@@ -50,6 +57,7 @@ async function serverLog(pool: OpencodeServerPool): Promise<Array<{ method: stri
 
 beforeEach(() => {
   Object.assign(SERVER_TURN_TIMING, DEFAULT_TIMING);
+  pluginOnHost.value = false;
 });
 
 afterEach(async () => {
@@ -143,6 +151,42 @@ describe("a provider error in a server turn", { timeout: 20_000 }, () => {
     expect(engine.isAlive("sess-1")).toBe(true);
     engine.kill("sess-1", "Interrupted: operator");
     expect((await turn).error).toBe("Interrupted: operator");
+  });
+});
+
+describe("a host whose opencode has a model-fallback plugin", { timeout: 20_000 }, () => {
+  /** What such a plugin does at a usage limit: abort the turn, then post its prompt again as a new message on another model. */
+  const limited = "COPYAFTERABORT build it";
+
+  it("ends the turn as a usage limit that names the plugin, and stops the copy instead of answering it", async () => {
+    SERVER_TURN_TIMING.closeWaitMs = 300;
+    pluginOnHost.value = true;
+    const { pool, engine } = harness();
+    const result = await engine.run(runOpts(limited));
+    expect(result.result).toBe("");
+    expect(result.error).toContain("model-fallback plugin");
+    expect(result.error).toContain("jinn doctor");
+    expect(result.rateLimit?.status).toBe("rejected");
+    // The copy's reply was not taken for the turn's answer, and was aborted rather than left running.
+    expect((await serverLog(pool)).some((e) => /^\/session\/[^/]+\/abort$/.test(e.url))).toBe(true);
+  });
+
+  it("leaves a host without the plugin's error, and the copy, as they were", async () => {
+    SERVER_TURN_TIMING.closeWaitMs = 300;
+    const { pool, engine } = harness();
+    const result = await engine.run(runOpts(limited));
+    expect(result.result).toBe("");
+    expect(result.error).not.toContain("model-fallback plugin");
+    expect((await serverLog(pool)).some((e) => e.url.endsWith("/abort"))).toBe(false);
+  });
+
+  it("does not stop a turn that has its answer", async () => {
+    pluginOnHost.value = true;
+    const { pool, engine } = harness();
+    const result = await engine.run(runOpts("PROVIDERRETRY build it"));
+    expect(result.error).toBeUndefined();
+    expect(result.result).toContain("answer:PROVIDERRETRY build it");
+    expect((await serverLog(pool)).some((e) => e.url.endsWith("/abort"))).toBe(false);
   });
 });
 

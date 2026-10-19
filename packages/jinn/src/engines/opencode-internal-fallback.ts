@@ -235,3 +235,9 @@ export function warnOpencodeInternalFallback(read: () => OpencodeInternalFallbac
   logger.debug(`opencode internal fallback found in: ${found.sources.join("; ")}`);
   return found;
 }
+
+/** Whether the opencode on a host has a model-fallback plugin: the gateway host's own reading, or what a remote host reported. */
+export function hostHasInternalFallback(remoteDestination?: string): boolean {
+  if (remoteDestination === undefined) return currentOpencodeInternalFallback().detected;
+  return (remoteSources.get(remoteDestination) ?? []).length > 0;
+}

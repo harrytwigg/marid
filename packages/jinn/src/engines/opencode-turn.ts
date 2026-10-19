@@ -24,6 +24,11 @@ import {
  * Transport-agnostic by construction — a local run and one carried over ssh
  * produce the same lines, so neither is special-cased here.
  */
+/** What a turn that a host's fallback plugin ended says: the plugin is named, and the turn counts as a usage limit. */
+export const FALLBACK_PLUGIN_ENDED_TURN =
+  "This host's opencode has a model-fallback plugin (see `jinn doctor`), which aborts a turn at a usage limit and re-sends the prompt on another model; "
+  + "the gateway does not follow that re-send, so this counts as a usage limit and its fallback chain takes over. Remove the plugin.";
+
 export class OpencodeTurn {
   /** The answer: the last non-empty text part wins. */
   private resultText = "";
@@ -39,7 +44,9 @@ export class OpencodeTurn {
   /** opencode assigns this; until it speaks, the id we asked it to resume. */
   private sessionId: string;
 
-  constructor(resumeSessionId: string) {
+  /** @param fallbackPluginOnHost whether the host's opencode carries a model-fallback
+   *  plugin (opencode-internal-fallback.ts), read when the turn ends. */
+  constructor(resumeSessionId: string, private readonly fallbackPluginOnHost: () => boolean = () => false) {
     this.sessionId = resumeSessionId;
   }
 
@@ -154,7 +161,7 @@ export class OpencodeTurn {
       return { sessionId: this.sessionId, result: this.resultText, ...accounting };
     }
 
-    const error = outcome.failure || this.outcomeError(outcome);
+    const { error, plugin } = this.failureOf(outcome);
     return {
       sessionId: this.sessionId,
       result: "",
@@ -170,8 +177,24 @@ export class OpencodeTurn {
       // which is exactly the shape `isDeadSessionError` reads as a stale resume
       // id — and it is consulted BEFORE `detectRateLimit`, so without this the
       // session id would be wiped and the engine chain never walked.
-      ...(isRateLimitMessage(error) ? { rateLimit: { status: "rejected" } } : {}),
+      ...(plugin || isRateLimitMessage(error) ? { rateLimit: { status: "rejected" } } : {}),
     };
+  }
+
+  /** The error of a turn with no accepted answer, and whether a host's fallback plugin ended it. */
+  private failureOf(outcome: { code: number | null; stderr: string; failure?: string; noAnswer?: string }): { error: string; plugin: boolean } {
+    const error = outcome.failure || this.outcomeError(outcome);
+    const plugin = this.endedByFallbackPlugin(outcome);
+    return { error: plugin ? `${error}. ${FALLBACK_PLUGIN_ENDED_TURN}` : error, plugin };
+  }
+
+  /** A turn that ended with nothing, on a host whose opencode has a model-fallback
+   *  plugin: the plugin aborts a turn at a usage limit and re-sends the prompt, which
+   *  ends it with no answer and no error of its own. Not for a failure of the transport,
+   *  or an error that is not a usage limit. */
+  private endedByFallbackPlugin(outcome: { code: number | null; failure?: string }): boolean {
+    if (outcome.failure || outcome.code !== 0 || !this.fallbackPluginOnHost()) return false;
+    return !this.turnError || isRateLimitMessage(this.turnError);
   }
 
   /** Why a turn that produced no accepted answer failed: whatever opencode

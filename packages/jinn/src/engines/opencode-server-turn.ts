@@ -87,6 +87,8 @@ export interface ServerTurnDeps {
    *  The engine takes the host off server mode, so later turns use `run`
    *  rather than lose events silently. */
   onProtocolDrift?: (reason: string) => void;
+  /** Whether the host's opencode has a model-fallback plugin (see opencode-internal-fallback.ts). */
+  fallbackPluginOnHost?: () => boolean;
 }
 
 /** Timings a test may shorten. The status poll is a backstop for a
@@ -578,7 +580,7 @@ export class OpencodeServerTurn {
     private readonly onStream: ((delta: StreamDelta) => void) | null,
     private readonly deps: ServerTurnDeps,
   ) {
-    this.turn = new OpencodeTurn(opts.resumeSessionId || "");
+    this.turn = new OpencodeTurn(opts.resumeSessionId || "", deps.fallbackPluginOnHost);
   }
 
   /**
@@ -616,6 +618,7 @@ export class OpencodeServerTurn {
       this.settle.cancel();
       this.controller.abort();
     }
+    await this.stopPluginCopy();
     return this.failedTurn(this.turn.result({
       code: this.failure ? 1 : 0,
       terminationReason: this.terminationReason,
@@ -625,6 +628,14 @@ export class OpencodeServerTurn {
       failure: this.failure ?? undefined,
       noAnswer: this.noAnswer(),
     }));
+  }
+
+  /** A fallback plugin that aborts the turn re-sends its prompt on another model, and
+   *  the gateway does not follow that copy. With no answer in hand, stop what it started
+   *  (the usage limit that set it off is the turn's outcome, and the chain takes over). */
+  private async stopPluginCopy(): Promise<void> {
+    if (!this.deps.fallbackPluginOnHost?.() || this.lastAnswer === "text" || this.terminationReason) return;
+    await this.stopOnServer();
   }
 
   /** What a failed turn adds to its result: when a usage window ends, and that

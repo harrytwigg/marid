@@ -6,6 +6,7 @@ import { logger } from "../shared/logger.js";
 import { isRemoteTarget } from "../shared/remote-target.js";
 import type { RemoteExecutionConfig } from "../shared/config-types.js";
 import { cleanupOpencodeSessionConfig, type OpencodeConfigHandle } from "./opencode-mcp.js";
+import { hostHasInternalFallback } from "./opencode-internal-fallback.js";
 import { OpencodeTurn } from "./opencode-turn.js";
 import { RemoteKills, type RemoteRun } from "./remote-stage.js";
 import {
@@ -310,6 +311,7 @@ export class OpencodeEngine implements InterruptibleEngine {
       const turn = new Turn(server, turnOpts, onStream, {
         abort: (target) => servers.abortTurn(trackingId, target),
         onSessionId: (id) => servers.noteEngineSession(trackingId, id),
+        fallbackPluginOnHost: () => hostHasInternalFallback(server.remote?.staging.destination),
         onProtocolDrift: (reason) => {
           drifted = true;
           servers.markUnsupported(server.hostKey, `opencode ${server.hostKey} server API drift: ${reason}`);
@@ -392,7 +394,7 @@ export class OpencodeEngine implements InterruptibleEngine {
       stderr: "",
       settled: false,
       resolve,
-      turn: new OpencodeTurn(plan.sessionIdOut),
+      turn: new OpencodeTurn(plan.sessionIdOut, () => hostHasInternalFallback(plan.remote?.destination)),
       ...(plan.configHandle ? { configHandle: plan.configHandle } : {}),
       ...(plan.remote ? { remote: plan.remote } : {}),
     };

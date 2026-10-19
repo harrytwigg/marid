@@ -75,6 +75,10 @@
 //               reply to the same prompt, which answers
 //   NEWERREPLYDONE  the first reply finishes "stop" with nothing written; 300 ms
 //               later a new reply to the same prompt opens and answers
+//   COPYAFTERABORT  a retry status an hour off, then the session is aborted (the reply
+//               closes with nothing written and no error; idle), and 300 ms later
+//               another client posts the prompt's text as a NEW user message, with
+//               no Jinn metadata, whose reply answers and runs until aborted
 // Directives are read from the prompt's own text only, never from a synthetic
 // part (which may quote another prompt's directives).
 // Test hooks: FAKE_OPENCODE_SERVE_FAIL=1 makes `serve` exit at once;
@@ -216,7 +220,7 @@ function serve() {
       return;
     }
     if (text.includes("MIDFAIL")) return midTurnFailure(sessionID, turn);
-    if (/PROVIDER|NEWERREPLY/.test(text) && await providerTrouble(sessionID, turn)) return;
+    if (/PROVIDER|NEWERREPLY|COPYAFTERABORT/.test(text) && await providerTrouble(sessionID, turn)) return;
     if (text.includes("MULTISTEP")) { toolRound(sessionID, turn, 1); toolRound(sessionID, turn, 2); }
     if (text.includes("TOOLONLY")) {
       toolRound(sessionID, turn, 1);
@@ -331,12 +335,37 @@ function serve() {
       setStatus(sessionID, "busy");
       newReply(sessionID, turn);
     }
+    if (text.includes("COPYAFTERABORT")) {
+      retry(1, 3_600_000);
+      await sleep(100);
+      closeEmpty();
+      setStatus(sessionID, "idle");
+      await sleep(300);
+      postCopyOfPrompt(sessionID, turn);
+      setStatus(sessionID, "busy");
+      newReply(sessionID, turn);
+      while (!turn.aborted) await sleep(20);
+      return true;
+    }
     if (text.includes("NEWERREPLYDONE")) {
       closeEmpty("stop");
       await sleep(300);
       newReply(sessionID, turn);
     }
     return false;
+  }
+
+  /** COPYAFTERABORT: another client posts the prompt's text parts again, without
+   *  metadata, and the turn's next reply answers that copy. */
+  function postCopyOfPrompt(sessionID, turn) {
+    const userId = newId("msg");
+    const parts = (turn.body.parts ?? []).filter((p) => p.type === "text")
+      .map((p) => ({ id: newId("prt"), type: "text", text: p.text, messageID: userId, sessionID }));
+    const user = { info: { id: userId, sessionID, role: "user", time: { created: Date.now() } }, parts };
+    sessions.get(sessionID).messages.push(user);
+    messageUpdated(sessionID, user);
+    for (const p of parts) publish("message.part.updated", { sessionID, part: p, time: Date.now() });
+    turn.userId = userId;
   }
 
   /** MIDFAIL: the turn ends itself, in the order its prompt asks for. */
