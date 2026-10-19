@@ -91,7 +91,9 @@ hook and the event.
 A hook on `to: in_review` with a label can start a reviewer that checks the Todo's
 pull request, merges and deploys it, and closes the Todo. The reviewer is an employee
 whose YAML says `closeTodos: true` (see "Closing Todos" in the org docs); without that
-grant its `update_work_item { status: "done" }` is refused like any other employee's.
+grant its `update_work_item { status: "done" }` is refused like any other employee's. Even
+with it, a close is accepted only from `in_review`: a Todo in any other open status is
+refused until it has been moved there.
 
 ```yaml
 # employee: org/ops/release-reviewer.yaml

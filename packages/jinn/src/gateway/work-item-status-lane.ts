@@ -20,7 +20,7 @@ import { workItemActor, type WorkItemCaller } from "./work-item-arming.js";
  *   the gateway posts on the Todo. Nothing else rides on it.
  * - The **closer lane** is the operator's standing grant: an employee whose YAML
  *   says `closeTodos: true` may move a Todo to `done` as itself, with a reason
- *   the gateway posts on the Todo. `done` and nothing else: cancelling,
+ *   the gateway posts on the Todo, from `in_review` only. `done` and nothing else: cancelling,
  *   reopening and cascading stay the operator's, and every other move by that
  *   employee is an ordinary agent move.
  */
@@ -80,10 +80,15 @@ function closerOf(caller: Extract<WorkItemCaller, { kind: "session" }>): string 
 }
 
 /** A granted employee closing a Todo as `done`, with the reason it will post.
- *  Closed work stays closed and `cascade` never reaches here (the fields parser
- *  refuses it off the operator surface), so this is the one close and nothing more. */
+ *  Only reviewed work: the grant exists to close what is in review, and a close
+ *  from any other open status would let an agent skip review. Closed work stays
+ *  closed and `cascade` never reaches here (the fields parser refuses it off the
+ *  operator surface), so this is the one close and nothing more. */
 function resolveCloserLane(employee: string, item: WorkItem, note: string): StatusLaneResult {
   if (STICKY_STATUSES.has(item.status)) return refuse(403, `Todo ${item.id} is already ${item.status}; reopening closed work is the operator's`);
+  if (item.status !== "in_review") {
+    return refuse(403, `an employee with closeTodos closes Todos that are in review: Todo ${item.id} is ${item.status}; move it to in_review first`);
+  }
   if (!note) {
     return refuse(400, `closing Todo ${item.id} needs the reason in note: it is posted on the Todo as a comment`);
   }

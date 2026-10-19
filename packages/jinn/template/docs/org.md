@@ -201,7 +201,7 @@ closeTodos: true
 
 - **Only the operator grants it, by editing the file.** It is not an editable field: `PATCH /api/org/employees/:name` rejects it like any unknown field, and no session or tool can set it. A built-in system employee cannot be granted it either.
 - **It is read when the employee acts**, so deleting the line or setting it to `false` stops that employee's next close, including from a session that is already running.
-- **`done` and nothing else.** Cancelling, reopening a closed Todo and closing a Todo's open sub-tasks along with it (`cascade`) stay the operator's. Every other status move by the employee is an ordinary employee move.
+- **From in review only, and `done` and nothing else.** The grant exists to close reviewed work, so a close from backlog, executing or blocked is refused (move the Todo to in review first). Cancelling, reopening a closed Todo and closing a Todo's open sub-tasks along with it (`cascade`) stay the operator's. Every other status move by the employee is an ordinary employee move.
 - **A reason is required.** `update_work_item { status: "done", note: "<why>" }` without a `note` is refused. The gateway posts it on the Todo as `Closed as done by <employee>. Reason: <note>`, and the Todo's event log records the close under the employee's own session with `closeTodos: true`, not under the operator.
 - **The usual guards still apply.** A session that executed the Todo cannot close it, a Todo with open sub-tasks cannot be closed, and an employee in a scoped department can reach only its own department's Todos.
 

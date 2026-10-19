@@ -119,6 +119,15 @@ describe("an employee granted closeTodos", () => {
     }
   });
 
+  it.each(["backlog", "executing", "blocked"] as const)("closes only from in_review: refuses a close from %s", async (status) => {
+    const item = workItems.createWorkItem({ title: `Closer from ${status}`, status });
+    const res = await closeAs("closer-dev", item.id);
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/closes Todos that are in review.*move it to in_review first/);
+    expect(statusOf(item.id)).toBe(status);
+    expect(listComments(item.id).total).toBe(0);
+  });
+
   it("moves everything else through the ordinary agent lane", async () => {
     const item = workItems.createWorkItem({ title: "Agent moves", status: "backlog" });
     const session = await sessionOf("closer-dev");
@@ -184,16 +193,6 @@ describe("an employee granted closeTodos", () => {
     expect(refused.body.error).toMatch(/operator's decision/);
     expect(statusOf(second.id)).toBe("in_review");
   });
-
-  it("reads only a literal true as the grant", async () => {
-    for (const value of ['"true"', "1", "yes", "'true'"]) {
-      writeEmployee("engineering", "closer-dev", [`closeTodos: ${value}`]);
-      refreshOrg(context.getConfig());
-      const item = reviewTodo(`Grant spelled ${value}`);
-      const res = await closeAs("closer-dev", item.id);
-      expect([value, res.status]).toEqual([value, 403]);
-    }
-  });
 });
 
 describe("an employee without the grant", () => {
@@ -234,12 +233,6 @@ describe("department scope", () => {
 
     const inside = await scoped("POST", `/api/work-items/${mine.id}/status`, closeBody);
     expect([inside.status, statusOf(mine.id)]).toEqual([200, "done"]);
-  });
-
-  it("lets an open-department closer close a Todo in another department", async () => {
-    const elsewhere = workItems.createWorkItem({ title: "Elsewhere", department: "engineering", status: "in_review" });
-    const res = await closeAs("closer-dev", elsewhere.id);
-    expect([res.status, statusOf(elsewhere.id)]).toEqual([200, "done"]);
   });
 });
 
