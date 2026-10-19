@@ -5,8 +5,10 @@ import { makeSession } from "./helpers/session-fixture.js";
 
 /** A notice an engine asks for (`EngineResult.notices`) is posted once, by the turn, before it settles. */
 
-function attempt(result: Partial<EngineResult>) {
-  const notice = vi.fn(async (_text: string) => undefined);
+function attempt(result: Partial<EngineResult>, failing = false) {
+  const notice = vi.fn(async (_text: string) => {
+    if (failing) throw new Error("surface down");
+  });
   return runEngineAttempt({
     input: { session: makeSession({}), attachments: [], employee: undefined, attemptToken: "t1", config: {} } as any,
     plan: {
@@ -26,6 +28,12 @@ describe("engine notices", () => {
   it("posts each notice the engine returned, once, and keeps the result", async () => {
     const { outcome, notice } = await attempt({ notices: ["first", "second"] });
     expect(notice.mock.calls.map((c) => c[0])).toEqual(["first", "second"]);
+    expect(outcome.result.result).toBe("ok");
+  });
+
+  it("keeps the engine's result when the surface cannot take a notice", async () => {
+    const { outcome, notice } = await attempt({ notices: ["first", "second"] }, true);
+    expect(notice).toHaveBeenCalledTimes(2);
     expect(outcome.result.result).toBe("ok");
   });
 

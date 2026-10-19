@@ -23,13 +23,13 @@ async function remoteReports(): Promise<Pick<OpencodeFallbackReading, "remote" |
     const { getStatus, resolveLocalGatewayConnection } = await import("../gateway/lifecycle.js");
     const { gatewayBaseUrl } = await import("../gateway/gateway-info.js");
     const { JINN_HOME } = await import("../shared/paths.js");
-    if (!getStatus().running) return { remote: [] };
+    if (!getStatus().running) return { remote: [], remoteNote: "the gateway is not running, so remote hosts were not checked (it learns of them when it reaches them)" };
     const res = await fetch(`${gatewayBaseUrl(resolveLocalGatewayConnection(JINN_HOME))}/api/engines`, { signal: AbortSignal.timeout(3000) });
     if (!res.ok) return { remote: [], remoteNote: `the running gateway did not answer /api/engines (HTTP ${res.status}), so remote hosts were not checked` };
     const body = await res.json() as { engines?: { opencode?: { internalFallback?: { remote?: Array<{ host: string; sources: string[] }> } } } };
     return { remote: body.engines?.opencode?.internalFallback?.remote ?? [] };
-  } catch {
-    return { remote: [] };
+  } catch (err) {
+    return { remote: [], remoteNote: `the running gateway could not be asked about remote hosts (${err instanceof Error ? err.message : String(err)}), so only this host was checked` };
   }
 }
 

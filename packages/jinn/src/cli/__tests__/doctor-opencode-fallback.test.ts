@@ -68,6 +68,12 @@ describe("doctor's report on an opencode internal fallback", () => {
     expect(out).not.toContain("migrate-opencode --write");
   });
 
+  it("says why remote hosts were not checked, also on a clean host", () => {
+    const out = text(opencodeFallbackFindings(reading({ remoteNote: "the running gateway could not be asked about remote hosts (fetch failed), so only this host was checked" })));
+    expect(out).toContain("opencode has no internal model fallback configured.");
+    expect(out).toContain("only this host was checked");
+  });
+
   it("is added to doctor's report only when given a reading", () => {
     const without = doctorFindings({ env: {}, home: "/nowhere", instances: [] });
     const withReading = doctorFindings({ env: {}, home: "/nowhere", instances: [], opencodeFallback: reading() });

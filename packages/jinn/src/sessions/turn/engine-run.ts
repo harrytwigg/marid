@@ -30,6 +30,18 @@ export interface EngineAttemptArgs {
   model: string | undefined;
 }
 
+/** The notices an engine asked for, once each, ahead of the reply. A courtesy: a surface that
+ *  cannot take one must not fail a turn whose engine run succeeded. */
+async function postEngineNotices(surface: TurnSurface, sessionId: string, notices: string[] | undefined): Promise<void> {
+  for (const notice of notices ?? []) {
+    try {
+      await surface.notice(notice);
+    } catch (err) {
+      logger.warn(`Session ${sessionId}: could not post an engine notice: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+}
+
 /**
  * Run the engine once for this turn. The system prompt is rebuilt per attempt
  * because a model fallback changes the platform context, and the context
@@ -74,7 +86,7 @@ export async function runEngineAttempt(args: EngineAttemptArgs): Promise<EngineA
   });
 
   // Notices the engine asks for, once each, ahead of the reply.
-  for (const notice of result.notices ?? []) await surface.notice(notice);
+  await postEngineNotices(surface, sessionId, result.notices);
   return {
     result,
     fingerprint: prepared.fingerprint,
