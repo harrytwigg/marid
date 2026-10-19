@@ -5,6 +5,7 @@
  * unaffected.
  */
 import type { TerminalConfig } from "./terminal-config.js";
+import type { BoardHookConfig } from "./board-hooks-config.js";
 import type { RemoteMcpConfig } from "./remote-mcp-config.js";
 import type { TodoDepartmentsConfig } from "./todo-departments-config.js";
 import type { AutoCompactConfig } from "./auto-compact-config.js";
@@ -255,6 +256,8 @@ export interface JinnConfig {
   remote?: RemoteExecutionConfig;
   /** Operator terminals on the gateway and other machines. */
   terminal?: TerminalConfig;
+  /** Reactions to Todo board events (docs/board-hooks.md). */
+  hooks?: BoardHookConfig[];
 }
 
 export type OpencodeMode = "run" | "server";

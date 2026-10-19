@@ -12,6 +12,7 @@ import { migrateWorkItemsSchema, preflightWorkItemsDatabase, UNSUPPORTED_PRERELE
 import type { WorkItemSchemaPreflight } from '../work-items/migrate.js';
 import { migrateWorkItemSearchIndex } from '../work-items/search-index.js';
 import { migrateHeartbeatsSchema } from '../heartbeats/migrate.js';
+import { migrateBoardHooksSchema } from '../board-hooks/migrate.js';
 import { migratePluginsSchema } from '../plugins/migrate.js';
 import { migrateTalkApprovalSchema } from '../talk/approval/schema.js';
 import { migrateTalkSessionSchema } from '../talk/session/schema.js';
@@ -263,6 +264,7 @@ export function initDb(): Database.Database {
     migrateWorkItemsSchema(database, todoPreflight);
     migrateWorkItemSearchIndex(database);
     migrateHeartbeatsSchema(database);
+    migrateBoardHooksSchema(database);
     migratePluginsSchema(database);
     migrateTalkSessionSchema(database);
     migrateTalkApprovalSchema(database);

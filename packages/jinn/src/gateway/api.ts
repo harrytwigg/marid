@@ -340,6 +340,7 @@ import { setWorkItemSprint, type Sprint } from "../work-items/sprints.js";
 import { readCreateSprint, sprintRow } from "./work-item-create-sprint.js";
 import { mayOrganiseTags, mayRetagTodo } from "./work-item-standing.js";
 import { handleBoardWalkApi } from "./board-walk-api.js";
+import { handleBoardHooksApi } from "./board-hooks-api.js";
 import { opencodeDiscoveryEnv } from "../engines/opencode-launch.js";
 
 /** Max bytes accepted on /api/internal/hook (loopback-only relay payloads are tiny). */
@@ -2587,8 +2588,8 @@ export async function handleApiRequest(
       }
       // The lane (work-item-status-lane.ts) decides who may make this move: the
       // operator's surfaces walk every declared edge with human authority, the
-      // coordinator may close as done with a reason, every other session stays
-      // inside the open statuses.
+      // coordinator and a `closeTodos` employee may close as done with a reason,
+      // every other session stays inside the open statuses.
       const operatorLane = hasOperatorLane(caller);
       const fields = parseStatusUpdateFields(body, target, operatorLane);
       if (!fields.ok) return json(res, { error: fields.error }, fields.status);
@@ -2608,6 +2609,8 @@ export async function handleApiRequest(
         // The connector moves with the operator's authority but is recorded as its
         // own session; the marker is what lets the reconciler treat it as his.
         ...(lane.kind === "operator" && caller.kind === "session" ? { operatorLane: true } : {}),
+        // A close on the operator's standing grant says so: the actor stays the closer's own session.
+        ...(lane.kind === "closer" ? { closeTodos: true } : {}),
       }, caller.origin);
       // The banner's asked-for-after reason (design-doc §5): a same-status
       // operator move with a note annotates the CURRENT stop instead of
@@ -2648,6 +2651,9 @@ export async function handleApiRequest(
         // was taken for them: it goes on the Todo, under the coordinator's session.
         if (actingAsOperator && result.item.status === "done") {
           addComment({ workItemId: params.id, ...workItemCommentAuthor(caller), ...workItemCommentSession(caller), body: `Closed as done for the operator. Reason: ${note}`, origin: caller.origin });
+        }
+        if (lane.kind === "closer" && result.item.status === "done") {
+          addComment({ workItemId: params.id, ...workItemCommentAuthor(caller), ...workItemCommentSession(caller), body: `Closed as done by ${lane.employee}. Reason: ${note}`, origin: caller.origin });
         }
         if (result.item.status !== item.status) result.item = linkSelfStartedTodo(caller, result.item, actor);
         // A review handoff or send-back note is a comment under whoever moved it; a retried move posts it too.
@@ -2797,6 +2803,7 @@ export async function handleApiRequest(
       }
 
       const started = startTodoDispatcher(item, context, {
+        actor: workItemActor(caller),
         emitProjectionEvent: (id, action) => emitTodoProjectionEvent(context, id, action),
       });
       return json(res, started.body, started.status);
@@ -3647,7 +3654,7 @@ export async function handleApiRequest(
       //    preserved ids (backlog item + idle, undispatched, re-linkable session)
       //    instead of dispatching an untracked turn.
       try {
-        linkSession(workItem.id, session.id, delegationActor, resolveDelegationLinkRole(intent, workItem.status));
+        linkSession(workItem.id, session.id, delegationActor, resolveDelegationLinkRole(intent, workItem.status), { via: "delegation" });
         claim.bind(session.id);
         if (employeeName) recordNewDelegateSession(workItem.id, employeeName, session.id, parentSessionId);
       } catch (linkErr) {
@@ -4240,6 +4247,7 @@ export async function handleApiRequest(
     }
 
     if (await handleBoardWalkApi(req, res, { method, pathname, url }, context)) return;
+    if (await handleBoardHooksApi(req, res, { method, pathname, url }, context)) return;
 
     // POST /api/engine-limits/refresh — currently identical to GET for live
     // sources. Kept as a command-shaped endpoint so the UI/CLI can request a

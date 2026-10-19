@@ -43,6 +43,7 @@ persona: |
 | `remoteCwd` | string | no | Absolute working directory on the remote host, required when `remoteHost` is set; must sit under `remote.root` in `config.yaml` |
 | `remoteClaudeConfigDir` | string | no | Absolute path used as `CLAUDE_CONFIG_DIR` for this employee's sessions on the remote host |
 | `claudeConfigDir` | string | no | Absolute path of the Claude Code profile this employee's **local** sessions run on (see "Claude profiles" below). Not allowed with `remoteHost` |
+| `closeTodos` | boolean | no | Lets this employee move a Todo to `done`, with a reason (default `false`; see "Closing Todos" below). Only a literal `true` grants it. YAML only |
 
 The `remote*` fields need a `remote` block in `config.yaml`. A bad remote target is refused at load: that one employee is skipped and the rest of the org still loads.
 
@@ -184,9 +185,28 @@ The org page shows a department's scope as a badge on its group box. Click the b
 
 ### Todos
 
-Todos are deliberately authored work in the live ledger. Employees find and update their assigned Todos, move finished work to in review, and use blocked only when they cannot proceed. Closing, cancelling and archiving Todos are the operator's.
+Todos are deliberately authored work in the live ledger. Employees find and update their assigned Todos, move finished work to in review, and use blocked only when they cannot proceed. Closing, cancelling and archiving Todos are the operator's, except that the operator can grant one employee the right to close (see below).
 
 Assigning a Todo, or changing its status, starts nothing. A session starts when the Todo is dispatched (`dispatch_work_item`), or when the scheduled walk over the open Todos starts it from the backlog (its rules file, in the instance home, says what it may start and when). For a multi-step job, split the work into child Todos and delegate them; use cron for scheduled prompts.
+
+### Closing Todos
+
+`closeTodos: true` in an employee's YAML lets that employee's sessions move a Todo to `done`, so a reviewer an automation starts (for example from a hook on a Todo's status change; the repository's hooks documentation has a worked example) can check the work, merge it and close the Todo without the operator's click.
+
+```yaml
+name: release-reviewer
+persona: Checks a finished pull request, merges and deploys it, then closes the Todo.
+closeTodos: true
+```
+
+- **Only the operator grants it, by editing the file.** It is not an editable field: `PATCH /api/org/employees/:name` rejects it like any unknown field, and no session or tool can set it. A built-in system employee cannot be granted it either.
+- **It is read from the live org when the employee acts**, so deleting the line or setting it to `false` stops that employee's next close once the gateway has reloaded the org (about a second after the file changes), including from a session that is already running.
+- **From in review only, and `done` and nothing else.** The grant exists to close reviewed work, so a close from backlog, executing or blocked is refused (move the Todo to in review first). Cancelling, reopening a closed Todo and closing a Todo's open sub-tasks along with it (`cascade`) stay the operator's. Every other status move by the employee is an ordinary employee move.
+- **A reason is required.** `update_work_item { status: "done", note: "<why>" }` without a `note` is refused. The gateway posts it on the Todo as `Closed as done by <employee>. Reason: <note>`, and the Todo's event log records the close under the employee's own session with `closeTodos: true`, not under the operator.
+- **Never its own work.** The employee cannot close a Todo it had a hand in, from any of its sessions: one where a session of the employee was linked to work on it, where the employee moved it to `executing` (other than sending it back from review), or where the employee made the latest move into review. Review it, send it back, and close it once someone else hands it in again.
+- **The usual guards still apply.** A Todo with open sub-tasks cannot be closed. An employee in a scoped department can reach only its own department's Todos; an employee in an open department reaches every department's Todos, as its other moves already do, so grant `closeTodos` there with that in mind.
+
+The employee panel on the org page shows a **Can close Todos** badge for an employee that has the grant.
 
 ### Todo departments
 

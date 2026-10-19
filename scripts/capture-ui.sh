@@ -74,7 +74,7 @@ if [[ "${JINN_CAPTURE_TOOL:-capture.mjs}" == "capture.mjs" ]] && { [[ $# -eq 0 ]
   export JINN_CAPTURE_SEED_ORG=1
 fi
 # Skills, cron and notes screens read their own fixtures (seed-pages.mjs), written the same way.
-if [[ "${JINN_CAPTURE_TOOL:-capture.mjs}" == "capture.mjs" ]] && { [[ $# -eq 0 ]] || printf '%s\n' "$@" | grep -Eq '^(skills|skill-detail|cron|cron-detail|notes|notes-editor)$'; }; then
+if [[ "${JINN_CAPTURE_TOOL:-capture.mjs}" == "capture.mjs" ]] && { [[ $# -eq 0 ]] || printf '%s\n' "$@" | grep -Eq '^(skills|skill-detail|cron|cron-detail|notes|notes-editor|hooks)$'; }; then
   export JINN_CAPTURE_SEED_PAGES=1
 fi
 "$NODE_BIN" "$CAPTURE_DIR/seed.mjs" db "$SANDBOX_HOME" "$REPO"

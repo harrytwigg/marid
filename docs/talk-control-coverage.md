@@ -17,6 +17,7 @@
 | logs | `/logs` | semantic | bounded redacted activity summary; controls: refresh |
 | limits | `/limits` | semantic | engine limit windows and freshness; controls: refresh |
 | auto-dispatch | `/auto-dispatch` | semantic | board walk status and tick log, sessions started per engine, and usage projection; controls: refresh |
+| hooks | `/hooks` | semantic | configured board hooks and their run log; controls: filter, refresh, enable, disable |
 | org | `/org` | semantic | employee, reporting line, and activity; controls: open, delegate |
 | settings-plugins | `/settings/plugins` | semantic | plugin inventory and state; controls: enable, disable, rescan |
 | settings | `/settings` | semantic | active settings and safe configuration summary; controls: update |

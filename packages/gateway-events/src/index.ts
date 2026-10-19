@@ -55,6 +55,8 @@ export interface GatewayEventMap {
     } | null
   }
   "queue:updated": { sessionId: string; sessionKey: string; depth?: number; paused?: boolean }
+  /** A board hook run row was written or finished; the Hooks page refetches. */
+  "hooks:run": { id: string; hook: string; status: string }
   "company:changed": CompanyChangedEvent
   "pins:changed": Record<string, never>
   "notes:changed": { path: string; revision: string; action: "created" | "updated" }
@@ -105,6 +107,7 @@ export const GATEWAY_EVENTS = {
   sessionAttachment: "session:attachment",
   sessionBackground: "session:background",
   queueUpdated: "queue:updated",
+  hooksRun: "hooks:run",
   companyChanged: "company:changed",
   pinsChanged: "pins:changed",
   notesChanged: "notes:changed",

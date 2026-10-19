@@ -67,7 +67,7 @@
       "path": "docs/org.md",
       "operation": "modify",
       "baseSha256": "3ed3540abb2997cde6ef0d8cecf61281f4e96c0909807d51040fba1709f3a968",
-      "targetSha256": "c15bfcd10e6d3a995c6bd41285e1e2bc32ff914dbb182fc9d5ec26bbf0fd9bca",
+      "targetSha256": "a56c05e456c56a82319d579812e820b495bf81664d912e10a88266925afd272e",
       "basePayload": "files/base/docs/org.md",
       "targetPayload": "files/target/docs/org.md"
     },

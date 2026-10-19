@@ -8,6 +8,7 @@ import { emojiForName } from "@/lib/emoji-pool";
 import { EmojiPicker } from "@/components/ui/emoji-picker";
 import { EmployeeEditor } from "@/components/org/employee-editor";
 import { ClaudeProfileRow } from "@/components/org/claude-profile";
+import { CloseTodosBadge } from "@/components/org/close-todos-badge";
 
 interface SessionData {
   id: string;
@@ -170,6 +171,7 @@ export function EmployeeDetail({
             </div>
           </div>
           <div className="flex items-center gap-[var(--space-2)]">
+            <CloseTodosBadge closeTodos={employee.closeTodos} />
             <RankBadge rank={rank} />
             {/* The COO node is injected client-side (no YAML) — not editable. */}
             {rank !== "executive" && (

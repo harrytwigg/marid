@@ -29,6 +29,7 @@ export const APP_ROUTES = [
   { id: "logs", path: "/logs", availability: "always", surface: "logs" },
   { id: "limits", path: "/limits", availability: "always", surface: "limits" },
   { id: "auto-dispatch", path: "/auto-dispatch", availability: "always", surface: "auto-dispatch" },
+  { id: "hooks", path: "/hooks", availability: "always", surface: "hooks" },
   { id: "org", path: "/org", availability: "always", surface: "org" },
   { id: "settings-plugins", path: "/settings/plugins", availability: "always", surface: "settings-plugins" },
   { id: "settings", path: "/settings", availability: "always", surface: "settings" },

@@ -40,7 +40,7 @@ const WORK_ITEM_NOTE_CHAR_CAP = 8_000;
 
 export const STATUSES = ["backlog", "executing", "in_review", "done", "blocked", "cancelled"] as const;
 const SOURCES = ["human", "delegation", "cron", "workflow", "session", "connector", "goal"] as const;
-/** The agent lane plus `done`, which only the coordinator reaches (asOperator). */
+/** The agent lane plus `done`, which the gateway grants the coordinator (asOperator) and a closeTodos employee, nobody else. */
 const AGENT_UPDATE_STATUSES = ["backlog", "executing", "in_review", "blocked", "done"] as const;
 const TODO_ID_SCHEMA = { type: "string", pattern: "^[A-Z]{3}-[1-9][0-9]*$" } as const;
 const COMMENT_ID_SCHEMA = { type: "string", pattern: "^wic_[0-9a-f]{12}$" } as const;
@@ -285,7 +285,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
 
   const update: JinnMcpTool = {
     name: "update_work_item",
-    description: "Update Todo status.",
+    description: "Update Todo status. done: operator or closeTodos employee, reason in note.",
     inputSchema: {
       type: "object",
       properties: {
