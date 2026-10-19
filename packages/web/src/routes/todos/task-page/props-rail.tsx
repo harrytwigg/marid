@@ -128,7 +128,7 @@ export function PropsRail({
           data-testid="rail-dispatch-session"
           data-session-id={railSession.id}
           onClick={() => openSession(railSession.id)}
-          className="focus-ring group/dispatch relative -mx-2.5 flex min-h-[34px] w-[calc(100%+20px)] items-center gap-[9px] rounded-[9px] px-2.5 text-left text-[13.5px] font-medium text-[var(--text-primary)] outline-none hover:bg-[var(--fill-quaternary)]"
+          className="focus-outline group/dispatch relative -mx-2.5 flex min-h-[34px] w-[calc(100%+20px)] items-center gap-[9px] rounded-[9px] px-2.5 text-left text-[13.5px] font-medium text-[var(--text-primary)] outline-none hover:bg-[var(--fill-quaternary)]"
         >
           {/* The pulse says "working", so it is spent only on a session that is:
               the rail now offers a finished attempt too, and a finished attempt
@@ -150,7 +150,7 @@ export function PropsRail({
           data-testid="rail-dispatch"
           disabled={dispatchPending}
           onClick={onDispatch}
-          className="focus-ring relative -mx-2.5 flex min-h-[34px] w-[calc(100%+20px)] items-center gap-[9px] rounded-[9px] px-2.5 text-left text-[13.5px] font-medium text-[var(--text-primary)] outline-none hover:bg-[var(--fill-quaternary)] disabled:cursor-wait disabled:text-[var(--text-tertiary)]"
+          className="focus-outline relative -mx-2.5 flex min-h-[34px] w-[calc(100%+20px)] items-center gap-[9px] rounded-[9px] px-2.5 text-left text-[13.5px] font-medium text-[var(--text-primary)] outline-none hover:bg-[var(--fill-quaternary)] disabled:cursor-wait disabled:text-[var(--text-tertiary)]"
         >
           {dispatchPending ? <LoaderCircle size={14} aria-hidden className="animate-spin text-[var(--text-tertiary)]" /> : <Send size={14} aria-hidden className="text-[var(--text-tertiary)]" />}
           {dispatchPending ? "Starting Dispatcher…" : "Dispatch"}
@@ -177,7 +177,7 @@ export function PropsRail({
               data-testid="rail-labels-add"
               aria-label="Edit labels"
               onClick={labelsPick.onOpen}
-              className="focus-ring flex h-[22px] items-center rounded-[11px] bg-[var(--fill-tertiary)] px-[9px] text-[11.5px] font-medium text-[var(--text-quaternary)] outline-none hover:text-[var(--text-secondary)]"
+              className="focus-outline flex h-[22px] items-center rounded-[11px] bg-[var(--fill-tertiary)] px-[9px] text-[11.5px] font-medium text-[var(--text-quaternary)] outline-none hover:text-[var(--text-secondary)]"
             >
               +
             </button>

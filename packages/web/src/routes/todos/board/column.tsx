@@ -101,7 +101,7 @@ export function BoardColumn({
             aria-label={`New todo in ${label}`}
             data-testid={`board-quick-add-${status}`}
             onClick={onQuickAdd}
-            className="focus-ring ml-auto grid size-6 place-items-center rounded-lg text-[var(--text-quaternary)] opacity-0 transition-opacity hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)] focus-visible:opacity-100 group-hover/colhead:opacity-100 max-[700px]:size-11 max-[700px]:opacity-100"
+            className="focus-outline ml-auto grid size-6 place-items-center rounded-lg text-[var(--text-quaternary)] opacity-0 transition-opacity hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)] focus-visible:opacity-100 group-hover/colhead:opacity-100 max-[700px]:size-11 max-[700px]:opacity-100"
           >
             <Plus size={13} strokeWidth={2.2} aria-hidden />
           </button>
@@ -121,7 +121,7 @@ export function BoardColumn({
             data-testid={`board-show-more-${status}`}
             onClick={loadMore}
             disabled={loadingMore}
-            className="focus-ring min-h-9 rounded-[var(--radius-lg)] bg-[var(--fill-quaternary)] px-[13px] text-left text-[calc(12px*var(--text-scale))] font-medium text-[var(--text-tertiary)] transition-colors hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)]"
+            className="focus-outline min-h-9 rounded-[var(--radius-lg)] bg-[var(--fill-quaternary)] px-[13px] text-left text-[calc(12px*var(--text-scale))] font-medium text-[var(--text-tertiary)] transition-colors hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)]"
           >
             {loadingMore ? "Loading…" : `Show ${Math.min(BOARD_PAGE_SIZE, remaining)} more`}
           </button>

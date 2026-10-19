@@ -88,6 +88,7 @@
 // every v1 route answers 200 text/html, as its SPA fallback does, and only
 // GET /api/info reports the version; FAKE_OPENCODE_API_INFO_DROP=1 drops the
 // first /api/info connection unanswered);
+// `--version` prints that version as the real CLI does;
 // FAKE_OPENCODE_ENV_LOG names a file each `serve`, `run` and `attach` appends
 // `<verb> <OPENCODE_DISABLE_FFF or empty>` to;
 // FAKE_OPENCODE_RUN_LOG names a file each `run` appends its argv to as one JSON line; FAKE_OPENCODE_SERVE_LOG names a file each
@@ -109,7 +110,7 @@ const flag = (name) => {
   const i = argv.indexOf(name);
   return i >= 0 ? argv[i + 1] : undefined;
 };
-if (process.env.FAKE_OPENCODE_ENV_LOG) fs.appendFileSync(process.env.FAKE_OPENCODE_ENV_LOG, `${verb} ${process.env.OPENCODE_DISABLE_FFF ?? ""}\n`);
+if (process.env.FAKE_OPENCODE_ENV_LOG && verb !== "--version") fs.appendFileSync(process.env.FAKE_OPENCODE_ENV_LOG, `${verb} ${process.env.OPENCODE_DISABLE_FFF ?? ""}\n`);
 const emitLine = (event) => process.stdout.write(`${JSON.stringify(event)}\n`);
 
 async function readStdin() {
@@ -588,7 +589,12 @@ function serve() {
   process.on("SIGTERM", () => process.exit(0));
 }
 
-if (verb === "serve") {
+if (verb === "--version") {
+  // As the real CLIs print it: 1.x bare, OpenCode 2 as `opencode v<version>`.
+  const reported = process.env.FAKE_OPENCODE_VERSION ?? "1.18.31";
+  if (reported.startsWith("v2:")) process.stdout.write(`opencode v${reported.slice(3)}\n`);
+  else if (reported !== "none") process.stdout.write(`${reported}\n`);
+} else if (verb === "serve") {
   serve();
 } else if (verb === "run") {
   const prompt = await readStdin();

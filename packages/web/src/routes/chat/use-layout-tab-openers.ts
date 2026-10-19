@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import type { Message } from '@/lib/conversations'
 import { resolveDeepLink } from '@/components/chat/chat-route-helpers'
-import type { OpenTodo } from '@/components/chat/file-open-context'
+import type { OpenSubagent, OpenTodo } from '@/components/chat/file-open-context'
 import type { useSplitWorkingSet } from './layout/use-split-working-set'
 
 type SplitWorkingSet = ReturnType<typeof useSplitWorkingSet>
@@ -29,6 +29,14 @@ export function useNewChatTabOpener(openNewChat: SplitWorkingSet['openNewChat'],
  */
 export function useTodoTabOpener(openTodo: SplitWorkingSet['openTodo'], mobile: boolean): OpenTodo {
   return useCallback((todoId, sessionId) => !mobile && openTodo(sessionId, todoId), [mobile, openTodo])
+}
+
+/**
+ * A sub-agent's conversation opened as a tab beside the chat that launched it. False on a phone, or
+ * with no chat on screen to open it beside, which has the caller show it in a sheet over the chat.
+ */
+export function useSubagentTabOpener(openSubagent: SplitWorkingSet['openSubagent'], mobile: boolean): OpenSubagent {
+  return useCallback((subagent) => !mobile && openSubagent(subagent.sessionId, subagent), [mobile, openSubagent])
 }
 
 /**

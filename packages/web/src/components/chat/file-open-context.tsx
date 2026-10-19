@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { sessionPath } from '@/components/chat/chat-route-helpers'
+import type { SubagentTabRef } from '@/routes/chat/layout/subagent-tab'
 
 /**
  * Opens a chat file link inside the app: as a tab beside the chat on desktop, as the file view
@@ -29,6 +30,19 @@ export function useOpenTodo(): OpenTodo | null {
 }
 
 /**
+ * Opens a background sub-agent's conversation as a tab beside the chat that launched it, on desktop.
+ * Provided by the chat page. Returns false when it could not (a phone, a layout not yet loaded, no chat
+ * on screen), so the caller shows it in a sheet over the chat instead; without a provider it always does.
+ */
+export type OpenSubagent = (subagent: SubagentTabRef) => boolean
+
+export const SubagentOpenContext = createContext<OpenSubagent | null>(null)
+
+export function useOpenSubagentTab(): OpenSubagent | null {
+  return useContext(SubagentOpenContext)
+}
+
+/**
  * Opens a chat from a link anywhere inside the chat layout (a Todo shown as a tab, its session
  * links): the chat's tab is shown and its pane focused if it is already open, else it opens as it
  * does from the list. Provided by the chat page.
@@ -51,17 +65,20 @@ export function useOpenSession(): OpenSession {
   }, [open, navigate])
 }
 
-/** The chat page's openers for what a link inside the layout can name: a file, a Todo, a chat. */
-export function LayoutOpenProviders({ file, todo, session, children }: {
+/** The chat page's openers for what a link inside the layout can name: a file, a Todo, a sub-agent, a chat. */
+export function LayoutOpenProviders({ file, todo, subagent, session, children }: {
   file: OpenFile
   todo: OpenTodo
+  subagent: OpenSubagent
   session: OpenSession
   children: ReactNode
 }) {
   return (
     <FileOpenContext.Provider value={file}>
       <TodoOpenContext.Provider value={todo}>
-        <SessionOpenContext.Provider value={session}>{children}</SessionOpenContext.Provider>
+        <SubagentOpenContext.Provider value={subagent}>
+          <SessionOpenContext.Provider value={session}>{children}</SessionOpenContext.Provider>
+        </SubagentOpenContext.Provider>
       </TodoOpenContext.Provider>
     </FileOpenContext.Provider>
   )

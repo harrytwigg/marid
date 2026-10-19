@@ -39,7 +39,7 @@ export function SearchLauncher({
         burst.current += e.key
         onOpen(burst.current)
       }}
-      className={`focus-ring outline-none transition-colors hover:bg-[var(--fill-secondary)] ${className}`}
+      className={`focus-outline outline-none transition-colors hover:bg-[var(--fill-secondary)] ${className}`}
     >
       <Search size={iconSize} strokeWidth={2} className="flex-none text-[var(--text-quaternary)]" aria-hidden />
       <span className={labelClassName}>Search todos</span>

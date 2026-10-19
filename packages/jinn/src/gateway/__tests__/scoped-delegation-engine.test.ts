@@ -273,7 +273,7 @@ describe("a delegate refused before its engine ever ran", () => {
     const third = await delegate(dispatcherId, id);
 
     expect(third.status).toBe(403);
-    expect(third.body.error).toMatch(/employee "todo-dispatcher" does not own Todo/);
+    expect(third.body.error).toMatch(/this Dispatcher's hand-off is spent/);
   });
 
   it("does not hand that second chance to anyone else", async () => {
@@ -297,6 +297,8 @@ describe("a delegate refused before its engine ever ran", () => {
 
     expect(again.status).toBe(403);
     expect(workItems.getWorkItem(id)?.assignee).toBe("lab-lead");
+    // Resuming the old delegate would restart work the operator moved elsewhere.
+    expect(again.body.error).not.toContain("send_to_session");
   });
 
   it("keeps the one-shot rule for a delegate whose engine ran, even when its first turn threw", async () => {
@@ -311,6 +313,8 @@ describe("a delegate refused before its engine ever ran", () => {
     const again = await call("/api/delegations", { workItemId: id, employee: "open-dev", task: BRIEF }, dispatcherId);
 
     expect(again.status).toBe(403);
-    expect(again.body.error).toMatch(/employee "todo-dispatcher" does not own Todo/);
+    expect(again.body.error).toMatch(/this Dispatcher's hand-off is spent/);
+    // The refusal points at the recovery that keeps the work: the dead delegate's own session.
+    expect(again.body.error).toContain(`send_to_session { sessionId: "${dead.id}" }`);
   });
 });

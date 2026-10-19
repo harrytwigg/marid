@@ -39,7 +39,7 @@ export const RailRow = forwardRef<HTMLButtonElement, {
       aria-haspopup="menu"
       aria-expanded={open || false}
       onClick={onOpen}
-      className={`${base} ${ink} focus-ring group/rail w-[calc(100%+20px)] text-left outline-none hover:bg-[var(--fill-quaternary)] ${
+      className={`${base} ${ink} focus-outline group/rail w-[calc(100%+20px)] text-left outline-none hover:bg-[var(--fill-quaternary)] ${
         open ? "bg-[var(--fill-quaternary)]" : ""
       }`}
     >
