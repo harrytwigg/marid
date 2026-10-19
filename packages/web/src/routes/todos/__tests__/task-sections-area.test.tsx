@@ -7,7 +7,7 @@ import { AREAS } from "@/contrib/types"
 import { contributeProbes, describeHostedArea } from "@/contrib/__tests__/hosted-area"
 import TaskPage from "../task-page/task-page"
 
-/* PLA-107 — the task page hosts `todo.detail.sections`. Contributed sections
+/* The task page hosts `todo.detail.sections`. Contributed sections
  * close the document, after the app's own sections and before the properties
  * rail and Activity. */
 
@@ -43,7 +43,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
 })
 
 const ITEM = {
-  id: "PLA-12",
+  id: "TSK-12",
   version: 3,
   title: "A Todo",
   body: null,
@@ -59,7 +59,7 @@ const ITEM = {
   budgetUsd: null,
   createdBy: "operator",
   parentId: null,
-  rootId: "PLA-12",
+  rootId: "TSK-12",
   depth: 0,
   dueAt: null,
   createdAt: "2026-07-20T08:00:00.000Z",
@@ -71,7 +71,7 @@ const ITEM = {
  *  renders no Runs section to sit after — so the fixture carries one attempt. */
 const RUN = {
   id: "wir_000000000001",
-  workItemId: "PLA-12",
+  workItemId: "TSK-12",
   sessionId: "session-1",
   startedAt: "2026-07-22T08:00:00.000Z",
   endedAt: "2026-07-22T08:40:00.000Z",
@@ -99,7 +99,7 @@ async function renderTaskPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/todos/PLA-12"]}>
+      <MemoryRouter initialEntries={["/todos/TSK-12"]}>
         <Routes>
           <Route path="/todos/:todoId" element={<TaskPage />} />
         </Routes>

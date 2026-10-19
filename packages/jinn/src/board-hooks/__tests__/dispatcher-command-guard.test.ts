@@ -139,7 +139,7 @@ describe("loop guard", () => {
   /** A hook-spawned session and the run row its fire left, as the dispatcher writes them. */
   function hookSession(hook: string, chain: string[], parentSessionId?: string) {
     const fireId = `bhf_${Math.random().toString(16).slice(2, 14)}`;
-    runs.insertRun({ fireId, hook, event: "todo.status_changed", eventId: "wie_0", todoId: "PLA-1", action: "spawn", status: "ok", payload: {}, chain });
+    runs.insertRun({ fireId, hook, event: "todo.status_changed", eventId: "wie_0", todoId: "TSK-1", action: "spawn", status: "ok", payload: {}, chain });
     return registry.createSession({ engine: "claude", source: "hook", sourceRef: `hook:${fireId}`, employee: "merger", parentSessionId });
   }
 
@@ -200,7 +200,7 @@ describe("loop guard", () => {
 
 describe("boot", () => {
   it("marks rows a previous process left running as interrupted", () => {
-    const id = runs.insertRun({ fireId: "bhf_old", hook: "h", event: "todo.created", eventId: "wie_1", todoId: "PLA-1", action: "command", status: "running", payload: {}, chain: [] });
+    const id = runs.insertRun({ fireId: "bhf_old", hook: "h", event: "todo.created", eventId: "wie_1", todoId: "TSK-1", action: "command", status: "running", payload: {}, chain: [] });
     hooks.installBoardHooks(context);
     expect(runs.getRun(id)!.status).toBe("interrupted");
   });

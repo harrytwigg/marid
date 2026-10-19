@@ -264,11 +264,11 @@ The convention already in practice here — the reason, then the reference that 
 reader find the whole story:
 
 - `packages/web/src/hooks/use-query-invalidation.ts:23` — why every event also schedules a
-  reconciliation pass, and what the patch alone cannot prove (ICI-570).
+  reconciliation pass, and what the patch alone cannot prove.
 - `packages/web/src/lib/query-keys.ts:4` — why these surfaces refetch on mount: an
-  invalidation arriving while a surface is unmounted must not survive its next mount (ICI-659).
+  invalidation arriving while a surface is unmounted must not survive its next mount.
 - `packages/jinn/src/work-items/migrate.ts:138` and `:304` — a frozen recognizer for a shape
-  that predates a migration, and the storage ownership rule that replaced it (PLA-48).
+  that predates a migration, and the storage ownership rule that replaced it.
 
 Each one answers a question the code cannot: *why is this here, and what breaks if I remove
 it?* That is a comment that survives a refactor.

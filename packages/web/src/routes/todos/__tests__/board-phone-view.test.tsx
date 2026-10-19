@@ -22,7 +22,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       getWorkItemTrees: (...args: unknown[]) => getWorkItemTrees(...args),
       getWorkItems: vi.fn().mockResolvedValue({ workItems: [] }),
       getDepartments: vi.fn().mockResolvedValue({
-        departments: [{ slug: "platform", prefix: "PLA", createdAt: "2026-07-01", todoCount: 2 }],
+        departments: [{ slug: "platform", prefix: "TSK", createdAt: "2026-07-01", todoCount: 2 }],
       }),
       getOrg: vi.fn().mockResolvedValue({
         departments: ["platform"],
@@ -159,10 +159,10 @@ afterEach(() => {
 describe("the Todos board on a phone", () => {
   it("shows the board on a phone viewport, one column a screen, with a Board | List switch on Board", async () => {
     setViewport(true)
-    rows.executing = [compact("PLA-1", "executing")]
+    rows.executing = [compact("TSK-1", "executing")]
     renderTodos("/todos/b/platform")
 
-    await screen.findByTestId("board-card-PLA-1")
+    await screen.findByTestId("board-card-TSK-1")
     expect((screen.getByTestId("todo-board-scroll") as HTMLDivElement).hidden).toBe(false)
     expect((screen.getByTestId("todo-list-scroll") as HTMLDivElement).hidden).toBe(true)
     expect(screen.getByRole("radiogroup", { name: "Board layout" })).toBeTruthy()
@@ -176,14 +176,14 @@ describe("the Todos board on a phone", () => {
 
   it("shows the grouped list on a phone when List is chosen, keeps Closed collapsed, and remembers the choice", async () => {
     setViewport(true)
-    rows.executing = [compact("PLA-1", "executing")]
-    rows.done = [compact("PLA-2", "done")]
+    rows.executing = [compact("TSK-1", "executing")]
+    rows.done = [compact("TSK-2", "done")]
     const first = renderTodos("/todos/b/platform")
 
-    await screen.findByTestId("board-card-PLA-1")
+    await screen.findByTestId("board-card-TSK-1")
     fireEvent.click(screen.getByRole("radio", { name: "List" }))
 
-    await screen.findByTestId("todo-list-row-PLA-1")
+    await screen.findByTestId("todo-list-row-TSK-1")
     expect((screen.getByTestId("todo-list-scroll") as HTMLDivElement).hidden).toBe(false)
     expect((screen.getByTestId("todo-board-scroll") as HTMLDivElement).hidden).toBe(true)
     expect(screen.queryByTestId("board-column-position")).toBeNull()
@@ -192,22 +192,22 @@ describe("the Todos board on a phone", () => {
     expect(screen.getByTestId("todo-list-group-in-review")).toBeTruthy()
     expect(screen.getByTestId("todo-list-group-backlog")).toBeTruthy()
     expect(screen.getByTestId("todo-list-group-closed")).toBeTruthy()
-    expect(screen.queryByTestId("todo-list-row-PLA-2")).toBeNull()
+    expect(screen.queryByTestId("todo-list-row-TSK-2")).toBeNull()
     expect(localStorage.getItem("jinn-board-phone-view")).toBe("list")
 
     // A new visit on the same device opens on the list.
     first.unmount()
     renderTodos("/todos/b/platform")
-    await screen.findByTestId("todo-list-row-PLA-1")
+    await screen.findByTestId("todo-list-row-TSK-1")
     expect((screen.getByRole("radio", { name: "List" }) as HTMLInputElement).checked).toBe(true)
     expect((screen.getByTestId("todo-board-scroll") as HTMLDivElement).hidden).toBe(true)
   })
 
   it("returns from a card to the column the strip was on, not the first", async () => {
     setViewport(true)
-    rows.executing = [compact("PLA-1", "executing")]
+    rows.executing = [compact("TSK-1", "executing")]
     renderTodos("/todos/b/platform")
-    const card = await screen.findByTestId("board-card-PLA-1")
+    const card = await screen.findByTestId("board-card-TSK-1")
     const strip = screen.getByTestId("todo-board-scroll") as HTMLDivElement
 
     strip.scrollLeft = 679
@@ -221,9 +221,9 @@ describe("the Todos board on a phone", () => {
 
   it("moves between Board and List with the arrow keys, as a native radio group does", async () => {
     setViewport(true)
-    rows.executing = [compact("PLA-1", "executing")]
+    rows.executing = [compact("TSK-1", "executing")]
     renderTodos("/todos/b/platform")
-    await screen.findByTestId("board-card-PLA-1")
+    await screen.findByTestId("board-card-TSK-1")
 
     const user = userEvent.setup()
     screen.getByRole("radio", { name: "Board" }).focus()
@@ -237,7 +237,7 @@ describe("the Todos board on a phone", () => {
 
   it("opens on the board when the device's storage cannot be read or written", async () => {
     setViewport(true)
-    rows.executing = [compact("PLA-1", "executing")]
+    rows.executing = [compact("TSK-1", "executing")]
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("blocked")
     })
@@ -246,26 +246,26 @@ describe("the Todos board on a phone", () => {
     })
     renderTodos("/todos/b/platform")
 
-    await screen.findByTestId("board-card-PLA-1")
+    await screen.findByTestId("board-card-TSK-1")
     expect((screen.getByRole("radio", { name: "Board" }) as HTMLInputElement).checked).toBe(true)
     fireEvent.click(screen.getByRole("radio", { name: "List" }))
-    await screen.findByTestId("todo-list-row-PLA-1")
+    await screen.findByTestId("todo-list-row-TSK-1")
     vi.restoreAllMocks()
   })
 
   it("offers no switch on a desktop viewport", async () => {
     setViewport(false)
-    rows.executing = [compact("PLA-1", "executing")]
+    rows.executing = [compact("TSK-1", "executing")]
     renderTodos("/todos/b/platform")
 
-    await screen.findByTestId("board-card-PLA-1")
+    await screen.findByTestId("board-card-TSK-1")
     expect(screen.queryByRole("radiogroup", { name: "Board layout" })).toBeNull()
     expect(screen.queryByTestId("board-column-position")).toBeNull()
   })
 
   it("flips to the phone layout live when the viewport crosses the breakpoint, without a remount", async () => {
     setViewport(false)
-    rows.executing = [compact("PLA-1", "executing")]
+    rows.executing = [compact("TSK-1", "executing")]
     renderTodos("/todos/b/platform")
 
     const board = await screen.findByTestId("todo-board-scroll")

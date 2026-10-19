@@ -7,7 +7,7 @@ import type { JinnConfig } from "../../shared/types.js";
 let orgDir: string;
 
 vi.mock("../../shared/paths.js", () => ({
-  // PLA-56: org.ts resolves <home>/org at call time, so the seam is the home —
+  // org.ts resolves <home>/org at call time, so the seam is the home —
   // orgDir's parent — not the frozen ORG_DIR constant.
   resolveJinnHome: () => path.dirname(orgDir),
 }));

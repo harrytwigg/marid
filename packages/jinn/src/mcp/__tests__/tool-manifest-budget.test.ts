@@ -57,7 +57,7 @@ const ATTESTED = {
   // in this group to buy the rest from, so the ceiling moves by exactly the 39.
   // Pi stays five under it.
   // Rebased for `set_work_item_dispatch` and `idempotencyKey` on
-  // create_work_item (ICI-733): how a Todo's next attempt runs, and a
+  // create_work_item: how a Todo's next attempt runs, and a
   // caller-supplied create key. Like the heartbeats
   // group before it, this is a new public capability rather than prose growth on
   // an existing tool, and there was no dead prose left in this group to buy it
@@ -65,8 +65,8 @@ const ATTESTED = {
   // override" to "engine/model override", "while it is executing" to "while
   // executing"), and the remaining 126 are the addition's honest cost. Pi stays
   // five under the ceiling, so the next addition still has to pay its own way.
-  // Rebased for `cascade` and `acknowledgeEscalated` on update_work_item
-  // (PLA-96): closing a container and its open sub-tasks in one move, and the
+  // Rebased for `cascade` and `acknowledgeEscalated` on update_work_item:
+  // closing a container and its open sub-tasks in one move, and the
   // separate word that lets that run over an escalated sub-task. Both have to be
   // on the tool — the route refuses a cascade it was not asked for, and refuses
   // one over an escalation until the caller says so, and a caller that cannot
@@ -75,14 +75,14 @@ const ATTESTED = {
   // surface only." dropped from the second, where the first already says it),
   // which paid 8 of the cost back. Nothing dead is left in this group to buy the
   // remaining 49 from, so the ceiling moves by exactly that. Pi stays five under.
-  // Rebased for `offset` on read_knowledge and the cap it now names (PLA-100).
+  // Rebased for `offset` on read_knowledge and the cap it now names.
   // Both have to be on the tool: an agent that cannot see the boundary reads a
   // truncated file believing it whole, and one that cannot page has no way to
   // reach the rest. Its own description paid 2 back first ("N chars at a time;
   // page the rest with offset" to "N chars per call; offset pages the rest"),
   // and nothing dead is left in this group to buy the remaining 14 from, so the
   // ceiling moves by exactly that. Pi stays five under it.
-  // Reattested for `verifyPolicy` on update_work_item (PLA-102): a Todo whose
+  // Reattested for `verifyPolicy` on update_work_item: a Todo whose
   // product lands in the operator's workspace rather than in the diff has to be
   // able to say so on the tool that moves it, or the route is one the web
   // surface can declare and an agent cannot. It is a bare `{"type":"object"}`
@@ -94,7 +94,7 @@ const ATTESTED = {
   // pays exactly 7 on each wrapper. So the ceiling, all three totals, and the
   // tool count are what `main` pinned; only the payload moved, so only the SHAs
   // do.
-  // Reattested for `choice` on decide_workflow_approval (PLA-133): without it an
+  // Reattested for `choice` on decide_workflow_approval: without it an
   // approval gate that offers variants is undecidable from MCP at all, because
   // approving one without naming a pick is refused rather than defaulted. The
   // bare `{"type":"string"}` costs 7 and not one word of prose. Two restatements
@@ -104,7 +104,7 @@ const ATTESTED = {
   // definition" on rerun_workflow_run, whose `definition` enum is
   // `["original","current"]`. The remaining 3 fit under the unchanged ceiling —
   // Pi sits two below it, so the next addition still has to pay its own way.
-  // Rebased for `parkedUntil` and `unblockHint` on update_work_item (PLA-157) —
+  // Rebased for `parkedUntil` and `unblockHint` on update_work_item —
   // the two fields that let a stopped Todo say whether it is waiting on a clock
   // or on a person. They cost 39. Three redundant clauses and two tightenings
   // bought 36 of that back:
@@ -122,7 +122,7 @@ const ATTESTED = {
   // `parkedUntil` carries no description of its own because the refusal names
   // the format at the moment it matters. The remaining 3 are the fields' honest
   // cost.
-  // Rebased again for `mode` on label_work_item (PLA-155). Replace was the only
+  // Rebased again for `mode` on label_work_item. Replace was the only
   // mode this tool had, so an agent told to drop one label had to re-send every
   // other label from memory to keep it — and a Todo that lost its arming label
   // that way sits at its arming status forever, because its lane trigger filters
@@ -134,26 +134,26 @@ const ATTESTED = {
   // modes at once. No enum is restated in prose anywhere on this surface any more
   // and no field list duplicates its own properties, so unlike the earlier
   // rebases there was nothing dead left to buy the 20 back from; the ceiling
-  // moves by exactly that. PLA-157's 3 land in the same release and take the
+  // moves by exactly that. The 3 for the stop-cause fields land in the same release and take the
   // headroom the move would otherwise have left, so Pi sits exactly ON the moved
   // ceiling: the next addition to this surface has to buy its room BEFORE it
   // spends any.
-  // Reattested for PLA-227: `assignee` left create_work_item's schema, because
+  // Reattested for the assign flow: `assignee` left create_work_item's schema, because
   // creation no longer writes ownership — the assign flow is its only writer. It
   // gives 8 tokens back on each wrapper. The ceiling does not move, so Pi comes off
   // it and sits 8 under: this refactor hands the next addition its room back.
-  // Rebased for `dispatch_work_item` (PLA-228): the Todo Shaper's handoff. The
+  // Rebased for `dispatch_work_item`: the Todo Shaper's handoff. The
   // Shaper's whole contract is to create one Todo and hand it on, and without
   // this verb it cannot — the dispatch route exists but has no MCP hand, so the
   // shaping half of quick capture would end at a Todo nobody starts. It is the
   // cheapest shape the capability has: a six-word description and one `id`
   // property, no prose the schema already carries. That is 64 tokens. Unlike
   // the earlier rebases there was nothing dead left to buy any of it back with
-  // — PLA-155 already retired the last restated enum and the last duplicated
-  // field list, and PLA-227's 8 are the headroom this spends first. So the
+  // — the `mode` change already retired the last restated enum and the last duplicated
+  // field list, and the assign flow's 8 are the headroom this spends first. So the
   // ceiling moves by exactly the remaining 56 and Pi sits ON it again: the next
   // addition to this surface has to buy its room before it spends any.
-  // Rebased for `land_on_work_item` (PLA-228): the third way a capture can end.
+  // Rebased for `land_on_work_item`: the third way a capture can end.
   // Without it a capture that restated a Todo the board already had leaves only
   // a comment, and a comment is prose — the derived stage is not allowed to
   // pattern-match it, so the strip reported a correct dedupe as `failed`. The
@@ -161,7 +161,7 @@ const ATTESTED = {
   // as `dispatch_work_item`: a seven-word description and one `id` property.
   // That is 68 tokens. Four were bought back by cutting "on a Todo" from
   // `dispatch_work_item` — its own `id` property already names which Todo — and
-  // there was nothing else left to cut, since S1 and PLA-155 between them took
+  // there was nothing else left to cut, since S1 and the `mode` change between them took
   // the last of the restated enums and duplicated field lists. So the ceiling
   // moves by the remaining 64 and Pi sits ON it again. As before: the next
   // addition to this surface has to buy its room before it spends any.

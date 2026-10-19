@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { call, startRouteHarness, stopRouteHarness, type Registry, type WorkItems } from "./todo-route-harness.js";
 
 /**
- * ICI-733 where a Todo's dispatch preferences are SET: what the route accepts,
+ * Where a Todo's dispatch preferences are SET: what the route accepts,
  * what it refuses by name, and the one that matters most — that setting an
  * override on an `executing` Todo redirects the NEXT attempt without reaching
  * into the session already running.

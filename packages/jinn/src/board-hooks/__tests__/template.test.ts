@@ -6,7 +6,7 @@ describe("renderTemplate", () => {
   it("replaces dotted paths with the payload value", () => {
     const payload = hookPayload({ actor: { raw: "session:s1", kind: "employee", employee: "merger" }, prUrl: "https://github.com/o/r/pull/1" });
     expect(renderTemplate("{{todo.id}} moved {{from}} -> {{to}} by {{actor.employee}}; merge {{prUrl}}", payload))
-      .toBe("PLA-12 moved executing -> in_review by merger; merge https://github.com/o/r/pull/1");
+      .toBe("TSK-12 moved executing -> in_review by merger; merge https://github.com/o/r/pull/1");
     expect(renderTemplate("{{ todo.title }}", payload)).toBe("Ship it");
   });
 
@@ -39,7 +39,7 @@ describe("renderSpawnPrompt", () => {
 
   it("uses a default that names the hook and the event when there is no prompt", () => {
     const prompt = renderSpawnPrompt(undefined, hookPayload());
-    expect(prompt).toContain('Board hook "review-merge" fired on todo.status_changed for PLA-12: Ship it.');
+    expect(prompt).toContain('Board hook "review-merge" fired on todo.status_changed for TSK-12: Ship it.');
     expect(renderSpawnPrompt("   ", hookPayload())).toContain('Board hook "review-merge"');
   });
 

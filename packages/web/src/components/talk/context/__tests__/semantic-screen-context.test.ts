@@ -17,9 +17,9 @@ afterEach(() => {
 
 describe("authoritative semantic screen context", () => {
   it("grounds a blocked Todo in its cached source object, relations, filters, and visible controls", () => {
-    queryClient.setQueryData(["work-item", "PLA-116"], {
+    queryClient.setQueryData(["work-item", "TSK-116"], {
       workItem: {
-        id: "PLA-116",
+        id: "TSK-116",
         version: 7,
         title: "Universal Talk control",
         status: "blocked",
@@ -43,16 +43,16 @@ describe("authoritative semantic screen context", () => {
       relations: [{
         kind: "relates",
         direction: "out",
-        other: { id: "PLA-115", title: "Canonical commands", status: "executing" },
+        other: { id: "TSK-115", title: "Canonical commands", status: "executing" },
       }],
       runs: [{ sessionId: "sess-related", outcome: null }],
     })
-    queryClient.setQueryData(["work-item-sessions", "PLA-116"], [
+    queryClient.setQueryData(["work-item-sessions", "TSK-116"], [
       { id: "sess-related", title: "Platform discussion", status: "idle" },
     ])
 
     const context = buildScreenContext({
-      location: describeLocation("/todos/PLA-116", "?status=blocked"),
+      location: describeLocation("/todos/TSK-116", "?status=blocked"),
       browserInstanceId: "browser-1",
       root: root(`
         <h1>Universal Talk control</h1>
@@ -70,7 +70,7 @@ describe("authoritative semantic screen context", () => {
       browserInstanceId: "browser-1",
       selectedObject: {
         kind: "Todo",
-        id: "PLA-116",
+        id: "TSK-116",
         title: "Universal Talk control",
         status: "blocked",
         fields: {
@@ -78,10 +78,10 @@ describe("authoritative semantic screen context", () => {
           sourceRef: "session:sess-related",
         },
         relations: [
-          { kind: "relates", id: "PLA-115", title: "Canonical commands", status: "executing" },
+          { kind: "relates", id: "TSK-115", title: "Canonical commands", status: "executing" },
           { kind: "session", id: "sess-related", title: "Platform discussion", status: "idle" },
         ],
-        retrievalAnchor: { kind: "work-item", id: "PLA-116", version: 7 },
+        retrievalAnchor: { kind: "work-item", id: "TSK-116", version: 7 },
       },
     })
     expect(context.controls.map((control) => control.label)).toContain("Edit priority")
@@ -92,7 +92,7 @@ describe("authoritative semantic screen context", () => {
 
   it("marks a selected object partial instead of inventing detail when its source object is cold", () => {
     const context = buildScreenContext({
-      location: describeLocation("/todos/PLA-404", ""),
+      location: describeLocation("/todos/TSK-404", ""),
       browserInstanceId: "browser-1",
       root: root("<h1>Loading Todo</h1>"),
       capturedAt: "2026-08-18T08:01:00.000Z",

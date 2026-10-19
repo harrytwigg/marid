@@ -724,7 +724,7 @@ function persistTodoMutationActivity(
   changed = true,
   /** The row's status before this write, for the routes whose write can reach
    *  `transition()`. A status that moved was already announced live from there
-   *  (ICI-749) — the seam every non-HTTP writer commits through — so emitting
+   *  — the seam every non-HTTP writer commits through — so emitting
    *  again here would double it. Assignment writes its own status change outside
    *  `transition()`, so that lane still announces itself here. */
   previousStatus?: WorkItemStatus,
@@ -760,7 +760,7 @@ function unarchivedDepartment(department: string | null | undefined): string | n
   return department && !isDepartmentArchived(initDb(), department) ? department : null;
 }
 
-/** ICI-570 — projection lanes (comments, attachments, relations, labels) don't
+/** Projection lanes (comments, attachments, relations, labels) don't
  * always rewrite the Todo row itself, but the web surfaces still need a change
  * signal to refetch live. One valueless event per affected item; the client
  * responds by invalidating that item's cached projections. */
@@ -2284,7 +2284,7 @@ export async function handleApiRequest(
       const createSprint = readCreateSprint(body, parentId);
       if (createSprint.error) return badRequest(res, createSprint.error);
       const sprintRef = createSprint.sprint;
-      // ICI-733: a caller-supplied create key, same shape rules as the edit key.
+      // A caller-supplied create key, same shape rules as the edit key.
       // Cron and connector retries create duplicate Todos without one.
       let idempotencyKey: string | undefined;
       if (body.idempotencyKey !== undefined) {
@@ -3455,7 +3455,7 @@ export async function handleApiRequest(
             ...(delegateEmployee.effortLevel ? { effortLevel: delegateEmployee.effortLevel } : {}),
           }
         : undefined;
-      // ICI-733: a Todo's own override outranks both the request and the
+      // A Todo's own override outranks both the request and the
       // employee's YAML — it is the lever for retrying a Todo somewhere else,
       // and a caller repeating the engine that just failed would defeat it.
       // A named engine with no model resolves that engine's default, so the
@@ -3667,7 +3667,7 @@ export async function handleApiRequest(
           hint: "nothing was dispatched: the backlog work item and the idle session row are both preserved and re-linkable",
         }, 500);
       }
-      // The ledger row for this attempt (ICI-728). Best-effort for the same
+      // The ledger row for this attempt. Best-effort for the same
       // reason the derive below is: a run-ledger hiccup is a reporting gap, and
       // undoing a correctly linked delegation over one would be a worse trade.
       try {

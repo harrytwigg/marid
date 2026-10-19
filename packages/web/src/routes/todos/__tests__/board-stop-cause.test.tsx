@@ -4,7 +4,7 @@ import type { WorkItemCompactWire, WorkItemStatusWire } from "@/lib/api"
 import { BoardCard, cardLayoutKey } from "../board/card"
 import { stopCauseQuote } from "../needs-you-support"
 
-/* PLA-157: a clock-wait and a you-wait used to render identically, under the
+/* A clock-wait and a you-wait used to render identically, under the
  * title, and hidden below 700px. These pin the two things that fixes: a
  * countdown that is honest about the clock, and a hint that leads the card. */
 
@@ -51,53 +51,53 @@ afterEach(() => {
 
 describe("a parked card counts down", () => {
   it("names the time left while the park is still ahead", () => {
-    renderCard(compact({ id: "PLA-1", status: "blocked", parkedUntil: new Date(Date.now() + 2 * HOUR + 14 * 60_000).toISOString() }))
-    expect(screen.getByTestId("park-chip-PLA-1").textContent).toContain("2h 14m")
+    renderCard(compact({ id: "TSK-1", status: "blocked", parkedUntil: new Date(Date.now() + 2 * HOUR + 14 * 60_000).toISOString() }))
+    expect(screen.getByTestId("park-chip-TSK-1").textContent).toContain("2h 14m")
   })
 
   it("shows minutes alone under an hour", () => {
-    renderCard(compact({ id: "PLA-2", status: "blocked", parkedUntil: new Date(Date.now() + 45 * 60_000).toISOString() }))
-    expect(screen.getByTestId("park-chip-PLA-2").textContent).toContain("45m")
+    renderCard(compact({ id: "TSK-2", status: "blocked", parkedUntil: new Date(Date.now() + 45 * 60_000).toISOString() }))
+    expect(screen.getByTestId("park-chip-TSK-2").textContent).toContain("45m")
   })
 
   it.each([
     ["one that has passed", new Date(Date.now() - HOUR).toISOString()],
     ["one that will not parse", "when the quota resets"],
   ])("shows no chip for %s", (_label, parkedUntil) => {
-    renderCard(compact({ id: "PLA-3", status: "blocked", parkedUntil }))
-    expect(screen.queryByTestId("park-chip-PLA-3")).toBeNull()
+    renderCard(compact({ id: "TSK-3", status: "blocked", parkedUntil }))
+    expect(screen.queryByTestId("park-chip-TSK-3")).toBeNull()
   })
 
   it("shows no chip when the Todo was never parked", () => {
-    renderCard(compact({ id: "PLA-4", status: "blocked" }))
-    expect(screen.queryByTestId("park-chip-PLA-4")).toBeNull()
+    renderCard(compact({ id: "TSK-4", status: "blocked" }))
+    expect(screen.queryByTestId("park-chip-TSK-4")).toBeNull()
   })
 
   it("drops the chip on its own once the park runs out, without a refetch", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
-    renderCard(compact({ id: "PLA-5", status: "blocked", parkedUntil: new Date(Date.now() + 60_000).toISOString() }))
-    expect(screen.getByTestId("park-chip-PLA-5")).toBeTruthy()
+    renderCard(compact({ id: "TSK-5", status: "blocked", parkedUntil: new Date(Date.now() + 60_000).toISOString() }))
+    expect(screen.getByTestId("park-chip-TSK-5")).toBeTruthy()
 
     // One flush per hop: the timer re-arms from the effect that the state update
     // it made schedules, which is one render later.
     act(() => { vi.advanceTimersByTime(30_000) })
     act(() => { vi.advanceTimersByTime(31_000) })
-    expect(screen.queryByTestId("park-chip-PLA-5")).toBeNull()
+    expect(screen.queryByTestId("park-chip-TSK-5")).toBeNull()
   })
 
   it("wakes at the expiry itself, not on a fixed cadence — a short park does not outlive its second", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
-    renderCard(compact({ id: "PLA-12", status: "blocked", parkedUntil: new Date(Date.now() + 5_000).toISOString() }))
-    expect(screen.getByTestId("park-chip-PLA-12")).toBeTruthy()
+    renderCard(compact({ id: "TSK-12", status: "blocked", parkedUntil: new Date(Date.now() + 5_000).toISOString() }))
+    expect(screen.getByTestId("park-chip-TSK-12")).toBeTruthy()
 
     act(() => { vi.advanceTimersByTime(6_000) })
-    expect(screen.queryByTestId("park-chip-PLA-12")).toBeNull()
+    expect(screen.queryByTestId("park-chip-TSK-12")).toBeNull()
   })
 })
 
 describe("a blocked card leads with the hint", () => {
   const stopped = compact({
-    id: "PLA-6",
+    id: "TSK-6",
     status: "blocked",
     title: "Renew the provider contract",
     unblockHint: { what: "sign the renewal", who: "the operator" },
@@ -105,27 +105,27 @@ describe("a blocked card leads with the hint", () => {
 
   it("says what and who", () => {
     renderCard(stopped)
-    const lead = screen.getByTestId("stop-lead-PLA-6")
+    const lead = screen.getByTestId("stop-lead-TSK-6")
     expect(lead.textContent).toContain("sign the renewal")
     expect(lead.textContent).toContain("the operator")
   })
 
   it("puts them above the title in the card's own reading order", () => {
     renderCard(stopped)
-    const card = screen.getByTestId("board-card-PLA-6")
-    const lead = screen.getByTestId("stop-lead-PLA-6")
+    const card = screen.getByTestId("board-card-TSK-6")
+    const lead = screen.getByTestId("stop-lead-TSK-6")
     const title = [...card.querySelectorAll("div")].find((el) => el.textContent === "Renew the provider contract")!
     expect(lead.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it("is not hidden on the phone, unlike the trailing why-line it replaces", () => {
     renderCard(stopped)
-    expect(screen.getByTestId("stop-lead-PLA-6").className).not.toContain("max-[700px]:hidden")
+    expect(screen.getByTestId("stop-lead-TSK-6").className).not.toContain("max-[700px]:hidden")
   })
 
   it("gives who its own line, so a narrow column cannot truncate it away", () => {
     renderCard(stopped)
-    const lines = [...screen.getByTestId("stop-lead-PLA-6").querySelectorAll("span")]
+    const lines = [...screen.getByTestId("stop-lead-TSK-6").querySelectorAll("span")]
       .filter((el) => el.className.includes("truncate"))
       .map((el) => el.textContent)
     expect(lines).toContain("sign the renewal")
@@ -134,7 +134,7 @@ describe("a blocked card leads with the hint", () => {
 })
 
 describe("the column's FLIP key", () => {
-  const key = (over: Partial<WorkItemCompactWire>) => cardLayoutKey(compact({ id: "PLA-7", status: "blocked", ...over }), undefined)
+  const key = (over: Partial<WorkItemCompactWire>) => cardLayoutKey(compact({ id: "TSK-7", status: "blocked", ...over }), undefined)
 
   const hint = { what: "decide", who: "the operator" }
   const parkedUntil = new Date(Date.now() + HOUR).toISOString()
@@ -159,17 +159,17 @@ describe("the Needs-you inbox speaks in the stop's own voice", () => {
   const NOW = Date.parse("2026-08-21T12:00:00.000Z")
 
   it("quotes the hint when there is one", () => {
-    const item = compact({ id: "PLA-8", status: "blocked", unblockHint: { what: "sign the renewal", who: "the operator" } })
+    const item = compact({ id: "TSK-8", status: "blocked", unblockHint: { what: "sign the renewal", who: "the operator" } })
     expect(stopCauseQuote(item, NOW)).toBe("sign the renewal — the operator")
   })
 
   it("says a park is a clock-wait, instead of blaming the reader for it", () => {
-    const item = compact({ id: "PLA-9", status: "blocked", parkedUntil: new Date(NOW + 90 * 60_000).toISOString() })
+    const item = compact({ id: "TSK-9", status: "blocked", parkedUntil: new Date(NOW + 90 * 60_000).toISOString() })
     expect(stopCauseQuote(item, NOW)).toBe("Waiting on a clock, not on you — back in 1h 30m.")
   })
 
   it("says nothing when the stop carries neither, leaving the caller's own copy", () => {
-    expect(stopCauseQuote(compact({ id: "PLA-10", status: "blocked" }), NOW)).toBeNull()
-    expect(stopCauseQuote(compact({ id: "PLA-11", status: "blocked", parkedUntil: new Date(NOW - 60_000).toISOString() }), NOW)).toBeNull()
+    expect(stopCauseQuote(compact({ id: "TSK-10", status: "blocked" }), NOW)).toBeNull()
+    expect(stopCauseQuote(compact({ id: "TSK-11", status: "blocked", parkedUntil: new Date(NOW - 60_000).toISOString() }), NOW)).toBeNull()
   })
 })

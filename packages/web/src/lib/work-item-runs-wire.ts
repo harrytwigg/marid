@@ -1,5 +1,5 @@
 /**
- * The Todo run ledger's wire shapes (ICI-728) — one row per work ATTEMPT.
+ * The Todo run ledger's wire shapes — one row per work ATTEMPT.
  *
  * Kept apart from the rest of the client because a run carries a pairing rule
  * none of the other work-item shapes do: an attempt is OPEN (no end, no

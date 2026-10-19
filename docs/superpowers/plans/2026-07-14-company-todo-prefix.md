@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give each Jinn company a stable three-letter Todo prefix derived from its company name, so `IC-IDEV` creates `ICI-1`, `ICI-2`, and so on.
+**Goal:** Give each Jinn company a stable three-letter Todo prefix derived from its company name, so `AC-MEDIA` creates `ACM-1`, `ACM-2`, and so on.
 
 **Architecture:** Add dedicated `portal.companyName` and optional `portal.companyPrefix` settings rather than reusing the assistant-facing Portal Name. Derive the human-intuitive default from word initials or a single word, let an explicit canonical override win, and freeze the chosen prefix inside the Todo allocator on its first allocation. Todo parsing accepts the public `<AAA>-N` grammar, while the database allocator and insert guards ensure one instance cannot issue a second prefix after initialization.
 
@@ -12,9 +12,9 @@
 
 - Work directly on `main` and preserve the unrelated Chat Archive working-tree changes.
 - `portalName` continues to name the assistant/portal; `companyName` names the operator's company.
-- Normalize with Unicode NFKD, uppercase, and discard non-ASCII letters. Hyphens, dots, slashes, ampersands, and whitespace separate word-ish parts. Three or more parts use initials (`Build Sprint Labs` → `BSL`); one part uses its first three letters (`Jinn` → `JIN`); two parts fall back to the first word, with a short leading acronym completed by the next part (`Acme Corp` → `ACM`, `IC-IDEV` → `ICI`). Reject names that cannot produce three letters.
+- Normalize with Unicode NFKD, uppercase, and discard non-ASCII letters. Hyphens, dots, slashes, ampersands, and whitespace separate word-ish parts. Three or more parts use initials (`Build Sprint Labs` → `BSL`); one part uses its first three letters (`Jinn` → `JIN`); two parts fall back to the first word, with a short leading acronym completed by the next part (`Acme Corp` → `ACM`, `AC-MEDIA` → `ACM`). Reject names that cannot produce three letters.
 - `portal.companyPrefix`, when present, wins over derivation and must match `^[A-Z]{3}$` exactly.
-- Before the first allocation, onboarding/settings show a concrete sequence such as `ICI-1, ICI-2, ...` and warn that the choice is permanent. Once frozen, settings show the allocator's actual prefix and do not offer a second one.
+- Before the first allocation, onboarding/settings show a concrete sequence such as `ACM-1, ACM-2, ...` and warn that the choice is permanent. Once frozen, settings show the allocator's actual prefix and do not offer a second one.
 - A company prefix is frozen by the first committed Todo allocation. Renaming the company never rewrites existing IDs and never changes the allocator prefix.
 - The public Todo grammar is `^[A-Z]{3}-[1-9][0-9]*$` with a positive safe-integer suffix.
 - The database, API, MCP, CLI, UI, URLs, search, logs, and copy/share surfaces use the same identifier.
@@ -36,7 +36,7 @@
 
 - [ ] **Step 1: Write failing backend and web tests**
 
-Test `IC-IDEV → ICI`, `Build Sprint Labs → BSL`, `Acme Corp → ACM`, `Jinn → JIN`, separator variants, accented Latin normalization, override precedence/validation, fewer than three-letter refusal, canonical parsing, and malformed/lowercase/unsafe-integer rejection.
+Test `AC-MEDIA → ACM`, `Build Sprint Labs → BSL`, `Acme Corp → ACM`, `Jinn → JIN`, separator variants, accented Latin normalization, override precedence/validation, fewer than three-letter refusal, canonical parsing, and malformed/lowercase/unsafe-integer rejection.
 
 - [ ] **Step 2: Run the focused tests and verify RED**
 
@@ -72,7 +72,7 @@ Expected: both focused files pass without warnings.
 
 - [ ] **Step 1: Write failing allocator tests**
 
-Cover first allocation `IC-IDEV -> ICI-1`, continued allocation after a config rename still producing `ICI-2`, two concurrent first allocations agreeing on one prefix, direct SQL prefix mutation refusal, mismatched-prefix insert refusal, and startup verification of prefix/row consistency.
+Cover first allocation `AC-MEDIA -> ACM-1`, continued allocation after a config rename still producing `ACM-2`, two concurrent first allocations agreeing on one prefix, direct SQL prefix mutation refusal, mismatched-prefix insert refusal, and startup verification of prefix/row consistency.
 
 - [ ] **Step 2: Run the allocator tests and verify RED**
 
@@ -112,7 +112,7 @@ Expected: all focused allocator/store tests pass.
 
 - [ ] **Step 1: Write failing API and UI tests**
 
-Require a valid derivation or explicit override during first-run completion, persist `IC-IDEV`/`JNN`, expose `ICI-1, ICI-2, ...` or the override sequence before freeze, reject invalid values, show permanence, and keep Portal Name independent.
+Require a valid derivation or explicit override during first-run completion, persist `AC-MEDIA`/`JNN`, expose `ACM-1, ACM-2, ...` or the override sequence before freeze, reject invalid values, show permanence, and keep Portal Name independent.
 
 - [ ] **Step 2: Run focused onboarding tests and verify RED**
 
@@ -143,11 +143,11 @@ Expected: backend and web onboarding tests pass.
 
 **Interfaces:**
 - Consumes: an explicit company name/prefix for offline dry-run mapping.
-- Produces: deterministic `ICI-1..ICI-N` dry-run maps and generic product documentation.
+- Produces: deterministic `ACM-1..ACM-N` dry-run maps and generic product documentation.
 
 - [ ] **Step 1: Write failing converter and surface tests**
 
-Assert an explicit `ICI` mapping, stable ordering, and refusal of invalid prefixes. Retain generic `JIN-N` examples where they are merely valid sample IDs, but remove claims that `JIN` is the only prefix.
+Assert an explicit `ACM` mapping, stable ordering, and refusal of invalid prefixes. Retain generic `JIN-N` examples where they are merely valid sample IDs, but remove claims that `JIN` is the only prefix.
 
 - [ ] **Step 2: Run focused tests and verify RED**
 

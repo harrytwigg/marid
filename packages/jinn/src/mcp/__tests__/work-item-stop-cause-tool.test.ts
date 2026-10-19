@@ -39,7 +39,7 @@ function tool(name: string): JinnMcpTool {
   return t;
 }
 
-/* PLA-157: a duplicated hint validator could accept at one boundary what the
+/* A duplicated hint validator could accept at one boundary what the
  * other refuses, so both boundaries import the same one — and this proves it by
  * putting the same value through each and comparing the message. */
 describe("update_work_item — stop cause", () => {

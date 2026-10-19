@@ -166,7 +166,7 @@ describe("handleRateLimit — Codex fallback guard (#40)", () => {
       engine: "codex",
       engineSessionId: null,
       // Claude's model goes with Claude: nothing is mapped, so the substitute
-      // runs on its own default rather than on a pin it cannot serve (PLA-202).
+      // runs on its own default rather than on a pin it cannot serve.
       model: null,
       engineSessions: { claude: { id: "claude-thread-1" } },
     }));

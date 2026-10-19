@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest"
 import type { DepartmentSummaryWire } from "@/lib/api"
 import { BoardSwitcher } from "../board/board-switcher"
 
-/* ICI-1357, criterion 6. The operator's complaint was structural: `Everything`
+/* Criterion 6. The operator's complaint was structural: `Everything`
  * sat below every department, so at fourteen departments it was a scroll away.
  * These pin the ORDER — three lenses, then the places — at both org sizes,
  * because the defect only shows once the department list is long. */

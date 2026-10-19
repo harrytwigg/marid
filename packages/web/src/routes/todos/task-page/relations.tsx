@@ -10,7 +10,7 @@ import { StatusCircle } from "../state-glyph"
  * wire kinds: "Blocked by" is an incoming `blocks` edge, so adding one writes
  * the edge on the OTHER item.
  *
- * ICI-1435 unmounted this from the Todo detail view. The relation tables,
+ * This is unmounted from the Todo detail view. The relation tables,
  * `link_work_items` and the client's add/remove calls are untouched — the
  * component is kept whole so restoring it is a one-line change. */
 

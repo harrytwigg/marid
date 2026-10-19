@@ -1,5 +1,5 @@
 /**
- * PLA-224's acceptance journey, in test form.
+ * The Talk acceptance journey, in test form.
  *
  * The five steps come verbatim from the session where the voice agent proved
  * decorative: it narrated instead of reading, drafted instead of sending, and
@@ -135,7 +135,7 @@ function seededChat() {
   return chat;
 }
 
-describe("PLA-224 journey", () => {
+describe("TSK-224 journey", () => {
   it("step 1: 'what are we looking at?' reads the focused chat instead of narrating it", async () => {
     const context = testContext();
     const { route } = await pressTheOrb(context);

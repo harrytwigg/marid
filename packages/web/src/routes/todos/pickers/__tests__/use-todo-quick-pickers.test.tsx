@@ -56,8 +56,8 @@ function treeOf(openKids: number) {
   return {
     tree: {
       root: {
-        ...detailOf("ICI-1").workItem,
-        children: [...Array.from({ length: openKids }, (_, i) => node(`ICI-2${i}`, "executing")), node("ICI-30", "done")],
+        ...detailOf("ISS-1").workItem,
+        children: [...Array.from({ length: openKids }, (_, i) => node(`ISS-2${i}`, "executing")), node("ISS-30", "done")],
       },
       totals: {},
       spendUsd: 0,
@@ -79,7 +79,7 @@ function Row({ property, value, row }: {
 }
 
 function Surface() {
-  const detail = useTodoById("ICI-1").data ?? undefined
+  const detail = useTodoById("ISS-1").data ?? undefined
   const pickers = useTodoQuickPickers({ detail, employees: EMPLOYEES, prefix: "quick" })
   if (!detail) return null
   const assignee = EMPLOYEES.find((employee) => employee.name === detail.workItem.assignee)?.displayName ?? "Unassigned"
@@ -109,7 +109,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   getWorkItem.mockImplementation((id: string) => Promise.resolve(detailOf(id)))
   getWorkItemTree.mockResolvedValue(treeOf(0))
-  setWorkItemStatus.mockResolvedValue({ workItem: { ...detailOf("ICI-1").workItem, version: 5 }, escalated: false })
+  setWorkItemStatus.mockResolvedValue({ workItem: { ...detailOf("ISS-1").workItem, version: 5 }, escalated: false })
 })
 
 describe("quick status picker", () => {
@@ -124,7 +124,7 @@ describe("quick status picker", () => {
 
     fireEvent.click(done)
     await waitFor(() =>
-      expect(setWorkItemStatus).toHaveBeenCalledWith("ICI-1", "done", undefined, undefined, { cascade: true }),
+      expect(setWorkItemStatus).toHaveBeenCalledWith("ISS-1", "done", undefined, undefined, { cascade: true }),
     )
   })
 
@@ -151,14 +151,14 @@ describe("quick assignee picker", () => {
 
     await waitFor(() => expect(rowText("assignee")).toBe("Unassigned"))
     expect(assignWorkItem).not.toHaveBeenCalled()
-    expect(updateWorkItem).toHaveBeenCalledWith("ICI-1", expect.objectContaining({
+    expect(updateWorkItem).toHaveBeenCalledWith("ISS-1", expect.objectContaining({
       patch: { assignee: null },
       expectedVersion: 4,
     }))
     // The in-flight write holds the key a live invalidation defers behind.
     expect(client.isMutating({ mutationKey: TODO_WRITE_KEY })).toBeGreaterThan(0)
 
-    resolveWrite({ workItem: { ...detailOf("ICI-1").workItem, version: 5, assignee: null }, replayed: false })
+    resolveWrite({ workItem: { ...detailOf("ISS-1").workItem, version: 5, assignee: null }, replayed: false })
     await waitFor(() => expect(client.isMutating({ mutationKey: TODO_WRITE_KEY })).toBe(0))
   })
 

@@ -11,7 +11,7 @@ import {
   type Upstream,
 } from "./helpers/sse-pty-upstream.js";
 
-// Regression tests for PLA-76: a transient fault on the POOLED first attempt
+// Regression tests: a transient fault on the POOLED first attempt
 // reached the claude CLI as a bare 502, which its harness reads as stream death.
 // Every other sse-pty-proxy suite passes `primaryAgent: false`, so the attempt
 // production actually makes — the pooled one — had no coverage at all.

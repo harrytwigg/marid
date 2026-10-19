@@ -1,6 +1,6 @@
 /**
  * Every `work_items` shape this release can still FIND on disk, frozen: the v1
- * public release, the pre-PLA-48 v2 with shadowed approval columns, and the
+ * public release, the pre-ownership-move v2 with shadowed approval columns, and the
  * unreleased prerelease shell. Startup recognizes a database by matching its
  * stored DDL against these byte-for-byte, so none of them may ever be edited to
  * follow the live schema — an edit here silently stops recognizing the databases
@@ -82,7 +82,7 @@ ${V1_WORK_ITEM_ID_BURNS_TABLE_DDL};
 ${V1_WORK_ITEM_ID_ISSUANCES_TABLE_DDL};
 `;
 
-/** Pre-PLA-48 v2 work_items shape, when approvals were also shadowed in eight
+/** Pre-ownership-move v2 work_items shape, when approvals were also shadowed in eight
  *  columns here. Frozen recognizer: a match is healed at boot. */
 export const V2_APPROVAL_WORK_ITEMS_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS work_items (

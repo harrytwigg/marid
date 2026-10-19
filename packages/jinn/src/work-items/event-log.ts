@@ -126,7 +126,7 @@ const EVIDENCE_FLOOR_ACTORS: readonly string[] = [HUMAN_ACTOR, PARK_EXPIRY_ACTOR
 /**
  * When this Todo was last put somewhere by a decision the attempt receipts must
  * not overrule, or undefined if it never was. Two kinds count: the operator
- * moving it himself (PLA-98) — on his own surface, or through a session that
+ * moving it himself — on his own surface, or through a session that
  * carries his lane (the remote connector), whose event is marked
  * `detail.operatorLane` because its actor stays that session — and an expired
  * park putting it back in the queue. Any event carrying a `to_status` counts — a status change and an

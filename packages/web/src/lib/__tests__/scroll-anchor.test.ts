@@ -65,7 +65,7 @@ function mountList(ids: string[]): List {
 }
 
 function rows(from: number, count: number): string[] {
-  return Array.from({ length: count }, (_, k) => `PLA-${from + k}`)
+  return Array.from({ length: count }, (_, k) => `TSK-${from + k}`)
 }
 
 afterEach(() => {
@@ -80,7 +80,7 @@ describe('captureVisibleAnchor', () => {
 
     const anchor = captureVisibleAnchor(list.node, ATTRIBUTE)
 
-    expect(anchor.id).toBe('PLA-21')
+    expect(anchor.id).toBe('TSK-21')
     expect(anchor.offset).toBe(-30)
     expect(anchor.scrollTop).toBe(1230)
   })
@@ -96,7 +96,7 @@ describe('restoreVisibleAnchor', () => {
   it('holds the anchored row at its offset when rows are inserted above it', () => {
     const list = mountList(rows(1, 60))
     list.node.scrollTop = 1230
-    const before = list.offsetOf('PLA-21')
+    const before = list.offsetOf('TSK-21')
     expect(before).toBe(-30)
 
     const anchor = captureVisibleAnchor(list.node, ATTRIBUTE)
@@ -104,7 +104,7 @@ describe('restoreVisibleAnchor', () => {
     list.setRows([...rows(58, 3), ...rows(1, 57)])
     restoreVisibleAnchor(list.node, anchor)
 
-    expect(list.offsetOf('PLA-21')).toBe(before)
+    expect(list.offsetOf('TSK-21')).toBe(before)
     expect(list.node.scrollTop).toBe(1230 + 3 * ROW_H)
   })
 
@@ -113,10 +113,10 @@ describe('restoreVisibleAnchor', () => {
     list.node.scrollTop = 1230
     const anchor = captureVisibleAnchor(list.node, ATTRIBUTE)
 
-    list.setRows(rows(1, 60).filter((id) => id !== 'PLA-2' && id !== 'PLA-3'))
+    list.setRows(rows(1, 60).filter((id) => id !== 'TSK-2' && id !== 'TSK-3'))
     restoreVisibleAnchor(list.node, anchor)
 
-    expect(list.offsetOf('PLA-21')).toBe(-30)
+    expect(list.offsetOf('TSK-21')).toBe(-30)
     expect(list.node.scrollTop).toBe(1230 - 2 * ROW_H)
   })
 
@@ -124,10 +124,10 @@ describe('restoreVisibleAnchor', () => {
     const list = mountList(rows(1, 60))
     list.node.scrollTop = 1230
     const anchor = captureVisibleAnchor(list.node, ATTRIBUTE)
-    expect(anchor.id).toBe('PLA-21')
+    expect(anchor.id).toBe('TSK-21')
 
     // The row moved into a collapsed group: it is gone, and the list is shorter.
-    list.setRows(rows(1, 60).filter((id) => id !== 'PLA-21'))
+    list.setRows(rows(1, 60).filter((id) => id !== 'TSK-21'))
     restoreVisibleAnchor(list.node, anchor)
 
     expect(list.node.scrollTop).toBe(1230 - ROW_H)

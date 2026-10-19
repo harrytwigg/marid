@@ -107,7 +107,7 @@ for (const testCase of CASES) {
 }
 
 test("todoIdFromWorktree reads the Todo out of the directory name", () => {
-  assert.equal(todoIdFromWorktree(path.join(WORKTREES, "jinn-build-PLA-83-reap-sandboxes")), "PLA-83")
+  assert.equal(todoIdFromWorktree(path.join(WORKTREES, "jinn-build-TSK-83-reap-sandboxes")), "TSK-83")
   assert.equal(todoIdFromWorktree(path.join(WORKTREES, "jinn-patch-ABC-7")), "ABC-7")
   assert.equal(todoIdFromWorktree(path.join(WORKTREES, "jinn-scratch")), null)
 })

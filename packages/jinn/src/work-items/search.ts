@@ -2,8 +2,8 @@ import type { Database as DatabaseType } from 'better-sqlite3';
 import { parseTodoId } from './id.js';
 
 /**
- * Free-text Todo search over the FTS5 indexes owned by `search-index.ts`
- * (ICI-1369). The store asks this module for the matching Todo ids in relevance
+ * Free-text Todo search over the FTS5 indexes owned by `search-index.ts`.
+ * The store asks this module for the matching Todo ids in relevance
  * order, composes its own filters around that id set in SQL, and then asks back
  * for the reason each row of the page it is about to return matched.
  *

@@ -24,15 +24,15 @@ vi.mock("@/lib/api", async (importOriginal) => {
 function setup() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   client.setQueryData(["work-items", "board", "platform", "executing"], {
-    pages: [{ workItems: [{ id: "PLA-3", version: 4, status: "executing" }], total: 1, nextOffset: null }],
+    pages: [{ workItems: [{ id: "TSK-3", version: 4, status: "executing" }], total: 1, nextOffset: null }],
     pageParams: [0],
   })
-  client.setQueryData(["work-item", "PLA-3"], {
-    workItem: { id: "PLA-3", version: 4, status: "executing" },
+  client.setQueryData(["work-item", "TSK-3"], {
+    workItem: { id: "TSK-3", version: 4, status: "executing" },
     spendUsd: 0,
   })
-  client.setQueryData(["work-item-preview", "PLA-3"], {
-    workItem: { id: "PLA-3", version: 4, status: "executing" },
+  client.setQueryData(["work-item-preview", "TSK-3"], {
+    workItem: { id: "TSK-3", version: 4, status: "executing" },
     spendUsd: 0,
     events: [],
   })
@@ -51,15 +51,15 @@ function boardStatus(client: QueryClient): string | undefined {
 }
 
 function detailStatus(client: QueryClient): string | undefined {
-  return client.getQueryData<{ workItem: { status: string } }>(["work-item", "PLA-3"])?.workItem.status
+  return client.getQueryData<{ workItem: { status: string } }>(["work-item", "TSK-3"])?.workItem.status
 }
 
 function detailVersion(client: QueryClient): number | undefined {
-  return client.getQueryData<{ workItem: { version: number } }>(["work-item", "PLA-3"])?.workItem.version
+  return client.getQueryData<{ workItem: { version: number } }>(["work-item", "TSK-3"])?.workItem.version
 }
 
 function previewStatus(client: QueryClient): string | undefined {
-  return client.getQueryData<{ workItem: { status: string } }>(["work-item-preview", "PLA-3"])?.workItem.status
+  return client.getQueryData<{ workItem: { status: string } }>(["work-item-preview", "TSK-3"])?.workItem.status
 }
 
 describe("Todo status mutation caches", () => {
@@ -74,7 +74,7 @@ describe("Todo status mutation caches", () => {
     setWorkItemStatus.mockImplementation(() => new Promise((_resolve, reject) => { rejectRequest = reject }))
     const { client, mutation } = setup()
 
-    act(() => mutation.current.mutate({ id: "PLA-3", status: "in_review" }))
+    act(() => mutation.current.mutate({ id: "TSK-3", status: "in_review" }))
 
     await waitFor(() => {
       expect(boardStatus(client)).toBe("in_review")
@@ -91,18 +91,18 @@ describe("Todo status mutation caches", () => {
   })
 
   it("leaves the confirmed status in the preview cache and re-asks the gateway for it", async () => {
-    setWorkItemStatus.mockResolvedValue({ workItem: { id: "PLA-3", version: 5, status: "in_review" }, escalated: false })
+    setWorkItemStatus.mockResolvedValue({ workItem: { id: "TSK-3", version: 5, status: "in_review" }, escalated: false })
     const { client, mutation } = setup()
     // Warm the batch cache the mention queryFn resolves out of, so a preview
     // that survived the write would be observable as a missing second request.
-    await requestTodoPreview("PLA-3")
+    await requestTodoPreview("TSK-3")
     expect(getWorkItems).toHaveBeenCalledTimes(1)
 
-    act(() => mutation.current.mutate({ id: "PLA-3", status: "in_review" }))
+    act(() => mutation.current.mutate({ id: "TSK-3", status: "in_review" }))
     await waitFor(() => expect(mutation.current.isSuccess).toBe(true))
 
     expect(previewStatus(client)).toBe("in_review")
-    await requestTodoPreview("PLA-3")
+    await requestTodoPreview("TSK-3")
     expect(getWorkItems).toHaveBeenCalledTimes(2)
   })
 
@@ -116,11 +116,11 @@ describe("Todo status mutation caches", () => {
     let rejectFirst!: (error: Error) => void
     setWorkItemStatus
       .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectFirst = reject }))
-      .mockResolvedValueOnce({ workItem: { id: "PLA-3", version: 5, status: "in_review" }, escalated: false })
+      .mockResolvedValueOnce({ workItem: { id: "TSK-3", version: 5, status: "in_review" }, escalated: false })
     const { client, mutation } = setup()
 
-    act(() => mutation.current.mutate({ id: "PLA-3", status: "in_review" }))
-    act(() => mutation.current.mutate({ id: "PLA-3", status: "in_review" }))
+    act(() => mutation.current.mutate({ id: "TSK-3", status: "in_review" }))
+    act(() => mutation.current.mutate({ id: "TSK-3", status: "in_review" }))
     await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(detailVersion(client)).toBe(5))
 
@@ -136,10 +136,10 @@ describe("Todo status mutation caches", () => {
     setWorkItemStatus.mockImplementation(() => new Promise((_resolve, reject) => { rejectRequest = reject }))
     const { client, mutation } = setup()
 
-    act(() => mutation.current.mutate({ id: "PLA-3", status: "in_review" }))
+    act(() => mutation.current.mutate({ id: "TSK-3", status: "in_review" }))
     await waitFor(() => expect(detailStatus(client)).toBe("in_review"))
 
-    act(() => mergeTodoIntoCaches(client, { id: "PLA-3", version: 5, status: "done" }))
+    act(() => mergeTodoIntoCaches(client, { id: "TSK-3", version: 5, status: "done" }))
     expect(boardStatus(client)).toBe("done")
     expect(detailStatus(client)).toBe("done")
 

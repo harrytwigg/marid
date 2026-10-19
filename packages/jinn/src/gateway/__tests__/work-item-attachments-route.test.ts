@@ -292,7 +292,7 @@ describe("PUT /api/work-items/:id/labels — array cap (HTTP parity with MCP)", 
   });
 });
 
-describe("ICI-570 — attachment writes emit company:changed for the parent Todo", () => {
+describe("ISS-570 — attachment writes emit company:changed for the parent Todo", () => {
   it("upload and delete each emit one entity=todo event; a refused upload emits nothing", async () => {
     const item = store.createWorkItem({ title: "live attachment item" });
 

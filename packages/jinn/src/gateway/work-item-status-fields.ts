@@ -73,7 +73,7 @@ function parsePark(body: Record<string, unknown>, target: string, blockKind: Blo
   return refused ? refuse(400, refused) : parseParkedUntil(body.parkedUntil) ?? undefined;
 }
 
-/** The stop's cause (PLA-157): when a clock-wait ends, or what has to happen
+/** The stop's cause: when a clock-wait ends, or what has to happen
  *  and who has to do it. Optional; validated here so the route and the MCP tool
  *  refuse the same malformed shapes. */
 function parseStopCause(

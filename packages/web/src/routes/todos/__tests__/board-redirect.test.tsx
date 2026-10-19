@@ -53,7 +53,7 @@ describe("/todos route arrangement", () => {
   })
 
   it("serves the task page at /todos/:todoId", () => {
-    render(<Shell start="/todos/PLA-12" />)
+    render(<Shell start="/todos/TSK-12" />)
     expect(screen.getByTestId("task-page")).toBeTruthy()
   })
 

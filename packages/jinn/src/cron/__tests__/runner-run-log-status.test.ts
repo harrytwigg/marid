@@ -6,7 +6,7 @@ import { logger } from "../../shared/logger.js";
 import type { CronJob, Connector, JinnConfig, Session } from "../../shared/types.js";
 
 /**
- * ICI-1410 — the run log used to record `success` the moment `route()` resolved,
+ * The run log used to record `success` the moment `route()` resolved,
  * whatever the turn actually did. An expired auth chain, a rate limit, or an engine
  * crash was logged green and the configured alert connector never fired, while the
  * same pass reconciled the linked Todo to `blocked` from the real session state.

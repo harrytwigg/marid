@@ -54,7 +54,7 @@ describe("Todo linked-session invalidation", () => {
   )
 })
 
-describe("Todo live reconciliation (ICI-570)", () => {
+describe("Todo live reconciliation (ISS-570)", () => {
   beforeEach(() => {
     connectionSeq = 1
     vi.useFakeTimers()

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { call, startRouteHarness, stopRouteHarness } from "./todo-route-harness.js";
 
 /**
- * ICI-733 create idempotency over the route, which is where the whole create
+ * Create idempotency over the route, which is where the whole create
  * payload is visible — including the labels, which are applied after the row
  * and would otherwise fall outside what "the same create" means.
  */

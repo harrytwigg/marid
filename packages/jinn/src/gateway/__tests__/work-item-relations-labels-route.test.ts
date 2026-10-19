@@ -323,7 +323,7 @@ describe("list wire data — labels, blocked flag, label filter", () => {
   });
 });
 
-describe("ICI-570 — relation and label writes emit company:changed", () => {
+describe("ISS-570 — relation and label writes emit company:changed", () => {
   it("linking emits one entity=todo event per endpoint; unlinking too", async () => {
     const a = store.createWorkItem({ title: "live rel a" });
     const b = store.createWorkItem({ title: "live rel b" });

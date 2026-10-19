@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest"
 import type { WorkItemCommentPageWire, WorkItemCommentWire } from "@/lib/api"
 import { commentHeadRequest, mergeCommentPages } from "../task-page/comment-window"
 
-/* ICI-748 — the detail payload already carries the last 10 comments, so the
+/* The detail payload already carries the last 10 comments, so the
  * page asks only for the head the tail is missing and unions the two. */
 
 function comment(id: string, at: string): WorkItemCommentWire {
   return {
-    id, workItemId: "PLA-12", parentCommentId: null, authorKind: "employee", author: "mason",
+    id, workItemId: "TSK-12", parentCommentId: null, authorKind: "employee", author: "mason",
     body: id, createdAt: at, editedAt: null, deletedAt: null,
   }
 }

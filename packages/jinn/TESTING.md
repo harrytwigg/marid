@@ -50,7 +50,7 @@ The run fails at import time, before any test body executes and before any write
   up; the guard was added (see `docs/superpowers/plans/2026-07-10-test-isolation-guard.md`),
   but only at layer 1.
 - **2026-07-25** — recurred at ~4x the size via `npx vitest` from the repo root:
-  286 sessions, 704 messages, 328 queue items, and **16 real Todos (ICI-580…595)**.
+  286 sessions, 704 messages, 328 queue items, and **16 real Todos**.
   Todo IDs come from a trigger-protected append-only allocator, so those 16 can
   never be reissued — a permanent hole in the live ledger caused by a test.
 

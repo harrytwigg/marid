@@ -4,7 +4,7 @@ import { AREAS } from '@/contrib/types'
 import { contributeProbes, describeHostedArea } from '@/contrib/__tests__/hosted-area'
 import { ChatPane } from '@/components/chat/chat-pane'
 
-/* PLA-107 — the chat pane hosts `chat.composer`, directly above the composer.
+/* The chat pane hosts `chat.composer`, directly above the composer.
  * Composer-adjacent rather than the message-list footer: this is mounted for
  * every view including CLI, so a contribution's visibility never depends on
  * host state a plugin cannot see. */

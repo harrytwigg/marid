@@ -6,7 +6,7 @@ import { TODO_RUN_OUTCOMES, type TodoRunOutcome } from './runs-schema.js';
 import { LEGACY_WORKFLOW_PHASE_SQL } from '../sessions/legacy-workflow-phase.js';
 
 /**
- * The Todo run ledger — one row per work attempt (ICI-728).
+ * The Todo run ledger — one row per work attempt.
  *
  * A Todo says what has to happen; a RUN says what one attempt at it actually
  * did. Which files it touched, which checks it ran, what it would tell the next

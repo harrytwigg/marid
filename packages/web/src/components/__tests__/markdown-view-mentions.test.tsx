@@ -12,11 +12,11 @@ vi.mock("@/lib/api", async (importOriginal) => {
   }
 })
 
-const LIVE_PREFIXES: ReadonlySet<string> = new Set(["ICI"])
+const LIVE_PREFIXES: ReadonlySet<string> = new Set(["ISS"])
 
 function renderDocument(content: string, prefixes: ReadonlySet<string> = LIVE_PREFIXES) {
   return render(
-    <MemoryRouter initialEntries={["/todos/ICI-1"]}>
+    <MemoryRouter initialEntries={["/todos/ISS-1"]}>
       <TodoPrefixContext.Provider value={prefixes}>
         <MarkdownView content={content} isDark={false} mentions />
       </TodoPrefixContext.Provider>
@@ -26,48 +26,48 @@ function renderDocument(content: string, prefixes: ReadonlySet<string> = LIVE_PR
 
 describe("Todo mentions in a rendered markdown document", () => {
   it("links a live id in a body or a comment", () => {
-    renderDocument("Depends on ICI-740, which is merged.")
+    renderDocument("Depends on ISS-740, which is merged.")
 
-    const link = screen.getByRole("link", { name: "ICI-740" })
-    expect(link.getAttribute("href")).toBe("/todos/ICI-740")
-    expect(screen.getByText(/Depends on/).textContent).toBe("Depends on ICI-740, which is merged.")
+    const link = screen.getByRole("link", { name: "ISS-740" })
+    expect(link.getAttribute("href")).toBe("/todos/ISS-740")
+    expect(screen.getByText(/Depends on/).textContent).toBe("Depends on ISS-740, which is merged.")
   })
 
   it("links a live id nested in emphasis, a list and a table cell", () => {
     renderDocument([
-      "- **ICI-741** in a list",
+      "- **ISS-741** in a list",
       "",
       "| Ticket | Note |",
       "| --- | --- |",
-      "| ICI-742 | in a cell |",
+      "| ISS-742 | in a cell |",
     ].join("\n"))
 
-    expect(screen.getByRole("link", { name: "ICI-741" })).toBeTruthy()
-    expect(screen.getByRole("link", { name: "ICI-742" })).toBeTruthy()
+    expect(screen.getByRole("link", { name: "ISS-741" })).toBeTruthy()
+    expect(screen.getByRole("link", { name: "ISS-742" })).toBeTruthy()
   })
 
   it("leaves an id alone inside inline code, a fenced block and an existing link", () => {
     const { container } = renderDocument([
-      "Inline `ICI-743` stays code.",
+      "Inline `ISS-743` stays code.",
       "",
       "```",
-      "ICI-744",
+      "ISS-744",
       "```",
       "",
-      "[ICI-745](https://example.com/x) is already a link.",
+      "[ISS-745](https://example.com/x) is already a link.",
     ].join("\n"))
 
-    expect(screen.queryByRole("link", { name: "ICI-743" })).toBeNull()
-    expect(screen.queryByRole("link", { name: "ICI-744" })).toBeNull()
-    expect(container.querySelector("code")?.textContent).toBe("ICI-743")
-    expect(screen.getByRole("link", { name: "ICI-745" }).getAttribute("href"))
+    expect(screen.queryByRole("link", { name: "ISS-743" })).toBeNull()
+    expect(screen.queryByRole("link", { name: "ISS-744" })).toBeNull()
+    expect(container.querySelector("code")?.textContent).toBe("ISS-743")
+    expect(screen.getByRole("link", { name: "ISS-745" }).getAttribute("href"))
       .toBe("https://example.com/x")
   })
 
   it("leaves a live id alone in a document that did not opt in", () => {
-    const prose = "A skill, a note, a file and a workflow's output all say ICI-747 plainly."
+    const prose = "A skill, a note, a file and a workflow's output all say ISS-747 plainly."
     const { container } = render(
-      <MemoryRouter initialEntries={["/todos/ICI-1"]}>
+      <MemoryRouter initialEntries={["/todos/ISS-1"]}>
         <TodoPrefixContext.Provider value={LIVE_PREFIXES}>
           <MarkdownView content={prose} isDark={false} />
         </TodoPrefixContext.Provider>

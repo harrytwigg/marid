@@ -51,7 +51,7 @@ describe("TalkSessionRepository", () => {
     }]);
     first.recordAction(opened.id, {
       tool: "comment_work_item",
-      subject: "PLA-42",
+      subject: "TSK-42",
       lane: "fast",
       consent: "not-required",
     });
@@ -64,7 +64,7 @@ describe("TalkSessionRepository", () => {
       state: "parked",
       credentialGeneration: 2,
       turns: [{ text: "Keep the launch decision" }],
-      actions: [{ tool: "comment_work_item", subject: "PLA-42" }],
+      actions: [{ tool: "comment_work_item", subject: "TSK-42" }],
       visualReceiptKeys: ["visual-gap-1:4:workflow-layout"],
     });
   });

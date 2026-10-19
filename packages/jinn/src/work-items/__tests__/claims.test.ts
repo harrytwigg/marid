@@ -92,7 +92,7 @@ describe("claimWorkItem", () => {
   });
 
   it("refuses a Todo that does not exist", () => {
-    const result = claims.claimWorkItem({ workItemId: "ICI-999999", owner: "owner-a" });
+    const result = claims.claimWorkItem({ workItemId: "ISS-999999", owner: "owner-a" });
 
     expect(result).toMatchObject({ state: "rejected" });
     expect(result.state === "rejected" && result.reason).toContain("does not exist");

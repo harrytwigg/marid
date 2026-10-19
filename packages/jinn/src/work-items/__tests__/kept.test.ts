@@ -34,7 +34,7 @@ const mkKept = (createdBy: string, extra: Record<string, unknown> = {}) => {
 const homeIds = (extra: Record<string, unknown> = {}) =>
   store.queryWorkItems({ kept: true, rootsOnly: true, limit: 100, ...extra }).workItems.map((i) => i.id);
 
-/* PLA-172 — Home is what the operator pinned, and nothing else. `created_by`
+/* Home is what the operator pinned, and nothing else. `created_by`
  * does not decide it: any caller holding the operator credential mints Todos as
  * `operator`, so an agent relaying a request is indistinguishable from the
  * operator clicking New Todo. Keeping on create made Home a copy of Everything. */

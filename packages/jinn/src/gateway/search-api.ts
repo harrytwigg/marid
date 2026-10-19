@@ -209,7 +209,7 @@ function readGlobalSearchParams(url: URL): ReadResult<GlobalSearchParams> {
 }
 
 /**
- * GET /api/search/global — ICI-1370: one query, ranked results across Todos,
+ * GET /api/search/global — one query, ranked results across Todos,
  * sessions, notes, people, cron jobs, skills and nav pages, each carrying why
  * it matched and a preview payload. The query grammar reads plain words and
  * explicit tokens both, and reports back how it understood them.

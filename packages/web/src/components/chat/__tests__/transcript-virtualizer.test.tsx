@@ -9,7 +9,7 @@ import type { RenderGroup } from '../chat-messages'
  *
  * The virtualizer keeps re-issuing a `scrollToIndex` from its own rAF until the
  * target holds still. Those retries land after the reader has been shown the
- * frame they correct, which is the jump ICI-821 is about, so the open path must
+ * frame they correct, which is the jump this suite is about, so the open path must
  * not leave any of them able to write.
  */
 

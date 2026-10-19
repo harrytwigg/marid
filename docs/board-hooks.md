@@ -140,10 +140,10 @@ release-reviewer. Reason: …`.
   "eventId": "wie_…",              // the work_item_events row
   "at": "2026-01-01T12:00:00.000Z",// the event row's created_at
   "todo": {
-    "id": "PLA-12", "title": "…", "status": "in_review", "department": "platform",
+    "id": "ACM-12", "title": "…", "status": "in_review", "department": "platform",
     "labels": ["auto-merge"], "assignee": "senior-developer",
-    "parentId": null, "rootId": "PLA-12", "childIds": ["PLA-13"],
-    "url": "/todos/PLA-12"
+    "parentId": null, "rootId": "ACM-12", "childIds": ["ACM-13"],
+    "url": "/todos/ACM-12"
   },
   "from": "executing",             // status events only, else null
   "to": "in_review",

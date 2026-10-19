@@ -116,9 +116,9 @@ beforeEach(() => {
   clearBoardScrollCache()
   sessionStorage.clear()
   rows = {
-    backlog: [compact("PLA-1", "backlog")],
-    executing: [compact("PLA-3", "executing")],
-    in_review: [compact("PLA-4", "in_review")],
+    backlog: [compact("TSK-1", "backlog")],
+    executing: [compact("TSK-3", "executing")],
+    in_review: [compact("TSK-4", "in_review")],
   }
   listWorkItems.mockImplementation((params: { status?: WorkItemStatusWire }) => Promise.resolve(listResponse(params)))
 })
@@ -130,42 +130,42 @@ afterEach(() => {
 describe("moving a card on a phone", () => {
   it("moves it from the Move to… menu on a tap, lands it in the chosen column and says so", async () => {
     setViewport(true)
-    setWorkItemStatus.mockResolvedValue({ workItem: { ...compact("PLA-3", "in_review"), version: 4 }, escalated: false })
-    updateWorkItem.mockResolvedValue({ workItem: { ...compact("PLA-3", "in_review"), version: 5 } })
+    setWorkItemStatus.mockResolvedValue({ workItem: { ...compact("TSK-3", "in_review"), version: 4 }, escalated: false })
+    updateWorkItem.mockResolvedValue({ workItem: { ...compact("TSK-3", "in_review"), version: 5 } })
     renderBoard()
-    await screen.findByTestId("board-card-PLA-3")
+    await screen.findByTestId("board-card-TSK-3")
 
-    tap(screen.getByTestId("board-move-PLA-3"))
+    tap(screen.getByTestId("board-move-TSK-3"))
     await screen.findByRole("menu")
     expect(screen.getByRole("menuitemradio", { name: "In progress" }).getAttribute("aria-checked")).toBe("true")
     tap(screen.getByRole("menuitemradio", { name: "In review" }))
 
-    await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("PLA-3", "in_review"))
+    await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("TSK-3", "in_review"))
     // Optimistic: the card is in In review at once, on top; the callout names the move once the gateway agrees.
     const review = screen.getByTestId("board-column-in_review")
-    await waitFor(() => expect(review.contains(screen.getByTestId("board-card-PLA-3"))).toBe(true))
-    expect(screen.getByTestId("board-column-in_review").querySelectorAll("[data-board-card]")[0]?.getAttribute("data-board-card")).toBe("PLA-3")
-    await waitFor(() => expect(screen.getByTestId("board-callout").textContent).toBe("PLA-3 moved to In review"))
+    await waitFor(() => expect(review.contains(screen.getByTestId("board-card-TSK-3"))).toBe(true))
+    expect(screen.getByTestId("board-column-in_review").querySelectorAll("[data-board-card]")[0]?.getAttribute("data-board-card")).toBe("TSK-3")
+    await waitFor(() => expect(screen.getByTestId("board-callout").textContent).toBe("TSK-3 moved to In review"))
     // The tap was the menu's, not the card's: the task page did not open.
     expect(screen.queryByTestId("task-probe")).toBeNull()
   })
 
   it("keeps the card in its destination column while the board refetches the move", async () => {
     setViewport(true)
-    const moving = compact("PLA-3", "executing")
+    const moving = compact("TSK-3", "executing")
     setWorkItemStatus.mockResolvedValue({ workItem: { ...moving, status: "in_review", version: 4 }, escalated: false })
     // Left in flight: the rank follow-up is a second write, and the frame this
     // pins is the status lane's alone.
     updateWorkItem.mockImplementation(() => new Promise(() => {}))
     const view = renderBoard()
-    await screen.findByTestId("board-card-PLA-3")
+    await screen.findByTestId("board-card-TSK-3")
 
     /* Every commit the move causes is recorded, not only the states the test stops
      * at, so no render in between may leave the card in no column. */
     const commits: string[] = []
     const record = () => {
       const holders = [...view.container.querySelectorAll("[data-board-column]")]
-        .filter((column) => column.querySelector('[data-board-card="PLA-3"]'))
+        .filter((column) => column.querySelector('[data-board-card="TSK-3"]'))
         .map((column) => column.getAttribute("data-board-column"))
       commits.push(holders.join(","))
     }
@@ -175,7 +175,7 @@ describe("moving a card on a phone", () => {
     const observer = new MutationObserver(record)
     observer.observe(view.container, { childList: true, subtree: true })
 
-    tap(screen.getByTestId("board-move-PLA-3"))
+    tap(screen.getByTestId("board-move-TSK-3"))
     await screen.findByRole("menu")
 
     /* Hold the refetches the confirmed move starts, so the columns land one at a
@@ -187,7 +187,7 @@ describe("moving a card on a phone", () => {
 
     tap(screen.getByRole("menuitemradio", { name: "In review" }))
     const destinationColumn = () => screen.getByTestId("board-column-in_review")
-    const card = () => screen.getByTestId("board-card-PLA-3")
+    const card = () => screen.getByTestId("board-card-TSK-3")
     await waitFor(() => expect(destinationColumn().contains(card())).toBe(true))
 
     // The confirmed revision is banked: the gateway now serves the card under
@@ -203,14 +203,14 @@ describe("moving a card on a phone", () => {
     })
     // Every commit up to here is on the record, and none of them left the card in no column.
     expect(commits).not.toContain("")
-    expect(screen.getAllByTestId("board-card-PLA-3")).toHaveLength(1)
+    expect(screen.getAllByTestId("board-card-TSK-3")).toHaveLength(1)
     expect(destinationColumn().contains(card())).toBe(true)
     expect(screen.getByTestId("board-column-executing").contains(card())).toBe(false)
 
     // Then the rest, the destination's own refetch among them: one card, in place.
     await act(async () => { refetches.splice(0).forEach((request) => request.release()) })
     await waitFor(() => {
-      const cards = screen.getAllByTestId("board-card-PLA-3")
+      const cards = screen.getAllByTestId("board-card-TSK-3")
       expect(cards).toHaveLength(1)
       expect(destinationColumn().contains(cards[0])).toBe(true)
     })
@@ -225,16 +225,16 @@ describe("moving a card on a phone", () => {
 
   it("a move into Blocked opens the task page on its reason field, as a drop does", async () => {
     setViewport(true)
-    setWorkItemStatus.mockResolvedValue({ workItem: { ...compact("PLA-3", "blocked"), version: 4 }, escalated: false })
-    updateWorkItem.mockResolvedValue({ workItem: { ...compact("PLA-3", "blocked"), version: 5 } })
+    setWorkItemStatus.mockResolvedValue({ workItem: { ...compact("TSK-3", "blocked"), version: 4 }, escalated: false })
+    updateWorkItem.mockResolvedValue({ workItem: { ...compact("TSK-3", "blocked"), version: 5 } })
     renderBoard()
-    await screen.findByTestId("board-card-PLA-3")
+    await screen.findByTestId("board-card-TSK-3")
 
-    tap(screen.getByTestId("board-move-PLA-3"))
+    tap(screen.getByTestId("board-move-TSK-3"))
     await screen.findByRole("menu")
     tap(screen.getByRole("menuitemradio", { name: "Blocked" }))
 
-    await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("PLA-3", "blocked"))
+    await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("TSK-3", "blocked"))
     const probe = await screen.findByTestId("task-probe")
     expect(JSON.parse(probe.dataset.state!)).toMatchObject({ focusBannerReason: true, fromBoard: "platform" })
   })
@@ -243,22 +243,22 @@ describe("moving a card on a phone", () => {
     setViewport(true)
     setWorkItemStatus.mockRejectedValue(new Error("The gateway refused the move"))
     renderBoard()
-    await screen.findByTestId("board-card-PLA-3")
+    await screen.findByTestId("board-card-TSK-3")
 
-    tap(screen.getByTestId("board-move-PLA-3"))
+    tap(screen.getByTestId("board-move-TSK-3"))
     await screen.findByRole("menu")
     tap(screen.getByRole("menuitemradio", { name: "In review" }))
 
     await waitFor(() => expect(screen.getByTestId("board-callout").textContent).toContain("refused"))
     // The refusal is the only thing said: the move was never announced.
     expect(screen.getByTestId("board-callout").textContent).not.toContain("moved")
-    await waitFor(() => expect(screen.getByTestId("board-column-executing").contains(screen.getByTestId("board-card-PLA-3"))).toBe(true))
+    await waitFor(() => expect(screen.getByTestId("board-column-executing").contains(screen.getByTestId("board-card-TSK-3"))).toBe(true))
   })
 
   it("a long press does not lift the card: a held finger is a pan", async () => {
     setViewport(true)
     renderBoard()
-    const card = await screen.findByTestId("board-card-PLA-3")
+    const card = await screen.findByTestId("board-card-TSK-3")
 
     fireEvent.pointerDown(card, { pointerType: "touch", button: 0, pointerId: 1, clientX: 40, clientY: 40 })
     await act(async () => {
@@ -273,8 +273,8 @@ describe("moving a card on a phone", () => {
   it("the desktop has no Move to… on a card, and still lifts one", async () => {
     setViewport(false)
     renderBoard()
-    const card = await screen.findByTestId("board-card-PLA-3")
-    expect(screen.queryByTestId("board-move-PLA-3")).toBeNull()
+    const card = await screen.findByTestId("board-card-TSK-3")
+    expect(screen.queryByTestId("board-move-TSK-3")).toBeNull()
 
     fireEvent.pointerDown(card, { button: 0, clientX: 210, clientY: 40, pointerType: "mouse" })
     await act(async () => {

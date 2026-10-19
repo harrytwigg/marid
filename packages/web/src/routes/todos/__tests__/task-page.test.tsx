@@ -45,7 +45,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       listWorkItemSessions: (...args: unknown[]) => listWorkItemSessions(...args),
       dispatchTodo: (...args: unknown[]) => dispatchTodo(...args),
       getDepartments: vi.fn().mockResolvedValue({
-        departments: [{ slug: "platform", prefix: "PLA", createdAt: "2026-07-01T00:00:00.000Z", todoCount: 4 }],
+        departments: [{ slug: "platform", prefix: "TSK", createdAt: "2026-07-01T00:00:00.000Z", todoCount: 4 }],
       }),
       getOrg: (...args: unknown[]) => getOrg(...args),
       listWorkItems: vi.fn().mockResolvedValue({ workItems: [], total: 0, nextOffset: null }),
@@ -89,7 +89,7 @@ function treeNode(item: WorkItemFullWire, children: WorkItemTreeNodeWire[] = [])
   return { ...item, children }
 }
 
-function renderTask(path = "/todos/PLA-12", state?: Record<string, unknown>) {
+function renderTask(path = "/todos/TSK-12", state?: Record<string, unknown>) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
@@ -131,7 +131,7 @@ beforeEach(() => {
   listWorkItemAttachments.mockResolvedValue({ attachments: [] })
   listWorkItemComments.mockResolvedValue({ comments: [], total: 0 })
   listWorkItemSessions.mockResolvedValue([])
-  dispatchTodo.mockResolvedValue({ workItemId: "PLA-12", sessionId: "dispatcher-session", status: "running", reused: false })
+  dispatchTodo.mockResolvedValue({ workItemId: "TSK-12", sessionId: "dispatcher-session", status: "running", reused: false })
   getOrg.mockResolvedValue({
     departments: ["platform"],
     employees: [],
@@ -160,7 +160,7 @@ describe("the task page", () => {
     expect(screen.getByTestId("task-activity")).toBeTruthy()
 
     await act(async () => {
-      resolveDetail(detailOf(full("PLA-12")))
+      resolveDetail(detailOf(full("TSK-12")))
     })
     await waitFor(() => expect(screen.queryByTestId("task-page-skeleton")).toBeNull())
     expect(screen.queryByTestId("task-details-toggle")).toBeNull()
@@ -170,7 +170,7 @@ describe("the task page", () => {
 
   it("reserves the banner when navigation identifies a banner-bearing task", () => {
     getWorkItem.mockImplementation(() => new Promise(() => {}))
-    renderTask("/todos/PLA-12", { bannerExpected: true })
+    renderTask("/todos/TSK-12", { bannerExpected: true })
 
     expect(screen.getByTestId("task-banner-skeleton")).toBeTruthy()
   })
@@ -185,7 +185,7 @@ describe("the task page", () => {
   })
 
   it("keeps the crumb and chip bands single-height while second-wave data lands", async () => {
-    const item = full("PLA-12", { rootId: "PLA-1", parentId: "PLA-1", assignee: "platform-dev" })
+    const item = full("TSK-12", { rootId: "TSK-1", parentId: "TSK-1", assignee: "platform-dev" })
     let resolveTree!: (value: { tree: { root: WorkItemTreeNodeWire; totals: {}; spendUsd: number } }) => void
     let resolveSessions!: (value: Array<{ status: string }>) => void
     getWorkItem.mockResolvedValue(detailOf(item))
@@ -223,7 +223,7 @@ describe("the task page", () => {
     await act(async () => {
       resolveTree({
         tree: {
-          root: treeNode(full("PLA-1"), [treeNode(item)]),
+          root: treeNode(full("TSK-1"), [treeNode(item)]),
           totals: {},
           spendUsd: 0,
         },
@@ -231,7 +231,7 @@ describe("the task page", () => {
       resolveSessions([{ status: "running" }])
     })
 
-    await waitFor(() => expect(screen.getByTestId("task-crumb-PLA-1")).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId("task-crumb-TSK-1")).toBeTruthy())
     expect(screen.getByTestId("task-crumb-bar").className).toBe(crumbBefore.className)
     expect(screen.getByTestId("task-chip-cluster").className).toBe(chipsBefore.className)
     expect(screen.getByTestId("task-chip-cluster").querySelectorAll(":scope > *")).toHaveLength(3)
@@ -239,54 +239,54 @@ describe("the task page", () => {
   })
 
   it("renders the breadcrumb (board › ancestors › ID + title) and the title block", async () => {
-    const item = full("PLA-22", { title: "Postal-code validation", rootId: "PLA-12", parentId: "PLA-14", depth: 2 })
+    const item = full("TSK-22", { title: "Postal-code validation", rootId: "TSK-12", parentId: "TSK-14", depth: 2 })
     getWorkItem.mockResolvedValue(detailOf(item))
     getWorkItemTree.mockResolvedValue({
       tree: {
-        root: treeNode(full("PLA-12"), [
-          treeNode(full("PLA-14", { parentId: "PLA-12", depth: 1 }), [treeNode(item)]),
+        root: treeNode(full("TSK-12"), [
+          treeNode(full("TSK-14", { parentId: "TSK-12", depth: 1 }), [treeNode(item)]),
         ]),
         totals: {},
         spendUsd: 0,
       },
     })
-    renderTask("/todos/PLA-22", { fromBoard: "platform" })
+    renderTask("/todos/TSK-22", { fromBoard: "platform" })
 
     await waitFor(() => expect(screen.getByTestId("task-title").textContent).toContain("Postal-code validation"))
     expect((screen.getByTestId("task-crumb-board")).textContent).toContain("Platform")
-    await waitFor(() => expect(screen.getByTestId("task-crumb-PLA-12")).toBeTruthy())
-    expect(screen.getByTestId("task-crumb-PLA-14")).toBeTruthy()
-    expect(getWorkItemTree).toHaveBeenCalledWith("PLA-12")
+    await waitFor(() => expect(screen.getByTestId("task-crumb-TSK-12")).toBeTruthy())
+    expect(screen.getByTestId("task-crumb-TSK-14")).toBeTruthy()
+    expect(getWorkItemTree).toHaveBeenCalledWith("TSK-12")
   })
 
   it("copies the bare desktop ID from the crumb and keeps the menu copy path", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     renderTask()
 
     await screen.findByTestId("task-title")
     fireEvent.click(screen.getByTestId("task-copy-id"))
-    await waitFor(() => expect(writeClipboardText).toHaveBeenCalledWith("PLA-12"))
-    expect(screen.getByTestId("task-callout").textContent).toBe("Copied PLA-12")
+    await waitFor(() => expect(writeClipboardText).toHaveBeenCalledWith("TSK-12"))
+    expect(screen.getByTestId("task-callout").textContent).toBe("Copied TSK-12")
 
     writeClipboardText.mockClear()
     fireEvent.pointerDown(screen.getByTestId("task-crumb-more"), { button: 0, ctrlKey: false })
     fireEvent.click(await screen.findByText("Copy ID"))
-    await waitFor(() => expect(writeClipboardText).toHaveBeenCalledWith("PLA-12"))
+    await waitFor(() => expect(writeClipboardText).toHaveBeenCalledWith("TSK-12"))
   })
 
   it("copies the bare ID from the mobile ID line with visible confirmation", async () => {
     stubMobileViewport()
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     renderTask()
 
     await screen.findByTestId("task-title")
     fireEvent.click(screen.getByTestId("task-copy-id-mobile"))
-    await waitFor(() => expect(writeClipboardText).toHaveBeenCalledWith("PLA-12"))
-    expect(screen.getByTestId("task-callout").textContent).toBe("Copied PLA-12")
+    await waitFor(() => expect(writeClipboardText).toHaveBeenCalledWith("TSK-12"))
+    expect(screen.getByTestId("task-callout").textContent).toBe("Copied TSK-12")
   })
 
   it("renders the document and persistent properties on first paint without a Details toggle", async () => {
-    const item = full("PLA-12", {
+    const item = full("TSK-12", {
       assignee: "mason",
       priority: 3,
       budgetUsd: 10,
@@ -294,7 +294,7 @@ describe("the task page", () => {
     })
     getWorkItemTree.mockResolvedValue({
       tree: {
-        root: treeNode(item, [treeNode(full("PLA-13", { parentId: "PLA-12", depth: 1 }))]),
+        root: treeNode(item, [treeNode(full("TSK-13", { parentId: "TSK-12", depth: 1 }))]),
         totals: {},
         spendUsd: 0,
       },
@@ -302,7 +302,7 @@ describe("the task page", () => {
     listWorkItemAttachments.mockResolvedValue({
       attachments: [{
         id: "wia_1",
-        workItemId: "PLA-12",
+        workItemId: "TSK-12",
         commentId: null,
         filename: "proof.png",
         mime: "image/png",
@@ -336,15 +336,15 @@ describe("the task page", () => {
   })
 
   it("starts the Dispatcher, shows its linked session, and removes the repeat action while live", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12", { status: "backlog" })))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12", { status: "backlog" })))
     listWorkItemSessions
       .mockResolvedValueOnce([])
-      .mockResolvedValue([{ id: "dispatcher-session", employee: "todo-dispatcher", status: "running", title: "Dispatch PLA-12" }])
+      .mockResolvedValue([{ id: "dispatcher-session", employee: "todo-dispatcher", status: "running", title: "Dispatch TSK-12" }])
     renderTask()
 
     fireEvent.click(await screen.findByTestId("rail-dispatch"))
 
-    await waitFor(() => expect(dispatchTodo).toHaveBeenCalledWith("PLA-12"))
+    await waitFor(() => expect(dispatchTodo).toHaveBeenCalledWith("TSK-12"))
     const linked = await screen.findByTestId("rail-dispatch-session")
     expect(linked.textContent).toContain("todo-dispatcher working")
     expect(linked.getAttribute("data-session-id")).toBe("dispatcher-session")
@@ -352,7 +352,7 @@ describe("the task page", () => {
   })
 
   it("an in_review Todo shows no banner and no approval controls", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12", { status: "in_review" })))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12", { status: "in_review" })))
     renderTask()
 
     await screen.findByTestId("task-page-grid")
@@ -363,23 +363,23 @@ describe("the task page", () => {
   })
 
   it("a reason-less blocked item grows the banner reason field; Save PUTs the same status with the note (F6)", async () => {
-    const item = full("PLA-12", { status: "blocked" })
+    const item = full("TSK-12", { status: "blocked" })
     getWorkItem.mockResolvedValue(detailOf(item))
     setWorkItemStatus.mockResolvedValue({ workItem: item, escalated: false })
-    renderTask("/todos/PLA-12", { focusBannerReason: true })
+    renderTask("/todos/TSK-12", { focusBannerReason: true })
 
     const input = await screen.findByTestId("task-banner-reason")
     await waitFor(() => expect(document.activeElement).toBe(input))
     fireEvent.change(input, { target: { value: "Waiting on vendor keys" } })
     fireEvent.click(screen.getByTestId("task-banner-reason-save"))
-    await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("PLA-12", "blocked", "Waiting on vendor keys"))
+    await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("TSK-12", "blocked", "Waiting on vendor keys"))
   })
 
   it("an unfinished reason survives losing focus — only a submit commits it", async () => {
-    const item = full("PLA-12", { status: "blocked" })
+    const item = full("TSK-12", { status: "blocked" })
     getWorkItem.mockResolvedValue(detailOf(item))
     setWorkItemStatus.mockResolvedValue({ workItem: item, escalated: false })
-    renderTask("/todos/PLA-12", { focusBannerReason: true })
+    renderTask("/todos/TSK-12", { focusBannerReason: true })
 
     const input = await screen.findByTestId("task-banner-reason")
     fireEvent.change(input, { target: { value: "Waiting on ven" } })
@@ -390,10 +390,10 @@ describe("the task page", () => {
   })
 
   it("a blocked item WITH a reason renders it rail-quoted instead of the input", async () => {
-    const item = full("PLA-12", { status: "blocked" })
+    const item = full("TSK-12", { status: "blocked" })
     getWorkItem.mockResolvedValue(detailOf(item, {
       events: [{
-        id: "e1", workItemId: "PLA-12", kind: "status_change", fromStatus: "executing",
+        id: "e1", workItemId: "TSK-12", kind: "status_change", fromStatus: "executing",
         toStatus: "blocked", actor: "mason", detail: { note: "Waiting on vendor keys" },
         createdAt: "2026-07-23T07:00:00.000Z",
       }],
@@ -408,9 +408,9 @@ describe("the task page", () => {
   describe("a blocked item says why it stopped, as its card does", () => {
     const hint = { what: "approve the vendor invoice", who: "the operator" }
     const blockedWithNote = (extra: Partial<WorkItemDetailWire>) =>
-      detailOf(full("PLA-12", { status: "blocked" }), {
+      detailOf(full("TSK-12", { status: "blocked" }), {
         events: [{
-          id: "e1", workItemId: "PLA-12", kind: "status_change", fromStatus: "executing",
+          id: "e1", workItemId: "TSK-12", kind: "status_change", fromStatus: "executing",
           toStatus: "blocked", actor: "mason", detail: { note: "Provider quota" },
           createdAt: "2026-07-23T07:00:00.000Z",
         }],
@@ -429,8 +429,8 @@ describe("the task page", () => {
       renderTask()
 
       const banner = await screen.findByTestId("task-banner-blocked")
-      expect(screen.getByTestId("park-chip-PLA-12").textContent).toContain("2h 14m")
-      const lead = screen.getByTestId("stop-lead-PLA-12")
+      expect(screen.getByTestId("park-chip-TSK-12").textContent).toContain("2h 14m")
+      const lead = screen.getByTestId("stop-lead-TSK-12")
       expect(lead.textContent).toContain(hint.what)
       expect(lead.textContent).toContain(hint.who)
       expect(banner.contains(lead)).toBe(true)
@@ -444,11 +444,11 @@ describe("the task page", () => {
 
       await screen.findByTestId("task-banner-blocked")
       for (const part of ["what", "who"]) {
-        const line = screen.getByTestId(`stop-hint-${part}-PLA-12`)
+        const line = screen.getByTestId(`stop-hint-${part}-TSK-12`)
         expect(line.className).not.toMatch(/\btruncate\b/)
         expect(line.className).toContain("whitespace-pre-wrap")
       }
-      expect(screen.getByTestId("stop-hint-what-PLA-12").textContent).toBe(long.what)
+      expect(screen.getByTestId("stop-hint-what-TSK-12").textContent).toBe(long.what)
     })
 
     it("drops the countdown on its own once the park has passed, and keeps the hint", async () => {
@@ -459,10 +459,10 @@ describe("the task page", () => {
       }))
       renderTask()
 
-      expect(await screen.findByTestId("park-chip-PLA-12")).toBeTruthy()
+      expect(await screen.findByTestId("park-chip-TSK-12")).toBeTruthy()
       act(() => { vi.advanceTimersByTime(6_000) })
-      expect(screen.queryByTestId("park-chip-PLA-12")).toBeNull()
-      expect(screen.getByTestId("stop-lead-PLA-12").textContent).toContain(hint.what)
+      expect(screen.queryByTestId("park-chip-TSK-12")).toBeNull()
+      expect(screen.getByTestId("stop-lead-TSK-12").textContent).toContain(hint.what)
     })
 
     it("shows no lead for a park that has already passed and no hint", async () => {
@@ -470,8 +470,8 @@ describe("the task page", () => {
       renderTask()
 
       expect((await screen.findByTestId("task-banner-blocked")).textContent).toContain("Provider quota")
-      expect(screen.queryByTestId("stop-lead-PLA-12")).toBeNull()
-      expect(screen.queryByTestId("park-chip-PLA-12")).toBeNull()
+      expect(screen.queryByTestId("stop-lead-TSK-12")).toBeNull()
+      expect(screen.queryByTestId("park-chip-TSK-12")).toBeNull()
     })
   })
 
@@ -489,7 +489,7 @@ describe("the task page", () => {
 
   it("a transport failure shows a visible Retry — never the missing state — and resolves on retry (cutover migration)", async () => {
     getWorkItem.mockRejectedValueOnce(Object.assign(new Error("socket hang up"), { status: 502 }))
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12", { title: "Recovered title" })))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12", { title: "Recovered title" })))
     renderTask()
     const error = await screen.findByTestId("task-load-error")
     expect(error.textContent).not.toContain("doesn't exist")
@@ -498,14 +498,14 @@ describe("the task page", () => {
   })
 
   it("the body renders through MarkdownView when present and the quiet placeholder when empty", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12", { body: "Let a buyer **complete** a purchase." })))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12", { body: "Let a buyer **complete** a purchase." })))
     renderTask()
     const body = await screen.findByTestId("task-body")
     await waitFor(() => expect((body).textContent).toContain("complete"))
   })
 
   it("desktop keeps the tab bar; the in-flow composer is the one composer", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     renderTask()
     await screen.findByTestId("task-chip-cluster")
     expect(screen.getByTestId("page-layout").dataset.hideMobileTabBar).toBe("false")
@@ -515,7 +515,7 @@ describe("the task page", () => {
 
   it("mobile is a full-screen push (§8): the tab bar yields and the fixed comment bar owns the bottom edge", async () => {
     stubMobileViewport()
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     renderTask()
     await screen.findByTestId("task-chip-cluster")
     expect(screen.getByTestId("page-layout").dataset.hideMobileTabBar).toBe("true")

@@ -3,7 +3,7 @@ import { WORK_ITEM_RUNS_DDL, WORK_ITEM_RUNS_TABLE_DDL } from "./runs-schema.js";
 import { currentTableSql, sqlShape } from "./sql-shape.js";
 
 /**
- * The run ledger's schema history (ICI-731).
+ * The run ledger's schema history.
  *
  * `work_item_runs` is the one Todo table whose shape has changed since it
  * shipped, and it lives here rather than in the boot migration because the
@@ -12,7 +12,7 @@ import { currentTableSql, sqlShape } from "./sql-shape.js";
  * it.
  */
 
-/** The shape ICI-728 shipped, before `rate_limited` joined the outcome
+/** The shape the ledger first shipped, before `rate_limited` joined the outcome
  *  taxonomy. Frozen, and written out rather than derived: it is the literal SQL
  *  a deployed database still stores, and a recognizer that regenerated it from
  *  the current constant would stop recognizing anything. */

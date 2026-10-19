@@ -790,7 +790,7 @@ export const api = {
   /** Todos v2 slice 6: the board's lazy tree expansion (roll-ups + spend). */
   getWorkItemTree: (id: string, signal?: AbortSignal) =>
     get<{ tree: WorkItemTreeWire }>(`/api/work-items/${encodeURIComponent(id)}/tree`, signal ? { signal } : undefined),
-  /** ICI-648: all visible board trees in one request. */
+  /** All visible board trees in one request. */
   getWorkItemTrees: (ids: string[], signal?: AbortSignal) => {
     const q = new URLSearchParams({ ids: ids.join(",") })
     return get<{ trees: Record<string, WorkItemTreeWire> }>(
@@ -805,7 +805,7 @@ export const api = {
   /** GRS-021a: full Todo detail (property stack + live spend + audit). */
   getWorkItem: (id: string, signal?: AbortSignal) =>
     get<WorkItemDetailWire>(`/api/work-items/${encodeURIComponent(id)}`, signal ? { signal } : undefined),
-  /** ICI-648: lightweight open-detail enrichment through the existing list route. */
+  /** Lightweight open-detail enrichment through the existing list route. */
   getWorkItems: (ids: string[], signal?: AbortSignal) => {
     const q = new URLSearchParams({ ids: ids.join(",") })
     return get<{ workItems: WorkItemOpenDetailWire[] }>(
@@ -882,7 +882,7 @@ export const api = {
   /** Replace a Todo's label set (ids or names; nothing created implicitly). */
   setWorkItemLabels: (id: string, labels: string[], origin?: WriteOriginWire) =>
     put<{ labels: WorkItemLabelWire[] }>(`/api/work-items/${encodeURIComponent(id)}/labels`, { labels }, origin),
-  /** Put a Todo on the operator's Home board, or take it off (ICI-1357). */
+  /** Put a Todo on the operator's Home board, or take it off. */
   setWorkItemKept: (id: string, kept: boolean) =>
     put<{ kept: boolean }>(`/api/work-items/${encodeURIComponent(id)}/kept`, { kept }),
   uploadFile: async (file: File, sessionId?: string): Promise<UploadedFile> => {

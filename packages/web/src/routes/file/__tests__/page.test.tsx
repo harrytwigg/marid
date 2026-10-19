@@ -97,7 +97,7 @@ describe("standalone /file route", () => {
 
 describe("a capped knowledge read says so in the viewer", () => {
   it("names how much of the file it is showing", async () => {
-    // PLA-100: the store used to append an inline "…[truncated N chars]" marker
+    // The store used to append an inline "…[truncated N chars]" marker
     // to the content itself. The counts are now structured fields, so the viewer
     // has to say it out loud or a long file just ends without explanation.
     fetchMock.mockResolvedValue({

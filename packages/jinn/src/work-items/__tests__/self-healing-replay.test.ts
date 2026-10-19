@@ -6,14 +6,14 @@ import {
 } from "../recovery.js";
 
 /**
- * PLA-240 replay: the audit's representative incidents, written as classifier
+ * Replay: the audit's representative incidents, written as classifier
  * contracts before any recovery writes exist. Generic fixture ids only.
  */
 
 describe("historical incident replay — classifier", () => {
   it("transient quota block classifies as recovering, not operator", () => {
     const verdict = classifyRecovery({
-      todo: { id: "PLA-1", status: "blocked", assignee: "platform-worker", source: "session" },
+      todo: { id: "TSK-1", status: "blocked", assignee: "platform-worker", source: "session" },
       lastRun: {
         id: "run_old",
         outcome: "rate_limited",
@@ -26,7 +26,7 @@ describe("historical incident replay — classifier", () => {
 
   it("code failure routes to manager, not operator", () => {
     const verdict = classifyRecovery({
-      todo: { id: "PLA-2", status: "blocked", assignee: "platform-worker", source: "session" },
+      todo: { id: "TSK-2", status: "blocked", assignee: "platform-worker", source: "session" },
       lastRun: {
         id: "run_old",
         outcome: "crashed",
@@ -39,7 +39,7 @@ describe("historical incident replay — classifier", () => {
 
   it("security/auth-terminal is manager, not a clock retry", () => {
     const verdict = classifyRecovery({
-      todo: { id: "PLA-4", status: "blocked", assignee: "platform-worker", source: "session" },
+      todo: { id: "TSK-4", status: "blocked", assignee: "platform-worker", source: "session" },
       lastRun: {
         id: "run_old",
         outcome: "crashed",
@@ -52,7 +52,7 @@ describe("historical incident replay — classifier", () => {
 
   it("ordinary backlog never classifies as recovering", () => {
     const verdict = classifyRecovery({
-      todo: { id: "PLA-6", status: "backlog", assignee: null, source: "human" },
+      todo: { id: "TSK-6", status: "backlog", assignee: null, source: "human" },
     });
     expect(verdict.lane).not.toBe("recovering");
     expect(verdict.class).toBe("operator");
@@ -60,7 +60,7 @@ describe("historical incident replay — classifier", () => {
 
   it("execution past the 4h timeout with a dead session is manager, and the same run keeps it there while the session lives", () => {
     const stalled = {
-      todo: { id: "PLA-17", status: "executing", assignee: "platform-worker", source: "workflow" },
+      todo: { id: "TSK-17", status: "executing", assignee: "platform-worker", source: "workflow" },
       openRun: { startedAt: "2026-08-20T12:00:00.000Z", sessionInFlight: false },
       now: new Date("2026-08-20T17:00:00.000Z"),
     };
@@ -71,7 +71,7 @@ describe("historical incident replay — classifier", () => {
   // in_review is the operator's desk: an unassigned Todo there waits on the
   // operator, so it is no manager's leftover.
   it("an in_review Todo with no assignee is not put on Manager attention", () => {
-    const verdict = classifyRecovery({ todo: { id: "PLA-18", status: "in_review", assignee: null, source: "workflow" } });
+    const verdict = classifyRecovery({ todo: { id: "TSK-18", status: "in_review", assignee: null, source: "workflow" } });
     expect(verdict).toMatchObject({ lane: "operator", reason: GENERIC_OPERATOR_REASON });
   });
 });

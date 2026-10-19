@@ -2,19 +2,19 @@
 
 Design spec. No product code. Base SHA `76be9932`.
 
-This document is the contract PLA-191..195 implement against. Eight primitives, one section
+This document is the contract the implementation slices build against. Eight primitives, one section
 each, in the same shape every time: **anatomy**, **states**, **breakpoint behaviour**, **tokens
 consumed**, and a **named source** for anything borrowed. A slice implements from here without
 asking a follow-up question: every size is a number with a unit, and every colour, radius,
 shadow, easing and duration is a token that already exists — with exactly one exception, the
 refresh spinner's rotation period, which §9 writes as a literal and justifies where it is used.
 
-Four questions were left open by PLA-187's dispatch and blocked PLA-191/192 from starting.
+Four questions were left open by the design task's dispatch and blocked the first two implementation slices from starting.
 §1 answers all four, one answer each, no hedging. §10 enumerates every place a borrowed idiom
 collides with a settled Jinn rule and names the winner.
 
 The grammar here is borrowed from Ionic, Konsta UI v5, Apple HIG and Material 3. **No package
-is.** Nothing in PLA-187's tree adds a dependency on Ionic or Konsta; the citations exist so a
+is.** Nothing in the design task's tree adds a dependency on Ionic or Konsta; the citations exist so a
 reader can check the source of an idea, not so a slice can install it.
 
 Paths are repo-relative. `web/` abbreviates `packages/web/src/`. Expand that shorthand and
@@ -33,7 +33,7 @@ has only this repository can still check every rule that binds a primitive here.
 
 **The token floor. Consume it; do not extend it.** Every custom property named anywhere in this
 document is declared in `web/routes/globals.css` at the base SHA. No primitive below invents a
-token — where one is genuinely missing, §11 records the gap and hands it to PLA-191 rather than
+token — where one is genuinely missing, §11 records the gap and hands it to the foundation slice rather than
 naming a property that does not resolve.
 
 | Token | Resolved | Where |
@@ -113,7 +113,7 @@ route a frame after it commits (`usePreviousViewSnapshot`), and a shell that rem
 route would have nothing to photograph. `PageScaffold` is per-route by definition. Merging them
 would put the snapshot host inside the thing being snapshotted.
 
-**What PLA-191 may change about `PageLayout`.** One thing only: the unused `headerActions` prop.
+**What the foundation slice may change about `PageLayout`.** One thing only: the unused `headerActions` prop.
 It is destructured as `_headerActions` and no caller supplies it — pages own their actions inline
 via `ToolbarActions`. `PageScaffold` takes over that job properly, so the dead prop comes off the
 signature in the same slice. Nothing else in the file is in scope.
@@ -129,7 +129,7 @@ Not the extended FAB. Not shrink-on-scroll.
 - **56px, which is Material 3's standard FAB.** Comfortably over both the Jinn ≥34px floor and
   HIG's 44pt, and it is a thumb target at the bottom of a phone (§10.4).
 - **Persistent, not shrink-on-scroll.** Shrinking on scroll needs to know the scroll position.
-  Doing that in JS is a scroll listener, which PLA-187 forbids; doing it in CSS burns the one
+  Doing that in JS is a scroll listener, which the design task forbids; doing it in CSS burns the one
   scroll timeline the page has on decoration while §1.4 spends it on the header, which is the
   thing the reader actually navigates by. One moving part beats two.
 - **Mobile-only.** Below `lg` the FAB is the page's primary action. At `lg` and up it does not
@@ -233,7 +233,7 @@ state**: no large title, the inline title always visible, the material always ap
 correct, quiet, and one line shorter. It is not animated, and nothing is animated badly.
 
 This is deliberate. Reimplementing the collapse on a scroll listener for old engines is the exact
-thing PLA-187 ruled out, and it would mean shipping two mechanisms whose behaviour diverges under
+thing the design task ruled out, and it would mean shipping two mechanisms whose behaviour diverges under
 momentum scrolling — the worse outcome is the one where the fallback *almost* works. There are
 currently zero occurrences of `animation-timeline`, `scroll-timeline`, `view-timeline` or
 `@supports` anywhere in `packages/web`; this spec introduces the first of each.
@@ -396,7 +396,7 @@ only place the action is named.
 `bottom: calc(55px + max(var(--safe-bottom), 6px) + var(--space-4))`. That literal `55px` is
 `MobileTabBar`'s box above its own safe-area padding — `min-h-[49px]` rows
 (`web/components/chat/mobile-tab-bar.tsx:85`) plus `py-1.5`'s 6px top (same file, `:58`). It is a
-literal because no token for the tab bar's height exists; §11 hands that gap to PLA-191, and the
+literal because no token for the tab bar's height exists; §11 hands that gap to the foundation slice, and the
 FAB is its first consumer.
 
 When the scaffold is rendered with `hideMobileTabBar` (the full-screen-push case — a pushed task
@@ -429,7 +429,7 @@ primary-container taxonomy (§10.3); depth is `--shadow-key`, not an elevation l
 
 A bottom-anchored modal on mobile, a centred dialog on desktop. This primitive is largely a
 **codification of what already ships**, not an invention: `web/routes/todos/todo-filter-sheet.tsx`
-and `web/routes/todos/new-todo-dialog.tsx` are the reference implementations, and PLA-193 extracts
+and `web/routes/todos/new-todo-dialog.tsx` are the reference implementations, and the extraction slice extracts
 rather than redesigns.
 
 **Anatomy.**
@@ -463,7 +463,7 @@ already do.
 skill, quoted verbatim: *"Persist item-scoped drafts before transport; serialize/coalesce saves
 against the last acknowledged revision; a close may complete only when the latest local revision is
 durably acknowledged. Browser history owns one reversible detail entry, while opaque transport IDs
-stay out of URLs and rendered metadata."* PLA-193 extracts it with the visuals rather than leaving
+stay out of URLs and rendered metadata."* The extraction slice moves it out with the visuals rather than leaving
 each caller to re-derive it, which is what makes §5 a codification rather than a restyle. Four
 obligations follow, and they bind any `Sheet` that edits something:
 
@@ -546,7 +546,7 @@ draws neither, and separates by fill and `--shadow-subtle` instead (§10.1).*
 
 A collection of rows. This primitive **reuses the settled Shared Visual Language and does not
 redefine it** — the Jinn design skill's § "Shared Visual Language" is authoritative for the
-grouped-inset grammar, and PLA-195 owns any update to it.
+grouped-inset grammar, and the design-skill slice owns any update to it.
 
 **Anatomy.** Quoting the settled rule: a collection is *ONE grouped-inset container
 (`--bg-secondary` + `--shadow-card` + 5px pad, radius `--radius-xl`) with FLAT rows inside (inner
@@ -711,7 +711,7 @@ collapse would spin the glyph roughly a thousand times a second rather than stop
 motion is handled one row above instead — the rotation is not applied at all and the glyph holds
 at full opacity — which is the accessible behaviour outright, not an approximation of it. No
 Ledger duration is within an order of magnitude of a spinner's period, and §11 deliberately does
-not ask PLA-191 for one: a rotation period is a property of this indicator, not a shared motion
+not ask the foundation slice for one: a rotation period is a property of this indicator, not a shared motion
 step that other surfaces would consume.
 
 **Gesture ownership, stated because two gestures share this surface.** `PullToRefresh` is vertical
@@ -754,7 +754,7 @@ primitives.
 
 - `LargeTitleHeader` never gains a bottom border on scroll. It carries `--material-thick` plus a
   backdrop blur *at all times*, so content passing beneath it is already visibly separated and
-  there is no state change to draw. This is the specific case PLA-190 was asked to call out, and
+  there is no state change to draw. This is the specific case this design task was asked to call out, and
   it is the one that most tempts a borrowed implementation, because Ionic and HIG both animate a
   separator in at the collapse boundary.
 - `ListSection` has no inter-row separators. The grouped-inset container plus row hover fills
@@ -858,11 +858,11 @@ breakpoints below `lg`, on every platform.
 
 ---
 
-## 11. Token gaps handed to PLA-191
+## 11. Token gaps handed to the foundation slice
 
 Per the scope rule, this spec consumes Ledger as it stands. Three properties a primitive here
 reaches for **do not exist** at the base SHA. Two are real gaps and are named rather than used;
-the third is settled here as a non-gap, so PLA-191 inherits a decision instead of a question:
+the third is settled here as a non-gap, so the foundation slice inherits a decision instead of a question:
 
 1. **A tab-bar height token.** `PrimaryAction` needs `MobileTabBar`'s height to clear it and
    currently must write the literal `55px` (§4). The bar's own box is
@@ -871,7 +871,7 @@ the third is settled here as a non-gap, so PLA-191 inherits a decision instead o
    sites — the FAB, the scaffold's below-`lg` bottom padding, and `todo-list.tsx`'s `pb-24`.
 2. **A large-title collapse distance — settled, and not a token.** `--jinn-collapse-distance`
    stays the inline per-instance property §1.4 sets from the large title's own measured height.
-   PLA-191 declares no Ledger token for it. A fixed global distance would be wrong rather than
+   The foundation slice declares no Ledger token for it. A fixed global distance would be wrong rather than
    merely coarser: `--text-large-title` is a `clamp()` multiplied by `--text-scale`, so the
    title's rendered height moves with the reader's text-size setting, and one constant range
    would finish the collapse early at large scales and leave it unfinished at small ones. This
@@ -880,21 +880,21 @@ the third is settled here as a non-gap, so PLA-191 inherits a decision instead o
    indicator. That reads correctly, but a spinner is not text, and the next spinner in the app
    will make the same borrow independently.
 
-Neither gap blocks PLA-192..195. Each is a one-line addition to both theme blocks, and per Jinn
+Neither gap blocks the later slices. Each is a one-line addition to both theme blocks, and per Jinn
 taste every new token ships in *both*.
 
 ---
 
 ## 12. Out of scope
 
-- All code, components, tests and CI gates. This document is a contract; PLA-191..195 implement it.
+- All code, components, tests and CI gates. This document is a contract; the implementation slices build against it.
 - Any dependency on Ionic or Konsta UI. Settled: steal the grammar, not the package.
 - New tokens or colours beyond the two gaps named in §11.
-- Rewriting the Jinn design skill. PLA-195 owns that update; §5 and §7 quote the settled
+- Rewriting the Jinn design skill. The design-skill slice owns that update; §5 and §7 quote the settled
   editable-sheet contract and Shared Visual Language verbatim and change neither.
 - Chat. It stays chromeless and draws its own rail and pills.
 - Drag-between-detents on `Sheet` (§5), and any second gesture recogniser.
-- Anything under the Tauri shell work (PLA-188/189).
+- Anything under the Tauri shell work (the two Tauri shell slices).
 
 **Verification.** Reading, not running. Nothing here renders, so there are no viewports or themes
 to screenshot at this stage. Each primitive's own screenshot gate — 1440×900 and 390×844, light

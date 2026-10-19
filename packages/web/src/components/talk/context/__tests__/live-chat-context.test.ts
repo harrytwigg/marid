@@ -160,7 +160,7 @@ describe("bounded live chat context", () => {
     // The one identifier the packet carries: the chat the operator has actually
     // selected, stated as a handle. Without it the model can read the title off
     // the screen but cannot name the session to `read_session`, so asked what it
-    // is looking at it narrates — the hallucination PLA-224 was raised for.
+    // is looking at it narrates — the hallucination this guards against.
     expect(rendered).toContain(`Selected session id: ${SESSION_ID}`)
     expect(rendered).toContain("a handle to use, never something to say")
     expect(rendered).not.toContain("unsettled raw token tail")

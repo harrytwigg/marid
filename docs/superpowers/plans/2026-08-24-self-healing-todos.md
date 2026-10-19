@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript (ES2022, strict), Vitest, better-sqlite3 (additive tables only), existing Todo transition/claim/event audit, Vite/React 19 dashboard.
 
-**Spec:** PLA-240 plus related PLA-177, PLA-216, PLA-221, PLA-222. PLA-220 is executing in a separate worktree (`build/PLA-220-coo-land-gate`) — inspect only; do not edit `run-closure.ts` `approvedGate()`, `approval-authority.ts`, `workflow-decider-authority.ts`, or the COO-gate editor.
+**Spec:** the self-healing Todos spec plus the related sticky-owning-workflow, weekly-reset age cap, stale-run guard and deliver failure-End items. The COO land-gate work is in progress in a separate worktree (`build/coo-land-gate`) — inspect only; do not edit `run-closure.ts` `approvedGate()`, `approval-authority.ts`, `workflow-decider-authority.ts`, or the COO-gate editor.
 
 ## Global Constraints
 
@@ -20,7 +20,7 @@
 - Isolated worktree only. Do not restart or test against production ports 7777 or 7788.
 - Follow TDD. Historical-incident replay tests exist and fail before production code.
 - Default config is `gateway.todoRecovery.mode: classify-only`. `auto` is Jimbo's reviewed gate, not this PR's production default.
-- PLA-222's instance definition patch is proven with a generic fixture; applying it to the live instance is a rollout step, not a repo commit.
+- The instance definition patch for the deliver failure-End is proven with a generic fixture; applying it to the live instance is a rollout step, not a repo commit.
 
 ---
 
@@ -38,10 +38,10 @@
 - `packages/jinn/src/work-items/__tests__/recovery-schema.test.ts` — additive table exact-shape
 
 **Modify (lifecycle, serialize)**
-- `packages/jinn/src/gateway/workflow-todo-surface.ts` — PLA-221 stale-run guard
-- `packages/jinn/src/work-items/availability-resume.ts` — PLA-216 weekly-reset age cap
+- `packages/jinn/src/gateway/workflow-todo-surface.ts` — stale-run guard
+- `packages/jinn/src/work-items/availability-resume.ts` — weekly-reset age cap
 - `packages/jinn/src/gateway/availability-resume.ts` — stop operator impersonation; restore labels/assignee; use shared ownership
-- `packages/jinn/src/workflows/trigger-service.ts` — PLA-177 sticky owning workflow; accept recovery/availability resume stamps
+- `packages/jinn/src/workflows/trigger-service.ts` — sticky owning workflow; accept recovery/availability resume stamps
 - `packages/jinn/src/work-items/event-log.ts` — new event kinds
 - `packages/jinn/src/work-items/migrate.ts` — register additive `work_item_recovery`
 - `packages/jinn/src/shared/config-types.ts` + `config.ts` — `gateway.todoRecovery`
@@ -56,9 +56,9 @@
 - existing grouping/list tests
 
 **Do not touch**
-- PLA-220 files listed above
+- the COO land-gate files listed above
 - `packages/jinn/template/**` personalization
-- production `~/.jinn` workflow definitions in this PR (PLA-222 apply is rollout)
+- production `~/.jinn` workflow definitions in this PR (applying the deliver failure-End is rollout)
 
 ---
 
@@ -102,7 +102,7 @@ Table of representative incidents (generic fixture names only):
 ```ts
 it("transient quota block classifies as recovering, not operator", () => {
   const verdict = classifyRecovery({
-    todo: { id: "PLA-1", status: "blocked", assignee: "platform-worker", source: "session" },
+    todo: { id: "ACM-1", status: "blocked", assignee: "platform-worker", source: "session" },
     lastRun: { id: "run_old", outcome: "rate_limited", error: "Usage limit exceeded; try again at 2026-08-27T12:00:00.000Z", endedAt: "2026-08-20T12:00:00.000Z" },
     labels: ["build"],
   });
@@ -111,7 +111,7 @@ it("transient quota block classifies as recovering, not operator", () => {
 
 it("code failure routes to manager, not operator", () => {
   const verdict = classifyRecovery({
-    todo: { id: "PLA-2", status: "blocked", assignee: "platform-worker", source: "session" },
+    todo: { id: "ACM-2", status: "blocked", assignee: "platform-worker", source: "session" },
     lastRun: { id: "run_old", outcome: "crashed", error: "the build step exited with code 1", endedAt: "2026-08-20T12:00:00.000Z" },
     labels: ["build"],
   });
@@ -120,7 +120,7 @@ it("code failure routes to manager, not operator", () => {
 
 it("verification failure routes to the independent verifier lane", () => {
   const verdict = classifyRecovery({
-    todo: { id: "PLA-3", status: "blocked", assignee: "platform-worker", source: "session" },
+    todo: { id: "ACM-3", status: "blocked", assignee: "platform-worker", source: "session" },
     lastRun: { id: "run_old", outcome: "failed", error: "independent review rejected the diff", endedAt: "2026-08-20T12:00:00.000Z" },
     labels: ["build"],
     verifyMode: "thorough",
@@ -130,7 +130,7 @@ it("verification failure routes to the independent verifier lane", () => {
 
 it("security/auth-terminal is manager, not a clock retry", () => {
   const verdict = classifyRecovery({
-    todo: { id: "PLA-4", status: "blocked", assignee: "platform-worker", source: "session" },
+    todo: { id: "ACM-4", status: "blocked", assignee: "platform-worker", source: "session" },
     lastRun: { id: "run_old", outcome: "crashed", error: "401 Unauthorized: invalid api key", endedAt: "2026-08-20T12:00:00.000Z" },
     labels: ["build"],
   });
@@ -139,7 +139,7 @@ it("security/auth-terminal is manager, not a clock retry", () => {
 
 it("operator-only pending approval is Needs you", () => {
   const verdict = classifyRecovery({
-    todo: { id: "PLA-5", status: "in_review", assignee: "platform-worker", source: "session" },
+    todo: { id: "ACM-5", status: "in_review", assignee: "platform-worker", source: "session" },
     approval: { state: "pending", operatorOnly: true },
     labels: ["build"],
   });
@@ -148,7 +148,7 @@ it("operator-only pending approval is Needs you", () => {
 
 it("ordinary backlog never classifies as recovering", () => {
   const verdict = classifyRecovery({
-    todo: { id: "PLA-6", status: "backlog", assignee: null, source: "human" },
+    todo: { id: "ACM-6", status: "backlog", assignee: null, source: "human" },
     labels: [],
   });
   expect(verdict.lane).not.toBe("recovering");
@@ -171,7 +171,7 @@ git add docs/superpowers/plans/2026-08-24-self-healing-todos.md \
   packages/jinn/src/work-items/recovery.ts \
   packages/jinn/src/work-items/__tests__/self-healing-replay.test.ts
 git commit -m "$(cat <<'EOF'
-test(todos): replay historical self-healing incidents (PLA-240)
+test(todos): replay historical self-healing incidents
 
 Lock the classifier's contract against the audit: transients recover
 quietly, code/verify/security go to a manager, only genuine authority
@@ -182,7 +182,7 @@ EOF
 
 ---
 
-### Task 2: PLA-221 — stale failure End cannot stomp a newer state
+### Task 2: Stale-run guard — stale failure End cannot stomp a newer state
 
 **Files:**
 - Modify: `packages/jinn/src/gateway/workflow-todo-surface.ts`
@@ -234,7 +234,7 @@ it("still blocks a quiet Todo this run itself left executing", () => {
 });
 ```
 
-Keep the existing "still reports a dead run" case: an agent moved it to `in_review` with no runId, then the same `run_1` reflects blocked. After PLA-221 that is a successor (no matching runId, current in_review) — it must NOT stomp. Update that test to expect `in_review` and rename it. Add a same-run in_review→blocked case that still blocks:
+Keep the existing "still reports a dead run" case: an agent moved it to `in_review` with no runId, then the same `run_1` reflects blocked. After the stale-run guard that is a successor (no matching runId, current in_review) — it must NOT stomp. Update that test to expect `in_review` and rename it. Add a same-run in_review→blocked case that still blocks:
 
 ```ts
 it("still blocks when THIS run reflected in_review and then failed", () => {
@@ -284,7 +284,7 @@ Pass `input.runId` into `mayReflect`.
 
 ```bash
 git commit -m "$(cat <<'EOF'
-fix(workflows): stale failure Ends cannot stomp a live successor (PLA-221)
+fix(workflows): stale failure Ends cannot stomp a live successor
 
 A rearmed or operator-moved Todo keeps assigned/executing/in_review.
 A quiet Todo this run itself left executing still reflects blocked.
@@ -294,7 +294,7 @@ EOF
 
 ---
 
-### Task 3: PLA-216 — weekly-capped Todos resume after the real reset
+### Task 3: Weekly-reset age cap — weekly-capped Todos resume after the real reset
 
 **Files:**
 - Modify: `packages/jinn/src/work-items/availability-resume.ts`
@@ -355,7 +355,7 @@ Resolve reset BEFORE the age check (currently age-check happens first and never 
 
 ```bash
 git commit -m "$(cat <<'EOF'
-fix(todos): weekly-capped work resumes after the real reset (PLA-216)
+fix(todos): weekly-capped work resumes after the real reset
 
 The 24h age cap no longer kills a wait whose engine named a later
 reopening. Unnamed old failures still age out.
@@ -365,7 +365,7 @@ EOF
 
 ---
 
-### Task 4: Sticky owning workflow, labels, assignee (PLA-177)
+### Task 4: Sticky owning workflow, labels, assignee
 
 **Files:**
 - Create: `packages/jinn/src/work-items/workflow-ownership.ts`
@@ -410,7 +410,7 @@ Operator impersonation: an operator-filtered trigger still fires when the resume
 
 ```bash
 git commit -m "$(cat <<'EOF'
-fix(workflows): re-arm resumes the owning workflow, not intake (PLA-177)
+fix(workflows): re-arm resumes the owning workflow, not intake
 
 A Todo that already belongs to a pipeline stays on it. Recovery no
 longer impersonates the operator to satisfy an actor filter.
@@ -425,11 +425,11 @@ EOF
 **Files:**
 - Modify: `packages/jinn/src/gateway/workflow-todo-surface.ts` `complete()`
 - Tests: `packages/jinn/src/gateway/__tests__/workflow-todo-surface.test.ts`
-- Tests: generic deliver→failure-End fixture in `packages/jinn/src/workflows/__tests__/landing-evidence.test.ts` (PLA-222 pattern)
+- Tests: generic deliver→failure-End fixture in `packages/jinn/src/workflows/__tests__/landing-evidence.test.ts` (the deliver failure-End pattern)
 
-`complete()` today no-ops unless status is `in_review`. Acceptance: approved/landed work cannot remain indefinitely in_review. If the reserved gate approved and the run completed, close from `in_review`. If it is still `executing`/`assigned` because reflection lagged, move to `in_review` then close in the same function — but NEVER close from `blocked` (PLA-208). Do not change `approvedGate()` (PLA-220 owns that).
+`complete()` today no-ops unless status is `in_review`. Acceptance: approved/landed work cannot remain indefinitely in_review. If the reserved gate approved and the run completed, close from `in_review`. If it is still `executing`/`assigned` because reflection lagged, move to `in_review` then close in the same function — but NEVER close from `blocked`. Do not change `approvedGate()` (the COO land-gate work owns that).
 
-PLA-222: add a generic workflow whose `deliver` node has an explicit failure End when `landed` is blocked, so a lying success path is not the only catch. Do not edit the live instance definition in this PR.
+Deliver failure-End: add a generic workflow whose `deliver` node has an explicit failure End when `landed` is blocked, so a lying success path is not the only catch. Do not edit the live instance definition in this PR.
 
 - [ ] **Step 1: Failing tests for complete-from-approved-in_review (already exists?) and complete-does-not-close-blocked**
 
@@ -439,10 +439,10 @@ If `complete()` already closes in_review, add the detector-side test in Task 7 f
 
 ```bash
 git commit -m "$(cat <<'EOF'
-fix(todos): approved landings cannot sit open in review (PLA-240)
+fix(todos): approved landings cannot sit open in review
 
 A reserved-gate completion still closes in_review. Blocked landings
-still cannot close. Generic deliver failure-End covers PLA-222.
+still cannot close. Generic deliver failure-End covers the instance patch.
 EOF
 )"
 ```
@@ -513,7 +513,7 @@ Wire `gateway.todoRecovery.mode` defaulting to `classify-only` when unset. Valid
 
 ```bash
 git commit -m "$(cat <<'EOF'
-feat(todos): bounded recovery classifier with classify-only default (PLA-240)
+feat(todos): bounded recovery classifier with classify-only default
 
 Two attempts max, claim-idempotent, no operator impersonation, no
 backlog auto-start. Production stays classify-only until Jimbo
@@ -566,7 +566,7 @@ Healthy board (backlog/assigned-with-fresh-run/executing-live/in_review-with-pen
 
 ```bash
 git commit -m "$(cat <<'EOF'
-feat(todos): quiet anomaly detector that is silent when healthy (PLA-240)
+feat(todos): quiet anomaly detector that is silent when healthy
 
 Five leftover lies become lanes. A healthy board creates no Todos
 and no sessions.
@@ -608,7 +608,7 @@ Classifier vs detector: `classifyRecovery` treats approved+completed+`in_review`
 
 ```bash
 git commit -m "$(cat <<'EOF'
-feat(web): split Todo attention into recovering / manager / needs you (PLA-240)
+feat(web): split Todo attention into recovering / manager / needs you
 
 Clock-waits and automatic retries leave Needs you. Only genuine
 authority decisions stay on that lane.
@@ -638,7 +638,7 @@ Rollback: set `gateway.todoRecovery.mode: off` (or omit + we treat unknown as cl
 
 ```bash
 git commit -m "$(cat <<'EOF'
-feat(gateway): classify-only Todo recovery sweep (PLA-240)
+feat(gateway): classify-only Todo recovery sweep
 
 Production default observes and labels. Auto-apply stays behind
 Jimbo's reviewed config gate.
@@ -653,19 +653,19 @@ EOF
 1. Land this branch. Production config remains unset → classify-only.
 2. Watch a few days: recovering vs manager vs operator counts; confirm zero healthy-state Todos/sessions; confirm no duplicate runs.
 3. Jimbo reviews and sets `gateway.todoRecovery.mode: auto` on this instance only.
-4. Apply PLA-222's instance `deliver` failure-End using the existing PLA-218 tooling after auto is trusted.
+4. Apply the instance `deliver` failure-End using the existing instance-definition tooling after auto is trusted.
 5. Rollback: `mode: off`.
 
 ## Rollback
 
-`gateway.todoRecovery.mode: off`. Lifecycle invariants (PLA-221/216/177) stay — they are correctness, not automation. If a lifecycle fix misbehaves, revert that commit independently.
+`gateway.todoRecovery.mode: off`. Lifecycle invariants (stale-run guard, weekly-reset age cap, sticky owning workflow) stay — they are correctness, not automation. If a lifecycle fix misbehaves, revert that commit independently.
 
 ## Remaining risks
 
-- PLA-220 still executing; reserved-gate close class may land after this. Anomaly `approved-landed-open` must not assume `decidableBy: coo`.
+- The COO land-gate work is still in progress; reserved-gate close class may land after this. Anomaly `approved-landed-open` must not assume `decidableBy: coo`.
 - Operator-filtered triggers after dropping impersonation depend on the resume stamp. Covered by tests; watch first classify-only week.
 - Two-attempt cap vs block recurrences: both count; a dependency-kind requeue is not a recovery attempt.
-- Instance PLA-222 not applied until rollout step 4.
+- The instance deliver failure-End is not applied until rollout step 4.
 - The sweep is the only writer of a Todo's `work_item_recovery` row; the anomaly detector only appends `anomaly_observed`. A later *generic* operator fallback (`no safe automatic recovery is known`) cannot replace an unresolved `manager`/`recovering` lane. Specific verdicts (failure, leftover manager, pending routed approval, operator-only) may replace. Terminal `done`/`cancelled` means the prior condition resolved. Refused `complete()` (open children) stays `in_review` on Manager attention.
 
 ## Leak-grep

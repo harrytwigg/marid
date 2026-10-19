@@ -10,25 +10,25 @@ import { gateway, renderRoute, sessionIds } from './multi-pane-page-harness'
 vi.mock('@/components/chat/doc-view', async () => {
   const { SessionTreePanel } = await import('@/routes/todos/task-page/session-tree')
   const child = {
-    id: 's-2', employee: null, status: 'idle', title: null, role: 'execute', workItemId: 'PLA-2', isRootLink: false,
+    id: 's-2', employee: null, status: 'idle', title: null, role: 'execute', workItemId: 'TSK-2', isRootLink: false,
     archived: false, backgroundActivity: null, delegatedActivity: null, truncated: null, children: [],
   }
   const tree = {
-    roots: [{ ...child, id: 's-1', workItemId: 'PLA-1', isRootLink: true, children: [child] }],
+    roots: [{ ...child, id: 's-1', workItemId: 'TSK-1', isRootLink: true, children: [child] }],
     directory: {}, truncated: { depth: false, count: false }, totals: { nodes: 2, live: 0 },
   }
   return {
-    DocView: ({ doc }: { doc: { kind: string; todoId?: string } }) => doc.kind === 'todo' && doc.todoId === 'PLA-1'
-      ? <SessionTreePanel tree={tree as never} byName={new Map()} todoId="PLA-1" />
+    DocView: ({ doc }: { doc: { kind: string; todoId?: string } }) => doc.kind === 'todo' && doc.todoId === 'TSK-1'
+      ? <SessionTreePanel tree={tree as never} byName={new Map()} todoId="TSK-1" />
       : null,
   }
 })
 
-const OVER_A = todoTabId('PLA-1')
-const OVER_B = todoTabId('PLA-2')
+const OVER_A = todoTabId('TSK-1')
+const OVER_B = todoTabId('TSK-2')
 
 function seedLayout(): void {
-  // Chats a and b side by side, PLA-2 open over b, PLA-1 over a, which holds focus.
+  // Chats a and b side by side, TSK-2 open over b, TSK-1 over a, which holds focus.
   const layout = openDocTab(openDocTab(createSplitLayout(['a', 'b'], 'b'), 'b', OVER_B), 'a', OVER_A)
   persistSplitLayout(localStorage, layout)
   localStorage.removeItem(WORKING_SET_STORAGE_KEY)

@@ -26,7 +26,7 @@ describe("resolveLocalGatewayConnection", () => {
     const connection = resolveLocalGatewayConnection(sandbox, 7801, {
       JINN_HOME: live,
       JINN_HOST: "0.0.0.0",
-      JINN_PORT: "7777", // footgun: ok the leaked live port is the regression under test (ICI-851)
+      JINN_PORT: "7777", // footgun: ok the leaked live port is the regression under test
     });
 
     expect(connection.port).toBe(7899);

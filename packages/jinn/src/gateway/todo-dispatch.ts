@@ -43,7 +43,7 @@ export type StartTodoDispatcherResult =
   | { ok: false; status: number; body: { error: string; workItemId?: string; sessionId?: string; code?: string } };
 
 export interface StartTodoDispatcherOptions {
-  /** ICI-570 change signal for the Todo's projections; the route wires its own
+  /** Change signal for the Todo's projections; the route wires its own
    *  activity-block emitter, a non-HTTP caller may pass nothing. */
   emitProjectionEvent?: (workItemId: string, action: string) => void;
   /** A closing paragraph for the Dispatcher's prompt: what this start is for,

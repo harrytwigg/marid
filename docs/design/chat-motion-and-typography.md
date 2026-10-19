@@ -2,7 +2,7 @@
 
 Design spec. No product code. Base SHA `4f11638c`.
 
-This document governs the remaining children of ICI-817. Five sections, one per defect the
+This document governs the remaining slices of the chat-refine effort. Five sections, one per defect the
 operator named. A slice implements from here without asking a follow-up question: every timing,
 easing, distance and size below is a number with a unit or a token quoted with its resolved
 value. Where a value is already shipped, the section says so and cites the line rather than
@@ -62,8 +62,8 @@ budget on the next `pnpm ratchet`; growing one is a CI failure, and raising a ba
 available move.
 
 **Out of scope for every section here.** Any change under `packages/**` in this diff — this
-branch is documentation only. Implementing any defect (that is ICI-819 through ICI-822).
-Re-opening ICI-802's native-scroll verdict. The Talk surface, the Todo board, and every non-chat
+branch is documentation only. Implementing any defect (that is the four slices below).
+Re-opening the earlier native-scroll verdict. The Talk surface, the Todo board, and every non-chat
 screen. New chat features: this is feel, not function.
 
 ---
@@ -71,7 +71,7 @@ screen. New chat features: this is feel, not function.
 ## 1. Send motion
 
 Operator defect 2 — *"when I send a message ... there's no transition or anything like that ...
-it abruptly shows up."* Owner: **ICI-820**. Prerequisite: **ICI-819**, because §3's remount
+it abruptly shows up."* Owner: **the send-motion slice**. Prerequisite: **the first-send slice**, because §3's remount
 destroys any enter animation before it can be seen.
 
 ### 1.1 What is already true
@@ -118,7 +118,7 @@ animation of any kind. The only enter choreography in the transcript belongs to 
 - **Survives reconciliation.** `reconcileMessages` (`web/lib/conversations.ts:95`) deliberately
   keeps the optimistic id and timestamp when the server twin lands
   (`web/lib/conversations.ts:81-86`) so the React key does not change. The enter animation must
-  not re-run on that swap. This is already guaranteed by the id-preserving reconcile; ICI-820
+  not re-run on that swap. This is already guaranteed by the id-preserving reconcile; the send-motion slice
   asserts it rather than adding a guard.
 
 **Reduced motion.** `animation: none`. The end state of `jinn-msg-send-in` is the resting state,
@@ -190,10 +190,10 @@ A row below the bubble, right-aligned with it:
 - `Retry` calls the existing retry path — `onRetry` → `handleSend`
   (`web/components/chat/chat-pane.tsx:637`). No new send plumbing.
 
-**One behaviour ICI-820 replaces rather than adds to.** `failSend`
+**One behaviour the send-motion slice replaces rather than adds to.** `failSend`
 (`web/hooks/use-live-session.ts:1330-1344`) currently appends a synthetic *assistant* row reading
 `Error: …` and leaves the user's own bubble looking successfully sent. That is the wrong shape:
-the failure belongs to the message that failed. ICI-820 moves the signal onto the user bubble and
+the failure belongs to the message that failed. The send-motion slice moves the signal onto the user bubble and
 removes the synthetic assistant row. Shipping both would give one event two cues in two voices.
 
 ### 1.5 Files, and where the code goes
@@ -213,7 +213,7 @@ module.
 ## 2. Receive and streaming motion
 
 Operator defect 2's other half, and the streaming behaviour behind defect 3. Owners:
-**ICI-820** for the enter animation, **ICI-821** for the scroll invariant it must not break.
+**the send-motion slice** for the enter animation, **the scroll slice** for the scroll invariant it must not break.
 
 ### 2.1 Assistant enter animation
 
@@ -256,7 +256,7 @@ state.
 ### 2.2 Invariant S — streaming growth may not move a detached reader
 
 This is the assertable form of "streaming text growth must not jerk the scroll position". It is
-**already implemented**; the reason it is written down is that ICI-820 and ICI-821 both touch the
+**already implemented**; the reason it is written down is that the send-motion and scroll slices both touch the
 transcript and this is the thing they must not regress.
 
 Let `d = scrollHeight − scrollTop − clientHeight`, computed by `distanceFromBottom`
@@ -333,7 +333,7 @@ buffer re-formats per token.
 
 Operator defect 4 — *"when I open a chat it will scroll viciously to the bottom or at least try
 to do it, sometimes it doesn't, so I have to manually click the down arrow."* Owner:
-**ICI-821**. The first-send variant of the same symptom is **ICI-819**; this section supplies its
+**the scroll slice**. The first-send variant of the same symptom belongs to **the first-send slice**; this section supplies its
 target, not its fix.
 
 ### 3.1 The timeline
@@ -455,7 +455,7 @@ it exists so a long tail of image decodes cannot hold the view pinned against a 
 already started scrolling.
 
 The gap above the virtual block — the `~80px` header padding, plus the older-page row — **is**
-declared as `scrollMargin` (`web/components/chat/transcript-virtualizer.ts:25-34`), as of ICI-1359.
+declared as `scrollMargin` (`web/components/chat/transcript-virtualizer.ts:25-34`), as of the scroll-margin change.
 This section previously said not to add it, on the grounds that every offset the module compares is
 a difference between two of the virtualizer's own numbers, where the shift cancels. That is true of
 this module's own comparisons and false of the one virtual-core makes internally: deciding whether a
@@ -465,7 +465,7 @@ so every row in the top `~80px` of the viewport read as one above the reader and
 correction the reader watched happen. Rows are positioned at `start - scrollMargin`, so declaring it
 moves nothing on screen.
 
-### 3.4 The first-send case — ICI-819's target
+### 3.4 The first-send case — the first-send slice's target
 
 Two independent unmounts blank the transcript on the first message of a new chat:
 
@@ -477,10 +477,10 @@ Two independent unmounts blank the transcript on the first message of a new chat
    `:630`, so while `hydrating` the transcript is unmounted and a centred spinner paints at
    `:605-609`.
 
-**The target this spec sets, for ICI-819 to hit:** across a first send, the transcript element is
+**The target this spec sets, for the first-send slice to hit:** across a first send, the transcript element is
 never unmounted and the user's bubble never leaves the screen. And the hydration spinner is a
 *threshold*, not a default — it may appear only if no messages are available **250ms** after
-`t = 0`. Below that, the previous frame holds. ICI-819 owns the mechanism; ICI-819's own body is
+`t = 0`. Below that, the previous frame holds. The first-send slice owns the mechanism; its own brief is
 explicit that hiding the loading state is not an acceptable fix, and this target is compatible
 with that: the requirement is that nothing unmounts, not that the spinner is suppressed.
 
@@ -508,14 +508,14 @@ modes. The reduced-motion reset already forces `scroll-behavior: auto` globally
 ## 4. Scroll feel
 
 Operator defect 3 — *"when I try to scroll on mobile it will abruptly stop instead of just
-sliding naturally when I release my finger."* Owner: **ICI-821**.
+sliding naturally when I release my finger."* Owner: **the scroll slice**.
 
-### 4.1 ICI-802's constraint, recorded as binding
+### 4.1 The native-scroll constraint, recorded as binding
 
 **No JS momentum scroller. Not Lenis, not Locomotive, not a hand-rolled `requestAnimationFrame`
 transform.** This is settled and is not reopened by this spec or by any slice under it.
 
-The reasoning, from the ICI-802 research: native scroll on iOS is backed by `UIScrollView` and is
+The reasoning, from the earlier native-scroll research: native scroll on iOS is backed by `UIScrollView` and is
 compositor-driven, so it survives a busy main thread. Every library of the Lenis family cancels
 that and drives a transform from a main-thread `rAF` loop — and Apple caps `requestAnimationFrame`
 at **60Hz** inside `WKWebView` by design, with no public API to lift it (WebKit bug 294338). A
@@ -540,7 +540,7 @@ Corollary, also binding: `scroll-behavior: smooth` is not restored globally. It 
 
 `overscroll-behavior: contain` does **not** remove the edge rubber-band the operator wants. It
 stops the scroll *chaining* to the page — the element keeps its own bounce. A slice that reads
-"rubber-band at the edges" in ICI-821's acceptance and removes `contain` to get it would break the
+"rubber-band at the edges" in the scroll slice's acceptance and removes `contain` to get it would break the
 thing the rule was added for. Stated here so that does not happen.
 
 So §4 is not a CSS-addition task. Everything a naive fix would add is present.
@@ -553,7 +553,7 @@ buffer on every token: `formatMessage(closePartialMarkdown(streamingText))` is m
 per token. Cost is O(buffer length) per token, so it grows through a long reply — which matches
 the symptom, since a flick that "stops dead" is a compositor waiting on a main thread that is busy.
 
-Two numbers ICI-821 verifies against, on the target device, with a live stream running:
+Two numbers the scroll slice verifies against, on the target device, with a live stream running:
 
 - **≤ 8ms** of main-thread work per token at p95, measured on a **4000-character** buffer.
 - **No `long-animation-frame` entry > 50ms** during an active scroll.
@@ -628,11 +628,11 @@ one place a `both`-filled animation would otherwise strand the control mounted.
 ## 5. Bubble type scale
 
 Operator defect 5 — *"the font sizes ... refining them if they're too small for user messages and
-for AI messages also, but do that only if you think it is necessary."* Owner: **ICI-822**.
+for AI messages also, but do that only if you think it is necessary."* Owner: **the typography slice**.
 
-Explicit decisions for both bubbles follow. ICI-822's body says a "no change" outcome closes it
+Explicit decisions for both bubbles follow. The typography slice's brief says a "no change" outcome closes it
 immediately with the rationale recorded; the decisions below are **change** for the user bubble
-and for leading on both, so ICI-822 executes rather than closes.
+and for leading on both, so the typography slice executes rather than closes.
 
 ### 5.1 What ships today
 
@@ -688,7 +688,7 @@ type step binds: `1.47` for `--text-body`. That figure is also `--leading-normal
 
 Reasoning:
 
-- `1.65` predates the ICI-776 fluid scale, which binds a leading to every step
+- `1.65` predates the fluid type scale, which binds a leading to every step
   (`web/routes/globals.css:171-208`). Keeping the override means the one place the scale is
   overridden is the one place the scale matters most.
 - Size and leading are one decision, not two. Raising the user bubble to `16px` while leaving
@@ -713,10 +713,10 @@ size and `leading-normal` (`web/components/chat/message-markdown.tsx:162`) and t
 handled by `overflow-wrap: break-word; word-break: break-word` on both bubble classes
 (`web/components/chat/chat-messages.tsx:1524-1526`) and is unaffected by size.
 
-**One consequence ICI-822 must re-check.** Every assistant row gets shorter, which changes how
+**One consequence the typography slice must re-check.** Every assistant row gets shorter, which changes how
 wrong `PLAIN_MESSAGE_SIZE = 140` (`web/components/chat/transcript-virtualizer.ts:38`) is. No code
 change is required — the estimate self-corrects on measure (`:37`) — but §3.3's late-measurement
-case is exactly the thing sensitive to estimate error, so ICI-822 re-runs §3's open-at-bottom
+case is exactly the thing sensitive to estimate error, so the typography slice re-runs §3's open-at-bottom
 check after the type change rather than assuming §3 still holds.
 
 ### 5.5 Decision — measure: **NO CHANGE**, `--chat-measure: 64rem` stays
@@ -747,6 +747,6 @@ a layout-driving animation, which the design system does not do.
 Both edits are token swaps and class removals on existing lines — net-zero or net-negative in a
 file with zero ratchet headroom, so §5 needs no new module. It is the only section that does not.
 
-**Screenshot gate.** ICI-822 verifies at `1440×900` and `390×844`, in **both** light and dark,
+**Screenshot gate.** The typography slice verifies at `1440×900` and `390×844`, in **both** light and dark,
 including a transcript with a code block, an inline-code run, a bare long URL, and a
 single-word message. One theme or one breakpoint is a failed gate, not a partial one.

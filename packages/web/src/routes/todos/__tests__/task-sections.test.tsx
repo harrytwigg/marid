@@ -20,7 +20,7 @@ import { comment, event } from "./fixtures/task-wire"
  * module, assign, open, add-row absent at the depth cap), attachments through
  * the multipart lane, and the merged activity feed (folds of ≥3 machine
  * events, comments never collapse, composer attaches pending files to the
- * comment it sends). Relations left the page in ICI-1435; the blocked-by swap
+ * comment it sends). Relations have left the page; the blocked-by swap
  * is now asserted against the component. */
 
 vi.mock("@/components/page-layout", () => ({ PageLayout: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
@@ -106,7 +106,7 @@ function imageAttachment(
 ): WorkItemAttachmentWire {
   return {
     id,
-    workItemId: "PLA-12",
+    workItemId: "TSK-12",
     commentId,
     filename,
     mime: "image/png",
@@ -126,7 +126,7 @@ function videoAttachment(
   return { ...imageAttachment(id, filename, commentId), mime: "video/mp4" }
 }
 
-function renderTask(path = "/todos/PLA-12") {
+function renderTask(path = "/todos/TSK-12") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
@@ -162,14 +162,14 @@ beforeEach(() => {
 
 describe("sub-tasks", () => {
   function withChildren() {
-    const item = full("PLA-12")
+    const item = full("TSK-12")
     getWorkItem.mockResolvedValue(detailOf(item))
     getWorkItemTree.mockResolvedValue({
       tree: {
         root: treeNode(item, [
-          treeNode(full("PLA-13", { status: "done", parentId: "PLA-12", depth: 1, title: "Schema for guest orders" })),
-          treeNode(full("PLA-14", { status: "executing", parentId: "PLA-12", depth: 1, assignee: "mason" }), ),
-          treeNode(full("PLA-16", { status: "backlog", parentId: "PLA-12", depth: 1 })),
+          treeNode(full("TSK-13", { status: "done", parentId: "TSK-12", depth: 1, title: "Schema for guest orders" })),
+          treeNode(full("TSK-14", { status: "executing", parentId: "TSK-12", depth: 1, assignee: "mason" }), ),
+          treeNode(full("TSK-16", { status: "backlog", parentId: "TSK-12", depth: 1 })),
         ]),
         totals: {},
         spendUsd: 0,
@@ -180,27 +180,27 @@ describe("sub-tasks", () => {
 
   it("renders rows with progress and commits a child transition through the child's legal-states popover", async () => {
     withChildren()
-    setWorkItemStatus.mockResolvedValue({ workItem: full("PLA-16", { status: "executing" }), escalated: false })
+    setWorkItemStatus.mockResolvedValue({ workItem: full("TSK-16", { status: "executing" }), escalated: false })
     renderTask()
 
     await waitFor(() => expect(screen.getByTestId("subtasks-done").textContent).toBe("1 of 3 done"))
     expect(screen.getByTestId("subtasks-progress").style.width).toBe("33%")
 
-    fireEvent.click(await screen.findByTestId("subtask-status-PLA-16"))
+    fireEvent.click(await screen.findByTestId("subtask-status-TSK-16"))
     // backlog's legal manual targets include executing (a manual start).
     fireEvent.click(await screen.findByTestId("subtask-status-option-executing"))
-    await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("PLA-16", "executing"))
+    await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("TSK-16", "executing"))
   })
 
   it("assigns a child through the quick action's roster picker", async () => {
     withChildren()
-    assignWorkItem.mockResolvedValue({ workItem: full("PLA-16", { assignee: "mason" }) })
+    assignWorkItem.mockResolvedValue({ workItem: full("TSK-16", { assignee: "mason" }) })
     renderTask()
 
-    await screen.findByTestId("subtask-row-PLA-16")
-    fireEvent.click(screen.getByTestId("subtask-assign-PLA-16"))
+    await screen.findByTestId("subtask-row-TSK-16")
+    fireEvent.click(screen.getByTestId("subtask-assign-TSK-16"))
     fireEvent.click(await screen.findByTestId("assignee-option-mason"))
-    await waitFor(() => expect(assignWorkItem).toHaveBeenCalledWith("PLA-16", "mason"))
+    await waitFor(() => expect(assignWorkItem).toHaveBeenCalledWith("TSK-16", "mason"))
   })
 
   it("adds a sub-task from the header's +, and the row is in the list before the gateway answers", async () => {
@@ -213,15 +213,15 @@ describe("sub-tasks", () => {
     fireEvent.change(input, { target: { value: "E-mail receipts" } })
     fireEvent.keyDown(input, { key: "Enter" })
     expect((await screen.findByTestId("subtask-pending-row")).textContent).toContain("E-mail receipts")
-    expect(createWorkItem).toHaveBeenCalledWith({ title: "E-mail receipts", parentId: "PLA-12" })
-    await act(async () => settle({ workItem: full("PLA-23", { parentId: "PLA-12" }) }))
+    expect(createWorkItem).toHaveBeenCalledWith({ title: "E-mail receipts", parentId: "TSK-12" })
+    await act(async () => settle({ workItem: full("TSK-23", { parentId: "TSK-12" }) }))
   })
 
   it("the add row simply doesn't exist at the depth cap — the caption explains", async () => {
-    const item = full("PLA-22", { depth: 3, rootId: "PLA-12", parentId: "PLA-14" })
+    const item = full("TSK-22", { depth: 3, rootId: "TSK-12", parentId: "TSK-14" })
     getWorkItem.mockResolvedValue(detailOf(item))
-    getWorkItemTree.mockResolvedValue({ tree: { root: treeNode(full("PLA-12"), []), totals: {}, spendUsd: 0 } })
-    renderTask("/todos/PLA-22")
+    getWorkItemTree.mockResolvedValue({ tree: { root: treeNode(full("TSK-12"), []), totals: {}, spendUsd: 0 } })
+    renderTask("/todos/TSK-22")
 
     await screen.findByTestId("task-title")
     await waitFor(() => expect(screen.queryByTestId("subtask-add")).toBeNull())
@@ -231,35 +231,35 @@ describe("sub-tasks", () => {
 
 describe("relations", () => {
   const outgoing: WorkItemRelationWire = { kind: "blocks", direction: "out", other: { id: "MKT-7", title: "Store launch campaign", status: "backlog" }, createdBy: "operator", createdAt: "2026-07-21T08:00:00.000Z" }
-  const incoming: WorkItemRelationWire = { kind: "blocks", direction: "in", other: { id: "PLA-9", title: "Vendor keys", status: "blocked" }, createdBy: "operator", createdAt: "2026-07-21T08:00:00.000Z" }
+  const incoming: WorkItemRelationWire = { kind: "blocks", direction: "in", other: { id: "TSK-9", title: "Vendor keys", status: "blocked" }, createdBy: "operator", createdAt: "2026-07-21T08:00:00.000Z" }
 
   it("reads an outgoing blocks edge as Blocks, an incoming one as Blocked by, and hands the relation back whole on remove", () => {
     const onRemove = vi.fn()
-    render(<RelationsSection id="PLA-12" relations={[outgoing, incoming]} onAdd={vi.fn()} onRemove={onRemove} />)
+    render(<RelationsSection id="TSK-12" relations={[outgoing, incoming]} onAdd={vi.fn()} onRemove={onRemove} />)
 
     expect(screen.getByTestId("relation-row-MKT-7").textContent).toContain("Blocks")
-    expect(screen.getByTestId("relation-row-PLA-9").textContent).toContain("Blocked by")
+    expect(screen.getByTestId("relation-row-TSK-9").textContent).toContain("Blocked by")
 
-    fireEvent.click(screen.getByTestId("relation-remove-PLA-9"))
+    fireEvent.click(screen.getByTestId("relation-remove-TSK-9"))
     // Which item owns an incoming edge is the caller's call, so the row hands
     // the relation back whole rather than a pre-swapped pair.
     expect(onRemove).toHaveBeenCalledWith(incoming)
   })
 
   it("adds a relation from search; 'Blocked by' writes the edge on the other item", async () => {
-    searchWorkItems.mockResolvedValue({ workItems: [{ ...full("PLA-9"), status: "backlog" }], total: 1, nextOffset: null })
+    searchWorkItems.mockResolvedValue({ workItems: [{ ...full("TSK-9"), status: "backlog" }], total: 1, nextOffset: null })
     const onAdd = vi.fn()
-    render(<RelationsSection id="PLA-12" relations={[]} onAdd={onAdd} onRemove={vi.fn()} />)
+    render(<RelationsSection id="TSK-12" relations={[]} onAdd={onAdd} onRemove={vi.fn()} />)
 
     fireEvent.click(screen.getByTestId("relation-add"))
     fireEvent.click(screen.getByTestId("relation-kind-blocked-by"))
     fireEvent.change(screen.getByTestId("relation-search"), { target: { value: "vendor" } })
-    fireEvent.click(await screen.findByTestId("relation-result-PLA-9"))
-    await waitFor(() => expect(onAdd).toHaveBeenCalledWith("PLA-9", "blocks", "PLA-12"))
+    fireEvent.click(await screen.findByTestId("relation-result-TSK-9"))
+    await waitFor(() => expect(onAdd).toHaveBeenCalledWith("TSK-9", "blocks", "TSK-12"))
   })
 
   it("stays out of the task page even for a Todo that has relations", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12"), { relations: [outgoing] }))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12"), { relations: [outgoing] }))
     renderTask()
 
     await screen.findByTestId("task-title")
@@ -270,14 +270,14 @@ describe("relations", () => {
 describe("attachments + activity", () => {
   it("previews and opens an item-level video in the shared player", async () => {
     const video = videoAttachment("wia_video", "walkthrough.mp4")
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     listWorkItemAttachments.mockResolvedValue({ attachments: [video] })
     renderTask()
 
     const tile = await screen.findByTestId("attachment-tile-wia_video")
     expect(tile.getAttribute("aria-label")).toBe("Play walkthrough.mp4")
     expect((screen.getByAltText("walkthrough.mp4 preview") as HTMLImageElement).getAttribute("src"))
-      .toBe("/api/work-items/PLA-12/attachments/wia_video?poster=1")
+      .toBe("/api/work-items/TSK-12/attachments/wia_video?poster=1")
     fireEvent.click(tile)
     const dialog = await screen.findByTestId("attachment-video-dialog")
     expect(within(dialog).getByLabelText("Play walkthrough.mp4")).toBeTruthy()
@@ -285,7 +285,7 @@ describe("attachments + activity", () => {
 
   it("previews a comment-level video with the same player", async () => {
     const note = comment("wic_video", "Video attached", "2026-07-22T08:00:00.000Z")
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     listWorkItemComments.mockResolvedValue({ comments: [note], total: 1 })
     listWorkItemAttachments.mockResolvedValue({ attachments: [videoAttachment("wia_comment_video", "result.mp4", note.id)] })
     renderTask()
@@ -296,7 +296,7 @@ describe("attachments + activity", () => {
   })
 
   it("chips item-level attachments under the description, uploads, and removes by id", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     listWorkItemAttachments.mockResolvedValue({ attachments: [
       imageAttachment("wia_1", "checkout-flow.png"),
       imageAttachment("wia_2", "region-matrix.csv", "wic_1"),
@@ -313,13 +313,13 @@ describe("attachments + activity", () => {
     expect(screen.queryByTestId("attachment-tile-wia_2")).toBeNull()
     const file = new File(["bytes"], "spec.md", { type: "text/markdown" })
     fireEvent.change(screen.getByTestId("attachment-file-input"), { target: { files: [file] } })
-    await waitFor(() => expect(uploadWorkItemAttachment).toHaveBeenCalledWith("PLA-12", file))
+    await waitFor(() => expect(uploadWorkItemAttachment).toHaveBeenCalledWith("TSK-12", file))
     fireEvent.click(screen.getByTestId("attachment-remove-wia_3"))
-    await waitFor(() => expect(deleteWorkItemAttachment).toHaveBeenCalledWith("PLA-12", "wia_3"))
+    await waitFor(() => expect(deleteWorkItemAttachment).toHaveBeenCalledWith("TSK-12", "wia_3"))
   })
 
   it("renders the paperclip alone when nothing is attached to the Todo", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     renderTask()
     const row = await screen.findByTestId("task-attachments")
     expect(within(row).getByTestId("attachment-add").getAttribute("aria-label")).toBe("Attach a file")
@@ -328,23 +328,23 @@ describe("attachments + activity", () => {
   })
 
   it("fetches the thumbnail variant for an image tile and the full original for the lightbox", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     listWorkItemAttachments.mockResolvedValue({ attachments: [imageAttachment("wia_shot", "shot.png")] })
     renderTask()
 
     const tile = await screen.findByTestId("attachment-tile-wia_shot")
     expect((screen.getByAltText("shot.png") as HTMLImageElement).getAttribute("src"))
-      .toBe("/api/work-items/PLA-12/attachments/wia_shot?thumb=1")
+      .toBe("/api/work-items/TSK-12/attachments/wia_shot?thumb=1")
 
     fireEvent.click(tile)
     expect(screen.getByTestId("attachment-lightbox-image").getAttribute("src"))
-      .toBe("/api/work-items/PLA-12/attachments/wia_shot")
+      .toBe("/api/work-items/TSK-12/attachments/wia_shot")
   })
 
   it("navigates the item image gallery with wrapping arrow keys and buttons", async () => {
     const first = imageAttachment("wia_first", "first.png")
     const second = imageAttachment("wia_second", "second.png")
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     listWorkItemAttachments.mockResolvedValue({ attachments: [first, second] })
     renderTask()
 
@@ -366,7 +366,7 @@ describe("attachments + activity", () => {
   })
 
   it("hides gallery arrows when only one image can be previewed", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     listWorkItemAttachments.mockResolvedValue({ attachments: [imageAttachment("wia_only", "only.png")] })
     renderTask()
 
@@ -376,7 +376,7 @@ describe("attachments + activity", () => {
   })
 
   it("closes from empty space or Escape, not the image, and restores tile focus", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     listWorkItemAttachments.mockResolvedValue({ attachments: [imageAttachment("wia_close", "close.png")] })
     renderTask()
 
@@ -398,7 +398,7 @@ describe("attachments + activity", () => {
   it("toggles, adjusts, and pans zoom before navigation resets the image to fit", async () => {
     const first = imageAttachment("wia_zoom", "zoom.png")
     const second = imageAttachment("wia_after", "after.png")
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     listWorkItemAttachments.mockResolvedValue({ attachments: [first, second] })
     renderTask()
 
@@ -431,7 +431,7 @@ describe("attachments + activity", () => {
   it("keeps each comment's image gallery isolated from item and sibling images", async () => {
     const rootComment = comment("wic_gallery", "Gallery", "2026-07-22T08:00:00.000Z")
     const siblingComment = comment("wic_sibling", "Sibling", "2026-07-22T09:00:00.000Z")
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     listWorkItemComments.mockResolvedValue({ comments: [rootComment, siblingComment], total: 2 })
     listWorkItemAttachments.mockResolvedValue({
       attachments: [
@@ -452,7 +452,7 @@ describe("attachments + activity", () => {
   })
 
   it("renders comments in the delegation grammar with their attachment chips, folds quiet updates, and sends with pending files", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12"), {
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12"), {
       events: [
         event("e1", "created", "2026-07-20T08:00:00.000Z"),
         event("e2", "metadata_edited", "2026-07-20T08:10:00.000Z"),
@@ -469,7 +469,7 @@ describe("attachments + activity", () => {
     })
     listWorkItemAttachments.mockResolvedValue({
       attachments: [
-        { id: "wia_9", workItemId: "PLA-12", commentId: "wic_1", filename: "form-states.png", mime: "image/png", bytes: 1024, sha256: "c", storagePath: "/z", uploadedBy: "mason", createdAt: "2026-07-22T08:00:00.000Z" },
+        { id: "wia_9", workItemId: "TSK-12", commentId: "wic_1", filename: "form-states.png", mime: "image/png", bytes: 1024, sha256: "c", storagePath: "/z", uploadedBy: "mason", createdAt: "2026-07-22T08:00:00.000Z" },
       ],
     })
     addWorkItemComment.mockResolvedValue({ comment: comment("wic_3", "New note", "2026-07-23T08:00:00.000Z") })
@@ -496,8 +496,8 @@ describe("attachments + activity", () => {
     expect((await screen.findByTestId("composer-pending")).textContent).toContain("shot.png")
     fireEvent.change(screen.getByTestId("composer-input"), { target: { value: "New note" } })
     fireEvent.click(screen.getByTestId("composer-send"))
-    await waitFor(() => expect(addWorkItemComment).toHaveBeenCalledWith("PLA-12", "New note", undefined))
-    await waitFor(() => expect(uploadWorkItemAttachment).toHaveBeenCalledWith("PLA-12", staged, "wic_3"))
+    await waitFor(() => expect(addWorkItemComment).toHaveBeenCalledWith("TSK-12", "New note", undefined))
+    await waitFor(() => expect(uploadWorkItemAttachment).toHaveBeenCalledWith("TSK-12", staged, "wic_3"))
   })
 
   it("renders comment markdown and line breaks while hiding pipeline markers", async () => {
@@ -509,7 +509,7 @@ describe("attachments + activity", () => {
       "[text](https://example.com)",
       "<!-- /pipeline-status -->",
     ].join("\n")
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     listWorkItemComments.mockResolvedValue({
       comments: [comment("wic_markdown", body, "2026-07-22T08:00:00.000Z")],
       total: 1,
@@ -529,7 +529,7 @@ describe("attachments + activity", () => {
   })
 
   it("shows newest blocks first, keeps replies chronological, and expands quiet updates newest first", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12"), {
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12"), {
       events: [
         event("e1", "created", "2026-07-20T08:00:00.000Z"),
         event("e2", "metadata_edited", "2026-07-20T09:00:00.000Z"),
@@ -574,7 +574,7 @@ describe("attachments + activity", () => {
       event("e4", "relation_added", "2026-07-20T11:00:00.000Z"),
     ]
     const older = comment("wic_older", "Older", "2026-07-21T08:00:00.000Z")
-    const detail = detailOf(full("PLA-12"), {
+    const detail = detailOf(full("TSK-12"), {
       events,
       comments: { comments: [older], total: 1 },
     })
@@ -590,7 +590,7 @@ describe("attachments + activity", () => {
 
     const newer = comment("wic_newer", "Newer", "2026-07-22T08:00:00.000Z")
     act(() => {
-      client.setQueryData(["work-item-comments", "PLA-12"], {
+      client.setQueryData(["work-item-comments", "TSK-12"], {
         comments: [newer, older],
         total: 2,
       })
@@ -601,7 +601,7 @@ describe("attachments + activity", () => {
   })
 
   it("keeps tombstones italic and renders deleted text instead of stored markdown", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     listWorkItemComments.mockResolvedValue({
       comments: [
         comment("wic_deleted", "**should stay hidden**", "2026-07-22T08:00:00.000Z", {
@@ -621,7 +621,7 @@ describe("attachments + activity", () => {
   it("carries comment edit/delete from the retired sheet: Edit only on operator-authored, Delete on any, wire round-trips (cutover)", async () => {
     const rawBody = "**operator words**\n`raw code`"
     const editedBody = "**operator words v2**\n`raw code`\n"
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     listWorkItemComments.mockResolvedValue({
       comments: [
         comment("wic_mine", rawBody, "2026-07-22T08:00:00.000Z", { authorKind: "operator", author: "operator" }),
@@ -644,9 +644,9 @@ describe("attachments + activity", () => {
     expect(editBox.value).toBe(rawBody)
     fireEvent.change(editBox, { target: { value: editedBody } })
     fireEvent.click(screen.getByTestId("activity-edit-save-wic_mine"))
-    await waitFor(() => expect(editWorkItemComment).toHaveBeenCalledWith("PLA-12", "wic_mine", editedBody))
+    await waitFor(() => expect(editWorkItemComment).toHaveBeenCalledWith("TSK-12", "wic_mine", editedBody))
 
     fireEvent.click(screen.getByTestId("activity-delete-wic_theirs"))
-    await waitFor(() => expect(deleteWorkItemComment).toHaveBeenCalledWith("PLA-12", "wic_theirs"))
+    await waitFor(() => expect(deleteWorkItemComment).toHaveBeenCalledWith("TSK-12", "wic_theirs"))
   })
 })

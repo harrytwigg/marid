@@ -1,8 +1,8 @@
-# ICI-719 — Plugin system: installable pages, backends, and watchers
+# Plugin system: installable pages, backends, and watchers
 
 Design round. No implementation. Base SHA `bc7a2aee`.
 
-This document is binding on ICI-720 through ICI-727. Each of those is graded against the
+This document is binding on the eight implementation slices. Each slice is graded against the
 section that specifies it; §12 maps which is which. Every `path:line` below was opened and
 verified on this branch.
 
@@ -50,7 +50,7 @@ and is not, and the next reader would otherwise spend the same hour discovering 
 | `packages/jinn/src/gateway/watcher.ts:7` | `interface WatcherCallbacks`, exactly four fixed hooks (`:8` to `:11`) | **Rejected as the watch registration shape.** Adding a target means editing this interface and every caller, which is the opposite of installable. The chokidar mechanics at `:78` are reused; the callback struct is not. |
 | `packages/jinn/src/gateway/watcher.ts:17` | `let timer` captured inside the `debounce` closure | **Rejected as the debounce helper for plugin watchers.** `stopWatchers()` at `:135` closes the chokidar watchers and clears the array, and that is all it can do: the timer handle is unreachable from outside the closure, so a change landing within 500 ms of shutdown still fires afterwards and keeps the event loop alive. A supervised lifecycle (§7) needs a cancel path, so the plugin debounce returns a handle with `cancel()`. |
 | `packages/jinn/src/gateway/server.ts:419` | `createConnector`, a hardcoded `switch` on type that throws on unknown | **Rejected as the model for plugin backends.** Connectors are a closed enum on purpose, and the comment at `:418` says so ("The only place a connector is constructed"). Plugin backends are open by definition; they load by path, not by name in a `switch`. |
-| `packages/jinn/src/gateway/server.ts:267` | `serveStatic(req, res, webDir, options)` | **Rejected for plugin assets, twice over.** Its containment check at `:282` is `resolved.startsWith(path.resolve(webDir))`, a string prefix rather than a separator-aware boundary, so a sibling directory whose name merely extends `webDir` would pass. And its cache policy at `:293` marks anything under `/assets/` `immutable` for a year, which is correct for Vite's content-addressed output and exactly wrong for a plugin file that hot-reloads under a stable name. §6 serves plugin assets on their own route with `no-store`. Fixing `serveStatic` itself is not this design's business and belongs to ICI-723 if it is done at all. |
+| `packages/jinn/src/gateway/server.ts:267` | `serveStatic(req, res, webDir, options)` | **Rejected for plugin assets, twice over.** Its containment check at `:282` is `resolved.startsWith(path.resolve(webDir))`, a string prefix rather than a separator-aware boundary, so a sibling directory whose name merely extends `webDir` would pass. And its cache policy at `:293` marks anything under `/assets/` `immutable` for a year, which is correct for Vite's content-addressed output and exactly wrong for a plugin file that hot-reloads under a stable name. §6 serves plugin assets on their own route with `no-store`. Fixing `serveStatic` itself is not this design's business and belongs to the discovery slice if it is done at all. |
 | `packages/web/src/main.tsx:106` | `createBrowserRouter([...])`, a static literal array of 27 children closing at `:144` | **Rejected as extensible.** Nothing appends to it after construction; the only conditional entry is the DEV-gated `/redesign` spread at `:141`. §3's `routes` area is what opens it. |
 | `packages/web/src/lib/nav.ts:23` | `BASE_NAV_ITEMS`, a static non-exported literal | **Rejected as the place plugins add nav.** Adding a destination today means editing this literal and, for mobile placement, the `primaryHrefs` literal at `:58`. Both are inside `nav.ts` and neither is reachable from outside the module. |
 | `packages/web/src/components/page-layout.tsx:123` | `PageLayout`, and its `headerActions` prop destructured to `_headerActions` | **Rejected as an existing slot.** The comment at `:115` records that no page supplies one and pages own their actions inline. It is a dead prop, not a seam. |
@@ -155,7 +155,7 @@ array and React re-renders forever.
 | --- | --- | --- | --- |
 | Full page | `routes` | `data: { path }` plus `render` | `packages/web/src/main.tsx:106`. Contributed paths are reserved the same way the static children are, so a plugin cannot shadow `/todos`. One absolute segment, no params. |
 | Sidebar nav | `sidebar.nav` | `data: { path, label, icon }` | Merged inside `packages/web/src/lib/nav.ts:49` so desktop, mobile, and overflow all see it. Pairs with a `routes` contribution; the row navigates to `path` and lights up while the app is there. |
-| Status bar | `statusbar.right` | `render`, or `data` for a plain label chip | **No host exists.** ICI-720 builds the bar and mounts it in `packages/web/src/components/page-layout.tsx:130`, inside `<main>`, which is the only sane mount point. See §10 for why this is not speculative. |
+| Status bar | `statusbar.right` | `render`, or `data` for a plain label chip | **No host exists.** The registry slice builds the bar and mounts it in `packages/web/src/components/page-layout.tsx:130`, inside `<main>`, which is the only sane mount point. See §10 for why this is not speculative. |
 | Todo detail, page-scoped pair | `todo.detail.actions` and `todo.detail.sections` | `render` | `banner.tsx:288` (the existing `actions?: ReactNode` slot, declared `:90`) and `task-page.tsx:567`, immediately above `ActivitySection` in the ordered section stack. |
 
 The pair is one surface with two ends, header and body, and it is the shape a plugin needs to
@@ -286,7 +286,7 @@ That routing, not the suffix allowlist in §9, is what keeps backend source off 
 allowlist that has to contain `.js` so the client half can load cannot also be the thing that
 withholds a `.js` backend.
 
-This is a correction to the shape ICI-723 currently describes, and the reason is concrete:
+This is a correction to the shape the discovery slice's brief currently describes, and the reason is concrete:
 `authRequiredForRequest` (`packages/jinn/src/gateway/auth.ts:251`) returns `true` only for paths
 under `/api/` (`:264`) or `/ws` (`:265`), and `false` otherwise (`:266`). A `/plugin-assets/...`
 route therefore never reaches the auth gate at `packages/jinn/src/gateway/server.ts:1098` and
@@ -464,7 +464,7 @@ rather than a convention to remember: the auth gate at
 `:1109`, so a gate living in the dispatch chain is downstream of it by construction. The gate
 also fails closed on an unknown plugin id, which is a 404 for the same reason.
 
-Two attributions, corrected here because ICI-723's body has them the other way round and copying
+Two attributions, corrected here because the discovery slice's brief has them the other way round and copying
 a wrong citation into shipped code comments is how the next reader gets misled:
 
 - `GHSA-5qr3-c538-wm9j` is the manifest path traversal and absolute-path RCE (lesson 2), named in
@@ -492,7 +492,7 @@ consumer before any plugin exists.
 | `statusbar.right` | The bar does not exist, so it is built with its own core contributions: the workspace switcher and theme toggle currently pinned at `packages/web/src/components/pill-nav.tsx:348` move into it. The bar is not built *for* plugins; it is built because those two controls are the only persistent status affordances the app has and they are currently wedged into the bottom of a nav rail. A plugin chip is then the second consumer, not the first. |
 | `todo.detail.actions` / `.sections` | `packages/web/src/routes/todos/task-page/banner.tsx:90` is an existing named `ReactNode` slot filled from `task-page.tsx:428`. Generalizing a slot that already has a caller is the second-caller rule, not a guess. |
 | The host API (§5) | Each verb wraps an endpoint the dashboard already calls. No verb is added without one. |
-| The whole system | The reference plugin (ICI-727) exercises every area, both halves, and the supervised watcher. It is committed in-repo and runs in CI, so an area with no core consumer still has a test that fails when it breaks. |
+| The whole system | The reference plugin (the settings and reference-plugin slice) exercises every area, both halves, and the supervised watcher. It is committed in-repo and runs in CI, so an area with no core consumer still has a test that fails when it breaks. |
 
 If an area cannot name a consumer, it does not ship. That is the rule this section exists to
 satisfy, and it is what shrank the area list to four.
@@ -516,19 +516,19 @@ satisfy, and it is what shrank the area list to four.
 
 ## 12. Slice map
 
-Each sibling Todo is graded against its section.
+Each slice is graded against its section.
 
-| Todo | Section | Deliverable |
+| Slice | Section | Deliverable |
 | --- | --- | --- |
-| ICI-720 | §3 | Contribution registry, area-scoped invalidation, `Slot`, error boundaries, and the status bar host |
-| ICI-721 | §4, §5 | `@jinn/plugin-sdk`: the single import surface and the hand-authored `.d.ts` |
-| ICI-722 | §4 | Runtime loader: specifier rejection, shims, blob import, validation, hot reload |
-| ICI-723 | §2, §6, §8, §9 | Discovery, manifest validation, `GET /api/plugins`, asset route with the three guards, config lists |
-| ICI-724 | §6, §8, §9 | Backend mount, hot reload, runtime enable gate after auth, per-plugin error isolation |
-| ICI-725 | §7, §6 | Supervised watcher lifecycle and the per-plugin event channel |
-| ICI-726 | §5 | The typed host verbs, on both the client and the server context |
-| ICI-727 | §10 | Settings page, the reference plugin, and `docs/plugins.md` |
+| Registry | §3 | Contribution registry, area-scoped invalidation, `Slot`, error boundaries, and the status bar host |
+| SDK | §4, §5 | `@jinn/plugin-sdk`: the single import surface and the hand-authored `.d.ts` |
+| Loader | §4 | Runtime loader: specifier rejection, shims, blob import, validation, hot reload |
+| Discovery and assets | §2, §6, §8, §9 | Discovery, manifest validation, `GET /api/plugins`, asset route with the three guards, config lists |
+| Backend mount | §6, §8, §9 | Backend mount, hot reload, runtime enable gate after auth, per-plugin error isolation |
+| Watcher | §7, §6 | Supervised watcher lifecycle and the per-plugin event channel |
+| Host verbs | §5 | The typed host verbs, on both the client and the server context |
+| Settings and reference plugin | §10 | Settings page, the reference plugin, and `docs/plugins.md` |
 
-Two corrections this design makes to Todos already written, so they are not lost when those are
-picked up: the asset route moves under `/api/` (§6), and the CVE attributions in ICI-723 are
+Two corrections this design makes to briefs already written, so they are not lost when those slices are
+picked up: the asset route moves under `/api/` (§6), and the CVE attributions in the discovery slice's brief are
 swapped (§9).

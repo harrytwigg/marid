@@ -10,7 +10,7 @@ import { KNOWLEDGE_FILE_CHAR_CAP } from "../../shared/knowledge-read.js";
 import type { JinnMcpContext, JinnMcpTool } from "../toolkit.js";
 
 /**
- * PLA-100 — read_knowledge's honesty about how much of a file it returned, split
+ * read_knowledge's honesty about how much of a file it returned, split
  * out of knowledge-tools.test.ts, which owns the group registry and search. Same
  * two tiers as its neighbour: a stubbed gateway for the tool's own contract, then
  * the real route + store for the paging round-trip.
@@ -60,7 +60,7 @@ describe("read_knowledge — the cap is discoverable from the tool itself", () =
 
 describe("read_knowledge — unit (stub gateway)", () => {
   it("a 200 whose body drifts shape fails loudly instead of reporting a clean empty read", async () => {
-    // PLA-100: both fields used to default toward "complete" — a body missing
+    // Both fields used to default toward "complete" — a body missing
     // `content` came back as truncated:false with content:"", which reads as a
     // whole file that happens to be empty. A caller cannot tell that apart from
     // the real thing, so the drift has to surface as an error.

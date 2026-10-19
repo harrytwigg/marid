@@ -24,7 +24,7 @@ import { attachSessionIdentity } from "../../mcp/identity.js";
 /**
  * The jinn belt reaches pi as a per-session `--extension` module while the session's
  * identity and the gateway credentials ride pi's child env. Neither end was pinned
- * from `run()`: PLA-161 found pi employees starting with no company tools at all,
+ * from `run()`: pi employees were found starting with no company tools at all,
  * nobody being told, and the whole suite green.
  */
 describe("PiEngine — jinn MCP attachment", () => {

@@ -252,7 +252,7 @@ export function useBoardRank() {
   })
 }
 
-/** Put a Todo on Home, or take it off (ICI-1357). Invalidates every Todo query
+/** Put a Todo on Home, or take it off. Invalidates every Todo query
  *  (unkeeping removes the card) and announces a refusal — nothing else shows one. */
 export function useKeepWorkItem(announce: (message: string) => void) {
   const qc = useQueryClient()

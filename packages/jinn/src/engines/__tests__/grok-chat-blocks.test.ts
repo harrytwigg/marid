@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 
-/** ICI-1393. Live Grok stdout is only `thought` / `text` / `end`. Tool calls live
+/** Live Grok stdout is only `thought` / `text` / `end`. Tool calls live
  *  in `updates.jsonl`, and the session id first appears on the same `end` line
  *  that settles the turn. Tests assert the live mid-turn stream (before `end`). */
 

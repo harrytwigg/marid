@@ -60,10 +60,10 @@ function closeRunsForSettledAttempts(sessions: readonly Session[]): void {
 }
 
 /**
- * Drop the attempts that predate the operator's own most recent status move
- * (PLA-98). A receipt written before he decided where the Todo belongs says
+ * Drop the attempts that predate the operator's own most recent status move.
+ * A receipt written before he decided where the Todo belongs says
  * nothing about what happened after the decision, and deriving from one reverts
- * him — on PLA-61 a ten-day-old `succeeded` session pulled a Todo he had just
+ * him — a ten-day-old `succeeded` session pulled a Todo he had just
  * parked in `backlog` into `in_review`, three seconds later.
  *
  * The floor is causal rather than a time window, so it clears itself: the moment

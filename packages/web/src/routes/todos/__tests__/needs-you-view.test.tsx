@@ -137,20 +137,20 @@ describe("NeedsYouView", () => {
   })
 
   it("shows an attachment ref in the card's quote as a thumbnail, not a token", async () => {
-    stopNote("Ship this? attachment:PLA-12:wia_ab12cd34ef56:image/png")
-    renderView([item("PLA-12", "blocked")])
+    stopNote("Ship this? attachment:TSK-12:wia_ab12cd34ef56:image/png")
+    renderView([item("TSK-12", "blocked")])
     await screen.findByTestId("attachment-ref-thumb-wia_ab12cd34ef56")
     const card = screen.getByTestId("needs-item")
     expect(card.textContent).toContain("Ship this?")
     expect(card.textContent).not.toContain("wia_ab12cd34ef56:image/png")
     const thumb = screen.getByTestId("attachment-ref-thumb-wia_ab12cd34ef56")
     expect(thumb.querySelector("img")?.getAttribute("src"))
-      .toBe(`${ACTIVE_ORIGIN}/api/work-items/PLA-12/attachments/wia_ab12cd34ef56?thumb=1`)
+      .toBe(`${ACTIVE_ORIGIN}/api/work-items/TSK-12/attachments/wia_ab12cd34ef56?thumb=1`)
   })
 
   it("shows a ref whose bytes are gone as a named file row rather than a broken image", async () => {
-    stopNote("Still there? attachment:PLA-12:wia_ab12cd34ef56:image/png")
-    renderView([item("PLA-12", "blocked")])
+    stopNote("Still there? attachment:TSK-12:wia_ab12cd34ef56:image/png")
+    renderView([item("TSK-12", "blocked")])
     fireEvent.error((await screen.findByTestId("attachment-ref-thumb-wia_ab12cd34ef56")).querySelector("img")!)
 
     expect(screen.queryByTestId("attachment-ref-thumb-wia_ab12cd34ef56")).toBeNull()
@@ -245,8 +245,8 @@ describe("NeedsYouView", () => {
     expect(container.innerHTML).not.toMatch(/wi_[a-z0-9_-]+/i)
   })
 
-  it("the ID line renders the public id + status phrase (PLA-26 · In review)", () => {
-    renderView([item("PLA-26", "in_review", { attentionLane: "manager" })])
-    expect(screen.getByText("PLA-26 · In review")).toBeTruthy()
+  it("the ID line renders the public id + status phrase (TSK-26 · In review)", () => {
+    renderView([item("TSK-26", "in_review", { attentionLane: "manager" })])
+    expect(screen.getByText("TSK-26 · In review")).toBeTruthy()
   })
 })

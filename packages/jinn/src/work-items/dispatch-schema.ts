@@ -1,6 +1,6 @@
 import type { Database as DatabaseType } from "better-sqlite3";
 
-/** ICI-733: how a Todo is RUN, as opposed to what it says. Which skills its
+/** How a Todo is RUN, as opposed to what it says. Which skills its
  *  working session preloads, and which engine/model the NEXT attempt uses —
  *  the recovery lever that moves a rate-limited Todo to another engine without
  *  re-describing the work.
@@ -48,7 +48,7 @@ export const WORK_ITEM_AUTO_START_DDL = `
 ${WORK_ITEM_AUTO_START_TABLE_DDL};
 `;
 
-/** ICI-733: one row per caller-supplied create key, so a cron or connector that
+/** One row per caller-supplied create key, so a cron or connector that
  *  retries a create gets the Todo it already made instead of a duplicate.
  *  `(source, source_ref)` already dedupes machine mints, but it is server-minted
  *  and the trigger paths do not set it usefully — hence an explicit key.

@@ -20,8 +20,8 @@ describe("parseToolArgs", () => {
   })
 
   it("accepts a well-formed object", () => {
-    const parsed = parseToolArgs("open_todo", SHAPE, '{"id":"ICI-59","limit":5,"expand":true}')
-    expect(parsed).toEqual({ ok: true, args: { id: "ICI-59", limit: 5, expand: true } })
+    const parsed = parseToolArgs("open_todo", SHAPE, '{"id":"ISS-59","limit":5,"expand":true}')
+    expect(parsed).toEqual({ ok: true, args: { id: "ISS-59", limit: 5, expand: true } })
   })
 
   it("says what would fix malformed JSON", () => {
@@ -35,7 +35,7 @@ describe("parseToolArgs", () => {
   })
 
   it("rejects a JSON value that is not an object", () => {
-    const parsed = parseToolArgs("open_todo", SHAPE, '"ICI-59"')
+    const parsed = parseToolArgs("open_todo", SHAPE, '"ISS-59"')
     expect(parsed.ok).toBe(false)
     if (parsed.ok) throw new Error("expected a failure")
     expect(parsed.error).toContain("JSON object")
@@ -57,12 +57,12 @@ describe("parseToolArgs", () => {
   })
 
   it("drops a null for an optional argument rather than failing on it", () => {
-    const parsed = parseToolArgs("open_todo", SHAPE, '{"id":"ICI-59","lens":null}')
-    expect(parsed).toEqual({ ok: true, args: { id: "ICI-59" } })
+    const parsed = parseToolArgs("open_todo", SHAPE, '{"id":"ISS-59","lens":null}')
+    expect(parsed).toEqual({ ok: true, args: { id: "ISS-59" } })
   })
 
   it("lists the accepted arguments when given an unknown one", () => {
-    const parsed = parseToolArgs("open_todo", SHAPE, '{"id":"ICI-59","colour":"red"}')
+    const parsed = parseToolArgs("open_todo", SHAPE, '{"id":"ISS-59","colour":"red"}')
     expect(parsed.ok).toBe(false)
     if (parsed.ok) throw new Error("expected a failure")
     expect(parsed.error).toContain('"colour"')
@@ -70,7 +70,7 @@ describe("parseToolArgs", () => {
   })
 
   it("names the expected type on a type mismatch", () => {
-    const parsed = parseToolArgs("open_todo", SHAPE, '{"id":"ICI-59","limit":"five"}')
+    const parsed = parseToolArgs("open_todo", SHAPE, '{"id":"ISS-59","limit":"five"}')
     expect(parsed.ok).toBe(false)
     if (parsed.ok) throw new Error("expected a failure")
     expect(parsed.error).toContain('"limit"')
@@ -78,7 +78,7 @@ describe("parseToolArgs", () => {
   })
 
   it("rejects a fractional value for an integer argument", () => {
-    const parsed = parseToolArgs("open_todo", SHAPE, '{"id":"ICI-59","limit":2.5}')
+    const parsed = parseToolArgs("open_todo", SHAPE, '{"id":"ISS-59","limit":2.5}')
     expect(parsed.ok).toBe(false)
   })
 

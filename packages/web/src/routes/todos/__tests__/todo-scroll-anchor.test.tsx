@@ -33,7 +33,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       getWorkItemTree: vi.fn().mockRejectedValue(new Error("not used")),
       getWorkItem: vi.fn().mockRejectedValue(new Error("not used")),
       getWorkItems: vi.fn().mockResolvedValue({ workItems: [] }),
-      getDepartments: vi.fn().mockResolvedValue({ departments: [{ slug: "platform", prefix: "PLA", createdAt: "2026-07-01", todoCount: 3 }] }),
+      getDepartments: vi.fn().mockResolvedValue({ departments: [{ slug: "platform", prefix: "TSK", createdAt: "2026-07-01", todoCount: 3 }] }),
       getOrg: vi.fn().mockResolvedValue({ departments: ["platform"], employees: [] }),
       setWorkItemStatus: vi.fn(),
       updateWorkItem: vi.fn(),
@@ -155,18 +155,18 @@ afterEach(() => { vi.restoreAllMocks() })
 
 describe("Todos list scroll anchoring", () => {
   it("holds the read position when a status change moves a row into a group above it", async () => {
-    rows.backlog = Array.from({ length: 40 }, (_, k) => compact(`PLA-${k + 1}`, "backlog", k))
+    rows.backlog = Array.from({ length: 40 }, (_, k) => compact(`TSK-${k + 1}`, "backlog", k))
     const { client } = renderBoard()
-    await screen.findByTestId("todo-list-row-PLA-1")
+    await screen.findByTestId("todo-list-row-TSK-1")
 
     const layout = installLayout("todo-list-scroll")
     layout.scrollTo(8.5 * ROW_H)
     const anchored = layout.rowIds()[8]
     const before = layout.offsetOf(anchored)
-    expect(anchored).toBe("PLA-9")
+    expect(anchored).toBe("TSK-9")
     expect(before).toBe(-30)
 
-    // PLA-30 sits below the reader and moves backlog → executing. Executing is
+    // TSK-30 sits below the reader and moves backlog → executing. Executing is
     // grouped above Backlog, so the row lands above the read position and every
     // row under it — including the anchored one — is pushed down.
     const moved = { ...rows.backlog[29], status: "executing" as const }
@@ -174,23 +174,23 @@ describe("Todos list scroll anchoring", () => {
     rows.executing = [moved]
     await settleStatusChange(client)
 
-    expect(layout.rowIds()[0]).toBe("PLA-30")
+    expect(layout.rowIds()[0]).toBe("TSK-30")
     expect(layout.rowIds().indexOf(anchored)).toBe(9)
     expect(Math.abs(layout.offsetOf(anchored) - before)).toBeLessThanOrEqual(2)
     expect(layout.scroller.scrollTop).toBe(8.5 * ROW_H + ROW_H)
   })
 
   it("holds it when the group above the reader grows", async () => {
-    rows.backlog = Array.from({ length: 40 }, (_, k) => compact(`PLA-${k + 1}`, "backlog", k))
+    rows.backlog = Array.from({ length: 40 }, (_, k) => compact(`TSK-${k + 1}`, "backlog", k))
     const { client } = renderBoard()
-    await screen.findByTestId("todo-list-row-PLA-1")
+    await screen.findByTestId("todo-list-row-TSK-1")
 
     const layout = installLayout("todo-list-scroll")
     layout.scrollTo(12.5 * ROW_H)
     const anchored = layout.rowIds()[12]
     const before = layout.offsetOf(anchored)
 
-    rows.executing = [compact("PLA-90", "executing", 0), compact("PLA-91", "executing", 1)]
+    rows.executing = [compact("TSK-90", "executing", 0), compact("TSK-91", "executing", 1)]
     await settleStatusChange(client)
 
     expect(layout.rowIds().indexOf(anchored)).toBe(14)
@@ -199,15 +199,15 @@ describe("Todos list scroll anchoring", () => {
   })
 
   it("leaves a reader at the top of the list at the top", async () => {
-    rows.backlog = Array.from({ length: 40 }, (_, k) => compact(`PLA-${k + 1}`, "backlog", k))
+    rows.backlog = Array.from({ length: 40 }, (_, k) => compact(`TSK-${k + 1}`, "backlog", k))
     const { client } = renderBoard()
-    await screen.findByTestId("todo-list-row-PLA-1")
+    await screen.findByTestId("todo-list-row-TSK-1")
 
     const layout = installLayout("todo-list-scroll")
-    rows.executing = [compact("PLA-90", "executing", 0)]
+    rows.executing = [compact("TSK-90", "executing", 0)]
     await settleStatusChange(client)
 
-    expect(layout.rowIds()[0]).toBe("PLA-90")
+    expect(layout.rowIds()[0]).toBe("TSK-90")
     expect(layout.scroller.scrollTop).toBe(0)
   })
 })
@@ -225,12 +225,12 @@ describe("Todos list scroll anchoring, windowed", () => {
   // The guard for the windowed list reading the page's own scroller: unwire
   // `getScrollElement` in list/list-window.tsx and no row mounts, so this fails.
   it("holds the read position when the group above the reader grows", async () => {
-    rows.backlog = Array.from({ length: 80 }, (_, k) => compact(`PLA-${k + 1}`, "backlog", k))
+    rows.backlog = Array.from({ length: 80 }, (_, k) => compact(`TSK-${k + 1}`, "backlog", k))
     const layout = installVirtualLayout(WINDOW_ROW_H, VIEWPORT_H, {
       scroller: '[data-testid="todo-list-scroll"]', row: "[data-anchor-id]", rowId: "data-anchor-id",
     })
     const { client } = renderBoard()
-    await screen.findByTestId("todo-list-row-PLA-1")
+    await screen.findByTestId("todo-list-row-TSK-1")
 
     const read = 30.5 * WINDOW_ROW_H
     layout.scrollTo(read)
@@ -238,7 +238,7 @@ describe("Todos list scroll anchoring, windowed", () => {
     const anchored = layout.visibleRowIds()[0]
     const before = layout.offsetOf(anchored)
 
-    rows.executing = [compact("PLA-90", "executing", 0), compact("PLA-91", "executing", 1)]
+    rows.executing = [compact("TSK-90", "executing", 0), compact("TSK-91", "executing", 1)]
     await settleStatusChange(client)
     // The refetch's render lands after the invalidate resolves, and the
     // correction rides with it: holding the place is what moves the scrollport.
@@ -252,9 +252,9 @@ describe("Todos list scroll anchoring, windowed", () => {
 
 describe("Todos board scroll anchoring", () => {
   it("holds the read position when cards land above the reader", async () => {
-    rows.backlog = Array.from({ length: 40 }, (_, k) => compact(`PLA-${k + 1}`, "backlog", k))
+    rows.backlog = Array.from({ length: 40 }, (_, k) => compact(`TSK-${k + 1}`, "backlog", k))
     const { client } = renderBoard()
-    await screen.findByTestId("board-card-PLA-1")
+    await screen.findByTestId("board-card-TSK-1")
 
     const layout = installLayout("todo-board-scroll", "data-board-card")
     layout.scrollTo(8.5 * ROW_H)
@@ -263,7 +263,7 @@ describe("Todos board scroll anchoring", () => {
     expect(before).toBe(-30)
     // Backlog is the board's first column, so cards land above the reader by
     // ranking ahead of them rather than by moving into an earlier group.
-    rows.backlog = [compact("PLA-90", "backlog", -2), compact("PLA-91", "backlog", -1), ...rows.backlog!]
+    rows.backlog = [compact("TSK-90", "backlog", -2), compact("TSK-91", "backlog", -1), ...rows.backlog!]
     await settleStatusChange(client)
 
     expect(layout.rowIds().indexOf(anchored)).toBe(10)
@@ -272,9 +272,9 @@ describe("Todos board scroll anchoring", () => {
   })
 
   it("follows the content when the anchored card leaves the board, without snapping to an edge", async () => {
-    rows.backlog = Array.from({ length: 40 }, (_, k) => compact(`PLA-${k + 1}`, "backlog", k))
+    rows.backlog = Array.from({ length: 40 }, (_, k) => compact(`TSK-${k + 1}`, "backlog", k))
     const { client } = renderBoard()
-    await screen.findByTestId("board-card-PLA-1")
+    await screen.findByTestId("board-card-TSK-1")
 
     const layout = installLayout("todo-board-scroll", "data-board-card")
     layout.scrollTo(8.5 * ROW_H)

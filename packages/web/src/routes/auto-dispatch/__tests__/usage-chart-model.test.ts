@@ -11,7 +11,7 @@ const fiveHour = (used: number, resetsAt: number) => ({ name: "5h", usedPercent:
 const RESET_A = Math.floor((NOW - 2 * H) / 1000)
 const RESET_B = Math.floor((NOW + 3 * H) / 1000)
 const session = (at: number): StartedSession => ({
-  id: `s-${at}`, engine: "claude", model: null, employee: "todo-dispatcher", title: "Dispatch PLA-1", source: "web",
+  id: `s-${at}`, engine: "claude", model: null, employee: "todo-dispatcher", title: "Dispatch TSK-1", source: "web",
   status: "idle", createdAt: new Date(at).toISOString(), startedBy: "board-walk-dispatch",
 })
 

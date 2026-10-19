@@ -87,7 +87,7 @@ beforeEach(() => {
   clearNoticeSink()
   clearBoardScrollCache()
   sessionStorage.clear()
-  rows = { executing: [compact("PLA-3", "executing")] }
+  rows = { executing: [compact("TSK-3", "executing")] }
   listWorkItems.mockImplementation((params: { status?: WorkItemStatusWire }) => Promise.resolve(listResponse(params)))
 })
 
@@ -97,7 +97,7 @@ describe("the quick-capture bar's chunk failing to load", () => {
     const notice = vi.fn()
     registerNoticeSink(notice)
     renderBoard()
-    await screen.findByTestId("board-card-PLA-3")
+    await screen.findByTestId("board-card-TSK-3")
 
     fireEvent.click(screen.getByTestId("todo-quick-capture"))
 

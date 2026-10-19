@@ -56,7 +56,7 @@ beforeAll(async () => {
   db = (await import("../../shared/db.js")).initDb();
 });
 
-describe("weekly-capped work waits for the named reset (PLA-216)", () => {
+describe("weekly-capped work waits for the named reset (TSK-216)", () => {
   it("resumes after the stated reset even when endedAt is older than 24h", () => {
     const resetAt = new Date(NOW.getTime() - 60_000).toISOString();
     const { id, runId } = parked("weekly cap", {

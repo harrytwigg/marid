@@ -4,7 +4,7 @@ import { AREAS } from "@/contrib/types"
 import { contributeProbes, describeHostedArea } from "@/contrib/__tests__/hosted-area"
 import { CrumbBar } from "../task-page/crumb-bar"
 
-/* PLA-107 — the crumb bar hosts `todo.detail.actions`. The contributed actions
+/* The crumb bar hosts `todo.detail.actions`. The contributed actions
  * lead the bar's right-hand group, so the app's own copy-link and ⋯ keep the
  * edge position the muscle memory expects. */
 
@@ -14,7 +14,7 @@ function renderCrumbBar() {
       boardLabel="Platform"
       onBack={() => {}}
       ancestors={[]}
-      id="PLA-12"
+      id="TSK-12"
       title="A Todo"
       onOpenAncestor={() => {}}
       onCopyId={() => {}}

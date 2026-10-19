@@ -6,7 +6,7 @@ import SettingsPage from '../page'
 
 /* A `role="switch"` control is an input with no text of its own, so its only
  * name is the `ariaLabel` the call site passes. Five switches shipped without
- * one and a screen reader announced each as a bare "switch" (MAR-101). This
+ * one and a screen reader announced each as a bare "switch". This
  * holds the whole page to the invariant, so a new unnamed call site fails here
  * rather than in a screen reader. */
 
@@ -80,7 +80,7 @@ describe('Settings switches', () => {
 
     // The `name` option asks for the computed accessible name, the same one axe
     // reads. An omitted `ariaLabel` leaves the switch in `switches` but out of
-    // `named`, which is the shape of the violation MAR-101 recorded five times.
+    // `named`, which is the shape of the violation recorded five times.
     const switches = screen.getAllByRole('switch')
     const named = screen.queryAllByRole('switch', { name: /./ })
     expect(named).toHaveLength(switches.length)

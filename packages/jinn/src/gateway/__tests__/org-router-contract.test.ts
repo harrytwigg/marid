@@ -17,7 +17,7 @@ vi.mock("../../shared/paths.js", async (importOriginal) => {
     get CRON_RUNS() { return home.cronRuns; },
     get CRON_JOBS() { return home.cronJobs; },
     get ORG_DIR() { return home.org; },
-    // PLA-56: org.ts resolves <home>/org at call time, so the home itself is the
+    // org.ts resolves <home>/org at call time, so the home itself is the
     // seam. Read through `home` on every call — seedHome() re-rolls it per test.
     resolveJinnHome: () => home.root,
   };

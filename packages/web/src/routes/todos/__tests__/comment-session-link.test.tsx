@@ -32,10 +32,10 @@ import { ActivitySection } from "../task-page/activity"
 import { SessionDirectoryProvider } from "../task-page/session-ref"
 
 const item = {
-  id: "PLA-12", version: 1, title: "Item", body: null, status: "executing", department: null,
+  id: "TSK-12", version: 1, title: "Item", body: null, status: "executing", department: null,
   assignee: null, priority: 2, rank: null, source: "human", sourceRef: null,
   rounds: 0, budgetUsd: null,
-  createdBy: "operator", parentId: null, rootId: "PLA-12", depth: 0,
+  createdBy: "operator", parentId: null, rootId: "TSK-12", depth: 0,
   dueAt: null, createdAt: "2026-07-20T08:00:00.000Z", updatedAt: "2026-07-20T08:00:00.000Z",
   closedAt: null,
 } as WorkItemFullWire
@@ -58,7 +58,7 @@ function renderThread(
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/todos/PLA-12"]}>
+      <MemoryRouter initialEntries={["/todos/TSK-12"]}>
         <Routes>
           <Route
             path="*"

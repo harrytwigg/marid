@@ -54,7 +54,7 @@ function indexBytes(db: Database.Database): string {
     .join("||");
 }
 
-/** A v2 database as it stood before ICI-1369: Todos and comments, no indexes. */
+/** A v2 database as it stood before the search indexes: Todos and comments, no indexes. */
 function preSearchIndexDatabase(name: string): { file: string; db: Database.Database } {
   const file = path.join(tmp, name);
   const db = new Database(file);

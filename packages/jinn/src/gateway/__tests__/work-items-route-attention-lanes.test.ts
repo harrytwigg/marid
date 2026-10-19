@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { api, ctx, dbModule, makeReq, makeRes, store, toolHeaders, reg } from "./helpers/work-items-route-harness.js";
 
 /**
- * PLA-240 data contract: Attention/list grouping is fed only from
+ * Data contract: Attention/list grouping is fed only from
  * GET /api/work-items?needsAttentionFor=me. Recovering leftovers must be in
  * that feed with attentionLane=recovering so the UI can split them out of
  * Needs you.

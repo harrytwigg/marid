@@ -4,7 +4,7 @@ import type { WorkItemCompactWire } from "@/lib/api"
 import { isParked, type TodoStopCauseWire } from "@/lib/parked"
 import { formatCountdown } from "../util"
 
-/* PLA-157 — how a stopped card says why it stopped.
+/* How a stopped card says why it stopped.
  *
  * Two different waits used to render identically: a Todo held by a quota window
  * and a Todo held by a person both became one tinted line under the title, and
@@ -14,7 +14,7 @@ import { formatCountdown } from "../util"
  * The countdown chip and the unblock hint separate them, and both LEAD the card
  * at every width: on a card that has stopped, the wait is the headline and the
  * title is the detail. A block whose only explanation is its transition note has
- * no line here any more — the board card is a fixed grid since ICI-1427, and the
+ * no line here any more — the board card is a fixed grid, and the
  * note reads on the task page and in the Needs-you view instead. */
 
 /** Whether the card carries a lead at all, from the fields alone and never from

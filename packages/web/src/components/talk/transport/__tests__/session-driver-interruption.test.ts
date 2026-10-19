@@ -252,7 +252,7 @@ describe("provider-owned interruption and false-start recovery", () => {
   })
 
   /**
-   * The routing PLA-223 turns on: the operator's own voice has to reach the orb
+   * The routing this turns on: the operator's own voice has to reach the orb
    * as its own state, and it has to do that without touching the response
    * bookkeeping underneath — the orb is a readout, not a participant.
    */

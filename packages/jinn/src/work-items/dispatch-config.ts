@@ -10,7 +10,7 @@ import { readAutoStartRow, writeAutoStartRow, type AutoStartRow } from './auto-s
 import { scopedOverrideRefusal } from './scoped-engine-override.js';
 
 /**
- * How a Todo is RUN (ICI-733): the skills its working session preloads and the
+ * How a Todo is RUN: the skills its working session preloads and the
  * engine/model its NEXT attempt uses.
  *
  * Both are set-time validated and re-resolved at dispatch, because the two

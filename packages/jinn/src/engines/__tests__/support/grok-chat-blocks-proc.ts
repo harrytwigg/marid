@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 
-/** Fake grok child used by ICI-1393 tests. Kept off GrokEngine so the
+/** Fake grok child used by the live mid-turn Grok tests. Kept off GrokEngine so the
  *  `node:child_process` mock can load it without a cycle. */
 
 export interface FakeProc {

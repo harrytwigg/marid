@@ -37,7 +37,7 @@ function tool(name: string): JinnMcpTool {
   return t;
 }
 
-/* PLA-96: the route owns who may close a tree, so the tool's only job is to
+/* The route owns who may close a tree, so the tool's only job is to
  * carry the ask there intact — and to hand the refusal back unsoftened. */
 describe("update_work_item — cascade close", () => {
   it("declares cascade as a boolean, and no longer declares the retired acknowledgement", () => {

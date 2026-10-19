@@ -5,7 +5,7 @@ import path from "node:path";
 import { KNOWLEDGE_FILE_CHAR_CAP, readKnowledgeFile } from "../store.js";
 
 /**
- * PLA-100 — the read cap and its offset paging, split out of store.test.ts, which
+ * The read cap and its offset paging, split out of store.test.ts, which
  * owns the Notes surface and readKnowledgeFile's containment battery. Its own
  * instance fixture: these cases seed large files and an escaping symlink and share
  * nothing with the suites next door.
@@ -29,7 +29,7 @@ beforeAll(() => {
 });
 
 /**
- * PLA-100: the cut point is measured here rather than assumed, because everything
+ * The cut point is measured here rather than assumed, because everything
  * downstream — the route, the MCP tool, and the agent deciding whether it has the
  * whole file — trusts `truncated` and the char counts to describe this slice exactly.
  */

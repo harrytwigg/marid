@@ -1,7 +1,7 @@
 /**
  * The microphone half of the orb's pulse.
  *
- * Before PLA-223 only the assistant's track was metered, so the orb could not
+ * Before the operator's track was metered, only the assistant's track was metered, so the orb could not
  * move while the operator talked to it. jsdom implements none of the audio
  * stack, so the whole peer is stubbed here and what is asserted is the wiring:
  * which stream lands in which channel, and that neither meter outlives `close`.

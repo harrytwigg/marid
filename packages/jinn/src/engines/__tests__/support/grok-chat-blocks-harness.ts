@@ -5,7 +5,7 @@ import { GrokEngine } from "../../grok.js";
 import type { FakeProc } from "./grok-chat-blocks-proc.js";
 import { spawnCalls } from "./grok-chat-blocks-proc.js";
 
-/** Shared fixtures for ICI-1393 live mid-turn Grok tests. The fake process
+/** Shared fixtures for live mid-turn Grok tests. The fake process
  *  lives in grok-chat-blocks-proc.ts so the child_process mock can load it
  *  without importing GrokEngine. */
 

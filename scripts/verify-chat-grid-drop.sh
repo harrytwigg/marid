@@ -43,7 +43,7 @@ fi
 VERIFY_ROOT="$(mktemp -d "$TMP_BASE/jinn-chat-grid-drop.XXXXXX")"
 HOST_HOME="$VERIFY_ROOT/host"
 SANDBOX_HOME="$HOST_HOME/.jinn-$INSTANCE"
-ARTIFACTS="$SANDBOX_HOME/sandbox-artifacts/pla-174"
+ARTIFACTS="$SANDBOX_HOME/sandbox-artifacts/chat-grid-drop"
 RETAIN_DIR="${JINN_VERIFY_RETAIN_DIR:-}"
 BASE_URL="http://127.0.0.1:$PORT"
 STARTED=0
@@ -73,7 +73,7 @@ cleanup() {
     echo "Refusing cleanup outside the current verification root: $VERIFY_ROOT" >&2
     status=3
   fi
-  echo "Destroyed PLA-174 sandbox and removed $VERIFY_ROOT"
+  echo "Destroyed chat-grid-drop sandbox and removed $VERIFY_ROOT"
   exit "$status"
 }
 trap cleanup EXIT

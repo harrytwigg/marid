@@ -34,7 +34,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       getWorkItemTrees: vi.fn().mockResolvedValue({ trees: {} }),
       getWorkItems: vi.fn().mockResolvedValue({ workItems: [] }),
       getDepartments: vi.fn().mockResolvedValue({
-        departments: [{ slug: "platform", prefix: "PLA", createdAt: "2026-07-01", todoCount: 2 }],
+        departments: [{ slug: "platform", prefix: "TSK", createdAt: "2026-07-01", todoCount: 2 }],
       }),
       getOrg: vi.fn().mockResolvedValue({ departments: ["platform"], employees: [] }),
       createWorkItem: vi.fn(),
@@ -82,9 +82,9 @@ function compact(id: string, status: WorkItemStatusWire, rank: number): WorkItem
 }
 
 /** Deterministic order: ranks ascend, so the flat model is creation order. */
-const BACKLOG = Array.from({ length: BACKLOG_COUNT }, (_, i) => compact(`PLA-${i}`, "backlog", i))
+const BACKLOG = Array.from({ length: BACKLOG_COUNT }, (_, i) => compact(`TSK-${i}`, "backlog", i))
 const SHORT_BACKLOG = BACKLOG.slice(0, SHORT_COUNT)
-const DONE = [compact("PLA-900", "done", 0), compact("PLA-901", "done", 1)]
+const DONE = [compact("TSK-900", "done", 0), compact("TSK-901", "done", 1)]
 const ROW_IDS = BACKLOG.map((item) => `todo-list-row-${item.id}`)
 
 /**
@@ -165,7 +165,7 @@ afterEach(() => {
 describe("the windowed Todo list", () => {
   it("mounts a window of rows, not the whole backlog", async () => {
     renderTodos("/todos/b/platform")
-    await screen.findByTestId("todo-list-row-PLA-0")
+    await screen.findByTestId("todo-list-row-TSK-0")
 
     const mounted = layout!.mountedRowIds()
     console.log(`[todo list] items=${BACKLOG_COUNT} mountedRows=${mounted.length}`)
@@ -181,13 +181,13 @@ describe("the windowed Todo list", () => {
 
   it("renders the correct slice of the flat model at a scrolled offset", async () => {
     renderTodos("/todos/b/platform")
-    await screen.findByTestId("todo-list-row-PLA-0")
+    await screen.findByTestId("todo-list-row-TSK-0")
     const atTop = layout!.mountedRowIds()
     expect(atTop).toEqual(ROW_IDS.slice(0, atTop.length))
 
     const scrollTop = 6000
     layout!.scrollTo(scrollTop)
-    await waitFor(() => expect(screen.queryByTestId("todo-list-row-PLA-0")).toBeNull())
+    await waitFor(() => expect(screen.queryByTestId("todo-list-row-TSK-0")).toBeNull())
 
     const mounted = layout!.mountedRowIds()
     console.log(`[todo list] scrollTop=${scrollTop} firstMountedIndex=${modelIndexOf(mounted[0])} mountedRows=${mounted.length}`)
@@ -214,9 +214,9 @@ describe("the windowed Todo list", () => {
   it("opens a row the window is showing", async () => {
     rows.backlog = SHORT_BACKLOG
     renderTodos("/todos/b/platform")
-    await screen.findByTestId("todo-list-row-PLA-0")
+    await screen.findByTestId("todo-list-row-TSK-0")
     layout!.scrollTo(6000)
-    await waitFor(() => expect(screen.queryByTestId("todo-list-row-PLA-0")).toBeNull())
+    await waitFor(() => expect(screen.queryByTestId("todo-list-row-TSK-0")).toBeNull())
 
     fireEvent.click(screen.getByTestId(layout!.mountedRowIds()[0]))
     await screen.findByTestId("detail-back")
@@ -225,27 +225,27 @@ describe("the windowed Todo list", () => {
   it("collapses and re-opens Closed from the bottom of the window", async () => {
     rows.backlog = SHORT_BACKLOG
     renderTodos("/todos/b/platform")
-    await screen.findByTestId("todo-list-row-PLA-0")
+    await screen.findByTestId("todo-list-row-TSK-0")
     layout!.scrollToBottom()
     const closed = await screen.findByTestId("todo-list-group-closed")
 
     const toggle = closed.querySelector<HTMLButtonElement>("button[aria-expanded]")!
     expect(toggle.getAttribute("aria-expanded")).toBe("false")
-    expect(screen.queryByTestId("todo-list-row-PLA-900")).toBeNull()
+    expect(screen.queryByTestId("todo-list-row-TSK-900")).toBeNull()
 
     fireEvent.click(toggle)
     layout!.scrollToBottom()
-    await screen.findByTestId("todo-list-row-PLA-900")
+    await screen.findByTestId("todo-list-row-TSK-900")
 
     fireEvent.click(screen.getByTestId("todo-list-group-closed").querySelector<HTMLButtonElement>("button[aria-expanded]")!)
-    await waitFor(() => expect(screen.queryByTestId("todo-list-row-PLA-900")).toBeNull())
+    await waitFor(() => expect(screen.queryByTestId("todo-list-row-TSK-900")).toBeNull())
   })
 
   it("pages a group from its Show more row", async () => {
     backlogHasMore = true
     rows.backlog = SHORT_BACKLOG
     renderTodos("/todos/b/platform")
-    await screen.findByTestId("todo-list-row-PLA-0")
+    await screen.findByTestId("todo-list-row-TSK-0")
     layout!.scrollToBottom()
 
     fireEvent.click(await screen.findByTestId("todo-list-show-more-backlog"))
@@ -264,10 +264,10 @@ describe("the windowed Todo list", () => {
     layout = installVirtualLayout(ROW_H, VIEWPORT_H, TARGETS, () => PADDING)
 
     renderTodos("/todos/b/platform")
-    await screen.findByTestId("todo-list-row-PLA-0")
+    await screen.findByTestId("todo-list-row-TSK-0")
     const scrollTop = 6000
     layout!.scrollTo(scrollTop)
-    await waitFor(() => expect(screen.queryByTestId("todo-list-row-PLA-0")).toBeNull())
+    await waitFor(() => expect(screen.queryByTestId("todo-list-row-TSK-0")).toBeNull())
 
     // Measured from the scrollport's top edge, so the padding counts once — and
     // exactly once. Declaring the margin without subtracting it in the transform
@@ -279,7 +279,7 @@ describe("the windowed Todo list", () => {
   it("narrows to one status and keeps windowing that group", async () => {
     rows.backlog = SHORT_BACKLOG
     renderTodos("/todos/b/platform?status=backlog")
-    await screen.findByTestId("todo-list-row-PLA-0")
+    await screen.findByTestId("todo-list-row-TSK-0")
 
     expect(screen.getByTestId("todo-list-group-backlog")).toBeTruthy()
     expect(screen.queryByTestId("todo-list-group-closed")).toBeNull()

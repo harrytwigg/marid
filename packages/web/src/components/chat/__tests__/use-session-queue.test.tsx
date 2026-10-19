@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { QueueItem } from '@/lib/api'
 import { useSessionQueue } from '@/components/chat/use-session-queue'
 
-/* ICI-1365 round 2 — the two things the queue hook owns that the card cannot:
+/* Round 2 — the two things the queue hook owns that the card cannot:
  * which transcript id a card is found under, and what happens when the server
  * says no. */
 

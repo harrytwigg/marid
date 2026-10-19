@@ -62,7 +62,7 @@ describe('desktop pane focus', () => {
   it('gives the deleted slot to the fallback instead of a surviving sibling', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     // The working set is a SUBSET of the sidebar order, so the post-delete
-    // fallback ('b') is a chat that was never in the grid — the PLA-180 repro.
+    // fallback ('b') is a chat that was never in the grid — the original repro.
     localStorage.setItem(WORKING_SET_STORAGE_KEY, JSON.stringify({
       version: 1,
       sessionIds: ['a', 'c', 'd'],
@@ -121,7 +121,7 @@ describe('desktop pane focus', () => {
     expect(within(menu).getByRole('menuitemradio', { name: 'CLI' })).toBeTruthy()
     // The pane title bar is the multi-pane home of the header's Open beside, so it has to
     // read the same and sit in the same slot: view toggle first, then Open beside, then the
-    // session items. PLA-180 introduced it above the toggle under a different name.
+    // session items. An earlier change introduced it above the toggle under a different name.
     const paneMenuOrder = Array.from(menu.querySelectorAll('[role="menuitem"], [role="menuitemradio"], button'))
       .map((element) => element.textContent?.trim() ?? '')
     expect(paneMenuOrder.indexOf('Open beside')).toBe(paneMenuOrder.indexOf('CLI') + 1)

@@ -2,9 +2,9 @@ import { Pin } from "@/components/ui/icon"
 import type { WorkItemCompactWire } from "@/lib/api"
 import { departmentTitle } from "./board-switcher"
 
-/* ICI-1357 — keeping a Todo on Home, and saying whose work a kept Todo is.
+/* Keeping a Todo on Home, and saying whose work a kept Todo is.
  *
- * A pin is how anything the operator did not create reaches Home (PLA-230), so
+ * A pin is how anything the operator did not create reaches Home, so
  * both parts have to be legible from a board they did not pin: the pin says
  * "this can go on Home", and the caption says whose work the kept one is.
  *
@@ -14,7 +14,7 @@ import { departmentTitle } from "./board-switcher"
 /**
  * The toggle. It shows at rest wherever it is mounted — an affordance nobody can
  * see is one nobody uses — and any mount that wants it hover-gated says so in
- * the `className` it passes, as the board card does since ICI-1427: that card's
+ * the `className` it passes, as the four-row board card does: that card's
  * top row belongs to the assignee, and a pin resting beside every avatar reads
  * as state rather than as a control. Unkept it rests at `--text-tertiary`, which
  * clears 3:1 on the card in both themes where the quietest ink measured 1.9:1,
@@ -52,7 +52,7 @@ export function KeepToggle(
 
 /** Whose work a kept Todo is — only when there is a department to name, so the
  *  line never reads `Kept · undefined`. Every kept Todo captions: `created_by`
- *  says nothing about who asked for it (PLA-172), so a Todo the operator
+ *  says nothing about who asked for it, so a Todo the operator
  *  "created" is no more theirs than one an agent raised. */
 export function keptCaptionOf(item: WorkItemCompactWire): string | null {
   if (item.kept !== true || !item.department) return null

@@ -23,7 +23,7 @@ describe('the waiting-on popup rows', () => {
     const [first, second] = sessionRows(popup)
     expect(first.textContent).toContain('Alpha Builder')
     expect(first.textContent).toContain('Delegated task')
-    expect(first.textContent).toContain('PLA-1 · Build the popup')
+    expect(first.textContent).toContain('TSK-1 · Build the popup')
     expect(first.textContent).toContain('Running')
     expect(first.textContent).toContain('8m')
     // No display name: the slug, title-cased, as the bar does.

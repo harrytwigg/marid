@@ -29,7 +29,7 @@ function storedSql(db: import("better-sqlite3").Database, table: string): string
   return (db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(table) as { sql: string } | undefined)?.sql;
 }
 
-/* PLA-157 lands in a new table, never a column: `verifyCurrentWorkItemSchema`
+/* The stop cause lands in a new table, never a column: `verifyCurrentWorkItemSchema`
  * compares every stored table DDL byte-for-byte, so a column on `work_items`
  * would make every deployed database refuse to boot. */
 describe("work_item_stop_cause is additive", () => {

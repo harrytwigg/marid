@@ -35,7 +35,7 @@ function normalizedCompanyParts(companyName: unknown): string[] {
 /**
  * Derive the prefix a person would naturally pick: initials for three or more
  * word-ish parts, and the leading word for one or two parts. A short leading
- * acronym is completed by the following part (`IC-IDEV` -> `ICI`).
+ * acronym is completed by the following part (`AC-MEDIA` -> `ACM`).
  */
 export function deriveTodoIdPrefix(companyName: unknown): string {
   const parts = normalizedCompanyParts(companyName);

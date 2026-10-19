@@ -17,7 +17,7 @@ function session(over: Partial<TodoCaptureSessionFact> = {}): TodoCaptureSession
 }
 
 function todo(over: Partial<TodoCaptureTodoFact> = {}): TodoCaptureTodoFact {
-  return { id: "PLA-9", title: "Closed rail scrolls under the board header", linked: [], ...over };
+  return { id: "TSK-9", title: "Closed rail scrolls under the board header", linked: [], ...over };
 }
 
 function facts(over: Partial<TodoCaptureFacts> = {}): TodoCaptureFacts {
@@ -80,7 +80,7 @@ describe("deriveTodoCaptureState — the forward path", () => {
 
     expect(state).toMatchObject({
       stage: "created",
-      workItemId: "PLA-9",
+      workItemId: "TSK-9",
       workItemTitle: "Closed rail scrolls under the board header",
       routedTo: null,
     });
@@ -89,7 +89,7 @@ describe("deriveTodoCaptureState — the forward path", () => {
   it("is dispatching once a Dispatcher session is linked to that Todo", () => {
     const state = deriveTodoCaptureState(facts({ todos: [todo({ linked: [dispatcher] })] }));
 
-    expect(state).toMatchObject({ stage: "dispatching", workItemId: "PLA-9", routedTo: null });
+    expect(state).toMatchObject({ stage: "dispatching", workItemId: "TSK-9", routedTo: null });
   });
 
   it("is routed, naming the employee, once a delegate is linked", () => {
@@ -148,13 +148,13 @@ describe("deriveTodoCaptureState — the failure edges", () => {
       todos: [todo()],
     }));
 
-    expect(state).toMatchObject({ stage: "failed", workItemId: "PLA-9" });
+    expect(state).toMatchObject({ stage: "failed", workItemId: "TSK-9" });
     expect(state.error).toMatch(/never dispatched|without dispatching/);
   });
 
   it("quotes the session's reason when a created Todo was never dispatched", () => {
     const state = deriveTodoCaptureState(facts({
-      session: session({ status: "error", lastError: "Todo PLA-9 is already being dispatched by session s-earlier" }),
+      session: session({ status: "error", lastError: "Todo TSK-9 is already being dispatched by session s-earlier" }),
       todos: [todo()],
     }));
 
@@ -175,16 +175,16 @@ describe("deriveTodoCaptureState — the failure edges", () => {
 
   it("reports the first Todo and surfaces the extras when one capture made several", () => {
     const state = deriveTodoCaptureState(facts({
-      todos: [todo(), todo({ id: "PLA-10" }), todo({ id: "PLA-11" })],
+      todos: [todo(), todo({ id: "TSK-10" }), todo({ id: "TSK-11" })],
     }));
 
-    expect(state).toMatchObject({ workItemId: "PLA-9", extraWorkItemIds: ["PLA-10", "PLA-11"] });
+    expect(state).toMatchObject({ workItemId: "TSK-9", extraWorkItemIds: ["TSK-10", "TSK-11"] });
   });
 
   it("surfaces extras on a failure too, so nothing a capture made is hidden", () => {
-    const state = deriveTodoCaptureState(facts({ session: null, todos: [todo(), todo({ id: "PLA-10" })] }));
+    const state = deriveTodoCaptureState(facts({ session: null, todos: [todo(), todo({ id: "TSK-10" })] }));
 
-    expect(state).toMatchObject({ stage: "failed", extraWorkItemIds: ["PLA-10"] });
+    expect(state).toMatchObject({ stage: "failed", extraWorkItemIds: ["TSK-10"] });
   });
 });
 
@@ -195,14 +195,14 @@ describe("deriveTodoCaptureState — the failure edges", () => {
  * first must not reach the second.
  */
 describe("deriveTodoCaptureState — landing on a Todo that already existed", () => {
-  const existing = { id: "PLA-4", title: "Collapsed rail scrolls under the header" };
+  const existing = { id: "TSK-4", title: "Collapsed rail scrolls under the header" };
 
   it("is landed, naming that Todo, once the capture records where it went", () => {
     const state = deriveTodoCaptureState(facts({ landedWorkItem: existing }));
 
     expect(state).toMatchObject({
       stage: "landed",
-      workItemId: "PLA-4",
+      workItemId: "TSK-4",
       workItemTitle: "Collapsed rail scrolls under the header",
       routedTo: null,
       error: null,
@@ -224,7 +224,7 @@ describe("deriveTodoCaptureState — landing on a Todo that already existed", ()
   it("prefers the Todo the capture CREATED when it somehow did both", () => {
     const over = facts({ todos: [todo()], landedWorkItem: existing });
 
-    expect(deriveTodoCaptureState(over)).toMatchObject({ stage: "created", workItemId: "PLA-9" });
+    expect(deriveTodoCaptureState(over)).toMatchObject({ stage: "created", workItemId: "TSK-9" });
   });
 
   // The direction the fix must not turn green. A Shaper that died having

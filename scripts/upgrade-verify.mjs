@@ -74,7 +74,7 @@ function assertReceipt(home, version, skills) {
 export function assertBackups(home, candidateVersion, removedNames, exactCopies = []) {
   const root = path.join(home, ".migration-backups")
   const backups = fs.readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)
-  // Published baselines since 0.33.1 can create their own boot-sync backup (PLA-394).
+  // Published baselines since 0.33.1 can create their own boot-sync backup.
   const candidateBackups = backups.filter((name) => name.startsWith(`${candidateVersion}-`))
   if (candidateBackups.length !== 1) {
     throw new Error(`expected one first-boot backup for candidate ${candidateVersion}, found ${candidateBackups.length}; backups: ${backups.join(", ")}`)

@@ -3,7 +3,7 @@
 - Date: 2026-08-23
 - Branch: merged; name not recorded here
 - Product SHA exercised: `f882cf21` — the whole journey was re-run at that head, after the `main` reconciliation, the `failedProfileId` fix, and the restored build-lane proofs
-- Reconciled onto: `main` at `2402dabd` — the commit this branch is actually merged onto; `git rev-list --count HEAD..main` is 0 and `git diff --name-only main...HEAD` lists only `docs/qa/` paths. `main` had independently landed the same two fixes (`7628ebf2` for `failedProfileId`/retry, `bdb9b6c8` for the startup and credential proofs) plus a size-cap split of the profile module (`66a829b1`), so this branch dropped its own copies and carries only this QA evidence on top of `main`. The earlier reconciliation point was `aaa5f48e`; across the whole range `aaa5f48e..2402dabd` the only drift on a PLA-118 surface is `packages/shell` CI test infrastructure — `packages/shell/package.json`, `packages/shell/scripts/test-native.mjs`, and `packages/shell/tauri.config.test.ts`. The three commits after `76be9932` retire `POST /api/files/transfer`, the `remotes` config key, and the Discord cross-gateway proxy, and touch no PLA-118 surface at all. No product file this journey exercised changed in that range
+- Reconciled onto: `main` at `2402dabd` — the commit this branch is actually merged onto; `git rev-list --count HEAD..main` is 0 and `git diff --name-only main...HEAD` lists only `docs/qa/` paths. `main` had independently landed the same two fixes (`7628ebf2` for `failedProfileId`/retry, `bdb9b6c8` for the startup and credential proofs) plus a size-cap split of the profile module (`66a829b1`), so this branch dropped its own copies and carries only this QA evidence on top of `main`. The earlier reconciliation point was `aaa5f48e`; across the whole range `aaa5f48e..2402dabd` the only drift on a platform-foundation surface is `packages/shell` CI test infrastructure — `packages/shell/package.json`, `packages/shell/scripts/test-native.mjs`, and `packages/shell/tauri.config.test.ts`. The three commits after `76be9932` retire `POST /api/files/transfer`, the `remotes` config key, and the Discord cross-gateway proxy, and touch no platform-foundation surface at all. No product file this journey exercised changed in that range
 - Product-code drift from the exercised head: the reconciled tree is **not** identical to `f882cf21`. `packages/shell/src-tauri/src/credentials.rs` and `packages/web/src/platform/__tests__/contracts.test.ts` are byte-identical, and the pairing screen's `unreachable` derivation is byte-identical (only its comment changed), but three behavioural deltas sit in `packages/web/src/lib/native-gateway-profiles.ts`, each visible in `git diff f882cf21..HEAD -- packages/web/src/lib/native-gateway-profiles.ts`:
   1. `verifyActive()`'s catch now also writes `failedProfileId: id`, so an unreachable active gateway names itself as the failure on record
   2. `remove()` now also writes `status: !failed && activeReachable ? "ready" : status`, so deleting the profile a failure named returns the screen to `ready` instead of leaving a stale `unreachable`
@@ -11,7 +11,7 @@
 
   Alongside those three, `remove()`'s `error` clause was rewritten from `cleared ? undefined : error` to `failed ? error : undefined` — the same condition expressed around `failed`, and equivalent once delta 1 makes every `error` write carry a `failedProfileId`. The `failedProfileId` and `retry()` doc comments were reworded to match. The `GuardedSocket` class also moved from `guarded-gateway-socket.ts` to `native-gateway-socket.ts`, and `main` carries profile-manager tests `f882cf21` did not
 - Why rows 10a/10b/10c still hold under those deltas: `retry()` still resolves its target from `activeId` and never from `failedProfileId`, the pairing screen still derives `unreachable` from `activeReachable` alone, and `remove()` still clears the failure only when it names the id it deleted — so every path the captures exercised is unchanged, and the three deltas only make `failedProfileId` mean one thing at every write
-- Sandboxes: fresh disposable `qa-pla-118-a` / `qa-pla-118-b` homes on loopback ports 7814 and 7815. Each home's `config.yaml` `port:` was read and confirmed before its daemon was started; both were seeded at 7777 by `setup` and rewritten first. An ambient `JINN_PORT=7777` in the runner environment overrode the sandbox config on the first start attempt and the gateway's port-owner guard refused it — the daemons run with that variable scrubbed. Both sandboxes were registered only in a throwaway `JINN_INSTANCES_REGISTRY`, never the host registry
+- Sandboxes: fresh disposable `qa-workspace-a` / `qa-workspace-b` homes on loopback ports 7814 and 7815. Each home's `config.yaml` `port:` was read and confirmed before its daemon was started; both were seeded at 7777 by `setup` and rewritten first. An ambient `JINN_PORT=7777` in the runner environment overrode the sandbox config on the first start attempt and the gateway's port-owner guard refused it — the daemons run with that variable scrubbed. Both sandboxes were registered only in a throwaway `JINN_INSTANCES_REGISTRY`, never the host registry
 - Production home/port: not used
 
 `Verified` means the listed evidence was exercised. `Unverified` is an explicit
@@ -100,7 +100,7 @@ application state restored from the backup taken before the run.
 
 - Re-confirmation base: `main` at
   `58908f607b2661e935996c3b5c69494fad483f33`
-- Previously shipped PLA-118 head:
+- Previously shipped platform-foundation head:
   `0e5981ca`
 - Landed-surface proof: `git diff 0e5981ca..58908f60 --` across
   `packages/web/src/platform`, the native gateway transport/profile modules,
@@ -108,21 +108,21 @@ application state restored from the backup taken before the run.
 - S1 gates: typecheck, test, build, ratchet, footguns, and shell Cargo test
   exited 0. Lint exited 1 only at
   `scripts/upgrade-lab/assertions.mjs:15` (complexity 14 > 10); the same
-  failure reproduced at `0e5981ca` and remains owned by open Todo PLA-234
+  failure reproduced at `0e5981ca` and remains owned by an open follow-up Todo
 - S2 journey result: the browser pairing/same-origin path and live native rows
   1–7, 9, 12, and 14 passed against fresh 7778/7779 sandboxes and a freshly
   built, ad-hoc signed macOS bundle. Rows 8, 11, and 13 passed their controlled
   transport/platform/Rust harnesses but were not all injected through the
   release WebView. Row 10 failed live: selecting stopped B left A current and
   described B only inside the switcher instead of activating B and rendering
-  the B-named retry screen. The regression is tracked as PLA-241
+  the B-named retry screen. The regression is tracked as a follow-up Todo
 - Fresh evidence: the row ledger and screenshots are in
   `docs/qa/platform-foundation-evidence/reconfirm-2026-08-24/`. The four-way screenshot
   matrix is complete for the browser A/Todos state and the live row-10 failure,
   but not for every earlier human-visible row; the evidence README says so
   explicitly and does not restate the 2026-08-23 captures as freshly driven
 - S2 gates: typecheck, test, build, ratchet, and footguns exited 0. Lint exited
-  1 on the PLA-234 line only. The focused platform run passed 7 files / 42
+  1 on that same line only. The focused platform run passed 7 files / 42
   tests, shell Cargo passed 17 tests, and the production JavaScript marker scan
   found zero Tauri/Capacitor implementation matches
 - Unchanged gaps: Developer ID signing, notarization, iOS/Android app packaging,
@@ -132,6 +132,6 @@ application state restored from the backup taken before the run.
 
 This re-confirmation does **not** supersede the earlier ship verdict: it records
 that the landed product surface is byte-identical while also preserving the new
-live row-10 discrepancy as follow-up PLA-241. PLA-118 can be reviewed as the
-landed feature; PLA-241 owns the newly observed stopped-profile selection
+live row-10 discrepancy as a follow-up Todo. The platform foundation can be reviewed as the
+landed feature; that follow-up owns the newly observed stopped-profile selection
 behavior.

@@ -58,8 +58,8 @@ function WorkRef({ item }: { item: WorkItemCompactWire }) {
   return <ProvChip source={item.source} sourceRef={item.sourceRef} />
 }
 
-/** The mock's mono ID line: `PLA-26 · In review`, `ACM-9 · escalated 2h`,
- *  `PLA-19 · blocked 1d`. Transport-only ids never render. */
+/** The mock's mono ID line: `ACM-26 · In review`, `ACM-9 · escalated 2h`,
+ *  `ACM-19 · blocked 1d`. Transport-only ids never render. */
 export function attentionIdLine(
   item: WorkItemCompactWire,
   kind: AttentionKind,

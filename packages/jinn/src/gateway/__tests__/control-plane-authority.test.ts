@@ -307,11 +307,11 @@ describe("control-plane writes require operator authority", () => {
     // Todos v2: allocation is per-prefix, so the company prefix never freezes.
     expect(JSON.parse(before.bodyText)).toMatchObject({ todoPrefix: "JIN", todoPrefixFrozen: false });
 
-    const valid = await call("POST", "/api/onboarding", { companyName: "IC-IDEV", companyPrefix: "JIN" }, {
+    const valid = await call("POST", "/api/onboarding", { companyName: "AC-MEDIA", companyPrefix: "JIN" }, {
       authorization: "Bearer test-token",
     });
     expect(valid.status).toBe(200);
-    expect(readConfig().portal.companyName).toBe("IC-IDEV");
+    expect(readConfig().portal.companyName).toBe("AC-MEDIA");
 
     const renamed = await call("POST", "/api/onboarding", { companyName: "AI" }, {
       authorization: "Bearer test-token",

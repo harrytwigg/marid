@@ -7,7 +7,7 @@ import {
 } from "./todo-route-harness.js";
 
 /**
- * ICI-733 where a Todo's dispatch preferences are READ: the two places a Todo
+ * Where a Todo's dispatch preferences are READ: the two places a Todo
  * becomes a working session. The requested skills have to reach the prompt, and
  * the engine/model override has to beat both the request body and the
  * employee's own default.

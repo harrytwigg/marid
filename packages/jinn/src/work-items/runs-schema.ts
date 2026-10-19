@@ -3,14 +3,14 @@ import type { Database as DatabaseType } from "better-sqlite3";
 /** How an attempt ended. Frozen: the DDL's CHECK pins the same six words, so a
  *  new one is a schema change, not a string.
  *
- *  `rate_limited` is deliberately not a failure (ICI-731): a quota window is the
+ *  `rate_limited` is deliberately not a failure: a quota window is the
  *  provider saying "not now", and recording it as `blocked` or `crashed` makes a
  *  wait look like a code problem to every reader and every counter downstream. */
 export const TODO_RUN_OUTCOMES = ["completed", "blocked", "crashed", "timed_out", "abandoned", "rate_limited"] as const;
 
 export type TodoRunOutcome = (typeof TODO_RUN_OUTCOMES)[number];
 
-/** ICI-728: one row per work ATTEMPT. Which files an attempt changed and which
+/** One row per work ATTEMPT. Which files an attempt changed and which
  *  tests it ran are run facts, not task facts — a retrying agent and a reviewer
  *  both need to read what the previous attempt already tried, and a scalar
  *  counter on the Todo cannot hold that.

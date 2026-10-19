@@ -160,7 +160,7 @@ describe("closeOrphanedWorkItemRuns", () => {
   });
 });
 
-describe("a quota window is not a failure (ICI-731)", () => {
+describe("a quota window is not a failure (ISS-731)", () => {
   /** A session that already reported its receipt, so the settled-session sweep
    *  is the thing deciding what the run's outcome reads as. */
   function settledSession(id: string, outcome: string, lastError: string | null, workItemId: string | null = null): void {

@@ -52,7 +52,7 @@ function installLayout() {
 }
 
 function ids(from: number, count: number): string[] {
-  return Array.from({ length: count }, (_, k) => `PLA-${from + k}`)
+  return Array.from({ length: count }, (_, k) => `TSK-${from + k}`)
 }
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
@@ -62,11 +62,11 @@ describe("useScrollAnchor", () => {
     const { rerender } = render(<Scroller ids={ids(10, 40)} enabled />)
     const layout = installLayout()
     layout.scrollTo(630)
-    const before = layout.offsetOf("PLA-20")
+    const before = layout.offsetOf("TSK-20")
 
     rerender(<Scroller ids={[...ids(1, 3), ...ids(10, 40)]} enabled />)
 
-    expect(layout.offsetOf("PLA-20")).toBe(before)
+    expect(layout.offsetOf("TSK-20")).toBe(before)
     expect(layout.scroller.scrollTop).toBe(630 + 3 * ROW_H)
   })
 

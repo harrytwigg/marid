@@ -3,7 +3,7 @@ import { runCronJob } from "../runner.js";
 import type { CronJob, Connector, JinnConfig } from "../../shared/types.js";
 
 /**
- * PLA-184 — the cron adapter used to materialize the employee and config engine
+ * The cron adapter used to materialize the employee and config engine
  * defaults into the route call, which reads downstream as "the caller named this
  * engine" and pins it. A cron fire whose engine is only a default then started on
  * an engine already known to be out of allowance, carrying its stale model.

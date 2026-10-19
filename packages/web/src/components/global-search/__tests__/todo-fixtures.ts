@@ -9,7 +9,7 @@ const EVENTS: WorkItemEventWire[] = [
   ["attachment_removed", "removed an attachment"],
 ].map(([kind], index) => ({
   id: `e${index + 1}`,
-  workItemId: "ICI-1",
+  workItemId: "ISS-1",
   kind,
   fromStatus: null,
   toStatus: null,

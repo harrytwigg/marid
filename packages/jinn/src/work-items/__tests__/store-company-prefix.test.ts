@@ -7,7 +7,7 @@ const home = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-company-prefix-store-")
 process.env.JINN_HOME = home;
 fs.writeFileSync(
   path.join(home, "config.yaml"),
-  "engines:\n  default: claude\n  claude: {}\nportal:\n  companyName: IC-IDEV\n  companyPrefix: JNN\n",
+  "engines:\n  default: claude\n  claude: {}\nportal:\n  companyName: AC-MEDIA\n  companyPrefix: JNN\n",
   "utf8",
 );
 
@@ -34,7 +34,7 @@ describe("Todo allocation from configured company name", () => {
     expect(store.createWorkItem({ title: "new namespace" }).id).toBe("ACM-1");
     fs.writeFileSync(
       path.join(home, "config.yaml"),
-      "engines:\n  default: claude\n  claude: {}\nportal:\n  companyName: IC-IDEV\n  companyPrefix: JNN\n",
+      "engines:\n  default: claude\n  claude: {}\nportal:\n  companyName: AC-MEDIA\n  companyPrefix: JNN\n",
       "utf8",
     );
     expect(store.createWorkItem({ title: "continued identity" }).id).toBe("JNN-2");

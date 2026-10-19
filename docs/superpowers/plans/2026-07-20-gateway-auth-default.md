@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Work only in the dedicated `jinn-ici-400` worktree based on `origin/main`; do not alter the canonical checkout.
+- Work only in the dedicated `jinn-wt-gateway-auth` worktree based on `origin/main`; do not alter the canonical checkout.
 - Do not use or restart ports 7777, 7850, 7788.
 - Existing instances receive no migration or config rewrite.
 - Local auto-pair must require the CLI-authored, single-use, 60-second URL-fragment grant; loopback address alone is not operator identity.
@@ -188,7 +188,7 @@ Push the feature branch, verify `origin/main` has not moved unexpectedly, then p
 
 - [ ] **Step 7: Update Todo and report**
 
-Move `ICI-400` to `in_review` with the commit hashes and verification summary. Report the design, changed files, verbatim command tails, C verdict, `origin/main` commits, and throwaway proof. End with `DONE`.
+Move the Todo to `in_review` with the commit hashes and verification summary. Report the design, changed files, verbatim command tails, C verdict, `origin/main` commits, and throwaway proof. End with `DONE`.
 
 ## Self-Review
 

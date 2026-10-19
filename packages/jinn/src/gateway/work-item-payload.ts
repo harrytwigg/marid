@@ -15,7 +15,7 @@ import { initDb } from "../shared/db.js";
  *  lists, one enriched shape for the board, one full shape for the detail route. */
 
 /** Compact wire summary (Todos v2 slice 3 adds `labels` + `blocked` — the
- *  board's chip/indicator data; ICI-1357 adds `kept` — whether the Todo is on
+ *  board's chip/indicator data; `kept` is added — whether the Todo is on
  *  the operator's Home). List callers pass the pre-batched `extras` (ONE query
  *  each per page); single-item callers omit them and pay per-item lookups. */
 function attentionLaneOf(
@@ -96,7 +96,7 @@ export function workItemPagePayload(page: ReturnType<typeof queryWorkItems>): Re
   };
 }
 
-/** PLA-157: why a stopped Todo stopped, flattened onto the compact row so the
+/** Why a stopped Todo stopped, flattened onto the compact row so the
  *  board can tell a clock-wait from a you-wait. Read only for the two statuses
  *  that can carry one — a page is mostly rows that never stopped — and absent
  *  entirely once the park has passed, so no surface has to re-check the clock
@@ -124,16 +124,16 @@ export function fullWorkItemPayload(item: WorkItem): Record<string, unknown> {
     relations: listRelations(item.id),
     labels: getWorkItemLabels(item.id),
     sprint: getWorkItemSprint(item.id),
-    // ICI-1357 (additive): whether this Todo sits on the operator's Home board.
+    // Additive: whether this Todo sits on the operator's Home board.
     kept: isWorkItemKept(initDb(), item.id),
     // Additive: the same stop cause and attention lane the compact row carries,
     // so the task page can say why a blocked Todo stopped as the card does.
     attentionLane: attentionLaneOf(item),
     ...stopCause(item),
-    // ICI-728 (additive): the attempt ledger, oldest first. Status says where the
+    // Additive: the attempt ledger, oldest first. Status says where the
     // Todo is; runs say what each attempt at it actually did.
     runs: listWorkItemRuns(item.id),
-    // ICI-733 (additive): how the NEXT attempt runs — preloaded skills and the
+    // Additive: how the NEXT attempt runs — preloaded skills and the
     // engine/model override. Null when the Todo has never had any set.
     dispatchConfig: getTodoDispatchConfig(item.id) ?? null,
   };

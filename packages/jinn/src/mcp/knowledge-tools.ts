@@ -16,7 +16,7 @@ import { KNOWLEDGE_FILE_CHAR_CAP } from "../shared/knowledge-read.js";
  *   - CONTEXT-BOMB GUARDS: search returns ≤20 {path,title,snippet,matchCount}
  *     hits (snippets ~12 words, never bodies); read returns ONE slice of ONE file,
  *     capped at KNOWLEDGE_FILE_CHAR_CAP chars, with `offset` to page the rest.
- *   - NO FABRICATED READS (PLA-100): a response missing `content`, `truncated`,
+ *   - NO FABRICATED READS: a response missing `content`, `truncated`,
  *     or the char counts is an error, never a defaulted "complete" read.
  *   - READ TIER: these are privileged company reads. Tool-marked or
  *     caller-session-claimed requests must carry a valid bound session
