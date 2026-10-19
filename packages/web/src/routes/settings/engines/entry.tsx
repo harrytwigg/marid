@@ -1,16 +1,25 @@
 import { useModelRegistry } from "@/hooks/use-model-registry"
+import { findSubject, useFallbackChains } from "@/hooks/use-fallback-chains"
 import { Section } from "../shared"
-import { EngineCard } from "./engine-card"
+import { AccountCard, EngineCard } from "./engine-card"
 import { LegacyFallbackRow } from "./legacy-row"
+import type { ChainBodyProps } from "./chain-body"
 import {
-  chainFor,
+  accountEntriesFor,
+  accountNames,
+  chainEntriesFor,
   legacyFallbackEngine,
   legacyMigrationMutations,
   modelMapFor,
+  substituteChainFor,
   type EnginesConfig,
   type SessionsFallbackConfig,
 } from "./chain-model"
+import { linksOfEntries } from "./chain-links"
+import { chainNameOf } from "./chain-editor"
 import { mapConfigValue, type ServedModels } from "./model-map-model"
+import type { EnginesResponse } from "@/lib/api"
+import type { FallbackChainsResponse } from "@jinn/fallback-chain-wire"
 
 interface EnginesSectionProps {
   engines: EnginesConfig | undefined
@@ -19,35 +28,81 @@ interface EnginesSectionProps {
   onChange: (path: string[], value: unknown) => void
 }
 
+interface SectionContext {
+  engines: EnginesConfig | undefined
+  registry: EnginesResponse
+  chains: FallbackChainsResponse | undefined
+  onChange: EnginesSectionProps["onChange"]
+}
+
+function bodyForEngine(name: string, ctx: SectionContext): ChainBodyProps {
+  return {
+    entries: chainEntriesFor(ctx.engines, name),
+    subject: findSubject(ctx.chains?.subjects, "engine", name),
+    chainName: chainNameOf(name),
+    ownEngine: name,
+    self: { engine: name },
+    where: `engines.${name}.fallback`,
+    waitsAs: name === "claude" ? "Claude" : chainNameOf(name).replace(/ chain$/, ""),
+    fields: { registry: ctx.registry, profiles: accountNames(ctx.engines) },
+    onChange: (links) => ctx.onChange(["engines", name, "fallback"], links),
+  }
+}
+
+function bodyForAccount(account: string, ctx: SectionContext): ChainBodyProps {
+  return {
+    entries: accountEntriesFor(ctx.engines, account),
+    subject: findSubject(ctx.chains?.subjects, "account", account),
+    chainName: chainNameOf("claude", account),
+    ownEngine: "claude",
+    self: { engine: "claude", profile: account },
+    where: `engines.claude.accounts.${account}.fallback`,
+    waitsAs: `Claude · ${account}`,
+    fields: { registry: ctx.registry, profiles: accountNames(ctx.engines) },
+    onChange: (links) => ctx.onChange(["engines", "claude", "accounts", account, "fallback"], links),
+  }
+}
+
+function mapFor(name: string, ctx: SectionContext) {
+  const entries = Object.values(ctx.registry.engines)
+  const served: ServedModels = Object.fromEntries(entries.map((e) => [e.name, e.models.map((m) => m.id)]))
+  const links = linksOfEntries(chainEntriesFor(ctx.engines, name))
+  return {
+    substitutes: substituteChainFor(ctx.engines, name),
+    everyLinkNamesModel: links.length > 0 && links.every((link) => link.model !== undefined),
+    pairs: modelMapFor(ctx.engines, name),
+    served,
+    defaultModels: Object.fromEntries(entries.map((e) => [e.name, e.defaultModel])),
+    onChange: (pairs: [string, string][]) => ctx.onChange(["engines", name, "fallbackModelMap"], mapConfigValue(pairs)),
+  }
+}
+
 /** Every engine the gateway knows, healthy or not, with the chain its turns fall
- *  through to. Uninstalled engines are listed rather than hidden: an operator
- *  deciding what to fall back to needs to see the one that is not there yet. */
+ *  through to, and under Claude one card for each declared account. Uninstalled
+ *  engines are listed rather than hidden: an operator deciding what to fall back
+ *  to needs to see the one that is not there yet. */
 export function EnginesSection({ engines, sessions, onChange }: EnginesSectionProps) {
   const { data: registry } = useModelRegistry()
-  const entries = Object.values(registry?.engines ?? {})
-  if (entries.length === 0) return null
+  if (!registry || Object.keys(registry.engines ?? {}).length === 0) return null
+  return <EnginesBody engines={engines} sessions={sessions} onChange={onChange} registry={registry} />
+}
 
-  const registryEngines = entries.map((entry) => entry.name)
-  // The registry, reduced to the two things the map editor asks of it.
-  const served: ServedModels = Object.fromEntries(entries.map((e) => [e.name, e.models.map((m) => m.id)]))
-  const defaultModels = Object.fromEntries(entries.map((e) => [e.name, e.defaultModel]))
+/** The section once the registry is known: reads the gateway's view of the chains beside it. */
+function EnginesBody({ engines, sessions, onChange, registry }: EnginesSectionProps & { registry: EnginesResponse }) {
+  const { data: chains } = useFallbackChains()
+  const ctx: SectionContext = { engines, registry, chains, onChange }
   const legacy = legacyFallbackEngine(sessions)
 
   return (
     <Section title="Engine Fallbacks">
       <div className="flex flex-col gap-[var(--space-2)]">
-        {entries.map((entry) => (
-          <EngineCard
-            key={entry.name}
-            entry={entry}
-            chain={chainFor(engines, entry.name)}
-            modelMap={modelMapFor(engines, entry.name)}
-            registryEngines={registryEngines}
-            served={served}
-            defaultModels={defaultModels}
-            onChange={(chain) => onChange(["engines", entry.name, "fallback"], chain)}
-            onMapChange={(pairs) => onChange(["engines", entry.name, "fallbackModelMap"], mapConfigValue(pairs))}
-          />
+        {Object.values(registry.engines).map((entry) => (
+          <div key={entry.name} className="flex flex-col gap-[var(--space-2)]">
+            <EngineCard entry={entry} body={bodyForEngine(entry.name, ctx)} map={mapFor(entry.name, ctx)} />
+            {entry.name === "claude" && accountNames(engines).map((account) => (
+              <AccountCard key={account} name={account} body={bodyForAccount(account, ctx)} />
+            ))}
+          </div>
         ))}
         {legacy && (
           <LegacyFallbackRow

@@ -129,8 +129,8 @@ export function useChainDrag(onReorder: (from: number, to: number) => void) {
 
   const liftPointerDown = useCallback((event: React.PointerEvent, from: number) => {
     if (event.button !== 0 && event.pointerType !== "touch") return
-    // The move and remove buttons own their own pointer.
-    if ((event.target as HTMLElement).closest("button")) return
+    // The row's buttons and selects own their own pointer.
+    if ((event.target as HTMLElement).closest("button, select, input")) return
     const rows = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-chain-row]") ?? [])
     if (rows.length < 2) return
     beginDrag(event, from, rows.map((row) => row.getBoundingClientRect()), update, finish)

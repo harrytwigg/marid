@@ -23,6 +23,13 @@ export interface EngineHealth {
   reason?: string;
   observedAt?: string;
 }
+/** opencode's own model switching (a rate-limit plugin on the host), reported by the
+ *  gateway so the dashboard can say the host would fall back twice. */
+export interface InternalFallbackStatus {
+  detected: boolean;
+  /** The gateway already runs opencode with the plugin switched off. */
+  neutralised?: boolean;
+}
 export interface EngineRegistryEntry {
   name: string;
   available: boolean;
@@ -31,6 +38,8 @@ export interface EngineRegistryEntry {
   models: ModelInfo[];
   supportsPty?: boolean; // interactive PTY/CLI view (`/ws/pty`)
   health?: EngineHealth;
+  /** opencode only; absent from a gateway that does not report it. */
+  internalFallback?: InternalFallbackStatus;
 }
 export interface EnginesResponse {
   default: string;

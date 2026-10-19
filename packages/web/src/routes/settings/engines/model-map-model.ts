@@ -7,7 +7,8 @@ import {
   unservedTargetProblem,
 } from "@jinn/fallback-map-wire"
 import { isSpellableModelId } from "@jinn/model-id"
-import { chainFor, modelMapFor, type EnginesConfig } from "./chain-model"
+import { chainSaveBlocker } from "./chain-problems"
+import { modelMapFor, substituteChainFor, type EnginesConfig } from "./chain-model"
 
 /** One `from → to` row. A list rather than an object because the editor has to be
  *  able to hold two rows claiming the same source long enough to say so — an
@@ -19,9 +20,9 @@ export type ModelMapPair = [string, string]
 export type ServedModels = Record<string, string[]>
 
 /**
- * The engine a turn actually lands on when it falls out of `engine`: the first
- * entry in its chain. The map's targets are judged against what THAT engine
- * serves, so an engine with no chain has nothing to judge its map against —
+ * The engine a turn actually lands on when it falls out of `engine` through a
+ * link that names no model: the first such link's engine. The map's targets are
+ * judged against what THAT engine serves, so an engine with no chain has nothing to judge its map against —
  * which is also why the editor says the map has no effect rather than hiding it.
  */
 export function firstSubstitute(chain: string[]): string | null {
@@ -112,7 +113,7 @@ export function mapProblems(context: MapContext, pairs: ModelMapPair[]): string[
 export function allModelMapProblems(engines: EnginesConfig | undefined, served: ServedModels): string[] {
   return Object.keys(served).flatMap((engine) =>
     mapProblems(
-      { engine, substitute: firstSubstitute(chainFor(engines, engine)), served },
+      { engine, substitute: firstSubstitute(substituteChainFor(engines, engine)), served },
       modelMapFor(engines, engine),
     ),
   )
@@ -123,12 +124,15 @@ export function allModelMapProblems(engines: EnginesConfig | undefined, served: 
  *
  * The gateway refuses these too, but only after the whole document has made the
  * trip. Asking here gets the operator the same sentence sooner, and keeps a
- * document the config loader would reject off the wire entirely.
+ * document the config loader would reject off the wire entirely. Chains are asked
+ * first: a map is judged against the chain it hangs from.
  */
 export function configSaveBlocker(
   engines: EnginesConfig | undefined,
   registryEngines: Record<string, { name: string; models: { id: string }[] }> | undefined,
 ): string | null {
+  const chainBlocker = chainSaveBlocker(engines, registryEngines)
+  if (chainBlocker) return chainBlocker
   const served: ServedModels = Object.fromEntries(
     Object.values(registryEngines ?? {}).map((engine) => [engine.name, engine.models.map((model) => model.id)]),
   )
