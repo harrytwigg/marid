@@ -13,8 +13,8 @@ import type { JinnConfig } from "../types.js";
  * an `isUsable` that rejects everything, so the order of its calls is the visit order.
  */
 
-const FRIEND = "/Users/operator/.claude-friend";
-const WORK2 = "/Users/operator/.claude-work2";
+const FRIEND = "/srv/operator/.claude-friend";
+const WORK2 = "/srv/operator/.claude-work2";
 const friendKey = `claude:${claudeProfileFromDir(FRIEND).key}`;
 const work2Key = `claude:${claudeProfileFromDir(WORK2).key}`;
 const ACCOUNTS = { friend: { configDir: FRIEND, fallback: ["claude:work2", "opencode"] }, work2: { configDir: WORK2, fallback: ["claude", "codex"] } };

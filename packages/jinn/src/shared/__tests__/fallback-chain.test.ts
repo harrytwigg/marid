@@ -8,8 +8,8 @@ import { makeSession } from "../../sessions/__tests__/helpers/session-fixture.js
 
 /** The chain resolver: precedence, the model rule, account and health keys, and the reasons a link is passed over. */
 
-const DIR_A = "/Users/operator/.claude-a";
-const DIR_B = "/Users/operator/.claude-b";
+const DIR_A = "/srv/operator/.claude-a";
+const DIR_B = "/srv/operator/.claude-b";
 const KEY_A = `claude:${claudeProfileFromDir(DIR_A).key}`;
 const KEY_B = `claude:${claudeProfileFromDir(DIR_B).key}`;
 
@@ -99,7 +99,7 @@ describe("precedence", () => {
   });
 
   it("an undeclared named profile with no employee chain has none; an employee chain still applies", () => {
-    const undeclared = employee({ claudeConfigDir: "/Users/operator/.claude-other" });
+    const undeclared = employee({ claudeConfigDir: "/srv/operator/.claude-other" });
     expect(resolve({ employee: undeclared })).toMatchObject({ source: "none", links: [expect.objectContaining({ key: "claude||opus" })] });
     expect(resolve({ employee: { ...undeclared, fallback: [{ engine: "codex" }] } }).source).toBe("employee");
   });
