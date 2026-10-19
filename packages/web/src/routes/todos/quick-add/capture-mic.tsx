@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react"
-import { LoaderCircle, Mic } from "lucide-react"
+import { LoaderCircle, Mic } from "@/components/ui/icon"
 import { useGateway } from "@/hooks/use-gateway"
 import { useStt, type UseSttReturn } from "@/hooks/use-stt"
 import { MicWaveform } from "@/components/chat/mic-waveform"

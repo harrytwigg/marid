@@ -30,6 +30,7 @@ import { AttachmentDropSurface, AttachmentsSection } from "./attachments"
 import { useTaskAttachments } from "./use-task-attachments"
 import { ActivitySection } from "./activity"
 import { TaskEmpty, TaskPageSkeleton } from "./task-page-fallbacks"
+import { Button } from "@/components/ui/button"
 import { Slot } from "@/contrib/slot"
 import { AREAS } from "@/contrib/types"
 
@@ -227,14 +228,9 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
           <p className="max-w-[340px] text-[14px] leading-[1.5] text-[var(--text-tertiary)]">
             {operatorSafeTodoError(detailQuery.error, "The gateway didn't answer. It may be restarting.")}
           </p>
-          <button
-            type="button"
-            data-testid="task-load-retry"
-            onClick={() => void detailQuery.refetch()}
-            className="focus-outline rounded-full px-4 py-2 text-[13px] font-semibold text-[var(--accent)] outline-none hover:bg-[var(--accent-fill)]"
-          >
+          <Button variant="secondary" data-testid="task-load-retry" onClick={() => void detailQuery.refetch()} className="rounded-full">
             Retry
-          </button>
+          </Button>
         </div>
       </TaskFrame>
     )
@@ -315,14 +311,15 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
                     onCommitReason={commitBannerReason}
                     actions={
                       detail.workItem.status === "blocked" ? (
-                        <button
-                          type="button"
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           data-testid="task-banner-unblock"
                           onClick={() => pickers.setOpenPicker("status")}
-                          className="focus-outline min-h-8 rounded-full bg-[var(--fill-tertiary)] px-3 text-[12.5px] font-semibold text-[var(--text-secondary)] outline-none hover:bg-[var(--fill-secondary)]"
+                          className="rounded-full"
                         >
                           Unblock…
-                        </button>
+                        </Button>
                       ) : undefined
                     }
                   />

@@ -1,4 +1,4 @@
-import { CalendarRange } from "lucide-react"
+import { CalendarRange } from "@/components/ui/icon"
 import type { SprintWire } from "@/lib/sprint-api"
 import { resolveSprintFilter, sprintDates, useSprints, useStartSprint, sprintErrorMessage } from "./use-sprints"
 

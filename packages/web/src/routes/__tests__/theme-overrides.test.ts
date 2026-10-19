@@ -24,8 +24,15 @@ describe("theme-overrides.css", () => {
 
   it("overrides only tokens that exist upstream, and only the orb's", () => {
     const declared = [...OVERRIDES.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/(--[\w-]+):/g)].map((m) => m[1])
-    expect(declared.sort()).toEqual([...ORB].sort())
+    expect([...new Set(declared)].sort()).toEqual([...ORB].sort())
     for (const token of declared) expect(GLOBALS, `${token} is not an upstream token`).toContain(`${token}:`)
+  })
+
+  it("gives Reduced transparency solid twins, from the OS preference and from the setting", () => {
+    const solid = /--orb-(core|base|bloom|lobe-a|lobe-b|lobe-c|rim):\s*light-dark\(#[0-9A-F]{6}, #[0-9A-F]{6}\);/g
+    const reduced = OVERRIDES.slice(OVERRIDES.indexOf("@media (prefers-reduced-transparency"))
+    expect(reduced).toContain('[data-transparency="reduced"]')
+    expect(reduced.match(solid)).toHaveLength(14)
   })
 
   it("leaves no upstream warm orb colour behind", () => {

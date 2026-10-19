@@ -59,6 +59,31 @@ non-zero when a check fails and photographs the open states. The screens
 before and after. `JINN_CAPTURE_TOOL=measure-open.mjs` reports what a menu's first
 open downloads on the chat and board routes (gzip bytes of the scripts).
 
+## Selects
+
+`JINN_CAPTURE_TOOL=selects.mjs` writes a small org into the sandbox (one scoped
+department, whose option is disabled) and drives the employee editor's selects:
+a click and the keyboard open the list, typeahead, arrow keys skip a disabled
+option, Escape and an outside press close it with focus back on the trigger, a
+choice sticks, and a phone tap. It runs against any build, so the same command
+gives the before and the after, exits non-zero when a check fails, and
+photographs the closed and open states and the settings page's native selects.
+
+## Org screens
+
+`org-map`, `org-employee`, `org-employee-editor` and `org-department` show a seeded org (`seed-org.mjs`:
+four departments, one scoped, managers with reports). `capture-ui.sh` writes it only when one of those
+screens is named, or no screen is, so the other screens' fixtures and baselines do not move.
+
+## Settings-family screens
+
+`settings`, `settings-engines`, `settings-connectors`, `settings-plugins`, `skills`, `skill-detail`, `cron`,
+`cron-detail`, `logs`, `limits`, `auto-dispatch`, `notes`, `notes-editor` and `more` (`screens-pages.mjs`).
+Skills, cron jobs with run history and a small notes folder come from `seed-pages.mjs`, written (with
+notes switched on) only when one of the skills, cron or notes screens is named, or no screen is. The logs
+screen filters to the cron lines and the auto-dispatch screen rewrites the rules path, because the
+gateway's own lines name the sandbox's paths.
+
 ## Settings
 
 | Variable | Default | Meaning |
@@ -123,3 +148,24 @@ Two more tools run in the same sandbox, through `JINN_CAPTURE_TOOL`:
 
 Headless Firefox does not render `backdrop-filter` at all, so a Firefox sheet
 shows the glass tint without its blur; judge the blur in a Chromium sheet.
+
+## The phone board
+
+`JINN_CAPTURE_TOOL=phone-board.mjs` drives the Todos board at 390px with touch
+and checks it: the board is the default view, one column fills the screen with
+the next peeking in, a swipe settles on a column (snap) and the dots follow it,
+"Move to…" moves a card by taps and the gateway agrees, a long press does not
+lift a card (Chromium only, it needs raw touch input), Board | List is one tap
+and remembered across a reload, and no card, column, header or rail blurs, on a
+phone or a desktop. It exits non-zero when a check fails and records the same
+walk-through to `phone-board.webm` in the out-dir. The screens `board-phone`,
+`board-phone-swiped`, `board-phone-list`, `board-phone-move`, `board-closed` and
+`board-sticky-header` photograph the board's states for before and after.
+
+`JINN_CAPTURE_TOOL=capture-bar-load.mjs` presses the board's Quick capture button
+while the bar's chunk is held on its way (a route that releases it later), at
+desktop and phone width: an inert, `aria-hidden` scrim must stand in, the board's
+columns and cards must not move by a pixel while it is pending or when the bar
+arrives, and a chunk that cannot be fetched must take the scrim down and show a
+message. It photographs `<viewport>-pending.png` and `<viewport>-arrived.png`.
+

@@ -1,56 +1,24 @@
 import * as React from "react"
-import { ScrollArea as ScrollAreaPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 
-function ScrollArea({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<typeof ScrollAreaPrimitive.Root>) {
+/**
+ * A panel that scrolls what overflows its height, with the app's own scrollbar: the browser's native scrolling
+ * (momentum, keyboard, find-in-page and scroll anchoring all stay the browser's), and a bar that rests invisible
+ * and shows while the pointer or focus is in the area, which keeps a scrollable panel from reading as a bordered
+ * box at rest. The bar's drawing is `.scroll-area` in `routes/globals.css`. Takes the props of a `div`; give it a height.
+ */
+function ScrollArea({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <ScrollAreaPrimitive.Root
+    <div
       data-slot="scroll-area"
-      className={cn("relative", className)}
-      {...props}
-    >
-      <ScrollAreaPrimitive.Viewport
-        data-slot="scroll-area-viewport"
-        className="size-full rounded-[inherit] outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--accent-fill)]"
-      >
-        {children}
-      </ScrollAreaPrimitive.Viewport>
-      <ScrollBar />
-      <ScrollAreaPrimitive.Corner />
-    </ScrollAreaPrimitive.Root>
-  )
-}
-
-/** The bar itself stays out of the way until the pointer is in the area, which
- *  is what keeps a scrollable panel from reading as a bordered box at rest. */
-function ScrollBar({
-  className,
-  orientation = "vertical",
-  ...props
-}: React.ComponentProps<typeof ScrollAreaPrimitive.ScrollAreaScrollbar>) {
-  return (
-    <ScrollAreaPrimitive.ScrollAreaScrollbar
-      data-slot="scroll-area-scrollbar"
-      orientation={orientation}
       className={cn(
-        "flex touch-none select-none p-[2px] transition-opacity duration-150 ease-[var(--ease-smooth)]",
-        orientation === "vertical" && "h-full w-[10px]",
-        orientation === "horizontal" && "h-[10px] flex-col",
+        "scroll-area relative overflow-auto rounded-[inherit] outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--accent-fill)]",
         className
       )}
       {...props}
-    >
-      <ScrollAreaPrimitive.ScrollAreaThumb
-        data-slot="scroll-area-thumb"
-        className="relative flex-1 rounded-full bg-[var(--fill-primary)]"
-      />
-    </ScrollAreaPrimitive.ScrollAreaScrollbar>
+    />
   )
 }
 
-export { ScrollArea, ScrollBar }
+export { ScrollArea }

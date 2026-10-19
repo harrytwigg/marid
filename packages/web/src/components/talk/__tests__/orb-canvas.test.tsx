@@ -49,6 +49,7 @@ afterEach(() => {
   cleanup()
   HTMLCanvasElement.prototype.getContext = originalGetContext
   document.documentElement.removeAttribute("data-theme")
+  document.documentElement.removeAttribute("data-transparency")
   vi.unstubAllGlobals()
 })
 
@@ -130,6 +131,19 @@ describe("OrbCanvas when the palette changes under it", () => {
     expect(paints()).toBe(1)
 
     document.documentElement.setAttribute("data-theme", "light")
+
+    await waitFor(() => expect(paints()).toBe(2))
+  })
+
+  it("repaints when Reduced transparency is switched on the root", async () => {
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1))
+    stubReducedMotion(true)
+    document.documentElement.setAttribute("data-theme", "dark")
+
+    render(<OrbCanvas state="idle" energyRef={energyRef} size={64} />)
+    expect(paints()).toBe(1)
+
+    document.documentElement.setAttribute("data-transparency", "reduced")
 
     await waitFor(() => expect(paints()).toBe(2))
   })

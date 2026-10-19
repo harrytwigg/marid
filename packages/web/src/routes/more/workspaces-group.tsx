@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from "react"
-import { ChevronRight, LoaderCircle, Plus, X } from "lucide-react"
+import { ChevronRight, LoaderCircle, Plus, X } from "@/components/ui/icon"
 import { NativePairingDialog } from "@/components/auth/native-pairing-screen"
 import { CreateWorkspaceDialog } from "@/components/workspaces/create-workspace-dialog"
 import { useStartWorkspace, useWorkspaces } from "@/hooks/use-workspaces"
@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils"
 import { nativeBridge } from "@/platform/native-bridge"
 
 function Card({ children }: { children: React.ReactNode }) {
-  return <div className="overflow-hidden rounded-[var(--radius-lg)] bg-[var(--bg-secondary)] shadow-[var(--shadow-card)]">{children}</div>
+  return <div className="glass-card overflow-hidden rounded-[var(--radius-lg)]">{children}</div>
 }
 
 function GroupLabel({ children }: { children: React.ReactNode }) {

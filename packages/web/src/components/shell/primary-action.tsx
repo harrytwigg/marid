@@ -47,9 +47,11 @@ type ActionProps = {
   onClick: () => void
   disabled?: boolean
   testId?: string
+  /** Handlers that warm what the press opens: pointer arrival, focus and touch, which run before the press. */
+  warm?: { onPointerEnter?: () => void; onFocus?: () => void; onTouchStart?: () => void }
 }
 
-function TrailingAction({ "aria-label": ariaLabel, label, icon, onClick, disabled, testId }: ActionProps) {
+function TrailingAction({ "aria-label": ariaLabel, label, icon, onClick, disabled, testId, warm }: ActionProps) {
   return (
     <Button
       type="button"
@@ -60,6 +62,7 @@ function TrailingAction({ "aria-label": ariaLabel, label, icon, onClick, disable
       aria-label={ariaLabel}
       disabled={disabled}
       onClick={onClick}
+      {...warm}
       className="hidden shrink-0 lg:inline-flex"
     >
       {icon}
@@ -68,7 +71,7 @@ function TrailingAction({ "aria-label": ariaLabel, label, icon, onClick, disable
   )
 }
 
-function FabAction({ "aria-label": ariaLabel, icon, onClick, disabled, testId, hideMobileTabBar }: ActionProps & { hideMobileTabBar: boolean }) {
+function FabAction({ "aria-label": ariaLabel, icon, onClick, disabled, testId, warm, hideMobileTabBar }: ActionProps & { hideMobileTabBar: boolean }) {
   return (
     <button
       type="button"
@@ -78,6 +81,7 @@ function FabAction({ "aria-label": ariaLabel, icon, onClick, disabled, testId, h
       aria-label={ariaLabel}
       disabled={disabled}
       onClick={onClick}
+      {...warm}
       className={cn(
         // --space-3 is the mobile page gutter (`.jinn-scrollport`'s --jinn-gutter
         // floor, and what the external-scroll routes pad by), so the disc's

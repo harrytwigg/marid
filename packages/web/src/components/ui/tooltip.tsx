@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Slot } from "radix-ui"
+import { Slot } from "./slot"
 import { Focusable } from "react-aria-components/Focusable"
 import { Tooltip as AriaTooltip, TooltipTrigger as AriaTooltipTrigger } from "react-aria-components/Tooltip"
 
@@ -72,7 +72,7 @@ function TooltipTrigger({
   asChild = false,
   ...props
 }: React.ComponentProps<"button"> & { asChild?: boolean }) {
-  const Comp = asChild ? Slot.Root : "button"
+  const Comp = asChild ? Slot : "button"
   // `Focusable` takes the hover, focus and key handlers React Aria's trigger
   // state hands out and merges them onto this one element, so the trigger stays
   // the button (or the child) it was and no wrapper carries `role=button`.

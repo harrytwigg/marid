@@ -1,6 +1,7 @@
 import type { EngineRegistryEntry } from "@/lib/api"
 import { ChainEditor } from "./chain-editor"
-import { addOptionsFor, classifyEngineHealth, engineLabel, type EngineHealthTone } from "./chain-model"
+import { addOptionsFor, classifyEngineHealth, type EngineHealthTone } from "./chain-model"
+import { engineDisplayName } from "@/lib/engine-names"
 import { ModelMapEditor } from "./model-map-editor"
 import type { ModelMapPair, ServedModels } from "./model-map-model"
 
@@ -32,7 +33,7 @@ export function EngineCard({ entry, chain, modelMap, registryEngines, served, de
     <div data-engine-card={entry.name} className="rounded-[var(--radius-lg)] bg-[var(--fill-quaternary)] p-[var(--space-3)]">
       <div className="flex items-baseline justify-between gap-[var(--space-3)]">
         <span className="text-[length:var(--text-subheadline)] font-[var(--weight-medium)] text-[var(--text-primary)]">
-          {engineLabel(entry.name)}
+          {engineDisplayName(entry.name)}
         </span>
         <span
           className="inline-flex shrink-0 items-center gap-[6px] text-[length:var(--text-caption1)] font-[var(--weight-medium)]"

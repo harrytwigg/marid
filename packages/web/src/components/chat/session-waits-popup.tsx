@@ -15,9 +15,11 @@ import {
   sectionWaits,
   type DelegatedSessionWait,
   type GoneSessionWait,
+  type BackgroundTaskWait,
   type SessionNode,
   type SessionWaitItem,
 } from '@/lib/session-waits'
+import type { SubagentRef } from '@/lib/subagent-transcript'
 
 /** A safety net for what no gateway event announces (a monitor's newest line). */
 const REFRESH_MS = 15_000
@@ -45,18 +47,23 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-function OtherRow({ item, now }: { item: Exclude<SessionWaitItem, DelegatedSessionWait>; now: number }) {
+function OtherRow({ item, now, onOpenSubagent }: {
+  item: Exclude<SessionWaitItem, DelegatedSessionWait>
+  now: number
+  onOpenSubagent?: (item: BackgroundTaskWait) => void
+}) {
   if (item.kind === 'rerun') return <RerunRow item={item} now={now} />
   if (item.kind === 'heartbeat') return <HeartbeatRow item={item} now={now} />
-  return <BackgroundTaskRow item={item} now={now} />
+  return <BackgroundTaskRow item={item} now={now} onOpenSubagent={onOpenSubagent} />
 }
 
-function Sections({ nodes, finished, others, now, onOpen }: {
+function Sections({ nodes, finished, others, now, onOpen, onOpenSubagent }: {
   nodes: SessionNode[]
   finished: SessionNode[]
   others: Exclude<SessionWaitItem, DelegatedSessionWait>[]
   now: number
   onOpen: (sessionId: string) => void
+  onOpenSubagent?: (item: BackgroundTaskWait) => void
 }) {
   return (
     <>
@@ -64,7 +71,7 @@ function Sections({ nodes, finished, others, now, onOpen }: {
         <Section title="Waiting on">
           <SessionTree nodes={nodes} now={now} onOpen={onOpen} />
           {others.map((item, index) => (
-            <li key={`${item.kind}:${'id' in item ? item.id : index}`}><OtherRow item={item} now={now} /></li>
+            <li key={`${item.kind}:${'id' in item ? item.id : index}`}><OtherRow item={item} now={now} onOpenSubagent={onOpenSubagent} /></li>
           ))}
         </Section>
       ) : null}
@@ -82,7 +89,12 @@ function Sections({ nodes, finished, others, now, onOpen }: {
  * open and kept live by the invalidations that refresh the session list. A session row that
  * leaves a later response stays, as "No longer available", until the popup closes.
  */
-export default function SessionWaitsPopup({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
+export default function SessionWaitsPopup({ sessionId, onClose, onOpenSubagent }: {
+  sessionId: string
+  onClose: () => void
+  /** Shows a sub-agent's conversation. The popup closes first: the view outlives it. */
+  onOpenSubagent?: (agent: SubagentRef) => void
+}) {
   const openSession = useOpenSession()
   const now = useNow()
   const { data, isError } = useQuery({
@@ -108,6 +120,11 @@ export default function SessionWaitsPopup({ sessionId, onClose }: { sessionId: s
     onClose()
   }
 
+  const openSubagent = onOpenSubagent && ((task: BackgroundTaskWait) => {
+    onOpenSubagent({ id: task.id, description: task.description, agentType: task.agentType })
+    onClose()
+  })
+
   if (!data) return <WaitsNote>{isError ? 'Could not load what this session is waiting on.' : 'Loading…'}</WaitsNote>
   if (empty) return <WaitsNote>Nothing pending</WaitsNote>
   return (
@@ -117,6 +134,7 @@ export default function SessionWaitsPopup({ sessionId, onClose }: { sessionId: s
       others={sections.waiting.others}
       now={now}
       onOpen={open}
+      onOpenSubagent={openSubagent}
     />
   )
 }

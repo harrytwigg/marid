@@ -29,12 +29,20 @@ const REG: EnginesResponse = {
       name: 'antigravity', available: true, defaultModel: 'gemini-3-flash-preview', effortMechanism: 'none',
       models: [{ id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', supportsEffort: false, effortLevels: [] }],
     },
+    opencode: {
+      name: 'opencode', available: true, defaultModel: 'opencode/space-bunny-free', effortMechanism: 'opencode-variant',
+      models: [
+        { id: 'opencode/space-bunny-free', label: 'space-bunny-free', supportsEffort: true, effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
+        { id: 'opencode/exo-free', label: 'exo-free', supportsEffort: true, effortLevels: ['high'] },
+        { id: 'opencode/big-pickle', label: 'big-pickle', supportsEffort: false, effortLevels: [] },
+      ],
+    },
   },
 }
 
 describe('engineList', () => {
   it('returns engine entries as an array', () => {
-    expect(engineList(REG).map((e) => e.name).sort()).toEqual(['antigravity', 'claude', 'codex'])
+    expect(engineList(REG).map((e) => e.name).sort()).toEqual(['antigravity', 'claude', 'codex', 'opencode'])
   })
   it('handles undefined registry', () => {
     expect(engineList(undefined)).toEqual([])
@@ -57,6 +65,19 @@ describe('effortLevelsFor', () => {
   })
   it('returns [] for an effort-less model (antigravity)', () => {
     expect(effortLevelsFor(REG, 'antigravity', 'gemini-3-flash-preview')).toEqual([])
+  })
+})
+
+describe('opencode variants', () => {
+  it('offers each model the levels opencode lists for it, and none for a model without variants', () => {
+    expect(effortLevelsFor(REG, 'opencode', 'opencode/space-bunny-free')).toEqual(['low', 'medium', 'high', 'xhigh', 'max'])
+    expect(effortLevelsFor(REG, 'opencode', 'opencode/exo-free')).toEqual(['high'])
+    expect(effortLevelsFor(REG, 'opencode', 'opencode/big-pickle')).toEqual([])
+  })
+  it('clamps the chosen level to the model switched to', () => {
+    expect(clampEffort(effortLevelsFor(REG, 'opencode', 'opencode/exo-free'), 'xhigh')).toBe('high')
+    expect(clampEffort(effortLevelsFor(REG, 'opencode', 'opencode/big-pickle'), 'xhigh')).toBeUndefined()
+    expect(clampEffort(effortLevelsFor(REG, 'opencode', 'opencode/space-bunny-free'), 'xhigh')).toBe('xhigh')
   })
 })
 

@@ -21,6 +21,7 @@ import path from "node:path"
 
 import { RAW_BACKDROP_BLUR } from "./footguns/backdrop-blur.mjs"
 import { findLeaks, loadPrivateTerms, PRIVATE_TERMS_DEFAULT } from "./footguns/privacy-leak.mjs"
+import { REMOVED_UI_LIBRARY } from "./footguns/removed-ui-libraries.mjs"
 
 const CODE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"])
 const TEXT_EXTENSIONS = new Set([...CODE_EXTENSIONS, ".json", ".md", ".yml", ".yaml", ".sh"])
@@ -66,6 +67,7 @@ function isTest(relPath) {
 
 const RULES = [
   RAW_BACKDROP_BLUR,
+  REMOVED_UI_LIBRARY,
   {
     name: "personal-path",
     message: "an absolute /Users/ path — this repo is published to npm, and the path names its author's machine",

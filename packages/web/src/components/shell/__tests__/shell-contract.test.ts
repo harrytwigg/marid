@@ -14,9 +14,7 @@ const ACCENT_CONTRAST = /text-\[var\(--accent-contrast\)\]/
 const SHEET_SIGNATURE = /animate-sheet-in|rounded-t-\[var\(--radius-2xl\)\]|rounded-t-\[18px\]/
 
 const KNOWN_SHEETS = new Set([
-  "src/routes/todos/new-todo-dialog.tsx",
   "src/routes/todos/pickers/picker-shell.tsx",
-  "src/routes/todos/quick-add/capture-bar.tsx",
   "src/routes/todos/todo-filter-sheet.tsx",
 ])
 

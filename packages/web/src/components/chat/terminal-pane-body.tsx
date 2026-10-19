@@ -1,5 +1,5 @@
 import { lazy, Suspense, useRef, useState, type RefObject } from 'react'
-import { CornerDownLeft } from 'lucide-react'
+import { CornerDownLeft } from '@/components/ui/icon'
 import { CliKeybar } from '@/components/chat/cli-keybar'
 import type { CliTerminalHandle } from '@/components/cli-terminal'
 import { isCoarsePointer } from '@/lib/terminal-input'
