@@ -167,7 +167,7 @@ describe("the fakes as processes", { timeout: 30_000 }, () => {
 
   function runClaude(configDir: string, args: string[]) {
     return spawnSync(process.execPath, [FAKE_CLAUDE, "--settings", settings(), ...args], {
-      cwd: path.join(dir, "work"), env: { ...env(), CLAUDE_CONFIG_DIR: configDir }, input: "", timeout: 8000, encoding: "utf8",
+      cwd: path.join(dir, "work"), env: { ...env(), CLAUDE_CONFIG_DIR: configDir }, input: "", timeout: 8000, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
     });
   }
 
@@ -217,7 +217,7 @@ describe("the fakes as processes", { timeout: 30_000 }, () => {
 
   it("runs an opencode turn by its -m model, writes the ledger and lists the scenario's models", () => {
     fs.writeFileSync(files().scenario, JSON.stringify({ opencode: { "x/limited": "rate-limit", "*": "ok" } }));
-    const run = (model: string) => spawnSync(process.execPath, [FAKE_OPENCODE, "run", "--format", "json", "-m", model], { env: env(), input: "go fc-tag-two", encoding: "utf8", timeout: 8000 });
+    const run = (model: string) => spawnSync(process.execPath, [FAKE_OPENCODE, "run", "--format", "json", "-m", model], { env: env(), input: "go fc-tag-two", encoding: "utf8", timeout: 8000, stdio: ["pipe", "pipe", "pipe"] });
     const limited = run("x/limited");
     expect(limited.status).toBe(1);
     expect(JSON.parse(limited.stdout.trim()).error.data.message).toBe(RATE_LIMIT_TEXT);
@@ -225,7 +225,7 @@ describe("the fakes as processes", { timeout: 30_000 }, () => {
     expect(ledger().map((row) => [row.engine, row.mode, row.model, row.outcome, row.tag])).toEqual([
       ["opencode", "run", "x/limited", "rate-limit", "fc-tag-two"], ["opencode", "run", "y/fine", "ok", "fc-tag-two"],
     ]);
-    const models = spawnSync(process.execPath, [FAKE_OPENCODE, "models"], { env: env(), encoding: "utf8" });
+    const models = spawnSync(process.execPath, [FAKE_OPENCODE, "models"], { env: env(), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     expect(models.stdout.split("\n")).toContain("x/limited");
     expect(modelsListing(true)).toContain("\"providerID\": \"opencode\"");
   });
