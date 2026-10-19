@@ -20,10 +20,7 @@ import { readEngineSpend, type EngineSpendRow } from "../sessions/engine-spend.j
  * An estimate, and the snapshot says so (`status: "snapshot"`). It counts only
  * turns jinn ran: opencode used by hand outside jinn is invisible to it. The
  * windows are treated as trailing, which is exact for a rolling window and
- * conservative for one anchored at first use. A turn the opencode-rate-limit
- * plugin moved to another provider is charged to the model jinn asked for —
- * the plugin only moves a turn after that model refused, so the over-count
- * errs towards reading the allowance as spent, never as spare.
+ * conservative for one anchored at first use.
  */
 
 interface WindowShape { name: string; minutes: number; share: number }

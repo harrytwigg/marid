@@ -54,6 +54,13 @@ vi.mock("node:child_process", () => ({
   }),
 }));
 
+// The machine running the tests may have a model-fallback plugin configured; a turn's error must not depend on that.
+vi.mock("../opencode-internal-fallback.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../opencode-internal-fallback.js")>()),
+  hostHasInternalFallback: () => false,
+  fallbackPluginAbortsTurns: () => false,
+}));
+
 vi.mock("../../shared/logger.js", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));

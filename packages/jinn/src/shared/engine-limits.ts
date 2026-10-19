@@ -299,9 +299,8 @@ async function collectCodexLimits(config: JinnConfig): Promise<EngineLimitEngine
 
 /** Engines with an installed CLI and no quota endpoint to read. OpenCode's
  *  entry is the point here: usage is per provider, and the only local
- *  signal (the opencode-rate-limit plugin) is a 429 seen after the fact. It is
- *  the answer only until `engines.opencode.usageLimits` configures the meter
- *  over jinn's own ledger. */
+ *  signal is a 429 seen after the fact. It is the answer only until
+ *  `engines.opencode.usageLimits` configures the meter over jinn's own ledger. */
 const UNSUPPORTED_REASONS: Record<string, string> = {
   pi: "Pi exposes model capabilities and per-session usage, but no aggregate account quota endpoint.",
   grok: "Grok currently exposes model/session behavior through its CLI, but no stable local quota endpoint is registered.",

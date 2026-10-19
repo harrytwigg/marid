@@ -66,8 +66,10 @@ The version decides four things:
 **Plugins.** opencode plugins written for 1.x (a default-exported `Plugin`
 factory) do not load on 2.x (`Plugin must export a default definition with an
 id and an effect or setup function`). [`examples/opencode-plugins`](../examples/opencode-plugins/)
-has 2.x replacements for a provider-fallback plugin and a pre-stream-400
-retry.
+has a 2.x replacement for a pre-stream-400 retry. opencode no longer falls back
+between models by itself: model and provider hops are gateway
+[fallback chains](fallback-chains.md), and a host that still runs a fallback
+plugin is reported (see [opencode internal fallback is removed](fallback-chains.md#opencode-internal-fallback-is-removed)).
 
 ---
 
@@ -160,8 +162,6 @@ What the meter does not see:
 - **Which model opencode picked for itself.** A turn is charged to the model jinn handed opencode, fixed when the turn is recorded, so changing `engines.opencode.model` later does not move old spend. A turn run with no model at all (neither the session nor `engines.opencode.model` names one, so opencode used its own default) is charged to whatever the default is when it is read.
 - **The provider's own clock.** Windows are treated as trailing. That is exact if Go's windows roll, and conservative if they are anchored at first use.
 - **A per-model engine record.** Engine health has one record per engine, so only the **default model's** windows can mark opencode out. A spent pinned model shows in its bucket, and its next refusal is handled reactively, as before.
-
-A turn that the opencode-rate-limit plugin moves to another provider is charged to the model jinn asked for. The plugin only moves a turn after that model has refused it, so the over-count errs towards reading the allowance as spent, never as spare.
 
 ---
 
@@ -286,9 +286,8 @@ opencode is client/server: its TUI is a client of an HTTP server with a document
 - **A turn that subscribes mid-busy-period.** The stream shows a reply only from its first event onwards, so the same pre-post read also seeds what the turn missed. With the session busy, a reply someone else started that is still running is classed as theirs and as the one running (only when busy: a server killed mid-reply leaves a reply with no completion and no error behind), so an error that ends it (the operator's Esc, an APIError) isn't taken as this turn's. If `/session/status` lists the session as busy, the idle that ends the busy period still ends the turn. An idle only counts once the turn's prompt has been sent: an earlier one ends someone else's busy period. An abort drops every prompt queued behind the one it stops (verified on 1.18.32; the prompt stays in the history with no reply). A turn whose session goes idle with no reply to its prompt at all, and is still not busy, reports `PromptNotRun` rather than a silent empty success.
 - **Supported versions: opencode 1.x from 1.18.31, OpenCode 2 from 2.0.28.** Server mode reads the server's own event and message shapes, which is a less stable contract than the CLI's `--format json`. A server older than its API's minimum, or one that reports no version, is refused. So is a major past 2. That host's turns then run in `run` mode for an hour before server mode is retried. Everything in this list describes the 1.x API; [Server mode on OpenCode 2](#server-mode-on-opencode-2) has what differs on 2.x.
 - **If the server's API changes, the host degrades to `run` mode instead of dropping events.** When a turn goes idle having translated neither an answer nor an error, Jinn reads the session's stored messages. If the answer is there, the stream didn't carry it in a shape Jinn recognises: the turn takes its result from the store (same parts, same translation), the host is switched to `run` mode for an hour, and the session's server is stopped. A turn whose `session.idle` never arrives is caught by a 30-second status poll and handled the same way. A store with neither an answer nor an error is not drift: a reply the server left unfinished, with the session idle, fails the turn ("the opencode server ended the turn without a final assistant response", followed by how the reply ended, e.g. `(its reply finished "stop" with 0 output tokens)`, which is what an empty answer from the provider looks like; or "stopped running the turn before its reply finished" when only the status poll saw it end), and the host keeps server mode and its server.
-- **Provider errors, retries and fallbacks.** opencode does not give up on a provider at the first error: it retries the request in place, and reports each attempt as a `retry` session status carrying the provider's message (on 1.18.35 and 1.19.0, up to five attempts; then `session.error`, the idle, and the failed reply). A provider fallback can also take a turn over. The opencode-rate-limit plugin, on a rate-limit retry or error, aborts the session and posts the prompt's text again, without Jinn's metadata, as a new message on its fallback model. So a turn handles these cases:
-  - **A turn waits instead of ending early.** A turn with no text answer does not end at the first idle or finished reply. It waits 2 s, or 5 s when the idle comes during a provider retry. In that time, any of these takes it up again: a newer reply to its prompt, its prompt re-sent, or a retry of its own reply. A turn with its answer ends as before.
-  - **A re-sent prompt becomes part of the turn.** While the turn has no answer, a user message that repeats its prompt text word for word is adopted as the turn's prompt. Replies to it are the turn's answer, its permissions are granted, and a stop aborts it. Its text part is given Jinn's prompt metadata, so the next turn's history walk reads it as a Jinn prompt, never as the operator's request.
+- **Provider errors, retries and fallbacks.** opencode does not give up on a provider at the first error: it retries the request in place, and reports each attempt as a `retry` session status carrying the provider's message (on 1.18.35 and 1.19.0, up to five attempts; then `session.error`, the idle, and the failed reply). Marid keeps that handling: it is what turns a usage limit into the gateway's rate-limit result, which then moves the session along its [fallback chain](fallback-chains.md). opencode does not switch models on its own; if a host's opencode does (a fallback plugin the operator installed), the gateway reports it and `jinn fallback migrate-opencode` turns its settings into a chain (see [opencode internal fallback is removed](fallback-chains.md#opencode-internal-fallback-is-removed)). So a turn handles these cases:
+  - **A turn waits instead of ending early.** A turn with no text answer does not end at the first idle or finished reply. It waits 2 s. In that time, either of these takes it up again: a newer reply to its prompt, or a retry of its own reply. A turn with its answer ends as before.
   - **Only the turn's own retries count.** A `retry` or busy status belongs to the session, which may be running someone else's prompt. It counts for the turn only while the turn's own reply runs, or before any reply.
   - **A failed turn names the provider's error.** A turn that ends without an answer after a retry leads its error with the provider's message, e.g. `opencode's provider failed: Go usage limit exceeded; the opencode server ended the turn without a final assistant response (…)`. It reads as a usage limit, so the gateway's rate-limit handling applies.
   - **A far-off retry ends the turn.** When opencode's next retry is more than 2 minutes away (a usage window, not a blip) and nothing else happens for 15 s, the turn ends with the provider's words and the retry time as its reset, and the pending retry is aborted on the server. opencode is then recorded as exhausted until that time, the same record as a spent window (see *Usage limits*), even if another provider or model would work.
@@ -352,9 +351,9 @@ verified against 2.0.28 and 2.0.29:
 - **Approvals and questions.**
   - A permission asked by one of the turn's steps is answered `once`.
   - Sessions the turn creates deny the `question` tool, which takes it out of the tool list. A question that still arrives (a form) is dismissed.
-- **Provider retries and fallbacks.**
+- **Provider retries.**
   - opencode reports a retry as `session.retry.scheduled {attempt, at, error}`, and the 1.x rules apply: wait, name the provider's error, and give up on a retry more than 2 minutes away.
-  - A fallback plugin on 2.x switches the session's model from the retry hook, so the fallback answer arrives inside the same turn (see `examples/opencode-plugins`). 1.x plugins, which re-post the prompt instead, do not load on 2.x.
+  - Model fallback is the gateway's ([fallback chains](fallback-chains.md)); a fallback plugin in the host's opencode is reported, not used.
 - **Stops.**
   - A turn whose prompt is still waiting in the inbox is taken back out (`DELETE …/inbox/<id>`), and the operator's execution is not touched.
   - Otherwise the session is interrupted (`POST …/interrupt`), and interrupted again until it has stayed idle for 1.5 s. After 15 s the server is stopped instead.

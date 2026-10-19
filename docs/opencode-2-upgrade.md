@@ -16,7 +16,7 @@ host still on 1.x, and the other way round.
 |---|---|---|
 | Server API | `/global/health`, `/event`, `/session/...` | `/api/*`. Marid detects this and switches. |
 | Plugins | a `Plugin` factory export | `export default { id, setup }`. 1.x plugins fail to load (non-fatal). |
-| `opencode-rate-limit@1.4.0` | works | does not load. Replace it with `examples/opencode-plugins/model-fallback.js`. |
+| `opencode-rate-limit@1.4.0` | works (but see [fallback chains](fallback-chains.md): the gateway reports it) | does not load. Model fallback is a gateway chain; run `jinn fallback migrate-opencode` (step 5). |
 | Credentials | `~/.local/share/opencode/auth.json` | the SQLite DB. Imported automatically from `auth.json` the first time 2.x opens a 1.x data directory. |
 | Sessions DB | `~/.local/share/opencode/opencode.db` | the same file, migrated in place on first start. Session ids are kept, so Marid resumes carry over. |
 | `opencode.json(c)` | v1 keys | v1 keys still read and converted in memory; the file is not rewritten. |
@@ -34,9 +34,10 @@ opencode fallback all work on 2.x as they are.
 - The gateway runs a Marid release with OpenCode 2 support, and every remote
   host has the same `jinn-cli` version (the usual remote requirement).
 - `npm` on each host, to fetch the binary (step 3).
-- The two plugin files from `examples/opencode-plugins/` at the release tag.
-  The `jinn-cli` npm package does not ship `examples/`, so take them from a
-  checkout of the repository at that tag, or download the two files from it.
+- `error-retry.js` from `examples/opencode-plugins/` at the release tag, if the
+  host used the 1.x `error-retry.js`. The `jinn-cli` npm package does not ship
+  `examples/`, so take it from a checkout of the repository at that tag, or
+  download the file from it.
 - Plan a restart. The gateway's opencode servers are stopped by it, and a
   remote host's opencode version is read when the gateway first reaches it,
   so `jinn restart` after upgrading a remote host makes the gateway see the
@@ -92,19 +93,27 @@ Run these as the user that runs opencode on that host. `ARCH` is `x64` or
    `opencode service get` shows it under `env`. Marid's own processes get the
    variable from `engines.opencode.disableFff`, which defaults to on.
 
-5. **Replace the plugins.** From the directory holding the two plugin files
-   (see *Before you start*):
+5. **Replace the plugins, and move model fallback to the gateway.** opencode
+   no longer falls back between models by itself: model and provider hops are
+   gateway [fallback chains](fallback-chains.md). First turn the host's
+   fallback settings into a chain, on the gateway host:
 
    ```sh
-   cp error-retry.js model-fallback.js ~/.config/opencode/plugin/
+   jinn fallback migrate-opencode            # prints the chain; --write adds it to config.yaml
+   ```
+
+   Then, on the host (from the directory holding `error-retry.js`):
+
+   ```sh
+   cp error-retry.js ~/.config/opencode/plugin/
    rm ~/.config/opencode/commands/rate-limit-status.md
    ```
 
    - The first command replaces the 1.x `error-retry.js`.
-   - The fallback plugin provides `/rate-limit-status` itself, so the 1.x command file goes.
+   - The `/rate-limit-status` command came from the fallback plugin, so the command file goes.
    - In `~/.config/opencode/opencode.jsonc`, remove `"opencode-rate-limit@1.4.0"` from `"plugin"`, and remove the key if nothing is left in it.
    - Leave `"model"` and `$schema` as they are.
-   - `~/.opencode/rate-limit-fallback.json` stays unchanged.
+   - Delete `~/.opencode/rate-limit-fallback.json` once `jinn fallback migrate-opencode` has been run. `jinn doctor` confirms no internal fallback is left.
    - The `@opencode-ai/plugin` pins in `~/.config/opencode/package.json` and `~/.opencode/package.json` are unused by 2.x. Leave them for a rollback.
 
 6. **Check credentials and plugins.** The first 2.x command migrates the
@@ -112,12 +121,12 @@ Run these as the user that runs opencode on that host. `ARCH` is `x64` or
 
    ```sh
    opencode auth list                 # both providers listed as stored
-   opencode plugin list               # lists opencode-error-retry and opencode-model-fallback
+   opencode plugin list               # lists opencode-error-retry
    opencode api GET /api/plugin       # their state; repeat once if the first answer is "data":[]
    opencode models --standalone | head
    ```
 
-   `opencode plugin list` shows no state. In `/api/plugin` both should be
+   `opencode plugin list` shows no state. In `/api/plugin` the plugin should be
    `"status":"active"`; the first call can answer `[]` while the plugins load.
    `auth list`, `api` and a bare `opencode` (the TUI) use 2.x's background
    service, start it if it is not running, and leave it running.
@@ -141,8 +150,7 @@ Run these as the user that runs opencode on that host. `ARCH` is `x64` or
 - **The terminal view.** Open the opencode CLI view of that chat. It shows the
   session in OpenCode 2's TUI.
 - **Hand use.** Run `opencode` in a terminal: the TUI starts with the same
-  model and providers, and no "Plugin failed" toast. `/rate-limit-status`
-  takes two Enters: the first completes the command, the second runs it.
+  model and providers, and no "Plugin failed" toast.
 
 ## Roll back to 1.x
 
@@ -154,12 +162,15 @@ Run these as the user that runs opencode on that host. `ARCH` is `x64` or
 
    ```sh
    cp -a "$B/config-opencode/." ~/.config/opencode/
-   rm ~/.config/opencode/plugin/model-fallback.js
    ```
 
    This puts back `opencode.jsonc`, `plugin/error-retry.js` and
-   `commands/rate-limit-status.md`. The 2.x plugin files must not stay in
-   `plugin/`, because 1.x loads every file there.
+   `commands/rate-limit-status.md`. The 2.x `error-retry.js` is replaced by
+   the 1.x one from the backup, because 1.x loads every file in `plugin/`.
+   The restored `opencode.jsonc` lists `opencode-rate-limit@1.4.0` again, which
+   brings back an opencode internal fallback beside the gateway's chains
+   (`jinn doctor` reports it). Leave it out of the restored `"plugin"` list
+   unless that is what you want.
 4. `jinn restart`.
 
 1.19.0 opens the database that 2.x migrated, but each version keeps its own
