@@ -201,6 +201,16 @@ describe("the Hooks page", () => {
     expect(screen.queryByTestId("hooks-problems")).toBeNull()
   })
 
+  it("keeps the last-known hooks when a refresh fails", async () => {
+    renderPage()
+    await screen.findByTestId("hook-row-review-merge")
+    reads.listHooks.mockRejectedValue(new ApiError(500, "API error: 500"))
+    fireEvent.click(screen.getByLabelText("Refresh"))
+    expect(await screen.findByRole("alert")).toBeTruthy()
+    // The rows stay: a failed background read is not permission to blank the list.
+    expect(screen.getByTestId("hook-row-review-merge")).toBeTruthy()
+  })
+
   it("reads a run's payload only when its row is opened", async () => {
     renderPage()
     expect(reads.getHookRun).not.toHaveBeenCalled()

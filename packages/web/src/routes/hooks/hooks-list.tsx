@@ -98,20 +98,22 @@ export function HooksList({
   now: Date
 }) {
   if (loading) return <Skeleton height={180} className="rounded-[var(--radius-xl)]" data-testid="hooks-loading" />
-  // A failed read is not an empty config: the alert above says so, and the
-  // "no hooks configured" line would be a lie about a config we never read.
-  if (error) return null
   return (
     <div className="grid gap-[var(--space-4)]">
-      {problems.length > 0 && <Problems problems={problems} />}
-      {hooks.length === 0 ? (
-        <Empty />
-      ) : (
+      {/* A failed read cannot vouch for the problems list either, so it goes —
+          but the last-known rows stay, the way `use-polled-read` and the cron
+          page keep theirs and let the alert above carry the failure. Empty is
+          the one state a failure must suppress: "no hooks configured" would be
+          a lie about a config we never managed to read. */}
+      {!error && problems.length > 0 && <Problems problems={problems} />}
+      {hooks.length > 0 ? (
         <div className="glass-card overflow-hidden rounded-[var(--radius-xl)] p-[5px]">
           {hooks.map((hook) => (
             <HookRow key={hook.name} hook={hook} now={now} />
           ))}
         </div>
+      ) : error ? null : (
+        <Empty />
       )}
     </div>
   )
