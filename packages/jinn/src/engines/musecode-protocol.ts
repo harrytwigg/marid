@@ -1,6 +1,8 @@
 import type { EngineRunOpts } from "../shared/types.js";
 import { MUSECODE_EFFORT_VOCABULARY } from "../shared/musecode-effort.js";
+import { logger } from "../shared/logger.js";
 import { buildOpencodePrompt } from "./opencode-protocol.js";
+import type { ModelEffortLevels } from "./opencode-variant.js";
 
 /**
  * Muse Code's wire contract, as pure functions: the argv of its MSP host, the
@@ -56,6 +58,20 @@ export function describeMusecodeLaunch(opts: Pick<EngineRunOpts, "model">): stri
 export function museReasoningEffort(level: string | undefined): string | undefined {
   if (!level || level === "none") return undefined;
   return (MUSECODE_EFFORT_VOCABULARY as readonly string[]).includes(level) ? level : undefined;
+}
+
+/**
+ * The `reasoningEffort` a turn sends: {@link museReasoningEffort}'s, and, where the
+ * engine knows each model's levels (`levelsOf`), only one the turn's own model lists.
+ * The session checked the effort against the model it names, which a catalog may not
+ * list, and a fallback runs the turn on another; a level the model rejects would fail
+ * the turn, so it is dropped (and logged) instead.
+ */
+export function museTurnEffort(opts: Pick<EngineRunOpts, "effortLevel" | "model">, levelsOf?: ModelEffortLevels): string | undefined {
+  const effort = museReasoningEffort(opts.effortLevel);
+  if (!effort || !levelsOf || levelsOf(opts.model).includes(effort)) return effort;
+  logger.debug(`Muse Code: effort "${effort}" is not a level of ${opts.model ?? "the default model"}, sending none`);
+  return undefined;
 }
 
 /** The server's own words for a turn that failed because the user is not signed in. */

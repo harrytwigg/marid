@@ -18,9 +18,8 @@ import { createMusecodeEnginePair } from "../musecode-view.js";
 const FAKE = new URL("../../engines/__tests__/fixtures/fake-muse.mjs", import.meta.url).pathname;
 const ID = "01a13fb8-5801-7983-8ae6-77432f86606b";
 
-function pair() {
+function pair(config = { engines: { musecode: { bin: FAKE } } } as unknown as JinnConfig) {
   const lifecycle = new PtyLifecycleManager({ maxLivePtys: 8 });
-  const config = { engines: { musecode: { bin: FAKE } } } as unknown as JinnConfig;
   return createMusecodeEnginePair({ getConfig: () => config, createLifecycle: () => lifecycle, refreshPids: () => {}, engineOptions: {} });
 }
 
@@ -57,5 +56,30 @@ describe("createMusecodeEnginePair", () => {
     expect(pty.hasWarmPty("s2")).toBe(true);
     await work.run({ prompt: "two", cwd: process.cwd(), bin: FAKE, sessionId: "s2", resumeSessionId: first.sessionId });
     expect(pty.hasWarmPty("s2")).toBe(false);
+  }, 30_000);
+
+  it("sends a turn's effort only when its model, or the registry's default for an unset one, lists it", async () => {
+    const log = path.join(state, "requests.jsonl");
+    vi.stubEnv("FAKE_MUSE_LOG", log);
+    const config = {
+      engines: { musecode: { bin: FAKE } },
+      models: {
+        musecode: {
+          default: "narrow",
+          models: [
+            { id: "narrow", supportsEffort: true, effortLevels: ["low", "high"] },
+            { id: "wide", supportsEffort: true, effortLevels: ["low", "high", "max"] },
+          ],
+        },
+      },
+    } as unknown as JinnConfig;
+    const { work, pty } = pair(config);
+    const run = (id: string, model?: string) => work.run({ prompt: "x", cwd: process.cwd(), bin: FAKE, sessionId: id, effortLevel: "max", ...(model ? { model } : {}) });
+    await run("e1");
+    await run("e2", "wide");
+    await run("e3", "unlisted");
+    const efforts = fs.readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((r) => r.method === "turn/start").map((r) => r.params.reasoningEffort);
+    expect(efforts).toEqual([undefined, "max", undefined]);
+    pty.killAll();
   }, 30_000);
 });

@@ -10,8 +10,9 @@ import {
   buildMuseServeArgs,
   buildMusecodePrompt,
   describeMusecodeLaunch,
-  museReasoningEffort,
+  museTurnEffort,
 } from "./musecode-protocol.js";
+import type { ModelEffortLevels } from "./opencode-variant.js";
 import { buildMuseSessionConfig } from "./musecode-mcp.js";
 import { FIRST_EVENT_TIMEOUT_MS, silentTurnResult, watchForSilence } from "./musecode-watchdog.js";
 import { loadMuseAttachments } from "./musecode-attachments.js";
@@ -46,6 +47,11 @@ export interface MusecodeEngineOptions {
    * cannot resume a session its terminal has open.
    */
   releaseView?: (sessionId: string) => Promise<void>;
+  /**
+   * The levels the registry knows for a model (an unset model means the engine's default), read per turn.
+   * A turn sends `reasoningEffort` only when its own model lists it. Without this, any level in Muse's vocabulary is sent.
+   */
+  effortLevels?: () => ModelEffortLevels;
   /** How long an accepted turn may go unheard before it is given up on. Defaults to {@link FIRST_EVENT_TIMEOUT_MS}. */
   firstEventTimeoutMs?: number;
 }
@@ -248,7 +254,7 @@ export class MusecodeEngine implements InterruptibleEngine {
     const sessionId = live.sessionId!;
     const { images, remaining } = loadMuseAttachments(opts.attachments);
     const text = buildMusecodePrompt({ ...opts, attachments: remaining });
-    const effort = museReasoningEffort(opts.effortLevel);
+    const effort = museTurnEffort(opts, this.options.effortLevels?.());
     try {
       const ack = await client.request("turn/start", {
         commandId: uuidv7(),
