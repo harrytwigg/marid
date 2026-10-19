@@ -2,10 +2,17 @@
 
 Head: `58908f607b2661e935996c3b5c69494fad483f33`
 
-This run used fresh, isolated gateways `Workspace A` on 7778 and `Workspace B` on
+This run used fresh, isolated gateways `Alpha` on 7778 and `Beta` on
 7779, an isolated browser profile, and a freshly built and ad-hoc signed
 `Jinn.app`. It did not connect to 7777 or 7788 and did not use the installed
 Jinn home.
+
+The gateways were originally named after the work item that prompted the run.
+The native captures below were made with those names. A fresh capture needs the
+signed macOS bundle, which was not rebuilt when the names were removed, so the
+two names, and the Todo prefix derived from them in the helper line under the
+Company Name field, were replaced in the image pixels with `Alpha` and `Beta`.
+Everything else in each capture is the original.
 
 ## Journey result
 
@@ -14,13 +21,13 @@ Jinn home.
 | 1 | Pass | Browser A paired with a one-time code; `/api/sessions` returned 200, `document.cookie` was empty, and no pairing screen remained. |
 | 2 | Pass | The in-app Todos link navigated with the SPA to `/todos/b/home`; A's origin and HttpOnly session remained intact. Browser screenshots below. |
 | 3 | Pass | The release bundle opened bundled assets at the native `Connect Jinn` screen with no saved profile. A complete ad-hoc signature was required before Keychain storage could be exercised. |
-| 4 | Pass | A paired, became ready, displayed `Workspace A`, and rendered A's settings/data. |
+| 4 | Pass | A paired, became ready, displayed `Alpha`, and rendered A's settings/data. |
 | 5 | Pass | B paired as a second profile while A stayed current; exact-origin Keychain accounts existed independently for ports 7778 and 7779. |
-| 6 | Pass | A→B preserved the Settings route and changed the rendered company identity to `Workspace B`. |
-| 7 | Pass | B→A restored `Workspace A` on the same route. |
+| 6 | Pass | A→B preserved the Settings route and changed the rendered company identity to `Beta`. |
+| 7 | Pass | B→A restored `Alpha` on the same route. |
 | 8 | Controlled harness pass; not live UI | The exact delayed REST/WebSocket quarantine cases passed in `native-gateway-profiles.test.ts`; this run did not inject frames into the release WebView. |
 | 9 | Pass | Removing B removed its profile and exact-origin Keychain entry while A remained ready and usable. |
-| 10 | **Fail** | After re-adding and stopping B, selecting it left A marked current and showed B only as `Gateway is unreachable` in the menu. It did not render the required B-active `Cannot reach Workspace B` retry screen. Tracked as a follow-up Todo. |
+| 10 | **Fail** | After re-adding and stopping B, selecting it left A marked current and showed B only as `Gateway is unreachable` in the menu. It did not render the required B-active `Cannot reach Beta` retry screen. Tracked as a follow-up Todo. |
 | 11 | Controlled harness pass; not live declared-fallback UI | Unsupported, permission-required, and denied results remained distinct across the 42-test focused web run. |
 | 12 | Pass | Fresh browser and native cold starts showed no permission prompt before a gesture; the no-startup-prompt contract also passed. |
 | 13 | Controlled native harness pass | All 17 Rust tests passed, including non-loopback HTTP refusal, native caller confinement, and external-navigation routing. No external URL was opened during this run. |
