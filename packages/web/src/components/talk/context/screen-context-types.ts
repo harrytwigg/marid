@@ -9,6 +9,7 @@ export type PageKind =
   | "logs"
   | "limits"
   | "auto-dispatch"
+  | "hooks"
   | "settings"
   | "settings-plugins"
   | "skills"

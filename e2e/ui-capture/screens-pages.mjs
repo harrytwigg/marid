@@ -86,6 +86,12 @@ export const PAGE_SCREENS = [
     },
   },
   {
+    name: 'hooks',
+    title: 'Hooks',
+    url: () => '/hooks',
+    ready: 'review-merge',
+  },
+  {
     name: 'notes',
     title: 'Notes list',
     url: () => '/notes/all',

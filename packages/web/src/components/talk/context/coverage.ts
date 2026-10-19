@@ -42,6 +42,7 @@ export const TALK_SURFACE_COVERAGE: Record<AppRouteId, TalkSurfaceCoverage> = {
   logs: supported("bounded redacted activity summary", ["read", "filter"], ["refresh"], "focus filtered activity"),
   limits: supported("engine limit windows and freshness", ["read"], ["refresh"], "focus engine limits"),
   "auto-dispatch": supported("board walk status and tick log, sessions started per engine, and usage projection", ["read", "inspect"], ["refresh"], "focus a tick or session"),
+  hooks: supported("configured board hooks and their run log", ["read", "inspect"], ["filter", "refresh", "enable", "disable"], "focus a run or toggle a hook"),
   org: supported("employee, reporting line, and activity", ["list", "inspect"], ["open", "delegate"], "focus employee or resulting chat"),
   settings: supported("active settings and safe configuration summary", ["read"], ["update"], "focus setting"),
   "settings-plugins": supported("plugin inventory and state", ["list", "inspect"], ["enable", "disable", "rescan"], "focus plugin state"),

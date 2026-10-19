@@ -68,8 +68,42 @@ function writeNotes(home) {
     : yaml.replace(/^gateway:\s*$/m, 'gateway:\n  notesEnabled: true'))
 }
 
+// The Hooks screen's fixtures. Todo creation and the status changes the api seed
+// makes fire these, so the run log holds real rows rather than an empty state.
+// `echo` is a permitted command and writes no files.
+const HOOKS_YAML = `hooks:
+  - name: review-merge
+    event: todo.created
+    action:
+      command:
+        run: "echo queued for review"
+  - name: notify-operator
+    event: todo.status_changed
+    match:
+      to: blocked
+    action:
+      command:
+        run: "echo the operator was notified"
+  - name: changelog
+    enabled: false
+    event: todo.status_changed
+    match:
+      to: done
+    action:
+      command:
+        run: "echo changelog entry written"
+`
+
+function writeHooks(home) {
+  const file = path.join(home, 'config.yaml')
+  const yaml = fs.readFileSync(file, 'utf8')
+  if (/^hooks:/m.test(yaml)) return
+  fs.writeFileSync(file, `${yaml.replace(/\n*$/, '')}\n\n${HOOKS_YAML}`)
+}
+
 export function writePages(sandboxHome) {
   writeSkills(sandboxHome)
   writeCron(sandboxHome)
   writeNotes(sandboxHome)
+  writeHooks(sandboxHome)
 }

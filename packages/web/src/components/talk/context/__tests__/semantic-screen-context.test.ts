@@ -125,3 +125,10 @@ describe("the Auto-Dispatch destination", () => {
     expect(describeLocation("/auto-dispatch/extra", "").kind).toBe("other")
   })
 })
+
+describe("the Hooks destination", () => {
+  it("is a page Talk can name, not an unknown path — as its coverage entry claims", () => {
+    expect(describeLocation("/hooks", "")).toMatchObject({ kind: "hooks", path: "/hooks" })
+    expect(describeLocation("/hooks/extra", "").kind).toBe("other")
+  })
+})
