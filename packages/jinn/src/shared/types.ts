@@ -552,7 +552,7 @@ export interface Employee extends RemoteTarget {
   effortLevel?: string;
   /** Whether to notify the parent session when this employee's child session completes. Default: true */
   alwaysNotify?: boolean;
-  /** May move a Todo to `done` with a reason (gateway/work-item-status-lane.ts). YAML-only, hand-edited by the operator: absent from WRITABLE_FIELDS, so no session or API can grant it. Default: false */
+  /** May move a Todo to `done` with a reason (gateway/work-item-status-lane.ts); YAML-only, never in WRITABLE_FIELDS. Default: false */
   closeTodos?: boolean;
   /** Who this employee reports to. String = single parent. Array = primary + dotted-line (future). */
   reportsTo?: string | string[];

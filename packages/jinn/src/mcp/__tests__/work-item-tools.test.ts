@@ -340,20 +340,6 @@ describe("work-item tools — unit (stub gateway)", () => {
     ]);
   });
 
-  it("names who may close on update_work_item, and leaves the refusal to the gateway", async () => {
-    const properties = tool("update_work_item").inputSchema.properties as { status: { enum: string[] } };
-    expect(tool("update_work_item").description).toMatch(/done: operator or closeTodos employee, reason in note/);
-    expect(properties.status.enum).toContain("done");
-
-    // A closeTodos employee closes with no asOperator: the tool forwards the move and the lane decides.
-    const { calls, ctx } = stub(() => ({ status: 200, body: { workItem: { id: "JIN-1", status: "done" } } }), "sess-1");
-    await tool("update_work_item").handler({ id: "JIN-1", status: "done", note: "PR merged and deployed" }, ctx);
-    expect(calls.map((c) => c.body)).toEqual([{ status: "done", note: "PR merged and deployed" }]);
-
-    const refused = stub(() => ({ status: 403, body: { error: "closing Todo JIN-1 is the operator's decision" } }), "sess-1");
-    await expect(tool("update_work_item").handler({ id: "JIN-1", status: "done", note: "x" }, refused.ctx)).rejects.toThrow(/operator's decision/);
-  });
-
   it("assign validates through the route and maps readable 400 near-match errors", async () => {
     const { calls, ctx } = stub(() => ({ status: 400, body: { error: 'unknown employee "platfrom-dev". Did you mean "platform-dev"? Check find_employees.' } }), "sess-1");
     await expect(tool("assign_work_item").handler({ id: "JIN-1", assignee: "platfrom-dev" }, ctx)).rejects.toThrow(

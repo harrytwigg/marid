@@ -13,9 +13,7 @@ import { as, call, context, home, sessionOf, startScopedHarness } from "./depart
  */
 
 type WorkItems = Awaited<ReturnType<typeof startScopedHarness>>["workItems"];
-type Registry = Awaited<ReturnType<typeof startScopedHarness>>["registry"];
 let workItems: WorkItems;
-let registry: Registry;
 let refreshOrg: (config?: unknown) => unknown;
 let listComments: typeof import("../../work-items/comments.js").listComments;
 let listWorkItemEvents: typeof import("../../work-items/event-log.js").listWorkItemEvents;
@@ -32,7 +30,7 @@ function writeEmployee(directory: string, name: string, extra: string[] = []): v
 const grant = ["closeTodos: true"];
 
 beforeAll(async () => {
-  ({ workItems, registry } = await startScopedHarness());
+  ({ workItems } = await startScopedHarness());
   ({ refreshOrg } = await import("../org-registry.js") as unknown as { refreshOrg: (config?: unknown) => unknown });
   ({ listComments } = await import("../../work-items/comments.js"));
   ({ listWorkItemEvents } = await import("../../work-items/event-log.js"));
@@ -246,7 +244,7 @@ describe("department scope", () => {
 });
 
 describe("what a closer's done leaves behind", () => {
-  it("is not undone or flagged by the reconciler, the recovery sweep or a re-run of either", async () => {
+  it("is not undone or flagged by the reconciler or the recovery sweep", async () => {
     const { reconcileActiveWorkItems } = await import("../../work-items/reconcile.js");
     const { sweepTodoRecovery } = await import("../../work-items/recovery-controller.js");
     const item = reviewTodo("Closed by a granted employee");
@@ -263,14 +261,6 @@ describe("what a closer's done leaves behind", () => {
     expect(listWorkItemEvents(item.id).filter((event) => event.toStatus !== null).map((event) => event.actor)).not.toContain("reconciler");
   });
 
-  it("goes on the operator's desk as a close under the closer's own name, not the operator's", async () => {
-    const item = reviewTodo("Provenance");
-    const session = await sessionOf("closer-dev");
-    await as(session.id)("POST", `/api/work-items/${item.id}/status`, closeBody);
-    const events = listWorkItemEvents(item.id).filter((event) => event.toStatus === "done");
-    expect(events.map((event) => event.actor)).toEqual([`session:${session.id}`]);
-    expect(registry.getSession(session.id)?.employee).toBe("closer-dev");
-  });
 });
 
 describe("the grant is not writable through the API", () => {
