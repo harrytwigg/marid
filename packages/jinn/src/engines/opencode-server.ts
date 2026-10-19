@@ -259,6 +259,13 @@ function healthRefusal(health: HealthReading): string | undefined {
   return unsupportedVersionReason(health.version);
 }
 
+/** A request the server answered with a non-2xx status. */
+class RequestStatusError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
 export class OpencodeServerPool {
   private servers = new Map<string, OpencodeServer>();
   private starting = new Map<string, Promise<OpencodeServer>>();
@@ -896,12 +903,9 @@ export class OpencodeServerPool {
     while (Date.now() < deadline) {
       if (server.exited) throw new Error("the server process exited");
       try {
-        const health = await this.request(server, "/global/health", { method: "GET" });
-        // Not JSON: an OpenCode 2 server answers every v1 route with its web UI.
-        // Its own version is on `/api/info`.
-        if (typeof health === "string") return { notJson: true, version: await this.apiInfoVersion(server) };
-        const version = health && typeof health === "object" ? (health as { version?: unknown }).version : undefined;
-        return { notJson: false, version: typeof version === "string" && version ? version : undefined };
+        const reading = await this.readHealth(server);
+        if ("failed" in reading) last = reading.failed;
+        else return reading;
       } catch (err) {
         last = err instanceof Error ? err.message : String(err);
       }
@@ -910,23 +914,34 @@ export class OpencodeServerPool {
     throw new Error(`no healthy answer within ${timeoutMs}ms (${last})`);
   }
 
-  /** The version an OpenCode 2 server reports on `/api/info`, or undefined when
-   *  there is no such route. A request that fails (no answer, or a non-2xx
-   *  status) is tried once more: a server that has only just answered its
-   *  health check can drop one. */
-  private async apiInfoVersion(server: OpencodeServer): Promise<string | undefined> {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      if (attempt > 0) await sleep(HEALTH_POLL_MS);
-      let info: unknown;
-      try {
-        info = await this.request(server, "/api/info", { method: "GET" });
-      } catch {
-        continue;
-      }
-      const version = info && typeof info === "object" ? (info as { version?: unknown }).version : undefined;
-      return typeof version === "string" && version ? version : undefined;
+  /** One health check: what the server says about its version, or why that could not be read. */
+  private async readHealth(server: OpencodeServer): Promise<HealthReading | { failed: string }> {
+    const health = await this.request(server, "/global/health", { method: "GET" });
+    // Not JSON: an OpenCode 2 server answers every v1 route with its web UI.
+    // Its own version is on `/api/info`.
+    if (typeof health === "string") {
+      const info = await this.apiInfoVersion(server);
+      return "failed" in info ? info : { notJson: true, version: info.version };
     }
-    return undefined;
+    const version = health && typeof health === "object" ? (health as { version?: unknown }).version : undefined;
+    return { notJson: false, version: typeof version === "string" && version ? version : undefined };
+  }
+
+  /** What `/api/info` said: a version (possibly none) from a server that
+   *  answered, or `failed` when the request did not get an answer to go by (no
+   *  answer, or a status such as 401 or 5xx). Only a route that is not there (404)
+   *  or an answer without a version is "no version"; a request that failed says
+   *  nothing about the server, so the caller asks again. */
+  private async apiInfoVersion(server: OpencodeServer): Promise<{ failed: string } | { version: string | undefined }> {
+    let info: unknown;
+    try {
+      info = await this.request(server, "/api/info", { method: "GET" });
+    } catch (err) {
+      if (err instanceof RequestStatusError && err.status === 404) return { version: undefined };
+      return { failed: err instanceof Error ? err.message : String(err) };
+    }
+    const version = info && typeof info === "object" ? (info as { version?: unknown }).version : undefined;
+    return { version: typeof version === "string" && version ? version : undefined };
   }
 
   /**
@@ -994,7 +1009,7 @@ export class OpencodeServerPool {
       headers: { ...(init.headers as Record<string, string> | undefined), authorization: basicAuthHeader(server.password) },
       signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
-    if (!res.ok) throw new Error(`${init.method ?? "GET"} ${route} answered ${res.status}`);
+    if (!res.ok) throw new RequestStatusError(`${init.method ?? "GET"} ${route} answered ${res.status}`, res.status);
     const text = await res.text();
     if (!text) return undefined;
     try {
