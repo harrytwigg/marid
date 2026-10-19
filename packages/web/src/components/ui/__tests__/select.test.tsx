@@ -1,3 +1,4 @@
+import "@/test/preload-dialogs"
 import { useState } from "react"
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
@@ -160,11 +161,12 @@ describe("Select inside a dialog", () => {
     return screen.findByRole("listbox")
   }
 
-  it("opens inside the dialog's content and can be pressed", async () => {
+  it("opens above the dialog, not hidden from assistive technology, and can be pressed", async () => {
     const onChange = vi.fn()
     render(<InDialog onChange={onChange} />)
     const list = await open()
-    expect(dialog()?.contains(list)).toBe(true)
+    expect(dialog()?.contains(list)).toBe(false)
+    expect(list.closest("[aria-hidden='true'], [inert]")).toBeNull()
 
     await userEvent.click(screen.getByRole("option", { name: "Apple" }))
 

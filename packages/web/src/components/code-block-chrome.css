@@ -1,0 +1,11 @@
+/* A fenced code block is a slab set into the sheet: a step off the sheet's colour, edged by a hairline
+   and lit along its top, with the language and copy strip as a lighter lid. Tint only, so a thread of
+   blocks never costs a blurred surface. */
+.code-block-wrap {
+  background-color: var(--bg-tertiary);
+  box-shadow: 0 0 0 1px var(--code-border), var(--shadow-subtle), var(--inset-shine);
+}
+.code-block-wrap > [data-code-head] {
+  background-image: var(--glass-sheen), linear-gradient(var(--fill-secondary), var(--fill-secondary));
+  box-shadow: inset 0 -1px 0 var(--code-border);
+}

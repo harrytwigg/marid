@@ -1,6 +1,6 @@
 import * as React from "react"
 import { createPortal } from "react-dom"
-import { Slot } from "radix-ui"
+import { Slot } from "./slot"
 
 import { MenuContentHost, MenuRootProvider, menuPart, preloadMenuPopup, useMenuRoot } from "./menu-root"
 import type { OverlayDomProps } from "./overlay-placement"
@@ -191,7 +191,7 @@ function useOpeners(show: (point: MenuPoint) => void, props: React.ComponentProp
 
 function ContextMenuTrigger({ asChild = false, ...props }: React.ComponentProps<"span"> & { asChild?: boolean }) {
   const { point, show } = usePoint()
-  const Comp = asChild ? Slot.Root : "span"
+  const Comp = asChild ? Slot : "span"
   return <Comp data-slot="context-menu-trigger" data-menu-open={point ? "" : undefined} {...props} {...useOpeners(show, props)} />
 }
 

@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Slot } from "radix-ui"
+import { Slot } from "./slot"
 
 import { MenuContentHost, MenuRootProvider, menuPart, preloadMenuPopup, useMenuRoot, type MenuRootProps } from "./menu-root"
 import type { MenuSearch } from "./menu-popup"
@@ -49,7 +49,7 @@ const fetchPopup = () => void preloadMenuPopup().catch(() => {})
 
 function DropdownMenuTrigger({ asChild = false, ...props }: TriggerProps) {
   const root = useMenuRoot()
-  const Comp = asChild ? Slot.Root : "button"
+  const Comp = asChild ? Slot : "button"
   const { disabled } = props
   return (
     <Comp

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { Archive, ArchiveRestore, Check, Copy, Pencil, Pin, PinOff, Square, Trash2 } from "lucide-react"
+import { Archive, ArchiveRestore, Check, Copy, Pencil, Pin, PinOff, Square, Trash2 } from "@/components/ui/icon"
 import { copyText } from "@/platform"
 import { cn } from "@/lib/utils"
 import {
@@ -45,7 +45,7 @@ export function SessionSelectCheckbox({ checked }: { checked: boolean }) {
           : "border-[var(--text-quaternary)] bg-transparent"
       )}
     >
-      {checked ? <Check className="size-3" strokeWidth={3} /> : null}
+      {checked ? <Check className="size-3" /> : null}
     </span>
   )
 }

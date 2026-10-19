@@ -1,4 +1,5 @@
-import { RefreshCw } from "lucide-react"
+import { RefreshCw } from "@/components/ui/icon"
+import { Button } from "@/components/ui/button"
 import { PageLayout } from "@/components/page-layout"
 import { LargeTitleHeader } from "@/components/shell/large-title-header"
 import { PageScaffold } from "@/components/shell/page-scaffold"
@@ -32,14 +33,9 @@ function Header({ installed, enabled, busy, onRescan }: {
           : `${installed} installed · ${enabled} enabled`
       }
       trailing={
-        <button
-          type="button"
-          aria-label="Rescan the plugins folder"
-          onClick={onRescan}
-          className="grid size-[34px] place-items-center rounded-full text-[var(--text-tertiary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)]"
-        >
-          <RefreshCw size={14} strokeWidth={2.2} className={busy ? "animate-spin" : undefined} aria-hidden />
-        </button>
+        <Button variant="ghost" size="icon-sm" aria-label="Rescan the plugins folder" onClick={onRescan} className="size-[34px] min-h-0 text-[var(--text-tertiary)]">
+          <RefreshCw size={14} className={busy ? "animate-spin" : undefined} aria-hidden />
+        </Button>
       }
     />
   )

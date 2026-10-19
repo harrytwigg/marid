@@ -1,8 +1,9 @@
 import { lazy, Suspense, useState } from "react"
-import { MoreHorizontal } from "lucide-react"
+import { MoreHorizontal } from "@/components/ui/icon"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { SESSION_MENU_CONTENT_CLASS, SESSION_MENU_ITEM_CLASS } from "@/components/chat/session-row-menu"
+import { LoadBoundary } from "@/components/ui/lazy-overlay"
 import type { ArchiveStage } from "./department-archive-dialog"
 
 /* A department board's `⋯`: archive the department, or take it back. Archiving is
@@ -34,9 +35,11 @@ export function DepartmentArchiveMenu({ slug, prefix, archived }: { slug: string
         </DropdownMenuContent>
       </DropdownMenu>
       {stage !== "closed" && (
-        <Suspense fallback={null}>
-          <ArchiveDialog key={stage} slug={slug} prefix={prefix} stage={stage} onClose={() => setStage("closed")} />
-        </Suspense>
+        <LoadBoundary what="The archive dialog" onFailed={() => setStage("closed")}>
+          <Suspense fallback={null}>
+            <ArchiveDialog key={stage} slug={slug} prefix={prefix} stage={stage} onClose={() => setStage("closed")} />
+          </Suspense>
+        </LoadBoundary>
       )}
     </>
   )

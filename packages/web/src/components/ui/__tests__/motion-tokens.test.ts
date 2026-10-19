@@ -15,12 +15,14 @@ const GLOBALS = source("routes/globals.css")
  *  on surfaces nobody has migrated yet and turn this guard into noise. */
 const TOUCHED = [
   "components/ui/dialog.tsx",
+  "components/ui/dialog-popup.tsx",
   "components/ui/dropdown-menu.tsx",
   "components/ui/select.tsx",
   "components/ui/context-menu.tsx",
   "routes/todos/todo-dialog.tsx",
   "routes/todos/new-todo-dialog.tsx",
   "routes/todos/todo-filter-sheet.tsx",
+  "routes/todos/pickers/picker-shell.tsx",
   "components/pill-nav.tsx",
   "components/chat/mobile-tab-bar.tsx",
   "components/chat/chat-tabs.tsx",
@@ -28,12 +30,10 @@ const TOUCHED = [
   "components/ui/menu-popup.tsx",
 ]
 
-/** React Aria's overlays enter and leave on HeroUI's popover classes (`data-entering`, `data-exiting`),
- *  which React Aria waits out before it unmounts, so there is no `data-[state]` pair in them to check. */
-const REACT_ARIA_OVERLAYS = new Set(["components/ui/dropdown-menu.tsx", "components/ui/context-menu.tsx", "components/ui/select.tsx"])
-
-/** The subset of those that open and close, and so owe both halves. */
-const OVERLAYS = TOUCHED.slice(0, 7).filter((file) => !REACT_ARIA_OVERLAYS.has(file))
+/** The modal every dialog, sheet and the lightbox is drawn in. React Aria waits out its enter and exit
+ *  animations (`data-entering`, `data-exiting`) before it unmounts it, so there is no `data-[state]` pair to check;
+ *  the pairs are in this one file, and the files that use the modal name only which pair (`motion`). */
+const MODAL = "components/ui/dialog-popup.tsx"
 
 const DURATION_TOKENS = ["--duration-instant", "--duration-fast", "--duration-base", "--duration-slow"]
 
@@ -82,9 +82,9 @@ function keyframeBody(name: string): string {
   return match[1]
 }
 
-/** `motion-safe:data-[state=open]:animate-pop-in` → `pop-in`. */
-function animationsFor(file: string, state: "open" | "closed"): string[] {
-  const pattern = new RegExp(`data-\\[state=${state}\\]:animate-([a-z-]+)`, "g")
+/** `motion-safe:data-[entering]:animate-pop-in` → `pop-in`. */
+function animationsFor(file: string, state: "entering" | "exiting"): string[] {
+  const pattern = new RegExp(`data-\\[${state}\\]:animate-([a-z-]+)`, "g")
   return [...source(file).matchAll(pattern)].map((m) => m[1])
 }
 
@@ -160,14 +160,16 @@ describe("touched files", () => {
     expect(text).not.toContain("cubic-bezier(")
   })
 
-  it.each(OVERLAYS)("%s animates on the way out as well as in", (file) => {
+  it("animates the modal's scrim and box on the way out as well as in", () => {
     const theme = themeBlock()
-    const entering = animationsFor(file, "open")
-    const leaving = animationsFor(file, "closed")
-    expect(entering.length, `${file} enter animations`).toBeGreaterThan(0)
+    const entering = animationsFor(MODAL, "entering")
+    const leaving = animationsFor(MODAL, "exiting")
+    expect(entering.length, `${MODAL} enter animations`).toBeGreaterThan(0)
     expect(leaving).toHaveLength(entering.length)
     for (const name of [...entering, ...leaving]) {
       expect(theme, `--animate-${name}`).toContain(`--animate-${name}:`)
     }
+    // Every enter has the exit that undoes it, so nothing leaves on a different curve than it arrived.
+    expect(leaving.map((name) => name.replace(/-out$/, ""))).toEqual(entering.map((name) => name.replace(/-in$/, "")))
   })
 })

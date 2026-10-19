@@ -1,6 +1,6 @@
 import { type ComponentType, type MouseEvent as ReactMouseEvent, type ReactNode, useEffect } from "react"
 import { Link, useLocation } from "react-router-dom"
-import { PanelLeft } from "lucide-react"
+import { PanelLeft } from "@/components/ui/icon"
 import { useSettings } from "@/routes/settings-provider"
 import { useNavigation } from "@/lib/use-navigation"
 import { cn } from "@/lib/utils"

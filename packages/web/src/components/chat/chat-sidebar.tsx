@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef, useCallback, useMemo, startTransiti
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
-import { Archive, CalendarClock, ChevronDown, ChevronRight, Clock3, EllipsisVertical, Focus, Layers, ListChecks, ListTree, Pin, Plus, Search, SquarePen, Trash2, X } from "lucide-react"
+import { Archive, CalendarClock, ChevronDown, ChevronRight, Clock3, EllipsisVertical, Focus, Layers, ListChecks, ListTree, Pin, Plus, Search, SquarePen, Trash2, X } from "@/components/ui/icon"
 import { api, type Employee, type SessionsResponse } from "@/lib/api"
 import { useOrg } from "@/hooks/use-employees"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
@@ -336,7 +336,7 @@ const SessionRow = React.memo(function SessionRow({
               ? "pl-11"
               : "pl-6",
             sessionIsActive
-              ? "border-l-[var(--text-tertiary)] bg-[var(--fill-secondary)]"
+              ? "border-l-[var(--accent)] bg-[var(--accent-fill)]"
               : "border-l-transparent hover:bg-[var(--fill-tertiary)]"
           )}
         >
@@ -524,7 +524,7 @@ const FlatSessionRow = React.memo(function FlatSessionRow({
             "group/flat relative flex w-full items-center gap-2.5 border-l-2 py-[7px] pl-3.5 pr-3 text-left transition-colors",
             tree && "gap-1.5",
             isActive
-              ? "border-l-[var(--text-tertiary)] bg-[var(--fill-secondary)]"
+              ? "border-l-[var(--accent)] bg-[var(--accent-fill)]"
               : "border-l-transparent hover:bg-[var(--fill-tertiary)]"
           )}
           style={tree ? { paddingLeft: treeRowPadding(tree.depth, "desktop") } : undefined}
@@ -750,7 +750,7 @@ const EmployeeRow = React.memo(function EmployeeRow({
             className={cn(
               "group/emp relative flex w-full items-center gap-2.5 border-l-2 py-2 pl-3.5 pr-3 text-left transition-colors",
               isActive
-                ? "border-l-[var(--text-tertiary)] bg-[var(--fill-secondary)]"
+                ? "border-l-[var(--accent)] bg-[var(--accent-fill)]"
                 : "border-l-transparent hover:bg-[var(--fill-tertiary)]"
             )}
           >
@@ -1946,7 +1946,7 @@ export function ChatSidebar({
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  <Icon className="size-[15px]" strokeWidth={2} />
+                  <Icon className="size-[15px]" />
                 </button>
               ))}
             </div>

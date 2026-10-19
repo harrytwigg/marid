@@ -1,6 +1,6 @@
 import "@/test/preload-menus"
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactElement } from 'react'
@@ -168,6 +168,23 @@ describe('ModelSelectorRow chip', () => {
     renderRow(<ModelSelectorRow mode="new" value={{ engine: 'antigravity', model: 'gemini-3-flash-preview' }} onChange={() => {}} />)
     const chip = screen.getByRole('button', { name: /model and effort/i })
     expect(chip.getAttribute('aria-label')).toBe('Model and effort: Gemini 3 Flash')
+  })
+
+  it('shows "Default" for a session with no effort set, not a fabricated tier', () => {
+    // The engine sends nothing and runs its own default (Muse Code's is `high`),
+    // so the chip must not claim "Medium" from the model's level list.
+    renderRow(<ModelSelectorRow mode="existing" value={{ engine: 'claude', model: 'opus' }} onChange={() => {}} />)
+    const chip = screen.getByRole('button', { name: /model and effort/i })
+    expect(chip.getAttribute('aria-label')).toBe('Model and effort: Opus 4.8 · Default')
+  })
+
+  it('marks no effort pill when the session has no effort set', async () => {
+    renderRow(<Harness mode="existing" initial={{ engine: 'claude', model: 'opus' }} />)
+    openMenu()
+    const row = await screen.findByTestId('effort-levels')
+    const pressed = within(row).getAllByRole('button').map((b) => b.getAttribute('aria-pressed'))
+    expect(pressed.length).toBeGreaterThan(0)
+    expect(pressed).not.toContain('true')
   })
 
   it('renders nothing extra (one trigger) — engine/model/effort all live in one dropdown', () => {

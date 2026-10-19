@@ -1,6 +1,7 @@
 import * as React from "react"
 
 import type { MenuParts, MenuPopupProps } from "./menu-popup"
+import { reportLoadFailure } from "@/lib/report-load-failure"
 import { returnFocusTo } from "./menu-focus"
 import { scheduleMenuWarmup } from "./menu-warmup"
 
@@ -148,6 +149,7 @@ export function MenuContentHost({ children, ...props }: Omit<MenuPopupProps, "ro
   return (
     <LoadBoundary
       onFail={() => {
+        reportLoadFailure("The menu")
         setFailed(true)
         root.change(false)
       }}

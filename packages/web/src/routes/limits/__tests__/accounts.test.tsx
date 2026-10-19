@@ -60,7 +60,7 @@ describe("LimitsPage — accounts", () => {
   it("renders one card per engine and no group headings without an accounts block", () => {
     const { container } = show(undefined)
     expect(screen.queryAllByTestId("account-group")).toHaveLength(0)
-    expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["claude", "codex"])
+    expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["Claude", "Codex"])
     expect(screen.queryAllByRole("heading", { level: 3 })).toHaveLength(0)
     expect(container.textContent).not.toMatch(/Used by|At limit|Host asleep|No live reading/)
   })
@@ -73,15 +73,40 @@ describe("LimitsPage — accounts", () => {
       ],
     })
     const [group] = screen.getAllByTestId("account-group")
-    expect(within(group).getByRole("heading", { level: 2 }).textContent).toBe("claude")
-    expect(within(group).getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["claude", ".claude-friend"])
+    expect(within(group).getByRole("heading", { level: 2 }).textContent).toBe("Claude")
+    expect(within(group).getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["Claude", ".claude-friend"])
     // codex has one account: its card sits under its own "Other engines" heading, never in the Claude group.
-    expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["claude", "Other engines"])
+    expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["Claude", "Other engines"])
     const others = screen.getByTestId("other-engines")
-    expect(within(others).getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["codex"])
+    expect(within(others).getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["Codex"])
     expect(within(group).queryByText("codex")).toBeNull()
     expect(within(card(".claude-friend")).getByText("Used by side-dev, side-qa")).toBeTruthy()
-    expect(within(card("claude")).queryByText(/Used by/)).toBeNull()
+    expect(within(card("Claude")).queryByText(/Used by/)).toBeNull()
+  })
+
+  it("spells an engine the way the project does — 'Muse Code', lowercase 'opencode'", () => {
+    state = {
+      phase: "ready", refreshing: false, error: null, now, refresh: () => {},
+      data: {
+        generatedAt: iso(0),
+        default: "musecode",
+        engines: { musecode: engine("musecode"), opencode: engine("opencode") },
+        accounts: {
+          musecode: [
+            account("musecode", "musecode", { name: "musecode" }),
+            account("musecode:ab12cd34", ".muse-work", { name: "musecode" }),
+          ],
+        },
+      },
+    }
+    render(<LimitsPage />)
+    // Group heading and the default account's own card both read "Muse Code";
+    // a CSS `capitalize` would have rendered both as "Musecode".
+    expect(screen.getAllByText("Muse Code")).toHaveLength(2)
+    // The single-account engine stays lowercase — it is how the project spells it.
+    expect(screen.getByText("opencode")).toBeTruthy()
+    expect(screen.queryByText("Musecode")).toBeNull()
+    expect(screen.queryByText("Opencode")).toBeNull()
   })
 
   it("names the host beside the plan on a remote account's card", () => {

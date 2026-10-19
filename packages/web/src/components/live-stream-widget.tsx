@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Copy, Minimize2, X } from "lucide-react"
+import { Copy, Minimize2, X } from "@/components/ui/icon"
 import { api } from "@/lib/api"
 import { parseLogLine } from "@/components/activity/log-browser"
 import type { ParsedLogEntry } from "@/components/activity/log-browser"

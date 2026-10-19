@@ -6,14 +6,15 @@ import { cn } from "@/lib/utils"
 import { EmojiPicker } from "@/components/ui/emoji-picker"
 import { OPERATOR_DEFAULT_EMOJI } from "@/components/ui/employee-avatar"
 import { useSettings } from "@/routes/settings-provider"
-import { CONTROL_CLASS } from "./shared"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { FIELD_CLASS } from "./shared"
 
 /* The two identity emoji controls in Branding. Each owns its picker state, so
  * the settings page carries one line per row instead of the whole popover. */
 
 const LABEL_CLASS = "block text-[length:var(--text-caption1)] text-[var(--text-tertiary)] mb-[var(--space-1)]"
-const SWATCH_CLASS =
-  "flex size-[44px] cursor-pointer items-center justify-center rounded-[13px] border-none bg-[var(--fill-quaternary)] text-[26px] leading-none transition-colors hover:bg-[var(--fill-tertiary)]"
+const SWATCH_CLASS = "size-[44px] min-h-0 shrink-0 rounded-[13px] p-0 text-[26px] leading-none"
 
 const ERROR_CLASS =
   "mt-[var(--space-2)] rounded-[var(--radius-lg)] p-[8px_10px] text-[length:var(--text-caption1)] text-[var(--system-red)]"
@@ -49,15 +50,15 @@ export function OperatorEmojiRow() {
     <div>
       <label className={LABEL_CLASS}>Operator Emoji</label>
       <div className="relative flex items-center">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           onClick={() => setPickerOpen(!pickerOpen)}
           aria-label="Choose operator emoji"
           aria-expanded={pickerOpen}
           className={SWATCH_CLASS}
         >
           {current}
-        </button>
+        </Button>
         {pickerOpen && (
           <EmojiPicker current={current} onSelect={choose} onClose={() => setPickerOpen(false)} />
         )}
@@ -89,18 +90,18 @@ export function PortalEmojiRow() {
     <div>
       <label className={LABEL_CLASS}>Portal Emoji</label>
       <div className="relative flex items-center gap-[var(--space-3)]">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           onClick={() => setPickerOpen(!pickerOpen)}
           aria-label="Choose portal emoji"
           aria-expanded={pickerOpen}
           className={SWATCH_CLASS}
         >
           {current || <BrandMark size={30} />}
-        </button>
-        <input
+        </Button>
+        <Input
           type="text"
-          className={cn(CONTROL_CLASS, "w-[96px] text-center")}
+          className={cn(FIELD_CLASS, "w-[96px] text-center")}
           placeholder="Default"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}

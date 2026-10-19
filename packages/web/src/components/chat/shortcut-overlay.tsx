@@ -1,6 +1,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { X } from 'lucide-react'
+import { X } from '@/components/ui/icon'
 import type { ShortcutDef } from '@/hooks/use-keyboard-shortcuts'
 import { SHORTCUT_CATEGORY_ORDER, formatShortcutKeys } from '@/lib/shortcut-catalog'
 

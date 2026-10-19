@@ -16,9 +16,12 @@ function filesBelow(root) {
 
 test("the converter is root-only, unshipped, and has no apply entry point", () => {
   const packageJson = JSON.parse(fs.readFileSync(path.join(repositoryRoot, "packages/jinn/package.json"), "utf8"));
-  // The published set gained the node-pty permissions postinstall script; the point of this
-  // assertion is that the converter never joins it, not that the list never grows.
-  assert.deepEqual(packageJson.files, ["dist/", "template/", "assets/", "scripts/fix-node-pty-permissions.mjs"]);
+  // The published set is free to grow; the point of this assertion is that the converter
+  // never joins it, not that the list never grows.
+  assert.ok(
+    Array.isArray(packageJson.files) && packageJson.files.every((entry) => !entry.includes("prerelease-todo-converter")),
+    `packages/jinn/package.json "files" must not publish the converter, got ${JSON.stringify(packageJson.files)}`,
+  );
 
   for (const file of filesBelow(path.join(repositoryRoot, "packages"))) {
     if (!/\.(?:[cm]?[jt]sx?|json|md)$/.test(file) || file.includes(`${path.sep}dist${path.sep}`)) continue;

@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from "react"
-import { FileText, Image as ImageIcon, Paperclip, X } from "lucide-react"
+import { FileText, Image as ImageIcon, Paperclip, X } from "@/components/ui/icon"
 import { api, type WorkItemAttachmentWire } from "@/lib/api"
 import { useFileDrop } from "@/hooks/use-file-drop"
 import { Button } from "@/components/ui/button"
@@ -69,7 +69,7 @@ export function AttachmentsSection({
       onClick={() => onRemove(attachment)}
       className={`focus-outline grid place-items-center opacity-0 outline-none transition-opacity focus-visible:opacity-100 ${className}`}
     >
-      <X size={12} strokeWidth={2.2} aria-hidden />
+      <X size={12} aria-hidden />
     </button>
   )
 
@@ -83,7 +83,7 @@ export function AttachmentsSection({
         onClick={() => inputRef.current?.click()}
         className="-ml-2 flex-none text-[var(--text-quaternary)]"
       >
-        <Paperclip size={15} strokeWidth={1.8} aria-hidden />
+        <Paperclip size={15} aria-hidden />
       </Button>
       {itemLevel.length > 0 && (
         <div data-testid="attachment-strip" className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -113,7 +113,7 @@ export function AttachmentsSection({
                   className="focus-outline flex min-w-0 items-center gap-2 rounded-lg outline-none"
                 >
                   <span className="grid size-6 flex-none place-items-center rounded-[7px] bg-[var(--fill-secondary)] text-[var(--text-tertiary)]">
-                    {isImageMime(attachment.mime) ? <ImageIcon size={12} strokeWidth={1.8} aria-hidden /> : <FileText size={12} strokeWidth={1.8} aria-hidden />}
+                    {isImageMime(attachment.mime) ? <ImageIcon size={12} aria-hidden /> : <FileText size={12} aria-hidden />}
                   </span>
                   <span className="max-w-[160px] truncate text-[12.5px] font-medium text-[var(--text-primary)]">{attachment.filename}</span>
                 </a>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { MarkdownView, SyntaxHighlighter, oneDark, oneLight } from "../markdown-view";
-import { ExternalLink, ArrowLeft } from "lucide-react";
+import { ExternalLink, ArrowLeft } from "@/components/ui/icon";
 import { useTheme } from "@/routes/providers";
 import { buildFileReadRequest } from "@/lib/file-read-request";
 import { authFetch } from "@/lib/auth";

@@ -6,6 +6,7 @@ import { EmployeeDetail } from "@/components/org/employee-detail";
 import { DepartmentPanel } from "@/components/org/department-panel";
 import { useDepartments } from "@/hooks/use-departments";
 import { isConfined, type DepartmentScopeWire } from "@/lib/department-api";
+import { Button } from "@/components/ui/button";
 import { PageLayout } from "@/components/page-layout";
 import { useSettings } from "@/routes/settings-provider";
 import { PRODUCT_NAME } from "@/lib/brand"
@@ -136,12 +137,7 @@ export default function OrgPage() {
           <div className="rounded-[var(--radius-md,12px)] px-[var(--space-4)] py-[var(--space-3)] text-[length:var(--text-body)] text-[var(--system-red)]" style={{ background: "color-mix(in srgb, var(--system-red) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--system-red) 30%, transparent)" }}>
             Failed to load organization: {error}
           </div>
-          <button
-            onClick={loadData}
-            className="px-[var(--space-4)] py-[var(--space-2)] rounded-[var(--radius-md,12px)] bg-[var(--accent)] text-[var(--accent-contrast)] border-none cursor-pointer text-[length:var(--text-body)] font-[var(--weight-semibold)]" // jinn-shell: ok error retry, not page chrome
-          >
-            Retry
-          </button>
+          <Button type="button" onClick={loadData}>Retry</Button>
         </div>
       </PageLayout>
     );
@@ -184,14 +180,17 @@ export default function OrgPage() {
             <div className="w-full sm:w-[420px] lg:w-[468px] xl:w-[520px] max-w-[100vw] h-full overflow-y-auto bg-[var(--bg)] flex flex-col shadow-[var(--shadow-overlay)]">
               {/* Close button */}
               <div className="sticky top-0 z-10 flex items-center justify-end px-[var(--space-4)] py-[var(--space-3)] bg-[var(--bg)]">
-                <button
+                <Button
                   ref={closeRef}
+                  type="button"
+                  variant="secondary"
+                  size="icon-sm"
+                  className="rounded-full"
                   onClick={() => openPanel(null)}
                   aria-label="Close detail panel"
-                  className="w-[30px] h-[30px] rounded-full flex items-center justify-center bg-[var(--fill-tertiary)] text-[var(--text-secondary)] border-none cursor-pointer text-sm"
                 >
                   &#x2715;
-                </button>
+                </Button>
               </div>
 
               {/* Employee or department detail */}
