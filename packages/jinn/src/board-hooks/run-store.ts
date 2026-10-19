@@ -23,7 +23,7 @@ export interface NewRun {
   eventId: string;
   todoId: string;
   action: HookRunAction;
-  status: "running" | "suppressed" | "error";
+  status: HookRunStatus;
   payload: unknown;
   chain: string[];
   error?: string;

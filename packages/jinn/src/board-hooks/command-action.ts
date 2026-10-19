@@ -15,7 +15,17 @@ const liveCommands = new Set<ChildProcess>();
 
 /** Stop every command still running (gateway shutdown, tests). */
 export function stopHookCommands(): void {
-  for (const child of liveCommands) child.kill("SIGTERM");
+  for (const child of liveCommands) endCommand(child);
+}
+
+/** SIGTERM the command's whole process group, so a shell's children go with it and release the output pipes. */
+function endCommand(child: ChildProcess): void {
+  try {
+    if (child.pid !== undefined) process.kill(-child.pid, "SIGTERM");
+    else child.kill("SIGTERM");
+  } catch {
+    child.kill("SIGTERM");
+  }
 }
 
 export function hookCommandEnv(payload: HookPayload, json: string): Record<string, string> {
@@ -71,6 +81,7 @@ export async function runCommandAction(command: BoardHookCommand, payload: HookP
     cwd: command.cwd ?? JINN_HOME,
     env: hookCommandEnv(payload, json),
     stdio: ["pipe", "pipe", "pipe"],
+    detached: true,
   });
   return runChild(child, json);
 }
