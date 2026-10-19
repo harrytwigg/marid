@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { ChevronRight, Search } from "lucide-react"
+import { ChevronRight, Search } from "@/components/ui/icon"
 import { api } from "@/lib/api"
 import { filterSkills, type SkillSummary } from "@/lib/skills"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { PageLayout } from "@/components/page-layout"
 import { LargeTitleHeader } from "@/components/shell/large-title-header"
 import { PageScaffold } from "@/components/shell/page-scaffold"
@@ -30,7 +32,7 @@ function SkillRow({ skill, onOpen }: { skill: SkillSummary; onOpen: (name: strin
           {skill.description || "No description"}
         </span>
       </span>
-      <ChevronRight size={14} strokeWidth={2.4} className="flex-none text-[var(--text-quaternary)]" aria-hidden />
+      <ChevronRight size={14} className="flex-none text-[var(--text-quaternary)]" aria-hidden />
     </button>
   )
 }
@@ -38,7 +40,7 @@ function SkillRow({ skill, onOpen }: { skill: SkillSummary; onOpen: (name: strin
 function ListSkeleton() {
   const widths = ["34%", "46%", "28%", "40%"]
   return (
-    <div className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[5px] shadow-[var(--shadow-card)]" data-testid="skills-skeleton" aria-hidden>
+    <div className="glass-card rounded-[var(--radius-xl)] p-[5px]" data-testid="skills-skeleton" aria-hidden>
       {widths.map((w, i) => (
         <div key={i} className="flex min-h-[56px] flex-col justify-center gap-2 py-[9px] pl-3.5 pr-3">
           <span
@@ -89,14 +91,15 @@ export default function SkillsPage() {
                 : "Playbooks your employees load on demand"
             }
             trailing={
-              <label className="inline-flex h-[30px] w-[220px] items-center gap-[7px] rounded-full bg-[var(--fill-tertiary)] px-3 text-[length:var(--text-footnote)] text-[var(--text-quaternary)] transition-colors focus-within:text-[var(--text-tertiary)] max-[500px]:w-full">
-                <Search size={12} strokeWidth={2.4} className="flex-none" aria-hidden />
-                <input
+              <label className="relative inline-flex w-[220px] items-center max-[500px]:w-full">
+                <Search size={12} className="pointer-events-none absolute left-3 text-[var(--text-quaternary)]" aria-hidden />
+                <Input
                   data-testid="skills-search"
+                  aria-label="Search skills"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search skills"
-                  className="w-full min-w-0 border-none bg-transparent text-[length:var(--text-footnote)] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-quaternary)]"
+                  className="rounded-full pl-8"
                 />
               </label>
             }
@@ -115,7 +118,7 @@ export default function SkillsPage() {
               {skillsQuery.error instanceof Error ? skillsQuery.error.message : "Failed to load skills"}
             </div>
           ) : skills.length === 0 ? (
-            <div className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] shadow-[var(--shadow-card)]" data-testid="skills-empty">
+            <div className="glass-card rounded-[var(--radius-xl)]" data-testid="skills-empty">
               <div className="px-6 py-12 text-center">
                 <h3 className="text-[length:var(--text-title3)] font-bold tracking-[var(--tracking-tight)] text-[var(--text-primary)]">
                   No skills yet
@@ -128,16 +131,12 @@ export default function SkillsPage() {
           ) : shown.length === 0 ? (
             <div className="px-6 py-14 text-center" data-testid="skills-no-match">
               <p className="text-[length:var(--text-subheadline)] text-[var(--text-tertiary)]">No skills match.</p>
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                className="mt-2 text-[length:var(--text-footnote)] font-medium text-[var(--accent)] transition-opacity hover:opacity-80"
-              >
+              <Button variant="link" className="mt-2" onClick={() => setQuery("")}>
                 Clear search
-              </button>
+              </Button>
             </div>
           ) : (
-            <div className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[5px] shadow-[var(--shadow-card)]" data-testid="skills-list">
+            <div className="glass-card rounded-[var(--radius-xl)] p-[5px]" data-testid="skills-list">
               {shown.map((skill) => (
                 <SkillRow key={skill.name} skill={skill} onOpen={onOpen} />
               ))}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { FileText, Globe, Search, Terminal, Wrench } from 'lucide-react'
+import { FileText, Globe, Search, Terminal, Wrench } from '@/components/ui/icon'
 import { ChatMessages, toolGlyphForName } from '../chat-messages'
 import type { Message } from '@/lib/conversations'
 
@@ -160,9 +160,9 @@ describe('ChatMessages tool groups', () => {
     const queuedRow = within(group).getByText('inspect_repo').closest('div')
     const runningRow = within(group).getByText('run_tests').closest('div')
 
-    expect(doneRow?.querySelector('.lucide-check')).not.toBeNull()
-    expect(queuedRow?.querySelector('.lucide-circle')).not.toBeNull()
-    expect(runningRow?.querySelector('.lucide-loader-circle')).not.toBeNull()
+    expect(doneRow?.querySelector('[data-icon="Check"]')).not.toBeNull()
+    expect(queuedRow?.querySelector('[data-icon="Circle"]')).not.toBeNull()
+    expect(runningRow?.querySelector('[data-icon="Loader2"]')).not.toBeNull()
     expect(within(group).getAllByLabelText('Running')).toHaveLength(1)
   })
 

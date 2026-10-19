@@ -83,7 +83,12 @@ describe('Settings stale chat controls', () => {
     const toggle = await screen.findByRole('switch', { name: 'Suggest fresh chats' })
     const tokenThreshold = screen.getByRole('spinbutton', { name: 'Context token threshold' })
     const idleMinutes = screen.getByRole('spinbutton', { name: 'Idle minutes' })
-    expect(toggle.className).toContain('h-[34px]')
+    // The press lands on the label around the track, not on the 24px track: at
+    // least 40px tall on a phone, 34px from md, and about 44px wide.
+    const target = toggle.closest('[data-slot="switch-content"]')!
+    expect(target.className).toContain('min-h-[40px]')
+    expect(target.className).toContain('md:min-h-[34px]')
+    expect(target.className).toContain('min-w-[44px]')
     expect(tokenThreshold.hasAttribute('disabled')).toBe(true)
     expect(idleMinutes.hasAttribute('disabled')).toBe(true)
 

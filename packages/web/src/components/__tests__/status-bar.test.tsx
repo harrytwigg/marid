@@ -54,6 +54,14 @@ describe("StatusBar in PageLayout", () => {
     expect(workspace.compareDocumentPosition(theme) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
+  it("is tint only: nothing scrolls beneath a flow sibling, so it takes no blur", () => {
+    const { container } = renderPage()
+
+    const bar = within(container.querySelector("main")!).getByLabelText(/Theme:/).parentElement!
+    expect(bar.classList.contains("glass-tint-bar")).toBe(true)
+    expect(bar.className).not.toMatch(/glass-float|backdrop/)
+  })
+
   it("still cycles the theme from the bar", () => {
     renderPage()
 

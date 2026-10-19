@@ -33,6 +33,7 @@ import {
 } from "../shared/template-materialization.js";
 import { PRODUCT_NAME } from "../shared/brand.js";
 import { settleGatewayPort } from "./setup-port.js";
+import { NAMES } from "../shared/codename.js";
 
 const GREEN = "\x1b[32m";
 const YELLOW = "\x1b[33m";
@@ -233,8 +234,8 @@ function detectProjectContext(portalSlug: string): void {
   }
 }
 
-const DEFAULT_CONFIG = `jinn:
-  version: "${getPackageVersion()}"
+const DEFAULT_CONFIG = `${NAMES.codename}:
+  version: "${getPackageVersion()}"${NAMES.renamed ? `\n  mcpServerName: ${NAMES.codename}` : ""}
 
 gateway:
   port: 7777

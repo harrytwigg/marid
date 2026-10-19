@@ -28,6 +28,7 @@ import {
   type AntigravityMcpConfigHandle,
 } from "./antigravity-mcp.js";
 import { employeeSessionEnv } from "../sessions/employee-env.js";
+import { findBuiltinMcp } from "../mcp/builtin-name.js";
 
 /**
  * Antigravity (`agy`) interactive PTY adapter, modeled on InteractiveClaudeEngine.
@@ -259,7 +260,7 @@ export class AntigravityEngine implements InterruptibleEngine, PtyViewEngine {
       cwd,
       model: opts.model,
       bin: opts.bin,
-      mcpAttached: Boolean(opts.resolvedMcp?.mcpServers?.jinn),
+      mcpAttached: Boolean(findBuiltinMcp(opts.resolvedMcp?.mcpServers)),
     })) {
       this.lifecycle.releaseSession(jinnSessionId);
       warm = undefined;

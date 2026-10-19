@@ -2,6 +2,7 @@
  * Entry point for the daemon child process.
  * Spawned by lifecycle.ts startDaemon().
  */
+import "../shared/adopt-legacy-env-entry.js";
 import { assertNativeRuntime, repairNodePtySpawnHelper } from "../shared/runtime-guard.js";
 
 // Verify the native DB addon loads under this Node BEFORE the imports below pull

@@ -4,6 +4,8 @@ import type { McpServerStdioConfig, McpServerUrlConfig, ResolvedMcpConfig } from
 import { MCP_TOOLSET_ARG } from "../mcp/identity.js";
 import { buildBoardWalkTools } from "../mcp/board-walk-tools.js";
 import { JINN_HOME } from "../shared/paths.js";
+import { findBuiltinMcp } from "../mcp/builtin-name.js";
+import { LEGACY_CODENAME } from "../shared/codename.js";
 import type { OpencodeApi } from "./opencode-version.js";
 
 /**
@@ -57,18 +59,18 @@ import type { OpencodeApi } from "./opencode-version.js";
  *  passes to `--agent` (board-walk/route-turn.ts). */
 export const OPENCODE_WALK_AGENT = "jinn-walk";
 
-/** The opencode tool names the board-walk toolset exposes: the `jinn` server
- *  prefix joined to each tool the toolset serves. Read from the toolset, never
+/** The opencode tool names the board-walk toolset exposes: the built-in server's
+ *  registered name joined to each tool the toolset serves. Read from the toolset, never
  *  hand-typed, so a new walk tool joins the allowlist on its own. */
-export function boardWalkOpencodeTools(): string[] {
-  return buildBoardWalkTools().map((tool) => `jinn_${tool.name}`);
+export function boardWalkOpencodeTools(serverName: string = LEGACY_CODENAME): string[] {
+  return buildBoardWalkTools().map((tool) => `${serverName}_${tool.name}`);
 }
 
 /** The confined agent's permission map: deny by default, then allow each of the
  *  board-walk toolset's own tool names exactly. */
-export function boardWalkAgentPermission(): Record<string, string> {
+export function boardWalkAgentPermission(serverName: string = LEGACY_CODENAME): Record<string, string> {
   const permission: Record<string, string> = { "*": "deny" };
-  for (const name of boardWalkOpencodeTools()) permission[name] = "allow";
+  for (const name of boardWalkOpencodeTools(serverName)) permission[name] = "allow";
   return permission;
 }
 
@@ -168,11 +170,12 @@ export function projectMcpForOpencode(resolvedMcp: ResolvedMcpConfig | undefined
   return out;
 }
 
-/** Whether the resolved set is a purpose-built toolset: the jinn server, built
- *  with `--jinn-toolset`, is the session's entire MCP surface. */
-function hasPurposeBuiltToolset(resolvedMcp: ResolvedMcpConfig | undefined): boolean {
-  const jinn = resolvedMcp?.mcpServers?.["jinn"] as { args?: unknown } | undefined;
-  return Array.isArray(jinn?.args) && jinn.args.includes(MCP_TOOLSET_ARG);
+/** The name of the built-in server when the resolved set is a purpose-built toolset: that
+ *  server, built with `--jinn-toolset`, is the session's entire MCP surface. */
+function purposeBuiltToolsetServer(resolvedMcp: ResolvedMcpConfig | undefined): string | undefined {
+  const builtin = findBuiltinMcp(resolvedMcp?.mcpServers);
+  const args = (builtin?.spec as { args?: unknown } | undefined)?.args;
+  return Array.isArray(args) && args.includes(MCP_TOOLSET_ARG) ? builtin?.name : undefined;
 }
 
 /** The config file's contents for a session, or undefined when it carries no
@@ -181,11 +184,12 @@ function hasPurposeBuiltToolset(resolvedMcp: ResolvedMcpConfig | undefined): boo
 export function buildOpencodeSessionConfig(resolvedMcp: ResolvedMcpConfig | undefined): OpencodeSessionConfig | undefined {
   const mcp = projectMcpForOpencode(resolvedMcp);
   if (Object.keys(mcp).length === 0) return undefined;
+  const toolsetServer = purposeBuiltToolsetServer(resolvedMcp);
   return {
     $schema: OPENCODE_CONFIG_SCHEMA,
     mcp,
-    ...(hasPurposeBuiltToolset(resolvedMcp)
-      ? { agent: { [OPENCODE_WALK_AGENT]: { mode: "primary" as const, permission: boardWalkAgentPermission() } } }
+    ...(toolsetServer
+      ? { agent: { [OPENCODE_WALK_AGENT]: { mode: "primary" as const, permission: boardWalkAgentPermission(toolsetServer) } } }
       : {}),
   };
 }

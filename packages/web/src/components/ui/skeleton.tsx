@@ -1,4 +1,3 @@
-
 import { cn } from "@/lib/utils"
 
 interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -6,20 +5,18 @@ interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
   height?: number | string
 }
 
+/**
+ * HeroUI's skeleton, as a native element in its `skeleton` classes (the default
+ * shimmer). HeroUI's own component adds nothing a div needs, and importing it
+ * puts its class-variant and React Aria SSR helpers, about 14 KB gzip, into
+ * every route that shows a skeleton.
+ */
 function Skeleton({ className, width, height, style, ...props }: SkeletonProps) {
   return (
     <div
-      className={cn(
-        "animate-shimmer rounded-md",
-        className
-      )}
-      style={{
-        background: `linear-gradient(90deg, var(--fill-secondary) 25%, var(--fill-tertiary) 50%, var(--fill-secondary) 75%)`,
-        backgroundSize: '200% 100%',
-        width,
-        height,
-        ...style,
-      }}
+      data-slot="skeleton"
+      className={cn("skeleton skeleton--shimmer rounded-md", className)}
+      style={{ width, height, ...style }}
       {...props}
     />
   )

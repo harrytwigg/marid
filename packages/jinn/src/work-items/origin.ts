@@ -14,8 +14,10 @@
  * the audit trail.
  */
 
+import { wireHeader } from '../shared/wire-names.js';
+
 /** Node lowercases incoming header names. */
-export const WRITE_ORIGIN_HEADER = 'x-jinn-origin';
+export const WRITE_ORIGIN_HEADER = wireHeader('origin');
 
 export const WRITE_ORIGINS = ['talk'] as const;
 

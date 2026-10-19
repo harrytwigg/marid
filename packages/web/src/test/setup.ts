@@ -8,6 +8,19 @@ import { afterEach, beforeEach, vi } from "vitest";
  * arrived moments later. */
 configure({ asyncUtilTimeout: 5000 });
 
+/* React Aria's selection indicator (the sliding tab pill) asks the element for
+ * its running animations, and its tab list builds selectors with CSS.escape.
+ * jsdom has neither. */
+if (typeof Element !== "undefined" && typeof Element.prototype.getAnimations !== "function") {
+  Element.prototype.getAnimations = () => [];
+}
+if (typeof globalThis.CSS === "undefined") {
+  Object.defineProperty(globalThis, "CSS", { value: {}, configurable: true });
+}
+if (typeof globalThis.CSS.escape !== "function") {
+  globalThis.CSS.escape = (value: string) => value.replace(/[^a-zA-Z0-9_\u00A0-\uFFFF-]/g, (char) => `\\${char}`);
+}
+
 function createMemoryStorage(): Storage {
   const data = new Map<string, string>();
   return {

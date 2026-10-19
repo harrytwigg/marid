@@ -2,6 +2,8 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { LEGACY_NAMES, NAMES, currentInstanceName, isDefaultInstanceName, sameInstanceName, type Names } from "../shared/codename.js";
+import { readEnv } from "../shared/codename-env.js";
 
 export const INSTANCE_DIRECTORY_SCHEMA_VERSION = 2 as const;
 
@@ -38,28 +40,39 @@ export interface HostPathOptions {
 export interface DirectoryOptions {
   registryPath?: string;
   legacyRegistryPath?: string;
+  /** Where an earlier codename kept the registry: read, and carried forward, when the current path has none. */
+  previousRegistryPath?: string | null;
 }
 
 function pathApi(platform: NodeJS.Platform): typeof path.posix | typeof path.win32 {
   return platform === "win32" ? path.win32 : path.posix;
 }
 
-export function resolveHostDataDir(options: HostPathOptions = {}): string {
+/** The host-level directory the registry lives in: named for the codename, in the form each platform uses. */
+export function resolveHostDataDir(options: HostPathOptions & { names?: Names } = {}): string {
   const platform = options.platform ?? process.platform;
   const home = options.home ?? os.homedir();
   const env = options.env ?? process.env;
+  const names = options.names ?? NAMES;
   const p = pathApi(platform);
-  if (platform === "darwin") return p.join(home, "Library", "Application Support", "Jinn");
-  if (platform === "win32") return p.join(env.APPDATA || p.join(home, "AppData", "Roaming"), "Jinn");
-  return p.join(env.XDG_CONFIG_HOME || p.join(home, ".config"), "jinn");
+  if (platform === "darwin") return p.join(home, "Library", "Application Support", names.title);
+  if (platform === "win32") return p.join(env.APPDATA || p.join(home, "AppData", "Roaming"), names.title);
+  return p.join(env.XDG_CONFIG_HOME || p.join(home, ".config"), names.codename);
 }
 
 export function resolveInstancesRegistryPath(options: HostPathOptions = {}): string {
   const env = options.env ?? process.env;
-  return env.JINN_INSTANCES_REGISTRY || pathApi(options.platform ?? process.platform).join(
+  return readEnv(env, "INSTANCES_REGISTRY") || pathApi(options.platform ?? process.platform).join(
     resolveHostDataDir(options),
     "instances.json",
   );
+}
+
+/** Where the legacy codename kept the registry, or null while the codename is unchanged or an override names the file. */
+export function resolvePreviousInstancesRegistryPath(options: HostPathOptions = {}): string | null {
+  const env = options.env ?? process.env; // footgun: ok the same fallback as resolveInstancesRegistryPath above, which decides the same override
+  if (!NAMES.renamed || readEnv(env, "INSTANCES_REGISTRY")) return null;
+  return pathApi(options.platform ?? process.platform).join(resolveHostDataDir({ ...options, names: LEGACY_NAMES }), "instances.json");
 }
 
 export function resolveLegacyInstancesRegistryPath(options: HostPathOptions = {}): string {
@@ -165,10 +178,15 @@ function writeDirectory(registryPath: string, instances: Instance[]): void {
 export function loadInstances(options: DirectoryOptions = {}): Instance[] {
   const registryPath = options.registryPath ?? resolveInstancesRegistryPath();
   const legacyRegistryPath = options.legacyRegistryPath ?? resolveLegacyInstancesRegistryPath();
+  const previousRegistryPath = options.previousRegistryPath === undefined ? resolvePreviousInstancesRegistryPath() : options.previousRegistryPath;
   let source = registryPath;
   if (!fs.existsSync(source)) {
-    if (!fs.existsSync(legacyRegistryPath) || path.resolve(legacyRegistryPath) === path.resolve(registryPath)) return [];
-    source = legacyRegistryPath;
+    // The registry an earlier codename wrote is carried forward, as the v0.26 one always was.
+    const carried = [previousRegistryPath, legacyRegistryPath].find((candidate): candidate is string => (
+      candidate !== null && path.resolve(candidate) !== path.resolve(registryPath) && fs.existsSync(candidate)
+    ));
+    if (!carried) return [];
+    source = carried;
   }
   let parsed: ReturnType<typeof parseDirectory>;
   try {
@@ -198,12 +216,13 @@ export function nextAvailablePort(instances: Pick<Instance, "port">[]): number {
 
 export function ensureDefaultInstance(): void {
   const instances = loadInstances();
-  if (instances.some((instance) => instance.name === "jinn")) return;
+  // An entry an earlier codename wrote is the default instance too: a second one would be a second identity.
+  if (instances.some((instance) => isDefaultInstanceName(instance.name))) return;
   saveInstances([{
-    name: "jinn",
+    name: NAMES.codename,
     displayName: "Jinn",
     port: 7777,
-    home: path.join(os.homedir(), ".jinn"),
+    home: path.join(os.homedir(), `.${NAMES.codename}`),
     createdAt: new Date().toISOString(),
     kind: "workspace",
     pinned: true,
@@ -211,5 +230,26 @@ export function ensureDefaultInstance(): void {
 }
 
 export function findInstance(name: string): Instance | undefined {
-  return loadInstances().find((instance) => instance.name === name);
+  return loadInstances().find((instance) => sameInstanceName(instance.name, name));
+}
+
+/**
+ * Record that an instance's home has moved to this build's naming: its name takes the current
+ * spelling and its home the new path. The entry is found by the home it had (or, failing that, by
+ * name), so a registry that already says the new thing is left as it is. Returns whether it changed.
+ */
+export function recordInstanceRenamed(
+  move: { fromHome: string; toHome: string; name?: string },
+  options: DirectoryOptions = {},
+): boolean {
+  const instances = loadInstances(options);
+  const index = instances.findIndex((instance) => path.resolve(instance.home) === path.resolve(move.fromHome));
+  const byName = index >= 0 || move.name === undefined ? index : instances.findIndex((instance) => sameInstanceName(instance.name, move.name!));
+  if (byName < 0) return false;
+  const entry = instances[byName];
+  const next: Instance = { ...entry, name: currentInstanceName(entry.name), home: path.resolve(move.toHome) };
+  if (next.name === entry.name && next.home === entry.home) return false;
+  instances[byName] = next;
+  saveInstances(instances, options);
+  return true;
 }

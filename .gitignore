@@ -32,3 +32,6 @@ scripts/.footgun-terms.local
 # Docker Compose local overrides — personal host paths, merged automatically.
 # The tracked docker-compose.yml carries the inline mount examples.
 docker-compose.override.yml
+
+# Test and build output captured to a file next to the sources
+*.log

@@ -67,6 +67,7 @@ export function OrgMap({ employees, hierarchy, selectedName, onNodeClick, scopes
       {/* Low-noise chrome: fit + zoom only, no lock/interactive toggle. */}
       <Controls
         position="bottom-left"
+        className="glass-tint"
         showInteractive={false}
         style={{ left: 16, bottom: 16 }}
       />

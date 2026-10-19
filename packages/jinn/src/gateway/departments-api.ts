@@ -3,6 +3,7 @@ import path from "node:path";
 import type { IncomingMessage as HttpRequest, ServerResponse } from "node:http";
 import { initDb } from "../shared/db.js";
 import { resolveJinnHome } from "../shared/paths.js";
+import { isBuiltinMcpName } from "../mcp/builtin-name.js";
 import { configuredMcpServerNames } from "../mcp/resolver.js";
 import { skillRefusal } from "../shared/skill-inspection.js";
 import type { DepartmentScope } from "../work-items/department-scope.js";
@@ -136,7 +137,7 @@ function definitionWire(slug: string, context: ApiContext): DepartmentDefinition
   // The built-in `jinn` server is always there; any other name must match a configured server.
   const configured = new Set(configuredMcpServerNames(context.getConfig().mcp));
   const mcpProblems = extras.mcp.flatMap((server) =>
-    server === "jinn" || configured.has(server) ? [] : [{ server, reason: "no MCP server of that name is configured on this instance" }],
+    isBuiltinMcpName(server) || configured.has(server) ? [] : [{ server, reason: "no MCP server of that name is configured on this instance" }],
   );
   return {
     slug,

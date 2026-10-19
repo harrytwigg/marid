@@ -91,12 +91,12 @@ describe("the keep toggle", () => {
     const { rerender } = render(<KeepToggle id="PLA-13" onToggle={() => {}} />)
     const unkept = screen.getByTestId("keep-toggle-PLA-13")
     expect(unkept.className).not.toContain("text-[var(--accent)]")
-    expect(unkept.querySelector("svg")?.getAttribute("class")).not.toContain("fill-current")
+    expect(unkept.querySelector("svg > path")?.getAttribute("opacity")).toBe("0.2")
 
     rerender(<KeepToggle id="PLA-13" kept onToggle={() => {}} />)
     const kept = screen.getByTestId("keep-toggle-PLA-13")
     expect(kept.className).toContain("text-[var(--accent)]")
-    expect(kept.querySelector("svg")?.getAttribute("class")).toContain("fill-current")
+    expect(kept.querySelector("svg > path")?.getAttribute("opacity")).toBe("1")
   })
 
   it("keeps a click off the card underneath it", () => {

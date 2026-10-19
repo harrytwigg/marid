@@ -1,4 +1,4 @@
-import { AlertTriangle } from "lucide-react"
+import { AlertTriangle } from "@/components/ui/icon"
 import type { EngineLimitAccountSnapshot, EngineLimitEngineSnapshot, EngineLimitWindow } from "@/lib/api"
 import { engineDisplayName } from "@/lib/engine-names"
 import { accountStatus } from "./account-status"
@@ -167,7 +167,7 @@ export function EngineCard({ engine, now, account, title, nested }: {
   return (
     // Grouped-inset card (shared visual language): --bg-secondary carrying the
     // page's only card shadow — no border at rest.
-    <section className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[var(--space-6)] shadow-[var(--shadow-card)]">
+    <section className="glass-card rounded-[var(--radius-xl)] p-[var(--space-6)]">
       <CardHeader engine={engine} account={account} title={title} tone={tone} Title={account || nested ? "h3" : "h2"} />
 
       {account && account.employees.length > 0 && (

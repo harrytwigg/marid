@@ -1,7 +1,39 @@
 import { defineConfig, type Plugin, type ProxyOptions } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import { VitePWA } from 'vite-plugin-pwa'
+import fs from 'node:fs'
+import { createRequire } from 'node:module'
 import path from 'node:path'
+import { CODENAME } from '../jinn/src/shared/codename-constant'
+
+/**
+ * The service worker's warm-up script, written with the codename in its cache name. It cannot live in
+ * `public/` as a static file: that copies it verbatim, and the cache it fills has to be named like the one
+ * the navigation rule in `runtimeCaching` reads.
+ */
+function shellWarmScript(): Plugin {
+  return {
+    name: 'jinn-shell-warm-script',
+    apply: 'build',
+    generateBundle() {
+      const template = fs.readFileSync(path.resolve(__dirname, 'sw-shell-warm.template.js'), 'utf8')
+      this.emitFile({ type: 'asset', fileName: 'sw-shell-warm.js', source: template.replaceAll('__CODENAME__', CODENAME) })
+    },
+  }
+}
+
+const require = createRequire(import.meta.url)
+
+/**
+ * @heroui/styles exports its shared theme map under a pattern with two
+ * wildcards, which no resolver accepts, so the file has no importable name.
+ * The alias below gives it one, found by where the package resolves rather than
+ * by a relative node_modules path that a change in pnpm's hoisting would break.
+ */
+const herouiThemeMap = path.join(
+  path.dirname(require.resolve('@heroui/styles/package.json')),
+  'dist/themes/shared/theme.css',
+)
 
 /**
  * The UI face is only discoverable once the stylesheet has downloaded and
@@ -11,7 +43,7 @@ import path from 'node:path'
  * font that never gets drawn is a wasted request.
  */
 function preloadUiFont(): Plugin {
-  const uiFont = /^assets\/hanken-grotesk-latin-var-[^/]+\.woff2$/
+  const uiFont = /^assets\/geist-latin-var-[^/]+\.woff2$/
   return {
     name: 'jinn-preload-ui-font',
     apply: 'build',
@@ -21,7 +53,7 @@ function preloadUiFont(): Plugin {
         const emitted = Object.keys(ctx.bundle ?? {}).find((name) => uiFont.test(name))
         if (!emitted) {
           throw new Error(
-            'jinn-preload-ui-font: no hanken-grotesk-latin-var woff2 in the bundle. ' +
+            'jinn-preload-ui-font: no geist-latin-var woff2 in the bundle. ' +
               'If the file was renamed, update the pattern; if the face was dropped, drop this plugin.',
           )
         }
@@ -62,6 +94,7 @@ export default defineConfig(() => {
     plugins: [
       react(),
       preloadUiFont(),
+      shellWarmScript(),
       VitePWA({
         // Registered from main.tsx instead, so the one call site is greppable.
         injectRegister: null,
@@ -77,6 +110,7 @@ export default defineConfig(() => {
             'manifest.webmanifest',
             'apple-touch-icon.png',
             'icons/*.png',
+            'icons/*.svg',
             'assets/index-*.js',
             'assets/vendor-*.js',
             'assets/index-*.css',
@@ -116,7 +150,7 @@ export default defineConfig(() => {
                 request.mode === 'navigate' && !url.pathname.startsWith('/api/'),
               handler: 'NetworkFirst',
               options: {
-                cacheName: 'jinn-app-shell',
+                cacheName: `${CODENAME}-app-shell`,
                 networkTimeoutSeconds: 3,
                 plugins: [{ cacheKeyWillBeUsed: async () => '/index.html' }],
               },
@@ -129,6 +163,7 @@ export default defineConfig(() => {
     ],
     resolve: {
       alias: {
+        'heroui-theme-map': herouiThemeMap,
         '@': path.resolve(__dirname, 'src'),
         // The plugin SDK is a specifier, not a package: a real package would
         // need its own build and its own React peer, and the singleton the SDK
@@ -142,6 +177,9 @@ export default defineConfig(() => {
         // editor has to judge a model id by the rule the config loader judges it
         // by, and a second copy of that rule is a second answer waiting to drift.
         '@jinn/model-id': path.resolve(__dirname, '../jinn/src/shared/model-id.ts'),
+        // The codename is one literal for the whole repo: the gateway's names and the
+        // browser's are built from the same line, so they cannot disagree.
+        '@jinn/codename': path.resolve(__dirname, '../jinn/src/shared/codename-constant.ts'),
       },
     },
     build: {
@@ -172,7 +210,7 @@ export default defineConfig(() => {
             ) {
               return 'vendor-query'
             }
-            // Radix and cmdk deliberately get no bucket. One shared bucket is
+            // React Aria deliberately gets no bucket. One shared bucket is
             // all-or-nothing: a single primitive in the shell drags every
             // primitive any route uses into the first load. Left alone, Rollup
             // puts each primitive with the route that needs it.

@@ -1,5 +1,7 @@
 
 import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 
 /* ── Types ───────────────────────────────────────────────────── */
 
@@ -88,23 +90,17 @@ export function LogBrowser({ lines }: LogBrowserProps) {
         {PILLS.map((pill) => {
           const isActive = filter === pill.key
           return (
-            <button
+            <Button
               key={pill.key}
+              variant="ghost"
+              size="sm"
+              aria-pressed={isActive}
               onClick={() => setFilter(pill.key)}
-              className="focus-ring flex items-center flex-shrink-0 rounded-[20px] py-[6px] px-[14px] text-[length:var(--text-footnote)] font-[var(--weight-medium)] border-none cursor-pointer gap-[var(--space-2)] transition-all duration-200 ease-[var(--ease-smooth)]"
-              style={{
-                ...(isActive
-                  ? {
-                      background: "var(--accent-fill)",
-                      color: "var(--accent)",
-                      boxShadow:
-                        "0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent)",
-                    }
-                  : {
-                      background: "var(--fill-secondary)",
-                      color: "var(--text-primary)",
-                    }),
-              }}
+              className={
+                isActive
+                  ? "gap-[var(--space-2)] text-[var(--accent)] [--button-bg:var(--accent-fill)] [--button-bg-hover:var(--accent-fill)]"
+                  : "gap-[var(--space-2)] text-[var(--text-primary)] [--button-bg:var(--fill-secondary)] [--button-bg-hover:var(--fill-tertiary)]"
+              }
             >
               <span>{pill.label}</span>
               <span
@@ -115,16 +111,17 @@ export function LogBrowser({ lines }: LogBrowserProps) {
               >
                 {counts[pill.key]}
               </span>
-            </button>
+            </Button>
           )
         })}
 
-        <input
+        <Input
           type="text"
+          aria-label="Search logs"
           placeholder="Search logs..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="focus-ring ml-auto py-[6px] px-3 text-[length:var(--text-footnote)] rounded-[var(--radius-sm)] border border-[var(--separator)] bg-[var(--fill-secondary)] text-[var(--text-primary)] outline-none min-w-40 max-w-60"
+          className="min-w-40 flex-1 sm:ml-auto sm:max-w-60 sm:flex-none"
         />
       </div>
 
@@ -143,13 +140,7 @@ export function LogBrowser({ lines }: LogBrowserProps) {
           </span>
         </div>
       ) : (
-        <div
-          className="rounded-[var(--radius-md)] overflow-hidden bg-[var(--material-regular)]"
-          style={{
-            backdropFilter: "blur(20px)",
-            WebkitBackdropFilter: "blur(20px)",
-          }}
-        >
+        <div className="glass-card overflow-hidden rounded-[var(--radius-xl)]">
           {filtered.map((entry, idx) => {
             const isExpanded = expandedId === entry.id
             const levelColor = LEVEL_COLOR[entry.level] ?? "var(--text-tertiary)"
@@ -173,7 +164,7 @@ export function LogBrowser({ lines }: LogBrowserProps) {
                       setExpandedId(isExpanded ? null : entry.id)
                     }
                   }}
-                  className="flex items-center hover-bg focus-ring min-h-11 px-[var(--space-4)]"
+                  className="flex items-center hover-bg focus-outline min-h-11 px-[var(--space-4)]"
                   style={{
                     cursor: isLong ? "pointer" : "default",
                     background:

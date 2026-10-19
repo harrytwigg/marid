@@ -1,5 +1,5 @@
 import { lazy, Suspense, useLayoutEffect, useRef, useState } from "react"
-import { ChevronRight } from "lucide-react"
+import { ChevronRight } from "@/components/ui/icon"
 import { MarkdownView } from "@/components/markdown-view"
 import { BODY_CLAMP_PX, BODY_PLACEHOLDER } from "./body-editor-constants"
 
@@ -59,12 +59,11 @@ function ShowMoreToggle({ expanded, onToggle }: { expanded: boolean; onToggle: (
       aria-expanded={expanded}
       data-testid="task-body-toggle"
       onClick={onToggle}
-      className="focus-ring mt-1 flex min-h-[34px] items-center gap-1.5 rounded-full px-2 text-[12px] font-semibold text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]"
+      className="focus-outline mt-1 flex min-h-[34px] items-center gap-1.5 rounded-full px-2 text-[12px] font-semibold text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]"
     >
       {expanded ? "Show less" : "Show more"}
       <ChevronRight
         size={11}
-        strokeWidth={2.2}
         aria-hidden
         className={`transition-transform duration-150 ${expanded ? "-rotate-90" : "rotate-90"}`}
       />

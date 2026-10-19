@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { FileText } from "lucide-react"
+import { FileText } from "@/components/ui/icon"
 import { useLocation, useNavigate, useNavigationType } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
 import { PageLayout } from "@/components/page-layout"

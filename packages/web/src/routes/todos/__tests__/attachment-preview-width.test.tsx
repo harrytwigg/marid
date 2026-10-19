@@ -1,3 +1,4 @@
+import "@/test/preload-dialogs"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import type { WorkItemAttachmentWire } from "@/lib/api"

@@ -6,6 +6,7 @@ import { logger } from "../shared/logger.js";
 import { getSession } from "./registry.js";
 import { sessionScopeDepartment } from "./session-scope.js";
 import { scopedDepartmentOf } from "../work-items/department-scope.js";
+import { builtinMcpServerName } from "../mcp/builtin-name.js";
 import { buildJinnServerSpec, isMcpCapableEngine, resolveMcpServers, writeMcpConfigFile } from "../mcp/resolver.js";
 
 export interface EngineRunMcp {
@@ -28,10 +29,10 @@ export function resolveEngineRunMcp(opts: {
   const department = sessionScopeDepartment(getSession(opts.sessionId)) ?? scopedDepartmentOf(opts.employee?.name);
   // A purpose-built toolset is the turn's entire MCP surface: no custom server,
   // no company belt, and no attachment gate, which decides the belt alone. The
-  // server keeps the name `jinn` so it is bound to the session like the belt.
+  // server keeps the built-in name so it is bound to the session like the belt.
   const mcpConfig = opts.employee?.toolset
-    ? { mcpServers: { jinn: buildJinnServerSpec(opts.employee.toolset) } }
-    : confinedForDepartment(resolveMcpServers(opts.config.mcp, opts.employee, opts.engine), department, opts.employee);
+    ? { mcpServers: { [builtinMcpServerName(opts.config)]: buildJinnServerSpec(opts.employee.toolset) } }
+    : confinedForDepartment(resolveMcpServers(opts.config.mcp, opts.employee, opts.engine, builtinMcpServerName(opts.config)), department, opts.employee);
   if (Object.keys(mcpConfig.mcpServers).length === 0) return {};
 
   // A department-scoped session's server offers the scoped tool profile and holds file paths to its roots.

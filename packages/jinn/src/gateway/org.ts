@@ -13,6 +13,16 @@ import {
   resolveSystemEmployees,
   SYSTEM_EMPLOYEE_OVERRIDE_FIELDS,
 } from "./system-employees.js";
+import { orgMcpKey } from "../shared/wire-names.js";
+import { nameAliases } from "../shared/codename.js";
+
+/** The per-employee built-in MCP override, under the current codename's key or the legacy one an older roster file still uses. */
+function orgMcpFlag(data: Record<string, unknown>): boolean | undefined {
+  for (const key of nameAliases(orgMcpKey)) {
+    if (typeof data[key] === "boolean") return data[key] as boolean;
+  }
+  return undefined;
+}
 
 export { updateEmployeeYaml, type EmployeeUpdate } from "./org-yaml-files.js";
 
@@ -71,7 +81,7 @@ export function scanOrg(config?: JinnConfig, scopeOf: (slug: string) => Departme
           // force-off). Boolean-checked like the other optional flags — the
           // scan whitelist previously dropped it, which live QA phase D caught
           // (a YAML pilot could never arm the smoke gate).
-          jinnMcp: typeof data.jinnMcp === "boolean" ? data.jinnMcp : undefined,
+          jinnMcp: orgMcpFlag(data),
           // Remote (SSH) execution. Validated immediately below — a bad remote
           // target fails THIS employee's load loudly at boot rather than at the
           // first turn, because the failure it guards against (an unattended
