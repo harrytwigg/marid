@@ -556,6 +556,8 @@ export interface Employee extends RemoteTarget {
   reportsTo?: string | string[];
   /** Services this employee provides to the org */
   provides?: ServiceDeclaration[];
+  fallback?: import("./fallback-chain-wire.js").FallbackLink[]; // chain override; absent inherits, [] is none
+  fallbackProblems?: string[]; // why a written chain was ignored at load (the employee then inherits)
 }
 
 /** A service that an employee can provide to other employees/departments. */

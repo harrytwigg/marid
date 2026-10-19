@@ -10,6 +10,8 @@ import {
 } from "../shared/session-fallback-config.js";
 import type { Employee, JinnConfig, ModelRegistry, Session } from "../shared/types.js";
 import { isKnownEngine, type EngineName } from "../shared/models.js";
+import type { FallbackHealthInputs } from "../shared/fallback-chain-health.js";
+import { sessionFallbackChainView } from "./session-fallback-chain.js";
 import { rateLimitAccount } from "./rate-limit-account.js";
 import { rateLimitRemoteTarget } from "./rate-limit-remote-target.js";
 import { accountWalkOptions, engineAllowedAsSubstitute, fallbackModelMapOf, sessionSubstituteScope, substituteScoped } from "./substitute-filters.js";
@@ -136,15 +138,17 @@ function allowedFallbackEngines(config: JinnConfig, registry: ModelRegistry, ses
     .map(([name]) => name);
 }
 
-/** What `GET /api/sessions/:id` reports for fallback. */
+/** What `GET /api/sessions/:id` reports for fallback. `inputs` is the engine health and cached limits readings the chain reads its link states from; without them every link reads ok. */
 export function sessionFallbackView(
   config: JinnConfig,
   registry: ModelRegistry,
   session: Session,
   employee?: Employee,
+  inputs: FallbackHealthInputs = { health: {} },
 ): SessionFallbackView {
   const { mode, source } = effectiveFallbackMode(config, session);
   const allowedEngines = allowedFallbackEngines(config, registry, session, employee);
-  if (session.fallbackTarget) return { mode, modeSource: source, target: ownTarget(registry, session.fallbackTarget), targetSource: "session", allowedEngines };
-  return { mode, modeSource: source, target: resolveSessionFallbackTarget(config, registry, session, employee), targetSource: "config", allowedEngines };
+  const chain = sessionFallbackChainView({ config, registry, session, employee, ...inputs });
+  if (session.fallbackTarget) return { mode, modeSource: source, target: ownTarget(registry, session.fallbackTarget), targetSource: "session", allowedEngines, chain };
+  return { mode, modeSource: source, target: resolveSessionFallbackTarget(config, registry, session, employee), targetSource: "config", allowedEngines, chain };
 }

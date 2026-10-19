@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { accountHasChain, resolveAccountFallback, resolveHealthyAccountFallback } from "../account-fallback.js";
-import { chainEntryAccount, declaredClaudeAccounts, validateClaudeAccounts, claudeChainAccountProblems } from "../claude-accounts-config.js";
+import { chainEntryAccount, declaredClaudeAccounts, validateClaudeAccounts } from "../claude-accounts-config.js";
 import { claudeProfileFromDir } from "../claude-profile.js";
 import { validateEngineFallbackChains } from "../engine-fallback.js";
 import { resolveClaudeConfigDir } from "../home.js";
@@ -49,14 +49,15 @@ describe("validation", () => {
   const engines = (claude: Record<string, unknown>) => config(claude).engines as unknown as Record<string, unknown>;
 
   it("accepts a well-formed set, cycles included", () => {
-    expect(validateClaudeAccounts(engines({
+    const set = engines({
       fallback: ["claude:friend", "codex"],
       accounts: {
         friend: { configDir: FRIEND, fallback: ["claude:work2"] },
         work2: { configDir: WORK2, fallback: ["claude:friend", "claude", "codex"] },
       },
-    }), "/tmp/jinn-home")).toEqual([]);
-    expect(validateEngineFallbackChains(engines({ fallback: ["claude:friend", "codex"] }))).toEqual([]);
+    });
+    expect(validateClaudeAccounts(set, "/tmp/jinn-home")).toEqual([]);
+    expect(validateEngineFallbackChains(set)).toEqual([]);
   });
 
   it("refuses two accounts on one canonical directory", () => {
@@ -79,11 +80,11 @@ describe("validation", () => {
     const problems = validateClaudeAccounts(engines({ accounts: {
       friend: { configDir: FRIEND, fallback: ["claude:friend", "claude:ghost", "gemini"] },
     } }), "/tmp/jinn-home").join("\n");
-    expect(problems).toMatch(/must not name claude:friend itself/);
-    expect(problems).toMatch(/"claude:ghost" names no account/);
+    expect(problems).toMatch(/fallback\[0\] \(claude · friend\) is the target this chain falls back from/);
+    expect(problems).toMatch(/profile "ghost" names no account/);
     expect(problems).toMatch(/"gemini" is not a known engine/);
-    expect(claudeChainAccountProblems(engines({ fallback: ["claude:ghost"] }))).toEqual([
-      'engines.claude.fallback[0] "claude:ghost" names no account under engines.claude.accounts',
+    expect(validateEngineFallbackChains(engines({ fallback: ["claude:ghost"] }))).toEqual([
+      'engines.claude.fallback[0]: profile "ghost" names no account under engines.claude.accounts',
     ]);
   });
 });

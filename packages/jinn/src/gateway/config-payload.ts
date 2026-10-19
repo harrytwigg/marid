@@ -71,14 +71,16 @@ function isMapping(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * A list replaces what is on disk, except that an item matching a stored one by
- * `id` is merged into it — that is what lets a connector instance keep the token
- * the UI only ever saw as a sentinel.
+ * A list replaces what is on disk, except that an item carrying an `id` that matches
+ * a stored one is merged into it — that is what lets a connector instance keep the
+ * token the UI only ever saw as a sentinel. An item with no `id` (a fallback link) is
+ * written as sent: matching `undefined` to `undefined` would merge it into the first
+ * stored mapping and write something else than what was sent.
  */
 function mergeArrayItems(source: unknown[], target: unknown): unknown[] {
   if (!Array.isArray(target)) return source;
   return source.map((item) => {
-    if (!isMapping(item)) return item;
+    if (!isMapping(item) || item.id === undefined) return item;
     const match = target.find((t) => t && typeof t === "object" && (t as Record<string, unknown>).id === item.id);
     return match ? deepMerge(match as Record<string, unknown>, item) : item;
   });
