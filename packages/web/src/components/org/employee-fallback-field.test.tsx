@@ -14,7 +14,7 @@ vi.mock("@/hooks/use-fallback-chains", async (importActual) => ({
   useFallbackChains: () => ({ data: chains.current }),
 }))
 
-import { EmployeeFallbackField, EmployeeFallbackSummary } from "./employee-fallback-field"
+import { EmployeeFallbackField, EmployeeFallbackRow, EmployeeFallbackSummary } from "./employee-fallback-field"
 import { sameChain } from "./employee-fallback"
 
 const model = (id: string) => ({ id, label: id, supportsEffort: false, effortLevels: [] })
@@ -175,6 +175,17 @@ describe("sameChain", () => {
     expect(sameChain([{ engine: "claude" }], [{ engine: "claude", profile: "A" }])).toBe(false)
     expect(sameChain(null, [])).toBe(false)
     expect(sameChain(null, null)).toBe(true)
+  })
+})
+
+describe("EmployeeFallbackRow for a system employee", () => {
+  it("shows the chain it follows, with nothing to edit, because the gateway refuses to set it", () => {
+    chains.current = { profiles: [], subjects: [subject("employee", "writer", false, [resolved("codex")])] }
+    render(<EmployeeFallbackRow employee={EMP} engine="claude" value={null} onChange={() => {}} locked />)
+
+    expect(document.querySelector("[data-employee-fallback-row=locked]")).toBeTruthy()
+    expect(document.querySelector("[data-fallback-list] li")?.textContent).toBe("1. Codex")
+    expect(screen.queryByRole("combobox", { name: "Fallback chain" })).toBeNull()
   })
 })
 

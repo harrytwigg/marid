@@ -27,17 +27,22 @@ interface EmployeeFallbackFieldProps {
   onBlockedChange?: (blocked: boolean) => void
 }
 
-/** The editor's labelled row for the chain, shaped like its other fields. */
-export function EmployeeFallbackRow(props: EmployeeFallbackFieldProps) {
+/** The editor's labelled row for the chain, shaped like its other fields. A system employee's chain is the
+ *  default's and cannot be set (the gateway refuses it), so it is shown, not offered. */
+export function EmployeeFallbackRow({ locked, ...props }: EmployeeFallbackFieldProps & { locked?: boolean }) {
   return (
-    <div className="flex flex-col gap-[var(--space-1)]">
-      <span className="text-[length:var(--text-caption2)] font-[var(--weight-semibold)] uppercase tracking-[var(--tracking-wide)] text-[var(--text-tertiary)]">
-        Fallback chain
-      </span>
-      <EmployeeFallbackField {...props} />
-      <span className="text-[length:var(--text-caption2)] text-[var(--text-quaternary)]">
-        Where this employee&apos;s sessions go when its own target reaches a limit.
-      </span>
+    <div className="flex flex-col gap-[var(--space-1)]" data-employee-fallback-row={locked ? "locked" : undefined}>
+      {locked ? <EmployeeFallbackSummary employee={props.employee} /> : (
+        <>
+          <span className="text-[length:var(--text-caption2)] font-[var(--weight-semibold)] uppercase tracking-[var(--tracking-wide)] text-[var(--text-tertiary)]">
+            Fallback chain
+          </span>
+          <EmployeeFallbackField {...props} />
+          <span className="text-[length:var(--text-caption2)] text-[var(--text-quaternary)]">
+            Where this employee&apos;s sessions go when its own target reaches a limit.
+          </span>
+        </>
+      )}
     </div>
   )
 }
