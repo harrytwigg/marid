@@ -110,7 +110,7 @@ hook and the event.
   "text": "…",                     // the comment body, or the note on the event; else null
   "prUrl": "https://github.com/o/r/pull/1", // first PR link found, else null
   "sessionId": "…",                // delegated/dispatched: the linked session
-  "chain": ["review-merge"]        // hooks upstream of this event, oldest first
+  "chain": ["review-merge"]        // hooks upstream of this event, oldest first, then this hook
 }
 ```
 
@@ -121,12 +121,14 @@ the Todo's latest 20 comments (newest first), the Todo body.
 
 A hook's `spawn` action starts its session with provenance `source: "hook"`,
 `sourceRef: "hook:<fireId>"`. The run row for that fire records the chain:
-the event's own chain plus this hook.
+the event's upstream chain plus this hook (the same value as `payload.chain` and
+`JINN_HOOK_CHAIN`).
 
 When an event's actor resolves to a session (an actor of `session:<id>`, or a comment
 whose meta records the authoring session), the dispatcher walks that session and its
 `parentSessionId` ancestors (at most 10 levels). Every ancestor with `source: "hook"`
-contributes the chain stored on its run row; the union is the event's `chain`.
+contributes the chain stored on its run row; the union is the event's upstream chain.
+`from`/`to` are null on non-status events, and a `from`/`to` matcher never matches them.
 
 A hook whose name is in the chain is skipped unless `allowReentry` is set, and every
 hook is skipped once the chain holds `MAX_HOOK_CHAIN` names. Skips are logged as
