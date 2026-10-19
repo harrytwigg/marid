@@ -2,6 +2,7 @@ import { declaredAccountByKey } from "../shared/claude-accounts-config.js";
 import { DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
 import { resolveSubstituteModel } from "../shared/engine-fallback.js";
 import { sessionFallbackChain } from "../shared/fallback-chain.js";
+import { linkModelWritten } from "../shared/fallback-chain-links.js";
 import { effectivePosition } from "../shared/fallback-chain-next.js";
 import type { ResolvedFallbackLink } from "../shared/fallback-chain-wire.js";
 import { isSpellableModelId } from "../shared/model-id.js";
@@ -106,7 +107,7 @@ function accountTarget(config: JinnConfig, session: Session, from: string, accou
 function linkTarget(config: JinnConfig, registry: ModelRegistry, own: Session, from: string, link: ResolvedFallbackLink): SessionFallbackTarget {
   const base = from !== "" && link.engine === "claude" ? accountTarget(config, own, from, link.account) : engineTarget(config, registry, own, link.engine);
   // A model the entry wrote is the target's; one it inherits from the session is derived as a swap derives it.
-  if (!link.modelNamed || !link.model) return base;
+  if (!linkModelWritten(link) || !link.model) return base;
   const prefix = base.account ? `${accountName(config, base.account)} · ` : "";
   return { ...base, model: link.model, label: `${prefix}${link.model}` };
 }

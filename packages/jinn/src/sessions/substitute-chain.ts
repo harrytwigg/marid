@@ -1,6 +1,7 @@
 import { accountForEmployee, DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
 import type { EngineHealthReading } from "../shared/engine-health.js";
 import { sessionFallbackChain } from "../shared/fallback-chain.js";
+import { linkModelWritten } from "../shared/fallback-chain-links.js";
 import type { FallbackChainSource, ResolvedFallbackLink } from "../shared/fallback-chain-wire.js";
 import { engineAvailable, engineSupportsRemote, getModelRegistry, type EngineName } from "../shared/models.js";
 import { sshDestination } from "../shared/remote-target.js";
@@ -60,7 +61,7 @@ export function resolveSubstituteChain(input: ChooseSubstituteInput, health: Eng
   const scope = { scoped: substituteScoped(session, input.remoteTarget), remote: Boolean(remote) };
   const registry = runtimeRegistry(input);
   const { source, links } = sessionFallbackChain({ config, employee, session: own, registry, health, scope });
-  const namedModel = (link: ResolvedFallbackLink): string | undefined => (link.modelNamed ? link.model : undefined);
+  const namedModel = (link: ResolvedFallbackLink): string | undefined => (linkModelWritten(link) ? link.model : undefined);
   const accountMode = own.engine === "claude" && !remote;
   return { source, links: judgedOnEmployeeAccount(links, input, accountMode), accountMode, namedModel };
 }

@@ -70,11 +70,14 @@ export interface ResolvedFallbackLink extends FallbackLink {
   label: string;
   /** "config" for a written link; "legacy" for one expanded from a string entry's own chain. */
   origin: "config" | "legacy";
+  /** The link as config spells it, before the gateway filled in the model it would run
+   *  (`model` above is that resolved model). This is what an editor shows as the
+   *  operator's choice and writes back; writing `engine`/`profile`/`model` instead would
+   *  pin a model the operator never chose. Always set by the gateway. */
+  written?: FallbackLink;
   /** Present when the link cannot be used at all for this subject or session. */
   skip?: FallbackSkipReason;
   health?: FallbackLinkHealth;
-  /** True when the entry wrote a model itself (as opposed to inheriting the session's or a `fallbackModelMap` translation): that model is the link's choice. */
-  modelNamed?: true;
 }
 
 /** One move along a chain, recorded on the session and announced in its transcript. */
@@ -140,6 +143,13 @@ export interface FallbackChainSubject {
   legacy: boolean;
   /** What would run, in order, after legacy expansion and de-duplication. */
   effective: ResolvedFallbackLink[];
+  /** An employee only: where `effective` comes from. `employee` is its own chain; an
+   *  inherited one is its declared account's (`account`, named by `sourceId`) or its
+   *  engine's (`engine`, named by `sourceId`); `none` is a named profile that is not
+   *  declared, which has no fallback. The gateway decides this, so a client never
+   *  reconstructs it. */
+  source?: Exclude<FallbackChainSource, "session">;
+  sourceId?: string;
   /** What is wrong with the chain the subject wrote. A repeated target is tolerated (the
    *  chain is kept and lists it once); an employee whose YAML chain failed validation at
    *  load inherits instead. Absent when nothing is wrong. */

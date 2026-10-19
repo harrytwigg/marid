@@ -1,4 +1,4 @@
-import { declaredClaudeAccounts, type DeclaredClaudeAccount } from "./claude-accounts-config.js";
+import { declaredAccountByKey, declaredClaudeAccounts, type DeclaredClaudeAccount } from "./claude-accounts-config.js";
 import { accountForEmployee } from "./engine-account.js";
 import { employeeOwnLink } from "./employee-fallback.js";
 import type { FallbackExpansionMode } from "./fallback-chain-expand.js";
@@ -8,7 +8,7 @@ import {
 } from "./fallback-chain.js";
 import {
   fallbackLinkOf,
-  type FallbackChainEntry, type FallbackChainSubject, type FallbackChainsResponse, type FallbackProfileOption,
+  type FallbackChainEntry, type FallbackChainSource, type FallbackChainSubject, type FallbackChainsResponse, type FallbackProfileOption,
 } from "./fallback-chain-wire.js";
 import { duplicateProblemsByChain } from "./fallback-chain-load.js";
 import { ENGINE_NAMES } from "./models.js";
@@ -67,6 +67,15 @@ export function accountSubject(env: FallbackChainEnv, account: DeclaredClaudeAcc
   return subjectOf(env, { kind: "account", id: account.name }, spec, account.fallback, problems);
 }
 
+/** Where an employee's chain comes from, and the account or engine that names it. */
+function inheritedSource(
+  config: JinnConfig, engine: string, ownAccount: string, source: FallbackChainSource | undefined,
+): Pick<FallbackChainSubject, "source" | "sourceId"> {
+  if (source === undefined) return { source: "employee" };
+  if (source === "account") return { source, sourceId: declaredAccountByKey(config, ownAccount)?.name };
+  return source === "engine" ? { source, sourceId: engine } : { source: "none" };
+}
+
 /**
  * An employee's chain: its own `fallback` when it writes one, else what its
  * account and engine give it. `scope` is what the employee's department and host
@@ -75,9 +84,13 @@ export function accountSubject(env: FallbackChainEnv, account: DeclaredClaudeAcc
 export function employeeSubject(env: FallbackChainEnv, employee: Employee, scope: FallbackChainSpec["scope"]): FallbackChainSubject {
   const ownAccount = accountForEmployee(employee, employee.engine);
   const mode: FallbackExpansionMode = employee.engine === "claude" && !scope.remote ? "account" : "engine";
-  const entries = employee.fallback ?? inheritedChain(env.config, employee.engine, mode, ownAccount).entries;
+  const inherited = employee.fallback === undefined ? inheritedChain(env.config, employee.engine, mode, ownAccount) : undefined;
+  const entries = employee.fallback ?? inherited?.entries ?? [];
   const own = employeeOwnLink(env.config, employee);
-  const subject = subjectOf(env, { kind: "employee", id: employee.name }, { own, ownAccount, entries, mode, scope }, employee.fallback);
+  const subject = {
+    ...subjectOf(env, { kind: "employee", id: employee.name }, { own, ownAccount, entries, mode, scope }, employee.fallback),
+    ...inheritedSource(env.config, employee.engine, ownAccount, inherited?.source),
+  };
   return employee.fallbackProblems?.length ? { ...subject, problems: employee.fallbackProblems } : subject;
 }
 

@@ -2,6 +2,7 @@ import { declaredAccountByKey } from "../shared/claude-accounts-config.js";
 import { accountForEmployee, DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
 import { exhaustedEngineReturnsAt, type EngineHealthReading } from "../shared/engine-health.js";
 import { sessionFallbackChain } from "../shared/fallback-chain.js";
+import { linkModelWritten } from "../shared/fallback-chain-links.js";
 import { isLinkExhausted, linkHealthKey } from "../shared/fallback-chain-health.js";
 import type { FallbackChainSource, ResolvedFallbackLink } from "../shared/fallback-chain-wire.js";
 import type { EngineName } from "../shared/models.js";
@@ -86,6 +87,6 @@ export function rerouteAtCreation(args: RerouteArgs): RerouteChoice | undefined 
   if (index < 1) return undefined;
   const link = links[index]!;
   // A model the entry wrote is the session's; one it inherits is the target left's, and means nothing on the link.
-  const model = link.modelNamed ? link.model : undefined;
+  const model = linkModelWritten(link) ? link.model : undefined;
   return { engine: link.engine as EngineName, ...(model === undefined ? {} : { model }), reroute: rerouteRecord(args, { own, link, index, source }) };
 }

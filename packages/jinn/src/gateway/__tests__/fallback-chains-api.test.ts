@@ -81,6 +81,25 @@ describe("GET /api/fallback-chains", () => {
     expect(keys(claude.effective)).toEqual(["codex||", "claude|A|opus"]);
   });
 
+  it("carries each link as written beside the model it would run, so an editor never writes back a resolved model", async () => {
+    setConfig(chainConfig(["claude:B", { engine: "codex" }]));
+    const claude = subject((await call("GET", "/api/fallback-chains")).body, "engine", "claude");
+    expect(claude.effective.map((l: any) => [l.key, l.written])).toEqual([
+      ["claude|B|opus", { engine: "claude", profile: "B" }],
+      ["codex||", { engine: "codex" }],
+    ]);
+    expect(claude.primary.written).toEqual({ engine: "claude", model: "opus" });
+
+    setConfig(chainConfig([{ engine: "claude", profile: "B" }, { engine: "codex" }]));
+    writeEmployee(undefined);
+    fs.writeFileSync(WORKER_FILE, yaml.dump({ ...(yaml.load(fs.readFileSync(WORKER_FILE, "utf-8")) as object), model: "sonnet" }));
+    const { refreshOrg } = await import("../org-registry.js");
+    refreshOrg(chainConfig([{ engine: "claude", profile: "B" }, { engine: "codex" }]));
+    const sonnet = subject((await call("GET", "/api/fallback-chains?employee=a-worker")).body, "employee", "a-worker");
+    expect(sonnet.effective[0]).toMatchObject({ key: "claude|B|sonnet", model: "sonnet", written: { engine: "claude", profile: "B" } });
+    expect(sonnet.effective[0].written).not.toHaveProperty("model");
+  });
+
   it("reports a repeated target as the chain's problems, and lists it once in the effective chain", async () => {
     setConfig(chainConfig([{ engine: "codex", model: "gpt-mapped" }, "grok", { engine: "codex", model: "gpt-mapped" }]));
     const claude = subject((await call("GET", "/api/fallback-chains")).body, "engine", "claude");
@@ -91,7 +110,7 @@ describe("GET /api/fallback-chains", () => {
 
   it("an employee chain overrides it, here and in the session view", async () => {
     const before = subject((await call("GET", "/api/fallback-chains?employee=a-worker")).body, "employee", "a-worker");
-    expect(before).toMatchObject({ configured: null, primary: { key: "claude||opus" } });
+    expect(before).toMatchObject({ configured: null, primary: { key: "claude||opus" }, source: "engine", sourceId: "claude" });
     expect(keys(before.effective)).toHaveLength(4);
 
     const patch = await call("PATCH", "/api/org/employees/a-worker", { fallback: [{ engine: "claude", profile: "B", model: "sonnet" }] });
@@ -99,6 +118,8 @@ describe("GET /api/fallback-chains", () => {
     expect(workerYaml().fallback).toEqual([{ engine: "claude", profile: "B", model: "sonnet" }]);
 
     const after = subject((await call("GET", "/api/fallback-chains?employee=a-worker")).body, "employee", "a-worker");
+    expect(after).toMatchObject({ source: "employee" });
+    expect(after).not.toHaveProperty("sourceId");
     expect(after.configured).toEqual([{ engine: "claude", profile: "B", model: "sonnet" }]);
     expect(keys(after.effective)).toEqual(["claude|B|sonnet"]);
 
@@ -131,6 +152,21 @@ describe("GET /api/fallback-chains", () => {
     expect(twice.configured).toHaveLength(2);
     expect(twice.problems).toEqual(["fallback[1] duplicates fallback[0] (codex · gpt-mapped): a chain tries each target once, so list it once"]);
     expect(keys(twice.effective)).toEqual(["codex||gpt-mapped"]);
+  });
+
+  it("says where an inherited chain comes from: a declared account's own chain (even empty), and none for an undeclared profile", async () => {
+    const accountWorker = { name: "a-worker", displayName: "A Worker", department: "platform", rank: "employee", engine: "claude", model: "opus", persona: "Fallback mode fixture", claudeConfigDir: DIR_A };
+    fs.writeFileSync(WORKER_FILE, yaml.dump(accountWorker));
+    const { refreshOrg } = await import("../org-registry.js");
+    refreshOrg(chainConfig());
+    const onAccount = subject((await call("GET", "/api/fallback-chains?employee=a-worker")).body, "employee", "a-worker");
+    expect(onAccount).toMatchObject({ source: "account", sourceId: "A", configured: null, effective: [] });
+
+    fs.writeFileSync(WORKER_FILE, yaml.dump({ ...accountWorker, claudeConfigDir: "/srv/operator/.claude-undeclared" }));
+    refreshOrg(chainConfig());
+    const undeclared = subject((await call("GET", "/api/fallback-chains?employee=a-worker")).body, "employee", "a-worker");
+    expect(undeclared).toMatchObject({ source: "none", configured: null, effective: [] });
+    expect(undeclared).not.toHaveProperty("sourceId");
   });
 
   it("answers 404 for an employee that does not exist", async () => {
