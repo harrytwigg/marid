@@ -6,13 +6,12 @@
  * place, reporting each attempt as a `retry` session status that carries the
  * provider's message (verified on 1.18.35 and 1.19.0 with a provider answering
  * 429 "Go usage limit exceeded": retry, busy, retry, … then, out of attempts,
- * session.error, idle, the failed reply's message.updated). A plugin or
- * provider can also fall back to another model: a newer reply to the turn's
- * prompt opens, or the prompt is re-sent (see repeatsPrompt). So an idle, or
- * a finished reply with no text, is only the end of a turn that has no answer
- * once nothing has taken the turn up again for a short while.
+ * session.error, idle, the failed reply's message.updated). A newer reply to
+ * the turn's prompt can also open after an idle (a next step, or a retry
+ * that outlived it). So an idle, or a finished reply with no text, is only
+ * the end of a turn that has no answer once nothing has taken the turn up
+ * again for a short while.
  */
-import { readMetadataTag } from "./opencode-metadata-tag.js";
 
 function str(value: unknown): string | undefined {
   return typeof value === "string" && value ? value : undefined;
@@ -47,26 +46,10 @@ export function abandonedRetryError(retry: ProviderRetry, now = Date.now()): { n
 }
 
 /**
- * Whether a part of a user message the turn did not post repeats the turn's
- * prompt word for word: a fallback re-sending it on another model. The
- * opencode-rate-limit plugin (1.4.0) does exactly that: on a rate-limit retry
- * or error it aborts the session and posts the last user message's text parts
- * again, without their metadata, as a new message on its fallback model (the
- * abort leaves the turn's reply completed, with no error and nothing written,
- * and the session idle; verified with opencode 1.19.0). The answer to that
- * copy is the turn's answer. A Jinn prompt always carries Jinn metadata, so
- * another Jinn turn's prompt is never taken for a copy.
- */
-export function repeatsPrompt(part: Record<string, unknown>, promptText: string): boolean {
-  const metadata = part.metadata && typeof part.metadata === "object" ? part.metadata as Record<string, unknown> : undefined;
-  return part.type === "text" && Boolean(promptText) && part.text === promptText && readMetadataTag(metadata) === undefined;
-}
-
-/**
  * Why the turn is waiting to end:
  * - `idle`: the session went idle without a text answer (or with its newest
- *   reply still open). A newer reply of the turn's, its re-sent prompt, or a
- *   retry of its own reply means opencode took the turn up again.
+ *   reply still open). A newer reply of the turn's, or a retry of its own
+ *   reply, means opencode took the turn up again.
  * - `done`: one of the turn's replies finished without a text answer. The same
  *   signs mean it is not the last.
  * - `retry`: opencode will not retry the provider for longer than a turn

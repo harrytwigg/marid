@@ -29,6 +29,8 @@ import { parseOpencodeVersion } from "../shared/opencode-bin-version.js";
 import { employeeSessionEnv } from "../sessions/employee-env.js";
 import { readHostAsset, relayStampShellCheck } from "../shared/host-assets.js";
 import { NAMES, nameAliases } from "../shared/codename.js";
+import { FALLBACK_FACTS_SNIPPET, remoteFallbackSources } from "./opencode-internal-fallback-remote.js";
+import { recordRemoteInternalFallback } from "./opencode-internal-fallback.js";
 
 /**
  * Everything the gateway does to a remote host that is NOT the interactive
@@ -261,6 +263,7 @@ printf 'pi=%s\\n' "$(command -v pi 2>/dev/null || true)"
 printf 'opencode=%s\\n' "$(command -v opencode 2>/dev/null || true)"
 if command -v opencode >/dev/null 2>&1; then
   printf 'opencodeversion=%s\\n' "$(OPENCODE_DISABLE_AUTOUPDATE=1 opencode --version 2>/dev/null | tr -d '\\r' | head -n 1)"
+${FALLBACK_FACTS_SNIPPET}
 fi
 jinnbin=$(${nameAliases((n) => n.codename).map((cli) => `command -v ${cli} 2>/dev/null`).join(" || ")} || true)
 if [ -n "$jinnbin" ]; then
@@ -432,6 +435,7 @@ export async function gatherFacts(destination: string): Promise<RemoteFacts> {
   }
   const kv = parseKeyValues(res.stdout);
   assertRemoteToolchain(destination, kv);
+  recordRemoteInternalFallback(destination, remoteFallbackSources(kv));
   if (!kv.jinnversion) {
     throw new Error(
       `${destination} has no \`jinn\` on PATH — run \`npm install -g jinn-cli@${getPackageVersion()}\` there `

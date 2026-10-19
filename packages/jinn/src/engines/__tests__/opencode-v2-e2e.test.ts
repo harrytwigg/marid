@@ -16,8 +16,7 @@ import { PtyLifecycleManager } from "../pty-lifecycle.js";
  * mock OpenAI-compatible provider. One Jinn session, several turns: an
  * answer, a resume, a tool call, an MCP tool call, a model switch, a stop and
  * what the next turn is told about it, and a compaction with its re-seed. Then
- * the host plugins: a rate limit falls back to a second provider, and a
- * pre-stream 400 is retried in place.
+ * the host plugin: a pre-stream 400 is retried in place.
  *
  * Skipped unless OPENCODE2_E2E=1:
  *
@@ -29,7 +28,7 @@ const RUN = process.env.OPENCODE2_E2E === "1";
 const BIN = process.env.OPENCODE2_BIN ?? "opencode";
 const MOCK = path.join(path.dirname(new URL(import.meta.url).pathname), "opencode-v2-mock-upstream.mjs");
 const MCP_STUB = path.join(path.dirname(new URL(import.meta.url).pathname), "opencode-v2-mcp-stub.mjs");
-/** The host plugins the OpenCode 2 upgrade guide installs. */
+/** The host plugin the OpenCode 2 upgrade guide installs. */
 const PLUGINS = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../../../../examples/opencode-plugins");
 
 function canConnect(port: number): Promise<boolean> {
@@ -82,28 +81,14 @@ describe.skipIf(!RUN)("opencode server mode on OpenCode 2", () => {
     const provider = (prefix: string) => ({ npm: "@ai-sdk/openai-compatible", options: { baseURL: `http://127.0.0.1:${port}/${prefix}`, apiKey: "dummy" }, models });
     writeJson(path.join(home, ".config", "opencode", "opencode.json"), {
       model: "mock/m1",
-      // The provider id the error-retry plugin watches, and a second provider
-      // for the fallback plugin; the mock rate-limits `/primary/`.
-      provider: { mock: provider("v1"), "opencode-go": provider("primary/v1"), backup: provider("backup/v1") },
+      // The provider id the error-retry plugin watches.
+      provider: { mock: provider("v1"), "opencode-go": provider("primary/v1") },
     });
-    for (const plugin of ["error-retry.js", "model-fallback.js"]) {
-      fs.mkdirSync(path.join(home, ".config", "opencode", "plugin"), { recursive: true });
-      fs.copyFileSync(path.join(PLUGINS, plugin), path.join(home, ".config", "opencode", "plugin", plugin));
-    }
-    writeJson(path.join(home, ".opencode", "rate-limit-fallback.json"), {
-      fallbackMode: "stop",
-      cooldownMs: 300_000,
-      // A chain per model the session starts on: each primary model falls back to its own.
-      fallbackModels: {
-        "opencode-go/m1": [{ providerID: "backup", modelID: "m1" }],
-        "opencode-go/m2": [{ providerID: "backup", modelID: "m2" }],
-      },
-      retryPolicy: { maxRetries: 2, strategy: "exponential", baseDelayMs: 200 },
-      circuitBreaker: { enabled: true, failureThreshold: 3, recoveryTimeoutMs: 300_000 },
-    });
+    fs.mkdirSync(path.join(home, ".config", "opencode", "plugin"), { recursive: true });
+    fs.copyFileSync(path.join(PLUGINS, "error-retry.js"), path.join(home, ".config", "opencode", "plugin", "error-retry.js"));
     fs.mkdirSync(path.join(home, "work"), { recursive: true });
     fs.writeFileSync(mockLog, "");
-    mock = spawn(process.execPath, [MOCK], { env: { ...process.env, MOCK_PORT: String(port), MOCK_LOG: mockLog, MOCK_LIMITED: "primary" }, stdio: "ignore" });
+    mock = spawn(process.execPath, [MOCK], { env: { ...process.env, MOCK_PORT: String(port), MOCK_LOG: mockLog }, stdio: "ignore" });
     process.env.HOME = home;
     process.env.XDG_CONFIG_HOME = path.join(home, ".config");
     process.env.XDG_DATA_HOME = path.join(home, ".local", "share");
@@ -218,26 +203,6 @@ describe.skipIf(!RUN)("opencode server mode on OpenCode 2", () => {
     expect(all).toContain("SYSTEM_PROMPT_MARKER");
   }, 120_000);
 
-  it("falls back to the second provider on a rate limit (fallback plugin), within the turn", async () => {
-    const { result } = await turn("limited E429", { model: "opencode-go/m1" });
-    expect(result.error).toBeUndefined();
-    expect(result.result).toBe("hello from mock");
-    const [first, second] = mainRequests().slice(-2);
-    expect(first!.url).toMatch(/^\/primary\//);
-    expect(second!.url).toMatch(/^\/backup\//);
-    expect(second!.model).toBe("m1");
-  }, 120_000);
-
-  it("falls back to the second provider on a provider 500 (fallback plugin), within the turn", async () => {
-    const { result } = await turn("broken E500", { model: "opencode-go/m2" });
-    expect(result.error).toBeUndefined();
-    expect(result.result).toBe("hello from mock");
-    const [first, second] = mainRequests().slice(-2);
-    expect(first!.url).toMatch(/^\/primary\//);
-    expect(second!.url).toMatch(/^\/backup\//);
-    expect(second!.model).toBe("m2");
-  }, 120_000);
-
   it("retries a pre-stream 400 in place (error-retry plugin), so the turn answers", async () => {
     const { result } = await turn("once E400ONCE", { model: "opencode-go/m2" });
     expect(result.error).toBeUndefined();
@@ -266,16 +231,5 @@ describe.skipIf(!RUN)("opencode server mode on OpenCode 2", () => {
       cappedEngine.killAll();
       await capped.stopAll();
     }
-  }, 120_000);
-
-  it("falls back along the chain of the model the turn started on (fallback plugin)", async () => {
-    const { result } = await turn("limited too E429", { model: "opencode-go/m2" });
-    expect(result.error).toBeUndefined();
-    expect(result.result).toBe("hello from mock");
-    const [first, second] = mainRequests().slice(-2);
-    expect(first!).toMatchObject({ model: "m2" });
-    expect(first!.url).toMatch(/^\/primary\//);
-    expect(second!.url).toMatch(/^\/backup\//);
-    expect(second!.model).toBe("m2");
   }, 120_000);
 });

@@ -186,7 +186,100 @@ profile, and could not be seen or edited in the dashboard. It is removed:
 - opencode model and provider hops are chain links:
   `{engine: opencode, model: openrouter/x}`;
 - a host still running a fallback plugin is reported by `jinn doctor`, at
-  gateway start, and in Settings, so there is never a double fallback.
+  gateway start, and in Settings, so a double fallback is never silent.
+
+### A configured plugin is reported, not neutralised
+
+The gateway cannot switch an operator's fallback plugin off for its own
+sessions alone, so it detects and reports one. Checked on the real binaries
+(opencode 1.19.0 with `opencode-rate-limit@1.4.0`, and 2.0.29 with the example
+`model-fallback.js`, against a provider answering 429):
+
+| Lever | 1.19.0 | 2.0.29 |
+|---|---|---|
+| a staged `OPENCODE_CONFIG` with an empty plugin list | the plugin still switches models: plugin lists are concatenated, not replaced | the same |
+| a staged plugin with the same name as the operator's | the plugin still switches models | not applicable: 2.x reads no local module path from config |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`, `OPENCODE_DISABLE_PROJECT_CONFIG` | the plugin still switches models | no such variable |
+| `OPENCODE_PURE=1` | stops the plugin, and every other external plugin with it: the operator's provider-auth plugins and the gateway's own staged plugin (the command-timeout cap) | no such variable |
+| `OPENCODE_CONFIG_DIR` pointing elsewhere | not tried | replaces the operator's config directory, so the provider config goes too (`provider.no-route`) |
+| the plugin's own `"enabled": false` | the plugin reads the first existing file of the project, `~` and the config directory (each under `.opencode/`, `opencode/`, then bare): the gateway would have to write into the operator's project or home | the same |
+
+What a gateway turn does on a host that still has the plugin (real binaries, the
+same 429 upstream, through the gateway's opencode engine; the default model's
+provider answers 429 and the plugin's fallback provider answers normally):
+
+| opencode | Mode | What happens |
+|---|---|---|
+| 1.19.0 + `opencode-rate-limit@1.4.0` | server | The plugin aborts the turn and re-sends the prompt as a new message, which the gateway no longer adopts. The turn ends in about 5 s as a usage limit (`rateLimit: rejected`) whose error names the plugin, so the chain takes over. The re-sent copy has usually reached the fallback model by then (one request); the gateway aborts it, and its answer is never delivered. |
+| 1.19.0 + `opencode-rate-limit@1.4.0` | run | The plugin's abort ends the process with exit 0, no answer and no error of its own, before any re-send, so no request reaches the fallback model. The turn ends as a usage limit whose error names the plugin. |
+| 2.0.29 + `model-fallback.js` | server | The plugin switches the session's model inside the turn. The fallback model answers it in about 3 s. No hop is recorded and the chain is not walked, but the turn says so: a warning in the gateway log and one session notice, "Answered by <provider/model> through the host's opencode fallback plugin, not the gateway's chain. Run `jinn doctor` to remove it." |
+| 2.0.29 + `model-fallback.js` | run | The same answer from the fallback model, invisibly to the chain; the notice is posted only for a server turn, which sees which model each step ran on. |
+
+**How a 1.x turn's outcome is decided on a plugin host.** The plugin's abort
+carries no error, so the gateway reads it from evidence. Every condition below must
+hold before a turn becomes the plugin's usage limit:
+
+- the host has the plugin and the binary is 1.x. 2.x turns are never read this
+  way, because the 2.x plugin switches models instead of aborting;
+- the process exited 0, the transport did not fail, and the gateway did not stop
+  the turn itself (an interrupt or a timeout keeps its own error);
+- no error other than a usage limit was reported;
+- the turn stopped while a model step was still due: no step finished, or the
+  last one finished on a tool call. opencode only stops there when something
+  aborts it. A turn the model ended itself closes on a `stop` step.
+
+When all hold, any text the turn wrote came from a step that ended on a tool call.
+That text is narration ("Let me read the file") and is not taken for the answer.
+The turn ends as a usage limit, and its error names the plugin.
+
+When any condition fails, the turn is read exactly as on a host without the plugin:
+- a blank last step is a plain error, so it cannot mark the whole opencode
+  engine as exhausted;
+- a final step's text is the answer;
+- a crash, transport failure or interrupt is never read as a usage limit.
+
+The tests in `opencode-fallback-plugin-turn.test.ts` and
+`opencode-server-provider.test.ts` pin each side of every condition. A change
+here must keep both sides covered.
+The 2.x notice is posted wherever the turn takes the engine's result: the first
+attempt, a chain hop's substitute and a parked retry.
+
+Before this was handled, a 1.x server turn also ended as a usage limit but left the copy running, and a 1.x run turn
+ended with `opencode exited successfully without a final assistant response` and no rate limit, so the chain
+never took over.
+
+What is checked, and where:
+
+- the plugin in a `plugin` or `plugins` list of the operator's opencode config
+  (`opencode.json`, `opencode.jsonc` or `config.json` in the config directory
+  and `~/.opencode/`, `OPENCODE_CONFIG`, and `opencode.json` and `.opencode/`
+  in the directory the gateway (or `jinn doctor`) runs in, which stands for the
+  project: a session's own working directory is not read);
+- a `model-fallback` or `opencode-rate-limit` file or directory in a `plugin`
+  or `plugins` directory of those;
+- a `rate-limit-fallback.json` without `"enabled": false` in `.opencode/`,
+  `opencode/` or the directory itself, under the project, `~` and
+  `$XDG_CONFIG_HOME`: the places the plugin reads.
+
+`GET /api/engines` carries the reading on the opencode entry:
+
+```json
+"internalFallback": { "detected": true, "neutralised": false, "sources": ["…/rate-limit-fallback.json"] }
+```
+
+`sources` are the operator's own paths: they are in `jinn doctor`'s output and
+at debug level in the log, never in an info-level line. Nothing is ever
+written to the operator's files.
+
+A remote host is read best effort, through the facts the gateway already
+collects when it first reaches the host: a shell probe for the same markers
+(a `grep` for the plugin's name as a whole package or file name in the opencode
+config files, so a comment that merely mentions it counts; the plugin files; a
+settings file whose top-level `enabled` is not false, read as plain JSON, so a
+file with comments, which the plugin itself cannot read either, is skipped).
+Its findings are added to `sources` as `host: path`, and the first
+one for a host logs the same warning. A project directory is not read on a
+remote host, since the host does not know which project a session will run in.
 
 ### Migrating a host
 
@@ -201,9 +294,12 @@ profile, and could not be seen or edited in the dashboard. It is removed:
    `rate-limit-fallback.json`.
 3. `jinn doctor` confirms no internal fallback is left.
 
-The plugin's `cooldownMs`, `circuitBreaker`, `fallbackMode` and `restoreModel`
-have no setting of their own: engine health, the once-per-run rule and the
-return to the session's own target at its reset cover them.
+The plugin's `cooldownMs`, `circuitBreaker`, `fallbackMode`, `restoreModel`
+and `retryPolicy` have no setting of their own: engine health, the
+once-per-run rule (a chain's length bounds the hops) and the return to the
+session's own target at its reset cover them. `jinn fallback migrate-opencode`
+lists each such key it finds, with this reason. `--write` merges only the
+engine default, and refuses when `engines.opencode.fallback` is already set. It goes through the atomic config save, so YAML comments in `config.yaml` are not kept, and an `engines.opencode` block is created when there is none.
 
 ## Testing without real providers
 

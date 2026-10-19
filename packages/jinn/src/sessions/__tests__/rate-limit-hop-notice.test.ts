@@ -75,6 +75,15 @@ describe("a chain hop's announcement", () => {
   });
 });
 
+describe("a hop that did not serve the turn", () => {
+  it("still posts the notices its engine asked for, once each", async () => {
+    await (await hooks()).onFallbackFailed!({ sessionId: "", result: "", error: "429", notices: ["from a plugin host"] });
+
+    expect(notice).toHaveBeenCalledTimes(1);
+    expect(notice).toHaveBeenCalledWith("from a plugin host");
+  });
+});
+
 describe("the chain running out", () => {
   const ran = { ...hop, to: null, toLabel: null };
 

@@ -2,6 +2,7 @@ import { sessionClaudeProfile } from "../session-account.js";
 import { remoteScopeFor, spawnCwd } from "../session-cwd.js";
 import { employeeRemoteTarget, isRemoteTarget } from "../../shared/remote-target.js";
 import { logger } from "../../shared/logger.js";
+import { postEngineNotices } from "./engine-notices.js";
 import { selectClaudeModelFallback } from "../../shared/model-fallback.js";
 import { getModelRegistry, refreshClaudeModels } from "../../shared/models.js";
 import type { EngineResult, StreamDelta } from "../../shared/types.js";
@@ -73,6 +74,8 @@ export async function runEngineAttempt(args: EngineAttemptArgs): Promise<EngineA
     partialStream.finish();
   });
 
+  // Notices the engine asks for, once each, ahead of the reply.
+  await postEngineNotices(surface, sessionId, result.notices);
   return {
     result,
     fingerprint: prepared.fingerprint,

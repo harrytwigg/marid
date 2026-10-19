@@ -9,9 +9,9 @@ import { logger } from "../shared/logger.js";
  * does not have is an error at the provider, so the engine sends one only when
  * the turn's effort is one of the levels the registry knows for the turn's
  * model, and says nothing otherwise. The effort the session resolved was
- * validated against the model the SESSION names; a provider fallback runs the
- * turn on another model, which is why this check is made again here, against
- * the model the turn actually runs.
+ * validated against the model the SESSION names; a turn that runs on another
+ * model (a fallback chain link names its own) needs this check again here,
+ * against the model the turn actually runs.
  *
  * It is made once, when the engine accepts the turn ({@link withKnownEffort}),
  * so every transport reads `opts.effortLevel` as "the variant to send".

@@ -210,6 +210,7 @@ async function launch(w: Walk, found: Found, hop: FallbackHop): Promise<WalkOutc
   const result = await runLink({ walk: w.input, choice, engine: opts.engines.get(choice.engine)!, substitution, prompt: promptFor(w, substitution), cwd });
   const failure = linkFailure(result, choice.engine);
   if (!failure) return await served(w, found, substitution.model ?? substitution.engineConfig.model, result);
+  await opts.hooks.onFallbackFailed?.(result);
   if (failure.reason === "auth" && result.error) noteLinkAuthFailure(opts, choice, result.error);
   failedOver(w, found, failure, result);
   return undefined;

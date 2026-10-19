@@ -7,9 +7,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
  * what it says. Real processes, as in opencode-server-mode.test.ts: the fake
  * `opencode` (fixtures/fake-opencode.mjs) plays the event orders real 1.18.35
  * and 1.19.0 emit for a provider answering 429 "Go usage limit exceeded", and
- * the fallback shapes where opencode takes the turn up again after a reply
- * that wrote nothing.
+ * the shapes where opencode takes the turn up again after a reply that wrote
+ * nothing.
  */
+
+// Whether the host's opencode has a model-fallback plugin: the real detection reads the machine running the tests.
+const pluginOnHost = vi.hoisted(() => ({ value: false }));
+vi.mock("../opencode-internal-fallback.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../opencode-internal-fallback.js")>()),
+  hostHasInternalFallback: () => pluginOnHost.value,
+  fallbackPluginAbortsTurns: (api?: number) => api !== 2 && pluginOnHost.value,
+}));
 
 vi.mock("../../shared/logger.js", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -17,9 +25,8 @@ vi.mock("../../shared/logger.js", () => ({
 
 import { OpencodeEngine } from "../opencode.js";
 import { OpencodeServerPool, basicAuthHeader } from "../opencode-server.js";
-import { cancelledRequests, SERVER_TURN_TIMING } from "../opencode-server-turn.js";
-import { USER_STOP_INTERRUPTION_REASON } from "../../sessions/interruption-reasons.js";
-import { abandonedRetryError, providerRetryOf, repeatsPrompt, SettleWait } from "../opencode-server-settle.js";
+import { SERVER_TURN_TIMING } from "../opencode-server-turn.js";
+import { abandonedRetryError, providerRetryOf, SettleWait } from "../opencode-server-settle.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
 import { JINN_HOME } from "../../shared/paths.js";
 import type { EngineRunOpts } from "../../shared/types.js";
@@ -51,6 +58,7 @@ async function serverLog(pool: OpencodeServerPool): Promise<Array<{ method: stri
 
 beforeEach(() => {
   Object.assign(SERVER_TURN_TIMING, DEFAULT_TIMING);
+  pluginOnHost.value = false;
 });
 
 afterEach(async () => {
@@ -86,46 +94,18 @@ describe("a provider error in a server turn", { timeout: 20_000 }, () => {
     expect(result.rateLimit).toEqual({ status: "rejected" });
   });
 
-  it("does not end the turn at an idle that opencode follows with a fallback reply", async () => {
+  it("does not end the turn at an idle that opencode follows with a newer reply", async () => {
     const { engine } = harness();
-    const result = await engine.run(runOpts("FALLBACKIDLE build it"));
+    const result = await engine.run(runOpts("NEWERREPLYIDLE build it"));
     expect(result.error).toBeUndefined();
-    expect(result.result).toContain("answer:FALLBACKIDLE build it");
+    expect(result.result).toContain("answer:NEWERREPLYIDLE build it");
   });
 
   it("does not end the turn at a reply that finished with nothing written when a newer reply follows", async () => {
     const { engine } = harness();
-    const result = await engine.run(runOpts("FALLBACKREPLY build it"));
+    const result = await engine.run(runOpts("NEWERREPLYDONE build it"));
     expect(result.error).toBeUndefined();
-    expect(result.result).toContain("answer:FALLBACKREPLY build it");
-  });
-
-  it("takes the answer to the prompt a fallback plugin re-sent after aborting the turn as this turn's answer", async () => {
-    const { pool, engine } = harness();
-    const result = await engine.run(runOpts("FALLBACKPROMPT build it"));
-    expect(result.error).toBeUndefined();
-    expect(result.result).toContain("answer:FALLBACKPROMPT build it");
-    expect((await serverLog(pool)).filter((e) => e.url.endsWith("/abort"))).toEqual([]); // nothing of it was stopped
-  });
-
-  it("makes a re-sent prompt a Jinn prompt, so a stop after the fallback is named once, by its request", async () => {
-    const { pool, engine } = harness();
-    // A first turn: the prompt's text carries the system prompt, which a notice must never quote.
-    const turn = engine.run({ ...runOpts("FALLBACKPROMPT HANG build it"), systemPrompt: "You are Ada." });
-    const marked = async () => Boolean(pool.get("sess-1")) && (await serverLog(pool)).some((e) => e.method === "PATCH");
-    for (let i = 0; i < 400 && !(await marked()); i++) await new Promise((r) => setTimeout(r, 25));
-    engine.kill("sess-1", USER_STOP_INTERRUPTION_REASON);
-    const result = await turn;
-    expect(result.error).toBe(USER_STOP_INTERRUPTION_REASON);
-
-    const server = pool.get("sess-1")!;
-    const stored = await (await fetch(`${server.apiUrl}/session/${result.sessionId}/message`, {
-      headers: { authorization: basicAuthHeader(server.password) },
-    })).json() as Array<{ info: Record<string, unknown>; parts: Array<{ text?: string; metadata?: Record<string, unknown> }> }>;
-    const prompts = stored.filter((m) => m.info.role === "user");
-    expect(prompts).toHaveLength(2);
-    expect(prompts[1]!.parts[0]!.metadata).toEqual({ jinn: "prompt", stopped: "user", request: "FALLBACKPROMPT HANG build it" });
-    expect(cancelledRequests(stored, false)).toEqual({ cancelled: [], stopped: ["FALLBACKPROMPT HANG build it"] });
+    expect(result.result).toContain("answer:NEWERREPLYDONE build it");
   });
 
   it("ends a turn whose provider retry is too far off, with the provider's words and when it resets, and stops the retry on the server", async () => {
@@ -175,15 +155,113 @@ describe("a provider error in a server turn", { timeout: 20_000 }, () => {
   });
 });
 
-describe("opencode-server-settle", () => {
-  it("knows a re-sent copy of the prompt: the same text, with no Jinn metadata", () => {
-    expect(repeatsPrompt({ type: "text", text: "build it" }, "build it")).toBe(true);
-    expect(repeatsPrompt({ type: "text", text: "build it", metadata: { jinn: "prompt" } }, "build it")).toBe(false);
-    expect(repeatsPrompt({ type: "text", text: "build it again" }, "build it")).toBe(false);
-    expect(repeatsPrompt({ type: "file", text: "build it" }, "build it")).toBe(false);
-    expect(repeatsPrompt({ type: "text", text: "" }, "")).toBe(false);
+describe("a host whose opencode has a model-fallback plugin", { timeout: 20_000 }, () => {
+  /** What such a plugin does at a usage limit: abort the turn, then post its prompt again as a new message on another model. */
+  const limited = "COPYAFTERABORT build it";
+
+  it("ends the turn as a usage limit that names the plugin, and stops the copy instead of answering it", async () => {
+    SERVER_TURN_TIMING.closeWaitMs = 300;
+    pluginOnHost.value = true;
+    const { pool, engine } = harness();
+    const result = await engine.run(runOpts(limited));
+    expect(result.result).toBe("");
+    expect(result.error).toContain("model-fallback plugin");
+    expect(result.error).toContain("jinn doctor");
+    expect(result.rateLimit?.status).toBe("rejected");
+    // The copy's reply was not taken for the turn's answer, and was aborted rather than left running.
+    expect((await serverLog(pool)).some((e) => /^\/session\/[^/]+\/abort$/.test(e.url))).toBe(true);
   });
 
+  it("marks the stopped copy as a Jinn prompt, so the next turn is not told the request was cancelled", async () => {
+    SERVER_TURN_TIMING.closeWaitMs = 300;
+    pluginOnHost.value = true;
+    const { pool, engine } = harness();
+    const first = await engine.run(runOpts(limited));
+    expect(first.error).toContain("model-fallback plugin");
+    const second = await engine.run({ ...runOpts("PROVIDERRETRY build it again"), resumeSessionId: first.sessionId });
+    expect(second.error).toBeUndefined();
+    const server = pool.get("sess-1")!;
+    const stored = await (await fetch(`${server.apiUrl}/session/${first.sessionId}/message`, {
+      headers: { authorization: basicAuthHeader(server.password) },
+    })).json() as Array<{ info: Record<string, unknown>; parts: Array<{ text?: string; metadata?: Record<string, unknown> }> }>;
+    const prompts = stored.filter((m) => m.info.role === "user");
+    // the turn's own prompt, the plugin's copy (now a Jinn prompt), and the second turn's
+    expect(prompts).toHaveLength(3);
+    expect(prompts[1]!.parts[0]!.metadata).toEqual({ jinn: "prompt" });
+    expect(prompts.flatMap((m) => m.parts).some((p) => /cancelled the request/.test(p.text ?? ""))).toBe(false);
+  });
+
+  it("leaves a host without the plugin's error, and the copy, as they were", async () => {
+    SERVER_TURN_TIMING.closeWaitMs = 300;
+    const { pool, engine } = harness();
+    const result = await engine.run(runOpts(limited));
+    expect(result.result).toBe("");
+    expect(result.error).not.toContain("model-fallback plugin");
+    expect((await serverLog(pool)).some((e) => e.url.endsWith("/abort"))).toBe(false);
+  });
+
+  it("reads a usage limit after a finished tool step as the plugin too, and stops the copy", async () => {
+    SERVER_TURN_TIMING.closeWaitMs = 300;
+    pluginOnHost.value = true;
+    const { pool, engine } = harness();
+    const result = await engine.run(runOpts(`TOOLFIRST ${limited}`));
+    expect(result.result).toBe("");
+    expect(result.error).toContain("model-fallback plugin");
+    expect(result.rateLimit?.status).toBe("rejected");
+    expect((await serverLog(pool)).some((e) => /^\/session\/[^/]+\/abort$/.test(e.url))).toBe(true);
+  });
+
+  it("reads a usage limit after a tool step that narrated as the plugin: the narration is not the answer, and the copy is stopped", async () => {
+    SERVER_TURN_TIMING.closeWaitMs = 300;
+    pluginOnHost.value = true;
+    const { pool, engine } = harness();
+    const result = await engine.run(runOpts(`TOOLNARRATE ${limited}`));
+    expect(result.result).toBe("");
+    expect(result.error).toContain("model-fallback plugin");
+    expect(result.rateLimit?.status).toBe("rejected");
+    expect((await serverLog(pool)).some((e) => /^\/session\/[^/]+\/abort$/.test(e.url))).toBe(true);
+  });
+
+  it("keeps the final answer of a turn that ran tool steps, with the plugin on the host", async () => {
+    pluginOnHost.value = true;
+    const { pool, engine } = harness();
+    const result = await engine.run(runOpts("MULTISTEP work"));
+    expect(result.error).toBeUndefined();
+    expect(result.result).not.toBe("");
+    expect((await serverLog(pool)).some((e) => e.url.endsWith("/abort"))).toBe(false);
+  });
+
+  it("does not read a blank last step after a tool step as the plugin", async () => {
+    pluginOnHost.value = true;
+    const { pool, engine } = harness();
+    const result = await engine.run(runOpts("TOOLONLY work"));
+    expect(result.error).toBeDefined();
+    expect(result.error).not.toContain("model-fallback plugin");
+    expect(result.rateLimit).toBeUndefined();
+    expect((await serverLog(pool)).some((e) => e.url.endsWith("/abort"))).toBe(false);
+  });
+
+  it("does not read a blank answer from a finished step as the plugin: a plain error, no usage limit, nothing stopped", async () => {
+    pluginOnHost.value = true;
+    const { pool, engine } = harness();
+    const result = await engine.run(runOpts("CUTOFF work"));
+    expect(result.error).toBeDefined();
+    expect(result.error).not.toContain("model-fallback plugin");
+    expect(result.rateLimit).toBeUndefined();
+    expect((await serverLog(pool)).some((e) => e.url.endsWith("/abort"))).toBe(false);
+  });
+
+  it("does not stop a turn that has its answer", async () => {
+    pluginOnHost.value = true;
+    const { pool, engine } = harness();
+    const result = await engine.run(runOpts("PROVIDERRETRY build it"));
+    expect(result.error).toBeUndefined();
+    expect(result.result).toContain("answer:PROVIDERRETRY build it");
+    expect((await serverLog(pool)).some((e) => e.url.endsWith("/abort"))).toBe(false);
+  });
+});
+
+describe("opencode-server-settle", () => {
   it("reads a retry status, and nothing else", () => {
     expect(providerRetryOf({ type: "retry", attempt: 1, message: "Go usage limit exceeded", next: 5 })).toEqual({ message: "Go usage limit exceeded", next: 5 });
     expect(providerRetryOf({ type: "retry" })).toEqual({ message: "the provider failed and opencode is retrying it" });

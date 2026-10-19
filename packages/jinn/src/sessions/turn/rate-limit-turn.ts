@@ -15,6 +15,7 @@ import { withBoardReminder } from "./board-reminder.js";
 import { hopNoticeText } from "../fallback-hop.js";
 import type { FallbackHop, FallbackHopNoticeMeta } from "../../shared/fallback-chain-wire.js";
 import type { JsonObject } from "../../shared/types.js";
+import { postEngineNotices } from "./engine-notices.js";
 
 export interface RateLimitTurnArgs {
   input: TurnInput;
@@ -144,7 +145,10 @@ function rateLimitHooks(args: RateLimitTurnArgs): RateLimitHandlerHooks {
   return {
     onFallbackStart: ({ resumeAt, substitute, model, hop }) => announceFallback(args, resumeAt, substitute, { model, hop }),
     onFallbackStream: (delta) => surface.delta(delta),
+    // A hop that did not serve the turn still asked for its notices, once each.
+    onFallbackFailed: (failed) => postEngineNotices(surface, args.input.session.id, failed.notices),
     onFallbackComplete: async (fallbackResult, ran) => {
+      await postEngineNotices(surface, args.input.session.id, fallbackResult.notices);
       // The fallback answered on a DIFFERENT engine, so its native id is filed
       // under whichever engine the switch landed on — and without a platform
       // context fingerprint, which belongs to the engine that was limited.
@@ -160,6 +164,7 @@ function rateLimitHooks(args: RateLimitTurnArgs): RateLimitHandlerHooks {
     onStillLimited: () => surface.waiting(true),
     onRetryStream: (delta) => surface.delta(delta),
     onRetrySuccess: async (retryResult) => {
+      await postEngineNotices(surface, args.input.session.id, retryResult.notices);
       const settled = await settleRecoveredTurn(args, retryResult, !retryResult.error && retryResult.sessionId?.trim() ? {
         engine: plan.engineName,
         nativeId: retryResult.sessionId,

@@ -24,6 +24,11 @@ import {
  * Transport-agnostic by construction — a local run and one carried over ssh
  * produce the same lines, so neither is special-cased here.
  */
+/** What a turn that a host's fallback plugin ended says: the plugin is named, and the turn counts as a usage limit. */
+export const FALLBACK_PLUGIN_ENDED_TURN =
+  "This host's opencode has a model-fallback plugin (see `jinn doctor`), which aborts a turn at a usage limit and re-sends the prompt on another model; "
+  + "the gateway does not follow that re-send, so this counts as a usage limit and its fallback chain takes over. Remove the plugin.";
+
 export class OpencodeTurn {
   /** The answer: the last non-empty text part wins. */
   private resultText = "";
@@ -34,12 +39,18 @@ export class OpencodeTurn {
   private producedOutput = false;
   /** Model round trips. A turn that called tools has more than one. */
   private steps = 0;
+  /** Why the last finished step ended: `tool-calls` means another step was due. */
+  private lastFinishReason: string | undefined;
+  /** Text arrived after the last finished step, i.e. in a step that did not end on a tool call. */
+  private textSinceStepFinish = false;
   private cost = 0;
   private contextTokens: number | undefined;
   /** opencode assigns this; until it speaks, the id we asked it to resume. */
   private sessionId: string;
 
-  constructor(resumeSessionId: string) {
+  /** @param fallbackPluginOnHost whether the host's opencode carries a model-fallback
+   *  plugin (opencode-internal-fallback.ts), read when the turn ends. */
+  constructor(resumeSessionId: string, private readonly fallbackPluginOnHost: () => boolean = () => false) {
     this.sessionId = resumeSessionId;
   }
 
@@ -80,6 +91,7 @@ export class OpencodeTurn {
     this.resultText = text;
     this.endedInError = false;
     this.producedOutput = true;
+    this.textSinceStepFinish = true;
     if (onStream) onStream({ type: "text", content: text });
   }
 
@@ -114,6 +126,8 @@ export class OpencodeTurn {
    *  ACCUMULATES and the context reading is whichever step spoke last. */
   private readStepFinish(part: Record<string, unknown>): void {
     this.steps += 1;
+    this.lastFinishReason = trimmedString(part.reason);
+    this.textSinceStepFinish = false;
     this.cost += numberOr(part.cost, 0);
     const context = contextTokensFromStep(asRecord(part.tokens) as StepTokens | undefined);
     if (context !== undefined) this.contextTokens = context;
@@ -150,11 +164,11 @@ export class OpencodeTurn {
     // text was an earlier step's narration ("Let me check X first"), and a
     // provider refusing the next step, or a stream that went away, is the
     // turn's outcome.
-    if (!outcome.failure && this.resultText.trim() && !this.endedInError) {
+    if (this.acceptsAnswer(outcome)) {
       return { sessionId: this.sessionId, result: this.resultText, ...accounting };
     }
 
-    const error = outcome.failure || this.outcomeError(outcome);
+    const { error, plugin } = this.failureOf(outcome);
     return {
       sessionId: this.sessionId,
       result: "",
@@ -170,8 +184,47 @@ export class OpencodeTurn {
       // which is exactly the shape `isDeadSessionError` reads as a stale resume
       // id — and it is consulted BEFORE `detectRateLimit`, so without this the
       // session id would be wiped and the engine chain never walked.
-      ...(isRateLimitMessage(error) ? { rateLimit: { status: "rejected" } } : {}),
+      ...(plugin || isRateLimitMessage(error) ? { rateLimit: { status: "rejected" } } : {}),
     };
+  }
+
+  /** Whether the last text is the turn's answer. Not when the transport failed or an error
+   *  came after it, and not when it was a tool step's narration ("Let me read the file")
+   *  and a host's fallback plugin then aborted the next step: that abort carries no error. */
+  private acceptsAnswer(outcome: { code: number | null; failure?: string }): boolean {
+    if (outcome.failure || !this.resultText.trim() || this.endedInError) return false;
+    return !(this.answerIsNarration && this.endedByFallbackPlugin(outcome));
+  }
+
+  /** The error of a turn with no accepted answer, and whether a host's fallback plugin ended it. */
+  private failureOf(outcome: { code: number | null; stderr: string; failure?: string; noAnswer?: string }): { error: string; plugin: boolean } {
+    const error = outcome.failure || this.outcomeError(outcome);
+    const plugin = this.endedByFallbackPlugin(outcome);
+    return { error: plugin ? `${error}. ${FALLBACK_PLUGIN_ENDED_TURN}` : error, plugin };
+  }
+
+  /** A turn that ended with nothing, on a host whose opencode has a model-fallback
+   *  plugin: the plugin aborts a turn at a usage limit and re-sends the prompt, which
+   *  ends it with no answer and no error of its own. The abort is the evidence: it lands
+   *  while a step was still due (see {@link stoppedBetweenSteps}), so a blank answer from a
+   *  last step that ended on its own is the model's and not this. Not for a failure of the
+   *  transport, or an error that is not a usage limit. */
+  private endedByFallbackPlugin(outcome: { code: number | null; failure?: string }): boolean {
+    if (outcome.failure || outcome.code !== 0 || !this.stoppedBetweenSteps || !this.fallbackPluginOnHost()) return false;
+    return !this.turnError || isRateLimitMessage(this.turnError);
+  }
+
+  /** Whether the turn stopped while another model step was still due: none had
+   *  finished, or the last one finished on a tool call. opencode only stops there when
+   *  something aborts it; a turn the model ended itself closes on a `stop` step. */
+  get stoppedBetweenSteps(): boolean {
+    return this.steps === 0 || this.lastFinishReason === "tool-calls";
+  }
+
+  /** Whether the turn's text came only from a step that ended on a tool call, with no
+   *  step after it: narration before a tool, not an answer, if the turn stops there. */
+  get answerIsNarration(): boolean {
+    return this.steps > 0 && this.lastFinishReason === "tool-calls" && !this.textSinceStepFinish;
   }
 
   /** Why a turn that produced no accepted answer failed: whatever opencode

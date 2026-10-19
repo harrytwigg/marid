@@ -103,11 +103,12 @@ function newSession(opts: { ref: string; employeeName?: string; model?: string; 
 }
 
 function recordingHooks() {
-  const seen = { starts: [] as Array<{ substitute: string; model?: string; hop?: FallbackHop }>, waiting: [] as Array<{ reason?: string; hop?: FallbackHop }>, completes: [] as Array<{ engine: string; model?: string }> };
+  const seen = { starts: [] as Array<{ substitute: string; model?: string; hop?: FallbackHop }>, waiting: [] as Array<{ reason?: string; hop?: FallbackHop }>, completes: [] as Array<{ engine: string; model?: string }>, failed: [] as EngineResult[] };
   return {
     seen,
     hooks: {
       onFallbackStart: (info: { substitute: string; model?: string; hop?: FallbackHop }) => { seen.starts.push(info); },
+      onFallbackFailed: (result: EngineResult) => { seen.failed.push(result); },
       onFallbackComplete: (_result: EngineResult, ran: { engine: string; model?: string }) => { seen.completes.push(ran); },
       onWaitingStart: (info: { reason?: string; hop?: FallbackHop }) => { seen.waiting.push(info); },
     },
@@ -166,6 +167,15 @@ describe("a four-link chain: claude/A/opus -> claude/B/sonnet -> opencode/X -> o
       [key(OPENCODE_X), key(OPENCODE_Y), "rate-limit"],
     ]);
     expect(seen.starts.map((start) => start.hop?.to)).toEqual([key(CLAUDE_B), key(OPENCODE_X), key(OPENCODE_Y)]);
+  });
+
+  it("hands every attempt that did not serve the turn to the failed-attempt hook, with the notices it asked for", async () => {
+    const { engines } = scripted((call) => (who(call) === "x-provider/model-x" ? answer("ok") : { ...limited(), notices: [`notice from ${who(call)}`] }));
+    const id = newSession();
+    const { opts, seen } = limitedTurn(id, employee(), engines);
+    await handleRateLimit(opts);
+
+    expect(seen.failed.map((result) => result.notices)).toEqual([["notice from B/sonnet"]]);
   });
 
   it("records the run, the target the session stands on, and who served the turn", async () => {

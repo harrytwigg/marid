@@ -48,6 +48,12 @@ export interface RateLimitHandlerHooks {
   onFallbackStream?: (delta: StreamDelta) => void;
 
   /**
+   * Called with the result of a chain link that did not serve the turn (it hit a limit, or a failure that
+   * moves the walk on), so the notices it asked for are posted once, as a served link's are.
+   */
+  onFallbackFailed?: (result: EngineResult) => void | Promise<void>;
+
+  /**
    * Called after the fallback engine finishes, before the handler returns.
    * The persistence of the assistant message and any "completed" event emission
    * is done here (caller-specific).

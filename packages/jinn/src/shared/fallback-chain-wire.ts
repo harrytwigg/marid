@@ -89,6 +89,15 @@ export interface FallbackHop {
   skipped?: Array<{ key: string; reason: FallbackSkipReason }>;
 }
 
+/**
+ * The `meta` of the transcript notice that announces a hop: a `notification`
+ * message whose `meta.fallbackHop` is the hop. The web renders it as a card; a
+ * notification without the key is an ordinary notice.
+ */
+export interface FallbackHopNoticeMeta {
+  fallbackHop: FallbackHop;
+}
+
 /** Where a session's chain came from, highest precedence first. */
 export type FallbackChainSource = "session" | "employee" | "account" | "engine" | "none";
 

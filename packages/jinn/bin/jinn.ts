@@ -16,6 +16,7 @@ import { resolveJinnHome } from "../src/shared/home.js";
 import { assertCommandAllowedInHome } from "../src/cli/remote-stage-guard.js";
 import { settleHomeForCommand } from "../src/cli/settle-home.js";
 import { registerDoctorCommand } from "../src/cli/doctor-command.js";
+import { registerFallbackCommand } from "../src/cli/opencode-fallback-command.js";
 
 const program = new Command();
 program
@@ -184,6 +185,7 @@ program
   });
 
 registerDoctorCommand(program);
+registerFallbackCommand(program);
 
 // Remote-execution subcommands (jinn remote status|wake).
 // An operator affordance only — a turn wakes and verifies its own remote host,

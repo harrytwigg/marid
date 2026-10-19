@@ -22,6 +22,7 @@ import {
   refreshOpencodeModels,
 } from "../shared/models.js";
 import { withEngineHealth } from "../shared/engine-health.js";
+import { withInternalFallback } from "../engines/opencode-internal-fallback.js";
 import { validateNewSessionSelection, validateSessionPatch } from "../sessions/session-patch.js";
 import { parseFallbackModeParam, parseFallbackModePatch, withFallbackView } from "./session-fallback-api.js";
 import { childFallbackMode } from "../sessions/session-fallback.js";
@@ -4212,7 +4213,7 @@ export async function handleApiRequest(
     // when no `models:` block is configured.
     if (method === "GET" && pathname === "/api/engines") {
       const config = context.getConfig();
-      return json(res, { default: config.engines.default, engines: withEngineHealth(getModelRegistry(config)) });
+      return json(res, { default: config.engines.default, engines: withInternalFallback(withEngineHealth(getModelRegistry(config))) });
     }
 
     // POST /api/engines/refresh — re-run dynamic model discovery and return the
@@ -4230,7 +4231,7 @@ export async function handleApiRequest(
         refreshHermesModels(config),
       ]);
       context.emit("engines:updated", {});
-      return json(res, { default: config.engines.default, engines: withEngineHealth(getModelRegistry(config)) });
+      return json(res, { default: config.engines.default, engines: withInternalFallback(withEngineHealth(getModelRegistry(config))) });
     }
 
     // GET /api/engine-limits — live/snapshot quota windows and static capability
