@@ -1,5 +1,6 @@
 import type { EngineResult, EngineRunOpts, InterruptibleEngine } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
+import { NAMES } from "../shared/codename.js";
 import { resolveBin } from "../shared/resolve-bin.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
 import { lostConversationFailure } from "../shared/process-start.js";
@@ -199,7 +200,7 @@ export class MusecodeEngine implements InterruptibleEngine {
   private async negotiate(client: MspClient, opts: EngineRunOpts): Promise<ReturnType<typeof buildMuseSessionConfig>> {
     const config = buildMuseSessionConfig(opts.resolvedMcp);
     const init = await client.initialize({
-      clientInfo: { name: "marid", version: packageVersion() },
+      clientInfo: { name: NAMES.codename, version: packageVersion() },
       userInputDialogs: false,
       ...(config ? { requestedCapabilities: ["sessionMcp"] } : {}),
     });

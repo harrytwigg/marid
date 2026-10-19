@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ResolvedMcpConfig } from "../../shared/types.js";
+import { envName } from "../../shared/codename-env.js";
 import { buildMuseViewArgs, buildMuseViewMcp } from "../musecode-view-args.js";
 
+const P = envName("MCP_");
 const ID = "01a13fb8-5801-7983-8ae6-77432f86606b";
 const RULES_OFF = ["-c", "context.foreign_personal_rules=false", "-c", "context.foreign_personal_skills=false"];
 
@@ -38,16 +40,16 @@ describe("buildMuseViewMcp", () => {
       transport: "stdio",
       command: "/usr/bin/node",
       args: ["/opt/jinn/server-entry.js"],
-      env: { JINN_HOME: "${MARID_MCP_1}", JINN_SESSION_ID: "${MARID_MCP_2}" },
+      env: { JINN_HOME: `\${${P}1}`, JINN_SESSION_ID: `\${${P}2}` },
       mode: "optional",
     });
     expect(JSON.parse(flags[3].replace("mcpServers.remote=", ""))).toEqual({
       transport: "streamableHttp",
       url: "https://mcp.example.test/mcp",
-      headers: { Authorization: "${MARID_MCP_3}" },
+      headers: { Authorization: `\${${P}3}` },
       mode: "optional",
     });
-    expect(env).toEqual({ MARID_MCP_1: "/home/x/.jinn", MARID_MCP_2: "s-1", MARID_MCP_3: "Bearer sekrit-token" });
+    expect(env).toEqual({ [`${P}1`]: "/home/x/.jinn", [`${P}2`]: "s-1", [`${P}3`]: "Bearer sekrit-token" });
     expect(skipped).toEqual(["bad.name"]);
   });
 
@@ -60,7 +62,7 @@ describe("buildMuseViewMcp", () => {
 
   it("escapes `$` in a value, which Muse expands a second time after resolving the reference", () => {
     const { env } = buildMuseViewMcp({ mcpServers: { s: { command: "/bin/x", env: { A: "pre${NOPE}post", B: "a$b" } } } } as unknown as ResolvedMcpConfig);
-    expect(env).toEqual({ MARID_MCP_1: "pre$${NOPE}post", MARID_MCP_2: "a$$b" });
+    expect(env).toEqual({ [`${P}1`]: "pre$${NOPE}post", [`${P}2`]: "a$$b" });
   });
 
   it("adds nothing for a session with no servers", () => {

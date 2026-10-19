@@ -7,6 +7,7 @@ vi.mock("../../sessions/employee-env.js", () => ({
   employeeSessionEnv: (sessionId: string | undefined) => (sessionId === "s-employee" ? { JINN_EMPLOYEE: "worker" } : {}),
 }));
 
+import { NAMES } from "../../shared/codename.js";
 import { MusecodeEngine } from "../musecode.js";
 import { isDeadSessionError } from "../../shared/rateLimit.js";
 import { isLostConversationError } from "../../shared/process-start.js";
@@ -26,7 +27,7 @@ describe("a fresh turn", () => {
   it("speaks the protocol the design says: client info, no user-input dialogs, allowAll, the cwd as workspace", async () => {
     await ctx.engine.run(opts());
     const [init] = sent("initialize");
-    expect(init).toMatchObject({ clientInfo: { name: "marid" }, capabilities: { userInputDialogs: false } });
+    expect(init).toMatchObject({ clientInfo: { name: NAMES.codename }, capabilities: { userInputDialogs: false } });
     expect(typeof init!.clientInfo.version).toBe("string");
     expect(sent("session/start")[0]).toMatchObject({ workspaceRoot: ctx.tmp, approvalMode: "allowAll" });
     expect(sent("session/start")[0]!.commandId).toMatch(/^[0-9a-f-]{36}$/);

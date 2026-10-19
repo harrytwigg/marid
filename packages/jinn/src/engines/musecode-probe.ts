@@ -1,5 +1,6 @@
 import os from "node:os";
 import { logger } from "../shared/logger.js";
+import { NAMES } from "../shared/codename.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
 import { getPackageVersion } from "../shared/version.js";
 import type { MspClient } from "./musecode-msp.js";
@@ -42,7 +43,7 @@ export async function askMuseHost<T>(bin: string, opts: MuseProbeOptions, ask: (
   });
   try {
     const answer = (async () => {
-      await proc.client.initialize({ clientInfo: { name: "marid", version: packageVersion() }, userInputDialogs: false });
+      await proc.client.initialize({ clientInfo: { name: NAMES.codename, version: packageVersion() }, userInputDialogs: false });
       return await ask(proc.client);
     })();
     // Whichever loses the race must not become an unhandled rejection.

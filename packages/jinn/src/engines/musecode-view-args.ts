@@ -1,4 +1,5 @@
 import type { ResolvedMcpConfig } from "../shared/types.js";
+import { envName } from "../shared/codename-env.js";
 import { buildMuseSessionConfig, type MuseMcpServer } from "./musecode-mcp.js";
 
 /**
@@ -24,7 +25,7 @@ const FOREIGN_RULES_OFF = ["-c", "context.foreign_personal_rules=false", "-c", "
 const ADDRESSABLE_NAME = /^[A-Za-z0-9_-]+$/;
 
 /** Prefix of the environment variables that carry the view's MCP values. */
-export const MUSE_VIEW_MCP_ENV_PREFIX = "MARID_MCP_";
+export const MUSE_VIEW_MCP_ENV_PREFIX = envName("MCP_");
 
 export interface MuseViewLaunch {
   /** The conversation to open. Without one the view is a fresh TUI. */

@@ -207,10 +207,17 @@ describe('ChatPaneTitleBar', () => {
 })
 
 describe('paneViewControls', () => {
-  const registry = { engines: { codex: { supportsPty: true }, musecode: { supportsPty: true }, claude: { supportsPty: true } } } as never
+  const registry = {
+    engines: {
+      codex: { supportsPty: true, ptyLockedDuringTurn: true },
+      musecode: { supportsPty: true, ptyLockedDuringTurn: true },
+      grok: { supportsPty: true, ptyLockedDuringTurn: true },
+      claude: { supportsPty: true },
+    },
+  } as never
   const session = (engine: string, status: string) => ({ id: 's1', engine, status }) as unknown as Session
 
-  it.each([['codex', 'Codex'], ['musecode', 'Muse Code']])('locks the %s view switch while a turn is running', (engine, name) => {
+  it.each([['codex', 'Codex'], ['musecode', 'Muse Code'], ['grok', 'Grok']])('locks the %s view switch while a turn is running', (engine, name) => {
     const controls = paneViewControls(session(engine, 'running'), registry)
     expect(controls.viewSwitchLocked).toBe(true)
     expect(controls.cliTitle).toBe(`${name} view switching is locked while a turn is running`)
@@ -219,5 +226,9 @@ describe('paneViewControls', () => {
   it('lets the view switch once the turn is over, and never locks an engine whose terminal and turns coexist', () => {
     expect(paneViewControls(session('musecode', 'idle'), registry).viewSwitchLocked).toBe(false)
     expect(paneViewControls(session('claude', 'running'), registry).viewSwitchLocked).toBe(false)
+  })
+
+  it('does not lock while the registry has not loaded', () => {
+    expect(paneViewControls(session('codex', 'running')).viewSwitchLocked).toBe(false)
   })
 })

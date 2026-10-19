@@ -826,7 +826,7 @@ function ChatPage() {
 
   const cliModeAvailable = !sessionMeta?.engine || engineRegistry?.engines?.[sessionMeta.engine]?.supportsPty === true
   const activeSessionTab = chatTabs.activeTab?.kind === 'session' ? chatTabs.activeTab : null
-  const viewSwitchLocked = viewSwitchLockedEngine(sessionMeta?.engine) && activeSessionTab?.sessionId === focusedSessionId && activeSessionTab.status === 'running'
+  const viewSwitchLocked = viewSwitchLockedEngine(sessionMeta?.engine, engineRegistry) && activeSessionTab?.sessionId === focusedSessionId && activeSessionTab.status === 'running'
   const cliTitle = viewSwitchLocked
     ? viewSwitchLockedTitle(sessionMeta?.engine)
     : cliModeAvailable ? undefined : 'CLI view is not available for this engine'
