@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { Pin, Search } from 'lucide-react'
+import { Pin, Search } from '@/components/ui/icon'
 import { cn } from '@/lib/utils'
 import { useSessionPicker, type SessionPickerRow } from './use-session-picker'
 

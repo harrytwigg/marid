@@ -20,8 +20,8 @@ describe("app.css", () => {
     expect(firstRule === -1 || firstRule > lastImport, `a rule precedes the import at ${lastImport}`).toBe(true)
   })
 
-  it("loads the palette and the bridge after HeroUI's theme so they win on source order", () => {
-    const order = ["./globals.css", "heroui-theme-map", "./theme-overrides.css", "./heroui-bridge.css"].map((file) =>
+  it("loads the bridge after HeroUI's theme so it wins on source order", () => {
+    const order = ["./globals.css", "heroui-theme-map", "./heroui-bridge.css"].map((file) =>
       imports.indexOf(file),
     )
 

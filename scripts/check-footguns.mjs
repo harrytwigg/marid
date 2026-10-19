@@ -19,7 +19,9 @@ import { execFileSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import path from "node:path"
 
+import { RAW_BACKDROP_BLUR } from "./footguns/backdrop-blur.mjs"
 import { findLeaks, loadPrivateTerms, PRIVATE_TERMS_DEFAULT } from "./footguns/privacy-leak.mjs"
+import { REMOVED_UI_LIBRARY } from "./footguns/removed-ui-libraries.mjs"
 
 const CODE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"])
 const TEXT_EXTENSIONS = new Set([...CODE_EXTENSIONS, ".json", ".md", ".yml", ".yaml", ".sh"])
@@ -57,15 +59,15 @@ function extensionIn(relPath, extensions) {
   return extensions.has(path.extname(relPath))
 }
 
-function underPackages(relPath) {
-  return relPath.startsWith("packages/")
-}
+const underPackages = (relPath) => relPath.startsWith("packages/")
 
 function isTest(relPath) {
   return relPath.includes("/__tests__/") || /\.test\.[jt]sx?$/.test(relPath)
 }
 
 const RULES = [
+  RAW_BACKDROP_BLUR,
+  REMOVED_UI_LIBRARY,
   {
     name: "personal-path",
     message: "an absolute /Users/ path — this repo is published to npm, and the path names its author's machine",

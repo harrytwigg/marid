@@ -1,4 +1,4 @@
-import { ArrowUpRight, UserRound } from "lucide-react"
+import { ArrowUpRight, UserRound } from "@/components/ui/icon"
 import type { Employee, WorkItemStatusWire, WorkItemTreeNodeWire } from "@/lib/api"
 import { STATUS_LABEL, stateKeyOf } from "@/lib/todos"
 import { closeGateCounts, legalTargets } from "@/lib/legal-targets"
@@ -103,10 +103,10 @@ function QuickActions({
       }`}
     >
       <button type="button" aria-label={`Assign ${id}`} data-testid={`subtask-assign-${id}`} onClick={onAssign} className={ICON_BUTTON}>
-        <UserRound size={14} strokeWidth={2} aria-hidden />
+        <UserRound size={14} aria-hidden />
       </button>
       <button type="button" aria-label={`Open ${id}`} data-testid={`subtask-open-${id}`} onClick={(event) => onOpen(id, event)} className={ICON_BUTTON}>
-        <ArrowUpRight size={14} strokeWidth={2} aria-hidden />
+        <ArrowUpRight size={14} aria-hidden />
       </button>
     </span>
   )

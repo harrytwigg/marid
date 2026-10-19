@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { ChevronLeft, ChevronRight, X, ZoomIn } from "lucide-react"
+import { ChevronLeft, ChevronRight, X, ZoomIn } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
 import { MIN_ZOOM } from "@/lib/zoom-pan"
 import type { PreviewItem } from "./media-preview-store"
@@ -19,7 +19,8 @@ const ROUND_BUTTON = cn(
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]",
 )
 
-const FLOATING = "bg-[var(--material-thick)] shadow-[var(--shadow-overlay)] backdrop-blur-[20px]"
+// The opaque overlay material, no blur: these sit over moving media on a sheet that is itself a glass surface, and blur does not nest.
+const FLOATING = "bg-[var(--material-thick-opaque)] shadow-[var(--shadow-overlay)]"
 
 export function PreviewSteppers({ onStep }: { onStep: (direction: -1 | 1) => void }) {
   return (
@@ -31,7 +32,7 @@ export function PreviewSteppers({ onStep }: { onStep: (direction: -1 | 1) => voi
         onClick={() => onStep(-1)}
         className={cn(ROUND_BUTTON, FLOATING, "absolute left-3 top-1/2 -translate-y-1/2 sm:left-6")}
       >
-        <ChevronLeft size={19} strokeWidth={2} aria-hidden />
+        <ChevronLeft size={19} aria-hidden />
       </button>
       <button
         type="button"
@@ -40,7 +41,7 @@ export function PreviewSteppers({ onStep }: { onStep: (direction: -1 | 1) => voi
         onClick={() => onStep(1)}
         className={cn(ROUND_BUTTON, FLOATING, "absolute right-3 top-1/2 -translate-y-1/2 sm:right-6")}
       >
-        <ChevronRight size={19} strokeWidth={2} aria-hidden />
+        <ChevronRight size={19} aria-hidden />
       </button>
     </>
   )
@@ -106,11 +107,11 @@ export function PreviewBar({ item, zoomPan, onPick, onClose }: PreviewBarProps) 
             label={zoomPan.zoom === MIN_ZOOM ? "Zoom in" : "Reset zoom"}
             onClick={zoomPan.toggleZoom}
           >
-            <ZoomIn size={16} strokeWidth={2} aria-hidden />
+            <ZoomIn size={16} aria-hidden />
           </BarButton>
         )}
         <BarButton label="Close preview" onClick={onClose}>
-          <X size={16} strokeWidth={2} aria-hidden />
+          <X size={16} aria-hidden />
         </BarButton>
       </div>
     </div>

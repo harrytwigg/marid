@@ -3,6 +3,7 @@ import { api } from "@/lib/api"
 import type { Employee, EmployeeUpdate } from "@/lib/api"
 import { isConfined, type DepartmentScopeWire } from "@/lib/department-api"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -63,9 +64,6 @@ function ReadonlyValue({ children, testId, tall }: {
     </div>
   )
 }
-
-const inputCls =
-  "w-full rounded-[var(--radius-md)] bg-[var(--fill-quaternary)] border border-[var(--separator)] px-[var(--space-3)] py-[var(--space-2)] text-[length:var(--text-subheadline)] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
 
 export function EmployeeEditor({
   employee,
@@ -156,7 +154,7 @@ export function EmployeeEditor({
 
   return (
     <div
-      className="rounded-[var(--radius-lg,16px)] border border-[var(--separator)] bg-[var(--material-regular)] p-[var(--space-5)] flex flex-col gap-[var(--space-4)]"
+      className="rounded-[var(--radius-lg,16px)] border border-[var(--separator)] bg-[var(--glass-float-opaque)] p-[var(--space-5)] flex flex-col gap-[var(--space-4)]"
       onKeyDown={onKeyDown}
     >
       <div className="flex items-center justify-between">
@@ -179,8 +177,7 @@ export function EmployeeEditor({
         {isSystem ? (
           <ReadonlyValue>{displayName}</ReadonlyValue>
         ) : (
-          <input
-            className={inputCls}
+          <Input
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             aria-invalid={displayNameInvalid}
@@ -196,7 +193,7 @@ export function EmployeeEditor({
           {isSystem ? (
             <ReadonlyValue testId="system-readonly-rank">{rank.charAt(0).toUpperCase() + rank.slice(1)}</ReadonlyValue>
           ) : <Select value={rank} onValueChange={(v) => setRank(v as Employee["rank"])}>
-            <SelectTrigger>
+            <SelectTrigger aria-label="Rank">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -251,7 +248,7 @@ export function EmployeeEditor({
         {isSystem ? (
           <ReadonlyValue>{reportsTo || "None (top level)"}</ReadonlyValue>
         ) : <Select value={reportsTo || NONE} onValueChange={(v) => setReportsTo(v === NONE ? "" : v)}>
-          <SelectTrigger>
+          <SelectTrigger aria-label="Reports to">
             <SelectValue placeholder="None" />
           </SelectTrigger>
           <SelectContent>
@@ -294,7 +291,7 @@ export function EmployeeEditor({
         {isSystem ? (
           <ReadonlyValue>{cliFlags || "None"}</ReadonlyValue>
         ) : (
-          <input className={inputCls} value={cliFlags} onChange={(e) => setCliFlags(e.target.value)} />
+          <Input value={cliFlags} onChange={(e) => setCliFlags(e.target.value)} />
         )}
       </Field>
 
@@ -312,7 +309,7 @@ export function EmployeeEditor({
         </div>
       )}
 
-      <div className="sticky bottom-[calc(49px+var(--safe-bottom))] flex items-center justify-end gap-[var(--space-2)] bg-[var(--material-regular)] pt-[var(--space-2)] lg:bottom-0">
+      <div className="sticky bottom-[calc(49px+var(--safe-bottom))] flex items-center justify-end gap-[var(--space-2)] bg-[var(--glass-float-opaque)] pt-[var(--space-2)] lg:bottom-0">
         <Button variant="ghost" onClick={onCancel} disabled={saving}>Cancel</Button>
         <Button onClick={() => void save()} disabled={!canSave || !dirty}>
           {saving ? "Saving…" : "Save"}

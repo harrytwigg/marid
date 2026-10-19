@@ -3,8 +3,9 @@ import { STATUS_LABEL } from "@/lib/todos"
 import { StatusCircle } from "@/routes/todos/state-glyph"
 
 /** The hover glance on a Todo mention: what that Todo is, on one line, with
- *  nothing to click. Everything else about it lives on the page the mention
- *  already links to, so this stays a read and never grows an action. */
+ *  nothing to click. The card around it (`HoverCardContent`) is the glass
+ *  surface, so this draws none. Everything else about it lives on the page the
+ *  mention already links to, so this stays a read and never grows an action. */
 export function TodoGlance({
   id,
   title,
@@ -16,12 +17,7 @@ export function TodoGlance({
 }) {
   return (
     <span
-      className="flex max-w-[380px] items-center gap-[7px] whitespace-nowrap rounded-full py-[6px] pr-[11px] pl-[8px] text-[length:var(--text-caption1)] text-[var(--text-secondary)]"
-      style={{
-        background: "var(--material-thick)",
-        backdropFilter: "blur(30px) saturate(180%)",
-        boxShadow: "var(--shadow-overlay)",
-      }}
+      className="flex max-w-[380px] items-center gap-[7px] whitespace-nowrap py-[6px] pr-[11px] pl-[8px] text-[length:var(--text-caption1)] text-[var(--text-secondary)]"
     >
       <StatusCircle status={status} size={16} />
       <span className="font-[family-name:var(--font-code)]">{id}</span>

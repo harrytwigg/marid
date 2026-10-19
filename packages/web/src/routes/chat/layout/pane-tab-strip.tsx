@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent, type RefObject, type WheelEvent } from 'react'
-import { X } from 'lucide-react'
+import { X } from '@/components/ui/icon'
 import { splitTitleId } from '@/components/chat/chat-tabs'
 import { StatusDot } from '@/components/chat/session-signals'
 import { TERMINAL_AVATAR } from '@/components/ui/employee-avatar'

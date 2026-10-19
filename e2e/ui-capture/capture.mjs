@@ -6,9 +6,18 @@
 // renders its fixture text, throws a page error, or shows something that looks
 // like an id, the sandbox token, a host name or an instance path (including
 // form values), since these images go on public PRs.
+//
+// Each capture also gets an axe accessibility pass. It only reports: the
+// summary goes to the console and to <out-dir>/axe.json, and violations never
+// fail the run. JINN_CAPTURE_TRANSPARENCY=reduced photographs with
+// Reduced selected in the persisted settings, so the setting and the bootstrap in
+// index.html are what apply it; use a separate out-dir for it. Each capture also
+// asserts the attribute was already on <html> at DOMContentLoaded (before React
+// mounts), and one first-paint frame per theme is kept in <out-dir>/firstpaint.
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import AxeBuilder from '@axe-core/playwright'
 import { chromium, firefox } from '@playwright/test'
 import { SCREENS, THEMES, VIEWPORTS } from './screens.mjs'
 
@@ -17,7 +26,10 @@ if (!sandboxHome || !baseUrl || !outDir) throw new Error('usage: capture.mjs <sa
 
 const { token } = JSON.parse(fs.readFileSync(path.join(sandboxHome, 'gateway.json'), 'utf8'))
 const fixtures = JSON.parse(fs.readFileSync(path.join(sandboxHome, 'ui-capture-fixtures.json'), 'utf8'))
-const screens = only.length ? SCREENS.filter((s) => only.includes(s.name)) : SCREENS
+// A screen that needs the padded thread is only part of the default set when it was asked for.
+const screens = only.length
+  ? SCREENS.filter((s) => only.includes(s.name))
+  : SCREENS.filter((s) => !s.longThread || process.env.JINN_CAPTURE_MESSAGES)
 fs.mkdirSync(outDir, { recursive: true })
 
 const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i
@@ -31,7 +43,7 @@ async function leaks(page) {
   // innerText leaves out form values, so read inputs and textareas too.
   const text = await page.evaluate(() => [
     document.body.innerText,
-    ...[...document.querySelectorAll('input, textarea')].map((field) => field.value),
+    ...[...document.querySelectorAll('input, textarea')].map((field) => /** @type {HTMLInputElement} */ (field).value),
   ].join('\n'))
   const found = []
   if (token && text.includes(token)) found.push('the sandbox token')
@@ -46,35 +58,98 @@ async function leaks(page) {
 const browserType = process.env.JINN_CAPTURE_BROWSER === 'chromium' ? chromium : firefox
 const browser = await browserType.launch()
 const failures = []
-const jobs = screens.flatMap((screen) => THEMES.flatMap((theme) => VIEWPORTS.map((viewport) => ({ screen, theme, viewport }))))
+const reduced = process.env.JINN_CAPTURE_TRANSPARENCY === 'reduced'
+const axeReport = []
+// A screen can name the viewports it makes sense at (the rail and the hover glance are desktop only).
+const jobs = screens.flatMap((screen) => THEMES.flatMap((theme) => VIEWPORTS
+  .filter((viewport) => !screen.viewports || screen.viewports.includes(viewport.name))
+  .map((viewport) => ({ screen, theme, viewport }))))
 
-async function captureOne({ screen, theme, viewport }) {
-  const label = `${screen.name}-${theme}-${viewport.name}`
+// Report-only: a failure of the audit itself is logged, never thrown.
+async function audit(page, label) {
+  try {
+    const { violations, incomplete } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze()
+    const summary = (list) => list.map((rule) => ({ id: rule.id, impact: rule.impact, nodes: rule.nodes.length, targets: rule.nodes.slice(0, 3).map((node) => node.target.join(' ')) }))
+    axeReport.push({ label, violations: summary(violations), incomplete: summary(incomplete) })
+    const found = violations.map((rule) => `${rule.id} x${rule.nodes.length}`).join(', ')
+    console.log(`  axe ${label}: ${violations.length} violation${violations.length === 1 ? '' : 's'}${found ? ` (${found})` : ''}, ${incomplete.length} to review`)
+  } catch (err) {
+    console.log(`  axe ${label}: audit failed: ${String(err.message).split('\n')[0]}`)
+  }
+}
+
+// First paint: stop at DOMContentLoaded and shoot before the app has hydrated.
+async function shootFirstPaint(page, screen, label) {
+  await page.goto(baseUrl + screen.url(fixtures), { waitUntil: 'domcontentloaded' })
+  fs.mkdirSync(path.join(outDir, 'firstpaint'), { recursive: true })
+  await page.screenshot({ path: path.join(outDir, 'firstpaint', `${label}.png`) })
+}
+
+/** @typedef {Window & { __rootAtParse?: string | null }} RootMarkedWindow */
+
+// The bootstrap marked <html> before React mounted, and hydration kept it.
+async function assertRootReduced(page) {
+  const atParse = await page.evaluate(() => /** @type {RootMarkedWindow} */ (window).__rootAtParse)
+  if (atParse !== 'reduced') throw new Error(`root was not reduced at DOMContentLoaded (${atParse})`)
+  const now = await page.evaluate(() => document.documentElement.getAttribute('data-transparency'))
+  if (now !== 'reduced') throw new Error(`root lost data-transparency after hydration (${now})`)
+}
+
+// A fresh browser context per capture: theme, size, persisted settings and the screen's own network setup.
+async function openPage({ screen, theme, viewport }) {
   const context = await browser.newContext({
-    viewport: { width: viewport.width, height: viewport.height },
+    viewport: { width: viewport.width, height: screen.heights?.[viewport.name] ?? viewport.height },
     deviceScaleFactor: 2,
     colorScheme: theme,
     // Captures compare states, not transitions.
     reducedMotion: 'reduce',
     extraHTTPHeaders: { authorization: `Bearer ${token}` },
   })
-  await context.addInitScript((t) => {
+  await context.addInitScript(([t, isReduced, onboarded]) => {
     localStorage.setItem('jinn-theme', t)
-    localStorage.setItem('jinn-onboarded', 'true')
-  }, theme)
+    if (onboarded) localStorage.setItem('jinn-onboarded', 'true')
+    if (isReduced) localStorage.setItem('jinn-settings', JSON.stringify({ transparency: 'reduced' }))
+    document.addEventListener('DOMContentLoaded', () => {
+      /** @type {RootMarkedWindow} */ (window).__rootAtParse = document.documentElement.getAttribute('data-transparency')
+    })
+  }, [theme, reduced, !screen.onboarding])
   const page = await context.newPage()
+  if (screen.onboarding) {
+    // The sandbox is onboarded; report it as fresh so the wizard opens.
+    await page.route('**/api/onboarding', async (route) => {
+      const response = await route.fetch()
+      await route.fulfill({ response, json: { ...(await response.json()), onboarded: false, needed: true } })
+    })
+  }
+  if (screen.setup) await screen.setup(page)
+  return { context, page }
+}
+
+async function showScreen(page, screen) {
+  await page.goto(baseUrl + screen.url(fixtures), { waitUntil: screen.waitUntil ?? 'networkidle' })
+  const ready = screen.readyLocator ? screen.readyLocator(page) : page.getByText(screen.ready, { exact: false }).locator('visible=true').first()
+  await ready.waitFor({ timeout: 15_000 })
+  await page.evaluate(() => document.fonts.ready)
+  if (reduced) await assertRootReduced(page)
+  await page.waitForTimeout(400)
+  if (screen.prepare) await screen.prepare(page)
+}
+
+async function captureOne(job) {
+  const { screen, theme, viewport } = job
+  const label = `${screen.name}-${theme}-${viewport.name}`
+  const { context, page } = await openPage(job)
   const errors = []
   page.on('pageerror', (err) => errors.push(String(err)))
   try {
-    await page.goto(baseUrl + screen.url(fixtures), { waitUntil: 'networkidle' })
-    await page.getByText(screen.ready, { exact: false }).locator('visible=true').first().waitFor({ timeout: 15_000 })
-    await page.evaluate(() => document.fonts.ready)
-    await page.waitForTimeout(400)
+    if (reduced && screen.name === 'settings' && viewport.name === 'desktop') await shootFirstPaint(page, screen, label)
+    await showScreen(page, screen)
     const leaked = await leaks(page)
     if (leaked.length) throw new Error(`shows ${leaked.join(' and ')}`)
     if (errors.length) throw new Error(`page error: ${errors[0]}`)
     await page.screenshot({ path: path.join(outDir, `${label}.png`) })
     console.log(`captured ${label}`)
+    await audit(page, label)
   } catch (err) {
     failures.push(`${label}: ${err.message.split('\n')[0]}`)
     await page.screenshot({ path: path.join(outDir, `${label}.failed.png`) }).catch(() => {})
@@ -88,6 +163,7 @@ try {
 } finally {
   await browser.close()
 }
+if (axeReport.length) fs.writeFileSync(path.join(outDir, 'axe.json'), `${JSON.stringify(axeReport, null, 2)}\n`)
 if (failures.length) {
   console.error(`capture failed:\n  ${failures.join('\n  ')}`)
   process.exit(1)

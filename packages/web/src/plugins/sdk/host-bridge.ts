@@ -35,8 +35,12 @@ export function hostNavigator(): HostNavigator | null {
   return navigate
 }
 
-export function registerHostNotificationSink(fn: HostNotificationSink): void {
+/** Returns the way to unregister, which does nothing if another surface has registered since. */
+export function registerHostNotificationSink(fn: HostNotificationSink): () => void {
   notificationSink = fn
+  return () => {
+    if (notificationSink === fn) notificationSink = null
+  }
 }
 
 /** Null until a surface that can show a notification is mounted. */

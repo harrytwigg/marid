@@ -12,6 +12,9 @@
 #   JINN_CAPTURE_NODE   node binary (default: the one beside pnpm).
 #   JINN_CAPTURE_BROWSER firefox (default) or chromium; use the same one for before and after.
 #   JINN_CAPTURE_KEEP_DRI set to leave /dev/dri visible to Chromium (see below).
+#   JINN_CAPTURE_TOOL    the script in e2e/ui-capture to run against the sandbox: capture.mjs
+#                        (default), perf.mjs (scroll frame times) or blur-count.mjs.
+#   JINN_CAPTURE_MESSAGES pad the chat to this many messages (perf.mjs wants a long transcript).
 set -euo pipefail
 
 unset JINN_HOME JINN_PORT JINN_HOST JINN_INSTANCE JINN_GATEWAY_URL JINN_GATEWAY_TOKEN JINN_SESSION_ID
@@ -66,10 +69,18 @@ trap 'exit 130' INT TERM
 
 mkdir -p "$HOST_HOME"
 env HOME="$HOST_HOME" JINN_REPO="$REPO" "$HELPER" create "$INSTANCE" --port "$PORT" --seed
+# The org screens need the seeded org; every other screen keeps its fixtures unchanged.
+if [[ "${JINN_CAPTURE_TOOL:-capture.mjs}" == "capture.mjs" ]] && { [[ $# -eq 0 ]] || printf '%s\n' "$@" | grep -q '^org-'; }; then
+  export JINN_CAPTURE_SEED_ORG=1
+fi
+# Skills, cron and notes screens read their own fixtures (seed-pages.mjs), written the same way.
+if [[ "${JINN_CAPTURE_TOOL:-capture.mjs}" == "capture.mjs" ]] && { [[ $# -eq 0 ]] || printf '%s\n' "$@" | grep -Eq '^(skills|skill-detail|cron|cron-detail|notes|notes-editor)$'; }; then
+  export JINN_CAPTURE_SEED_PAGES=1
+fi
 "$NODE_BIN" "$CAPTURE_DIR/seed.mjs" db "$SANDBOX_HOME" "$REPO"
 STARTED=1
 env HOME="$HOST_HOME" JINN_REPO="$REPO" "$HELPER" start "$INSTANCE"
-"$NODE_BIN" "$CAPTURE_DIR/seed.mjs" api "$SANDBOX_HOME" "$BASE_URL"
+"$NODE_BIN" "$CAPTURE_DIR/seed.mjs" api "$SANDBOX_HOME" "$BASE_URL" "$REPO"
 
 # Headless Chromium renders in software, but its GPU process still opens /dev/dri. On a host whose
 # GPU driver is wedged that open blocks in the kernel, and the page's main thread then waits on the
@@ -85,4 +96,4 @@ if [[ "${JINN_CAPTURE_BROWSER:-firefox}" == "chromium" && -z "${JINN_CAPTURE_KEE
 fi
 
 cd "$SCRIPT_REPO"
-${RUN[@]+"${RUN[@]}"} "$NODE_BIN" "$CAPTURE_DIR/capture.mjs" "$SANDBOX_HOME" "$BASE_URL" "$OUT" "$@"
+${RUN[@]+"${RUN[@]}"} "$NODE_BIN" "$CAPTURE_DIR/${JINN_CAPTURE_TOOL:-capture.mjs}" "$SANDBOX_HOME" "$BASE_URL" "$OUT" "$@"

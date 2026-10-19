@@ -32,8 +32,11 @@ import {
   Users,
   X,
   Zap,
-} from "lucide-react"
-import type { LucideIcon } from "lucide-react"
+} from "./icons"
+import type { IconComponent } from "./icon-svg"
+
+export * from "./icons"
+export type { IconComponent, IconProps } from "./icon-svg"
 
 /**
  * The app's icon set, keyed by name.
@@ -41,7 +44,7 @@ import type { LucideIcon } from "lucide-react"
  * Name-keyed rather than a component a caller imports, because the caller we
  * added this for is a plugin: the runtime loader's allowlist is the SDK, React
  * and the JSX runtime, so a plugin cannot import an icon library at all. A
- * curated map costs the loader nothing, and it keeps a lucide version out of a
+ * curated map costs the loader nothing, and it keeps an icon library out of a
  * public contract that a plugin author has no way to install against.
  *
  * Names are the contract — a plugin writes them as strings — so a rename here
@@ -80,7 +83,7 @@ const ICONS = {
   warning: TriangleAlert,
   x: X,
   zap: Zap,
-} as const satisfies Record<string, LucideIcon>
+} as const satisfies Record<string, IconComponent>
 
 export type IconName = keyof typeof ICONS
 
@@ -88,8 +91,8 @@ export { ICONS }
 
 /** The icon a name maps to, or `undefined` when the set has no such name. The
  *  caller decides what an unknown name falls back to. */
-export function lookupIcon(name: string): LucideIcon | undefined {
-  return (ICONS as Record<string, LucideIcon>)[name]
+export function lookupIcon(name: string): IconComponent | undefined {
+  return (ICONS as Record<string, IconComponent>)[name]
 }
 
 interface IconProps extends Omit<React.SVGProps<SVGSVGElement>, "name" | "ref"> {

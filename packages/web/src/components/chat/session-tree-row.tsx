@@ -2,7 +2,7 @@
  * the count a folded parent shows, and the glyph that says why a top-level row
  * is top-level. Shared by the desktop and phone rows so the two cannot drift. */
 
-import { Bot, ChevronRight, Repeat, Unlink } from "lucide-react"
+import { Bot, ChevronRight, Repeat, Unlink } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
 import type { TreeRootKind } from "@/components/chat/session-tree"
 

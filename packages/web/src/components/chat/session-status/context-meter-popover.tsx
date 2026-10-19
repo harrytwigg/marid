@@ -1,6 +1,6 @@
-import { Popover } from 'radix-ui'
-import { LoaderCircleIcon } from 'lucide-react'
+import { LoaderCircleIcon } from "@/components/ui/icon"
 import type { ReactNode } from 'react'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { ContextUsageWire } from '@/lib/api-context-usage'
 import { fmtK, formatContextUsage, type ContextUsage } from '@/lib/context-usage'
 import { compactDisabledReason, enabledBudget } from './context-meter-model'
@@ -68,19 +68,16 @@ export function ContextMeterPopover({ trigger, open, onOpenChange, data, tokens,
   const reason = compactDisabledReason(data, loading)
   const disabled = compacting || reason != null
   return (
-    <Popover.Root open={open} onOpenChange={onOpenChange}>
-      <Popover.Trigger asChild>{trigger}</Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Content
-          side="top"
-          align="start"
-          sideOffset={8}
-          // Keep a margin from the viewport edge: at 375px the left-aligned popover
-          // would otherwise be shifted flush against the right edge.
-          collisionPadding={8}
-          aria-label="Context usage"
-          className="z-50 w-64 max-w-[calc(100vw-2rem)] rounded-[var(--radius-lg)] border-0 bg-[var(--bg-tertiary)] p-3 text-[length:var(--text-caption1)] shadow-[var(--shadow-overlay)] motion-safe:data-[state=closed]:animate-pop-out motion-safe:data-[state=open]:animate-pop-in"
-        >
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      {/* A margin from the viewport edge (the default collisionPadding): at 375px the
+          left-aligned popover would otherwise be shifted flush against the right edge. */}
+      <PopoverContent
+        side="top"
+        align="start"
+        aria-label="Context usage"
+        className="w-64 max-w-[calc(100vw-2rem)] p-3 text-[length:var(--text-caption1)]"
+      >
           <UsageRows data={data} tokens={tokens} />
           <button
             type="button"
@@ -106,8 +103,7 @@ export function ContextMeterPopover({ trigger, open, onOpenChange, data, tokens,
           {phase.kind === 'error' && (
             <p role="alert" data-testid="compact-error" className="mt-1.5 text-[length:var(--text-caption2)] leading-snug text-[var(--system-red)]">{phase.message}</p>
           )}
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
+      </PopoverContent>
+    </Popover>
   )
 }

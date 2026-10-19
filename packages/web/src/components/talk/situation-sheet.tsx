@@ -154,7 +154,7 @@ export function SituationSheet({ situation, onAnswer, onDismiss, onLayout }: Sit
         style={panelStyle(phase, durationMs, drag)}
         className={cn(
           "absolute inset-x-0 bottom-0 mx-auto flex max-h-[80dvh] w-full flex-col outline-none",
-          "rounded-t-[var(--radius-2xl)] bg-[var(--material-thick)] shadow-[var(--shadow-overlay)] backdrop-blur-2xl",
+          "glass-overlay rounded-t-[var(--radius-2xl)]",
           "origin-top-right transition-[transform,opacity]",
           "lg:bottom-5 lg:max-w-[816px] lg:origin-right lg:rounded-[var(--radius-2xl)]",
           settled ? "opacity-100" : "opacity-0",

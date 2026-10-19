@@ -43,7 +43,7 @@ const herouiThemeMap = path.join(
  * font that never gets drawn is a wasted request.
  */
 function preloadUiFont(): Plugin {
-  const uiFont = /^assets\/hanken-grotesk-latin-var-[^/]+\.woff2$/
+  const uiFont = /^assets\/geist-latin-var-[^/]+\.woff2$/
   return {
     name: 'jinn-preload-ui-font',
     apply: 'build',
@@ -53,7 +53,7 @@ function preloadUiFont(): Plugin {
         const emitted = Object.keys(ctx.bundle ?? {}).find((name) => uiFont.test(name))
         if (!emitted) {
           throw new Error(
-            'jinn-preload-ui-font: no hanken-grotesk-latin-var woff2 in the bundle. ' +
+            'jinn-preload-ui-font: no geist-latin-var woff2 in the bundle. ' +
               'If the file was renamed, update the pattern; if the face was dropped, drop this plugin.',
           )
         }
@@ -110,6 +110,7 @@ export default defineConfig(() => {
             'manifest.webmanifest',
             'apple-touch-icon.png',
             'icons/*.png',
+            'icons/*.svg',
             'assets/index-*.js',
             'assets/vendor-*.js',
             'assets/index-*.css',
@@ -209,7 +210,7 @@ export default defineConfig(() => {
             ) {
               return 'vendor-query'
             }
-            // Radix and cmdk deliberately get no bucket. One shared bucket is
+            // React Aria deliberately gets no bucket. One shared bucket is
             // all-or-nothing: a single primitive in the shell drags every
             // primitive any route uses into the first load. Left alone, Rollup
             // puts each primitive with the route that needs it.

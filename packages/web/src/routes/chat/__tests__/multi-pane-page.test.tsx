@@ -1,3 +1,4 @@
+import "@/test/preload-menus"
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { installVirtualLayout, type VirtualLayout } from '@/test/virtual-layout'
@@ -10,13 +11,8 @@ import {
   renderRoute,
   sessionIds,
   sessionTransfer,
+  openChatBeside,
 } from './multi-pane-page-harness'
-function openChatBeside() {
-  const desktopNewChat = screen.getAllByRole('button', { name: 'New chat' })[0]
-  const actionsPill = desktopNewChat.parentElement!
-  fireEvent.click(within(actionsPill).getByRole('button', { name: 'More options' }))
-  fireEvent.click(within(actionsPill).getByRole('button', { name: 'Open beside' }))
-}
 function seedWorkingSet(ids = sessionIds) {
   localStorage.setItem(WORKING_SET_STORAGE_KEY, JSON.stringify({ version: 1, sessionIds: ids, focusedId: ids[0], focusHistory: ids }))
 }
@@ -118,7 +114,7 @@ describe('the routed multi-pane surface', () => {
     const desktopNewChat = screen.getAllByRole('button', { name: 'New chat' })[0]
     const actionsPill = desktopNewChat.parentElement!
     expect(within(actionsPill).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['New chat', 'More options'])
-    openChatBeside()
+    await openChatBeside()
     fireEvent.click(await screen.findByRole('option', { name: /Title c/ }))
     await waitFor(() => expect(pane('c').textContent).toContain('transcript-c'))
     await waitFor(() => expect(JSON.parse(localStorage.getItem(WORKING_SET_STORAGE_KEY) ?? '{}').sessionIds).toEqual(['a', 'b', 'c']))
@@ -137,7 +133,7 @@ describe('the routed multi-pane surface', () => {
     await waitFor(() => expect(pane('a').textContent).toContain('transcript-a'))
     const originalPane = pane('a')
 
-    openChatBeside()
+    await openChatBeside()
     fireEvent.click(await screen.findByRole('option', { name: /Title b/ }))
 
     await waitFor(() => expect(pane('b').textContent).toContain('transcript-b'))
@@ -154,7 +150,7 @@ describe('the routed multi-pane surface', () => {
     installPickerLayout()
     renderRoute()
     await waitFor(() => expect(pane('a').textContent).toContain('transcript-a'))
-    openChatBeside()
+    await openChatBeside()
     const picker = await screen.findByRole('combobox', { name: 'Search chats' })
     const pickerPane = picker.closest('[data-chat-grid-pane]')
     expect(pickerPane?.querySelector('[data-chat-pane-session="new"]')).toBeTruthy()
@@ -164,7 +160,7 @@ describe('the routed multi-pane surface', () => {
     await waitFor(() => expect(JSON.parse(localStorage.getItem(WORKING_SET_STORAGE_KEY) ?? '{}').sessionIds).toEqual(['a', 'b']))
     expect(Array.from(document.querySelectorAll('[data-chat-grid-pane]')).at(-1)?.querySelector('[data-chat-pane-session="b"]')).toBeTruthy()
 
-    openChatBeside()
+    await openChatBeside()
     const freshPicker = await screen.findByRole('combobox', { name: 'Search chats' })
     const freshPane = freshPicker.closest<HTMLElement>('[data-chat-pane-session="new"]')!
     const textarea = freshPane.querySelector<HTMLTextAreaElement>('[data-chat-textarea]')!

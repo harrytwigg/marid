@@ -5,14 +5,14 @@ import { queryClient } from '@/lib/query-client'
 import { ThemeProvider } from "@/routes/providers"
 import { SettingsProvider, DocumentTitle, useSettings } from "@/routes/settings-provider"
 import { useQueryInvalidation } from '@/hooks/use-query-invalidation'
-import { EmojiFavicon } from '@/components/emoji-favicon'
+import { BrandFavicon } from '@/components/brand-favicon'
 import { GatewayProvider } from '@/hooks/use-gateway'
 import { AuthGate, AuthProvider } from "@/routes/auth-provider"
 import { TalkOrbOverlay } from "@/components/talk/talk-orb-overlay"
 import { TodoPrefixContext } from "@/components/chat/todo-prefix-context"
 import { useTodoPrefixes } from "@/hooks/use-todo-prefixes"
+import { Notices } from "@/components/ui/notices"
 import { PluginHostBridge } from "@/plugins/sdk/plugin-host-bridge"
-import { PluginNotices } from "@/plugins/sdk/plugin-notices"
 import { DiskPluginsBridge } from "@/plugins/disk-plugins-bridge"
 
 const TalkContextBridge = lazy(() =>
@@ -59,11 +59,11 @@ export function ClientProviders({ children }: { children: ReactNode }) {
                 {/* Above the router, so route changes never remount the orb. */}
                 <TalkOrbOverlay />
                 <DocumentTitle />
-                <EmojiFavicon />
+                <BrandFavicon />
                 <QueryInvalidationBridge />
                 {/* Before the host bridge, so the sink is registered by the
                     time a frame can route into it. */}
-                <PluginNotices />
+                <Notices />
                 <PluginHostBridge />
                 {/* After the host bridge: a plugin's module body may read
                     host state the moment it evaluates. */}

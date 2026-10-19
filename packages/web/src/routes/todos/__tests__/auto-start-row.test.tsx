@@ -32,11 +32,11 @@ beforeEach(() => {
 
 describe("AutoStartRow", () => {
   it("reads on when the Todo has no dispatch config", () => {
-    expect(renderRow(detail()).getAttribute("aria-checked")).toBe("true")
+    expect((renderRow(detail()) as HTMLInputElement).checked).toBe(true)
   })
 
   it("reads off when the dispatch config says so", () => {
-    expect(renderRow(detail({ dispatchConfig: { autoStart: false, engine: "opencode" } })).getAttribute("aria-checked")).toBe("false")
+    expect((renderRow(detail({ dispatchConfig: { autoStart: false, engine: "opencode" } })) as HTMLInputElement).checked).toBe(false)
   })
 
   it("writes exactly { autoStart: false } to the dispatch-config route, leaving the engine pin alone", async () => {

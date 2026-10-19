@@ -16,7 +16,6 @@ export type PageKind =
   | "file"
   | "more"
   | "talk-orb"
-  | "redesign"
   | "plugin"
   | "other"
 

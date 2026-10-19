@@ -143,6 +143,20 @@ describe('adding a mapping', () => {
     expect(within(card('claude')).getByText('claude-opus-5')).toBeTruthy()
     expect((await save()).engines.claude.fallbackModelMap).toEqual({ 'claude-opus-5': 'gpt-5.6-luna' })
   })
+
+  it('adds nothing when Cancel is pressed on a half-filled form', async () => {
+    await renderSettings()
+    openAddForm('claude')
+    fireEvent.change(within(card('claude')).getByLabelText('Model to carry off Claude'), {
+      target: { value: 'claude-opus-5' },
+    })
+    fireEvent.click(within(card('claude')).getByRole('button', { name: 'Cancel' }))
+
+    // Cancel is not a submit: the form closes without handing the pair to the writer.
+    expect(within(card('claude')).queryByLabelText('Model to carry off Claude')).toBeNull()
+    expect(card('claude').querySelectorAll('[data-model-map-pair]')).toHaveLength(0)
+    expect(apiMocks.updateConfig).not.toHaveBeenCalled()
+  })
 })
 
 describe('editing and removing', () => {

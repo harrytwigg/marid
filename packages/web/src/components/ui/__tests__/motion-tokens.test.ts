@@ -15,26 +15,36 @@ const GLOBALS = source("routes/globals.css")
  *  on surfaces nobody has migrated yet and turn this guard into noise. */
 const TOUCHED = [
   "components/ui/dialog.tsx",
+  "components/ui/dialog-popup.tsx",
   "components/ui/dropdown-menu.tsx",
   "components/ui/select.tsx",
   "components/ui/context-menu.tsx",
   "routes/todos/todo-dialog.tsx",
   "routes/todos/new-todo-dialog.tsx",
   "routes/todos/todo-filter-sheet.tsx",
+  "routes/todos/pickers/picker-shell.tsx",
   "components/pill-nav.tsx",
   "components/chat/mobile-tab-bar.tsx",
   "components/chat/chat-tabs.tsx",
+  "components/ui/menu-parts.tsx",
+  "components/ui/menu-popup.tsx",
 ]
 
-/** The subset of those that open and close, and so owe both halves. */
-const OVERLAYS = TOUCHED.slice(0, 7)
+/** The modal every dialog, sheet and the lightbox is drawn in. React Aria waits out its enter and exit
+ *  animations (`data-entering`, `data-exiting`) before it unmounts it, so there is no `data-[state]` pair to check;
+ *  the pairs are in this one file, and the files that use the modal name only which pair (`motion`). */
+const MODAL = "components/ui/dialog-popup.tsx"
 
 const DURATION_TOKENS = ["--duration-instant", "--duration-fast", "--duration-base", "--duration-slow"]
 
 /** The utility names shadcn's markup ships with. They come from the
- *  tw-animate-css plugin, which is not a dependency here and is not imported,
- *  so every one of them emitted exactly nothing. This is the guard that would
- *  have caught that. */
+ *  tw-animate-css plugin. app.css imports it now, but for HeroUI's tooltip and
+ *  popover stylesheets, which `@apply` them. Before that nothing imported it, so
+ *  every one of these emitted exactly nothing; they would play now, with their
+ *  own durations and curves instead of the --duration-* and --ease-* tokens, so
+ *  the overlays here stay on the app's own animations. This is the guard that
+ *  would have caught the dead classes, and it still keeps these files on one
+ *  motion vocabulary. */
 const PLUGIN_CLASSES = [
   "animate-in",
   "animate-out",
@@ -72,9 +82,9 @@ function keyframeBody(name: string): string {
   return match[1]
 }
 
-/** `motion-safe:data-[state=open]:animate-pop-in` → `pop-in`. */
-function animationsFor(file: string, state: "open" | "closed"): string[] {
-  const pattern = new RegExp(`data-\\[state=${state}\\]:animate-([a-z-]+)`, "g")
+/** `motion-safe:data-[entering]:animate-pop-in` → `pop-in`. */
+function animationsFor(file: string, state: "entering" | "exiting"): string[] {
+  const pattern = new RegExp(`data-\\[${state}\\]:animate-([a-z-]+)`, "g")
   return [...source(file).matchAll(pattern)].map((m) => m[1])
 }
 
@@ -150,14 +160,16 @@ describe("touched files", () => {
     expect(text).not.toContain("cubic-bezier(")
   })
 
-  it.each(OVERLAYS)("%s animates on the way out as well as in", (file) => {
+  it("animates the modal's scrim and box on the way out as well as in", () => {
     const theme = themeBlock()
-    const entering = animationsFor(file, "open")
-    const leaving = animationsFor(file, "closed")
-    expect(entering.length, `${file} enter animations`).toBeGreaterThan(0)
+    const entering = animationsFor(MODAL, "entering")
+    const leaving = animationsFor(MODAL, "exiting")
+    expect(entering.length, `${MODAL} enter animations`).toBeGreaterThan(0)
     expect(leaving).toHaveLength(entering.length)
     for (const name of [...entering, ...leaving]) {
       expect(theme, `--animate-${name}`).toContain(`--animate-${name}:`)
     }
+    // Every enter has the exit that undoes it, so nothing leaves on a different curve than it arrived.
+    expect(leaving.map((name) => name.replace(/-out$/, ""))).toEqual(entering.map((name) => name.replace(/-in$/, "")))
   })
 })
