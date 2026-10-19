@@ -73,6 +73,8 @@ export async function runEngineAttempt(args: EngineAttemptArgs): Promise<EngineA
     partialStream.finish();
   });
 
+  // Notices the engine asks for, once each, ahead of the reply.
+  for (const notice of result.notices ?? []) await surface.notice(notice);
   return {
     result,
     fingerprint: prepared.fingerprint,

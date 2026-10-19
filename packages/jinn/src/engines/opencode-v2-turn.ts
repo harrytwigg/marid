@@ -14,6 +14,7 @@ import {
   stoppedRequestsNotice,
   type ServerTurnDeps,
 } from "./opencode-server-turn.js";
+import { fallbackModelNotice, requestedModel, stepModel } from "./opencode-fallback-notice.js";
 import { abandonedRetryError, providerFailureReason, SettleWait, type ProviderRetry, type SettleKind } from "./opencode-server-settle.js";
 import { isAbortError, record, runLinesFromStoredReply, str, V2RunLines, v2ReplyIsDone, type V2Event, type V2Message } from "./opencode-v2-events.js";
 import { cancelledV2Requests, JINN_V2_PROMPT_METADATA, jinnSessionNotes, type JinnSessionNotes } from "./opencode-v2-history.js";
@@ -96,6 +97,8 @@ export class OpencodeV2ServerTurn {
   /** The id the turn's prompt is posted under. */
   private readonly promptId = newMessageId();
   private promptText = "";
+  /** The model the turn's steps ran on, when a host plugin moved them off the one asked for. */
+  private ranOn?: string;
   /** What the session's metadata held for this turn to say (see opencode-v2-history.ts). */
   private notes: JinnSessionNotes = { stopped: [], reseed: false };
   /** The input the session runs now is the turn's prompt. */
@@ -168,13 +171,14 @@ export class OpencodeV2ServerTurn {
       this.settle.cancel();
       this.controller.abort();
     }
-    return this.failedTurn(this.turn.result({
+    const result = this.failedTurn(this.turn.result({
       code: this.failure ? 1 : 0,
       terminationReason: this.terminationReason,
       stderr: this.failure ?? "",
       failure: this.failure ?? undefined,
       noAnswer: this.noAnswer(),
     }));
+    return this.ranOn ? { ...result, notices: [fallbackModelNotice(this.ranOn)] } : result;
   }
 
   /** As 1.x: a usage window says when it ends, and a prompt the server took
@@ -564,6 +568,19 @@ export class OpencodeV2ServerTurn {
     this.own.add(id);
     this.newestOwnOpen = true;
     this.ownReply = { id };
+    this.noteModel(data);
+  }
+
+  /** A step that ran on another model than the turn asked for, on a host whose opencode has a
+   *  fallback plugin: the plugin switched it. Not a chain hop; the turn says so instead. */
+  private noteModel(data: Record<string, unknown>): void {
+    const ran = stepModel(data);
+    const asked = requestedModel(this.modelRef());
+    if (!ran || !asked || ran === asked || !this.deps.fallbackPluginOnHost?.()) return;
+    if (!this.ranOn) {
+      logger.warn(`opencode turn in ${this.sessionId} ran on ${ran}, not the requested ${asked}: the host's opencode fallback plugin switched models, not the gateway's chain (run \`jinn doctor\`)`);
+    }
+    this.ranOn = ran;
   }
 
   private onStepEnded(data: Record<string, unknown>, event: V2Event): void {

@@ -18,6 +18,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 vi.mock("../../shared/logger.js", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
+// Whether the host's opencode has a model-fallback plugin: the real detection reads the machine running the tests.
+const pluginOnHost = vi.hoisted(() => ({ value: false }));
+vi.mock("../opencode-internal-fallback.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../opencode-internal-fallback.js")>()),
+  hostHasInternalFallback: () => pluginOnHost.value,
+}));
 
 import { OpencodeEngine } from "../opencode.js";
 import { OpencodeServerPool, basicAuthHeader } from "../opencode-server.js";
@@ -26,6 +32,7 @@ import { RESEED_PREAMBLE } from "../opencode-server-compaction.js";
 import { buildOpencodeViewArgs } from "../opencode-protocol.js";
 import { clearOpencodeVersionCache } from "../../shared/opencode-bin-version.js";
 import { isDeadSessionError } from "../../shared/rateLimit.js";
+import { logger } from "../../shared/logger.js";
 import { USER_STOP_INTERRUPTION_REASON } from "../../sessions/interruption-reasons.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
 import { JINN_HOME } from "../../shared/paths.js";
@@ -113,6 +120,7 @@ async function waitDelivered(h: Harness): Promise<void> {
 const ENV_HOOKS = ["FAKE_V2_OPERATOR_BUSY_MS", "FAKE_V2_LOG", "FAKE_V2_VERSION", "FAKE_V2_CLI_VERSION", "FAKE_V2_SERVE_FAIL", "FAKE_V2_HEARTBEAT_MS", "FAKE_V2_API_INFO_FAIL"];
 
 beforeEach(() => {
+  pluginOnHost.value = false;
   for (const name of ENV_HOOKS) delete process.env[name];
   clearOpencodeVersionCache();
   Object.assign(SERVER_TURN_TIMING, TIMING_DEFAULTS, { statusPollMs: 30_000, closeWaitMs: 2_000 });
@@ -554,6 +562,39 @@ describe("a turn that goes wrong", { timeout: 40_000 }, () => {
     expect(result.error).toBeUndefined();
     expect(result.result).toBe("fake:retried");
     expect(result.numTurns).toBe(1);
+  });
+
+  describe("a host whose opencode has a model-fallback plugin", () => {
+    const NOTICE = "Answered by mock/other through the host's opencode fallback plugin, not the gateway's chain. Run `jinn doctor` to remove it.";
+
+    it("says so when a step ran on another model than the turn asked for, and does not treat it as a limit or a hop", async () => {
+      pluginOnHost.value = true;
+      vi.mocked(logger.warn).mockClear();
+      const h = harness();
+      const { result } = await streamed(h, { prompt: "OTHERMODEL please" });
+      expect(result.error).toBeUndefined();
+      expect(result.result).toBe("fake:othermodel");
+      expect(result.rateLimit).toBeUndefined();
+      expect(result.notices).toEqual([NOTICE]);
+      const warned = vi.mocked(logger.warn).mock.calls.map((c) => String(c[0])).filter((m) => m.includes("fallback plugin switched models"));
+      expect(warned).toHaveLength(1);
+      expect(warned[0]).toContain(`ran on mock/other, not the requested ${MODEL}`);
+    });
+
+    it("says nothing when the turn ran on the model it asked for", async () => {
+      pluginOnHost.value = true;
+      const h = harness();
+      const { result } = await streamed(h, { prompt: "build it" });
+      expect(result.result).toContain("fake:");
+      expect(result.notices).toBeUndefined();
+    });
+
+    it("says nothing on a host without the plugin", async () => {
+      const h = harness();
+      const { result } = await streamed(h, { prompt: "OTHERMODEL please" });
+      expect(result.result).toBe("fake:othermodel");
+      expect(result.notices).toBeUndefined();
+    });
   });
 
   it("ends a turn whose provider retry is far off after the grace window, with the reset time", async () => {

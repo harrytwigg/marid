@@ -43,6 +43,8 @@
 //               (step.started, same assistantMessageID) whose text takes 800 ms
 //   RETRYLOOP   five retry.scheduled an hour ahead, 200 ms apart, then the step
 //               ends and the text `fake:retryloop` answers
+//   OTHERMODEL  one step on another model than the session's (its step.started names
+//               it), which answers `fake:othermodel`; the session's model is unchanged
 //   PERMISSION  a tool step that asks permission.asked and waits (1.5 s at most)
 //               for the reply; the answer is `permission:<decision>`
 //   QUESTION    a question tool step that raises form.created and waits (1.5 s at
@@ -321,6 +323,14 @@ function serve() {
     return failAborted(s, item);
   }
 
+  async function otherModelTurn(s) {
+    const own = s.model;
+    s.model = { providerID: "mock", id: "other", variant: "default" };
+    const outcome = await textStep(s, "fake:othermodel");
+    s.model = own;
+    return outcome;
+  }
+
   async function permissionTurn(s) {
     let decision = "timeout";
     const first = await toolStep(s, {
@@ -445,6 +455,7 @@ function serve() {
     ["RETRYLOOP", retryLoopTurn],
     ["RETRYSLOW", retrySlowTurn],
     ["NOTEXT", noTextTurn],
+    ["OTHERMODEL", otherModelTurn],
     ["PERMISSION", permissionTurn],
     ["QUESTION", questionTurn],
     ["NOIDLE", noIdleTurn],
