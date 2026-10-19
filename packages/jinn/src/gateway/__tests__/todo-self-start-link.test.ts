@@ -49,7 +49,7 @@ describe("a Todo its own session starts", () => {
     expect(started.body.workItem.version).toBe(store.getWorkItem(id)?.version);
 
     expect(reg.getSession(session.id)).toMatchObject({ workItemId: id, workItemRole: "execute" });
-    expect(linkEvents(id).map((event) => event.detail)).toEqual([{ sessionId: session.id, role: "execute", selfStarted: true }]);
+    expect(linkEvents(id).map((event) => event.detail)).toEqual([{ sessionId: session.id, role: "execute", employee: "solo-worker", selfStarted: true }]);
     expect(listWorkItemRuns(id)).toMatchObject([{ sessionId: session.id, endedAt: null, outcome: null }]);
 
     const read = await call("GET", `/api/work-items/${id}`, undefined, toolHeaders(session.id));
