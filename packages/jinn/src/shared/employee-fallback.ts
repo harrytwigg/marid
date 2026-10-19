@@ -31,13 +31,23 @@ export function employeeFallbackProblems(config: JinnConfig | undefined, employe
   if (stringEntry >= 0) return [`fallback[${stringEntry}] must be a mapping with engine, profile and model: the engine-name and claude:<name> strings are for engine and account chains`];
   const named = chain.map((entry) => fallbackLinkOf(entry)?.profile).filter((profile): profile is string => profile !== undefined);
   const profiles = config ? accountNames(config.engines) : new Set(named);
-  const self = config ? employeeOwnLink(config, employee) : undefined;
-  return fallbackChainProblems("fallback", chain, { engines: ENGINE_NAMES, profiles, ...(self ? { self } : {}) });
+  const ctx = { engines: ENGINE_NAMES, profiles };
+  if (!config) return fallbackChainProblems("fallback", chain, ctx);
+  // A link with no model runs the employee's own model on its own engine, so it is the own target as well: check both spellings.
+  const self = employeeOwnLink(config, employee);
+  const { model: _model, ...modelless } = self;
+  return [...new Set([...fallbackChainProblems("fallback", chain, { ...ctx, self }), ...fallbackChainProblems("fallback", chain, { ...ctx, self: modelless })])];
 }
 
 /** A valid chain as the links it holds. */
 function linksOf(chain: unknown[]): FallbackLink[] {
   return chain.flatMap((entry) => fallbackLinkOf(entry) ?? []);
+}
+
+/** What changing an employee's engine or model does to the chain it already holds: the problems the new own target gives it, none when it holds no chain or the target stays. */
+export function storedFallbackProblems(config: JinnConfig, current: EmployeeTarget & { fallback?: FallbackLink[] }, next: EmployeeTarget): string[] {
+  if (!current.fallback || (current.engine === next.engine && current.model === next.model)) return [];
+  return employeeFallbackProblems(config, next, current.fallback);
 }
 
 /** A PATCH's `fallback`: null removes it (inherit), a valid list is written as links, anything else is refused with the reasons. */

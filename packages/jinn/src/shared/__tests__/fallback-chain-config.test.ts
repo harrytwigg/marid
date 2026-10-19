@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { employeeFallbackProblems, employeeFallbackUpdate } from "../employee-fallback.js";
+import { employeeFallbackProblems, employeeFallbackUpdate, storedFallbackProblems } from "../employee-fallback.js";
 import { validateConfigShape } from "../config.js";
 import type { JinnConfig } from "../types.js";
 
@@ -84,6 +84,19 @@ describe("an employee's chain", () => {
     expect(employeeFallbackProblems(config, worker, [{ engine: "claude", model: "opus" }])[0]).toContain("is the target this chain falls back from");
     // The same link is another target for an employee on another model.
     expect(employeeFallbackProblems(config, { engine: "claude", model: "sonnet" }, [{ engine: "claude", model: "opus" }])).toEqual([]);
+  });
+
+  it("a link with no model is the own target too: it runs the employee's own model on its own engine", () => {
+    expect(employeeFallbackProblems(config, worker, [{ engine: "claude" }])[0]).toContain("is the target this chain falls back from");
+    expect(employeeFallbackProblems(config, worker, [{ engine: "claude", profile: "A" }])).toEqual([]);
+  });
+
+  it("a stored chain is rechecked against a new engine or model, and left alone when the target stays", () => {
+    const stored = { ...worker, fallback: [{ engine: "codex", model: "gpt" }] };
+    expect(storedFallbackProblems(config, stored, { engine: "codex", model: "gpt" })[0]).toContain("is the target this chain falls back from");
+    expect(storedFallbackProblems(config, stored, { engine: "claude", model: "sonnet" })).toEqual([]);
+    expect(storedFallbackProblems(config, stored, worker)).toEqual([]);
+    expect(storedFallbackProblems(config, worker, { engine: "codex", model: "gpt" })).toEqual([]);
   });
 
   it("an employee on a declared account's directory cannot name that account as a fallback with the same model", () => {

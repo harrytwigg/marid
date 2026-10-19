@@ -43,7 +43,8 @@ type Queued = { entry: FallbackChainEntry; origin: ExpandedFallbackLink["origin"
 
 type EngineSection = { fallback?: FallbackChainEntry[] } | undefined;
 
-function engineChain(config: JinnConfig, engine: string): FallbackChainEntry[] {
+/** An engine's own `fallback` as written. */
+export function engineChain(config: JinnConfig, engine: string): FallbackChainEntry[] {
   return (config.engines as unknown as Record<string, EngineSection>)[engine]?.fallback ?? [];
 }
 

@@ -4,7 +4,7 @@ import { linkAccount, ownTargetLink } from "./fallback-chain-links.js";
 import { resolveEmployeeClaudeProfile } from "./claude-profile.js";
 import { accountForEmployee, claudeAccountKey, DEFAULT_CLAUDE_ACCOUNT } from "./engine-account.js";
 import { resolveSubstituteModel } from "./engine-fallback.js";
-import { expandFallbackChain, type FallbackExpansionMode } from "./fallback-chain-expand.js";
+import { engineChain, expandFallbackChain, type FallbackExpansionMode } from "./fallback-chain-expand.js";
 import { linkHealth, type FallbackHealthInputs } from "./fallback-chain-health.js";
 import {
   fallbackLinkKey, fallbackLinkLabel,
@@ -123,10 +123,6 @@ export function resolveFallbackLinks(env: FallbackChainEnv, subject: FallbackCha
   return links;
 }
 
-function engineChainOf(config: JinnConfig, engine: string): FallbackChainEntry[] {
-  return (config.engines as unknown as Record<string, { fallback?: FallbackChainEntry[] } | undefined>)[engine]?.fallback ?? [];
-}
-
 /**
  * The chain a target inherits when no session or employee names one: its
  * declared account's, else (for the default profile and every other engine) its
@@ -139,7 +135,7 @@ export function inheritedChain(
     const declared = declaredAccountByKey(config, ownAccount);
     return declared ? { source: "account", entries: declared.fallback ?? [] } : { source: "none", entries: [] };
   }
-  return { source: "engine", entries: engineChainOf(config, engine) };
+  return { source: "engine", entries: engineChain(config, engine) };
 }
 
 /** Which chain a session gets, first match wins: its own target, its employee's chain, then what its account and engine give. */

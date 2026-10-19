@@ -140,6 +140,24 @@ describe("PATCH /api/org/employees/:name with fallback", () => {
     expect(workerYaml()).not.toHaveProperty("fallback");
   });
 
+  it("refuses a link with no model on the employee's own engine, which is its own target", async () => {
+    const got = await call("PATCH", "/api/org/employees/a-worker", { fallback: [{ engine: "claude" }] });
+    expect(got.status).toBe(400);
+    expect(got.body.error).toContain("is the target this chain falls back from");
+    expect(workerYaml()).not.toHaveProperty("fallback");
+  });
+
+  it("refuses an engine or model change that would leave the stored chain naming the employee's own target", async () => {
+    writeEmployee([{ engine: "codex", model: "gpt-mapped" }]);
+    const refused = await call("PATCH", "/api/org/employees/a-worker", { engine: "codex", model: "gpt-mapped" });
+    expect(refused.status).toBe(400);
+    expect(refused.body.error).toContain("the engine or model change leaves the employee's fallback invalid");
+    expect(workerYaml()).toMatchObject({ engine: "claude", fallback: [{ engine: "codex", model: "gpt-mapped" }] });
+    // Sending the chain with it, or an unrelated change, is fine.
+    expect((await call("PATCH", "/api/org/employees/a-worker", { engine: "codex", model: "gpt-mapped", fallback: null })).status).toBe(200);
+    expect((await call("PATCH", "/api/org/employees/a-worker", { displayName: "Renamed" })).status).toBe(200);
+  });
+
   it("refuses the employee's own target, an unknown engine or profile, a string entry and a non-list", async () => {
     const refuse = async (fallback: unknown) => (await call("PATCH", "/api/org/employees/a-worker", { fallback })).body.error as string;
     expect(await refuse([{ engine: "claude", model: "opus" }])).toContain("is the target this chain falls back from");

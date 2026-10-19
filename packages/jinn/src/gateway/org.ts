@@ -8,7 +8,7 @@ import { logger } from "../shared/logger.js";
 import { getModelRegistry, effortLevelsForModel, hasDynamicModelCatalog } from "../shared/models.js";
 import { effortLevelsPending } from "../shared/opencode-catalogue.js";
 import { validateEmployeeTargets } from "../shared/claude-profile.js";
-import { employeeFallbackUpdate, loadEmployeeFallback } from "../shared/employee-fallback.js";
+import { employeeFallbackUpdate, loadEmployeeFallback, storedFallbackProblems } from "../shared/employee-fallback.js";
 import { departmentDisagreement, resolveEmployeeDepartment, scopedEmployeeRefusal } from "./org-department-check.js";
 import { walkEmployeeYamls, WRITABLE_FIELDS, type EmployeeUpdate } from "./org-yaml-files.js";
 import {
@@ -300,10 +300,15 @@ export function validateEmployeeUpdate(
   }
 
   // --- fallback (links, or null to inherit) ---
+  const target = { ...current, engine: resultingEngine, model: updates.model ?? current.model };
   if (body.fallback !== undefined) {
-    const chain = employeeFallbackUpdate(config, { ...current, engine: resultingEngine, model: updates.model ?? current.model }, body.fallback);
+    const chain = employeeFallbackUpdate(config, target, body.fallback);
     if (!chain.ok) return { ok: false, error: chain.error };
     updates.fallback = chain.value;
+  } else {
+    // A new engine or model can make the chain already written one that names the employee's own target.
+    const stale = storedFallbackProblems(config, current, target);
+    if (stale.length > 0) return { ok: false, error: `the engine or model change leaves the employee's fallback invalid (send a new fallback, or null to inherit): ${stale.join("; ")}` };
   }
 
   if (Object.keys(updates).length === 0) {
