@@ -17,10 +17,10 @@ export async function runSpawnAction(context: ApiContext, spawn: BoardHookSpawn,
     ...(spawn.effortLevel ? { effortLevel: spawn.effortLevel } : {}),
     provenance: { source: "hook", sourceRef: `hook:${payload.fireId}` },
   });
-  if (!outcome.ok) return { status: "error", error: outcome.error };
+  if (!outcome.ok) return { status: "error", error: redactText(outcome.error) };
   const sessionId = outcome.session.id;
   if (outcome.dispatched) return { status: "ok", sessionId };
-  return { status: "error", sessionId, error: outcome.session.lastError ?? "the session was created but could not be started" };
+  return { status: "error", sessionId, error: redactText(outcome.session.lastError ?? "the session was created but could not be started") };
 }
 
 /** Post the rendered, redacted text through the configured connector. */

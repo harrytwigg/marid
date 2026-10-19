@@ -89,9 +89,9 @@ describe("runnableHooks", () => {
 });
 
 describe("validateConfigShape", () => {
-  it("reports hook problems with the rest of config.yaml", () => {
+  it("leaves hook problems out, so a bad hook cannot make config.yaml unloadable", () => {
     const base = { engines: { claude: {} } };
     expect(validateConfigShape({ ...base, hooks: [good] })).toEqual([]);
-    expect(validateConfigShape({ ...base, hooks: [{ name: "x" }] }).join()).toMatch(/hooks\[0\] \(x\): event must be/);
+    expect(validateConfigShape({ ...base, hooks: [{ name: "x" }] })).toEqual([]);
   });
 });

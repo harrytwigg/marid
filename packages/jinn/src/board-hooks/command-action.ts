@@ -18,7 +18,7 @@ export function stopHookCommands(): void {
   for (const child of liveCommands) endCommand(child);
 }
 
-/** SIGTERM the command's whole process group, so a shell's children go with it and release the output pipes. */
+/** SIGTERM the command's whole process group, so a shell's children go with it and release the output pipes. A gateway that is killed outright never gets here, so its commands run on. */
 function endCommand(child: ChildProcess): void {
   try {
     if (child.pid !== undefined) process.kill(-child.pid, "SIGTERM");

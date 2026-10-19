@@ -11,7 +11,7 @@ import type { JinnConfig } from "./types.js";
 import { todoRecoveryProblems } from "./todo-recovery-config.js";
 import { todoDepartmentsProblems } from "./todo-departments-config.js";
 import { remoteMcpProblems } from "./remote-mcp-config.js";
-import { hooksProblems } from "./board-hooks-config.js";
+import { warnAboutHookProblems } from "./board-hooks-config.js";
 import { nameAliases } from "./codename.js";
 
 type ClaudeEngineConfig = JinnConfig["engines"]["claude"];
@@ -97,7 +97,7 @@ export function validateConfigShape(config: unknown): string[] {
     problems.push(...opencodeUsageLimitsProblems(c.engines), ...autoCompactProblems(c.engines));
   }
 
-  problems.push(...validateRealtime(c.realtime), ...hooksProblems(c.hooks));
+  problems.push(...validateRealtime(c.realtime));
 
   return problems;
 }
@@ -193,6 +193,7 @@ export function loadConfig(): JinnConfig {
     );
   }
   const config = parsed as JinnConfig;
+  warnAboutHookProblems(config.hooks);
   config.engines.claude = normalizeClaudeEngineConfig(config.engines.claude);
   applyLegacyFallbackMigration(config);
   applyGatewayEnvOverrides(config);

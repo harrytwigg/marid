@@ -3,6 +3,7 @@
  * (docs/board-hooks.md). Validation lives here, beside the other config blocks;
  * the runtime in `board-hooks/` reads only hooks that pass it.
  */
+import { logger } from "./logger.js";
 
 export const BOARD_HOOK_EVENTS = [
   "todo.created",
@@ -178,7 +179,12 @@ function runnableIndexes(hooks: unknown[]): number[] {
   return indexes;
 }
 
-/** Shape-check the `hooks` block. A bad hook is a problem here and is skipped at runtime; the rest still run. */
+/**
+ * Shape-check the `hooks` block. A bad hook is reported (GET /api/hooks, and
+ * {@link warnAboutHookProblems} at load) and skipped at runtime; the rest still
+ * run. It is deliberately not part of `validateConfigShape`, whose problems make
+ * the whole config.yaml unloadable.
+ */
 export function hooksProblems(value: unknown): string[] {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value)) return ["hooks must be a list"];
@@ -193,6 +199,17 @@ export function hooksProblems(value: unknown): string[] {
     }
   });
   return problems;
+}
+
+let lastWarned = "";
+
+/** Log the block's problems when they change: loadConfig is polled, and one bad hook must not flood the log. */
+export function warnAboutHookProblems(value: unknown): void {
+  const problems = hooksProblems(value);
+  const key = problems.join("\n");
+  if (key === lastWarned) return;
+  lastWarned = key;
+  for (const problem of problems) logger.warn(`config hooks: ${problem} (skipped)`);
 }
 
 export interface ConfiguredHook {

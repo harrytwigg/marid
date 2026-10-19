@@ -1,4 +1,5 @@
 import { getSession } from "../sessions/registry.js";
+import { logger } from "../shared/logger.js";
 import { chainOfFire } from "./run-store.js";
 import { MAX_HOOK_CHAIN } from "./types.js";
 
@@ -6,6 +7,13 @@ import { MAX_HOOK_CHAIN } from "./types.js";
 const MAX_ANCESTOR_DEPTH = 10;
 const HOOK_SOURCE = "hook";
 const HOOK_REF_PREFIX = "hook:";
+
+/** The chain a hook session's fire recorded; a missing run row (pruned, or never written) leaves the guard open, so say so. */
+function chainOfSession(sessionId: string, sourceRef: string): string[] {
+  const chain = chainOfFire(sourceRef.replace(HOOK_REF_PREFIX, ""));
+  if (chain.length === 0) logger.warn(`board hooks: no run row for hook session ${sessionId} (${sourceRef}); its events are not loop-guarded`);
+  return chain;
+}
 
 /** The chain of every hook session on the path from `sessionId` up through its parents, oldest hook first. */
 function chainsAbove(sessionId: string): string[][] {
@@ -16,7 +24,7 @@ function chainsAbove(sessionId: string): string[][] {
     seen.add(id);
     const session = getSession(id);
     if (!session) break;
-    if (session.source === HOOK_SOURCE) chains.unshift(chainOfFire(session.sourceRef.replace(HOOK_REF_PREFIX, "")));
+    if (session.source === HOOK_SOURCE) chains.unshift(chainOfSession(session.id, session.sourceRef));
     id = session.parentSessionId;
   }
   return chains;
