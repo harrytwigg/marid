@@ -170,7 +170,7 @@ describe("rate-limit engine substitution — the model floor", () => {
     });
   });
 
-  it("leaves the next turn on a model the substitute serves — the ISS-1369 regression", async () => {
+  it("leaves the next turn on a model the substitute serves — the original regression", async () => {
     const cfg = config();
     const { session } = await swap(cfg);
 

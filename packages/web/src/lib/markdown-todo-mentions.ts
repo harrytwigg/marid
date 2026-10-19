@@ -1,6 +1,6 @@
 import { TODO_ID_MENTION_SOURCE } from "@/lib/todo-id"
 
-/* Turning `ISS-741` in a Todo body into a mention is a text-level rewrite, so it
+/* Turning `ISS-7` in a Todo body into a mention is a text-level rewrite, so it
  * happens on the tree react-markdown builds rather than in a component override:
  * only text nodes are split, and only outside the three places where the id is
  * already spoken for — inline code, a fenced block, and an existing link.

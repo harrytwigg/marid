@@ -171,7 +171,7 @@ describe("validateNewSessionSelection — engine selection under a spent allowan
       .toMatchObject({ ok: true, engine: "codex", model: "gpt-5.6-sol" });
   });
 
-  it("never resolves a model the engine it moved to does not serve (TSK-202)", () => {
+  it("never resolves a model the engine it moved to does not serve", () => {
     recordEngineUnavailable("codex", "out of quota", anHourOut());
     const cfg = config();
 

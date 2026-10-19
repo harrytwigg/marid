@@ -60,7 +60,7 @@ function cancelledMidFlight(title: string, sessionId: string): { id: string; run
   return { id: item.id, runId: open.id };
 }
 
-describe("the reconciler settles the run ledger from attempt receipts (ISS-728)", () => {
+describe("the reconciler settles the run ledger from attempt receipts", () => {
   it.each([
     ["succeeded", "completed"],
     ["failed", "blocked"],
@@ -110,7 +110,7 @@ describe("the reconciler settles the run ledger from attempt receipts (ISS-728)"
   });
 });
 
-describe("the startup sweep settles orphaned runs (ISS-728)", () => {
+describe("the startup sweep settles orphaned runs", () => {
   it("closes a run whose session no longer exists as crashed", () => {
     const item = store.createWorkItem({ title: "vanished session", status: "executing", source: "delegation" });
     const open = runs.openWorkItemRun({ workItemId: item.id, sessionId: "s-vanished" });
@@ -132,7 +132,7 @@ describe("the startup sweep settles orphaned runs (ISS-728)", () => {
   });
 });
 
-describe("both sweeps close a run the status sweep will never reach (ISS-728)", () => {
+describe("both sweeps close a run the status sweep will never reach", () => {
   it("closes a cancelled Todo's run with its child's outcome on the periodic tick", () => {
     const item = cancelledMidFlight("cancelled, child still running", "s-cancelled-periodic");
 

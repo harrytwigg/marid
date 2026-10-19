@@ -29,7 +29,7 @@ test('real pointer preview matches the 2-to-3 pane right-region result', async (
   const geometry = await dragSessionToRightQuarter(page, sessionC, sessionB)
   const delta = rectDelta(geometry.preview, geometry.result)
   const evidence = `preview ${describeRect(geometry.preview)} vs result ${describeRect(geometry.result)}; delta ${JSON.stringify(delta)}`
-  console.log(`TSK-174 geometry: ${evidence}`)
+  console.log(`chat-grid-drop geometry: ${evidence}`)
 
   for (const [axis, value] of Object.entries(delta)) {
     expect(Math.abs(value), `${evidence}; ${axis} exceeded 1px`).toBeLessThanOrEqual(1)
@@ -121,7 +121,7 @@ for (const viewport of [DESKTOP, { width: 1920, height: 1080 }]) {
     const cases = dropMatrix(viewport)
 
     for (const scenario of cases) {
-      console.log(`TSK-174 matrix: ${viewport.width}x${viewport.height} ${scenario.count} panes ${scenario.region}`)
+      console.log(`chat-grid-drop matrix: ${viewport.width}x${viewport.height} ${scenario.count} panes ${scenario.region}`)
       await setWorkingSet(page, ids.slice(0, scenario.count))
       const geometry = await dragSession(
         page,

@@ -115,7 +115,7 @@ function seedItem(db: import("better-sqlite3").Database): string {
  *  literal and the recognizer test goes red instead of quietly passing. */
 const FIVE_OUTCOME_RUNS_SQL = WORK_ITEM_RUNS_TABLE_DDL.replace(",'rate_limited'", "");
 
-describe("widening the run outcomes on a deployed database (ISS-731)", () => {
+describe("widening the run outcomes on a deployed database", () => {
   /** A current database wound back to the five-outcome run table, rows and all. */
   function fiveOutcomeDatabase(name: string): { file: string; host: string } {
     const { file, db } = freshDatabase(name);

@@ -135,7 +135,7 @@ function seededChat() {
   return chat;
 }
 
-describe("TSK-224 journey", () => {
+describe("Talk acceptance journey", () => {
   it("step 1: 'what are we looking at?' reads the focused chat instead of narrating it", async () => {
     const context = testContext();
     const { route } = await pressTheOrb(context);

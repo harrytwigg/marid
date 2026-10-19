@@ -396,7 +396,7 @@ describe("reconcileActiveWorkItems / startup sweep — the recoverStaleSessions 
   });
 });
 
-describe("ISS-570 — live todo events from the reconciler", () => {
+describe("live todo events from the reconciler", () => {
   it("emits one event when reconcile changes status, none when it no-ops", async () => {
     const live = await import("../live-events.js");
     const events: Array<Record<string, unknown>> = [];

@@ -72,7 +72,7 @@ function storedSql(db: import("better-sqlite3").Database, table: string): string
   return (db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(table) as { sql: string } | undefined)?.sql;
 }
 
-describe("the ISS-733 tables are additive", () => {
+describe("the dispatch-config tables are additive", () => {
   it("creates both on a fresh database with their frozen DDL, and verifies", () => {
     const { db } = freshDatabase("fresh.db");
     expect(shape(storedSql(db, "work_item_dispatch"))).toBe(shape(WORK_ITEM_DISPATCH_TABLE_DDL));
@@ -109,7 +109,7 @@ describe("the ISS-733 tables are additive", () => {
   });
 });
 
-describe("work_items itself is untouched by ISS-733", () => {
+describe("work_items itself is untouched by the dispatch-config tables", () => {
   it("still matches the shape it had before, so an existing database still verifies", () => {
     const { db } = freshDatabase("work-items-shape.db");
     expect(shape(storedSql(db, "work_items"))).toBe(shape(WORK_ITEMS_TABLE_DDL_BEFORE_DISPATCH_CONFIG));

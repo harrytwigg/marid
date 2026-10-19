@@ -72,7 +72,7 @@ beforeEach(() => {
   listWorkItemComments.mockResolvedValue({ comments: [], total: 0 })
 })
 
-describe("the embedded comment tail is not paid for twice (ISS-748)", () => {
+describe("the embedded comment tail is not paid for twice", () => {
   it("asks only for the head the tail is missing, then shows all 13 comments once, newest first", async () => {
     listWorkItemComments.mockResolvedValue({ comments: thread.slice(0, 3), total: 13 })
     renderActivity(detailOf(thread.slice(3), 13))

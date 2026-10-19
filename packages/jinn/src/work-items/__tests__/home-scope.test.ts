@@ -83,7 +83,7 @@ describe("the Home scope is the union of pinned and operator-created", () => {
     expect(page.total).toBe(3);
   });
 
-  it("leaves Home a strict subset of Everything (criterion 5, TSK-172 guard)", () => {
+  it("leaves Home a strict subset of Everything (criterion 5, auto-keep guard)", () => {
     const everything = store.queryWorkItems({ rootsOnly: true, limit: 100 }).workItems.map((i) => i.id);
     const home = homeIds();
     for (const id of home) expect(everything).toContain(id);

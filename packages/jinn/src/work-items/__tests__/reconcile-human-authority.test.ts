@@ -57,8 +57,8 @@ beforeAll(async () => {
   db = (await import("../../shared/db.js")).initDb();
 });
 
-describe("reconcileWorkItem — attempts that predate the operator's own move are not evidence (TSK-98)", () => {
-  it("leaves a Todo the operator parked in backlog exactly where he put it (TSK-61, replayed)", () => {
+describe("reconcileWorkItem — attempts that predate the operator's own move are not evidence", () => {
+  it("leaves a Todo the operator parked in backlog exactly where he put it (replayed incident)", () => {
     const id = parkedAfterStaleAttempt("never started", "s-stale-attempt");
 
     expect(reconcile.reconcileWorkItem(id)).toMatchObject({ changed: false, item: { status: "backlog" } });
@@ -146,7 +146,7 @@ function operatorOpenedTrustReview(title: string, sourceRef: string): string {
   return item.id;
 }
 
-describe("reconcileWorkItem — a fresh attempt licenses the TRUST close only once it has settled successfully (TSK-99)", () => {
+describe("reconcileWorkItem — a fresh attempt licenses the TRUST close only once it has settled successfully", () => {
   it("does not close a review the operator opened when the fresh attempt FAILED", () => {
     const id = operatorOpenedTrustReview("cron retry failed", "cron:trust-failed");
     linkedSession("s-trust-failed", id, "idle", afterTheMove(), "failed");

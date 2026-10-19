@@ -95,7 +95,7 @@ describe("scheduler — manual vs scheduled fire identity (GRS-003b-1)", () => {
 
     expect(runCronJob).toHaveBeenCalledTimes(1);
     const call = (runCronJob as any).mock.calls[0];
-    expect(call[2]).toBe(swapped); // TSK-260: resolved at fire time, not capture time
+    expect(call[2]).toBe(swapped); // resolved at fire time, not capture time
     const opts = call[4];
     expect(opts).toBeDefined();
     expect(opts.fireIso).toMatch(/^\d{4}-\d{2}-\d{2}T[0-9:.]+Z$/);

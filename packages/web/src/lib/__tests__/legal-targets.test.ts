@@ -62,7 +62,7 @@ describe("legalTargets — the roll-up close gate", () => {
   })
 })
 
-describe("legalTargets — the cascade close (TSK-96)", () => {
+describe("legalTargets — the cascade close", () => {
   it("offers done live, saying what the one close takes with it", () => {
     const done = legalTargets("in_review", { openChildren: 3 }).find((t) => t.status === "done")
     expect(done).toEqual({ status: "done", gated: false, cascade: true, reason: "also closes 3 open sub-tasks" })
