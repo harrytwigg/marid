@@ -294,6 +294,15 @@ describe("work-item store — events (append-only audit)", () => {
     expect(linkEvents[0].detail).toEqual({ sessionId: "sess-evt-link", role: "execute" });
   });
 
+  it("linkSession stamps the session's employee on 'session_linked'", () => {
+    insertSession("sess-evt-employee");
+    db.prepare("UPDATE sessions SET employee = 'link-dev' WHERE id = ?").run("sess-evt-employee");
+    const wi = store.createWorkItem({ title: "link with employee" });
+    store.linkSession(wi.id, "sess-evt-employee", null, "execute", { via: "delegation" });
+    const linkEvents = store.listWorkItemEvents(wi.id).filter((e) => e.kind === "session_linked");
+    expect(linkEvents[0].detail).toEqual({ sessionId: "sess-evt-employee", role: "execute", employee: "link-dev", via: "delegation" });
+  });
+
   it("listWorkItemEvents returns oldest-first and tolerates corrupt detail JSON", () => {
     const wi = store.createWorkItem({ title: "ordered events" });
     store.appendWorkItemEvent({ workItemId: wi.id, kind: "note", detail: { n: 1 } });
