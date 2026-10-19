@@ -60,13 +60,24 @@ const queueStub = {
 
 /** A claude whose binary is missing, so a scoped claude turn is refused before it starts. */
 const MISSING_CLAUDE = path.join(home, "no-such-bin", "claude");
+/**
+ * An absolute, executable stub for opencode, so opencode's availability is a
+ * property of this fixture rather than of whatever happens to be on the host's
+ * PATH. `getModelRegistry` reports `available` from an in-module
+ * `engineAvailable` the vi.mock below cannot intercept, so a bare `"opencode"`
+ * resolved via PATH (or `~/.local/bin`) and the reroute depended on the host.
+ */
+const FAKE_OPENCODE = path.join(home, "bin", "opencode");
+fs.mkdirSync(path.dirname(FAKE_OPENCODE), { recursive: true });
+fs.writeFileSync(FAKE_OPENCODE, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+fs.chmodSync(FAKE_OPENCODE, 0o755);
 
 const config = {
   gateway: { port: 7799, host: "127.0.0.1" },
   engines: {
     default: "claude",
     claude: { bin: MISSING_CLAUDE, model: "sonnet", fallback: ["opencode"] },
-    opencode: { bin: "opencode", model: "deepseek" },
+    opencode: { bin: FAKE_OPENCODE, model: "deepseek" },
   },
   models: {
     claude: { default: "sonnet", models: [{ id: "sonnet" }] },
