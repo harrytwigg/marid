@@ -11,14 +11,16 @@ import { noModelLabel, profileOptionsFor, rowLabel, withEngine, withModel, withP
 /** A row's icon button: ghost, at the 34px the rows are laid out for. */
 export const ROW_BUTTON_CLASS = "size-[34px] min-h-0 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
 
-function RowButton({ label, disabled, onClick, children }: {
+function RowButton({ label, move, disabled, onClick, children }: {
   label: string
+  /** Which way the button moves its row, so focus can be put back on it after the move. */
+  move?: "earlier" | "later"
   disabled?: boolean
   onClick: () => void
   children: React.ReactNode
 }) {
   return (
-    <Button variant="ghost" size="icon-sm" aria-label={label} disabled={disabled} onClick={onClick} className={ROW_BUTTON_CLASS}>
+    <Button variant="ghost" size="icon-sm" aria-label={label} data-chain-move={move} disabled={disabled} onClick={onClick} className={ROW_BUTTON_CLASS}>
       {children}
     </Button>
   )
@@ -88,10 +90,10 @@ function RowActions({ label, chainName, index, count, onMove, onRemove }: {
 }) {
   return (
     <>
-      <RowButton label={`Move ${label} earlier in the ${chainName}`} disabled={index === 0} onClick={() => onMove(index - 1)}>
+      <RowButton label={`Move ${label} earlier in the ${chainName}`} move="earlier" disabled={index === 0} onClick={() => onMove(index - 1)}>
         <ChevronUp size={15} aria-hidden />
       </RowButton>
-      <RowButton label={`Move ${label} later in the ${chainName}`} disabled={index === count - 1} onClick={() => onMove(index + 1)}>
+      <RowButton label={`Move ${label} later in the ${chainName}`} move="later" disabled={index === count - 1} onClick={() => onMove(index + 1)}>
         <ChevronDown size={15} aria-hidden />
       </RowButton>
       <RowButton label={`Remove ${label} from the ${chainName}`} onClick={onRemove}>
@@ -103,7 +105,9 @@ function RowActions({ label, chainName, index, count, onMove, onRemove }: {
 
 /** One link in the chain: its place in the order, the target it names, and the
  *  three ways to change that place without a pointer. */
-export function ChainRow({ link, index, count, fields, problems, expanded, style, onPointerDown, onChange, onMove, onRemove }: {
+export function ChainRow({ rowId, link, index, count, fields, problems, expanded, style, onPointerDown, onChange, onMove, onRemove }: {
+  /** Stable across moves and edits: see `useRowIds`. */
+  rowId: string
   link: FallbackLink
   index: number
   count: number
@@ -123,12 +127,16 @@ export function ChainRow({ link, index, count, fields, problems, expanded, style
     <div className="flex flex-col gap-[2px]">
       <div
         data-chain-row={fallbackLinkLabel(link)}
+        data-row-id={rowId}
         data-invalid={problems.length > 0 || undefined}
         onPointerDown={onPointerDown}
         style={style}
         className="flex flex-wrap items-center gap-[var(--space-1)] rounded-[10px] bg-[var(--fill-tertiary)] py-[3px] pl-[var(--space-2)] pr-[3px] @[560px]/chain:flex-nowrap"
       >
-        <GripVertical size={14} aria-hidden className="shrink-0 cursor-grab text-[var(--text-quaternary)]" />
+        {/* The one part of a row that owns a touch: everywhere else a swipe scrolls the page. */}
+        <span data-chain-grip aria-hidden className="grid size-[28px] shrink-0 cursor-grab place-items-center text-[var(--text-quaternary)]" style={{ touchAction: "none" }}>
+          <GripVertical size={14} />
+        </span>
         <span className="w-[14px] shrink-0 text-[length:var(--text-caption2)] text-[var(--text-quaternary)] [font-variant-numeric:tabular-nums]">
           {index + 1}
         </span>

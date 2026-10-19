@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { fallbackLinkLabel, type FallbackHop, type FallbackHopReason } from '@jinn/fallback-chain-wire'
+import { fallbackLinkLabel, type FallbackHop, type FallbackHopNoticeMeta, type FallbackHopReason } from '@jinn/fallback-chain-wire'
 import { ArrowRightLeftIcon, ChevronDown, ChevronRight } from '@/components/ui/icon'
 import { SKIP_REASON_TEXT, formatReset } from '@/lib/fallback-format'
 import type { Message } from '@/lib/conversations'
@@ -25,7 +25,7 @@ function text(value: unknown): value is string {
 /** The hop a notification carries, or null when it carries none or a malformed one. */
 export function parseFallbackHop(message: Message): FallbackHop | null {
   if (message.role !== 'notification') return null
-  const hop = (message.meta as { fallbackHop?: Partial<FallbackHop> } | undefined)?.fallbackHop
+  const hop = (message.meta as Partial<FallbackHopNoticeMeta> | undefined)?.fallbackHop as Partial<FallbackHop> | undefined
   if (!hop || typeof hop !== 'object') return null
   if (!text(hop.from) || !text(hop.fromLabel) || !text(hop.reason)) return null
   return hop as FallbackHop

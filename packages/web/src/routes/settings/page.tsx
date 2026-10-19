@@ -26,6 +26,7 @@ import { PluginsEntry } from "./plugins/entry"
 import { EnginesSection } from "./engines/entry"
 import type { Config } from "./config-shape"
 import { configSaveBlocker } from "./engines/model-map-model"
+import { refreshFallbackChains } from "@/hooks/use-fallback-chains"
 import { SttSettingsSection } from "./stt-section"
 import { VoiceSection } from "./voice-section"
 import { PairingSection } from "./pairing-section"
@@ -110,7 +111,7 @@ export default function SettingsPage() {
   const { voiceCapability, reloadVoiceCapability } = useVoiceCapability()
   const { saveState, commit, adoptRevision } = useConfigCommit({
     blocker: (next) => configSaveBlocker(next.engines, modelRegistry?.engines, loadedEnginesRef.current),
-    onSaved: reloadVoiceCapability,
+    onSaved: () => { reloadVoiceCapability(); refreshFallbackChains() },
     onConflict: setConflict,
   })
 

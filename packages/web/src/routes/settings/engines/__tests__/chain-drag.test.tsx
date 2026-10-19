@@ -92,6 +92,31 @@ describe('chain drag reorder', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
+  it('a touch on the row body is a scroll, not a lift', async () => {
+    const rows = renderEditor()
+
+    fireEvent.pointerDown(rows[0], { button: 0, clientX: 10, clientY: 10, pointerType: 'touch' })
+    await act(async () => { window.dispatchEvent(pointer('pointermove', 10, 20)) })
+    await act(async () => { window.dispatchEvent(pointer('pointermove', 10, 70)) })
+    await act(async () => { window.dispatchEvent(pointer('pointerup', 10, 70)) })
+
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('a touch on the grip lifts the row at once, and the grip alone holds touch-action: none', async () => {
+    const rows = renderEditor()
+    const grip = rows[0].querySelector('[data-chain-grip]') as HTMLElement
+    expect(grip.style.touchAction).toBe('none')
+    expect(rows[0].style.touchAction).toBe('')
+
+    fireEvent.pointerDown(grip, { button: 0, clientX: 10, clientY: 10, pointerType: 'touch' })
+    await act(async () => { window.dispatchEvent(pointer('pointermove', 10, 20)) })
+    await act(async () => { window.dispatchEvent(pointer('pointermove', 10, 70)) })
+    await act(async () => { window.dispatchEvent(pointer('pointerup', 10, 70)) })
+
+    expect(onChange).toHaveBeenCalledWith([{ engine: 'grok' }, { engine: 'codex' }, { engine: 'pi' }])
+  })
+
   it('a press on a row select is that select, never a lift', async () => {
     const rows = renderEditor()
     const engine = rows[0].querySelector('select[aria-label="Engine of link 1 of the Claude chain"]')!

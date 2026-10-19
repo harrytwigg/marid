@@ -2,16 +2,18 @@ import { useCallback, useMemo, useRef, useState } from "react"
 
 /* Pointer reorder for one fallback chain, in the board's hand-rolled idiom
  * (`routes/todos/board/use-board-drag.ts`): window listeners, a travel
- * threshold so a click on a row's own controls still lands, a touch hold, and
- * Escape to cancel. A chain is a list rather than a board, so the geometry is
+ * threshold so a click on a row's own controls still lands, and Escape to cancel. A chain is a list rather than a board, so the geometry is
  * one dimension and is measured once on lift: the rows move by transform, which
  * leaves the slots the pointer is tested against exactly where they were.
+ *
+ * On a touch screen a row is part of the page's scroll: only the grip takes the
+ * pointer (`touch-action: none` is on it alone), so a swipe that starts on a row
+ * still scrolls, and a drag that starts on the grip lifts at once.
  *
  * Dragging is one of two ways to reorder. The move buttons on each row are the
  * other, and they are the one that works with no pointer at all. */
 
 const LIFT_THRESHOLD_PX = 5
-const TOUCH_HOLD_MS = 300
 
 export interface ChainDragState {
   from: number
@@ -66,26 +68,17 @@ function beginDrag(
   const step = rects[1].top - rects[0].top
   const startX = event.clientX
   const startY = event.clientY
-  const isTouch = event.pointerType === "touch"
   const session = new AbortController()
   let lifted = false
-  let holdTimer: number | null = null
 
   const end = (commit: boolean) => {
-    if (holdTimer !== null) window.clearTimeout(holdTimer)
     session.abort()
     finish(commit)
   }
 
   const onMove = (e: PointerEvent) => {
     if (!lifted) {
-      const travelled = Math.hypot(e.clientX - startX, e.clientY - startY)
-      if (isTouch && holdTimer !== null) {
-        // Moving before the hold fires is a scroll, not a lift.
-        if (travelled > LIFT_THRESHOLD_PX) end(false)
-        return
-      }
-      if (travelled < LIFT_THRESHOLD_PX) return
+      if (Math.hypot(e.clientX - startX, e.clientY - startY) < LIFT_THRESHOLD_PX) return
       lifted = true
     }
     e.preventDefault()
@@ -93,14 +86,6 @@ function beginDrag(
   }
 
   listenForSession(session, onMove, end)
-
-  if (isTouch) {
-    holdTimer = window.setTimeout(() => {
-      holdTimer = null
-      lifted = true
-      update({ from, to: from, offsetY: 0, step })
-    }, TOUCH_HOLD_MS)
-  }
 }
 
 export function useChainDrag(onReorder: (from: number, to: number) => void) {
@@ -129,8 +114,10 @@ export function useChainDrag(onReorder: (from: number, to: number) => void) {
 
   const liftPointerDown = useCallback((event: React.PointerEvent, from: number) => {
     if (event.button !== 0 && event.pointerType !== "touch") return
-    // The row's buttons and selects own their own pointer.
-    if ((event.target as HTMLElement).closest("button, select, input")) return
+    const target = event.target as HTMLElement
+    // The row's buttons and selects own their own pointer, and a touch on the row is a scroll.
+    if (target.closest("button, select, input")) return
+    if (event.pointerType === "touch" && !target.closest("[data-chain-grip]")) return
     const rows = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-chain-row]") ?? [])
     if (rows.length < 2) return
     beginDrag(event, from, rows.map((row) => row.getBoundingClientRect()), update, finish)

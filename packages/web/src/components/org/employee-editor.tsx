@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { api } from "@/lib/api"
 import type { Employee, EmployeeUpdate } from "@/lib/api"
-import { EmployeeFallbackRow, employeeChainOf, sameChain, type FallbackPatch } from "./employee-fallback-field"
+import { EmployeeFallbackRow, employeeChainOf, refreshFallbackChains, sameChain, type FallbackPatch } from "./employee-fallback-field"
 import { isConfined, type DepartmentScopeWire } from "@/lib/department-api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -88,6 +88,7 @@ export function EmployeeEditor({
     effortLevel: employee.effortLevel,
   })
   const [fallback, setFallback] = useState(() => employeeChainOf(employee))
+  const [fallbackBlocked, setFallbackBlocked] = useState(false)
   const isSystem = employee.system === true
 
   // Department + reportsTo option lists come from the live org.
@@ -111,7 +112,7 @@ export function EmployeeEditor({
 
   const personaInvalid = persona.trim().length === 0
   const displayNameInvalid = displayName.trim().length === 0
-  const canSave = !saving && !personaInvalid && !displayNameInvalid
+  const canSave = !saving && !personaInvalid && !displayNameInvalid && !fallbackBlocked
 
   // Build a patch of only the changed fields.
   const patch = useMemo<EmployeeUpdate>(() => {
@@ -140,6 +141,7 @@ export function EmployeeEditor({
     setError(null)
     try {
       const res = await api.updateEmployee(employee.name, patch)
+      refreshFallbackChains()
       if (res.employee) onSaved(res.employee)
       else onSaved({ ...employee, ...patch } as Employee)
     } catch (e) {
@@ -269,7 +271,7 @@ export function EmployeeEditor({
         </div>
       </Field>
 
-      <EmployeeFallbackRow employee={employee} engine={selector.engine ?? employee.engine} value={fallback} onChange={setFallback} />
+      <EmployeeFallbackRow employee={employee} engine={selector.engine ?? employee.engine} value={fallback} onChange={setFallback} onBlockedChange={setFallbackBlocked} />
 
       <Field label="Persona / instructions">
         {isSystem ? (

@@ -74,6 +74,13 @@ function chainRows(cardSelector: string): string[] {
 }
 const engineRows = (name: string) => chainRows(`[data-engine-card="${name}"]`)
 
+/** For a test that edits more than once: the write that follows the last edit, once the debounce has gone quiet. */
+async function saveLast() {
+  await waitFor(() => expect(apiMocks.updateConfig).toHaveBeenCalled())
+  await new Promise((resolve) => setTimeout(resolve, 700))
+  return apiMocks.updateConfig.mock.calls.at(-1)![0] as Record<string, any>
+}
+
 /** Settings save themselves; what a test waits for is the write. */
 async function save() {
   await waitFor(() => expect(apiMocks.updateConfig).toHaveBeenCalled())
@@ -159,7 +166,7 @@ describe('Engine Fallbacks section', () => {
     fireEvent.keyDown(screen.getByRole('button', { name: /Model of link 1 of the Claude chain/ }), { key: 'Enter' })
     fireEvent.click(await screen.findByRole('menuitemradio', { name: /Sonnet/ }))
 
-    expect((await save()).engines.claude.fallback).toEqual([{ engine: 'claude', profile: 'work', model: 'sonnet' }])
+    expect((await saveLast()).engines.claude.fallback).toEqual([{ engine: 'claude', profile: 'work', model: 'sonnet' }])
   })
 
   it('writes no model for "Same model" / "Engine default", and says which one it is', async () => {
@@ -173,6 +180,16 @@ describe('Engine Fallbacks section', () => {
 
     expect((await save()).engines.claude.fallback[1]).toEqual({ engine: 'codex' })
     expect(screen.getByRole('button', { name: 'Model of link 2 of the Claude chain: Engine default' })).toBeTruthy()
+  })
+
+  it('asks for the gateway view of the chains again once a save has landed', async () => {
+    const { queryClient } = await import('@/lib/query-client')
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    await renderSettings()
+    fireEvent.click(screen.getByRole('button', { name: 'Add a target to the Claude chain' }))
+    await save()
+
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['fallback-chains'] }))
   })
 
   it('saves a chain emptied in the UI as [], and says the engine waits', async () => {

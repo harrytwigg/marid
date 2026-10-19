@@ -23,7 +23,7 @@ export interface ChainBodyProps {
 
 /** A chain written in engine names runs as its expansion; say so once, so the
  *  rows are not mistaken for what is in the file. */
-function LegacyNotice() {
+export function LegacyNotice() {
   return (
     <p data-chain-legacy-notice className="mt-[var(--space-2)] text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">
       Written as engine names, shown as it runs. The first edit saves it as explicit links.

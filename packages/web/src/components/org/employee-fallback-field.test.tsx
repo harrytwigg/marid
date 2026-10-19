@@ -15,6 +15,7 @@ vi.mock("@/hooks/use-fallback-chains", async (importActual) => ({
 }))
 
 import { EmployeeFallbackField, EmployeeFallbackSummary } from "./employee-fallback-field"
+import { sameChain } from "./employee-fallback"
 
 const model = (id: string) => ({ id, label: id, supportsEffort: false, effortLevels: [] })
 const entry = (name: string) => ({ name, available: true, defaultModel: "m", effortMechanism: "none", models: [model("m")] })
@@ -115,6 +116,64 @@ describe("EmployeeFallbackField", () => {
     render(<EmployeeFallbackField employee={EMP} engine="claude" value={[]} onChange={() => {}} />)
 
     expect(screen.getByText("No fallback. Claude waits for its own limit to reset.")).toBeTruthy()
+  })
+})
+
+describe("an employee chain written in engine names", () => {
+  const legacy = { ...EMP, fallback: ["codex"] } as Employee
+  const effective = [resolved("codex"), resolved("opencode", { model: "x/y", origin: "legacy" })]
+
+  beforeEach(() => {
+    chains.current = { profiles: [], subjects: [{ ...subject("employee", "writer", true, effective), legacy: true }] }
+  })
+
+  it("shows what runs, marks the link another chain contributed, and says so once", () => {
+    render(<EmployeeFallbackField employee={legacy} engine="claude" value={[{ engine: "codex" }]} onChange={() => {}} />)
+
+    expect(Array.from(document.querySelectorAll("[data-chain-row]")).map((r) => r.getAttribute("data-chain-row"))).toEqual(["codex", "opencode · x/y"])
+    expect(document.querySelectorAll("[data-chain-expanded]").length).toBe(1)
+    expect(document.querySelector("[data-chain-legacy-notice]")).toBeTruthy()
+  })
+
+  it("writes the whole effective chain, as links, on the first edit, so the expansion is not lost", () => {
+    const onChange = vi.fn()
+    render(<EmployeeFallbackField employee={legacy} engine="claude" value={[{ engine: "codex" }]} onChange={onChange} />)
+
+    fireEvent.click(screen.getByRole("button", { name: "Move opencode · x/y earlier in the Writer chain" }))
+
+    expect(onChange).toHaveBeenCalledWith([{ engine: "opencode", model: "x/y" }, { engine: "codex" }])
+  })
+})
+
+describe("choosing Custom before the gateway has answered", () => {
+  it("is not offered, and does nothing if forced, rather than writing an empty chain that means no fallback", () => {
+    chains.current = undefined
+    const onChange = vi.fn()
+    render(<EmployeeFallbackField employee={EMP} engine="claude" value={null} onChange={onChange} />)
+
+    expect((screen.getByRole("option", { name: "Custom" }) as HTMLOptionElement).disabled).toBe(true)
+    fireEvent.change(screen.getByRole("combobox", { name: "Fallback chain" }), { target: { value: "custom" } })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+})
+
+describe("a chain with a problem", () => {
+  it("tells the editor to hold the save, and lets go once it is valid", () => {
+    const onBlockedChange = vi.fn()
+    const { rerender } = render(<EmployeeFallbackField employee={EMP} engine="claude" value={[{ engine: "claude", profile: "work" }]} onChange={() => {}} onBlockedChange={onBlockedChange} />)
+    expect(onBlockedChange).toHaveBeenLastCalledWith(true)
+
+    rerender(<EmployeeFallbackField employee={EMP} engine="claude" value={[{ engine: "codex" }]} onChange={() => {}} onBlockedChange={onBlockedChange} />)
+    expect(onBlockedChange).toHaveBeenLastCalledWith(false)
+  })
+})
+
+describe("sameChain", () => {
+  it("compares links, not the order their fields were written in", () => {
+    expect(sameChain([{ engine: "claude", model: "opus", profile: "A" }], [{ engine: "claude", profile: "A", model: "opus" }])).toBe(true)
+    expect(sameChain([{ engine: "claude" }], [{ engine: "claude", profile: "A" }])).toBe(false)
+    expect(sameChain(null, [])).toBe(false)
+    expect(sameChain(null, null)).toBe(true)
   })
 })
 

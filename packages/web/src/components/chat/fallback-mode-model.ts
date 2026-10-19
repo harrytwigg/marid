@@ -100,3 +100,9 @@ export function withTarget(view: SessionFallbackView, choice: FallbackTargetChoi
 export function hasOwnTarget(view: SessionFallbackView): boolean {
   return view.targetSource === 'session' && view.target !== null
 }
+
+/** The session info's "Served by" line, or null when there is nothing to say. */
+export function servedByInfoLine(rawFallback: unknown): string | null {
+  const label = servedByLabel(parseFallbackView(rawFallback))
+  return label ? `Served by: ${label}` : null
+}

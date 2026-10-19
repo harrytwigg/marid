@@ -74,6 +74,22 @@ describe('resolveForFlow', () => {
   })
 })
 
+describe('resolveForFlow, own target', () => {
+  it('takes the own node from the subject primary, whose key carries the default model, so it keeps its health', () => {
+    const primary = link('claude', { key: 'claude||sonnet', model: 'sonnet', label: 'claude · sonnet', health: { state: 'exhausted', usedPercent: 97, window: 'weekly' } })
+    const subject = { kind: 'engine' as const, id: 'claude', primary, configured: null, legacy: false, effective: [] }
+
+    const [own] = resolveForFlow({ engine: 'claude' }, [{ engine: 'codex' }], subject)
+
+    expect(own.health?.usedPercent).toBe(97)
+    expect(own.label).toBe('claude · sonnet')
+  })
+
+  it('falls back to the plain own target when the gateway has not said', () => {
+    expect(resolveForFlow({ engine: 'claude' }, [], undefined)[0].label).toBe('claude')
+  })
+})
+
 describe('ChainFlow', () => {
   async function renderFlow(props: Parameters<typeof ChainFlow>[0]) {
     render(<ChainFlow {...props} />)

@@ -1,3 +1,4 @@
+import { useEffect } from "react"
 import type { FallbackLink } from "@jinn/fallback-chain-wire"
 import { ChainFlowDisclosure } from "@/components/fallback/chain-flow-disclosure"
 import { resolveForFlow } from "@/components/fallback/resolve-links"
@@ -6,11 +7,13 @@ import { useFallbackChains } from "@/hooks/use-fallback-chains"
 import type { Employee } from "@/lib/api"
 import { engineDisplayName } from "@/lib/engine-names"
 import { ChainEditor } from "@/routes/settings/engines/chain-editor"
+import { LegacyNotice } from "@/routes/settings/engines/chain-body"
 import { SettingsSelect } from "@/routes/settings/shared"
 import type { EmployeeFallbackFields } from "@/lib/fallback-chains-api"
-import { employeeChainOf, employeeSubject, fallbackFieldState, sameChain, subjectProblems } from "./employee-fallback"
+import { chainBlocked, employeeChainOf, employeeSubject, fallbackFieldState, sameChain, subjectProblems, type InheritedChain, type OwnChain } from "./employee-fallback"
 
 export { employeeChainOf, sameChain }
+export { refreshFallbackChains } from "@/hooks/use-fallback-chains"
 /** What the editor adds to its PATCH. */
 export type FallbackPatch = EmployeeFallbackFields
 
@@ -21,6 +24,8 @@ interface EmployeeFallbackFieldProps {
   /** The employee's own chain; null inherits. */
   value: FallbackLink[] | null
   onChange: (next: FallbackLink[] | null) => void
+  /** Told whether the chain holds a problem, so the editor can refuse to save it. */
+  onBlockedChange?: (blocked: boolean) => void
 }
 
 /** The editor's labelled row for the chain, shaped like its other fields. */
@@ -38,50 +43,80 @@ export function EmployeeFallbackRow(props: EmployeeFallbackFieldProps) {
   )
 }
 
+/** Per link, where it came from: only a chain written in names has links that came from elsewhere. */
+function originsOf(own: OwnChain | null): ("config" | "legacy")[] | undefined {
+  return own?.expanded.map((expanded) => (expanded ? "legacy" : "config"))
+}
+
 const INHERIT = "inherit"
 const CUSTOM = "custom"
 
-/** "Use the default" or "Custom": the default's chain read-only, or the same rows an
- *  engine's chain has. Switching to Custom starts from the chain the default runs. */
-export function EmployeeFallbackField({ employee, engine, value, onChange }: EmployeeFallbackFieldProps) {
-  const { data: registry } = useModelRegistry()
-  const { data: chains } = useFallbackChains(employee.name)
-  if (!registry) return null
-
-  const { inherited, self, shown, subject } = fallbackFieldState(employee, engine, value, chains)
-
+/** Inherit or custom. Custom starts from the chain the default runs: until the gateway has said what that is it would start from nothing, which means no fallback at all, so it waits. */
+function ChainChoice({ custom, ready, inherited, onChange }: {
+  custom: boolean
+  ready: boolean
+  inherited: InheritedChain
+  onChange: (next: FallbackLink[] | null) => void
+}) {
   return (
-    <div className="flex flex-col gap-[var(--space-1)]" data-employee-fallback>
-      <SettingsSelect
-        value={value === null ? INHERIT : CUSTOM}
-        ariaLabel="Fallback chain"
-        onChange={(choice) => onChange(choice === CUSTOM ? inherited.links : null)}
-        options={[
-          { value: INHERIT, label: `Use the default (from ${inherited.label})` },
-          { value: CUSTOM, label: "Custom" },
-        ]}
-      />
-      {value === null ? (
-        <InheritedRows links={inherited.links} engine={engine} />
-      ) : (
-        <ChainEditor
-          chainName={`${employee.displayName || employee.name} chain`}
-          ownEngine={engine}
-          self={self}
-          where="fallback"
-          links={value}
-          expanded={value.map(() => false)}
-          fields={{ registry, profiles: chains?.profiles.map((p) => p.name) ?? [] }}
-          waitsAs={engineDisplayName(engine)}
-          onChange={onChange}
-        />
-      )}
-      {subjectProblems(subject).map((problem) => (
+    <SettingsSelect
+      value={custom ? CUSTOM : INHERIT}
+      ariaLabel="Fallback chain"
+      onChange={(choice) => { if (choice !== CUSTOM) onChange(null); else if (ready) onChange(inherited.links) }}
+      options={[
+        { value: INHERIT, label: `Use the default (from ${inherited.label})` },
+        { value: CUSTOM, label: "Custom", disabled: !ready },
+      ]}
+    />
+  )
+}
+
+/** What the gateway itself says is wrong with a chain. */
+function GatewayProblems({ problems }: { problems: string[] }) {
+  return (
+    <>
+      {problems.map((problem) => (
         <p key={problem} data-chain-problem role="alert" className="m-0 text-[length:var(--text-caption2)]" style={{ color: "var(--system-red)" }}>
           {problem}
         </p>
       ))}
-      {shown.length > 0 && <ChainFlowDisclosure links={resolveForFlow(self, shown, subject)} />}
+    </>
+  )
+}
+
+/** "Use the default" or "Custom": the default's chain read-only, or the same rows an
+ *  engine's chain has. Switching to Custom starts from the chain the default runs. */
+export function EmployeeFallbackField({ employee, engine, value, onChange, onBlockedChange }: EmployeeFallbackFieldProps) {
+  const { data: registry } = useModelRegistry()
+  const { data: chains } = useFallbackChains(employee.name)
+  const { inherited, self, shown, own, subject } = fallbackFieldState(employee, engine, value, chains)
+  const blocked = chainBlocked(registry, own, self, chains)
+  useEffect(() => { onBlockedChange?.(blocked) }, [blocked, onBlockedChange])
+  if (!registry) return null
+
+  return (
+    <div className="flex flex-col gap-[var(--space-1)]" data-employee-fallback>
+      <ChainChoice custom={own !== null} ready={Boolean(chains)} inherited={inherited} onChange={onChange} />
+      {own === null ? (
+        <InheritedRows links={inherited.links} engine={engine} />
+      ) : (
+        <>
+          {own.legacy && <LegacyNotice />}
+          <ChainEditor
+            chainName={`${employee.displayName || employee.name} chain`}
+            ownEngine={engine}
+            self={self}
+            where="fallback"
+            links={own.links}
+            expanded={own.expanded}
+            fields={{ registry, profiles: chains?.profiles.map((p) => p.name) ?? [] }}
+            waitsAs={engineDisplayName(engine)}
+            onChange={onChange}
+          />
+        </>
+      )}
+      <GatewayProblems problems={subjectProblems(subject)} />
+      {shown.length > 0 && <ChainFlowDisclosure links={resolveForFlow(self, shown, subject, originsOf(own))} />}
     </div>
   )
 }

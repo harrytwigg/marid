@@ -23,8 +23,9 @@ vi.mock("@/components/chat/model-selector-row", () => ({
 // The stub drives the editor's side of it: what it patches.
 vi.mock("./employee-fallback-field", async (importActual) => ({
   ...(await importActual<typeof import("./employee-fallback-field")>()),
-  EmployeeFallbackRow: ({ onChange }: { onChange: (next: { engine: string }[] | null) => void }) => (
+  EmployeeFallbackRow: ({ onChange, onBlockedChange }: { onChange: (next: { engine: string }[] | null) => void; onBlockedChange: (blocked: boolean) => void }) => (
     <>
+      <button type="button" onClick={() => onBlockedChange(true)}>Chain has a problem</button>
       <button type="button" onClick={() => onChange([{ engine: "codex" }])}>Set custom chain</button>
       <button type="button" onClick={() => onChange(null)}>Inherit chain</button>
     </>
@@ -106,6 +107,28 @@ describe("EmployeeEditor", () => {
     fireEvent.click(saveBtn())
 
     await waitFor(() => expect(updateEmployee).toHaveBeenCalledWith("content-writer", { fallback: null }))
+  })
+
+  it("holds Save while the chain has a problem, as Settings holds its save", () => {
+    render(<EmployeeEditor employee={EMP} onCancel={() => {}} onSaved={() => {}} />)
+    fireEvent.click(screen.getByRole("button", { name: "Set custom chain" }))
+    expect(saveBtn().disabled).toBe(false)
+
+    fireEvent.click(screen.getByRole("button", { name: "Chain has a problem" }))
+
+    expect(saveBtn().disabled).toBe(true)
+  })
+
+  it("asks for the chains again after a save, so the detail shows what the gateway now says", async () => {
+    const { queryClient } = await import("@/lib/query-client")
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries")
+    updateEmployee.mockResolvedValue({ status: "ok", employee: EMP })
+    render(<EmployeeEditor employee={EMP} onCancel={() => {}} onSaved={() => {}} />)
+
+    fireEvent.click(screen.getByRole("button", { name: "Set custom chain" }))
+    fireEvent.click(saveBtn())
+
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ["fallback-chains"] }))
   })
 
   it("sends no fallback when the employee inherits and still does", () => {

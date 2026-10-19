@@ -1,4 +1,5 @@
 import {
+  fallbackLinkKey,
   fallbackLinkOf,
   type FallbackChainEntry,
   type FallbackChainSubject,
@@ -8,7 +9,9 @@ import {
 import type { Employee } from "@/lib/api"
 import type { EmployeeFallbackFields } from "@/lib/fallback-chains-api"
 import { engineDisplayName } from "@/lib/engine-names"
+import type { EnginesResponse } from "@/lib/api"
 import { linkOfResolved } from "@/routes/settings/engines/chain-links"
+import { rowProblems, validatorContext } from "@/routes/settings/engines/chain-problems"
 
 /* What the employee screens need to know about a chain: whether it is the
  * employee's own, where an inherited one comes from, and what would run. */
@@ -20,9 +23,10 @@ export function employeeChainOf(employee: Employee & EmployeeFallbackFields): Fa
   return entries.flatMap((entry) => fallbackLinkOf(entry) ?? [])
 }
 
-/** Same chain, whatever the spelling: what decides whether the PATCH has anything to send. */
+/** Same chain, whatever the spelling or the order a link's fields were written in: what decides whether the PATCH has anything to send. */
 export function sameChain(a: FallbackLink[] | null, b: FallbackLink[] | null): boolean {
-  return JSON.stringify(a) === JSON.stringify(b)
+  if (a === null || b === null) return a === b
+  return a.length === b.length && a.every((link, i) => fallbackLinkKey(link) === fallbackLinkKey(b[i]))
 }
 
 /** The declared account an employee's Claude profile is, by directory, when it is one. */
@@ -61,6 +65,28 @@ export function employeeSubject(chains: FallbackChainsResponse | undefined, name
   return subjectOf(chains, "employee", name)
 }
 
+/** The chain the editor shows and edits. */
+export interface OwnChain {
+  links: FallbackLink[]
+  /** Per link: expanded from another entry's own chain. */
+  expanded: boolean[]
+  /** The employee's chain is written in engine names, so `links` is its expansion until it is edited. */
+  legacy: boolean
+}
+
+/**
+ * The employee's own chain as the editor shows it. One written in engine names is
+ * shown as the gateway expands it, as Settings shows an engine's, until the first
+ * edit: that edit then writes what runs, as explicit links, rather than the names alone.
+ */
+function ownChainOf(employee: Employee, value: FallbackLink[], subject: FallbackChainSubject | undefined): OwnChain {
+  const written = employeeChainOf(employee as Employee & EmployeeFallbackFields)
+  if (subject?.legacy && sameChain(value, written)) {
+    return { links: subject.effective.map(linkOfResolved), expanded: subject.effective.map((l) => l.origin === "legacy"), legacy: true }
+  }
+  return { links: value, expanded: value.map(() => false), legacy: false }
+}
+
 /** What the field shows for an employee on `engine`, with `value` as its own chain (null inherits). */
 export function fallbackFieldState(
   employee: Employee,
@@ -71,7 +97,31 @@ export function fallbackFieldState(
   const account = engine === "claude" ? declaredAccountOf(employee.claudeProfile, chains) : undefined
   const inherited = inheritedChain(engine, account, chains)
   const self: FallbackLink = { engine, ...(account ? { profile: account } : {}) }
-  return { inherited, self, shown: value ?? inherited.links, subject: employeeSubject(chains, employee.name) }
+  const subject = employeeSubject(chains, employee.name)
+  const own = value === null ? null : ownChainOf(employee, value, subject)
+  return { inherited, self, shown: own?.links ?? inherited.links, own, subject }
+}
+
+/** How many problems the validator finds in an employee's own chain: a chain with any is not saved. */
+export function chainProblemCount(
+  links: FallbackLink[],
+  self: FallbackLink,
+  registry: EnginesResponse,
+  chains: FallbackChainsResponse | undefined,
+): number {
+  const ctx = { engines: Object.values(registry.engines), profiles: chains?.profiles.map((p) => p.name) ?? [] }
+  const found = rowProblems("fallback", links, validatorContext(ctx, self))
+  return found.byRow.flat().length + found.general.length
 }
 
 export { subjectProblems } from "@/hooks/use-fallback-chains"
+
+/** Whether the editor must hold the save: the employee's own chain, once the registry is known, has a problem. */
+export function chainBlocked(
+  registry: EnginesResponse | undefined,
+  own: OwnChain | null,
+  self: FallbackLink,
+  chains: FallbackChainsResponse | undefined,
+): boolean {
+  return registry !== undefined && own !== null && chainProblemCount(own.links, self, registry, chains) > 0
+}

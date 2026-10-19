@@ -1,4 +1,4 @@
-import type React from "react"
+import { useLayoutEffect, useRef, type CSSProperties } from "react"
 import type { FallbackLink } from "@jinn/fallback-chain-wire"
 import { Plus } from "@/components/ui/icon"
 import { Button } from "@/components/ui/button"
@@ -7,6 +7,7 @@ import { blankLink, moveLink, removeLink, replaceLink, type ChainContext } from 
 import { rowProblems, validatorContext } from "./chain-problems"
 import { ChainRow, type RowFields } from "./chain-row"
 import { rowShift, useChainDrag } from "./use-chain-drag"
+import { useRowIds } from "./use-row-ids"
 
 export { ROW_BUTTON_CLASS } from "./chain-row"
 
@@ -30,7 +31,7 @@ export interface ChainEditorProps {
   onChange: (links: FallbackLink[]) => void
 }
 
-function dragStyle(drag: ReturnType<typeof useChainDrag>["drag"], index: number, reducedMotion: boolean): React.CSSProperties {
+function dragStyle(drag: ReturnType<typeof useChainDrag>["drag"], index: number, reducedMotion: boolean): CSSProperties {
   const lifted = drag?.from === index
   return {
     transform: `translateY(${lifted ? drag.offsetY : rowShift(drag, index)}px)` + (lifted && !reducedMotion ? " scale(1.02)" : ""),
@@ -38,7 +39,6 @@ function dragStyle(drag: ReturnType<typeof useChainDrag>["drag"], index: number,
     boxShadow: lifted ? "var(--shadow-overlay)" : undefined,
     position: lifted ? "relative" : undefined,
     zIndex: lifted ? 1 : undefined,
-    touchAction: "none",
   }
 }
 
@@ -55,15 +55,46 @@ function GeneralProblems({ problems }: { problems: string[] }) {
   )
 }
 
+/** What a reorder does, kept together: the links, the ids that travel with the rows, and where focus goes. */
+function useChainMoves(links: FallbackLink[], onChange: (links: FallbackLink[]) => void) {
+  const rows = useRowIds(links.length)
+  const focusAfter = useRef<{ id: string; dir: "earlier" | "later" } | null>(null)
+  const listRef = useRef<HTMLDivElement | null>(null)
+  // A moved row keeps the focus its operator gave it, so a second press moves it again.
+  useLayoutEffect(() => {
+    const target = focusAfter.current
+    focusAfter.current = null
+    const row = target ? listRef.current?.querySelector(`[data-row-id="${target.id}"]`) : null
+    const button = row?.querySelector<HTMLButtonElement>(`[data-chain-move="${target?.dir}"]:not(:disabled)`)
+      ?? row?.querySelector<HTMLButtonElement>("[data-chain-move]:not(:disabled)")
+    button?.focus()
+  })
+  const move = (from: number, to: number) => {
+    rows.moved(from, to)
+    onChange(moveLink(links, from, to))
+  }
+  return {
+    ids: rows.ids,
+    listRef,
+    move,
+    moveByButton: (from: number, to: number) => {
+      focusAfter.current = { id: rows.ids[from], dir: to > from ? "later" : "earlier" }
+      move(from, to)
+    },
+    remove: (index: number) => {
+      rows.removed(index)
+      onChange(removeLink(links, index))
+    },
+  }
+}
+
 /** The ordered chain: engine, profile and model per link; drag a row by its grip,
  *  or move it with the buttons a keyboard reaches. A problem shows under its row. */
 export function ChainEditor(props: ChainEditorProps) {
   const { chainName, ownEngine, self, where, links, expanded, fields, waitsAs, serverProblems = [], onChange } = props
-  const { drag, listRef, liftPointerDown, reducedMotion } = useChainDrag((from, to) => onChange(moveLink(links, from, to)))
-  const ctx: ChainContext = {
-    engines: Object.values(fields.registry.engines),
-    profiles: fields.profiles,
-  }
+  const moves = useChainMoves(links, onChange)
+  const { drag, listRef, liftPointerDown, reducedMotion } = useChainDrag(moves.move)
+  const ctx: ChainContext = { engines: Object.values(fields.registry.engines), profiles: fields.profiles }
   const problems = rowProblems(where, links, validatorContext(ctx, self))
   const rowFields: RowFields = { ...fields, ownEngine, chainName }
 
@@ -74,10 +105,11 @@ export function ChainEditor(props: ChainEditorProps) {
           No fallback. {waitsAs} waits for its own limit to reset.
         </p>
       ) : (
-        <div ref={listRef} className="flex flex-col gap-[var(--space-1)]">
+        <div ref={(el) => { listRef.current = el; moves.listRef.current = el }} className="flex flex-col gap-[var(--space-1)]">
           {links.map((link, index) => (
             <ChainRow
-              key={index}
+              key={moves.ids[index]}
+              rowId={moves.ids[index]}
               link={link}
               index={index}
               count={links.length}
@@ -87,8 +119,8 @@ export function ChainEditor(props: ChainEditorProps) {
               style={dragStyle(drag, index, reducedMotion)}
               onPointerDown={(event) => liftPointerDown(event, index)}
               onChange={(next) => onChange(replaceLink(links, index, next))}
-              onMove={(to) => onChange(moveLink(links, index, to))}
-              onRemove={() => onChange(removeLink(links, index))}
+              onMove={(to) => moves.moveByButton(index, to)}
+              onRemove={() => moves.remove(index)}
             />
           ))}
         </div>

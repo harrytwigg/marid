@@ -25,7 +25,8 @@ export function resolveForFlow(
 ): ResolvedFallbackLink[] {
   const known = new Map<string, ResolvedFallbackLink>()
   for (const link of [subject?.primary, ...(subject?.effective ?? [])]) if (link) known.set(link.key, link)
-  const own = known.get(fallbackLinkKey(self)) ?? plainResolved(self)
+  // The gateway's own target carries the default model, so its key is not the bare `self`'s: take it from the subject.
+  const own = subject?.primary ?? known.get(fallbackLinkKey(self)) ?? plainResolved(self)
   const rest = links.map((link, i) => ({
     ...(known.get(fallbackLinkKey(link)) ?? plainResolved(link)),
     origin: origins?.[i] ?? "config",

@@ -143,7 +143,9 @@ Each account (and each non-Claude engine) keeps its own conversation thread.
 
 Each hop is recorded on the session (most recent 20) with its time, from and
 to targets, reason, the failing target's reset and any links passed over, and
-announced in the transcript as a notice. The target that served the latest
+announced in the transcript as a notice: a `notification` message whose
+`meta.fallbackHop` is the hop (`FallbackHopNoticeMeta`), which the dashboard
+shows as a card with the links passed over. The target that served the latest
 turn is recorded too. The session API reports the chain, its position, the
 next hop and the hops under `fallback.chain`.
 
