@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { envName } from "../../shared/codename-env.js";
 
 interface FakePty {
   pid: number;
@@ -105,7 +106,7 @@ describe("MusecodeInteractiveEngine", () => {
     expect(args.slice(-2)).toEqual(["--provider", "echo"]);
     expect(args.some((a) => a.startsWith("mcpServers.jinn="))).toBe(true);
     expect(args.join(" ")).not.toContain("s1\"");
-    expect(opts.env.MARID_MCP_1).toBe("s1");
+    expect(opts.env[envName("MCP_") + "1"]).toBe("s1");
   });
 
   it("reuses a warm view, and reopens one that was opened before the conversation existed", () => {
