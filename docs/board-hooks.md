@@ -86,6 +86,49 @@ as JSON. A spawn prompt always ends with the full payload in a fenced `json` blo
 whatever the template says. A spawn with no `prompt` uses a default that names the
 hook and the event.
 
+## Example: review, merge and close
+
+A hook on `to: in_review` with a label can start a reviewer that checks the Todo's
+pull request, merges and deploys it, and closes the Todo. The reviewer is an employee
+whose YAML says `closeTodos: true` (see "Closing Todos" in the org docs); without that
+grant its `update_work_item { status: "done" }` is refused like any other employee's. Even
+with it, a close is accepted only from `in_review`: a Todo in any other open status is
+refused until it has been moved there.
+
+```yaml
+# employee: org/ops/release-reviewer.yaml
+name: release-reviewer
+displayName: Release Reviewer
+department: ops
+rank: senior
+persona: >
+  You review a finished Todo's pull request. If the checks are green and the
+  change does what the Todo asks, merge it and deploy it. Then close the Todo.
+  If anything is wrong, say what in a comment and leave the Todo where it is.
+closeTodos: true
+```
+
+```yaml
+# config.yaml
+hooks:
+  - name: review-merge-close
+    event: todo.status_changed
+    match:
+      to: in_review
+      label: auto-close
+    action:
+      spawn:
+        employee: release-reviewer
+        prompt: >
+          {{todo.id}} moved {{from}} -> {{to}}. Check {{prUrl}}: CI green and the
+          change matches the Todo. If so, merge it, deploy it, and close the Todo
+          with update_work_item { id: "{{todo.id}}", status: "done", note: "<what
+          you merged and deployed>" }. Otherwise comment with what is wrong.
+```
+
+The reason in `note` is required and is posted on the Todo as `Closed as done by
+release-reviewer. Reason: …`.
+
 ## Payload
 
 ```jsonc
@@ -143,6 +186,11 @@ contributes the chain stored on its run row; the union is the event's upstream c
 A hook whose name is in the chain is skipped unless `allowReentry` is set, and every
 hook is skipped once the chain holds `MAX_HOOK_CHAIN` names. Skips are logged as
 `suppressed` runs so a hook that "did not fire" can be explained.
+
+A close made by a `closeTodos` employee fires `todo.status_changed` with `from:
+in_review`, `to: done`, which a hook matching `to: in_review` does not match, so the
+example above does not trigger itself. A hook that matches `to: done` does fire on it,
+with the closing employee as the actor.
 
 Limits: a `command` action's own API calls carry no session, so they are not
 chain-tracked; its environment carries `JINN_HOOK_CHAIN` for scripts that want to

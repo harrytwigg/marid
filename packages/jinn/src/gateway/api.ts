@@ -2586,8 +2586,8 @@ export async function handleApiRequest(
       }
       // The lane (work-item-status-lane.ts) decides who may make this move: the
       // operator's surfaces walk every declared edge with human authority, the
-      // coordinator may close as done with a reason, every other session stays
-      // inside the open statuses.
+      // coordinator and a `closeTodos` employee may close as done with a reason,
+      // every other session stays inside the open statuses.
       const operatorLane = hasOperatorLane(caller);
       const fields = parseStatusUpdateFields(body, target, operatorLane);
       if (!fields.ok) return json(res, { error: fields.error }, fields.status);
@@ -2607,6 +2607,8 @@ export async function handleApiRequest(
         // The connector moves with the operator's authority but is recorded as its
         // own session; the marker is what lets the reconciler treat it as his.
         ...(lane.kind === "operator" && caller.kind === "session" ? { operatorLane: true } : {}),
+        // A close on the operator's standing grant says so: the actor stays the closer's own session.
+        ...(lane.kind === "closer" ? { closeTodos: true } : {}),
       }, caller.origin);
       // The banner's asked-for-after reason (design-doc §5): a same-status
       // operator move with a note annotates the CURRENT stop instead of
@@ -2647,6 +2649,9 @@ export async function handleApiRequest(
         // was taken for them: it goes on the Todo, under the coordinator's session.
         if (actingAsOperator && result.item.status === "done") {
           addComment({ workItemId: params.id, ...workItemCommentAuthor(caller), ...workItemCommentSession(caller), body: `Closed as done for the operator. Reason: ${note}`, origin: caller.origin });
+        }
+        if (lane.kind === "closer" && result.item.status === "done") {
+          addComment({ workItemId: params.id, ...workItemCommentAuthor(caller), ...workItemCommentSession(caller), body: `Closed as done by ${lane.employee}. Reason: ${note}`, origin: caller.origin });
         }
         if (result.item.status !== item.status) result.item = linkSelfStartedTodo(caller, result.item, actor);
         // A review handoff or send-back note is a comment under whoever moved it; a retried move posts it too.
