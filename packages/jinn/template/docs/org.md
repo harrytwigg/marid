@@ -191,7 +191,7 @@ Assigning a Todo, or changing its status, starts nothing. A session starts when 
 
 ### Closing Todos
 
-`closeTodos: true` in an employee's YAML lets that employee's sessions move a Todo to `done`, so a reviewer an automation starts (for example a board hook; the worked example is in the repository's `docs/board-hooks.md`) can check the work, merge it and close the Todo without the operator's click.
+`closeTodos: true` in an employee's YAML lets that employee's sessions move a Todo to `done`, so a reviewer an automation starts (for example from a hook on a Todo's status change; the repository's hooks documentation has a worked example) can check the work, merge it and close the Todo without the operator's click.
 
 ```yaml
 name: release-reviewer
