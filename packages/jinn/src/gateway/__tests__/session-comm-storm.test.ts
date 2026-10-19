@@ -7,8 +7,6 @@ import type { ServerResponse } from "node:http";
 import {
   createSessionCommGuards,
   sessionCommGuards,
-  LATERAL_MAX_SENDS,
-  LATERAL_WINDOW_MS,
   LATERAL_MAX_HOPS,
   LATERAL_HOP_TTL_MS,
   PRUNE_EVERY_OPS,
@@ -21,15 +19,12 @@ import type { JinnMcpContext, JinnMcpTool } from "../../mcp/toolkit.js";
  * GRS-017c — the STORM/ABUSE matrix: every substrate guard provably fires on
  * its exact trigger, as committed regressions. Two tiers:
  *
- *   UNIT (fake clock) — rate-window edge arithmetic (exactly 10 / the 11th /
- *   rollover at exactly WINDOW_MS), hop-refusal-consumes-no-rate, lazy pruning
- *   + stats, TTL expiry.
+ *   UNIT (fake clock) — lazy pruning + stats, hop TTL expiry.
  *
  *   INTEGRATION (real routes + registry, temp JINN_HOME) — the adversarial
- *   scenarios a QA engine throws: fan-out storm (one sender → many peers),
- *   a 5-session relay chain dying on the hop budget, N concurrent sends racing
- *   one sender's window (the synchronous-guard invariant, end-to-end), a
- *   spoofed-caller flood leaving ZERO guard state, and the descendant walk
+ *   scenarios a QA engine throws: a large fan-out (one sender → many peers)
+ *   that is never refused, a 5-session relay chain dying on the hop budget,
+ *   a spoofed-caller flood leaving ZERO guard state, and the descendant walk
  *   under a deep chain + a separate branch. (Two-peer ping-pong death and the
  *   operator hop-reset live in mcp/__tests__/session-tools.test.ts since 017a.)
  *
@@ -41,40 +36,9 @@ import type { JinnMcpContext, JinnMcpTool } from "../../mcp/toolkit.js";
 // Isolated registry DB for the integration tier. Set BEFORE the dynamic api import.
 process.env.JINN_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-storm-home-"));
 
-/* ── UNIT: window/hop edge arithmetic ───────────────────────────────────────── */
+/* ── UNIT: hop edge arithmetic ───────────────────────────────────────── */
 
-describe("rate-window edges (fake clock)", () => {
-  it(`send ${LATERAL_MAX_SENDS} is allowed, send ${LATERAL_MAX_SENDS + 1} refused, and capacity returns at EXACTLY window age`, () => {
-    let now = 0;
-    const g = createSessionCommGuards(() => now);
-    // Sends staggered at t=0,1,…,9 so window slots expire one at a time.
-    for (let i = 0; i < LATERAL_MAX_SENDS; i++) {
-      expect(g.checkSendAllowed("a").ok).toBe(true);
-      now = i + 1;
-    }
-    expect(g.checkSendAllowed("a").ok).toBe(false);
-    // The first send was at t=0; at exactly t=WINDOW_MS its age is not < WINDOW → expired.
-    now = LATERAL_WINDOW_MS;
-    const v = g.checkSendAllowed("a");
-    expect(v.ok).toBe(true);
-    // ...but only ONE slot returned (the t=1..9 sends are still inside the window).
-    expect(g.checkSendAllowed("a").ok).toBe(false);
-  });
-
-  it("a hop-budget refusal consumes NO rate capacity (hop check runs first)", () => {
-    const g = createSessionCommGuards(() => 0);
-    g.recordDelivery("a", LATERAL_MAX_HOPS);
-    for (let i = 0; i < 3; i++) {
-      const denied = g.checkSendAllowed("a");
-      expect(!denied.ok && denied.status === 400).toBe(true);
-    }
-    g.clearInboundHop("a");
-    // Full window still available — the hop refusals left no residue.
-    for (let i = 0; i < LATERAL_MAX_SENDS; i++) {
-      expect(g.checkSendAllowed("a").ok).toBe(true);
-    }
-  });
-
+describe("hop edges (fake clock)", () => {
   it("hop TTL expiry mid-chain resets the budget (stale relay tags don't strand a sender)", () => {
     let now = 0;
     const g = createSessionCommGuards(() => now);
@@ -88,22 +52,19 @@ describe("rate-window edges (fake clock)", () => {
 });
 
 describe("lazy pruning + stats (memory bound)", () => {
-  it(`sweeps expired senders/hop tags after ${PRUNE_EVERY_OPS} guard ops`, () => {
+  it(`sweeps expired hop tags after ${PRUNE_EVERY_OPS} guard ops`, () => {
     let now = 0;
     const g = createSessionCommGuards(() => now);
-    // 300 one-shot senders + 300 hop tags at t=0.
+    // 300 hop tags at t=0.
     for (let i = 0; i < 300; i++) {
       g.checkSendAllowed(`s-${i}`);
       g.recordDelivery(`t-${i}`, 1);
     }
-    expect(g.stats().senders).toBe(300);
     expect(g.stats().hopEntries).toBe(300);
     // Everything expires; the next PRUNE_EVERY_OPS ops trigger a sweep.
-    now = LATERAL_WINDOW_MS + LATERAL_HOP_TTL_MS + 1;
+    now = LATERAL_HOP_TTL_MS + 1;
     for (let i = 0; i < PRUNE_EVERY_OPS; i++) g.checkSendAllowed("active");
-    const after = g.stats();
-    expect(after.hopEntries).toBe(0);
-    expect(after.senders).toBe(1); // only the live "active" sender remains
+    expect(g.stats().hopEntries).toBe(0);
   });
 });
 
@@ -214,18 +175,20 @@ beforeEach(() => {
 });
 
 describe("storm matrix — integration against the real routes", () => {
-  it(`FAN-OUT STORM: one sender messaging ${LATERAL_MAX_SENDS} distinct peers is fine; peer ${LATERAL_MAX_SENDS + 1} trips the per-sender cap`, async () => {
-    const sender = await createOperatorSession("storm sender");
+  it("FAN-OUT: one sender messaging 40 distinct peers, then all of them again, is never refused", async () => {
+    const sender = await createOperatorSession("fanout sender");
     const peers: string[] = [];
-    for (let i = 0; i <= LATERAL_MAX_SENDS; i++) peers.push(await createOperatorSession(`peer ${i}`));
+    for (let i = 0; i < 40; i++) peers.push(await createOperatorSession(`peer ${i}`));
     const ctx = ctxFor(sender);
-    for (let i = 0; i < LATERAL_MAX_SENDS; i++) {
-      await tool("send_to_session").handler({ sessionId: peers[i], message: `fanout ${i}` }, ctx);
+    for (const round of ["notice", "follow-up"]) {
+      for (let i = 0; i < peers.length; i++) {
+        const res = (await tool("send_to_session").handler({ sessionId: peers[i], message: `${round} ${i}` }, ctx)) as {
+          status: string;
+        };
+        expect(res.status).toBe("queued");
+      }
     }
-    // The cap is per SENDER across all targets — a fresh target does not help.
-    await expect(
-      tool("send_to_session").handler({ sessionId: peers[LATERAL_MAX_SENDS], message: "one more" }, ctx),
-    ).rejects.toThrow(/429.*rate cap/is);
+    expect(registry.getMessages(peers[39]).at(-1)!.content).toContain("follow-up 39");
   });
 
   it(`RELAY CHAIN A→B→C→D→E with the cap pinned to 4: delivery to E carries hop 4/4; E's forward attempt is refused`, async () => {
@@ -266,22 +229,14 @@ describe("storm matrix — integration against the real routes", () => {
     ).rejects.toThrow(/400.*hop budget.*escalate/is);
   });
 
-  it(`CONCURRENCY: ${LATERAL_MAX_SENDS + 5} sends racing one sender's window admit EXACTLY ${LATERAL_MAX_SENDS} (synchronous-guard invariant, end-to-end)`, async () => {
+  it("CONCURRENCY: 30 sends racing from one sender to one target are all admitted", async () => {
     const sender = await createOperatorSession("racer");
     const target = await createOperatorSession("race target");
     const ctx = ctxFor(sender);
     const results = await Promise.allSettled(
-      Array.from({ length: LATERAL_MAX_SENDS + 5 }, (_, i) =>
-        tool("send_to_session").handler({ sessionId: target, message: `race ${i}` }, ctx),
-      ),
+      Array.from({ length: 30 }, (_, i) => tool("send_to_session").handler({ sessionId: target, message: `race ${i}` }, ctx)),
     );
-    const ok = results.filter((r) => r.status === "fulfilled").length;
-    const refused = results.filter((r) => r.status === "rejected");
-    expect(ok).toBe(LATERAL_MAX_SENDS);
-    expect(refused).toHaveLength(5);
-    for (const r of refused) {
-      expect(String((r as PromiseRejectedResult).reason)).toMatch(/429/);
-    }
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(30);
   });
 
   it("SPOOF FLOOD: unknown caller ids are refused 403 and leave ZERO guard state (memory-bound proof)", async () => {

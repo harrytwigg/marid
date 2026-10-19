@@ -6,48 +6,45 @@ import { CALLER_SESSION_CAPABILITY_HEADER, CALLER_SESSION_HEADER, TOOL_CALL_HEAD
  *
  * The design ruling (GRS-017 §2.4): runaway-loop protection between sessions is
  * enforced HERE, gateway-side, not by prompt doctrine — so it holds for MCP and
- * curl alike. Three guards, all deterministic, all in-memory.
+ * curl alike. Two guards, both deterministic, both in-memory.
  *
  * PERSISTENCE DECISION (GRS-017c, argued): guard state deliberately does NOT
  * survive a gateway restart. A storm is driven by live engine turns, and a
  * restart kills exactly those actors — the restart extinguishes the storm the
- * state was bounding. The worst case after a restart is one fresh budget
- * (4 hops / 10 sends per sender), and a crash-loop that repeatedly resets the
+ * state was bounding. The worst case after a restart is one fresh hop budget,
+ * and a crash-loop that repeatedly resets the
  * guards is a gateway-health incident, not a comm-storm — each restart cycle
  * costs seconds, which throttles harder than the window does. Durable guard
  * state would need a store + cleanup + migration: a new primitive the marginal
  * bound does not earn (catalog rule: primitive first, wrapper later).
  *
- * CONCURRENCY INVARIANT: every guard mutation (checkSendAllowed's
- * read-filter-push, recordDelivery, pruning) is SYNCHRONOUS — no await between
- * read and write — so Node's event loop serializes it; two racing HTTP requests
- * cannot both observe 9-of-10 and both pass. Do not introduce an await inside
- * these methods. Pinned by the concurrent-sends storm test.
+ * CONCURRENCY INVARIANT: every guard mutation (recordDelivery, pruning) is
+ * SYNCHRONOUS — no await between read and write — so Node's event loop
+ * serializes it. Do not introduce an await inside these methods.
  *
  * MEMORY BOUND: real caller ids are validated against live sessions route-side
- * (spoofed ids are refused before any guard call), so the maps are bounded by
+ * (spoofed ids are refused before any guard call), so the hop map is bounded by
  * the session count; lazy pruning (every {@link PRUNE_EVERY_OPS} guard ops)
- * additionally sweeps expired windows/hop tags so idle senders don't linger.
+ * additionally sweeps expired hop tags so idle sessions don't linger.
  *
  * The guards:
  *
  *   1. no-self-message (checked in prepareLateralSend, before any state changes);
- *   2. a sliding-window rate cap per SENDER across all targets;
- *   3. a relay hop budget: each delivered lateral message tags its target with an
+ *   2. a relay hop budget: each delivered lateral message tags its target with an
  *      inbound hop count; the target's next lateral send is hop n+1; beyond
  *      LATERAL_MAX_HOPS the route refuses ("escalate instead of forwarding").
  *      Hop state expires (TTL) and is cleared when a genuine user/operator
  *      message reaches the session — an operator instruction resets the chain.
+ *
+ * There is deliberately NO per-sender send-rate cap: a coordinator may fan a
+ * message out to as many distinct sessions as its task needs, and loop
+ * protection comes from the hop budget alone.
  *
  * Identity is the best-effort `x-jinn-caller-session` header (see mcp/identity.ts)
  * — these are anti-storm guards, NOT security boundaries (GRS-015 lesson: never
  * dress an environment value up as an authority gate).
  */
 
-/** Max agent-initiated sends per sender per rolling window. */
-export const LATERAL_MAX_SENDS = 10;
-/** The rolling window for the rate cap. */
-export const LATERAL_WINDOW_MS = 10 * 60_000;
 /**
  * Default max relay hops a lateral chain may traverse. Raised from 4 → 12: a
  * legitimate COO ↔ implementer ↔ QA loop is a 3-actor cycle whose round-trips
@@ -75,25 +72,24 @@ export const PRUNE_EVERY_OPS = 256;
 
 export type SendVerdict =
   | { ok: true; hops: number }
-  | { ok: false; status: 400 | 429; error: string };
+  | { ok: false; status: 400; error: string };
 
 export interface SessionCommGuards {
-  /** Check rate + hop budget for a sender; on success RECORDS the send (consumes
-   *  window capacity) and returns the outbound hop count to stamp. Refusals
-   *  consume nothing. */
+  /** Check the hop budget for a sender and return the outbound hop count to
+   *  stamp. There is no send-rate limit: any number of sends may pass. */
   checkSendAllowed(callerId: string): SendVerdict;
   /** Record that a lateral message with the given hop count reached a target. */
   recordDelivery(targetId: string, hops: number): void;
   /** Reset a session's relay chain (a genuine user/operator message arrived). */
   clearInboundHop(sessionId: string): void;
   /** Live map sizes — ops/tests introspection (spoof-flood no-growth proof). */
-  stats(): { senders: number; hopEntries: number };
+  stats(): { hopEntries: number };
   /** The current relay-hop cap for this guard instance. */
   maxHops(): number;
   /** Reconfigure the relay-hop cap (config apply at boot + hot-reload). Clamped
    *  to [LATERAL_MIN_HOPS, LATERAL_HOPS_HARD_CAP]. Does not touch storm state. */
   setMaxHops(value: number): void;
-  /** Test/ops escape hatch: drop all in-memory storm state (NOT the hop cap). */
+  /** Test/ops escape hatch: drop all in-memory hop state (NOT the hop cap). */
   reset(): void;
 }
 
@@ -101,7 +97,6 @@ export function createSessionCommGuards(
   now: () => number = Date.now,
   initialMaxHops: number = LATERAL_MAX_HOPS,
 ): SessionCommGuards {
-  const sends = new Map<string, number[]>(); // sender id → send timestamps in window
   const inboundHop = new Map<string, { hops: number; at: number }>();
   let maxHops = clampLateralMaxHops(initialMaxHops);
   let opsSincePrune = 0;
@@ -116,17 +111,12 @@ export function createSessionCommGuards(
     return rec.hops;
   }
 
-  /** Sweep expired window entries + hop tags every PRUNE_EVERY_OPS guard ops so
-   *  idle senders don't linger. Synchronous (concurrency invariant above). */
+  /** Sweep expired hop tags every PRUNE_EVERY_OPS guard ops so idle sessions
+   *  don't linger. Synchronous (concurrency invariant above). */
   function maybePrune(): void {
     if (++opsSincePrune < PRUNE_EVERY_OPS) return;
     opsSincePrune = 0;
     const t = now();
-    for (const [id, arr] of sends) {
-      const live = arr.filter((ts) => t - ts < LATERAL_WINDOW_MS);
-      if (live.length === 0) sends.delete(id);
-      else if (live.length !== arr.length) sends.set(id, live);
-    }
     for (const [id, rec] of inboundHop) {
       if (t - rec.at > LATERAL_HOP_TTL_MS) inboundHop.delete(id);
     }
@@ -145,21 +135,6 @@ export function createSessionCommGuards(
             `Stop forwarding — escalate to your parent session or the operator with a summary instead.`,
         };
       }
-      const t = now();
-      const window = (sends.get(callerId) ?? []).filter((ts) => t - ts < LATERAL_WINDOW_MS);
-      if (window.length >= LATERAL_MAX_SENDS) {
-        const retryMs = LATERAL_WINDOW_MS - (t - window[0]);
-        sends.set(callerId, window);
-        return {
-          ok: false,
-          status: 429,
-          error:
-            `lateral-send rate cap: ${LATERAL_MAX_SENDS} agent-initiated messages per ${Math.round(LATERAL_WINDOW_MS / 60_000)} minutes. ` +
-            `Retry in ~${Math.max(1, Math.ceil(retryMs / 1000))}s, or end your turn and let replies wake you instead of messaging in a loop.`,
-        };
-      }
-      window.push(t);
-      sends.set(callerId, window);
       return { ok: true, hops };
     },
 
@@ -172,8 +147,8 @@ export function createSessionCommGuards(
       inboundHop.delete(sessionId);
     },
 
-    stats(): { senders: number; hopEntries: number } {
-      return { senders: sends.size, hopEntries: inboundHop.size };
+    stats(): { hopEntries: number } {
+      return { hopEntries: inboundHop.size };
     },
 
     maxHops(): number {
@@ -185,7 +160,6 @@ export function createSessionCommGuards(
     },
 
     reset(): void {
-      sends.clear();
       inboundHop.clear();
       opsSincePrune = 0;
     },
@@ -197,7 +171,7 @@ export const sessionCommGuards: SessionCommGuards = createSessionCommGuards();
 
 export type LateralSendPlan =
   | { ok: true; prompt: string; displayMessage: string; hops: number; meta: AgentRelayMeta }
-  | { ok: false; status: 400 | 429; error: string };
+  | { ok: false; status: 400; error: string };
 
 export interface AgentRelayMeta {
   kind: "agent-relay";
@@ -223,9 +197,9 @@ export function clipSessionMessage(text: string, max = 220): string {
  * agent-initiated send: the ENGINE prompt carries full sender identity, the hop
  * tag, the verbatim message, and a reply hint; `displayMessage` is the clean
  * banner the web UI shows. Deterministic text from record fields only.
- * On success the sender's window capacity is consumed; the caller then
- * `guards.recordDelivery(targetId, hops)` when it accepts the send (conservative
- * if a later step fails — an over-recorded hop only tightens the budget).
+ * On success the caller then `guards.recordDelivery(targetId, hops)` when it
+ * accepts the send (conservative if a later step fails — an over-recorded hop
+ * only tightens the budget).
  */
 export function prepareLateralSend(opts: {
   caller: Session;
