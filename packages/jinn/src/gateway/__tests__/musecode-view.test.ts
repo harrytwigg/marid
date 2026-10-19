@@ -12,6 +12,7 @@ vi.mock("../../sessions/employee-env.js", () => ({ employeeSessionEnv: () => ({}
 
 import { PtyLifecycleManager } from "../../engines/pty-lifecycle.js";
 import { MUSECODE_TURN_RUNNING } from "../../engines/musecode-interactive.js";
+import { invalidateModelRegistry } from "../../shared/models.js";
 import { createMusecodeEnginePair } from "../musecode-view.js";
 
 /** The two Muse Code engines as the gateway builds them, against the fake host (`engines/__tests__/fixtures/fake-muse.mjs`). */
@@ -58,14 +59,15 @@ describe("createMusecodeEnginePair", () => {
     expect(pty.hasWarmPty("s2")).toBe(false);
   }, 30_000);
 
-  it("sends a turn's effort only when its model, or the registry's default for an unset one, lists it", async () => {
-    const log = path.join(state, "requests.jsonl");
+  /** The effort each turn sent, for turns on `models` run at `max`; an unset model is the first of `models`'s default. */
+  async function effortsSent(defaultModel: string, models: Array<string | undefined>): Promise<unknown[]> {
+    const log = path.join(state, `requests-${defaultModel}.jsonl`);
     vi.stubEnv("FAKE_MUSE_LOG", log);
     const config = {
       engines: { musecode: { bin: FAKE } },
       models: {
         musecode: {
-          default: "narrow",
+          default: defaultModel,
           models: [
             { id: "narrow", supportsEffort: true, effortLevels: ["low", "high"] },
             { id: "wide", supportsEffort: true, effortLevels: ["low", "high", "max"] },
@@ -73,13 +75,21 @@ describe("createMusecodeEnginePair", () => {
         },
       },
     } as unknown as JinnConfig;
+    invalidateModelRegistry(); // the registry is cached across configs
     const { work, pty } = pair(config);
-    const run = (id: string, model?: string) => work.run({ prompt: "x", cwd: process.cwd(), bin: FAKE, sessionId: id, effortLevel: "max", ...(model ? { model } : {}) });
-    await run("e1");
-    await run("e2", "wide");
-    await run("e3", "unlisted");
-    const efforts = fs.readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((r) => r.method === "turn/start").map((r) => r.params.reasoningEffort);
-    expect(efforts).toEqual([undefined, "max", undefined]);
+    for (const [i, model] of models.entries()) {
+      await work.run({ prompt: "x", cwd: process.cwd(), bin: FAKE, sessionId: `e-${defaultModel}-${i}`, effortLevel: "max", ...(model ? { model } : {}) });
+    }
     pty.killAll();
+    return fs.readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((r) => r.method === "turn/start").map((r) => r.params.reasoningEffort);
+  }
+
+  it("sends a turn's effort only when its own model lists it", async () => {
+    expect(await effortsSent("narrow", ["wide", "narrow", "unlisted"])).toEqual(["max", undefined, undefined]);
+  }, 30_000);
+
+  it("judges a turn with no model against the registry's default model", async () => {
+    expect(await effortsSent("narrow", [undefined])).toEqual([undefined]);
+    expect(await effortsSent("wide", [undefined])).toEqual(["max"]);
   }, 30_000);
 });
