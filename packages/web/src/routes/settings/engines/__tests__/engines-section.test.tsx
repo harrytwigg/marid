@@ -229,6 +229,16 @@ describe('Engine Fallbacks section', () => {
       .toContain("Codex's own default")
   })
 
+  it('reads a chain of mixed string and object entries, whichever way each was written', async () => {
+    loadConfig({ engines: { claude: { fallback: ['codex', { engine: 'opencode', model: 'x/two' }, { engine: 'codex', model: 'gpt-5.6-sol' }] } } })
+    await renderSettings()
+
+    expect(engineRows('claude')).toEqual(['codex', 'opencode · x/two', 'codex · gpt-5.6-sol'])
+    expect(document.querySelector('[data-engine-card="claude"] [data-chain-legacy-notice]')).toBeTruthy()
+    // The map follows the links that name no model and leave the engine: only the bare "codex" one.
+    expect(document.querySelector('[data-engine-card="claude"] [data-model-map-floor]')?.textContent).toContain("Codex's own default")
+  })
+
   it('hides the map when every link names a model, since it would translate nothing', async () => {
     loadConfig({ engines: { claude: { fallback: [{ engine: 'codex', model: 'gpt-5.6-sol' }] } } })
     await renderSettings()

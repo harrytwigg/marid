@@ -101,6 +101,16 @@ describe("EmployeeFallbackField", () => {
     )
   })
 
+  it("shows the gateway's problems with the employee chain, whichever way it is set", () => {
+    chains.current = {
+      profiles: [],
+      subjects: [{ ...subject("employee", "writer", true, []), problems: ["fallback[0]: \"nope\" is not a known engine (claude, codex)"] }],
+    }
+    render(<EmployeeFallbackField employee={EMP} engine="claude" value={[{ engine: "codex" }]} onChange={() => {}} />)
+
+    expect(screen.getByText('fallback[0]: "nope" is not a known engine (claude, codex)').getAttribute("role")).toBe("alert")
+  })
+
   it("says an empty custom chain means no fallback", () => {
     render(<EmployeeFallbackField employee={EMP} engine="claude" value={[]} onChange={() => {}} />)
 

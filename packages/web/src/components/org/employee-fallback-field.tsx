@@ -8,7 +8,7 @@ import { engineDisplayName } from "@/lib/engine-names"
 import { ChainEditor } from "@/routes/settings/engines/chain-editor"
 import { SettingsSelect } from "@/routes/settings/shared"
 import type { EmployeeFallbackFields } from "@/lib/fallback-chains-api"
-import { employeeChainOf, employeeSubject, fallbackFieldState, sameChain } from "./employee-fallback"
+import { employeeChainOf, employeeSubject, fallbackFieldState, sameChain, subjectProblems } from "./employee-fallback"
 
 export { employeeChainOf, sameChain }
 /** What the editor adds to its PATCH. */
@@ -76,6 +76,11 @@ export function EmployeeFallbackField({ employee, engine, value, onChange }: Emp
           onChange={onChange}
         />
       )}
+      {subjectProblems(subject).map((problem) => (
+        <p key={problem} data-chain-problem role="alert" className="m-0 text-[length:var(--text-caption2)]" style={{ color: "var(--system-red)" }}>
+          {problem}
+        </p>
+      ))}
       {shown.length > 0 && <ChainFlowDisclosure links={resolveForFlow(self, shown, subject)} />}
     </div>
   )
