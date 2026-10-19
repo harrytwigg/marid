@@ -1,6 +1,7 @@
 import { isCoordinatorSession } from "../sessions/registry.js";
 import { STICKY_STATUSES, type WorkItem, type WorkItemStatus } from "../work-items/store.js";
 import { isAgentLaneMove } from "../work-items/transition-edges.js";
+import { orgRegistry } from "./org-registry.js";
 import { remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
 import { workItemActor, type WorkItemCaller } from "./work-item-arming.js";
 
@@ -17,6 +18,11 @@ import { workItemActor, type WorkItemCaller } from "./work-item-arming.js";
  * - The **coordinator lane** is the one exception: the operator's coordinator
  *   chat may close a Todo as `done` on the operator's behalf, with a reason
  *   the gateway posts on the Todo. Nothing else rides on it.
+ * - The **closer lane** is the operator's standing grant: an employee whose YAML
+ *   says `closeTodos: true` may move a Todo to `done` as itself, with a reason
+ *   the gateway posts on the Todo. `done` and nothing else: cancelling,
+ *   reopening and cascading stay the operator's, and every other move by that
+ *   employee is an ordinary agent move.
  */
 
 export const WORK_ITEM_STATUSES: readonly WorkItemStatus[] = ["backlog", "executing", "in_review", "done", "blocked", "cancelled"];
@@ -24,6 +30,7 @@ export const WORK_ITEM_STATUSES: readonly WorkItemStatus[] = ["backlog", "execut
 export type StatusLane =
   | { kind: "operator" }
   | { kind: "coordinator"; actingAs: string }
+  | { kind: "closer"; employee: string }
   | { kind: "agent" };
 
 export type StatusLaneResult = { ok: true; lane: StatusLane } | { ok: false; status: number; error: string };
@@ -64,6 +71,25 @@ function resolveCoordinatorLane(
   return { ok: true, lane: { kind: "coordinator", actingAs: workItemActor(caller) } };
 }
 
+/** The employee a session acts as when the operator has granted it `closeTodos`.
+ *  Read from the live roster at call time, so a revoked grant stops the next
+ *  call and a session spawned before the grant is covered by it. */
+function closerOf(caller: Extract<WorkItemCaller, { kind: "session" }>): string | undefined {
+  const name = caller.session.employee;
+  return name && orgRegistry().get(name)?.closeTodos === true ? name : undefined;
+}
+
+/** A granted employee closing a Todo as `done`, with the reason it will post.
+ *  Closed work stays closed and `cascade` never reaches here (the fields parser
+ *  refuses it off the operator surface), so this is the one close and nothing more. */
+function resolveCloserLane(employee: string, item: WorkItem, note: string): StatusLaneResult {
+  if (STICKY_STATUSES.has(item.status)) return refuse(403, `Todo ${item.id} is already ${item.status}; reopening closed work is the operator's`);
+  if (!note) {
+    return refuse(400, `closing Todo ${item.id} needs the reason in note: it is posted on the Todo as a comment`);
+  }
+  return { ok: true, lane: { kind: "closer", employee } };
+}
+
 /** Decide the lane for moving `item` to `target`. `target` is already one of
  *  {@link WORK_ITEM_STATUSES}; `note` is trimmed. */
 export function resolveStatusLane(
@@ -75,6 +101,8 @@ export function resolveStatusLane(
   if (hasOperatorLane(caller)) return { ok: true, lane: { kind: "operator" } };
   if (caller.kind !== "session") return refuse(403, "caller has no session identity");
   if (asOperator) return resolveCoordinatorLane(caller, item, target, note);
+  const closer = target === "done" ? closerOf(caller) : undefined;
+  if (closer) return resolveCloserLane(closer, item, note);
   return resolveAgentLane(item, target, note);
 }
 
