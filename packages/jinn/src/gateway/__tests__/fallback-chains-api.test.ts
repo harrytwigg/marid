@@ -81,6 +81,14 @@ describe("GET /api/fallback-chains", () => {
     expect(keys(claude.effective)).toEqual(["codex||", "claude|A|opus"]);
   });
 
+  it("reports a repeated target as the chain's problems, and lists it once in the effective chain", async () => {
+    setConfig(chainConfig([{ engine: "codex", model: "gpt-mapped" }, "grok", { engine: "codex", model: "gpt-mapped" }]));
+    const claude = subject((await call("GET", "/api/fallback-chains")).body, "engine", "claude");
+    expect(claude.problems).toEqual(["engines.claude.fallback[2] duplicates engines.claude.fallback[0] (codex · gpt-mapped): a chain tries each target once, so list it once"]);
+    expect(keys(claude.effective)).toEqual(["codex||gpt-mapped", "grok||"]);
+    expect(subject((await call("GET", "/api/fallback-chains")).body, "engine", "codex")).not.toHaveProperty("problems");
+  });
+
   it("an employee chain overrides it, here and in the session view", async () => {
     const before = subject((await call("GET", "/api/fallback-chains?employee=a-worker")).body, "employee", "a-worker");
     expect(before).toMatchObject({ configured: null, primary: { key: "claude||opus" } });

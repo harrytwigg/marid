@@ -3,12 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import yaml from "js-yaml";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { unchangedLegacyDuplicates, warnLegacyDuplicates } from "../fallback-chain-load.js";
+import { duplicateProblemsByChain, unchangedDuplicates, warnDuplicates } from "../fallback-chain-load.js";
 import { validateConfigShape } from "../config.js";
 
 /**
  * A duplicate chain entry is refused on write, but an upgrade must never stop a gateway
- * starting: what the legacy validator accepted (a string listed twice) loads with a warning.
+ * starting: at load a duplicate, in either form, is reported and the expansion lists the target once.
  */
 
 const warn = vi.hoisted(() => vi.fn());
@@ -32,10 +32,10 @@ describe("on write, a duplicate is refused", () => {
   });
 });
 
-describe("at load, only the legacy string duplicate is tolerated", () => {
-  const load = (fallback: unknown[], rest?: Record<string, unknown>) => validateConfigShape(config(fallback, rest), { tolerateDuplicates: warnLegacyDuplicates() });
+describe("at load, a duplicate in either form is tolerated and reported", () => {
+  const load = (fallback: unknown[], rest?: Record<string, unknown>) => validateConfigShape(config(fallback, rest), { tolerateDuplicates: warnDuplicates() });
 
-  it("accepts a string listed twice and warns, once, naming the path", () => {
+  it("a string listed twice loads with one warning, naming the path and the target", () => {
     expect(load(["codex", "grok", "codex"])).toEqual([]);
     expect(warn).toHaveBeenCalledTimes(1);
     expect(String(warn.mock.calls[0]?.[0])).toContain("engines.claude.fallback[2] duplicates engines.claude.fallback[0] (codex)");
@@ -43,18 +43,33 @@ describe("at load, only the legacy string duplicate is tolerated", () => {
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
+  it("a repeated mapping, and a string repeated as a mapping, load with a warning too", () => {
+    expect(load([{ engine: "codex", model: "m" }, { engine: "codex", model: "m" }])).toEqual([]);
+    expect(String(warn.mock.calls.at(-1)?.[0])).toContain("duplicates engines.claude.fallback[0] (codex · m)");
+    expect(load(["grok", { engine: "grok" }])).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
   it("tolerates it in an account's chain as well", () => {
     const accounts = { A: { configDir: "/srv/operator/.claude-a", fallback: ["codex", "codex"] } };
-    expect(validateConfigShape(config([], { claude: { bin: "claude", model: "opus", accounts } }), { tolerateDuplicates: warnLegacyDuplicates() })).toEqual([]);
+    expect(validateConfigShape(config([], { claude: { bin: "claude", model: "opus", accounts } }), { tolerateDuplicates: warnDuplicates() })).toEqual([]);
     expect(String(warn.mock.calls.at(-1)?.[0])).toContain("engines.claude.accounts.A.fallback[1] duplicates");
   });
 
-  it("still refuses what only the object form can say, and every other problem", () => {
-    expect(load([{ engine: "codex" }, { engine: "codex" }])).toEqual([DUPLICATE]);
-    expect(load(["codex", { engine: "codex" }])).toEqual([DUPLICATE]);
-    expect(warn).not.toHaveBeenCalled();
-    expect(load(["gemini", "codex", "codex"]).join("\n")).toContain('"gemini" is not a known engine');
-    expect(load(["claude", "codex", "codex"]).join("\n")).toContain("is the target this chain falls back from");
+  it("every other problem stays a load error, naming the path", () => {
+    expect(load(["gemini", "codex", "codex"]).join("\n")).toContain('engines.claude.fallback[0]: "gemini" is not a known engine');
+    expect(load(["claude", "codex", "codex"]).join("\n")).toContain("engines.claude.fallback[0] (claude) is the target this chain falls back from");
+    expect(load([{ engine: "claude", profile: "ghost" }]).join("\n")).toContain('profile "ghost" names no account');
+    expect(load([{ engine: "codex", model: "" }]).join("\n")).toContain("fallback[0].model must be a model id");
+  });
+
+  it("lists them by chain for the API and doctor, in the wire module's words", () => {
+    const accounts = { A: { configDir: "/srv/operator/.claude-a", fallback: ["codex", "codex"] } };
+    const found = duplicateProblemsByChain({ claude: { fallback: [{ engine: "codex" }, { engine: "codex" }], accounts }, codex: { fallback: ["grok"] } });
+    expect(found).toEqual({
+      "engines.claude.fallback": [DUPLICATE],
+      "engines.claude.accounts.A.fallback": ["engines.claude.accounts.A.fallback[1] duplicates engines.claude.accounts.A.fallback[0] (codex): a chain tries each target once, so list it once"],
+    });
   });
 });
 
@@ -62,10 +77,10 @@ describe("on write, a duplicate the file already has and the request leaves alon
   const existing = config(["codex", "codex"]);
 
   it("tolerates it unchanged, and refuses it once the request writes that chain", () => {
-    expect(validateConfigShape(existing, { tolerateDuplicates: unchangedLegacyDuplicates(existing) })).toEqual([]);
+    expect(validateConfigShape(existing, { tolerateDuplicates: unchangedDuplicates(existing) })).toEqual([]);
     const edited = config(["codex", "codex", "grok"]);
-    expect(validateConfigShape(edited, { tolerateDuplicates: unchangedLegacyDuplicates(existing) })).toEqual([DUPLICATE]);
-    expect(validateConfigShape(config([{ engine: "codex" }, { engine: "codex" }]), { tolerateDuplicates: unchangedLegacyDuplicates(existing) })).toEqual([DUPLICATE]);
+    expect(validateConfigShape(edited, { tolerateDuplicates: unchangedDuplicates(existing) })).toEqual([DUPLICATE]);
+    expect(validateConfigShape(config([{ engine: "codex" }, { engine: "codex" }]), { tolerateDuplicates: unchangedDuplicates(existing) })).toEqual([DUPLICATE]);
   });
 });
 
@@ -95,9 +110,12 @@ describe("loadConfig", () => {
     expect(String(warn.mock.calls[0]?.[0])).toContain("engines.claude.fallback[1] duplicates");
   });
 
-  it("refuses a duplicate that only the object form can express", async () => {
+  it("loads a repeated mapping with a warning too, and still refuses a self target", async () => {
     write([{ engine: "codex" }, { engine: "codex" }]);
     const { loadConfig } = await import("../config.js");
-    expect(() => loadConfig()).toThrow(/duplicates engines\.claude\.fallback\[0\]/);
+    expect(loadConfig().engines.claude.fallback).toEqual([{ engine: "codex" }, { engine: "codex" }]);
+    expect(String(warn.mock.calls.at(-1)?.[0])).toContain("engines.claude.fallback[1] duplicates engines.claude.fallback[0] (codex)");
+    write([{ engine: "claude" }]);
+    expect(() => loadConfig()).toThrow(/engines\.claude\.fallback\[0\] \(claude\) is the target/);
   });
 });

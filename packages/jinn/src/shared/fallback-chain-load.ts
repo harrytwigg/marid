@@ -1,32 +1,28 @@
+import { accountNames } from "./claude-accounts-config.js";
 import { logger } from "./logger.js";
-import type { FallbackChainDuplicate } from "./fallback-chain-wire.js";
+import { fallbackChainProblems, type FallbackChainDuplicate } from "./fallback-chain-wire.js";
+import { ENGINE_NAMES } from "./models.js";
 
 /**
  * Duplicate chain entries are refused when a config is written (PUT /api/config, the
- * org PATCH) but an upgrade must never stop a gateway starting, so what the legacy
- * validator accepted stays loadable: a string entry listed twice. The expansion lists
- * a target once, so the repeat is harmless. Anything only the object form can say
- * (a repeated mapping) stays an error everywhere.
+ * org PATCH) but an upgrade must never stop a gateway starting, so a config that repeats
+ * a target still loads: the repeat is reported (a warning at load, the subject's
+ * `problems` beside its chain, a `jinn doctor` line) and the expansion lists the target
+ * once. Every other problem stays a load error.
  */
 
 /** Decides whether a duplicate is tolerated; see `FallbackChainContext.onDuplicate`. */
 export type DuplicateTolerance = (duplicate: FallbackChainDuplicate) => boolean;
 
-/** Both entries are legacy strings: the one duplicate the old validator accepted. */
-function legacyDuplicate({ chain, index, first }: FallbackChainDuplicate): boolean {
-  return typeof chain[index] === "string" && typeof chain[first] === "string";
-}
-
 // Warn once per message: loadConfig() runs again on every hot-reload.
 const warned = new Set<string>();
 
-/** At load: a legacy string duplicate is logged (once) and left to the expansion to dedupe. */
-export function warnLegacyDuplicates(warn: (message: string) => void = (message) => logger.warn(message)): DuplicateTolerance {
-  return (duplicate) => {
-    if (!legacyDuplicate(duplicate)) return false;
-    if (!warned.has(duplicate.problem)) {
-      warned.add(duplicate.problem);
-      warn(`${duplicate.problem}; the repeat is ignored. Remove it from config.yaml.`);
+/** At load: a duplicate is logged (once) and left to the expansion to dedupe. */
+export function warnDuplicates(warn: (message: string) => void = (message) => logger.warn(message)): DuplicateTolerance {
+  return ({ problem }) => {
+    if (!warned.has(problem)) {
+      warned.add(problem);
+      warn(`${problem}; the repeat is ignored. Remove it from config.yaml.`);
     }
     return true;
   };
@@ -39,8 +35,39 @@ function chainsOf(config: unknown): string[] {
   return chains.filter(Array.isArray).map((chain) => JSON.stringify(chain));
 }
 
-/** On a write: a legacy string duplicate in a chain the request leaves as the file has it is not the writer's to fix, so it must not block an unrelated save. */
-export function unchangedLegacyDuplicates(existing: unknown): DuplicateTolerance {
+/** On a write: a duplicate in a chain the request leaves as the file has it is not the writer's to fix, so it must not block an unrelated save. */
+export function unchangedDuplicates(existing: unknown): DuplicateTolerance {
   const unchanged = new Set(chainsOf(existing));
-  return (duplicate) => legacyDuplicate(duplicate) && unchanged.has(JSON.stringify(duplicate.chain));
+  return ({ chain }) => unchanged.has(JSON.stringify(chain));
+}
+
+type Section = { fallback?: unknown; accounts?: unknown } | undefined;
+
+function isMapping(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * The duplicates in the engine and account chains of an `engines` mapping, by the
+ * config path of the chain (`engines.claude.fallback`, `engines.claude.accounts.A.fallback`),
+ * in the wire module's words. Only duplicates: other problems are the validator's.
+ */
+export function duplicateProblemsByChain(engines: unknown): Record<string, string[]> {
+  if (!isMapping(engines)) return {};
+  const profiles = accountNames(engines);
+  const found: Record<string, string[]> = {};
+  const scan = (where: string, chain: unknown, self: { engine: string; profile?: string }): void => {
+    const onDuplicate = ({ problem }: FallbackChainDuplicate): boolean => { (found[where] ??= []).push(problem); return true; };
+    fallbackChainProblems(where, chain, { engines: ENGINE_NAMES, profiles, self, onDuplicate });
+  };
+  for (const name of ENGINE_NAMES) {
+    const section = engines[name] as Section;
+    if (!isMapping(section)) continue;
+    scan(`engines.${name}.fallback`, section.fallback, { engine: name });
+    if (name !== "claude" || !isMapping(section.accounts)) continue;
+    for (const [account, entry] of Object.entries(section.accounts)) {
+      if (isMapping(entry)) scan(`engines.claude.accounts.${account}.fallback`, entry.fallback, { engine: "claude", profile: account });
+    }
+  }
+  return found;
 }

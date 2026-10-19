@@ -3,7 +3,7 @@ import yaml from "js-yaml";
 import { CONFIG_PATH } from "./paths.js";
 import { applyLegacyFallbackMigration, validateEngineFallbackChains, validateEngineFallbackModelMaps } from "./engine-fallback.js";
 import { validateClaudeAccounts } from "./claude-accounts-config.js";
-import { warnLegacyDuplicates, type DuplicateTolerance } from "./fallback-chain-load.js";
+import { warnDuplicates, type DuplicateTolerance } from "./fallback-chain-load.js";
 import { opencodeUsageLimitsProblems } from "./opencode-usage-limits-config.js";
 import { autoCompactProblems } from "./auto-compact-config.js";
 import { contextConfigProblems } from "./context-config.js";
@@ -186,7 +186,7 @@ export function loadConfig(): JinnConfig {
   } catch (err) {
     throw new Error(`Invalid YAML in ${CONFIG_PATH}: ${(err as Error).message}`);
   }
-  const problems = validateConfigShape(parsed, { tolerateDuplicates: warnLegacyDuplicates() });
+  const problems = validateConfigShape(parsed, { tolerateDuplicates: warnDuplicates() });
   if (problems.length > 0) {
     throw new Error(
       `Invalid config at ${CONFIG_PATH}:\n  - ${problems.join("\n  - ")}`

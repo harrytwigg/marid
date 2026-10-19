@@ -10,6 +10,7 @@ import {
   fallbackLinkOf,
   type FallbackChainEntry, type FallbackChainSubject, type FallbackChainsResponse, type FallbackProfileOption,
 } from "./fallback-chain-wire.js";
+import { duplicateProblemsByChain } from "./fallback-chain-load.js";
 import { ENGINE_NAMES } from "./models.js";
 import type { Employee, JinnConfig, ModelRegistry } from "./types.js";
 
@@ -33,9 +34,11 @@ export function fallbackProfiles(config: JinnConfig): FallbackProfileOption[] {
 
 function subjectOf(
   env: FallbackChainEnv, identity: Pick<FallbackChainSubject, "kind" | "id">, spec: FallbackChainSpec, written: readonly FallbackChainEntry[] | undefined,
+  problems: readonly string[] = [],
 ): FallbackChainSubject {
   const [primary, ...effective] = resolveFallbackLinks(env, spec);
   return {
+    ...(problems.length > 0 ? { problems: [...problems] } : {}),
     ...identity,
     primary: primary ?? null,
     configured: written === undefined ? null : written.flatMap((entry) => fallbackLinkOf(entry) ?? []),
@@ -51,7 +54,8 @@ export function engineSubject(env: FallbackChainEnv, engine: string): FallbackCh
   const written = (env.config.engines as unknown as Record<string, { fallback?: FallbackChainEntry[] } | undefined>)[engine]?.fallback;
   const mode: FallbackExpansionMode = engine === "claude" ? "account" : "engine";
   const own = ownTargetLink(env.config, { engine, model: defaultModel(env.config, env.registry, engine) });
-  return subjectOf(env, { kind: "engine", id: engine }, { own, ownAccount: engine, entries: written ?? [], mode, scope: OPEN_SCOPE }, written);
+  const problems = duplicateProblemsByChain(env.config.engines)[`engines.${engine}.fallback`];
+  return subjectOf(env, { kind: "engine", id: engine }, { own, ownAccount: engine, entries: written ?? [], mode, scope: OPEN_SCOPE }, written, problems);
 }
 
 /** A declared Claude account's chain, `engines.claude.accounts.<name>.fallback`. */
@@ -59,7 +63,8 @@ export function accountSubject(env: FallbackChainEnv, account: DeclaredClaudeAcc
   const model = defaultModel(env.config, env.registry, "claude");
   const own = { engine: "claude", profile: account.name, ...(model ? { model } : {}) };
   const spec: FallbackChainSpec = { own, ownAccount: account.key, entries: account.fallback ?? [], mode: "account", scope: OPEN_SCOPE };
-  return subjectOf(env, { kind: "account", id: account.name }, spec, account.fallback);
+  const problems = duplicateProblemsByChain(env.config.engines)[`engines.claude.accounts.${account.name}.fallback`];
+  return subjectOf(env, { kind: "account", id: account.name }, spec, account.fallback, problems);
 }
 
 /**
