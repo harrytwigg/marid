@@ -1,10 +1,10 @@
-import { FileText, ListTodo, SquarePen, type LucideIcon } from 'lucide-react'
+import { Bot, FileText, ListTodo, SquarePen, type LucideIcon } from 'lucide-react'
 import { useTodoPreview } from '@/lib/todo-preview'
 import type { PaneTabKind } from './tab-kind'
 
 type KindOfTab = Exclude<PaneTabKind, 'chat'>
 
-const ICONS: Record<KindOfTab, LucideIcon> = { file: FileText, todo: ListTodo, 'new-chat': SquarePen }
+const ICONS: Record<KindOfTab, LucideIcon> = { file: FileText, todo: ListTodo, 'new-chat': SquarePen, subagent: Bot }
 
 /** The label of a tab that is no chat: its kind's glyph and its title (a file's basename in code type,
  * a Todo's id, then its title once the preview cache has it). */

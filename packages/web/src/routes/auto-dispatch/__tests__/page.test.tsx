@@ -111,7 +111,7 @@ describe("the Auto-Dispatch page", () => {
     expect(within(list).getByText("Dispatch ABC-3")).toBeTruthy()
     expect(within(list).getByText("dispatch button")).toBeTruthy()
 
-    fireEvent.click(within(list).getByRole("tab", { name: "codex" }))
+    fireEvent.click(within(list).getByRole("tab", { name: "Codex" }))
     expect(within(list).getAllByTestId("session-row")).toHaveLength(1)
     expect(within(list).getByText("Draft the post")).toBeTruthy()
   })

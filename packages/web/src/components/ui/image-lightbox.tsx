@@ -272,7 +272,7 @@ export function ImageLightbox({
               data-testid="attachment-lightbox-prev"
               aria-label="Previous image"
               onClick={() => navigate(-1)}
-              className="focus-ring absolute left-3 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-full bg-[var(--material-thick)] text-[var(--text-secondary)] shadow-[var(--shadow-overlay)] outline-none backdrop-blur-[20px] transition-transform duration-150 ease-out hover:text-[var(--text-primary)] active:scale-[0.96] sm:left-6"
+              className="focus-outline absolute left-3 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-full bg-[var(--material-thick)] text-[var(--text-secondary)] shadow-[var(--shadow-overlay)] outline-none backdrop-blur-[20px] transition-transform duration-150 ease-out hover:text-[var(--text-primary)] active:scale-[0.96] sm:left-6"
             >
               <ChevronLeft size={19} strokeWidth={2} aria-hidden />
             </button>
@@ -281,7 +281,7 @@ export function ImageLightbox({
               data-testid="attachment-lightbox-next"
               aria-label="Next image"
               onClick={() => navigate(1)}
-              className="focus-ring absolute right-3 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-full bg-[var(--material-thick)] text-[var(--text-secondary)] shadow-[var(--shadow-overlay)] outline-none backdrop-blur-[20px] transition-transform duration-150 ease-out hover:text-[var(--text-primary)] active:scale-[0.96] sm:right-6"
+              className="focus-outline absolute right-3 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-full bg-[var(--material-thick)] text-[var(--text-secondary)] shadow-[var(--shadow-overlay)] outline-none backdrop-blur-[20px] transition-transform duration-150 ease-out hover:text-[var(--text-primary)] active:scale-[0.96] sm:right-6"
             >
               <ChevronRight size={19} strokeWidth={2} aria-hidden />
             </button>
@@ -297,7 +297,7 @@ export function ImageLightbox({
             data-testid="attachment-lightbox-zoom"
             aria-label={zoom === 1 ? "Zoom in" : "Reset zoom"}
             onClick={toggleZoom}
-            className="focus-ring grid size-10 flex-none place-items-center rounded-full text-[var(--text-secondary)] outline-none transition-transform duration-150 ease-out hover:bg-[var(--fill-secondary)] active:scale-[0.96]"
+            className="focus-outline grid size-10 flex-none place-items-center rounded-full text-[var(--text-secondary)] outline-none transition-transform duration-150 ease-out hover:bg-[var(--fill-secondary)] active:scale-[0.96]"
           >
             <ZoomIn size={16} strokeWidth={2} aria-hidden />
           </button>
@@ -305,7 +305,7 @@ export function ImageLightbox({
             href={image.url}
             download={image.name}
             aria-label={downloadLabel ?? `Download ${image.name}`}
-            className="focus-ring grid size-10 flex-none place-items-center rounded-full text-[var(--text-secondary)] outline-none transition-transform duration-150 ease-out hover:bg-[var(--fill-secondary)] active:scale-[0.96]"
+            className="focus-outline grid size-10 flex-none place-items-center rounded-full text-[var(--text-secondary)] outline-none transition-transform duration-150 ease-out hover:bg-[var(--fill-secondary)] active:scale-[0.96]"
           >
             <Download size={16} strokeWidth={2} aria-hidden />
           </a>
@@ -313,7 +313,7 @@ export function ImageLightbox({
             type="button"
             aria-label={closeLabel}
             onClick={onClose}
-            className="focus-ring grid size-10 flex-none place-items-center rounded-full text-[var(--text-secondary)] outline-none transition-transform duration-150 ease-out hover:bg-[var(--fill-secondary)] active:scale-[0.96]"
+            className="focus-outline grid size-10 flex-none place-items-center rounded-full text-[var(--text-secondary)] outline-none transition-transform duration-150 ease-out hover:bg-[var(--fill-secondary)] active:scale-[0.96]"
           >
             <X size={16} strokeWidth={2} aria-hidden />
           </button>

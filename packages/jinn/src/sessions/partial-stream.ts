@@ -154,6 +154,7 @@ export function createPartialStreamWriter(sessionId: string): PartialStreamWrite
           match.messageId,
           `Used ${match.toolName}`,
           activityReceiptId,
+          delta.agentId,
         );
         return;
       }

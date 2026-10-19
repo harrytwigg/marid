@@ -1,4 +1,5 @@
 import { isFileTabId, parseFileTabId, type FileTabRef } from './file-tab'
+import { isSubagentTabId, parseSubagentTabId, type SubagentTabRef } from './subagent-tab'
 
 /**
  * The kinds of tab the split layout holds. The layout keeps tabs as plain strings, so every kind but
@@ -8,10 +9,10 @@ import { isFileTabId, parseFileTabId, type FileTabRef } from './file-tab'
  * - a new chat (`new:`): a blank composer that becomes a chat on its first send. Like a chat it is
  *   its pane's identity when shown (its own composer pane, not drawn over a chat that stays mounted),
  *   but it is no session: the route and the working set never see it;
- * - a document (file-tab.ts `file:`, `todo:`): something read beside a chat. It is shown over its
+ * - a document (file-tab.ts `file:`, `todo:`, subagent-tab.ts `subagent:`): something read beside a chat. It is shown over its
  *   group's chat, which stays mounted under it, or, dragged out, in a pane of its own.
  */
-export type PaneTabKind = 'chat' | 'new-chat' | 'file' | 'todo'
+export type PaneTabKind = 'chat' | 'new-chat' | 'file' | 'todo' | 'subagent'
 
 const TODO_TAB_PREFIX = 'todo:'
 const NEW_CHAT_TAB_PREFIX = 'new:'
@@ -24,9 +25,9 @@ export function isNewChatTabId(tabId: string): boolean {
   return tabId.startsWith(NEW_CHAT_TAB_PREFIX)
 }
 
-/** A file or a Todo: a tab shown over its group's chat rather than a pane of its own. */
+/** A file, a Todo or a sub-agent: a tab shown over its group's chat rather than a pane of its own. */
 export function isDocTabId(tabId: string): boolean {
-  return isFileTabId(tabId) || isTodoTabId(tabId)
+  return isFileTabId(tabId) || isTodoTabId(tabId) || isSubagentTabId(tabId)
 }
 
 /** A session: the only kind the route, the URL and the working set know. */
@@ -37,6 +38,7 @@ export function isChatTabId(tabId: string): boolean {
 export function paneTabKind(tabId: string): PaneTabKind {
   if (isFileTabId(tabId)) return 'file'
   if (isTodoTabId(tabId)) return 'todo'
+  if (isSubagentTabId(tabId)) return 'subagent'
   return isNewChatTabId(tabId) ? 'new-chat' : 'chat'
 }
 
@@ -68,11 +70,13 @@ export function parseNewChatTabId(tabId: string): NewChatTabRef | null {
 }
 
 /** What a document tab shows. */
-export type DocTabRef = { kind: 'file'; file: FileTabRef } | { kind: 'todo'; todoId: string }
+export type DocTabRef = { kind: 'file'; file: FileTabRef } | { kind: 'todo'; todoId: string } | { kind: 'subagent'; subagent: SubagentTabRef }
 
 export function parseDocTabId(tabId: string): DocTabRef | null {
   const file = parseFileTabId(tabId)
   if (file) return { kind: 'file', file }
   const todoId = parseTodoTabId(tabId)
-  return todoId ? { kind: 'todo', todoId } : null
+  if (todoId) return { kind: 'todo', todoId }
+  const subagent = parseSubagentTabId(tabId)
+  return subagent ? { kind: 'subagent', subagent } : null
 }

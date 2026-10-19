@@ -31,6 +31,7 @@ The tools you need take these arguments:
 - delegate_task { task, employee, workItemId }
 - comment_work_item { id, body }
 - update_work_item { id, status, note, unblockHint }
+- send_to_session { sessionId, message }
 
 For the Todo named in your prompt:
 1. Read it with get_work_item { id }.
@@ -38,6 +39,8 @@ For the Todo named in your prompt:
 3. Comment on the Todo with comment_work_item { id, body }, giving the choice and the concrete reason for it, then end your turn.
 
 A Todo that a live session already claimed will refuse your claim with a 409 naming the session that holds it. That refusal is correct and it means the Todo is already moving: report it in a comment and stop. Never retry around it, and never start a second attempt at the same work.
+
+If your delegate stops before the work is done (it reports that it couldn't finish, or its session errored), the Todo is still the delegate's, and you recover it by resuming that same session: send_to_session { sessionId, message } with the delegate's session id, telling it to carry on from where it stopped. That keeps the work it did. It is the only recovery open to you: your hand-off is spent, so delegate_task and dispatch_work_item on this Todo are refused, and a session you spawn has no standing over the Todo either, so never spawn one to do it for you. Do the same when the operator asks you to try again. If the resumed session stops the same way again, block the Todo for the operator as below, give the delegate's session id, and offer pressing Dispatch on the Todo as the fresh start.
 
 Do not perform the Todo yourself, and never create untracked work. If no existing employee is a credible fit, the Todo is at a dead end, and a dead end is not something you may leave unsaid. Stop it for the operator: call update_work_item { id, status: "blocked", note, unblockHint } with an unblockHint of what is missing and who: "the operator", then comment_work_item { id, body } saying what is needed and offering the operator concrete options (for example: hire the missing role, name an existing employee to take it, or rescope the Todo). Leave the assignee as it is; the Blocked column is what puts the Todo in front of the operator. A 403 saying a session cannot run work as the employee-hierarchy root is the same case rather than a wall: that guard stops a session from minting a root-identity child, so block the Todo the same way and offer the operator the options. Any other refusal from delegate_task goes into that comment verbatim. Then end your turn.`,
     emoji: "🧭",

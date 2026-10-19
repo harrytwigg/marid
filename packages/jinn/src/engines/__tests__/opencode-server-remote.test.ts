@@ -32,6 +32,12 @@ const hoisted = vi.hoisted(() => ({
   tick: 0,
   servers: [] as Array<{ close: (code: number) => void }>,
   sse: [] as ReadableStreamDefaultController<Uint8Array>[],
+  /** What each facts read reports `opencode --version` as, in turn (then none). */
+  factsVersions: [] as string[],
+  /** The fake server speaks OpenCode 2's API (only enough of it to start). */
+  serverV2: false,
+  /** Every server process spawned, to end on a signal. */
+  serverProcs: [] as Array<{ close: (code: number) => void }>,
 }));
 
 vi.mock("node:child_process", () => ({
@@ -74,6 +80,7 @@ vi.mock("node:child_process", () => ({
         return proc;
       },
     };
+    if (kind === "server") hoisted.serverProcs.push(proc);
     return proc;
   }),
 }));
@@ -91,10 +98,12 @@ vi.mock("../remote-stage.js", async (importOriginal) => {
         stageDir: "/home/builder/.jinn-remote-stage",
         nodeBin: "/home/builder/.nvm/versions/node/v22.22.3/bin/node",
         opencodeBin: REMOTE_BIN,
+        ...(hoisted.factsVersions.length ? { opencodeVersion: hoisted.factsVersions.shift() } : {}),
         jinnVersion: "0.33.3",
         entryDir: "/x",
       },
     })),
+    forgetRemoteFacts: vi.fn(),
     prepareRemoteSession: vi.fn(async (opts: Record<string, unknown>) => {
       hoisted.prepareCalls.push(opts);
       return {
@@ -115,6 +124,7 @@ vi.mock("../../shared/logger.js", () => ({
 
 import { OpencodeEngine } from "../opencode.js";
 import { OpencodeServerPool } from "../opencode-server.js";
+import { forgetRemoteFacts } from "../remote-stage.js";
 import { enforcePtyIdleCap, ptyIdleCapForHost, PtyLifecycleManager } from "../pty-lifecycle.js";
 import { JINN_HOME } from "../../shared/paths.js";
 import type { OpencodeServerConfig } from "../../shared/config-types.js";
@@ -166,6 +176,10 @@ beforeEach(() => {
   hoisted.tick = 0;
   hoisted.servers = [];
   hoisted.sse = [];
+  hoisted.factsVersions = [];
+  hoisted.serverV2 = false;
+  hoisted.serverProcs = [];
+  vi.mocked(forgetRemoteFacts).mockClear();
   // The engine signals local process GROUPS; never let a fake pid reach the OS.
   killSpy = vi.spyOn(process, "kill").mockImplementation((() => true) as typeof process.kill);
   vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit = {}) => {
@@ -173,6 +187,17 @@ beforeEach(() => {
     hoisted.fetches.push({ url, method: init.method ?? "GET", auth: headers.authorization, at: ++hoisted.tick, ...(typeof init.body === "string" ? { body: init.body } : {}) });
     const route = new URL(url).pathname;
     const json = (body: unknown, status = 200) => new Response(body === undefined ? null : JSON.stringify(body), { status });
+    if (hoisted.serverV2) {
+      if (route === "/api/info") return json({ version: "2.0.29" });
+      if (route === "/api/mcp") return json({ data: [] });
+      if (route !== "/api/event") return new Response("<!doctype html>", { status: 200, headers: { "content-type": "text/html" } });
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ type: "server.connected", data: {} })}\n\n`));
+        },
+      });
+      return new Response(stream, { status: 200, headers: { "content-type": "text/event-stream" } });
+    }
     if (route === "/event") {
       const stream = new ReadableStream<Uint8Array>({
         start(controller) {
@@ -366,3 +391,64 @@ describe("opencode servers on a remote host and the gateway's idle PTY cap", { t
     expect(["a", "b", "c"].filter((id) => pool.get(id) !== undefined)).toHaveLength(2);
   });
 });
+
+describe("a remote host whose opencode was upgraded since its facts were read", () => {
+  const spec = { cwd: JINN_HOME, remoteHost: "build-box", remoteUser: "builder", remoteCwd: "/srv/jinn-work/proj" };
+  /** A stop ends the fake server, as the group signal would end the real one. */
+  function serversExitOnSignal(): void {
+    killSpy.mockImplementation(((pid: number) => {
+      if (pid === -7001) for (const server of hoisted.serverProcs) server.close(143);
+      return true;
+    }) as typeof process.kill);
+  }
+
+  it("is read again, and the server restaged in the shape of the API it speaks", async () => {
+    serversExitOnSignal();
+    hoisted.serverV2 = true;
+    hoisted.factsVersions = ["1.19.0", "2.0.29"];
+    const { pool } = setup();
+    const server = await pool.acquire("sess-1", spec);
+    expect(server.api).toBe(2);
+    expect(server.stagedApi).toBe(2);
+    expect(vi.mocked(forgetRemoteFacts)).toHaveBeenCalledWith("builder@build-box");
+    expect(hoisted.spawns.filter((s) => s.kind === "server")).toHaveLength(2);
+    expect(hoisted.prepareCalls).toHaveLength(2);
+    pool.release("sess-1");
+  });
+
+  it("refuses the server when a second read still names the other API", async () => {
+    serversExitOnSignal();
+    hoisted.serverV2 = true;
+    hoisted.factsVersions = ["1.19.0", "1.19.0"];
+    const { pool } = setup();
+    await expect(pool.acquire("sess-1", spec)).rejects.toThrow(/could not be staged for the API it speaks/);
+    expect(vi.mocked(forgetRemoteFacts)).toHaveBeenCalledTimes(2);
+    expect(hoisted.spawns.filter((s) => s.kind === "server")).toHaveLength(2);
+    expect(pool.size()).toBe(0);
+  });
+});
+
+describe("the command ceiling on a remote server", () => {
+  function poolWith(commandTimeoutMs: number) {
+    const lifecycle = new PtyLifecycleManager({ maxLivePtys: 8, enforceLocalCap: false });
+    const pool = new OpencodeServerPool(lifecycle, { remote: () => REMOTE_CONFIG, gatewayPort: () => GATEWAY_PORT, commandTimeoutMs: () => commandTimeoutMs });
+    return new OpencodeEngine({ remote: () => REMOTE_CONFIG, gatewayPort: () => GATEWAY_PORT, mode: () => "server", servers: pool, commandTimeoutMs: () => commandTimeoutMs });
+  }
+  const serverCommand = () => hoisted.spawns.find((s) => s.kind === "server")!.args.at(-1)!;
+
+  it("has the plugin staged on the host and passes the ceiling to the server it starts there", async () => {
+    const result = await poolWith(900_000).run(runOpts());
+    expect(result.error).toBeUndefined();
+    // The host's own staging lists the plugin (its shape: remote-employee-env.test.ts).
+    expect(hoisted.prepareCalls[0]).toMatchObject({ opencodeCommandTimeout: true });
+    expect(serverCommand()).toContain("JINN_OPENCODE_COMMAND_TIMEOUT_MS='900000'");
+  });
+
+  it("stages no plugin and passes no ceiling when it is off", async () => {
+    const result = await poolWith(0).run(runOpts());
+    expect(result.error).toBeUndefined();
+    expect(hoisted.prepareCalls[0]).not.toHaveProperty("opencodeCommandTimeout");
+    expect(serverCommand()).not.toContain("JINN_OPENCODE_COMMAND_TIMEOUT_MS");
+  });
+});
+

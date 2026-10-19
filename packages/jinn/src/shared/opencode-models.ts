@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import type { EngineModelsConfig, ModelInfo } from "./types.js";
 import { logger } from "./logger.js";
+import { contextWindowOf, effortLevelsOf, MODEL_LINE, parseOpencodeApiModels, parseRecord } from "./opencode-model-records.js";
 
 /**
  * Dynamic model discovery for the opencode engine.
@@ -12,35 +13,27 @@ import { logger } from "./logger.js";
  * rather than any provider directly is what keeps the catalog honest: a model
  * never appears here for credentials this host does not hold.
  *
- * Only the context window is taken from the record (`limit.context`), for the
- * context meter; plain `opencode models` has none. Nothing else is claimed
- * about capability, and `--variant` (the reasoning-effort flag) is
- * provider-specific with no list to validate against. So no model here
- * declares effort support: an effort picker that silently changes nothing is
- * worse than no picker, and a bad variant is an error the turn discovers at
- * the provider.
+ * Two things are taken from the record: the context window (`limit.context`),
+ * for the context meter, and the model's variants. A variant is opencode's
+ * reasoning-effort control (`run --variant`, the prompt body's `variant`), and
+ * the record lists exactly which ones THIS model has — `{high}` for one model,
+ * `{low, medium, high, xhigh, max}` for another, `{}` for one with none. Those
+ * keys, in opencode's order, are the model's effort levels, so the picker offers
+ * what the model accepts and nothing it would reject. A model with no variants
+ * (or a record without the field, as plain `opencode models` has none) declares
+ * no effort support. Plain `opencode models` carries neither window nor variants.
+ *
+ * OpenCode 2.x has no `--verbose`. Its records come from the server's
+ * `GET /api/model` instead, asked through `opencode api model.list
+ * --standalone`: the CLI starts a private server, prints the answer as JSON and
+ * stops it. That keeps discovery a one-shot command like every other step here,
+ * independent of whether Marid runs a server of its own (run mode has none, and
+ * server mode's servers are per session and come and go).
  */
 
-/** One `provider/model` line. The model half may itself contain slashes
- *  (`openrouter/meta-llama/llama-4`), so only the FIRST slash is structural —
- *  the same split the engine does when handing `-m` back to opencode. */
-const MODEL_LINE = /^([A-Za-z0-9_.-]+)\/(\S+)$/;
 
 /** Strip terminal colour/cursor escapes. */
 const stripAnsi = (line: string): string => line.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "");
-
-/** `limit.context` of one model's `--verbose` JSON, or undefined when it is
- *  missing, not a positive number, or the text is not JSON at all. */
-function contextWindowOf(json: string): number | undefined {
-  try {
-    const parsed: unknown = JSON.parse(json);
-    const limit = (parsed as { limit?: { context?: unknown } } | null)?.limit;
-    const context = limit?.context;
-    return typeof context === "number" && Number.isFinite(context) && context > 0 ? context : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 /**
  * Parse `opencode models` / `opencode models --verbose` output.
@@ -53,9 +46,9 @@ function contextWindowOf(json: string): number | undefined {
  *
  * `--verbose` follows each model line with that model's record as a
  * pretty-printed JSON object: `{` alone on a line, every inner line indented,
- * `}` alone on a line. Its `limit.context` becomes the model's `contextWindow`.
- * A model with no object, a cut-off one or one that is not JSON simply has no
- * window — never a guessed one.
+ * `}` alone on a line. Its `limit.context` becomes the model's `contextWindow`
+ * and its `variants` the model's `effortLevels`. A model with no object, a
+ * cut-off one or one that is not JSON simply has neither — never a guessed one.
  */
 export function parseOpencodeModels(output: string): ModelInfo[] {
   const reader: Reader = { models: [], seen: new Set() };
@@ -73,10 +66,19 @@ interface Reader {
   json?: string[];
 }
 
-/** The object is complete (or cut off): give its model the window it states. */
+/** The object is complete (or cut off): give its model the window and the
+ *  effort levels it states. */
 function closeObject(reader: Reader): void {
-  const window = reader.current && reader.json ? contextWindowOf(reader.json.join("\n")) : undefined;
-  if (reader.current && window !== undefined) reader.current.contextWindow = window;
+  const record = reader.current && reader.json ? parseRecord(reader.json.join("\n")) : undefined;
+  if (reader.current && record) {
+    const window = contextWindowOf(record);
+    if (window !== undefined) reader.current.contextWindow = window;
+    const levels = effortLevelsOf(record);
+    if (levels.length > 0) {
+      reader.current.supportsEffort = true;
+      reader.current.effortLevels = levels;
+    }
+  }
   reader.json = undefined;
 }
 
@@ -103,22 +105,59 @@ function readLine(reader: Reader, text: string): void {
   }
 }
 
-/** The operator's configured `contextWindow` for a model wins over the one
- *  opencode reports: it is the operator's own statement about a model (a
- *  provider limit opencode does not know, a self-imposed cap). Nothing else of
- *  the `models.opencode` block is applied to a discovered catalog. */
-export function withConfiguredWindows(models: ModelInfo[], block: EngineModelsConfig | undefined): ModelInfo[] {
-  const configured = new Map<string, number>();
+/** What an entry of the `models.opencode` block overrides on a discovered model. */
+interface ModelOverride {
+  contextWindow?: number;
+  /** `false`: switch the model's effort off. */
+  supportsEffort?: false;
+  /** The levels the entry lists, and whether it turned effort on itself. */
+  levels?: { list: string[]; explicit: boolean };
+}
+
+/** The part of a configured entry that states something. A zero, negative or
+ *  NaN window states nothing, nor does an effort list that names no level:
+ *  the discovered value stays. `supportsEffort: false` is the one way to switch
+ *  a discovered model's effort off. */
+function overrideOf(entry: NonNullable<EngineModelsConfig["models"]>[number]): ModelOverride {
+  const override: ModelOverride = {};
+  if (typeof entry.contextWindow === "number" && Number.isFinite(entry.contextWindow) && entry.contextWindow > 0) {
+    override.contextWindow = entry.contextWindow;
+  }
+  const list = (Array.isArray(entry.effortLevels) ? entry.effortLevels : []).filter((l) => typeof l === "string" && l.trim() !== "");
+  if (entry.supportsEffort === false) override.supportsEffort = false;
+  else if (list.length > 0) override.levels = { list, explicit: entry.supportsEffort === true };
+  return override;
+}
+
+/** One model with its entry applied. Levels follow the block's own convention
+ *  (a model has effort when the entry says `supportsEffort: true`, as in a block
+ *  with no discovery), except that a list for a model discovery already gave
+ *  effort replaces its levels without that flag. */
+function applyOverride(model: ModelInfo, override: ModelOverride): ModelInfo {
+  const out: ModelInfo = { ...model };
+  if (override.contextWindow !== undefined) out.contextWindow = override.contextWindow;
+  if (override.supportsEffort === false) return { ...out, supportsEffort: false, effortLevels: [] };
+  if (override.levels && (override.levels.explicit || model.supportsEffort)) {
+    return { ...out, supportsEffort: true, effortLevels: override.levels.list };
+  }
+  return out;
+}
+
+/** The operator's configured `contextWindow` and `effortLevels` for a model win
+ *  over what opencode reports: they are the operator's own statement about a
+ *  model (a provider limit opencode does not know, a self-imposed cap, the
+ *  variants of a build whose discovery lists none). Nothing else of the
+ *  `models.opencode` block is applied to a discovered catalog. */
+export function withConfiguredOverrides(models: ModelInfo[], block: EngineModelsConfig | undefined): ModelInfo[] {
+  const configured = new Map<string, ModelOverride>();
   for (const entry of block?.models ?? []) {
-    // A zero, negative or NaN window states nothing: keep the discovered one.
-    if (typeof entry.contextWindow === "number" && Number.isFinite(entry.contextWindow) && entry.contextWindow > 0) {
-      configured.set(entry.id, entry.contextWindow);
-    }
+    const override = overrideOf(entry);
+    if (Object.keys(override).length > 0) configured.set(entry.id, override);
   }
   if (configured.size === 0) return models;
   return models.map((model) => {
-    const window = configured.get(model.id);
-    return window === undefined ? model : { ...model, contextWindow: window };
+    const override = configured.get(model.id);
+    return override ? applyOverride(model, override) : model;
   });
 }
 
@@ -199,22 +238,31 @@ function runOpencodeModels(bin: string, args: string[]): Promise<ModelsRun> {
   });
 }
 
-/** The plain list, tried in this order when `--verbose` gave nothing. OpenCode
- *  2.x lists from a private server only with `--standalone` (without it `models`
- *  starts and depends on its background service, which can fail outright);
- *  1.x rejects that flag, so a build that does is asked again without it. */
+/** OpenCode 2.x's records, from its server API. 1.x has no `api` command and
+ *  exits 1 within a second, so a 1.x build that got this far loses nothing. */
+const API_MODELS_ARGS = ["api", "model.list", "--standalone"];
+
+/** The plain list, tried in this order when neither run above gave anything.
+ *  OpenCode 2.x lists from a private server only with `--standalone` (without
+ *  it `models` starts and depends on its background service, which can fail
+ *  outright); 1.x rejects that flag, so a build that does is asked again
+ *  without it. */
 const PLAIN_MODELS_ARGS: string[][] = [["models", "--standalone"], ["models"]];
 
 /** Run `opencode models --verbose` and return what the installed CLI exposes.
  *
- *  `--verbose` is what carries the context windows, but not every build has it:
+ *  `--verbose` is what carries the context windows and variants on 1.x, but
  *  OpenCode 2.x exits 1 with "Unrecognized flag: --verbose". When that run
- *  exits non-zero or lists no models, the plain list is used instead, without
- *  windows, so such a build keeps its catalogue. */
+ *  exits non-zero or lists no models, the same records are asked of 2.x's API.
+ *  Only when that gives nothing either is the plain list used, without windows
+ *  or variants, so such a build still keeps its catalogue. */
 export async function discoverOpencodeModels(bin: string): Promise<ModelInfo[]> {
   const verbose = await runOpencodeModels(bin, ["models", "--verbose"]);
   const withWindows = parseOpencodeModels(verbose.stdout);
   if (verbose.code === 0 && withWindows.length > 0) return withWindows;
+  const api = await runOpencodeModels(bin, API_MODELS_ARGS);
+  const fromApi = api.code === 0 ? parseOpencodeApiModels(api.stdout) : [];
+  if (fromApi.length > 0) return fromApi;
   for (const args of PLAIN_MODELS_ARGS) {
     const plain = parseOpencodeModels((await runOpencodeModels(bin, args)).stdout);
     if (plain.length > 0) return plain;

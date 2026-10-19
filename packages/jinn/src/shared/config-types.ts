@@ -151,6 +151,14 @@ export interface JinnConfig {
        * opencode bundles `@ff-labs/fff-bun` >= 0.11 or #50719 is fixed.
        */
       disableFff?: boolean;
+      /**
+       * The longest one shell command of an opencode turn may run, in ms
+       * (default 1800000, 30 min; 0 turns it off). opencode lets the model pick a
+       * command's timeout with no upper bound; Marid stages a plugin that caps it
+       * at this, on 1.x and 2.x, local and remote. 2.x background commands are
+       * not capped. See docs/engines-opencode.md.
+       */
+      commandTimeoutMs?: number;
       /** meter jinn's own opencode spend against the provider's
        *  windowed allowance, since opencode publishes none to read. Absent =
        *  unmetered, exactly as before. See docs/engines-opencode.md. */

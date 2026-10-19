@@ -56,7 +56,7 @@ function PaneViewControls({ session, actions, viewMode, cliModeAvailable, viewSw
           title={viewSwitchLocked ? cliTitle : undefined}
           className={cn(
             'flex-1 rounded-md px-2 py-1 text-caption1 font-medium transition-colors',
-            viewMode === 'chat' ? 'bg-[var(--accent-fill)] text-[var(--accent)]' : 'text-muted-foreground hover:bg-accent',
+            viewMode === 'chat' ? 'bg-[var(--accent-fill)] text-[var(--accent)]' : 'text-muted-foreground hover:bg-[var(--fill-secondary)]',
             viewSwitchLocked && 'cursor-not-allowed opacity-60',
           )}
         >Chat</button>
@@ -67,7 +67,7 @@ function PaneViewControls({ session, actions, viewMode, cliModeAvailable, viewSw
           title={cliTitle}
           className={cn(
             'flex-1 rounded-md px-2 py-1 font-mono text-caption1 font-medium transition-colors',
-            viewMode === 'cli' ? 'bg-[var(--accent-fill)] text-[var(--accent)]' : 'text-muted-foreground hover:bg-accent',
+            viewMode === 'cli' ? 'bg-[var(--accent-fill)] text-[var(--accent)]' : 'text-muted-foreground hover:bg-[var(--fill-secondary)]',
             (!cliModeAvailable || viewSwitchLocked) && 'cursor-not-allowed opacity-45',
           )}
         >CLI</button>
