@@ -88,11 +88,11 @@ describe('Settings switches', () => {
     // The five that shipped unnamed: named now, and after their visible row
     // rather than a generic "switch".
     for (const name of [
-      'Share session in channel',
-      'Ignore old messages on boot (Slack)',
-      'Ignore old messages on boot (Telegram)',
-      'Stdout',
-      'File logging',
+      'Share Slack session in channel',
+      'Ignore old Slack messages on boot',
+      'Ignore old Telegram messages on boot',
+      'Log to stdout',
+      'Log to file',
     ]) {
       expect(screen.getByRole('switch', { name })).toBeTruthy()
     }

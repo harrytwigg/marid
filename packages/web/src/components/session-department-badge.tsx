@@ -1,4 +1,4 @@
-import { ShieldHalf } from "lucide-react"
+import { ShieldHalf } from "@/components/ui/icon"
 
 /* The department a scoped employee's session is bound to, as a small pill beside
  * the session's title. Sessions that are not bound show nothing, so an instance
@@ -15,7 +15,7 @@ export function SessionDepartmentBadge({ department, className = "" }: { departm
       className={`inline-flex min-w-0 max-w-[7.5rem] flex-none items-center gap-1 rounded-full px-2 py-px text-[length:var(--text-caption2)] font-[var(--weight-semibold)] tracking-[0.02em] ${className}`}
       style={{ color: tone, background: `color-mix(in srgb, ${tone} 14%, transparent)` }}
     >
-      <ShieldHalf size={10} strokeWidth={2.4} aria-hidden className="flex-none" />
+      <ShieldHalf size={10} aria-hidden className="flex-none" />
       <span className="truncate">{department}</span>
     </span>
   )

@@ -1,6 +1,6 @@
-import { type ComponentType, type MouseEvent as ReactMouseEvent, type ReactNode } from "react"
+import { type ComponentType, type MouseEvent as ReactMouseEvent, type ReactNode, useEffect } from "react"
 import { Link, useLocation } from "react-router-dom"
-import { PanelLeft } from "lucide-react"
+import { PanelLeft } from "@/components/ui/icon"
 import { useSettings } from "@/routes/settings-provider"
 import { useNavigation } from "@/lib/use-navigation"
 import { cn } from "@/lib/utils"
@@ -77,19 +77,43 @@ export function isNavItemActive(href: string, pathname: string): boolean {
 // item = soft --fill-secondary, NEVER --accent.
 // ---------------------------------------------------------------------------
 
-// The floating label that springs out beside a hovered/focused icon. Calm and
-// crisp: a flat opaque --bg-tertiary surface with a 0.5px --separator hairline
-// and a subtle drop shadow — NO backdrop saturate (no colored halo) and NOT the
-// heavy overlay shadow (no glow). Theme-aware, quiet, readable over the list.
+// The floating label that springs out beside a hovered/focused icon. It is the
+// rail's tooltip, drawn with no script at all (the rail is in the always-loaded
+// shell, where a positioned React Aria tooltip would not fit the initial
+// budget): CSS hover and focus-within show it, `.rail-reveal` gives it the
+// overlay glass (glass-identity.css), blurred only while it shows so one label
+// is one blurred surface, and Escape hides it (see `useDismissLabelOnEscape`).
 // The icon carries the real aria-label, so the pill is decorative (aria-hidden).
 // Under reduced motion it fades only (no slide).
 const RIBBON_LABEL_PILL =
-  "whitespace-nowrap rounded-full border-[0.5px] border-[var(--separator)] bg-[var(--bg-tertiary)] " +
+  "rail-reveal whitespace-nowrap rounded-full " +
   "px-2.5 py-1 text-[length:var(--text-footnote)] font-[var(--weight-medium)] text-[var(--text-primary)] " +
-  "shadow-[var(--shadow-subtle)] " +
   "opacity-0 transition-[opacity,transform] duration-150 [transition-timing-function:var(--ease-snappy)] " +
   "motion-safe:-translate-x-1.5 group-hover/row:opacity-100 group-hover/row:translate-x-0 " +
   "group-focus-within/row:opacity-100 group-focus-within/row:translate-x-0 motion-reduce:transition-opacity"
+
+/** A label that covers what the reader is looking at has to be dismissible
+ *  without moving the pointer or the focus, so Escape hides the label of the
+ *  row under the pointer or holding focus, and it comes back the next time the
+ *  pointer or focus enters a row (so a row focused after its pointer-dismissed
+ *  label shows its label again). Done on the element, not in state: nothing
+ *  re-renders for it. */
+function useDismissLabelOnEscape() {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      for (const row of document.querySelectorAll<HTMLElement>("[data-rail-row]:is(:hover, :focus-within)")) {
+        row.dataset.labelDismissed = ""
+      }
+    }
+    document.addEventListener("keydown", onKeyDown)
+    return () => document.removeEventListener("keydown", onKeyDown)
+  }, [])
+}
+
+const restoreLabel = (event: { currentTarget: HTMLElement }) => {
+  delete event.currentTarget.dataset.labelDismissed
+}
 
 /** One ribbon entry — a fixed 44px icon square. It never resizes; the label is a
  *  floating pill that escapes to the right on hover/focus (the piano reveal), and
@@ -131,9 +155,11 @@ function RibbonRow({
     return (
       <Link
         to={href} viewTransition
+        data-rail-row=""
         onClick={onClick}
-        onPointerEnter={() => prefetchRoute(href)}
-        onFocus={() => prefetchRoute(href)}
+        onPointerEnter={(event) => { restoreLabel(event); prefetchRoute(href) }}
+        onFocus={(event) => { restoreLabel(event); prefetchRoute(href) }}
+        onBlur={restoreLabel}
         aria-label={label}
         aria-current={isActive ? "page" : undefined}
         className={cls}
@@ -143,7 +169,7 @@ function RibbonRow({
     )
   }
   return (
-    <button type="button" onClick={onClick} aria-label={label} className={cls}>
+    <button type="button" data-rail-row="" onClick={onClick} onPointerEnter={restoreLabel} onFocus={restoreLabel} onBlur={restoreLabel} aria-label={label} className={cls}>
       {inner}
     </button>
   )
@@ -164,6 +190,7 @@ export function NavRibbon({
   const navItems = useNavigation(features?.notesEnabled === true).items
   const pathname = useLocation().pathname
   const { settings } = useSettings()
+  useDismissLabelOnEscape()
   const portalName = settings.portalName ?? PRODUCT_NAME
   // The Chat icon is OPEN-ONLY. While already on the chat route ("/") with the
   // list collapsed, a plain click reveals the list instead of firing a dead
@@ -185,7 +212,7 @@ export function NavRibbon({
     <div className="relative hidden h-full w-14 shrink-0 lg:block">
       {/* Named so a route change snapshots the rail apart from the page — globals.css. */}
       <nav aria-label="Primary"
-        className="absolute inset-y-0 left-0 z-30 flex w-14 flex-col items-center gap-0.5 bg-[var(--ribbon-bg)] px-1.5 pb-2.5 pt-3.5 [view-transition-name:jinn-nav-rail]"
+        className="absolute inset-y-0 left-0 z-30 flex w-14 flex-col items-center gap-0.5 px-1.5 pb-2.5 pt-3.5 [view-transition-name:jinn-nav-rail]"
       >
         {/* Top slot — a plain, button-sized Jinn brand mark that fills the rail
             top (no frosted-pill chrome). It morphs to the sidebar.left toggle

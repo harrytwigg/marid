@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { Pause } from "lucide-react"
+import { Pause } from "@/components/ui/icon"
 import { AttachmentRefText } from "@/components/attachment-ref-preview"
 import type { Employee, WorkItemDetailWire, WorkItemEventWire } from "@/lib/api"
 import { StopCauseLead } from "../board/stop-cause"
@@ -82,7 +82,7 @@ export function TaskBanner({
       className="mb-3.5 rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[14px_16px] shadow-[var(--shadow-card)]"
     >
       <div className="flex items-center gap-2.5 text-[14px] font-semibold" style={{ color: style.color }}>
-        <Pause size={14} strokeWidth={2} aria-hidden />
+        <Pause size={14} aria-hidden />
         Blocked
         {when && <span className="ml-auto text-[11px] font-normal text-[var(--text-quaternary)]">{when}</span>}
       </div>

@@ -1,3 +1,4 @@
+import "@/test/preload-dialogs"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AttachmentRefText, AttachmentRefs, attachmentRefsOf } from "../attachment-ref-preview"

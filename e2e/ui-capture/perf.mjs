@@ -50,17 +50,20 @@ function summarise(frames) {
   }
 }
 
+/** @typedef {Window & { __frames?: number[], __last?: number, __run?: boolean }} FrameClockWindow */
+
 async function scrollRun(client, page, viewport) {
   const x = Math.round(viewport.width / 2)
   const y = Math.round(viewport.height / 2)
   await page.evaluate(() => {
-    window.__frames = []
-    window.__last = 0
-    window.__run = true
+    const w = /** @type {FrameClockWindow} */ (window)
+    w.__frames = []
+    w.__last = 0
+    w.__run = true
     const tick = (t) => {
-      if (window.__last) window.__frames.push(t - window.__last)
-      window.__last = t
-      if (window.__run) requestAnimationFrame(tick)
+      if (w.__last) w.__frames.push(t - w.__last)
+      w.__last = t
+      if (w.__run) requestAnimationFrame(tick)
     }
     requestAnimationFrame(tick)
   })
@@ -70,8 +73,9 @@ async function scrollRun(client, page, viewport) {
     await client.send('Input.synthesizeScrollGesture', { x, y, yDistance: dir * DISTANCE, speed: SPEED, gestureSourceType: 'mouse' })
   }
   return page.evaluate(() => {
-    window.__run = false
-    return window.__frames
+    const w = /** @type {FrameClockWindow} */ (window)
+    w.__run = false
+    return w.__frames
   })
 }
 

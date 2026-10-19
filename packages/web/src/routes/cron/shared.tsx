@@ -1,4 +1,4 @@
-import { Check, Minus, X } from "lucide-react"
+import { Check, Minus, X } from "@/components/ui/icon"
 import type { Employee } from "@/lib/api"
 import { ToggleSwitch as UiToggleSwitch } from "@/components/ui/toggle-switch"
 
@@ -68,9 +68,9 @@ export function RunGlyph({ outcome, size = 24 }: { outcome: RunOutcome; size?: n
       style={{ width: size, height: size, background: bg, color: fg }}
       aria-hidden
     >
-      {outcome === "ok" && <Check size={size * 0.5} strokeWidth={3} />}
-      {outcome === "error" && <X size={size * 0.46} strokeWidth={3} />}
-      {outcome === "none" && <Minus size={size * 0.42} strokeWidth={3} />}
+      {outcome === "ok" && <Check size={size * 0.5} />}
+      {outcome === "error" && <X size={size * 0.46} />}
+      {outcome === "none" && <Minus size={size * 0.42} />}
     </span>
   )
 }

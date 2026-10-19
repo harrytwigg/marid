@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { api } from "@/lib/api"
-import { cn } from "@/lib/utils"
-import { CONTROL_CLASS, Section } from "./shared"
+import { Button } from "@/components/ui/button"
+import { Section, SettingsSelect } from "./shared"
 
 // ---------------------------------------------------------------------------
 // Whisper STT language list (curated top ~35)
@@ -81,12 +81,9 @@ function DownloadRow({ status, onDownload }: { status: SttStatus; onDownload: ()
   }
   if (status.available) return null
   return (
-    <button
-      onClick={onDownload}
-      className="w-full p-[var(--space-3)] rounded-[var(--radius-md)] bg-[var(--accent)] text-[var(--accent-contrast)] border-none cursor-pointer text-[length:var(--text-footnote)] font-[var(--weight-semibold)] mb-[var(--space-4)]" // jinn-shell: ok settings download control, not page chrome
-    >
+    <Button className="mb-[var(--space-4)] w-full" onClick={onDownload}>
       Download Whisper Small (~500MB)
-    </button>
+    </Button>
   )
 }
 
@@ -112,14 +109,16 @@ function LanguageChips({
           </span>
           {WHISPER_LANGUAGES[code] || code}
           {languages.length > 1 && (
-            <button
+            <Button
+              variant="ghost"
+              size="icon-xs"
               onClick={() => onRemove(code)}
               disabled={saving}
               aria-label={`Remove ${WHISPER_LANGUAGES[code] || code}`}
-              className="bg-none border-none cursor-pointer p-0 ml-[2px] text-[var(--text-quaternary)] text-[14px] leading-none flex items-center"
+              className="ml-[2px] size-5 min-h-0 text-[var(--text-quaternary)]"
             >
               ×
-            </button>
+            </Button>
           )}
         </div>
       ))}
@@ -143,34 +142,20 @@ function AddLanguageRow({
 }) {
   return (
     <div className="flex gap-[var(--space-2)]">
-      <select
-        aria-label="Language to add"
-        value={addLang}
-        onChange={(e) => setAddLang(e.target.value)}
-        className={cn(CONTROL_CLASS, "flex-1 cursor-pointer")}
-        style={{
-          color: addLang ? "var(--text-primary)" : "var(--text-tertiary)",
-        }}
-      >
-        <option value="">Add a language…</option>
-        {available.map(([code, name]) => (
-          <option key={code} value={code}>
-            {code.toUpperCase()} — {name}
-          </option>
-        ))}
-      </select>
-      <button
-        onClick={onAdd}
-        disabled={!addLang || saving}
-        className="px-[14px] py-[6px] rounded-[var(--radius-sm)] border-none text-[length:var(--text-footnote)] font-[var(--weight-semibold)] shrink-0"
-        style={{
-          background: addLang ? "var(--accent)" : "var(--fill-tertiary)",
-          color: addLang ? "var(--accent-contrast)" : "var(--text-quaternary)",
-          cursor: addLang ? "pointer" : "default",
-        }}
-      >
+      <div className="min-w-0 flex-1">
+        <SettingsSelect
+          ariaLabel="Add a language"
+          value={addLang}
+          onChange={setAddLang}
+          options={[
+            { value: "", label: "Add a language…" },
+            ...available.map(([code, name]) => ({ value: code, label: `${code.toUpperCase()} — ${name}` })),
+          ]}
+        />
+      </div>
+      <Button onClick={onAdd} disabled={!addLang || saving}>
         Add
-      </button>
+      </Button>
     </div>
   )
 }

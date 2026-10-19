@@ -176,7 +176,6 @@ const ROUTE_READERS: Readonly<Record<string, RouteReader>> = {
   file: (rest, params) => fileView(rest, params),
   more: (rest) => staticView("more", rest),
   "talk-orb": (rest) => staticView("talk-orb", rest),
-  redesign: (rest) => staticView("redesign", rest),
   chat: (rest) => redirectView("chat", rest),
   kanban: (rest) => redirectView("kanban", rest),
 }

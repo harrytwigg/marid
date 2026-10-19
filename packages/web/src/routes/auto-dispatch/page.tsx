@@ -1,4 +1,5 @@
-import { RefreshCw } from "lucide-react"
+import { RefreshCw } from "@/components/ui/icon"
+import { Button } from "@/components/ui/button"
 import { PageLayout } from "@/components/page-layout"
 import { LargeTitleHeader } from "@/components/shell/large-title-header"
 import { PageScaffold } from "@/components/shell/page-scaffold"
@@ -17,14 +18,9 @@ import { UsageCard } from "./usage-card"
 
 function RefreshButton({ onClick, busy }: { onClick: () => void; busy: boolean }) {
   return (
-    <button
-      onClick={onClick}
-      aria-label="Refresh"
-      aria-busy={busy}
-      className="inline-flex size-[38px] shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)]"
-    >
+    <Button variant="ghost" size="icon" onClick={onClick} aria-label="Refresh" aria-busy={busy}>
       <RefreshCw size={17} className={busy ? "animate-spin" : ""} />
-    </button>
+    </Button>
   )
 }
 

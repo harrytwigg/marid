@@ -1,5 +1,5 @@
 import { useRef, useState } from "react"
-import { Download, Play } from "lucide-react"
+import { Download, Play } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
 
 type VideoQuality = "low" | "original"
@@ -98,9 +98,9 @@ export function VideoPlayer({ src, name, className }: { src: string; name: strin
             type="button"
             aria-label={`Play ${name}`}
             onClick={() => setPlaying(true)}
-            className="focus-outline absolute left-1/2 top-1/2 grid size-12 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[var(--material-thick)] text-[var(--text-primary)] shadow-[var(--shadow-overlay)] outline-none backdrop-blur-xl transition-transform active:scale-[0.96]"
+            className="focus-outline absolute left-1/2 top-1/2 grid size-12 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[var(--material-thick-opaque)] text-[var(--text-primary)] shadow-[var(--shadow-overlay)] outline-none transition-transform active:scale-[0.96]"
           >
-            <Play size={20} fill="currentColor" strokeWidth={1.5} aria-hidden className="ml-0.5" />
+            <Play size={20} filled aria-hidden className="ml-0.5" />
           </button>
         </>
       )}
@@ -111,7 +111,7 @@ export function VideoPlayer({ src, name, className }: { src: string; name: strin
             aria-label="Video quality"
             value={quality}
             onChange={(event) => changeQuality(event.target.value as VideoQuality)}
-            className="focus-outline h-10 appearance-none rounded-[var(--radius-md)] bg-[var(--material-thick)] px-3 text-[12px] font-medium text-[var(--text-primary)] shadow-[var(--shadow-overlay)] outline-none backdrop-blur-xl"
+            className="focus-outline h-10 appearance-none rounded-[var(--radius-md)] bg-[var(--material-thick-opaque)] px-3 text-[12px] font-medium text-[var(--text-primary)] shadow-[var(--shadow-overlay)] outline-none"
           >
             <option value="low">Data saver</option>
             <option value="original">Original</option>
@@ -121,9 +121,9 @@ export function VideoPlayer({ src, name, className }: { src: string; name: strin
           href={sourceWith(src, { quality: null, poster: null, download: "1" })}
           download={name}
           aria-label={`Download ${name}`}
-          className="focus-outline grid size-10 place-items-center rounded-[var(--radius-md)] bg-[var(--material-thick)] text-[var(--text-primary)] shadow-[var(--shadow-overlay)] outline-none backdrop-blur-xl transition-transform active:scale-[0.96]"
+          className="focus-outline grid size-10 place-items-center rounded-[var(--radius-md)] bg-[var(--material-thick-opaque)] text-[var(--text-primary)] shadow-[var(--shadow-overlay)] outline-none transition-transform active:scale-[0.96]"
         >
-          <Download size={17} strokeWidth={1.8} aria-hidden />
+          <Download size={17} aria-hidden />
         </a>
       </div>
     </div>

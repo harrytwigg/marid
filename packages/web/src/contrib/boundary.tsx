@@ -1,5 +1,5 @@
 import React from "react"
-import { TriangleAlert } from "lucide-react"
+import { TriangleAlert } from "@/components/ui/icon"
 
 /** `chip` is an inline bar item; `pane` is a block that owns its slot. */
 export type ContribBoundaryVariant = "chip" | "pane"

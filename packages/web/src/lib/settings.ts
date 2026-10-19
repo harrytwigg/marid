@@ -42,7 +42,6 @@ export interface JinnSettings {
   portalName: string | null
   portalSubtitle: string | null
   portalEmoji: string | null
-  portalIcon: string | null
   iconBgHidden: boolean
   emojiOnly: boolean
   operatorName: string | null
@@ -70,7 +69,6 @@ export const DEFAULTS: JinnSettings = {
   portalName: null,
   portalSubtitle: null,
   portalEmoji: null,
-  portalIcon: null,
   iconBgHidden: false,
   emojiOnly: false,
   operatorName: null,
@@ -93,6 +91,8 @@ export function loadSettings(): JinnSettings {
     if (!raw) return { ...DEFAULTS }
     const parsed = JSON.parse(raw)
     const merged = { ...DEFAULTS, ...parsed } as JinnSettings
+    // Retired: nothing writes it, and a saved copy would be written back for ever.
+    delete (merged as { portalIcon?: unknown }).portalIcon
     if (!isOrbVariant(merged.talkOrbVariant)) merged.talkOrbVariant = DEFAULTS.talkOrbVariant
     if (!isOrbIntensity(merged.talkOrbIntensity)) merged.talkOrbIntensity = DEFAULTS.talkOrbIntensity
     if (!isTextScale(merged.textScale)) merged.textScale = DEFAULTS.textScale

@@ -10,8 +10,4 @@ describe("customBrandGlyph", () => {
   it("returns the portal emoji, trimmed", () => {
     expect(customBrandGlyph({ portalEmoji: " 🦊 " })).toBe("🦊")
   })
-
-  it("ignores the legacy portalIcon, which nothing writes or reads", () => {
-    expect(customBrandGlyph({ portalEmoji: null, portalIcon: "★" } as never)).toBeNull()
-  })
 })

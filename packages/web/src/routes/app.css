@@ -21,7 +21,6 @@
 @import "./heroui-theme-restore.css";
 @import "@heroui/styles/utilities";
 @import "@heroui/styles/base/base.css" layer(base);
-@import "./theme-overrides.css";
 @import "./heroui-bridge.css";
 /* One import per HeroUI component an adapter in components/ui draws. A control
    whose adapter is added later adds its line here. */
@@ -33,6 +32,20 @@
 @import "@heroui/styles/components/skeleton.css" layer(components);
 @import "@heroui/styles/components/input.css" layer(components);
 @import "@heroui/styles/components/textarea.css" layer(components);
+/* The enter and exit animations HeroUI's tooltip and popover @apply. HeroUI's own
+   entry file imports this, and this file does not import that one. */
+@import "tw-animate-css";
+@import "@heroui/styles/components/tooltip.css" layer(components);
+@import "@heroui/styles/components/popover.css" layer(components);
+@import "@heroui/styles/components/menu.css" layer(components);
+@import "@heroui/styles/components/menu-item.css" layer(components);
+@import "@heroui/styles/components/menu-section.css" layer(components);
+@import "@heroui/styles/components/header.css" layer(components);
+@import "@heroui/styles/components/separator.css" layer(components);
+@import "@heroui/styles/components/select.css" layer(components);
+@import "@heroui/styles/components/list-box.css" layer(components);
+@import "@heroui/styles/components/list-box-item.css" layer(components);
+@import "@heroui/styles/components/list-box-section.css" layer(components);
 @import "./heroui-glass.css";
 
 /* base.css gives every element's border the --border colour. Marid's borders

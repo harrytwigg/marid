@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button"
 import type { ReactNode } from "react"
 import { DepartmentScopeBadge } from "@/components/department-scope-badge"
 import { useDepartment } from "@/hooks/use-department"
@@ -168,14 +169,9 @@ function Members({ members, onSelect }: { members: string[]; onSelect: (name: st
       ) : (
         <div className="flex flex-wrap gap-1.5">
           {members.map((name) => (
-            <button
-              key={name}
-              type="button"
-              onClick={() => onSelect(name)}
-              className={`${MONO} cursor-pointer rounded-full border border-[var(--separator)] bg-transparent px-2.5 py-0.5 text-[length:var(--text-caption1)] text-[var(--text-primary)] hover:border-[var(--accent)]`}
-            >
+            <Button key={name} type="button" variant="outline" size="xs" onClick={() => onSelect(name)} className={`${MONO} max-w-full rounded-full`}>
               {name}
-            </button>
+            </Button>
           ))}
         </div>
       )}

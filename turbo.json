@@ -31,7 +31,18 @@
     // worker either way. Stripping it here only changed which real profile a test reached.
     "test": {
       "dependsOn": ["^build"],
-      "passThroughEnv": ["JINN_TEST_MAX_CONCURRENT", "CLAUDE_CONFIG_DIR"],
+      // JINN_TEST_NICE is the caller's escape hatch back to normal priority and
+      // JINN_TEST_LOW_PRIORITY is what low-priority.mjs sets on the way in;
+      // strict env mode would strip both, and a suite that cannot see the second
+      // one keeps the 5s timeouts it was told to widen.
+      "passThroughEnv": [
+        "JINN_TEST_GLOBAL_CORES",
+        "JINN_TEST_RUN_CORES",
+        "JINN_TEST_RESERVED_CORES",
+        "JINN_TEST_NICE",
+        "JINN_TEST_LOW_PRIORITY",
+        "CLAUDE_CONFIG_DIR"
+      ],
       "cache": false
     },
     "coverage": {

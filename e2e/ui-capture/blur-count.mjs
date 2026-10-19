@@ -5,8 +5,9 @@
 // For each theme and width it opens the chat, then reports the elements whose computed
 // backdrop-filter is not `none`, twice: every one in the DOM, and the ones visible at once
 // (inside the viewport, painted, not faded out). It measures with the thread at rest and
-// scrolled up, where the jump-to-latest control shows, and with the Reduced setting on,
-// where nothing may blur. With Chromium it also measures Reduced from the OS preference, a
+// scrolled up, where the jump-to-latest control shows. On desktop it also opens the nav rail's label
+// and the Todo mention's glance one at a time: an open overlay is one more surface within the same
+// budget. With the Reduced setting on nothing may blur. With Chromium it also measures Reduced from the OS preference, a
 // coarse pointer, a CLI view and two panes side by side, where nothing may blur either.
 // Exits non-zero when a state is over 3 visible surfaces or a radius is over 32px. Writes <out-dir>/blur-count.json.
 import fs from 'node:fs'
@@ -174,6 +175,43 @@ async function bandPassesPointer(page) {
   })
 }
 
+// An overlay open over the chat is a surface of its own, so it has to fit the budget beside the chat's
+// own. Each opens by the pointer on desktop (the rail and the hover glance are desktop only, and a
+// coarse pointer gets neither) and `shown` says it really did.
+const OVERLAYS = [
+  {
+    name: 'rail-label',
+    open: (page) => page.locator('nav[aria-label="Primary"] a[aria-label="Todos"]').hover(),
+    shown: (page) => page.evaluate(() => Number(getComputedStyle(document.querySelector('nav[aria-label="Primary"] a[aria-label="Todos"] .rail-reveal')).opacity) > 0.9),
+  },
+  {
+    name: 'todo-glance',
+    open: (page) => page.locator('a[href^="/todos/"]').first().hover(),
+    shown: (page) => page.locator('.todo-glance').first().waitFor({ timeout: 5_000 }).then(() => true, () => false),
+  },
+]
+
+function withOverlays({ layout, viewport, pointer }) {
+  return layout === 'chat' && viewport.name === 'desktop' && pointer === 'fine'
+}
+
+async function measureOverlays(page, name, options) {
+  for (const overlay of OVERLAYS) {
+    await page.mouse.move(700, 450)
+    await overlay.open(page)
+    await page.waitForTimeout(500)
+    if (!(await overlay.shown(page))) {
+      failures.push(`${name}/${overlay.name}: the overlay did not open`)
+      continue
+    }
+    const rows = await page.evaluate(survey)
+    record(`${name}/${overlay.name}`, rows)
+    failures.push(...judge(`${name}/${overlay.name}`, rows, options))
+    await page.mouse.move(700, 450)
+    await page.waitForTimeout(300)
+  }
+}
+
 async function measure(options, ids) {
   const { theme, viewport, pointer, reduced, layout } = options
   const context = await newContext(options)
@@ -185,6 +223,7 @@ async function measure(options, ids) {
     record(`${name}/${state}`, rows)
     failures.push(...judge(`${name}/${state}`, rows, options))
   }
+  if (withOverlays(options)) await measureOverlays(page, name, options)
   if (!(await layoutRendered(page, layout))) failures.push(`${name}: the ${layout} layout did not render`)
   if (!noneAllowed(options) && !(await bandPassesPointer(page))) failures.push(`${name}: the composer band takes the pointer from the transcript under it`)
   await context.close()

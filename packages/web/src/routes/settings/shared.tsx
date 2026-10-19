@@ -1,4 +1,6 @@
 import { createContext, useContext, useId } from "react"
+import { ChevronDownIcon } from "@/components/ui/icon"
+import { Input } from "@/components/ui/input"
 import { ToggleSwitch as UiToggleSwitch } from "@/components/ui/toggle-switch"
 
 // ---------------------------------------------------------------------------
@@ -19,25 +21,16 @@ export function Section({
       >
         {title}
       </div>
-      {/* Grouped-inset card (shared visual language): --bg-secondary carrying
-          the card shadow — no hairline ring at rest. */}
-      <div
-        className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[var(--space-4)] shadow-[var(--shadow-card)]"
-      >
+      {/* Glass card on the reading sheet (glass-identity.css): tint, lit edge, no blur. */}
+      <div className="glass-card rounded-[var(--radius-xl)] p-[var(--space-4)]">
         {children}
       </div>
     </section>
   )
 }
 
-// One control recipe for every text input and select on the page: soft
-// --fill-tertiary well, no border at rest, accent focus ring (mirrors
-// .apple-input, sized for dense form rows).
-export const CONTROL_CLASS =
-  "min-h-[40px] md:min-h-0 w-full rounded-[10px] border-none bg-[var(--fill-tertiary)] px-[12px] py-[7px] " +
-  "text-[length:var(--text-footnote)] text-[var(--text-primary)] outline-none " +
-  "placeholder:text-[var(--text-tertiary)] transition-[box-shadow] duration-150 " +
-  "focus:shadow-[0_0_0_3px_var(--accent-fill)]"
+/** The field's phone floor: a thumb needs 40px, and from md up the field's own 34px does. */
+export const FIELD_CLASS = "min-h-[40px] md:min-h-0"
 
 /** The id a `FieldRow` puts on its label, so the control the row labels can
  *  carry the same id and the two are associated. `SettingsSelect` and
@@ -63,18 +56,17 @@ export function FieldRow({
       className="flex flex-col items-stretch gap-[var(--space-2)] py-[var(--space-2)] sm:flex-row sm:items-center sm:justify-between sm:gap-[var(--space-4)]"
     >
       {/* A real label for the row's control: the control takes this id through
-          the context below, so the name comes from the row and clicking the
-          words focuses the field. It used to be an orphan <label> with no
-          htmlFor. On a switch row the id goes unclaimed — see the context. */}
+          the context below, so clicking the words focuses the field. On a switch
+          row the id goes unclaimed — see the context. */}
       <label
         htmlFor={controlId}
         className="shrink-0 text-[length:var(--text-subheadline)] text-[var(--text-secondary)]"
       >
         {label}
       </label>
-      <FieldRowControlId.Provider value={controlId}>
-        <div className="min-w-0 w-full sm:w-[240px] sm:shrink-0">{children}</div>
-      </FieldRowControlId.Provider>
+      <div className="min-w-0 w-full sm:w-[240px] sm:shrink-0">
+        <FieldRowControlId.Provider value={controlId}>{children}</FieldRowControlId.Provider>
+      </div>
     </div>
   )
 }
@@ -98,7 +90,7 @@ export function SettingsInput({
 }) {
   const fieldId = useFieldRowControlId()
   return (
-    <input
+    <Input
       id={fieldId}
       type={type}
       value={value}
@@ -107,7 +99,7 @@ export function SettingsInput({
       disabled={disabled}
       min={min}
       aria-label={ariaLabel}
-      className={`${CONTROL_CLASS} disabled:cursor-not-allowed disabled:opacity-50`}
+      className={FIELD_CLASS}
     />
   )
 }
@@ -117,30 +109,36 @@ export function SettingsSelect({
   onChange,
   options,
   ariaLabel,
+  onBlur,
 }: {
   value: string
   onChange: (v: string) => void
   options: { value: string; label: string; disabled?: boolean }[]
   /** Required: a `<select>` shows only its chosen option, not what it is for, so
-   *  an omitted name leaves a screen reader reading bare menu options. Optional
-   *  let eight settings-page call sites ship unnamed. */
+   *  an omitted name leaves a screen reader reading bare menu options. */
   ariaLabel: string
+  onBlur?: () => void
 }) {
   const fieldId = useFieldRowControlId()
   return (
-    <select
-      id={fieldId}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      aria-label={ariaLabel}
-      className={`${CONTROL_CLASS} cursor-pointer`}
-    >
-      {options.map((o) => (
-        <option key={o.value} value={o.value} disabled={o.disabled}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+    <span className="relative block w-full">
+      <select
+        id={fieldId}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
+        aria-label={ariaLabel}
+        className="select__trigger min-h-[40px] w-full cursor-pointer appearance-none pe-8 text-[length:var(--text-footnote)] md:min-h-0"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value} disabled={o.disabled}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      {/* The chevron sits over the select, so a press on it must reach the select; HeroUI pads the end only for an indicator inside the trigger, hence `pe-8` above. */}
+      <ChevronDownIcon aria-hidden className="select__indicator pointer-events-none size-4" />
+    </span>
   )
 }
 
@@ -153,8 +151,7 @@ export function ToggleSwitch({
   checked: boolean
   onChange: (v: boolean) => void
   /** Required: a `role="switch"` control carries no text of its own, so an
-   *  omitted name leaves a screen reader announcing it as bare "switch".
-   *  Optional let five settings-page call sites ship unnamed. */
+   *  omitted name leaves a screen reader announcing it as bare "switch". */
   ariaLabel: string
   /** A switch mid-write: not clickable and not keyboard-toggleable either. */
   disabled?: boolean

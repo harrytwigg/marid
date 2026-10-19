@@ -188,7 +188,7 @@ export default defineConfig(() => {
             ) {
               return 'vendor-query'
             }
-            // Radix and cmdk deliberately get no bucket. One shared bucket is
+            // React Aria deliberately gets no bucket. One shared bucket is
             // all-or-nothing: a single primitive in the shell drags every
             // primitive any route uses into the first load. Left alone, Rollup
             // puts each primitive with the route that needs it.

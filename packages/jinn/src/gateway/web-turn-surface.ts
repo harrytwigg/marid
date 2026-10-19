@@ -48,6 +48,7 @@ export function createWebTurnSurface(options: WebTurnSurfaceOptions): TurnSurfac
           toolName: delta.toolName,
           toolId: delta.toolId,
           activityReceiptId: delta.activityReceiptId,
+          agentId: delta.agentId,
           input: delta.input,
           ...(delta.sidechain ? { sidechain: true } : {}),
           block: delta.block,
