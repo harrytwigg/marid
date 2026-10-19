@@ -211,6 +211,26 @@ describe("a host whose opencode has a model-fallback plugin", { timeout: 20_000 
     expect((await serverLog(pool)).some((e) => /^\/session\/[^/]+\/abort$/.test(e.url))).toBe(true);
   });
 
+  it("reads a usage limit after a tool step that narrated as the plugin: the narration is not the answer, and the copy is stopped", async () => {
+    SERVER_TURN_TIMING.closeWaitMs = 300;
+    pluginOnHost.value = true;
+    const { pool, engine } = harness();
+    const result = await engine.run(runOpts(`TOOLNARRATE ${limited}`));
+    expect(result.result).toBe("");
+    expect(result.error).toContain("model-fallback plugin");
+    expect(result.rateLimit?.status).toBe("rejected");
+    expect((await serverLog(pool)).some((e) => /^\/session\/[^/]+\/abort$/.test(e.url))).toBe(true);
+  });
+
+  it("keeps the final answer of a turn that ran tool steps, with the plugin on the host", async () => {
+    pluginOnHost.value = true;
+    const { pool, engine } = harness();
+    const result = await engine.run(runOpts("MULTISTEP work"));
+    expect(result.error).toBeUndefined();
+    expect(result.result).not.toBe("");
+    expect((await serverLog(pool)).some((e) => e.url.endsWith("/abort"))).toBe(false);
+  });
+
   it("does not read a blank last step after a tool step as the plugin", async () => {
     pluginOnHost.value = true;
     const { pool, engine } = harness();

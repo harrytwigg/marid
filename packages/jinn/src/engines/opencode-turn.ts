@@ -41,6 +41,8 @@ export class OpencodeTurn {
   private steps = 0;
   /** Why the last finished step ended: `tool-calls` means another step was due. */
   private lastFinishReason: string | undefined;
+  /** Text arrived after the last finished step, i.e. in a step that did not end on a tool call. */
+  private textSinceStepFinish = false;
   private cost = 0;
   private contextTokens: number | undefined;
   /** opencode assigns this; until it speaks, the id we asked it to resume. */
@@ -89,6 +91,7 @@ export class OpencodeTurn {
     this.resultText = text;
     this.endedInError = false;
     this.producedOutput = true;
+    this.textSinceStepFinish = true;
     if (onStream) onStream({ type: "text", content: text });
   }
 
@@ -124,6 +127,7 @@ export class OpencodeTurn {
   private readStepFinish(part: Record<string, unknown>): void {
     this.steps += 1;
     this.lastFinishReason = trimmedString(part.reason);
+    this.textSinceStepFinish = false;
     this.cost += numberOr(part.cost, 0);
     const context = contextTokensFromStep(asRecord(part.tokens) as StepTokens | undefined);
     if (context !== undefined) this.contextTokens = context;
@@ -160,7 +164,7 @@ export class OpencodeTurn {
     // text was an earlier step's narration ("Let me check X first"), and a
     // provider refusing the next step, or a stream that went away, is the
     // turn's outcome.
-    if (!outcome.failure && this.resultText.trim() && !this.endedInError) {
+    if (this.acceptsAnswer(outcome)) {
       return { sessionId: this.sessionId, result: this.resultText, ...accounting };
     }
 
@@ -182,6 +186,14 @@ export class OpencodeTurn {
       // session id would be wiped and the engine chain never walked.
       ...(plugin || isRateLimitMessage(error) ? { rateLimit: { status: "rejected" } } : {}),
     };
+  }
+
+  /** Whether the last text is the turn's answer. Not when the transport failed or an error
+   *  came after it, and not when it was a tool step's narration ("Let me read the file")
+   *  and a host's fallback plugin then aborted the next step: that abort carries no error. */
+  private acceptsAnswer(outcome: { code: number | null; failure?: string }): boolean {
+    if (outcome.failure || !this.resultText.trim() || this.endedInError) return false;
+    return !(this.answerIsNarration && this.endedByFallbackPlugin(outcome));
   }
 
   /** The error of a turn with no accepted answer, and whether a host's fallback plugin ended it. */
@@ -209,6 +221,11 @@ export class OpencodeTurn {
     return this.steps === 0 || this.lastFinishReason === "tool-calls";
   }
 
+  /** Whether the turn's text came only from a step that ended on a tool call, with no
+   *  step after it: narration before a tool, not an answer, if the turn stops there. */
+  get answerIsNarration(): boolean {
+    return this.steps > 0 && this.lastFinishReason === "tool-calls" && !this.textSinceStepFinish;
+  }
 
   /** Why a turn that produced no accepted answer failed: whatever opencode
    *  reported, or — having reported nothing — why ending without one is still a

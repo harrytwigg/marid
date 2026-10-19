@@ -636,7 +636,7 @@ export class OpencodeServerTurn {
    *  the gateway does not follow that copy. With no answer in hand, stop what it started
    *  (the usage limit that set it off is the turn's outcome, and the chain takes over). */
   private async stopPluginCopy(): Promise<void> {
-    if (!this.deps.fallbackPluginAbortsTurns?.() || this.lastAnswer === "text" || this.terminationReason || !this.turn.stoppedBetweenSteps) return;
+    if (!this.deps.fallbackPluginAbortsTurns?.() || this.hasAnswer() || this.terminationReason || !this.turn.stoppedBetweenSteps) return;
     await this.stopOnServer();
     await this.markPromptCopies();
   }
@@ -1059,7 +1059,7 @@ export class OpencodeServerTurn {
    */
   private onIdle(): void {
     if (!this.sawBusy || !this.posting) return;
-    if (this.lastAnswer === "text" && !this.newestOwnOpen) return this.finish();
+    if (this.hasAnswer() && !this.newestOwnOpen) return this.finish();
     this.settle.arm("idle", SERVER_TURN_TIMING.closeWaitMs);
   }
 
@@ -1136,11 +1136,19 @@ export class OpencodeServerTurn {
     if (replyIsDone(info) || (this.settle.pending === "idle" && !this.newestOwnOpen)) this.onReplyEnded();
   }
 
+  /** The turn has a text answer in hand. On a host whose fallback plugin aborts turns,
+   *  a tool step's narration is not one: the plugin's abort of the next step leaves it
+   *  last, and the turn waits as it would with nothing written, so the copy is seen. */
+  private hasAnswer(): boolean {
+    if (this.lastAnswer !== "text") return false;
+    return !(this.deps.fallbackPluginAbortsTurns?.() && this.turn.answerIsNarration);
+  }
+
   /** One of the turn's replies finished, or the idle session's newest one
    *  closed. With a text answer that is the end; without one, opencode may
    *  still retry, so the turn waits a moment. */
   private onReplyEnded(): void {
-    if (this.lastAnswer === "text") return this.finish();
+    if (this.hasAnswer()) return this.finish();
     if (this.settle.pending !== "idle") this.settle.arm("done", SERVER_TURN_TIMING.closeWaitMs);
   }
 

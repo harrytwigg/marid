@@ -11,6 +11,8 @@ import { FALLBACK_PLUGIN_ENDED_TURN, OpencodeTurn } from "../opencode-turn.js";
 
 const noEvents = { code: 0, terminationReason: null, stderr: "" };
 const text = JSON.stringify({ type: "text", sessionID: "ses_1", part: { id: "p1", type: "text", text: "the answer", time: { start: 1, end: 2 } } });
+const toolStep = JSON.stringify({ type: "step_finish", sessionID: "ses_1", part: { id: "s0", type: "step-finish", reason: "tool-calls", cost: 0, tokens: { input: 5, output: 1, reasoning: 0, cache: { read: 0, write: 0 } } } });
+const stopStep = JSON.stringify({ type: "step_finish", sessionID: "ses_1", part: { id: "s9", type: "step-finish", reason: "stop", cost: 0, tokens: { input: 5, output: 1, reasoning: 0, cache: { read: 0, write: 0 } } } });
 const failure = JSON.stringify({ type: "error", sessionID: "ses_1", error: { name: "APIError", data: { message: "Bad Request: no such model", statusCode: 400 } } });
 
 describe("a run turn that a fallback plugin ended", () => {
@@ -49,6 +51,35 @@ describe("a run turn that a fallback plugin ended", () => {
     expect(result.error).toContain("model-fallback plugin");
     expect(result.rateLimit).toEqual({ status: "rejected" });
     expect(result.numTurns).toBe(1);
+  });
+
+  it("is the plugin when a tool step narrated and the next one never came: the narration is not the answer", () => {
+    const narration = JSON.stringify({ type: "text", sessionID: "ses_1", part: { id: "p0", type: "text", text: "Let me read the file.", time: { start: 1, end: 2 } } });
+    const turn = new OpencodeTurn("ses_1", () => true);
+    turn.readLine(narration, null);
+    turn.readLine(toolStep, null);
+    const result = turn.result(noEvents);
+    expect(turn.answerIsNarration).toBe(true);
+    expect(result.result).toBe("");
+    expect(result.error).toContain("model-fallback plugin");
+    expect(result.rateLimit).toEqual({ status: "rejected" });
+  });
+
+  it("keeps a tool step's narration as the answer on a host without the plugin, as before", () => {
+    const narration = JSON.stringify({ type: "text", sessionID: "ses_1", part: { id: "p0", type: "text", text: "Let me read the file.", time: { start: 1, end: 2 } } });
+    const turn = new OpencodeTurn("ses_1");
+    turn.readLine(narration, null);
+    turn.readLine(toolStep, null);
+    expect(turn.result(noEvents)).toMatchObject({ result: "Let me read the file." });
+  });
+
+  it("keeps the text of a final step after a tool step as the answer", () => {
+    const turn = new OpencodeTurn("ses_1", () => true);
+    turn.readLine(toolStep, null);
+    turn.readLine(text, null);
+    turn.readLine(stopStep, null);
+    expect(turn.answerIsNarration).toBe(false);
+    expect(turn.result(noEvents)).toMatchObject({ result: "the answer" });
   });
 
   it("keeps a real answer", () => {
