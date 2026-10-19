@@ -171,8 +171,16 @@ function ChatPage() {
   // the closed tab and pulled the route back. So the ids removed here are remembered until an
   // explicit selection opens one again, and a pane's own focus does not select them.
   const removedSessionIdsRef = useRef(new Set<string>())
+  // The bulk archive can land between a select and the route committing it, so the
+  // navigation in flight names a chat that is already gone. That commit is not a new
+  // arrival: it must not clear the removed mark or open the tab back up.
+  const overtakenSelectionRef = useRef<string | null>(null)
   const handleSessionsRemoved = useCallback((ids: string[]) => {
-    for (const id of ids) { removedSessionIdsRef.current.add(id); removeWorkingSetPane(id); closeSessionTab(id) }
+    for (const id of ids) {
+      removedSessionIdsRef.current.add(id)
+      if (pendingNavRef.current === id) overtakenSelectionRef.current = id
+      removeWorkingSetPane(id); closeSessionTab(id)
+    }
   }, [closeSessionTab, removeWorkingSetPane])
   const duplicateSessionMutation = useDuplicateSession()
   const focusedDelegatedActivity = useMemo(
@@ -267,6 +275,8 @@ function ChatPage() {
   const handleSelect = useCallback(
     (id: string, opts?: { navigateMobile?: boolean; replace?: boolean; from?: ThreadOrigin; system?: boolean }) => {
       removedSessionIdsRef.current.delete(id)
+      // A fresh selection supersedes any archive that overtook an earlier one.
+      overtakenSelectionRef.current = null
       const currentId = selectedIdRef.current
       const currentScroller = document.querySelector<HTMLElement>('.chat-messages-scroll') // display-toggled away on a phone, where it reports scrollTop 0
       if (currentId && currentScroller?.clientHeight) sessionScrollRef.current.set(currentId, currentScroller.scrollTop)
@@ -329,6 +339,24 @@ function ChatPage() {
   useEffect(() => {
     pendingNavRef.current = undefined
     if (navigationType === 'POP') setSystemPrimedId(null)
+    // A commit the bulk archive overtook names a chat that is already gone, so it is
+    // not an arrival: it must not clear the removed mark or open the tab back up.
+    // The route follows the active tab instead — the step the tab→URL reconciler
+    // would have taken had this commit not moved the URL out from under it. A POP is
+    // never that push, so back/forward to the chat still re-opens it as before.
+    const overtaken = overtakenSelectionRef.current
+    overtakenSelectionRef.current = null
+    if (selectedId && overtaken === selectedId && navigationType !== 'POP') {
+      const at = chatTabs.activeTab
+      didMountRef.current = true
+      if (at && at.kind === 'session') {
+        handleSelect(at.sessionId, { replace: true, navigateMobile: false, system: true })
+      } else if (!at) {
+        pendingNavRef.current = null
+        navigate('/', { replace: true })
+      }
+      return
+    }
     if (selectedId) {
       newChatIntentRef.current = false
       removedSessionIdsRef.current.delete(selectedId) // the route came to it again (back, deep link)
