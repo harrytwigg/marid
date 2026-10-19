@@ -2,6 +2,7 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import { useEffect } from 'react'
@@ -108,12 +109,12 @@ function EffortRow({ efforts, effort, onPick }: { efforts: string[]; effort: str
   return (
     <>
       <DropdownMenuSeparator className="bg-[var(--separator)]" />
-      <div className="px-2 pt-0.5 pb-1 text-[length:var(--text-caption2)] font-[var(--weight-bold)] uppercase tracking-[0.4px] text-[var(--text-quaternary)]">
+      <DropdownMenuLabel className="pt-0.5 pb-1 text-[length:var(--text-caption2)] font-[var(--weight-bold)] uppercase tracking-[0.4px] text-[var(--text-quaternary)]">
         Effort
-      </div>
-      <div
+      </DropdownMenuLabel>
+      <DropdownMenuLabel
         data-testid="effort-levels"
-        className={`flex gap-1 px-1 pb-1 ${efforts.length > 4 ? 'overflow-x-auto [-webkit-overflow-scrolling:touch]' : ''}`}
+        className={`flex gap-1 px-1 pt-0 pb-1 font-normal ${efforts.length > 4 ? 'overflow-x-auto [-webkit-overflow-scrolling:touch]' : ''}`}
       >
         {efforts.map((lvl) => {
           const on = lvl === effort
@@ -133,7 +134,7 @@ function EffortRow({ efforts, effort, onPick }: { efforts: string[]; effort: str
             </button>
           )
         })}
-      </div>
+      </DropdownMenuLabel>
     </>
   )
 }
@@ -144,7 +145,7 @@ function ContextFooter({ usage }: { usage: ContextUsage | null }) {
   return (
     <>
       <DropdownMenuSeparator className="bg-[var(--separator)]" />
-      <div className="px-2 pt-0.5 pb-1.5">
+      <DropdownMenuLabel className="pt-0.5 pb-1.5 font-normal">
         <div className="flex items-center justify-between text-[length:var(--text-caption1)]">
           <span className="text-[var(--text-tertiary)]">Context</span>
           {usage.tokens > 0 ? (
@@ -169,7 +170,7 @@ function ContextFooter({ usage }: { usage: ContextUsage | null }) {
             />
           </div>
         )}
-      </div>
+      </DropdownMenuLabel>
     </>
   )
 }
@@ -177,9 +178,9 @@ function ContextFooter({ usage }: { usage: ContextUsage | null }) {
 /** The notes under the effort row of a persisted chat: a rejected update, or "applies to your next message". */
 function SelectorNotes({ mode, errorNote, pendingNote }: Pick<ModelSelectorRowProps, 'mode' | 'errorNote' | 'pendingNote'>) {
   if (mode !== 'existing') return null
-  if (errorNote) return <div className="px-2 pb-1 text-[length:var(--text-caption2)] text-[var(--system-red)]">{errorNote}</div>
+  if (errorNote) return <DropdownMenuLabel className="pt-0 pb-1 text-[length:var(--text-caption2)] font-normal text-[var(--system-red)]">{errorNote}</DropdownMenuLabel>
   if (!pendingNote) return null
-  return <div className="px-2 pb-1 text-[length:var(--text-caption2)] italic text-[var(--text-quaternary)]">Applies to your next message</div>
+  return <DropdownMenuLabel className="pt-0 pb-1 text-[length:var(--text-caption2)] font-normal italic text-[var(--text-quaternary)]">Applies to your next message</DropdownMenuLabel>
 }
 
 /**
@@ -217,7 +218,7 @@ export function ModelSelectorRow({ mode, value, onChange, pendingNote, errorNote
         side="top"
         align="start"
         sideOffset={8}
-        className="w-64 max-w-[calc(100vw-2rem)] overflow-hidden rounded-[var(--radius-lg)] border-0 bg-[var(--bg-tertiary)] p-1.5 shadow-[var(--shadow-overlay)]"
+        className="w-64 max-w-[calc(100vw-2rem)] rounded-[var(--radius-lg)] p-1.5"
       >
         <ModelPicker registry={registry} engine={engine} modelId={modelId} onPickEngine={pickEngine} onPickModel={pickModel}>
           <EffortRow efforts={efforts} effort={effort} onPick={(level) => onChange({ engine, model: modelId, effortLevel: level })} />

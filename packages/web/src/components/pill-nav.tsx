@@ -1,26 +1,23 @@
-import { type ComponentType, type MouseEvent as ReactMouseEvent, type ReactNode } from "react"
+import { type ComponentType, type MouseEvent as ReactMouseEvent, type ReactNode, useEffect } from "react"
 import { Link, useLocation } from "react-router-dom"
-import { PanelLeft } from "lucide-react"
+import { PanelLeft } from "@/components/ui/icon"
 import { useSettings } from "@/routes/settings-provider"
 import { useNavigation } from "@/lib/use-navigation"
 import { cn } from "@/lib/utils"
 import { useFeatures } from "@/hooks/use-features"
 import { prefetchRoute } from "@/lib/route-prefetch"
-import { PRODUCT_EMOJI, PRODUCT_NAME } from "@/lib/brand"
+import { PRODUCT_NAME } from "@/lib/brand"
+import { PortalMark } from "@/components/brand-mark"
 
 // ---------------------------------------------------------------------------
 // Frosted pill primitives (mockup _shared.css `.pill` recipe)
 // ---------------------------------------------------------------------------
-// A theme-aware material, 0.5px theme-aware border (the shadow's built-in ring,
-// NOT a hairline at rest), overlay shadow, full radius — flipping with the theme
-// via --pill-bg / --pill-border (globals.css). blur(20px) saturate(1.3) rides on
-// top for pointer:fine only: these float over a scrolling region, where a
-// backdrop filter re-rasterises every frame. Coarse pointers get the same
-// material composited to alpha 1 (--pill-bg-opaque), not a dropped effect.
-const PILL_MATERIAL =
-  "border-[0.5px] border-[var(--pill-border)] bg-[var(--pill-bg-opaque)] shadow-[var(--shadow-overlay)] " +
-  "[@media(pointer:fine)]:bg-[var(--pill-bg)] [@media(pointer:fine)]:[backdrop-filter:blur(20px)_saturate(1.3)] " +
-  "[@media(pointer:fine)]:[-webkit-backdrop-filter:blur(20px)_saturate(1.3)]"
+// Glass material (.glass-tint, glass-identity.css): the float tint, lit edge and
+// specular highlight, full radius, flipping with the theme. These pills sit on
+// the chat's top scrim, which is the surface that blurs the scrolling thread
+// behind them, so they are tint only: blur does not nest. Coarse pointers and
+// reduced transparency get the same material composited to alpha 1.
+const PILL_MATERIAL = "glass-tint border-[0.5px] border-[var(--pill-border)]"
 
 // The cross-page pill system and the chat header pills share this primitive; the
 // nav popover reuses the EXACT same material, only the radius differs.
@@ -80,19 +77,43 @@ export function isNavItemActive(href: string, pathname: string): boolean {
 // item = soft --fill-secondary, NEVER --accent.
 // ---------------------------------------------------------------------------
 
-// The floating label that springs out beside a hovered/focused icon. Calm and
-// crisp: a flat opaque --bg-tertiary surface with a 0.5px --separator hairline
-// and a subtle drop shadow — NO backdrop saturate (no colored halo) and NOT the
-// heavy overlay shadow (no glow). Theme-aware, quiet, readable over the list.
+// The floating label that springs out beside a hovered/focused icon. It is the
+// rail's tooltip, drawn with no script at all (the rail is in the always-loaded
+// shell, where a positioned React Aria tooltip would not fit the initial
+// budget): CSS hover and focus-within show it, `.rail-reveal` gives it the
+// overlay glass (glass-identity.css), blurred only while it shows so one label
+// is one blurred surface, and Escape hides it (see `useDismissLabelOnEscape`).
 // The icon carries the real aria-label, so the pill is decorative (aria-hidden).
 // Under reduced motion it fades only (no slide).
 const RIBBON_LABEL_PILL =
-  "whitespace-nowrap rounded-full border-[0.5px] border-[var(--separator)] bg-[var(--bg-tertiary)] " +
+  "rail-reveal whitespace-nowrap rounded-full " +
   "px-2.5 py-1 text-[length:var(--text-footnote)] font-[var(--weight-medium)] text-[var(--text-primary)] " +
-  "shadow-[var(--shadow-subtle)] " +
   "opacity-0 transition-[opacity,transform] duration-150 [transition-timing-function:var(--ease-snappy)] " +
   "motion-safe:-translate-x-1.5 group-hover/row:opacity-100 group-hover/row:translate-x-0 " +
   "group-focus-within/row:opacity-100 group-focus-within/row:translate-x-0 motion-reduce:transition-opacity"
+
+/** A label that covers what the reader is looking at has to be dismissible
+ *  without moving the pointer or the focus, so Escape hides the label of the
+ *  row under the pointer or holding focus, and it comes back the next time the
+ *  pointer or focus enters a row (so a row focused after its pointer-dismissed
+ *  label shows its label again). Done on the element, not in state: nothing
+ *  re-renders for it. */
+function useDismissLabelOnEscape() {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      for (const row of document.querySelectorAll<HTMLElement>("[data-rail-row]:is(:hover, :focus-within)")) {
+        row.dataset.labelDismissed = ""
+      }
+    }
+    document.addEventListener("keydown", onKeyDown)
+    return () => document.removeEventListener("keydown", onKeyDown)
+  }, [])
+}
+
+const restoreLabel = (event: { currentTarget: HTMLElement }) => {
+  delete event.currentTarget.dataset.labelDismissed
+}
 
 /** One ribbon entry — a fixed 44px icon square. It never resizes; the label is a
  *  floating pill that escapes to the right on hover/focus (the piano reveal), and
@@ -134,9 +155,11 @@ function RibbonRow({
     return (
       <Link
         to={href} viewTransition
+        data-rail-row=""
         onClick={onClick}
-        onPointerEnter={() => prefetchRoute(href)}
-        onFocus={() => prefetchRoute(href)}
+        onPointerEnter={(event) => { restoreLabel(event); prefetchRoute(href) }}
+        onFocus={(event) => { restoreLabel(event); prefetchRoute(href) }}
+        onBlur={restoreLabel}
         aria-label={label}
         aria-current={isActive ? "page" : undefined}
         className={cls}
@@ -146,7 +169,7 @@ function RibbonRow({
     )
   }
   return (
-    <button type="button" onClick={onClick} aria-label={label} className={cls}>
+    <button type="button" data-rail-row="" onClick={onClick} onPointerEnter={restoreLabel} onFocus={restoreLabel} onBlur={restoreLabel} aria-label={label} className={cls}>
       {inner}
     </button>
   )
@@ -167,11 +190,8 @@ export function NavRibbon({
   const navItems = useNavigation(features?.notesEnabled === true).items
   const pathname = useLocation().pathname
   const { settings } = useSettings()
+  useDismissLabelOnEscape()
   const portalName = settings.portalName ?? PRODUCT_NAME
-  // Default brand mark carries U+FE0F so the genie always renders as a COLOR
-  // emoji (never a text-presentation glyph that would inherit the slot's text
-  // color and look faded — see the brand-mark color note below).
-  const emoji = settings.portalEmoji ?? `${PRODUCT_EMOJI}\u{FE0F}`
   // The Chat icon is OPEN-ONLY. While already on the chat route ("/") with the
   // list collapsed, a plain click reveals the list instead of firing a dead
   // same-route navigation. Not on "/" → the Link navigates as before; list
@@ -192,7 +212,7 @@ export function NavRibbon({
     <div className="relative hidden h-full w-14 shrink-0 lg:block">
       {/* Named so a route change snapshots the rail apart from the page — globals.css. */}
       <nav aria-label="Primary"
-        className="absolute inset-y-0 left-0 z-30 flex w-14 flex-col items-center gap-0.5 bg-[var(--ribbon-bg)] px-1.5 pb-2.5 pt-3.5 [view-transition-name:jinn-nav-rail]"
+        className="absolute inset-y-0 left-0 z-30 flex w-14 flex-col items-center gap-0.5 px-1.5 pb-2.5 pt-3.5 [view-transition-name:jinn-nav-rail]"
       >
         {/* Top slot — a plain, button-sized Jinn brand mark that fills the rail
             top (no frosted-pill chrome). It morphs to the sidebar.left toggle
@@ -213,15 +233,15 @@ export function NavRibbon({
               aria-expanded={listOpen}
               className="relative flex size-11 items-center justify-center rounded-[12px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)]"
             >
-              {/* Full-strength brand color (NOT the button's --text-secondary) +
-                  forced color-emoji presentation, so the genie — or a custom
-                  monochrome/letter portalEmoji — reads crisp at rest in BOTH
-                  themes instead of inheriting the muted secondary text token. */}
+              {/* The glass mark, or the operator's own glyph. A glyph gets
+                  full-strength brand color (NOT the button's --text-secondary)
+                  and forced color-emoji presentation, so a custom monochrome or
+                  letter mark reads crisp at rest in BOTH themes. */}
               <span
                 aria-hidden
                 className="absolute inset-0 flex items-center justify-center text-[26px] leading-none text-[var(--text-primary)] [font-variant-emoji:emoji] transition-opacity duration-150 group-hover/sidebar:opacity-0 group-focus-within/logo:opacity-0"
               >
-                {emoji}
+                <PortalMark size={32} />
               </span>
               <PanelLeft
                 size={22}
@@ -230,8 +250,8 @@ export function NavRibbon({
             </button>
           ) : (
             // Global (non-chat) rail: no list to fold, so the top slot is a plain
-            // brand mark that links home. Same full-strength color + forced
-            // color-emoji presentation as the chat variant — no toggle/morph.
+            // brand mark that links home. Same mark as the chat variant — no
+            // toggle/morph.
             <Link
               to="/" viewTransition
               onPointerEnter={() => prefetchRoute("/")}
@@ -244,7 +264,7 @@ export function NavRibbon({
                 aria-hidden
                 className="flex items-center justify-center text-[26px] leading-none text-[var(--text-primary)] [font-variant-emoji:emoji]"
               >
-                {emoji}
+                <PortalMark size={32} />
               </span>
             </Link>
           )}

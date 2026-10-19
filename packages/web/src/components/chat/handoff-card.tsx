@@ -1,4 +1,4 @@
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight } from '@/components/ui/icon'
 import type { ChatBlock, JsonValue } from '@/lib/blocks'
 import { EmployeeChip } from '@/components/ui/employee-chip'
 import { QuietCard } from '@/components/ui/quiet-card'
@@ -88,7 +88,7 @@ export function HandoffCard({ block, onPeek }: HandoffCardProps) {
 
   return (
     <div
-      className={`${layout} rounded-[var(--radius-xl)] bg-[var(--fill-tertiary)] shadow-[var(--shadow-subtle)]`}
+      className={`${layout} glass-card rounded-[var(--radius-xl)]`}
       data-handoff-state={visual.state}
       data-handoff-interactive="false"
       data-block-id={block.id}

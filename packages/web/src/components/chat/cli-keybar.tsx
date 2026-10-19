@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, CornerDownLeft, Keyboard, X } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, CornerDownLeft, Keyboard, X, type IconComponent } from '@/components/ui/icon'
 import { Button } from '@/components/ui/button'
-import type { LucideIcon } from 'lucide-react'
 
 type CliKey = {
   label: string
   aria: string
   data: string
-  icon?: LucideIcon
+  icon?: IconComponent
 }
 
 export const CLI_KEYS: readonly CliKey[] = [
@@ -77,7 +76,7 @@ export function CliKeybar({
         <div
           role="toolbar"
           aria-label="Terminal keys"
-          className="absolute bottom-full right-0 z-30 mb-2 flex w-max max-w-[min(92vw,280px)] flex-wrap items-center justify-end gap-1 rounded-[var(--radius-md)] border border-[var(--separator)] bg-[var(--material-regular)] p-1.5 shadow-lg backdrop-blur-md"
+          className="absolute bottom-full right-0 z-30 mb-2 flex w-max max-w-[min(92vw,280px)] flex-wrap items-center justify-end gap-1 rounded-[var(--radius-md)] border border-[var(--separator)] bg-[var(--material-thick-opaque)] p-1.5 shadow-[var(--shadow-overlay)]"
         >
           {CLI_KEYS.map((key) => {
             const Icon = key.icon

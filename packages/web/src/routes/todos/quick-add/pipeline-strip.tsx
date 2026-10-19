@@ -1,4 +1,4 @@
-import { Check, CircleAlert, CornerDownRight, LoaderCircle } from "lucide-react"
+import { Check, CircleAlert, CornerDownRight, LoaderCircle } from "@/components/ui/icon"
 import type { TodoCaptureWire } from "@/lib/api"
 import { CAPTURE_STEPS, landedLabel, stepLabel, type CaptureStep } from "./capture-stages"
 

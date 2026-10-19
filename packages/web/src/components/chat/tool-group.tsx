@@ -1,5 +1,5 @@
 import { useRef, type CSSProperties } from 'react'
-import { ChevronDown, FileText, Globe, Search, Terminal, Wrench, type LucideIcon } from 'lucide-react'
+import { ChevronDown, FileText, Globe, Search, Terminal, Wrench, type IconComponent } from '@/components/ui/icon'
 import type { Message } from '@/lib/conversations'
 import type { SubagentRef } from '@/lib/subagent-transcript'
 import { statusMark } from './chat-blocks'
@@ -21,7 +21,7 @@ function findActiveToolIndex(msgs: Message[]): number {
 }
 
 const TOOL_GLYPH_RULES: ReadonlyArray<{
-  glyph: LucideIcon
+  glyph: IconComponent
   matches: readonly string[]
 }> = [
   { glyph: FileText, matches: ['read', 'write', 'edit', 'file', 'patch', 'notebook'] },
@@ -30,7 +30,7 @@ const TOOL_GLYPH_RULES: ReadonlyArray<{
   { glyph: Globe, matches: ['fetch', 'web', 'browser', 'http'] },
 ]
 
-export function toolGlyphForName(toolName: string): LucideIcon {
+export function toolGlyphForName(toolName: string): IconComponent {
   const normalized = toolName.replace(/^mcp__.*?__/i, '').toLowerCase()
   return TOOL_GLYPH_RULES.find(({ matches }) => matches.some((match) => normalized.includes(match)))?.glyph
     ?? Wrench

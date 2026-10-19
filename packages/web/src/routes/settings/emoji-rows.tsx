@@ -1,20 +1,21 @@
 import { useEffect, useRef, useState } from "react"
-import { PRODUCT_EMOJI } from "@/lib/brand"
+import { BrandMark } from "@/components/brand-mark"
+import { customBrandGlyph } from "@/lib/brand"
 import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { EmojiPicker } from "@/components/ui/emoji-picker"
 import { OPERATOR_DEFAULT_EMOJI } from "@/components/ui/employee-avatar"
 import { useSettings } from "@/routes/settings-provider"
-import { CONTROL_CLASS } from "./shared"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { FIELD_CLASS } from "./shared"
 
 /* The two identity emoji controls in Branding. Each owns its picker state, so
  * the settings page carries one line per row instead of the whole popover. */
 
 const LABEL_CLASS = "block text-[length:var(--text-caption1)] text-[var(--text-tertiary)] mb-[var(--space-1)]"
-const SWATCH_CLASS =
-  "flex size-[44px] cursor-pointer items-center justify-center rounded-[13px] border-none bg-[var(--fill-quaternary)] text-[26px] leading-none transition-colors hover:bg-[var(--fill-tertiary)]"
+const SWATCH_CLASS = "size-[44px] min-h-0 shrink-0 rounded-[13px] p-0 text-[26px] leading-none"
 
-const PORTAL_DEFAULT_EMOJI = PRODUCT_EMOJI
 const ERROR_CLASS =
   "mt-[var(--space-2)] rounded-[var(--radius-lg)] p-[8px_10px] text-[length:var(--text-caption1)] text-[var(--system-red)]"
 const ERROR_WASH = { background: "color-mix(in srgb, var(--system-red) 8%, transparent)" }
@@ -49,15 +50,15 @@ export function OperatorEmojiRow() {
     <div>
       <label className={LABEL_CLASS}>Operator Emoji</label>
       <div className="relative flex items-center">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           onClick={() => setPickerOpen(!pickerOpen)}
           aria-label="Choose operator emoji"
           aria-expanded={pickerOpen}
           className={SWATCH_CLASS}
         >
           {current}
-        </button>
+        </Button>
         {pickerOpen && (
           <EmojiPicker current={current} onSelect={choose} onClose={() => setPickerOpen(false)} />
         )}
@@ -79,7 +80,7 @@ export function PortalEmojiRow() {
   const { settings, setPortalEmoji } = useSettings()
   const [pickerOpen, setPickerOpen] = useState(false)
   const [draft, setDraft] = useState(settings.portalEmoji ?? "")
-  const current = settings.portalEmoji ?? PORTAL_DEFAULT_EMOJI
+  const current = customBrandGlyph(settings) ?? ""
 
   useEffect(() => {
     setDraft(settings.portalEmoji ?? "")
@@ -89,22 +90,22 @@ export function PortalEmojiRow() {
     <div>
       <label className={LABEL_CLASS}>Portal Emoji</label>
       <div className="relative flex items-center gap-[var(--space-3)]">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           onClick={() => setPickerOpen(!pickerOpen)}
           aria-label="Choose portal emoji"
           aria-expanded={pickerOpen}
           className={SWATCH_CLASS}
         >
-          {current}
-        </button>
-        <input
+          {current || <BrandMark size={30} />}
+        </Button>
+        <Input
           type="text"
-          className={cn(CONTROL_CLASS, "w-[96px] text-center")}
-          placeholder={`${PRODUCT_EMOJI}\u{FE0F}`}
+          className={cn(FIELD_CLASS, "w-[96px] text-center")}
+          placeholder="Default"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => setPortalEmoji(draft || null)}
+          onBlur={() => setPortalEmoji(draft.trim() || null)}
         />
         {pickerOpen && (
           <EmojiPicker

@@ -1,14 +1,13 @@
 import type React from "react"
-import { ChevronDown, ChevronUp, GripVertical, X } from "lucide-react"
-import { CONTROL_CLASS } from "../shared"
+import { ChevronDown, ChevronUp, GripVertical, X } from "@/components/ui/icon"
+import { Button } from "@/components/ui/button"
+import { SettingsSelect } from "../shared"
 import { moveInChain, removeFromChain } from "./chain-model"
 import { engineDisplayName } from "@/lib/engine-names"
 import { rowShift, useChainDrag } from "./use-chain-drag"
 
-const ROW_BUTTON_CLASS =
-  "grid size-[34px] shrink-0 place-items-center rounded-[8px] border-none bg-transparent " +
-  "text-[var(--text-tertiary)] transition-colors hover:bg-[var(--fill-secondary)] " +
-  "hover:text-[var(--text-primary)] disabled:pointer-events-none disabled:opacity-30"
+/** A row's icon button: ghost, at the 34px the rows are laid out for. */
+export const ROW_BUTTON_CLASS = "size-[34px] min-h-0 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
 
 function RowButton({ label, disabled, onClick, children }: {
   label: string
@@ -17,9 +16,9 @@ function RowButton({ label, disabled, onClick, children }: {
   children: React.ReactNode
 }) {
   return (
-    <button type="button" aria-label={label} disabled={disabled} onClick={onClick} className={ROW_BUTTON_CLASS}>
+    <Button variant="ghost" size="icon-sm" aria-label={label} disabled={disabled} onClick={onClick} className={ROW_BUTTON_CLASS}>
       {children}
-    </button>
+    </Button>
   )
 }
 
@@ -44,7 +43,7 @@ function ChainRow({ engine, name, index, count, style, onPointerDown, onMove, on
       style={style}
       className="flex items-center gap-[var(--space-1)] rounded-[10px] bg-[var(--fill-tertiary)] py-[3px] pl-[var(--space-2)] pr-[3px]"
     >
-      <GripVertical size={14} strokeWidth={2} aria-hidden className="shrink-0 cursor-grab text-[var(--text-quaternary)]" />
+      <GripVertical size={14} aria-hidden className="shrink-0 cursor-grab text-[var(--text-quaternary)]" />
       <span className="w-[14px] shrink-0 text-[length:var(--text-caption2)] text-[var(--text-quaternary)] [font-variant-numeric:tabular-nums]">
         {index + 1}
       </span>
@@ -52,13 +51,13 @@ function ChainRow({ engine, name, index, count, style, onPointerDown, onMove, on
         {label}
       </span>
       <RowButton label={`Move ${label} earlier in the ${chain}`} disabled={index === 0} onClick={() => onMove(index - 1)}>
-        <ChevronUp size={15} strokeWidth={2.2} aria-hidden />
+        <ChevronUp size={15} aria-hidden />
       </RowButton>
       <RowButton label={`Move ${label} later in the ${chain}`} disabled={index === count - 1} onClick={() => onMove(index + 1)}>
-        <ChevronDown size={15} strokeWidth={2.2} aria-hidden />
+        <ChevronDown size={15} aria-hidden />
       </RowButton>
       <RowButton label={`Remove ${label} from the ${chain}`} onClick={onRemove}>
-        <X size={15} strokeWidth={2.2} aria-hidden />
+        <X size={15} aria-hidden />
       </RowButton>
     </div>
   )
@@ -72,17 +71,14 @@ function AddEngineControl({ engine, options, onAdd }: {
   onAdd: (name: string) => void
 }) {
   return (
-    <select
-      value=""
-      aria-label={`Add an engine to the ${engineDisplayName(engine)} chain`}
-      onChange={(event) => { if (event.target.value) onAdd(event.target.value) }}
-      className={`${CONTROL_CLASS} mt-[var(--space-2)] cursor-pointer text-[var(--text-tertiary)] sm:w-[220px]`}
-    >
-      <option value="">Add an engine</option>
-      {options.map((name) => (
-        <option key={name} value={name}>{engineDisplayName(name)}</option>
-      ))}
-    </select>
+    <div className="mt-[var(--space-2)] sm:w-[220px]">
+      <SettingsSelect
+        value=""
+        ariaLabel={`Add an engine to the ${engineDisplayName(engine)} chain`}
+        onChange={(name) => { if (name) onAdd(name) }}
+        options={[{ value: "", label: "Add an engine" }, ...options.map((name) => ({ value: name, label: engineDisplayName(name) }))]}
+      />
+    </div>
   )
 }
 

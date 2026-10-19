@@ -11,16 +11,17 @@ import {
   MoreHorizontal,
   NotebookPen,
   Puzzle,
-} from "lucide-react"
-import type { LucideIcon } from "lucide-react"
+  lookupIcon,
+  type IconComponent,
+  type IconName,
+} from "@/components/ui/icon"
 import { contributions } from "@/contrib/registry"
 import { AREAS } from "@/contrib/types"
-import { lookupIcon, type IconName } from "@/components/ui/icon"
 
 export interface NavItem {
   href: string
   label: string
-  icon: LucideIcon
+  icon: IconComponent
 }
 
 /**
@@ -35,7 +36,7 @@ export interface NavItem {
 export interface NavContributionData {
   href: string
   label: string
-  icon?: LucideIcon | IconName
+  icon?: IconComponent | IconName
 }
 
 function contributedNavItems(): NavItem[] {
