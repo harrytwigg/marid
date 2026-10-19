@@ -27,12 +27,22 @@ interface EmployeeFallbackFieldProps {
   onBlockedChange?: (blocked: boolean) => void
 }
 
+/** Said beside a system employee's chain: the control is not there, and this is why. */
+export const LOCKED_NOTE = "Fallback for system employees is set by the gateway and can't be changed here."
+
 /** The editor's labelled row for the chain, shaped like its other fields. A system employee's chain is the
  *  default's and cannot be set (the gateway refuses it), so it is shown, not offered. */
 export function EmployeeFallbackRow({ locked, ...props }: EmployeeFallbackFieldProps & { locked?: boolean }) {
   return (
     <div className="flex flex-col gap-[var(--space-1)]" data-employee-fallback-row={locked ? "locked" : undefined}>
-      {locked ? <EmployeeFallbackSummary employee={props.employee} /> : (
+      {locked ? (
+        <>
+          <span data-employee-fallback-locked className="text-[length:var(--text-caption2)] text-[var(--text-tertiary)]">
+            {LOCKED_NOTE}
+          </span>
+          <EmployeeFallbackSummary employee={props.employee} />
+        </>
+      ) : (
         <>
           <span className="text-[length:var(--text-caption2)] font-[var(--weight-semibold)] uppercase tracking-[var(--tracking-wide)] text-[var(--text-tertiary)]">
             Fallback chain

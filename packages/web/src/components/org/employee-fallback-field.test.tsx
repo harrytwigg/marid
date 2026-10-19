@@ -203,6 +203,10 @@ describe("EmployeeFallbackRow for a system employee", () => {
     render(<EmployeeFallbackRow employee={EMP} engine="claude" value={null} onChange={() => {}} locked />)
 
     expect(document.querySelector("[data-employee-fallback-row=locked]")).toBeTruthy()
+    // Not just a missing control: one line says why, ahead of the chain it follows.
+    const note = document.querySelector("[data-employee-fallback-locked]")!
+    expect(note.textContent).toBe("Fallback for system employees is set by the gateway and can't be changed here.")
+    expect(note.compareDocumentPosition(document.querySelector("[data-fallback-list]")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(document.querySelector("[data-fallback-list] li")?.textContent).toBe("1. Codex")
     expect(screen.queryByRole("combobox", { name: "Fallback chain" })).toBeNull()
   })
