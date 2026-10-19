@@ -75,6 +75,8 @@
 //               reply to the same prompt, which answers
 //   NEWERREPLYDONE  the first reply finishes "stop" with nothing written; 300 ms
 //               later a new reply to the same prompt opens and answers
+//   TOOLFIRST   one tool round trip (finish=tool-calls) before any provider directive,
+//               so the trouble lands on the turn's second step
 //   COPYAFTERABORT  a retry status an hour off, then the session is aborted (the reply
 //               closes with nothing written and no error; idle), and 300 ms later
 //               another client posts the prompt's text as a NEW user message, with
@@ -220,6 +222,7 @@ function serve() {
       return;
     }
     if (text.includes("MIDFAIL")) return midTurnFailure(sessionID, turn);
+    if (text.includes("TOOLFIRST")) toolRound(sessionID, turn, 1);
     if (/PROVIDER|NEWERREPLY|COPYAFTERABORT/.test(text) && await providerTrouble(sessionID, turn)) return;
     if (text.includes("MULTISTEP")) { toolRound(sessionID, turn, 1); toolRound(sessionID, turn, 2); }
     if (text.includes("TOOLONLY")) {

@@ -39,6 +39,8 @@ export class OpencodeTurn {
   private producedOutput = false;
   /** Model round trips. A turn that called tools has more than one. */
   private steps = 0;
+  /** Why the last finished step ended: `tool-calls` means another step was due. */
+  private lastFinishReason: string | undefined;
   private cost = 0;
   private contextTokens: number | undefined;
   /** opencode assigns this; until it speaks, the id we asked it to resume. */
@@ -121,6 +123,7 @@ export class OpencodeTurn {
    *  ACCUMULATES and the context reading is whichever step spoke last. */
   private readStepFinish(part: Record<string, unknown>): void {
     this.steps += 1;
+    this.lastFinishReason = trimmedString(part.reason);
     this.cost += numberOr(part.cost, 0);
     const context = contextTokensFromStep(asRecord(part.tokens) as StepTokens | undefined);
     if (context !== undefined) this.contextTokens = context;
@@ -190,18 +193,22 @@ export class OpencodeTurn {
 
   /** A turn that ended with nothing, on a host whose opencode has a model-fallback
    *  plugin: the plugin aborts a turn at a usage limit and re-sends the prompt, which
-   *  ends it with no answer and no error of its own. The abort is the evidence: it lands before
-   *  any step finished, so a blank answer from a finished step is the model's own and not
-   *  this. Not for a failure of the transport, or an error that is not a usage limit. */
+   *  ends it with no answer and no error of its own. The abort is the evidence: it lands
+   *  while a step was still due (see {@link stoppedBetweenSteps}), so a blank answer from a
+   *  last step that ended on its own is the model's and not this. Not for a failure of the
+   *  transport, or an error that is not a usage limit. */
   private endedByFallbackPlugin(outcome: { code: number | null; failure?: string }): boolean {
-    if (outcome.failure || outcome.code !== 0 || this.steps > 0 || !this.fallbackPluginOnHost()) return false;
+    if (outcome.failure || outcome.code !== 0 || !this.stoppedBetweenSteps || !this.fallbackPluginOnHost()) return false;
     return !this.turnError || isRateLimitMessage(this.turnError);
   }
 
-  /** Whether any model round trip of this turn finished. */
-  get stepsFinished(): number {
-    return this.steps;
+  /** Whether the turn stopped while another model step was still due: none had
+   *  finished, or the last one finished on a tool call. opencode only stops there when
+   *  something aborts it; a turn the model ended itself closes on a `stop` step. */
+  get stoppedBetweenSteps(): boolean {
+    return this.steps === 0 || this.lastFinishReason === "tool-calls";
   }
+
 
   /** Why a turn that produced no accepted answer failed: whatever opencode
    *  reported, or — having reported nothing — why ending without one is still a

@@ -636,7 +636,7 @@ export class OpencodeServerTurn {
    *  the gateway does not follow that copy. With no answer in hand, stop what it started
    *  (the usage limit that set it off is the turn's outcome, and the chain takes over). */
   private async stopPluginCopy(): Promise<void> {
-    if (!this.deps.fallbackPluginAbortsTurns?.() || this.lastAnswer === "text" || this.terminationReason || this.turn.stepsFinished > 0) return;
+    if (!this.deps.fallbackPluginAbortsTurns?.() || this.lastAnswer === "text" || this.terminationReason || !this.turn.stoppedBetweenSteps) return;
     await this.stopOnServer();
     await this.markPromptCopies();
   }

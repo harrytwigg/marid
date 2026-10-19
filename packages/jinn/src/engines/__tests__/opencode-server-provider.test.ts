@@ -200,6 +200,27 @@ describe("a host whose opencode has a model-fallback plugin", { timeout: 20_000 
     expect((await serverLog(pool)).some((e) => e.url.endsWith("/abort"))).toBe(false);
   });
 
+  it("reads a usage limit after a finished tool step as the plugin too, and stops the copy", async () => {
+    SERVER_TURN_TIMING.closeWaitMs = 300;
+    pluginOnHost.value = true;
+    const { pool, engine } = harness();
+    const result = await engine.run(runOpts(`TOOLFIRST ${limited}`));
+    expect(result.result).toBe("");
+    expect(result.error).toContain("model-fallback plugin");
+    expect(result.rateLimit?.status).toBe("rejected");
+    expect((await serverLog(pool)).some((e) => /^\/session\/[^/]+\/abort$/.test(e.url))).toBe(true);
+  });
+
+  it("does not read a blank last step after a tool step as the plugin", async () => {
+    pluginOnHost.value = true;
+    const { pool, engine } = harness();
+    const result = await engine.run(runOpts("TOOLONLY work"));
+    expect(result.error).toBeDefined();
+    expect(result.error).not.toContain("model-fallback plugin");
+    expect(result.rateLimit).toBeUndefined();
+    expect((await serverLog(pool)).some((e) => e.url.endsWith("/abort"))).toBe(false);
+  });
+
   it("does not read a blank answer from a finished step as the plugin: a plain error, no usage limit, nothing stopped", async () => {
     pluginOnHost.value = true;
     const { pool, engine } = harness();

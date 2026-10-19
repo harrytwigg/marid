@@ -35,7 +35,20 @@ describe("a run turn that a fallback plugin ended", () => {
     const result = turn.result(noEvents);
     expect(result.error).toBe("opencode exited successfully without a final assistant response");
     expect(result.rateLimit).toBeUndefined();
-    expect(turn.stepsFinished).toBe(1);
+    expect(turn.stoppedBetweenSteps).toBe(false);
+  });
+
+  it("is the plugin when a tool step finished and the next one never came", () => {
+    const step = JSON.stringify({ type: "step_finish", sessionID: "ses_1", part: { id: "s1", type: "step-finish", reason: "tool-calls", cost: 0, tokens: { input: 5, output: 1, reasoning: 0, cache: { read: 0, write: 0 } } } });
+    const tool = JSON.stringify({ type: "tool_use", sessionID: "ses_1", part: { id: "t1", type: "tool", tool: "read", callID: "c1", state: { status: "error", input: { filePath: "a.txt" }, error: "aborted" } } });
+    const turn = new OpencodeTurn("ses_1", () => true);
+    turn.readLine(tool, null);
+    turn.readLine(step, null);
+    const result = turn.result(noEvents);
+    expect(turn.stoppedBetweenSteps).toBe(true);
+    expect(result.error).toContain("model-fallback plugin");
+    expect(result.rateLimit).toEqual({ status: "rejected" });
+    expect(result.numTurns).toBe(1);
   });
 
   it("keeps a real answer", () => {
