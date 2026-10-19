@@ -235,6 +235,79 @@ describe("attachPtyWebSocket snapshot framing", () => {
     ws.close();
     expect(engine.viewingCalls).toEqual([true, false]);
   });
+
+  it("does not count a viewer against the PTY a failed restart killed, and enters once when the next spawn succeeds", async () => {
+    const ws = new FakeWebSocket();
+    const engine = new FakeEngine();
+    // Like a lifecycle-backed engine: the kill releases the PTY and its viewer entry, then the respawn throws.
+    engine.restartPty = () => {
+      engine.warm = false;
+      throw new Error("spawn ENOENT");
+    };
+    attachPtyWebSocket(ws as any, "session-1", engine, { resumeDeadlineMs: 50 });
+    await settle();
+    for (const message of [{ type: "viewing", viewing: true }, { type: "resize", cols: 90, rows: 30 }]) ws.receive(message);
+    expect(engine.viewingCalls).toEqual([true]);
+
+    ws.receive({ type: "restart" });
+    expect(controls(ws).filter((c) => c.type === "error")).toMatchObject([{ recoverable: true, message: expect.stringContaining("failed to restart terminal: spawn ENOENT") }]);
+
+    // Queued, not applied to the dead PTY.
+    ws.receive({ type: "viewing", viewing: true });
+    expect(engine.viewingCalls).toEqual([true]);
+
+    // No resume-deadline error for a terminal that was never going to resume.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(controls(ws).filter((c) => c.type === "error")).toHaveLength(1);
+
+    // Closing now has no entry to leave.
+    const second = new FakeWebSocket();
+    attachPtyWebSocket(second as any, "session-1", engine);
+    await settle();
+    second.close();
+    expect(engine.viewingCalls).toEqual([true]);
+
+    // The next successful spawn enters once; closing leaves once.
+    ws.receive({ type: "resize", cols: 100, rows: 40 });
+    expect(engine.viewingCalls).toEqual([true, true]);
+    ws.close();
+    expect(engine.viewingCalls).toEqual([true, true, false]);
+  });
+
+  it("does not leave a viewer entry the engine no longer has when the socket closes after a failed restart", async () => {
+    const ws = new FakeWebSocket();
+    const engine = new FakeEngine();
+    engine.restartPty = () => {
+      engine.warm = false;
+      throw new Error("spawn ENOENT");
+    };
+    attachPtyWebSocket(ws as any, "session-1", engine);
+    await settle();
+    for (const message of [{ type: "viewing", viewing: true }, { type: "resize", cols: 90, rows: 30 }, { type: "restart" }]) ws.receive(message);
+    ws.close();
+    expect(engine.viewingCalls).toEqual([true]);
+  });
+
+  it("re-enters viewing on a second restart that succeeds after a failed one", async () => {
+    const ws = new FakeWebSocket();
+    const engine = new FakeEngine();
+    let failing = true;
+    engine.restartPty = () => {
+      if (failing) {
+        engine.warm = false;
+        throw new Error("spawn ENOENT");
+      }
+      engine.warm = true;
+    };
+    attachPtyWebSocket(ws as any, "session-1", engine);
+    await settle();
+    for (const message of [{ type: "viewing", viewing: true }, { type: "resize", cols: 90, rows: 30 }, { type: "restart" }]) ws.receive(message);
+    failing = false;
+    ws.receive({ type: "restart" });
+    expect(engine.viewingCalls).toEqual([true, true]);
+    ws.close();
+    expect(engine.viewingCalls).toEqual([true, true, false]);
+  });
 });
 
 describe("attachPtyWebSocket input frames", () => {

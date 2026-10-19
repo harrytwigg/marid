@@ -42,6 +42,7 @@ vi.mock("node-pty", () => ({
 vi.mock("../../shared/logger.js", () => ({ logger: { warn: vi.fn(), debug: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 vi.mock("../../sessions/employee-env.js", () => ({ employeeSessionEnv: (id?: string) => (id === "s1" ? { JINN_EMPLOYEE: "worker" } : {}) }));
 
+import { spawn as ptySpawn } from "node-pty";
 import type { ResolvedMcpConfig } from "../../shared/types.js";
 import { isDeadSessionError } from "../../shared/rateLimit.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
@@ -200,6 +201,25 @@ describe("MusecodeInteractiveEngine", () => {
       engine.setViewing("s1", false);
       await engine.releaseUnviewed("s1");
       expect(spawnCalls[1].proc.killed).toBe(true);
+    });
+
+    it("keeps no viewer count for a terminal a failed restart killed", async () => {
+      const { engine } = make({ bin: () => "/opt/muse" });
+      engine.ensureIdleSpawn("s1", { engineSessionId: ID, cwd: "/w" });
+      engine.setViewing("s1", true);
+      vi.mocked(ptySpawn).mockImplementationOnce(() => { throw new Error("spawn ENOENT"); });
+      expect(() => engine.restartPty("s1", { engineSessionId: ID, cwd: "/w" })).toThrow("spawn ENOENT");
+      expect(spawnCalls[0].proc.killed).toBe(true);
+      expect(engine.hasWarmPty("s1")).toBe(false);
+
+      // A fresh terminal counts from zero: one enter and one leave leave it unviewed.
+      engine.ensureIdleSpawn("s1", { engineSessionId: ID, cwd: "/w" });
+      expect(spawnCalls).toHaveLength(2);
+      engine.setViewing("s1", true);
+      engine.setViewing("s1", false);
+      await engine.releaseUnviewed("s1");
+      expect(spawnCalls[1].proc.killed).toBe(true);
+      expect(engine.hasWarmPty("s1")).toBe(false);
     });
 
     it("does nothing when there is no terminal", async () => {

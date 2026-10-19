@@ -257,8 +257,14 @@ export function attachPtyWebSocket(
         armResumeDeadline();
         if (restoreViewing) applyViewingWhenReady(true);
       } catch (error) {
-        // A restart that is refused (an engine may refuse one mid-turn) leaves the terminal as it was, this socket still counted as viewing it.
-        ({ didEnter, entryReady, pendingViewing, terminalReady } = entered);
+        if (engine.hasWarmPty(sessionId)) {
+          // A restart refused before the kill (an engine may refuse one mid-turn) leaves the terminal as it was, this socket still counted as viewing it.
+          ({ didEnter, entryReady, pendingViewing, terminalReady } = entered);
+        } else {
+          // The old PTY is gone and its viewer entry went with it, so there is nothing to restore: stay not entered and queue the viewing, which the next spawn (a resize or another restart) applies.
+          clearResumeDeadline();
+          pendingViewing = restoreViewing ? true : null;
+        }
         sendControl({
           type: "error",
           message: `failed to restart terminal: ${error instanceof Error ? error.message : String(error)}`,
