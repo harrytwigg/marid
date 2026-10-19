@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react"
-import { ArrowUpRight } from "lucide-react"
+import { ArrowUpRight } from "@/components/ui/icon"
 import type { Employee } from "@/lib/api"
 import { useOpenSession } from "@/components/chat/file-open-context"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"

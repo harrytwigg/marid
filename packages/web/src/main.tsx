@@ -18,6 +18,7 @@ import { APP_ROUTES, type AppRouteId } from './lib/app-routes'
 import type { NativeGatewayProfiles, NativeGatewayProfilesSnapshot } from './lib/native-gateway-profiles'
 import { nativeBridge } from './platform/native-bridge'
 import './routes/app.css'
+import './routes/glass-identity.css'
 
 let profiles: NativeGatewayProfiles | undefined
 let initialNativeOrigin: string | undefined
@@ -39,7 +40,6 @@ const SkillsPage = lazyRoute(() => import('./routes/skills/page'), 'skills')
 const SkillDetailPage = lazyRoute(() => import('./routes/skills/detail'), 'skill-detail')
 const FilePage = lazyRoute(() => import('./routes/file/page'), 'file')
 const MorePage = lazyRoute(() => import('./routes/more/page'), 'more')
-const RedesignPage = lazyRoute(() => import('./routes/redesign/page'), 'redesign')
 const TalkOrbHarnessPage = lazyRoute(() => import('./routes/talk-orb-harness/page'), 'talk-orb-harness')
 
 registerRoutePrefetch('/', ChatPage.prefetch)
@@ -129,7 +129,6 @@ const routeElements: Partial<Record<AppRouteId, ReactNode>> = {
   // server pointed at a live gateway, so it has to survive the build. It is a
   // lazy route: nothing of it loads until someone types the path.
   "talk-orb": <TalkOrbHarnessPage />,
-  redesign: <RedesignPage />,
 }
 
 // Redirect routes resolve at the ROUTER level so they never commit an
@@ -142,7 +141,7 @@ const routeLoaders: Partial<Record<AppRouteId, RouteObject["loader"]>> = {
 }
 
 const appRoutes: RouteObject[] = APP_ROUTES.flatMap((route) => {
-  if (route.id === "plugin-contributed" || (route.availability === "development" && !import.meta.env.DEV)) return []
+  if (route.id === "plugin-contributed") return []
   const element = routeElements[route.id]
   const loader = routeLoaders[route.id]
   return element ? [{ path: route.path, element, ...(loader ? { loader } : {}) }] : []

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { HoverCard } from 'radix-ui'
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
 import { isTodoId, todoPath } from '@/lib/todo-id'
 import { requestTodoPreview, useTodoPreview } from '@/lib/todo-preview'
 import { useKnownTodoPrefixes } from '@/components/chat/todo-prefix-context'
@@ -106,26 +106,24 @@ function LiveTodoMention({ id }: { id: string }) {
 
   if (!glanceEnabled) return link
   return (
-    <HoverCard.Root
+    <HoverCard
       open={mention.glanceOpen}
       onOpenChange={mention.setGlanceOpen}
       openDelay={OPEN_DELAY_MS}
       closeDelay={CLOSE_DELAY_MS}
     >
-      <HoverCard.Trigger asChild onPointerEnter={mention.onPointerEnter}>{link}</HoverCard.Trigger>
-      <HoverCard.Portal>
-        <HoverCard.Content
-          side="bottom"
-          align="start"
-          sideOffset={6}
-          alignOffset={-8}
-          collisionPadding={8}
-          className="todo-glance z-50"
-        >
-          <MentionGlance id={id} />
-        </HoverCard.Content>
-      </HoverCard.Portal>
-    </HoverCard.Root>
+      <HoverCardTrigger asChild onPointerEnter={mention.onPointerEnter}>{link}</HoverCardTrigger>
+      <HoverCardContent
+        side="bottom"
+        align="start"
+        sideOffset={6}
+        alignOffset={-8}
+        collisionPadding={8}
+        className="todo-glance rounded-full"
+      >
+        <MentionGlance id={id} />
+      </HoverCardContent>
+    </HoverCard>
   )
 }
 

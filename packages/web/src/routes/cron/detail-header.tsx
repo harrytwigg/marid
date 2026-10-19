@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "react-router-dom"
-import { Check, ChevronLeft, Play } from "lucide-react"
+import { Check, ChevronLeft, Play } from "@/components/ui/icon"
+import { Button } from "@/components/ui/button"
 import { describeCron } from "@/lib/cron-utils"
 import { LargeTitleHeader } from "@/components/shell/large-title-header"
 import { ToggleSwitch, type CronJobWire } from "./shared"
@@ -11,7 +12,7 @@ function CronBackLink() {
       to="/cron"
       className="mb-3.5 inline-flex items-center gap-1 text-[length:var(--text-footnote)] font-medium text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
     >
-      <ChevronLeft size={13} strokeWidth={2.4} aria-hidden />
+      <ChevronLeft size={13} aria-hidden />
       Cron
     </Link>
   )
@@ -52,17 +53,12 @@ function CronJobTrailing({
   const navigate = useNavigate()
   return (
     <div className="flex flex-none items-center gap-3.5">
-      <button
-        type="button"
+      <Button
+        variant={triggered ? "ghost" : "secondary"}
         data-testid="cron-run-now"
         disabled={triggerPending || triggered}
         onClick={onRun}
-        className="inline-flex h-[38px] flex-none items-center gap-1.5 rounded-full px-4 text-[length:var(--text-subheadline)] font-semibold transition-transform hover:scale-[0.98] disabled:opacity-80"
-        style={
-          triggered
-            ? { background: "color-mix(in srgb, var(--system-green) 13%, transparent)", color: "var(--system-green)", boxShadow: "var(--inset-shine)" }
-            : { background: "var(--accent-fill)", color: "var(--accent)", boxShadow: "var(--inset-shine)" }
-        }
+        className={triggered ? "text-[var(--system-green)] [--button-bg:color-mix(in_srgb,var(--system-green)_13%,transparent)] disabled:opacity-80" : "disabled:opacity-80"}
       >
         {triggered ? (
           <>
@@ -71,11 +67,11 @@ function CronJobTrailing({
           </>
         ) : (
           <>
-            <Play className="size-[13px]" fill="currentColor" strokeWidth={0} aria-hidden />
+            <Play className="size-[13px]" filled aria-hidden />
             {triggerPending ? "Starting…" : "Run now"}
           </>
         )}
-      </button>
+      </Button>
       <ToggleSwitch
         checked={job.enabled}
         onChange={onToggle}

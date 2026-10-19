@@ -1,30 +1,35 @@
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
-import { Slot } from "radix-ui"
+import { Slot } from "./slot"
 
 import { cn } from "@/lib/utils"
 
 /**
- * A small status label.
+ * A small status label in HeroUI's `chip` classes. A native span: a Chip has no
+ * behaviour, and its component would pull class-variant helpers into the SDK chunk.
  *
- * The tinted variants are the app's existing chip recipe — the colour at 12%
- * for the fill and at full strength for the text — so a plugin's status chip
- * and the app's own read as one language. No border at rest: the fill is the
- * separation.
+ * The tinted variants are the app's existing chip recipe: the colour at 12%
+ * for the fill and at full strength for the text, which is HeroUI's `soft`
+ * variant. No border at rest: the fill is the separation.
  */
+const CHIP = {
+  default: { color: "default", variant: "soft" },
+  secondary: { color: "default", variant: "tertiary" },
+  success: { color: "success", variant: "soft" },
+  warning: { color: "warning", variant: "soft" },
+  destructive: { color: "danger", variant: "soft" },
+} as const
+
 const badgeVariants = cva(
-  "inline-flex w-fit shrink-0 items-center justify-center gap-[var(--space-1)] whitespace-nowrap rounded-[var(--radius-sm)] px-[var(--space-2)] py-[2px] text-[length:var(--text-caption1)] font-[var(--weight-medium)] [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3",
+  "w-fit shrink-0 whitespace-nowrap [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3",
   {
     variants: {
       variant: {
-        default: "bg-[var(--fill-primary)] text-[var(--text-primary)]",
-        secondary: "bg-[var(--fill-tertiary)] text-[var(--text-secondary)]",
-        success:
-          "bg-[color-mix(in_srgb,var(--system-green)_12%,transparent)] text-[var(--system-green)]",
-        warning:
-          "bg-[color-mix(in_srgb,var(--system-orange)_12%,transparent)] text-[var(--system-orange)]",
-        destructive:
-          "bg-[color-mix(in_srgb,var(--system-red)_12%,transparent)] text-[var(--system-red)]",
+        default: "",
+        secondary: "",
+        success: "",
+        warning: "",
+        destructive: "",
       },
     },
     defaultVariants: {
@@ -37,20 +42,27 @@ function Badge({
   className,
   variant = "default",
   asChild = false,
+  children,
   ...props
 }: React.ComponentProps<"span"> &
   VariantProps<typeof badgeVariants> & {
     asChild?: boolean
   }) {
-  const Comp = asChild ? Slot.Root : "span"
+  const v = variant ?? "default"
+  const { color, variant: chipVariant } = CHIP[v]
+  const Comp = asChild ? Slot : "span"
+  // As HeroUI's Chip does, a bare string or number gets its label wrapper.
+  const label = typeof children === "string" || typeof children === "number" ? <span className="chip__label">{children}</span> : children
 
   return (
     <Comp
       data-slot="badge"
-      data-variant={variant}
-      className={cn(badgeVariants({ variant, className }))}
+      data-variant={v}
+      className={cn("chip", "chip--sm", `chip--${color}`, `chip--${chipVariant}`, badgeVariants({ variant: v }), className)}
       {...props}
-    />
+    >
+      {asChild ? children : label}
+    </Comp>
   )
 }
 

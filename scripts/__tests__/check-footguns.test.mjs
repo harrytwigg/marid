@@ -116,6 +116,35 @@ const RULE_CASES = [
     passesBecause: "naming process.env once at an overridable seam is the opposite of scattering it",
   },
   {
+    rule: "raw-backdrop-blur",
+    triggers: {
+      "packages/web/src/components/bar.tsx": 'export const Bar = () => <nav className="backdrop-blur-xl" />;\n',
+    },
+    passes: {
+      // The token file owns the material, and a test may name a filter to assert it is gone.
+      "packages/web/src/routes/glass-identity.css": ".glass-float { backdrop-filter: var(--glass-blur); }\n",
+      "packages/web/src/components/__tests__/bar.test.tsx": 'expect(el.style.backdropFilter).toBe("")\n',
+      "packages/jinn/src/gateway/page.ts": 'const css = "backdrop-filter: blur(4px)";\n',
+    },
+    passesBecause: "the glass token file defines the material, tests assert on it, and only the web app is in scope",
+  },
+  {
+    rule: "removed-ui-library",
+    triggers: {
+      "packages/web/src/components/menu.tsx": 'import { Slot } from "radix-ui"\n',
+    },
+    passes: {
+      // The look-alikes: the local slot, the icon module, packages that merely start alike, prose that
+      // names a library, and another package, where the web app's bundle is not at stake.
+      "packages/web/src/components/fine.tsx":
+        'import { Slot } from "./slot"\nimport { Search } from "@/components/ui/icon"\n' +
+        'import { Command } from "cmdk-like"\nimport { useRadixThing } from "@/hooks/radix-ui-compat"\n',
+      "packages/web/docs/notes.md": "Replaced `lucide-react` and `radix-ui`.\n",
+      "packages/jinn/src/other.ts": 'import { Search } from "lucide-react"\n',
+    },
+    passesBecause: "only the web app's code is in scope, and only the exact libraries count",
+  },
+  {
     rule: "spawn-without-stdio",
     triggers: {
       "packages/jinn/src/download.ts":
@@ -154,6 +183,37 @@ for (const { rule, triggers, passes, passesBecause } of RULE_CASES) {
   })
 }
 
+test("removed-ui-library catches every library, in every way a module is named", () => {
+  const root = repoWith({
+    "packages/web/src/a.tsx": 'import { Slot } from "radix-ui"\n',
+    "packages/web/src/b.tsx": 'import * as Dialog from "@radix-ui/react-dialog"\n',
+    "packages/web/src/c.tsx": 'import { Search } from "lucide-react"\n',
+    "packages/web/src/d.tsx": "import { Command } from 'cmdk'\n",
+    "packages/web/src/e.ts": 'const icons = await import("lucide-react/dynamic")\n',
+    "packages/web/src/f.cjs": 'const { Slot } = require("@radix-ui/react-slot")\n',
+    "packages/web/package.json": '{\n  "dependencies": {\n    "cmdk": "^1.1.1"\n  }\n}\n',
+  })
+
+  const { status, stdout } = check(root, "--all")
+
+  assert.equal(violationsOf(stdout, "removed-ui-library"), 7, stdout)
+  assert.equal(status, 1)
+})
+
+test("removed-ui-library judges only the lines a change adds", () => {
+  const root = repoWith({ "packages/web/src/old.tsx": 'import { Search } from "lucide-react"\n' })
+  git(root, "commit", "-m", "base")
+  git(root, "branch", "base")
+  writeFiles(root, { "packages/web/src/new.tsx": 'import { Slot } from "radix-ui"\n' })
+  git(root, "add", "-A")
+  git(root, "commit", "-m", "change")
+
+  const { stdout } = check(root, "--diff", "base")
+
+  assert.equal(violationsOf(stdout, "removed-ui-library"), 1, stdout)
+  assert.match(stdout, /^packages\/web\/src\/new\.tsx:1$/m)
+})
+
 test("a frozen migration excuses the historical path, never a live leak", () => {
   const root = repoWith({
     "packages/jinn/template/migrations/0001-initial/notes.md":
@@ -175,6 +235,27 @@ test("--list prints every rule with a remediation", () => {
   const fixes = [...stdout.matchAll(/^ {2}fix: (.+)$/gm)].map((match) => match[1].trim())
   assert.equal(fixes.length, RULE_CASES.length)
   for (const fix of fixes) assert.ok(fix.length > 0, "every rule needs a non-empty fix")
+})
+
+test("every raw backdrop filter in this repository is the glass file or an explained exception", async () => {
+  const { BACKDROP_BLUR_ALLOWLIST, GLASS_TOKEN_FILE } = await import("../footguns/backdrop-blur-allowlist.mjs")
+  const tracked = git(process.cwd(), "ls-files", "packages/web/src").split("\n").filter(Boolean)
+  const raw = /backdrop-filter|backdropFilter|\bbackdrop-(?:blur|saturate|brightness|contrast|grayscale|hue-rotate|invert|sepia)\b/
+  const holders = tracked.filter(
+    (file) => /\.(?:tsx?|css)$/.test(file) && !/\/__tests__\/|\.test\./.test(file) && raw.test(fs.readFileSync(file, "utf8")),
+  )
+
+  // An entry for a file that no longer filters is a rotted excuse: drop it.
+  for (const file of BACKDROP_BLUR_ALLOWLIST.keys()) {
+    assert.ok(holders.includes(file), `${file} is allowlisted but holds no raw backdrop filter; remove the entry`)
+  }
+  for (const [file, reason] of BACKDROP_BLUR_ALLOWLIST) assert.ok(reason.trim().length > 0, `${file} needs a reason`)
+  const unexplained = holders.filter((file) => file !== GLASS_TOKEN_FILE && !BACKDROP_BLUR_ALLOWLIST.has(file))
+  assert.deepEqual(unexplained, [])
+  assert.match(fs.readFileSync(GLASS_TOKEN_FILE, "utf8"), /backdrop-filter/, "the token file should hold the filter")
+
+  const { stdout } = check(process.cwd(), "--all")
+  assert.equal(violationsOf(stdout, "raw-backdrop-blur"), 0, stdout)
 })
 
 test("--all completes over this repository without throwing", () => {

@@ -1,7 +1,8 @@
 import { useEffect, useRef, type ReactNode } from "react"
-import { FileText, Image as ImageIcon, Paperclip, X } from "lucide-react"
+import { FileText, Image as ImageIcon, Paperclip, X } from "@/components/ui/icon"
 import { api, type WorkItemAttachmentWire } from "@/lib/api"
 import { useFileDrop } from "@/hooks/use-file-drop"
+import { Button } from "@/components/ui/button"
 import { FileDropOverlay } from "@/components/ui/file-drop-overlay"
 import { AttachmentTile, isImageMime, useAttachmentPreview } from "./attachment-preview"
 
@@ -68,21 +69,22 @@ export function AttachmentsSection({
       onClick={() => onRemove(attachment)}
       className={`focus-outline grid place-items-center opacity-0 outline-none transition-opacity focus-visible:opacity-100 ${className}`}
     >
-      <X size={12} strokeWidth={2.2} aria-hidden />
+      <X size={12} aria-hidden />
     </button>
   )
 
   return (
     <section data-testid="task-attachments" className="mt-2 flex flex-wrap items-center gap-2">
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="icon-sm"
         aria-label="Attach a file"
         data-testid="attachment-add"
         onClick={() => inputRef.current?.click()}
-        className="focus-outline -ml-2 grid size-[34px] flex-none place-items-center rounded-[10px] text-[var(--text-quaternary)] outline-none transition-colors hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]"
+        className="-ml-2 flex-none text-[var(--text-quaternary)]"
       >
-        <Paperclip size={15} strokeWidth={1.8} aria-hidden />
-      </button>
+        <Paperclip size={15} aria-hidden />
+      </Button>
       {itemLevel.length > 0 && (
         <div data-testid="attachment-strip" className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           {itemLevel.map((attachment) =>
@@ -95,7 +97,7 @@ export function AttachmentsSection({
                 dense
                 action={removeButton(
                   attachment,
-                  "absolute right-1 top-1 size-[34px] rounded-full bg-[var(--material-thick)] text-[var(--text-secondary)] shadow-[var(--shadow-subtle)] backdrop-blur-[20px] hover:text-[var(--text-primary)] group-hover/tile:opacity-100",
+                  "absolute right-1 top-1 size-[34px] rounded-full bg-[var(--material-thick-opaque)] text-[var(--text-secondary)] shadow-[var(--shadow-subtle)] hover:text-[var(--text-primary)] group-hover/tile:opacity-100",
                 )}
               />
             ) : (
@@ -111,7 +113,7 @@ export function AttachmentsSection({
                   className="focus-outline flex min-w-0 items-center gap-2 rounded-lg outline-none"
                 >
                   <span className="grid size-6 flex-none place-items-center rounded-[7px] bg-[var(--fill-secondary)] text-[var(--text-tertiary)]">
-                    {isImageMime(attachment.mime) ? <ImageIcon size={12} strokeWidth={1.8} aria-hidden /> : <FileText size={12} strokeWidth={1.8} aria-hidden />}
+                    {isImageMime(attachment.mime) ? <ImageIcon size={12} aria-hidden /> : <FileText size={12} aria-hidden />}
                   </span>
                   <span className="max-w-[160px] truncate text-[12.5px] font-medium text-[var(--text-primary)]">{attachment.filename}</span>
                 </a>

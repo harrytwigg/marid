@@ -37,7 +37,7 @@ const gateway = vi.hoisted(() => ({ connected: false, subscribe: () => () => {} 
 
 vi.mock("@/hooks/use-gateway", () => ({ GatewayProvider: passThrough, useGateway: () => gateway }))
 vi.mock("@/hooks/use-query-invalidation", () => ({ useQueryInvalidation: () => {} }))
-vi.mock("@/components/emoji-favicon", () => ({ EmojiFavicon: () => null }))
+vi.mock("@/components/brand-favicon", () => ({ BrandFavicon: () => null }))
 
 function renderApp() {
   const router = createMemoryRouter(

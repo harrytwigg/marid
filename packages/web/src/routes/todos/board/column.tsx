@@ -1,16 +1,18 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react"
-import { Plus } from "lucide-react"
+import { Plus } from "@/components/ui/icon"
 import type { WorkItemStatusWire } from "@/lib/api"
 import { StateCircle } from "../state-glyph"
 import { stateKeyOf, STATUS_LABEL } from "@/lib/todos"
+import { NEW_TODO_PRELOAD } from "../new-todo-dialog-lazy"
 import { BOARD_PAGE_SIZE } from "./use-board"
 import type { BoardDragState } from "./use-board-drag"
 
-/* Todos v2 slice 6 — one status column (design-doc §2). Sticky header carries
- * the page background (polish law 21) so cards scroll under it; the track is
- *  transparent — cards sit directly on --bg. The `+` lives on To do
- *  only: creation is birth, never a teleport into mid-pipeline. During a drag,
- * an illegal/gated column recedes to 38% and renders no slot. */
+/* Todos v2 slice 6 — one status column (design-doc §2). The column is a glass
+ * panel on the board (glass-identity.css), and its header sticks on the desktop
+ * with the panel's own opaque tint so cards scroll under it; on a phone the
+ * header scrolls with the column, which is 84vw wide and snaps. The `+` lives on
+ * To do only: creation is birth, never a teleport into mid-pipeline. During a
+ * drag, an illegal/gated column recedes to 38% and renders no slot. */
 
 /** FLIP the column's cards when the list shifts (slot insertion, drops,
  *  polling moves). Measures previous tops per card id and plays the inversion
@@ -84,14 +86,15 @@ export function BoardColumn({
     <section
       data-testid={`board-column-${status}`}
       data-board-column={status}
-      className="flex min-w-0 flex-1 flex-col transition-opacity duration-150 max-[700px]:flex-none"
+      data-board-snap=""
+      className="flex min-w-0 flex-1 flex-col transition-opacity duration-150 max-[700px]:w-[84vw] max-[700px]:flex-none max-[700px]:snap-start"
       style={{
         opacity: dimmed ? 0.38 : undefined,
         flex: drag ? `0 0 ${drag.width}px` : undefined,
       }}
       aria-label={`${label} column, ${count} items`}
     >
-      <div className="group/colhead sticky top-0 z-[2] flex items-center gap-2 bg-[var(--bg)] px-[11px] pb-2.5 pt-0.5 max-[700px]:static max-[700px]:px-0.5 max-[700px]:pb-0.5">
+      <div data-board-column-head="" className="group/colhead sticky top-0 z-[2] flex items-center gap-2 px-[11px] pb-2.5 pt-0.5 max-[700px]:static">
         <StateCircle keyOf={stateKeyOf(status)} size={20} />
         <span className="text-[calc(13px*var(--text-scale))] font-semibold text-[var(--text-secondary)]">{label}</span>
         <span className="text-[calc(12px*var(--text-scale))] tabular-nums text-[var(--text-quaternary)]">{count}</span>
@@ -101,9 +104,10 @@ export function BoardColumn({
             aria-label={`New todo in ${label}`}
             data-testid={`board-quick-add-${status}`}
             onClick={onQuickAdd}
+            {...NEW_TODO_PRELOAD}
             className="focus-outline ml-auto grid size-6 place-items-center rounded-lg text-[var(--text-quaternary)] opacity-0 transition-opacity hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)] focus-visible:opacity-100 group-hover/colhead:opacity-100 max-[700px]:size-11 max-[700px]:opacity-100"
           >
-            <Plus size={13} strokeWidth={2.2} aria-hidden />
+            <Plus size={13} aria-hidden />
           </button>
         )}
       </div>
@@ -112,7 +116,7 @@ export function BoardColumn({
           bodyRef.current = el
           registerColumn(status)(el)
         }}
-        className="flex flex-col gap-2 max-[700px]:gap-0"
+        className="flex flex-col gap-2"
       >
         {children}
         {hasMore && (

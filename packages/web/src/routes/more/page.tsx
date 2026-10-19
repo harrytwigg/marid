@@ -1,5 +1,6 @@
+import { Button } from "@/components/ui/button"
 import { Link } from "react-router-dom"
-import { ChevronRight, Sun, Moon, Palette, type LucideIcon } from "lucide-react"
+import { ChevronRight, Sun, Moon, Palette, type IconComponent } from "@/components/ui/icon"
 import { PageLayout } from "@/components/page-layout"
 import { LargeTitleHeader } from "@/components/shell/large-title-header"
 import { PageScaffold } from "@/components/shell/page-scaffold"
@@ -29,7 +30,7 @@ const TINT: Record<string, { bg: string; fg: string }> = {
   "/settings": { bg: "var(--text-tertiary)", fg: "var(--bg-secondary)" },
 }
 
-function RowIcon({ Icon, href }: { Icon: LucideIcon; href: string }) {
+function RowIcon({ Icon, href }: { Icon: IconComponent; href: string }) {
   const tint = TINT[href] ?? { bg: "var(--text-tertiary)", fg: "#fff" }
   return (
     <span
@@ -62,7 +63,7 @@ function LinkRow({ item, first }: { item: NavItem; first: boolean }) {
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
-    <div className="overflow-hidden rounded-[var(--radius-lg)] bg-[var(--bg-secondary)] shadow-[var(--shadow-card)]">
+    <div className="glass-card overflow-hidden rounded-[var(--radius-lg)]">
       {children}
     </div>
   )
@@ -97,22 +98,18 @@ function AppearanceRow() {
       <span className="flex-1 text-[length:var(--text-body)] font-[var(--weight-medium)] tracking-[-0.01em] text-[var(--text-primary)]">
         Appearance
       </span>
-      <div className="flex items-center gap-0.5 rounded-full bg-[var(--fill-tertiary)] p-0.5" role="group" aria-label="Appearance">
+      <div className="flex items-center gap-0.5 rounded-full bg-[var(--fill-tertiary)] p-0.5 shadow-[inset_0_0_0_1px_var(--glass-edge)]" role="group" aria-label="Appearance">
         {THEMES.map((t) => (
-          <button
+          <Button
             key={t.id}
-            type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => setTheme(t.id)}
             aria-pressed={theme === t.id}
-            className={cn(
-              "min-h-[40px] md:min-h-0 rounded-full px-3 py-1 text-[length:var(--text-footnote)] font-[var(--weight-semibold)] transition-[background-color,color,box-shadow]",
-              theme === t.id
-                ? "bg-[var(--bg-tertiary)] text-[var(--text-primary)] shadow-[var(--shadow-subtle)]"
-                : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]",
-            )}
+            className="segment min-h-[40px] md:min-h-0 px-3 font-[var(--weight-semibold)]"
           >
             {t.label}
-          </button>
+          </Button>
         ))}
       </div>
     </div>

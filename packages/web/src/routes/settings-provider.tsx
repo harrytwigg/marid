@@ -23,7 +23,6 @@ interface SettingsContextValue {
   setPortalName: (name: string | null) => void
   setPortalSubtitle: (subtitle: string | null) => void
   setPortalEmoji: (emoji: string | null) => void
-  setPortalIcon: (icon: string | null) => void
   setIconBgHidden: (hidden: boolean) => void
   setEmojiOnly: (emojiOnly: boolean) => void
   setOperatorName: (name: string | null) => void
@@ -33,6 +32,7 @@ interface SettingsContextValue {
   setTalkOrbVariant: (variant: JinnSettings["talkOrbVariant"]) => void
   setTalkOrbIntensity: (intensity: JinnSettings["talkOrbIntensity"]) => void
   setTextScale: (textScale: JinnSettings["textScale"]) => void
+  setTransparency: (transparency: JinnSettings["transparency"]) => void
   setEmployeeOverride: (employeeId: string, override: EmployeeOverride) => void
   clearEmployeeOverride: (employeeId: string) => void
   getEmployeeDisplay: (employee: { name: string; emoji: string; id: string }) => EmployeeDisplay
@@ -46,7 +46,6 @@ const SettingsContext = createContext<SettingsContextValue>({
   setPortalName: () => {},
   setPortalSubtitle: () => {},
   setPortalEmoji: () => {},
-  setPortalIcon: () => {},
   setIconBgHidden: () => {},
   setEmojiOnly: () => {},
   setOperatorName: () => {},
@@ -56,6 +55,7 @@ const SettingsContext = createContext<SettingsContextValue>({
   setTalkOrbVariant: () => {},
   setTalkOrbIntensity: () => {},
   setTextScale: () => {},
+  setTransparency: () => {},
   setEmployeeOverride: () => {},
   clearEmployeeOverride: () => {},
   getEmployeeDisplay: (employee) => ({ emoji: employee.emoji }),
@@ -157,12 +157,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     },
     [update],
   )
-  const setPortalIcon = useCallback(
-    (icon: string | null) => {
-      update((prev) => ({ ...prev, portalIcon: icon }))
-    },
-    [update],
-  )
   const setIconBgHidden = useCallback(
     (hidden: boolean) => {
       update((prev) => ({ ...prev, iconBgHidden: hidden }))
@@ -198,6 +192,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const setTalkOrb = useField(update, "talkOrb")
   const setTalkOrbVariant = useField(update, "talkOrbVariant")
   const setTalkOrbIntensity = useField(update, "talkOrbIntensity")
+  const setTransparency = useField(update, "transparency")
 
   const setTextScale = useCallback(
     (textScale: JinnSettings["textScale"]) => {
@@ -257,7 +252,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         setPortalName,
         setPortalSubtitle,
         setPortalEmoji,
-        setPortalIcon,
         setIconBgHidden,
         setEmojiOnly,
         setOperatorName,
@@ -267,6 +261,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         setTalkOrbVariant,
         setTalkOrbIntensity,
         setTextScale,
+        setTransparency,
         setEmployeeOverride,
         clearEmployeeOverride,
         getEmployeeDisplay,

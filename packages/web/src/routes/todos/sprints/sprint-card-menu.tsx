@@ -1,12 +1,11 @@
-import { useCallback, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  PointMenu,
+} from "@/components/ui/context-menu"
 import type { WorkItemCompactWire } from "@/lib/api"
 import type { SprintWire } from "@/lib/sprint-api"
 import { MenuCheck } from "../filter-chips"
@@ -23,7 +22,7 @@ import { keptByClosedSprint, useSetWorkItemSprint } from "./use-sprints"
  * unrelated page state, which the board's render-cost budget forbids. */
 
 const MENU_CLASS =
-  "min-w-[220px] rounded-[var(--radius-xl)] border-0 bg-[var(--material-thick)] p-1.5 shadow-[var(--shadow-overlay)] backdrop-blur-xl"
+  "min-w-[220px] rounded-[var(--radius-xl)] p-1.5"
 const ITEM_CLASS =
   "min-h-9 cursor-pointer gap-2 rounded-[9px] px-2.5 text-[length:var(--text-subheadline)] text-[var(--text-primary)] focus:bg-[var(--fill-tertiary)]"
 
@@ -76,38 +75,35 @@ function SprintCardMenu({ target, sprints, onClose, onMove }: {
 }) {
   const current = currentSprintOf(target)
   const kept = keptByClosedSprint(target.item.status, target.item.sprint)
+  const point = useMemo(() => ({ x: target.x, y: target.y }), [target.x, target.y])
   return (
-    <DropdownMenu open onOpenChange={(open) => { if (!open) onClose() }}>
-      <DropdownMenuTrigger asChild>
-        <span
-          aria-hidden
-          className="pointer-events-none fixed size-0"
-          style={{ left: target.x, top: target.y }}
-        />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className={MENU_CLASS} data-testid="sprint-card-menu">
-        <DropdownMenuLabel className="px-2.5 pb-1 pt-1.5 text-[length:var(--text-caption1)] font-semibold uppercase tracking-[0.06em] text-[var(--text-tertiary)]">
+    <PointMenu point={point} onOpenChange={(open) => { if (!open) onClose() }}>
+      <ContextMenuContent aria-label={`Move ${target.item.id} to a sprint`} className={MENU_CLASS} data-testid="sprint-card-menu">
+        <ContextMenuLabel className="px-2.5 pb-1 pt-1.5 text-[length:var(--text-caption1)] font-semibold uppercase tracking-[0.06em] text-[var(--text-tertiary)]">
           Move {target.item.id} to sprint
-        </DropdownMenuLabel>
+        </ContextMenuLabel>
         {kept && (
-          <div className="max-w-[240px] px-2.5 pb-1.5 text-[length:var(--text-caption1)] text-[var(--text-tertiary)]" data-testid="sprint-card-kept">
+          <ContextMenuLabel
+            data-testid="sprint-card-kept"
+            className="max-w-[240px] px-2.5 pb-1.5 pt-0 text-[length:var(--text-caption1)] font-normal text-[var(--text-tertiary)]"
+          >
             {target.item.status === "done" ? "Done" : "Cancelled"} in closed sprint {target.item.sprint?.name}, which keeps it as its record.
-          </div>
+          </ContextMenuLabel>
         )}
         {sprints.map((sprint) => (
-          <DropdownMenuItem key={sprint.id} className={ITEM_CLASS} disabled={kept} data-testid={`sprint-card-move-${sprint.id}`} onSelect={() => onMove(sprint.id)}>
+          <ContextMenuItem key={sprint.id} className={ITEM_CLASS} disabled={kept} data-testid={`sprint-card-move-${sprint.id}`} onSelect={() => onMove(sprint.id)}>
             <span className="min-w-0 truncate">{sprint.name}</span>
             <span className="text-[11px] text-[var(--text-quaternary)]">{sprint.status}</span>
             <MenuCheck on={current === sprint.id} />
-          </DropdownMenuItem>
+          </ContextMenuItem>
         ))}
-        {sprints.length > 0 && <DropdownMenuSeparator />}
-        <DropdownMenuItem className={ITEM_CLASS} disabled={kept} data-testid="sprint-card-move-none" onSelect={() => onMove(null)}>
+        {sprints.length > 0 && <ContextMenuSeparator />}
+        <ContextMenuItem className={ITEM_CLASS} disabled={kept} data-testid="sprint-card-move-none" onSelect={() => onMove(null)}>
           No sprint
           <MenuCheck on={current === null} />
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </PointMenu>
   )
 }
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { isTodoId, TODO_ID_MENTION_SOURCE } from '@/lib/todo-id'
 import { TodoMention } from '@/components/todo-mention'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown } from '@/components/ui/icon'
 import { CodeBlock, parseFenceLang } from '@/components/chat/message-code-block'
 import { FILE_PATH_CORE, isFilePath, renderPathLink } from '@/components/chat/message-file-link'
 

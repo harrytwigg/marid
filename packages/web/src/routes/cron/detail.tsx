@@ -9,6 +9,7 @@ import {
   formatRunTime,
   nextCronDate,
 } from "@/lib/cron-utils"
+import { Button } from "@/components/ui/button"
 import { PageLayout } from "@/components/page-layout"
 import { PageScaffold } from "@/components/shell/page-scaffold"
 import { CronJobHeader } from "./detail-header"
@@ -138,13 +139,9 @@ export default function CronDetailPage() {
               <p className="mt-2 text-[length:var(--text-subheadline)] text-[var(--text-tertiary)]">
                 “{id}” isn't scheduled on this gateway.
               </p>
-              <button
-                type="button"
-                onClick={() => navigate("/cron")}
-                className="mt-4 text-[length:var(--text-footnote)] font-medium text-[var(--accent)] transition-opacity hover:opacity-80"
-              >
+              <Button variant="link" className="mt-4" onClick={() => navigate("/cron")}>
                 Back to Cron
-              </button>
+              </Button>
             </div>
           ) : jobsQuery.isError ? (
             <div
@@ -171,7 +168,7 @@ export default function CronDetailPage() {
                     Overview
                   </span>
                 </div>
-                <div className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[5px] shadow-[var(--shadow-card)]">
+                <div className="glass-card rounded-[var(--radius-xl)] p-[5px]">
                   <OverviewRow label="Target">
                     {job.action ? (
                       <span className="truncate">{actionLabel(job.action)}</span>
@@ -224,7 +221,7 @@ export default function CronDetailPage() {
                   )}
                 </div>
                 {runsQuery.isLoading ? (
-                  <div className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[5px] shadow-[var(--shadow-card)]" aria-hidden>
+                  <div className="glass-card rounded-[var(--radius-xl)] p-[5px]" aria-hidden>
                     {[0, 1, 2].map((i) => (
                       <div key={i} className="flex min-h-[44px] items-center gap-2.5 py-1.5 pl-2.5 pr-3.5">
                         <span className="size-[22px] flex-none rounded-full bg-[var(--fill-tertiary)] motion-safe:animate-[skeletonPulse_1.6s_var(--ease-smooth)_infinite]" style={{ animationDelay: `${i * 200}ms` }} />
@@ -233,13 +230,13 @@ export default function CronDetailPage() {
                     ))}
                   </div>
                 ) : runs.length === 0 ? (
-                  <div className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] shadow-[var(--shadow-card)]" data-testid="cron-runs-empty">
+                  <div className="glass-card rounded-[var(--radius-xl)]" data-testid="cron-runs-empty">
                     <div className="px-5 py-8 text-center text-[length:var(--text-subheadline)] text-[var(--text-tertiary)]">
                       No runs yet.
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[5px] shadow-[var(--shadow-card)]" data-testid="cron-runs">
+                  <div className="glass-card rounded-[var(--radius-xl)] p-[5px]" data-testid="cron-runs">
                     {runs.map((run, i) => (
                       <RunRow key={`${runTimestamp(run) ?? "run"}-${i}`} run={run} now={now} />
                     ))}

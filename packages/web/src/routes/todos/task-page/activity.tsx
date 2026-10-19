@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { skipToken, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ArrowUp, ChevronRight, FileText, Image as ImageIcon, Paperclip, X } from "lucide-react"
+import { ArrowUp, ChevronRight, FileText, Image as ImageIcon, Paperclip, X } from "@/components/ui/icon"
 import {
   api,
   type Employee,
@@ -152,7 +152,6 @@ function CommentBlock({
               {expanded ? "Show less" : "Show more"}
               <ChevronRight
                 size={11}
-                strokeWidth={2.2}
                 aria-hidden
                 className={`transition-transform duration-150 ${expanded ? "-rotate-90" : "rotate-90"}`}
               />
@@ -333,7 +332,7 @@ export function ActivitySection({
             onClick={() => setPending((current) => current.filter((candidate) => candidate.key !== entry.key))}
             className="absolute -right-1.5 -top-1.5 grid size-[18px] place-items-center rounded-full bg-[var(--bg-tertiary)] text-[var(--text-secondary)] shadow-[var(--shadow-subtle)]"
           >
-            <X size={10} strokeWidth={2.4} aria-hidden />
+            <X size={10} aria-hidden />
           </button>
         </span>
       ))}
@@ -397,7 +396,7 @@ export function ActivitySection({
           onClick={() => fileRef.current?.click()}
           className="focus-outline grid size-[34px] flex-none place-items-center rounded-[10px] text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-secondary)]"
         >
-          <Paperclip size={15} strokeWidth={2} aria-hidden />
+          <Paperclip size={15} aria-hidden />
         </button>
         <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-quaternary)] max-[700px]:hidden">
           ↩ to send · ⇧↩ new line · markdown
@@ -411,7 +410,7 @@ export function ActivitySection({
           className="focus-outline grid size-[34px] flex-none place-items-center rounded-full outline-none disabled:opacity-40"
           style={{ background: "var(--accent-fill)", color: "var(--accent)", boxShadow: "var(--inset-shine)" }}
         >
-          <ArrowUp size={15} strokeWidth={2.2} aria-hidden />
+          <ArrowUp size={15} aria-hidden />
         </button>
       </div>
     </div>
@@ -497,7 +496,6 @@ export function ActivitySection({
               >
                 <ChevronRight
                   size={11}
-                  strokeWidth={2.2}
                   aria-hidden
                   className={`ml-0.5 mr-[16.5px] transition-transform duration-150 ${open ? "rotate-90" : ""}`}
                 />
