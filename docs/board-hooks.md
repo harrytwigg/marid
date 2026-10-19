@@ -15,7 +15,9 @@ Claude Code's own tool hooks (SessionStart, Stop, ...). Board hook code lives in
 - **Fire-and-forget.** A board write never waits on a hook. Events are taken off the
   write path on `setImmediate`, after the write has returned. There is no hook
   timeout: a command that hangs stays `running` in the log until it exits or the
-  gateway stops.
+  gateway stops. Commands run in their own process group, which a graceful gateway
+  stop terminates; after a hard kill they keep running, and their rows are marked
+  `interrupted` at the next start.
 - **Failures never touch the move.** Any error inside matching, payload building or an
   action is caught and recorded on the run row. Nothing is retried.
 - **Committed writes only.** An event is dispatched only if its `work_item_events` row
@@ -58,8 +60,9 @@ hooks:
         text: "{{todo.id}} is waiting on you: {{todo.title}}"
 ```
 
-Validation runs with the rest of `config.yaml`; a malformed hook is reported as a
-config problem and skipped, it never takes the others down.
+A malformed hook never stops `config.yaml` from loading and never takes the other
+hooks down: it is skipped, logged once as a warning, and listed in the `problems` of
+`GET /api/hooks`. `PUT /api/config` does not reject it either.
 
 ### Events
 
@@ -147,14 +150,16 @@ guard themselves. `notify` cannot write to the board.
 - **command**: `/bin/sh -c <run>`, payload JSON on stdin; environment is the
   scrubbed child env plus `JINN_HOOK_NAME`, `JINN_HOOK_EVENT`, `JINN_HOOK_FIRE_ID`,
   `JINN_HOOK_TODO_ID`, `JINN_HOOK_FROM`, `JINN_HOOK_TO`, `JINN_HOOK_ACTOR`,
-  `JINN_HOOK_CHAIN` (comma-separated) and `JINN_HOOK_PAYLOAD` (the JSON). The command
+  `JINN_HOOK_CHAIN` (comma-separated) and `JINN_HOOK_PAYLOAD` (the JSON, omitted when
+  it is over 64 KB; stdin always carries it). The command
   passes the gateway's command policy first; a refused command is an `error` run.
   Outcome: `ok` on exit 0, `error` otherwise, with the exit code and the redacted
   last 4 KB of stdout+stderr.
 - **notify**: the configured connector's `sendMessage`, text rendered and redacted.
 
 Each action of a firing is its own run row, so a hook with `spawn` and `notify`
-writes two rows sharing one `fireId`.
+writes two rows sharing one `fireId`. A hook whose payload could not be built is
+logged as an `error` run with action `none`.
 
 ## Run log
 
@@ -172,7 +177,8 @@ Table `board_hook_runs` in the gateway database:
 | `started_at`, `finished_at`, `started_ms` | |
 
 Retention: rows older than 30 days, and rows beyond the newest 10,000, are pruned at
-most once an hour, at write time. At gateway start, rows still `running` from a
+most once an hour, at write time; `running` rows are never pruned. A hook session
+whose run row has been pruned is no longer loop-guarded (a warning is logged). At gateway start, rows still `running` from a
 previous process are marked `interrupted`.
 
 ## API (operator only)
