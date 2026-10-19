@@ -151,9 +151,10 @@ describe("a Muse Code usage limit", () => {
     expect(claude.runs).toBe(1);
     const session = registry.getSession(id)!;
     expect(session.engine).toBe("claude");
-    // The notice names the engine by its label and the reset by the time Muse reported.
-    const notice = connector.replies.find((r) => r.includes("usage limit reached"));
-    expect(notice).toBe(`⚠️ Muse Code usage limit reached. Resets ${formatResumeTime(new Date(resetsAtMs))}. Switching to Claude for now.`);
+    // A chain hop's notice names both targets and the reset by the time Muse reported.
+    const notice = connector.replies.find((r) => r.includes("hit its usage limit"));
+    expect(notice).toMatch(/^⚠️ musecode\b.* hit its usage limit \(resets .+\)\. Moving to claude\b/);
+    expect(notice).toContain(`(resets ${formatResumeTime(new Date(resetsAtMs))})`);
     expect(registry.getMessages(id).map((m) => m.content)).toContain("answered by claude");
   }, 60_000);
 
