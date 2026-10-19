@@ -77,6 +77,30 @@ function RowTarget({ link, index, fields, onChange }: {
   )
 }
 
+/** The three ways to change a row's place without a pointer. */
+function RowActions({ label, chainName, index, count, onMove, onRemove }: {
+  label: string
+  chainName: string
+  index: number
+  count: number
+  onMove: (to: number) => void
+  onRemove: () => void
+}) {
+  return (
+    <>
+      <RowButton label={`Move ${label} earlier in the ${chainName}`} disabled={index === 0} onClick={() => onMove(index - 1)}>
+        <ChevronUp size={15} aria-hidden />
+      </RowButton>
+      <RowButton label={`Move ${label} later in the ${chainName}`} disabled={index === count - 1} onClick={() => onMove(index + 1)}>
+        <ChevronDown size={15} aria-hidden />
+      </RowButton>
+      <RowButton label={`Remove ${label} from the ${chainName}`} onClick={onRemove}>
+        <X size={15} aria-hidden />
+      </RowButton>
+    </>
+  )
+}
+
 /** One link in the chain: its place in the order, the target it names, and the
  *  three ways to change that place without a pointer. */
 export function ChainRow({ link, index, count, fields, problems, expanded, style, onPointerDown, onChange, onMove, onRemove }: {
@@ -113,15 +137,7 @@ export function ChainRow({ link, index, count, fields, problems, expanded, style
         <div className="order-last flex w-full sm:order-none sm:contents">
           <RowTarget link={link} index={index} fields={fields} onChange={onChange} />
         </div>
-        <RowButton label={`Move ${label} earlier in the ${fields.chainName}`} disabled={index === 0} onClick={() => onMove(index - 1)}>
-          <ChevronUp size={15} aria-hidden />
-        </RowButton>
-        <RowButton label={`Move ${label} later in the ${fields.chainName}`} disabled={index === count - 1} onClick={() => onMove(index + 1)}>
-          <ChevronDown size={15} aria-hidden />
-        </RowButton>
-        <RowButton label={`Remove ${label} from the ${fields.chainName}`} onClick={onRemove}>
-          <X size={15} aria-hidden />
-        </RowButton>
+        <RowActions label={label} chainName={fields.chainName} index={index} count={count} onMove={onMove} onRemove={onRemove} />
       </div>
       {problems.map((problem) => (
         <p key={problem} data-chain-problem role="alert" className="px-[var(--space-2)] text-[length:var(--text-caption2)]" style={{ color: "var(--system-red)" }}>

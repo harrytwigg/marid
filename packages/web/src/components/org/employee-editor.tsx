@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react"
 import { api } from "@/lib/api"
 import type { Employee, EmployeeUpdate } from "@/lib/api"
+import type { EmployeeFallbackFields } from "@/lib/fallback-chains-api"
+import { employeeChainOf, sameChain } from "./employee-fallback"
+import { EmployeeFallbackField } from "./employee-fallback-field"
 import { isConfined, type DepartmentScopeWire } from "@/lib/department-api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -86,6 +89,7 @@ export function EmployeeEditor({
     model: employee.model,
     effortLevel: employee.effortLevel,
   })
+  const [fallback, setFallback] = useState(() => employeeChainOf(employee))
   const isSystem = employee.system === true
 
   // Department + reportsTo option lists come from the live org.
@@ -113,7 +117,7 @@ export function EmployeeEditor({
 
   // Build a patch of only the changed fields.
   const patch = useMemo<EmployeeUpdate>(() => {
-    const p: EmployeeUpdate = {}
+    const p: EmployeeUpdate & EmployeeFallbackFields = {}
     if (displayName !== (employee.displayName || employee.name)) p.displayName = displayName.trim()
     if (department !== (employee.department || "")) p.department = department
     if (rank !== employee.rank) p.rank = rank
@@ -126,8 +130,9 @@ export function EmployeeEditor({
     if (selector.engine !== employee.engine) p.engine = selector.engine
     if (selector.model !== employee.model) p.model = selector.model
     if (selector.effortLevel !== employee.effortLevel) p.effortLevel = selector.effortLevel
+    if (!sameChain(fallback, employeeChainOf(employee))) p.fallback = fallback
     return p
-  }, [displayName, department, rank, reportsTo, persona, alwaysNotify, cliFlags, selector, employee])
+  }, [displayName, department, rank, reportsTo, persona, alwaysNotify, cliFlags, selector, fallback, employee])
 
   const dirty = Object.keys(patch).length > 0
 
@@ -264,6 +269,10 @@ export function EmployeeEditor({
         <div className="rounded-[var(--radius-md)] bg-[var(--fill-quaternary)] border border-[var(--separator)] px-[var(--space-3)] py-[var(--space-2)]">
           <ModelSelectorRow mode="new" value={selector} onChange={setSelector} />
         </div>
+      </Field>
+
+      <Field label="Fallback chain" hint="Where this employee's sessions go when its own target reaches a limit.">
+        <EmployeeFallbackField employee={employee} engine={selector.engine} value={fallback} onChange={setFallback} />
       </Field>
 
       <Field label="Persona / instructions">

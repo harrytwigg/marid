@@ -58,8 +58,8 @@ const EXHAUSTED_UNTIL = new Date(Date.now() + 6 * 24 * 60 * 60_000).toISOString(
 
 const model = (id: string, label = id) => ({ id, label, supportsEffort: false, effortLevels: [] })
 
-function engine(name: string, available: boolean, defaultModel: string, health?: unknown, models = [model(defaultModel)], extra = {}) {
-  return { name, available, defaultModel, effortMechanism: 'none', models, ...(health ? { health } : {}), ...extra }
+function engine(name: string, available: boolean, defaultModel: string, extra: Record<string, unknown> = {}) {
+  return { name, available, defaultModel, effortMechanism: 'none', models: [model(defaultModel)], ...extra }
 }
 
 async function renderSettings() {
@@ -91,10 +91,13 @@ beforeEach(() => {
   registry.current = {
     default: 'claude',
     engines: {
-      claude: engine('claude', true, 'opus', { state: 'exhausted', until: EXHAUSTED_UNTIL, window: '7d' }, [model('opus', 'Opus'), model('sonnet', 'Sonnet')]),
+      claude: engine('claude', true, 'opus', {
+        health: { state: 'exhausted', until: EXHAUSTED_UNTIL, window: '7d' },
+        models: [model('opus', 'Opus'), model('sonnet', 'Sonnet')],
+      }),
       codex: engine('codex', true, 'gpt-5.6-sol'),
-      grok: engine('grok', false, 'grok-build', { state: 'degraded' }),
-      opencode: engine('opencode', true, 'x/one', undefined, [model('x/one'), model('x/two')]),
+      grok: engine('grok', false, 'grok-build', { health: { state: 'degraded' } }),
+      opencode: engine('opencode', true, 'x/one', { models: [model('x/one'), model('x/two')] }),
     },
   }
   loadConfig({ engines: { claude: { fallback: [{ engine: 'codex' }] } } })
@@ -313,7 +316,7 @@ describe('a legacy chain', () => {
 describe('the opencode internal fallback warning', () => {
   const withOpencode = (internalFallback: unknown) => {
     const reg = registry.current as { engines: Record<string, unknown> }
-    reg.engines.opencode = engine('opencode', true, 'x/one', undefined, [model('x/one')], { internalFallback })
+    reg.engines.opencode = engine('opencode', true, 'x/one', { internalFallback })
   }
 
   it('warns on the opencode card, with a link to the migration, while the plugin is still active', async () => {

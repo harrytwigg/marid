@@ -19,6 +19,17 @@ vi.mock("@/components/chat/model-selector-row", () => ({
   ),
 }))
 
+// The fallback chain field reads the registry and the chains API; its own tests cover it.
+// The stub drives the editor's side of it: what it patches.
+vi.mock("./employee-fallback-field", () => ({
+  EmployeeFallbackField: ({ onChange }: { onChange: (next: { engine: string }[] | null) => void }) => (
+    <>
+      <button type="button" onClick={() => onChange([{ engine: "codex" }])}>Set custom chain</button>
+      <button type="button" onClick={() => onChange(null)}>Inherit chain</button>
+    </>
+  ),
+}))
+
 const updateEmployee = vi.fn()
 const getOrg = vi.fn()
 vi.mock("@/lib/api", () => ({
@@ -71,6 +82,35 @@ describe("EmployeeEditor", () => {
     await waitFor(() => expect(updateEmployee).toHaveBeenCalledTimes(1))
     expect(updateEmployee).toHaveBeenCalledWith("content-writer", { persona: "New persona." })
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith({ ...EMP, persona: "New persona." }))
+  })
+
+  it("patches a custom chain as a list of links", async () => {
+    updateEmployee.mockResolvedValue({ status: "ok", employee: EMP })
+    const own = { ...EMP, fallback: [{ engine: "grok" }] } as Employee
+    render(<EmployeeEditor employee={own} onCancel={() => {}} onSaved={() => {}} />)
+    expect(saveBtn().disabled).toBe(true) // the chain it holds is not a change
+
+    fireEvent.click(screen.getByRole("button", { name: "Set custom chain" }))
+    fireEvent.click(saveBtn())
+
+    await waitFor(() => expect(updateEmployee).toHaveBeenCalledWith("content-writer", { fallback: [{ engine: "codex" }] }))
+  })
+
+  it("patches null to go back to the default", async () => {
+    updateEmployee.mockResolvedValue({ status: "ok", employee: EMP })
+    const own = { ...EMP, fallback: [{ engine: "grok" }] } as Employee
+    render(<EmployeeEditor employee={own} onCancel={() => {}} onSaved={() => {}} />)
+
+    fireEvent.click(screen.getByRole("button", { name: "Inherit chain" }))
+    fireEvent.click(saveBtn())
+
+    await waitFor(() => expect(updateEmployee).toHaveBeenCalledWith("content-writer", { fallback: null }))
+  })
+
+  it("sends no fallback when the employee inherits and still does", () => {
+    render(<EmployeeEditor employee={EMP} onCancel={() => {}} onSaved={() => {}} />)
+    fireEvent.click(screen.getByRole("button", { name: "Inherit chain" }))
+    expect(saveBtn().disabled).toBe(true)
   })
 
   it("keeps the form open and shows the error on a failed save", async () => {

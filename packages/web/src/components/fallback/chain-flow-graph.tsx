@@ -1,5 +1,5 @@
 import "@xyflow/react/dist/style.css"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type CSSProperties } from "react"
 import { Handle, MarkerType, Position, ReactFlow, type NodeProps } from "@xyflow/react"
 import { buildChainFlow, FLOW_NODE_H, type ChainFlowInput, type FlowOrientation, type FlowTargetData } from "./chain-flow-model"
 
@@ -50,6 +50,20 @@ function Badges({ data }: { data: FlowTargetData }) {
   )
 }
 
+function nodeStyle(target: FlowTargetData): CSSProperties {
+  return {
+    width: "100%",
+    height: FLOW_NODE_H,
+    opacity: target.skip ? 0.5 : 1,
+    border: `1px ${target.skip ? "dashed" : "solid"} ${target.current ? "var(--accent)" : "var(--separator)"}`,
+    boxShadow: target.current ? "0 0 0 1px var(--accent)" : undefined,
+  }
+}
+
+function nodeName(target: FlowTargetData): string {
+  return [target.label, HEALTH_WORD[target.health], target.skipText].filter(Boolean).join(". ")
+}
+
 /** One target: its label, a health dot, and what the limits reading says. A link
  *  that would be passed over is dimmed, with the reason on hover and to a screen reader. */
 export function ChainTargetNode({ data }: NodeProps) {
@@ -62,16 +76,9 @@ export function ChainTargetNode({ data }: NodeProps) {
       data-current={target.current || undefined}
       data-skipped={target.skip ?? undefined}
       title={target.skipText ?? undefined}
-      aria-label={[target.label, HEALTH_WORD[target.health], target.skipText].filter(Boolean).join(". ")}
+      aria-label={nodeName(target)}
       className="flex flex-col justify-center gap-[2px] rounded-[var(--radius-md)] bg-[var(--fill-secondary)] px-[var(--space-3)]"
-      style={{
-        width: "100%",
-        height: FLOW_NODE_H,
-        opacity: target.skip ? 0.5 : 1,
-        border: `1px solid ${target.current ? "var(--accent)" : "var(--separator)"}`,
-        boxShadow: target.current ? "0 0 0 1px var(--accent)" : undefined,
-        borderStyle: target.skip ? "dashed" : "solid",
-      }}
+      style={nodeStyle(target)}
     >
       <Handle type="target" position={vertical ? Position.Top : Position.Left} isConnectable={false} className="!opacity-0" />
       <div className="flex min-w-0 items-center gap-[6px]">
