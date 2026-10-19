@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { STARTED_BY_LABEL, type StartedSession } from "@/lib/api-auto-dispatch"
+import { engineDisplayName } from "@/lib/engine-names"
 import { agoLabel } from "./format"
 
 /**
@@ -27,9 +28,9 @@ function EngineTabs({ engines, engine, onPick }: { engines: string[]; engine: st
           role="tab"
           aria-selected={name === engine}
           onClick={() => onPick(name)}
-          className={`focus-ring rounded-full px-[10px] py-[2px] text-[length:var(--text-caption1)] outline-none ${name === engine ? "bg-[var(--accent)] text-white" : "bg-[var(--fill-tertiary)] text-[var(--text-secondary)]"}`}
+          className={`focus-outline rounded-full px-[10px] py-[2px] text-[length:var(--text-caption1)] outline-none ${name === engine ? "bg-[var(--accent)] text-white" : "bg-[var(--fill-tertiary)] text-[var(--text-secondary)]"}`}
         >
-          {name}
+          {engineDisplayName(name)}
         </button>
       ))}
     </div>
@@ -40,7 +41,7 @@ function SessionRow({ session, now }: { session: StartedSession; now: number }) 
   return (
     <li className="py-[var(--space-2)]" data-testid="session-row">
       <div className="flex flex-wrap items-baseline gap-x-[var(--space-3)] gap-y-[var(--space-1)]">
-        <Link to={`/chat/${session.id}`} className="focus-ring min-w-0 flex-1 truncate rounded text-[length:var(--text-footnote)] text-[var(--text-primary)] outline-none hover:text-[var(--accent)]">
+        <Link to={`/chat/${session.id}`} className="focus-outline min-w-0 flex-1 truncate rounded text-[length:var(--text-footnote)] text-[var(--text-primary)] outline-none hover:text-[var(--accent)]">
           {session.title ?? session.id}
         </Link>
         <span className={`text-[length:var(--text-caption1)] ${session.startedBy === "board-walk-dispatch" ? "font-[var(--weight-semibold)] text-[var(--system-green)]" : "text-[var(--text-secondary)]"}`}>

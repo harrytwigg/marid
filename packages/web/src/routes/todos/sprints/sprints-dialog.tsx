@@ -16,7 +16,7 @@ import { sprintDates, useDeleteSprint, useSprints, useStartSprint, sprintErrorMe
 const SECTION_LABEL_CLASS =
   "px-1 pb-1.5 pt-4 text-[length:var(--text-caption1)] font-semibold uppercase tracking-[0.06em] text-[var(--text-tertiary)]"
 const ROW_BUTTON_CLASS =
-  "focus-ring inline-flex h-[30px] flex-none items-center gap-1.5 rounded-full px-3 text-[12px] font-medium outline-none transition-colors disabled:opacity-50"
+  "focus-outline inline-flex h-[30px] flex-none items-center gap-1.5 rounded-full px-3 text-[12px] font-medium outline-none transition-colors disabled:opacity-50"
 const QUIET_BUTTON_CLASS = `${ROW_BUTTON_CLASS} bg-[var(--fill-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]`
 const ACCENT_BUTTON_CLASS = `${ROW_BUTTON_CLASS} bg-[var(--accent-fill)] text-[var(--accent)] hover:bg-[var(--fill-secondary)]`
 const ERROR_CLASS = "rounded-[var(--radius-md)] p-[10px_13px] text-[length:var(--text-footnote)] text-[var(--system-red)]"
@@ -200,7 +200,7 @@ function SprintRow({ sprint, onShow, children }: { sprint: SprintWire; onShow: (
       <button
         type="button"
         onClick={() => onShow(sprint.id)}
-        className="focus-ring min-w-0 flex-1 rounded-[10px] text-left outline-none"
+        className="focus-outline min-w-0 flex-1 rounded-[10px] text-left outline-none"
         title="Show this sprint on the board"
       >
         <div className="flex items-center gap-2">

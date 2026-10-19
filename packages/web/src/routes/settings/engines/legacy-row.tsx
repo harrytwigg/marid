@@ -1,5 +1,5 @@
 import { ArrowRight } from "lucide-react"
-import { engineLabel } from "./chain-model"
+import { engineDisplayName } from "@/lib/engine-names"
 
 /** The deprecated `sessions.rateLimitStrategy` / `sessions.fallbackEngine` pair,
  *  read-only: the chains above are the current spelling, and editing the old one
@@ -13,7 +13,7 @@ export function LegacyFallbackRow({ engine, onMigrate }: { engine: string; onMig
           <div className="flex items-center gap-[6px] text-[length:var(--text-footnote)] text-[var(--text-primary)]">
             Claude
             <ArrowRight size={13} strokeWidth={2.2} aria-hidden className="shrink-0 text-[var(--text-quaternary)]" />
-            {engineLabel(engine)}
+            {engineDisplayName(engine)}
           </div>
           <div className="mt-[2px] text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">
             An older setting still routes Claude here. Migrate it into the chain above.

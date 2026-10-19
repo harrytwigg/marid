@@ -54,7 +54,7 @@ function TerminalTouchInput({ terminalRef }: { terminalRef: RefObject<CliTermina
         className="min-w-0 flex-1 rounded-lg bg-[var(--fill-tertiary)] px-3 py-2 font-[family-name:var(--font-code)] text-footnote text-[var(--text-primary)] outline-none"
       />
       <button type="button" aria-label="Send to the terminal" onClick={sendLine}
-        className="grid size-9 shrink-0 place-items-center rounded-lg bg-[var(--accent)] text-[var(--accent-foreground)] active:scale-[0.96]">
+        className="grid size-9 shrink-0 place-items-center rounded-lg bg-[var(--accent)] text-[var(--accent-contrast)] active:scale-[0.96]">
         <CornerDownLeft className="size-4" aria-hidden />
       </button>
       <button type="button" aria-label="Send Ctrl-C" onClick={() => send('\x03')} className={KEY_BUTTON_CLASS}>^C</button>

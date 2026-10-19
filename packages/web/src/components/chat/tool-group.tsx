@@ -1,6 +1,7 @@
 import { useRef, type CSSProperties } from 'react'
 import { ChevronDown, FileText, Globe, Search, Terminal, Wrench, type LucideIcon } from 'lucide-react'
 import type { Message } from '@/lib/conversations'
+import type { SubagentRef } from '@/lib/subagent-transcript'
 import { statusMark } from './chat-blocks'
 import { commsArrivalDelayMs } from './message-arrival'
 import { usePersistentExpansion } from './transcript-expansion'
@@ -47,6 +48,17 @@ interface ToolEntry {
   index: number
 }
 
+/** Opens a background sub-agent's transcript from its Agent card. `returnFocusTo`
+ *  is the card, which is still on the page when the view closes. Not
+ *  `file-open-context`'s `OpenSubagent`, which opens a tab and answers whether one opened. */
+export type OpenSubagentCard = (agent: SubagentRef, returnFocusTo: HTMLElement | null) => void
+
+/** The sub-agent id a background `Agent`/`Task` launch left on its row, if any. */
+function subagentIdOf(msg: Message): string | null {
+  const id = msg.meta?.agentId
+  return typeof id === 'string' && id ? id : null
+}
+
 /** Stable across the group's re-renders, including the calls that carry no id. */
 function toolChipKey(entry: ToolEntry): string {
   return entry.msg.id || `${entry.msg.toolCall}-${entry.index}`
@@ -65,24 +77,12 @@ function visibleToolEntries(msgs: Message[], activeIndex: number, showAll: boole
   return indexed.slice(0, 10)
 }
 
-function ToolChip({ entry, activeIndex, arrival, enter }: {
-  entry: ToolEntry
-  activeIndex: number
-  arrival: number | undefined
-  enter: ChipEnter | undefined
-}) {
-  const { msg, index } = entry
-  const status = isToolDone(msg) ? 'done' : index === activeIndex ? 'running' : 'queued'
+const CHIP_BASE = 'inline-flex min-h-9 max-w-full items-center gap-1.5 px-2.5 py-1 text-left'
+
+function ToolChipContent({ msg, index, status }: { msg: Message; index: number; status: 'done' | 'running' | 'queued' }) {
   const ToolGlyph = toolGlyphForName(msg.toolCall || '')
   return (
-    <div
-      data-tool-enter={enter}
-      style={enter ? arriveDelay(arrival) : undefined}
-      className={cn(
-        'inline-flex min-h-9 max-w-full items-center gap-1.5 px-2.5 py-1 text-left',
-        enter && 'tool-arrive',
-      )}
-    >
+    <>
       <span className="grid size-4 shrink-0 place-items-center">
         {statusMark(status)}
       </span>
@@ -90,6 +90,43 @@ function ToolChip({ entry, activeIndex, arrival, enter }: {
       <span className="min-w-0 truncate text-[length:var(--text-footnote)] font-[var(--weight-medium)] text-[var(--text-primary)]">
         {msg.toolCall || `Tool ${index + 1}`}
       </span>
+    </>
+  )
+}
+
+function ToolChip({ entry, activeIndex, arrival, enter, onOpenSubagent }: {
+  entry: ToolEntry
+  activeIndex: number
+  arrival: number | undefined
+  enter: ChipEnter | undefined
+  onOpenSubagent?: OpenSubagentCard
+}) {
+  const { msg, index } = entry
+  const status = isToolDone(msg) ? 'done' : index === activeIndex ? 'running' : 'queued'
+  const agentId = subagentIdOf(msg)
+  const className = cn(CHIP_BASE, enter && 'tool-arrive')
+  const style = enter ? arriveDelay(arrival) : undefined
+  // Only a background sub-agent launch carries an agent id: its card opens the same
+  // read-only transcript the waiting-on popup does, which is gone once it finishes.
+  // The card keeps no description or agent type, so the view opens without the row's labels.
+  if (agentId && onOpenSubagent) {
+    return (
+      <button
+        type="button"
+        data-tool-enter={enter}
+        data-pane-focus-preserving
+        style={style}
+        className={cn(className, 'cursor-pointer rounded-md border-none bg-transparent font-[inherit] transition-colors duration-150 hover:bg-[var(--fill-tertiary)] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--accent)]')}
+        aria-label={`Open the ${msg.toolCall || 'Agent'} sub-agent transcript`}
+        onClick={(event) => onOpenSubagent({ id: agentId, description: null, agentType: null }, event.currentTarget)}
+      >
+        <ToolChipContent msg={msg} index={index} status={status} />
+      </button>
+    )
+  }
+  return (
+    <div data-tool-enter={enter} style={style} className={className}>
+      <ToolChipContent msg={msg} index={index} status={status} />
     </div>
   )
 }
@@ -103,7 +140,7 @@ function useExpandedChips(entries: ToolEntry[], expanding: boolean): ReadonlySet
   return opened.current
 }
 
-function ToolChipList({ msgs, activeIndex, showAll, onShowAll, arrivals, isEntering, expanding }: {
+function ToolChipList({ msgs, activeIndex, showAll, onShowAll, arrivals, isEntering, expanding, onOpenSubagent }: {
   msgs: Message[]
   activeIndex: number
   showAll: boolean
@@ -113,6 +150,7 @@ function ToolChipList({ msgs, activeIndex, showAll, onShowAll, arrivals, isEnter
   /** The reader just opened this group. False when the list comes back with a
    *  windowed row that was already open — that is not an entrance. */
   expanding: boolean
+  onOpenSubagent?: OpenSubagentCard
 }) {
   const entries = visibleToolEntries(msgs, activeIndex, showAll)
   const expandedChips = useExpandedChips(entries, expanding)
@@ -133,6 +171,7 @@ function ToolChipList({ msgs, activeIndex, showAll, onShowAll, arrivals, isEnter
             // reader just revealed staggers by its place in the opened list.
             arrival={live ? arrivals.get(entry.msg.id ?? '') : position}
             enter={live ? 'chip' : expandedChips.has(toolChipKey(entry)) ? 'expand' : undefined}
+            onOpenSubagent={onOpenSubagent}
           />
         )
       })}
@@ -201,7 +240,7 @@ function useGroupArrival(msgs: Message[], isEntering: (id: string | undefined) =
   return latched.current.id
 }
 
-export function ToolGroup({ msgs, isActive, groupId, arrivals, isEntering }: {
+export function ToolGroup({ msgs, isActive, groupId, arrivals, isEntering, onOpenSubagent }: {
   msgs: Message[]
   isActive: boolean
   /** Identity the expansion outlives the row by, once virtualised. */
@@ -210,6 +249,8 @@ export function ToolGroup({ msgs, isActive, groupId, arrivals, isEntering }: {
   arrivals: Map<string, number>
   /** True while a tool call that arrived live still owes its entrance. */
   isEntering: (id: string | undefined) => boolean
+  /** Opens a finished background sub-agent's transcript from its Agent card. */
+  onOpenSubagent?: OpenSubagentCard
 }) {
   const [expanded, setExpanded] = usePersistentExpansion(`tools:${groupId}`, false)
   const [showAllTools, setShowAllTools] = usePersistentExpansion(`tools-all:${groupId}`, false)
@@ -243,6 +284,7 @@ export function ToolGroup({ msgs, isActive, groupId, arrivals, isEntering }: {
           arrivals={arrivals}
           isEntering={isEntering}
           expanding={openedHere.current}
+          onOpenSubagent={onOpenSubagent}
         />
       )}
     </div>

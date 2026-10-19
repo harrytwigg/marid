@@ -652,6 +652,24 @@ describe("useLiveSession (read-only)", () => {
     expect(result.current.messages.find((m) => m.toolCall)?.meta).toEqual({ sidechain: true })
   })
 
+  it("keeps a background Agent result's sub-agent id on its tool row", async () => {
+    getSession.mockResolvedValue({ status: "running", messages: [] })
+    const { subscribe, emit } = makeBus()
+    const { result } = renderHook(() =>
+      useLiveSession("s1", { subscribe, readOnly: true }),
+    )
+    await act(async () => { await Promise.resolve() })
+
+    act(() => {
+      emit("session:delta", { sessionId: "s1", type: "tool_use", content: "Using Agent", toolName: "Agent", toolId: "tu-1" })
+      emit("session:delta", { sessionId: "s1", type: "tool_result", content: "Agent", toolName: "Agent", toolId: "tu-1", agentId: "agent-7" })
+    })
+
+    const row = result.current.messages.find((m) => m.toolCall === "Agent")
+    expect(row?.content).toBe("Used Agent")
+    expect(row?.meta).toEqual({ agentId: "agent-7" })
+  })
+
   it("dedupes a flushed bubble that IS the final answer (exactly one answer live)", async () => {
     getSession.mockResolvedValue({ status: "running", messages: [] })
     const { subscribe, emit } = makeBus()

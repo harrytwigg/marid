@@ -1,0 +1,52 @@
+/*
+ * The one stylesheet main.tsx loads, so Tailwind compiles a single tree:
+ * HeroUI's component CSS @applies Marid's theme and HeroUI's utilities, which
+ * only resolve inside the same compile.
+ *
+ * Order matters. HeroUI's theme map comes after globals.css so its colour names
+ * (accent, muted …) win; the Marid call sites that meant something else by them
+ * were renamed to the fill tokens first. Its radius names would win too and move
+ * every rounded corner, so they are put back straight after it.
+ *
+ * Not imported, on purpose:
+ *  - HeroUI's default theme variables: heroui-bridge.css defines every variable
+ *    its components read from Marid's tokens instead.
+ *  - HeroUI's variants file: its dark variant falls back to prefers-color-scheme
+ *    even when the app is set to light. globals.css keeps the data-theme one.
+ */
+@import "./globals.css";
+/* An alias, not a path: the package exports this file under a pattern with two
+   wildcards that no resolver accepts. vite.config.ts defines the alias. */
+@import "heroui-theme-map";
+@import "./heroui-theme-restore.css";
+@import "@heroui/styles/utilities";
+@import "@heroui/styles/base/base.css" layer(base);
+@import "./theme-overrides.css";
+@import "./heroui-bridge.css";
+
+/* base.css gives every element's border the --border colour. Marid's borders
+   that name no colour have always drawn in the text colour (a red error box
+   with a bare `border` is red on purpose), so the default goes back to that
+   until a slice moves them to tokens. A HeroUI control sets its own. This
+   comes after every @import: an @import after a rule is silently dropped. */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: currentColor;
+  }
+}
+
+/* base.css also turns off the page-level view transition (and its pointer
+   events), which is the cross-fade globals.css gives every route change. */
+@layer base {
+  :root {
+    view-transition-name: root;
+  }
+
+  ::view-transition {
+    pointer-events: auto;
+  }
+}

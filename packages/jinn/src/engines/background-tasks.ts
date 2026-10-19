@@ -54,12 +54,21 @@ function launchedMonitor(input: Fields, response: Fields, base: Pick<LaunchedTas
 }
 
 function launchedSubagent(input: Fields, response: Fields, base: Pick<LaunchedTask, "description" | "startedAt">): LaunchedTask | null {
-  if (response?.status !== "async_launched" || typeof response.agentId !== "string") return null;
+  const id = launchedSubagentId(response);
+  if (!id) return null;
   return {
-    ...base, kind: "subagent", id: response.agentId, command: null, timeoutMs: null,
-    description: base.description ?? clip(response.description, DESCRIPTION_MAX),
+    ...base, kind: "subagent", id, command: null, timeoutMs: null,
+    description: base.description ?? clip(response?.description, DESCRIPTION_MAX),
     agentType: clip(input?.subagent_type, DESCRIPTION_MAX),
   };
+}
+
+/** The sub-agent id a background `Agent`/`Task` launch answers with, from its tool result:
+ *  `status: "async_launched"` and an `agentId` (verified on Claude Code 2.1.300). `undefined`
+ *  for a foreground call or any other result, which has no id to open. */
+export function launchedSubagentId(response: Fields): string | undefined {
+  if (response?.status !== "async_launched" || typeof response.agentId !== "string") return undefined;
+  return response.agentId;
 }
 
 /** The background task a top-level PostToolUse launched, or null for any other hook. Facts from the

@@ -8,7 +8,7 @@ import { useStickToBottom } from '@/hooks/use-stick-to-bottom'
 import { useMessageTts, stopMessageTts } from './use-message-tts'
 import { ChatBlockInline } from './chat-blocks'
 import { blockFallbackContent, isActiveDelegationStatus, type LiveBlockArrival } from '@/lib/blocks'
-import { isToolDone, ToolGroup } from './tool-group'
+import { isToolDone, ToolGroup, type OpenSubagentCard } from './tool-group'
 import { parseTeammateReply, TeammateReply } from './teammate-reply'
 import { parseAgentRelay, AgentRelay } from './agent-relay'
 import { DispatchRow } from './dispatch-row'
@@ -804,6 +804,8 @@ interface ChatMessagesProps {
   onLoadOlderMessages?: () => Promise<void> | void
   /** Open the read-only report panel for a comms ledger line. */
   onPeek?: (peek: CommsPeekData) => void
+  /** Opens a finished background sub-agent's transcript from its Agent tool card. */
+  onOpenSubagent?: OpenSubagentCard
   blockArrivals?: ReadonlyMap<string, LiveBlockArrival>
   liveTerminalDelegationIds?: ReadonlySet<string>
   blockAnnouncement?: string
@@ -848,6 +850,7 @@ export function ChatMessages({
   olderMessagesError = null,
   onLoadOlderMessages,
   onPeek,
+  onOpenSubagent,
   blockArrivals = new Map(),
   liveTerminalDelegationIds = new Set(),
   blockAnnouncement = '',
@@ -1053,6 +1056,7 @@ export function ChatMessages({
               groupId={rowId}
               arrivals={commsArrivals}
               isEntering={isEntering}
+              onOpenSubagent={onOpenSubagent}
             />
           )}
           {item.kind === 'dispatch-call' && (

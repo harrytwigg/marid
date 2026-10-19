@@ -29,7 +29,7 @@ export function AttachmentChips({ attachments, workItemId }: { attachments: Work
             href={api.workItemAttachmentUrl(workItemId, attachment.id)}
             download={attachment.filename}
             data-testid={`comment-attachment-${attachment.id}`}
-            className="focus-ring flex h-10 items-center gap-2 rounded-[10px] bg-[var(--fill-tertiary)] pl-2 pr-3 text-[12.5px] font-medium text-[var(--text-primary)] shadow-[var(--shadow-ambient)] outline-none"
+            className="focus-outline flex h-10 items-center gap-2 rounded-[10px] bg-[var(--fill-tertiary)] pl-2 pr-3 text-[12.5px] font-medium text-[var(--text-primary)] shadow-[var(--shadow-ambient)] outline-none"
           >
             <span className="grid size-6 place-items-center rounded-[7px] bg-[var(--fill-secondary)] text-[var(--text-tertiary)]">
               <FileText size={12} strokeWidth={1.8} aria-hidden />

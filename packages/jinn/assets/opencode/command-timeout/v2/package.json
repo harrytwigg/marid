@@ -1,0 +1,8 @@
+{
+  "name": "marid-command-timeout",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "description": "Caps the timeout of OpenCode 2 shell commands at JINN_OPENCODE_COMMAND_TIMEOUT_MS (staged by Marid)."
+}

@@ -48,7 +48,7 @@ export function TaskEmpty({ message, onBack }: { message: string; onBack?: () =>
         <button
           type="button"
           onClick={onBack}
-          className="focus-ring rounded-full px-4 py-2 text-[13px] font-semibold text-[var(--accent)] outline-none hover:bg-[var(--accent-fill)]"
+          className="focus-outline rounded-full px-4 py-2 text-[13px] font-semibold text-[var(--accent)] outline-none hover:bg-[var(--accent-fill)]"
         >
           Back to Todos
         </button>
