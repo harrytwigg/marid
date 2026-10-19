@@ -118,7 +118,8 @@ export async function runDoctor(options: { json?: boolean; rename?: boolean; app
     if (report.blockers.length > 0) process.exitCode = 1;
     return;
   }
-  const findings = doctorFindings({ opencodeFallback: await collectOpencodeFallback() });
+  const opencodeFallback = await collectOpencodeFallback();
+  const findings = doctorFindings({ ...(opencodeFallback ? { opencodeFallback } : {}) });
   if (options.json) console.log(JSON.stringify(findings, null, 2));
   else for (const finding of findings) console.log(`${MARK[finding.level]}${finding.message}`);
   if (findings.some((finding) => finding.level === "problem")) process.exitCode = 1;

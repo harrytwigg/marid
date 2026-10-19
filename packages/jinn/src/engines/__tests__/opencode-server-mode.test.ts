@@ -17,6 +17,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 vi.mock("../opencode-internal-fallback.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../opencode-internal-fallback.js")>()),
   hostHasInternalFallback: () => false,
+  fallbackPluginAbortsTurns: () => false,
 }));
 
 vi.mock("../../shared/logger.js", () => ({

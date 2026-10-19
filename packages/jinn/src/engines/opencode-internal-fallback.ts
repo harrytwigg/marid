@@ -281,6 +281,14 @@ export function warnOpencodeInternalFallback(read: () => OpencodeInternalFallbac
   return found;
 }
 
+/**
+ * Whether a turn's ending may be read as a 1.x fallback plugin's abort: the host has one, and the
+ * binary is 1.x. The 2.x plugin switches models inside the turn and never aborts or re-sends it.
+ */
+export function fallbackPluginAbortsTurns(api: number | undefined, remoteDestination?: string): boolean {
+  return api !== 2 && hostHasInternalFallback(remoteDestination);
+}
+
 /** Whether the opencode on a host has a model-fallback plugin: the gateway host's own reading, or what a remote host reported. */
 export function hostHasInternalFallback(remoteDestination?: string): boolean {
   if (remoteDestination === undefined) return currentOpencodeInternalFallback().detected;

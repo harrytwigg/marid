@@ -10,6 +10,7 @@ import { settleTurn, type SettleTurnInput } from "./completion.js";
 import { formatResumeTime, turnDisplayText } from "./text.js";
 import type { TurnInput, TurnPlan, TurnSurface } from "./types.js";
 import { withBoardReminder } from "./board-reminder.js";
+import { postEngineNotices } from "./engine-notices.js";
 
 export interface RateLimitTurnArgs {
   input: TurnInput;
@@ -125,6 +126,7 @@ function rateLimitHooks(args: RateLimitTurnArgs): RateLimitHandlerHooks {
     onFallbackStart: ({ resumeAt, substitute, model }) => announceFallback(args, resumeAt, substitute, model),
     onFallbackStream: (delta) => surface.delta(delta),
     onFallbackComplete: async (fallbackResult, ran) => {
+      await postEngineNotices(surface, args.input.session.id, fallbackResult.notices);
       // The fallback answered on a DIFFERENT engine, so its native id is filed
       // under whichever engine the switch landed on — and without a platform
       // context fingerprint, which belongs to the engine that was limited.
@@ -140,6 +142,7 @@ function rateLimitHooks(args: RateLimitTurnArgs): RateLimitHandlerHooks {
     onStillLimited: () => surface.waiting(true),
     onRetryStream: (delta) => surface.delta(delta),
     onRetrySuccess: async (retryResult) => {
+      await postEngineNotices(surface, args.input.session.id, retryResult.notices);
       const settled = await settleRecoveredTurn(args, retryResult, !retryResult.error && retryResult.sessionId?.trim() ? {
         engine: plan.engineName,
         nativeId: retryResult.sessionId,

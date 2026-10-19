@@ -23,6 +23,7 @@ const pluginOnHost = vi.hoisted(() => ({ value: false }));
 vi.mock("../opencode-internal-fallback.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../opencode-internal-fallback.js")>()),
   hostHasInternalFallback: () => pluginOnHost.value,
+  fallbackPluginAbortsTurns: (api?: number) => api !== 2 && pluginOnHost.value,
 }));
 
 import { OpencodeEngine } from "../opencode.js";
@@ -579,6 +580,15 @@ describe("a turn that goes wrong", { timeout: 40_000 }, () => {
       const warned = vi.mocked(logger.warn).mock.calls.map((c) => String(c[0])).filter((m) => m.includes("fallback plugin switched models"));
       expect(warned).toHaveLength(1);
       expect(warned[0]).toContain(`ran on mock/other, not the requested ${MODEL}`);
+    });
+
+    it("does not read a blank answer as the plugin on 2.x, which never aborts a turn: a plain error, no usage limit", async () => {
+      pluginOnHost.value = true;
+      const h = harness();
+      const { result } = await streamed(h, { prompt: "NOTEXT" });
+      expect(result.error).toMatch(/without a final assistant response/);
+      expect(result.error).not.toContain("model-fallback plugin");
+      expect(result.rateLimit).toBeUndefined();
     });
 
     it("says nothing when the turn ran on the model it asked for", async () => {

@@ -28,6 +28,16 @@ describe("a run turn that a fallback plugin ended", () => {
     expect(result.rateLimit).toBeUndefined();
   });
 
+  it("is not the plugin when a step finished: a blank answer from the model is a plain error", () => {
+    const step = JSON.stringify({ type: "step_finish", sessionID: "ses_1", part: { id: "s1", type: "step-finish", reason: "stop", cost: 0, tokens: { input: 5, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } } });
+    const turn = new OpencodeTurn("ses_1", () => true);
+    turn.readLine(step, null);
+    const result = turn.result(noEvents);
+    expect(result.error).toBe("opencode exited successfully without a final assistant response");
+    expect(result.rateLimit).toBeUndefined();
+    expect(turn.stepsFinished).toBe(1);
+  });
+
   it("keeps a real answer", () => {
     const turn = new OpencodeTurn("ses_1", () => true);
     turn.readLine(text, null);

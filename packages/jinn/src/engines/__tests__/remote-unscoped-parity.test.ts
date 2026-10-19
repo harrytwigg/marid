@@ -44,7 +44,7 @@ const sha256 = (text: string): string => crypto.createHash("sha256").update(text
  *  deliberate changes for every session, scoped or not. */
 const MAIN = {
   farmScript: "e5b74a0bedc2ea64111a00392827e9c883deeff711f4cf3640f74fb65a1548e5",
-  factsScript: "631473cefef45f7d68b258d8747df6a3c2b08e34e9169c6252a9b65091490403",
+  factsScript: "15e51b601b6ce7c049d315d7d69bd2ae836dbfe927376138815b04e78dd8bdfb",
   killScript: "d400383f3c8c055691322b6513249351035165e2aae839d87bb95c250e89eaf6",
   trustSeedCommand: "b6a9b06cc4e07add49ef443da653c3c546950dbd0564ddc29e4a2c9833c61b7c",
   sessionEnvFile: "1d350a33a74a0752f1540ecad76daddd0ab98a6686742ed01cad801bc230d910",

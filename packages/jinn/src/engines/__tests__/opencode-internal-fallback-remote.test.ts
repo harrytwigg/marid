@@ -11,6 +11,7 @@ import { FACTS_SCRIPT } from "../remote-stage.js";
 import { remoteFallbackSources } from "../opencode-internal-fallback-remote.js";
 import {
   combinedOpencodeInternalFallback,
+  fallbackPluginAbortsTurns,
   recordRemoteInternalFallback,
   resetOpencodeInternalFallbackCache,
   withInternalFallback,
@@ -89,6 +90,18 @@ describe("the facts script's opencode fallback probe", () => {
     }
   });
 
+  it("anchors the plugin's name: a helper whose name merely contains it is not the plugin", () => {
+    put(".config/opencode/opencode.json", '{"plugin": ["./plugins/no-model-fallback-helper.js", "opencode-rate-limit-extras"]}');
+    expect(remoteFallbackSources(runFacts(home))).toEqual([]);
+  });
+
+  it("reads only a settings file's own top-level enabled: a nested one does not disable it, a top-level one does", () => {
+    const settings = put(".opencode/rate-limit-fallback.json", '{"circuitBreaker": {"enabled": false}, "fallbackModels": []}');
+    expect(remoteFallbackSources(runFacts(home))).toEqual([settings]);
+    put(".opencode/rate-limit-fallback.json", '{"enabled": false, "circuitBreaker": {"enabled": true}}');
+    expect(remoteFallbackSources(runFacts(home))).toEqual([]);
+  });
+
   it("reads a plugin directory under plugins/", () => {
     const dir = put(".opencode/plugins/model-fallback/index.js", "x");
     expect(remoteFallbackSources(runFacts(home))).toEqual([path.dirname(dir)]);
@@ -114,6 +127,14 @@ describe("remote reports", () => {
     expect(combined.sources).toContain("builder: /home/op/.opencode/rate-limit-fallback.json");
     expect(combined.remote).toEqual([{ host: "builder", sources: ["/home/op/.opencode/rate-limit-fallback.json"] }]);
     expect(withInternalFallback({ opencode: {} }).opencode).toMatchObject({ internalFallback: { detected: true, neutralised: false } });
+  });
+
+  it("reads a plugin's abort and re-send only on a 1.x binary: the 2.x plugin switches models inside the turn", () => {
+    recordRemoteInternalFallback("builder", ["/x"]);
+    expect(fallbackPluginAbortsTurns(1, "builder")).toBe(true);
+    expect(fallbackPluginAbortsTurns(undefined, "builder")).toBe(true);
+    expect(fallbackPluginAbortsTurns(2, "builder")).toBe(false);
+    expect(fallbackPluginAbortsTurns(1, "another-host")).toBe(false);
   });
 
   it("forgets a host that no longer reports one", () => {

@@ -16,6 +16,7 @@ const pluginOnHost = vi.hoisted(() => ({ value: false }));
 vi.mock("../opencode-internal-fallback.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../opencode-internal-fallback.js")>()),
   hostHasInternalFallback: () => pluginOnHost.value,
+  fallbackPluginAbortsTurns: (api?: number) => api !== 2 && pluginOnHost.value,
 }));
 
 vi.mock("../../shared/logger.js", () => ({
@@ -196,6 +197,16 @@ describe("a host whose opencode has a model-fallback plugin", { timeout: 20_000 
     const result = await engine.run(runOpts(limited));
     expect(result.result).toBe("");
     expect(result.error).not.toContain("model-fallback plugin");
+    expect((await serverLog(pool)).some((e) => e.url.endsWith("/abort"))).toBe(false);
+  });
+
+  it("does not read a blank answer from a finished step as the plugin: a plain error, no usage limit, nothing stopped", async () => {
+    pluginOnHost.value = true;
+    const { pool, engine } = harness();
+    const result = await engine.run(runOpts("CUTOFF work"));
+    expect(result.error).toBeDefined();
+    expect(result.error).not.toContain("model-fallback plugin");
+    expect(result.rateLimit).toBeUndefined();
     expect((await serverLog(pool)).some((e) => e.url.endsWith("/abort"))).toBe(false);
   });
 

@@ -2,6 +2,7 @@ import { sessionClaudeProfile } from "../session-account.js";
 import { remoteScopeFor, spawnCwd } from "../session-cwd.js";
 import { employeeRemoteTarget, isRemoteTarget } from "../../shared/remote-target.js";
 import { logger } from "../../shared/logger.js";
+import { postEngineNotices } from "./engine-notices.js";
 import { selectClaudeModelFallback } from "../../shared/model-fallback.js";
 import { getModelRegistry, refreshClaudeModels } from "../../shared/models.js";
 import type { EngineResult, StreamDelta } from "../../shared/types.js";
@@ -28,18 +29,6 @@ export interface EngineAttemptArgs {
   partialStream: PartialStreamWriter;
   turnStartedAt: number;
   model: string | undefined;
-}
-
-/** The notices an engine asked for, once each, ahead of the reply. A courtesy: a surface that
- *  cannot take one must not fail a turn whose engine run succeeded. */
-async function postEngineNotices(surface: TurnSurface, sessionId: string, notices: string[] | undefined): Promise<void> {
-  for (const notice of notices ?? []) {
-    try {
-      await surface.notice(notice);
-    } catch (err) {
-      logger.warn(`Session ${sessionId}: could not post an engine notice: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
 }
 
 /**

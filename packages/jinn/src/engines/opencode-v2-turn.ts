@@ -141,7 +141,7 @@ export class OpencodeV2ServerTurn {
     private readonly onStream: ((delta: StreamDelta) => void) | null,
     private readonly deps: ServerTurnDeps,
   ) {
-    this.turn = new OpencodeTurn(opts.resumeSessionId || "", deps.fallbackPluginOnHost);
+    this.turn = new OpencodeTurn(opts.resumeSessionId || "");
   }
 
   /** Stop the turn: on the server first, then here. Idempotent. */

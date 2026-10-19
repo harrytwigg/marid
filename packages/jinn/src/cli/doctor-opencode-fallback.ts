@@ -33,8 +33,19 @@ async function remoteReports(): Promise<Pick<OpencodeFallbackReading, "remote" |
   }
 }
 
-/** Read this host, and the remote hosts the running gateway knows about. */
-export async function collectOpencodeFallback(): Promise<OpencodeFallbackReading> {
+/** Whether this instance uses opencode at all: its config has an `engines.opencode` block. An unreadable config says yes. */
+async function opencodeConfigured(): Promise<boolean> {
+  try {
+    const { loadConfig } = await import("../shared/config.js");
+    return Boolean(loadConfig().engines.opencode);
+  } catch {
+    return true;
+  }
+}
+
+/** Read this host, and the remote hosts the running gateway knows about; nothing when the instance has no opencode engine. */
+export async function collectOpencodeFallback(): Promise<OpencodeFallbackReading | undefined> {
+  if (!(await opencodeConfigured())) return undefined;
   return { local: detectOpencodeInternalFallbackFindings({ projectDirs: [process.cwd()] }), ...(await remoteReports()) };
 }
 

@@ -89,6 +89,8 @@ export interface ServerTurnDeps {
   onProtocolDrift?: (reason: string) => void;
   /** Whether the host's opencode has a model-fallback plugin (see opencode-internal-fallback.ts). */
   fallbackPluginOnHost?: () => boolean;
+  /** Whether such a plugin would abort and re-send a turn of this server's API (1.x only). */
+  fallbackPluginAbortsTurns?: () => boolean;
 }
 
 /** Timings a test may shorten. The status poll is a backstop for a
@@ -580,7 +582,7 @@ export class OpencodeServerTurn {
     private readonly onStream: ((delta: StreamDelta) => void) | null,
     private readonly deps: ServerTurnDeps,
   ) {
-    this.turn = new OpencodeTurn(opts.resumeSessionId || "", deps.fallbackPluginOnHost);
+    this.turn = new OpencodeTurn(opts.resumeSessionId || "", deps.fallbackPluginAbortsTurns);
   }
 
   /**
@@ -634,7 +636,7 @@ export class OpencodeServerTurn {
    *  the gateway does not follow that copy. With no answer in hand, stop what it started
    *  (the usage limit that set it off is the turn's outcome, and the chain takes over). */
   private async stopPluginCopy(): Promise<void> {
-    if (!this.deps.fallbackPluginOnHost?.() || this.lastAnswer === "text" || this.terminationReason) return;
+    if (!this.deps.fallbackPluginAbortsTurns?.() || this.lastAnswer === "text" || this.terminationReason || this.turn.stepsFinished > 0) return;
     await this.stopOnServer();
     await this.markPromptCopies();
   }

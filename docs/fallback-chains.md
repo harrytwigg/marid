@@ -189,6 +189,14 @@ provider answers 429 and the plugin's fallback provider answers normally):
 | 2.0.29 + `model-fallback.js` | server | The plugin switches the session's model inside the turn. The fallback model answers it in about 3 s. No hop is recorded and the chain is not walked, but the turn says so: a warning in the gateway log and one session notice, "Answered by <provider/model> through the host's opencode fallback plugin, not the gateway's chain. Run `jinn doctor` to remove it." |
 | 2.0.29 + `model-fallback.js` | run | The same answer from the fallback model, invisibly to the chain; the notice is posted only for a server turn, which sees which model each step ran on. |
 
+The usage-limit reading of a 1.x turn needs the plugin's abort as evidence: it is
+applied only when the host has the plugin, the binary is 1.x, and no model step
+of the turn finished. A blank answer from a finished step is the model's own and
+stays a plain error (so it cannot mark the whole opencode engine as exhausted),
+and 2.x turns are never read this way, since the 2.x plugin does not abort a turn.
+The 2.x notice is posted wherever the turn takes the engine's result: the first
+attempt, a chain hop's substitute and a parked retry.
+
 Before this was handled, a 1.x server turn also ended as a usage limit but left the copy running, and a 1.x run turn
 ended with `opencode exited successfully without a final assistant response` and no rate limit, so the chain
 never took over.
@@ -197,8 +205,9 @@ What is checked, and where:
 
 - the plugin in a `plugin` or `plugins` list of the operator's opencode config
   (`opencode.json`, `opencode.jsonc` or `config.json` in the config directory
-  and `~/.opencode/`, `OPENCODE_CONFIG`, a project's `opencode.json` and
-  `.opencode/`);
+  and `~/.opencode/`, `OPENCODE_CONFIG`, and `opencode.json` and `.opencode/`
+  in the directory the gateway (or `jinn doctor`) runs in, which stands for the
+  project: a session's own working directory is not read);
 - a `model-fallback` or `opencode-rate-limit` file or directory in a `plugin`
   or `plugins` directory of those;
 - a `rate-limit-fallback.json` without `"enabled": false` in `.opencode/`,
@@ -217,9 +226,11 @@ written to the operator's files.
 
 A remote host is read best effort, through the facts the gateway already
 collects when it first reaches the host: a shell probe for the same markers
-(a `grep` for the plugin's name in the opencode config files, so a comment that
-merely mentions it counts; the plugin files; a settings file that is not
-disabled). Its findings are added to `sources` as `host: path`, and the first
+(a `grep` for the plugin's name as a whole package or file name in the opencode
+config files, so a comment that merely mentions it counts; the plugin files; a
+settings file whose top-level `enabled` is not false, read as plain JSON, so a
+file with comments, which the plugin itself cannot read either, is skipped).
+Its findings are added to `sources` as `host: path`, and the first
 one for a host logs the same warning. A project directory is not read on a
 remote host, since the host does not know which project a session will run in.
 

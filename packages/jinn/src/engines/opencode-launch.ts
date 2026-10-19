@@ -58,6 +58,8 @@ export interface OpencodeLaunchPlan {
   /** For a remote turn: how to reach the opencode on the other host again, so a
    *  kill can terminate IT rather than only the local ssh client. */
   remote?: RemoteEngineHandle;
+  /** The API of the binary the turn runs on (opencode-version.ts); 1 when not stated. */
+  api?: OpencodeApi;
 }
 
 /**
@@ -162,6 +164,7 @@ export function localOpencodeLaunch(
     prompt: buildOpencodePrompt(opts),
     sessionIdOut: opts.resumeSessionId || "",
     configHandle,
+    api,
   };
 }
 
@@ -247,7 +250,6 @@ export async function remoteOpencodeLaunch(
   const readiness = await ensureRemoteReady(opts, ctx.remote, { engine: "opencode", allowWake: false });
   if (!readiness.ready) throw new Error(`remote host not ready: ${readiness.reason}`);
   const facts = readiness.facts;
-
   const staging = await prepareRemoteSession({
     target: opts,
     remote: ctx.remote!,
@@ -280,5 +282,6 @@ export async function remoteOpencodeLaunch(
     prompt: buildOpencodePrompt(withRemoteAttachments(opts, staging.sessionHome, trackingId)),
     sessionIdOut: opts.resumeSessionId || "",
     remote,
+    api: opencodeApiOf(facts.opencodeVersion),
   };
 }

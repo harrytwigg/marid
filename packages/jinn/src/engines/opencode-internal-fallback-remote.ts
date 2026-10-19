@@ -16,9 +16,17 @@ export const FALLBACK_FACTS_SNIPPET = `
   xdg=\${XDG_CONFIG_HOME:-$HOME/.config}
   n=0
   ocfb() { n=$((n+1)); printf 'opencodefallback.%s=%s\\n' "$n" "$1"; }
+  # A settings file the plugin would act on: a JSON object whose top-level "enabled" is not false.
+  ocfb_active() {
+    if command -v node >/dev/null 2>&1; then
+      node -e 'try{const s=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.exit(s&&typeof s==="object"&&!Array.isArray(s)&&s.enabled!==false?0:1)}catch(e){process.exit(1)}' "$1"
+    else
+      ! grep -q -E '"enabled"[[:space:]]*:[[:space:]]*false' "$1" 2>/dev/null
+    fi
+  }
   for d in "$xdg/opencode" "$HOME/.opencode"; do
     for f in "$d/opencode.json" "$d/opencode.jsonc" "$d/config.json"; do
-      if [ -f "$f" ] && grep -q -E '"(npm:)?(@[^"/]*/)?(opencode-rate-limit|[^"]*model-fallback)' "$f" 2>/dev/null; then ocfb "$f"; fi
+      if [ -f "$f" ] && grep -q -E '"([^"]*[/:])?(opencode-rate-limit|model-fallback)(@[^"]*|\\.[cm]?[jt]s)?"' "$f" 2>/dev/null; then ocfb "$f"; fi
     done
     for p in "$d/plugin" "$d/plugins"; do
       for f in "$p"/*; do
@@ -32,7 +40,7 @@ export const FALLBACK_FACTS_SNIPPET = `
   done
   for d in "$HOME/.opencode" "$HOME/opencode" "$HOME" "$xdg/.opencode" "$xdg/opencode" "$xdg"; do
     f="$d/rate-limit-fallback.json"
-    if [ -f "$f" ] && ! grep -q -E '"enabled"[[:space:]]*:[[:space:]]*false' "$f" 2>/dev/null; then ocfb "$f"; fi
+    if [ -f "$f" ] && ocfb_active "$f"; then ocfb "$f"; fi
   done`;
 
 /** The paths the snippet printed, from the facts script's key=value lines, in order, once each. */

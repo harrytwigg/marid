@@ -247,7 +247,8 @@ export interface EngineResult {
    */
   rateLimit?: EngineRateLimitInfo;
   /** Session notices the engine asks the turn to post, once each (an opencode 2.x
-   *  host plugin that answered from another model, say). */
+   *  host plugin that answered from another model, say). The turn posts them
+   *  wherever it takes this result: the attempt, a chain hop's substitute, a parked retry. */
   notices?: string[];
 }
 

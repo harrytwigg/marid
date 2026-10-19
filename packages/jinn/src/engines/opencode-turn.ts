@@ -190,11 +190,17 @@ export class OpencodeTurn {
 
   /** A turn that ended with nothing, on a host whose opencode has a model-fallback
    *  plugin: the plugin aborts a turn at a usage limit and re-sends the prompt, which
-   *  ends it with no answer and no error of its own. Not for a failure of the transport,
-   *  or an error that is not a usage limit. */
+   *  ends it with no answer and no error of its own. The abort is the evidence: it lands before
+   *  any step finished, so a blank answer from a finished step is the model's own and not
+   *  this. Not for a failure of the transport, or an error that is not a usage limit. */
   private endedByFallbackPlugin(outcome: { code: number | null; failure?: string }): boolean {
-    if (outcome.failure || outcome.code !== 0 || !this.fallbackPluginOnHost()) return false;
+    if (outcome.failure || outcome.code !== 0 || this.steps > 0 || !this.fallbackPluginOnHost()) return false;
     return !this.turnError || isRateLimitMessage(this.turnError);
+  }
+
+  /** Whether any model round trip of this turn finished. */
+  get stepsFinished(): number {
+    return this.steps;
   }
 
   /** Why a turn that produced no accepted answer failed: whatever opencode
