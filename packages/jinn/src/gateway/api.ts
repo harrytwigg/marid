@@ -4006,6 +4006,7 @@ export async function handleApiRequest(
       // `interrupt` boolean): queue waits for the running turn, now cuts it off.
       // Queued messages drain one per turn, in order, through the serial queue.
       const delivery = resolveMessageDelivery({ delivery: body.delivery, interrupt: body.interrupt });
+      const pausableKey = session.sessionKey || session.sourceRef || session.id;
       const shouldInterruptRunningTurn = interruptsRunningTurn({
         isNotification,
         prompt: String(prompt),
@@ -4013,7 +4014,7 @@ export async function handleApiRequest(
         turnRunning,
         autoCompacting: isAutoCompacting(session.id),
         delivery,
-        queuePaused: context.sessionManager.getQueue().isPaused(session.sessionKey || session.sourceRef || session.id),
+        queuePaused: () => context.sessionManager.getQueue().isPaused(pausableKey),
       });
       if (shouldInterruptRunningTurn) supersedeRunningTurn(session);
 

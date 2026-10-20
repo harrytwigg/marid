@@ -39,7 +39,9 @@ describe("shouldInterruptRunningTurn", () => {
     expect(shouldInterruptRunningTurn({ ...base, delivery: "now", turnRunning: false })).toBe(false);
     expect(shouldInterruptRunningTurn({ ...base, delivery: "now", autoCompacting: true })).toBe(false);
     expect(shouldInterruptRunningTurn({ ...base, delivery: "now", prompt: "/compact" })).toBe(false);
-    expect(shouldInterruptRunningTurn({ ...base, delivery: "now", queuePaused: true })).toBe(false);
+    expect(shouldInterruptRunningTurn({ ...base, delivery: "now", queuePaused: () => true })).toBe(false);
+    expect(shouldInterruptRunningTurn({ ...base, queuePaused: () => true })).toBe(false);
+    expect(shouldInterruptRunningTurn({ ...base, delivery: "now", queuePaused: () => false })).toBe(true);
   });
 });
 

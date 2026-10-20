@@ -50,12 +50,12 @@ export function shouldInterruptRunningTurn(o: {
   autoCompacting?: boolean;
   /** Per-message choice; overrides `interruptOnNewMessage` when set. */
   delivery?: MessageDelivery;
-  /** The session's queue is paused. */
-  queuePaused?: boolean;
+  /** Whether the session's queue is paused; asked only when the answer matters. */
+  queuePaused?: () => boolean;
 }): boolean {
-  if (o.isNotification || !o.turnRunning || o.autoCompacting || o.queuePaused) return false;
+  if (o.isNotification || !o.turnRunning || o.autoCompacting) return false;
   if (isCompactCommand(o.prompt)) return false;
   if (o.delivery === "queue") return false;
-  if (o.delivery === "now") return true;
-  return o.interruptOnNewMessage ?? true;
+  const wouldInterrupt = o.delivery === "now" || (o.interruptOnNewMessage ?? true);
+  return wouldInterrupt && !o.queuePaused?.();
 }
