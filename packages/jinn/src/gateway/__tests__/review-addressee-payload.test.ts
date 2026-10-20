@@ -72,6 +72,12 @@ describe("the operator's attention feed", () => {
     const feed = async () =>
       (await call("GET", "/api/work-items?needsAttentionFor=me&limit=200")).body.workItems.map((row: { id: string }) => row.id);
 
+    // The settle wake flushes 10 s after the move in the gateway; a pending wake counts as open
+    // work for the stall check, so flush it here. No owner session is linked, so it re-dispatches,
+    // and a Dispatcher already running is the refusal that leaves nothing more to do.
+    const { flushChildSettles } = await import("../../work-items/child-settle-wake.js");
+    flushChildSettles(parent.id, { isEmployee: () => true, redispatch: () => ({ unavailable: "a Dispatcher is already running for it" }) });
+
     // The parent owner was woken and has not acted: the review is the owner's, not an inbox row.
     sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ unavailable: "test" }) as never });
     expect(getWorkItemRecovery(child.id)).toMatchObject({ lane: "manager" });
