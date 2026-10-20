@@ -353,6 +353,18 @@ describe("buildContext — Jinn MCP usage directive", () => {
     expect(companyBlock).toMatch(/never set done or cancelled/i);
   });
 
+  it("tells the parent owner to accept or send back a child's review, in both lifecycle variants", () => {
+    const full = buildContext({ ...baseOpts, employee: qa, hierarchy, jinnMcpAttached: true });
+    expect(full).toMatch(/parent an employee owns hands its in_review to that employee, who accepts it \(done, with a note\) or sends it back/);
+    expect(full).toMatch(/never set done or cancelled, except accepting a child of a Todo you own/i);
+
+    const trimmed = buildContext({
+      ...baseOpts, employee: qa, hierarchy, jinnMcpAttached: true,
+      config: { gateway: { host: "127.0.0.1", port: 7799 }, engines: { default: "claude", claude: { model: "opus" } }, context: { maxChars: 1500 } } as unknown as JinnConfig,
+    });
+    expect(trimmed).toMatch(/child of an employee-owned Todo goes to its parent owner, who accepts or sends it back/);
+  });
+
   it("keeps the change-requested round trip when the budget trims the company identity block", () => {
     const config = {
       gateway: { host: "127.0.0.1", port: 7799 },

@@ -95,7 +95,7 @@ describe("payloads", () => {
       version: 1, event: "todo.created", from: null, to: null, text: null, prUrl: null, sessionId: null,
       todo: {
         id: parent.id, title: "Parent", status: "backlog", department: "platform", assignee: "senior-developer",
-        parentId: null, rootId: parent.id, labels: ["auto-merge", "urgent"], childIds: [child.id], url: `/todos/${parent.id}`,
+        parentId: null, rootId: parent.id, labels: ["auto-merge", "urgent"], childIds: [child.id], reviewAddressee: { kind: "operator" }, url: `/todos/${parent.id}`,
       },
     });
     expect(made.eventId).toBe(lastOf("created", parent.id).id);

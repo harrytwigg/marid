@@ -8,7 +8,7 @@ export function basePayload(overrides: Partial<BasePayload> = {}): BasePayload {
     at: "2026-01-01T12:00:00.000Z",
     todo: {
       id: "TSK-12", title: "Ship it", status: "in_review", department: "platform", labels: ["auto-merge"],
-      assignee: "senior-developer", parentId: null, rootId: "TSK-12", childIds: [], url: "/todos/TSK-12",
+      assignee: "senior-developer", parentId: null, rootId: "TSK-12", childIds: [], reviewAddressee: { kind: "operator" }, url: "/todos/TSK-12",
     },
     from: "executing",
     to: "in_review",

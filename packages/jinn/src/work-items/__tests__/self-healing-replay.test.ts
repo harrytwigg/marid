@@ -106,3 +106,20 @@ describe("mayReplaceRecoveryLane", () => {
     expect(mayReplaceRecoveryLane({ lane: "manager" }, generic, "cancelled")).toBe(true);
   });
 });
+
+describe("an employee-addressed review", () => {
+  it("is manager attention naming the addressee, and only while it is in review", () => {
+    const todo = { id: "TSK-19", status: "in_review", assignee: "child-worker", source: "workflow" };
+    const verdict = classifyRecovery({ todo, reviewAddressee: "parent-owner" });
+    expect(verdict).toMatchObject({ lane: "manager", class: "operator" });
+    expect(verdict.reason).toContain("parent-owner");
+    expect(classifyRecovery({ todo }).lane).toBe("operator");
+    expect(classifyRecovery({ todo: { ...todo, status: "backlog" }, reviewAddressee: "parent-owner" }).lane).toBe("operator");
+  });
+
+  it("may be replaced by the generic operator verdict once the review goes back to the operator", () => {
+    const generic = { class: "operator" as const, lane: "operator" as const, reason: GENERIC_OPERATOR_REASON };
+    const addressed = classifyRecovery({ todo: { id: "TSK-19", status: "in_review", assignee: null, source: "workflow" }, reviewAddressee: "parent-owner" });
+    expect(mayReplaceRecoveryLane({ lane: addressed.lane, reason: addressed.reason }, generic, "in_review")).toBe(true);
+  });
+});

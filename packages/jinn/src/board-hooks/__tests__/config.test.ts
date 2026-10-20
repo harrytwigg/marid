@@ -66,6 +66,10 @@ describe("hooksProblems", () => {
     expect(hookProblems({ ...good, match: { label: 3 } }).join()).toMatch(/match.label must be a string or a list/);
     expect(hookProblems({ ...good, match: { to: "finished" } }).join()).toMatch(/match.to names an unknown status "finished"/);
     expect(hookProblems({ ...good, match: null })).toEqual([]);
+    expect(hookProblems({ ...good, match: { reviewAddressee: "operator" } })).toEqual([]);
+    expect(hookProblems({ ...good, match: { reviewAddressee: ["operator", "employee"] } })).toEqual([]);
+    expect(hookProblems({ ...good, match: { reviewAddressee: "manager" } }).join()).toMatch(/match.reviewAddressee names an unknown addressee "manager"/);
+    expect(hookProblems({ ...good, match: { reviewAddressee: 3 } }).join()).toMatch(/match.reviewAddressee must be a string or a list/);
   });
 
   it("checks the booleans", () => {

@@ -2,6 +2,7 @@ import { getSession, isCoordinatorSession } from "../sessions/registry.js";
 import { listWorkItemEvents } from "../work-items/event-log.js";
 import { toWorkItemLinkRole } from "../work-items/link-role.js";
 import { STICKY_STATUSES, type WorkItem, type WorkItemEvent, type WorkItemStatus } from "../work-items/store.js";
+import { reviewAddresseeEmployee } from "../work-items/review-addressee.js";
 import { isAgentLaneMove } from "../work-items/transition-edges.js";
 import { orgRegistry } from "./org-registry.js";
 import { remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
@@ -34,6 +35,7 @@ export type StatusLane =
   | { kind: "operator" }
   | { kind: "coordinator"; actingAs: string }
   | { kind: "closer"; employee: string }
+  | { kind: "parent-owner"; employee: string }
   | { kind: "agent" };
 
 export type StatusLaneResult = { ok: true; lane: StatusLane } | { ok: false; status: number; error: string };
@@ -144,6 +146,46 @@ function resolveCloserLane(employee: string, item: WorkItem, note: string): Stat
   return { ok: true, lane: { kind: "closer", employee } };
 }
 
+/** The employee a session acts as when it owns the parent of a child Todo in
+ *  review and the move is the accept or the send-back. Read live from the
+ *  parent and the roster, so a reassigned parent hands the review elsewhere at
+ *  once. `undefined` leaves the move to the other lanes. */
+function parentOwnerOf(
+  caller: Extract<WorkItemCaller, { kind: "session" }>,
+  item: WorkItem,
+  target: WorkItemStatus,
+): string | undefined {
+  if (item.status !== "in_review" || (target !== "done" && target !== "executing")) return undefined;
+  const employee = caller.session.employee;
+  return employee && reviewAddresseeEmployee(item) === employee ? employee : undefined;
+}
+
+/** The parent's owner accepting or sending back a child in review. A hand in
+ *  the child's work leaves the move to the ordinary agent lane: accepting it is
+ *  refused as self-review, and moving it back to executing is the producer's
+ *  own take-back, not a review bounce. */
+function resolveParentOwnerLane(employee: string, item: WorkItem, target: WorkItemStatus, note: string): StatusLaneResult | undefined {
+  const handIn = closerHandIn(employee, item);
+  if (handIn) {
+    return target === "done"
+      ? refuse(403, `${employee} cannot accept Todo ${item.id}: ${handIn}, and an employee never closes its own work (self-review ban); another reviewer or the operator closes it`)
+      : undefined;
+  }
+  if (!note) {
+    return refuse(400, target === "done"
+      ? `accepting Todo ${item.id} needs the reason in note: it is posted on the Todo as a comment`
+      : `sending Todo ${item.id} back needs the feedback in note: it is posted on the Todo as a comment`);
+  }
+  return { ok: true, lane: { kind: "parent-owner", employee } };
+}
+
+/** The comment the gateway posts when an employee's lane closes a Todo as `done`. */
+export function employeeCloseComment(lane: StatusLane, note: string): string | undefined {
+  if (lane.kind === "closer") return `Closed as done by ${lane.employee}. Reason: ${note}`;
+  if (lane.kind === "parent-owner") return `Accepted as done by ${lane.employee}, who owns the parent Todo. Reason: ${note}`;
+  return undefined;
+}
+
 /** Decide the lane for moving `item` to `target`. `target` is already one of
  *  {@link WORK_ITEM_STATUSES}; `note` is trimmed. */
 export function resolveStatusLane(
@@ -155,6 +197,9 @@ export function resolveStatusLane(
   if (hasOperatorLane(caller)) return { ok: true, lane: { kind: "operator" } };
   if (caller.kind !== "session") return refuse(403, "caller has no session identity");
   if (asOperator) return resolveCoordinatorLane(caller, item, target, note);
+  const owner = parentOwnerOf(caller, item, target);
+  const ownerLane = owner ? resolveParentOwnerLane(owner, item, target, note) : undefined;
+  if (ownerLane) return ownerLane;
   const closer = target === "done" ? closerOf(caller) : undefined;
   if (closer) return resolveCloserLane(closer, item, note);
   return resolveAgentLane(item, target, note);

@@ -1,4 +1,5 @@
 import type { BoardHookEvent } from "../shared/board-hooks-config.js";
+import type { ReviewAddressee } from "../work-items/review-addressee.js";
 
 /** Most hooks one causal chain may pass through, re-entry or not (docs/board-hooks.md, Loop guard). */
 export const MAX_HOOK_CHAIN = 5;
@@ -27,6 +28,8 @@ export interface BasePayload {
     parentId: string | null;
     rootId: string;
     childIds: string[];
+    /** Who the Todo's review is addressed to: the operator, or the employee that owns its parent. */
+    reviewAddressee: ReviewAddressee;
     url: string;
   };
   from: string | null;

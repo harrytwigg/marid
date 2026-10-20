@@ -44,6 +44,7 @@ hooks:
       label: auto-merge           # the Todo carries (any of) these labels
       assignee: senior-developer  # current assignee; "operator" matches the operator
       actor: [operator, employee] # operator | system | employee | <employee slug>
+      reviewAddressee: operator   # operator | employee: who the Todo's review is addressed to
     allowReentry: false           # default false; see "Loop guard"
     action:                       # at least one of spawn / command / notify
       spawn:
@@ -143,6 +144,7 @@ release-reviewer. Reason: …`.
     "id": "ACM-12", "title": "…", "status": "in_review", "department": "platform",
     "labels": ["auto-merge"], "assignee": "senior-developer",
     "parentId": null, "rootId": "ACM-12", "childIds": ["ACM-13"],
+    "reviewAddressee": { "kind": "operator" },  // or { "kind": "employee", "employee": "…" }
     "url": "/todos/ACM-12"
   },
   "from": "executing",             // status events only, else null
@@ -159,6 +161,12 @@ release-reviewer. Reason: …`.
   "chain": ["review-merge"]        // hooks upstream of this event, oldest first, then this hook
 }
 ```
+
+`todo.reviewAddressee` says who the Todo's `in_review` is addressed to: the parent's owner
+(`{ "kind": "employee", "employee": … }`) when the Todo has a parent owned by an employee
+in the org and that parent is not closed, otherwise the operator. It is computed when the
+event fires. A hook meant for the operator's desk can add `match: { reviewAddressee: operator }`
+to skip reviews that belong to a parent's owner; a hook without the field fires as before.
 
 `prUrl` is the first GitHub pull-request URL found in, in order: the event's text,
 the Todo's latest 20 comments (newest first), the Todo body.

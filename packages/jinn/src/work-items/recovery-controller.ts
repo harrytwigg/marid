@@ -17,6 +17,7 @@ import type { Session } from "../shared/types.js";
 import { listSessionsByWorkItem } from "../sessions/registry.js";
 import { hasOpenDelegations, isSessionInFlight } from "./open-delegations.js";
 import type { AvailabilityRearmResult } from "./availability-resume.js";
+import { reviewAddresseeEmployee } from "./review-addressee.js";
 
 export type TodoRecoveryMode = "off" | "classify-only" | "auto";
 
@@ -83,6 +84,7 @@ export function classifyWorkItem(item: WorkItem, now = new Date()): RecoveryClas
       : undefined,
     openRun: open ? { startedAt: open.startedAt, sessionInFlight: sessionInFlight(open.sessionId) } : undefined,
     attempts: item.status === "executing" ? attemptActivity(item.id, now.getTime()) : undefined,
+    reviewAddressee: item.status === "in_review" ? reviewAddresseeEmployee(item) : undefined,
     now,
   });
 }

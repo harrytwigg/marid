@@ -242,7 +242,7 @@ import { TodoDepartmentNotAllowedError } from "../shared/todo-departments-config
 import { DepartmentArchivedError, isDepartmentArchived } from "../work-items/department-archive.js";
 import { DepartmentBoundaryError, scopedDepartmentOf } from "../work-items/department-scope.js";
 import { parseStatusUpdateFields } from "./work-item-status-fields.js";
-import { hasOperatorLane, resolveStatusLane, WORK_ITEM_STATUSES } from "./work-item-status-lane.js";
+import { employeeCloseComment, hasOperatorLane, resolveStatusLane, WORK_ITEM_STATUSES } from "./work-item-status-lane.js";
 import { assignWorkItem, changedStopCause, transition, TransitionError } from "../work-items/transitions.js";
 import { checkAssignee } from "./todo-assignee.js";
 import { reconcileWorkItem } from "../work-items/reconcile.js";
@@ -2615,6 +2615,8 @@ export async function handleApiRequest(
         ...(lane.kind === "operator" && caller.kind === "session" ? { operatorLane: true } : {}),
         // A close on the operator's standing grant says so: the actor stays the closer's own session.
         ...(lane.kind === "closer" ? { closeTodos: true } : {}),
+        // The parent's owner accepting or sending back a child's review: the actor stays its own session.
+        ...(lane.kind === "parent-owner" ? { parentOwner: true } : {}),
       }, caller.origin);
       // The banner's asked-for-after reason (design-doc §5): a same-status
       // operator move with a note annotates the CURRENT stop instead of
@@ -2647,6 +2649,8 @@ export async function handleApiRequest(
               // Agent lane: resolveStatusLane already held the move to the
               // agent pairs, so the manual-start rule does not also govern it.
               agent: lane.kind === "agent" || undefined,
+              // The parent's owner sending a child back from review is the review bounce.
+              ...(lane.kind === "parent-owner" && target === "executing" ? { bounce: true } : {}),
               callerSessionId: caller.kind === "session" ? caller.callerId : undefined, ...(blockKind ? { blockKind } : {}),
               ...(cascade ? { cascade: true } : {}), ...(stopCause ? { stopCause } : {}),
               detail,
@@ -2656,8 +2660,9 @@ export async function handleApiRequest(
         if (actingAsOperator && result.item.status === "done") {
           addComment({ workItemId: params.id, ...workItemCommentAuthor(caller), ...workItemCommentSession(caller), body: `Closed as done for the operator. Reason: ${note}`, origin: caller.origin });
         }
-        if (lane.kind === "closer" && result.item.status === "done") {
-          addComment({ workItemId: params.id, ...workItemCommentAuthor(caller), ...workItemCommentSession(caller), body: `Closed as done by ${lane.employee}. Reason: ${note}`, origin: caller.origin });
+        const closeComment = result.item.status === "done" ? employeeCloseComment(lane, note) : undefined;
+        if (closeComment) {
+          addComment({ workItemId: params.id, ...workItemCommentAuthor(caller), ...workItemCommentSession(caller), body: closeComment, origin: caller.origin });
         }
         if (result.item.status !== item.status) result.item = linkSelfStartedTodo(caller, result.item, actor);
         // A review handoff or send-back note is a comment under whoever moved it; a retried move posts it too.
