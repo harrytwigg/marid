@@ -3,6 +3,7 @@
 // side of the same database; the table's DDL lives in `queue-items-schema.ts`.
 import { randomUUID } from 'node:crypto';
 import { initDb } from '../shared/db.js';
+import { rotatePendingToFront } from './queue-rotation.js';
 
 export interface QueueItem {
   id: string;
@@ -13,7 +14,7 @@ export interface QueueItem {
   internal: boolean;
   /** The transcript row this item will run, when the enqueuing path had one. */
   messageId: string | null;
-  /** Engine-facing extras that must travel with the payload when rows rotate.
+  /** Engine-facing extras this message was sent with.
    *  Null means this row never recorded any: the dispatch closure still decides. */
   dispatch: QueueDispatch | null;
   position: number;
@@ -38,8 +39,8 @@ interface QueueItemRow extends Omit<QueueItem, "internal" | "dispatch"> {
  * Null means no payload was ever recorded for this row - the notification,
  * workflow and plugin paths never record one - so the dispatch closure still
  * decides. An empty recorded payload means "this row runs with nothing extra",
- * which is what a rotated row that carried no attachment must say, or it would
- * inherit the attachment of the row it landed on.
+ * which is what a message sent without a file must say, so that it never falls back
+ * to whatever the dispatch closure captured.
  */
 function parseDispatchPayload(raw: string | null): QueueDispatch | null {
   if (raw === null) return null;
@@ -155,27 +156,28 @@ export function editPendingQueueItem(itemId: string, prompt: string): QueueItem 
 }
 
 /**
- * Move payloads between parked rows, in one transaction so a reader never sees
- * two rows claiming the same message. The rows keep their positions and their
- * place in the committed promise chain; only what they will run changes.
+ * Run one parked message next: give it the head of the line among the pending
+ * operator-visible rows, the others keeping their relative order.
  *
- * The whole payload moves - text, bubble, attachments, speech origin - because a
- * message arriving with a neighbour's attachment is worse than not reordering.
+ * Only the rows' positions move, in one transaction. Each row keeps its id, its
+ * text, its bubble, its attachments and the dispatch its enqueuer registered, so
+ * a queue item id names the same message before and after, and the message runs
+ * the way it was sent. The set of position values is reused rather than
+ * renumbered, so internal rows (callback deliveries) hold the place they had.
+ *
+ * Returns false when the item is not a pending visible row of the lane.
  */
-export function reassignPendingQueuePayloads(
-  assignments: ReadonlyArray<{ id: string; payload: QueueItem }>,
-): void {
+export function promotePendingQueueItem(sessionKey: string, itemId: string): boolean {
   const db = initDb();
-  db.transaction(() => {
-    const write = db.prepare(
-      "UPDATE queue_items SET prompt = ?, message_id = ?, dispatch_payload = ? WHERE id = ? AND status = 'pending'",
-    );
-    for (const { id, payload } of assignments) {
-      // Always explicit after a rotation, never null: a promoted row that says
-      // nothing would fall back to the closure of the row it displaced.
-      const dispatch = payload.dispatch ?? { attachments: [], speechDerived: false };
-      write.run(payload.prompt, payload.messageId, serializeDispatchPayload(dispatch), id);
-    }
+  return db.transaction(() => {
+    const parked = db.prepare(
+      "SELECT id, position FROM queue_items WHERE session_key = ? AND internal = 0 AND status = 'pending' ORDER BY position ASC",
+    ).all(sessionKey) as Array<{ id: string; position: number }>;
+    if (!parked.some((row) => row.id === itemId)) return false;
+    const promoted = rotatePendingToFront(parked, itemId);
+    const write = db.prepare("UPDATE queue_items SET position = ? WHERE id = ? AND status = 'pending'");
+    promoted.forEach((row, index) => write.run(parked[index].position, row.id));
+    return true;
   }).immediate();
 }
 
@@ -267,10 +269,11 @@ export function openTurnMessages(sessionId: string): { prompts: string[]; messag
   return { prompts: items.map((item) => item.prompt), messageIds };
 }
 
+/** Every pending row, each lane's rows in the order its slots will claim them. */
 export function listAllPendingQueueItems(): QueueItem[] {
   const db = initDb();
   const rows = db.prepare(
-    `${QUEUE_ITEM_SELECT} WHERE status = 'pending' ORDER BY created_at ASC, position ASC`
+    `${QUEUE_ITEM_SELECT} WHERE status = 'pending' ORDER BY position ASC, created_at ASC`
   ).all() as QueueItemRow[];
   return rows.map(rowToQueueItem);
 }

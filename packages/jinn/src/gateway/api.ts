@@ -70,6 +70,7 @@ import {
   getMessages,
   getMessagePage,
   enqueueQueueItem,
+  promotePendingQueueItem,
   markRunningQueueItemsCompletedForSession,
   shouldHoldParentCompletionQueueDispatch,
   listReleasableParentCompletionQueuesForSource,
@@ -133,7 +134,7 @@ export {
 } from "../sessions/turn/text.js";
 import { getPackageVersion } from "../shared/version.js";
 import { badRequest, json, matchRoute, notFound, serverError, type ResWithEncoding } from "./route-helpers.js";
-import { handleSessionQueueRoute, promotePendingQueueItem } from "./queue-routes.js";
+import { handleSessionQueueRoute } from "./queue-routes.js";
 export { matchRoute } from "./route-helpers.js";
 import { handleCronApi } from "./cron-api.js";
 import { handleOrgApi } from "./org-api.js";
@@ -4202,12 +4203,11 @@ export async function handleApiRequest(
 
       // Internal notification-role messages are already durably queued above;
       // only real user messages create a visible queue-panel item here. The row
-      // carries the whole payload so "send this one now" can move all of it.
-      let carrierQueueItemId = queueItemId;
+      // carries the whole payload, and keeps it if "send this one now" moves it.
       if (!isNotification) {
         queueItemId = enqueueQueueItem(session.id, sessionKey, prompt, { messageId: incomingMessageId, dispatch: { attachments: attachmentPaths, speechDerived } });
         // A message that cut the turn off runs next, not behind what was already parked.
-        carrierQueueItemId = shouldInterruptRunningTurn ? promotePendingQueueItem(sessionKey, queueItemId) : queueItemId;
+        if (shouldInterruptRunningTurn) promotePendingQueueItem(sessionKey, queueItemId);
         context.emit("queue:updated", { sessionId: session.id, sessionKey });
       }
 
@@ -4219,7 +4219,7 @@ export async function handleApiRequest(
         status: "queued",
         sessionId: session.id,
         messageId: incomingMessageId,
-        queueItemId: carrierQueueItemId,
+        queueItemId,
         ...(delivery ? { delivery } : {}),
         ...(callbackDelivery ? { callbackDeliveryId: callbackDelivery.id } : {}),
       });

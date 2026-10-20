@@ -7,10 +7,9 @@ import {
   getQueueItem,
   getQueueItems,
   getSession,
-  reassignPendingQueuePayloads,
+  promotePendingQueueItem,
   withdrawPendingQueueItem,
 } from "../sessions/registry.js";
-import { rotatePendingToFront } from "../sessions/queue-rotation.js";
 import { supersedeRunningTurn } from "../sessions/turn/superseded.js";
 import { USER_MESSAGE_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
 import { messageBodyError } from "../shared/message-body.js";
@@ -124,18 +123,6 @@ function interruptRunningTurn(context: ApiContext, session: Session): void {
   supersedeRunningTurn(session);
   engine.kill(session.id, USER_MESSAGE_INTERRUPTION_REASON);
   context.emit("session:interrupted", { sessionId: session.id, reason: "send now" });
-}
-
-/**
- * Move a parked item's payload to the head of the pending rows, everything
- * else keeping its order (see queue-rotation.ts for why payloads move, not
- * rows). Returns the id of the row that now carries the item.
- */
-export function promotePendingQueueItem(sessionKey: string, itemId: string): string {
-  const parked = getQueueItems(sessionKey).filter((row) => row.status === "pending");
-  const promoted = rotatePendingToFront(parked, itemId);
-  reassignPendingQueuePayloads(promoted.map((payload, index) => ({ id: parked[index].id, payload })));
-  return promoted[0]?.id === itemId ? parked[0].id : itemId;
 }
 
 /** A paused queue drains nothing: cutting the turn off there only loses the reply. */
