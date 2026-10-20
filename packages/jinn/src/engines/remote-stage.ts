@@ -561,15 +561,12 @@ export async function ensureRemoteReady(
     }
     const facts = await gatherFacts(destination);
     requireRemoteEngineBin(destination, facts, opts.engine);
-    // Freebuff reads nothing from the gateway's home: it is a terminal program
-    // with no hooks, no MCP and no skills, so there is no farm to link and no
-    // mount to wait for. A host with its sshfs down is still a usable host.
-    const mountProblem = opts.engine === "freebuff" ? undefined : await verifyMount(destination, remote, mountWait(remote, opts, { now, sleep }, {
+    const mountProblem = await verifyHostMount(destination, remote, opts, { now, sleep }, {
       // A host already announced as offline is reported once; the mount wait
       // then continues under the same `waiting` status.
       onWaitStart: () => { if (!announced) onWaitStart({ destination, waking: false, waitingFor: "mount" }); },
       announced: () => announced,
-    }));
+    });
     if (mountProblem) return { ready: false, reason: mountProblem };
     const profileProblem = await verifyEngineProfile(destination, target, remote, opts.engine);
     if (profileProblem) return { ready: false, reason: profileProblem };
@@ -577,6 +574,23 @@ export async function ensureRemoteReady(
   } catch (err) {
     return { ready: false, reason: err instanceof Error ? err.message : String(err) };
   }
+}
+
+/**
+ * The mount half of readiness. Freebuff reads nothing from the gateway's home:
+ * it is a terminal program with no hooks, no MCP and no skills, so there is no
+ * farm to link and no mount to wait for, and a host with its sshfs down is still
+ * a usable one.
+ */
+async function verifyHostMount(
+  destination: string,
+  remote: RemoteExecutionConfig,
+  opts: EnsureReadyOpts,
+  clock: Pick<MountWait, "now" | "sleep">,
+  wait: { onWaitStart: () => void; announced: () => boolean },
+): Promise<string | undefined> {
+  if (opts.engine === "freebuff") return undefined;
+  return await verifyMount(destination, remote, mountWait(remote, opts, clock, wait));
 }
 
 /** How {@link verifyMount} may wait for this caller. The wait is announced like

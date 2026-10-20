@@ -54,3 +54,26 @@ export function writeFreebuffUsage(usage: FreebuffUsageSnapshot, file: string = 
     // best-effort only
   }
 }
+
+/** What a screen's panel and clock say, as the snapshot to keep: undefined when they say nothing. */
+export function usageFromScreen(
+  info: { hoursRemaining?: number; hoursTotal?: number; sessionLeftMinutes?: number; statusBar?: { modelLabel: string } },
+  observedAtMs: number = Date.now(),
+): FreebuffUsageSnapshot | undefined {
+  if (info.hoursRemaining === undefined && info.sessionLeftMinutes === undefined) return undefined;
+  return {
+    observedAtMs,
+    ...(info.hoursRemaining !== undefined ? { hoursRemaining: info.hoursRemaining } : {}),
+    ...(info.hoursTotal !== undefined ? { hoursTotal: info.hoursTotal } : {}),
+    ...(info.sessionLeftMinutes !== undefined ? { sessionLeftMinutes: info.sessionLeftMinutes } : {}),
+    ...(info.statusBar ? { modelLabel: info.statusBar.modelLabel } : {}),
+  };
+}
+
+/** One log line for a reading. */
+export function describeUsage(usage: FreebuffUsageSnapshot, context?: { tokens?: number; pct?: number }): string {
+  const hours = usage.hoursRemaining !== undefined ? `${usage.hoursRemaining}/${usage.hoursTotal ?? "?"} hours left today` : "hours unknown";
+  const session = usage.sessionLeftMinutes !== undefined ? `, ${usage.sessionLeftMinutes}m left in this session` : "";
+  const tokens = context?.tokens !== undefined ? `, ${context.tokens} context tokens (${context.pct ?? "?"}%)` : "";
+  return `Freebuff: ${hours}${session}${tokens}`;
+}

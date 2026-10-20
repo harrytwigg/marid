@@ -70,3 +70,11 @@ export function screenFailure(info: FreebuffScreenInfo, place: FreebuffPlace): F
 export function unknownScreenFailure(lines: readonly string[], seconds: number): FreebuffFailure {
   return new FreebuffFailure(`Freebuff showed a screen Marid does not recognise for ${seconds}s:\n${dumpScreen(lines)}`);
 }
+
+/** Freebuff dropped its hour session before the message went in: start the process afresh and try once more. */
+export class SessionReleased extends Error {
+  constructor(text: string) {
+    super(text);
+    this.name = "SessionReleased";
+  }
+}

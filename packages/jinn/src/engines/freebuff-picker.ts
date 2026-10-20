@@ -68,6 +68,82 @@ export function choiceSatisfied(choice: PickerChoice, bar: { modelLabel: string;
   return true;
 }
 
+/** What one walk through the picker has seen and what it has to say. */
+interface Walk {
+  io: PickerIO;
+  lines: string[];
+  seen: Set<string>;
+}
+
+function noModelError(model: string, seen: ReadonlySet<string>): FreebuffPickerError {
+  return new FreebuffPickerError(`no model in the picker starts with "${model}"; it showed ${describeLabels(seen)}`, [...seen]);
+}
+
+function noteRows(walk: Walk, rows: readonly FreebuffPickerRow[]): void {
+  for (const row of rows) walk.seen.add(row.label);
+}
+
+/** Press one key and read the screen it leaves. */
+async function step(walk: Walk, key: PickerKey): Promise<FreebuffPickerRow[]> {
+  await walk.io.press(key);
+  walk.lines = await walk.io.nextScreen(walk.lines);
+  const rows = parsePickerRows(walk.lines);
+  noteRows(walk, rows);
+  return rows;
+}
+
+/** Which way to press: toward the wanted row when it is in view, else the way already scanning. */
+function heading(rows: readonly FreebuffPickerRow[], at: number, model: string, scanning: PickerKey): { key: PickerKey; inView: boolean } {
+  const target = rows.findIndex((r) => modelMatches(r.label, model));
+  if (target < 0) return { key: scanning, inView: false };
+  return { key: target > at ? "down" : "up", inView: true };
+}
+
+/**
+ * Move the cursor onto the row whose label starts with `model`, one key at a
+ * time. With the row in view, head for it; with it out of view, scroll down
+ * until the cursor stops, then up until it stops, and give up.
+ */
+async function moveToModel(walk: Walk, model: string): Promise<void> {
+  let scanning: PickerKey = "down";
+  let stops = 0;
+  noteRows(walk, parsePickerRows(walk.lines));
+  for (let taken = 0; taken <= MAX_STEPS; taken++) {
+    const rows = parsePickerRows(walk.lines);
+    const at = selectedIndex(rows);
+    if (at < 0) throw new FreebuffPickerError("the model picker is not showing a selected row", [...walk.seen]);
+    if (modelMatches(rows[at].label, model)) return;
+    const { key, inView } = heading(rows, at, model, scanning);
+    const after = await step(walk, key);
+    if (inView || after.find((r) => r.selected)?.label !== rows[at].label) continue;
+    // The cursor stopped: the end of the list in this direction.
+    if (++stops > 1) break;
+    scanning = scanning === "down" ? "up" : "down";
+  }
+  throw noModelError(model, walk.seen);
+}
+
+/** Tab the selected row through its reasoning levels until it shows `wanted`. */
+async function moveToEffort(walk: Walk, wanted: string, warnings: string[]): Promise<void> {
+  const offered: string[] = [];
+  for (let taken = 0; ; taken++) {
+    const row = parsePickerRows(walk.lines).find((r) => r.selected);
+    if (!row) throw new FreebuffPickerError("the model picker lost its selected row", [...walk.seen]);
+    if (row.effort === undefined) {
+      // No level to choose on this model: nothing to match, and not worth failing the turn.
+      warnings.push(`"${row.label}" has no reasoning level; ignoring effortLevel "${wanted}"`);
+      return;
+    }
+    if (effortMatches(row.effort, wanted)) return;
+    if (!offered.includes(row.effort)) offered.push(row.effort);
+    // Tab came back to a level already seen, or the cycle is longer than any real one: it is exhausted.
+    if (taken >= MAX_EFFORT_STEPS || (taken > 0 && offered.length === taken)) {
+      throw new FreebuffPickerError(`"${row.label}" has no reasoning level "${wanted}"; it offered ${offered.map((e) => `"${e}"`).join(", ")}`, [...walk.seen]);
+    }
+    await step(walk, "tab");
+  }
+}
+
 /**
  * Drive an OPEN picker to the wanted model and level, press Enter, and leave it.
  * Throws {@link FreebuffPickerError} (after pressing Esc) when there is no such
@@ -75,65 +151,11 @@ export function choiceSatisfied(choice: PickerChoice, bar: { modelLabel: string;
  */
 export async function chooseInPicker(io: PickerIO, choice: PickerChoice): Promise<{ warnings: string[] }> {
   const warnings: string[] = [];
-  const seen = new Set<string>();
-  let lines = await io.screen();
-  const note = (rows: readonly FreebuffPickerRow[]) => rows.forEach((r) => seen.add(r.label));
-
+  const walk: Walk = { io, lines: await io.screen(), seen: new Set() };
+  const wantedEffort = choice.effortLevel && choice.effortLevel !== "default" ? choice.effortLevel : undefined;
   try {
-    if (choice.model) {
-      let direction: "down" | "up" = "down";
-      let flips = 0;
-      for (let step = 0; ; step++) {
-        const rows = parsePickerRows(lines);
-        note(rows);
-        const at = selectedIndex(rows);
-        if (rows.length === 0 || at < 0) {
-          throw new FreebuffPickerError("the model picker is not showing a selected row", [...seen]);
-        }
-        if (modelMatches(rows[at].label, choice.model)) break;
-        const target = rows.findIndex((r) => modelMatches(r.label, choice.model!));
-        if (target >= 0) direction = target > at ? "down" : "up";
-        if (step >= MAX_STEPS) {
-          throw new FreebuffPickerError(`no model in the picker starts with "${choice.model}"; it showed ${describeLabels(seen)}`, [...seen]);
-        }
-        await io.press(direction);
-        const next = await io.nextScreen(lines);
-        const nextRows = parsePickerRows(next);
-        const moved = nextRows.find((r) => r.selected)?.label !== rows[at].label;
-        lines = next;
-        if (!moved && target < 0) {
-          // The cursor stopped: the end of the list in this direction.
-          note(nextRows);
-          if (++flips > 1) {
-            throw new FreebuffPickerError(`no model in the picker starts with "${choice.model}"; it showed ${describeLabels(seen)}`, [...seen]);
-          }
-          direction = direction === "down" ? "up" : "down";
-        }
-      }
-    }
-
-    const wantedEffort = choice.effortLevel && choice.effortLevel !== "default" ? choice.effortLevel : undefined;
-    if (wantedEffort) {
-      const offered: string[] = [];
-      for (let step = 0; ; step++) {
-        const row = parsePickerRows(lines).find((r) => r.selected);
-        if (!row) throw new FreebuffPickerError("the model picker lost its selected row", [...seen]);
-        if (row.effort === undefined) {
-          // No level to choose on this model: nothing to match, and not worth failing the turn.
-          warnings.push(`"${row.label}" has no reasoning level; ignoring effortLevel "${wantedEffort}"`);
-          break;
-        }
-        if (effortMatches(row.effort, wantedEffort)) break;
-        if (!offered.includes(row.effort)) offered.push(row.effort);
-        if (step >= MAX_EFFORT_STEPS || (step > 0 && offered.length === step)) {
-          // Tab came back to a level already seen: the cycle is exhausted.
-          throw new FreebuffPickerError(`"${row.label}" has no reasoning level "${wantedEffort}"; it offered ${offered.map((e) => `"${e}"`).join(", ")}`, [...seen]);
-        }
-        await io.press("tab");
-        lines = await io.nextScreen(lines);
-      }
-    }
-
+    if (choice.model) await moveToModel(walk, choice.model);
+    if (wantedEffort) await moveToEffort(walk, wantedEffort, warnings);
     await io.press("enter");
     return { warnings };
   } catch (err) {

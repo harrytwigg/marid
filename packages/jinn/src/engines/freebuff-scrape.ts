@@ -14,29 +14,47 @@ const STAMP = /^\s*\[\d{1,2}:\d{2}\s?[AP]M\]\s*$/;
 const FOOTER = /⎘\s*•\s*[0-9hms ]+•/;
 const SCROLLBAR = /[\s▀▄█]+$/;
 
-export function scrapeAnswer(lines: readonly string[]): string | undefined {
+/** Where the conversation sits on the screen: the user's stamp, and the footer that closes the turn. */
+function locate(lines: readonly string[]): { stamp: number; footer: number } | undefined {
   let footer = -1;
   lines.forEach((l, i) => { if (FOOTER.test(l)) footer = i; });
   let stamp = -1;
   lines.forEach((l, i) => { if ((footer < 0 || i < footer) && STAMP.test(l)) stamp = i; });
-  if (footer < 0 || stamp < 0) return undefined;
+  return footer < 0 || stamp < 0 ? undefined : { stamp, footer };
+}
 
-  // The stamp, then the user's message (which may wrap), then a blank line.
-  let start = stamp + 1;
-  while (start < footer && lines[start].trim()) start++;
+/** Whether a line is a tool call or its output rather than the model's text. */
+function isToolLine(line: string): boolean {
+  return /^\s*•\s/.test(line) || /^\s*\$\s/.test(line);
+}
+
+/** Drop the `• Thinking` blocks: a header, then lines indented under it, up to a blank line. */
+function withoutReasoning(lines: readonly string[]): string[] {
   const kept: string[] = [];
   let thinking = false;
-  for (const raw of lines.slice(start, footer)) {
-    const line = raw.replace(SCROLLBAR, "").replace(/\s+$/, "");
-    if (/^\s*•\s*Thinking\b/.test(line)) { thinking = true; continue; }
-    if (thinking) {
-      // Reasoning is indented under its header; it ends at the first line that is not.
-      if (/^\s{4,}\S/.test(line) || !line.trim()) { if (!line.trim()) thinking = false; continue; }
+  for (const line of lines) {
+    if (/^\s*•\s*Thinking\b/.test(line)) thinking = true;
+    else if (thinking && (!line.trim() || /^\s{4,}\S/.test(line))) thinking = !!line.trim();
+    else {
       thinking = false;
+      kept.push(line);
     }
-    if (/^\s*•\s/.test(line) || /^\s*\$\s/.test(line)) continue; // a tool call, not the answer
-    kept.push(line.replace(/^ {2}/, ""));
   }
-  const text = kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return kept;
+}
+
+export function scrapeAnswer(lines: readonly string[]): string | undefined {
+  const where = locate(lines);
+  if (!where) return undefined;
+  // The stamp, then the user's message (which may wrap), then a blank line.
+  let start = where.stamp + 1;
+  while (start < where.footer && lines[start].trim()) start++;
+  const body = lines.slice(start, where.footer).map((raw) => raw.replace(SCROLLBAR, "").replace(/\s+$/, ""));
+  const text = withoutReasoning(body)
+    .filter((line) => !isToolLine(line))
+    .map((line) => line.replace(/^ {2}/, ""))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
   return text || undefined;
 }

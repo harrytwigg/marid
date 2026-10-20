@@ -81,8 +81,6 @@ export function resolveEffort(
   // Non-child sessions (COO) or fallback
   const engineDefault = clean(engineConfig.effortLevel);
   if (engineDefault && isValid(engineDefault)) return engineDefault;
-  if (engineDefault) {
-    logger.warn(`Invalid effortLevel "${engineDefault}" in engine config (valid: ${validLevels.join(", ")}), defaulting to "${unchosenEffort(engine)}"`);
-  }
+  if (engineDefault) logger.warn(`Invalid effortLevel "${engineDefault}" in engine config (valid: ${validLevels.join(", ")}), defaulting to "${unchosenEffort(engine)}"`);
   return unchosenEffort(engine);
 }

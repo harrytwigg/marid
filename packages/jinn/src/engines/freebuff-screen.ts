@@ -112,6 +112,49 @@ export function parseStatusBar(lines: readonly string[]): FreebuffStatusBar | un
   return { modelLabel: modelSegment.slice(0, bullet).trim(), ...(effort ? { effort } : {}) };
 }
 
+function readHours(text: string, info: FreebuffScreenInfo): void {
+  const hours = HOURS_REMAINING.exec(text);
+  if (!hours) return;
+  info.hoursRemaining = Number(hours[1]);
+  info.hoursTotal = Number(hours[2]);
+}
+
+/** The session clock, and the context beside it when the line carries one. */
+function readSessionLine(lines: readonly string[], info: FreebuffScreenInfo): void {
+  for (const line of lines) {
+    const session = SESSION_LINE.exec(line);
+    const minutes = session ? minutesOf(session[1]) : undefined;
+    if (!session || minutes === undefined) continue;
+    info.sessionLeftMinutes = minutes;
+    if (session[2] !== undefined) {
+      info.contextTokens = parseTokenCount(session[2], session[3]);
+      info.contextPct = Number(session[4]);
+    }
+    return;
+  }
+}
+
+function readRefusal(text: string): FreebuffRefusal | undefined {
+  for (const { kind, pattern } of REFUSALS) {
+    const found = pattern.exec(text);
+    // The line as drawn: the transcript's margin and the scrollbar glyphs are not part of it.
+    if (found) return { kind, text: found[0].replace(/[\s▀▄█]+$/, "").trim() };
+  }
+  return undefined;
+}
+
+/**
+ * Order matters: a sign-in prompt and the picker each cover or replace the input
+ * box, and the picker leaves the idle status bar on screen below it.
+ */
+function readState(text: string, busy: boolean): FreebuffScreenState {
+  if (SIGNED_OUT_MARKERS.some((marker) => text.includes(marker))) return "signed-out";
+  if (text.includes(PICKER_HINT)) return "picker";
+  if (busy || text.includes(BUSY_PLACEHOLDER)) return "busy";
+  if (text.includes(IDLE_PLACEHOLDER)) return "idle";
+  return "unknown";
+}
+
 export function parseFreebuffScreen(lines: readonly string[]): FreebuffScreenInfo {
   const text = lines.join("\n");
   const info: FreebuffScreenInfo = {
@@ -120,45 +163,15 @@ export function parseFreebuffScreen(lines: readonly string[]): FreebuffScreenInf
     sessionActive: /\bSession active\b/.test(text),
     turnFooter: lines.some((l) => TURN_FOOTER.test(l)),
   };
-
-  const hours = HOURS_REMAINING.exec(text);
-  if (hours) {
-    info.hoursRemaining = Number(hours[1]);
-    info.hoursTotal = Number(hours[2]);
-  }
-  for (const line of lines) {
-    const session = SESSION_LINE.exec(line);
-    if (!session) continue;
-    const minutes = minutesOf(session[1]);
-    if (minutes === undefined) continue;
-    info.sessionLeftMinutes = minutes;
-    if (session[2] !== undefined) {
-      info.contextTokens = parseTokenCount(session[2], session[3]);
-      info.contextPct = Number(session[4]);
-    }
-    break;
-  }
+  readHours(text, info);
+  readSessionLine(lines, info);
   const statusBar = parseStatusBar(lines);
   if (statusBar) info.statusBar = statusBar;
-
   const busy = lines.map((l) => BUSY_LINE.exec(l)).find((m): m is RegExpExecArray => m !== null);
   if (busy?.[1] !== undefined) info.busySeconds = Number(busy[1]);
-
-  for (const { kind, pattern } of REFUSALS) {
-    const found = pattern.exec(text);
-    if (found) {
-      // The line as drawn: the transcript's margin and the scrollbar glyphs are not part of it.
-      info.refusal = { kind, text: found[0].replace(/[\s▀▄█]+$/, "").trim() };
-      break;
-    }
-  }
-
-  // Order matters: a sign-in prompt and the picker each cover or replace the
-  // input box, and the picker leaves the idle status bar on screen below it.
-  if (SIGNED_OUT_MARKERS.some((marker) => text.includes(marker))) info.state = "signed-out";
-  else if (text.includes(PICKER_HINT)) info.state = "picker";
-  else if (busy || text.includes(BUSY_PLACEHOLDER)) info.state = "busy";
-  else if (text.includes(IDLE_PLACEHOLDER)) info.state = "idle";
+  const refusal = readRefusal(text);
+  if (refusal) info.refusal = refusal;
+  info.state = readState(text, busy !== undefined);
   return info;
 }
 

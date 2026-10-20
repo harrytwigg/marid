@@ -14,7 +14,7 @@ vi.mock("../remote-stage.js", async (importOriginal) => {
     ...actual,
     sshRun: async (_destination: string, args: string[], opts: { stdin?: string } = {}) => {
       if (sshExit !== 0) return { code: sshExit, stdout: "", stderr: "ssh: connect to host build-box port 22: No route to host" };
-      const run = spawnSync("sh", ["-c", args[0]], { input: opts.stdin, encoding: "utf8", env: { ...process.env, HOME: remoteHome } });
+      const run = spawnSync("sh", ["-c", args[0]], { input: opts.stdin, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, HOME: remoteHome } });
       return { code: run.status, stdout: run.stdout, stderr: run.stderr };
     },
   };

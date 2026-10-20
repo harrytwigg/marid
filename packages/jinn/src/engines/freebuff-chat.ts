@@ -224,3 +224,46 @@ export function localChatSource(configDir: string = freebuffConfigDir()): Freebu
     },
   };
 }
+
+// ── Finding a process's chat ─────────────────────────────────────────────────
+
+export interface LocateChatOpts {
+  /** The chat this process was told to continue (its project may not be known), or the one already found. */
+  known?: FreebuffChatRef;
+  /** Every chat that existed before the process started. */
+  before: ReadonlySet<string>;
+  /** Every chat another Marid session owns. */
+  claimed: ReadonlySet<string>;
+  /** The message that was sent into it. */
+  sent: string;
+  onAmbiguous?: () => void;
+}
+
+/** How many unresolved chats are read to settle which one a pasted message went into. */
+const READ_AT_MOST = 4;
+
+async function locateByReading(source: FreebuffChatSource, candidates: readonly FreebuffChatListing[], sent: string): Promise<FreebuffChatRef | undefined> {
+  for (const candidate of candidates.slice(0, READ_AT_MOST)) {
+    const ref = { chatId: candidate.chatId, project: candidate.project };
+    if (firstPromptMatches(lastUserMessage(await source.readMessages(ref)), sent)) return ref;
+  }
+  return undefined;
+}
+
+/**
+ * The chat a process is in, or undefined if it cannot be told yet. A chat the
+ * process was told to continue only needs its project found; a new one is the
+ * one that appeared since the process started and holds what was sent.
+ */
+export async function locateChat(source: FreebuffChatSource, opts: LocateChatOpts): Promise<FreebuffChatRef | undefined> {
+  if (opts.known?.project) return opts.known;
+  const listing = await source.list();
+  if (opts.known) {
+    const found = listing.find((c) => c.chatId === opts.known!.chatId);
+    return found ? { chatId: found.chatId, project: found.project } : undefined;
+  }
+  const picked = pickNewChat(listing, { before: opts.before, claimed: opts.claimed, sentPrompt: opts.sent });
+  if (picked.chat && picked.ambiguous) opts.onAmbiguous?.();
+  // A pasted message leaves no first prompt in the chat's meta: read the chat to see what it was sent.
+  return picked.chat ?? await locateByReading(source, picked.unresolved, opts.sent);
+}

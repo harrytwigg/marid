@@ -1,213 +1,43 @@
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import * as pty from "node-pty";
-import type { InterruptibleEngine, EngineRunOpts, EngineResult, RemoteTarget } from "../shared/types.js";
-import type { RemoteExecutionConfig } from "../shared/config-types.js";
-import { freebuffMaxConcurrent, type FreebuffEngineConfig } from "../shared/freebuff-config.js";
+import type { InterruptibleEngine, EngineRunOpts, EngineResult } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
 import { JINN_HOME } from "../shared/paths.js";
-import { resolveBin } from "../shared/resolve-bin.js";
-import { buildEngineChildEnv } from "../shared/child-env.js";
 import { neutralizeForPaste } from "../shared/skill-commands.js";
-import { writeFreebuffUsage } from "../shared/freebuff-usage.js";
-import { assertRemoteTarget, isRemoteTarget, sshDestination } from "../shared/remote-target.js";
-import { employeeSessionEnv } from "../sessions/employee-env.js";
-import { PtyLifecycleManager, processExitInterruption, ptyHostKey, type PtyExit, type PtyHandle } from "./pty-lifecycle.js";
-import { PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
-import type { PtyControlEvent, PtyIdleSpawnOpts, PtySnapshotSubscription, PtyViewEngine } from "./pty-view-engine.js";
+import { describeUsage, usageFromScreen, writeFreebuffUsage } from "../shared/freebuff-usage.js";
+import { isRemoteTarget } from "../shared/remote-target.js";
+import { processExitInterruption, ptyHostKey } from "./pty-lifecycle.js";
 import { processStartFailure } from "../shared/process-start.js";
-import { buildSshSpawnArgs, ensureRemoteReady, remoteNodeDir, requireRemoteEngineBin } from "./remote-stage.js";
-import { FREEBUFF_COLS, FREEBUFF_ROWS, FreebuffTerminal } from "./freebuff-terminal.js";
-import {
-  parseFreebuffScreen,
-  type FreebuffScreenInfo,
-} from "./freebuff-screen.js";
+import type { FreebuffScreenInfo } from "./freebuff-screen.js";
 import {
   chatKey,
   extractAnswer,
-  lastUserMessage,
   firstPromptMatches,
-  localChatSource,
-  pickNewChat,
+  lastUserMessage,
+  locateChat,
   type FreebuffChatRef,
-  type FreebuffChatSource,
 } from "./freebuff-chat.js";
-import {
-  choiceSatisfied,
-  chooseInPicker,
-  FreebuffPickerError,
-  type PickerChoice,
-  type PickerIO,
-  type PickerKey,
-} from "./freebuff-picker.js";
-import {
-  FreebuffFailure,
-  UNKNOWN_SCREEN_LIMIT_MS,
-  notSignedInMessage,
-  refusalFailure,
-  screenFailure,
-  unknownScreenFailure,
-  type FreebuffPlace,
-} from "./freebuff-failure.js";
-import { FreebuffSlots } from "./freebuff-slots.js";
-import { remoteChatSource, remoteSignedIn } from "./freebuff-remote.js";
+import { FreebuffFailure, SessionReleased } from "./freebuff-failure.js";
+import { FreebuffDriver, sleep } from "./freebuff-driver.js";
+import { composeFreebuffMessage } from "./freebuff-message.js";
+import { FreebuffProcessPool, TurnStopped, reusableProcess, type ActiveTurn, type Live, type Stop } from "./freebuff-pool.js";
 import { scrapeAnswer } from "./freebuff-scrape.js";
+import { buildFreebuffArgs, type FreebuffTarget, type SpawnParams } from "./freebuff-spawn.js";
+
+export { buildFreebuffArgs, composeFreebuffMessage, reusableProcess };
+export { remoteLocationNote } from "./freebuff-message.js";
+export type { FreebuffEngineDeps } from "./freebuff-pool.js";
 
 /** A turn is bounded by the hour session it runs in, with room to spare. */
 const TURN_TIMEOUT_MS = 2 * 60 * 60 * 1000;
-const POLL_MS = 200;
-/** Idle after busy, with the footer up, for this long: the turn is over. */
-const SETTLE_MS = 1_500;
-/** Idle after busy but no footer: wait this long for one before reading the chat anyway. */
-const FOOTER_GRACE_MS = 15_000;
-/** The message was pasted and submitted, yet the screen never went busy. */
-const NOT_ACCEPTED_MS = 30_000;
 /** The chat file may lag the screen; wait this long for the answer to be in it. */
 const ANSWER_WAIT_MS = 20_000;
-const PICKER_OPEN_MS = 15_000;
-const KEY_PATIENCE_MS = 1_500;
-const KEY_SETTLE_MS = 150;
-const PASTE_CHUNK = 8 * 1024;
-const CURSOR_POSITION_RESPONSE = "\x1b[1;1R";
-
-const KEY_BYTES: Record<PickerKey, string> = { up: "\x1b[A", down: "\x1b[B", tab: "\t", enter: "\r", escape: "\x1b" };
-
-/** Why a turn stopped other than by finishing. */
-type Stop =
-  | { kind: "interrupt"; reason: string }
-  | { kind: "exit"; exit: PtyExit | undefined; output: string };
-
-class TurnStopped extends Error {
-  constructor(readonly stop: Stop) {
-    super(stop.kind === "interrupt" ? stop.reason : "freebuff exited");
-    this.name = "TurnStopped";
-  }
-}
-
-/** Freebuff dropped its hour session before the message went in: start the process afresh and try once more. */
-class SessionReleased extends Error {
-  constructor(text: string) {
-    super(text);
-    this.name = "SessionReleased";
-  }
-}
-
-interface ActiveTurn {
-  abort: AbortController;
-}
-
-/** Where a Freebuff process runs and which chat it holds. */
-interface SpawnParams {
-  cwd: string;
-  bin?: string;
-  /** `--continue` this chat. Unset starts a new one. */
-  chatId?: string;
-  /** The host to run on, for a remote employee. */
-  target?: RemoteTarget & { remoteHost: string };
-}
-
-interface Live {
-  proc: pty.IPty;
-  handle: PtyHandle;
-  terminal: FreebuffTerminal;
-  place: FreebuffPlace;
-  params: SpawnParams;
-  /** The chat this process is in: known up front for `--continue`, found after the first turn otherwise. */
-  chat?: FreebuffChatRef;
-  /** Every chat that existed before this process started, so a new one can be told apart. */
-  before: Set<string>;
-  chats: FreebuffChatSource;
-  /** Raw output kept until the TUI first shows itself, for a failed start. */
-  startOutput: { text: string };
-  booted: boolean;
-  exited?: PtyExit;
-}
-
-export interface FreebuffEngineDeps {
-  /** The `remote` block, read live so an edit takes effect on the next spawn. */
-  remote?: () => RemoteExecutionConfig | undefined;
-  /** `engines.freebuff`, read live. */
-  config?: () => FreebuffEngineConfig | undefined;
-  /** Test seams. */
-  spawnPty?: typeof pty.spawn;
-  localChats?: () => FreebuffChatSource;
-}
-
-/** Sleep that ends early, by throwing the signal's reason, when the turn stops. */
-function sleep(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal.aborted) return reject(signal.reason);
-    const timer = setTimeout(() => { signal.removeEventListener("abort", onAbort); resolve(); }, ms);
-    const onAbort = () => { clearTimeout(timer); reject(signal.reason); };
-    signal.addEventListener("abort", onAbort, { once: true });
-  });
-}
-
-function configHome(): string {
-  return os.homedir();
-}
 
 /**
- * What a remote chat is told about where it is. The context built for every employee
- * names the gateway's own home as the working directory, and on another machine that
- * path is not there: a model that believes it creates it, and writes its files there.
+ * Freebuff, driven through its screen: each turn types the message into the real
+ * TUI and reads the answer from its chat file. The processes, their slots and the
+ * dashboard's terminal are {@link FreebuffProcessPool}'s.
  */
-export function remoteLocationNote(remoteCwd: string): string {
-  return `**Where you run:** this session runs on a different machine from the gateway, and your working directory is \`${remoteCwd}\`. `
-    + "The gateway's instance home, and any path under it named above, does not exist on this machine: keep your files under your working directory.";
-}
-
-/** The message the CLI is sent: Freebuff has no system-prompt flag, so a new chat's context goes in front of the first message. */
-export function composeFreebuffMessage(
-  opts: Pick<EngineRunOpts, "prompt" | "systemPrompt" | "resumeSessionId" | "platformContextRefresh" | "attachments">,
-  remoteCwd?: string,
-): string {
-  const body = opts.attachments?.length
-    ? `${opts.prompt}\n\nAttached files:\n${opts.attachments.map((a) => `- ${a}`).join("\n")}`
-    : opts.prompt;
-  const context = opts.resumeSessionId ? opts.platformContextRefresh : opts.systemPrompt;
-  if (!context) return body;
-  return `${context}${remoteCwd ? `\n\n${remoteLocationNote(remoteCwd)}` : ""}\n\n---\n\n${body}`;
-}
-
-/** The arguments the CLI is started with. `--trust-agents` skips the folder-trust prompt nobody is there to answer. */
-export function buildFreebuffArgs(params: Pick<SpawnParams, "cwd" | "chatId">): string[] {
-  return ["--cwd", params.cwd, "--trust-agents", ...(params.chatId ? ["--continue", params.chatId] : [])];
-}
-
-export class FreebuffInteractiveEngine implements InterruptibleEngine, PtyViewEngine {
+export class FreebuffInteractiveEngine extends FreebuffProcessPool implements InterruptibleEngine {
   name = "freebuff" as const;
-  private readonly active = new Map<string, ActiveTurn>();
-  private readonly live = new Map<string, Live>();
-  private readonly streams: PtyStreamManager;
-  private readonly lastGeom = new Map<string, { cols: number; rows: number }>();
-  private readonly slots: FreebuffSlots;
-  private readonly readRemote: () => RemoteExecutionConfig | undefined;
-  private readonly readConfig: () => FreebuffEngineConfig | undefined;
-  private readonly spawnPty: typeof pty.spawn;
-  private readonly localChats: () => FreebuffChatSource;
-
-  constructor(private readonly lifecycle: PtyLifecycleManager, deps: FreebuffEngineDeps = {}) {
-    this.readRemote = deps.remote ?? (() => undefined);
-    this.readConfig = deps.config ?? (() => undefined);
-    this.spawnPty = deps.spawnPty ?? pty.spawn;
-    this.localChats = deps.localChats ?? (() => localChatSource());
-    this.streams = new PtyStreamManager("Freebuff PTY", (id) => this.lifecycle.getWarm(id) !== undefined);
-    this.slots = new FreebuffSlots({
-      max: () => freebuffMaxConcurrent(this.readConfig()),
-      evict: (id) => {
-        logger.info(`FreebuffInteractiveEngine: stopping ${id}'s idle process to give its slot to a waiting turn`);
-        this.lifecycle.releaseSession(id);
-      },
-    });
-    this.lifecycle.onRelease((id) => {
-      const live = this.live.get(id);
-      this.live.delete(id);
-      live?.terminal.dispose();
-      this.slots.release(id);
-    });
-  }
 
   // ── A turn ─────────────────────────────────────────────────────────────────
 
@@ -231,64 +61,52 @@ export class FreebuffInteractiveEngine implements InterruptibleEngine, PtyViewEn
     } finally {
       clearTimeout(hardTimeout);
       this.active.delete(id);
-      if (this.live.has(id)) {
-        this.lifecycle.turnEnded(id);
-        this.slots.markIdle(id);
-      } else {
-        this.slots.release(id);
-      }
+      this.afterTurn(id);
     }
+  }
+
+  /** The process stays warm for the next turn, and its slot may now be taken over; or it is gone, and so is its slot. */
+  private afterTurn(id: string): void {
+    if (!this.live.has(id)) {
+      this.slots.release(id);
+      return;
+    }
+    this.lifecycle.turnEnded(id);
+    this.slots.markIdle(id);
   }
 
   private failureResult(err: unknown, opts: EngineRunOpts, id: string): EngineResult {
     const chatId = this.live.get(id)?.chat?.chatId ?? opts.resumeSessionId ?? "";
-    if (err instanceof TurnStopped) {
-      const stop = err.stop;
-      if (stop.kind === "interrupt") {
-        // A turn cut short leaves the process mid-answer; the next turn re-joins the chat in a fresh one.
-        this.lifecycle.releaseSession(id);
-        return { sessionId: chatId, result: "", error: stop.reason, conversationIntact: true };
-      }
-      // Before the TUI ever showed itself the process never ran this turn: a failed start, with what it printed.
-      const live = this.live.get(id);
-      const booted = live?.booted ?? false;
-      if (!booted) return { sessionId: chatId, result: "", error: processStartFailure("freebuff", stop.exit, stop.output) };
-      return { sessionId: chatId, result: "", error: processExitInterruption("freebuff", stop.exit), conversationIntact: true };
-    }
+    if (err instanceof TurnStopped) return this.stoppedResult(err.stop, id, chatId);
+    // The process is in an unknown or unusable state; the next turn starts it afresh (and re-joins the chat).
+    this.lifecycle.releaseSession(id);
     if (err instanceof FreebuffFailure) {
-      // The process is in an unknown or unusable state; the next turn starts it afresh (and re-joins the chat).
-      this.lifecycle.releaseSession(id);
       return { sessionId: chatId, result: "", error: err.message, conversationIntact: true, ...(err.rateLimit ? { rateLimit: err.rateLimit } : {}) };
     }
     const message = err instanceof Error ? err.message : String(err);
     logger.warn(`FreebuffInteractiveEngine: turn for ${id} failed: ${message}`);
-    this.lifecycle.releaseSession(id);
     return { sessionId: chatId, result: "", error: `Freebuff interactive: ${message}`, conversationIntact: true };
   }
 
-  private async runTurn(opts: EngineRunOpts, id: string, signal: AbortSignal, rejoined = false): Promise<EngineResult> {
-    const target = isRemoteTarget(opts) ? (opts as RemoteTarget & { remoteHost: string }) : undefined;
-    const wantedChat = opts.resumeSessionId || undefined;
-
-    // A process in another chat, folder or host is not this turn's: start over.
-    const warm = this.live.get(id);
-    if (warm && !this.reusable(warm, opts, target, wantedChat)) this.lifecycle.releaseSession(id);
-
-    await this.slots.acquire(id, signal);
-    let live = this.live.get(id);
-    if (live) {
-      this.lifecycle.turnStarted(id);
-    } else {
-      live = await this.spawnProcess(id, { cwd: opts.cwd || JINN_HOME, bin: opts.bin, chatId: wantedChat, target });
-      this.lifecycle.adopt(id, live.handle, { turnRunning: true, hostKey: ptyHostKey(target) });
-      this.lifecycle.turnStarted(id);
+  private stoppedResult(stop: Stop, id: string, chatId: string): EngineResult {
+    if (stop.kind === "interrupt") {
+      // A turn cut short leaves the process mid-answer; the next turn re-joins the chat in a fresh one.
+      this.lifecycle.releaseSession(id);
+      return { sessionId: chatId, result: "", error: stop.reason, conversationIntact: true };
     }
+    // Before the TUI ever showed itself the process never ran this turn: a failed start, with what it printed.
+    if (!this.live.get(id)?.booted) return { sessionId: chatId, result: "", error: processStartFailure("freebuff", stop.exit, stop.output) };
+    return { sessionId: chatId, result: "", error: processExitInterruption("freebuff", stop.exit), conversationIntact: true };
+  }
+
+  private async runTurn(opts: EngineRunOpts, id: string, signal: AbortSignal, rejoined = false): Promise<EngineResult> {
+    const target = isRemoteTarget(opts) ? (opts as FreebuffTarget) : undefined;
+    const wantedChat = opts.resumeSessionId || undefined;
+    const live = await this.processFor(id, signal, { cwd: opts.cwd || JINN_HOME, bin: opts.bin, chatId: wantedChat, target });
+    const driver = new FreebuffDriver(this.driverTarget(live), signal);
 
     try {
-      const ready = await this.waitForState(live, signal, (info) => info.state === "idle", { what: "start" });
-      this.recordUsage(ready);
-
-      await this.ensureModel(live, signal, { model: opts.model?.trim() || undefined, effortLevel: opts.effortLevel });
+      await this.getReady(driver, opts);
     } catch (err) {
       if (!(err instanceof SessionReleased) || rejoined) throw err;
       // The process outlived its hour session. A fresh one re-joins the chat (and the session, if one is still running).
@@ -296,345 +114,79 @@ export class FreebuffInteractiveEngine implements InterruptibleEngine, PtyViewEn
       this.lifecycle.releaseSession(id);
       return await this.runTurn(opts, id, signal, true);
     }
+    return await this.sendAndRead(live, driver, signal, opts, target?.remoteCwd);
+  }
 
-    const message = composeFreebuffMessage(opts, target?.remoteCwd);
-    await this.submit(live, signal, neutralizeForPaste(message));
-    const finish = await this.waitForFinish(live, signal, message);
+  /** The TUI is up and showing the model the turn asked for. */
+  private async getReady(driver: FreebuffDriver, opts: EngineRunOpts): Promise<void> {
+    this.recordUsage(await driver.waitForState((info) => info.state === "idle", { what: "start" }));
+    await driver.ensureModel({ model: opts.model?.trim() || undefined, effortLevel: opts.effortLevel });
+  }
 
+  private async sendAndRead(live: Live, driver: FreebuffDriver, signal: AbortSignal, opts: EngineRunOpts, remoteCwd: string | undefined): Promise<EngineResult> {
+    const message = composeFreebuffMessage(opts, remoteCwd);
+    await driver.submit(neutralizeForPaste(message));
+    const finish = await driver.waitForFinish(() => this.answerInChat(live, message));
     const { answer, usedScreen } = await this.readAnswer(live, signal, message, finish.lines);
-    const info = finish.info;
-    this.recordUsage(info);
-    if (usedScreen) logger.warn(`FreebuffInteractiveEngine: ${id}: the answer was read from the screen, not the chat file`);
+    this.recordUsage(finish.info);
+    if (usedScreen) logger.warn(`FreebuffInteractiveEngine: ${opts.sessionId}: the answer was read from the screen, not the chat file`);
     return {
-      sessionId: live.chat?.chatId ?? wantedChat ?? "",
+      sessionId: live.chat?.chatId ?? opts.resumeSessionId ?? "",
       result: answer,
       numTurns: 1,
       cost: 0,
-      ...(info.contextTokens !== undefined ? { contextTokens: info.contextTokens } : {}),
+      ...(finish.info.contextTokens !== undefined ? { contextTokens: finish.info.contextTokens } : {}),
     };
   }
 
-  private reusable(live: Live, opts: EngineRunOpts, target: (RemoteTarget & { remoteHost: string }) | undefined, wantedChat: string | undefined): boolean {
-    if (live.exited) return false;
-    const sameHost = (live.params.target?.remoteHost ?? "") === (target?.remoteHost ?? "") && (live.params.target?.remoteUser ?? "") === (target?.remoteUser ?? "");
-    const cwd = target ? target.remoteCwd : (opts.cwd || JINN_HOME);
-    const sameDir = (target ? live.params.target?.remoteCwd : live.params.cwd) === cwd;
-    return sameHost && sameDir && (wantedChat ?? "") === (live.chat?.chatId ?? "");
-  }
+  /** The process this turn types into: a warm one that is still the right one, else a new one. */
+  private async processFor(id: string, signal: AbortSignal, params: SpawnParams): Promise<Live> {
+    const warm = this.live.get(id);
+    if (warm && !reusableProcess(warm, { target: params.target, cwd: params.cwd, chatId: params.chatId })) this.lifecycle.releaseSession(id);
 
-  // ── The process ────────────────────────────────────────────────────────────
-
-  private chatSourceFor(target: (RemoteTarget & { remoteHost: string }) | undefined, id: string): FreebuffChatSource {
-    return target ? remoteChatSource(target, id) : this.localChats();
-  }
-
-  private async assertSignedIn(target: (RemoteTarget & { remoteHost: string }) | undefined): Promise<void> {
-    if (!target) {
-      if (!fs.existsSync(path.join(configHome(), ".config", "manicode", "credentials.json"))) throw new FreebuffFailure(notSignedInMessage("local"));
-      return;
+    await this.slots.acquire(id, signal);
+    const existing = this.live.get(id);
+    if (existing) {
+      this.lifecycle.turnStarted(id);
+      return existing;
     }
-    // Unknown (ssh failed) is not "signed out": the screen will say if it really is.
-    if (await remoteSignedIn(sshDestination(target)) === false) throw new FreebuffFailure(notSignedInMessage("remote"));
-  }
-
-  private async spawnProcess(id: string, params: SpawnParams): Promise<Live> {
-    const { target } = params;
-    await this.assertSignedIn(target);
-    const chats = this.chatSourceFor(target, id);
-    const before = new Set<string>();
-    if (!params.chatId) {
-      try {
-        for (const chat of await chats.list()) before.add(chatKey(chat));
-      } catch (err) {
-        logger.warn(`FreebuffInteractiveEngine: could not list existing chats before spawning ${id}: ${err instanceof Error ? err.message : err}`);
-      }
-    }
-
-    const geom = this.lastGeom.get(id);
-    const cols = geom?.cols ?? FREEBUFF_COLS;
-    const rows = geom?.rows ?? FREEBUFF_ROWS;
-    const args = buildFreebuffArgs(target ? { cwd: target.remoteCwd!, chatId: params.chatId } : params);
-    let proc: pty.IPty;
-    if (target) {
-      const remote = this.readRemote();
-      assertRemoteTarget(target, remote);
-      const readiness = await ensureRemoteReady(target, remote, { engine: "freebuff", allowWake: false });
-      if (!readiness.ready) throw new FreebuffFailure(`remote host not ready: ${readiness.reason}`);
-      const destination = sshDestination(target);
-      const sshArgs = buildSshSpawnArgs({
-        destination,
-        tunnelPort: 0,
-        gatewayPort: 0,
-        reverseTunnel: false,
-        remoteCwd: target.remoteCwd!,
-        remoteEnv: { TERM: "xterm-256color" },
-        // freebuff is a node program: put its node first, as the other remote engines do.
-        pathPrepend: [remoteNodeDir(readiness.facts)],
-        bin: requireRemoteEngineBin(destination, readiness.facts, "freebuff"),
-        args,
-      });
-      logger.info(`FreebuffInteractiveEngine spawning REMOTE session on ${destination}:${target.remoteCwd} (chat: ${params.chatId ?? "new"})`);
-      proc = this.spawnPty(resolveBin("ssh"), sshArgs, { name: "xterm-256color", cols, rows, cwd: JINN_HOME, env: this.sshClientEnv(id) });
-    } else {
-      const bin = resolveBin("freebuff", params.bin || this.readConfig()?.bin);
-      logger.info(`FreebuffInteractiveEngine spawning ${bin} (chat: ${params.chatId ?? "new"})`);
-      proc = this.spawnPty(bin, args, { name: "xterm-256color", cols, rows, cwd: params.cwd, env: this.childEnv(id) });
-    }
-    return this.wireProcess(id, proc, params, chats, before);
-  }
-
-  private childEnv(id: string): Record<string, string> {
-    const env = buildEngineChildEnv(process.env, { scrubClaudeCode: true, scrubCodex: true });
-    env.TERM = "xterm-256color";
-    env.JINN_SESSION_ID = id;
-    Object.assign(env, employeeSessionEnv(id));
-    return env;
-  }
-
-  /** The local ssh client needs the ordinary environment (agent socket, config), not the engine-scrubbed one. */
-  private sshClientEnv(id: string): Record<string, string> {
-    return this.childEnv(id);
-  }
-
-  private wireProcess(id: string, proc: pty.IPty, params: SpawnParams, chats: FreebuffChatSource, before: Set<string>): Live {
-    const handle = createPtyHandle(proc);
-    const geom = this.lastGeom.get(id);
-    const live: Live = {
-      proc,
-      handle,
-      terminal: new FreebuffTerminal(geom?.cols ?? FREEBUFF_COLS, geom?.rows ?? FREEBUFF_ROWS),
-      place: params.target ? "remote" : "local",
-      params,
-      ...(params.chatId ? { chat: { chatId: params.chatId, project: "" } } : {}),
-      before,
-      chats,
-      startOutput: { text: "" },
-      booted: false,
-    };
-    this.live.set(id, live);
-
-    proc.onData((data) => {
-      if (data.includes("\x1b[6n")) proc.write(CURSOR_POSITION_RESPONSE);
-      live.terminal.write(data);
-    });
-    const tail = this.streams.attachWithOutputTail(id, proc, () => live.booted);
-    live.startOutput = tail;
-    proc.onExit((event) => {
-      live.exited = event ?? { exitCode: 0, signal: 0 };
-      // Judged before the release below drops it: a process we already replaced
-      // or stopped is not the one the current turn is talking to.
-      const isCurrent = this.live.get(id) === live;
-      if (this.lifecycle.getWarm(id) === handle) {
-        this.streams.onPtyExit(id, { exitCode: event?.exitCode ?? 0, signal: event?.signal ?? 0 });
-        this.lifecycle.releaseSession(id);
-      }
-      if (isCurrent) this.active.get(id)?.abort.abort(new TurnStopped({ kind: "exit", exit: live.exited, output: tail.text }));
-    });
+    const live = await this.spawnProcess(id, params);
+    this.lifecycle.adopt(id, live.handle, { turnRunning: true, hostKey: ptyHostKey(params.target) });
+    this.lifecycle.turnStarted(id);
     return live;
-  }
-
-  // ── The screen ─────────────────────────────────────────────────────────────
-
-  private async screen(live: Live): Promise<{ lines: string[]; info: FreebuffScreenInfo }> {
-    await live.terminal.settled();
-    const lines = live.terminal.lines().map((l) => l.trimEnd());
-    const info = parseFreebuffScreen(lines);
-    if (info.state !== "unknown" && info.state !== "signed-out") live.booted = true;
-    return { lines, info };
-  }
-
-  /**
-   * Poll the screen until `done` says so. Fails the turn on the screens that mean
-   * it cannot go on (signed out, no hours), and on one nothing recognises for a
-   * minute, with that screen in the error.
-   */
-  private async waitForState(
-    live: Live,
-    signal: AbortSignal,
-    done: (info: FreebuffScreenInfo) => boolean,
-    opts: { what: string; timeoutMs?: number },
-  ): Promise<FreebuffScreenInfo> {
-    const startedAt = Date.now();
-    let unknownSince: number | undefined;
-    for (;;) {
-      await sleep(POLL_MS, signal);
-      const { lines, info } = await this.screen(live);
-      const failure = screenFailure(info, live.place);
-      if (failure) throw failure;
-      if (info.refusal) this.refused(info.refusal);
-      if (done(info)) return info;
-      if (info.state === "unknown") {
-        unknownSince ??= Date.now();
-        if (Date.now() - unknownSince >= UNKNOWN_SCREEN_LIMIT_MS) throw unknownScreenFailure(lines, Math.round(UNKNOWN_SCREEN_LIMIT_MS / 1000));
-      } else {
-        unknownSince = undefined;
-      }
-      if (opts.timeoutMs !== undefined && Date.now() - startedAt >= opts.timeoutMs) {
-        throw new FreebuffFailure(`Freebuff did not reach its ${opts.what} screen within ${Math.round(opts.timeoutMs / 1000)}s`);
-      }
-    }
-  }
-
-  /** A refusal the CLI printed: a failure to report, or a dropped session to start over from. */
-  private refused(refusal: NonNullable<FreebuffScreenInfo["refusal"]>): never {
-    const failure = refusalFailure(refusal);
-    if (failure) throw failure;
-    throw new SessionReleased(refusal.text);
-  }
-
-  private type(live: Live, text: string): void {
-    live.proc.write(text);
-  }
-
-  // ── Model and effort ───────────────────────────────────────────────────────
-
-  private async ensureModel(live: Live, signal: AbortSignal, choice: PickerChoice): Promise<void> {
-    const effortLevel = choice.effortLevel && choice.effortLevel !== "default" ? choice.effortLevel : undefined;
-    const wanted: PickerChoice = { ...(choice.model ? { model: choice.model } : {}), ...(effortLevel ? { effortLevel } : {}) };
-    if (!wanted.model && !wanted.effortLevel) return;
-    const { info } = await this.screen(live);
-    if (choiceSatisfied(wanted, info.statusBar)) return;
-
-    logger.info(`FreebuffInteractiveEngine: switching to ${wanted.model ?? "(current model)"}${wanted.effortLevel ? ` • ${wanted.effortLevel}` : ""} (status bar: ${info.statusBar ? `${info.statusBar.modelLabel}${info.statusBar.effort ? ` • ${info.statusBar.effort}` : ""}` : "unreadable"})`);
-    this.type(live, "/model");
-    await sleep(400, signal);
-    this.type(live, "\r");
-    await this.waitForState(live, signal, (i) => i.state === "picker", { what: "model picker", timeoutMs: PICKER_OPEN_MS });
-
-    const io: PickerIO = {
-      screen: async () => (await this.screen(live)).lines,
-      press: async (key) => { live.proc.write(KEY_BYTES[key]); },
-      nextScreen: async (previous) => {
-        const before = previous.join("\n");
-        const deadline = Date.now() + KEY_PATIENCE_MS;
-        let latest = previous;
-        while (Date.now() < deadline) {
-          await sleep(80, signal);
-          latest = (await this.screen(live)).lines;
-          if (latest.join("\n") !== before) {
-            // The TUI drops keys that land mid-redraw: let it finish drawing.
-            await sleep(KEY_SETTLE_MS, signal);
-            return (await this.screen(live)).lines;
-          }
-        }
-        return latest;
-      },
-    };
-    try {
-      const { warnings } = await chooseInPicker(io, wanted);
-      for (const warning of warnings) logger.warn(`FreebuffInteractiveEngine: ${warning}`);
-    } catch (err) {
-      if (err instanceof FreebuffPickerError) throw new FreebuffFailure(`Freebuff model selection failed: ${err.message}`);
-      throw err;
-    }
-
-    const after = await this.waitForState(live, signal, (i) => i.state === "idle", { what: "idle", timeoutMs: PICKER_OPEN_MS });
-    if (!choiceSatisfied(wanted, after.statusBar)) {
-      const shown = after.statusBar ? `${after.statusBar.modelLabel}${after.statusBar.effort ? ` • ${after.statusBar.effort}` : ""}` : "unreadable";
-      throw new FreebuffFailure(`Freebuff did not switch to ${wanted.model ?? "the requested model"}${wanted.effortLevel ? ` • ${wanted.effortLevel}` : ""}; its status bar shows ${shown}`);
-    }
-  }
-
-  // ── Sending and finishing ──────────────────────────────────────────────────
-
-  /** Bracketed paste, so a multi-line message arrives as one message and its newlines do not submit; then Enter. */
-  private async submit(live: Live, signal: AbortSignal, text: string): Promise<void> {
-    live.proc.write("\x1b[200~");
-    for (let i = 0; i < text.length; i += PASTE_CHUNK) {
-      live.proc.write(text.slice(i, i + PASTE_CHUNK));
-      if (text.length > PASTE_CHUNK) await sleep(15, signal);
-    }
-    live.proc.write("\x1b[201~");
-    await sleep(Math.min(3_000, 300 + Math.floor(text.length / 40)), signal);
-    live.proc.write("\r");
-  }
-
-  /**
-   * Busy, then idle again with the `⎘ • 11s` footer up, held for a moment: the
-   * turn is over. The footer of an earlier turn can still be on screen, so
-   * nothing counts until this turn has been seen busy.
-   */
-  private async waitForFinish(live: Live, signal: AbortSignal, sent: string): Promise<{ info: FreebuffScreenInfo; lines: string[] }> {
-    const submittedAt = Date.now();
-    let sawBusy = false;
-    let idleSince: number | undefined;
-    let unknownSince: number | undefined;
-    for (;;) {
-      await sleep(POLL_MS, signal);
-      const { lines, info } = await this.screen(live);
-      const failure = screenFailure(info, live.place);
-      if (failure) throw failure;
-      // Only before the model starts answering: once it has, its words are its own.
-      if (!sawBusy && info.refusal) {
-        const refusal = refusalFailure(info.refusal);
-        throw refusal ?? new FreebuffFailure(`Freebuff dropped its session as the message went in (${info.refusal.text}); the next turn starts the process afresh and re-joins the chat`);
-      }
-
-      if (info.state === "busy") {
-        sawBusy = true;
-        idleSince = undefined;
-        unknownSince = undefined;
-        continue;
-      }
-      if (info.state === "idle" && sawBusy) {
-        idleSince ??= Date.now();
-        const settled = Date.now() - idleSince;
-        if ((info.turnFooter && settled >= SETTLE_MS) || settled >= FOOTER_GRACE_MS) {
-          if (!info.turnFooter) logger.warn("FreebuffInteractiveEngine: the turn went idle without its footer; reading the chat anyway");
-          return { info, lines };
-        }
-        continue;
-      }
-      if (info.state === "unknown") {
-        unknownSince ??= Date.now();
-        if (Date.now() - unknownSince >= UNKNOWN_SCREEN_LIMIT_MS) throw unknownScreenFailure(lines, Math.round(UNKNOWN_SCREEN_LIMIT_MS / 1000));
-      } else {
-        unknownSince = undefined;
-      }
-      if (!sawBusy && info.state === "idle" && Date.now() - submittedAt >= NOT_ACCEPTED_MS) {
-        // A turn short enough to have come and gone between polls leaves its chat behind.
-        if (await this.answerInChat(live, sent)) return { info, lines };
-        throw new FreebuffFailure(`Freebuff did not take the message: its input stayed idle for ${Math.round(NOT_ACCEPTED_MS / 1000)}s after submit:\n${lines.filter((l) => l.trim()).slice(-12).join("\n")}`);
-      }
-    }
   }
 
   // ── The answer ─────────────────────────────────────────────────────────────
 
-  /** Find the chat this process created (once), by what was sent into it. */
-  private async locateChat(live: Live, sent: string): Promise<FreebuffChatRef | undefined> {
-    if (live.chat?.project) return live.chat;
-    const listing = await live.chats.list();
-    if (live.chat) {
-      // `--continue <id>`: the id is known, the project directory it lives under is not.
-      const found = listing.find((c) => c.chatId === live.chat!.chatId);
-      if (found) live.chat = { chatId: found.chatId, project: found.project };
-      return live.chat.project ? live.chat : undefined;
-    }
+  /** The chat this process is in, found by what was sent into it the first time. */
+  private async chatOf(live: Live, sent: string): Promise<FreebuffChatRef | undefined> {
     const claimed = new Set<string>();
     for (const other of this.live.values()) if (other !== live && other.chat?.project) claimed.add(chatKey(other.chat));
-    const picked = pickNewChat(listing, { before: live.before, claimed, sentPrompt: sent });
-    if (picked.chat) {
-      if (picked.ambiguous) logger.warn("FreebuffInteractiveEngine: several new chats opened with the same words; using the newest");
-      live.chat = picked.chat;
-      return live.chat;
-    }
-    // A pasted message leaves no first prompt in the chat's meta: read the chat to see what it was sent.
-    for (const candidate of picked.unresolved.slice(0, 4)) {
-      const ref = { chatId: candidate.chatId, project: candidate.project };
-      if (firstPromptMatches(lastUserMessage(await live.chats.readMessages(ref)), sent)) {
-        live.chat = ref;
-        return ref;
-      }
-    }
-    return undefined;
+    const chat = await locateChat(live.chats, {
+      known: live.chat,
+      before: live.before,
+      claimed,
+      sent,
+      onAmbiguous: () => logger.warn("FreebuffInteractiveEngine: several new chats opened with the same words; using the newest"),
+    });
+    if (chat) live.chat = chat;
+    return chat;
+  }
+
+  /** The reply to `sent`, if the chat file already holds it complete. */
+  private async chatAnswer(live: Live, sent: string): Promise<string | undefined> {
+    const chat = await this.chatOf(live, sent);
+    if (!chat) return undefined;
+    const messages = await live.chats.readMessages(chat);
+    // The reply must be to THIS message: a chat file that has not caught up
+    // yet still ends in the previous turn's completed answer.
+    const answer = extractAnswer(messages);
+    return answer && firstPromptMatches(lastUserMessage(messages), sent) ? answer.text : undefined;
   }
 
   private async answerInChat(live: Live, sent: string): Promise<boolean> {
     try {
-      const chat = await this.locateChat(live, sent);
-      if (!chat) return false;
-      return extractAnswer(await live.chats.readMessages(chat)) !== undefined;
+      return (await this.chatAnswer(live, sent)) !== undefined;
     } catch {
       return false;
     }
@@ -645,14 +197,8 @@ export class FreebuffInteractiveEngine implements InterruptibleEngine, PtyViewEn
     let lastError: unknown;
     for (;;) {
       try {
-        const chat = await this.locateChat(live, sent);
-        if (chat) {
-          const messages = await live.chats.readMessages(chat);
-          const answer = extractAnswer(messages);
-          // The reply must be to THIS message: a chat file that has not caught up
-          // yet still ends in the previous turn's completed answer.
-          if (answer && firstPromptMatches(lastUserMessage(messages), sent)) return { answer: answer.text, usedScreen: false };
-        }
+        const answer = await this.chatAnswer(live, sent);
+        if (answer !== undefined) return { answer, usedScreen: false };
       } catch (err) {
         lastError = err;
       }
@@ -666,106 +212,9 @@ export class FreebuffInteractiveEngine implements InterruptibleEngine, PtyViewEn
   }
 
   private recordUsage(info: FreebuffScreenInfo): void {
-    if (info.hoursRemaining === undefined && info.sessionLeftMinutes === undefined) return;
-    writeFreebuffUsage({
-      observedAtMs: Date.now(),
-      ...(info.hoursRemaining !== undefined ? { hoursRemaining: info.hoursRemaining } : {}),
-      ...(info.hoursTotal !== undefined ? { hoursTotal: info.hoursTotal } : {}),
-      ...(info.sessionLeftMinutes !== undefined ? { sessionLeftMinutes: info.sessionLeftMinutes } : {}),
-      ...(info.statusBar ? { modelLabel: info.statusBar.modelLabel } : {}),
-    });
-    logger.info(
-      `Freebuff: ${info.hoursRemaining !== undefined ? `${info.hoursRemaining}/${info.hoursTotal ?? "?"} hours left today` : "hours unknown"}`
-      + `${info.sessionLeftMinutes !== undefined ? `, ${info.sessionLeftMinutes}m left in this session` : ""}`
-      + `${info.contextTokens !== undefined ? `, ${info.contextTokens} context tokens (${info.contextPct ?? "?"}%)` : ""}`,
-    );
-  }
-
-  // ── The dashboard's terminal ───────────────────────────────────────────────
-
-  ensureIdleSpawn(id: string, opts: PtyIdleSpawnOpts): void {
-    if (this.active.has(id)) return;
-    if (opts.cols && opts.rows) setCapped(this.lastGeom, id, { cols: opts.cols, rows: opts.rows });
-    const target = isRemoteTarget(opts) ? (opts as RemoteTarget & { remoteHost: string }) : undefined;
-    const wantedChat = opts.engineSessionId || undefined;
-    const warm = this.live.get(id);
-    if (warm) {
-      if (!warm.exited && (wantedChat === undefined || wantedChat === warm.chat?.chatId)) return;
-      this.lifecycle.releaseSession(id);
-    }
-    // A view never waits for a slot and never displaces a turn: no slot, no terminal.
-    if (!this.slots.tryAcquireIdle(id)) {
-      logger.info(`FreebuffInteractiveEngine: no free slot (maxConcurrent ${freebuffMaxConcurrent(this.readConfig())}); not starting a terminal for ${id}`);
-      return;
-    }
-    void (async () => {
-      try {
-        const live = await this.spawnProcess(id, { cwd: opts.cwd || JINN_HOME, bin: opts.bin, chatId: wantedChat, target });
-        this.lifecycle.adopt(id, live.handle, { hostKey: ptyHostKey(target) });
-      } catch (err) {
-        logger.warn(`FreebuffInteractiveEngine: could not start a terminal for ${id}: ${err instanceof Error ? err.message : err}`);
-        this.slots.release(id);
-      }
-    })();
-  }
-
-  subscribeWithSnapshot(sessionId: string, cb: (data: Buffer) => void, onControl?: (event: PtyControlEvent) => void): PtySnapshotSubscription {
-    return this.streams.subscribeWithSnapshot(sessionId, cb, onControl);
-  }
-
-  restartPty(sessionId: string, opts: PtyIdleSpawnOpts): void {
-    this.kill(sessionId, "Interrupted: terminal restart requested");
-    this.ensureIdleSpawn(sessionId, opts);
-  }
-
-  writeStdin(sessionId: string, text: string): void {
-    const live = this.live.get(sessionId);
-    if (live) live.proc.write(neutralizeForPaste(text) + "\r");
-  }
-
-  writeRaw(sessionId: string, data: string): void {
-    this.live.get(sessionId)?.proc.write(data);
-  }
-
-  resizePty(sessionId: string, cols: number, rows: number): void {
-    setCapped(this.lastGeom, sessionId, { cols, rows });
-    this.streams.resize(sessionId, cols, rows);
-    const live = this.live.get(sessionId);
-    if (!live) return;
-    live.terminal.resize(cols, rows);
-    try { live.proc.resize(cols, rows); } catch { /* gone */ }
-  }
-
-  setViewing(sessionId: string, viewing: boolean): void {
-    if (viewing) this.lifecycle.viewerEnter(sessionId);
-    else this.lifecycle.viewerLeave(sessionId);
-  }
-
-  hasWarmPty(sessionId: string): boolean {
-    return this.lifecycle.getWarm(sessionId) !== undefined;
-  }
-
-  isTurnRunning(sessionId: string): boolean {
-    return this.active.has(sessionId);
-  }
-
-  kill(sessionId: string, reason = "Interrupted"): void {
-    this.active.get(sessionId)?.abort.abort(new TurnStopped({ kind: "interrupt", reason: reason.startsWith("Interrupted") ? reason : `Interrupted: ${reason}` }));
-    this.lifecycle.releaseSession(sessionId);
-  }
-
-  killAll(): void {
-    this.slots.rejectAll(new Error("Interrupted: gateway shutting down"));
-    for (const id of [...this.active.keys()]) this.kill(id, "Interrupted: gateway shutting down");
-    this.lifecycle.killAll();
-  }
-
-  /** Recycle idle warm PTYs only (org-reload); a turn in flight is never interrupted. */
-  killIdle(): void {
-    this.lifecycle.releaseIdle((id) => this.active.has(id));
-  }
-
-  isAlive(sessionId: string): boolean {
-    return this.active.has(sessionId) || this.lifecycle.getWarm(sessionId) !== undefined;
+    const usage = usageFromScreen(info);
+    if (!usage) return;
+    writeFreebuffUsage(usage);
+    logger.info(describeUsage(usage, { tokens: info.contextTokens, pct: info.contextPct }));
   }
 }

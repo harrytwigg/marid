@@ -35,20 +35,24 @@ for c in "$d"/*/chats/*/; do
 done
 `;
 
+/** A chat's meta as the listing carries it; one cut off mid-write is "not there yet". */
+function parseMeta(json: string): FreebuffChatMeta | undefined {
+  if (!json) return undefined;
+  try {
+    const parsed = JSON.parse(json) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as FreebuffChatMeta) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** The listing the script prints, parsed. A line that is not that shape is skipped. */
 export function parseRemoteChatListing(stdout: string): FreebuffChatListing[] {
   const out: FreebuffChatListing[] = [];
   for (const line of stdout.split("\n")) {
     const [project, chatId, ...rest] = line.split("\t");
     if (!project || !chatId) continue;
-    const json = rest.join("\t").trim();
-    let meta: FreebuffChatMeta | undefined;
-    if (json) {
-      try {
-        const parsed = JSON.parse(json) as unknown;
-        if (parsed && typeof parsed === "object") meta = parsed as FreebuffChatMeta;
-      } catch { /* a meta written mid-line: treated as not there yet */ }
-    }
+    const meta = parseMeta(rest.join("\t").trim());
     out.push({ project, chatId, ...(meta ? { meta } : {}) });
   }
   return out;
