@@ -102,9 +102,10 @@ function validateExpiresAt(expiresAt: unknown): number | null {
   return Math.floor(expiresAt);
 }
 
+/** Manual heartbeats only: a gateway-owned one (`purpose` set) is exempt from the cap. */
 function countArmed(ownerSessionId: string): number {
   return initDb()
-    .prepare("SELECT COUNT(*) FROM heartbeats WHERE owner_session_id = ? AND status = 'armed'")
+    .prepare("SELECT COUNT(*) FROM heartbeats WHERE owner_session_id = ? AND status = 'armed' AND purpose IS NULL")
     .pluck()
     .get(ownerSessionId) as number;
 }

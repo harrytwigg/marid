@@ -86,6 +86,19 @@ describe("POST /api/delegations", () => {
     expect(watches(caller)).toHaveLength(1);
   });
 
+  it("arms for a delegation that lands in the delegate's live session", async () => {
+    const first = newSession();
+    const second = newSession();
+    const created = await call("POST", "/api/delegations", { employee: "route-worker", task: "First brief." }, asSession(first));
+    expect(created.status).toBe(201);
+    const reused = await call("POST", "/api/delegations", {
+      employee: "route-worker", task: "Follow-up brief.", workItemId: created.body.workItemId,
+    }, asSession(second));
+    expect(reused.status).toBe(200);
+    expect(reused.body.sessionId).toBe(created.body.sessionId);
+    expect(watches(second)).toHaveLength(1);
+  });
+
   it("arms nothing for an operator delegation", async () => {
     const delegation = await call("POST", "/api/delegations", { employee: "route-worker", task: "Operator task." });
     expect(delegation.status).toBe(201);
@@ -103,6 +116,15 @@ describe("POST /api/sessions", () => {
     expect(watches(caller)).toHaveLength(1);
     const listed = await call("GET", "/api/heartbeats", undefined, asSession(caller));
     expect(listed.body.heartbeats.map((h: { purpose: string | null }) => h.purpose)).toEqual(["child-watch"]);
+  });
+
+  it("arms nothing when the caller names another session as the parent", async () => {
+    const caller = newSession();
+    const other = newSession();
+    const spawn = await call("POST", "/api/sessions", { prompt: "Not mine.", engine: "codex", parentSessionId: other }, asSession(caller));
+    expect(spawn.status).toBe(201);
+    expect(watches(caller)).toHaveLength(0);
+    expect(watches(other)).toHaveLength(0);
   });
 
   it("arms nothing for an operator spawn", async () => {

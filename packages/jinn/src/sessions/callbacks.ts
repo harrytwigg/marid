@@ -553,8 +553,9 @@ export async function deliverClaimedSessionDelivery(deliveryId: string): Promise
       block: attempt.payload.block,
       callbackDeliveryId: attempt.id,
     });
-    if (getSessionDelivery(attempt.id)?.status === "pending") armCallbackRetrySweep();
-    else releaseChildWatchAfterCompletion(attempt);
+    const settled = getSessionDelivery(attempt.id)?.status;
+    if (settled === "pending") armCallbackRetrySweep();
+    else if (settled === "accepted") releaseChildWatchAfterCompletion(attempt);
     return "accepted";
   } catch (error) {
     if (getSessionDelivery(attempt.id)?.status === "accepted") {

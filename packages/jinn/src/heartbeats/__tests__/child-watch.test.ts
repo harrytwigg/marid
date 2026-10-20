@@ -91,6 +91,16 @@ describe("armChildWatch", () => {
     expect(armed(owner)).toHaveLength(1);
   });
 
+  it("does not take a manual slot: a full set of manual heartbeats still arms after the watch", () => {
+    const owner = session().id;
+    watch.armChildWatch(owner);
+    for (let i = 0; i < store.MAX_ARMED_PER_SESSION; i++) {
+      store.armHeartbeat({ ownerSessionId: owner, message: `manual ${i}`, everySeconds: 60 });
+    }
+    expect(store.listHeartbeatsForSession(owner)).toHaveLength(store.MAX_ARMED_PER_SESSION + 1);
+    expect(() => store.armHeartbeat({ ownerSessionId: owner, message: "one too many", everySeconds: 60 })).toThrow(/maximum/);
+  });
+
   it("arms again after the session stopped it", () => {
     const owner = session().id;
     watch.armChildWatch(owner);
@@ -219,6 +229,30 @@ describe("releaseChildWatchIfSettled", () => {
       vi.unstubAllGlobals();
     }
     expect(fetchStub).toHaveBeenCalledOnce();
+    expect(armed(parent.id)).toHaveLength(0);
+  });
+
+  it("disarms when the delivery was accepted but the callback request itself failed", async () => {
+    const parent = session();
+    const child = session(parent.id);
+    registry.updateSession(child.id, { status: "idle" });
+    watch.armChildWatch(parent.id);
+    const callbacks = await import("../../sessions/callbacks.js");
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: { body: string }) => {
+      const { callbackDeliveryId } = JSON.parse(init.body) as { callbackDeliveryId: string };
+      registry.acceptSessionDelivery(callbackDeliveryId, parent.id, parent.sessionKey || parent.id);
+      throw new Error("connection reset after accept");
+    }));
+    try {
+      const { delivery } = registry.claimSessionDelivery({
+        targetSessionId: parent.id, sourceKind: "session", sourceId: child.id, sourceAttempt: "a1",
+        sourceOutcome: "succeeded", sourceVersion: 1, deliveryKind: "parent-completion",
+        payload: { message: "done", displayMessage: "done" },
+      });
+      expect(await callbacks.deliverClaimedSessionDelivery(delivery.id)).toBe("accepted");
+    } finally {
+      vi.unstubAllGlobals();
+    }
     expect(armed(parent.id)).toHaveLength(0);
   });
 
