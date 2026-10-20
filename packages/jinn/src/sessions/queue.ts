@@ -18,6 +18,9 @@ export class SessionQueue {
   private pauseWaiters = new Map<string, Array<() => void>>();
   /** Queue rows this process has already taken responsibility for. */
   private inFlightItems = new Set<string>();
+  /** Tasks waiting per key that have no durable row (connector turns, the talk
+   * handoff). The row count alone cannot see them; they leave when they start. */
+  private rowlessWaiting = new Map<string, number>();
 
   /**
    * Check if a session is currently running.
@@ -41,6 +44,11 @@ export class SessionQueue {
     return this.running.has(sessionKey) ? Math.max(0, total - 1) : total;
   }
 
+  /** Row-less tasks parked behind the running one: what the durable rows miss. */
+  getRowlessWaitingCount(sessionKey: string): number {
+    return this.rowlessWaiting.get(sessionKey) || 0;
+  }
+
   getTransportState(sessionKey: string, status?: "idle" | "running" | "error" | "waiting" | "interrupted"): "idle" | "queued" | "running" | "error" | "interrupted" {
     if (status === "error") return "error";
     if (status === "interrupted") return "interrupted";
@@ -56,6 +64,7 @@ export class SessionQueue {
   clearQueue(sessionKey: string): void {
     this.cancelled.add(sessionKey);
     this.pending.delete(sessionKey);
+    this.rowlessWaiting.delete(sessionKey);
     this.callbackDrainHeld.delete(sessionKey);
     this.wakePauseWaiters(sessionKey);
   }
@@ -132,8 +141,10 @@ export class SessionQueue {
       const owner = getQueueItem(queueItemId)?.sessionId ?? "?";
       logger.info(`Session ${owner} turn ${queueItemId} queued behind ${ahead} turn(s) on lane ${sessionKey}`);
     }
+    if (!queueItemId) this.rowlessWaiting.set(sessionKey, this.getRowlessWaitingCount(sessionKey) + 1);
     const prev = this.queues.get(sessionKey) || Promise.resolve();
     const runTask = async () => {
+      if (!queueItemId) this.leaveRowlessWaiting(sessionKey);
       this.running.add(sessionKey);
       let queueItemStarted = false;
       try {
@@ -180,6 +191,12 @@ export class SessionQueue {
       : item.status === "pending" && markQueueItemRunning(queueItemId));
     if (!runnable) logger.warn(`Turn ${queueItemId} on lane ${sessionKey} skipped: queue row is ${item ? item.status : "gone"}`);
     return runnable;
+  }
+
+  private leaveRowlessWaiting(sessionKey: string): void {
+    const remaining = this.getRowlessWaitingCount(sessionKey) - 1;
+    if (remaining > 0) this.rowlessWaiting.set(sessionKey, remaining);
+    else this.rowlessWaiting.delete(sessionKey);
   }
 
   private decrementPending(sessionKey: string): void {

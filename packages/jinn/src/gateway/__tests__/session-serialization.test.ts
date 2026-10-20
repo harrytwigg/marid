@@ -43,7 +43,7 @@ function makeContext(
     backgroundActivity,
     sessionManager: {
       getQueue: () => ({
-        getPendingCount: () => 0,
+        getPendingCount: () => 0, getRowlessWaitingCount: () => 0,
         getTransportState: (key: string) => transportByKey[key] ?? "idle",
       }),
       getEngine: () => engine,

@@ -121,7 +121,7 @@ describe("a session with background sub-agents still working", () => {
       backgroundActivity: activity,
       sessionManager: {
         getQueue: () => ({
-          getPendingCount: () => 0,
+          getPendingCount: () => 0, getRowlessWaitingCount: () => 0,
           getTransportState: (_key: string, status: string) => (status === "running" ? "running" : "idle"),
         }),
         getEngine: () => undefined,

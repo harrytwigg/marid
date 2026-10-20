@@ -80,7 +80,7 @@ const ctx = {
       enqueue: async () => {},
       clearCancelled: () => {},
       clearQueue: () => {},
-      getPendingCount: () => 0,
+      getPendingCount: () => 0, getRowlessWaitingCount: () => 0,
       getTransportState: (_key: string, status: string) => status,
     }),
   },

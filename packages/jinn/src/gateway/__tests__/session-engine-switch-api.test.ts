@@ -93,7 +93,7 @@ function ctx(transportState: "idle" | "queued" | "running" | "error" | "interrup
     emit: vi.fn(),
     sessionManager: {
       getQueue: () => ({
-        getPendingCount: () => 0,
+        getPendingCount: () => 0, getRowlessWaitingCount: () => 0,
         getTransportState: () => transportState,
       }),
       getEngines: () => new Map(),

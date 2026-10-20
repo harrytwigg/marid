@@ -39,6 +39,7 @@ import { reroutedSessionMeta } from "../sessions/engine-override-window.js";
 import { stripControlChars, hasControlBytes } from "../shared/sanitize.js";
 import { CONNECTOR_ID_REQUIREMENTS, isValidConnectorId } from "../shared/connector-id.js";
 import { initDb } from "../shared/db.js";
+import { countPendingQueueItemsByKey } from "../sessions/queue-item-registry.js";
 import {
   listSessions,
   listChatPins,
@@ -1093,9 +1094,14 @@ export function serializeSession(
   session: Session,
   context: ApiContext,
   delegatedActivityIndex?: ReadonlyMap<string, DelegatedActivity>,
+  pendingQueueItems?: ReadonlyMap<string, number>,
 ): Session {
-  const queue = context.sessionManager.getQueue();
-  const queueDepth = queue.getPendingCount(session.sessionKey || session.sourceRef);
+  // The badge counts the durable pending rows the chat's queued bar lists, not
+  // the in-process chain, which keeps a cancelled row until its slot is skipped;
+  // plus the turns that only ever exist in that chain (connector messages).
+  const queueKey = session.sessionKey || session.sourceRef;
+  const queueDepth = (pendingQueueItems?.get(queueKey) ?? 0)
+    + context.sessionManager.getQueue().getRowlessWaitingCount(queueKey);
   const transportState = getSessionTransportState(session, context);
   const bg = currentRuntimeActivity(session, context);
   const working = isBackgroundWorkLive(bg);
@@ -1118,12 +1124,13 @@ export function serializeSession(
 
 function serializeSessionList(sessions: readonly Session[], context: ApiContext): Session[] {
   const delegatedActivityIndex = buildSessionDelegatedActivityIndex(listSessions(), context);
-  return sessions.map((session) => serializeSession(session, context, delegatedActivityIndex));
+  const pendingQueueItems = countPendingQueueItemsByKey();
+  return sessions.map((session) => serializeSession(session, context, delegatedActivityIndex, pendingQueueItems));
 }
 
 function serializeSessionResponse(session: Session, context: ApiContext): Session {
   const delegatedActivityIndex = buildSessionDelegatedActivityIndex(listSessions(), context);
-  return serializeSession(session, context, delegatedActivityIndex);
+  return serializeSession(session, context, delegatedActivityIndex, countPendingQueueItemsByKey());
 }
 
 function isSessionLiveRunning(session: Session, context: ApiContext): boolean {

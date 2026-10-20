@@ -33,7 +33,7 @@ const apiCtx = {
   sessionManager: {
     getEngines: () => new Map(),
     getEngine: () => undefined,
-    getQueue: () => ({ getPendingCount: () => 0, getTransportState: (_k: string, s: string) => s }),
+    getQueue: () => ({ getPendingCount: () => 0, getRowlessWaitingCount: () => 0, getTransportState: (_k: string, s: string) => s }),
   },
 } as unknown as import("../api.js").ApiContext;
 
