@@ -56,6 +56,8 @@ export interface QuietEscalationInput {
   sessionId: string | undefined;
   quietSince: number;
   nudgedAt: number | undefined;
+  /** A session of the assignee can be messaged now. */
+  reachable: boolean;
   now: number;
 }
 
@@ -70,11 +72,12 @@ function quietLine(input: QuietEscalationInput): string {
 }
 
 /** Only what works on a Todo in this state: a dispatch is refused while the
- *  assignee's session is idle between turns, so it is offered only when that
- *  session cannot be messaged at all. */
+ *  assignee's session is idle between turns, so it is offered only when no
+ *  session of the assignee can be messaged now (one may have errored since the
+ *  nudge). */
 function actionLine(input: QuietEscalationInput): string {
   const read = input.sessionId ? `read_session { sessionId: "${input.sessionId}", last: 20 } to see where it stopped, then ` : "";
-  const act = input.nudgedAt === undefined
+  const act = !input.reachable
     ? "re-dispatch it with dispatch_work_item, or take the work back or reassign it"
     : "message it with send_to_session, or take the work back or reassign it";
   return `Look at it now: ${read}${act}. If it is waiting on a person, it should be \`blocked\` with a note.`;

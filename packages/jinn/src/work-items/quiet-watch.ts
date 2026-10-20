@@ -11,7 +11,7 @@ import { canMessageSession } from "./employee-sessions.js";
 import { isExecutionAttempt } from "./link-role.js";
 import { attemptActivity } from "./recovery-controller.js";
 import { appendWorkItemEvent, getWorkItem, listWorkItems, type WorkItem } from "./store.js";
-import type { AvailabilityRearmResult } from "./availability-resume.js";
+import { DISPATCHER_ALREADY_RUNNING, type AvailabilityRearmResult } from "./availability-resume.js";
 import { quietEscalationPayload, quietEscalationReason, quietNudgePayload, type QuietEscalationInput } from "./quiet-watch-message.js";
 import { quietWatchFor, recordQuietEscalation, recordQuietNudge, type QuietWatchRow } from "./quiet-watch-rows.js";
 
@@ -156,6 +156,7 @@ function ownedParent(item: WorkItem, isEmployee: (name: string) => boolean): { p
  *  only nudge once more, so telling it would be a second nudge that nobody above
  *  the work hears of. */
 function reportingSession(producer: Session | undefined, isSystemEmployee: (name: string) => boolean): Session | undefined {
+  // An errored producer session still says whom it reported to.
   const id = producer ? withReportingParent(producer).parentSessionId : undefined;
   const session = id ? getSession(id) : undefined;
   if (!session || session.id === producer?.id || !canMessageSession(session)) return undefined;
@@ -170,7 +171,8 @@ function escalationTarget(quiet: QuietTodo, deps: QuietWatchDeps): EscalationTar
     if (session && session.id !== quiet.producer?.id) return { kind: "session", session };
     if (owned.parent.status === "executing") return { kind: "redispatch", parent: owned.parent };
   }
-  const reporting = reportingSession(quiet.producer, deps.isSystemEmployee ?? (() => false));
+  const assigneeSession = quiet.producer ?? (quiet.assigneeSessionId ? getSession(quiet.assigneeSessionId) : undefined);
+  const reporting = reportingSession(assigneeSession, deps.isSystemEmployee ?? (() => false));
   return reporting ? { kind: "session", session: reporting } : { kind: "none" };
 }
 
@@ -180,6 +182,7 @@ function escalationInput(quiet: QuietTodo, now: number): QuietEscalationInput {
     sessionId: quiet.row?.nudgeSessionId ?? quiet.assigneeSessionId,
     quietSince: quiet.quietSince,
     nudgedAt: quiet.row?.nudgedAt ? time(quiet.row.nudgedAt) : undefined,
+    reachable: quiet.producer !== undefined,
     now,
   };
 }
@@ -199,11 +202,29 @@ function commentOnTodo(quiet: QuietTodo, input: QuietEscalationInput): void {
   }
 }
 
-function redispatchParent(parent: WorkItem, input: QuietEscalationInput, deps: QuietWatchDeps): void {
+/** Re-dispatch the parent. A Dispatcher already running reads the escalation's
+ *  tree itself; any other refusal, or a throw, started nothing, so the
+ *  escalation is left on the parent where whoever resumes it reads it. */
+function redispatchParent(parent: WorkItem, quiet: QuietTodo, input: QuietEscalationInput, deps: QuietWatchDeps): void {
+  let why: string | undefined;
   try {
-    deps.redispatch(parent.id, quietEscalationReason(input));
+    const result = deps.redispatch(parent.id, quietEscalationReason(input));
+    if ("unavailable" in result && result.unavailable !== DISPATCHER_ALREADY_RUNNING) why = result.unavailable;
   } catch (error) {
-    logger.warn(`[quiet-watch] Re-dispatching ${parent.id} failed: ${error instanceof Error ? error.message : String(error)}`);
+    why = error instanceof Error ? error.message : String(error);
+  }
+  if (why === undefined) return;
+  logger.warn(`[quiet-watch] Re-dispatching ${parent.id} for ${quiet.item.id} started nothing: ${why}`);
+  try {
+    addComment({
+      workItemId: parent.id,
+      author: QUIET_WATCH_ACTOR,
+      authorKind: "system",
+      body: `${quietEscalationReason(input)}\n\nNothing could be started for this Todo (${why}), so nobody was told.`,
+      idempotencyKey: `quiet-escalation:${quiet.item.id}:${quiet.stint}:parent`,
+    });
+  } catch (error) {
+    logger.warn(`[quiet-watch] Could not comment on ${parent.id}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -220,7 +241,7 @@ function escalate(quiet: QuietTodo, deps: QuietWatchDeps, now: number): void {
     return id;
   })();
   if (target.kind === "session") deliver(deliveryId, quiet, target.session);
-  else if (target.kind === "redispatch") redispatchParent(target.parent, input, deps);
+  else if (target.kind === "redispatch") redispatchParent(target.parent, quiet, input, deps);
   else commentOnTodo(quiet, input);
 }
 

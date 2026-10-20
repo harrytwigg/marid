@@ -275,6 +275,57 @@ describe("who is nudged and who is told", () => {
   });
 });
 
+describe("when the session or the restart is gone", () => {
+  it("offers a re-dispatch once the nudged session has errored since", () => {
+    const { workerSession, ownerSession } = tree();
+    at(16);
+    sweep();
+    db.prepare("UPDATE sessions SET status = 'error' WHERE id = ?").run(workerSession);
+    at(40);
+    sweep();
+    const escalation = deliveries().find((delivery) => delivery.deliveryKind === "todo-quiet-escalation")!;
+    expect(escalation.targetSessionId).toBe(ownerSession);
+    expect(escalation.payload.message).toContain("dispatch_work_item");
+    expect(escalation.payload.message).not.toContain("message it with send_to_session");
+  });
+
+  it("still escalates to the manager an errored root session reported to", () => {
+    const manager = sessionOn(OWNER, null);
+    const item = executingTodo(WORKER);
+    const worker = sessionOn(WORKER, item.id, "error", { parent: manager });
+    at(16);
+    sweep();
+    expect(deliveries()).toEqual([expect.objectContaining({ targetSessionId: manager, deliveryKind: "todo-quiet-escalation" })]);
+    expect(deliveries()[0]!.payload.message).toContain(worker);
+  });
+
+  const parentComments = (id: string) => db.prepare("SELECT body FROM work_item_comments WHERE work_item_id = ?").pluck().all(id) as string[];
+
+  it("leaves the escalation on the parent when its re-dispatch is refused or throws", () => {
+    const held = tree();
+    db.prepare("UPDATE sessions SET status = 'error' WHERE id = ?").run(held.ownerSession);
+    deps.redispatch.mockImplementationOnce(() => ({ unavailable: "it is held until its start date" }) as never);
+    at(16);
+    sweep();
+    at(40);
+    sweep();
+    expect(parentComments(held.parent.id)).toEqual([expect.stringContaining("held until its start date")]);
+    expect(parentComments(held.parent.id)[0]).toContain(held.child.id);
+  });
+
+  it("leaves nothing more when a Dispatcher is already running for the parent", () => {
+    const busy = tree();
+    db.prepare("UPDATE sessions SET status = 'error' WHERE id = ?").run(busy.ownerSession);
+    deps.redispatch.mockImplementationOnce(() => ({ unavailable: "a Dispatcher is already running for it" }) as never);
+    at(16);
+    sweep();
+    at(40);
+    sweep();
+    expect(deps.redispatch).toHaveBeenCalled();
+    expect(parentComments(busy.parent.id)).toEqual([]);
+  });
+});
+
 describe("a Todo that is not quiet", () => {
   it("is never nudged while its session runs, waits, or has live background work", () => {
     const running = executingTodo(WORKER);
