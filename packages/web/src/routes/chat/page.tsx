@@ -86,6 +86,7 @@ function ChatPage() {
   const { settings } = useSettings()
   const portalName = settings.portalName ?? PRODUCT_NAME
   const orgQuery = useOrg()
+  const [pickedEmployee, setPickedEmployee] = useState<{ paneKey: string; employee: string | null } | null>(null)
   // The URL is the single source of truth for the selected session
   // (`/?session=<id>`) — selecting is a navigation, so browser back/forward
   // walk the session trail, refresh restores the thread, and links carry it.
@@ -858,8 +859,14 @@ function ChatPage() {
     />
   )
   // The conversation title — slim inline (desktop) / centered nav bar (mobile).
-  const headerTitle = chatHeaderTitle({ focusedSessionId, meta: sessionMeta, sessions: sessionsQuery.data })
-  const headerEmployee = chatHeaderEmployee({ focusedSessionId, meta: sessionMeta, sessions: sessionsQuery.data, employees: orgQuery.data?.employees, portalName })
+  const headerEmployees = orgQuery.data?.employees
+  const headerTitle = chatHeaderTitle({ focusedSessionId, meta: sessionMeta, sessions: sessionsQuery.data, employees: headerEmployees })
+  // A composer pane keeps its key through its first send, so the pick follows the chat it becomes until
+  // the chat's own meta lands; any other pane's key retires it.
+  const onComposerPane = paneKey.startsWith('__new__')
+  const composerPick = !onComposerPane ? null : pickedEmployee?.paneKey === paneKey ? pickedEmployee.employee : pendingEmployee
+  useEffect(() => { if (!onComposerPane) setPickedEmployee(null) }, [onComposerPane])
+  const headerEmployee = chatHeaderEmployee({ focusedSessionId, meta: sessionMeta, sessions: sessionsQuery.data, employees: headerEmployees, portalName, picked: composerPick })
   const mobileWorkingSet = useMobileSessionTabs({
     committedId, systemPrimedId, activeId: focusedSessionId, sessions: sessionsQuery.data,
     subscribe, connectionSeq, onSelect: handleMobileWorkingSetSelect,
@@ -977,6 +984,7 @@ function ChatPage() {
                   pendingUserMessage: pendingMessage,
                   initialEmployee: committedId ? undefined : pendingEmployee,
                   onSessionCreated: handleSessionCreated,
+                  onNewChatEmployeeChange: (employee) => setPickedEmployee({ paneKey, employee }),
                   onClose: () => { if (workingSet.state.focusedId) handleFocusPane(workingSet.state.focusedId) },
                   viewMode: effectiveViewMode,
                   focusTrigger: paneState.focusTriggerFor(committedId),

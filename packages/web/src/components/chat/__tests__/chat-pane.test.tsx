@@ -17,8 +17,10 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/api', () => ({ api: apiMocks }))
 
+// One object for every render: a new chat's selector pre-fill depends on the org, so a fresh one each time never settles.
+const orgResult = vi.hoisted(() => ({ data: { employees: [{ name: 'platform-lead', displayName: 'Platform Lead' }] } }))
 vi.mock('@/hooks/use-employees', () => ({
-  useOrg: () => ({ data: { employees: [{ name: 'platform-lead', displayName: 'Platform Lead' }] } }),
+  useOrg: () => orgResult,
 }))
 
 vi.mock('@/hooks/use-features', () => ({
@@ -91,9 +93,9 @@ vi.mock('@/components/chat/model-selector-row', () => ({
 }))
 
 vi.mock('@/components/chat/chat-messages', () => ({
-  ChatMessages: ({ footer, onRetry }: { footer?: React.ReactNode; onRetry?: (message: string) => void }) => {
+  ChatMessages: ({ footer, onRetry, emptyState }: { footer?: React.ReactNode; onRetry?: (message: string) => void; emptyState?: React.ReactNode }) => {
     messagesOnRetry = onRetry ?? null
-    return <div data-testid="messages">{footer}</div>
+    return <div data-testid="messages">{footer}{emptyState}</div>
   },
 }))
 
@@ -149,35 +151,27 @@ describe('ChatPane', () => {
   })
 
   describe('new chat employee, reported for the page header', () => {
-    it('reports the employee the picker chooses, and none until then', () => {
-      const onSessionMetaChange = vi.fn()
-      renderPane({ sessionId: null, onSessionMetaChange })
-      expect(onSessionMetaChange).toHaveBeenLastCalledWith({ employee: undefined })
+    it('reports the employee the picker chooses', () => {
+      const onNewChatEmployeeChange = vi.fn()
+      renderPane({ sessionId: null, onNewChatEmployeeChange })
+      expect(onNewChatEmployeeChange).not.toHaveBeenCalled()
 
       fireEvent.click(screen.getByTestId('employee-picker'))
-      expect(onSessionMetaChange).toHaveBeenLastCalledWith({ employee: 'platform-lead' })
+      expect(onNewChatEmployeeChange).toHaveBeenCalledExactlyOnceWith('platform-lead')
     })
 
-    it('reports a preselected employee straight away', () => {
-      const onSessionMetaChange = vi.fn()
-      renderPane({ sessionId: null, initialEmployee: 'platform-lead', onSessionMetaChange })
-      expect(onSessionMetaChange).toHaveBeenLastCalledWith({ employee: 'platform-lead' })
+    it('reports nothing from a pane that stands another picker in the picker\'s place', () => {
+      const onNewChatEmployeeChange = vi.fn()
+      renderPane({ sessionId: null, newChatEmptyState: <div data-testid="other-picker" />, onNewChatEmployeeChange })
+      expect(screen.queryByTestId('employee-picker')).toBeNull()
+      expect(onNewChatEmployeeChange).not.toHaveBeenCalled()
     })
 
-    it('does not report again when only the page hands it a new callback', () => {
-      const first = vi.fn()
-      const second = vi.fn()
-      const { rerender } = renderPane({ sessionId: null, onSessionMetaChange: first })
-      const calls = first.mock.calls.length
-      rerender(<ChatPane sessionId={null} isActive onFocus={() => {}} subscribe={() => () => {}} events={[]} onSessionMetaChange={second} />)
-      expect(first.mock.calls.length).toBe(calls)
-      expect(second).not.toHaveBeenCalled()
-    })
-
-    it('leaves an existing chat to report its own employee', () => {
-      const onSessionMetaChange = vi.fn()
-      renderPane({ sessionId: 's1', onSessionMetaChange })
-      expect(onSessionMetaChange).not.toHaveBeenCalled()
+    it('reports nothing for an existing chat, which has no picker', () => {
+      const onNewChatEmployeeChange = vi.fn()
+      renderPane({ sessionId: 's1', onNewChatEmployeeChange })
+      expect(screen.queryByTestId('employee-picker')).toBeNull()
+      expect(onNewChatEmployeeChange).not.toHaveBeenCalled()
     })
   })
 

@@ -81,6 +81,21 @@ export const CHAT_SCREENS = [
     },
   },
   {
+    // A phone's new chat with an employee picked: the header names who the chat will run as.
+    name: 'chat-new-picked',
+    viewports: ['narrow'],
+    title: 'New chat, employee picked, phone',
+    url: () => '/',
+    ready: 'Delegation flow',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: 'New chat' }).first().click()
+      await page.getByText('Who do you want to talk to?').waitFor({ timeout: 10_000 })
+      await page.getByRole('option', { name: /Platform Developer/ }).click()
+      await page.locator('[data-chat-mobile-employee]').filter({ hasText: 'Platform Developer' }).waitFor({ timeout: 10_000 })
+      await page.waitForTimeout(500)
+    },
+  },
+  {
     // The same on a short viewport (a phone with its keyboard up, or turned on its side): the first rows
     // have to stay reachable by scrolling.
     name: 'chat-new-short',

@@ -31,23 +31,29 @@ export function chatHeaderTitle({
   focusedSessionId,
   meta,
   sessions,
+  employees,
 }: {
   focusedSessionId: string | null
   meta: SessionMeta | null
   sessions: ReadonlyArray<ListedSession> | undefined
+  /** Names an untitled chat by its employee's display name rather than the slug. */
+  employees?: ReadonlyArray<{ name: string; displayName?: string }>
 }): string {
   if (!focusedSessionId) return 'New chat'
   const live = meta?.sessionId === focusedSessionId ? meta : undefined
   const listed = sessions?.find((session) => String(session.id ?? '') === focusedSessionId)
-  const candidates = [live?.title, listed?.title, live?.employee, listed?.employee]
+  const employeeName = (slug: unknown) => displayable(employees?.find((employee) => employee.name === slug)?.displayName) ?? slug
+  const candidates = [live?.title, listed?.title, employeeName(live?.employee), employeeName(listed?.employee)]
   return candidates.map(displayable).find(Boolean) ?? ''
 }
 
 /**
  * Who the focused chat runs as, for the mobile nav bar, or '' when that is not known yet or does not
  * apply (a terminal is a shell, not an employee). A chat with no employee is the portal's own, so it is
- * named by the portal. The composer reads the employee the picker has chosen, which the pane reports
- * under the id 'new'. Every source is keyed to the id now in front of the reader, as the title's are.
+ * named by the portal. A composer has no session to ask: it reads the employee the operator picked in
+ * it (`picked`, null for the portal). `picked` also stands in for the moment after a first send, before
+ * the new chat's own meta or the list carries it. Every other source is keyed to the id now in front of
+ * the reader, as the title's are.
  */
 export function chatHeaderEmployee({
   focusedSessionId,
@@ -55,18 +61,21 @@ export function chatHeaderEmployee({
   sessions,
   employees,
   portalName,
+  picked,
 }: {
   focusedSessionId: string | null
   meta: SessionMeta | null
   sessions: ReadonlyArray<ListedSession> | undefined
   employees: ReadonlyArray<{ name: string; displayName?: string }> | undefined
   portalName: string
+  picked?: string | null
 }): string {
-  const live = focusedSessionId ? (meta?.sessionId === focusedSessionId ? meta : undefined) : meta ?? undefined
+  const live = focusedSessionId && meta?.sessionId === focusedSessionId ? meta : undefined
   const listed = focusedSessionId ? sessions?.find((session) => String(session.id ?? '') === focusedSessionId) : undefined
-  if (focusedSessionId && !live && !listed) return ''
+  const known = !focusedSessionId || Boolean(live || listed)
   if (isTerminalSession({ engine: live?.engine ?? listed?.engine, source: listed?.source })) return ''
-  const slug = displayable(live?.employee) ?? displayable(listed?.employee)
+  const slug = known && focusedSessionId ? displayable(live?.employee) ?? displayable(listed?.employee) : displayable(picked)
+  if (!known && !slug) return ''
   if (slug === TERMINAL_AVATAR) return ''
   if (!slug) return portalName
   return displayable(employees?.find((employee) => employee.name === slug)?.displayName) ?? slug

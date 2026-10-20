@@ -57,6 +57,8 @@ interface ChatPaneProps {
   /** If set on mount, used as the initial user message before loadSession resolves — for the just-created-from-new-chat case. */
   pendingUserMessage?: Message
   /** Notify parent when session meta changes */
+  /** The employee the operator picks in this pane's own picker (not the "Open chat" picker's), for the page header. */
+  onNewChatEmployeeChange?: (employee: string | null) => void
   onSessionMetaChange?: (meta: { sessionId?: string; title?: string; employee?: string; engine?: string; engineSessionId?: string; model?: string; archivedAt?: string | null }) => void
   /** Notify parent to refresh sidebar */
   onRefresh?: () => void
@@ -103,6 +105,7 @@ export function ChatPane({
   sessionId, isActive, onFocus,
   onSessionCreated,
   onSessionMetaChange,
+  onNewChatEmployeeChange,
   onRefresh,
   portalName = PRODUCT_NAME,
   subscribe,
@@ -213,13 +216,6 @@ export function ChatPane({
   // clears its own state on a null sessionId; this is the pane-local part).
   // Falls back to initialEmployee so a preselected contact survives the reset.
   useEffect(() => { if (!sessionId) setSelectedEmployee(initialEmployee ?? null) }, [sessionId, initialEmployee])
-  // The page's header names who a new chat will run as, so it hears the picker's choice (a session reports
-  // its own employee once it exists). The callback is read through a ref: the page hands each render a new one.
-  const onSessionMetaChangeRef = useRef(onSessionMetaChange)
-  useEffect(() => { onSessionMetaChangeRef.current = onSessionMetaChange }, [onSessionMetaChange])
-  useEffect(() => {
-    if (!sessionId) onSessionMetaChangeRef.current?.({ employee: selectedEmployee ?? undefined })
-  }, [sessionId, selectedEmployee])
 
   // Engine/Model/Effort selector state (composer). Engine is editable on a new
   // chat only; model + effort are editable in existing chats too.
@@ -521,7 +517,7 @@ export function ChatPane({
                 <ChatEmployeePicker
                   employees={pickerEmployees}
                   selectedEmployee={selectedEmployee}
-                  onSelect={setSelectedEmployee}
+                  onSelect={(name) => { setSelectedEmployee(name); onNewChatEmployeeChange?.(name) }}
                   portalName={portalName}
                 />
               </ScrollingEmptyState>
