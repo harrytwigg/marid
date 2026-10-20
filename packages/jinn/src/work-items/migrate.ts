@@ -10,6 +10,7 @@ import {
 import { registerWorkItemIdentityFunctions } from "./id-allocator.js";
 import { WORK_ITEM_BLOCKS_DDL } from "./blocks.js";
 import { WORK_ITEM_STOP_CAUSE_DDL } from "./stop-cause.js";
+import { WORK_ITEM_CHILD_SETTLES_DDL, WORK_ITEM_CHILD_SETTLES_TABLE_DDL } from "./child-settles.js";
 import { WORK_ITEM_RECOVERY_TABLES } from "./recovery.js";
 import { clearAutoKeptOnce, WORK_ITEM_KEPT_DDL } from "./kept.js";
 import { migrateRetiredWorkItemData } from "./retired-approvals.js";
@@ -495,6 +496,7 @@ const REQUIRED_TABLE_SQL = new Map<string, string>([
   ["sprints", SPRINTS_TABLE_DDL],
   ["work_item_sprints", WORK_ITEM_SPRINTS_TABLE_DDL],
   ["work_item_start_dates", WORK_ITEM_START_DATES_TABLE_DDL],
+  ["work_item_child_settles", WORK_ITEM_CHILD_SETTLES_TABLE_DDL],
   ["work_item_approvals", WORK_ITEM_APPROVALS_TABLE_DDL],
   ["work_item_approval_choices", WORK_ITEM_APPROVAL_CHOICES_DDL],
   ["work_item_approval_operator_only", WORK_ITEM_APPROVAL_OPERATOR_ONLY_DDL],
@@ -541,6 +543,7 @@ const V2_ADDITIVE_TABLES: ReadonlyArray<{ name: string; ddl: string }> = [
   { name: "department_scopes", ddl: DEPARTMENT_SCOPES_DDL },
   { name: "department_archives", ddl: DEPARTMENT_ARCHIVES_DDL }, // after `departments`, which it references
   { name: "work_item_start_dates", ddl: WORK_ITEM_START_DATES_DDL },
+  { name: "work_item_child_settles", ddl: WORK_ITEM_CHILD_SETTLES_DDL },
 ].concat(WORK_ITEM_RECOVERY_TABLES);
 /**
  * Copy a shadow-column table's `approval_*` values into `work_item_approvals`,
