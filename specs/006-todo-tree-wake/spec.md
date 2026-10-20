@@ -148,8 +148,10 @@ child, and carries the tree to completion. Only the root goes to the operator.
 ## Part C: Children report to the parent owner
 
 1. **Review addressee.** `reviewAddressee(item)` is the parent owner when the item has a
-   parent, the parent's assignee is an employee in the org, and the parent is not closed;
-   otherwise the operator. Computed on read, never stored, so a parent reassigned to the
+   parent, the parent's assignee is an employee in the org, and the parent is `executing`
+   or `blocked` (the states in which Parts A and D wake or tell its owner); otherwise the
+   operator. A parent in `backlog` or `in_review` would never hear of the child, so its
+   children's reviews reach the operator. Computed on read, never stored, so a parent reassigned to the
    operator sends its children's reviews to the operator from then on. The Todo payloads
    (compact, board and full) carry `reviewAddressee: { kind: "operator" } | { kind:
    "employee", employee }`.
