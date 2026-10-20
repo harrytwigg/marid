@@ -123,6 +123,19 @@ function interruptRunningTurn(context: ApiContext, session: Session): void {
   context.emit("session:interrupted", { sessionId: session.id, reason: "send now" });
 }
 
+/**
+ * Force-send everything parked: cut the running turn and let the queue drain
+ * in its existing order, one message per turn. Unlike the single-item verb
+ * there is no rotation — the head stays the head.
+ */
+function sendAllNow({ res, context, session, params }: QueueRouteArgs): void {
+  const sessionKey = queueKey(session);
+  const count = getQueueItems(sessionKey).filter((row) => row.status === "pending").length;
+  if (count > 0) interruptRunningTurn(context, session);
+  context.emit("queue:updated", { sessionId: params.id, sessionKey });
+  return json(res, { status: "sent-now", count });
+}
+
 function sendNow({ res, context, session, params }: QueueRouteArgs): void {
   const item = resolveEditableItem(res, params, "sent now");
   if (!item) return;
@@ -140,6 +153,7 @@ function sendNow({ res, context, session, params }: QueueRouteArgs): void {
  * method keeps those two apart.
  */
 const QUEUE_ROUTES: Array<{ method: string; pattern: string; run: (args: QueueRouteArgs) => void | Promise<void> }> = [
+  { method: "POST", pattern: "/api/sessions/:id/queue/send-now", run: sendAllNow },
   { method: "POST", pattern: "/api/sessions/:id/queue/:itemId/send-now", run: sendNow },
   { method: "PATCH", pattern: "/api/sessions/:id/queue/:itemId", run: editItem },
   { method: "DELETE", pattern: "/api/sessions/:id/queue/:itemId", run: cancelOneItem },

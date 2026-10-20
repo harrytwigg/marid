@@ -362,7 +362,7 @@ export function ChatPane({
           // CLI view → route to the interactive PTY engine so the user sees the prompt
           // get injected into the live xterm + claude's streaming response.
           const mode = viewMode === 'cli' && engineRegistry?.engines?.[String(currentSession?.engine ?? '')]?.supportsPty ? 'interactive' : undefined
-          sessionQueue.adopt(userMsg.id, await api.sendMessage(sid, { message, interrupt: interrupt || undefined, attachments: attachmentIds, mode, speech: speech || undefined }))
+          sessionQueue.adopt(userMsg.id, await api.sendMessage(sid, { message, delivery: interrupt === undefined ? undefined : interrupt ? 'now' : 'queue', attachments: attachmentIds, mode, speech: speech || undefined }))
           onRefresh?.()
         }
         keepPaneTab(sid)
@@ -533,6 +533,23 @@ export function ChatPane({
         variant="chip"
         className="flex shrink-0 flex-wrap items-center gap-1 px-[var(--space-4)] py-[var(--space-1)]"
       />
+
+      {/* Queued messages wait above the composer too: force-send them all,
+          in order, without hunting for each card in the transcript. */}
+      {sessionId && sessionQueue.pendingCount > 0 ? (
+        <div className="flex shrink-0 items-center justify-between gap-[var(--space-3)] px-[var(--space-4)] py-[var(--space-2)]" data-queued-bar>
+          <span className="text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">
+            {sessionQueue.pendingCount} queued, sending after this reply in order
+          </span>
+          <button
+            type="button"
+            onClick={() => { void sessionQueue.sendAllNow().catch(() => {}) }}
+            className="h-7 shrink-0 cursor-pointer rounded-full border-none bg-[var(--accent)] px-[var(--space-3)] text-[length:var(--text-caption1)] text-[var(--accent-contrast)]"
+          >
+            Send all now
+          </button>
+        </div>
+      ) : null}
 
       {/* Input — chat-style composer for every view, including CLI (the PTY engine
           accepts attachments + the prompt is injected into xterm via bracketed-paste). */}

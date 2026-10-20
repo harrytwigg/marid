@@ -15,19 +15,25 @@ export interface QueuedMessage {
 
 export interface SessionQueue {
   byMessageId: ReadonlyMap<string, QueuedMessage>
+  /** Parked messages waiting for the running turn, in delivery order. */
+  pendingCount: number
   /** Each verb REJECTS on failure. The card is the only caller and it reports. */
   cancel: (itemId: string) => Promise<void>
   edit: (itemId: string, prompt: string) => Promise<void>
   sendNow: (itemId: string) => Promise<void>
+  /** Force-send everything parked, in queue order, interrupting the turn. */
+  sendAllNow: () => Promise<void>
   /** Point an optimistic message id at the canonical one the server minted. */
   adopt: (localId: string, sent: unknown) => void
 }
 
 const EMPTY: SessionQueue = {
   byMessageId: new Map(),
+  pendingCount: 0,
   cancel: async () => {},
   edit: async () => {},
   sendNow: async () => {},
+  sendAllNow: async () => {},
   adopt: () => {},
 }
 
@@ -113,11 +119,15 @@ export function useSessionQueue(
 
   const byMessageId = useMemo(() => withAliases(indexByMessage(items), aliases), [items, aliases])
 
+  const pendingCount = useMemo(() => items.filter((item) => item.status === 'pending').length, [items])
+
   return useMemo<SessionQueue>(() => sessionId === null ? EMPTY : {
     byMessageId,
+    pendingCount,
     cancel: (itemId) => act(() => api.cancelQueueItem(sessionId, itemId)),
     edit: (itemId, prompt) => act(() => api.editQueueItem(sessionId, itemId, prompt)),
     sendNow: (itemId) => act(() => api.sendQueueItemNow(sessionId, itemId)),
+    sendAllNow: () => act(() => api.sendAllQueueItemsNow(sessionId)),
     adopt,
-  }, [sessionId, byMessageId, act, adopt])
+  }, [sessionId, byMessageId, pendingCount, act, adopt])
 }

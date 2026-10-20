@@ -7,11 +7,12 @@ import { useSessionQueue } from '@/components/chat/use-session-queue'
  * which transcript id a card is found under, and what happens when the server
  * says no. */
 
-const { getSessionQueue, cancelQueueItem } = vi.hoisted(() => ({
+const { getSessionQueue, cancelQueueItem, sendAllQueueItemsNow } = vi.hoisted(() => ({
   getSessionQueue: vi.fn(),
   cancelQueueItem: vi.fn(),
+  sendAllQueueItemsNow: vi.fn(),
 }))
-vi.mock('@/lib/api', () => ({ api: { getSessionQueue, cancelQueueItem } }))
+vi.mock('@/lib/api', () => ({ api: { getSessionQueue, cancelQueueItem, sendAllQueueItemsNow } }))
 
 const parked: QueueItem = {
   id: 'qi_1',
@@ -28,6 +29,7 @@ const noEvents = () => () => {}
 beforeEach(() => {
   getSessionQueue.mockReset().mockResolvedValue([parked])
   cancelQueueItem.mockReset().mockResolvedValue({ status: 'cancelled' })
+  sendAllQueueItemsNow.mockReset().mockResolvedValue({ status: 'sent-now', count: 1 })
 })
 
 describe('useSessionQueue', () => {
@@ -51,6 +53,15 @@ describe('useSessionQueue', () => {
     act(() => result.current.adopt('local-uuid', { status: 'queued' }))
 
     expect(result.current.byMessageId.has('local-uuid')).toBe(false)
+  })
+
+  it('counts parked messages and force-sends them all', async () => {
+    const { result } = renderHook(() => useSessionQueue('s1', noEvents))
+    await waitFor(() => expect(result.current.pendingCount).toBe(1))
+
+    await act(async () => { await result.current.sendAllNow() })
+
+    expect(sendAllQueueItemsNow).toHaveBeenCalledWith('s1')
   })
 
   it('lets a rejected action reach its caller, having refreshed anyway', async () => {

@@ -1,0 +1,160 @@
+import { Readable } from "node:stream";
+import { beforeEach, describe, expect, it } from "vitest";
+import {
+  api,
+  createParent,
+  eventually,
+  makeContext,
+  queueModule,
+  resetCallbackState,
+  type ApiContext,
+} from "./helpers/callback-harness.js";
+import { makeResponse } from "./helpers/callback-requests.js";
+import type { Engine, EngineRunOpts } from "../../shared/types.js";
+
+/**
+ * The per-message delivery choice against the real route handler, a real
+ * SessionQueue and real SQLite: `delivery: "queue"` waits for the running
+ * turn, `delivery: "now"` cuts it off, and the queue's send-now verb
+ * force-sends everything parked. Queued messages drain one per turn, in
+ * the order they were sent.
+ */
+
+beforeEach(resetCallbackState);
+
+const HEADERS = {
+  host: "gateway.test",
+  authorization: "Bearer test-token",
+  "content-type": "application/json",
+};
+
+async function request(
+  context: ApiContext,
+  method: string,
+  url: string,
+  body?: unknown,
+) {
+  const req = Object.assign(Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))]), {
+    method,
+    url,
+    headers: { ...HEADERS },
+  });
+  const captured = makeResponse();
+  await api.handleApiRequest(req as never, captured.res, context);
+  return captured;
+}
+
+const send = (context: ApiContext, sessionId: string, message: string, extra: Record<string, unknown> = {}) =>
+  request(context, "POST", `/api/sessions/${sessionId}/message`, { message, ...extra });
+
+interface QueueRow { id: string; prompt: string; status: string }
+
+const parkedRows = async (context: ApiContext, sessionId: string): Promise<QueueRow[]> =>
+  ((await request(context, "GET", `/api/sessions/${sessionId}/queue`)).body as QueueRow[])
+    .filter((row) => row.status === "pending");
+
+/** An interruptible engine whose turn ends only when released or killed. */
+function interruptibleBlockingEngine() {
+  const prompts: string[] = [];
+  const kills: Array<string | undefined> = [];
+  const releases: Array<() => void> = [];
+  let alive = false;
+  const engine = {
+    name: "stub",
+    run: async (opts: EngineRunOpts) => {
+      prompts.push(opts.prompt);
+      alive = true;
+      await new Promise<void>((resolve) => { releases.push(resolve); });
+      alive = false;
+      return { sessionId: "stub", result: "acknowledged" };
+    },
+    kill: (_sessionId: string, reason?: string) => { kills.push(reason); releases.shift()?.(); },
+    isAlive: () => alive,
+    killAll: () => {},
+  } as unknown as Engine;
+  return { engine, prompts, kills, releaseNext: () => releases.shift()?.() };
+}
+
+async function runningInterruptibleSession(suffix: string) {
+  const stub = interruptibleBlockingEngine();
+  const queue = new queueModule.SessionQueue();
+  const context = makeContext(stub.engine, queue, []);
+  const session = createParent(suffix);
+  await send(context, session.id, "running turn");
+  await eventually(() => expect(stub.prompts).toEqual(["running turn"]));
+  return { ...stub, context, queue, session };
+}
+
+describe("POST /message delivery choice", () => {
+  it("queues two messages behind a running turn without interrupting, then delivers them in order, one per turn", async () => {
+    const { context, session, prompts, kills, releaseNext } = await runningInterruptibleSession("delivery-queue");
+    await send(context, session.id, "queued one", { delivery: "queue" });
+    await send(context, session.id, "queued two", { delivery: "queue" });
+
+    expect(kills).toEqual([]);
+    expect(prompts).toEqual(["running turn"]);
+    expect((await parkedRows(context, session.id)).map((row) => row.prompt)).toEqual(["queued one", "queued two"]);
+
+    releaseNext();
+    await eventually(() => expect(prompts).toEqual(["running turn", "queued one"]));
+    releaseNext();
+    await eventually(() => expect(prompts).toEqual(["running turn", "queued one", "queued two"]));
+    releaseNext();
+  });
+
+  it("send-now delivery interrupts the running turn as before", async () => {
+    const { context, session, prompts, kills, releaseNext } = await runningInterruptibleSession("delivery-now");
+    await send(context, session.id, "do this instead", { delivery: "now" });
+
+    expect(kills).toHaveLength(1);
+    // The interrupted turn's prompt is carried forward into the next turn's.
+    await eventually(() => expect(prompts[1]).toContain("do this instead"));
+    releaseNext();
+  });
+
+  it("does not deliver a cancelled queued message", async () => {
+    const { context, session, prompts, releaseNext } = await runningInterruptibleSession("delivery-cancel");
+    await send(context, session.id, "keep me", { delivery: "queue" });
+    await send(context, session.id, "drop me", { delivery: "queue" });
+    const dropped = (await parkedRows(context, session.id)).find((row) => row.prompt === "drop me")!;
+
+    const cancelled = await request(context, "DELETE", `/api/sessions/${session.id}/queue/${dropped.id}`);
+    expect(cancelled.status).toBe(200);
+
+    releaseNext();
+    await eventually(() => expect(prompts).toEqual(["running turn", "keep me"]));
+    releaseNext();
+    // Give a wrongly-delivered cancelled message a chance to appear, then check it did not.
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(prompts).toEqual(["running turn", "keep me"]);
+  });
+});
+
+describe("POST /api/sessions/:id/queue/send-now (all)", () => {
+  it("interrupts the running turn and drains every queued message in queue order", async () => {
+    const { context, session, prompts, kills, releaseNext } = await runningInterruptibleSession("force-all");
+    await send(context, session.id, "first queued", { delivery: "queue" });
+    await send(context, session.id, "second queued", { delivery: "queue" });
+    expect(kills).toEqual([]);
+
+    const forced = await request(context, "POST", `/api/sessions/${session.id}/queue/send-now`, {});
+
+    expect(forced.status).toBe(200);
+    expect(forced.body).toMatchObject({ status: "sent-now", count: 2 });
+    expect(kills).toHaveLength(1);
+    // The interrupted turn's prompt is carried forward into the next turn's.
+    await eventually(() => expect(prompts[1]).toContain("first queued"));
+    releaseNext();
+    await eventually(() => expect(prompts[2]).toContain("second queued"));
+    expect(prompts).toHaveLength(3);
+    releaseNext();
+  });
+
+  it("does not interrupt when nothing is queued", async () => {
+    const { context, session, kills } = await runningInterruptibleSession("force-none");
+    const forced = await request(context, "POST", `/api/sessions/${session.id}/queue/send-now`, {});
+    expect(forced.status).toBe(200);
+    expect(forced.body).toMatchObject({ status: "sent-now", count: 0 });
+    expect(kills).toEqual([]);
+  });
+});

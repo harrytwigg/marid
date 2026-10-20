@@ -327,7 +327,7 @@ import {
 import { handleHeartbeatApi } from "./heartbeat-api.js";
 import { handleSelfCompactionApi } from "./self-compaction-api.js";
 import { handleSessionContextApi } from "./session-context-api.js";
-import { shouldInterruptRunningTurn as interruptsRunningTurn } from "./message-interrupt.js";
+import { resolveMessageDelivery, shouldInterruptRunningTurn as interruptsRunningTurn } from "./message-interrupt.js";
 import { isAutoCompacting } from "../sessions/auto-compaction.js";
 import { isRawEngineCommand } from "../shared/skill-commands.js";
 import { handleTerminalApi, type TerminalApiOptions } from "./terminal-api.js";
@@ -4002,12 +4002,17 @@ export async function handleApiRequest(
       // Headless engines lack isTurnRunning; their isAlive ≈ "turn running".
       const turnRunning = session.status === "running" && isInterruptibleEngine(engine)
         && ("isTurnRunning" in engine ? (engine as any).isTurnRunning(session.id) : engine.isAlive(session.id));
+      // Per-message delivery choice (`delivery: "queue" | "now"`, or the legacy
+      // `interrupt` boolean): queue waits for the running turn, now cuts it off.
+      // Queued messages drain one per turn, in order, through the serial queue.
+      const delivery = resolveMessageDelivery({ delivery: body.delivery, interrupt: body.interrupt });
       const shouldInterruptRunningTurn = interruptsRunningTurn({
         isNotification,
         prompt: String(prompt),
         interruptOnNewMessage: config.sessions?.interruptOnNewMessage,
         turnRunning,
         autoCompacting: isAutoCompacting(session.id),
+        delivery,
       });
       if (shouldInterruptRunningTurn) supersedeRunningTurn(session);
 
@@ -4203,6 +4208,7 @@ export async function handleApiRequest(
         sessionId: session.id,
         messageId: incomingMessageId,
         queueItemId,
+        ...(delivery ? { delivery } : {}),
         ...(callbackDelivery ? { callbackDeliveryId: callbackDelivery.id } : {}),
       });
     }
