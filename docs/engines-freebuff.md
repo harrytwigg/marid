@@ -44,7 +44,7 @@ persona: |
   You write release notes.
 ```
 
-**Set `model:` on the employee.** Employee files default to `model: sonnet`, which is a Claude alias and not a label in Freebuff's picker, so a Freebuff employee without a `model:` fails its turns with the list of labels the picker showed. `engines.freebuff.model` applies to a session that has no model of its own.
+**The model.** Set `model:` on the employee to a picker label. Employee files default to `model: sonnet`, and that default (like any Claude alias, `claude-…` or `gpt-…` id) is not a Freebuff label, so Marid sets it aside, says so in the log, and uses `engines.freebuff.model`, else leaves the CLI's own choice. A label that is set but matches no picker row still fails the turn, naming the labels the picker showed.
 
 ---
 

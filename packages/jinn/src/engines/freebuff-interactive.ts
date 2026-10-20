@@ -18,6 +18,7 @@ import {
 import { FreebuffFailure, SessionReleased } from "./freebuff-failure.js";
 import { FreebuffDriver, sleep } from "./freebuff-driver.js";
 import { composeFreebuffMessage } from "./freebuff-message.js";
+import { pickerModelFor } from "./freebuff-model.js";
 import { FreebuffProcessPool } from "./freebuff-pool.js";
 import { TurnStopped, reusableProcess, type ActiveTurn, type Live, type Stop } from "./freebuff-live.js";
 import { scrapeAnswer } from "./freebuff-scrape.js";
@@ -127,7 +128,7 @@ export class FreebuffInteractiveEngine extends FreebuffProcessPool implements In
   /** The TUI is up and showing the model the turn asked for. */
   private async getReady(driver: FreebuffDriver, opts: EngineRunOpts): Promise<void> {
     this.recordUsage(await driver.waitForState((info) => info.state === "idle", { what: "start" }));
-    await driver.ensureModel({ model: opts.model?.trim() || undefined, effortLevel: opts.effortLevel });
+    await driver.ensureModel({ model: pickerModelFor(opts.model, this.readConfig()?.model), effortLevel: opts.effortLevel });
   }
 
   private async sendAndRead(live: Live, driver: FreebuffDriver, signal: AbortSignal, opts: EngineRunOpts, remoteCwd: string | undefined): Promise<EngineResult> {

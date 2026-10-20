@@ -107,6 +107,20 @@ describe.skipIf(process.platform === "win32")("FreebuffInteractiveEngine", () =>
     expect(result.result).toContain("ANSWER#1[DeepSeek V4.1 Flash 10/17 • high]");
   }, 30_000);
 
+  it("sets a Claude alias aside, as an employee file's default `sonnet` is, and leaves the CLI's choice alone", async () => {
+    const result = await turn(engine(), "alias", "default model please", { model: "sonnet" });
+    expect(result.error).toBeUndefined();
+    expect(result.result).toContain("ANSWER#1[DeepSeek V4.1 Flash 10/17 • high]");
+  }, 30_000);
+
+  it("uses engines.freebuff.model in place of such an alias", async () => {
+    const e = new FreebuffInteractiveEngine(new PtyLifecycleManager({ maxLivePtys: 8 }), { config: () => ({ maxConcurrent: 1, model: "Muse Spark" }) });
+    engines.push(e);
+    const result = await turn(e, "alias2", "configured model please", { model: "sonnet" });
+    expect(result.error).toBeUndefined();
+    expect(result.result).toContain("ANSWER#1[Muse Spark 1.3 • high]");
+  }, 30_000);
+
   it("fails a model that is not in the picker with the labels it showed, and sends nothing", async () => {
     const e = engine();
     const result = await turn(e, "m3", "never sent", { model: "Nonesuch" });
