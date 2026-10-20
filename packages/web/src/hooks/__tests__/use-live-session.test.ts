@@ -417,6 +417,22 @@ describe("useLiveSession (read-only)", () => {
     expect(getSession).toHaveBeenLastCalledWith("s1", { messages: false })
   })
 
+  it("does not let a late stop refresh overwrite the turn a resend started", async () => {
+    getSession.mockResolvedValue({ id: "s1", status: "running", messages: [{ id: "u1", role: "user", content: "go", timestamp: 1 }] })
+    const { subscribe, emit } = makeBus()
+    const { result } = renderHook(() => useLiveSession("s1", { subscribe }))
+    await act(async () => { await Promise.resolve() })
+
+    let answerStop: (record: unknown) => void = () => {}
+    getSession.mockReturnValueOnce(new Promise((resolve) => { answerStop = resolve }))
+    act(() => { emit("session:stopped", { sessionId: "s1" }) })
+    act(() => { emit("session:started", { sessionId: "s1" }) })
+    expect(result.current.session?.status).toBe("running")
+
+    await act(async () => { answerStop({ id: "s1", status: "interrupted", messages: [] }) })
+    expect(result.current.session?.status).toBe("running")
+  })
+
   it("batches a terminal completion error with its live final response identity", async () => {
     getSession.mockResolvedValue({
       status: "running",

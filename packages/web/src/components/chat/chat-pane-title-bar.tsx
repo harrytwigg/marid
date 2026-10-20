@@ -89,7 +89,7 @@ function cliTitleFor(engine: string | undefined, locked: boolean, available: boo
  */
 export function paneViewControls(session: Session, engineRegistry?: EnginesResponse, turnRunning = session.status === 'running') {
   const engine = typeof session.engine === 'string' ? session.engine : undefined
-  if (isTerminalSession(session)) return { cliModeAvailable: false, viewSwitchLocked: false, cliTitle: 'A terminal has no chat view' }
+  if (isTerminalSession(session)) return { cliModeAvailable: false, viewSwitchLocked: false, cliTitle: 'A terminal has no separate CLI view' }
   const cliModeAvailable = !engine || engineRegistry?.engines?.[engine]?.supportsPty === true
   const viewSwitchLocked = viewSwitchLockedEngine(engine, engineRegistry) && turnRunning
   return {
