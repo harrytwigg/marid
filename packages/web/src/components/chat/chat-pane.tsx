@@ -9,6 +9,7 @@ import { CliKeybar } from '@/components/chat/cli-keybar'
 import { TerminalPaneBody } from '@/components/chat/terminal-pane-body'
 import { isTerminalSession } from '@/lib/terminal-session'
 import { ChatEmployeePicker } from '@/components/chat/chat-employee-picker'
+import { ScrollingEmptyState } from '@/components/chat/chat-transcript-empty'
 import { ChatHydrationOverlay, useHydrationSpinner } from '@/components/chat/chat-hydration'
 import { SessionQueueContext, useSessionQueue } from '@/components/chat/use-session-queue'
 import { BackgroundActivityStatus } from '@/components/chat/background-activity-status'
@@ -508,12 +509,14 @@ export function ChatPane({
             backgroundActivity={backgroundActivity}
             delegatedActivity={paneDelegatedActivity}
             emptyState={sessionId ? undefined : newChatEmptyState ?? (
-              <ChatEmployeePicker
-                employees={pickerEmployees}
-                selectedEmployee={selectedEmployee}
-                onSelect={setSelectedEmployee}
-                portalName={portalName}
-              />
+              <ScrollingEmptyState>
+                <ChatEmployeePicker
+                  employees={pickerEmployees}
+                  selectedEmployee={selectedEmployee}
+                  onSelect={setSelectedEmployee}
+                  portalName={portalName}
+                />
+              </ScrollingEmptyState>
             )}
           />
         </SessionQueueContext.Provider>
