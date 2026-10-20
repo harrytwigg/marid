@@ -1,7 +1,7 @@
 import { declaredAccountByKey } from "../shared/claude-accounts-config.js";
 import { DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
 import { engineSupportsRemote, type EngineName } from "../shared/models.js";
-import { isRemoteTarget } from "../shared/remote-target.js";
+import { isRemoteTarget, sshDestination } from "../shared/remote-target.js";
 import type { Employee, JinnConfig, Session } from "../shared/types.js";
 import { rateLimitRemoteTarget } from "./rate-limit-remote-target.js";
 import { sessionScopeDepartment } from "./session-scope.js";
@@ -33,7 +33,8 @@ export function fallbackModelMapOf(config: JinnConfig, account: string): Record<
 /** The scope a session's substitutes are filtered by: department-scoped, and/or running on a remote host. */
 export function sessionSubstituteScope(
   session: Session, employee: Employee | undefined, config: JinnConfig,
-): { scoped: boolean; remote: boolean } {
+): { scoped: boolean; remote: boolean; host?: string } {
   const remoteTarget = rateLimitRemoteTarget({ session, employee, config });
-  return { scoped: substituteScoped(session, remoteTarget), remote: isRemoteTarget(remoteTarget) };
+  const host = isRemoteTarget(remoteTarget) ? sshDestination(remoteTarget) : undefined;
+  return { scoped: substituteScoped(session, remoteTarget), remote: host !== undefined, ...(host ? { host } : {}) };
 }

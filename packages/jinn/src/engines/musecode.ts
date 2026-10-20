@@ -5,6 +5,22 @@ import { resolveBin } from "../shared/resolve-bin.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
 import { lostConversationFailure } from "../shared/process-start.js";
 import { employeeSessionEnv } from "../sessions/employee-env.js";
+import { JINN_HOME } from "../shared/paths.js";
+import { envNamesFor } from "../shared/codename-env.js";
+import { withRemoteAttachments } from "../shared/remote-attachments.js";
+import { assertRemoteTarget, isRemoteTarget } from "../shared/remote-target.js";
+import {
+  buildSshSpawnArgs,
+  ensureRemoteReady,
+  prepareRemoteSession,
+  reapStaleRemoteEngine,
+  remoteEnginePidFile,
+  remoteNodeDir,
+  remoteSessionBinDir,
+  requireRemoteEngineBin,
+  RemoteKills,
+  type RemoteEngineHandle,
+} from "./remote-stage.js";
 import { MspClient, MspClosedError, uuidv7 } from "./musecode-msp.js";
 import { MspProcess } from "./musecode-process.js";
 import {
@@ -37,6 +53,14 @@ import {
 
 const TURN_TIMEOUT_MS = 14 * 24 * 60 * 60 * 1000;
 
+/** A turn's host process, and the turn's options as that host sees them. */
+interface MuseHost {
+  proc: MspProcess;
+  opts: EngineRunOpts;
+  /** Attachment paths (the gateway's) as the host names them in the prompt. */
+  attachmentPaths: (files: string[]) => string[];
+}
+
 export type { MusecodeEngineOptions } from "./musecode-options.js";
 
 /**
@@ -53,12 +77,23 @@ export type { MusecodeEngineOptions } from "./musecode-options.js";
  * `musecode-turn.ts`, the argv and prompt are `musecode-protocol.ts`, the MCP
  * servers are `musecode-mcp.ts`, and the transport is `musecode-msp.ts`.
  *
- * Local only: Muse is not in `REMOTE_ENGINE_NAMES`, so a turn is never carried
- * to another machine.
+ * Remote: an employee carrying a `remoteHost` runs the same host on that
+ * machine, with an `ssh -T` client standing in for the local process. MSP is
+ * newline-delimited JSON on stdin and stdout, which ssh carries verbatim, so
+ * nothing above the process changes (see {@link spawnRemoteHost}).
  */
 export class MusecodeEngine implements InterruptibleEngine {
   name = "musecode" as const;
   private live = new Map<string, LiveTurn>();
+  private remoteKills = new RemoteKills("musecode");
+
+  /**
+   * Variables the REMOTE login environment must not carry into `muse`: the
+   * markers that tell a nested CLI it runs inside another agent, which the local
+   * host has scrubbed by `buildEngineChildEnv`. Provider keys are left alone, as
+   * for pi and opencode: `META_API_KEY` is one way Muse signs in at all.
+   */
+  private static readonly REMOTE_ENV_DENY = ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", ...envNamesFor(["HOME_IDENTITY", "TAKE_PORT"])];
 
   constructor(private readonly options: MusecodeEngineOptions = {}) {}
 
@@ -72,6 +107,11 @@ export class MusecodeEngine implements InterruptibleEngine {
 
   killAll(): void {
     for (const sessionId of [...this.live.keys()]) this.kill(sessionId, "Interrupted: gateway shutting down");
+  }
+
+  /** Remote kills still in flight, for a shutdown to wait on. */
+  pendingRemoteKills(): Promise<unknown> {
+    return this.remoteKills.pending();
   }
 
   /** Batch engine: a host lives only as long as its turn, so there is nothing idle to recycle. */
@@ -102,7 +142,9 @@ export class MusecodeEngine implements InterruptibleEngine {
       live.settled = true;
       // Live until its host is gone: a terminal opened before then would meet a session the host still holds.
       try {
-        await live.proc?.shutdown();
+        const exit = await live.proc?.shutdown();
+        // A remote host's ssh client can close with the host still running over there (a dropped connection, or our own signal racing the pid file).
+        if (exit) await this.remoteKills.beforeSettle(live, trackingId, exit.code);
       } finally {
         if (this.live.get(trackingId) === live) this.live.delete(trackingId);
       }
@@ -120,8 +162,13 @@ export class MusecodeEngine implements InterruptibleEngine {
   private async runTurn(opts: EngineRunOpts, trackingId: string, live: LiveTurn): Promise<EngineResult> {
     await this.closeView(opts);
     if (live.reason) return interruptedResult(opts, live.reason);
-    const proc = this.spawnHost(opts, trackingId, live);
+    const host = await this.startHost(opts, trackingId, live);
+    // Staging a remote host takes a few round trips; an interrupt in that time had no host to reach.
+    if (live.reason) return interruptedResult(opts, live.reason);
+    const proc = host.proc;
     const client = proc.client;
+    // From here on the turn sees the host's own world: its working directory and MCP set.
+    opts = host.opts;
     let session: OpenedSession;
     try {
       const config = await this.negotiate(client, opts);
@@ -134,12 +181,13 @@ export class MusecodeEngine implements InterruptibleEngine {
 
     const turn = new MuseTurn(session.sessionId, {
       onStream: opts.onStream ?? null,
-      onUsage: (usage) => this.options.onUsage?.(usage),
+      // The gateway's reading is its own login's; a remote host may be signed in to another account.
+      onUsage: (usage) => { if (!live.remote) this.options.onUsage?.(usage); },
     });
     live.turn = turn;
     if (session.projectionUnavailable) opts.onStream?.({ type: "status", content: "Muse Code could not read this conversation's history (projectionUnavailable); the turn may not start" });
     await this.syncModel(client, session, opts);
-    const started = await this.startTurn(client, turn, opts, live);
+    const started = await this.startTurn(client, turn, opts, live, host.attachmentPaths);
     if (started) return started;
     return await this.awaitTurn(turn, session, live, opts);
   }
@@ -166,13 +214,107 @@ export class MusecodeEngine implements InterruptibleEngine {
     return result;
   }
 
+  /** The turn's host: `muse serve` here, or on the session's remote host over ssh. */
+  private async startHost(opts: EngineRunOpts, trackingId: string, live: LiveTurn): Promise<MuseHost> {
+    if (isRemoteTarget(opts)) return await this.spawnRemoteHost(opts, trackingId, live);
+    return { proc: this.spawnHost(opts, trackingId, live), opts, attachmentPaths: (files) => files };
+  }
+
+  /**
+   * Start the turn's host on the session's remote host: `muse serve` with the
+   * same argv, its stdio carried by `ssh -T`.
+   *
+   * No tty, because one would fold Muse's stderr into the JSON on stdout. That
+   * makes it a batch engine as pi and opencode are: closing the channel signals
+   * nothing over there, so the host's pid is recorded and an interrupt or a
+   * timeout ends it on that machine first (`RemoteKills`). Closing stdin, which
+   * is how a turn's host is normally let go, reaches it as EOF.
+   *
+   * What changes for the turn is returned in `opts`: the workspace is the
+   * remote working directory, and the MCP set is the one re-pointed at that
+   * host's install and the reverse tunnel. It still travels in `session/start`
+   * over stdin, so the session's capability is never on a command line.
+   */
+  private async spawnRemoteHost(opts: EngineRunOpts, trackingId: string, live: LiveTurn): Promise<MuseHost> {
+    const { staging, facts, handle, gatewayPort } = await this.stageRemoteHost(opts, trackingId);
+    const args = buildSshSpawnArgs({
+      destination: staging.destination,
+      tunnelPort: staging.tunnelPort,
+      gatewayPort,
+      remoteCwd: opts.remoteCwd!,
+      remoteEnv: { JINN_HOME: staging.sessionHome, JINN_SESSION_ID: trackingId },
+      // The gateway URL, its bearer and the employee's session identity, from a 0600 file rather than a command line.
+      envFile: staging.envFilePath,
+      unsetRemoteEnv: MusecodeEngine.REMOTE_ENV_DENY,
+      // The jinn MCP server is a node script, and the instance's own bin/ carries `mem`.
+      pathPrepend: [remoteNodeDir(facts), remoteSessionBinDir(staging.sessionHome)],
+      bin: handle.bin,
+      args: buildMuseServeArgs(opts),
+      allocateTty: false,
+      pidFile: handle.pidFile,
+    });
+    logger.info(
+      `Muse Code engine starting REMOTE on ${staging.destination}:${opts.remoteCwd} — ${describeMusecodeLaunch(opts)} `
+      + `(resume: ${opts.resumeSessionId || "none"}, tunnel: ${staging.tunnelPort}→${gatewayPort}, jinn tools: ${staging.resolvedMcp ? "on" : "off"})`,
+    );
+    live.remote = handle;
+    const env = buildEngineChildEnv(process.env, { scrubClaudeCode: true, scrubCodex: true });
+    // The ssh client's own cwd is irrelevant: the remote command opens with a `cd` into remoteCwd.
+    const proc = this.attachHost(new MspProcess({
+      bin: resolveBin("ssh"),
+      args,
+      cwd: JINN_HOME,
+      env,
+      signalVia: (signalLocal) => this.remoteKills.terminate(live, trackingId, signalLocal),
+    }), live);
+    const { resolvedMcp: _local, ...rest } = opts;
+    return {
+      proc,
+      opts: { ...rest, cwd: opts.remoteCwd!, ...(staging.resolvedMcp ? { resolvedMcp: staging.resolvedMcp } : {}) },
+      // Attachments named in the prompt as the remote session's staged home sees them; images go inline and are read here.
+      attachmentPaths: (files) => withRemoteAttachments({ attachments: files }, staging.sessionHome, trackingId).attachments ?? files,
+    };
+  }
+
+  /** Make the remote host ready for the turn: readiness, the session's stage, and no host left over from an earlier turn. */
+  private async stageRemoteHost(opts: EngineRunOpts, trackingId: string) {
+    const remote = this.options.remote?.();
+    assertRemoteTarget(opts, remote);
+    const gatewayPort = this.options.gatewayPort?.() ?? 0;
+    // Without a real gateway port the reverse forward would be built as `-R <n>:127.0.0.1:0`, and every jinn tool call would answer into nothing.
+    if (!gatewayPort) throw new Error("remote spawn needs the gateway's port for the reverse tunnel, and none was provided");
+    const readiness = await ensureRemoteReady(opts, remote, { engine: "musecode", allowWake: false });
+    if (!readiness.ready) throw new Error(`remote host not ready: ${readiness.reason}`);
+    const facts = readiness.facts;
+    const staging = await prepareRemoteSession({
+      target: opts,
+      remote: remote!,
+      facts,
+      engine: "musecode",
+      jinnSessionId: trackingId,
+      gatewayPort,
+      ...(opts.resolvedMcp ? { resolvedMcp: opts.resolvedMcp } : {}),
+    });
+    const handle: RemoteEngineHandle = {
+      destination: staging.destination,
+      pidFile: remoteEnginePidFile(staging.sessionHome),
+      bin: requireRemoteEngineBin(staging.destination, facts, "musecode"),
+    };
+    await reapStaleRemoteEngine(handle, "musecode");
+    return { staging, facts, handle, gatewayPort };
+  }
+
   private spawnHost(opts: EngineRunOpts, trackingId: string, live: LiveTurn): MspProcess {
     const bin = resolveBin("muse", opts.bin);
     const env = buildEngineChildEnv(process.env, { scrubClaudeCode: true, scrubCodex: true });
     env.JINN_SESSION_ID = trackingId;
     Object.assign(env, employeeSessionEnv(trackingId));
     logger.info(`Muse Code engine starting: ${bin} ${describeMusecodeLaunch(opts)} (resume: ${opts.resumeSessionId || "none"})`);
-    const proc = new MspProcess({ bin, args: buildMuseServeArgs(opts), cwd: opts.cwd, env });
+    return this.attachHost(new MspProcess({ bin, args: buildMuseServeArgs(opts), cwd: opts.cwd, env }), live);
+  }
+
+  /** Make `proc` the turn's host: what it says reaches the turn, and what it asks is answered. */
+  private attachHost(proc: MspProcess, live: LiveTurn): MspProcess {
     live.proc = proc;
     proc.client.onNotification((method, params) => live.turn?.read(method, params));
     proc.client.onServerRequest((method, params) => answerMuseServerRequest(proc.client, method, params));
@@ -233,10 +375,12 @@ export class MusecodeEngine implements InterruptibleEngine {
   }
 
   /** `turn/start`. Returns a result only when the turn could not be started. */
-  private async startTurn(client: MspClient, turn: MuseTurn, opts: EngineRunOpts, live: LiveTurn): Promise<EngineResult | undefined> {
+  private async startTurn(
+    client: MspClient, turn: MuseTurn, opts: EngineRunOpts, live: LiveTurn, attachmentPaths: MuseHost["attachmentPaths"],
+  ): Promise<EngineResult | undefined> {
     const sessionId = live.sessionId!;
     const { images, remaining } = loadMuseAttachments(opts.attachments);
-    const text = buildMusecodePrompt({ ...opts, attachments: remaining });
+    const text = buildMusecodePrompt({ ...opts, attachments: attachmentPaths(remaining) });
     const effort = museTurnEffort(opts, this.options.effortLevels?.());
     try {
       const ack = await client.request("turn/start", {

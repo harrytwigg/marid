@@ -81,6 +81,7 @@ Usage: `cost` is 0 (Freebuff bills hours) and `contextTokens` is the figure on t
 An employee with `remoteHost` and `remoteCwd` runs Freebuff over `ssh -tt`, on the same remote targets, `remote.root` rule and `pathPrepend` handling as the other remote engines. What differs:
 
 - Nothing of the gateway's is needed on the host: no mount, no staged home, no reverse tunnel, no hooks. The host needs `freebuff` on the non-interactive `PATH` (the nvm default Node is found), a signed-in Freebuff, and the same `jinn-cli` version as the gateway (the chat file is read through the host's own file-read policy, `remote-file-read`).
+- A turn on a host known to lack `freebuff` is refused at turn preflight, naming the host and the binary, before anything is spawned; a host not probed yet is left for the spawn to report.
 - The chat file is read over ssh, and new chats are found by listing the host's `~/.config/manicode/projects`.
 - The first message of a remote chat says where it really runs, because the context built for every employee names the gateway's home as the working directory and a model will believe it.
 

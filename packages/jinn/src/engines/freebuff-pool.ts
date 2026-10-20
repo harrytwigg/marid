@@ -111,6 +111,8 @@ export class FreebuffProcessPool implements PtyViewEngine {
     if (this.live.get(id) === live) this.live.delete(id);
     live.terminal.dispose();
     live.handle.kill("SIGKILL");
+    // It was wired to the stream manager when it started, so a dashboard viewer of it is told it is gone.
+    this.streams.onPtyExit(id, { exitCode: 0, signal: 9 });
   }
 
   /** Stop the session's process but keep its slot, for a turn that starts again at once. */

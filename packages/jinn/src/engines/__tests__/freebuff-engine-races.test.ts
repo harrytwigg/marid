@@ -55,6 +55,36 @@ describe.skipIf(process.platform === "win32")("FreebuffInteractiveEngine around 
     expect(chatMessages(result.sessionId).filter((m) => m.variant === "user")).toHaveLength(1);
   }, 40_000);
 
+  it("names the chat of a first turn that was interrupted, so the next turn resumes it rather than opening another", async () => {
+    process.env.FAKE_BUSY_MS = "20000";
+    const e = engine();
+    const running = turn(e, "stop-first", "slow work");
+    await vi.waitFor(() => expect(starts().length).toBe(1), { timeout: 10_000 });
+    await new Promise((r) => setTimeout(r, 2500));
+    e.kill("stop-first", "stop it");
+    const stopped = await running;
+    expect(stopped.error).toMatch(/^Interrupted/);
+    expect(stopped.sessionId).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+
+    process.env.FAKE_BUSY_MS = "300";
+    const next = await turn(e, "stop-first", "carry on", { resumeSessionId: stopped.sessionId, systemPrompt: "System context." });
+    expect(next.error).toBeUndefined();
+    expect(next.sessionId).toBe(stopped.sessionId);
+    expect(starts().filter((l) => l.includes(`continue=${stopped.sessionId}`))).toHaveLength(1);
+  }, 60_000);
+
+  it("stops a terminal whose slot was taken after it started, and tells the viewer watching it that it is gone", async () => {
+    const e = engine();
+    // The slot is still ours when the start begins and gone when it ends (over ssh the start takes seconds).
+    const slots = (e as unknown as { slots: { holds: (id: string) => boolean } }).slots;
+    vi.spyOn(slots, "holds").mockReturnValueOnce(true).mockReturnValue(false);
+    const events: string[] = [];
+    e.ensureIdleSpawn("viewed", { cwd: h.state.work, bin: FAKE, cols: 120, rows: 40 });
+    e.subscribeWithSnapshot("viewed", () => undefined, (event) => events.push(event.type)).start();
+    await vi.waitFor(() => expect(events).toContain("exited"), { timeout: 10_000 });
+    expect(e.hasWarmPty("viewed")).toBe(false);
+  }, 30_000);
+
   it("never has a terminal and a turn's process alive at once at maxConcurrent 1, whichever started first", async () => {
     // A slow chat listing keeps the terminal's start in flight while the turn takes over its slot.
     const slow = localChatSource();

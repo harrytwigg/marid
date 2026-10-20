@@ -722,7 +722,12 @@ export async function startGateway(
   const codexEngine = new CodexEngine();
   const grokEngine = new GrokEngine();
   const hermesEngine = new HermesAcpEngine();
-  const { work: musecodeEngine, pty: musecodeInteractiveEngine } = createMusecodeEnginePair({ getConfig: () => currentConfig, createLifecycle: createPtyLifecycle, refreshPids: refreshPtyPids, engineOptions: musecodeEngineOptions });
+  const { work: musecodeEngine, pty: musecodeInteractiveEngine } = createMusecodeEnginePair({ getConfig: () => currentConfig, createLifecycle: createPtyLifecycle, refreshPids: refreshPtyPids, engineOptions: {
+    ...musecodeEngineOptions,
+    // Muse is the fourth engine that can relocate a turn over SSH: the same two live readers.
+    remote: () => currentConfig.remote,
+    gatewayPort: () => port,
+  } });
   const engines = new Map<string, Engine>();
   // Claude WORK TURNS (chat, employees, cron, child sessions) run on the
   // interactive PTY engine → cc_entrypoint=cli, covered by the Max subscription
@@ -1307,13 +1312,13 @@ export async function startGateway(
     freebuffEngine.killAll();
     void opencodeServers.stopAll();
 
-    // A pi or opencode turn on a remote host is killed over a control
+    // A pi, opencode or Muse Code turn on a remote host is killed over a control
     // connection, not by the local signal. Give those a moment to land before
     // the rest of shutdown — bounded well inside the 5s force-exit, and the
     // connections are spawned to outlive this process, so running out of time
     // here only stops the wait, not the kill.
     await Promise.race([
-      Promise.all([piEngine.pendingRemoteKills(), opencodeEngine.pendingRemoteKills(), opencodeServers.pendingRemoteKills()]),
+      Promise.all([piEngine.pendingRemoteKills(), opencodeEngine.pendingRemoteKills(), opencodeServers.pendingRemoteKills(), musecodeEngine.pendingRemoteKills()]),
       new Promise((resolve) => setTimeout(resolve, 2500).unref()),
     ]);
 

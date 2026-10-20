@@ -97,8 +97,11 @@ export class FreebuffInteractiveEngine extends FreebuffProcessPool implements In
   private async stoppedResult(stop: Stop, id: string, turn: ActiveTurn, chatId: string): Promise<EngineResult> {
     if (stop.kind === "interrupt") {
       // A turn cut short leaves the process mid-answer; the next turn re-joins the chat in a fresh one.
+      // The chat is named if the message got far enough to be written down, so that turn can resume it
+      // rather than open a second one (and send the system prompt again).
+      const named = (await this.chatAfterCrash(turn))?.chatId ?? chatId;
       this.lifecycle.releaseSession(id);
-      return { sessionId: chatId, result: "", error: stop.reason, conversationIntact: true };
+      return { sessionId: named, result: "", error: stop.reason, conversationIntact: true };
     }
     // Before the TUI ever showed itself the process never ran this turn: a failed start, with what it printed.
     if (!turn.live?.booted) return { sessionId: chatId, result: "", error: processStartFailure("freebuff", stop.exit, stop.output) };
