@@ -157,6 +157,11 @@ export function assignedTodo(title: string, assignee = "first-worker") {
   return workItems.createWorkItem({ title, source: "human", status: "backlog", assignee, department: "platform" });
 }
 
+/** A backlog Todo with no assignee: the Dispatcher chooses who takes it. */
+export function unassignedTodo(title: string) {
+  return workItems.createWorkItem({ title, source: "human", status: "backlog", department: "platform" });
+}
+
 /** The operator presses Dispatch. */
 export function dispatch(workItemId: string) {
   return call("POST", `/api/work-items/${workItemId}/dispatch`, {});

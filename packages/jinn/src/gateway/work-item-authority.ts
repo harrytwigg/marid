@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { BOARD_WALK_STARTED_BY } from "../board-walk/started-sessions.js";
 import { isOrgAncestor, resolveOrgHierarchy } from "./org-hierarchy.js";
 import { orgRegistry } from "./org-registry.js";
 import type { WorkItemCaller } from "./work-item-arming.js";
@@ -11,6 +12,7 @@ import { getWorkItemClaim } from "../work-items/claims.js";
 import type { WorkItem } from "../work-items/store.js";
 import { isExecutionAttempt } from "../work-items/link-role.js";
 import { neverReachedEngine } from "../sessions/engine-reach.js";
+import { OPERATOR_ASSIGNEE } from "../work-items/operator-assignee.js";
 
 /**
  * Who may act on a Todo when the caller is not the operator.
@@ -149,6 +151,42 @@ function dispatcherRefusal(callerId: string, session: Session, item: WorkItem, a
 }
 
 /**
+ * The assignee binding on a hand-pressed Dispatch (MAR-163).
+ *
+ * The operator assigning an employee and pressing Dispatch is a routing
+ * choice: the Dispatcher it starts hands the Todo to exactly that assignee,
+ * never to someone else it prefers. The gateway refuses the override outright,
+ * so a re-route cannot slip through when the prompt text is misread. A refused
+ * bound hand-off is the dead end the persona already sends to blocked, with
+ * the refusal and options — never a second choice.
+ *
+ * Two starts are not bound. An unset assignee, or @operator (a person nobody
+ * can delegate to), leaves nobody to be bound to, so the Dispatcher chooses.
+ * And a Dispatcher the board walk started carries the walk's own routing brief
+ * (a reason and an engine preference) in its prompt; its routing stays its own
+ * decision, marked by the transportMeta the walk stamps on its session.
+ */
+function dispatcherAssigneeBinding(
+  session: Session,
+  item: WorkItem,
+  delegate: string | undefined,
+): { ok: false; status: 403; error: string } | undefined {
+  if (!delegate || delegate === item.assignee) return undefined;
+  if (!isDispatcherRoutingTodo(session, item)) return undefined;
+  if (session.transportMeta?.startedBy === BOARD_WALK_STARTED_BY) return undefined;
+  const assignee = item.assignee;
+  if (!assignee || assignee === OPERATOR_ASSIGNEE) return undefined;
+  return {
+    ok: false,
+    status: 403,
+    error: `this Dispatcher was started by the operator's Dispatch on Todo ${item.id}, whose assignee is employee "${assignee}": `
+      + `that assignment is binding, so it cannot hand the Todo to "${delegate}" — `
+      + `hand it to its assignee with delegate_task { task, employee: "${assignee}", workItemId: "${item.id}" }. `
+      + `If that delegation is refused, block the Todo for the operator with the refusal and options rather than choosing someone else.`,
+  };
+}
+
+/**
  * Who may delegate an existing Todo from a session.
  *
  * The owner/manager/root rule, plus two callers it cannot see. The session that
@@ -158,7 +196,9 @@ function dispatcherRefusal(callerId: string, session: Session, item: WorkItem, a
  * owner rule would refuse the one call it exists to make. That standing is
  * bound to the Todo the Dispatcher was started for, and lasts only until it
  * hands that Todo on: another Todo, a second hand-off, or any other action goes
- * through the ordinary rule.
+ * through the ordinary rule. On a hand-pressed Dispatch the standing carries
+ * the assignee binding above: the Dispatcher hands the Todo to its assignee
+ * and to nobody else.
  *
  * A hand-off that never started is not spent either: a caller whose own
  * delegate on this Todo was refused before its engine ever ran may hand the
@@ -171,7 +211,11 @@ function dispatcherRefusal(callerId: string, session: Session, item: WorkItem, a
 export function authorizeWorkItemDelegation(
   caller: Extract<WorkItemCaller, { kind: 'session' }>,
   item: WorkItem,
+  /** The employee the delegation would hand the Todo to, when one is named. */
+  delegateEmployee?: string,
 ): { ok: true } | { ok: false; status: 403; error: string } {
+  const binding = dispatcherAssigneeBinding(caller.session, item, delegateEmployee);
+  if (binding) return binding;
   const created = item.sourceRef?.startsWith(`session:${caller.callerId}:`)
     || item.sourceRef?.startsWith(`delegate:${caller.callerId}:`);
   if (created || isDispatcherRoutingTodo(caller.session, item)) return { ok: true };
