@@ -43,6 +43,50 @@ describe("the Todo payloads", () => {
   });
 });
 
+describe("the tree routes", () => {
+  it("carry the addressee on every node, from the node's parent in the tree", async () => {
+    const { parent, child } = treeInReview(workItems, "Tree");
+    const grandchild = workItems.createWorkItem({ title: "Tree grandchild", status: "in_review", parentId: child.id });
+    const operatorTree = treeInReview(workItems, "Tree operator", { parentOwner: "@operator" });
+
+    const tree = (await call("GET", `/api/work-items/${parent.id}/tree`)).body.tree;
+    expect(tree.root.reviewAddressee).toEqual({ kind: "operator" });
+    expect(tree.root.children[0].reviewAddressee).toEqual({ kind: "employee", employee: "owner-dev" });
+    // The grandchild's parent is the child, which is assigned to child-dev, an employee in the org.
+    expect(tree.root.children[0].children[0]).toMatchObject({ id: grandchild.id, reviewAddressee: { kind: "employee", employee: "child-dev" } });
+
+    const batch = (await call("GET", `/api/work-items/trees?ids=${parent.id},${operatorTree.parent.id}`)).body.trees;
+    expect(batch[parent.id].root.children[0].reviewAddressee).toEqual({ kind: "employee", employee: "owner-dev" });
+    expect(batch[operatorTree.parent.id].root.children[0].reviewAddressee).toEqual({ kind: "operator" });
+  });
+});
+
+describe("the operator's attention feed", () => {
+  it("leaves out an employee-addressed review, and the stalled parent is in it", async () => {
+    const { transition } = await import("../../work-items/transitions.js");
+    const parent = workItems.createWorkItem({ title: "Stalled parent", status: "backlog", assignee: "owner-dev" });
+    transition(parent.id, "executing", "operator", { human: true, manual: true });
+    const child = workItems.createWorkItem({ title: "Waiting child", status: "executing", parentId: parent.id, assignee: "child-dev" });
+    transition(child.id, "in_review", "operator", { detail: { note: "ready" } });
+    const operatorChild = treeInReview(workItems, "Feed operator", { parentOwner: "@operator" }).child;
+    const feed = async () =>
+      (await call("GET", "/api/work-items?needsAttentionFor=me&limit=200")).body.workItems.map((row: { id: string }) => row.id);
+
+    // The parent owner was woken and has not acted: the review is the owner's, not an inbox row.
+    sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ unavailable: "test" }) as never });
+    expect(getWorkItemRecovery(child.id)).toMatchObject({ lane: "manager" });
+    expect(await feed()).not.toContain(child.id);
+
+    // Four hours on with no producer running, the parent itself is flagged and surfaces.
+    sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ unavailable: "test" }) as never, now: () => new Date(Date.now() + 5 * 60 * 60_000) });
+    expect(getWorkItemRecovery(parent.id)).toMatchObject({ lane: "manager" });
+    const surfaced = await feed();
+    expect(surfaced).toContain(parent.id);
+    expect(surfaced).not.toContain(child.id);
+    expect(operatorChild.status).toBe("in_review");
+  });
+});
+
 describe("the attention lane", () => {
   it("is manager for an employee-addressed review, and unchanged for every other Todo", async () => {
     const { child, parent } = treeInReview(workItems, "Lane");

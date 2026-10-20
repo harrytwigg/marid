@@ -46,14 +46,14 @@ export const EXECUTING_UNHANDED_REASON = "executing with nothing running for ove
 
 /** The reason recovery gives an employee-addressed review. A prefix test keys
  *  on it, so a row left behind by a later reassignment can be told apart. */
-const ADDRESSEE_REASON_PREFIX = "in review for ";
+export const REVIEW_ADDRESSEE_REASON_PREFIX = "in review for ";
 
 export function reviewAddresseeReason(employee: string): string {
-  return `${ADDRESSEE_REASON_PREFIX}${employee}, the owner of its parent Todo, to accept or send back`;
+  return `${REVIEW_ADDRESSEE_REASON_PREFIX}${employee}, the owner of its parent Todo, to accept or send back`;
 }
 
 export function isReviewAddresseeReason(reason: string | undefined): boolean {
-  return reason?.startsWith(ADDRESSEE_REASON_PREFIX) === true;
+  return reason?.startsWith(REVIEW_ADDRESSEE_REASON_PREFIX) === true;
 }
 
 /** Generic fallback: classifyRecovery found no specific incident. */

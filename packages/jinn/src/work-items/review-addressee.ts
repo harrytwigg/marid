@@ -15,7 +15,11 @@ const OPERATOR: ReviewAddressee = { kind: "operator" };
  * operator from then on.
  */
 export function reviewAddressee(item: Pick<WorkItem, "parentId">): ReviewAddressee {
-  const parent = item.parentId ? getWorkItem(item.parentId) : undefined;
+  return addresseeOfParent(item.parentId ? getWorkItem(item.parentId) : undefined);
+}
+
+/** The same rule from the parent row itself, for callers that already hold it (a tree walk). */
+export function addresseeOfParent(parent: Pick<WorkItem, "assignee" | "status"> | undefined): ReviewAddressee {
   if (!parent?.assignee || STICKY_STATUSES.has(parent.status)) return OPERATOR;
   return orgRegistry().has(parent.assignee) ? { kind: "employee", employee: parent.assignee } : OPERATOR;
 }

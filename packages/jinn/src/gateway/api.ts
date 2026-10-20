@@ -237,7 +237,7 @@ import { isToolCallMarker, readHookSessionId, wireHeader } from "../shared/wire-
 import { readWriteOrigin, writeDetail, WRITE_ORIGIN_HEADER } from "../work-items/origin.js";
 import { workItemActor, workItemActorEmployee, type WorkItemCaller } from "./work-item-arming.js";
 import { authorizeWorkItemDelegation, authorizeWorkItemOwnerManagerOrRoot } from "./work-item-authority.js";
-import { fullWorkItemPayload, openWorkItemPayload, workItemPagePayload } from "./work-item-payload.js";
+import { fullWorkItemPayload, openWorkItemPayload, workItemPagePayload, workItemTreePayload, workItemTreesPayload } from "./work-item-payload.js";
 import { TodoDepartmentNotAllowedError } from "../shared/todo-departments-config.js";
 import { DepartmentArchivedError, isDepartmentArchived } from "../work-items/department-archive.js";
 import { DepartmentBoundaryError, scopedDepartmentOf } from "../work-items/department-scope.js";
@@ -2384,7 +2384,7 @@ export async function handleApiRequest(
       if (ids.some((id) => !isTodoId(id))) {
         return badRequest(res, "ids must be a comma-separated list of Todo IDs in <AAA>-N format");
       }
-      return json(res, { trees: getWorkItemTrees(ids) });
+      return json(res, { trees: workItemTreesPayload(getWorkItemTrees(ids)) });
     }
 
     // GET /api/work-items/:id — full Todo detail.
@@ -2824,7 +2824,7 @@ export async function handleApiRequest(
       if (!requireTodoRouteId(res, params.id)) return;
       const tree = getWorkItemTree(params.id);
       if (!tree) return notFound(res);
-      return json(res, { tree });
+      return json(res, { tree: workItemTreePayload(tree) });
     }
 
     // GET /api/work-items/:id/comments — chronological thread page (any caller).

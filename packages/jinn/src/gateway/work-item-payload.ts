@@ -1,4 +1,4 @@
-import { getWorkItemSpend, listWorkItemEvents, type queryWorkItems, type WorkItem } from "../work-items/store.js";
+import { getWorkItemSpend, listWorkItemEvents, type queryWorkItems, type WorkItem, type WorkItemTree, type WorkItemTreeNode } from "../work-items/store.js";
 import { commentsTail } from "../work-items/comments.js";
 import { blockedSet, isBlocked, listRelations } from "../work-items/relations.js";
 import { getWorkItemLabels, labelSets, type Label } from "../work-items/labels.js";
@@ -9,7 +9,7 @@ import { readStopCause, type TodoStopCause } from "../work-items/stop-cause.js";
 import { isWorkItemKept, keptSet } from "../work-items/kept.js";
 import { getWorkItemRecovery, recoveryByItem } from "../work-items/recovery-rows.js";
 import { isRecoverySweptStatus, isReviewAddresseeReason } from "../work-items/recovery.js";
-import { reviewAddressee } from "../work-items/review-addressee.js";
+import { addresseeOfParent, reviewAddressee, type ReviewAddressee } from "../work-items/review-addressee.js";
 import { initDb } from "../shared/db.js";
 
 /** The wire projections of a Todo the API routes return: one compact shape for
@@ -162,4 +162,25 @@ export function openWorkItemPayload(item: WorkItem, events = listWorkItemEvents(
     events,
     reviewAddressee: reviewAddressee(item),
   };
+}
+
+/** A tree node as the tree routes return it: the store row, its children and
+ *  who its review is addressed to, read from the node's parent in the tree. */
+export type WorkItemTreeNodePayload = Omit<WorkItemTreeNode, "children"> & { reviewAddressee: ReviewAddressee; children: WorkItemTreeNodePayload[] };
+
+function treeNodePayload(node: WorkItemTreeNode, parent?: WorkItemTreeNode): WorkItemTreeNodePayload {
+  return {
+    ...node,
+    reviewAddressee: parent ? addresseeOfParent(parent) : reviewAddressee(node),
+    children: node.children.map((child) => treeNodePayload(child, node)),
+  };
+}
+
+/** A subtree with `reviewAddressee` on every node, additive to the store shape. */
+export function workItemTreePayload(tree: WorkItemTree): Omit<WorkItemTree, "root"> & { root: WorkItemTreeNodePayload } {
+  return { ...tree, root: treeNodePayload(tree.root) };
+}
+
+export function workItemTreesPayload(trees: Record<string, WorkItemTree>): Record<string, ReturnType<typeof workItemTreePayload>> {
+  return Object.fromEntries(Object.entries(trees).map(([id, tree]) => [id, workItemTreePayload(tree)]));
 }
