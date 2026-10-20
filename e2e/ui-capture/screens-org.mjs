@@ -15,6 +15,26 @@ export const ORG_SCREENS = [
     },
   },
   {
+    // The map zoomed in on a phone, where a node's name has to stay readable beside its badges: the
+    // seeded org has long, near-identical names and an opencode report. Fit-to-view is too small to see.
+    name: 'org-map-zoomed',
+    title: 'Org map, zoomed',
+    url: () => '/org',
+    ready: READY,
+    viewports: ['narrow'],
+    prepare: async (page) => {
+      const node = page.locator('.react-flow__node', { hasText: 'Principal Developer' }).first()
+      await node.waitFor({ timeout: 10_000 })
+      await page.waitForTimeout(900)
+      const box = await node.boundingBox()
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+      await page.keyboard.down('Control')
+      await page.mouse.wheel(0, -900)
+      await page.keyboard.up('Control')
+      await page.waitForTimeout(900)
+    },
+  },
+  {
     // A selected employee: the detail panel beside the map (over it on a phone).
     name: 'org-employee',
     title: 'Org employee panel',

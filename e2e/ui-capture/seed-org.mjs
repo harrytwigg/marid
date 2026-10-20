@@ -11,12 +11,19 @@ const DEPARTMENTS = [
   { slug: 'side-project', name: 'Side project', description: 'A small standalone effort.', scope: 'scoped' },
 ]
 
-// [department, name, display name, rank, reports to, model]
+// [department, name, display name, rank, reports to, model, engine, claude config dir]. Engine
+// defaults to claude; the long, near-identical display names are what the map's narrow cards must
+// still tell apart.
 const EMPLOYEES = [
   ['engineering', 'eng-lead', 'Engineering Lead', 'manager', null, 'opus'],
   ['engineering', 'eng-platform', 'Platform Developer', 'senior', 'eng-lead', 'sonnet'],
   ['engineering', 'eng-web', 'Web Developer', 'employee', 'eng-lead', 'sonnet'],
   ['engineering', 'eng-qa', 'Quality Reviewer', 'employee', 'eng-lead', 'haiku'],
+  ['engineering', 'eng-principal', 'Principal Developer', 'senior', 'eng-lead', 'opus', 'claude', '/home/sandbox/.claude-friend'],
+  ['engineering', 'eng-principal-qa', 'Principal Developer QA', 'senior', 'eng-lead', 'opus', 'claude', '/home/sandbox/.claude-friend'],
+  ['engineering', 'eng-senior', 'Senior Developer Reviewer', 'employee', 'eng-principal', 'sonnet', 'claude'],
+  ['engineering', 'eng-junior', 'Junior Developer', 'employee', 'eng-principal', 'deepseek-v4.1-flash', 'opencode'],
+  ['engineering', 'eng-junior-qa', 'Junior Developer QA', 'employee', 'eng-principal', 'deepseek-v4.1-flash', 'opencode'],
   ['design', 'design-lead', 'Design Lead', 'manager', null, 'opus'],
   ['design', 'design-visual', 'Visual Designer', 'employee', 'design-lead', 'sonnet'],
   ['design', 'design-writer', 'Content Writer', 'employee', 'design-lead', 'sonnet'],
@@ -43,10 +50,10 @@ export function writeOrg(sandboxHome) {
       `name: ${d.slug}`, `displayName: ${d.name}`, `description: ${d.description}`, ...(d.scope ? [`scope: ${d.scope}`] : []),
     ])
   }
-  for (const [department, name, displayName, rank, reportsTo, model] of EMPLOYEES) {
+  for (const [department, name, displayName, rank, reportsTo, model, engine = 'claude', configDir] of EMPLOYEES) {
     write(path.join(org, department, `${name}.yaml`), [
       `name: ${name}`, `displayName: ${displayName}`, `department: ${department}`, `rank: ${rank}`,
-      'engine: claude', `model: ${model}`, ...(reportsTo ? [`reportsTo: ${reportsTo}`] : []),
+      `engine: ${engine}`, `model: ${model}`, ...(configDir ? [`claudeConfigDir: ${configDir}`] : []), ...(reportsTo ? [`reportsTo: ${reportsTo}`] : []),
       'persona: |', ...PERSONA.map((line) => `  ${line}`),
     ])
   }

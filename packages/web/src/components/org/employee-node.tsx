@@ -17,12 +17,13 @@ function roleLabel(emp: EmployeeNodeData): string {
 export function EmployeeNode({ data, selected }: NodeProps) {
   const employee = data as EmployeeNodeData
   const isExec = employee.rank === "executive"
+  const label = employee.displayName || employee.name
 
   // Glass tint, no blur: a map holds many nodes, and blur costs per node. The inline shadow below
   // wins over the class's, so the class supplies the tinted background only.
   return (
     <div
-      className="group hover-lift relative w-[200px] h-[64px] flex items-center gap-[var(--space-2)] px-[var(--space-3)] rounded-[var(--radius-md)] glass-tint cursor-pointer overflow-hidden"
+      className="group hover-lift relative w-[220px] h-[88px] flex items-center gap-[var(--space-2)] px-[var(--space-3)] rounded-[var(--radius-md)] glass-tint cursor-pointer overflow-hidden"
       style={{
         border: `1px solid ${selected ? "var(--accent)" : isExec ? "color-mix(in srgb, var(--accent) 45%, var(--separator))" : "var(--separator)"}`,
         boxShadow: selected
@@ -42,30 +43,33 @@ export function EmployeeNode({ data, selected }: NodeProps) {
 
       <EmployeeAvatar name={employee.name} size={isExec ? 28 : 22} />
 
-      <div className="flex-1 min-w-0">
+      {/* The name gets the whole row (wrapping to a second line) so cards stay tellable apart at any
+          zoom; the role and the badges share the line below it instead of competing with the name. */}
+      <div className="flex-1 min-w-0 flex flex-col gap-[2px]">
         <div
-          className={`${isExec ? "text-[length:var(--text-body)] font-[var(--weight-bold)] tracking-[var(--tracking-tight)]" : "text-[length:var(--text-subheadline)] font-[var(--weight-semibold)]"} text-[var(--text-primary)] whitespace-nowrap overflow-hidden text-ellipsis leading-[var(--leading-tight)]`}
+          data-testid="employee-node-name"
+          title={label}
+          className={`${isExec ? "text-[length:var(--text-body)] font-[var(--weight-bold)] tracking-[var(--tracking-tight)]" : "text-[length:var(--text-subheadline)] font-[var(--weight-semibold)]"} text-[var(--text-primary)] line-clamp-2 break-words leading-[var(--leading-tight)]`}
         >
-          {employee.displayName || employee.name}
+          {label}
         </div>
-        <div className="text-[length:var(--text-caption1)] text-[var(--text-tertiary)] whitespace-nowrap overflow-hidden text-ellipsis">
-          {roleLabel(employee)}
+        <div className="flex items-center gap-[var(--space-1)] min-w-0">
+          <span className="shrink-0 text-[length:var(--text-caption1)] text-[var(--text-tertiary)] whitespace-nowrap">
+            {roleLabel(employee)}
+          </span>
+          {/* Engine always; model revealed on hover/selected to keep nodes quiet */}
+          <span className="shrink-0 whitespace-nowrap text-[length:var(--text-caption2)] font-[var(--weight-semibold)] text-[var(--accent)] bg-[var(--accent-fill)] py-px px-[7px] rounded-[10px]">
+            {engineDisplayName(employee.engine)}
+          </span>
+          {employee.model && (
+            <span
+              className={`min-w-0 truncate text-[length:var(--text-caption2)] text-[var(--text-tertiary)] bg-[var(--fill-quaternary)] py-px px-[7px] rounded-[10px] transition-opacity duration-150 ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+            >
+              {employee.model}
+            </span>
+          )}
         </div>
         <ClaudeProfileBadge profile={employee.claudeProfile} />
-      </div>
-
-      {/* Engine always; model revealed on hover/selected to keep nodes quiet */}
-      <div className="flex flex-col items-end gap-[2px] shrink-0">
-        <span className="text-[length:var(--text-caption2)] font-[var(--weight-semibold)] text-[var(--accent)] bg-[var(--accent-fill)] py-px px-[7px] rounded-[10px]">
-          {engineDisplayName(employee.engine)}
-        </span>
-        {employee.model && (
-          <span
-            className={`text-[length:var(--text-caption2)] text-[var(--text-tertiary)] bg-[var(--fill-quaternary)] py-px px-[7px] rounded-[10px] transition-opacity duration-150 ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
-          >
-            {employee.model}
-          </span>
-        )}
       </div>
 
       <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
