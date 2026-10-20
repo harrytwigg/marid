@@ -207,21 +207,26 @@ check. Part D notices within minutes.
    moment the Todo last entered `executing`; any status move starts a new one):
    1. **Nudge the producer**: one outbox delivery (`deliveryKind: "todo-quiet-nudge"`,
       `sourceKind: "work-item"`, `sourceId: <todo>`, `sourceAttempt:
-      "quiet-nudge:<stint>"`) to the newest messageable execution session, saying the Todo
-      is still `executing` with nothing running, that a background command it waited on
-      has finished or was lost and will not wake it, and what to do: check the result and
+      "quiet-nudge:<stint>"`) to the assignee's newest messageable execution session
+      (only the assignee's: a Todo reassigned while executing keeps its previous holder's
+      session linked, and a Dispatcher is linked to execute too), saying the Todo is still
+      `executing` with nothing running, that a background command it waited on has
+      finished or was lost and will not wake it, and what to do: check the result and
       continue, `blocked` with a note if it waits on a person, `in_review` if it is done.
-      If no execution session can be messaged, skip straight to step 2.
+      If none of the assignee's sessions can be messaged, skip straight to step 2.
    2. **Escalate**: when the Todo is quiet again after the nudge (its own window measured
       from the nudge or the turn that answered it, whichever is later), one delivery
       (`deliveryKind: "todo-quiet-escalation"`, `sourceAttempt:
       "quiet-escalation:<stint>"`) to whoever owns the work from above: the parent
       owner session (Part A's resolution) for a child Todo, else the session the
-      producer reports to. If the Todo has a parent in `executing` and no owner session
-      can be messaged, the parent is re-dispatched with the escalation as the reason. The
-      message names the Todo, its producer session, when it went quiet and that a nudge
-      did not move it, and offers: read the session, nudge it, re-dispatch the child, or
-      take it back.
+      producer reports to unless that is a system employee (the Dispatcher that started
+      board-walk work can only nudge again), else a system comment on the Todo. If the
+      Todo has a parent in `executing` and no owner session can be messaged, the parent
+      is re-dispatched with the escalation as the reason. The message names the Todo,
+      its producer session and how long nothing has run, and offers only what works:
+      read the session, then message it, or take the work back or reassign it. A
+      re-dispatch of the child is offered only when none of its assignee's sessions can
+      be messaged, because a dispatch is refused while that session is idle.
 3. **State**: an additive table, one row per Todo, reset when the stint changes:
 
    ```sql
