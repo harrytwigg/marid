@@ -137,6 +137,28 @@ describe("choiceSatisfied", () => {
   });
 });
 
+describe("a picker that draws its hint before its rows", () => {
+  it("waits for the rows instead of failing on the empty first frame", async () => {
+    const hintOnly = [" 53m left     ✕ End session", " ↑↓ choose model · Tab reasoning · Enter select · Esc cancel", "", " OPTIMIZED · Strongest price-to-performance models"];
+    const picker = new SimPicker(rows());
+    let frames = 0;
+    const io: PickerIO = {
+      screen: async () => hintOnly,
+      press: (key) => picker.press(key),
+      nextScreen: async (previous) => (frames++ < 2 ? previous : picker.screen()),
+    };
+    await chooseInPicker(io, { model: "GLM 5.3" });
+    expect(picker.cursor).toBe(4);
+    expect(picker.keys.at(-1)).toBe("enter");
+  });
+
+  it("still fails when the rows never come", async () => {
+    const hintOnly = [" ↑↓ choose model · Tab reasoning · Enter select · Esc cancel"];
+    const io: PickerIO = { screen: async () => hintOnly, press: async () => undefined, nextScreen: async (previous) => previous };
+    await expect(chooseInPicker(io, { model: "GLM" })).rejects.toThrow("not showing a selected row");
+  });
+});
+
 describe("chooseInPicker against recorded screens", () => {
   it("moves from the first row to MiMo v2.6 Flash Slow on the recorded picker", async () => {
     // picker.txt is the picker as first opened (cursor on row 0); picker-tab.txt

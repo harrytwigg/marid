@@ -92,6 +92,23 @@ async function step(walk: Walk, key: PickerKey): Promise<FreebuffPickerRow[]> {
   return rows;
 }
 
+/** How many times a picker that has drawn its hint but no rows yet is given a moment to draw them. */
+const DRAW_RETRIES = 5;
+
+/**
+ * The rows on screen with a cursor among them. The hint line appears a beat before
+ * the rows do, so a read right after the picker opens can find none: wait for the
+ * redraw rather than call that a failure.
+ */
+async function rowsWithCursor(walk: Walk): Promise<{ rows: FreebuffPickerRow[]; at: number }> {
+  for (let tries = 0; ; tries++) {
+    const rows = parsePickerRows(walk.lines);
+    const at = selectedIndex(rows);
+    if (at >= 0 || tries >= DRAW_RETRIES) return { rows, at };
+    walk.lines = await walk.io.nextScreen(walk.lines);
+  }
+}
+
 /** Which way to press: toward the wanted row when it is in view, else the way already scanning. */
 function heading(rows: readonly FreebuffPickerRow[], at: number, model: string, scanning: PickerKey): { key: PickerKey; inView: boolean } {
   const target = rows.findIndex((r) => modelMatches(r.label, model));
@@ -107,10 +124,9 @@ function heading(rows: readonly FreebuffPickerRow[], at: number, model: string, 
 async function moveToModel(walk: Walk, model: string): Promise<void> {
   let scanning: PickerKey = "down";
   let stops = 0;
-  noteRows(walk, parsePickerRows(walk.lines));
   for (let taken = 0; taken <= MAX_STEPS; taken++) {
-    const rows = parsePickerRows(walk.lines);
-    const at = selectedIndex(rows);
+    const { rows, at } = await rowsWithCursor(walk);
+    noteRows(walk, rows);
     if (at < 0) throw new FreebuffPickerError("the model picker is not showing a selected row", [...walk.seen]);
     if (modelMatches(rows[at].label, model)) return;
     const { key, inView } = heading(rows, at, model, scanning);
@@ -127,7 +143,8 @@ async function moveToModel(walk: Walk, model: string): Promise<void> {
 async function moveToEffort(walk: Walk, wanted: string, warnings: string[]): Promise<void> {
   const offered: string[] = [];
   for (let taken = 0; ; taken++) {
-    const row = parsePickerRows(walk.lines).find((r) => r.selected);
+    const { rows, at } = await rowsWithCursor(walk);
+    const row = rows[at];
     if (!row) throw new FreebuffPickerError("the model picker lost its selected row", [...walk.seen]);
     if (row.effort === undefined) {
       // No level to choose on this model: nothing to match, and not worth failing the turn.
