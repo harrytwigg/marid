@@ -67,14 +67,14 @@ describe("the task page's status chip", () => {
   it("says who an employee-addressed review is for", () => {
     renderChip(detail("in_review", { kind: "employee", employee: "owner-dev" }))
     expect(screen.getByTestId("chip-status").textContent).toContain("In review")
-    expect(screen.getByTestId("chip-review-for").textContent).toBe("for Owner Dev")
+    expect(within(screen.getByTestId("chip-status")).getByTestId("review-for-chip").textContent).toBe("for Owner Dev")
   })
 
   it("says nothing for the operator's review, or a Todo that is not in review", () => {
     renderChip(detail("in_review", { kind: "operator" }))
-    expect(screen.queryByTestId("chip-review-for")).toBeNull()
+    expect(screen.queryByTestId("review-for-chip")).toBeNull()
     renderChip(detail("executing", { kind: "employee", employee: "owner-dev" }))
-    expect(screen.queryByTestId("chip-review-for")).toBeNull()
+    expect(screen.queryByTestId("review-for-chip")).toBeNull()
   })
 })
 

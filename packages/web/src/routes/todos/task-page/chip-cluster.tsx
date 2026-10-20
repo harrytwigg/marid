@@ -3,6 +3,7 @@ import { STATUS_LABEL, priorityLabel, reviewAddresseeEmployee } from "@/lib/todo
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { StatusCircle } from "../state-glyph"
 import { displayNameOf } from "../util"
+import { ReviewForChip } from "../review-for-chip"
 import { type RailPickers } from "./props-rail"
 import { RailPriorityBars } from "./rail-rows"
 import { RemoveButton } from "./label-chip"
@@ -70,7 +71,7 @@ export function ChipCluster({
       <Chip mobile={mobile} label="Status" testId="chip-status" onOpen={() => rowFor("status")?.onOpen()}>
         <StatusCircle status={item.status} size={16} />
         {STATUS_LABEL[item.status]}
-        {reviewFor && <span data-testid="chip-review-for" className="text-[var(--text-tertiary)]">for {displayNameOf(reviewFor, byName)}</span>}
+        {reviewFor && <ReviewForChip employee={reviewFor} byName={byName} />}
         {working && (
           <span className="flex items-center gap-1.5 text-[var(--system-blue)]" data-testid="chip-working">
             <span

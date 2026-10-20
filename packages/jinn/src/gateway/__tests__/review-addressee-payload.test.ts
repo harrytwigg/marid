@@ -125,7 +125,44 @@ describe("the attention lane", () => {
   });
 });
 
+describe("after the parent's owner sends a child back", () => {
+  it("does not read the producer's earlier failed run as a fresh failure, so the child is not sent back to Manager attention", async () => {
+    const { transition } = await import("../../work-items/transitions.js");
+    const runs = await import("../../work-items/runs.js");
+    const parent = workItems.createWorkItem({ title: "Bounce parent", status: "executing", assignee: "owner-dev" });
+    const child = workItems.createWorkItem({ title: "Bounce child", status: "executing", parentId: parent.id, assignee: "child-dev" });
+    const producer = await sessionOf("child-dev");
+    const run = runs.openWorkItemRun({ workItemId: child.id, sessionId: producer.id, startedAt: "2026-01-01T00:00:00.000Z" });
+    runs.closeWorkItemRun(run.id, { outcome: "crashed", error: "the attempt failed", endedAt: "2026-01-01T00:10:00.000Z" });
+    transition(child.id, "in_review", "operator", { detail: { note: "ready" } });
+    sweep();
+    expect(getWorkItemRecovery(child.id)).toMatchObject({ lane: "manager" });
+
+    expect((await statusPost((await sessionOf("owner-dev")).id, child.id, { status: "executing", note: "needs the migration test" })).status).toBe(200);
+    sweep();
+
+    expect(getWorkItemRecovery(child.id)?.class).not.toBe("code");
+    expect(getWorkItemRecovery(child.id)?.lane).not.toBe("manager");
+    const feed = (await call("GET", "/api/work-items?needsAttentionFor=me&limit=200")).body.workItems.map((row: { id: string }) => row.id);
+    expect(feed).not.toContain(child.id);
+  });
+});
+
 describe("the recovery classifier", () => {
+  it("rewrites the row and records the change when the review is addressed to someone else", async () => {
+    const { listWorkItemEvents } = await import("../../work-items/event-log.js");
+    const { parent, child } = treeInReview(workItems, "Reassigned reason");
+    sweep();
+    expect(getWorkItemRecovery(child.id)?.reason).toContain("owner-dev");
+
+    assignWorkItem(parent.id, "third-dev", "engineering", "operator");
+    sweep();
+
+    expect(getWorkItemRecovery(child.id)).toMatchObject({ lane: "manager", reason: expect.stringContaining("third-dev") });
+    const classified = listWorkItemEvents(child.id).filter((event) => event.kind === "recovery_classified");
+    expect(classified.at(-1)?.detail).toMatchObject({ reason: expect.stringContaining("third-dev") });
+  });
+
   it("gives an employee-addressed review lane manager with a reason naming the addressee", () => {
     const { child } = treeInReview(workItems, "Recovery");
     sweep();
