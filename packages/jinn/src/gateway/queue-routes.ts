@@ -126,7 +126,9 @@ function interruptRunningTurn(context: ApiContext, session: Session): void {
 /**
  * Force-send everything parked: cut the running turn and let the queue drain
  * in its existing order, one message per turn. Unlike the single-item verb
- * there is no rotation — the head stays the head.
+ * there is no rotation: the head stays the head. A paused queue stays paused
+ * (same as the single-item verb): the interrupt lands, and the drain starts
+ * when the queue is resumed.
  */
 function sendAllNow({ res, context, session, params }: QueueRouteArgs): void {
   const sessionKey = queueKey(session);

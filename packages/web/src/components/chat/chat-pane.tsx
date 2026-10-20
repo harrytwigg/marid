@@ -12,6 +12,7 @@ import { ChatEmployeePicker } from '@/components/chat/chat-employee-picker'
 import { ScrollingEmptyState } from '@/components/chat/chat-transcript-empty'
 import { ChatHydrationOverlay, useHydrationSpinner } from '@/components/chat/chat-hydration'
 import { SessionQueueContext, useSessionQueue } from '@/components/chat/use-session-queue'
+import { QueuedBar } from '@/components/chat/queued-bar'
 import { BackgroundActivityStatus } from '@/components/chat/background-activity-status'
 import { useSubagentView } from '@/components/chat/use-subagent-view'
 import { TerminalWaitStatus } from '@/components/chat/terminal-wait-status'
@@ -536,20 +537,7 @@ export function ChatPane({
 
       {/* Queued messages wait above the composer too: force-send them all,
           in order, without hunting for each card in the transcript. */}
-      {sessionId && sessionQueue.pendingCount > 0 ? (
-        <div className="flex shrink-0 items-center justify-between gap-[var(--space-3)] px-[var(--space-4)] py-[var(--space-2)]" data-queued-bar>
-          <span className="text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">
-            {sessionQueue.pendingCount} queued, sending after this reply in order
-          </span>
-          <button
-            type="button"
-            onClick={() => { void sessionQueue.sendAllNow().catch(() => {}) }}
-            className="h-7 shrink-0 cursor-pointer rounded-full border-none bg-[var(--accent)] px-[var(--space-3)] text-[length:var(--text-caption1)] text-[var(--accent-contrast)]"
-          >
-            Send all now
-          </button>
-        </div>
-      ) : null}
+      {sessionId ? <QueuedBar count={sessionQueue.pendingCount} onSendAllNow={sessionQueue.sendAllNow} /> : null}
 
       {/* Input — chat-style composer for every view, including CLI (the PTY engine
           accepts attachments + the prompt is injected into xterm via bracketed-paste). */}

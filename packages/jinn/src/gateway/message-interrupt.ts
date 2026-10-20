@@ -5,8 +5,8 @@ export type MessageDelivery = "queue" | "now";
 
 /**
  * The caller's explicit choice wins over the global default: `"queue"` never
- * interrupts, `"now"` always does. Anything else (including the legacy
- * `interrupt` boolean, mapped by the caller) falls back to
+ * interrupts, `"now"` always does. The legacy `interrupt` boolean maps to the
+ * same choice here; anything else falls back to
  * `sessions.interruptOnNewMessage`.
  */
 export function resolveMessageDelivery(o: {
