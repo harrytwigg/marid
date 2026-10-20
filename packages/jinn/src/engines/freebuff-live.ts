@@ -21,6 +21,10 @@ export class TurnStopped extends Error {
 
 export interface ActiveTurn {
   abort: AbortController;
+  /** The process this turn types into, held by the turn so a release that drops it from the map cannot lose it. */
+  live?: Live;
+  /** The message that went in (for finding the chat after a crash). */
+  sent?: string;
 }
 
 export interface Live {

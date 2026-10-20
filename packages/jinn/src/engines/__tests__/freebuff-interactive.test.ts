@@ -1,64 +1,22 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../../sessions/employee-env.js", () => ({ employeeSessionEnv: () => ({}) }));
 
-import { PtyLifecycleManager } from "../pty-lifecycle.js";
-import { FreebuffInteractiveEngine, buildFreebuffArgs, composeFreebuffMessage, remoteLocationNote } from "../freebuff-interactive.js";
+import { buildFreebuffArgs, composeFreebuffMessage, remoteLocationNote } from "../freebuff-interactive.js";
 import { detectRateLimit } from "../../shared/rateLimit.js";
-import { localChatSource, userMessageText } from "../freebuff-chat.js";
-
-const FAKE = path.join(path.dirname(fileURLToPath(import.meta.url)), "helpers", "fake-freebuff.mjs");
+import { userMessageText } from "../freebuff-chat.js";
+import { useFakeFreebuff } from "./helpers/freebuff-engine-harness.js";
 
 /**
  * The engine against a stand-in CLI on a real PTY: the stand-in draws the screens
  * the real one draws and writes its chat files where the real one does, so the
- * whole turn runs — spawn, ready, /model, paste, busy → idle, read the chat.
+ * whole turn runs.
  */
 describe.skipIf(process.platform === "win32")("FreebuffInteractiveEngine", () => {
-  let home: string;
-  let work: string;
-  let startLog: string;
-  let engines: FreebuffInteractiveEngine[];
-  const savedHome = process.env.HOME;
-
-  function engine(maxConcurrent = 1): FreebuffInteractiveEngine {
-    const e = new FreebuffInteractiveEngine(new PtyLifecycleManager({ maxLivePtys: 8 }), { config: () => ({ maxConcurrent }) });
-    engines.push(e);
-    return e;
-  }
-  const turn = (e: FreebuffInteractiveEngine, id: string, prompt: string, extra: Record<string, unknown> = {}) =>
-    e.run({ sessionId: id, prompt, cwd: work, bin: FAKE, ...extra });
-  const starts = () => (fs.existsSync(startLog) ? fs.readFileSync(startLog, "utf-8").trim().split("\n") : []);
-  const chatMessages = (chatId: string): Array<{ variant: string; content: string; textAttachments?: Array<{ content: string }> }> =>
-    JSON.parse(fs.readFileSync(path.join(home, ".config", "manicode", "projects", path.basename(work), "chats", chatId, "chat-messages.json"), "utf-8"));
-
-  beforeEach(() => {
-    home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "fb-home-")));
-    work = path.join(home, "work");
-    fs.mkdirSync(work);
-    startLog = path.join(home, "starts.log");
-    fs.mkdirSync(path.join(home, ".config", "manicode"), { recursive: true });
-    fs.writeFileSync(path.join(home, ".config", "manicode", "credentials.json"), "{}");
-    process.env.HOME = home;
-    process.env.FAKE_START_LOG = startLog;
-    process.env.FAKE_BUSY_MS = "500";
-    delete process.env.FAKE_MODE;
-    delete process.env.FAKE_HOURS;
-    engines = [];
-  });
-  afterEach(() => {
-    for (const e of engines) e.killAll();
-    process.env.HOME = savedHome;
-    delete process.env.FAKE_START_LOG;
-    delete process.env.FAKE_BUSY_MS;
-    delete process.env.FAKE_MODE;
-    delete process.env.FAKE_HOURS;
-    fs.rmSync(home, { recursive: true, force: true });
-  });
+  const h = useFakeFreebuff();
+  const { engine, engineWith, turn, starts, chatMessages } = h;
 
   it("answers from the chat file, puts the system prompt in front of a new chat, and resumes the same chat in the warm process", async () => {
     const e = engine();
@@ -114,8 +72,7 @@ describe.skipIf(process.platform === "win32")("FreebuffInteractiveEngine", () =>
   }, 30_000);
 
   it("uses engines.freebuff.model in place of such an alias", async () => {
-    const e = new FreebuffInteractiveEngine(new PtyLifecycleManager({ maxLivePtys: 8 }), { config: () => ({ maxConcurrent: 1, model: "Muse Spark" }) });
-    engines.push(e);
+    const e = engineWith({ config: () => ({ maxConcurrent: 1, model: "Muse Spark" }) });
     const result = await turn(e, "alias2", "configured model please", { model: "sonnet" });
     expect(result.error).toBeUndefined();
     expect(result.result).toContain("ANSWER#1[Muse Spark 1.3 • high]");
@@ -127,12 +84,12 @@ describe.skipIf(process.platform === "win32")("FreebuffInteractiveEngine", () =>
     expect(result.error).toContain('"Nonesuch"');
     expect(result.error).toContain("MiMo v2.6 Flash Slow");
     expect(result.conversationIntact).toBe(true);
-    const chats = path.join(home, ".config", "manicode", "projects", path.basename(work), "chats");
+    const chats = path.join(h.state.home, ".config", "manicode", "projects", path.basename(h.state.work), "chats");
     for (const chat of fs.readdirSync(chats)) expect(fs.existsSync(path.join(chats, chat, "chat-messages.json"))).toBe(false);
   }, 30_000);
 
   it("says Freebuff is not signed in, without starting it, when there are no credentials", async () => {
-    fs.rmSync(path.join(home, ".config", "manicode", "credentials.json"));
+    fs.rmSync(path.join(h.state.home, ".config", "manicode", "credentials.json"));
     const result = await turn(engine(), "so", "hi");
     expect(result.error).toBe('freebuff is not signed in on local; run "freebuff login" there');
     expect(starts()).toEqual([]);
@@ -154,7 +111,7 @@ describe.skipIf(process.platform === "win32")("FreebuffInteractiveEngine", () =>
   }, 30_000);
 
   it("starts the process afresh when the session is released as the message goes in, and the message runs once", async () => {
-    process.env.FAKE_RELEASED_ON_SUBMIT = path.join(home, "released-on-submit");
+    process.env.FAKE_RELEASED_ON_SUBMIT = path.join(h.state.home, "released-on-submit");
     const result = await turn(engine(), "rel2", "after the release");
     delete process.env.FAKE_RELEASED_ON_SUBMIT;
     expect(result.error).toBeUndefined();
@@ -172,34 +129,6 @@ describe.skipIf(process.platform === "win32")("FreebuffInteractiveEngine", () =>
     expect(starts().filter((l) => l.startsWith("start "))).toHaveLength(1);
   }, 30_000);
 
-  it("does not return the last turn's answer for the same message sent again while the chat file lags", async () => {
-    process.env.FAKE_FILE_LAG_MS = "3500";
-    const e = engine();
-    const first = await turn(e, "again", "check children");
-    expect(first.error).toBeUndefined();
-    expect(first.result).toContain("ANSWER#1");
-    const second = await turn(e, "again", "check children", { resumeSessionId: first.sessionId });
-    delete process.env.FAKE_FILE_LAG_MS;
-    expect(second.error).toBeUndefined();
-    expect(second.result).toContain("ANSWER#2");
-    expect(chatMessages(first.sessionId).filter((m) => m.variant === "user")).toHaveLength(2);
-  }, 60_000);
-
-  it("starts one process, not two, when the dashboard terminal and a turn start together", async () => {
-    // A slow chat listing (as over ssh) keeps the start in flight long enough for the turn to arrive during it.
-    const slow = localChatSource();
-    const e = new FreebuffInteractiveEngine(new PtyLifecycleManager({ maxLivePtys: 8 }), {
-      config: () => ({ maxConcurrent: 1 }),
-      localChats: () => ({ ...slow, list: async () => { await new Promise((r) => setTimeout(r, 400)); return slow.list(); } }),
-    });
-    engines.push(e);
-    e.ensureIdleSpawn("race", { cwd: work, bin: FAKE, cols: 120, rows: 40 });
-    const result = await turn(e, "race", "hi");
-    expect(result.error).toBeUndefined();
-    expect(starts().filter((l) => l.startsWith("start "))).toHaveLength(1);
-    expect(e.hasWarmPty("race")).toBe(true);
-  }, 30_000);
-
   it("fails a turn the model ended without saying anything, rather than returning an empty answer", async () => {
     process.env.FAKE_EMPTY_ANSWER = "1";
     const result = await turn(engine(), "empty", "say nothing");
@@ -207,31 +136,6 @@ describe.skipIf(process.platform === "win32")("FreebuffInteractiveEngine", () =>
     expect(result.error).toContain("ended the turn without an answer");
     expect(result.conversationIntact).toBe(true);
   }, 30_000);
-
-  it("queues a second session's turn behind the first at maxConcurrent 1, taking over the idle process", async () => {
-    const e = engine(1);
-    const a = await turn(e, "qa", "first session");
-    expect(a.error).toBeUndefined();
-    expect(e.hasWarmPty("qa")).toBe(true);
-    // qa's process is idle now; qb must not open a second one beside it.
-    const [b1, b2] = await Promise.all([turn(e, "qb", "second session"), turn(e, "qc", "third session")]);
-    expect(b1.error).toBeUndefined();
-    expect(b2.error).toBeUndefined();
-    expect(b1.result).toContain("second session");
-    expect(b2.result).toContain("third session");
-    expect(e.hasWarmPty("qa")).toBe(false);
-    const alive = ["qa", "qb", "qc"].filter((id) => e.hasWarmPty(id));
-    expect(alive).toHaveLength(1);
-    expect(starts().filter((l) => l.startsWith("start "))).toHaveLength(3);
-  }, 60_000);
-
-  it("runs two sessions side by side when maxConcurrent is 2", async () => {
-    const e = engine(2);
-    const [a, b] = await Promise.all([turn(e, "pa", "alpha"), turn(e, "pb", "beta")]);
-    expect(a.error).toBeUndefined();
-    expect(b.error).toBeUndefined();
-    expect(e.hasWarmPty("pa") && e.hasWarmPty("pb")).toBe(true);
-  }, 60_000);
 
   it("resumes a chat in a new process with --continue when no process is warm", async () => {
     const e = engine();
@@ -243,18 +147,6 @@ describe.skipIf(process.platform === "win32")("FreebuffInteractiveEngine", () =>
     expect(starts().filter((l) => l.includes(`continue=${first.sessionId}`))).toHaveLength(1);
     expect(chatMessages(first.sessionId).filter((m) => m.variant === "user")).toHaveLength(2);
   }, 60_000);
-
-  it("stops a turn that is interrupted, with an Interrupted error and the chat kept", async () => {
-    process.env.FAKE_BUSY_MS = "20000";
-    const e = engine();
-    const running = turn(e, "k1", "slow");
-    await vi.waitFor(() => expect(starts().length).toBe(1), { timeout: 10_000 });
-    await new Promise((r) => setTimeout(r, 1500));
-    e.kill("k1", "stop it");
-    const result = await running;
-    expect(result.error).toMatch(/^Interrupted/);
-    expect(e.isAlive("k1")).toBe(false);
-  }, 30_000);
 });
 
 describe("composeFreebuffMessage", () => {

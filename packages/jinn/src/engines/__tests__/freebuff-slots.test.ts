@@ -63,6 +63,18 @@ describe("FreebuffSlots", () => {
     expect(evicted).toEqual([]);
   });
 
+  it("lets the session that holds a slot take it again past a queue that is waiting for it", async () => {
+    const { slots } = make(1);
+    await slots.acquire("a");
+    const b = slots.acquire("b");
+    // a starts over (a process restarted under its turn): it must not queue behind b, which waits for a.
+    await slots.acquire("a");
+    expect(slots.stateOf("a")).toBe("busy");
+    expect(slots.waiting).toBe(1);
+    slots.release("a");
+    await b;
+  });
+
   it("frees the slot when the process goes away", async () => {
     const { slots } = make(1);
     await slots.acquire("a");

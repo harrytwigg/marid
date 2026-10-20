@@ -125,14 +125,25 @@ interface RawMessage {
   credits?: unknown;
 }
 
-/** The answer text of one AI message: its `text` blocks, not its reasoning or tool calls. */
+function textOf(block: RawBlock): string {
+  return typeof block.content === "string" ? block.content.trim() : "";
+}
+
+/**
+ * The answer text of one AI message. A reply is a run of reasoning, tool calls and
+ * text, and the text before a tool call is the model thinking aloud ("DONE" and then
+ * a check of the file); what it ends on is the answer. So: the text after the last
+ * tool call, and when the reply ends on a tool call, the last text there is.
+ */
 function messageText(message: RawMessage): string {
   const blocks = Array.isArray(message.blocks) ? (message.blocks as RawBlock[]) : [];
-  const parts = blocks
-    .filter((b) => b.type === "text" && b.textType !== "reasoning" && typeof b.content === "string")
-    .map((b) => (b.content as string).trim())
-    .filter(Boolean);
-  if (parts.length) return parts.join("\n\n");
+  const lastTool = blocks.map((b) => b.type).lastIndexOf("tool");
+  const texts = blocks
+    .map((b, i) => ({ i, text: b.type === "text" && b.textType !== "reasoning" ? textOf(b) : "" }))
+    .filter((t) => t.text);
+  const after = texts.filter((t) => t.i > lastTool);
+  const chosen = after.length ? after : texts.slice(-1);
+  if (chosen.length) return chosen.map((t) => t.text).join("\n\n");
   return typeof message.content === "string" ? message.content.trim() : "";
 }
 
@@ -184,6 +195,22 @@ export interface FreebuffChatSource {
   list(): Promise<FreebuffChatListing[]>;
   /** The chat's messages, or undefined when the file is not there (yet). */
   readMessages(chat: FreebuffChatRef): Promise<unknown | undefined>;
+  /**
+   * The messages file's size and mtime, or undefined when it is not there or cannot be
+   * asked. Cheap where reading is not: the file embeds the run state and grows by
+   * about a megabyte a turn, so it is read only when this changes.
+   */
+  statMessages(chat: FreebuffChatRef): Promise<MessagesStat | undefined>;
+}
+
+export interface MessagesStat {
+  size: number;
+  mtimeMs: number;
+}
+
+/** Whether two stats describe the same file contents, as far as a stat can say. */
+export function sameStat(a: MessagesStat | undefined, b: MessagesStat | undefined): boolean {
+  return a !== undefined && b !== undefined && a.size === b.size && a.mtimeMs === b.mtimeMs;
 }
 
 function readJson(file: string): unknown | undefined {
@@ -216,6 +243,14 @@ export function localChatSource(configDir: string = freebuffConfigDir()): Freebu
     },
     async readMessages(chat) {
       return readJson(path.join(configDir, chatFileRelPath(chat, "chat-messages.json")));
+    },
+    async statMessages(chat) {
+      try {
+        const st = fs.statSync(path.join(configDir, chatFileRelPath(chat, "chat-messages.json")));
+        return { size: st.size, mtimeMs: st.mtimeMs };
+      } catch {
+        return undefined;
+      }
     },
   };
 }

@@ -10,6 +10,7 @@ import { TurnStopped, type ActiveTurn, type FreebuffEngineDeps, type Live } from
 import { PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
 import type { PtyControlEvent, PtyIdleSpawnOpts, PtySnapshotSubscription, PtyViewEngine } from "./pty-view-engine.js";
 import { FREEBUFF_COLS, FREEBUFF_ROWS, FreebuffTerminal } from "./freebuff-terminal.js";
+import { FreebuffFailure } from "./freebuff-failure.js";
 import { localChatSource, type FreebuffChatSource } from "./freebuff-chat.js";
 import type { DriverTarget } from "./freebuff-driver.js";
 import { FreebuffSlots } from "./freebuff-slots.js";
@@ -27,6 +28,10 @@ import {
 
 const CURSOR_POSITION_RESPONSE = "\x1b[1;1R";
 
+export function clampGeometry(cols: number, rows: number): { cols: number; rows: number } {
+  return { cols: Math.max(cols, FREEBUFF_COLS), rows: Math.max(rows, FREEBUFF_ROWS) };
+}
+
 /**
  * The Freebuff processes: who is alive, where, and on whose slot, and the
  * dashboard's terminal on them. A turn (see the engine that extends this) types
@@ -41,6 +46,8 @@ export class FreebuffProcessPool implements PtyViewEngine {
   private readonly streams: PtyStreamManager;
   /** A start in flight per session, so a terminal and a turn that race share one process. */
   private readonly starting = new Map<string, Promise<Live>>();
+  /** Sessions whose process is being replaced under a turn that keeps its slot. */
+  private readonly keepSlot = new Set<string>();
   private readonly lastGeom = new Map<string, { cols: number; rows: number }>();
   private readonly spawnPty: SpawnPty;
   private readonly localChats: () => FreebuffChatSource;
@@ -62,7 +69,7 @@ export class FreebuffProcessPool implements PtyViewEngine {
       const live = this.live.get(id);
       this.live.delete(id);
       live?.terminal.dispose();
-      this.slots.release(id);
+      if (!this.keepSlot.delete(id)) this.slots.release(id);
     });
   }
 
@@ -89,8 +96,28 @@ export class FreebuffProcessPool implements PtyViewEngine {
 
   private async startProcess(id: string, params: SpawnParams): Promise<Live> {
     const live = await this.launch(id, params);
+    // A slot given away while this was starting (an idle terminal that a turn took over)
+    // is not ours any more: a process that outlives it would be one more than the cap.
+    if (!this.slots.holds(id)) {
+      this.discard(id, live);
+      throw new FreebuffFailure("its slot was taken while the process was starting");
+    }
     this.lifecycle.adopt(id, live.handle, { hostKey: ptyHostKey(params.target) });
     return live;
+  }
+
+  /** Stop a process that never became the session's. */
+  private discard(id: string, live: Live): void {
+    if (this.live.get(id) === live) this.live.delete(id);
+    live.terminal.dispose();
+    live.handle.kill("SIGKILL");
+  }
+
+  /** Stop the session's process but keep its slot, for a turn that starts again at once. */
+  protected releaseKeepingSlot(id: string): void {
+    this.keepSlot.add(id);
+    this.lifecycle.releaseSession(id);
+    this.keepSlot.delete(id);
   }
 
   private async launch(id: string, params: SpawnParams): Promise<Live> {
@@ -98,6 +125,7 @@ export class FreebuffProcessPool implements PtyViewEngine {
     await assertSignedIn(target);
     const chats = target ? remoteChatSource(target, id) : this.localChats();
     const before = params.chatId ? new Set<string>() : await chatsBefore(chats, id);
+    if (!this.slots.holds(id)) throw new FreebuffFailure("its slot was taken before the process started");
     const geom = this.lastGeom.get(id) ?? { cols: FREEBUFF_COLS, rows: FREEBUFF_ROWS };
     const env = freebuffChildEnv(id);
     const proc = target
@@ -157,7 +185,7 @@ export class FreebuffProcessPool implements PtyViewEngine {
 
   ensureIdleSpawn(id: string, opts: PtyIdleSpawnOpts): void {
     if (this.active.has(id)) return;
-    if (opts.cols && opts.rows) setCapped(this.lastGeom, id, { cols: opts.cols, rows: opts.rows });
+    if (opts.cols && opts.rows) setCapped(this.lastGeom, id, clampGeometry(opts.cols, opts.rows));
     const wantedChat = opts.engineSessionId || undefined;
     if (!this.dropStaleTerminal(id, wantedChat)) return;
     // A view never waits for a slot and never displaces a turn: no slot, no terminal.
@@ -206,12 +234,15 @@ export class FreebuffProcessPool implements PtyViewEngine {
   }
 
   resizePty(sessionId: string, cols: number, rows: number): void {
-    setCapped(this.lastGeom, sessionId, { cols, rows });
-    this.streams.resize(sessionId, cols, rows);
+    // The CLI and the screen reader stay at least as wide as the parser was written for;
+    // a narrower dashboard pane scrolls instead (see FREEBUFF_COLS).
+    const geom = clampGeometry(cols, rows);
+    setCapped(this.lastGeom, sessionId, geom);
+    this.streams.resize(sessionId, geom.cols, geom.rows);
     const live = this.live.get(sessionId);
     if (!live) return;
-    live.terminal.resize(cols, rows);
-    try { live.proc.resize(cols, rows); } catch { /* gone */ }
+    live.terminal.resize(geom.cols, geom.rows);
+    try { live.proc.resize(geom.cols, geom.rows); } catch { /* gone */ }
   }
 
   setViewing(sessionId: string, viewing: boolean): void {

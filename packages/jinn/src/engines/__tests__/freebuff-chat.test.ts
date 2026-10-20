@@ -21,13 +21,21 @@ const reasoning = (content: string) => ({ type: "text", textType: "reasoning", c
 const tool = { type: "tool", toolName: "write_file", input: { path: "hello.txt" }, output: "ok" };
 
 describe("extractAnswer", () => {
-  it("joins the text blocks of the last completed reply and drops reasoning and tool calls", () => {
+  it("answers with the text after the last tool call, not the thinking aloud before it", () => {
     const messages = [
       { variant: "ai", content: "", blocks: [{ type: "mode-divider", mode: "LITE" }] },
       { variant: "user", content: "make hello.txt" },
       ai([reasoning("thinking…"), tool, text("\nDONE"), reasoning("verify"), tool, text("Verified.\n\nDONE")]),
     ];
-    expect(extractAnswer(messages)).toEqual({ text: "DONE\n\nVerified.\n\nDONE", credits: 0 });
+    // "DONE" came before the model checked its work; what it ends on is the answer.
+    expect(extractAnswer(messages)).toEqual({ text: "Verified.\n\nDONE", credits: 0 });
+  });
+
+  it("takes every text block after the last tool call, and the last text when the reply ends on a tool call", () => {
+    const user = { variant: "user", content: "q" };
+    expect(extractAnswer([user, ai([tool, text("one"), reasoning("hm"), text("two")])])?.text).toBe("one\n\ntwo");
+    expect(extractAnswer([user, ai([text("early"), tool, text("late"), tool])])?.text).toBe("late");
+    expect(extractAnswer([user, ai([text("only"), text("these")])])?.text).toBe("only\n\nthese");
   });
 
   it("answers the last user message, not an earlier turn", () => {

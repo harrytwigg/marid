@@ -101,7 +101,9 @@ export class FreebuffSlots {
    */
   acquire(sessionId: string, signal?: AbortSignal): Promise<void> {
     if (signal?.aborted) return Promise.reject(abortError(signal));
-    if (this.queue.length === 0 && this.tryTake(sessionId)) return Promise.resolve();
+    // A session that already holds a slot keeps it, queue or no queue: it would otherwise wait
+    // behind turns that can only start once it lets go.
+    if ((this.slots.has(sessionId) || this.queue.length === 0) && this.tryTake(sessionId)) return Promise.resolve();
     return new Promise<void>((resolve, reject) => {
       const waiter: Waiter = {
         sessionId,

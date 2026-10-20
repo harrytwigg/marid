@@ -51,12 +51,12 @@ persona: |
 ## How a turn runs
 
 1. The CLI starts as `freebuff --cwd <dir> --trust-agents` (plus `--continue <chatId>` to resume). `--trust-agents` skips the folder-trust question, which nobody is there to answer.
-2. Its output goes into a headless terminal (`@xterm/headless`) and the visible rows are read as text. A parser turns them into a state (`signed-out`, `idle`, `busy`, `picker` or `unknown`) plus the session clock, the context tokens, the hours balance and the model on the status bar. Raw escape codes are never read.
+2. Its output goes into a headless terminal (`@xterm/headless`) and the visible rows are read as text. A parser turns them into a state (`signed-out`, `idle`, `busy`, `picker` or `unknown`) plus the session clock, the context tokens, the hours balance and the model on the status bar. Raw escape codes are never read, and the markers are read only from the CLI's own chrome (the input box, the bar under it, the panel, a line that is nothing but the sign-in text), never from the model's answer, which can say anything.
 3. If `model` or `effortLevel` is set and the status bar disagrees, Marid opens `/model` and drives the picker one key at a time: ↓ and ↑ to the row, Tab to cycle its reasoning level, Enter to select. It then checks the status bar. The picker is the only place the CLI takes either setting, and a new process starts on its own default, so this runs on every cold start.
 4. A new chat's context (the employee's persona and the platform context, which Freebuff has no flag for) is put in front of the first message. A resumed chat gets only the new message.
 5. The message goes in as a bracketed paste, then Enter. A long or multi-line message arrives as one message and does not submit early: verified with a 39 KB, 614-line paste. Freebuff keeps a long paste as an attachment of the message.
 6. The turn is over when the screen has gone busy and then idle again with the `⎘ • 11s` footer up for a moment.
-7. The answer is read from Freebuff's own chat file, not the screen: the text blocks of the last completed reply after the last user message. If the file cannot be read, Marid falls back to the text on the screen and logs a warning.
+7. The answer is read from Freebuff's own chat file, not the screen: the text after the last tool call in the last completed reply to the message (the text before a tool call is the model thinking aloud; when the reply ends on a tool call, its last text is the answer). The file embeds the run state and is about a megabyte a turn, so it is read only after the screen says the turn is over and then only when its stat changes (one `stat` per poll, over ssh too). If the file cannot be read, Marid falls back to the text on the screen and logs a warning.
 
 `engineSessionId` is the chat id (an ISO time with `:` replaced by `-`, for example `2026-10-20T15-50-31.145Z`). The process stays warm between turns, so the next turn reuses it; a cold start resumes the chat with `--continue`, and Freebuff re-joins the hour session already running.
 
@@ -107,7 +107,7 @@ The refusal messages come from the CLI's own wording as of 0.2.30. A refusal cou
 
 - **No Marid MCP.** Freebuff loads MCP servers only from a repository's `mcp.json`, and writing one into an employee's checkout is too invasive. A Freebuff employee has no company tools. It sees only the persona and context pasted in front of its first message.
 - **No system-prompt flag, no per-turn streaming.** The reply arrives when the turn ends.
-- **The terminal view shares the process.** Typing in the dashboard terminal while a turn runs types into the same session; a message typed there is not copied into the chat.
+- **The terminal view shares the process.** The dashboard locks its view switch while a turn runs, but a message typed in the terminal between turns goes into the same session and is not copied into the chat. The CLI and the screen reader stay at least 160 columns wide whatever size the dashboard pane is (it scrolls), because the status bar wraps below that.
 - **A session that ends mid-turn has not been seen.** The hour session is an hour long and a turn is bounded at two; if one ever ends mid-answer, the screen is whatever Freebuff draws then, and a screen Marid does not recognise fails the turn after 60 seconds with that screen in the error. The next turn re-joins the chat.
 - **The hours balance can go up.** Freebuff refunds the whole hours an ended session did not spend, so the `daily hours` figure on the Limits page is a reading, not a running total.
 - **Untested on Windows.** The engine needs a PTY and `ssh`; it has only been run on Linux.

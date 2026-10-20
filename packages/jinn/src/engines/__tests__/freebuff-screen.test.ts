@@ -87,6 +87,36 @@ describe("parseFreebuffScreen", () => {
   });
 });
 
+describe("markers inside the model's answer", () => {
+  /** turn-finished.txt with one line of the answer replaced by `text`. */
+  const answering = (text: string): string[] => screen("turn-finished.txt").map((l) => (l.includes("Verified:") ? `  ${text}` : l));
+
+  it.each([
+    ["the picker hint", "Run /model and choose model MiMo, the hint reads: ↑↓ choose model · Tab reasoning"],
+    ["the sign-in prompt", "If it is signed out the CLI shows Press ENTER to login... and a URL."],
+    ["the busy placeholder", "While it works the input says Add to the current task (/ for commands)."],
+    ["the idle placeholder", "An idle input reads Enter a coding task or / for commands."],
+    ["the sign-in URL line", "It then says Open this URL in your browser to login: and waits."],
+    ["the hours line", "The panel shows 3/21 hours remaining before the first message."],
+    ["the footer", "The footer is drawn as ⎘ • 11s • △▽ when a turn ends."],
+    ["the session clock", "Then 5m left · 1.2K (1%) shows under the answer."],
+  ])("does not change what the screen is when it quotes %s", (_name, text) => {
+    const plain = parseFreebuffScreen(screen("turn-finished.txt"));
+    const quoted = parseFreebuffScreen(answering(text));
+    expect(quoted.state).toBe("idle");
+    expect(quoted.hoursRemaining).toBe(plain.hoursRemaining);
+    expect(quoted.sessionLeftMinutes).toBe(plain.sessionLeftMinutes);
+    expect(quoted.contextTokens).toBe(plain.contextTokens);
+    expect(quoted.sessionNotStarted).toBe(false);
+    expect(quoted.refusals).toEqual([]);
+  });
+
+  it("still reads a busy screen whose answer so far quotes the idle placeholder", () => {
+    const busy = screen("busy.txt").map((l) => (l.includes("Create hello.txt") ? "  An idle input reads Enter a coding task or / for commands." : l));
+    expect(parseFreebuffScreen(busy).state).toBe("busy");
+  });
+});
+
 describe("refusals", () => {
   // The CLI's own wording for the states that cannot be reached on demand, taken from
   // the 0.2.30 binary's strings rather than recorded: shown in the chat above the idle input.

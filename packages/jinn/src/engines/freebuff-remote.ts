@@ -9,7 +9,7 @@ import {
   type FreebuffChatSource,
 } from "./freebuff-chat.js";
 import { readRemoteSessionFile } from "./remote-file-read.js";
-import { SSH_CONNECTION_FAILED, sshRun } from "./remote-stage.js";
+import { SSH_CONNECTION_FAILED, shq, sshRun } from "./remote-stage.js";
 
 /**
  * The remote halves of the Freebuff engine: what its PTY does not tell the
@@ -58,6 +58,12 @@ export function parseRemoteChatListing(stdout: string): FreebuffChatListing[] {
   return out;
 }
 
+/** `size mtime-ms` of one file, on a host with GNU or BSD stat. */
+export const REMOTE_STAT_SCRIPT = `
+f=${CONFIG_DIR_SH}/"$1"
+stat -c '%s %Y' "$f" 2>/dev/null || stat -f '%z %m' "$f" 2>/dev/null
+`;
+
 /** The biggest chat file a turn will pull over ssh: they hold the whole run state and grow with every turn. */
 const MAX_CHAT_FILE_BYTES = 512 * 1024 * 1024;
 
@@ -70,6 +76,11 @@ export function remoteChatSource(target: RemoteTarget & { remoteHost: string }, 
         throw new Error(`could not list Freebuff chats on ${destination}: ${res.stderr.trim() || `exit ${res.code}`}`);
       }
       return parseRemoteChatListing(res.stdout);
+    },
+    async statMessages(chat: FreebuffChatRef) {
+      const res = await sshRun(destination, [`sh -s ${shq(chatFileRelPath(chat, "chat-messages.json"))}`], { stdin: REMOTE_STAT_SCRIPT });
+      const [size, seconds] = res.stdout.trim().split(/\s+/).map(Number);
+      return res.code === 0 && Number.isFinite(size) && Number.isFinite(seconds) ? { size, mtimeMs: seconds * 1000 } : undefined;
     },
     async readMessages(chat: FreebuffChatRef) {
       const read = await readRemoteSessionFile({

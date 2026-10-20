@@ -65,15 +65,28 @@ export interface FreebuffScreenInfo {
   refusals: FreebuffRefusal[];
 }
 
-const SIGNED_OUT_MARKERS = [
-  "Press ENTER to login",
-  "Open this URL in your browser to login",
-  "Waiting for login",
-];
+import { PICKER_HINT_LINE, bare } from "./freebuff-picker-rows.js";
 
-const IDLE_PLACEHOLDER = "Enter a coding task or / for commands";
-const BUSY_PLACEHOLDER = "Add to the current task";
-const PICKER_HINT = "choose model";
+/**
+ * The state markers are read from the CLI's own chrome (a line that is nothing but
+ * the marker, the input box, the bar under it, the panel's rows), never from
+ * anywhere on screen: the model's answer is on screen too, and an answer that
+ * mentions "Press ENTER to login..." or "choose model" is not the CLI saying it.
+ */
+const SIGNED_OUT_LINES = [/^Press ENTER to login\.\.\.$/, /^Open this URL in your browser to login:?/, /^Waiting for login\.\.\.$/];
+const INPUT_BOX_TOP = /^\s*╭─+╮/;
+const IDLE_BOX_ROW = /▍\s*Enter a coding task or \/ for commands/;
+const BUSY_BOX_ROW = /▍\s*Add to the current task/;
+/** The rows of the panel above the chat (`│ 17/21 hours remaining │`). */
+const PANEL_HOURS = /^\s*│\s*(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*hours?\s+remaining\b/i;
+const PANEL_FIRST_MESSAGE = /^\s*│\s*Your first message starts the session\./;
+const PANEL_SESSION_ACTIVE = /^\s*│\s*Session active\b/;
+
+/** The input box and what is drawn around it: the busy line above it, the bar and help under it. */
+function chromeOf(lines: readonly string[]): string[] {
+  const top = lines.map((l) => INPUT_BOX_TOP.test(l)).lastIndexOf(true);
+  return top < 0 ? [] : lines.slice(Math.max(0, top - 2));
+}
 
 /**
  * What may stand before a refusal on its line: margin, a box border, and the glyph
@@ -91,8 +104,7 @@ const REFUSALS: Array<{ kind: FreebuffRefusal["kind"]; pattern: RegExp }> = [
 ];
 
 const BUSY_LINE = /^\s*working\.\.\..*?(?:(\d+)s\s+)?■\s*Esc\s*$/;
-const TURN_FOOTER = /⎘\s*•\s*[0-9hms ]+•/;
-const HOURS_REMAINING = /(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*hours?\s+remaining/i;
+const TURN_FOOTER = /^⎘\s*•\s*[0-9hms ]+•\s*\S*$/;
 // `58m left · 13.5K (1%)`, `1h left · …`, `1h 1m left`, and `4:59 left` for the last five minutes.
 const SESSION_LINE = /^\s*((?:\d+h)?\s*(?:\d+m)?\s*(?:\d+s)?|\d+:\d{2})\s*left\b(?:\s*·\s*([\d.]+)\s*([KMkm])?\s*\((\d+)%\))?/;
 
@@ -114,7 +126,7 @@ function minutesOf(duration: string): number | undefined {
 
 /** The status bar: `<model> • <effort> · <cwd> · /model to change · Chat: <title>`. */
 export function parseStatusBar(lines: readonly string[]): FreebuffStatusBar | undefined {
-  const line = lines.find((l) => l.includes("/model to change"));
+  const line = [...lines].reverse().find((l) => l.includes("/model to change"));
   if (!line) return undefined;
   const modelSegment = line.trim().split(" · ")[0];
   const bullet = modelSegment.lastIndexOf(" • ");
@@ -123,8 +135,8 @@ export function parseStatusBar(lines: readonly string[]): FreebuffStatusBar | un
   return { modelLabel: modelSegment.slice(0, bullet).trim(), ...(effort ? { effort } : {}) };
 }
 
-function readHours(text: string, info: FreebuffScreenInfo): void {
-  const hours = HOURS_REMAINING.exec(text);
+function readHours(lines: readonly string[], info: FreebuffScreenInfo): void {
+  const hours = lines.map((l) => PANEL_HOURS.exec(l)).find((m): m is RegExpExecArray => m !== null);
   if (!hours) return;
   info.hoursRemaining = Number(hours[1]);
   info.hoursTotal = Number(hours[2]);
@@ -132,7 +144,7 @@ function readHours(text: string, info: FreebuffScreenInfo): void {
 
 /** The session clock, and the context beside it when the line carries one. */
 function readSessionLine(lines: readonly string[], info: FreebuffScreenInfo): void {
-  for (const line of lines) {
+  for (const line of [...lines].reverse()) {
     const session = SESSION_LINE.exec(line);
     const minutes = session ? minutesOf(session[1]) : undefined;
     if (!session || minutes === undefined) continue;
@@ -189,99 +201,34 @@ export function newRefusal(refusals: readonly FreebuffRefusal[], baseline: Reado
  * Order matters: a sign-in prompt and the picker each cover or replace the input
  * box, and the picker leaves the idle status bar on screen below it.
  */
-function readState(text: string, busy: boolean): FreebuffScreenState {
-  if (SIGNED_OUT_MARKERS.some((marker) => text.includes(marker))) return "signed-out";
-  if (text.includes(PICKER_HINT)) return "picker";
-  if (busy || text.includes(BUSY_PLACEHOLDER)) return "busy";
-  if (text.includes(IDLE_PLACEHOLDER)) return "idle";
+function readState(lines: readonly string[], busyLine: boolean): FreebuffScreenState {
+  const trimmed = lines.map(bare);
+  if (trimmed.some((l) => SIGNED_OUT_LINES.some((marker) => marker.test(l)))) return "signed-out";
+  if (trimmed.some((l) => PICKER_HINT_LINE.test(l))) return "picker";
+  const chrome = chromeOf(lines);
+  if (busyLine || chrome.some((l) => BUSY_BOX_ROW.test(l))) return "busy";
+  if (chrome.some((l) => IDLE_BOX_ROW.test(l))) return "idle";
   return "unknown";
 }
 
 export function parseFreebuffScreen(lines: readonly string[]): FreebuffScreenInfo {
-  const text = lines.join("\n");
   const info: FreebuffScreenInfo = {
     state: "unknown",
-    sessionNotStarted: text.includes("Your first message starts the session"),
-    sessionActive: /\bSession active\b/.test(text),
-    turnFooter: lines.some((l) => TURN_FOOTER.test(l)),
+    sessionNotStarted: lines.some((l) => PANEL_FIRST_MESSAGE.test(l)),
+    sessionActive: lines.some((l) => PANEL_SESSION_ACTIVE.test(l)),
+    turnFooter: lines.some((l) => TURN_FOOTER.test(bare(l))),
     refusals: readRefusals(lines),
   };
-  readHours(text, info);
+  readHours(lines, info);
   readSessionLine(lines, info);
   const statusBar = parseStatusBar(lines);
   if (statusBar) info.statusBar = statusBar;
-  const busy = lines.map((l) => BUSY_LINE.exec(l)).find((m): m is RegExpExecArray => m !== null);
+  // `working... 5s ■ Esc` sits just above the input box.
+  const busy = chromeOf(lines).map((l) => BUSY_LINE.exec(l)).find((m): m is RegExpExecArray => m !== null);
   if (busy?.[1] !== undefined) info.busySeconds = Number(busy[1]);
-  info.state = readState(text, busy !== undefined);
+  info.state = readState(lines, busy !== undefined);
   return info;
 }
 
-// ── The /model picker ────────────────────────────────────────────────────────
-
-export interface FreebuffPickerRow {
-  /** The model's name as the picker prints it, without its reasoning level. */
-  label: string;
-  /** The reasoning level this row is currently set to, when it has one. */
-  effort?: string;
-  /** The cursor is on this row. */
-  selected: boolean;
-  /** The cost multiplier on the row's second line (`3x`), when visible. */
-  multiplier?: number;
-}
-
-const BOX_TOP = /^\s*┌─+┐[\s▀▄█]*$/;
-const BOX_BOTTOM = /^\s*└─+┘[\s▀▄█]*$/;
-// The picker scrolls and draws a scrollbar glyph in the margin, so a row's
-// right edge can carry one extra character after the border.
-const BOX_INNER = /^\s*│\s?(.*?)\s*│[\s▀▄█]*$/;
-
-/** `DeepSeek V4.1 Flash 10/17 • high · Smart & Fast` → label and effort. */
-export function parsePickerLabel(firstLine: string): { label: string; effort?: string } {
-  const text = firstLine.replace(/^[›>]\s*/, "").trim();
-  const bullet = text.indexOf(" • ");
-  if (bullet >= 0) {
-    const label = text.slice(0, bullet).trim();
-    const effort = text.slice(bullet + 3).split(" · ")[0].trim();
-    return { label, ...(effort ? { effort } : {}) };
-  }
-  return { label: text.split(" · ")[0].trim() };
-}
-
-/** The boxed rows of the `/model` picker, in screen order. Empty if it is not open. */
-export function parsePickerRows(lines: readonly string[]): FreebuffPickerRow[] {
-  const hint = lines.findIndex((l) => l.includes(PICKER_HINT));
-  if (hint < 0) return [];
-  const rows: FreebuffPickerRow[] = [];
-  let inner: string[] | undefined;
-  for (const line of lines.slice(hint + 1)) {
-    if (BOX_TOP.test(line)) {
-      inner = [];
-    } else if (BOX_BOTTOM.test(line)) {
-      if (inner?.length) rows.push(rowFromInner(inner));
-      inner = undefined;
-    } else if (inner) {
-      const match = BOX_INNER.exec(line);
-      if (match) inner.push(match[1]);
-    }
-  }
-  return rows;
-}
-
-function rowFromInner(inner: readonly string[]): FreebuffPickerRow {
-  const first = inner[0];
-  const selected = /^[›>]/.test(first.trim());
-  const { label, effort } = parsePickerLabel(first);
-  // A long first line wraps ("… · Promotional · 1" / "session a day"); the
-  // multiplier is the line that starts with `<n>x`.
-  const multiplier = inner.slice(1).map((l) => /^(\d+(?:\.\d+)?)x\b/.exec(l.trim())).find((m) => m !== null);
-  return { label, ...(effort ? { effort } : {}), selected, ...(multiplier ? { multiplier: Number(multiplier[1]) } : {}) };
-}
-
-/** Whether a picker label or status-bar model name satisfies a configured prefix. */
-export function modelMatches(label: string, wanted: string): boolean {
-  return label.trim().toLowerCase().startsWith(wanted.trim().toLowerCase());
-}
-
-export function effortMatches(shown: string | undefined, wanted: string): boolean {
-  return shown !== undefined && shown.trim().toLowerCase() === wanted.trim().toLowerCase();
-}
+// The /model picker's rows live in freebuff-picker-rows.ts.
+export { effortMatches, modelMatches, parsePickerLabel, parsePickerRows, type FreebuffPickerRow } from "./freebuff-picker-rows.js";
