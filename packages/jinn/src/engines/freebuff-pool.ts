@@ -97,6 +97,8 @@ export class FreebuffProcessPool implements PtyViewEngine {
   protected readonly readRemote: () => RemoteExecutionConfig | undefined;
   protected readonly readConfig: () => FreebuffEngineConfig | undefined;
   private readonly streams: PtyStreamManager;
+  /** A start in flight per session, so a terminal and a turn that race share one process. */
+  private readonly starting = new Map<string, Promise<Live>>();
   private readonly lastGeom = new Map<string, { cols: number; rows: number }>();
   private readonly spawnPty: SpawnPty;
   private readonly localChats: () => FreebuffChatSource;
@@ -124,7 +126,32 @@ export class FreebuffProcessPool implements PtyViewEngine {
 
   // ── The process ────────────────────────────────────────────────────────────
 
-  protected async spawnProcess(id: string, params: SpawnParams): Promise<Live> {
+  /**
+   * The process for this session, started if it is not up. Two callers that arrive
+   * while it is starting (the dashboard's terminal and a turn) get the same one:
+   * a second process would open a second hour session and charge it again. The
+   * process is adopted here, once, as idle; a turn then marks it running.
+   */
+  protected spawnProcess(id: string, params: SpawnParams): Promise<Live> {
+    const pending = this.starting.get(id);
+    if (pending) return pending;
+    const started = this.startProcess(id, params).finally(() => this.starting.delete(id));
+    this.starting.set(id, started);
+    return started;
+  }
+
+  /** Resolves once a start in flight for this session (if any) has finished, however it ended. */
+  protected async whenStarted(id: string): Promise<void> {
+    await this.starting.get(id)?.catch(() => undefined);
+  }
+
+  private async startProcess(id: string, params: SpawnParams): Promise<Live> {
+    const live = await this.launch(id, params);
+    this.lifecycle.adopt(id, live.handle, { hostKey: ptyHostKey(params.target) });
+    return live;
+  }
+
+  private async launch(id: string, params: SpawnParams): Promise<Live> {
     const { target } = params;
     await assertSignedIn(target);
     const chats = target ? remoteChatSource(target, id) : this.localChats();
@@ -211,8 +238,7 @@ export class FreebuffProcessPool implements PtyViewEngine {
 
   private async startTerminal(id: string, params: SpawnParams): Promise<void> {
     try {
-      const live = await this.spawnProcess(id, params);
-      this.lifecycle.adopt(id, live.handle, { hostKey: ptyHostKey(params.target) });
+      await this.spawnProcess(id, params);
     } catch (err) {
       logger.warn(`FreebuffInteractiveEngine: could not start a terminal for ${id}: ${err instanceof Error ? err.message : err}`);
       this.slots.release(id);

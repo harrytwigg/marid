@@ -62,7 +62,7 @@ persona: |
 
 Two checkouts can share a basename, so the newest chat is never taken on trust. A new chat is the one that did not exist before the process started, that no other Marid session owns, and whose first message is the one that was sent (read from the chat's metadata or, for a pasted message, from its attachment).
 
-Usage: `cost` is 0 (Freebuff bills hours) and `contextTokens` is the figure on the status line. The hours balance and the time left in the session are kept in `tmp/freebuff-usage.json` in the instance home and shown on the Limits page as "daily hours" and "session". They are as of the last turn that read the screen.
+Usage: `cost` is 0 (Freebuff bills hours) and `contextTokens` is the figure on the status line. The hours balance and the time left in the session are kept in `tmp/freebuff-usage.json` in the instance home and shown on the Limits page as "daily hours" and "session". The balance is on screen only before a session's first message, so it is kept from the last reading that had it (and goes stale a day after that reading); the session clock is as of the last turn.
 
 ---
 
@@ -70,7 +70,7 @@ Usage: `cost` is 0 (Freebuff bills hours) and `contextTokens` is the figure on t
 
 `engines.freebuff.maxConcurrent` (default `1`) caps the number of live Freebuff processes across the gateway and every remote host together, because each extra process opens another hour session and spends hours again.
 
-- A warm process waiting for its next turn holds a slot but can be given away: when another session's turn needs a slot, the idle process with the longest wait is stopped, and its chat resumes later inside the same hour session at no charge.
+- A warm process waiting for its next turn holds a slot but can be given away: when another session's turn needs a slot, the idle process with the longest wait is stopped and its chat resumes later with `--continue`. Stopping a process appears to end the hour session it held (the hours balance goes back up by the whole hours it had not spent, and a process started right after found the account's session released), so the next process's first message starts a new session. This was seen in one run and not studied further.
 - A process serving a turn is never stopped. A turn that finds every slot busy waits its turn, first in first out, and does not fail.
 - The dashboard's terminal view never queues: it starts only when a slot is free or idle.
 

@@ -1,6 +1,6 @@
 import { logger } from "../shared/logger.js";
 import type { FreebuffTerminal } from "./freebuff-terminal.js";
-import { parseFreebuffScreen, type FreebuffRefusal, type FreebuffScreenInfo } from "./freebuff-screen.js";
+import { countRefusals, parseFreebuffScreen, type FreebuffRefusal, type FreebuffScreenInfo } from "./freebuff-screen.js";
 import {
   choiceSatisfied,
   chooseInPicker,
@@ -11,8 +11,6 @@ import {
 } from "./freebuff-picker.js";
 import {
   FreebuffFailure,
-  SessionReleased,
-  refusalFailure,
   screenFailure,
   type FreebuffPlace,
 } from "./freebuff-failure.js";
@@ -45,11 +43,6 @@ export function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-/** A refusal the CLI printed: a failure to report, or a dropped session to start over from. */
-function refused(refusal: FreebuffRefusal): never {
-  throw refusalFailure(refusal) ?? new SessionReleased(refusal.text);
-}
-
 /** The choice with `default` and blanks taken out, or undefined when nothing is asked for. */
 function wantedChoice(choice: PickerChoice): PickerChoice | undefined {
   const effortLevel = choice.effortLevel && choice.effortLevel !== "default" ? choice.effortLevel : undefined;
@@ -70,6 +63,9 @@ function describeBar(bar: FreebuffScreenInfo["statusBar"]): string {
  * ends early, by throwing the turn's stop reason, when the turn is stopped.
  */
 export class FreebuffDriver {
+  /** The refusal lines on screen when the message went in; see {@link FinishWatch}. */
+  private baseline: ReadonlyMap<FreebuffRefusal["kind"], number> = new Map();
+
   constructor(private readonly target: DriverTarget, private readonly signal: AbortSignal) {}
 
   /** The screen as it is once everything written so far has been drawn. */
@@ -83,7 +79,7 @@ export class FreebuffDriver {
 
   /**
    * Poll the screen until `done` says so. Fails the turn on the screens that mean
-   * it cannot go on (signed out, no hours, a refusal), and on one nothing
+   * it cannot go on (signed out, no hours), and on one nothing
    * recognises for a minute, with that screen in the error.
    */
   async waitForState(done: (info: FreebuffScreenInfo) => boolean, opts: { what: string; timeoutMs?: number }): Promise<FreebuffScreenInfo> {
@@ -94,7 +90,6 @@ export class FreebuffDriver {
       const { lines, info } = await this.screen();
       const failure = screenFailure(info, this.target.place);
       if (failure) throw failure;
-      if (info.refusal) refused(info.refusal);
       if (done(info)) return info;
       unknown.check(info, lines);
       if (opts.timeoutMs !== undefined && Date.now() - startedAt >= opts.timeoutMs) {
@@ -157,6 +152,7 @@ export class FreebuffDriver {
   /** Bracketed paste, so a multi-line message arrives as one message and its newlines do not submit; then Enter. */
   async submit(text: string): Promise<void> {
     const { proc } = this.target;
+    this.baseline = countRefusals((await this.screen()).info.refusals);
     proc.write("\x1b[200~");
     for (let i = 0; i < text.length; i += PASTE_CHUNK) {
       proc.write(text.slice(i, i + PASTE_CHUNK));
@@ -173,7 +169,7 @@ export class FreebuffDriver {
    * enough to have come and gone between looks has left its answer in the chat.
    */
   async waitForFinish(answered: () => Promise<boolean>): Promise<{ info: FreebuffScreenInfo; lines: string[] }> {
-    const watch = new FinishWatch(this.target.place, Date.now());
+    const watch = new FinishWatch(this.target.place, Date.now(), this.baseline);
     for (;;) {
       await sleep(POLL_MS, this.signal);
       const { lines, info } = await this.screen();

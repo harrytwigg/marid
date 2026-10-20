@@ -1,6 +1,6 @@
 import type { EngineRateLimitInfo } from "../shared/types.js";
 import { dumpScreen } from "./freebuff-terminal.js";
-import type { FreebuffScreenInfo } from "./freebuff-screen.js";
+import type { FreebuffRefusal, FreebuffScreenInfo } from "./freebuff-screen.js";
 
 /** How long a screen nothing here recognises may stand before the turn gives up on it. */
 export const UNKNOWN_SCREEN_LIMIT_MS = 60_000;
@@ -26,7 +26,7 @@ export type FreebuffPlace = "local" | "remote";
  * `released` is not a failure at all (the caller starts the process afresh) and is
  * left to it.
  */
-export function refusalFailure(refusal: NonNullable<FreebuffScreenInfo["refusal"]>): FreebuffFailure | undefined {
+export function refusalFailure(refusal: FreebuffRefusal): FreebuffFailure | undefined {
   switch (refusal.kind) {
     case "no-hours":
       return new FreebuffFailure(`Freebuff would not start a session: ${refusal.text}`, { status: "rejected", rateLimitType: "hours" });

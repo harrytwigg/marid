@@ -176,11 +176,6 @@ export function lastUserMessage(messages: unknown): string | undefined {
   return undefined;
 }
 
-/** How many user messages the chat holds: the turn counter a caller compares across turns. */
-export function countUserMessages(messages: unknown): number {
-  return Array.isArray(messages) ? (messages as RawMessage[]).filter((m) => m?.variant === "user").length : 0;
-}
-
 // ── Reading chats ────────────────────────────────────────────────────────────
 
 /** Where chats are read from: this machine, or the host a remote employee runs on. */

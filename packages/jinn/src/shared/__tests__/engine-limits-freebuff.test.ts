@@ -47,7 +47,8 @@ describe("collectFreebuffLimits", () => {
   it("shows only the windows the screen gave, and a day-old reading as stale", () => {
     writeFreebuffUsage({ observedAtMs: NOW - FREEBUFF_SNAPSHOT_MAX_AGE_MS - 1, sessionLeftMinutes: 60 });
     const snap = collectFreebuffLimits(config(), NOW);
-    expect(snap.windows?.map((w) => w.name)).toEqual(["session"]);
+    // A session reading that old describes a session that is over.
+    expect(snap.windows).toEqual([]);
     expect(snap.accountPlan).toBeUndefined();
     expect(snap.stale).toBe(true);
   });
@@ -60,6 +61,22 @@ describe("collectFreebuffLimits", () => {
 });
 
 describe("the usage snapshot file", () => {
+  it("keeps the day's hours through later readings that carry only the session clock", () => {
+    // The panel is on screen before a session's first message only; every later screen has the clock alone.
+    writeFreebuffUsage({ observedAtMs: NOW - 120_000, hoursRemaining: 17, hoursTotal: 21 });
+    writeFreebuffUsage({ observedAtMs: NOW - 60_000, sessionLeftMinutes: 53 });
+    expect(readFreebuffUsage()).toMatchObject({ observedAtMs: NOW - 60_000, hoursRemaining: 17, hoursTotal: 21, hoursObservedAtMs: NOW - 120_000, sessionLeftMinutes: 53 });
+    const snap = collectFreebuffLimits(config(), NOW);
+    expect(snap.windows?.map((w) => w.name)).toEqual(["daily hours", "session"]);
+    expect(snap.accountPlan).toBe("17/21 hours left today");
+  });
+
+  it("goes stale by the age of the hours, not of the latest clock reading", () => {
+    writeFreebuffUsage({ observedAtMs: NOW - FREEBUFF_SNAPSHOT_MAX_AGE_MS - 5_000, hoursRemaining: 17, hoursTotal: 21 });
+    writeFreebuffUsage({ observedAtMs: NOW - 1_000, sessionLeftMinutes: 40 });
+    expect(collectFreebuffLimits(config(), NOW).stale).toBe(true);
+  });
+
   it("keeps the newer of two readings", () => {
     writeFreebuffUsage({ observedAtMs: 2_000, hoursRemaining: 10 });
     writeFreebuffUsage({ observedAtMs: 1_000, hoursRemaining: 20 });

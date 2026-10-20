@@ -17,6 +17,12 @@ export interface FreebuffUsageSnapshot {
   /** Hours left today, and the daily allowance, from the panel. */
   hoursRemaining?: number;
   hoursTotal?: number;
+  /**
+   * When the hours were read. The panel is on screen only before a session's first
+   * message, so later readings carry the session clock alone and the hours are
+   * kept from the reading that had them.
+   */
+  hoursObservedAtMs?: number;
   /** Minutes left in the running hour session, when one is running. */
   sessionLeftMinutes?: number;
   /** The model the status bar showed. */
@@ -41,6 +47,14 @@ export function readFreebuffUsage(file: string = freebuffUsageFile()): FreebuffU
   }
 }
 
+/** `usage` laid over the held snapshot: its fields win, and the held hours stay when it has none. */
+export function mergeUsage(held: FreebuffUsageSnapshot | undefined, usage: FreebuffUsageSnapshot): FreebuffUsageSnapshot {
+  if (usage.hoursRemaining !== undefined) return { ...usage, hoursObservedAtMs: usage.observedAtMs };
+  const { hoursRemaining, hoursTotal, hoursObservedAtMs } = held ?? {};
+  if (hoursRemaining === undefined) return usage;
+  return { ...usage, hoursRemaining, ...(hoursTotal !== undefined ? { hoursTotal } : {}), ...(hoursObservedAtMs !== undefined ? { hoursObservedAtMs } : {}) };
+}
+
 /** Keep `usage` as the latest snapshot, unless the file already holds a newer one. */
 export function writeFreebuffUsage(usage: FreebuffUsageSnapshot, file: string = freebuffUsageFile()): void {
   try {
@@ -48,7 +62,7 @@ export function writeFreebuffUsage(usage: FreebuffUsageSnapshot, file: string = 
     if (held && held.observedAtMs > usage.observedAtMs) return;
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const tmp = `${file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(usage), { encoding: "utf-8", mode: 0o600 });
+    fs.writeFileSync(tmp, JSON.stringify(mergeUsage(held, usage)), { encoding: "utf-8", mode: 0o600 });
     fs.renameSync(tmp, file);
   } catch {
     // best-effort only

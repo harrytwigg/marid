@@ -28,7 +28,7 @@ describe("parseFreebuffScreen", () => {
     expect(info.sessionNotStarted).toBe(true);
     expect(info.sessionActive).toBe(false);
     expect(info.sessionLeftMinutes).toBeUndefined();
-    expect(info.refusal).toBeUndefined();
+    expect(info.refusals).toEqual([]);
   });
 
   it("reads an idle screen with a running session", () => {
@@ -91,7 +91,7 @@ describe("refusals", () => {
   // The CLI's own wording for the states that cannot be reached on demand, taken from
   // the 0.2.30 binary's strings rather than recorded: shown in the chat above the idle input.
   const withNotice = (notice: string) => ["", `  ${notice}`, ...screen("idle-session-active.txt")];
-  const refusalOf = (notice: string) => parseFreebuffScreen(withNotice(notice)).refusal;
+  const refusalOf = (notice: string) => parseFreebuffScreen(withNotice(notice)).refusals[0];
 
   it.each([
     ["no-hours", "Not enough hours: 0.4 available. See https://freebuff.com/plans or use /model."],
@@ -105,9 +105,26 @@ describe("refusals", () => {
     expect(refusalOf(notice)).toEqual({ kind, text: notice.split("\n")[0].trim() });
   });
 
+  it("does not take a line that merely quotes a refusal for one", () => {
+    const quoted = [
+      "  Earlier answer: the CLI prints 'Not enough hours: 0.4 available.' when you are out,",
+      "  and says \"Session limit reached.\" or This session was released. when it drops you.",
+      "  > Session limit reached. is also what a docs page might say, but not at the start of a line here",
+      ...screen("idle-session-active.txt"),
+    ];
+    const info = parseFreebuffScreen(quoted);
+    // Only the line that STARTS with the words is Freebuff's; the blockquote above is a quote of them.
+    expect(info.refusals.map((r) => r.kind)).toEqual([]);
+  });
+
+  it("does not take the user's own message, echoed under its time stamp, for a refusal", () => {
+    const echoed = ["   [04:50 PM]", "   Session limit reached. is the first thing this message says,", "   and This session was released. the second.", "", ...screen("idle-session-active.txt")];
+    expect(parseFreebuffScreen(echoed).refusals).toEqual([]);
+  });
+
   it("sees none on an ordinary screen", () => {
     for (const name of ["idle-session-active.txt", "busy.txt", "turn-finished.txt", "picker.txt", "signed-out.txt"]) {
-      expect(parseFreebuffScreen(screen(name)).refusal, name).toBeUndefined();
+      expect(parseFreebuffScreen(screen(name)).refusals, name).toEqual([]);
     }
   });
 });

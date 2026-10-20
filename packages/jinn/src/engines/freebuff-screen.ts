@@ -56,8 +56,13 @@ export interface FreebuffScreenInfo {
   turnFooter: boolean;
   /** Seconds the busy line says the turn has run. */
   busySeconds?: number;
-  /** A message saying Freebuff will not run (or has dropped) a session. */
-  refusal?: FreebuffRefusal;
+  /**
+   * Every line that is one of Freebuff's refusals to run (or keep) a session. A line
+   * counts only when it STARTS with the refusal, so an answer or a user message that
+   * quotes one is not one; the engine also counts only the lines that appeared after
+   * its message went in.
+   */
+  refusals: FreebuffRefusal[];
 }
 
 const SIGNED_OUT_MARKERS = [
@@ -70,13 +75,15 @@ const IDLE_PLACEHOLDER = "Enter a coding task or / for commands";
 const BUSY_PLACEHOLDER = "Add to the current task";
 const PICKER_HINT = "choose model";
 
+/** What may stand before a refusal on its line: margin, and the glyph Freebuff draws beside a notice. */
+const LEAD = "^[\\s⚠✕!•-]*";
 const REFUSALS: Array<{ kind: FreebuffRefusal["kind"]; pattern: RegExp }> = [
-  { kind: "no-hours", pattern: /Not enough hours:[^\n]*/ },
-  { kind: "session-limit", pattern: /Session limit reached\.[^\n]*/ },
-  { kind: "network-cap", pattern: /Too many Freebuff sessions on this network\.[^\n]*/ },
-  { kind: "concurrent-limit", pattern: /[^\n]*(?:concurrent-session limit|allows one session across CLI and Desktop)[^\n]*/ },
-  { kind: "unavailable", pattern: /Freebuff is unavailable in [^\n]*/ },
-  { kind: "released", pattern: /This session was released\.[^\n]*/ },
+  { kind: "no-hours", pattern: new RegExp(`${LEAD}(Not enough hours:.*)$`) },
+  { kind: "session-limit", pattern: new RegExp(`${LEAD}(Session limit reached\\..*)$`) },
+  { kind: "network-cap", pattern: new RegExp(`${LEAD}(Too many Freebuff sessions on this network\\..*)$`) },
+  { kind: "concurrent-limit", pattern: new RegExp(`${LEAD}(Your concurrent-session limit.*|Limited access without a subscription allows one session.*)$`) },
+  { kind: "unavailable", pattern: new RegExp(`${LEAD}(Freebuff is unavailable in .*)$`) },
+  { kind: "released", pattern: new RegExp(`${LEAD}(This session was released\\..*)$`) },
 ];
 
 const BUSY_LINE = /^\s*working\.\.\..*?(?:(\d+)s\s+)?■\s*Esc\s*$/;
@@ -134,13 +141,44 @@ function readSessionLine(lines: readonly string[], info: FreebuffScreenInfo): vo
   }
 }
 
-function readRefusal(text: string): FreebuffRefusal | undefined {
-  for (const { kind, pattern } of REFUSALS) {
-    const found = pattern.exec(text);
-    // The line as drawn: the transcript's margin and the scrollbar glyphs are not part of it.
-    if (found) return { kind, text: found[0].replace(/[\s▀▄█]+$/, "").trim() };
+/** The `[04:50 PM]` stamp above each user message; the message runs from there to the next blank line. */
+const USER_STAMP = /^\s*\[\d{1,2}:\d{2}\s?[AP]M\]\s*$/;
+
+/** The lines of the screen that are not the user's own words echoed back. */
+function outsideUserMessages(lines: readonly string[]): string[] {
+  const kept: string[] = [];
+  let inMessage = false;
+  for (const line of lines) {
+    if (USER_STAMP.test(line)) inMessage = true;
+    else if (!line.trim()) inMessage = false;
+    else if (!inMessage) kept.push(line);
   }
-  return undefined;
+  return kept;
+}
+
+function readRefusals(lines: readonly string[]): FreebuffRefusal[] {
+  const found: FreebuffRefusal[] = [];
+  for (const line of outsideUserMessages(lines)) {
+    for (const { kind, pattern } of REFUSALS) {
+      // The line as drawn: the transcript's margin and the scrollbar glyphs are not part of it.
+      const match = pattern.exec(line.replace(/[\s▀▄█│]+$/, ""));
+      if (match) found.push({ kind, text: match[1].trim() });
+    }
+  }
+  return found;
+}
+
+/** How many refusal lines of each kind a screen shows. */
+export function countRefusals(refusals: readonly FreebuffRefusal[]): Map<FreebuffRefusal["kind"], number> {
+  const counts = new Map<FreebuffRefusal["kind"], number>();
+  for (const { kind } of refusals) counts.set(kind, (counts.get(kind) ?? 0) + 1);
+  return counts;
+}
+
+/** The first refusal of a kind that has more lines now than `baseline` had: one that appeared since. */
+export function newRefusal(refusals: readonly FreebuffRefusal[], baseline: ReadonlyMap<FreebuffRefusal["kind"], number>): FreebuffRefusal | undefined {
+  const now = countRefusals(refusals);
+  return refusals.find((r) => (now.get(r.kind) ?? 0) > (baseline.get(r.kind) ?? 0));
 }
 
 /**
@@ -162,6 +200,7 @@ export function parseFreebuffScreen(lines: readonly string[]): FreebuffScreenInf
     sessionNotStarted: text.includes("Your first message starts the session"),
     sessionActive: /\bSession active\b/.test(text),
     turnFooter: lines.some((l) => TURN_FOOTER.test(l)),
+    refusals: readRefusals(lines),
   };
   readHours(text, info);
   readSessionLine(lines, info);
@@ -169,8 +208,6 @@ export function parseFreebuffScreen(lines: readonly string[]): FreebuffScreenInf
   if (statusBar) info.statusBar = statusBar;
   const busy = lines.map((l) => BUSY_LINE.exec(l)).find((m): m is RegExpExecArray => m !== null);
   if (busy?.[1] !== undefined) info.busySeconds = Number(busy[1]);
-  const refusal = readRefusal(text);
-  if (refusal) info.refusal = refusal;
   info.state = readState(text, busy !== undefined);
   return info;
 }

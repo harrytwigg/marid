@@ -9,7 +9,7 @@ vi.mock("../../sessions/employee-env.js", () => ({ employeeSessionEnv: () => ({}
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
 import { FreebuffInteractiveEngine, buildFreebuffArgs, composeFreebuffMessage, remoteLocationNote } from "../freebuff-interactive.js";
 import { detectRateLimit } from "../../shared/rateLimit.js";
-import { userMessageText } from "../freebuff-chat.js";
+import { localChatSource, userMessageText } from "../freebuff-chat.js";
 
 const FAKE = path.join(path.dirname(fileURLToPath(import.meta.url)), "helpers", "fake-freebuff.mjs");
 
@@ -64,7 +64,7 @@ describe.skipIf(process.platform === "win32")("FreebuffInteractiveEngine", () =>
     const e = engine();
     const first = await turn(e, "s1", "say hello", { systemPrompt: "You are Ada." });
     expect(first.error).toBeUndefined();
-    expect(first.result).toContain("ANSWER[DeepSeek V4.1 Flash 10/17 • high]");
+    expect(first.result).toContain("ANSWER#1[DeepSeek V4.1 Flash 10/17 • high]");
     expect(first.result).toContain("say hello");
     expect(first.sessionId).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z$/);
     expect(first.numTurns).toBe(1);
@@ -99,12 +99,12 @@ describe.skipIf(process.platform === "win32")("FreebuffInteractiveEngine", () =>
   it("drives /model to the configured model and level before the message, and says so in the answer", async () => {
     const result = await turn(engine(), "m1", "pick", { model: "Muse Spark", effortLevel: "low" });
     expect(result.error).toBeUndefined();
-    expect(result.result).toContain("ANSWER[Muse Spark 1.3 • low]");
+    expect(result.result).toContain("ANSWER#1[Muse Spark 1.3 • low]");
   }, 30_000);
 
   it("leaves the CLI's own model alone when none is configured", async () => {
     const result = await turn(engine(), "m2", "default");
-    expect(result.result).toContain("ANSWER[DeepSeek V4.1 Flash 10/17 • high]");
+    expect(result.result).toContain("ANSWER#1[DeepSeek V4.1 Flash 10/17 • high]");
   }, 30_000);
 
   it("fails a model that is not in the picker with the labels it showed, and sends nothing", async () => {
@@ -139,15 +139,6 @@ describe.skipIf(process.platform === "win32")("FreebuffInteractiveEngine", () =>
     expect(detectRateLimit(result).limited).toBe(true);
   }, 30_000);
 
-  it("starts the process afresh, once, when it finds its hour session already released", async () => {
-    process.env.FAKE_RELEASED_ONCE = path.join(home, "released-once");
-    const result = await turn(engine(), "rel", "after the release");
-    delete process.env.FAKE_RELEASED_ONCE;
-    expect(result.error).toBeUndefined();
-    expect(result.result).toContain("after the release");
-    expect(starts().filter((l) => l.startsWith("start "))).toHaveLength(2);
-  }, 30_000);
-
   it("starts the process afresh when the session is released as the message goes in, and the message runs once", async () => {
     process.env.FAKE_RELEASED_ON_SUBMIT = path.join(home, "released-on-submit");
     const result = await turn(engine(), "rel2", "after the release");
@@ -157,6 +148,43 @@ describe.skipIf(process.platform === "win32")("FreebuffInteractiveEngine", () =>
     expect(starts().filter((l) => l.startsWith("start "))).toHaveLength(2);
     expect(chatMessages(result.sessionId).filter((m) => m.variant === "user")).toHaveLength(1);
   }, 40_000);
+
+  it("completes a turn whose message and answer quote the refusals, rather than failing or restarting on them", async () => {
+    const prompt = "Session limit reached. is what the CLI prints when the day is used up; Not enough hours: 0.4 available. is the other, and This session was released. a third. Just say ok.";
+    const result = await turn(engine(), "quote", prompt);
+    expect(result.error).toBeUndefined();
+    expect(result.rateLimit).toBeUndefined();
+    expect(result.result).toMatch(/ANSWER#\d+\[/);
+    expect(starts().filter((l) => l.startsWith("start "))).toHaveLength(1);
+  }, 30_000);
+
+  it("does not return the last turn's answer for the same message sent again while the chat file lags", async () => {
+    process.env.FAKE_FILE_LAG_MS = "3500";
+    const e = engine();
+    const first = await turn(e, "again", "check children");
+    expect(first.error).toBeUndefined();
+    expect(first.result).toContain("ANSWER#1");
+    const second = await turn(e, "again", "check children", { resumeSessionId: first.sessionId });
+    delete process.env.FAKE_FILE_LAG_MS;
+    expect(second.error).toBeUndefined();
+    expect(second.result).toContain("ANSWER#2");
+    expect(chatMessages(first.sessionId).filter((m) => m.variant === "user")).toHaveLength(2);
+  }, 60_000);
+
+  it("starts one process, not two, when the dashboard terminal and a turn start together", async () => {
+    // A slow chat listing (as over ssh) keeps the start in flight long enough for the turn to arrive during it.
+    const slow = localChatSource();
+    const e = new FreebuffInteractiveEngine(new PtyLifecycleManager({ maxLivePtys: 8 }), {
+      config: () => ({ maxConcurrent: 1 }),
+      localChats: () => ({ ...slow, list: async () => { await new Promise((r) => setTimeout(r, 400)); return slow.list(); } }),
+    });
+    engines.push(e);
+    e.ensureIdleSpawn("race", { cwd: work, bin: FAKE, cols: 120, rows: 40 });
+    const result = await turn(e, "race", "hi");
+    expect(result.error).toBeUndefined();
+    expect(starts().filter((l) => l.startsWith("start "))).toHaveLength(1);
+    expect(e.hasWarmPty("race")).toBe(true);
+  }, 30_000);
 
   it("fails a turn the model ended without saying anything, rather than returning an empty answer", async () => {
     process.env.FAKE_EMPTY_ANSWER = "1";

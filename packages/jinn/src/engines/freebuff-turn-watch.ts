@@ -1,5 +1,5 @@
 import { SessionReleased, UNKNOWN_SCREEN_LIMIT_MS, refusalFailure, screenFailure, unknownScreenFailure, type FreebuffPlace } from "./freebuff-failure.js";
-import type { FreebuffScreenInfo } from "./freebuff-screen.js";
+import { newRefusal, type FreebuffRefusal, type FreebuffScreenInfo } from "./freebuff-screen.js";
 
 /** Idle after busy, with the `⎘ • 11s` footer up, for this long: the turn is over. */
 export const SETTLE_MS = 1_500;
@@ -48,6 +48,8 @@ export class FinishWatch {
   constructor(
     private readonly place: FreebuffPlace,
     private readonly submittedAt: number,
+    /** The refusal lines already on screen when the message went in: they are not this turn's. */
+    private readonly baseline: ReadonlyMap<FreebuffRefusal["kind"], number> = new Map(),
     private readonly now: () => number = Date.now,
   ) {
     this.unknown = new UnknownScreenWatch(now);
@@ -68,7 +70,8 @@ export class FinishWatch {
     const failure = screenFailure(info, this.place);
     if (failure) throw failure;
     // Only before the model starts answering: once it has, its words are its own.
-    if (!this.sawBusy && info.refusal) throw refusalFailure(info.refusal) ?? new SessionReleased(info.refusal.text);
+    const refusal = this.sawBusy ? undefined : newRefusal(info.refusals, this.baseline);
+    if (refusal) throw refusalFailure(refusal) ?? new SessionReleased(refusal.text);
     this.unknown.check(info, lines);
   }
 

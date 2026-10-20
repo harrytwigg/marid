@@ -9,9 +9,8 @@
 //   FAKE_HOURS       the hours balance on the panel (default 17); 0 = none left
 //   FAKE_RELEASED_ON_SUBMIT  a file path: the first message sent (no such file yet) is answered with the
 //                    "session was released" message and never run, as when the hour ran out under a warm process
+//   FAKE_FILE_LAG_MS  how long after the screen goes idle the reply is written to the chat file (default 0)
 //   FAKE_EMPTY_ANSWER  1: the model ends every turn with a complete reply that says nothing
-//   FAKE_RELEASED_ONCE  a file path: the first process to start (no such file yet) shows the
-//                    "session was released" message, creates the file, and every later one is fine
 //   FAKE_START_LOG   a file each start and each Enter on the sign-in screen is appended to
 import fs from "node:fs";
 import os from "node:os";
@@ -51,11 +50,8 @@ let pasted = "";
 let inPaste = false;
 let picker = 0;
 let minutes = 60;
+let replies = 0;
 let notice = "";
-if (process.env.FAKE_RELEASED_ONCE && !fs.existsSync(process.env.FAKE_RELEASED_ONCE)) {
-  fs.writeFileSync(process.env.FAKE_RELEASED_ONCE, "");
-  notice = "This session was released. Choose a model to start a new session.";
-}
 
 const draw = (lines) => process.stdout.write("\x1b[2J\x1b[H" + lines.join("\r\n"));
 const effortOf = () => (model.efforts ? ` • ${model.efforts[model.effort]}` : "");
@@ -92,8 +88,11 @@ function submit(text) {
   messages.push({ id: `user-${Date.now()}`, variant: "user", content: long ? "" : text, timestamp: "05:00 PM", ...(long ? { textAttachments: [{ id: "a", content: text, preview: text.slice(0, 40), charCount: text.length }] } : {}) });
   if (title === "New chat") title = long ? "(empty chat)" : text.slice(0, 40);
   const first = messages.find((m) => m.variant === "user");
-  fs.writeFileSync(path.join(chatDir, "chat-messages.json"), JSON.stringify(messages));
-  fs.writeFileSync(path.join(chatDir, "chat-meta.json"), JSON.stringify({ messageCount: messages.length, firstPrompt: first.content || "(empty chat)", messagesSize: 1, messagesMtimeMs: Date.now() }));
+  // With a lag the CLI writes the chat once, at the end: until then the file knows nothing of this turn.
+  if (!process.env.FAKE_FILE_LAG_MS) {
+    fs.writeFileSync(path.join(chatDir, "chat-messages.json"), JSON.stringify(messages));
+    fs.writeFileSync(path.join(chatDir, "chat-meta.json"), JSON.stringify({ messageCount: messages.length, firstPrompt: first.content || "(empty chat)", messagesSize: 1, messagesMtimeMs: Date.now() }));
+  }
   answer = "";
   busyFor = 0;
   screen = "busy";
@@ -101,13 +100,19 @@ function submit(text) {
   const tick = setInterval(() => { busyFor += 250; render(); }, 250);
   setTimeout(() => {
     clearInterval(tick);
-    answer = process.env.FAKE_EMPTY_ANSWER ? "" : `ANSWER[${model.label}${effortOf()}] ${text.replace(/\s+/g, " ").slice(-60)}`;
-    messages.push({ id: `ai-${Date.now()}`, variant: "ai", content: "", blocks: [{ type: "text", textType: "reasoning", content: "thinking" }, ...(answer ? [{ type: "text", textType: "text", content: answer }] : [])], timestamp: "05:00 PM", isComplete: true, completionTime: "2s", credits: 0 });
-    fs.writeFileSync(path.join(chatDir, "chat-messages.json"), JSON.stringify(messages));
-    fs.writeFileSync(path.join(chatDir, "chat-meta.json"), JSON.stringify({ messageCount: messages.length, firstPrompt: first.content || "(empty chat)", messagesSize: 1, messagesMtimeMs: Date.now() }));
+    replies += 1;
+    answer = process.env.FAKE_EMPTY_ANSWER ? "" : `ANSWER#${replies}[${model.label}${effortOf()}] ${text.replace(/\s+/g, " ").slice(-60)}`;
     screen = "idle";
     render();
+    // The chat file can trail the screen; the engine must not take the last reply for this one.
+    setTimeout(() => writeReply(first), Number(process.env.FAKE_FILE_LAG_MS ?? 0));
   }, busyMs);
+}
+
+function writeReply(first) {
+  messages.push({ id: `ai-${Date.now()}`, variant: "ai", content: "", blocks: [{ type: "text", textType: "reasoning", content: "thinking" }, ...(answer ? [{ type: "text", textType: "text", content: answer }] : [])], timestamp: "05:00 PM", isComplete: true, completionTime: "2s", credits: 0 });
+  fs.writeFileSync(path.join(chatDir, "chat-messages.json"), JSON.stringify(messages));
+  fs.writeFileSync(path.join(chatDir, "chat-meta.json"), JSON.stringify({ messageCount: messages.length, firstPrompt: first.content || "(empty chat)", messagesSize: 1, messagesMtimeMs: Date.now() }));
 }
 
 function key(data) {

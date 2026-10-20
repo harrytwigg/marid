@@ -4,7 +4,7 @@ import { JINN_HOME } from "../shared/paths.js";
 import { neutralizeForPaste } from "../shared/skill-commands.js";
 import { describeUsage, usageFromScreen, writeFreebuffUsage } from "../shared/freebuff-usage.js";
 import { isRemoteTarget } from "../shared/remote-target.js";
-import { processExitInterruption, ptyHostKey } from "./pty-lifecycle.js";
+import { processExitInterruption } from "./pty-lifecycle.js";
 import { processStartFailure } from "../shared/process-start.js";
 import type { FreebuffScreenInfo } from "./freebuff-screen.js";
 import {
@@ -131,9 +131,10 @@ export class FreebuffInteractiveEngine extends FreebuffProcessPool implements In
 
   private async sendAndRead(live: Live, driver: FreebuffDriver, signal: AbortSignal, opts: EngineRunOpts, remoteCwd: string | undefined): Promise<EngineResult> {
     const message = composeFreebuffMessage(opts, remoteCwd);
+    const before = await this.messageCount(live);
     await driver.submit(neutralizeForPaste(message));
-    const finish = await driver.waitForFinish(() => this.answerInChat(live, message));
-    const { answer, usedScreen } = await this.readAnswer(live, signal, message, finish.lines);
+    const finish = await driver.waitForFinish(() => this.answerInChat(live, message, before));
+    const { answer, usedScreen } = await this.readAnswer(live, signal, message, before, finish.lines);
     this.recordUsage(finish.info);
     if (!answer.trim()) throw emptyAnswer(finish.lines);
     if (usedScreen) logger.warn(`FreebuffInteractiveEngine: ${opts.sessionId}: the answer was read from the screen, not the chat file`);
@@ -148,6 +149,7 @@ export class FreebuffInteractiveEngine extends FreebuffProcessPool implements In
 
   /** The process this turn types into: a warm one that is still the right one, else a new one. */
   private async processFor(id: string, signal: AbortSignal, params: SpawnParams): Promise<Live> {
+    await this.whenStarted(id);
     const warm = this.live.get(id);
     if (warm && !reusableProcess(warm, { target: params.target, cwd: params.cwd, chatId: params.chatId })) this.lifecycle.releaseSession(id);
 
@@ -158,7 +160,6 @@ export class FreebuffInteractiveEngine extends FreebuffProcessPool implements In
       return existing;
     }
     const live = await this.spawnProcess(id, params);
-    this.lifecycle.adopt(id, live.handle, { turnRunning: true, hostKey: ptyHostKey(params.target) });
     this.lifecycle.turnStarted(id);
     return live;
   }
@@ -180,31 +181,48 @@ export class FreebuffInteractiveEngine extends FreebuffProcessPool implements In
     return chat;
   }
 
-  /** The reply to `sent`, if the chat file already holds it complete. */
-  private async chatAnswer(live: Live, sent: string): Promise<string | undefined> {
+  /**
+   * The reply to `sent`, if the chat file already holds it complete. It must be a
+   * reply to THIS message: a chat file that has not caught up still ends in the
+   * previous turn's completed answer, and a message sent twice ("continue") matches
+   * itself. So the file must hold more messages than the chat had when this one went
+   * in, as well as end in this message's text.
+   */
+  private async chatAnswer(live: Live, sent: string, before: number): Promise<string | undefined> {
     const chat = await this.chatOf(live, sent);
     if (!chat) return undefined;
     const messages = await live.chats.readMessages(chat);
-    // The reply must be to THIS message: a chat file that has not caught up
-    // yet still ends in the previous turn's completed answer.
+    if (!Array.isArray(messages) || messages.length <= before) return undefined;
     const answer = extractAnswer(messages);
     return answer && firstPromptMatches(lastUserMessage(messages), sent) ? answer.text : undefined;
   }
 
-  private async answerInChat(live: Live, sent: string): Promise<boolean> {
+  /** How many messages the chat holds right now (0 for a chat that does not exist yet), from its small meta file. */
+  private async messageCount(live: Live): Promise<number> {
+    if (!live.chat) return 0;
     try {
-      return (await this.chatAnswer(live, sent)) !== undefined;
+      const listing = await live.chats.list();
+      const mine = listing.find((c) => c.chatId === live.chat?.chatId && (!live.chat.project || c.project === live.chat.project));
+      return mine?.meta?.messageCount ?? 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  private async answerInChat(live: Live, sent: string, before: number): Promise<boolean> {
+    try {
+      return (await this.chatAnswer(live, sent, before)) !== undefined;
     } catch {
       return false;
     }
   }
 
-  private async readAnswer(live: Live, signal: AbortSignal, sent: string, lines: string[]): Promise<{ answer: string; usedScreen: boolean }> {
+  private async readAnswer(live: Live, signal: AbortSignal, sent: string, before: number, lines: string[]): Promise<{ answer: string; usedScreen: boolean }> {
     const deadline = Date.now() + ANSWER_WAIT_MS;
     let lastError: unknown;
     for (;;) {
       try {
-        const answer = await this.chatAnswer(live, sent);
+        const answer = await this.chatAnswer(live, sent, before);
         if (answer !== undefined) return { answer, usedScreen: false };
       } catch (err) {
         lastError = err;

@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { FinishWatch, FOOTER_GRACE_MS, NOT_ACCEPTED_MS, SETTLE_MS } from "../freebuff-turn-watch.js";
 import { SessionReleased, UNKNOWN_SCREEN_LIMIT_MS } from "../freebuff-failure.js";
-import { parseFreebuffScreen } from "../freebuff-screen.js";
+import { countRefusals, parseFreebuffScreen, type FreebuffRefusal } from "../freebuff-screen.js";
+
+type RefusalKind = FreebuffRefusal["kind"];
 import { screen } from "./helpers/freebuff-fixtures.js";
 
-function watch() {
+function watch(baseline = new Map<RefusalKind, number>()) {
   let t = 1_000_000;
-  const w = new FinishWatch("local", t, () => t);
+  const w = new FinishWatch("local", t, baseline, () => t);
   const look = (lines: string[], advance = 0) => {
     t += advance;
     return w.observe(parseFreebuffScreen(lines), lines);
@@ -55,6 +57,14 @@ describe("FinishWatch", () => {
     const { look } = watch();
     look(screen("busy.txt"));
     expect(look(refused)).toBe("wait");
+  });
+
+  it("ignores a refusal that was already on screen when the message went in, and takes a second one", () => {
+    const old = ["  Session limit reached. See https://freebuff.com/plans or choose another model with /model.", ...screen("idle-session-active.txt")];
+    const baseline = countRefusals(parseFreebuffScreen(old).refusals);
+    const { look } = watch(baseline);
+    expect(look(old)).toBe("wait");
+    expect(() => look(["  Session limit reached. See https://freebuff.com/plans.", ...old])).toThrow(/would not start a session/);
   });
 
   it("asks to start again when the session was released as the message went in", () => {

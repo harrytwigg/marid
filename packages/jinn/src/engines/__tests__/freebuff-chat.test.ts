@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   chatFileRelPath,
   chatKey,
-  countUserMessages,
   extractAnswer,
   firstPromptMatches,
   localChatSource,
@@ -55,11 +54,6 @@ describe("extractAnswer", () => {
     expect(extractAnswer(undefined)).toBeUndefined();
     expect(extractAnswer({})).toBeUndefined();
     expect(extractAnswer([])).toBeUndefined();
-  });
-
-  it("counts user messages", () => {
-    expect(countUserMessages([{ variant: "user" }, ai([]), { variant: "user" }])).toBe(2);
-    expect(countUserMessages(null)).toBe(0);
   });
 });
 
