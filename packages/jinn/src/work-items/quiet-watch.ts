@@ -45,6 +45,8 @@ export interface QuietWindows {
 export interface QuietWatchDeps {
   /** Whether `name` is an employee in the org: not the operator, not empty. */
   isEmployee(name: string): boolean;
+  /** Whether `name` is a gateway system employee (the Todo Dispatcher, the Shaper). */
+  isSystemEmployee?(name: string): boolean;
   /** Restart a parent's work through the Todo Dispatcher. */
   redispatch(parentId: string, reason: string): AvailabilityRearmResult;
   /** The windows to use now, or null when the watch is turned off. */
@@ -57,6 +59,8 @@ interface QuietTodo {
   /** When the Todo last entered `executing`: the stint the ladder counts in. */
   stint: string;
   producer: Session | undefined;
+  /** The assignee's newest execution session, messageable or not: the one to read. */
+  assigneeSessionId: string | undefined;
   quietSince: number;
   awaitingBackgroundTask: boolean;
   row: QuietWatchRow | undefined;
@@ -64,11 +68,12 @@ interface QuietTodo {
 
 const time = (iso: string | null | undefined): number => Date.parse(iso ?? "") || 0;
 
-/** The session to nudge: the assignee's newest messageable execution session,
- *  else the newest messageable one. Attempts arrive newest first. */
+/** The session to nudge: the assignee's newest messageable execution session.
+ *  Only the assignee's: a Todo reassigned while executing keeps the previous
+ *  holder's session linked, and a Dispatcher is linked to execute too, and
+ *  neither is the one to carry the work on. Attempts arrive newest first. */
 function producerSession(item: WorkItem, attempts: readonly Session[]): Session | undefined {
-  const reachable = attempts.filter(canMessageSession);
-  return reachable.find((session) => session.employee === item.assignee) ?? reachable[0];
+  return attempts.find((session) => session.employee === item.assignee && canMessageSession(session));
 }
 
 /** The Todo, read as quiet at `now`, or undefined while anything speaks for it. */
@@ -86,7 +91,8 @@ export function quietTodo(item: WorkItem, now: number, windows: QuietWindows): Q
   const quietSince = Math.max(time(stint), time(row?.nudgedAt), ...attempts.map((session) => time(session.lastActivity)));
   const window = awaitingBackgroundTask ? windows.backgroundTaskMs : windows.afterMs;
   if (now - quietSince < window) return undefined;
-  return { item, stint, producer, quietSince, awaitingBackgroundTask, row };
+  const assigneeSessionId = attempts.find((session) => session.employee === item.assignee)?.id;
+  return { item, stint, producer, assigneeSessionId, quietSince, awaitingBackgroundTask, row };
 }
 
 /** Claim one keyed outbox delivery; the id to deliver, or undefined when it was already taken. */
@@ -145,29 +151,33 @@ function ownedParent(item: WorkItem, isEmployee: (name: string) => boolean): { p
   return parent.assignee && isEmployee(parent.assignee) ? { parent, owner: parent.assignee } : undefined;
 }
 
-/** The session the producer reports to, when it is not the producer. */
-function reportingSession(producer: Session | undefined): Session | undefined {
+/** The session the producer reports to, when it is not the producer. A system
+ *  employee does not count: the Dispatcher that started board-walk work can
+ *  only nudge once more, so telling it would be a second nudge that nobody above
+ *  the work hears of. */
+function reportingSession(producer: Session | undefined, isSystemEmployee: (name: string) => boolean): Session | undefined {
   const id = producer ? withReportingParent(producer).parentSessionId : undefined;
   const session = id ? getSession(id) : undefined;
-  return session && session.id !== producer?.id && canMessageSession(session) ? session : undefined;
+  if (!session || session.id === producer?.id || !canMessageSession(session)) return undefined;
+  return session.employee && isSystemEmployee(session.employee) ? undefined : session;
 }
 
 /** Whoever owns the work from above: the parent's owner, then who the producer reports to. */
-function escalationTarget(quiet: QuietTodo, isEmployee: (name: string) => boolean): EscalationTarget {
-  const owned = ownedParent(quiet.item, isEmployee);
+function escalationTarget(quiet: QuietTodo, deps: QuietWatchDeps): EscalationTarget {
+  const owned = ownedParent(quiet.item, deps.isEmployee);
   if (owned) {
     const session = parentOwnerSession(owned.parent, owned.owner);
     if (session && session.id !== quiet.producer?.id) return { kind: "session", session };
     if (owned.parent.status === "executing") return { kind: "redispatch", parent: owned.parent };
   }
-  const reporting = reportingSession(quiet.producer);
+  const reporting = reportingSession(quiet.producer, deps.isSystemEmployee ?? (() => false));
   return reporting ? { kind: "session", session: reporting } : { kind: "none" };
 }
 
 function escalationInput(quiet: QuietTodo, now: number): QuietEscalationInput {
   return {
     item: quiet.item,
-    sessionId: quiet.row?.nudgeSessionId ?? quiet.producer?.id,
+    sessionId: quiet.row?.nudgeSessionId ?? quiet.assigneeSessionId,
     quietSince: quiet.quietSince,
     nudgedAt: quiet.row?.nudgedAt ? time(quiet.row.nudgedAt) : undefined,
     now,
@@ -199,7 +209,7 @@ function redispatchParent(parent: WorkItem, input: QuietEscalationInput, deps: Q
 
 function escalate(quiet: QuietTodo, deps: QuietWatchDeps, now: number): void {
   const input = escalationInput(quiet, now);
-  const target = escalationTarget(quiet, deps.isEmployee);
+  const target = escalationTarget(quiet, deps);
   const db = initDb();
   const deliveryId = db.transaction(() => {
     const id = target.kind === "session" ? claim(target.session, quiet, "escalation", quietEscalationPayload(input)) : undefined;

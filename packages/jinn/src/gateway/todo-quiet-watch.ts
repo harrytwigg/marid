@@ -2,6 +2,7 @@ import { loadConfig } from "../shared/config.js";
 import { QUIET_AFTER_MS, QUIET_BACKGROUND_TASK_MS, startQuietWatch, type QuietWindows } from "../work-items/quiet-watch.js";
 import type { ApiContext } from "./api.js";
 import { orgRegistry } from "./org-registry.js";
+import { isSystemEmployeeName } from "./system-employees.js";
 import { redispatchTodo } from "./todo-redispatch.js";
 
 type QuietWatchConfig = { enabled?: boolean; afterMinutes?: number; backgroundTaskMinutes?: number } | undefined;
@@ -23,6 +24,7 @@ export function quietWindows(config: QuietWatchConfig): QuietWindows | null {
 export function startTodoQuietWatch(context: ApiContext): () => void {
   return startQuietWatch({
     isEmployee: (name) => orgRegistry(context.getConfig()).has(name),
+    isSystemEmployee: isSystemEmployeeName,
     redispatch: (todoId, reason) => redispatchTodo(todoId, context, reason),
     windows: () => quietWindows(loadConfig().gateway.todoQuietWatch),
   });

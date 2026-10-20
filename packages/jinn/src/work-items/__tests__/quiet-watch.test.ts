@@ -36,12 +36,14 @@ beforeAll(async () => {
 });
 
 const OWNER = "quiet-owner";
+const DISPATCHER = "todo-dispatcher";
 const WORKER = "quiet-worker";
 const MIN = 60_000;
 let base = Date.now();
 let offset = 0;
 const deps = {
-  isEmployee: (name: string) => name === OWNER || name === WORKER,
+  isEmployee: (name: string) => name === OWNER || name === WORKER || name === DISPATCHER,
+  isSystemEmployee: (name: string) => name === DISPATCHER,
   redispatch: vi.fn((_id: string, _reason: string) => ({ status: "executing" as const })),
   now: () => base + offset,
 };
@@ -143,7 +145,10 @@ describe("a quiet executing Todo", () => {
     const { message } = deliveries()[1]!.payload;
     expect(message).toContain(child.id);
     expect(message).toContain(workerSession);
-    expect(message).toContain("nudged it");
+    expect(message).toContain("nudged its session");
+    expect(message).toContain("send_to_session");
+    // Refused while the child's session is idle between turns, so not offered.
+    expect(message).not.toContain("dispatch_work_item");
     expect(kinds(child.id)).toEqual(["quiet_nudged", "quiet_escalated"]);
 
     at(120);
@@ -204,6 +209,8 @@ describe("a quiet executing Todo", () => {
     sweep();
     expect(deliveries()).toEqual([expect.objectContaining({ targetSessionId: ownerSession, deliveryKind: "todo-quiet-escalation" })]);
     expect(deliveries()[0]!.payload.message).toContain("was not nudged");
+    expect(deliveries()[0]!.payload.message).toContain("dispatch_work_item");
+    expect(deliveries()[0]!.payload.message).toContain(workerSession);
     expect(kinds(child.id)).toEqual(["quiet_escalated"]);
   });
 
@@ -223,6 +230,48 @@ describe("a quiet executing Todo", () => {
     at(56);
     sweep();
     expect(deliveries()[2]).toMatchObject({ targetSessionId: workerSession, deliveryKind: "todo-quiet-nudge" });
+  });
+});
+
+describe("who is nudged and who is told", () => {
+  it("never nudges a previous assignee's session after the Todo was reassigned", () => {
+    const item = executingTodo(WORKER);
+    const previous = sessionOn(WORKER, item.id);
+    transitions.assignWorkItem(item.id, OWNER, null, "operator");
+    at(16);
+    sweep();
+    expect(deliveries().map((delivery) => delivery.targetSessionId)).not.toContain(previous);
+    expect(kinds(item.id)).toEqual(["quiet_escalated"]);
+  });
+
+  it("never nudges the Dispatcher linked to execute a Todo its delegate never reached", () => {
+    const item = executingTodo(WORKER);
+    const dispatcher = sessionOn(DISPATCHER, item.id);
+    at(16);
+    sweep();
+    expect(deliveries().map((delivery) => delivery.targetSessionId)).not.toContain(dispatcher);
+  });
+
+  it("does not escalate a board-walk root to the Dispatcher that started it, but says so on the Todo", () => {
+    const dispatcher = sessionOn(DISPATCHER, null);
+    const item = executingTodo(WORKER);
+    sessionOn(WORKER, item.id, "idle", { parent: dispatcher });
+    at(16);
+    sweep();
+    at(40);
+    sweep();
+    expect(deliveries().map((delivery) => delivery.targetSessionId)).not.toContain(dispatcher);
+    expect(kinds(item.id)).toEqual(["quiet_nudged", "quiet_escalated"]);
+    const comments = db.prepare("SELECT body FROM work_item_comments WHERE work_item_id = ?").pluck().all(item.id) as string[];
+    expect(comments).toEqual([expect.stringContaining("nobody was told")]);
+  });
+
+  it("says one minute, not one minutes", () => {
+    const item = executingTodo(WORKER);
+    sessionOn(WORKER, item.id);
+    offset = 70_000;
+    watch.sweepQuietTodos({ ...deps, windows: () => ({ afterMs: 60_000, backgroundTaskMs: 60_000 }) });
+    expect(deliveries()[0]!.payload.message).toContain("for 1 minute.");
   });
 });
 

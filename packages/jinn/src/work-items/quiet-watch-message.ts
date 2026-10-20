@@ -14,8 +14,9 @@ function clip(text: string, max: number): string {
   return oneLine.length <= max ? oneLine : `${oneLine.slice(0, max - 1).trimEnd()}…`;
 }
 
-function minutesSince(since: number, now: number): number {
-  return Math.max(1, Math.round((now - since) / 60_000));
+function minutesSince(since: number, now: number): string {
+  const minutes = Math.max(1, Math.round((now - since) / 60_000));
+  return minutes === 1 ? "1 minute" : `${minutes} minutes`;
 }
 
 export interface QuietNudgeInput {
@@ -30,13 +31,13 @@ export function quietNudgePayload(input: QuietNudgeInput): SessionDeliveryPayloa
   const { item, quietSince, now } = input;
   const minutes = minutesSince(quietSince, now);
   const waited = input.awaitingBackgroundTask
-    ? `This session still counts a background command it started, but it has been running for over ${minutes} minutes with no word. `
+    ? `This session still counts a background command it started, but it has been running for over ${minutes} with no word. `
       + "Check it directly: if it is done, read its result; if it is stuck, stop it and run it again in the foreground."
     : "If you ended your turn waiting on a background command, test run or build, it has finished or was lost, "
       + "and its notification will not wake you. Check its result directly now.";
   const message = [
     `[Gateway] Todo ${item.id} (${clip(item.title, DISPLAY_TITLE_MAX_CHARS)}) is still \`executing\`, `
-      + `but nothing has run in this session for ${minutes} minutes.`,
+      + `but nothing has run in this session for ${minutes}.`,
     waited,
     "Then carry on with the work. If you are waiting on a person, move the Todo to `blocked` with a note saying who "
       + "and what. If the work is finished, hand it in the way your brief says. Do not end another turn waiting on "
@@ -44,7 +45,7 @@ export function quietNudgePayload(input: QuietNudgeInput): SessionDeliveryPayloa
   ].join("\n\n");
   return {
     message,
-    displayMessage: `⏸ ${item.id} quiet for ${minutes} min: asked to carry on`,
+    displayMessage: `⏸ ${item.id} quiet for ${minutes}: asked to carry on`,
     meta: { kind: "todo-quiet-nudge", workItemId: item.id },
   };
 }
@@ -58,26 +59,34 @@ export interface QuietEscalationInput {
   now: number;
 }
 
-function nudgeLine(input: QuietEscalationInput): string {
-  if (input.nudgedAt === undefined) return "No session of it could be messaged, so it was not nudged.";
-  const at = new Date(input.nudgedAt).toISOString();
-  return `The gateway nudged it at ${at} to carry on, and it has gone quiet again.`;
+function quietLine(input: QuietEscalationInput): string {
+  const { quietSince, now } = input;
+  if (input.nudgedAt === undefined) {
+    return `Nothing has run for it for ${minutesSince(quietSince, now)}, and none of its assignee's sessions `
+      + "can be messaged, so it was not nudged.";
+  }
+  return `The gateway nudged its session at ${new Date(input.nudgedAt).toISOString()} to carry on, `
+    + `and nothing has run since for ${minutesSince(quietSince, now)}.`;
 }
 
+/** Only what works on a Todo in this state: a dispatch is refused while the
+ *  assignee's session is idle between turns, so it is offered only when that
+ *  session cannot be messaged at all. */
 function actionLine(input: QuietEscalationInput): string {
   const read = input.sessionId ? `read_session { sessionId: "${input.sessionId}", last: 20 } to see where it stopped, then ` : "";
-  return `Look at it now: ${read}nudge it with send_to_session, re-dispatch it with dispatch_work_item, `
-    + "or take the work back. If it is waiting on a person, it should be `blocked` with a note.";
+  const act = input.nudgedAt === undefined
+    ? "re-dispatch it with dispatch_work_item, or take the work back or reassign it"
+    : "message it with send_to_session, or take the work back or reassign it";
+  return `Look at it now: ${read}${act}. If it is waiting on a person, it should be \`blocked\` with a note.`;
 }
 
 export function quietEscalationPayload(input: QuietEscalationInput): SessionDeliveryPayload {
-  const { item, quietSince, now } = input;
+  const { item } = input;
   const who = item.assignee ? `, ${item.assignee}` : "";
   const message = [
-    `[Gateway] Todo ${item.id} (${clip(item.title, DISPLAY_TITLE_MAX_CHARS)}${who}) has been \`executing\` `
-      + `with nothing running for ${minutesSince(quietSince, now)} minutes`
+    `[Gateway] Todo ${item.id} (${clip(item.title, DISPLAY_TITLE_MAX_CHARS)}${who}) is \`executing\` with nothing running`
       + `${input.sessionId ? ` (session ${input.sessionId})` : ""}.`,
-    nudgeLine(input),
+    quietLine(input),
     actionLine(input),
   ].join("\n\n");
   return {
