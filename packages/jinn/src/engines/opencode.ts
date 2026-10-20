@@ -303,8 +303,8 @@ export class OpencodeEngine implements InterruptibleEngine {
     // opencode-server-compaction.ts) — Jinn's self-compaction queues it, and an
     // operator may type it.
     if (isCompactCommand(opts.prompt)) return await this.runServerCompaction(server, slot, opts, trackingId);
-    let drifted = false;
-    let unreachable = false;
+    // Stop the server once the hold is released: its API drifted, or it never streamed.
+    let retire = false;
     // Everything from here on is inside the try: a hold left behind would keep
     // the next turn for another spec waiting on this server for good.
     try {
@@ -317,7 +317,7 @@ export class OpencodeEngine implements InterruptibleEngine {
         abort: (target) => servers.abortTurn(trackingId, target),
         onSessionId: (id) => servers.noteEngineSession(trackingId, id),
         onProtocolDrift: (reason) => {
-          drifted = true;
+          retire = true;
           servers.markUnsupported(server.hostKey, `opencode ${server.hostKey} server API drift: ${reason}`);
         },
       });
@@ -328,17 +328,16 @@ export class OpencodeEngine implements InterruptibleEngine {
       );
       const result = await turn.run();
       if (turn.serverUnreachable) {
-        unreachable = true;
+        retire = true;
+        slot.turn = undefined; // a later interrupt is the slot's (see kill), which the fallback honours
         return new Error(result.error ?? "the server's event stream did not connect");
       }
       if (result.error) logger.error(result.error);
       return result;
     } finally {
       servers.release(trackingId);
-      if (unreachable) await servers.stop(trackingId);
-      // Off server mode for this host: the next turn resumes the same opencode
-      // session with a plain `run`, which must not find a server still holding it.
-      if (drifted) await servers.stop(trackingId);
+      // A plain `run` resumes the same opencode session, so no server may still hold it.
+      if (retire) await servers.stop(trackingId);
     }
   }
 

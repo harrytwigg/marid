@@ -110,7 +110,7 @@ async function waitDelivered(h: Harness): Promise<void> {
   await new Promise((r) => setTimeout(r, 200));
 }
 
-const ENV_HOOKS = ["FAKE_V2_OPERATOR_BUSY_MS", "FAKE_V2_LOG", "FAKE_V2_VERSION", "FAKE_V2_CLI_VERSION", "FAKE_V2_SERVE_FAIL", "FAKE_V2_HEARTBEAT_MS", "FAKE_V2_API_INFO_FAIL", "FAKE_V2_MCP_FAIL"];
+const ENV_HOOKS = ["FAKE_V2_OPERATOR_BUSY_MS", "FAKE_V2_LOG", "FAKE_V2_VERSION", "FAKE_V2_CLI_VERSION", "FAKE_V2_SERVE_FAIL", "FAKE_V2_HEARTBEAT_MS", "FAKE_V2_API_INFO_FAIL", "FAKE_V2_MCP_FAIL", "FAKE_V2_EVENT_STALL"];
 
 beforeEach(() => {
   for (const name of ENV_HOOKS) delete process.env[name];
@@ -825,6 +825,16 @@ describe("the config staged for an OpenCode 2 server", { timeout: 30_000 }, () =
     await expect(h.pool.acquire("sess-1", { cwd: JINN_HOME, bin: FAKE_V2, resolvedMcp: COMPANY_MCP })).rejects.toThrow(
       /did not start: none of its MCP servers connected \(jinn\)/,
     );
+    expect(h.pool.size()).toBe(0);
+  });
+
+  // The fake has no `run` verb, so the plain-run fallback shows as its refusal.
+  it("falls back to a plain run, posting nothing, when the server's event stream does not connect", async () => {
+    process.env.FAKE_V2_EVENT_STALL = "1";
+    SERVER_TURN_TIMING.connectMs = 300;
+    const h = harness();
+    const result = await h.engine.run(runOpts());
+    expect(result.error).toMatch(/unsupported verb run/);
     expect(h.pool.size()).toBe(0);
   });
 

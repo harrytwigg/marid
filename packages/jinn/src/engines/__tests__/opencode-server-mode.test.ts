@@ -1029,6 +1029,27 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
     fs.rmSync(serveLog, { force: true });
   });
 
+  it("an interrupt that lands while the unreachable turn's server is stopped ends the turn, rather than running it plain", async () => {
+    const serveLog = path.join(JINN_HOME, `stalled-stream-stop-${process.pid}.log`);
+    fs.rmSync(serveLog, { force: true });
+    process.env.FAKE_OPENCODE_SERVE_LOG = serveLog;
+    process.env.FAKE_OPENCODE_EVENT_STALL = "1";
+    SERVER_TURN_TIMING.connectMs = 300;
+    const { engine, pool } = harness();
+    const realStop = pool.stop.bind(pool);
+    let first = true;
+    pool.stop = async (id: string) => {
+      if (first) { first = false; engine.kill(id, "Interrupted: operator"); }
+      return await realStop(id);
+    };
+    const result = await engine.run(runOpts());
+    expect(result.error).toBe("Interrupted: operator");
+    expect(result.result).toBe("");
+    expect(pool.size()).toBe(0);
+    expect(fs.readFileSync(serveLog, "utf8").split("\n").filter((l) => l.startsWith("serve"))).toHaveLength(1);
+    fs.rmSync(serveLog, { force: true });
+  });
+
   it("an interrupt during the bootstrap ends the turn at once, and leaves the server starting for the next turn", async () => {
     process.env.FAKE_OPENCODE_BOOTSTRAP_MS = "3000";
     const h = harness();
