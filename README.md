@@ -237,11 +237,14 @@ Marid detects installed agent CLIs and lets each employee or session choose an e
 | **pi** | Pi coding agent CLI | see Pi CLI docs | Chat | - |
 | **opencode** | [opencode](https://opencode.ai) - open-source terminal coding agent, bring your own provider | `curl -fsSL https://opencode.ai/install \| bash` (then `opencode auth login`) | Chat (batch, or server mode with a live terminal) | - |
 | **musecode** | [Muse Code](https://dev.meta.ai) - Meta's terminal coding agent, driven over its session protocol | `curl -fsSL https://dev.meta.ai/install.sh \| bash` (then `muse login` or set `META_API_KEY`) | Chat (batch, one `muse serve` per turn) | minimal / low / medium / high / xhigh |
+| **freebuff** | [Freebuff](https://freebuff.com) - free terminal coding agent with no print mode, driven through its screen | `npm install -g freebuff` (then `freebuff login`) | Chat (the real TUI in a terminal) · CLI (xterm) · SSH | the level in its `/model` picker |
 | **hermes** | NousResearch Hermes - open-source, model-agnostic agent | `curl -fsSL https://hermes-agent.nousresearch.com/install.sh \| bash` | Chat (ACP streaming) · CLI (xterm view) | - |
 
 Fallback labels include **Opus (Latest)**, **Sonnet (Latest)**, **Fable (Latest)**, **GPT-5.5 Codex**, **Grok Build**, and **Gemini 3.5 Flash Medium / High / Low**. Pi and Hermes report their models at session start; Muse Code lists its own catalog (`muse-spark-1.3`, `muse-spark-1.2` and their contributor variants offline).
 
 > **Hermes cost note.** Unlike the subscription-wrapped engines, Hermes owns its own model loop and bills **per token** on the provider configured in `~/.hermes`. It streams over the Agent Client Protocol (ACP) and runs fully auto-approved. See [`docs/engines-hermes.md`](docs/engines-hermes.md).
+
+> **Freebuff.** Billed in hours from a daily allowance, not money, so `engines.freebuff.maxConcurrent` (default 1) caps the processes alive at once and extra turns queue. It has no Marid MCP tools. Its terms restrict automated use: run it only with permission. See [`docs/engines-freebuff.md`](docs/engines-freebuff.md).
 
 > **Muse Code.** Driven over its own session protocol (one `muse serve` per turn). Sign in with `muse login` or `META_API_KEY`; its subscription window and weekly block show on the Limits page, and a spent window moves new sessions to the fallback engine. See [`docs/engines-musecode.md`](docs/engines-musecode.md).
 

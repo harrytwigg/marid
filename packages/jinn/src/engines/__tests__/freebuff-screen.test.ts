@@ -21,6 +21,16 @@ describe("parseFreebuffScreen", () => {
     expect(info.statusBar).toEqual({ modelLabel: "DeepSeek V4.1 Flash 10/17", effort: "high" });
   });
 
+  it("reads a process whose hour session ran out: back to the panel that says the next message starts one", () => {
+    // Recorded as a warm process crossed the end of its session (the clock reached 0:00 and the panel reset).
+    const info = parseFreebuffScreen(screen("idle-session-expired.txt"));
+    expect(info.state).toBe("idle");
+    expect(info.sessionNotStarted).toBe(true);
+    expect(info.sessionActive).toBe(false);
+    expect(info.sessionLeftMinutes).toBeUndefined();
+    expect(info.refusal).toBeUndefined();
+  });
+
   it("reads an idle screen with a running session", () => {
     const info = parseFreebuffScreen(screen("idle-session-active.txt"));
     expect(info.state).toBe("idle");
@@ -72,6 +82,7 @@ describe("parseFreebuffScreen", () => {
     expect(left(" 1h left · 13.5K (1%)")).toBe(60);
     expect(left(" 58m left · 13.5K (1%)")).toBe(58);
     expect(left(" 45s left")).toBe(0);
+    expect(left(" 4:59 left     ✕ End session")).toBe(4);
     expect(left("the work is not left")).toBeUndefined();
   });
 });

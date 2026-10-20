@@ -82,8 +82,8 @@ const REFUSALS: Array<{ kind: FreebuffRefusal["kind"]; pattern: RegExp }> = [
 const BUSY_LINE = /^\s*working\.\.\..*?(?:(\d+)s\s+)?■\s*Esc\s*$/;
 const TURN_FOOTER = /⎘\s*•\s*[0-9hms ]+•/;
 const HOURS_REMAINING = /(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*hours?\s+remaining/i;
-// `58m left · 13.5K (1%)`, `1h left · …`, `1h 1m left`, `45s left`.
-const SESSION_LINE = /^\s*((?:\d+h)?\s*(?:\d+m)?\s*(?:\d+s)?)\s*left\b(?:\s*·\s*([\d.]+)\s*([KMkm])?\s*\((\d+)%\))?/;
+// `58m left · 13.5K (1%)`, `1h left · …`, `1h 1m left`, and `4:59 left` for the last five minutes.
+const SESSION_LINE = /^\s*((?:\d+h)?\s*(?:\d+m)?\s*(?:\d+s)?|\d+:\d{2})\s*left\b(?:\s*·\s*([\d.]+)\s*([KMkm])?\s*\((\d+)%\))?/;
 
 export function parseTokenCount(value: string, unit: string | undefined): number {
   const n = Number(value);
@@ -92,6 +92,8 @@ export function parseTokenCount(value: string, unit: string | undefined): number
 }
 
 function minutesOf(duration: string): number | undefined {
+  const clock = /^(\d+):\d{2}$/.exec(duration.trim());
+  if (clock) return Number(clock[1]);
   const h = /(\d+)h/.exec(duration)?.[1];
   const m = /(\d+)m/.exec(duration)?.[1];
   const s = /(\d+)s/.exec(duration)?.[1];

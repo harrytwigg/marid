@@ -14,6 +14,7 @@ const SRC = path.resolve(__dirname, "..", "..");
 /** Where a literal `cwd: JINN_HOME` is allowed, and how many times, with the reason. */
 const ALLOWED: Record<string, { count: number; why: string }> = {
   "engines/claude-interactive.ts": { count: 2, why: "the ssh client's own local cwd; the session's cwd is the `cd` in the remote command" },
+  "engines/freebuff-interactive.ts": { count: 1, why: "the ssh client's own local cwd; the session's cwd is the `cd` in the remote command" },
   "engines/opencode-interactive.ts": { count: 1, why: "opencode: a scoped employee cannot use it (FR-026)" },
   "engines/opencode-launch.ts": { count: 1, why: "opencode: a scoped employee cannot use it (FR-026)" },
   "engines/opencode-server.ts": { count: 2, why: "opencode: a scoped employee cannot use it (FR-026)" },

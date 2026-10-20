@@ -27,7 +27,7 @@ interface CronJob {
 
 The board walk is the one action that reads its runner fields. Its job's `employee`, `engine`, `model` and `effortLevel`, where set, override the same keys in `board-walk.md` (which supplies them otherwise); unset on both, the defaults are `employee: assistant`, `engine: claude`, `model: sonnet`. The walk's turn can only run on an engine whose tools the gateway can clamp to the walk's own (`claude` or `opencode`), so its `engine`/`model` are validated on save like a session's pair. `delivery` is not used by an action job.
 
-`schedule` uses standard five-field cron syntax. `timezone` is an IANA timezone; when omitted, the system timezone applies. Engine values are claude, codex, antigravity, grok, pi, hermes, opencode, musecode. A model override must be supported by its engine.
+`schedule` uses standard five-field cron syntax. `timezone` is an IANA timezone; when omitted, the system timezone applies. Engine values are claude, codex, antigravity, grok, pi, hermes, opencode, musecode, freebuff. A model override must be supported by its engine.
 
 ## Delivery ownership
 
