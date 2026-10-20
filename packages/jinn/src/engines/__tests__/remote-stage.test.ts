@@ -40,7 +40,7 @@ vi.mock("node:dgram", () => {
   return { default: { createSocket }, createSocket };
 });
 
-import { REMOTE_ENGINE_NAMES } from "../../shared/models.js";
+import { REMOTE_ENGINE_CLI, REMOTE_ENGINE_NAMES } from "../../shared/models.js";
 import Database from "better-sqlite3";
 import { REMOTE_STAGE_MARKER } from "../../shared/remote-farm.js";
 import { isRemoteStagedHome } from "../../shared/local-db-guard.js";
@@ -468,9 +468,14 @@ describe.skipIf(process.platform === "win32")("FACTS_SCRIPT node resolution", ()
     fs.writeFileSync(opencode, "#!/bin/sh\nexit 0\n");
     fs.chmodSync(opencode, 0o755);
 
+    const muse = path.join(binDir, "muse");
+    fs.writeFileSync(muse, "#!/bin/sh\nexit 0\n");
+    fs.chmodSync(muse, 0o755);
+
     const kv = runFacts(`${binDir}:/usr/bin:/bin`);
     expect(kv.pi).toBe(pi);
     expect(kv.opencode).toBe(opencode);
+    expect(kv.muse).toBe(muse);
     expect(kv.claude).toBe("");
   });
 
@@ -1010,6 +1015,8 @@ describe("requireRemoteEngineBin", () => {
       .toBe("/usr/local/bin/claude");
     expect(requireRemoteEngineBin("build-box", { ...FACTS, opencodeBin: "/usr/local/bin/opencode" }, "opencode"))
       .toBe("/usr/local/bin/opencode");
+    expect(requireRemoteEngineBin("build-box", { ...FACTS, museBin: "/home/u/.local/bin/muse" }, "musecode"))
+      .toBe("/home/u/.local/bin/muse");
   });
 
   it("does not refuse a Pi host for having no Claude Code or opencode on it", () => {
@@ -1022,9 +1029,15 @@ describe("requireRemoteEngineBin", () => {
     // having nothing installed on it.
     for (const engine of REMOTE_ENGINE_NAMES) {
       if (engine === "pi") continue;
+      const cli = REMOTE_ENGINE_CLI[engine];
       expect(() => requireRemoteEngineBin("build-box", FACTS, engine))
-        .toThrow(new RegExp(`build-box has no \\\`${engine}\\\``));
+        .toThrow(new RegExp(`build-box has no \\\`${cli}\\\`.*command -v ${cli}`, "s"));
     }
+  });
+
+  it("names the command a Muse Code employee needs, which is `muse`, not the engine's name", () => {
+    expect(() => requireRemoteEngineBin("build-box", FACTS, "musecode"))
+      .toThrow(/build-box has no `muse` on the non-interactive PATH.*command -v muse'.*muse login/s);
   });
 
   it("names the host, the binary and how to check the PATH when one is missing", () => {

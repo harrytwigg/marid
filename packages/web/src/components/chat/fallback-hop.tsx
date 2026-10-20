@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { fallbackLinkLabel, type FallbackHop, type FallbackHopNoticeMeta, type FallbackHopReason } from '@jinn/fallback-chain-wire'
 import { ArrowRightLeftIcon, ChevronDown, ChevronRight } from '@/components/ui/icon'
-import { SKIP_REASON_TEXT, formatReset } from '@/lib/fallback-format'
+import { formatReset, skipText } from '@/lib/fallback-format'
 import type { Message } from '@/lib/conversations'
 
 /**
@@ -59,7 +59,7 @@ function PassedOver({ skipped }: { skipped: NonNullable<FallbackHop['skipped']> 
     <ul data-fallback-hop-skipped className="m-0 mt-[var(--space-1)] list-none p-0">
       {skipped.map((link) => (
         <li key={link.key} className="text-[length:var(--text-caption2)] text-[var(--text-tertiary)]">
-          Passed over {labelOfLinkKey(link.key)}: {SKIP_REASON_TEXT[link.reason] ?? link.reason}
+          Passed over {labelOfLinkKey(link.key)}: {skipText(link.reason, link.detail)}
         </li>
       ))}
     </ul>

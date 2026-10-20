@@ -39,7 +39,7 @@ function session(engine: string, employee?: string): string {
   return created.id;
 }
 
-async function envFileOf(engine: "claude" | "pi" | "opencode", jinnSessionId: string): Promise<string> {
+async function envFileOf(engine: "claude" | "pi" | "opencode" | "musecode", jinnSessionId: string): Promise<string> {
   const staging = await prepareRemoteSession({
     target: { remoteHost: "box", remoteCwd: path.join(tmp, "root", "work") }, remote, facts, engine, jinnSessionId, gatewayPort: 40123,
   } as never);
@@ -67,7 +67,7 @@ afterEach(() => {
 });
 
 describe.skipIf(process.platform === "win32")("a remote session's session-env.sh", { timeout: 60_000 }, () => {
-  for (const engine of ["claude", "pi", "opencode"] as const) {
+  for (const engine of ["claude", "pi", "opencode", "musecode"] as const) {
     it(`exports JINN_EMPLOYEE for a ${engine} session with an employee, and not for one without`, async () => {
       const withEmployee = await envFileOf(engine, session(engine, "build-dev"));
       expect(withEmployee).toContain("export JINN_EMPLOYEE='build-dev'\n");
@@ -101,5 +101,52 @@ describe.skipIf(process.platform === "win32")("a remote opencode session's stage
 
   it("stages no config without the ceiling or MCP servers", async () => {
     expect(await stagedConfig("2.0.29", false)).toBeUndefined();
+  });
+});
+
+describe.skipIf(process.platform === "win32")("a remote Muse Code session's staging", { timeout: 60_000 }, () => {
+  const CAPABILITY = "capability-of-this-session";
+  const gatewayMcp = {
+    mcpServers: {
+      jinn: {
+        command: process.execPath,
+        args: ["/gateway/dist/src/mcp/server-entry.js"],
+        env: { JINN_HOME: "/gateway/home", JINN_GATEWAY_URL: "http://127.0.0.1:7777", JINN_SESSION_CAPABILITY: CAPABILITY },
+      },
+    },
+  };
+
+  async function stage(resolvedMcp?: typeof gatewayMcp) {
+    return await prepareRemoteSession({
+      target: { remoteHost: "box", remoteCwd: path.join(tmp, "root", "work") }, remote, facts, engine: "musecode",
+      jinnSessionId: session("musecode"), gatewayPort: 40123, ...(resolvedMcp ? { resolvedMcp } : {}),
+    });
+  }
+
+  /** Every file under the stand-in host, with its content. */
+  function hostFiles(): Array<[string, string]> {
+    const host = path.join(tmp, "host");
+    return (fs.readdirSync(host, { recursive: true }) as string[])
+      .map((rel) => path.join(host, rel))
+      .filter((file) => fs.lstatSync(file).isFile())
+      .map((file) => [file, fs.readFileSync(file, "utf-8")]);
+  }
+
+  it("re-points the MCP set at the host's install and this session's tunnel, and keeps the capability off the host's disk", async () => {
+    const staging = await stage(gatewayMcp);
+    expect(staging.engine).toBe("musecode");
+    expect(staging.resolvedMcp?.mcpServers.jinn).toMatchObject({
+      command: facts.nodeBin,
+      args: [path.posix.join(facts.entryDir, "server-entry.js")],
+      env: { JINN_HOME: staging.sessionHome, JINN_GATEWAY_URL: `http://127.0.0.1:${staging.tunnelPort}`, JINN_SESSION_CAPABILITY: CAPABILITY },
+    });
+    // Muse takes the set over the host's stdin, so no file carries it.
+    expect(hostFiles().filter(([, content]) => content.includes(CAPABILITY)).map(([file]) => file)).toEqual([]);
+  });
+
+  it("stages no MCP set for a session that has none, and no Claude trust seed either", async () => {
+    const staging = await stage();
+    expect(staging).not.toHaveProperty("resolvedMcp");
+    expect(fs.existsSync(path.join(tmp, "host", "profile", ".claude.json"))).toBe(false);
   });
 });

@@ -3,13 +3,11 @@ import type { EngineHealthReading } from "../shared/engine-health.js";
 import { sessionFallbackChain } from "../shared/fallback-chain.js";
 import { linkModelWritten } from "../shared/fallback-chain-links.js";
 import type { FallbackChainSource, ResolvedFallbackLink } from "../shared/fallback-chain-wire.js";
-import { engineAvailable, engineSupportsRemote, getModelRegistry, type EngineName } from "../shared/models.js";
+import { getModelRegistry } from "../shared/models.js";
 import { sshDestination } from "../shared/remote-target.js";
 import type { ModelRegistry } from "../shared/types.js";
-import type { RemoteEngineName } from "../shared/models.js";
-import { remoteEngineAvailable } from "../engines/remote-stage.js";
 import type { ChooseSubstituteInput } from "./rate-limit-substitute.js";
-import { availabilityRegistry } from "./availability-registry.js";
+import { availabilityRegistry, engineInstalledWhereRun } from "./availability-registry.js";
 import { sessionAtOwnTarget } from "./fallback-run.js";
 import { substituteScoped } from "./substitute-filters.js";
 
@@ -37,12 +35,8 @@ export interface SubstituteChain {
 /** The registry the resolver reads, with `available` meaning what the walk always meant by it: registered with this gateway and installed where the turn runs. */
 function runtimeRegistry(input: ChooseSubstituteInput): ModelRegistry {
   const { config, engines, remote } = input;
-  return availabilityRegistry(getModelRegistry(config), (name) => {
-    const installed = remote && engineSupportsRemote(name as EngineName)
-      ? remoteEngineAvailable(sshDestination(remote), name as RemoteEngineName) !== false
-      : engineAvailable(config, name as EngineName);
-    return engines.has(name) && installed;
-  });
+  const destination = remote ? sshDestination(remote) : undefined;
+  return availabilityRegistry(getModelRegistry(config), (name) => engines.has(name) && engineInstalledWhereRun(config, name, destination));
 }
 
 /** An unprofiled Claude link in an engine chain is the employee's own account (the default's when it has none). */
@@ -58,7 +52,7 @@ export function resolveSubstituteChain(input: ChooseSubstituteInput, health: Eng
   const { config, employee, session, remote } = input;
   const own = sessionAtOwnTarget(session);
   // The scope is the one the turn ran under (its target, not a fresh read of the roster): a remote turn is walked as remote.
-  const scope = { scoped: substituteScoped(session, input.remoteTarget), remote: Boolean(remote) };
+  const scope = { scoped: substituteScoped(session, input.remoteTarget), remote: Boolean(remote), ...(remote ? { host: sshDestination(remote) } : {}) };
   const registry = runtimeRegistry(input);
   const { source, links } = sessionFallbackChain({ config, employee, session: own, registry, health, scope });
   const namedModel = (link: ResolvedFallbackLink): string | undefined => (linkModelWritten(link) ? link.model : undefined);

@@ -14,6 +14,12 @@ export const SKIP_REASON_TEXT: Record<FallbackSkipReason, string> = {
   "profile-unknown": "No declared account has that name",
 }
 
+/** A skip as a sentence, with the gateway's detail (which host lacks the engine) when it gave one. */
+export function skipText(reason: FallbackSkipReason, detail?: string): string {
+  const text = SKIP_REASON_TEXT[reason] ?? reason
+  return detail ? `${text}: ${detail}` : text
+}
+
 /** A reset as a time of day when it is today, else with its date. Null when the
  *  value is absent or not a date: a misparsed record reads as "no time", never as
  *  "Invalid Date". */

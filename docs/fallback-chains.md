@@ -114,11 +114,9 @@ reset, as before.
   has not been tried and is not ruled out. A chain is always the chain of the
   session's **own** target, whichever target is running now, so a limit on a
   stand-in continues along it and never goes back to the target the session left.
-- A link is passed over (and named in the hop record) when it was already
-  tried, its engine is not installed, its engine cannot run on the session's
-  host, the session is department-scoped and the link is not a Claude account,
-  or its model is not served. A link whose health says it is at its limit is
-  passed over first, and tried only when nothing healthier is left.
+- A link is passed over, and named in the hop record with why (the skip
+  reasons below). A link whose health says it is at its limit is passed over
+  first, and tried only when nothing healthier is left.
 - When the chain runs out, the session waits for its own target's reset and
   resumes there. It reads `waiting` (its `lastError` names the own target and
   when it reopens, e.g. "claude · work · opus usage limit, resumes …"), its last
@@ -132,6 +130,25 @@ reset, as before.
 - A **new** session whose own target is out of allowance starts on the first
   healthy link instead, with a run that starts there.
 
+
+### Why a link is passed over
+
+| Skip | When |
+|---|---|
+| `tried` | already tried in this run (the loop guard) |
+| `not-installed` | its engine is not installed where the session runs: on the gateway, or for a session on a remote host, on that host. For an engine that runs remotely the link also carries `skipDetail` naming the host, e.g. "build-box has no \`muse\` on its non-interactive PATH", and the hop record carries it as `detail` |
+| `remote` | the session runs on a remote host and the link cannot follow it there: an engine other than `claude`, `pi`, `opencode` and `musecode`, or a link naming a local Claude profile |
+| `scoped` | the session is department-scoped and the link is not a Claude account |
+| `exhausted` | its health says it is at its limit; tried only when nothing else is left |
+| `model-not-served` | the engine's catalog does not list the link's model |
+| `profile-unknown` | the link names a profile that is not a declared account |
+
+Whether a remote host has an engine's CLI comes from the facts the gateway
+learned when it last spawned a session there (`command -v` over a
+non-interactive ssh). A host this gateway has not probed since it started counts
+as having it, and the spawn then says if it does not. `GET /api/fallback-chains`
+judges an employee on a remote host the same way, so its chain shows what its
+turns would do.
 ### Health keys
 
 A Claude target's health is its account's. An opencode target's health is kept

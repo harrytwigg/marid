@@ -15,9 +15,11 @@ vi.mock("../../shared/models.js", async (importOriginal) => ({
   // Only codex lists a catalogue (the one model a session's own fallback target names); no other link's model is ever "not served".
   getModelRegistry: () => ({ codex: { models: [{ id: "gpt-mini" }] } }),
 }));
+/** What the remote host's facts say is installed there, by engine; unset is installed. */
+let onHost: Record<string, boolean> = {};
 vi.mock("../../engines/remote-stage.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../engines/remote-stage.js")>()),
-  remoteEngineAvailable: () => true,
+  remoteEngineAvailable: (_destination: string, engine: string) => onHost[engine] ?? true,
 }));
 let health: Record<string, { state: "exhausted"; until: string; recheckAt: string }> = {};
 vi.mock("../../shared/engine-health.js", async (importOriginal) => ({
@@ -34,7 +36,7 @@ import type { Employee, JinnConfig } from "../../shared/types.js";
 const FRIEND = path.join(os.tmpdir(), "claude-chain-friend");
 const friend = claudeProfileFromDir(FRIEND);
 const FRIEND_ACCOUNT = `claude:${friend.key}`;
-const engines = new Set(["claude", "codex", "pi", "opencode"]);
+const engines = new Set(["claude", "codex", "pi", "opencode", "musecode"]);
 const spent = () => { const until = new Date(Date.now() + 3600_000).toISOString(); return { state: "exhausted" as const, until, recheckAt: until }; };
 
 function configWith(claude: Record<string, unknown> = {}, other: Record<string, unknown> = {}): JinnConfig {
@@ -58,7 +60,7 @@ function decide(config: JinnConfig, over: Partial<ChooseSubstituteInput> = {}, e
 const OWN = "claude||opus";
 const run = (position: number, ...tried: string[]) => ({ position, tried: [OWN, ...tried] });
 
-beforeEach(() => { health = {}; });
+beforeEach(() => { health = {}; onHost = {}; });
 afterEach(() => { setDepartmentScopeResolver(null); setEmployeeDepartmentResolver(null); });
 
 describe("object links", () => {
@@ -119,6 +121,23 @@ describe("remote sessions keep the remote rule", () => {
 
   it("wait when no link can run there", () => {
     expect(asRemote(configWith({ fallback: ["codex"] })).choice).toBeUndefined();
+  });
+
+  const museChain = { fallback: [{ engine: "musecode", model: "muse-spark-1.3" }, { engine: "opencode", model: "x/m" }] };
+
+  it("take a Muse Code link, which runs on their host too", () => {
+    const { choice, next } = asRemote(configWith(museChain));
+    expect(choice).toEqual({ engine: "musecode", model: "muse-spark-1.3", claudeProfile: null });
+    expect(next?.skipped).toEqual([]);
+  });
+
+  it("pass over Muse Code on a host without `muse`, naming the host", () => {
+    onHost = { musecode: false };
+    const { choice, next } = asRemote(configWith(museChain));
+    expect(choice).toEqual({ engine: "opencode", model: "x/m", claudeProfile: null });
+    expect(next?.skipped).toEqual([
+      { key: "musecode||muse-spark-1.3", reason: "not-installed", detail: "box has no `muse` on its non-interactive PATH" },
+    ]);
   });
 });
 

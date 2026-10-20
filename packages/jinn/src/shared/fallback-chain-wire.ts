@@ -77,7 +77,17 @@ export interface ResolvedFallbackLink extends FallbackLink {
   written?: FallbackLink;
   /** Present when the link cannot be used at all for this subject or session. */
   skip?: FallbackSkipReason;
+  /** The skip in the gateway's words, when it has more to say than the reason:
+   *  for a session on a remote host, which host lacks the engine's CLI. */
+  skipDetail?: string;
   health?: FallbackLinkHealth;
+}
+
+/** A link a hop passed over. */
+export interface FallbackHopSkip {
+  key: string;
+  reason: FallbackSkipReason;
+  detail?: string;
 }
 
 /** One move along a chain, recorded on the session and announced in its transcript. */
@@ -90,8 +100,8 @@ export interface FallbackHop {
   reason: FallbackHopReason;
   /** The failing target's reset, when it stated one. */
   resetsAt?: string;
-  /** Links passed over on the way to `to`, with why. */
-  skipped?: Array<{ key: string; reason: FallbackSkipReason }>;
+  /** Links passed over on the way to `to`, with why (`detail`: the link's `skipDetail`). */
+  skipped?: FallbackHopSkip[];
 }
 
 /**

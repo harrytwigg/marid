@@ -1,6 +1,6 @@
 import type { EngineHealthReading } from "./engine-health.js";
 import { isLinkExhausted } from "./fallback-chain-health.js";
-import type { FallbackSkipReason, ResolvedFallbackLink } from "./fallback-chain-wire.js";
+import type { FallbackHopSkip, FallbackSkipReason, ResolvedFallbackLink } from "./fallback-chain-wire.js";
 
 /**
  * Which link a limit moves a session to next. Pure: a resolved chain, where the
@@ -20,7 +20,7 @@ export interface NextFallbackLink {
   index: number;
   link: ResolvedFallbackLink;
   /** Links passed over between the cursor and `link`, with why. */
-  skipped: Array<{ key: string; reason: FallbackSkipReason }>;
+  skipped: FallbackHopSkip[];
 }
 
 /**
@@ -50,7 +50,8 @@ function scan(
     const link = links[index]!;
     const reason: FallbackSkipReason | undefined = tried.has(link.key) ? "tried" : link.skip ?? (isSpent(link) ? "exhausted" : undefined);
     if (reason === undefined) return { index, link, skipped };
-    skipped.push({ key: link.key, reason });
+    const detail = reason === link.skip ? link.skipDetail : undefined;
+    skipped.push({ key: link.key, reason, ...(detail ? { detail } : {}) });
   }
   return undefined;
 }

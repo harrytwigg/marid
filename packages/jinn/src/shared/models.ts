@@ -85,7 +85,7 @@ export function engineOffersPty(name: string, config: Pick<JinnConfig, "engines"
  * Membership is a property of the ENGINE ADAPTER, not of the CLI it drives:
  * each of these branches on `remoteHost` and spawns `ssh` instead of its own
  * binary (`claude-interactive.ts` `spawnRemote`, `pi.ts` and `opencode.ts`
- * `runRemote`). Every other adapter ignores the field entirely and would run
+ * `runRemote`, `musecode.ts` `spawnRemoteHost`). Every other adapter ignores the field entirely and would run
  * the turn on the gateway — with `--dangerously-skip-permissions`, against a
  * checkout that is not there — while the UI showed a remote employee working
  * normally.
@@ -95,8 +95,18 @@ export function engineOffersPty(name: string, config: Pick<JinnConfig, "engines"
  * remote employee is never handed to an engine that would silently bring the
  * work back here.
  */
-export const REMOTE_ENGINE_NAMES = ["claude", "pi", "opencode"] as const;
+export const REMOTE_ENGINE_NAMES = ["claude", "pi", "opencode", "musecode"] as const;
 export type RemoteEngineName = (typeof REMOTE_ENGINE_NAMES)[number];
+
+/** The command each remote engine runs on a host, which is not always the
+ *  engine's name: the `musecode` engine drives Muse Code's `muse`. What an
+ *  operator is told to look for with `command -v`, so it is the real binary. */
+export const REMOTE_ENGINE_CLI: Record<RemoteEngineName, string> = {
+  claude: "claude",
+  pi: "pi",
+  opencode: "opencode",
+  musecode: "muse",
+};
 
 /** Type guard: can `name`'s adapter run a turn on another host? */
 export function engineSupportsRemote(name: string): name is RemoteEngineName {
