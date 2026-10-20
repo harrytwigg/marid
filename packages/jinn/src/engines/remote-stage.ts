@@ -398,12 +398,15 @@ export function requireRemoteEngineBin(
 ): string {
   const bin = remoteEngineBin(facts, engine);
   if (bin) return bin;
+  throw new Error(remoteEngineMissingMessage(destination, engine));
+}
+
+/** What a host that lacks `engine`'s CLI is called out with: the host, the binary and how to fix it. */
+export function remoteEngineMissingMessage(destination: string, engine: RemoteEngineName): string {
   const cli = REMOTE_ENGINE_CLI[engine];
-  throw new Error(
-    `${destination} has no \`${cli}\` on the non-interactive PATH. Check with `
+  return `${destination} has no \`${cli}\` on the non-interactive PATH. Check with `
     + `\`ssh ${destination} 'command -v ${cli}'\` — ${REMOTE_ENGINE_INSTALL_HINT[engine]}, `
-    + `or symlink it onto the default PATH if it is already installed`,
-  );
+    + `or symlink it onto the default PATH if it is already installed`;
 }
 
 /** Check the first line of the remote's `jinn --version` against the gateway's
