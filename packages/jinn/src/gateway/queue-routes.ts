@@ -151,7 +151,8 @@ function sendNow({ res, context, session, params }: QueueRouteArgs): void {
   if (!item) return;
   const sessionKey = queueKey(session);
   if (refusePaused(res, context, sessionKey)) return;
-  promotePendingQueueItem(sessionKey, item.id);
+  // The item can leave `pending` between the check and the write, as with edit.
+  if (!promotePendingQueueItem(sessionKey, item.id)) return json(res, { error: "Only a pending message can be sent now" }, 409);
   interruptRunningTurn(context, session);
   context.emit("queue:updated", { sessionId: params.id, sessionKey });
   return json(res, { status: "sent-now", itemId: params.itemId });

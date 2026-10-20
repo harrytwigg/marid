@@ -162,21 +162,26 @@ export function editPendingQueueItem(itemId: string, prompt: string): QueueItem 
  * Only the rows' positions move, in one transaction. Each row keeps its id, its
  * text, its bubble, its attachments and the dispatch its enqueuer registered, so
  * a queue item id names the same message before and after, and the message runs
- * the way it was sent. The set of position values is reused rather than
- * renumbered, so internal rows (callback deliveries) hold the place they had.
+ * the way it was sent. Internal rows (callback deliveries) keep their place in
+ * the line. The lane's pending rows are renumbered densely while at it, because
+ * positions are only unique when every row was enqueued in one process lifetime:
+ * a row put back to pending after a restart can tie with a later one, and a tie
+ * would let the promoted row lose.
  *
  * Returns false when the item is not a pending visible row of the lane.
  */
 export function promotePendingQueueItem(sessionKey: string, itemId: string): boolean {
   const db = initDb();
   return db.transaction(() => {
-    const parked = db.prepare(
-      "SELECT id, position FROM queue_items WHERE session_key = ? AND internal = 0 AND status = 'pending' ORDER BY position ASC",
-    ).all(sessionKey) as Array<{ id: string; position: number }>;
-    if (!parked.some((row) => row.id === itemId)) return false;
-    const promoted = rotatePendingToFront(parked, itemId);
+    const pending = db.prepare(
+      "SELECT id, internal FROM queue_items WHERE session_key = ? AND status = 'pending' ORDER BY position ASC, created_at ASC, rowid ASC",
+    ).all(sessionKey) as Array<{ id: string; internal: number }>;
+    const visible = pending.filter((row) => row.internal === 0);
+    if (!visible.some((row) => row.id === itemId)) return false;
+    const promoted = rotatePendingToFront(visible, itemId);
+    let nextVisible = 0;
     const write = db.prepare("UPDATE queue_items SET position = ? WHERE id = ? AND status = 'pending'");
-    promoted.forEach((row, index) => write.run(parked[index].position, row.id));
+    pending.forEach((row, index) => write.run(index + 1, row.internal === 0 ? promoted[nextVisible++].id : row.id));
     return true;
   }).immediate();
 }

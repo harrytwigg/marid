@@ -141,7 +141,7 @@ export class SessionQueue {
    * another row's dispatch. The returned promise settles with that function's
    * outcome, whichever slot ran it.
    */
-  async enqueue(sessionKey: string, fn: () => Promise<void>, queueItemId?: string, claimed = false): Promise<void> {
+  async enqueue(sessionKey: string, fn: () => Promise<void>, queueItemId?: string): Promise<void> {
     if (queueItemId) this.inFlightItems.add(queueItemId);
     const ahead = this.pending.get(sessionKey) || 0;
     this.pending.set(sessionKey, ahead + 1);
@@ -152,32 +152,22 @@ export class SessionQueue {
       const owner = getQueueItem(queueItemId)?.sessionId ?? "?";
       logger.info(`Session ${owner} turn ${queueItemId} queued behind ${ahead} turn(s) on lane ${sessionKey}`);
     }
-    if (queueItemId && !claimed) return this.enqueueRow(sessionKey, fn, queueItemId);
-    return this.enqueueOwn(sessionKey, fn, queueItemId);
+    return queueItemId ? this.enqueueRow(sessionKey, fn, queueItemId) : this.enqueueRowless(sessionKey, fn);
   }
 
-  /** A task that runs in its own slot: one with no durable row, or whose row was claimed by its enqueuer. */
-  private enqueueOwn(sessionKey: string, fn: () => Promise<void>, queueItemId?: string): Promise<void> {
-    if (!queueItemId) this.rowlessWaiting.set(sessionKey, this.getRowlessWaitingCount(sessionKey) + 1);
+  /** A task with no durable row (a connector turn, the talk handoff): it runs in its own slot. */
+  private enqueueRowless(sessionKey: string, fn: () => Promise<void>): Promise<void> {
+    this.rowlessWaiting.set(sessionKey, this.getRowlessWaitingCount(sessionKey) + 1);
     const runTask = async () => {
-      if (!queueItemId) this.leaveRowlessWaiting(sessionKey);
+      this.leaveRowlessWaiting(sessionKey);
       this.running.add(sessionKey);
-      let queueItemStarted = false;
       try {
         // Wait while paused — blocks until resumeQueue() wakes us (no polling)
         await this.waitWhilePaused(sessionKey);
-        if (queueItemId) {
-          if (!this.takeClaimedRow(sessionKey, queueItemId)) return;
-          queueItemStarted = true;
-        }
         if (!this.cancelled.has(sessionKey)) {
           await fn();
         }
       } finally {
-        if (queueItemId) {
-          if (queueItemStarted) markQueueItemCompleted(queueItemId);
-          this.inFlightItems.delete(queueItemId);
-        }
         this.running.delete(sessionKey);
         this.decrementPending(sessionKey);
       }
@@ -207,29 +197,43 @@ export class SessionQueue {
       let failure: { error: unknown } | undefined;
       try {
         row = await this.claimNextRow(sessionKey);
-        if (row && !this.cancelled.has(sessionKey)) {
-          try {
-            await row.fn();
-          } catch (error) {
-            failure = { error };
-          }
-        }
+        if (row && !this.cancelled.has(sessionKey)) await row.fn();
+      } catch (error) {
+        failure = { error };
       } finally {
         // Mark the DB row done in finally so an errored/cancelled task can't
         // leave the item stuck as 'running' (getQueueItems returns 'running'
         // rows, so a stuck row would keep the UI badge from draining).
         if (row) {
-          markQueueItemCompleted(row.id);
+          try {
+            markQueueItemCompleted(row.id);
+          } catch (error) {
+            failure ??= { error };
+          }
           this.inFlightItems.delete(row.id);
         }
         this.running.delete(sessionKey);
         this.decrementPending(sessionKey);
-        this.waitingRows.forgetIfEmpty(sessionKey);
       }
-      if (row) failure ? row.reject(failure.error) : row.resolve();
+      this.settleSlot(sessionKey, row, failure);
     };
     void this.chain(sessionKey, runSlot);
     return settled;
+  }
+
+  /**
+   * Tell the caller how its slot went. A slot that failed before claiming any
+   * row (the durable store erroring) still owes the lane one row: that one is
+   * failed rather than left waiting on a slot that will never come for it.
+   */
+  private settleSlot(sessionKey: string, row: WaitingRow | undefined, failure: { error: unknown } | undefined): void {
+    if (row) {
+      if (failure) row.reject(failure.error);
+      else row.resolve();
+    } else if (failure) {
+      this.waitingRows.failOldest(sessionKey, failure.error);
+    }
+    this.waitingRows.forgetIfEmpty(sessionKey);
   }
 
   /**
@@ -250,18 +254,12 @@ export class SessionQueue {
         await this.parkUntilWoken(sessionKey);
         continue;
       }
-      this.waitingRows.take(sessionKey, head);
-      if (markQueueItemRunning(head.id)) return head;
+      if (markQueueItemRunning(head.id)) {
+        this.waitingRows.take(sessionKey, head);
+        return head;
+      }
       this.waitingRows.skip(sessionKey, head, "no longer pending");
     }
-  }
-
-  /** A claimed row was flipped to running by its enqueuer; it runs only if it still is. */
-  private takeClaimedRow(sessionKey: string, queueItemId: string): boolean {
-    const item = getQueueItem(queueItemId);
-    const runnable = item?.status === "running";
-    if (!runnable) logger.warn(`Turn ${queueItemId} on lane ${sessionKey} skipped: queue row is ${item ? item.status : "gone"}`);
-    return runnable;
   }
 
   private leaveRowlessWaiting(sessionKey: string): void {

@@ -66,6 +66,15 @@ export class WaitingRows {
     row.resolve();
   }
 
+  /** Fail the row that has waited longest, for a slot that broke before it could claim one. */
+  failOldest(lane: string, error: unknown): void {
+    const [row] = this.lanes.get(lane)?.values() ?? [];
+    if (!row) return;
+    this.take(lane, row);
+    this.onSkipped(row);
+    row.reject(error);
+  }
+
   /** Drop a lane's bookkeeping once nothing waits on it. */
   forgetIfEmpty(lane: string): void {
     if (this.lanes.get(lane)?.size === 0) this.lanes.delete(lane);

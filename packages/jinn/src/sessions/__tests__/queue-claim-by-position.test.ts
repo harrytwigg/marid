@@ -155,6 +155,38 @@ describe("SessionQueue claims the next row by position", () => {
     expect(ran).toEqual(["callback", "visible"]);
   });
 
+  it("promotes past a tie: rows left sharing a position by a restart", async () => {
+    const lane = "lane-tied";
+    const { ran, ids, release, done } = parkedLane(lane, ["a", "b", "c"]);
+    await tick();
+    (await import("../../shared/db.js")).initDb()
+      .prepare("UPDATE queue_items SET position = 50 WHERE session_key = ? AND status = 'pending'").run(lane);
+
+    reg.promotePendingQueueItem(lane, ids.get("c")!);
+
+    release();
+    await done();
+    expect(ran).toEqual(["running", "c", "a", "b"]);
+  });
+
+  it("rejects the caller and frees the row when the store fails while claiming it", async () => {
+    const lane = "lane-store-fails";
+    const db = (await import("../../shared/db.js")).initDb();
+    const queue = new SessionQueue();
+    const id = reg.enqueueQueueItem("s-claim", lane, "doomed");
+    db.exec(`CREATE TRIGGER fail_claim BEFORE UPDATE ON queue_items WHEN NEW.id = '${id}' AND NEW.status = 'running'
+             BEGIN SELECT RAISE(ABORT, 'store busy'); END`);
+    try {
+      await expect(queue.enqueue(lane, async () => {}, id)).rejects.toThrow("store busy");
+    } finally {
+      db.exec("DROP TRIGGER fail_claim");
+    }
+
+    expect(queue.hasInFlightItem(id)).toBe(false);
+    expect(queue.isRunning(lane)).toBe(false);
+    expect(queue.getPendingCount(lane)).toBe(0);
+  });
+
   it("lists pending rows for boot replay in the order the lane will claim them", async () => {
     const lane = "lane-replay";
     const { ids, release, done } = parkedLane(lane, ["a", "b", "c"]);
