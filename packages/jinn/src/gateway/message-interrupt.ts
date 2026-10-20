@@ -20,6 +20,15 @@ export function resolveMessageDelivery(o: {
 }
 
 /**
+ * Why a `delivery` field is refused, or undefined when it is absent or valid.
+ * A misspelt choice must not fall through to the default, which interrupts.
+ */
+export function messageDeliveryError(delivery: unknown): string | undefined {
+  if (delivery === undefined || delivery === null || delivery === "queue" || delivery === "now") return undefined;
+  return 'delivery must be "queue" or "now"';
+}
+
+/**
  * Whether a message arriving mid-turn cuts that turn off. An operator message
  * does by default (`sessions.interruptOnNewMessage`); a notification — a child
  * callback, a relay — never does. Nor does `/compact`: it waits for the running

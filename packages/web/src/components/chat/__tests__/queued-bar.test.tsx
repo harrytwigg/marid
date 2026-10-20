@@ -27,4 +27,16 @@ describe('QueuedBar', () => {
     expect(await screen.findByRole('alert')).toBeTruthy()
     expect(screen.getByText(/Could not send/)).toBeTruthy()
   })
+
+  it('forgets an old failure once the queue empties', async () => {
+    const view = render(<QueuedBar count={1} onSendAllNow={vi.fn().mockRejectedValue(new Error('gateway down'))} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Send all now' }))
+    await screen.findByRole('alert')
+
+    view.rerender(<QueuedBar count={0} onSendAllNow={vi.fn()} />)
+    view.rerender(<QueuedBar count={1} onSendAllNow={vi.fn()} />)
+
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByText('1 queued, sending after this reply in order')).toBeTruthy()
+  })
 })

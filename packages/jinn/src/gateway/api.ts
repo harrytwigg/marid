@@ -132,7 +132,7 @@ export {
 } from "../sessions/turn/text.js";
 import { getPackageVersion } from "../shared/version.js";
 import { badRequest, json, matchRoute, notFound, serverError, type ResWithEncoding } from "./route-helpers.js";
-import { handleSessionQueueRoute } from "./queue-routes.js";
+import { handleSessionQueueRoute, promotePendingQueueItem } from "./queue-routes.js";
 export { matchRoute } from "./route-helpers.js";
 import { handleCronApi } from "./cron-api.js";
 import { handleOrgApi } from "./org-api.js";
@@ -327,7 +327,7 @@ import {
 import { handleHeartbeatApi } from "./heartbeat-api.js";
 import { handleSelfCompactionApi } from "./self-compaction-api.js";
 import { handleSessionContextApi } from "./session-context-api.js";
-import { resolveMessageDelivery, shouldInterruptRunningTurn as interruptsRunningTurn } from "./message-interrupt.js";
+import { messageDeliveryError, resolveMessageDelivery, shouldInterruptRunningTurn as interruptsRunningTurn } from "./message-interrupt.js";
 import { isAutoCompacting } from "../sessions/auto-compaction.js";
 import { isRawEngineCommand } from "../shared/skill-commands.js";
 import { handleTerminalApi, type TerminalApiOptions } from "./terminal-api.js";
@@ -3916,7 +3916,7 @@ export async function handleApiRequest(
       }
 
       const prompt = body.message || body.prompt;
-      const messageError = messageBodyError(prompt);
+      const messageError = messageBodyError(prompt) ?? messageDeliveryError(body.delivery);
       if (messageError) return badRequest(res, messageError);
 
       // Allow internal callers (e.g. child session callbacks) to specify a non-user role
@@ -4194,8 +4194,11 @@ export async function handleApiRequest(
       // Internal notification-role messages are already durably queued above;
       // only real user messages create a visible queue-panel item here. The row
       // carries the whole payload so "send this one now" can move all of it.
+      let carrierQueueItemId = queueItemId;
       if (!isNotification) {
         queueItemId = enqueueQueueItem(session.id, sessionKey, prompt, { messageId: incomingMessageId, dispatch: { attachments: attachmentPaths, speechDerived } });
+        // A message that cut the turn off runs next, not behind what was already parked.
+        carrierQueueItemId = shouldInterruptRunningTurn ? promotePendingQueueItem(sessionKey, queueItemId) : queueItemId;
         context.emit("queue:updated", { sessionId: session.id, sessionKey });
       }
 
@@ -4207,7 +4210,7 @@ export async function handleApiRequest(
         status: "queued",
         sessionId: session.id,
         messageId: incomingMessageId,
-        queueItemId,
+        queueItemId: carrierQueueItemId,
         ...(delivery ? { delivery } : {}),
         ...(callbackDelivery ? { callbackDeliveryId: callbackDelivery.id } : {}),
       });

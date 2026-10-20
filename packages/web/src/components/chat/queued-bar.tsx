@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 /* The strip above the composer while messages are parked: how many, and the
  * one action that sends them all now, in order. A failed force-send says so
@@ -11,6 +11,8 @@ interface QueuedBarProps {
 
 export function QueuedBar({ count, onSendAllNow }: QueuedBarProps) {
   const [error, setError] = useState<string | null>(null)
+  // The bar stays mounted while hidden: an old failure must not greet the next queue.
+  useEffect(() => { if (count === 0) setError(null) }, [count])
   if (count === 0) return null
   return (
     <div className="flex shrink-0 items-center justify-between gap-[var(--space-3)] px-[var(--space-4)] py-[var(--space-2)]" data-queued-bar>

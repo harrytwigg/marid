@@ -28,7 +28,7 @@ const noEvents = () => () => {}
 
 beforeEach(() => {
   getSessionQueue.mockReset().mockResolvedValue([parked])
-  cancelQueueItem.mockReset().mockResolvedValue({ status: 'cancelled' })
+  cancelQueueItem.mockReset().mockResolvedValue({ status: 'cancelled', messageId: 'canonical-id' })
   sendAllQueueItemsNow.mockReset().mockResolvedValue({ status: 'sent-now', count: 1 })
 })
 
@@ -74,6 +74,28 @@ describe('useSessionQueue', () => {
 
     expect(cancelQueueItem).toHaveBeenCalledWith('s1', 'qi_1')
     expect([...result.current.withdrawn].sort()).toEqual(['canonical-id', 'local-uuid'])
+  })
+
+  it('withdraws the message the server says it removed, not the one this view last saw on the row', async () => {
+    // Send-now moves message ids between rows; the server's answer is the truth.
+    cancelQueueItem.mockResolvedValue({ status: 'cancelled', messageId: 'moved-here-id' })
+    const { result } = renderHook(() => useSessionQueue('s1', noEvents))
+    await waitFor(() => expect(result.current.byMessageId.size).toBe(1))
+
+    await act(async () => { await result.current.cancel('qi_1') })
+
+    expect([...result.current.withdrawn]).toEqual(['moved-here-id'])
+  })
+
+  it('withdraws a message cancelled from another view', async () => {
+    let listener: ((frame: unknown) => void) | undefined
+    const subscribe = (fn: (frame: unknown) => void) => { listener = fn; return () => {} }
+    const { result } = renderHook(() => useSessionQueue('s1', subscribe as never))
+    await waitFor(() => expect(listener).toBeDefined())
+
+    act(() => listener!({ event: 'queue:updated', payload: { sessionId: 's1', sessionKey: 'k', withdrawnMessageId: 'elsewhere-id' } }))
+
+    expect([...result.current.withdrawn]).toEqual(['elsewhere-id'])
   })
 
   it('keeps a message whose cancel the server refused', async () => {

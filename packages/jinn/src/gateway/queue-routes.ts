@@ -52,11 +52,12 @@ function resolveEditableItem(res: ServerResponse, params: Record<string, string>
 function cancelOneItem({ res, context, session, params }: QueueRouteArgs): void {
   if (!resolveEditableItem(res, params, "cancelled")) return;
   // The item can leave `pending` between the check and the write, as with edit.
-  if (!withdrawPendingQueueItem(params.itemId)) {
-    return json(res, { error: "Only a pending message can be cancelled" }, 409);
-  }
-  context.emit("queue:updated", { sessionId: params.id, sessionKey: session.sessionKey });
-  return json(res, { status: "cancelled", itemId: params.itemId });
+  const withdrawn = withdrawPendingQueueItem(params.itemId);
+  if (!withdrawn) return json(res, { error: "Only a pending message can be cancelled" }, 409);
+  // The message id comes from the write, not the caller: every view drops that bubble.
+  const messageId = withdrawn.messageId ?? undefined;
+  context.emit("queue:updated", { sessionId: params.id, sessionKey: queueKey(session), ...(messageId ? { withdrawnMessageId: messageId } : {}) });
+  return json(res, { status: "cancelled", itemId: params.itemId, ...(messageId ? { messageId } : {}) });
 }
 
 function listItems({ res, session }: QueueRouteArgs): void {
@@ -126,14 +127,32 @@ function interruptRunningTurn(context: ApiContext, session: Session): void {
 }
 
 /**
+ * Move a parked item's payload to the head of the pending rows, everything
+ * else keeping its order (see queue-rotation.ts for why payloads move, not
+ * rows). Returns the id of the row that now carries the item.
+ */
+export function promotePendingQueueItem(sessionKey: string, itemId: string): string {
+  const parked = getQueueItems(sessionKey).filter((row) => row.status === "pending");
+  const promoted = rotatePendingToFront(parked, itemId);
+  reassignPendingQueuePayloads(promoted.map((payload, index) => ({ id: parked[index].id, payload })));
+  return promoted[0]?.id === itemId ? parked[0].id : itemId;
+}
+
+/** A paused queue drains nothing: cutting the turn off there only loses the reply. */
+function refusePaused(res: ServerResponse, context: ApiContext, sessionKey: string): boolean {
+  if (!context.sessionManager.getQueue().isPaused(sessionKey)) return false;
+  json(res, { error: "The queue is paused; resume it to send" }, 409);
+  return true;
+}
+
+/**
  * Force-send everything parked: cut the running turn and let the queue drain
  * in its existing order, one message per turn. Unlike the single-item verb
- * there is no rotation: the head stays the head. A paused queue stays paused
- * (same as the single-item verb): the interrupt lands, and the drain starts
- * when the queue is resumed.
+ * there is no rotation: the head stays the head.
  */
 function sendAllNow({ res, context, session, params }: QueueRouteArgs): void {
   const sessionKey = queueKey(session);
+  if (refusePaused(res, context, sessionKey)) return;
   const count = getQueueItems(sessionKey).filter((row) => row.status === "pending").length;
   if (count > 0) interruptRunningTurn(context, session);
   context.emit("queue:updated", { sessionId: params.id, sessionKey });
@@ -144,9 +163,8 @@ function sendNow({ res, context, session, params }: QueueRouteArgs): void {
   const item = resolveEditableItem(res, params, "sent now");
   if (!item) return;
   const sessionKey = queueKey(session);
-  const parked = getQueueItems(sessionKey).filter((row) => row.status === "pending");
-  const promoted = rotatePendingToFront(parked, item.id);
-  reassignPendingQueuePayloads(promoted.map((payload, index) => ({ id: parked[index].id, payload })));
+  if (refusePaused(res, context, sessionKey)) return;
+  promotePendingQueueItem(sessionKey, item.id);
   interruptRunningTurn(context, session);
   context.emit("queue:updated", { sessionId: params.id, sessionKey });
   return json(res, { status: "sent-now", itemId: params.itemId });

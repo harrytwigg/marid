@@ -102,8 +102,13 @@ function useWithdrawn(sessionId: string | null) {
 }
 
 /** The session's queue rows, re-read on every queue:updated, and the wrapper
- *  each verb runs through. */
-function useQueueItems(sessionId: string | null, subscribe: (fn: GatewayEventListener) => () => void) {
+ *  each verb runs through. A cancel seen on the event, from any view, withdraws
+ *  its bubble here too. */
+function useQueueItems(
+  sessionId: string | null,
+  subscribe: (fn: GatewayEventListener) => () => void,
+  withdraw: (messageId: string) => void,
+) {
   const [items, setItems] = useState<QueueItem[]>([])
 
   const refresh = useCallback(async () => {
@@ -121,8 +126,9 @@ function useQueueItems(sessionId: string | null, subscribe: (fn: GatewayEventLis
   useEffect(() => subscribe((frame) => {
     if (frame.event !== 'queue:updated') return
     if (frame.payload.sessionId !== sessionId) return
+    if (frame.payload.withdrawnMessageId) withdraw(frame.payload.withdrawnMessageId)
     void refresh()
-  }), [subscribe, sessionId, refresh])
+  }), [subscribe, sessionId, refresh, withdraw])
 
   /** Refresh either way, then let the failure through: a card that says nothing
    *  after a rejected action is indistinguishable from one that worked. */
@@ -141,28 +147,29 @@ export function useSessionQueue(
   sessionId: string | null,
   subscribe: (fn: GatewayEventListener) => () => void,
 ): SessionQueue {
-  const { items, act } = useQueueItems(sessionId, subscribe)
+  const { canonical, withdraw } = useWithdrawn(sessionId)
+  const { items, act } = useQueueItems(sessionId, subscribe, withdraw)
   const { aliases, adopt } = useMessageIdAliases(sessionId)
 
   const byMessageId = useMemo(() => withAliases(indexByMessage(items), aliases), [items, aliases])
 
   const pendingCount = useMemo(() => items.filter((item) => item.status === 'pending').length, [items])
 
-  const { canonical, withdraw } = useWithdrawn(sessionId)
   const withdrawn = useMemo(() => withdrawnIds(canonical, aliases), [canonical, aliases])
 
   return useMemo<SessionQueue>(() => sessionId === null ? EMPTY : {
     byMessageId,
     pendingCount,
     withdrawn,
-    cancel: async (itemId) => {
-      const messageId = items.find((item) => item.id === itemId)?.messageId
-      await act(() => api.cancelQueueItem(sessionId, itemId))
+    // The server names the message it withdrew: send-now moves message ids
+    // between rows, so this view's snapshot of which row holds which can be stale.
+    cancel: (itemId) => act(async () => {
+      const { messageId } = await api.cancelQueueItem(sessionId, itemId)
       if (messageId) withdraw(messageId)
-    },
+    }),
     edit: (itemId, prompt) => act(() => api.editQueueItem(sessionId, itemId, prompt)),
     sendNow: (itemId) => act(() => api.sendQueueItemNow(sessionId, itemId)),
     sendAllNow: () => act(() => api.sendAllQueueItemsNow(sessionId)),
     adopt,
-  }, [sessionId, byMessageId, pendingCount, withdrawn, items, withdraw, act, adopt])
+  }, [sessionId, byMessageId, pendingCount, withdrawn, withdraw, act, adopt])
 }

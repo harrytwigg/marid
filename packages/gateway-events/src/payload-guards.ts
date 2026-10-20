@@ -211,7 +211,8 @@ export const payloadGuards: Record<GatewayEventName, PayloadGuard> = {
       && isString(value.sessionId)
       && isString(value.sessionKey)
       && isOptionalNumber(value.depth)
-      && isOptionalBoolean(value.paused),
+      && isOptionalBoolean(value.paused)
+      && isOptionalString(value.withdrawnMessageId),
   "hooks:run": (value) => isRecord(value) && isString(value.id) && isString(value.hook) && isString(value.status),
   "company:changed": isCompanyChangedEvent,
   "pins:changed": isEmptyPayload,

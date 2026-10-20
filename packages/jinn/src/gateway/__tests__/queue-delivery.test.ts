@@ -116,6 +116,41 @@ describe("POST /message delivery choice", () => {
     releaseNext();
   });
 
+  it("send-now with messages already queued runs next, ahead of them, then the queue in order", async () => {
+    const { context, session, prompts, kills, releaseNext } = await runningInterruptibleSession("delivery-now-ahead");
+    await send(context, session.id, "parked one", { delivery: "queue" });
+    await send(context, session.id, "parked two", { delivery: "queue" });
+
+    const urgent = await send(context, session.id, "urgent correction", { delivery: "now" });
+
+    expect(kills).toHaveLength(1);
+    // The response names the row that now carries the urgent message: the head.
+    const parked = await parkedRows(context, session.id);
+    expect(parked.map((row) => row.prompt)).toEqual(["urgent correction", "parked one", "parked two"]);
+    expect((urgent.body as { queueItemId: string }).queueItemId).toBe(parked[0].id);
+    // The cut-off turn's prompt is carried forward into the urgent one.
+    await eventually(() => expect(prompts[1]).toContain("urgent correction"));
+    expect(prompts[1]).not.toContain("parked one");
+    releaseNext();
+    await eventually(() => expect(prompts[2]).toBe("parked one"));
+    releaseNext();
+    await eventually(() => expect(prompts[3]).toBe("parked two"));
+    releaseNext();
+  });
+
+  it("refuses an unknown delivery value instead of falling back to interrupting", async () => {
+    const { context, session, prompts, kills, releaseNext } = await runningInterruptibleSession("delivery-unknown");
+
+    const refused = await send(context, session.id, "typo", { delivery: "later" });
+
+    expect(refused.status).toBe(400);
+    expect(kills).toEqual([]);
+    expect(await parkedRows(context, session.id)).toEqual([]);
+    expect(await transcriptTexts(context, session.id)).not.toContain("typo");
+    expect(prompts).toEqual(["running turn"]);
+    releaseNext();
+  });
+
   it("does not deliver a cancelled queued message", async () => {
     const { context, session, prompts, releaseNext } = await runningInterruptibleSession("delivery-cancel");
     await send(context, session.id, "keep me", { delivery: "queue" });
@@ -134,6 +169,24 @@ describe("POST /message delivery choice", () => {
     // Give a wrongly-delivered cancelled message a chance to appear, then check it did not.
     await new Promise((resolve) => setTimeout(resolve, 25));
     expect(prompts).toEqual(["running turn", "keep me"]);
+  });
+
+  it("cancel withdraws whichever message the row holds now, after a send-now moved it", async () => {
+    const { context, session, releaseNext } = await runningInterruptibleSession("delivery-cancel-moved");
+    await send(context, session.id, "first parked", { delivery: "queue" });
+    const second = await send(context, session.id, "second parked", { delivery: "queue" });
+    const [headRow, secondRow] = await parkedRows(context, session.id);
+    // Promote the second; its payload moves onto the head row, and the first onto the other.
+    await request(context, "POST", `/api/sessions/${session.id}/queue/${secondRow.id}/send-now`, {});
+
+    const cancelled = await request(context, "DELETE", `/api/sessions/${session.id}/queue/${headRow.id}`);
+
+    expect(cancelled.status).toBe(200);
+    expect((cancelled.body as { messageId?: string }).messageId).toBe((second.body as { messageId: string }).messageId);
+    expect(await transcriptTexts(context, session.id)).not.toContain("second parked");
+    expect(await transcriptTexts(context, session.id)).toContain("first parked");
+    releaseNext();
+    releaseNext();
   });
 
   it("refuses to cancel a queued message through another session", async () => {
@@ -169,6 +222,24 @@ describe("POST /api/sessions/:id/queue/send-now (all)", () => {
     releaseNext();
     await eventually(() => expect(prompts[2]).toContain("second queued"));
     expect(prompts).toHaveLength(3);
+    releaseNext();
+  });
+
+  it("refuses while the queue is paused, leaving the running turn alone", async () => {
+    const { context, session, kills, releaseNext } = await runningInterruptibleSession("force-paused");
+    await send(context, session.id, "held", { delivery: "queue" });
+    await request(context, "POST", `/api/sessions/${session.id}/queue/pause`, {});
+
+    const refused = await request(context, "POST", `/api/sessions/${session.id}/queue/send-now`, {});
+    const held = (await parkedRows(context, session.id))[0]!;
+    const refusedOne = await request(context, "POST", `/api/sessions/${session.id}/queue/${held.id}/send-now`, {});
+
+    expect(refused.status).toBe(409);
+    expect(refusedOne.status).toBe(409);
+    expect(kills).toEqual([]);
+    expect((await parkedRows(context, session.id)).map((row) => row.prompt)).toEqual(["held"]);
+    await request(context, "POST", `/api/sessions/${session.id}/queue/resume`, {});
+    releaseNext();
     releaseNext();
   });
 

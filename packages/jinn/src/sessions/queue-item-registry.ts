@@ -117,16 +117,18 @@ export function cancelQueueItem(itemId: string): boolean {
  * transcript, reads exactly like one that was sent. Same transaction reasoning
  * as the edit below.
  *
- * Returns false when the item is gone or has already left `pending`.
+ * Returns the withdrawn item as it was, or undefined when it is gone or has
+ * already left `pending`. Its `messageId` is read inside the transaction:
+ * send-now moves message ids between rows, so a caller's snapshot can be stale.
  */
-export function withdrawPendingQueueItem(itemId: string): boolean {
+export function withdrawPendingQueueItem(itemId: string): QueueItem | undefined {
   const db = initDb();
   return db.transaction(() => {
     const item = getQueueItem(itemId);
-    if (!item || item.status !== 'pending') return false;
+    if (!item || item.status !== 'pending') return undefined;
     db.prepare("UPDATE queue_items SET status = 'cancelled' WHERE id = ? AND status = 'pending'").run(itemId);
     if (item.messageId) db.prepare('DELETE FROM messages WHERE id = ?').run(item.messageId);
-    return true;
+    return item;
   }).immediate();
 }
 
