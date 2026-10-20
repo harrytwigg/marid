@@ -157,6 +157,11 @@ export function assignedTodo(title: string, assignee = "first-worker") {
   return workItems.createWorkItem({ title, source: "human", status: "backlog", assignee, department: "platform" });
 }
 
+/** A backlog Todo with no assignee: the Dispatcher chooses who takes it. */
+export function unassignedTodo(title: string) {
+  return workItems.createWorkItem({ title, source: "human", status: "backlog", department: "platform" });
+}
+
 /** The operator presses Dispatch. */
 export function dispatch(workItemId: string) {
   return call("POST", `/api/work-items/${workItemId}/dispatch`, {});
@@ -181,6 +186,16 @@ export function delegate(callerSessionId: string, workItemId: string, employee: 
     "POST",
     "/api/delegations",
     { workItemId, employee, task: "Complete the Todo acceptance criteria and report evidence." },
+    toolCallHeaders(callerSessionId),
+  );
+}
+
+/** `delegate_task` onto an existing Todo naming an engine but no employee, as the given session. */
+export function delegateEngine(callerSessionId: string, workItemId: string, engine = "codex") {
+  return call(
+    "POST",
+    "/api/delegations",
+    { workItemId, engine, task: "Complete the Todo acceptance criteria and report evidence." },
     toolCallHeaders(callerSessionId),
   );
 }

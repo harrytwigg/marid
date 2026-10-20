@@ -1,7 +1,7 @@
 import dagre from "@dagrejs/dagre"
 import type { Edge, Node } from "@xyflow/react"
 import type { FallbackLinkHealth, FallbackSkipReason, ResolvedFallbackLink } from "@jinn/fallback-chain-wire"
-import { formatReset, formatUsed, SKIP_REASON_TEXT } from "@/lib/fallback-format"
+import { formatReset, formatUsed, skipText } from "@/lib/fallback-format"
 
 /* The chain diagram's data and layout, apart from the component that draws it. */
 
@@ -47,7 +47,7 @@ function targetData(link: ResolvedFallbackLink, index: number, input: ChainFlowI
     used: formatUsed(link.health?.usedPercent),
     resets: reset ? `resets ${reset}` : null,
     skip: link.skip ?? null,
-    skipText: link.skip ? SKIP_REASON_TEXT[link.skip] : null,
+    skipText: link.skip ? skipText(link.skip, link.skipDetail) : null,
     legacy: link.origin === "legacy",
     current: input.position === index,
     servedLast: input.servedBy != null && input.servedBy === link.key,

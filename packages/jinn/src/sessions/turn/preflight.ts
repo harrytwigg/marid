@@ -1,14 +1,16 @@
 import { buildPlatformContextRefresh, fingerprintPlatformContext } from "../../engines/platform-context.js";
 import { isBudgetExhausted } from "../../gateway/budgets.js";
 import { refuseScopedTurn } from "./scoped-turn.js";
-import { isRemoteTarget } from "../../shared/remote-target.js";
+import { isRemoteTarget, sshDestination } from "../../shared/remote-target.js";
 import { refuseClaudeLogin } from "./claude-login-refusal.js";
 import { resolveEffort } from "../../shared/effort.js";
 import { isCompactCommand, isRawEngineCommand } from "../../shared/skill-commands.js";
 import { opencodeMode } from "../../engines/opencode-server.js";
 import { compactCommandRefusal } from "../compact-command.js";
 import { logger } from "../../shared/logger.js";
-import { effortLevelsForModel, engineAvailable, engineUnavailableMessage, isKnownEngine } from "../../shared/models.js";
+import { effortLevelsForModel, engineSupportsRemote, engineUnavailableMessage, isKnownEngine } from "../../shared/models.js";
+import { remoteEngineMissingMessage } from "../../engines/remote-stage.js";
+import { engineInstalledWhereRun } from "../availability-registry.js";
 import type { EngineSessionRef, ResolvedMcpConfig, Session } from "../../shared/types.js";
 import { buildContext, buildPlatformContextSnapshot, runtimeSessionSource, type BuildContextOptions } from "../context.js";
 import { resolveEngineRunMcp } from "../engine-run-mcp.js";
@@ -73,13 +75,25 @@ function refuseTurn(input: TurnInput): string | undefined {
   if (!input.engineOverride && !input.engines.has(session.engine)) {
     return `Engine "${session.engine}" not available`;
   }
-  if (isKnownEngine(session.engine) && !engineAvailable(input.config, session.engine)) {
-    return engineUnavailableMessage(input.config, session.engine);
-  }
+  const missing = missingEngineMessage(input);
+  if (missing) return missing;
   if (session.employee && isBudgetExhausted(session.employee, input.config.budgets?.employees)) {
     return `Budget limit exceeded for employee "${session.employee}". Session blocked.`;
   }
   return refuseScopedOrLogin(input);
+}
+
+/**
+ * Why the session's engine is not installed where the turn runs, if it is not: on
+ * the employee's host for a remote session whose engine can run there (the gateway
+ * need not have it), on this gateway otherwise.
+ */
+function missingEngineMessage(input: TurnInput): string | undefined {
+  const engine = input.session.engine;
+  if (!isKnownEngine(engine)) return undefined;
+  const host = isRemoteTarget(input.employee) ? sshDestination(input.employee) : undefined;
+  if (engineInstalledWhereRun(input.config, engine, host)) return undefined;
+  return host && engineSupportsRemote(engine) ? remoteEngineMissingMessage(host, engine) : engineUnavailableMessage(input.config, engine);
 }
 
 /** The department-scope gates (scoped-turn.ts), then the Claude login check. */

@@ -47,7 +47,7 @@ import { spawn as ptySpawn } from "node-pty";
 import type { ResolvedMcpConfig } from "../../shared/types.js";
 import { isDeadSessionError } from "../../shared/rateLimit.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
-import { MUSECODE_TURN_RUNNING, MUSECODE_VIEW_ONLY, MusecodeInteractiveEngine, type MusecodeInteractiveDeps } from "../musecode-interactive.js";
+import { MUSECODE_REMOTE_VIEW, MUSECODE_TURN_RUNNING, MUSECODE_VIEW_ONLY, MusecodeInteractiveEngine, type MusecodeInteractiveDeps } from "../musecode-interactive.js";
 
 const ID = "01a13fb8-5801-7983-8ae6-77432f86606b";
 const OTHER = "01a13fb9-0000-7000-8000-000000000002";
@@ -90,6 +90,15 @@ describe("MusecodeInteractiveEngine", () => {
     expect(call.opts.env).toMatchObject({ JINN_SESSION_ID: "s1", JINN_EMPLOYEE: "worker", META_API_KEY: "key-from-gateway", TERM: "xterm-256color" });
     expect(call.opts.env.CLAUDECODE).toBeUndefined();
     expect(call.opts.env.CODEX_HOME).toBeUndefined();
+  });
+
+  it("opens no terminal on the gateway for a session that runs on a remote host, whose conversation is there", () => {
+    const { engine } = make({ bin: () => "/opt/muse" });
+    const remote = { engineSessionId: ID, cwd: "/w", remoteHost: "build-box", remoteUser: "builder", remoteCwd: "/srv/agents/main" };
+    expect(() => engine.ensureIdleSpawn("s1", remote)).toThrow(MUSECODE_REMOTE_VIEW);
+    expect(() => engine.restartPty("s1", remote)).toThrow(MUSECODE_REMOTE_VIEW);
+    expect(spawnCalls).toHaveLength(0);
+    expect(engine.hasWarmPty("s1")).toBe(false);
   });
 
   it("opens a fresh TUI when the session has no conversation yet", () => {

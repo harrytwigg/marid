@@ -96,7 +96,9 @@ export function employeeSubject(env: FallbackChainEnv, employee: Employee, scope
 
 /** The whole response: profiles, every engine and every declared account, and the employee when one is asked for. */
 export function fallbackChainsResponse(
-  env: FallbackChainEnv, employee?: { employee: Employee; scope: FallbackChainSpec["scope"] },
+  env: FallbackChainEnv,
+  /** `registry`: the employee's own, when its links are judged elsewhere than this gateway (a remote host). */
+  employee?: { employee: Employee; scope: FallbackChainSpec["scope"]; registry?: ModelRegistry },
 ): FallbackChainsResponse {
   const engines = ENGINE_NAMES.filter((name) => env.registry[name] !== undefined || name === "claude");
   return {
@@ -104,7 +106,7 @@ export function fallbackChainsResponse(
     subjects: [
       ...engines.map((name) => engineSubject(env, name)),
       ...declaredClaudeAccounts(env.config).map((account) => accountSubject(env, account)),
-      ...(employee ? [employeeSubject(env, employee.employee, employee.scope)] : []),
+      ...(employee ? [employeeSubject(employee.registry ? { ...env, registry: employee.registry } : env, employee.employee, employee.scope)] : []),
     ],
   };
 }

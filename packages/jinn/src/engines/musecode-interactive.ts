@@ -10,6 +10,7 @@ import { PtyLifecycleManager } from "./pty-lifecycle.js";
 import { PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
 import type { PtyControlEvent, PtyIdleSpawnOpts, PtySnapshotSubscription, PtyViewEngine } from "./pty-view-engine.js";
 import { buildMuseViewArgs, type MuseViewArgs } from "./musecode-view-args.js";
+import { isRemoteTarget } from "../shared/remote-target.js";
 
 /** Why a work turn cannot run on the terminal view's engine. */
 export const MUSECODE_VIEW_ONLY =
@@ -17,6 +18,14 @@ export const MUSECODE_VIEW_ONLY =
 
 /** Why the terminal is not opened while a turn holds the session. */
 export const MUSECODE_TURN_RUNNING = "A turn is running; the terminal opens when it ends.";
+
+/**
+ * Why no terminal opens for a session that runs on a remote host. Its
+ * conversation is in Muse's store on that host, so `muse resume` here would open
+ * on nothing; the transcript is the view.
+ */
+export const MUSECODE_REMOTE_VIEW =
+  "This Muse Code session runs on a remote host, which has no terminal view yet; its transcript shows each turn.";
 
 /** How long a headless turn waits for a view it has closed to let go of the session. */
 const VIEW_EXIT_WAIT_MS = 4000;
@@ -73,7 +82,7 @@ export class MusecodeInteractiveEngine implements InterruptibleEngine, PtyViewEn
   // ── PtyViewEngine ─────────────────────────────────────────────────────────
 
   ensureIdleSpawn(jinnSessionId: string, opts: PtyIdleSpawnOpts): void {
-    if (this.wouldSpawn(jinnSessionId, opts) && this.deps.turnRunning?.(jinnSessionId)) throw new Error(MUSECODE_TURN_RUNNING);
+    this.assertCanOpen(jinnSessionId, opts);
     if (opts.cols && opts.rows) setCapped(this.lastGeom, jinnSessionId, { cols: opts.cols, rows: opts.rows });
     if (this.lifecycle.getWarm(jinnSessionId)) {
       // A TUI opened before the session had a conversation is a different one
@@ -85,6 +94,12 @@ export class MusecodeInteractiveEngine implements InterruptibleEngine, PtyViewEn
     }
     const handle = this.spawn(jinnSessionId, opts);
     this.lifecycle.adopt(jinnSessionId, handle);
+  }
+
+  /** Refuse a terminal whose conversation is on another host, or one that would open while a turn holds the session. */
+  private assertCanOpen(sessionId: string, opts: PtyIdleSpawnOpts): void {
+    if (isRemoteTarget(opts)) throw new Error(MUSECODE_REMOTE_VIEW);
+    if (this.wouldSpawn(sessionId, opts) && this.deps.turnRunning?.(sessionId)) throw new Error(MUSECODE_TURN_RUNNING);
   }
 
   /** Whether opening a terminal for this session starts a process: none is warm, or the warm one is on another conversation. */

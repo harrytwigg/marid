@@ -40,11 +40,12 @@ const sha256 = (text: string): string => crypto.createHash("sha256").update(text
 
 /** Hashes computed on origin/main 5587f6cb, except `factsScript`: the facts
  *  probe has since learned to read the host's `opencode --version` (OpenCode 2
- *  support) and to look for an opencode internal fallback (a read-only probe),
- *  deliberate changes for every session, scoped or not. */
+ *  support), to look for an opencode internal fallback (a read-only probe) and
+ *  to look for Muse Code's `muse` (Muse runs remotely too), deliberate changes
+ *  for every session, scoped or not. */
 const MAIN = {
   farmScript: "e5b74a0bedc2ea64111a00392827e9c883deeff711f4cf3640f74fb65a1548e5",
-  factsScript: "15e51b601b6ce7c049d315d7d69bd2ae836dbfe927376138815b04e78dd8bdfb",
+  factsScript: "e1bbfd654b4bd4ea66af8055fad139b59b7c65c7129af891bee2d3544290f15a",
   killScript: "d400383f3c8c055691322b6513249351035165e2aae839d87bb95c250e89eaf6",
   trustSeedCommand: "b6a9b06cc4e07add49ef443da653c3c546950dbd0564ddc29e4a2c9833c61b7c",
   sessionEnvFile: "1d350a33a74a0752f1540ecad76daddd0ab98a6686742ed01cad801bc230d910",

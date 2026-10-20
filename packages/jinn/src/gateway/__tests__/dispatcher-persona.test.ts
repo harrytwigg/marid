@@ -4,8 +4,9 @@ import { buildTools } from "../../mcp/server.js";
 
 /**
  * The Dispatcher's routing contract, pinned where it actually ships: read the
- * Todo, delegate it to the best-fitting employee (the assignee by default), and
- * report a refused claim rather than work around it.
+ * Todo, delegate it to its assignee (binding on a manual dispatch; the
+ * Dispatcher chooses only when nobody is assigned), and report a refused
+ * claim rather than work around it.
  */
 
 const persona = SYSTEM_EMPLOYEES.find((employee) => employee.name === TODO_DISPATCHER_NAME)!.persona;
@@ -41,6 +42,27 @@ describe("Todo Dispatcher persona — routing", () => {
   it("tells it to choose an employee when the assignee is unset or is @operator", () => {
     expect(persona).toMatch(/assignee is unset/);
     expect(persona).toMatch(/@operator/);
+  });
+
+  // MAR-163: on a manual dispatch the assignee is not a default to weigh but a
+  // binding to obey — the override clause is gone, and a refusal of the bound
+  // hand-off stops the Todo rather than freeing a second choice.
+  it("states the assignee is binding for a manual dispatch", () => {
+    expect(persona).toMatch(/binds you|is binding/);
+  });
+
+  it("keeps no override clause", () => {
+    expect(persona).not.toMatch(/Choose someone else only when/);
+    expect(persona).not.toMatch(/overrode the assignment/);
+    expect(persona).not.toMatch(/better fit/);
+  });
+
+  it("names the board-walk start as the one routing exception", () => {
+    expect(persona).toMatch(/board walk started/i);
+  });
+
+  it("sends a refused bound hand-off to blocked rather than to someone else", () => {
+    expect(persona).toMatch(/do not try someone else/i);
   });
 
   it("forbids choosing a system employee", () => {

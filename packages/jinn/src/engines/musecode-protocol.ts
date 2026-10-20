@@ -76,7 +76,7 @@ export function museTurnEffort(opts: Pick<EngineRunOpts, "effortLevel" | "model"
 
 /** The server's own words for a turn that failed because the user is not signed in. */
 export const MUSECODE_AUTH_HELP =
-  "Muse Code is not signed in. Run `muse login` on the gateway host, or set META_API_KEY in the gateway's environment, then retry.";
+  "Muse Code is not signed in. Run `muse login` on the host the session runs on (the gateway, or the employee's remote host), or set META_API_KEY in that host's environment, then retry.";
 
 /** The answer to an `approval/request`: the id of an `availableChoices` entry that allows the call, preferring a one-off allow. */
 export function allowingChoiceId(choices: unknown): string | undefined {

@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { BOARD_WALK_STARTED_BY } from "../../board-walk/started-sessions.js";
 import {
   assignedTodo,
   delegate,
+  delegateEngine,
   dispatch,
   dispatchAs,
   employeeSession,
@@ -9,6 +11,7 @@ import {
   sessionsOf,
   startDispatchHarness,
   stopDispatchHarness,
+  unassignedTodo,
   workItems,
 } from "./dispatch-assigned-harness.js";
 
@@ -28,15 +31,47 @@ beforeAll(startDispatchHarness);
 afterAll(stopDispatchHarness);
 
 describe("Dispatch on a backlog Todo that has an assignee", () => {
-  // The regression: this delegation used to be refused with "does not own
-  // Todo ... and is not its authorized manager/root".
-  it("lets the Dispatcher re-route an owned Todo to the employee it picked", async () => {
+  // MAR-163: the operator assigned this Todo and pressed Dispatch by hand, so
+  // the assignee binds the Dispatcher. Re-routing it to someone else used to
+  // succeed (201); that was the bug — the assignment is the operator's routing
+  // choice, and overriding it is the operator's call, not the Dispatcher's.
+  it("refuses a manually-dispatched Dispatcher that delegates to anyone but the assignee", async () => {
     const item = assignedTodo("Assigned by the operator, re-routed by Dispatch");
 
     const dispatched = await dispatch(item.id);
     expect(dispatched.status).toBe(201);
     const dispatcherId = dispatched.body.sessionId as string;
     expect(registry.getSession(dispatcherId)?.employee).toBe("todo-dispatcher");
+
+    const delegated = await delegate(dispatcherId, item.id, "second-worker");
+
+    expect(delegated.status).toBe(403);
+    expect(delegated.body.error).toMatch(/binding/);
+    expect(delegated.body.error).toContain(item.assignee);
+    expect(workItems.getWorkItem(item.id)).toMatchObject({ assignee: "first-worker", status: "executing" });
+    expect(sessionsOf(item.id, "second-worker")).toHaveLength(0);
+  });
+
+  // An engine-only delegation names nobody, but it still starts execution
+  // outside the assignee — so the binding refuses that too.
+  it("refuses a bound Dispatcher that delegates to an unnamed engine", async () => {
+    const item = assignedTodo("Assigned by the operator, engine-only Dispatch");
+    const dispatcherId = (await dispatch(item.id)).body.sessionId as string;
+
+    const delegated = await delegateEngine(dispatcherId, item.id);
+
+    expect(delegated.status).toBe(403);
+    expect(delegated.body.error).toMatch(/binding/);
+    expect(delegated.body.error).toContain(item.assignee);
+    expect(workItems.getWorkItem(item.id)).toMatchObject({ assignee: "first-worker" });
+  });
+
+  // The board walk starts the same Dispatcher with its own routing brief (a
+  // reason and an engine preference), so its routing stays its own decision.
+  it("still lets a board-walk-started Dispatcher re-route an owned Todo to the employee it picked", async () => {
+    const item = assignedTodo("Assigned, started by the board walk");
+    const dispatcherId = (await dispatch(item.id)).body.sessionId as string;
+    registry.updateSession(dispatcherId, { transportMeta: { startedBy: BOARD_WALK_STARTED_BY } });
 
     const delegated = await delegate(dispatcherId, item.id, "second-worker");
 
@@ -47,6 +82,28 @@ describe("Dispatch on a backlog Todo that has an assignee", () => {
       workItemId: item.id,
       workItemRole: "execute",
     });
+    expect(workItems.getWorkItem(item.id)).toMatchObject({ assignee: "second-worker", status: "executing" });
+  });
+
+  // No assignee, no binding: the Dispatcher chooses.
+  it("lets the Dispatcher choose on a Todo with no assignee", async () => {
+    const item = unassignedTodo("Unassigned, routed by Dispatch");
+    const dispatcherId = (await dispatch(item.id)).body.sessionId as string;
+
+    const delegated = await delegate(dispatcherId, item.id, "second-worker");
+
+    expect(delegated.status).toBe(201);
+    expect(workItems.getWorkItem(item.id)).toMatchObject({ assignee: "second-worker", status: "executing" });
+  });
+
+  // @operator is a person nobody can delegate to, so there is nobody to be bound to: choosing stays open.
+  it("lets the Dispatcher choose on a Todo assigned to @operator", async () => {
+    const item = assignedTodo("Held by the operator, routed by Dispatch", "@operator");
+    const dispatcherId = (await dispatch(item.id)).body.sessionId as string;
+
+    const delegated = await delegate(dispatcherId, item.id, "second-worker");
+
+    expect(delegated.status).toBe(201);
     expect(workItems.getWorkItem(item.id)).toMatchObject({ assignee: "second-worker", status: "executing" });
   });
 

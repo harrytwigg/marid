@@ -97,6 +97,18 @@ describe("ensureRemoteHostReady", () => {
     );
   });
 
+  it("lets a remote employee on Muse Code through, and asks the host about Muse's own CLI", async () => {
+    // Muse Code runs on the host too, so a remote employee whose engine is
+    // musecode (or that a fallback moved onto it) is not refused here.
+    const { ensureRemoteReady } = await import("../../../engines/remote-stage.js");
+    expect(await ensureRemoteHostReady(input(), "musecode")).toEqual({ ok: true });
+    expect(ensureRemoteReady).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ engine: "musecode" }),
+    );
+  });
+
   it("does not start the turn when a stop lands between the last probe and the restore", async () => {
     // `shouldAbort` covers the wait itself but cannot cover this window. The
     // restore is fenced on `waiting`, so it simply fails — and ignoring that

@@ -7,6 +7,7 @@ import { MspClient, MspError, uuidv7 } from "./musecode-msp.js";
 import { MSP_EXIT_GRACE_MS, type MspProcess } from "./musecode-process.js";
 import { MUSECODE_AUTH_HELP } from "./musecode-protocol.js";
 import type { MuseTurn } from "./musecode-turn.js";
+import type { RemoteRun } from "./remote-stage.js";
 import { CONVERSATION_KEPT } from "./musecode-turn-text.js";
 
 /**
@@ -16,8 +17,8 @@ import { CONVERSATION_KEPT } from "./musecode-turn-text.js";
 
 /** A turn gets this long to wind down after an interrupt before its host is signalled. */
 export const INTERRUPT_WAIT_MS = 3000;
-/** What one turn has so far, for `kill` and `isAlive` to reach. */
-export interface LiveTurn {
+/** What one turn has so far, for `kill` and `isAlive` to reach. A remote turn also carries its host's handle on the other machine (`RemoteRun`). */
+export interface LiveTurn extends RemoteRun {
   /** Why the turn was stopped from outside, once it has been. */
   reason: string | null;
   proc: MspProcess | null;

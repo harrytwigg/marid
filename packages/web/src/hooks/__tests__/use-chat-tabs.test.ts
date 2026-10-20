@@ -158,6 +158,13 @@ describe('useChatTabs — file tabs (openFileTab)', () => {
     expect(result.current.tabs.some(t => t.kind === 'file' && t.path === 'docs/foo.md')).toBe(true)
   })
 
+  it('reconcileTabs releases a running tab whose session was stopped', () => {
+    const { result } = renderHook(() => useChatTabs())
+    act(() => result.current.openTab({ sessionId: 's1', label: 'A', status: 'running', unread: false, pinned: true }))
+    act(() => result.current.reconcileTabs([{ id: 's1', status: 'interrupted' }]))
+    expect(result.current.tabs[0]).toMatchObject({ sessionId: 's1', status: 'idle' })
+  })
+
   it('reconcileTabs keeps an unlisted session tab and the active tab with it', () => {
     const { result } = renderHook(() => useChatTabs())
     act(() => result.current.openTab({ sessionId: 's1', label: 'A', status: 'idle', unread: false, pinned: true }))

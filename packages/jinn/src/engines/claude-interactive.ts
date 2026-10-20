@@ -19,7 +19,7 @@ import type { HookRegistry, HookPayload } from "../gateway/hook-registry.js";
 import { SsePtyProxy, MAIN_AGENT_SENTINEL, type SseDataEvent, type UpstreamActivityInfo } from "./sse-pty-proxy.js";
 import { BackgroundTaskStore, launchedBackgroundTask, launchedSubagentId } from "./background-tasks.js";
 import { finishedTaskNotificationIds } from "./task-notifications.js";
-import type { BackgroundTasksReport, BackgroundTasksSource } from "../shared/session-waits.js";
+import type { BackgroundTaskWait, BackgroundTasksReport, BackgroundTasksSource } from "../shared/session-waits.js";
 import { isCompactCommand, isNativeClaudeCommand, neutralizeForPaste } from "../shared/skill-commands.js";
 import { buildPromptWithPlatformContext } from "./platform-context.js";
 import { findSessionTranscript } from "./claude-transcript-path.js";
@@ -1668,6 +1668,12 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
   private taskStore = new BackgroundTaskStore((jinnSessionId) => this.publishBackgroundState(jinnSessionId));
   private backgroundSilenceTimers = new Map<string, NodeJS.Timeout>();
   private backgroundActivityCb?: (jinnSessionId: string, info: UpstreamActivityInfo | null) => void;
+  private lostBackgroundTasksCb?: (jinnSessionId: string, tasks: BackgroundTaskWait[]) => void;
+  /** Sessions whose PTY kill() is releasing: the session was stopped on purpose, so the
+   *  background tasks that die with it are not reported lost. Held only for the release. */
+  private deliberateReleases = new Set<string>();
+  /** killAll ran: the gateway is shutting down, and the restart record owns what dies with it. */
+  private shuttingDown = false;
   /** Test override for the post-settle clear quiet window (default 10s). */
   backgroundClearQuietMs = BACKGROUND_CLEAR_QUIET_MS;
   /** Test override for the background silence backstop (default 30m). */
@@ -1712,7 +1718,9 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       this.terminalTurns.delete(id);
       this.backgroundReruns.delete(id);
       this.spawnParams.delete(id);
-      // The PTY (and its SSE proxy) died — any in-flight counts are moot.
+      // The PTY (and its SSE proxy) died — any in-flight counts are moot, and
+      // the background tasks it was running died with it.
+      this.reportLostBackgroundTasks(id);
       this.clearBackground(id);
     });
   }
@@ -1798,6 +1806,30 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
 
   onRuntimeActivity(cb: (jinnSessionId: string, info: UpstreamActivityInfo | null) => void): void {
     this.onBackgroundActivity(cb);
+  }
+
+  /** Single registration: a session's Claude Code process ended (it exited, was
+   *  evicted as idle, or was respawned) while background tasks it launched were
+   *  still running. Claude Code never announces those tasks' ends, so nothing
+   *  would re-invoke the model; the gateway asks the session to carry on. Not
+   *  called when the session was stopped on purpose (kill) or the gateway is
+   *  shutting down. */
+  onLostBackgroundTasks(cb: (jinnSessionId: string, tasks: BackgroundTaskWait[]) => void): void {
+    this.lostBackgroundTasksCb = cb;
+  }
+
+  /** The session's PTY is being released: report the background tasks still
+   *  open, which die with it. */
+  private reportLostBackgroundTasks(jinnSessionId: string): void {
+    const tasks = this.taskStore.list(jinnSessionId);
+    if (tasks.length === 0) return;
+    const deliberate = this.shuttingDown || this.deliberateReleases.has(jinnSessionId);
+    logger.warn(
+      `InteractiveClaudeEngine: ${jinnSessionId}'s Claude Code process ended with ${tasks.length} background task(s) `
+      + `still running (${tasks.map((task) => task.id).join(", ")}): `
+      + (deliberate ? "it was stopped on purpose, so the session is not asked to carry on" : "reporting them so the session can be asked to carry on"),
+    );
+    if (!deliberate) this.lostBackgroundTasksCb?.(jinnSessionId, tasks);
   }
 
   /** Per-PTY SSE proxy reported an in-flight change. Always record it (counts
@@ -1893,6 +1925,9 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     // An open sub-agent or re-run keeps the PTY from being reaped as idle, as
     // an upstream request in flight does: either is work that dies with it.
     this.lifecycle.setRuntimeActive(jinnSessionId, info.activeStreams > 0 || discreteWork);
+    // A background Bash or Monitor dies with it too, but may run for days, so it
+    // only puts the PTY at the back of the idle cap's queue.
+    this.lifecycle.setHoldsBackgroundTasks(jinnSessionId, (info.activeMonitors ?? 0) > 0 || (info.backgroundAgents ?? 0) > 0);
     this.armBackgroundSilence(jinnSessionId, discreteWork);
     if (this.active.has(jinnSessionId)) return; // in-flight turn — already "running"
     if (info.activeStreams > 0 || (info.activeMonitors ?? 0) > 0 || discreteWork) {
@@ -3445,10 +3480,16 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     this.cancelLateRecovery(sessionId);
     const e = this.active.get(sessionId);
     e?.resolver.interrupt(reason.startsWith("Interrupted") ? reason : `Interrupted: ${reason}`);
-    this.lifecycle.releaseSession(sessionId);
+    this.deliberateReleases.add(sessionId);
+    try {
+      this.lifecycle.releaseSession(sessionId);
+    } finally {
+      this.deliberateReleases.delete(sessionId);
+    }
   }
 
   killAll(): void {
+    this.shuttingDown = true;
     for (const abort of [...this.terminalWaits.values()]) abort("Interrupted: gateway shutting down");
     for (const id of new Set([...this.active.keys(), ...this.backgroundStops.keys()])) this.kill(id, "Interrupted: gateway shutting down");
     this.lifecycle.killAll();

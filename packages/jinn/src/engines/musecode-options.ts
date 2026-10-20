@@ -1,3 +1,4 @@
+import type { RemoteExecutionConfig } from "../shared/config-types.js";
 import type { ModelEffortLevels } from "./opencode-variant.js";
 import type { MuseModelCost, MuseUsageSnapshot } from "./musecode-turn.js";
 
@@ -18,6 +19,10 @@ export interface MusecodeEngineOptions {
    * A turn sends `reasoningEffort` only when its own model lists it. Without this, any level in Muse's vocabulary is sent.
    */
   effortLevels?: () => ModelEffortLevels;
+  /** The `remote` block, read per turn so a config reload reaches the next one. A remote employee's turn needs it to run on its host. */
+  remote?: () => RemoteExecutionConfig | undefined;
+  /** The gateway's port, which a remote turn's reverse tunnel forwards to. */
+  gatewayPort?: () => number;
   /** How long an accepted turn may go unheard before it is given up on. Defaults to the watchdog's `FIRST_EVENT_TIMEOUT_MS`. */
   firstEventTimeoutMs?: number;
 }

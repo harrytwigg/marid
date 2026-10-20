@@ -281,9 +281,11 @@ export function useChatTabs() {
           if (tab.kind === 'file' || !session) return tab
           let updated: SessionTab = tab
           // Normalize stale 'running' if server says otherwise
+          // A stopped turn leaves the record 'interrupted', and a missed frame (reload, dropped socket,
+          // stop from another client) is the only other thing that would have cleared the dot.
           if (
             tab.status === 'running' &&
-            (session.status === 'idle' || session.status === 'error')
+            (session.status === 'idle' || session.status === 'error' || session.status === 'interrupted')
           ) {
             updated = {
               ...updated,
