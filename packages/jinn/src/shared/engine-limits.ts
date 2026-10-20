@@ -16,6 +16,7 @@ import { collectClaudeAccounts } from "./engine-limits-accounts.js";
 import { getModelRegistry } from "./models.js";
 import { resolveBin } from "./resolve-bin.js";
 import { collectClaudeLimits } from "./engine-limits-claude.js";
+import { collectFreebuffLimits } from "./engine-limits-freebuff.js";
 import { collectMusecodeLimits } from "./engine-limits-musecode.js";
 import { collectOpencodeLimits, OPENCODE_UNMETERED_REASON } from "./engine-limits-opencode.js";
 import {
@@ -351,6 +352,8 @@ export async function collectEngineLimits(
         ?? collectUnsupported(config, name, UNSUPPORTED_REASONS.opencode);
     } else if (name === "musecode") {
       engines[name] = collectMusecodeLimits(config);
+    } else if (name === "freebuff") {
+      engines[name] = collectFreebuffLimits(config);
     } else if (name === "antigravity") {
       const snap = baseSnapshot(config, name);
       engines[name] = {

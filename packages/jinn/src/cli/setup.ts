@@ -408,6 +408,20 @@ export async function runSetup(opts?: { force?: boolean; port?: number }): Promi
 
   // 4c. Check for Muse Code (`muse`)
   const musePath = checkMuse(whichBin, { ok, fail, info });
+
+  // 4d. Freebuff. Reported but never offered as the default engine: it spends
+  // hours from a daily allowance, and its terms restrict automated use, so
+  // choosing it is the operator's deliberate act (docs/engines-freebuff.md).
+  const freebuffPath = whichBin("freebuff");
+  if (freebuffPath) {
+    ok(`freebuff found at ${freebuffPath}`);
+    const ver = runVersion("freebuff");
+    if (ver) ok(`freebuff --version: ${ver}`);
+    else warn("freebuff --version failed");
+    info("Freebuff is optional: run `freebuff login` once, then set engine: freebuff and a model: on an employee (docs/engines-freebuff.md).");
+  } else {
+    info("freebuff not found (optional). Install with: npm install -g freebuff");
+  }
   // 5. Loudly warn if NO engine is installed — the gateway will start, but it
   //     cannot run any session until at least one engine CLI is on PATH.
   if (!claudePath && !codexPath && !grokPath && !hermesPath && !musePath) {
