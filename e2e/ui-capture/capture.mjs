@@ -103,6 +103,9 @@ async function openPage({ screen, theme, viewport }) {
     colorScheme: theme,
     // Captures compare states, not transitions.
     reducedMotion: 'reduce',
+    // A screen that pads or rewrites an API response with page.route blocks the service worker: from the
+    // second context in one browser it answers the request itself and the route never sees it.
+    serviceWorkers: screen.serviceWorkers ?? 'allow',
     extraHTTPHeaders: { authorization: `Bearer ${token}` },
   })
   await context.addInitScript(([t, isReduced, onboarded]) => {

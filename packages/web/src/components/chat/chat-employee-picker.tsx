@@ -227,7 +227,7 @@ export function ChatEmployeePicker({
         role="listbox"
         tabIndex={0}
         onKeyDown={handleListKeyDown}
-        className="w-full max-h-[360px] overflow-y-auto rounded-[var(--radius-md)] bg-[var(--fill-quaternary)] outline-none"
+        className="w-full max-h-[max(10rem,min(360px,calc(100dvh-20rem)))] overflow-y-auto rounded-[var(--radius-md)] bg-[var(--fill-quaternary)] outline-none"
       >
         {/* COO row — always visible */}
         <div
