@@ -672,13 +672,18 @@ export class OpencodeServerPool {
 
   /** OpenCode 2 connects MCP servers lazily: wait for the staged ones (see
    *  v2WaitMcpReady), within what is left of the bootstrap budget. One that
-   *  will not connect costs its tools, not the server. */
+   *  will not connect costs its tools, not the server; all of them failing
+   *  refuses the server. */
   private async waitMcpConnected(server: OpencodeServer, spec: OpencodeServerSpec, since: number): Promise<void> {
     if (server.api !== 2 || !server.stagedApi) return;
     const names = Object.keys(buildOpencodeSessionConfig(spec.resolvedMcp)?.mcp ?? {});
     const left = Math.max(1_000, this.bootstrapTimeoutMs() - (Date.now() - since));
     const missing = await v2WaitMcpReady(server, names, { timeoutMs: left, settleMs: V2_MCP_SETTLE_MS });
     if (missing.length) logger.warn(`opencode server for session ${server.sessionId}: MCP server(s) not connected: ${missing.join(", ")}`);
+    // One that will not connect costs its tools; none of them connecting (the
+    // gateway's own among them) is a server that is not working, which a turn
+    // would only find out 15 s later as a stream that never connects.
+    if (names.length && missing.length === names.length) throw new Error(`none of its MCP servers connected (${missing.join(", ")})`);
   }
 
   private startTimeoutMs(): number {

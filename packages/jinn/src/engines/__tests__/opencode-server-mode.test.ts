@@ -105,6 +105,7 @@ beforeEach(() => {
   delete process.env.FAKE_OPENCODE_PATCH_DELAY_MS;
   delete process.env.FAKE_OPENCODE_SUMMARIZE_DELAY_MS;
   delete process.env.FAKE_OPENCODE_BOOTSTRAP_MS;
+  delete process.env.FAKE_OPENCODE_EVENT_STALL;
   // The fake's --version follows FAKE_OPENCODE_VERSION; the probe caches per file.
   clearOpencodeVersionCache();
   SERVER_TURN_TIMING.statusPollMs = 30_000;
@@ -997,6 +998,56 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
     const result = await engine.run(runOpts());
     expect(result.result).toBe("plain:build it");
     expect(pool.size()).toBe(0);
+  });
+
+  // A server that passed its readiness check can still stop answering `/event`
+  // (a loaded host): the turn used to fail after its 15 s connect budget, the
+  // session went dead, and the next turn met the same server.
+  it("runs a turn plain when its server's event stream does not connect, and gives the next turn a new server", async () => {
+    const serveLog = path.join(JINN_HOME, `stalled-stream-serve-${process.pid}.log`);
+    fs.rmSync(serveLog, { force: true });
+    process.env.FAKE_OPENCODE_SERVE_LOG = serveLog;
+    // The readiness probe's stream connects; the turn's does not.
+    process.env.FAKE_OPENCODE_EVENT_STALL = "1";
+    SERVER_TURN_TIMING.connectMs = 300;
+    const starts = () => fs.readFileSync(serveLog, "utf8").split("\n").filter((l) => l.startsWith("serve")).length;
+    const { engine, pool } = harness();
+
+    const first = await engine.run(runOpts());
+    expect(first.error).toBeUndefined();
+    expect(first.result).toBe("plain:build it");
+    expect(pool.size()).toBe(0);
+    expect(starts()).toBe(1);
+
+    // A retry on the same session starts a server of its own.
+    delete process.env.FAKE_OPENCODE_EVENT_STALL;
+    const second = await engine.run(runOpts());
+    expect(second.error).toBeUndefined();
+    expect(second.result).toBe("answer:build it model=opencode-go/deepseek-v4.1-flash");
+    expect(starts()).toBe(2);
+    expect(pool.get("sess-1")?.ready).toBe(true);
+    fs.rmSync(serveLog, { force: true });
+  });
+
+  it("an interrupt that lands while the unreachable turn's server is stopped ends the turn, rather than running it plain", async () => {
+    const serveLog = path.join(JINN_HOME, `stalled-stream-stop-${process.pid}.log`);
+    fs.rmSync(serveLog, { force: true });
+    process.env.FAKE_OPENCODE_SERVE_LOG = serveLog;
+    process.env.FAKE_OPENCODE_EVENT_STALL = "1";
+    SERVER_TURN_TIMING.connectMs = 300;
+    const { engine, pool } = harness();
+    const realStop = pool.stop.bind(pool);
+    let first = true;
+    pool.stop = async (id: string) => {
+      if (first) { first = false; engine.kill(id, "Interrupted: operator"); }
+      return await realStop(id);
+    };
+    const result = await engine.run(runOpts());
+    expect(result.error).toBe("Interrupted: operator");
+    expect(result.result).toBe("");
+    expect(pool.size()).toBe(0);
+    expect(fs.readFileSync(serveLog, "utf8").split("\n").filter((l) => l.startsWith("serve"))).toHaveLength(1);
+    fs.rmSync(serveLog, { force: true });
   });
 
   it("an interrupt during the bootstrap ends the turn at once, and leaves the server starting for the next turn", async () => {

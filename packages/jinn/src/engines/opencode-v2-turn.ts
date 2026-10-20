@@ -128,6 +128,8 @@ export class OpencodeV2ServerTurn {
   private interrupting?: Promise<void>;
   private posting?: Promise<unknown>;
   private posted = false;
+  /** The server's event stream answered `server.connected`. */
+  private streamConnected = false;
   private answered = false;
   private streamErred = false;
   private missedIdle = false;
@@ -154,6 +156,15 @@ export class OpencodeV2ServerTurn {
 
   isSettled(): boolean {
     return this.settled;
+  }
+
+  /**
+   * The turn failed before the server had spoken to it: its event stream never
+   * connected (nothing was posted, so nothing ran). The server is not usable
+   * for this session, and the turn can run elsewhere unchanged.
+   */
+  get serverUnreachable(): boolean {
+    return !this.streamConnected && !this.posted && !this.terminationReason && this.failure !== null;
   }
 
   async run(): Promise<EngineResult> {
@@ -255,6 +266,7 @@ export class OpencodeV2ServerTurn {
         });
         if (!res.ok || !res.body) throw new Error(`GET /api/event answered ${res.status}`);
         await this.readStream(res.body, () => {
+          this.streamConnected = true;
           clearTimeout(timer);
           resolve();
         });

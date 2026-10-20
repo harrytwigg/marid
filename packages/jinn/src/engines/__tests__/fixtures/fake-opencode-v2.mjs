@@ -71,6 +71,9 @@
 //   FAKE_V2_SERVE_FAIL=1      `serve` exits at once
 //   FAKE_V2_API_INFO_FAIL     `<n>[:<status>]`: the first n /api/info requests
 //                             answer that status (default 503) instead of the version
+//   FAKE_V2_EVENT_STALL=<n>   every event stream after the first n opens but stays silent
+//                             (no `server.connected`)
+//   FAKE_V2_MCP_FAIL=1        no MCP server ever connects: each is listed `failed`
 // GET /test/log returns the requests the server saw ({at, method, path, body}),
 // GET /test/info how it was started (argv, the OPENCODE_CONFIG file's contents).
 import http from "node:http";
@@ -118,6 +121,7 @@ function serve() {
   const sessions = new Map();
   let seq = 0;
   let mcpCalls = 0;
+  let eventStreams = 0;
   let config = null;
   try { config = process.env.OPENCODE_CONFIG ? JSON.parse(fs.readFileSync(process.env.OPENCODE_CONFIG, "utf8")) : null; } catch { config = "unreadable"; }
   const info = {
@@ -549,6 +553,10 @@ function serve() {
 
   function openEventStream(res) {
     res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+    if (eventStreams++ >= Number(process.env.FAKE_V2_EVENT_STALL ?? Infinity)) {
+      res.on("close", () => res.end());
+      return;
+    }
     res.write(`data: ${JSON.stringify({ type: "server.connected", data: {} })}\n\n`);
     clients.add(res);
     const heartbeat = setInterval(() => res.write(": heartbeat\n\n"), Number(process.env.FAKE_V2_HEARTBEAT_MS ?? 10_000));
@@ -666,7 +674,8 @@ function serve() {
     if (url.pathname === "/api/event") return openEventStream(res);
     if (url.pathname === "/api/mcp" && req.method === "GET") {
       const names = Object.keys(config?.mcp?.servers ?? {});
-      const listed = mcpCalls++ === 0 ? [] : names.map((name) => ({ name, status: { status: "connected" } }));
+      const status = process.env.FAKE_V2_MCP_FAIL === "1" ? "failed" : "connected";
+      const listed = mcpCalls++ === 0 ? [] : names.map((name) => ({ name, status: { status } }));
       entry.answered = listed.map((m) => `${m.name}:${m.status.status}`);
       return data(res, listed);
     }

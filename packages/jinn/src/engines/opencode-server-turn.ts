@@ -579,6 +579,8 @@ export class OpencodeServerTurn {
   /** The prompt's POST, while in flight; `posted` once the server has it. */
   private posting?: Promise<unknown>;
   private posted = false;
+  /** The server's event stream answered `server.connected`. */
+  private streamConnected = false;
   /** A text or error line reached the parser from the stream. */
   private answered = false;
   /** An error line did: the turn's own error, whatever its reply's state. */
@@ -616,6 +618,15 @@ export class OpencodeServerTurn {
 
   isSettled(): boolean {
     return this.settled;
+  }
+
+  /**
+   * The turn failed before the server had spoken to it: its event stream never
+   * connected (nothing was posted, so nothing ran). The server is not usable
+   * for this session, and the turn can run elsewhere unchanged.
+   */
+  get serverUnreachable(): boolean {
+    return !this.streamConnected && !this.posted && !this.terminationReason && this.failure !== null;
   }
 
   async run(): Promise<EngineResult> {
@@ -750,6 +761,7 @@ export class OpencodeServerTurn {
         });
         if (!res.ok || !res.body) throw new Error(`GET /event answered ${res.status}`);
         await this.readStream(res.body, () => {
+          this.streamConnected = true;
           clearTimeout(timer);
           resolve();
         });
