@@ -167,6 +167,30 @@ describe("PtyLifecycleManager", () => {
     expect(newestIdle.killed).toBe(false);
   });
 
+  it("evicts a PTY running background tasks only after every other idle PTY", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-01T00:00:00Z"));
+    const m = new PtyLifecycleManager({ maxLivePtys: 8 });
+    const busy = fakeHandle(), staleIdle = fakeHandle(), newestIdle = fakeHandle();
+    m.adopt("busy", busy);
+    m.setHoldsBackgroundTasks("busy", true);
+    vi.advanceTimersByTime(1000);
+    m.adopt("stale-idle", staleIdle);
+    vi.advanceTimersByTime(1000);
+    m.adopt("newest-idle", newestIdle);
+
+    enforcePtyIdleCap([m], 1);
+
+    // The stalest is spared: its tasks would die with it.
+    expect(busy.killed).toBe(false);
+    expect(staleIdle.killed).toBe(true);
+    expect(newestIdle.killed).toBe(true);
+
+    // It is still a candidate, so the cap stays a hard bound.
+    enforcePtyIdleCap([m], 0);
+    expect(busy.killed).toBe(true);
+  });
+
   it("killAll kills every live PTY", () => {
     const m = new PtyLifecycleManager({ maxLivePtys: 8 });
     const a = fakeHandle(), b = fakeHandle();
