@@ -63,7 +63,7 @@ const context = {
       clearQueue: () => {},
       pauseQueue: () => {},
       resumeQueue: () => {},
-      getPendingCount: () => 0,
+      getPendingCount: () => 0, getRowlessWaitingCount: () => 0,
       getTransportState: (_key: string, status: string) => status,
     }),
   },

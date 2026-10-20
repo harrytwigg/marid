@@ -52,7 +52,7 @@ const engineStub = {
 const queueStub = {
   enqueue: async (_key: string, fn: () => Promise<void>) => { await fn(); },
   clearCancelled: () => {}, clearQueue: () => {}, pauseQueue: () => {}, resumeQueue: () => {},
-  getPendingCount: () => 0,
+  getPendingCount: () => 0, getRowlessWaitingCount: () => 0,
   getTransportState: (_key: string, status: string) => status,
   holdForCallbackDrain: () => {}, releaseCallbackDrain: () => {}, hasInFlightItem: () => false,
 };

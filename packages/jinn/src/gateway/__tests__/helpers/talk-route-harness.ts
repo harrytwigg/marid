@@ -155,7 +155,7 @@ export function makeContext(config: JinnConfig) {
       // so the spawned session is created and simply never runs.
       getEngine: () => undefined,
       getQueue: () => ({
-        getPendingCount: () => 0,
+        getPendingCount: () => 0, getRowlessWaitingCount: () => 0,
         getTransportState: (_key: string, status: string) => status,
       }),
     },

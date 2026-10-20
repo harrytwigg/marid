@@ -1097,8 +1097,11 @@ export function serializeSession(
   pendingQueueItems?: ReadonlyMap<string, number>,
 ): Session {
   // The badge counts the durable pending rows the chat's queued bar lists, not
-  // the in-process chain, which keeps a cancelled row until its slot is skipped.
-  const queueDepth = pendingQueueItems?.get(session.sessionKey || session.sourceRef) ?? 0;
+  // the in-process chain, which keeps a cancelled row until its slot is skipped;
+  // plus the turns that only ever exist in that chain (connector messages).
+  const queueKey = session.sessionKey || session.sourceRef;
+  const queueDepth = (pendingQueueItems?.get(queueKey) ?? 0)
+    + context.sessionManager.getQueue().getRowlessWaitingCount(queueKey);
   const transportState = getSessionTransportState(session, context);
   const bg = currentRuntimeActivity(session, context);
   const working = isBackgroundWorkLive(bg);

@@ -64,13 +64,14 @@ const depthOf = async (context: ApiContext, sessionId: string) => {
 /** One running turn plus `parked` messages waiting behind it. */
 async function sessionWithParkedMessages(parked: string[], suffix: string) {
   const { engine, prompts, release } = blockingEngine();
-  const context = makeContext(engine, new queueModule.SessionQueue(), []);
+  const queue = new queueModule.SessionQueue();
+  const context = makeContext(engine, queue, []);
   const session = createParent(suffix);
   await send(context, session.id, "running turn");
   await eventually(() => expect(prompts).toEqual(["running turn"]));
   for (const message of parked) await send(context, session.id, message);
   expect((await parkedRows(context, session.id)).map((row) => row.prompt)).toEqual(parked);
-  return { context, session, prompts, release };
+  return { context, queue, session, prompts, release };
 }
 
 describe("the session list's queue badge", () => {
@@ -101,5 +102,22 @@ describe("the session list's queue badge", () => {
 
     expect(await depthOf(context, session.id)).toBe(0);
     release();
+  });
+
+  it("still counts turns that have no durable row, such as a connector message", async () => {
+    const { context, queue, session, release } = await sessionWithParkedMessages(["parked with a row"], "badge-rowless");
+    const key = session.sessionKey || session.sourceRef;
+    // A connector turn goes straight into the in-process chain, behind the running one.
+    const started: string[] = [];
+    void queue.enqueue(key, async () => { started.push("connector"); });
+    expect(await depthOf(context, session.id)).toBe(2);
+
+    const doomed = (await parkedRows(context, session.id))[0];
+    expect((await request(context, "DELETE", `/api/sessions/${session.id}/queue/${doomed.id}`)).status).toBe(200);
+    expect(await depthOf(context, session.id)).toBe(1);
+
+    release();
+    await eventually(() => expect(started).toEqual(["connector"]));
+    await eventually(async () => expect(await depthOf(context, session.id)).toBe(0));
   });
 });

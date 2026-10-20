@@ -107,7 +107,7 @@ const queueStub = {
   clearQueue: () => {},
   pauseQueue: () => {},
   resumeQueue: () => {},
-  getPendingCount: () => 0,
+  getPendingCount: () => 0, getRowlessWaitingCount: () => 0,
   getTransportState: (_key: string, status: string) => status,
 };
 const engineStub = { name: "stub", run: async () => ({ result: "ok" }), isAlive: () => false, kill: () => {}, killAll: () => {} };

@@ -52,7 +52,7 @@ const apiCtx = {
     getEngines: () => new Map([["codex", {}]]),
     getEngine: () => undefined,
     getQueue: () => ({
-      getPendingCount: () => 0,
+      getPendingCount: () => 0, getRowlessWaitingCount: () => 0,
       getTransportState: (_key: string, status: string) => status,
       clearQueue: () => {},
     }),
