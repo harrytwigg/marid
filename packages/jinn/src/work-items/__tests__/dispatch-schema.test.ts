@@ -21,12 +21,12 @@ beforeAll(async () => {
 const NEW_TABLES = ["work_item_dispatch", "work_item_create_receipts"] as const;
 
 /**
- * `work_items` exactly as it stood BEFORE ICI-733, frozen here on purpose.
+ * `work_items` exactly as it stood BEFORE the dispatch-config table, frozen here on purpose.
  * `verifyCurrentWorkItemSchema` compares the stored DDL byte-for-byte, so a
  * column added to that table would make every deployed database refuse to boot
  * — this test is the tripwire for that, not documentation of it.
  */
-const WORK_ITEMS_TABLE_DDL_BEFORE_ICI_733 = `
+const WORK_ITEMS_TABLE_DDL_BEFORE_DISPATCH_CONFIG = `
 CREATE TABLE IF NOT EXISTS work_items (
   id                  TEXT PRIMARY KEY CHECK (
   id GLOB '[A-Z][A-Z][A-Z]-[1-9]*'
@@ -72,7 +72,7 @@ function storedSql(db: import("better-sqlite3").Database, table: string): string
   return (db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(table) as { sql: string } | undefined)?.sql;
 }
 
-describe("the ICI-733 tables are additive", () => {
+describe("the dispatch-config tables are additive", () => {
   it("creates both on a fresh database with their frozen DDL, and verifies", () => {
     const { db } = freshDatabase("fresh.db");
     expect(shape(storedSql(db, "work_item_dispatch"))).toBe(shape(WORK_ITEM_DISPATCH_TABLE_DDL));
@@ -109,10 +109,10 @@ describe("the ICI-733 tables are additive", () => {
   });
 });
 
-describe("work_items itself is untouched by ICI-733", () => {
+describe("work_items itself is untouched by the dispatch-config tables", () => {
   it("still matches the shape it had before, so an existing database still verifies", () => {
     const { db } = freshDatabase("work-items-shape.db");
-    expect(shape(storedSql(db, "work_items"))).toBe(shape(WORK_ITEMS_TABLE_DDL_BEFORE_ICI_733));
+    expect(shape(storedSql(db, "work_items"))).toBe(shape(WORK_ITEMS_TABLE_DDL_BEFORE_DISPATCH_CONFIG));
     db.close();
   });
 

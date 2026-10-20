@@ -11,7 +11,7 @@ import { AttachmentTile, isImageMime, useAttachmentPreview } from "./attachment-
  * attached riding beside it as chips. Previewable files reuse the same dense
  * tile the activity feed renders, so the page speaks one visual language about
  * an attachment wherever it appears. Item-level only — comment-level
- * attachments belong to their comment in the feed (ICI-1438). */
+ * attachments belong to their comment in the feed. */
 
 /* The other way in: the whole detail surface takes a file drag, so a drop over
  * the description, the sub-tasks, the props rail or the activity feed attaches

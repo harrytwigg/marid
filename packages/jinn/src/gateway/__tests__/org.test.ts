@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-// PLA-56: org.ts resolves its org dir at CALL time from resolveJinnHome(), so
+// org.ts resolves its org dir at CALL time from resolveJinnHome(), so
 // the seam is the home (not the frozen ORG_DIR constant). tmpDir stays the org
 // dir the fixtures are written into: <tmpHome>/org.
 let tmpHome: string;

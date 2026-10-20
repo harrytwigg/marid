@@ -39,7 +39,7 @@ function systemSession(employee: string, sourceRef: string) {
     sourceRef,
     connector: "web",
     employee,
-    prompt: "ICI-9: nobody on the roster fits this",
+    prompt: "ISS-9: nobody on the roster fits this",
   });
 }
 

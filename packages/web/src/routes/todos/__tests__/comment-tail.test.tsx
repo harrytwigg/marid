@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkItemCommentWire, WorkItemDetailWire, WorkItemFullWire } from "@/lib/api"
 import { ActivitySection } from "../task-page/activity"
 
-/* ICI-748 — GET /api/work-items/:id embeds the LAST comments of the thread, so
+/* GET /api/work-items/:id embeds the LAST comments of the thread, so
  * the activity feed asks the comments route only for the head in front of them
  * instead of re-fetching a page it was already handed. A thread short enough to
  * fit inside that tail asks for nothing at all, and a request that never fires
@@ -32,14 +32,14 @@ vi.mock("@/lib/api", async (importOriginal) => {
 
 function comment(id: string, body: string, at: string, deletedAt: string | null = null): WorkItemCommentWire {
   return {
-    id, workItemId: "PLA-12", parentCommentId: null, authorKind: "employee", author: "mason",
+    id, workItemId: "TSK-12", parentCommentId: null, authorKind: "employee", author: "mason",
     body, createdAt: at, editedAt: null, deletedAt,
   }
 }
 
 /** The feed reads three things off a detail payload: the id, the events, the tail. */
 function detailOf(comments: WorkItemCommentWire[], total: number): WorkItemDetailWire {
-  return { workItem: { id: "PLA-12" } as WorkItemFullWire, spendUsd: 0, events: [], comments: { comments, total } }
+  return { workItem: { id: "TSK-12" } as WorkItemFullWire, spendUsd: 0, events: [], comments: { comments, total } }
 }
 
 /** 13 comments an hour apart, oldest first — wic_01 … wic_13. */
@@ -72,12 +72,12 @@ beforeEach(() => {
   listWorkItemComments.mockResolvedValue({ comments: [], total: 0 })
 })
 
-describe("the embedded comment tail is not paid for twice (ICI-748)", () => {
+describe("the embedded comment tail is not paid for twice", () => {
   it("asks only for the head the tail is missing, then shows all 13 comments once, newest first", async () => {
     listWorkItemComments.mockResolvedValue({ comments: thread.slice(0, 3), total: 13 })
     renderActivity(detailOf(thread.slice(3), 13))
 
-    await waitFor(() => expect(listWorkItemComments).toHaveBeenCalledWith("PLA-12", { limit: 3, offset: 0 }))
+    await waitFor(() => expect(listWorkItemComments).toHaveBeenCalledWith("TSK-12", { limit: 3, offset: 0 }))
     expect(listWorkItemComments).toHaveBeenCalledTimes(1)
 
     await screen.findByTestId("activity-comment-wic_01")

@@ -3,7 +3,7 @@ import { liveBackgroundSessionIds } from '../sessions/background-work.js';
 import { appendWorkItemEvent, type WorkItemStatus } from './store.js';
 
 /**
- * The claim on a Todo (ICI-729) — one row per Todo saying who is working it and
+ * The claim on a Todo — one row per Todo saying who is working it and
  * until when.
  *
  * Every automated pickup path claims before it works, so a second gateway or a

@@ -19,7 +19,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
   }
 })
 
-const LIVE_PREFIXES: ReadonlySet<string> = new Set(["ICI"])
+const LIVE_PREFIXES: ReadonlySet<string> = new Set(["ISS"])
 
 /** What the batch route answers with, keyed by id. Ids are unique per case, so
  *  the module-level preview cache never carries an answer between them. */
@@ -99,13 +99,13 @@ afterEach(() => {
 
 describe("the hover glance on a Todo mention", () => {
   it("shows the state disc, the id, the title and the status label of that Todo", async () => {
-    rows.set("ICI-7101", { title: "Hover glance strip", status: "executing" })
-    renderMentions(["ICI-7101"])
+    rows.set("ISS-7101", { title: "Hover glance strip", status: "executing" })
+    renderMentions(["ISS-7101"])
 
-    await openGlance("ICI-7101")
+    await openGlance("ISS-7101")
 
     const strip = stripFor("Hover glance strip")
-    expect(strip.textContent).toBe("ICI-7101Hover glance stripIn progress")
+    expect(strip.textContent).toBe("ISS-7101Hover glance stripIn progress")
     expect(strip.querySelector("svg")).not.toBeNull()
   })
 
@@ -120,54 +120,54 @@ describe("the hover glance on a Todo mention", () => {
   })
 
   it("opens on an already-warmed id without a second request", async () => {
-    rows.set("ICI-7103", { title: "Warmed already", status: "backlog" })
-    renderMentions(["ICI-7103"])
+    rows.set("ISS-7103", { title: "Warmed already", status: "backlog" })
+    renderMentions(["ISS-7103"])
     await waitFor(() => expect(getWorkItems).toHaveBeenCalledTimes(1))
 
-    await openGlance("ICI-7103")
+    await openGlance("ISS-7103")
 
     expect(getWorkItems).toHaveBeenCalledTimes(1)
   })
 
   it("re-reads the hovered id when the gateway says it changed, and leaves the others alone", async () => {
-    rows.set("ICI-7104", { title: "Before the event", status: "backlog" })
-    rows.set("ICI-7105", { title: "Untouched neighbour", status: "done" })
-    renderMentions(["ICI-7104", "ICI-7105"])
-    await openGlance("ICI-7104")
-    await openGlance("ICI-7105")
+    rows.set("ISS-7104", { title: "Before the event", status: "backlog" })
+    rows.set("ISS-7105", { title: "Untouched neighbour", status: "done" })
+    renderMentions(["ISS-7104", "ISS-7105"])
+    await openGlance("ISS-7104")
+    await openGlance("ISS-7105")
 
     // What use-query-invalidation does for a live work-item event, verbatim.
-    rows.set("ICI-7104", { title: "After the event", status: "done" })
-    forgetTodoPreview("ICI-7104")
+    rows.set("ISS-7104", { title: "After the event", status: "done" })
+    forgetTodoPreview("ISS-7104")
     await act(async () => {
-      await queryClient.invalidateQueries({ queryKey: ["work-item-preview", "ICI-7104"] })
+      await queryClient.invalidateQueries({ queryKey: ["work-item-preview", "ISS-7104"] })
     })
 
     expect(await screen.findByText("After the event")).toBeTruthy()
     expect(screen.queryByText("Before the event")).toBeNull()
     expect(screen.getByText("Untouched neighbour")).toBeTruthy()
-    expect(getWorkItems.mock.calls.at(-1)![0]).toEqual(["ICI-7104"])
+    expect(getWorkItems.mock.calls.at(-1)![0]).toEqual(["ISS-7104"])
   })
 
   it("does not render at all on a narrow viewport, and the mention still navigates", async () => {
     forceNarrowViewport()
-    rows.set("ICI-7106", { title: "Not on a phone", status: "backlog" })
-    renderMentions(["ICI-7106"])
+    rows.set("ISS-7106", { title: "Not on a phone", status: "backlog" })
+    renderMentions(["ISS-7106"])
 
-    const link = screen.getByRole("link", { name: "ICI-7106" })
+    const link = screen.getByRole("link", { name: "ISS-7106" })
     fireEvent.focus(link)
     await pastTheOpenDelay()
 
     expect(document.querySelector(".todo-glance")).toBeNull()
     expect(screen.queryByText("Not on a phone")).toBeNull()
-    expect(link.getAttribute("href")).toBe("/todos/ICI-7106")
+    expect(link.getAttribute("href")).toBe("/todos/ISS-7106")
   })
 
   it("closes on Escape and leaves focus on the mention", async () => {
-    rows.set("ICI-7107", { title: "Escape closes it", status: "backlog" })
-    renderMentions(["ICI-7107"])
-    await openGlance("ICI-7107")
-    const link = screen.getByRole("link", { name: "ICI-7107" })
+    rows.set("ISS-7107", { title: "Escape closes it", status: "backlog" })
+    renderMentions(["ISS-7107"])
+    await openGlance("ISS-7107")
+    const link = screen.getByRole("link", { name: "ISS-7107" })
     link.focus()
 
     fireEvent.keyDown(document, { key: "Escape" })
@@ -181,11 +181,11 @@ describe("the hover glance on a Todo mention", () => {
   // leaves the cursor exactly where it was. Left alone, both stay on screen
   // saying the same thing, the strip lying across the transcript.
   it("takes the strip away when the click opens the Todo as a tab instead", async () => {
-    rows.set("ICI-7109", { title: "The tab takes it from here", status: "executing" })
-    renderMentions(["ICI-7109"], LIVE_PREFIXES, true)
-    await openGlance("ICI-7109")
+    rows.set("ISS-7109", { title: "The tab takes it from here", status: "executing" })
+    renderMentions(["ISS-7109"], LIVE_PREFIXES, true)
+    await openGlance("ISS-7109")
 
-    fireEvent.click(screen.getByRole("link", { name: "ICI-7109" }), { button: 0 })
+    fireEvent.click(screen.getByRole("link", { name: "ISS-7109" }), { button: 0 })
 
     await waitFor(() => expect(document.querySelector(".todo-glance")).toBeNull())
   })
@@ -194,10 +194,10 @@ describe("the hover glance on a Todo mention", () => {
   // was, so the trigger is still engaged and asks to open again the moment its
   // delay elapses. Until the pointer actually leaves, the answer stays no.
   it("keeps the strip away while the mention it opened is still under the cursor", async () => {
-    rows.set("ICI-7110", { title: "Still under the cursor", status: "executing" })
-    renderMentions(["ICI-7110"], LIVE_PREFIXES, true)
-    await openGlance("ICI-7110")
-    const link = screen.getByRole("link", { name: "ICI-7110" })
+    rows.set("ISS-7110", { title: "Still under the cursor", status: "executing" })
+    renderMentions(["ISS-7110"], LIVE_PREFIXES, true)
+    await openGlance("ISS-7110")
+    const link = screen.getByRole("link", { name: "ISS-7110" })
 
     fireEvent.click(link, { button: 0 })
     fireEvent.focus(link)
@@ -207,25 +207,25 @@ describe("the hover glance on a Todo mention", () => {
   })
 
   it("shows the strip again once the cursor comes back to the mention", async () => {
-    rows.set("ICI-7111", { title: "Back for a second look", status: "backlog" })
-    renderMentions(["ICI-7111"], LIVE_PREFIXES, true)
-    await openGlance("ICI-7111")
-    const link = screen.getByRole("link", { name: "ICI-7111" })
+    rows.set("ISS-7111", { title: "Back for a second look", status: "backlog" })
+    renderMentions(["ISS-7111"], LIVE_PREFIXES, true)
+    await openGlance("ISS-7111")
+    const link = screen.getByRole("link", { name: "ISS-7111" })
     fireEvent.click(link, { button: 0 })
 
     fireEvent.pointerEnter(link)
-    await openGlance("ICI-7111")
+    await openGlance("ISS-7111")
 
     expect(stripFor("Back for a second look")).toBeTruthy()
   })
 
   it("is a tooltip the mention is described by while it is open, so a screen reader reads it with the link", async () => {
-    rows.set("ICI-7112", { title: "Read with the link", status: "backlog" })
-    renderMentions(["ICI-7112"])
-    const link = screen.getByRole("link", { name: "ICI-7112" })
+    rows.set("ISS-7112", { title: "Read with the link", status: "backlog" })
+    renderMentions(["ISS-7112"])
+    const link = screen.getByRole("link", { name: "ISS-7112" })
     expect(link.hasAttribute("aria-describedby")).toBe(false)
 
-    await openGlance("ICI-7112")
+    await openGlance("ISS-7112")
 
     const tip = screen.getByRole("tooltip")
     expect(tip.textContent).toContain("Read with the link")
@@ -233,19 +233,19 @@ describe("the hover glance on a Todo mention", () => {
   })
 
   it("opens when the keyboard reaches the mention", async () => {
-    rows.set("ICI-7113", { title: "Opened by Tab", status: "executing" })
-    renderMentions(["ICI-7113"])
+    rows.set("ISS-7113", { title: "Opened by Tab", status: "executing" })
+    renderMentions(["ISS-7113"])
 
     await userEvent.tab()
 
-    expect(document.activeElement).toBe(screen.getByRole("link", { name: "ICI-7113" }))
+    expect(document.activeElement).toBe(screen.getByRole("link", { name: "ISS-7113" }))
     await screen.findByText("Opened by Tab")
   })
 
   it("holds nothing in the tab order, so tabbing never stops inside it", async () => {
-    rows.set("ICI-7108", { title: "Nothing to tab to", status: "in_review" })
-    renderMentions(["ICI-7108"])
-    await openGlance("ICI-7108")
+    rows.set("ISS-7108", { title: "Nothing to tab to", status: "in_review" })
+    renderMentions(["ISS-7108"])
+    await openGlance("ISS-7108")
 
     const strip = stripFor("Nothing to tab to")
     // React Aria adds a visually hidden dismiss button, which is `tabindex="-1"`.

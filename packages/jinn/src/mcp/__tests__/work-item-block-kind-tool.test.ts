@@ -37,7 +37,7 @@ function tool(name: string): JinnMcpTool {
   return t;
 }
 
-/* ICI-730: the kind is what an agent chooses when it blocks, and choosing badly
+/* The kind is what an agent chooses when it blocks, and choosing badly
  * routes work somewhere nobody asked for — so the tool declares the four and
  * refuses anything else before the gateway is called at all. */
 describe("update_work_item — blockKind", () => {

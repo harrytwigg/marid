@@ -1,7 +1,7 @@
 export const TODO_WRITE_KEY = ['todo-write'] as const
 
 /** Todo surfaces resync when you return to them: an invalidation that lands
- * while the surface is unmounted must not survive its next mount (ICI-659). */
+ * while the surface is unmounted must not survive its next mount. */
 export const TODO_QUERY_FRESHNESS = { staleTime: 10_000, refetchOnMount: true } as const
 
 export const queryKeys = {

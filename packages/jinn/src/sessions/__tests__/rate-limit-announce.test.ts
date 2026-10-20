@@ -3,7 +3,7 @@ import type { RateLimitHandlerHooks } from "../rate-limit-handler.js";
 import type { Engine } from "../../shared/types.js";
 
 /**
- * PLA-184 — the fallback announcement used to be written for one engine: it said
+ * The fallback announcement used to be written for one engine: it said
  * Claude was limited and GPT was taking over, and it killed the Claude PTY, no
  * matter which engine had actually run out. A codex limit therefore told the
  * operator the wrong thing and left the codex PTY warm — exactly the abandoned

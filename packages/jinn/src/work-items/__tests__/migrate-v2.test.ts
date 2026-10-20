@@ -108,13 +108,13 @@ describe("v1 → v2 migration", () => {
     migrate.registerWorkItemIdentityFunctions(db);
     migrate.migrateWorkItemsSchema(db, "absent");
     expect(migrate.allocateWorkItemId(db, "2026-07-01T00:00:00.000Z", "ACM").id).toBe("ACM-1");
-    expect(migrate.allocateWorkItemId(db, "2026-07-01T00:00:00.000Z", "PLA").id).toBe("PLA-1");
+    expect(migrate.allocateWorkItemId(db, "2026-07-01T00:00:00.000Z", "TSK").id).toBe("TSK-1");
     expect(migrate.allocateWorkItemId(db, "2026-07-01T00:00:00.000Z", "ACM").id).toBe("ACM-2");
     db.close();
   });
 });
 
-/* ── Todos v2 slice 4 + PLA-48: work_item_approvals as the sole owner ───────── */
+/* ── Todos v2 slice 4 + the ownership move: work_item_approvals as the sole owner ───────── */
 
 function freshV2(file: string): Database.Database {
   const fresh = new Database(file);
@@ -160,7 +160,7 @@ describe("legacy approval columns heal into work_item_approvals", () => {
 
   it("classifies a legacy-shape database as current, moves the values off-row, drops the columns, and re-runs as a no-op", () => {
     const file = path.join(tmp, "registry-backfill.db");
-    // A pre-PLA-48 home: work_items still carries the shadow approval_* columns,
+    // A home from before approvals had a sole owner: work_items still carries the shadow approval_* columns,
     // with the real indexes and triggers; the additive tables never shipped.
     const legacy = new Database(file);
     migrate.registerWorkItemIdentityFunctions(legacy);

@@ -594,7 +594,7 @@ export function updateNote(
   return readNote(input.path, home);
 }
 
-/* ── Knowledge search + instance read (GRS-020b, re-homed here by PLA-52) ────
+/* ── Knowledge search + instance read (GRS-020b, re-homed here) ────
  *
  * Deterministic search over the company's institutional knowledge, plus capped reads
  * of files in the active Jinn instance. Search walks knowledge/ and docs/ through

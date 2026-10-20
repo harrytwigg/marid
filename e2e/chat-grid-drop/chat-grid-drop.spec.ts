@@ -29,7 +29,7 @@ test('real pointer preview matches the 2-to-3 pane right-region result', async (
   const geometry = await dragSessionToRightQuarter(page, sessionC, sessionB)
   const delta = rectDelta(geometry.preview, geometry.result)
   const evidence = `preview ${describeRect(geometry.preview)} vs result ${describeRect(geometry.result)}; delta ${JSON.stringify(delta)}`
-  console.log(`PLA-174 geometry: ${evidence}`)
+  console.log(`chat-grid-drop geometry: ${evidence}`)
 
   for (const [axis, value] of Object.entries(delta)) {
     expect(Math.abs(value), `${evidence}; ${axis} exceeded 1px`).toBeLessThanOrEqual(1)
@@ -121,7 +121,7 @@ for (const viewport of [DESKTOP, { width: 1920, height: 1080 }]) {
     const cases = dropMatrix(viewport)
 
     for (const scenario of cases) {
-      console.log(`PLA-174 matrix: ${viewport.width}x${viewport.height} ${scenario.count} panes ${scenario.region}`)
+      console.log(`chat-grid-drop matrix: ${viewport.width}x${viewport.height} ${scenario.count} panes ${scenario.region}`)
       await setWorkingSet(page, ids.slice(0, scenario.count))
       const geometry = await dragSession(
         page,
@@ -185,7 +185,7 @@ test('ten consecutive member moves have no geometry drift or stale overlay', asy
     expectGeometryMatch(geometry.preview, geometry.result, `repeat ${index + 1} ${region}`)
     await expectNoDropOverlay(page)
   }
-  await page.screenshot({ path: artifactPath('pla-174-light-1440.png') })
+  await page.screenshot({ path: artifactPath('chat-grid-drop-light-1440.png') })
   await context.close()
 })
 
@@ -219,7 +219,7 @@ test('dark-theme cap drop matches its preview with token-only overlay styling', 
   })
   expect(overlayStyle.borderWidth).toBe('0px')
   expect(overlayStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)')
-  await page.screenshot({ path: artifactPath('pla-174-dark-1440-held.png') })
+  await page.screenshot({ path: artifactPath('chat-grid-drop-dark-1440-held.png') })
   await page.mouse.up()
   const droppedPane = page.locator(`[data-chat-grid-pane]:has([data-chat-pane-session="${ids[cap]}"])`)
   await expect(droppedPane).toHaveAttribute('data-grid-motion', 'idle')
@@ -229,7 +229,7 @@ test('dark-theme cap drop matches its preview with token-only overlay styling', 
   // The point of the case: the grid absorbed a (cap + 1)th chat by evicting, not by growing.
   await expect(page.locator('[data-chat-grid-pane]')).toHaveCount(cap)
   await expectNoDropOverlay(page)
-  await page.screenshot({ path: artifactPath('pla-174-dark-1440.png') })
+  await page.screenshot({ path: artifactPath('chat-grid-drop-dark-1440.png') })
   await context.close()
 })
 
@@ -254,7 +254,7 @@ test('Open beside follows the view toggle and opens the picker in both themes', 
     expect(openIndex).toBe(cliIndex + 1)
     expect(newTabIndex).toBe(openIndex + 1)
     expect(pinIndex).toBe(newTabIndex + 1)
-    await page.screenshot({ path: artifactPath(`pla-174-${theme}-menu-1440.png`) })
+    await page.screenshot({ path: artifactPath(`chat-grid-drop-${theme}-menu-1440.png`) })
     await menu.getByRole('menuitem', { name: 'Open beside' }).click()
     await expect(page.getByTestId('session-picker-scroll')).toBeVisible()
     await context.close()
@@ -263,7 +263,7 @@ test('Open beside follows the view toggle and opens the picker in both themes', 
 
 test('the pane title-bar menu reads the same as the header in both themes', async ({ browser }) => {
   // The header menu above is the single-pane home of this action; the pane title bar is the
-  // multi-pane one. Checking only the header is how the two came to disagree: PLA-180 gave the
+  // multi-pane one. Checking only the header is how the two came to disagree: an earlier change gave the
   // pane its own copy under a different name, in a different slot, and nothing compared them.
   for (const theme of ['light', 'dark'] as const) {
     const { context, page } = await openGridPage(browser, { theme })
@@ -283,7 +283,7 @@ test('the pane title-bar menu reads the same as the header in both themes', asyn
     ))
     expect(order.indexOf('Open beside')).toBe(order.indexOf('CLI') + 1)
     expect(order.indexOf('Open beside')).toBeLessThan(order.indexOf('Rename'))
-    await page.screenshot({ path: artifactPath(`pla-174-${theme}-pane-menu-1440.png`) })
+    await page.screenshot({ path: artifactPath(`chat-grid-drop-${theme}-pane-menu-1440.png`) })
     await context.close()
   }
 })

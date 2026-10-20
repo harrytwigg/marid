@@ -137,9 +137,9 @@ describe("work-item tools — registry + schemas", () => {
 
 describe("work-item tools — unit (stub gateway)", () => {
   it("accepts a company-derived canonical ID and forwards it unchanged", async () => {
-    const { calls, ctx } = stub(() => ({ status: 200, body: { id: "ICI-42", title: "Company Todo" } }));
-    await expect(tool("get_work_item").handler({ id: "ICI-42" }, ctx)).resolves.toMatchObject({ id: "ICI-42" });
-    expect(calls[0].url).toBe("http://127.0.0.1:7777/api/work-items/ICI-42");
+    const { calls, ctx } = stub(() => ({ status: 200, body: { id: "ISS-42", title: "Company Todo" } }));
+    await expect(tool("get_work_item").handler({ id: "ISS-42" }, ctx)).resolves.toMatchObject({ id: "ISS-42" });
+    expect(calls[0].url).toBe("http://127.0.0.1:7777/api/work-items/ISS-42"); // footgun: ok stub gateway URL, asserted and never contacted
   });
 
   it.each(["wi_0123456789ab", "JIN-0", "JIN-01", "JIN-9007199254740992", " JIN-1 "])(
@@ -924,7 +924,7 @@ describe("work-item attachment + department tools (Todos v2 slice 5)", () => {
   });
 
   it("list_departments proxies the departments surface", async () => {
-    const { calls, ctx } = stub(() => ({ status: 200, body: { departments: [{ slug: "platform", prefix: "PLA", todoCount: 3 }] } }));
+    const { calls, ctx } = stub(() => ({ status: 200, body: { departments: [{ slug: "platform", prefix: "TSK", todoCount: 3 }] } }));
     const out = (await tool("list_departments").handler({}, ctx)) as { departments: Array<{ slug: string }> };
     expect(calls[0].method).toBe("GET");
     expect(new URL(calls[0].url).pathname).toBe("/api/departments");

@@ -207,7 +207,7 @@ describe("universal Talk gateway control acceptance", () => {
     const delegatedSession = delegatedSessions[0]!;
     expect(delegated.body).toMatchObject({ uiEffect: { navigate: `/?session=${delegatedSession.id}` } });
 
-    // The named-session send is a gateway write now (PLA-224 S3), and it is
+    // The named-session send is a gateway write now, and it is
     // gated on the operator's own live utterance rather than on a browser
     // sheet. Posted without that binding it is refused before anything runs.
     const message = control("message-1", "talk_send_to_session", {

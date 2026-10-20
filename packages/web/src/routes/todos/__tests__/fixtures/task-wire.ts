@@ -6,14 +6,14 @@ import type { WorkItemCommentWire, WorkItemEventWire, WorkItemRunWire, WorkItemT
 
 export function event(id: string, kind: string, at: string, extra: Partial<WorkItemEventWire> = {}): WorkItemEventWire {
   return {
-    id, workItemId: "PLA-12", kind, fromStatus: null, toStatus: null, actor: "operator",
+    id, workItemId: "TSK-12", kind, fromStatus: null, toStatus: null, actor: "operator",
     detail: null, createdAt: at, ...extra,
   }
 }
 
 export function comment(id: string, body: string, at: string, extra: Partial<WorkItemCommentWire> = {}): WorkItemCommentWire {
   return {
-    id, workItemId: "PLA-12", parentCommentId: null, authorKind: "employee", author: "mason",
+    id, workItemId: "TSK-12", parentCommentId: null, authorKind: "employee", author: "mason",
     body, createdAt: at, editedAt: null, deletedAt: null, ...extra,
   }
 }
@@ -21,7 +21,7 @@ export function comment(id: string, body: string, at: string, extra: Partial<Wor
 /** A settled attempt by default; an open one is `{ endedAt: null, outcome: null }`. */
 export function run(id: string, extra: Partial<WorkItemRunWire> = {}): WorkItemRunWire {
   return {
-    id, workItemId: "PLA-12", sessionId: `session-${id}`,
+    id, workItemId: "TSK-12", sessionId: `session-${id}`,
     startedAt: "2026-07-22T08:00:00.000Z", endedAt: "2026-07-22T08:40:00.000Z",
     outcome: "completed", summary: null, handoff: {}, error: null, ...extra,
   }
@@ -46,8 +46,8 @@ export function workItemNode(id: string, overrides: Partial<WorkItemTreeNodeWire
     rounds: 0,
     budgetUsd: null,
     createdBy: "operator",
-    parentId: "PLA-12",
-    rootId: "PLA-12",
+    parentId: "TSK-12",
+    rootId: "TSK-12",
     depth: 1,
     dueAt: null,
     createdAt: "2026-07-20T08:00:00.000Z",

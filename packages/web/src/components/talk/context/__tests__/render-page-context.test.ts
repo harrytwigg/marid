@@ -99,7 +99,7 @@ describe("rendering the page context", () => {
   })
 
   /**
-   * Journey step 1 (PLA-224). Asked "what are we looking at?", the model used
+   * Journey step 1. Asked "what are we looking at?", the model used
    * to narrate: it could read the chat's title off the packet but the session
    * id was deliberately withheld, so `read_session` was uncallable and there
    * was nothing to read. The handle is the difference between reading and

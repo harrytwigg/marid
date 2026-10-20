@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkItemAttachmentWire, WorkItemDetailWire, WorkItemFullWire, WorkItemTreeNodeWire } from "@/lib/api"
 import TaskPage from "../task-page/task-page"
 
-/* ICI-1439 — the whole Todo detail view takes a file drag, and every file in a
+/* The whole Todo detail view takes a file drag, and every file in a
  * drop is its own upload: one refusal reports itself by name and the rest of
  * the batch still lands. The paperclip picker shares that path, so it is
  * asserted alongside rather than trusted to have stayed in step. */
@@ -41,7 +41,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       listWorkItemSessions: (...args: unknown[]) => listWorkItemSessions(...args),
       dispatchTodo: vi.fn(),
       getDepartments: vi.fn().mockResolvedValue({
-        departments: [{ slug: "platform", prefix: "PLA", createdAt: "2026-07-01T00:00:00.000Z", todoCount: 4 }],
+        departments: [{ slug: "platform", prefix: "TSK", createdAt: "2026-07-01T00:00:00.000Z", todoCount: 4 }],
       }),
       getOrg: (...args: unknown[]) => getOrg(...args),
       listWorkItems: vi.fn().mockResolvedValue({ workItems: [], total: 0, nextOffset: null }),
@@ -79,7 +79,7 @@ function full(id: string): WorkItemFullWire {
 function attachmentWire(filename: string, index: number): WorkItemAttachmentWire {
   return {
     id: `wia_${index}`,
-    workItemId: "PLA-12",
+    workItemId: "TSK-12",
     commentId: null,
     filename,
     mime: "application/pdf",
@@ -124,7 +124,7 @@ function renderTask() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/todos/PLA-12"]}>
+      <MemoryRouter initialEntries={["/todos/TSK-12"]}>
         <Routes>
           <Route path="/todos/:todoId" element={<TaskPage />} />
         </Routes>
@@ -146,7 +146,7 @@ function pdf(name: string): File {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+  getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
   getWorkItemTree.mockImplementation((id: string) =>
     Promise.resolve({ tree: { root: treeNode(full(id)), totals: {}, spendUsd: 0 } }),
   )
@@ -199,9 +199,9 @@ describe("dropping files on the Todo detail view", () => {
 
     await waitFor(() => expect(uploadWorkItemAttachment).toHaveBeenCalledTimes(3))
     expect(uploadWorkItemAttachment.mock.calls.map(([id, file]) => [id, (file as File).name])).toEqual([
-      ["PLA-12", "a.pdf"],
-      ["PLA-12", "b.pdf"],
-      ["PLA-12", "c.pdf"],
+      ["TSK-12", "a.pdf"],
+      ["TSK-12", "b.pdf"],
+      ["TSK-12", "c.pdf"],
     ])
     const strip = await screen.findByTestId("attachment-strip")
     await waitFor(() => expect(within(strip).getAllByText(/\.pdf$/)).toHaveLength(3))

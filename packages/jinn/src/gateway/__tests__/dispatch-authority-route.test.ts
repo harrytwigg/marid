@@ -11,7 +11,7 @@ import { call, startRouteHarness, stopRouteHarness, type Registry, type WorkItem
 /**
  * Who may start the Dispatcher on a Todo.
  *
- * PLA-228 rests on the answer: the Todo Shaper creates a Todo and hands it
+ * The Todo Shaper's design rests on the answer: the Todo Shaper creates a Todo and hands it
  * straight on, so quick capture only works if a session has standing over what
  * it created. It does, and by an existing rule rather than a new exception —
  * the approval route resolves an unassigned Todo's owner to the employee behind

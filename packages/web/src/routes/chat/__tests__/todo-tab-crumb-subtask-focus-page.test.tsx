@@ -14,7 +14,7 @@ vi.mock('@/components/chat/doc-view', async () => {
   const { useOpenTodoInPlace } = await import('@/routes/todos/task-page/task-frame')
   const { useNavigate } = await import('react-router-dom')
   const child = {
-    id: 'PLA-2', title: 'Other', status: 'backlog', assignee: null, children: [],
+    id: 'TSK-2', title: 'Other', status: 'backlog', assignee: null, children: [],
   }
   function TodoTab() {
     const navigate = useNavigate()
@@ -24,8 +24,8 @@ vi.mock('@/components/chat/doc-view', async () => {
         <CrumbBar
           boardLabel="Board"
           onBack={() => {}}
-          ancestors={[{ id: 'PLA-2', title: 'Other' }]}
-          id="PLA-1"
+          ancestors={[{ id: 'TSK-2', title: 'Other' }]}
+          id="TSK-1"
           title="This"
           onOpenAncestor={openTodo}
           onCopyId={() => {}}
@@ -47,15 +47,15 @@ vi.mock('@/components/chat/doc-view', async () => {
   }
   return {
     DocView: ({ doc }: { doc: { kind: string; todoId?: string } }) =>
-      doc.kind === 'todo' && doc.todoId === 'PLA-1' ? <TodoTab /> : null,
+      doc.kind === 'todo' && doc.todoId === 'TSK-1' ? <TodoTab /> : null,
   }
 })
 
-const OVER_A = todoTabId('PLA-1')
-const OVER_B = todoTabId('PLA-2')
+const OVER_A = todoTabId('TSK-1')
+const OVER_B = todoTabId('TSK-2')
 
 function seedLayout(): void {
-  // Chats a and b side by side, PLA-2 open over b, PLA-1 over a, which holds focus.
+  // Chats a and b side by side, TSK-2 open over b, TSK-1 over a, which holds focus.
   const layout = openDocTab(openDocTab(createSplitLayout(['a', 'b'], 'b'), 'b', OVER_B), 'a', OVER_A)
   persistSplitLayout(localStorage, layout)
   localStorage.removeItem(WORKING_SET_STORAGE_KEY)
@@ -75,7 +75,7 @@ describe("a Todo tab's crumbs and sub-tasks inside the chat layout", () => {
 
   async function clickAndExpectFocusMoves(testId: string | (() => HTMLElement)) {
     renderRoute('/?session=a')
-    await waitFor(() => expect(screen.getByTestId('task-crumb-PLA-2')).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId('task-crumb-TSK-2')).toBeTruthy())
     expect(focusedGroup(stored())!.activeTab).toBe(OVER_A)
 
     fireEvent.click(typeof testId === 'string' ? screen.getByTestId(testId) : testId())
@@ -86,7 +86,7 @@ describe("a Todo tab's crumbs and sub-tasks inside the chat layout", () => {
   }
 
   it('an ancestor crumb focuses the Todo\'s tab where it is open, and the pane it was clicked in does not take focus back', async () => {
-    await clickAndExpectFocusMoves('task-crumb-PLA-2')
+    await clickAndExpectFocusMoves('task-crumb-TSK-2')
   })
 
   it('a sub-task row focuses the Todo\'s tab where it is open, and the pane it was clicked in does not take focus back', async () => {
@@ -94,6 +94,6 @@ describe("a Todo tab's crumbs and sub-tasks inside the chat layout", () => {
   })
 
   it('a sub-task\'s open button focuses the Todo\'s tab where it is open, and the pane it was clicked in does not take focus back', async () => {
-    await clickAndExpectFocusMoves('subtask-open-PLA-2')
+    await clickAndExpectFocusMoves('subtask-open-TSK-2')
   })
 })

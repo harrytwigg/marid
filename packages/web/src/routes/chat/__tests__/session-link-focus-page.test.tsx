@@ -21,7 +21,7 @@ vi.mock('@/components/chat/doc-view', async () => {
   }
 })
 
-const TODO = todoTabId('PLA-1')
+const TODO = todoTabId('TSK-1')
 
 function seedLayout(): void {
   // Chats a and b side by side, the Todo opened over a, which holds focus.

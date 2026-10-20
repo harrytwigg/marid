@@ -146,7 +146,7 @@ export interface ListWorkItemsFilter {
   rootDepartment?: string;
   /** Only tree roots (parentless items). */
   rootsOnly?: boolean;
-  /** Board scopes — `kept`: pinned (ICI-1357). `home`: pinned OR operator-created (PLA-230). */
+  /** Board scopes — `kept`: pinned. `home`: pinned OR operator-created. */
   kept?: boolean;
   home?: boolean;
   /** Items carrying this label, matched by exact label id (`lbl_…`) or stored
@@ -542,7 +542,7 @@ function workItemWhere(filter: ListWorkItemsFilter, textIds?: readonly string[])
   if (filter.needsAttentionFor) {
     // A blocked Todo held by the caller, or one recovery routed to a human; the operator's own queue
     // adds blocked Todos held by @operator or by nobody (a Dispatcher or Shaper dead end). An unexpired
-    // park is a clock-wait (PLA-157) and leaves this set outright; an unreadable one is not a park.
+    // park is a clock-wait and leaves this set outright; an unreadable one is not a park.
     // A recovery row only counts while the Todo is in a status the sweep visits — the sweep
     // statuses are RECOVERY_SWEPT_STATUSES in work-items/recovery.ts; keep this list in step with it.
     conditions.push(

@@ -60,7 +60,7 @@ export interface JinnConfig {
     /** Nudge sessions this gateway's own restart interrupted to continue on the
      *  next boot. Default true; false leaves them interrupted for the operator. */
     resumeInterruptedSessions?: boolean;
-    /** Bounded Todo recovery (PLA-240). Unset = classify-only: lanes and
+    /** Bounded Todo recovery. Unset = classify-only: lanes and
      *  metrics, no automatic re-arm. `auto` is a reviewed production gate. */
     todoRecovery?: { mode?: "off" | "classify-only" | "auto" };
     /** Closed Todo departments (JIN-1): unset = open; see shared/todo-departments-config.ts. */

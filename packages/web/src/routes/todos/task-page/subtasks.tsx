@@ -7,7 +7,7 @@ import { PENDING_SUBTASK_PREFIX } from "./use-subtask-mutations"
 import type { OpenTodoFromClick } from "./task-frame"
 
 /* Todos v2 slice 6 — the task page's sub-tasks section (design-doc §7.2.8,
- * mock task-detail.html). ICI-1437 gives the group Linear's shape: the header
+ * mock task-detail.html). The group takes Linear's shape: the header
  * is a disclosure carrying the subtree count and the `+`, and the `+` opens an
  * inline field at the BOTTOM of the list rather than a dialog. The header
  * survives an empty list, so `+` stays reachable on a Todo with no children.

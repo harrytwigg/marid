@@ -1,7 +1,7 @@
 /**
  * What the model is told when a control does not succeed.
  *
- * Split from `session-driver-actions.test.ts` (PLA-224): the honesty
+ * Split from `session-driver-actions.test.ts`: the honesty
  * contract is its own concern, and the two together outgrew the size cap.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -47,7 +47,7 @@ beforeEach(() => {
 
 describe("what the model is told when a control fails", () => {
   /**
-   * The "no trace whatsoever" regression (PLA-224). A name this client's
+   * The "no trace whatsoever" regression. A name this client's
    * manifest does not carry used to be refused here, so nothing was posted and
    * the gateway log for that window was empty — the operator was told the
    * attempt failed and no one could find out why. The gateway owns the

@@ -1,7 +1,7 @@
 import type { Database as DatabaseType } from "better-sqlite3";
 import type { BlockKind } from "./blocks.js";
 
-/** PLA-157: why a stopped Todo stopped, and what ends the wait.
+/** Why a stopped Todo stopped, and what ends the wait.
  *
  *  A Todo held by a quota window and a Todo held by a human decision both sit in
  *  `blocked`, so the board cannot tell a clock-wait from a you-wait

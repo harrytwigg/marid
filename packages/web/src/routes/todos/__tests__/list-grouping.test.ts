@@ -27,9 +27,9 @@ function item(id: string, status: WorkItemStatusWire): WorkItemCompactWire {
 
 describe("groupTodoListItems", () => {
   it("splits only the recovering lane out of Blocked and leaves manager and operator lane items in it", () => {
-    const recovering = { ...item("PLA-1", "blocked"), attentionLane: "recovering" as const }
-    const manager = { ...item("PLA-2", "blocked"), attentionLane: "manager" as const }
-    const operator = { ...item("PLA-3", "blocked"), attentionLane: "operator" as const }
+    const recovering = { ...item("TSK-1", "blocked"), attentionLane: "recovering" as const }
+    const manager = { ...item("TSK-2", "blocked"), attentionLane: "manager" as const }
+    const operator = { ...item("TSK-3", "blocked"), attentionLane: "operator" as const }
     const empty = { items: [], total: 0 }
     const groups = groupTodoListItems(
       {
@@ -39,10 +39,10 @@ describe("groupTodoListItems", () => {
       },
       [recovering, manager, operator],
     )
-    expect(groups.find((group) => group.key === "recovering")?.items.map(({ id }) => id)).toEqual(["PLA-1"])
+    expect(groups.find((group) => group.key === "recovering")?.items.map(({ id }) => id)).toEqual(["TSK-1"])
     expect(groups.map((group) => group.key)).not.toContain("manager")
     const blocked = groups.find((group) => group.key === "blocked")
-    expect(blocked?.items.map(({ id }) => id)).toEqual(["PLA-2", "PLA-3"])
+    expect(blocked?.items.map(({ id }) => id)).toEqual(["TSK-2", "TSK-3"])
     expect(blocked?.count).toBe(2)
     expect(groups.map((group) => group.key)).not.toContain("needs-you")
   })
@@ -91,7 +91,7 @@ describe("groupTodoListItems", () => {
   })
 
   it("keeps an unloaded manager-lane item in its status count rather than a separate group", () => {
-    const needsReview = { ...item("PLA-22", "in_review"), attentionLane: "manager" as const }
+    const needsReview = { ...item("TSK-22", "in_review"), attentionLane: "manager" as const }
     const empty = { items: [], total: 0 }
     const groups = groupTodoListItems(
       { backlog: empty, executing: empty, in_review: { items: [], total: 21 }, blocked: empty, done: empty, cancelled: empty },
@@ -102,7 +102,7 @@ describe("groupTodoListItems", () => {
   })
 
   it("hoists a recovering item outside the loaded status page", () => {
-    const needsReview = { ...item("PLA-21", "in_review"), attentionLane: "recovering" as const }
+    const needsReview = { ...item("TSK-21", "in_review"), attentionLane: "recovering" as const }
     const groups = groupTodoListItems(
       {
         backlog: { items: [], total: 0 },
@@ -115,15 +115,15 @@ describe("groupTodoListItems", () => {
       [needsReview],
     )
 
-    expect(groups.find((group) => group.key === "recovering")?.items.map(({ id }) => id)).toEqual(["PLA-21"])
+    expect(groups.find((group) => group.key === "recovering")?.items.map(({ id }) => id)).toEqual(["TSK-21"])
     expect(groups.find((group) => group.key === "in-review")?.items).toEqual([])
     expect(groups.find((group) => group.key === "in-review")?.count).toBe(20)
-    expect(groups.flatMap((group) => group.items).filter(({ id }) => id === "PLA-21")).toHaveLength(1)
+    expect(groups.flatMap((group) => group.items).filter(({ id }) => id === "TSK-21")).toHaveLength(1)
   })
 
   it("shows every blocked Todo under Blocked, whoever it is waiting on", () => {
-    const operatorBlocked = { ...item("ICI-2", "blocked"), attentionLane: "operator" as const, assignee: "operator" }
-    const unassignedBlocked = item("ICI-3", "blocked")
+    const operatorBlocked = { ...item("ISS-2", "blocked"), attentionLane: "operator" as const, assignee: "operator" }
+    const unassignedBlocked = item("ISS-3", "blocked")
     const groups = groupTodoListItems(
       {
         backlog: { items: [], total: 0 },
@@ -137,12 +137,12 @@ describe("groupTodoListItems", () => {
     )
 
     expect(groups.map((group) => group.key)).toEqual(["executing", "in-review", "backlog", "blocked", "closed"])
-    expect(groups.find((group) => group.key === "blocked")?.items.map(({ id }) => id)).toEqual(["ICI-2", "ICI-3"])
+    expect(groups.find((group) => group.key === "blocked")?.items.map(({ id }) => id)).toEqual(["ISS-2", "ISS-3"])
     expect(groups.find((group) => group.key === "blocked")?.count).toBe(2)
   })
 
   it("leaves an operator-lane in_review Todo in its own status group", () => {
-    const awaitingOperator = { ...item("ICI-5", "in_review"), attentionLane: "operator" as const }
+    const awaitingOperator = { ...item("ISS-5", "in_review"), attentionLane: "operator" as const }
     const empty = { items: [], total: 0 }
     const groups = groupTodoListItems(
       {
@@ -153,12 +153,12 @@ describe("groupTodoListItems", () => {
       [awaitingOperator],
     )
 
-    expect(groups.find((group) => group.key === "in-review")?.items.map(({ id }) => id)).toEqual(["ICI-5"])
+    expect(groups.find((group) => group.key === "in-review")?.items.map(({ id }) => id)).toEqual(["ISS-5"])
     expect(groups.find((group) => group.key === "in-review")?.count).toBe(1)
   })
 
   it("omits the groups a one-status view never queried, rather than showing them as 0", () => {
-    const executing = item("ICI-9", "executing")
+    const executing = item("ISS-9", "executing")
     const empty = { items: [], total: 0 }
     const groups = groupTodoListItems(
       {

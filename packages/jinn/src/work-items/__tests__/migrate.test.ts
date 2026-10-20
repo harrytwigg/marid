@@ -288,11 +288,11 @@ describe("startup Todo preflight — concurrent first boot", () => {
     try {
       // v2 truth: two prefixes contend concurrently and each namespace stays
       // independently monotonic without reuse.
-      const prefixArgs = Array.from({ length: 32 }, (_, index) => index % 2 === 0 ? "ICI" : "ACM");
+      const prefixArgs = Array.from({ length: 32 }, (_, index) => index % 2 === 0 ? "ISS" : "ACM");
       const results = await runMigrationWave(workers.map((worker) => worker.child), file, 2, "allocate", prefixArgs);
       expect(results.filter((result) => !result.ok)).toEqual([]);
       expect(new Set(results.map((result) => result.id)).size).toBe(32);
-      for (const prefix of ["ICI", "ACM"] as const) {
+      for (const prefix of ["ISS", "ACM"] as const) {
         const ordinals = results
           .map((result) => result.id)
           .filter((id): id is string => !!id && id.startsWith(`${prefix}-`))
@@ -306,7 +306,7 @@ describe("startup Todo preflight — concurrent first boot", () => {
 
     const db = new Database(file);
     expect(db.prepare("SELECT prefix, high_water FROM work_item_id_allocator ORDER BY prefix").all())
-      .toEqual([{ prefix: "ACM", high_water: 16 }, { prefix: "ICI", high_water: 16 }]);
+      .toEqual([{ prefix: "ACM", high_water: 16 }, { prefix: "ISS", high_water: 16 }]);
     expect(db.prepare("SELECT COUNT(*) FROM work_item_id_burns").pluck().get()).toBe(32);
     expect(db.prepare("SELECT COUNT(*) FROM work_item_id_issuances").pluck().get()).toBe(32);
     expect(db.prepare("SELECT COUNT(*) FROM work_items").pluck().get()).toBe(32);

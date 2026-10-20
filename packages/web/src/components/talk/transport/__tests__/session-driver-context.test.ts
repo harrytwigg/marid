@@ -116,7 +116,7 @@ describe("following the operator around the app", () => {
 
     expect(updates(connection)).toHaveLength(2)
     expect(instructionsOf(updates(connection)[1]!)).toContain("Selected: chat current")
-    // The selected chat is addressable (PLA-224 S2): the title is what gets
+    // The selected chat is addressable: the title is what gets
     // spoken, the id is what gets passed to a tool.
     expect(instructionsOf(updates(connection)[1]!)).toContain("Selected session id: sess-4821")
   })

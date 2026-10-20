@@ -2,8 +2,8 @@ import type { JsonObject } from "../shared/types.js";
 import type { WorkItem, WorkItemEvent, WorkItemStatus } from "./store.js";
 
 /**
- * ICI-570 — live change signal for Todo writes that happen IN-PROCESS, outside
- * the HTTP routes: the cron mint, and (ICI-749) every guarded status write,
+ * Live change signal for Todo writes that happen IN-PROCESS, outside
+ * the HTTP routes: the cron mint, and every guarded status write,
  * whoever commits it. This module gives the gateway one registration point so
  * those lanes reach the web dashboard too. The non-status route lanes still emit
  * their own richer `company:changed` events at the persistence boundary. Null
@@ -23,7 +23,7 @@ export interface TodoLiveEvent {
 }
 
 /**
- * PLA-96 — a signal is HELD while the write that raised it is still inside an
+ * A signal is HELD while the write that raised it is still inside an
  * enclosing transaction, and released only once that transaction commits.
  *
  * A cascade closes its descendants through nested `transition` calls, and a

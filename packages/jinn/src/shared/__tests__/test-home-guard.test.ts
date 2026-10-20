@@ -232,7 +232,7 @@ describe('worker gateway-binding scrub', () => {
  * finds no config, so Vitest uses defaults and NONE of it runs — an ambient
  * JINN_HOME=~/.jinn then reaches every suite and the tests write into the live
  * gateway registry. That happened 2026-07-06, and again 4x larger on
- * 2026-07-25, burning Todo IDs ICI-580…595 out of an append-only allocator.
+ * 2026-07-25, burning sixteen Todo IDs out of an append-only allocator.
  *
  * paths.ts therefore re-asserts at the boundary that every registry-touching
  * module imports, so no cwd/config/runner choice can bypass it.

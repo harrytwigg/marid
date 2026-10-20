@@ -4,7 +4,7 @@ import { exceptionReasonOf } from "../task-page/banner"
 import { reasonOf } from "../board/card"
 import { event } from "./fixtures/task-wire"
 
-/* ICI-730 added a second guard that escalates on its own (a Todo blocked again
+/* A second guard escalates on its own (a Todo blocked again
  * and again for the same reason). Both why-lines read the escalation event's
  * `reason`, so an unmapped one renders blank exactly where the operator needs
  * to know why the work stopped. */
@@ -16,7 +16,7 @@ const escalation = (reason: string) =>
   })
 
 const detail = (reason: string): WorkItemDetailWire => ({
-  workItem: { id: "PLA-12", status: "blocked" } as WorkItemFullWire,
+  workItem: { id: "TSK-12", status: "blocked" } as WorkItemFullWire,
   spendUsd: 0,
   events: [escalation(reason)],
 })
@@ -28,7 +28,7 @@ describe("the escalation why-line", () => {
   ])("reads %s on the task-page banner and the board card", (reason, expected) => {
     expect(exceptionReasonOf(detail(reason))).toMatchObject({ note: expected })
 
-    const item = { id: "PLA-12", status: "blocked" } as WorkItemCompactWire
+    const item = { id: "TSK-12", status: "blocked" } as WorkItemCompactWire
     expect(reasonOf(item, { events: [escalation(reason)] } as WorkItemOpenDetailWire)).toBe(expected)
   })
 
@@ -54,6 +54,6 @@ describe("the escalation why-line", () => {
       ],
     }
     expect(exceptionReasonOf(migrated).note).toBe("which vendor?")
-    expect(reasonOf({ id: "PLA-12", status: "blocked" } as WorkItemCompactWire, { events: migrated.events } as WorkItemOpenDetailWire)).toBe("which vendor?")
+    expect(reasonOf({ id: "TSK-12", status: "blocked" } as WorkItemCompactWire, { events: migrated.events } as WorkItemOpenDetailWire)).toBe("which vendor?")
   })
 })

@@ -1,6 +1,6 @@
 # QA verification pass: chat refine
 
-Verification report for the five operator defects behind ICI-817, measured against the numbers
+Verification report for the five operator defects behind the chat-refine effort, measured against the numbers
 in `docs/design/chat-motion-and-typography.md`. No product code was changed by this
 pass; a failing defect is handed back to the child that owns it. The one other thing this pass
 adds is `scripts/device-scroll-fixture.mjs`, which exists so defect 3's blocked checklist can
@@ -9,11 +9,11 @@ printed rather than written down.
 
 | # | Defect | Owner | Verdict |
 | --- | --- | --- | --- |
-| 1 | First send does not blank or reload the transcript | ICI-819 | **PASS** |
-| 2 | Optimistic send, enter transition, failure + retry | ICI-820 | **PASS** |
-| 3 | Mobile flick coasts with momentum and rubber-bands | ICI-821 | **BLOCKED** |
-| 4 | Opening a chat lands at the bottom on first paint | ICI-821 | **FAIL** |
-| 5 | Typography matches the spec's decision | ICI-822 | **PASS** |
+| 1 | First send does not blank or reload the transcript | first-send slice | **PASS** |
+| 2 | Optimistic send, enter transition, failure + retry | send-motion slice | **PASS** |
+| 3 | Mobile flick coasts with momentum and rubber-bands | scroll slice | **BLOCKED** |
+| 4 | Opening a chat lands at the bottom on first paint | scroll slice | **FAIL** |
+| 5 | Typography matches the spec's decision | typography slice | **PASS** |
 
 Reduced motion was checked as a cross-cutting concern and passes; it is recorded after defect 5.
 
@@ -47,7 +47,7 @@ frame it happened in.
 
 ## Defect 1 — first send does not blank or reload the transcript — **PASS**
 
-Owner **ICI-819**. A fresh chat (`[data-chat-pane-session="new"]`) was sent into, which promotes
+Owner **the first-send slice**. A fresh chat (`[data-chat-pane-session="new"]`) was sent into, which promotes
 the pane to a real session id and rewrites the URL — the transition the original defect lived in.
 Across the send the probe watched three things every frame for 20 seconds: whether the live
 `.chat-messages-scroll` node is still the same object captured before submit, whether a
@@ -74,7 +74,7 @@ end).
 
 ## Defect 2 — optimistic send, enter transition, failure + retry — **PASS**
 
-Owner **ICI-820**.
+Owner **the send-motion slice**.
 
 ### The bubble is in the DOM in the same frame as submit
 
@@ -161,7 +161,7 @@ are green.
 
 ## Defect 3 — mobile flick momentum and rubber-band — **BLOCKED**
 
-Owner **ICI-821**. Not verified, and **not substituted with touch emulation**.
+Owner **the scroll slice**. Not verified, and **not substituted with touch emulation**.
 
 ### Why it is blocked
 
@@ -272,7 +272,7 @@ Then destroy it, pass or fail:
 
 ## Defect 4 — chat opens at the bottom on first paint — **FAIL**
 
-Owner **ICI-821**. The plain-transcript half of the criterion passes cleanly. The
+Owner **the scroll slice**. The plain-transcript half of the criterion passes cleanly. The
 **image-transcript half fails**: the first painted frame is at the bottom, but the transcript then
 paints one to two further frames up to **600px** above the bottom before a post-paint write pulls
 it back — which is the "opens, then jumps" symptom the defect is about, and which the criterion
@@ -390,7 +390,7 @@ them covers a row that grows *after* first paint, which is the case that fails h
 
 ## Defect 5 — bubble type scale — **PASS**
 
-Owner **ICI-822**. Computed styles on the live bubbles, measured at the two widths the spec's
+Owner **the typography slice**. Computed styles on the live bubbles, measured at the two widths the spec's
 §5 arithmetic is stated for:
 
 | | spec | 390px measured | 1024px measured |
@@ -513,7 +513,7 @@ changes stashed, so neither moved for anything in this report.
 
 ## Hand-back
 
-Defect 4 is the only FAIL. It is handed to **ICI-821** with the criterion it missed and the
+Defect 4 is the only FAIL. It is handed to **the scroll slice** with the criterion it missed and the
 measurement that missed it; it is not fixed here. Defect 3 stays BLOCKED until the operator runs
 the checklist above on a real device, or explicitly accepts the block.
 
@@ -527,5 +527,5 @@ the checklist above on a real device, or explicitly accepts the block.
 2. **`playwright.config.ts` hardcodes `baseURL: 'http://localhost:7779'` and declares no
    `webServer`.** A bare `pnpm test:e2e` therefore aims at whatever happens to own 7779 on the
    machine.
-3. **ICI-823 never declared `verifyPolicy.deliverable`**, so its route defaulted to `repo`. The
+3. **This pass's own Todo never declared `verifyPolicy.deliverable`**, so its route defaulted to `repo`. The
    report is committed here rather than inferring a workspace route around the gap.

@@ -109,13 +109,13 @@ function seedItem(db: import("better-sqlite3").Database): string {
   return claim.id;
 }
 
-/** The shape ICI-728 shipped: the same table with five outcomes in its CHECK.
+/** The shape the ledger first shipped: the same table with five outcomes in its CHECK.
  *  Derived from the current DDL rather than copied, so the day someone edits the
  *  table for an unrelated reason this stops matching migrate.ts's own frozen
  *  literal and the recognizer test goes red instead of quietly passing. */
 const FIVE_OUTCOME_RUNS_SQL = WORK_ITEM_RUNS_TABLE_DDL.replace(",'rate_limited'", "");
 
-describe("widening the run outcomes on a deployed database (ICI-731)", () => {
+describe("widening the run outcomes on a deployed database", () => {
   /** A current database wound back to the five-outcome run table, rows and all. */
   function fiveOutcomeDatabase(name: string): { file: string; host: string } {
     const { file, db } = freshDatabase(name);

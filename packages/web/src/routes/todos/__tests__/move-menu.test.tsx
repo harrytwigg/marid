@@ -6,9 +6,9 @@ import { MoveToMenu } from "../board/move-menu"
 
 function item(status: WorkItemStatusWire): WorkItemCompactWire {
   return {
-    id: "PLA-7",
+    id: "TSK-7",
     version: 1,
-    title: "Item PLA-7",
+    title: "Item TSK-7",
     status,
     assignee: null,
     department: "platform",
@@ -16,7 +16,7 @@ function item(status: WorkItemStatusWire): WorkItemCompactWire {
     sourceRef: null,
     createdBy: "operator",
     parentId: null,
-    rootId: "PLA-7",
+    rootId: "TSK-7",
     depth: 0,
     dueAt: null,
     labels: [],
@@ -34,7 +34,7 @@ function tap(element: Element) {
 }
 
 const open = async () => {
-  tap(screen.getByRole("button", { name: "Move PLA-7 to…" }))
+  tap(screen.getByRole("button", { name: "Move TSK-7 to…" }))
   return screen.findByRole("menu")
 }
 const rowsOf = () => screen.getAllByRole("menuitemradio").map((row) => row.textContent)
@@ -61,7 +61,7 @@ describe("the card's Move to… menu", () => {
     await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
     await open()
     tap(screen.getByRole("menuitemradio", { name: "In review" }))
-    await waitFor(() => expect(onMove).toHaveBeenCalledWith(expect.objectContaining({ id: "PLA-7" }), "in_review"))
+    await waitFor(() => expect(onMove).toHaveBeenCalledWith(expect.objectContaining({ id: "TSK-7" }), "in_review"))
     await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
   })
 

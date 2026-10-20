@@ -151,7 +151,7 @@ const readTreeFilters: FilterReader = (url, filter) => {
   return undefined;
 };
 
-/** ICI-1357 `kept` and PLA-230 `home`, the board scopes. Both mirror
+/** `kept` and `home`, the board scopes. Both mirror
  *  `rootsOnly` — a boolean flag is either asserted or absent, so there is no
  *  unusable value to reject. */
 const readBoardScopeFilters: FilterReader = (url, filter) => {

@@ -1,5 +1,5 @@
 /**
- * Content-free provider traces for the seven interruption cases in PLA-117.
+ * Content-free provider traces for the seven interruption cases.
  *
  * These fixtures start at the browser's real seam: events emitted by provider
  * VAD. They deliberately do not pretend the browser can run provider VAD over

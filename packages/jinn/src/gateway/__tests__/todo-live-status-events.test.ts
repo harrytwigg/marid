@@ -6,7 +6,7 @@ import { Readable } from "node:stream";
 import type { ServerResponse } from "node:http";
 
 /**
- * ICI-749 — every status write reaches the dashboard live, exactly once.
+ * Every status write reaches the dashboard live, exactly once.
  *
  * The board went stale because only the HTTP routes emitted `company:changed`;
  * the reconciler committed silently.

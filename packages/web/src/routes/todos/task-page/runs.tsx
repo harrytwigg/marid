@@ -1,7 +1,7 @@
 import type { WorkItemRunHandoffWire, WorkItemRunOutcomeWire, WorkItemRunWire } from "@/lib/api"
 import { formatRelativeTime } from "../util"
 
-/* ICI-728, ICI-1440 — an attempt read back as lines in the one Activity
+/* An attempt read back as lines in the one Activity
  * stream: where it started, and where it settled carrying its outcome and the
  * handoff a reviewer reads. It borrows the whisper's line grammar so an
  * attempt sorts in beside the audit events instead of arriving as a table of

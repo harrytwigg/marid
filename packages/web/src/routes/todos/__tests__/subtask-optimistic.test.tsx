@@ -6,7 +6,7 @@ import type { WorkItemTreeNodeWire, WorkItemTreeWire } from "@/lib/api"
 import { workItemNode } from "./fixtures/task-wire"
 import { PENDING_SUBTASK_PREFIX, useSubTaskMutations } from "../task-page/use-subtask-mutations"
 
-/** ICI-1437 — the add lands in the tree cache before the gateway answers, and a
+/** The add lands in the tree cache before the gateway answers, and a
  *  refusal takes it straight back out through the page's own error lane. */
 
 const createWorkItem = vi.fn()
@@ -16,16 +16,16 @@ vi.mock("@/lib/api", async (importOriginal) => {
   return { ...actual, api: { ...actual.api, createWorkItem: (...args: unknown[]) => createWorkItem(...args) } }
 })
 
-const TREE_KEY = ["work-item-tree", "PLA-12"]
+const TREE_KEY = ["work-item-tree", "TSK-12"]
 
 function seeded(children: WorkItemTreeNodeWire[], { loaded = true } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  const item = workItemNode("PLA-12", { depth: 0, parentId: null, children })
+  const item = workItemNode("TSK-12", { depth: 0, parentId: null, children })
   if (loaded) client.setQueryData(TREE_KEY, { tree: { root: item, totals: {}, spendUsd: 0 } })
   const announced: string[] = []
   const failWith = (fallback: string) => (error: unknown) => announced.push(`${fallback} / ${String(error)}`)
   const { result } = renderHook(
-    () => useSubTaskMutations({ id: "PLA-12", rootId: "PLA-12", item, failWith }),
+    () => useSubTaskMutations({ id: "TSK-12", rootId: "TSK-12", item, failWith }),
     { wrapper: ({ children: tree }) => <QueryClientProvider client={client}>{tree}</QueryClientProvider> },
   )
   const rows = () => (client.getQueryData(TREE_KEY) as { tree: WorkItemTreeWire } | undefined)?.tree.root.children ?? []
@@ -40,27 +40,27 @@ describe("adding a sub-task", () => {
   it("carries the child in the tree cache before the gateway answers", async () => {
     let settle: (value: unknown) => void = () => {}
     createWorkItem.mockImplementation(() => new Promise((resolve) => (settle = resolve)))
-    const { result, rows } = seeded([workItemNode("PLA-13")])
+    const { result, rows } = seeded([workItemNode("TSK-13")])
 
     act(() => result.current.addSubTask.mutate("E-mail receipts"))
 
-    await waitFor(() => expect(rows().map((row) => row.title)).toEqual(["Item PLA-13", "E-mail receipts"]))
+    await waitFor(() => expect(rows().map((row) => row.title)).toEqual(["Item TSK-13", "E-mail receipts"]))
     expect(rows()[1].id).toBe(`${PENDING_SUBTASK_PREFIX}1`)
     expect(rows()[1].status).toBe("backlog")
-    expect(createWorkItem).toHaveBeenCalledWith({ title: "E-mail receipts", parentId: "PLA-12" })
+    expect(createWorkItem).toHaveBeenCalledWith({ title: "E-mail receipts", parentId: "TSK-12" })
 
-    await act(async () => settle({ workItem: workItemNode("PLA-23") }))
+    await act(async () => settle({ workItem: workItemNode("TSK-23") }))
   })
 
   it("takes the child back out when the gateway refuses, and announces the refusal", async () => {
     createWorkItem.mockRejectedValue(new Error("parent is at the depth cap"))
-    const { announced, result, rows } = seeded([workItemNode("PLA-13")])
+    const { announced, result, rows } = seeded([workItemNode("TSK-13")])
 
     await act(async () => {
       await result.current.addSubTask.mutateAsync("E-mail receipts").catch(() => undefined)
     })
 
-    expect(rows().map((row) => row.title)).toEqual(["Item PLA-13"])
+    expect(rows().map((row) => row.title)).toEqual(["Item TSK-13"])
     expect(announced).toEqual(["Failed to add the sub-task / Error: parent is at the depth cap"])
   })
 
@@ -80,7 +80,7 @@ describe("adding a sub-task", () => {
     createWorkItem.mockImplementation(
       () => new Promise((resolve, reject) => (settle.push(resolve), refuse.push(reject))),
     )
-    const { result, rows } = seeded([workItemNode("PLA-13")])
+    const { result, rows } = seeded([workItemNode("TSK-13")])
 
     act(() => result.current.addSubTask.mutate("First"))
     await waitFor(() => expect(rows()).toHaveLength(2))
@@ -92,7 +92,7 @@ describe("adding a sub-task", () => {
       await Promise.resolve()
     })
 
-    expect(rows().map((row) => row.title)).toEqual(["Item PLA-13", "Second"])
-    await act(async () => settle[1]({ workItem: workItemNode("PLA-24") }))
+    expect(rows().map((row) => row.title)).toEqual(["Item TSK-13", "Second"])
+    await act(async () => settle[1]({ workItem: workItemNode("TSK-24") }))
   })
 })

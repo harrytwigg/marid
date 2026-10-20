@@ -11,7 +11,7 @@ import {
 
 describe("company-derived Todo identity", () => {
   it("uses intuitive word initials and single-word letter prefixes", () => {
-    expect(deriveTodoIdPrefix("IC-IDEV")).toBe("ICI");
+    expect(deriveTodoIdPrefix("AC-MEDIA")).toBe("ACM");
     expect(deriveTodoIdPrefix("Build Sprint Labs")).toBe("BSL");
     expect(deriveTodoIdPrefix("Acme Corp")).toBe("ACM");
     expect(deriveTodoIdPrefix("A Company")).toBe("ACO");
@@ -37,23 +37,23 @@ describe("company-derived Todo identity", () => {
   });
 
   it("parses and formats any canonical three-letter company prefix", () => {
-    expect(parseTodoId("ICI-1")).toBe("ICI-1");
+    expect(parseTodoId("ISS-1")).toBe("ISS-1");
     expect(parseTodoId("ACM-9007199254740991")).toBe("ACM-9007199254740991");
-    expect(todoIdPrefix("ICI-42")).toBe("ICI");
-    expect(todoIdOrdinal("ICI-42")).toBe(42);
-    expect(formatTodoId("ICI", 42)).toBe("ICI-42");
+    expect(todoIdPrefix("ISS-42")).toBe("ISS");
+    expect(todoIdOrdinal("ISS-42")).toBe(42);
+    expect(formatTodoId("ISS", 42)).toBe("ISS-42");
   });
 
   it("rejects malformed prefixes and ordinals", () => {
     for (const value of [
       "IC-1",
       "ICID-1",
-      "ici-1",
+      "iss-1",
       "I1I-1",
-      "ICI-0",
-      "ICI-01",
-      "ICI-9007199254740992",
-      " ICI-1",
+      "ISS-0",
+      "ISS-01",
+      "ISS-9007199254740992",
+      " ISS-1",
     ]) {
       expect(() => parseTodoId(value)).toThrow(InvalidTodoIdError);
     }

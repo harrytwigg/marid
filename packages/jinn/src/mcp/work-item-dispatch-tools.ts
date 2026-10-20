@@ -85,7 +85,7 @@ function dispatchConfigTool(): JinnMcpTool {
 /** Where a capture landed when it created nothing.
  *
  *  Without this the shaping session leaves only prose — a comment saying "this
- *  restated PLA-12" — and prose is not something the capture's derived stage is
+ *  restated ACM-12" — and prose is not something the capture's derived stage is
  *  allowed to read: matching on comment text would be exactly the guessing that
  *  deriving the stage exists to forbid. The link this writes is a fact, and the
  *  strip reads the fact. */

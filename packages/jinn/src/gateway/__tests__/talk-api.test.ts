@@ -125,7 +125,7 @@ describe("universal Talk control", () => {
       arguments: JSON.stringify({ id: todo.id }),
     };
     expect((await call(config, "POST", path, original)).body).toMatchObject({ ok: true });
-    expect((await call(config, "POST", path, { ...original, arguments: JSON.stringify({ id: "PLA-999" }) })).body)
+    expect((await call(config, "POST", path, { ...original, arguments: JSON.stringify({ id: "TSK-999" }) })).body)
       .toMatchObject({ ok: false, code: "provider-call-conflict" });
     expect((await call(config, "POST", path, original, {})).status).toBe(401);
   });

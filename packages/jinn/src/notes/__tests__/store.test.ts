@@ -319,7 +319,7 @@ describe("file-size cap", () => {
 });
 
 /**
- * GRS-020b search + instance read, re-homed here (PLA-52) so a single module owns
+ * GRS-020b search + instance read, re-homed here so a single module owns
  * knowledge/. Search now runs the same recursive, symlink-refusing regime as the
  * Notes surface above; readKnowledgeFile is unchanged, and its containment battery
  * is the security acceptance for the whole read primitive. These suites share one
@@ -392,20 +392,20 @@ describe("searchKnowledge", () => {
   });
 
   it("skips a symlink that stays INSIDE the root", () => {
-    // PLA-52 D3: search now runs the stricter Notes regime — every symlink is
+    // Search now runs the stricter Notes regime — every symlink is
     // refused, so an in-root alias no longer surfaces as a second hit.
     const hits = searchKnowledge("axolotl", instanceHome);
     expect(hits.map((h) => h.path)).not.toContain("knowledge/alias.md");
   });
 
   it("finds notes nested below knowledge/", () => {
-    // PLA-52 D1: create_note({ folder }) writes nested files; search must see them.
+    // create_note({ folder }) writes nested files; search must see them.
     const hits = searchKnowledge("newt playbook", instanceHome);
     expect(hits.map((h) => h.path)).toEqual(["knowledge/competitor-scout-2026-07/steal-these-playbook.md"]);
   });
 
   it("finds documents nested below docs/", () => {
-    // PLA-52 D2: the same recursive regime applies to both allowlisted roots.
+    // The same recursive regime applies to both allowlisted roots.
     const hits = searchKnowledge("newt decision", instanceHome);
     expect(hits.map((h) => h.path)).toEqual(["docs/adr/0001-engine-registry.md"]);
   });

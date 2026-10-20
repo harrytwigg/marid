@@ -33,7 +33,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       listLabels: vi.fn().mockResolvedValue({ labels: [] }),
       listWorkItemSessions: vi.fn().mockResolvedValue([]),
       getDepartments: vi.fn().mockResolvedValue({
-        departments: [{ slug: "platform", prefix: "PLA", createdAt: "2026-07-01T00:00:00.000Z", todoCount: 4 }],
+        departments: [{ slug: "platform", prefix: "TSK", createdAt: "2026-07-01T00:00:00.000Z", todoCount: 4 }],
       }),
       getOrg: vi.fn().mockResolvedValue({
         departments: ["platform"],
@@ -73,7 +73,7 @@ function renderTask() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/todos/PLA-12"]}>
+      <MemoryRouter initialEntries={["/todos/TSK-12"]}>
         <Routes>
           <Route path="/todos/:todoId" element={<TaskPage />} />
         </Routes>
@@ -91,7 +91,7 @@ beforeEach(() => {
 
 describe("the assignee picker's Unassign row", () => {
   it("sits above every person, out of the roster's scroller, and is absent when nobody is assigned", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12", { assignee: "mason" })))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12", { assignee: "mason" })))
     const assigned = renderTask()
     fireEvent.click(await screen.findByTestId("rail-assignee"))
 
@@ -108,7 +108,7 @@ describe("the assignee picker's Unassign row", () => {
     expect(rows[0].parentElement).not.toBe(rows[1].parentElement)
     assigned.unmount()
 
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     renderTask()
     fireEvent.click(await screen.findByTestId("rail-assignee"))
     await screen.findByTestId("assignee-option-mason")
@@ -118,7 +118,7 @@ describe("the assignee picker's Unassign row", () => {
 
 describe("clearing the assignee without opening a picker", () => {
   it("the rail's clear control commits the same null the picker's Unassign does", async () => {
-    const item = full("PLA-12", { assignee: "mason" })
+    const item = full("TSK-12", { assignee: "mason" })
     getWorkItem.mockResolvedValue(detailOf(item))
     updateWorkItem.mockResolvedValue({ workItem: { ...item, assignee: null, version: 4 }, replayed: false })
     renderTask()
@@ -130,7 +130,7 @@ describe("clearing the assignee without opening a picker", () => {
 
     fireEvent.click(clear)
     await waitFor(() =>
-      expect(updateWorkItem).toHaveBeenCalledWith("PLA-12", expect.objectContaining({
+      expect(updateWorkItem).toHaveBeenCalledWith("TSK-12", expect.objectContaining({
         patch: { assignee: null },
         expectedVersion: 3,
       })),
@@ -138,7 +138,7 @@ describe("clearing the assignee without opening a picker", () => {
   })
 
   it("the chip's clear control commits it too, and both vanish once nobody is assigned", async () => {
-    const item = full("PLA-12", { assignee: "mason" })
+    const item = full("TSK-12", { assignee: "mason" })
     const cleared = { ...item, assignee: null, version: 4 }
     // First load is assigned; every refetch after the gateway accepts the clear
     // returns the unassigned Todo, so this also proves the clear survives one.
@@ -151,7 +151,7 @@ describe("clearing the assignee without opening a picker", () => {
     expect(clear.getAttribute("aria-label")).toBe("Remove assignee")
     fireEvent.click(clear)
     await waitFor(() =>
-      expect(updateWorkItem).toHaveBeenCalledWith("PLA-12", expect.objectContaining({
+      expect(updateWorkItem).toHaveBeenCalledWith("TSK-12", expect.objectContaining({
         patch: { assignee: null },
         expectedVersion: 3,
       })),
@@ -161,7 +161,7 @@ describe("clearing the assignee without opening a picker", () => {
   })
 
   it("offers nothing to clear when nobody is assigned", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     renderTask()
 
     await screen.findByTestId("rail-assignee")
@@ -172,17 +172,17 @@ describe("clearing the assignee without opening a picker", () => {
 
 describe("the operator as an assignee", () => {
   it("offers 'You (operator)' and posts the reserved value", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     renderTask()
     fireEvent.click(await screen.findByTestId("rail-assignee"))
     const option = await screen.findByTestId("assignee-option-@operator")
     expect(option.textContent).toContain("You (operator)")
     fireEvent.click(option)
-    await waitFor(() => expect(assignWorkItem).toHaveBeenCalledWith("PLA-12", "@operator"))
+    await waitFor(() => expect(assignWorkItem).toHaveBeenCalledWith("TSK-12", "@operator"))
   })
 
   it("shows the reserved value as You", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12", { assignee: "@operator" })))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12", { assignee: "@operator" })))
     renderTask()
     expect((await screen.findByTestId("rail-assignee")).textContent).toContain("You")
   })

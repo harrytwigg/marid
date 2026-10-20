@@ -10,7 +10,7 @@ import { json } from "./route-helpers.js";
 import { TODO_DISPATCHER_NAME } from "./system-employees.js";
 
 /**
- * The claim gate the two pickup routes share (ICI-729).
+ * The claim gate the two pickup routes share.
  *
  * Both `POST /api/delegations` onto an existing Todo and `POST
  * /api/work-items/:id/dispatch` used to ask "does this Todo have a live session?"

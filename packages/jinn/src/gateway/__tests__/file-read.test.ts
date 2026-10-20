@@ -282,7 +282,7 @@ describe("/api/files/read containment — real route", () => {
   it("returns a Unicode filename unchanged from the shared multipart parser", async () => {
     const filename = "тест документ.pdf";
     const sourceBytes = Buffer.from([0x00, 0xff, 0x80]);
-    const req = multipartRequest("/api/work-items/ICI-688/attachments", filename, sourceBytes);
+    const req = multipartRequest("/api/work-items/ISS-688/attachments", filename, sourceBytes);
 
     const uploaded = await files.readMultipartFile(req as any, 1024);
 

@@ -74,7 +74,7 @@ describe("scheduler — manual vs scheduled fire identity (GRS-003b-1)", () => {
     expect(result).toEqual(job);
     expect(runCronJob).toHaveBeenCalledTimes(1);
     const call = (runCronJob as any).mock.calls[0];
-    // PLA-260: the config reaching the runner is the one the gateway holds NOW,
+    // The config reaching the runner is the one the gateway holds NOW,
     // not the one that existed when the scheduler was started.
     expect(call[2]).toBe(swapped);
     // The opts carry the workflow fire handler slot (GRS-014d) but NO fireIso — a manual
@@ -95,7 +95,7 @@ describe("scheduler — manual vs scheduled fire identity (GRS-003b-1)", () => {
 
     expect(runCronJob).toHaveBeenCalledTimes(1);
     const call = (runCronJob as any).mock.calls[0];
-    expect(call[2]).toBe(swapped); // PLA-260: resolved at fire time, not capture time
+    expect(call[2]).toBe(swapped); // resolved at fire time, not capture time
     const opts = call[4];
     expect(opts).toBeDefined();
     expect(opts.fireIso).toMatch(/^\d{4}-\d{2}-\d{2}T[0-9:.]+Z$/);

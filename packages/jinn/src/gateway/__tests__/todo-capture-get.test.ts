@@ -134,7 +134,7 @@ describe("GET /api/todo-captures/:id", () => {
     const started = await call("POST", "/api/todo-captures", { text: "a capture with nowhere to land" });
     const captureId = started.body.captureId as string;
 
-    const landing = await call("POST", "/api/work-items/PLA-99999/capture-landing", {}, asSession(captureId));
+    const landing = await call("POST", "/api/work-items/TSK-99999/capture-landing", {}, asSession(captureId));
 
     expect(landing.status).toBe(404);
     expect((await call("GET", `/api/todo-captures/${captureId}`)).body.stage).not.toBe("landed");

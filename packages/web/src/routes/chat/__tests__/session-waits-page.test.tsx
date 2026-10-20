@@ -11,7 +11,7 @@ function waitingChild(sessionId: string, name: string): DelegatedSessionWait {
   return {
     kind: 'session', sessionId, reportsTo: 'a', relation: 'delegated', restricted: false,
     employee: name.toLowerCase(), employeeDisplayName: name, title: null,
-    todo: { id: 'PLA-1', title: `Work for ${name}` }, status: 'running', active: true,
+    todo: { id: 'TSK-1', title: `Work for ${name}` }, status: 'running', active: true,
     since: new Date(Date.now() - 4 * 60_000).toISOString(), endedAt: null, archived: false,
   }
 }

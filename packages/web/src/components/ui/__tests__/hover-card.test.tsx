@@ -8,7 +8,7 @@ function Example(props: { onOpenChange?: (open: boolean) => void; openDelay?: nu
     <>
       <HoverCard openDelay={40} closeDelay={40} {...props}>
         <HoverCardTrigger asChild>
-          <a href="#todo">ICI-1</a>
+          <a href="#todo">ISS-1</a>
         </HoverCardTrigger>
         <HoverCardContent>The card</HoverCardContent>
       </HoverCard>
@@ -18,7 +18,7 @@ function Example(props: { onOpenChange?: (open: boolean) => void; openDelay?: nu
 }
 
 const pause = (ms: number) => act(async () => { await new Promise((resolve) => setTimeout(resolve, ms)) })
-const link = () => screen.getByRole("link", { name: "ICI-1" })
+const link = () => screen.getByRole("link", { name: "ISS-1" })
 const card = () => screen.queryByRole("tooltip")
 
 describe("HoverCard", () => {
@@ -124,7 +124,7 @@ describe("HoverCard", () => {
     render(
       <HoverCard open={false} onOpenChange={onOpenChange} openDelay={10}>
         <HoverCardTrigger asChild>
-          <a href="#todo">ICI-1</a>
+          <a href="#todo">ISS-1</a>
         </HoverCardTrigger>
         <HoverCardContent>The card</HoverCardContent>
       </HoverCard>,

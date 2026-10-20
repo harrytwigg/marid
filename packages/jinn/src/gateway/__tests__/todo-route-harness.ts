@@ -6,7 +6,7 @@ import type { ServerResponse } from "node:http";
 import type { JinnConfig } from "../../shared/types.js";
 
 /**
- * The API fixture the ICI-733 route tests share: a throwaway JINN_HOME holding
+ * The API fixture the dispatch-config and create-idempotency route tests share: a throwaway JINN_HOME holding
  * one employee and two skills, and a `call` that drives `handleApiRequest`
  * directly instead of over a socket.
  *

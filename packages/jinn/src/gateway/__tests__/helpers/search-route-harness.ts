@@ -59,7 +59,7 @@ export const registry = await import("../../../sessions/registry.js");
 export const store = await import("../../../work-items/store.js");
 (await import("../../../shared/db.js")).initDb();
 
-/** The Todo the whole ICI-1368 search category is about: `search opens` reaches
+/** The Todo the whole search category is about: `search opens` reaches
  *  it only across title and body, in the wrong order. */
 export const redesign = store.createWorkItem({
   title: "Redesign Todos Search & Cmd + K global search",

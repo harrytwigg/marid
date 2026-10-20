@@ -16,7 +16,7 @@ import { applyLegacyFallbackMigration } from "../../shared/engine-fallback.js";
 import type { JinnConfig } from "../../shared/types.js";
 
 /**
- * ICI-714 — the two session runners each carried their own completion sequence,
+ * The two session runners each carried their own completion sequence,
  * and they drifted. The connector runner guarded rate-limit accounting behind
  * `if (cost || numTurns)`, so a recovered turn reporting neither recorded
  * nothing at all, while the web runner recorded it unconditionally. Employee

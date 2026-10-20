@@ -140,7 +140,7 @@ describe("handleRateLimit — chain fallback for any engine", () => {
     expect(overrideRecord()).toEqual({
       originalEngine: "codex",
       originalEngineSessionId: "codex-thread-1",
-      originalModel: "gpt-5.6-sol", // the row loses it for the duration (PLA-202)
+      originalModel: "gpt-5.6-sol", // the row loses it for the duration
       until: RESETS_AT.toISOString(),
       syncSince: expect.any(String),
     });

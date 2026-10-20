@@ -1,4 +1,4 @@
-/** PLA-157: the stop cause a blocked Todo carries on the wire, and the
+/** The stop cause a blocked Todo carries on the wire, and the
  *  one rule for reading it.
  *
  *  A Todo waiting out a quota window and a Todo waiting on a person both sit in

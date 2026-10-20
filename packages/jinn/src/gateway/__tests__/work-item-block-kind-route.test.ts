@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { api, ctx, makeReq, makeRes, reg, store, toolHeaders } from "./helpers/work-items-route-harness.js";
 
-/* ICI-730: the kind decides where a block lands, so the route is where an
+/* The kind decides where a block lands, so the route is where an
  * unrecognized one has to stop — a silent fallback would route work somewhere
  * its caller did not choose. */
 describe("POST /api/work-items/:id/status — blockKind", () => {

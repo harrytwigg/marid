@@ -13,7 +13,7 @@ import {
 import type { Employee, JinnConfig } from "../../shared/types.js";
 
 /**
- * PLA-184 — a NEW routed session used to pick its engine from config and the
+ * A NEW routed session used to pick its engine from config and the
  * employee YAML alone, so an engine already known to be out of allowance was
  * discovered again, one burned turn per session. Health now orders that pick.
  */
@@ -171,7 +171,7 @@ describe("validateNewSessionSelection — engine selection under a spent allowan
       .toMatchObject({ ok: true, engine: "codex", model: "gpt-5.6-sol" });
   });
 
-  it("never resolves a model the engine it moved to does not serve (PLA-202)", () => {
+  it("never resolves a model the engine it moved to does not serve", () => {
     recordEngineUnavailable("codex", "out of quota", anHourOut());
     const cfg = config();
 

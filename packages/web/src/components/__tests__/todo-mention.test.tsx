@@ -21,7 +21,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
   }
 })
 
-const LIVE_PREFIXES: ReadonlySet<string> = new Set(["ICI"])
+const LIVE_PREFIXES: ReadonlySet<string> = new Set(["ISS"])
 
 /** The batch route answers with only the rows it could resolve, so the stub
  *  echoes back exactly the ids it was asked for unless a case omits some. */
@@ -34,7 +34,7 @@ function respondWith(omit: ReadonlySet<string> = new Set()) {
 }
 
 function ids(start: number, count: number): string[] {
-  return Array.from({ length: count }, (_, i) => `ICI-${start + i}`)
+  return Array.from({ length: count }, (_, i) => `ISS-${start + i}`)
 }
 
 /** Render a chat message the way the transcript does, then drain the coalescer's
@@ -62,11 +62,11 @@ beforeEach(() => {
 
 describe("TodoMention markup", () => {
   it("renders a live mention as the same anchor the transcript rendered before", async () => {
-    await renderMessage("Open ICI-6001")
+    await renderMessage("Open ISS-6001")
 
-    const link = screen.getByRole("link", { name: "ICI-6001" })
-    expect(link.getAttribute("href")).toBe("/todos/ICI-6001")
-    expect(link.getAttribute("title")).toBe("Open ICI-6001")
+    const link = screen.getByRole("link", { name: "ISS-6001" })
+    expect(link.getAttribute("href")).toBe("/todos/ISS-6001")
+    expect(link.getAttribute("title")).toBe("Open ISS-6001")
     expect(link.getAttribute("class")).toBe(
       "text-[var(--system-blue)] underline decoration-[var(--system-blue)]/40 hover:decoration-[var(--system-blue)] underline-offset-2 font-[family-name:var(--font-code)] text-[0.88em]",
     )
@@ -113,23 +113,23 @@ describe("TodoMention preview batching", () => {
   })
 
   it("caches an id the gateway omits so a dangling mention stops re-asking", async () => {
-    respondWith(new Set(["ICI-4001"]))
+    respondWith(new Set(["ISS-4001"]))
 
-    await renderMessage("ICI-4001")
-    await renderMessage("ICI-4001")
+    await renderMessage("ISS-4001")
+    await renderMessage("ISS-4001")
 
     expect(getWorkItems).toHaveBeenCalledTimes(1)
   })
 
   it("forgets only the id it was told changed", async () => {
-    await renderMessage("ICI-5001 ICI-5002")
+    await renderMessage("ISS-5001 ISS-5002")
     expect(getWorkItems).toHaveBeenCalledTimes(1)
 
-    forgetTodoPreview("ICI-5001")
-    await renderMessage("ICI-5001 ICI-5002")
+    forgetTodoPreview("ISS-5001")
+    await renderMessage("ISS-5001 ISS-5002")
 
     expect(getWorkItems).toHaveBeenCalledTimes(2)
-    expect(getWorkItems.mock.calls[1][0]).toEqual(["ICI-5001"])
+    expect(getWorkItems.mock.calls[1][0]).toEqual(["ISS-5001"])
   })
 })
 
@@ -145,7 +145,7 @@ async function renderMention(openTodo: OpenTodo | null = null) {
     <TodoPrefixContext.Provider value={LIVE_PREFIXES}>
       <TodoOpenContext.Provider value={openTodo}>
         <FileLinkSessionContext.Provider value="chat-a">
-          <div data-testid="message">{formatMessage("Open ICI-7001")}</div>
+          <div data-testid="message">{formatMessage("Open ISS-7001")}</div>
         </FileLinkSessionContext.Provider>
       </TodoOpenContext.Provider>
       <Location />
@@ -166,10 +166,10 @@ describe("TodoMention click", () => {
   it("opens the full Todo page on a plain left click where no chat layout can take a tab", async () => {
     await renderMention()
 
-    fireEvent.click(screen.getByRole("link", { name: "ICI-7001" }), { button: 0 })
+    fireEvent.click(screen.getByRole("link", { name: "ISS-7001" }), { button: 0 })
 
     const path = screen.getByTestId("path")
-    expect(path.textContent).toBe("/todos/ICI-7001")
+    expect(path.textContent).toBe("/todos/ISS-7001")
     // A phone's back chevron on that page returns to this mention, not to a board.
     expect(path.getAttribute("data-return-back")).toBe("true")
   })
@@ -182,7 +182,7 @@ describe("TodoMention click", () => {
   ])("leaves %s to the browser", async (_name, modifier) => {
     const openTodo = vi.fn<OpenTodo>(() => true)
     await renderMention(openTodo)
-    const link = screen.getByRole("link", { name: "ICI-7001" })
+    const link = screen.getByRole("link", { name: "ISS-7001" })
 
     // Nothing calls preventDefault, so the browser performs its own navigation
     // (new tab / new window) to the full page.
@@ -190,7 +190,7 @@ describe("TodoMention click", () => {
 
     expect(notPrevented).toBe(true)
     expect(openTodo).not.toHaveBeenCalled()
-    expect(link.getAttribute("href")).toBe("/todos/ICI-7001")
+    expect(link.getAttribute("href")).toBe("/todos/ISS-7001")
   })
 })
 
@@ -199,10 +199,10 @@ describe("TodoMention click in the chat layout", () => {
     const openTodo = vi.fn<OpenTodo>(() => true)
     await renderMention(openTodo)
 
-    const notPrevented = fireEvent.click(screen.getByRole("link", { name: "ICI-7001" }), { button: 0 })
+    const notPrevented = fireEvent.click(screen.getByRole("link", { name: "ISS-7001" }), { button: 0 })
 
     expect(notPrevented).toBe(false)
-    expect(openTodo).toHaveBeenCalledWith("ICI-7001", "chat-a")
+    expect(openTodo).toHaveBeenCalledWith("ISS-7001", "chat-a")
     expect(screen.getByTestId("path").textContent).toBe("/chat")
   })
 
@@ -210,9 +210,9 @@ describe("TodoMention click in the chat layout", () => {
     const openTodo = vi.fn<OpenTodo>(() => false)
     await renderMention(openTodo)
 
-    fireEvent.click(screen.getByRole("link", { name: "ICI-7001" }), { button: 0 })
+    fireEvent.click(screen.getByRole("link", { name: "ISS-7001" }), { button: 0 })
 
     expect(openTodo).toHaveBeenCalledTimes(1)
-    expect(screen.getByTestId("path").textContent).toBe("/todos/ICI-7001")
+    expect(screen.getByTestId("path").textContent).toBe("/todos/ISS-7001")
   })
 })

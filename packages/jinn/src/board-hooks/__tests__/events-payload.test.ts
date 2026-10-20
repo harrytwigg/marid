@@ -184,6 +184,6 @@ describe("payloads", () => {
   it("returns null for a Todo that no longer exists", () => {
     const item = store.createWorkItem({ title: "Gone" });
     const created = lastOf("created", item.id);
-    expect(payload.buildBasePayload({ ...created, workItemId: "PLA-99999" }, "todo.created")).toBeNull();
+    expect(payload.buildBasePayload({ ...created, workItemId: "TSK-99999" }, "todo.created")).toBeNull();
   });
 });

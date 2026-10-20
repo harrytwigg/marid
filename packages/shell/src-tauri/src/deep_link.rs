@@ -72,8 +72,8 @@ mod tests {
     #[test]
     fn a_nested_route_keeps_its_segments() {
         assert_eq!(
-            route("jinn://todos/ICI-1").as_deref(),
-            Some("tauri://localhost/todos/ICI-1")
+            route("jinn://todos/ISS-1").as_deref(),
+            Some("tauri://localhost/todos/ISS-1")
         );
     }
 

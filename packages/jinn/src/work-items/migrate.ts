@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS work_items (
   closed_at           TEXT
 )`;
 
-/** The pre-PLA-48 shadow columns, dropped once their values reach `work_item_approvals`. */
+/** The pre-ownership-move shadow columns, dropped once their values reach `work_item_approvals`. */
 const V2_APPROVAL_COLUMNS: readonly string[] = ["approval_state", "approval_request", "approval_ref",
   "approval_target", "approval_target_kind", "approval_escalated_at", "approval_decided_by", "approval_decided_at"];
 
@@ -208,7 +208,7 @@ CREATE INDEX IF NOT EXISTS idx_wia_comment ON work_item_attachments(comment_id) 
 `;
 
 /** Todos v2 slice 4: approvals leave the fat work_items row. The SOLE storage
- *  owner since PLA-48 — full history, one row per requested gate; the partial
+ *  owner since the ownership move — full history, one row per requested gate; the partial
  *  unique index makes "at most one PENDING approval per item" a DB guarantee.
  *  `ref` is the opaque correlation reference the request contract has always
  *  carried (kept here so the `approvalRef` payload field stays byte-identical). */
@@ -608,7 +608,7 @@ function hasShadowApprovalColumns(db: DatabaseType): boolean {
 
 /** A v2 database whose only defects heal at boot: additive tables that shipped
  *  later are absent (e.g. slice-1 pre-comments), work_items still carries the
- *  pre-PLA-48 approval columns, and/or work_item_runs still pins the five
+ *  pre-ownership-move approval columns, and/or work_item_runs still pins the five
  *  outcomes it shipped with. Never a refusal. Every OTHER table that is present
  *  must shape-match exactly. */
 function recognizedHealableV2(db: DatabaseType): boolean {
@@ -869,9 +869,9 @@ export function migrateWorkItemsSchema(
 ): WorkItemsMigrationResult {
   registerWorkItemIdentityFunctions(db);
   const migrate = db.transaction((): WorkItemsMigrationResult => {
-    clearAutoKeptOnce(db); // PLA-172: one-shot, and self-guarded on every path through this function
+    clearAutoKeptOnce(db); // one-shot, and self-guarded on every path through this function
     // In-place self-heal, BEFORE classification: a v2 database created before a
-    // later slice shipped its additive tables (or before PLA-48 dropped the
+    // later slice shipped its additive tables (or before the ownership move dropped the
     // approval columns) is brought to the canonical shape here so the exact-shape
     // verifier below sees the complete v2 schema. IF NOT EXISTS makes this a
     // no-op everywhere else, and a refused classification rolls the creates back
@@ -880,13 +880,13 @@ export function migrateWorkItemsSchema(
     const shadowedApprovals = hasShadowApprovalColumns(db);
     if (shadowedApprovals || sqlShape(currentTableSql(db, "work_items")) === sqlShape(WORK_ITEMS_TABLE_DDL)) {
       for (const table of V2_ADDITIVE_TABLES) db.exec(table.ddl);
-      // PLA-48: a pre-drop database hands its shadowed approvals to their one
+      // A pre-drop database hands its shadowed approvals to their one
       // owner and then loses the columns — same transaction, both or neither.
       if (shadowedApprovals) {
         backfillWorkItemApprovals(db, "work_items");
         for (const column of V2_APPROVAL_COLUMNS) db.exec(`ALTER TABLE work_items DROP COLUMN ${column}`);
       }
-      // ICI-731: a run ledger written before `rate_limited` existed is widened
+      // A run ledger written before `rate_limited` existed is widened
       // here, after the additive creates above have had their no-op pass at it.
       if (hasFiveOutcomeRunTable(db)) widenRunOutcomes(db);
       // Slice-5 review F2: departments that gained Todos through pre-fix

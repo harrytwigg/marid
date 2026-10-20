@@ -5,7 +5,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import type { ServerResponse } from "node:http";
 
-/** PLA-54 — the calendar-month per-employee spend cap was enforced only on the connector path, so
+/** The calendar-month per-employee spend cap was enforced only on the connector path, so
  *  dashboard chats, delegations, workflow node runs and MCP-spawned sessions (all of which dispatch
  *  through runWebSession) ran uncapped. Pins the evaluator boundary and the web/API block. */
 

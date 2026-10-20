@@ -3,7 +3,7 @@ import { api, ctx, makeReq, makeRes, operatorHeaders, reg, store, toolHeaders } 
 import { readStopCause } from "../../work-items/stop-cause.js";
 import { initDb } from "../../shared/db.js";
 
-/* PLA-157: a stop nobody can act on is the failure this route exists to
+/* A stop nobody can act on is the failure this route exists to
  * stop. "Blocked again for the same reason" tells the operator a Todo stopped
  * and nothing about whose move it is, so a block may say what has to happen and
  * who has to do it. The hint is optional, but a malformed one is refused rather

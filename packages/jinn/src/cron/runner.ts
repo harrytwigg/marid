@@ -109,7 +109,7 @@ export async function runCronJob(
       // Slice-5 decision 7: cron-created items stamp the creating job.
       createdBy: `cron:${job.id}`,
     });
-    // ICI-570: the mint happens in-process (no route emit) — signal the web now,
+    // The mint happens in-process (no route emit) — signal the web now,
     // so the item appears even if the spawn below fails and no reconcile runs.
     notifyTodoChanged(workItem, "created");
   } catch (wiErr) {
@@ -212,7 +212,7 @@ export async function runCronJob(
 
     const durationMs = Date.now() - startTime;
 
-    // ICI-1410 — `route()` resolving is not the same as the turn succeeding. A dead
+    // `route()` resolving is not the same as the turn succeeding. A dead
     // auth chain, a rate limit, or an engine crash settles the session as failed and
     // still returns here, so the run log has to read the session's own receipt. A
     // registry hiccup must not fail a run that otherwise worked: it falls through to

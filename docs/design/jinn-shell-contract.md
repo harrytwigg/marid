@@ -91,7 +91,7 @@ on both.
    width decision and not a design one. A pair written outside any
    `className` falls back to its own line.
 3. **No new bottom sheet outside the enumerated set.** `Sheet` has not
-   shipped yet (PLA-194). The rule enumerates the existing bottom-sheet
+   shipped yet. The rule enumerates the existing bottom-sheet
    implementations and fails if a new file matches the signature.
 
 Each rule has a fixture that goes red on a deliberate violation and green

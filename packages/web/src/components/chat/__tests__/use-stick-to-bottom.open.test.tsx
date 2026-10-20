@@ -3,7 +3,7 @@ import { render, act, fireEvent } from '@testing-library/react'
 import { STICK_THRESHOLD_PX } from '@/hooks/stick-geometry'
 import { Harness, setClampedMetrics, setMetrics, stubScrollEnvironment } from './stick-harness'
 
-// The two rules ICI-821 changed: where a transcript opens, and when the arrow
+// The two rules that changed: where a transcript opens, and when the arrow
 // offering to take the reader back to the bottom is worth showing at all.
 
 beforeEach(() => { stubScrollEnvironment() })

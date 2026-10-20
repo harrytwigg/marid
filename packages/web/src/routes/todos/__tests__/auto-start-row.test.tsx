@@ -12,7 +12,7 @@ vi.mock("@/lib/auth", () => ({ authFetch: (...args: unknown[]) => authFetch(...a
 
 function detail(over: Partial<WorkItemDetailWire> & { dispatchConfig?: unknown } = {}): WorkItemDetailWire {
   return {
-    workItem: { id: "PLA-7", title: "Spare-window work", status: "backlog" } as WorkItemDetailWire["workItem"],
+    workItem: { id: "TSK-7", title: "Spare-window work", status: "backlog" } as WorkItemDetailWire["workItem"],
     spendUsd: 0,
     events: [],
     ...over,
@@ -43,7 +43,7 @@ describe("AutoStartRow", () => {
     fireEvent.click(renderRow(detail({ dispatchConfig: { autoStart: true, engine: "opencode", model: null, skills: [] } })))
     await waitFor(() => expect(authFetch).toHaveBeenCalledTimes(1))
     const [url, init] = authFetch.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe("/api/work-items/PLA-7/dispatch-config")
+    expect(url).toBe("/api/work-items/TSK-7/dispatch-config")
     expect(init.method).toBe("PUT")
     expect(JSON.parse(init.body as string)).toEqual({ autoStart: false })
   })

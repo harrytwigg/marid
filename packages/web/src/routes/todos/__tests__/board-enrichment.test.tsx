@@ -16,7 +16,7 @@ afterEach(() => {
 
 describe("board enrichment network fan-out", () => {
   it("fetches trees and open details for 60 ids in exactly two requests", async () => {
-    const ids = Array.from({ length: 60 }, (_, index) => `PLA-${index + 1}`)
+    const ids = Array.from({ length: 60 }, (_, index) => `TSK-${index + 1}`)
     const fetchSpy = vi.fn<typeof fetch>().mockImplementation(async (input) => {
       const url = new URL(String(input))
       if (url.pathname === "/api/work-items/trees") {

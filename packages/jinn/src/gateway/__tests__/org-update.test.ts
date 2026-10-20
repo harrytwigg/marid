@@ -8,7 +8,7 @@ import type { JinnConfig, Employee } from "../../shared/types.js";
 let tmpDir: string;
 
 vi.mock("../../shared/paths.js", () => ({
-  // PLA-56: org.ts resolves <home>/org at call time, so the seam is tmpDir's parent.
+  // org.ts resolves <home>/org at call time, so the seam is tmpDir's parent.
   resolveJinnHome: () => path.dirname(tmpDir),
 }));
 

@@ -100,7 +100,7 @@ describe("the sprint planner", () => {
   it("completes the active sprint, carrying unfinished Todos into the next planned sprint and starting it", async () => {
     sprintApi.completeSprint.mockResolvedValue({
       sprint: { ...ACTIVE, status: "closed" },
-      carried: ["PLA-1", "PLA-2", "PLA-3"],
+      carried: ["TSK-1", "TSK-2", "TSK-3"],
       carriedTo: { ...NEXT, status: "active" },
     })
     const { onShowOnBoard } = renderDialog()
@@ -172,7 +172,7 @@ describe("the Todo page's Sprint row", () => {
   function detail(over: { parentId?: string | null; rootId?: string; sprint?: SprintWire | null; status?: string }) {
     const sprint = over.sprint === undefined ? null : over.sprint
     return {
-      workItem: { id: "PLA-7", parentId: over.parentId ?? null, rootId: over.rootId ?? "PLA-7", status: over.status ?? "backlog" },
+      workItem: { id: "TSK-7", parentId: over.parentId ?? null, rootId: over.rootId ?? "TSK-7", status: over.status ?? "backlog" },
       sprint: sprint && { id: sprint.id, name: sprint.name, status: sprint.status },
     } as unknown as React.ComponentProps<typeof SprintRailRow>["detail"]
   }
@@ -190,14 +190,14 @@ describe("the Todo page's Sprint row", () => {
     expect(screen.getByTestId("rail-sprint").textContent).toContain("Sprint 1")
     fireEvent.pointerDown(screen.getByTestId("rail-sprint"), { button: 0, ctrlKey: false, pointerType: "mouse" })
     fireEvent.click(await screen.findByTestId(`rail-sprint-${NEXT.id}`))
-    await waitFor(() => expect(sprintApi.setWorkItemSprint).toHaveBeenCalledWith("PLA-7", NEXT.id))
+    await waitFor(() => expect(sprintApi.setWorkItemSprint).toHaveBeenCalledWith("TSK-7", NEXT.id))
     // Closed sprints are history, never a destination.
     expect(screen.queryByTestId(`rail-sprint-${OLD.id}`)).toBeNull()
   })
 
   it("shows the gateway's own refusal when a move is refused", async () => {
     const { ApiError } = await import("@/lib/api")
-    sprintApi.setWorkItemSprint.mockRejectedValue(new ApiError(400, 'PLA-7 is done in closed sprint "Sprint 0", which keeps it as its record'))
+    sprintApi.setWorkItemSprint.mockRejectedValue(new ApiError(400, 'TSK-7 is done in closed sprint "Sprint 0", which keeps it as its record'))
     renderRow({ detail: detail({ sprint: OLD }), editable: true })
     fireEvent.pointerDown(screen.getByTestId("rail-sprint"), { button: 0, ctrlKey: false, pointerType: "mouse" })
     fireEvent.click(await screen.findByTestId(`rail-sprint-${NEXT.id}`))
@@ -212,9 +212,9 @@ describe("the Todo page's Sprint row", () => {
   })
 
   it("reads a sub-task's sprint from its root and offers no move", () => {
-    renderRow({ detail: detail({ parentId: "PLA-3", rootId: "PLA-3", sprint: ACTIVE }), editable: true })
+    renderRow({ detail: detail({ parentId: "TSK-3", rootId: "TSK-3", sprint: ACTIVE }), editable: true })
     const row = screen.getByTestId("rail-sprint")
     expect(row.tagName).toBe("DIV")
-    expect(row.textContent).toContain("follows PLA-3")
+    expect(row.textContent).toContain("follows TSK-3")
   })
 })

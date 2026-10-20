@@ -18,8 +18,8 @@ describe("gateway URL consumers", () => {
       navigate: vi.fn(),
     }))
 
-    expect(api.workItemAttachmentUrl("PLA-12", "attachment 1")).toBe(
-      "https://qa-a.example:7779/api/work-items/PLA-12/attachments/attachment%201",
+    expect(api.workItemAttachmentUrl("TSK-12", "attachment 1")).toBe(
+      "https://qa-a.example:7779/api/work-items/TSK-12/attachments/attachment%201",
     )
     expect(describeInstance()).toMatchObject({ port: "7779" })
   })

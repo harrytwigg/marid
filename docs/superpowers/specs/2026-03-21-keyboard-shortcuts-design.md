@@ -1,4 +1,4 @@
-# ICI-424: Linear-style Keyboard Shortcuts - Design Spec
+# Linear-style Keyboard Shortcuts - Design Spec
 
 ## Overview
 

@@ -6,7 +6,7 @@ import { workItemNode } from "./fixtures/task-wire"
 import { SubTasksSection } from "../task-page/subtasks"
 import { PENDING_SUBTASK_PREFIX } from "../task-page/use-subtask-mutations"
 
-/** ICI-1437 — the collapsible sub-tasks group and its inline add field, driven
+/** The collapsible sub-tasks group and its inline add field, driven
  *  bare with stub callbacks. The optimistic insert itself lives a level up, in
  *  subtask-optimistic.test.tsx, because it is the query cache that carries it. */
 
@@ -16,7 +16,7 @@ function renderSection(children: WorkItemTreeNodeWire[], parentDepth = 0) {
   const onAddSubTask = vi.fn()
   render(
     <SubTasksSection
-      node={{ ...child("PLA-12"), depth: 0, parentId: null, children }}
+      node={{ ...child("TSK-12"), depth: 0, parentId: null, children }}
       parentDepth={parentDepth}
       employees={[]}
       byName={new Map()}
@@ -32,19 +32,19 @@ function renderSection(children: WorkItemTreeNodeWire[], parentDepth = 0) {
 
 describe("sub-tasks group", () => {
   it("collapses to its header and restores, tracking aria-expanded", () => {
-    renderSection([child("PLA-13"), child("PLA-14")])
+    renderSection([child("TSK-13"), child("TSK-14")])
     const toggle = screen.getByTestId("subtasks-toggle")
     expect(toggle.getAttribute("aria-expanded")).toBe("true")
 
     fireEvent.click(toggle)
     expect(toggle.getAttribute("aria-expanded")).toBe("false")
-    expect(screen.queryByTestId("subtask-row-PLA-13")).toBeNull()
+    expect(screen.queryByTestId("subtask-row-TSK-13")).toBeNull()
     expect(screen.queryByTestId("subtasks-progress")).toBeNull()
     expect(screen.getByTestId("subtasks-count").textContent).toBe("2")
     expect(screen.getByTestId("subtask-add")).toBeTruthy()
 
     fireEvent.click(toggle)
-    expect(screen.getByTestId("subtask-row-PLA-13")).toBeTruthy()
+    expect(screen.getByTestId("subtask-row-TSK-13")).toBeTruthy()
     expect(screen.getByTestId("subtasks-progress")).toBeTruthy()
   })
 
@@ -58,18 +58,18 @@ describe("sub-tasks group", () => {
   })
 
   it("counts the whole subtree and holds 'N of M done' back until one is closed", () => {
-    renderSection([child("PLA-13"), { ...child("PLA-14"), children: [child("PLA-15")] }])
+    renderSection([child("TSK-13"), { ...child("TSK-14"), children: [child("TSK-15")] }])
     expect(screen.getByTestId("subtasks-count").textContent).toBe("3")
     expect(screen.queryByTestId("subtasks-done")).toBeNull()
   })
 
   it("reads 'N of M done' once a descendant is closed", () => {
-    renderSection([child("PLA-13", "done"), child("PLA-14")])
+    renderSection([child("TSK-13", "done"), child("TSK-14")])
     expect(screen.getByTestId("subtasks-done").textContent).toBe("1 of 2 done")
   })
 
   it("opens a focused field as the last row of the list, animated and not a dialog", () => {
-    renderSection([child("PLA-13")])
+    renderSection([child("TSK-13")])
     expect(screen.queryByTestId("subtask-add-input")).toBeNull()
 
     fireEvent.click(screen.getByTestId("subtask-add"))
@@ -83,7 +83,7 @@ describe("sub-tasks group", () => {
   })
 
   it("expands the group when + is pressed while it is collapsed", () => {
-    renderSection([child("PLA-13")])
+    renderSection([child("TSK-13")])
     fireEvent.click(screen.getByTestId("subtasks-toggle"))
     fireEvent.click(screen.getByTestId("subtask-add"))
     expect(screen.getByTestId("subtasks-toggle").getAttribute("aria-expanded")).toBe("true")
@@ -91,7 +91,7 @@ describe("sub-tasks group", () => {
   })
 
   it("creates on Enter and stays open and focused for the next one", () => {
-    const { onAddSubTask } = renderSection([child("PLA-13")])
+    const { onAddSubTask } = renderSection([child("TSK-13")])
     fireEvent.click(screen.getByTestId("subtask-add"))
     const field = screen.getByTestId("subtask-add-input") as HTMLInputElement
     fireEvent.change(field, { target: { value: "Ship it" } })
@@ -104,7 +104,7 @@ describe("sub-tasks group", () => {
   })
 
   it("closes on Escape without creating, and closes on blur when empty", () => {
-    const { onAddSubTask } = renderSection([child("PLA-13")])
+    const { onAddSubTask } = renderSection([child("TSK-13")])
     fireEvent.click(screen.getByTestId("subtask-add"))
     const field = screen.getByTestId("subtask-add-input")
     fireEvent.change(field, { target: { value: "Nope" } })
@@ -119,14 +119,14 @@ describe("sub-tasks group", () => {
   })
 
   it("offers no + and no field at the depth cap", () => {
-    renderSection([child("PLA-13")], 3)
+    renderSection([child("TSK-13")], 3)
     expect(screen.queryByTestId("subtask-add")).toBeNull()
     expect(screen.queryByTestId("subtask-add-input")).toBeNull()
     expect(screen.getByTestId("subtask-depth-cap")).toBeTruthy()
   })
 
   it("renders a child the gateway has not minted yet as a quiet row with no actions", () => {
-    renderSection([child("PLA-13"), { ...child(`${PENDING_SUBTASK_PREFIX}1`), title: "In flight" }])
+    renderSection([child("TSK-13"), { ...child(`${PENDING_SUBTASK_PREFIX}1`), title: "In flight" }])
     const pending = screen.getByTestId("subtask-pending-row")
     expect(pending.textContent).toContain("In flight")
     expect(screen.queryByTestId(`subtask-open-${PENDING_SUBTASK_PREFIX}1`)).toBeNull()

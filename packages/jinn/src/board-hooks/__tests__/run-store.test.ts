@@ -18,7 +18,7 @@ beforeEach(() => {
   runs.__resetBoardHookPruneForTest();
 });
 
-const base = { fireId: "bhf_1", hook: "h", event: "todo.created", eventId: "wie_1", todoId: "PLA-1", action: "spawn" as const, payload: { a: 1 }, chain: ["h"] };
+const base = { fireId: "bhf_1", hook: "h", event: "todo.created", eventId: "wie_1", todoId: "TSK-1", action: "spawn" as const, payload: { a: 1 }, chain: ["h"] };
 
 describe("board_hook_runs", () => {
   it("records a running row and finishes it with the outcome", () => {
@@ -56,7 +56,7 @@ describe("board_hook_runs", () => {
 
   it("lists newest first with filters and a cursor, without payload or output", () => {
     const t0 = Date.now() - 10_000;
-    const ids = [0, 1, 2, 3, 4].map((n) => runs.insertRun({ ...base, hook: n % 2 ? "odd" : "even", todoId: n < 3 ? "PLA-1" : "PLA-2", status: "running" }, t0 + n * 1000));
+    const ids = [0, 1, 2, 3, 4].map((n) => runs.insertRun({ ...base, hook: n % 2 ? "odd" : "even", todoId: n < 3 ? "TSK-1" : "TSK-2", status: "running" }, t0 + n * 1000));
     runs.finishRun(ids[0], { status: "error", error: "boom" });
     const all = runs.listRuns({});
     expect(all.runs.map((run) => run.id)).toEqual([...ids].reverse());
@@ -64,7 +64,7 @@ describe("board_hook_runs", () => {
     expect(all.runs[0]).not.toHaveProperty("payload");
     expect(all.runs[0]).not.toHaveProperty("output");
     expect(runs.listRuns({ hook: "odd" }).runs).toHaveLength(2);
-    expect(runs.listRuns({ todo: "PLA-2" }).runs).toHaveLength(2);
+    expect(runs.listRuns({ todo: "TSK-2" }).runs).toHaveLength(2);
     expect(runs.listRuns({ status: "error" }).runs.map((run) => run.id)).toEqual([ids[0]]);
     const first = runs.listRuns({ limit: 2 });
     expect(first.runs.map((run) => run.id)).toEqual([ids[4], ids[3]]);
@@ -108,7 +108,7 @@ describe("board_hook_runs", () => {
     const now = Date.now();
     const insert = db.prepare(
       `INSERT INTO board_hook_runs (id, fire_id, hook, event, event_id, todo_id, action, status, payload, chain, started_at, started_ms)
-       VALUES (?, 'f', 'h', 'todo.created', 'e', 'PLA-1', 'none', 'suppressed', '{}', '[]', ?, ?)`,
+       VALUES (?, 'f', 'h', 'todo.created', 'e', 'TSK-1', 'none', 'suppressed', '{}', '[]', ?, ?)`,
     );
     db.transaction(() => {
       for (let n = 0; n < runs.RETENTION_ROWS + 25; n += 1) insert.run(`bhr_fill_${n}`, new Date(now - n).toISOString(), now - n);

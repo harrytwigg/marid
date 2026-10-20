@@ -33,7 +33,7 @@ function linkedSession(id: string, workItemId: string, status: SessionStatus, at
 }
 
 /**
- * PLA-61's sequence: an attempt that settled ten days ago, then somebody walking
+ * The reported sequence: an attempt that settled ten days ago, then somebody walking
  * the Todo executing → blocked → backlog today. `actor` is what the test varies —
  * only `operator` carries human authority.
  */
@@ -57,9 +57,9 @@ beforeAll(async () => {
   db = (await import("../../shared/db.js")).initDb();
 });
 
-describe("reconcileWorkItem — attempts that predate the operator's own move are not evidence (PLA-98)", () => {
-  it("leaves a Todo the operator parked in backlog exactly where he put it (PLA-61, replayed)", () => {
-    const id = parkedAfterStaleAttempt("never started", "s-pla61");
+describe("reconcileWorkItem — attempts that predate the operator's own move are not evidence", () => {
+  it("leaves a Todo the operator parked in backlog exactly where he put it (replayed incident)", () => {
+    const id = parkedAfterStaleAttempt("never started", "s-stale-attempt");
 
     expect(reconcile.reconcileWorkItem(id)).toMatchObject({ changed: false, item: { status: "backlog" } });
     expect(store.getWorkItem(id)?.status).toBe("backlog");
@@ -146,7 +146,7 @@ function operatorOpenedTrustReview(title: string, sourceRef: string): string {
   return item.id;
 }
 
-describe("reconcileWorkItem — a fresh attempt licenses the TRUST close only once it has settled successfully (PLA-99)", () => {
+describe("reconcileWorkItem — a fresh attempt licenses the TRUST close only once it has settled successfully", () => {
   it("does not close a review the operator opened when the fresh attempt FAILED", () => {
     const id = operatorOpenedTrustReview("cron retry failed", "cron:trust-failed");
     linkedSession("s-trust-failed", id, "idle", afterTheMove(), "failed");

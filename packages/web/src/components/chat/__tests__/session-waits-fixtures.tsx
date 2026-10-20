@@ -40,7 +40,7 @@ export function child(overrides: Partial<DelegatedSessionWait> & { sessionId: st
     employee: 'alpha-builder',
     employeeDisplayName: 'Alpha Builder',
     title: null,
-    todo: { id: 'PLA-1', title: 'Build the popup' },
+    todo: { id: 'TSK-1', title: 'Build the popup' },
     status: 'running',
     active: true,
     since: iso(8 * MIN),
@@ -56,7 +56,7 @@ export const reviewer = child({
   relation: 'review',
   employee: 'alpha-reviewer',
   employeeDisplayName: null,
-  todo: { id: 'PLA-1', title: 'Build the popup' },
+  todo: { id: 'TSK-1', title: 'Build the popup' },
   status: 'waiting',
   since: iso(3 * MIN),
 })

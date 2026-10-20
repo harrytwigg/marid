@@ -48,7 +48,7 @@ describe("the authoritative Talk control manifest", () => {
   });
 
   /**
-   * The twin PLA-224 found: `talk_send_to_session` was declared browser-target
+   * The twin the audit found: `talk_send_to_session` was declared browser-target
    * while a complete gateway adapter, durable claim, and re-read sat behind it
    * as dead code. Preflight refused the gateway path, the consent sheet asked
    * and never sent, and the operator's message went nowhere. One name, one

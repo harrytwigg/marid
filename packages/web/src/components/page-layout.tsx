@@ -135,7 +135,7 @@ export function ToolbarActions({ children }: { children?: React.ReactNode }) {
  * stands down with it for the same reason: two surfaces cannot own one edge.
  * Only mobile pushes, so desktop chrome is untouched.
  *
- * The left-edge back drag (ICI-801) is mounted here rather than per route, so
+ * The left-edge back drag is mounted here rather than per route, so
  * `chromeless` chat gets it too. It arms on a coarse pointer only: a mouse keeps
  * the browser's own back, and the existing chevrons are untouched either way.
  */

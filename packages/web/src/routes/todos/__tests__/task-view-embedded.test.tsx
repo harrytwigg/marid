@@ -60,7 +60,7 @@ function client() {
   return new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
 }
 
-function renderTab(openTodo: OpenTodo | null, ids: string[] = ["PLA-12"]) {
+function renderTab(openTodo: OpenTodo | null, ids: string[] = ["TSK-12"]) {
   return render(
     <QueryClientProvider client={client()}>
       <MemoryRouter initialEntries={["/chat"]}>
@@ -104,7 +104,7 @@ beforeEach(() => {
   stubViewport(false)
   getWorkItem.mockImplementation((id: string) => Promise.resolve({ workItem: full(id), spendUsd: 0, events: [] }))
   getWorkItemTree.mockResolvedValue({
-    tree: { root: node(full("PLA-12"), [node(full("PLA-13", { parentId: "PLA-12", rootId: "PLA-12", depth: 1 }))]), totals: {}, spendUsd: 0 },
+    tree: { root: node(full("TSK-12"), [node(full("TSK-13", { parentId: "TSK-12", rootId: "TSK-12", depth: 1 }))]), totals: {}, spendUsd: 0 },
   })
 })
 
@@ -116,7 +116,7 @@ describe("a Todo opened as a tab", () => {
   it("is the whole Todo, inside the tab rather than the app shell", async () => {
     renderTab(null)
 
-    expect((await screen.findByTestId("task-title")).textContent).toBe("Item PLA-12")
+    expect((await screen.findByTestId("task-title")).textContent).toBe("Item TSK-12")
     expect(screen.getByTestId("todo-tab-view")).toBeTruthy()
     expect(screen.queryByTestId("page-layout")).toBeNull()
     for (const testId of ["task-crumb-bar", "task-chip-cluster", "task-body", "task-props-rail", "task-composer"]) {
@@ -129,9 +129,9 @@ describe("a Todo opened as a tab", () => {
     const openTodo = vi.fn<OpenTodo>(() => true)
     renderTab(openTodo)
 
-    fireEvent.click(await screen.findByTestId("subtask-open-PLA-13"))
+    fireEvent.click(await screen.findByTestId("subtask-open-TSK-13"))
 
-    expect(openTodo).toHaveBeenCalledWith("PLA-13", "chat-a")
+    expect(openTodo).toHaveBeenCalledWith("TSK-13", "chat-a")
     expect(screen.getByTestId("path").textContent).toBe("/chat")
   })
 
@@ -139,18 +139,18 @@ describe("a Todo opened as a tab", () => {
     const openTodo = vi.fn<OpenTodo>(() => false)
     renderTab(openTodo)
 
-    fireEvent.click(await screen.findByTestId("subtask-open-PLA-13"))
+    fireEvent.click(await screen.findByTestId("subtask-open-TSK-13"))
 
     expect(openTodo).toHaveBeenCalledTimes(1)
-    expect(screen.getByTestId("path").textContent).toBe("/todos/PLA-13")
+    expect(screen.getByTestId("path").textContent).toBe("/todos/TSK-13")
   })
 })
 
 describe("two Todos open side by side", () => {
   it("returns focus to the row in the view whose picker closed, not the other one", async () => {
-    renderTab(null, ["PLA-12", "PLA-13"])
-    const second = within(screen.getByTestId("pane-PLA-13"))
-    await within(screen.getByTestId("pane-PLA-12")).findByTestId("rail-status")
+    renderTab(null, ["TSK-12", "TSK-13"])
+    const second = within(screen.getByTestId("pane-TSK-13"))
+    await within(screen.getByTestId("pane-TSK-12")).findByTestId("rail-status")
     const row = await second.findByTestId("rail-status")
 
     fireEvent.click(row)
@@ -168,7 +168,7 @@ describe("what a tab leaves to the page", () => {
       contributeProbes(AREAS.todoDetailSections, [{ id: "section" }]),
     ]
     try {
-      const page = renderRoute(["/todos/PLA-12"])
+      const page = renderRoute(["/todos/TSK-12"])
       await screen.findByTestId("task-title")
       expect(screen.getByTestId("probe-action")).toBeTruthy()
       expect(screen.getByTestId("probe-section")).toBeTruthy()
@@ -187,14 +187,14 @@ describe("what a tab leaves to the page", () => {
     getWorkItem.mockRejectedValue(Object.assign(new Error("not found"), { status: 404 }))
     renderTab(null)
 
-    expect(await screen.findByText("PLA-12 doesn't exist (anymore).")).toBeTruthy()
+    expect(await screen.findByText("TSK-12 doesn't exist (anymore).")).toBeTruthy()
     expect(screen.queryByRole("button", { name: "Back to Todos" })).toBeNull()
     expect(screen.getByTestId("path").textContent).toBe("/chat")
   })
 })
 
 describe("the Todo page's back affordance", () => {
-  const fromMention = [{ pathname: "/" }, { pathname: "/todos/PLA-12", state: { returnBack: true } }]
+  const fromMention = [{ pathname: "/" }, { pathname: "/todos/TSK-12", state: { returnBack: true } }]
 
   it("returns a phone to the mention that opened the Todo", async () => {
     stubViewport(true)
@@ -207,7 +207,7 @@ describe("the Todo page's back affordance", () => {
 
   it("still goes to the board from a phone that arrived any other way", async () => {
     stubViewport(true)
-    renderRoute(["/", "/todos/PLA-12"])
+    renderRoute(["/", "/todos/TSK-12"])
 
     fireEvent.click(await screen.findByTestId("task-crumb-back"))
 

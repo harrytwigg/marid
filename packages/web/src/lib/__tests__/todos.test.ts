@@ -106,7 +106,7 @@ describe("deriveNeedsYou", () => {
     expect(deriveNeedsYou([compact({ id: "x", status: "executing" })])).toHaveLength(0)
   })
 
-  // PLA-157: the board's "N waiting" reads this set, so a Todo waiting out a
+  // The board's "N waiting" reads this set, so a Todo waiting out a
   // quota window must not be counted as a Todo waiting on a person.
   it("drops an unexpired park, and keeps one that has run out or will not parse", () => {
     const ahead = new Date(NOW + 3_600_000).toISOString()

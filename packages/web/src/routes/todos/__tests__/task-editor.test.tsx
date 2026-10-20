@@ -53,7 +53,7 @@ function renderTask() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/todos/PLA-12"]}>
+      <MemoryRouter initialEntries={["/todos/TSK-12"]}>
         <Routes>
           <Route path="/todos/:todoId" element={<TaskPage />} />
         </Routes>
@@ -68,7 +68,7 @@ beforeEach(() => {
 
 describe("inline title + body editor on the page", () => {
   it("tap-to-edit title commits a PATCH on Enter and reverts on Escape", async () => {
-    const item = full("PLA-12", { title: "Guest checkout" })
+    const item = full("TSK-12", { title: "Guest checkout" })
     getWorkItem.mockResolvedValue(detailOf(item))
     updateWorkItem.mockResolvedValue({ workItem: { ...item, title: "Guest checkout v2", version: 4 }, replayed: false })
     renderTask()
@@ -79,7 +79,7 @@ describe("inline title + body editor on the page", () => {
     fireEvent.change(input, { target: { value: "Guest checkout v2" } })
     fireEvent.keyDown(input, { key: "Enter" })
     await waitFor(() =>
-      expect(updateWorkItem).toHaveBeenCalledWith("PLA-12", expect.objectContaining({
+      expect(updateWorkItem).toHaveBeenCalledWith("TSK-12", expect.objectContaining({
         patch: { title: "Guest checkout v2" },
         expectedVersion: 3,
       })),
@@ -95,14 +95,14 @@ describe("inline title + body editor on the page", () => {
   })
 
   it("the body first renders stored markdown read-only (heading + list, no raw syntax)", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12", { body: "## Scope\n\n- E-mail-only identity\n\nShips `PLA-22` separately." })))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12", { body: "## Scope\n\n- E-mail-only identity\n\nShips `TSK-22` separately." })))
     renderTask()
 
     const body = await screen.findByTestId("task-body")
     await waitFor(() => {
       expect(body.querySelector("h2")?.textContent).toBe("Scope")
       expect(body.querySelector("li")?.textContent).toContain("E-mail-only identity")
-      expect(body.querySelector("code")?.textContent).toBe("PLA-22")
+      expect(body.querySelector("code")?.textContent).toBe("TSK-22")
     })
     expect(body.textContent).not.toContain("##")
   })

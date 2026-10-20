@@ -115,9 +115,9 @@ beforeEach(() => {
   clearBoardScrollCache()
   sessionStorage.clear()
   rows = {
-    backlog: [compact("PLA-1", "backlog")],
-    executing: [compact("PLA-3", "executing")],
-    in_review: [compact("PLA-4", "in_review")],
+    backlog: [compact("TSK-1", "backlog")],
+    executing: [compact("TSK-3", "executing")],
+    in_review: [compact("TSK-4", "in_review")],
   }
   listWorkItems.mockImplementation((params: { status?: WorkItemStatusWire }) => Promise.resolve(listResponse(params)))
 })
@@ -125,7 +125,7 @@ beforeEach(() => {
 describe("board drag legality", () => {
   it("dims illegal columns at 38% on lift and renders no slot in them", async () => {
     renderBoard()
-    const card = await screen.findByTestId("board-card-PLA-4") // in_review
+    const card = await screen.findByTestId("board-card-TSK-4") // in_review
     stubColumnGeometry()
 
     fireEvent.pointerDown(card, { button: 0, clientX: 210, clientY: 40, pointerType: "mouse" })
@@ -144,9 +144,9 @@ describe("board drag legality", () => {
   })
 
   it("renders the slot in a hovered legal column and commits the transition on drop", async () => {
-    setWorkItemStatus.mockResolvedValue({ workItem: { ...compact("PLA-3", "in_review") }, escalated: false })
+    setWorkItemStatus.mockResolvedValue({ workItem: { ...compact("TSK-3", "in_review") }, escalated: false })
     renderBoard()
-    const card = await screen.findByTestId("board-card-PLA-3")
+    const card = await screen.findByTestId("board-card-TSK-3")
     const order = stubColumnGeometry()
     const reviewIndex = order.indexOf("in_review")
     const reviewX = reviewIndex * 100 + 50
@@ -164,15 +164,15 @@ describe("board drag legality", () => {
     await act(async () => {
       window.dispatchEvent(pointer("pointerup", reviewX, 50))
     })
-    await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("PLA-3", "in_review"))
+    await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("TSK-3", "in_review"))
   })
 
   it("writes the landing rank after an accepted cross-column drop (F3 — refetch never reorders it)", async () => {
-    rows.in_review = [{ ...compact("PLA-4", "in_review"), rank: 2048 }]
-    setWorkItemStatus.mockResolvedValue({ workItem: { ...compact("PLA-3", "in_review"), version: 4 }, escalated: false })
-    updateWorkItem.mockResolvedValue({ workItem: { ...compact("PLA-3", "in_review"), version: 5 } })
+    rows.in_review = [{ ...compact("TSK-4", "in_review"), rank: 2048 }]
+    setWorkItemStatus.mockResolvedValue({ workItem: { ...compact("TSK-3", "in_review"), version: 4 }, escalated: false })
+    updateWorkItem.mockResolvedValue({ workItem: { ...compact("TSK-3", "in_review"), version: 5 } })
     renderBoard()
-    const card = await screen.findByTestId("board-card-PLA-3")
+    const card = await screen.findByTestId("board-card-TSK-3")
     const order = stubColumnGeometry()
     const reviewX = order.indexOf("in_review") * 100 + 50
 
@@ -187,11 +187,11 @@ describe("board drag legality", () => {
       window.dispatchEvent(pointer("pointerup", reviewX, 50))
     })
 
-    await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("PLA-3", "in_review"))
+    await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("TSK-3", "in_review"))
     // The rank PATCH uses the rankBetween neighbours at the landing slot
-    // (below PLA-4 @2048 → 2048+1024) and the version the transition returned.
+    // (below TSK-4 @2048 → 2048+1024) and the version the transition returned.
     await waitFor(() =>
-      expect(updateWorkItem).toHaveBeenCalledWith("PLA-3", expect.objectContaining({
+      expect(updateWorkItem).toHaveBeenCalledWith("TSK-3", expect.objectContaining({
         patch: { rank: 3072 },
         expectedVersion: 4,
       })),
@@ -199,11 +199,11 @@ describe("board drag legality", () => {
   })
 
   it("a drop into Blocked opens the task page with the banner reason focused (F6 hand-off)", async () => {
-    rows.blocked = [compact("PLA-9", "blocked")] // materialize the Blocked column
-    setWorkItemStatus.mockResolvedValue({ workItem: { ...compact("PLA-3", "blocked"), version: 4 }, escalated: false })
-    updateWorkItem.mockResolvedValue({ workItem: { ...compact("PLA-3", "blocked"), version: 5 } })
+    rows.blocked = [compact("TSK-9", "blocked")] // materialize the Blocked column
+    setWorkItemStatus.mockResolvedValue({ workItem: { ...compact("TSK-3", "blocked"), version: 4 }, escalated: false })
+    updateWorkItem.mockResolvedValue({ workItem: { ...compact("TSK-3", "blocked"), version: 5 } })
     renderBoard()
-    const card = await screen.findByTestId("board-card-PLA-3")
+    const card = await screen.findByTestId("board-card-TSK-3")
     const order = stubColumnGeometry()
     const blockedX = order.indexOf("blocked") * 100 + 50
 
@@ -218,15 +218,15 @@ describe("board drag legality", () => {
       window.dispatchEvent(pointer("pointerup", blockedX, 50))
     })
 
-    await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("PLA-3", "blocked"))
+    await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("TSK-3", "blocked"))
     const probe = await screen.findByTestId("task-probe")
-    expect(probe.dataset.todo).toBe("PLA-3")
+    expect(probe.dataset.todo).toBe("TSK-3")
     expect(JSON.parse(probe.dataset.state!)).toMatchObject({ focusBannerReason: true, fromBoard: "platform" })
   })
 
   it("does not commit anything when dropped over dead space", async () => {
     renderBoard()
-    const card = await screen.findByTestId("board-card-PLA-3")
+    const card = await screen.findByTestId("board-card-TSK-3")
     stubColumnGeometry()
 
     fireEvent.pointerDown(card, { button: 0, clientX: 210, clientY: 40, pointerType: "mouse" })
@@ -245,7 +245,7 @@ describe("board drag legality", () => {
 
   it("a legal-but-empty exception column materializes on lift (states mock §6) and folds back after", async () => {
     renderBoard() // no blocked rows anywhere
-    const card = await screen.findByTestId("board-card-PLA-3") // executing
+    const card = await screen.findByTestId("board-card-TSK-3") // executing
     vi.spyOn(card, "getBoundingClientRect").mockReturnValue({
       x: 200, y: 0, left: 200, top: 0, right: 300, bottom: 72, width: 100, height: 72,
       toJSON: () => ({}),
@@ -274,7 +274,7 @@ describe("board drag legality", () => {
 
   it("a plain click never lifts — it opens the card", async () => {
     renderBoard()
-    const card = await screen.findByTestId("board-card-PLA-3")
+    const card = await screen.findByTestId("board-card-TSK-3")
     stubColumnGeometry()
     fireEvent.pointerDown(card, { button: 0, clientX: 210, clientY: 40, pointerType: "mouse" })
     await act(async () => {

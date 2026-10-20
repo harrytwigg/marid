@@ -12,7 +12,7 @@ describe("Talk coverage of the routes the app can render", () => {
   it("matches concrete detail routes to their authoritative descriptors", () => {
     expect(matchAppRoute("/chat/session-7")?.id).toBe("chat-redirect")
     expect(legacyChatRedirectTarget("session 7")).toBe("/?session=session%207")
-    expect(matchAppRoute("/todos/PLA-116")?.id).toBe("todo-detail")
+    expect(matchAppRoute("/todos/TSK-116")?.id).toBe("todo-detail")
     expect(matchAppRoute("/org")?.id).toBe("org")
     expect(matchAppRoute("/settings/plugins")?.id).toBe("settings-plugins")
     expect(matchAppRoute("/notes/f/product/n/product/roadmap")?.id).toBe("notes")

@@ -49,7 +49,7 @@ import { getModelRegistry, invalidateModelRegistry } from "../../shared/models.j
 import type { EngineResult, JinnConfig, Session } from "../../shared/types.js";
 
 /**
- * PLA-202 / the ICI-1369 incident: codex hit its usage limit on a session pinned
+ * The incident: codex hit its usage limit on a session pinned
  * to `gpt-5.6-luna`, the swap rewrote `engine` to claude and left the pin alone,
  * and the session's NEXT turn asked Anthropic for a codex model — `model_not_found`.
  * The swap and the turn after it are asserted together here because the bug lived
@@ -170,7 +170,7 @@ describe("rate-limit engine substitution — the model floor", () => {
     });
   });
 
-  it("leaves the next turn on a model the substitute serves — the ICI-1369 regression", async () => {
+  it("leaves the next turn on a model the substitute serves — the original regression", async () => {
     const cfg = config();
     const { session } = await swap(cfg);
 

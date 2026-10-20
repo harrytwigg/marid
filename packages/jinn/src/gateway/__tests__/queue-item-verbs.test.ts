@@ -24,7 +24,7 @@ import {
 import type { Engine, EngineRunOpts } from "../../shared/types.js";
 
 /**
- * ICI-1365 — the two verbs a parked message card offers beyond cancel: edit it
+ * The two verbs a parked message card offers beyond cancel: edit it
  * in place, and jump it to the front. Both run against the real route handler,
  * real SQLite and a real SessionQueue, because what they have to get right is
  * the relationship between a durable row, the transcript row it shows, and the

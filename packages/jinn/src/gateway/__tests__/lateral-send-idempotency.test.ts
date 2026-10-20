@@ -22,7 +22,7 @@ import { ensureSessionCapability } from "../../mcp/identity.js";
 import type { Engine, EngineRunOpts } from "../../shared/types.js";
 
 /**
- * PLA-74 — one `send_to_session` that arrives twice (an MCP transport replay of
+ * One `send_to_session` that arrives twice (an MCP transport replay of
  * the same pending `tools/call`) must land as ONE turn. These drive the real
  * route, real SQLite and a real SessionQueue; only the engine is a stub, and it
  * blocks so the send stays in flight for the whole replay window — which is the

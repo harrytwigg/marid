@@ -2,8 +2,8 @@ import http from "node:http";
 import { EventEmitter } from "node:events";
 import { AddressInfo } from "node:net";
 
-/** Fakes and fixtures shared by the PLA-76 suites (cross-stream isolation and
- *  pooled recovery). Both drive the proxy's upstream seam, one with a real local
+/** Fakes and fixtures shared by the cross-stream isolation and
+ *  pooled recovery suites. Both drive the proxy's upstream seam, one with a real local
  *  server and one with stubs, so the pieces live here rather than in either. */
 
 export const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));

@@ -1,14 +1,14 @@
 import type { Database as DatabaseType } from "better-sqlite3";
 import { CREATE_META_TABLE } from "../sessions/migrate.js";
 
-/** ICI-1357: the Todos the operator keeps on Home.
+/** The Todos the operator keeps on Home.
  *
  *  Home used to be `created_by = 'operator'`, so a Todo an agent raised was
  *  reachable only from its department board. Keeping is the operator's gesture
- *  for "follow this one" — PLA-172 removed the auto-keep on create, because
+ *  for "follow this one" — the auto-keep on create was removed, because
  *  `created_by = 'operator'` is every caller holding the gateway credential
  *  rather than the operator's own hand, and Home filled up with work they never
- *  asked to follow. Since PLA-230 a pin is no longer the only thing on Home:
+ *  asked to follow. Since then a pin is no longer the only thing on Home:
  *  the operator's own Todos join it as a term in `HOME_SCOPE_SQL`, read at
  *  query time, so nothing writes to the kept set on their behalf.
  *
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS work_item_kept (
  *  filter. It lives here so the table's one reader in SQL sits with the table. */
 export const KEPT_EXISTS_SQL = "EXISTS (SELECT 1 FROM work_item_kept k WHERE k.work_item_id = work_items.id)";
 
-/** The Home board's whole scope (PLA-230): what the operator pinned, plus what
+/** The Home board's whole scope: what the operator pinned, plus what
  *  they created. Parenthesised as one term so the OR survives AND-composition
  *  with every other filter the board sends. */
 export const HOME_SCOPE_SQL = `(${KEPT_EXISTS_SQL} OR work_items.created_by = 'operator')`;
@@ -78,7 +78,7 @@ const AUTO_KEEP_CLEARED_KEY = "work_item_kept_auto_keep_cleared";
  *
  *  Marked in `meta` rather than inferred from the table being new: the point of
  *  the flag is that a pin made after the cleanup survives the next boot. Every
- *  row this deletes was written by machinery PLA-172 removed — the pin shipped
+ *  row this deletes was written by the auto-keep machinery that was removed — the pin shipped
  *  hours earlier and was invisible, so there is no hand-curated set to lose. */
 export function clearAutoKeptOnce(db: DatabaseType): void {
   db.exec(CREATE_META_TABLE);

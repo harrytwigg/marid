@@ -80,19 +80,19 @@ export interface TransitionOptions {
    * item goes to `blocked` INSTEAD, recorded as an escalation (design §1.3 —
    * bounded loops end in front of the operator, never spin). */
   bounce?: boolean;
-  /** Why this block is a block (ICI-730); read only when `to` is `blocked`, and
+  /** Why this block is a block; read only when `to` is `blocked`, and
    *  `blocks.ts` owns what each kind does. Absent, a block means `needs_input`:
    *  never `dependency`, which would re-queue work nobody asked to have back. */
   blockKind?: BlockKind;
   /**
-   * Close this item's open descendants along with it (PLA-96), so recording one
+   * Close this item's open descendants along with it, so recording one
    * decision costs one action instead of one per sub-task. Read only for a
    * `done` target carrying `human` — the same authority pairing `archiveWorkItem`
    * requires for cascade-cancel, because a cascade closes work its caller never
    * looked at.
    */
   cascade?: boolean;
-  /** Why this stop will end (PLA-157): the moment a clock-wait is over, or what
+  /** Why this stop will end: the moment a clock-wait is over, or what
    *  has to happen and who has to do it. Stored only when the move lands in
    *  `blocked`; leaving it deletes whatever was stored. */
   stopCause?: TodoStopCause;
@@ -184,7 +184,7 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
       }
     }
 
-    // The authorized cascade (PLA-96) runs FIRST, so the gate below meets a tree
+    // The authorized cascade runs FIRST, so the gate below meets a tree
     // whose children are already closed. Without the flag nothing changes: the
     // gate's refusal stays the default answer, word for word.
     if (to === 'done' && opts.cascade && opts.human) {
@@ -241,7 +241,7 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
     // Only a successful completion resets the block history; `cancelled` keeps
     // it, because abandoning work is not evidence its blocks were resolved.
     if (target === 'done') clearBlockRecord(db, id);
-    // The stop's cause belongs to the stop (PLA-157), so it is written with the
+    // The stop's cause belongs to the stop, so it is written with the
     // status that made it true and deleted the moment the Todo is no longer
     // stopped — a countdown can never outlive the wait it was counting.
     if (target !== 'blocked') clearStopCause(db, id);
@@ -273,7 +273,7 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
     return { item: getWorkItem(id)!, escalated, event };
   });
   const result = holdLiveSignalsUntilCommit(txn);
-  // ICI-749: the board's live signal belongs to the status write, not to the HTTP
+  // The board's live signal belongs to the status write, not to the HTTP
   // routes. The reconciler, a cascade and the recovery controller all commit
   // here with no route to announce them, so the dashboard stayed stale until a
   // reload. The route lanes suppress their own duplicate

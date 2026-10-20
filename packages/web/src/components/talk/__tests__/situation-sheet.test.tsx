@@ -89,7 +89,7 @@ describe("answering", () => {
     expect(onAnswer).toHaveBeenNthCalledWith(2, "revise")
   })
 
-  // ICI-755 superseded the tile as an answering card: a tap opens the preview,
+  // A later change superseded the tile as an answering card: a tap opens the preview,
   // and the answer moved onto the preview's own control.
   it("answers image and clip sets from the preview a tile opens", async () => {
     const images = renderSheet(situation("images"))

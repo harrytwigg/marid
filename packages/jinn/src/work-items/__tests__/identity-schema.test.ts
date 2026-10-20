@@ -20,21 +20,21 @@ describe("the freshly created Todo schema", () => {
     const db = new Database(":memory:");
     migrateWorkItemsSchema(db, "absent");
 
-    const first = allocateWorkItemId(db, "2026-07-14T00:00:00.000Z", "ICI");
-    const second = allocateWorkItemId(db, "2026-07-14T00:00:01.000Z", "ICI");
-    const third = allocateWorkItemId(db, "2026-07-14T00:00:02.000Z", "ICI");
+    const first = allocateWorkItemId(db, "2026-07-14T00:00:00.000Z", "ISS");
+    const second = allocateWorkItemId(db, "2026-07-14T00:00:01.000Z", "ISS");
+    const third = allocateWorkItemId(db, "2026-07-14T00:00:02.000Z", "ISS");
 
-    expect(first.id).toBe("ICI-1");
-    expect(second.id).toBe("ICI-2");
-    expect(third.id).toBe("ICI-3");
-    expect(db.prepare("SELECT prefix FROM work_item_id_allocator").pluck().all()).toEqual(["ICI"]);
+    expect(first.id).toBe("ISS-1");
+    expect(second.id).toBe("ISS-2");
+    expect(third.id).toBe("ISS-3");
+    expect(db.prepare("SELECT prefix FROM work_item_id_allocator").pluck().all()).toEqual(["ISS"]);
     expect(() => db.prepare("UPDATE work_item_id_allocator SET prefix = 'ACM'").run()).toThrow(/allocator/i);
   });
 
   it("rejects a claimed insert whose prefix differs from the claimed namespace", () => {
     const db = new Database(":memory:");
     migrateWorkItemsSchema(db, "absent");
-    const claim = allocateWorkItemId(db, "2026-07-14T00:00:00.000Z", "ICI");
+    const claim = allocateWorkItemId(db, "2026-07-14T00:00:00.000Z", "ISS");
 
     expect(() => useWorkItemAllocationClaim(db, claim, () => db.prepare(`
       INSERT INTO work_items (id, title, created_by, root_id, depth, created_at, updated_at)

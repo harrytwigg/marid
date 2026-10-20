@@ -17,7 +17,7 @@ the Todos half. Every "shipped" row below cites a path that resolves at the base
 | Sub-issues | Shipped | `packages/jinn/src/work-items/store.ts` (`parent_id` / `root_id`) |
 | Relations between Todos | Shipped | `packages/jinn/src/work-items/relations.ts` |
 | Labels, priority | Shipped | `packages/jinn/src/work-items/labels.ts` |
-| Hide employee-created noise, see only my own | Shipped | `packages/web/src/routes/todos/board/` — Home = `kept=true` + `rootsOnly`, filled by the operator's pin alone (ICI-1357, PLA-172) |
+| Hide employee-created noise, see only my own | Shipped | `packages/web/src/routes/todos/board/` — Home = `kept=true` + `rootsOnly`, filled by the operator's pin alone |
 | System employees that cannot be deleted or altered | **Missing** | `scanOrg()` in `packages/jinn/src/gateway/org.ts:44` treats every YAML alike; the constructed `Employee` has no system or protected field |
 | Todo Dispatcher + a Dispatch button | **Missing** | no dispatch affordance on any Todo surface; `delegate_task` exists but is agent-invoked, not a Todo action |
 | Request-update button | **Missing** | — |

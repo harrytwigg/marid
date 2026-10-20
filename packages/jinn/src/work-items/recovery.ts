@@ -1,7 +1,7 @@
 import { classifyEngineFailureText, hasEngineFailureClass } from "../shared/engine-failure.js";
 
 /**
- * Bounded recovery classification (PLA-240).
+ * Bounded recovery classification.
  *
  * A verdict here is not an action. The controller decides whether to re-arm,
  * route, or leave the Todo on Needs you. The open run and the clock arrive as inputs, so the replay suite can feed it history with no DB.

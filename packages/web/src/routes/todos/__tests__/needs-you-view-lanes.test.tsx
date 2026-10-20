@@ -84,7 +84,7 @@ afterEach(() => {
   restoreTransport = null
 })
 
-describe("NeedsYouView attention lanes (PLA-240)", () => {
+describe("NeedsYouView attention lanes", () => {
   it("a recovering leftover reaches Recovering automatically and not Blocked", () => {
     renderView([
       item("QAP-2", "blocked", { title: "quota parked build", attentionLane: "recovering", assignee: "platform-worker" }),

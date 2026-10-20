@@ -7,7 +7,7 @@ import { listWorkItemAttemptRuns, type TodoRun } from './runs.js';
 import { appendWorkItemEvent } from './store.js';
 
 /**
- * Pre-claim respawn guards (ICI-731).
+ * Pre-claim respawn guards.
  *
  * An automated re-dispatch — a workflow re-arm, a status-driven trigger, any
  * future auto-pickup — asks these four predicates before it takes the Todo's

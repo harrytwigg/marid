@@ -3,7 +3,7 @@ import { initDb } from '../shared/db.js';
 import { createWorkItem, getWorkItem, type CreateWorkItemInput, type WorkItem } from './store.js';
 
 /**
- * Caller-supplied create idempotency (ICI-733).
+ * Caller-supplied create idempotency.
  *
  * `(source, source_ref)` already dedupes machine mints, but the server picks
  * that pair and the trigger paths do not set it usefully — a cron that fires

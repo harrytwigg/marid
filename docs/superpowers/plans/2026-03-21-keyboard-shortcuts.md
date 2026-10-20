@@ -132,7 +132,7 @@ describe('useKeyboardShortcuts', () => {
 
 - [ ] **Step 2: Run tests - verify they fail**
 
-Run: `cd ~/Projects/jinn-wt-ici-424/packages/web && pnpm test -- --reporter=verbose 2>&1 | tail -30`
+Run: `cd ~/Projects/jinn-wt-keyboard-shortcuts/packages/web && pnpm test -- --reporter=verbose 2>&1 | tail -30`
 Expected: FAIL - module `../use-keyboard-shortcuts` not found
 
 - [ ] **Step 3: Implement hook with types and key matching**
@@ -201,13 +201,13 @@ export function useKeyboardShortcuts(shortcuts: ShortcutDef[]) {
 
 - [ ] **Step 4: Run tests - verify they pass**
 
-Run: `cd ~/Projects/jinn-wt-ici-424/packages/web && pnpm test -- --reporter=verbose 2>&1 | tail -30`
+Run: `cd ~/Projects/jinn-wt-keyboard-shortcuts/packages/web && pnpm test -- --reporter=verbose 2>&1 | tail -30`
 Expected: All 8 tests PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd ~/Projects/jinn-wt-ici-424 && git add packages/web/src/hooks/use-keyboard-shortcuts.ts packages/web/src/hooks/__tests__/use-keyboard-shortcuts.test.ts && git commit -m "feat(ICI-424): add useKeyboardShortcuts hook with key matching"
+cd ~/Projects/jinn-wt-keyboard-shortcuts && git add packages/web/src/hooks/use-keyboard-shortcuts.ts packages/web/src/hooks/__tests__/use-keyboard-shortcuts.test.ts && git commit -m "feat(shortcuts): add useKeyboardShortcuts hook with key matching"
 ```
 
 ---
@@ -323,7 +323,7 @@ Add to the test file after the `key matching` describe block:
 
 - [ ] **Step 2: Run tests - verify new tests fail**
 
-Run: `cd ~/Projects/jinn-wt-ici-424/packages/web && pnpm test -- --reporter=verbose 2>&1 | tail -40`
+Run: `cd ~/Projects/jinn-wt-keyboard-shortcuts/packages/web && pnpm test -- --reporter=verbose 2>&1 | tail -40`
 Expected: New tests FAIL (input guard, modal guard logic not yet implemented)
 
 - [ ] **Step 3: Implement safety guards**
@@ -370,13 +370,13 @@ export function useKeyboardShortcuts(shortcuts: ShortcutDef[], options: Shortcut
 
 - [ ] **Step 4: Run tests - verify all pass**
 
-Run: `cd ~/Projects/jinn-wt-ici-424/packages/web && pnpm test -- --reporter=verbose 2>&1 | tail -40`
+Run: `cd ~/Projects/jinn-wt-keyboard-shortcuts/packages/web && pnpm test -- --reporter=verbose 2>&1 | tail -40`
 Expected: All tests PASS (key matching + safety guards + cleanup)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd ~/Projects/jinn-wt-ici-424 && git add packages/web/src/hooks/use-keyboard-shortcuts.ts packages/web/src/hooks/__tests__/use-keyboard-shortcuts.test.ts && git commit -m "feat(ICI-424): add input and modal safety guards to keyboard shortcuts hook"
+cd ~/Projects/jinn-wt-keyboard-shortcuts && git add packages/web/src/hooks/use-keyboard-shortcuts.ts packages/web/src/hooks/__tests__/use-keyboard-shortcuts.test.ts && git commit -m "feat(shortcuts): add input and modal safety guards to keyboard shortcuts hook"
 ```
 
 ---
@@ -454,7 +454,7 @@ describe('ShortcutOverlay', () => {
 
 - [ ] **Step 2: Run tests - verify they fail**
 
-Run: `cd ~/Projects/jinn-wt-ici-424/packages/web && pnpm test -- --reporter=verbose 2>&1 | tail -20`
+Run: `cd ~/Projects/jinn-wt-keyboard-shortcuts/packages/web && pnpm test -- --reporter=verbose 2>&1 | tail -20`
 Expected: FAIL - module not found
 
 - [ ] **Step 3: Implement ShortcutOverlay component**
@@ -557,13 +557,13 @@ export function ShortcutOverlay({ shortcuts, onClose }: ShortcutOverlayProps) {
 
 - [ ] **Step 4: Run tests - verify they pass**
 
-Run: `cd ~/Projects/jinn-wt-ici-424/packages/web && pnpm test -- --reporter=verbose 2>&1 | tail -30`
+Run: `cd ~/Projects/jinn-wt-keyboard-shortcuts/packages/web && pnpm test -- --reporter=verbose 2>&1 | tail -30`
 Expected: All overlay tests PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd ~/Projects/jinn-wt-ici-424 && git add packages/web/src/components/chat/shortcut-overlay.tsx packages/web/src/components/chat/__tests__/shortcut-overlay.test.tsx && git commit -m "feat(ICI-424): add ShortcutOverlay component with grouped key hints"
+cd ~/Projects/jinn-wt-keyboard-shortcuts && git add packages/web/src/components/chat/shortcut-overlay.tsx packages/web/src/components/chat/__tests__/shortcut-overlay.test.tsx && git commit -m "feat(shortcuts): add ShortcutOverlay component with grouped key hints"
 ```
 
 ---
@@ -609,13 +609,13 @@ The effect should depend on the displayed sessions list. Use `JSON.stringify` of
 
 - [ ] **Step 4: Verify existing tests still pass**
 
-Run: `cd ~/Projects/jinn-wt-ici-424/packages/web && pnpm test -- --reporter=verbose 2>&1 | tail -20`
+Run: `cd ~/Projects/jinn-wt-keyboard-shortcuts/packages/web && pnpm test -- --reporter=verbose 2>&1 | tail -20`
 Expected: All existing tests PASS (sidebar changes are additive - new optional props)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd ~/Projects/jinn-wt-ici-424 && git add packages/web/src/components/chat/chat-sidebar.tsx && git commit -m "feat(ICI-424): expose session/employee order from sidebar for keyboard nav"
+cd ~/Projects/jinn-wt-keyboard-shortcuts && git add packages/web/src/components/chat/chat-sidebar.tsx && git commit -m "feat(shortcuts): expose session/employee order from sidebar for keyboard nav"
 ```
 
 ---
@@ -757,18 +757,18 @@ Add before the closing `</PageLayout>` tag, just before the `<Dialog>`:
 
 - [ ] **Step 8: Run all tests**
 
-Run: `cd ~/Projects/jinn-wt-ici-424/packages/web && pnpm test -- --reporter=verbose 2>&1 | tail -30`
+Run: `cd ~/Projects/jinn-wt-keyboard-shortcuts/packages/web && pnpm test -- --reporter=verbose 2>&1 | tail -30`
 Expected: All tests PASS
 
 - [ ] **Step 9: Run type check**
 
-Run: `cd ~/Projects/jinn-wt-ici-424 && pnpm typecheck 2>&1 | tail -20`
+Run: `cd ~/Projects/jinn-wt-keyboard-shortcuts && pnpm typecheck 2>&1 | tail -20`
 Expected: No type errors
 
 - [ ] **Step 10: Commit**
 
 ```bash
-cd ~/Projects/jinn-wt-ici-424 && git add packages/web/src/app/chat/page.tsx packages/web/src/components/chat/chat-sidebar.tsx && git commit -m "feat(ICI-424): wire keyboard shortcuts into chat page with overlay"
+cd ~/Projects/jinn-wt-keyboard-shortcuts && git add packages/web/src/app/chat/page.tsx packages/web/src/components/chat/chat-sidebar.tsx && git commit -m "feat(shortcuts): wire keyboard shortcuts into chat page with overlay"
 ```
 
 ---
@@ -779,23 +779,23 @@ cd ~/Projects/jinn-wt-ici-424 && git add packages/web/src/app/chat/page.tsx pack
 
 - [ ] **Step 1: Run full test suite**
 
-Run: `cd ~/Projects/jinn-wt-ici-424/packages/web && pnpm test -- --reporter=verbose 2>&1`
+Run: `cd ~/Projects/jinn-wt-keyboard-shortcuts/packages/web && pnpm test -- --reporter=verbose 2>&1`
 Expected: All tests PASS
 
 - [ ] **Step 2: Run build**
 
-Run: `cd ~/Projects/jinn-wt-ici-424/packages/web && pnpm build 2>&1 | tail -20`
+Run: `cd ~/Projects/jinn-wt-keyboard-shortcuts/packages/web && pnpm build 2>&1 | tail -20`
 Expected: Build succeeds with no errors
 
 - [ ] **Step 3: Run lint**
 
-Run: `cd ~/Projects/jinn-wt-ici-424 && pnpm lint 2>&1 | tail -20`
+Run: `cd ~/Projects/jinn-wt-keyboard-shortcuts && pnpm lint 2>&1 | tail -20`
 Expected: No lint errors
 
 - [ ] **Step 4: Final commit if any fixes were needed**
 
 ```bash
-cd ~/Projects/jinn-wt-ici-424 && git add -u && git commit -m "fix(ICI-424): address build/lint issues"
+cd ~/Projects/jinn-wt-keyboard-shortcuts && git add -u && git commit -m "fix(shortcuts): address build/lint issues"
 ```
 
 (Only run this step if the build or lint step required fixes.)

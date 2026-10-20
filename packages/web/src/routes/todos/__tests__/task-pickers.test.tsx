@@ -38,7 +38,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       listWorkItemSessions: vi.fn().mockResolvedValue([]),
       getDepartments: vi.fn().mockResolvedValue({
         departments: [
-          { slug: "platform", prefix: "PLA", createdAt: "2026-07-01T00:00:00.000Z", todoCount: 4 },
+          { slug: "platform", prefix: "TSK", createdAt: "2026-07-01T00:00:00.000Z", todoCount: 4 },
           { slug: "marketing", prefix: "MKT", createdAt: "2026-07-01T00:00:00.000Z", todoCount: 2 },
         ],
       }),
@@ -74,7 +74,7 @@ function treeNode(item: WorkItemFullWire, children: WorkItemTreeNodeWire[] = [])
   return { ...item, children }
 }
 
-function renderTask(path = "/todos/PLA-12") {
+function renderTask(path = "/todos/TSK-12") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
@@ -100,7 +100,7 @@ beforeEach(() => {
 
 describe("the status picker", () => {
   it("offers ONLY the legal manual targets from in review — illegal edges are absent, with the omission footnote", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12", { status: "in_review" })))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12", { status: "in_review" })))
     renderTask()
     fireEvent.click(await screen.findByTestId("rail-status"))
 
@@ -121,11 +121,11 @@ describe("the status picker", () => {
   })
 
   it("renders a gated Cancelled disabled with the inline reason while a sub-task is open, and refuses the click", async () => {
-    const item = full("PLA-12")
+    const item = full("TSK-12")
     getWorkItem.mockResolvedValue(detailOf(item))
     getWorkItemTree.mockResolvedValue({ tree: { root: treeNode(item, [
-      treeNode(full("PLA-13", { status: "blocked", parentId: "PLA-12", depth: 1 })),
-      treeNode(full("PLA-14", { status: "done", parentId: "PLA-12", depth: 1 })),
+      treeNode(full("TSK-13", { status: "blocked", parentId: "TSK-12", depth: 1 })),
+      treeNode(full("TSK-14", { status: "done", parentId: "TSK-12", depth: 1 })),
     ]), totals: {}, spendUsd: 0 } })
     renderTask()
     fireEvent.click(await screen.findByTestId("rail-status"))
@@ -138,15 +138,15 @@ describe("the status picker", () => {
   })
 
   it("closes the whole tree in one move: Done stays live with open sub-tasks and commits the cascade", async () => {
-    const item = full("PLA-12")
+    const item = full("TSK-12")
     getWorkItem.mockResolvedValue(detailOf(item))
     getWorkItemTree.mockResolvedValue({ tree: { root: treeNode(item, [
-      treeNode(full("PLA-13", { status: "executing", parentId: "PLA-12", depth: 1 }), [
-        treeNode(full("PLA-15", { status: "backlog", parentId: "PLA-13", depth: 2 })),
+      treeNode(full("TSK-13", { status: "executing", parentId: "TSK-12", depth: 1 }), [
+        treeNode(full("TSK-15", { status: "backlog", parentId: "TSK-13", depth: 2 })),
       ]),
-      treeNode(full("PLA-14", { status: "done", parentId: "PLA-12", depth: 1 })),
+      treeNode(full("TSK-14", { status: "done", parentId: "TSK-12", depth: 1 })),
     ]), totals: {}, spendUsd: 0 } })
-    setWorkItemStatus.mockResolvedValue({ workItem: full("PLA-12", { status: "done", version: 4 }), escalated: false })
+    setWorkItemStatus.mockResolvedValue({ workItem: full("TSK-12", { status: "done", version: 4 }), escalated: false })
     renderTask()
     fireEvent.click(await screen.findByTestId("rail-status"))
 
@@ -155,11 +155,11 @@ describe("the status picker", () => {
     // The count is the whole open subtree, not the one child directly below it.
     expect(done.textContent).toContain("also closes 2 open sub-tasks")
     fireEvent.click(done)
-    await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("PLA-12", "done", undefined, undefined, { cascade: true }))
+    await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("TSK-12", "done", undefined, undefined, { cascade: true }))
   })
 
   it("commits optimistically and snaps back with the gateway's words on refusal", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     setWorkItemStatus.mockRejectedValue(new ApiError(403, "3 sub-tasks still open"))
     renderTask()
     fireEvent.click(await screen.findByTestId("rail-status"))
@@ -167,12 +167,12 @@ describe("the status picker", () => {
 
     // Optimistic: the rail row reads the new value before the server answers.
     await waitFor(() => expect(screen.getByTestId("rail-status").textContent).toContain("In review"))
-    await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("PLA-12", "in_review", undefined))
+    await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("TSK-12", "in_review", undefined))
     await waitFor(() => expect(screen.getByTestId("task-callout").textContent).toContain("3 sub-tasks still open"))
   })
 
   it("superimposes the anchor NSMenu-style: current row first, menu offset -7px, width 314", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     renderTask()
     fireEvent.click(await screen.findByTestId("rail-status"))
     const picker = await screen.findByTestId("picker-status")
@@ -184,7 +184,7 @@ describe("the status picker", () => {
 
 describe("the other pickers", () => {
   it("priority superimposes the CURRENT row over the anchor (Medium = index 1 → -43px) and commits a PATCH", async () => {
-    const item = full("PLA-12", { priority: 2 })
+    const item = full("TSK-12", { priority: 2 })
     getWorkItem.mockResolvedValue(detailOf(item))
     updateWorkItem.mockResolvedValue({ workItem: { ...item, priority: 3, version: 4 }, replayed: false })
     renderTask()
@@ -193,11 +193,11 @@ describe("the other pickers", () => {
     const picker = await screen.findByTestId("picker-priority")
     expect(picker.style.top).toBe("-43px")
     fireEvent.click(screen.getByTestId("priority-option-3"))
-    await waitFor(() => expect(updateWorkItem).toHaveBeenCalledWith("PLA-12", expect.objectContaining({ patch: { priority: 3 }, expectedVersion: 3 })))
+    await waitFor(() => expect(updateWorkItem).toHaveBeenCalledWith("TSK-12", expect.objectContaining({ patch: { priority: 3 }, expectedVersion: 3 })))
   })
 
   it("assignee search filters the roster; naming someone ASSIGNS, Unassign commits null through the pen", async () => {
-    const item = full("PLA-12", { assignee: "mason" })
+    const item = full("TSK-12", { assignee: "mason" })
     getWorkItem.mockResolvedValue(detailOf(item))
     assignWorkItem.mockResolvedValue({ workItem: { ...item, assignee: "scout", version: 4 } })
     updateWorkItem.mockResolvedValue({ workItem: { ...item, assignee: null, version: 4 }, replayed: false })
@@ -211,17 +211,17 @@ describe("the other pickers", () => {
 
     // Granting ownership is the assign lane's: roster check, status unchanged, notify.
     fireEvent.click(screen.getByTestId("assignee-option-scout"))
-    await waitFor(() => expect(assignWorkItem).toHaveBeenCalledWith("PLA-12", "scout"))
+    await waitFor(() => expect(assignWorkItem).toHaveBeenCalledWith("TSK-12", "scout"))
     expect(updateWorkItem).not.toHaveBeenCalled()
 
     // Only "nobody" goes through the pen: /assign cannot express it.
     fireEvent.click(await screen.findByTestId("rail-assignee"))
     fireEvent.click(await screen.findByTestId("assignee-option-unassign"))
-    await waitFor(() => expect(updateWorkItem).toHaveBeenCalledWith("PLA-12", expect.objectContaining({ patch: { assignee: null }, expectedVersion: 3 })))
+    await waitFor(() => expect(updateWorkItem).toHaveBeenCalledWith("TSK-12", expect.objectContaining({ patch: { assignee: null }, expectedVersion: 3 })))
   })
 
   it("labels multi-select PUTs the replaced set", async () => {
-    const item = full("PLA-12")
+    const item = full("TSK-12")
     getWorkItem.mockResolvedValue(detailOf(item, { labels: [
       { id: "lab_1", name: "store", color: "#7DBE6A", department: null, createdAt: "2026-07-01T00:00:00.000Z" },
     ] }))
@@ -232,12 +232,12 @@ describe("the other pickers", () => {
     const infra = await screen.findByTestId("label-option-lab_2")
     fireEvent.click(infra)
     await waitFor(() =>
-      expect(setWorkItemLabels).toHaveBeenCalledWith("PLA-12", expect.arrayContaining(["lab_1", "lab_2"])),
+      expect(setWorkItemLabels).toHaveBeenCalledWith("TSK-12", expect.arrayContaining(["lab_1", "lab_2"])),
     )
   })
 
   it("the rail has no review-policy row to open", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12", { rounds: 2 })))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12", { rounds: 2 })))
     renderTask()
     await screen.findByTestId("rail-due")
     expect(screen.queryByTestId("rail-verify")).toBeNull()
@@ -245,7 +245,7 @@ describe("the other pickers", () => {
   })
 
   it("the due picker commits an ISO day and can clear", async () => {
-    const item = full("PLA-12", { dueAt: "2026-08-08T12:00:00.000Z" })
+    const item = full("TSK-12", { dueAt: "2026-08-08T12:00:00.000Z" })
     getWorkItem.mockResolvedValue(detailOf(item))
     updateWorkItem.mockResolvedValue({ workItem: { ...item, version: 4 }, replayed: false })
     renderTask()
@@ -258,7 +258,7 @@ describe("the other pickers", () => {
   })
 
   it("the start picker commits startAt on its own row, beside the due date", async () => {
-    const item = full("PLA-12", { startAt: "2026-08-03T12:00:00.000Z", dueAt: "2026-08-08T12:00:00.000Z" })
+    const item = full("TSK-12", { startAt: "2026-08-03T12:00:00.000Z", dueAt: "2026-08-08T12:00:00.000Z" })
     getWorkItem.mockResolvedValue(detailOf(item))
     updateWorkItem.mockResolvedValue({ workItem: { ...item, version: 4 }, replayed: false })
     renderTask()
@@ -271,18 +271,18 @@ describe("the other pickers", () => {
   })
 
   it("department rows carry the mono prefix and the birth-prefix footnote", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     renderTask()
     fireEvent.click(await screen.findByTestId("rail-department"))
 
     const picker = await screen.findByTestId("picker-department")
-    expect(picker.textContent).toContain("PLA")
+    expect(picker.textContent).toContain("TSK")
     expect(picker.textContent).toContain("MKT")
     expect(picker.textContent).toContain("keeps its birth prefix")
   })
 
   it("Esc closes the picker and returns focus to the rail row", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
     renderTask()
     const row = await screen.findByTestId("rail-status")
     fireEvent.click(row)

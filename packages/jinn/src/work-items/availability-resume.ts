@@ -15,7 +15,7 @@ import { listWorkItemAttemptRuns } from './runs.js';
 import { appendWorkItemEvent, listWorkItems, type WorkItem, type WorkItemStatus } from './store.js';
 
 /**
- * The clock-driven counterpart to the respawn guards (PLA-153).
+ * The clock-driven counterpart to the respawn guards.
  *
  * `rate_limit_cooldown` refuses a re-dispatch inside a quota window, and until
  * now nothing came back once the window closed: the run settled `rate_limited`,
@@ -56,7 +56,7 @@ export function isClockRestartable(item: Pick<WorkItem, 'id' | 'status'>): boole
  *  failure is resurrecting history rather than resuming it. Measured from
  *  `endedAt` when no engine named a reset, and from the named reset once it
  *  has passed — so a weekly cap waits out its real window instead of aging
- *  out at 24h (PLA-216). */
+ *  out at 24h. */
 const MAX_RESUMABLE_AGE_MS = 24 * 60 * 60_000;
 
 const DEFAULT_RESUME_INTERVAL_MS = 5 * 60_000;

@@ -20,7 +20,7 @@ beforeAll(async () => {
 
 /** A session a hook spawned, with the run row its fire left behind. */
 function hookSession(fireId: string, chain: string[], parentSessionId?: string) {
-  runs.insertRun({ fireId, hook: chain.at(-1)!, event: "todo.created", eventId: "wie_1", todoId: "PLA-1", action: "spawn", status: "running", payload: {}, chain });
+  runs.insertRun({ fireId, hook: chain.at(-1)!, event: "todo.created", eventId: "wie_1", todoId: "TSK-1", action: "spawn", status: "running", payload: {}, chain });
   return registry.createSession({ engine: "claude", source: "hook", sourceRef: `hook:${fireId}`, employee: "worker", parentSessionId });
 }
 

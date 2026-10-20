@@ -5,12 +5,12 @@ import { describe, expect, it, vi } from "vitest"
 import type { WorkItemDetailWire, WorkItemFullWire, WorkItemRunWire } from "@/lib/api"
 import { comment, event, run } from "./fixtures/task-wire"
 
-/* ICI-728, ICI-1440 — the run ledger's read surface, now inside the one
+/* The run ledger's read surface, now inside the one
  * Activity stream: an attempt reads as a start line and, once it settles, an
  * end line carrying its outcome and the handoff a reviewer reads. An OPEN
  * attempt reads as in-flight instead of borrowing an outcome it never
- * reported, a Todo nobody has attempted shows no run lines and no empty state
- * (ICI-1435), and the lines sort chronologically among the comments. */
+ * reported, a Todo nobody has attempted shows no run lines and no empty state,
+ * and the lines sort chronologically among the comments. */
 
 vi.mock("@/routes/settings-provider", () => ({ useSettings: () => ({ settings: { operatorEmoji: null, employeeOverrides: {} } }) }))
 vi.mock("@/routes/providers", () => ({ useTheme: () => ({ theme: "dark" }) }))
@@ -34,7 +34,7 @@ import { ActivitySection } from "../task-page/activity"
 
 const SETTLED_LABELS = ["Completed", "Blocked", "Crashed", "Timed out", "Abandoned", "Rate limited"]
 
-const item = { id: "PLA-12", createdAt: "2026-07-20T08:00:00.000Z" } as WorkItemFullWire
+const item = { id: "TSK-12", createdAt: "2026-07-20T08:00:00.000Z" } as WorkItemFullWire
 
 function renderActivity(runs: WorkItemRunWire[], extra: Partial<WorkItemDetailWire> = {}) {
   const detail = { workItem: item, spendUsd: 0, events: [], runs, ...extra } as unknown as WorkItemDetailWire

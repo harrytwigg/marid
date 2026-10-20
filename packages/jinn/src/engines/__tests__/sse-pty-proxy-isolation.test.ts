@@ -11,7 +11,7 @@ import {
   type Upstream,
 } from "./helpers/sse-pty-upstream.js";
 
-// Regression tests for PLA-76: one stream's death took every other stream with
+// Regression tests: one stream's death took every other stream with
 // it. Two blast radii are covered here — the socket pool (it was module scope,
 // so every session drew from one 64-socket bucket) and the in-flight upstream
 // handle a finished stream used to keep pointing at.

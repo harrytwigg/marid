@@ -12,7 +12,7 @@ import {
 } from "./helpers/turn-parity-harness.js";
 
 /**
- * ICI-714 — three terminal receipts the connector runner used to skip entirely,
+ * Three terminal receipts the connector runner used to skip entirely,
  * each of which the web runner already wrote. They are covered here because the
  * connector path is the one that was missing them, and because a receipt nobody
  * writes is invisible until a parent hangs or a spinner never clears.

@@ -8,7 +8,7 @@ import { setWorkItemKept } from "../work-items/kept.js";
 import { appendWorkItemEvent, getWorkItem } from "../work-items/store.js";
 
 /**
- * `PUT /api/work-items/:id/kept` — ICI-1357, the operator's Home board.
+ * `PUT /api/work-items/:id/kept` — the operator's Home board.
  *
  * Operator-only. Home is the operator's own board, so an employee session
  * pinning onto it would be putting work in front of a person who never asked

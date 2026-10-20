@@ -7,19 +7,19 @@ function treeNode(id: string, parentId: string | null, children: WorkItemTreeNod
 }
 
 describe("ancestor helpers", () => {
-  const root = treeNode("PLA-1", null, [
-    treeNode("PLA-2", "PLA-1", [treeNode("PLA-4", "PLA-2")]),
-    treeNode("PLA-3", "PLA-1"),
+  const root = treeNode("TSK-1", null, [
+    treeNode("TSK-2", "TSK-1", [treeNode("TSK-4", "TSK-2")]),
+    treeNode("TSK-3", "TSK-1"),
   ])
 
   it("derives the ancestor trail root-first", () => {
-    expect(ancestorsOf(root, "PLA-4").map((a) => a.id)).toEqual(["PLA-1", "PLA-2"])
-    expect(ancestorsOf(root, "PLA-1")).toEqual([])
-    expect(ancestorsOf(root, "PLA-9")).toEqual([])
+    expect(ancestorsOf(root, "TSK-4").map((a) => a.id)).toEqual(["TSK-1", "TSK-2"])
+    expect(ancestorsOf(root, "TSK-1")).toEqual([])
+    expect(ancestorsOf(root, "TSK-9")).toEqual([])
   })
 
   it("finds the item's own node", () => {
-    expect(nodeOf(root, "PLA-4")?.id).toBe("PLA-4")
-    expect(nodeOf(root, "PLA-9")).toBeUndefined()
+    expect(nodeOf(root, "TSK-4")?.id).toBe("TSK-4")
+    expect(nodeOf(root, "TSK-9")).toBeUndefined()
   })
 })

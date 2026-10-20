@@ -39,12 +39,12 @@ describe("resolveDepartmentPrefix reservation", () => {
     const db = new Database(":memory:");
     registerWorkItemIdentityFunctions(db);
     migrateWorkItemsSchema(db, "absent");
-    // Historical company namespace: ICI has allocated ids but is no longer the
+    // Historical company namespace: ISS has allocated ids but is no longer the
     // configured company prefix (which is now JNN).
-    allocateWorkItemId(db, "2026-07-01T00:00:00.000Z", "ICI");
-    const prefix = resolveDepartmentPrefix(db, "icing", "JNN");
-    expect(prefix).not.toBe("ICI");
-    expect(prefix).toBe("ICA"); // deterministic fallback: third letter restarts at A
+    allocateWorkItemId(db, "2026-07-01T00:00:00.000Z", "ISS");
+    const prefix = resolveDepartmentPrefix(db, "issues", "JNN");
+    expect(prefix).not.toBe("ISS");
+    expect(prefix).toBe("ISA"); // deterministic fallback: third letter restarts at A
     db.close();
   });
 

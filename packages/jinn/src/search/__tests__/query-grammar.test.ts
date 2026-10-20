@@ -97,13 +97,13 @@ describe("parseSearchQuery", () => {
   });
 
   it("lifts an exact Todo id out while leaving it in the free text for the index to score", () => {
-    const parsed = parse("ICI-1368");
-    expect(parsed.todoId).toBe("ICI-1368");
-    expect(parsed.freeText).toBe("ICI-1368");
+    const parsed = parse("ISS-1368");
+    expect(parsed.todoId).toBe("ISS-1368");
+    expect(parsed.freeText).toBe("ISS-1368");
   });
 
   it("reports no Todo id when the query is more than the id", () => {
-    expect(parse("ICI-1368 search").todoId).toBeNull();
+    expect(parse("ISS-1368 search").todoId).toBeNull();
   });
 
   it("literal=true produces zero facets and the whole raw string as free text", () => {

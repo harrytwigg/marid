@@ -26,7 +26,7 @@ describe("GET /api/work-items/:id/sessions", () => {
 
   it("accepts a canonical company-derived route ID before lookup", async () => {
     const cap = makeRes();
-    await api.handleApiRequest(makeReq("GET", "/api/work-items/ICI-999"), cap.res, ctx);
+    await api.handleApiRequest(makeReq("GET", "/api/work-items/ISS-999"), cap.res, ctx);
     expect(cap.status).toBe(404);
   });
 

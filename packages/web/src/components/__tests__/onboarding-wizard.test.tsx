@@ -96,12 +96,12 @@ describe("OnboardingWizard model registry", () => {
     renderWizard()
 
     const companyName = await screen.findByRole("textbox", { name: "Company Name" })
-    fireEvent.change(companyName, { target: { value: "IC-IDEV" } })
+    fireEvent.change(companyName, { target: { value: "AC-MEDIA" } })
 
-    expect(screen.getByText(/"IC-IDEV" produces ICI-1, ICI-2/)).toBeTruthy()
+    expect(screen.getByText(/"AC-MEDIA" produces ACM-1, ACM-2/)).toBeTruthy()
     expect(screen.getByText(/cannot be changed after the first Todo/i)).toBeTruthy()
     fireEvent.click(screen.getByRole("button", { name: "Next" }))
-    expect(setCompanyName).toHaveBeenCalledWith("IC-IDEV")
+    expect(setCompanyName).toHaveBeenCalledWith("AC-MEDIA")
   })
 
   it("allows an explicit canonical prefix override before allocation", async () => {

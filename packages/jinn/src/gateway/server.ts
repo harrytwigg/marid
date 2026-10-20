@@ -808,7 +808,7 @@ export async function startGateway(
   };
   const emit = createTalkProactiveGatewayEmit(initDb(), broadcast);
   sessionManager.setGatewayEmitter(emit);
-  // ICI-570: in-process Todo writes (cron mints, session-lifecycle reconciles)
+  // In-process Todo writes (cron mints, session-lifecycle reconciles)
   // reach the dashboard through the same company:changed lane the routes use.
   setTodoLiveEmitter((event) => emit("company:changed", event));
   // A child's reply held while it waited on its own background work goes out
@@ -960,7 +960,7 @@ export async function startGateway(
   });
   const stopSessionSchedulers = startSessionSchedulers();
 
-  // Todos ledger truth-keeping: derive status from linked-session evidence so a mid-process settle lands without a boot (GRS-021a), and resume a Todo parked on a provider window that has since reopened (PLA-153).
+  // Todos ledger truth-keeping: derive status from linked-session evidence so a mid-process settle lands without a boot (GRS-021a), and resume a Todo parked on a provider window that has since reopened.
   const stopWorkItemReconciler = startWorkItemReconciler();
   const stopTodoSweeps = startTodoSweeps(apiContext);
 

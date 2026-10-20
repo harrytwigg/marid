@@ -155,7 +155,7 @@ describe("reconcileWorkItem — integration against real store + registry", () =
   it("continues normal reconciliation after an operator manually starts an item", () => {
     const wi = store.createWorkItem({ title: "manual start", status: "backlog", source: "human" });
     tr.transition(wi.id, "executing", "operator", { human: true, manual: true });
-    linkedSession("s-manual-start", wi.id, "running", new Date(Date.now() + 60_000).toISOString()); // the attempt runs AFTER his dispatch, or it is not evidence about it (PLA-98)
+    linkedSession("s-manual-start", wi.id, "running", new Date(Date.now() + 60_000).toISOString()); // the attempt runs AFTER his dispatch, or it is not evidence about it
 
     expect(reconcile.reconcileWorkItem(wi.id)).toMatchObject({ changed: false, item: { status: "executing" } });
 
@@ -396,7 +396,7 @@ describe("reconcileActiveWorkItems / startup sweep — the recoverStaleSessions 
   });
 });
 
-describe("ICI-570 — live todo events from the reconciler", () => {
+describe("live todo events from the reconciler", () => {
   it("emits one event when reconcile changes status, none when it no-ops", async () => {
     const live = await import("../live-events.js");
     const events: Array<Record<string, unknown>> = [];

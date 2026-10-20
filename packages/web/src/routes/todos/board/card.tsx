@@ -10,7 +10,7 @@ import { hasStopLead, StopCauseLead, stopLeadKey } from "./stop-cause"
 import { KeepToggle } from "./keep-control"
 import { MoveToMenu } from "./move-menu"
 
-/* ICI-1427 — the board card, Variant A: four rows, the same four on every card.
+/* The board card, Variant A: four rows, the same four on every card.
  * ID + assignee, status glyph + title, priority + labels + roll-up, cost + due.
  *
  * Every row is unconditional, so a card's height is settled by its title alone

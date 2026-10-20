@@ -141,7 +141,7 @@ describe("TalkControlRuntime", () => {
   });
 
   /**
-   * The mute-failure regression PLA-224 was raised for. Before this, every
+   * The mute-failure regression. Before this, every
    * adapter throw arrived as one house sentence, so "Todo ZZZ-999 not found"
    * and "Employee dana not found" were indistinguishable to the model and the
    * operator was told nothing. Revert `executionReason` to a constant and this

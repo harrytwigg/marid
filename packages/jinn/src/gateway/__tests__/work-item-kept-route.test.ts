@@ -13,7 +13,7 @@ import {
 } from "../../mcp/identity.js";
 
 /**
- * ICI-1357 — `PUT /api/work-items/:id/kept`. Home is the operator's board, so
+ * `PUT /api/work-items/:id/kept`. Home is the operator's board, so
  * only the operator may put anything on it; everything else about the route is
  * the ordinary work-item sub-path contract (400 bad id, 404 unknown, 400 bad
  * body). Drives handleApiRequest directly against a throwaway JINN_HOME.
@@ -186,7 +186,7 @@ describe("the list route reads `kept`", () => {
     const theirs = store.createWorkItem({ title: "an agent's", createdBy: "session:agent-6" });
     const mine = store.createWorkItem({ title: "the operator's", createdBy: "operator" });
 
-    // PLA-172: nothing reaches Home by being created, the operator's own least
+    // Nothing reaches Home by being created, the operator's own least
     // of all — `created_by = 'operator'` is every caller holding their token.
     const before = await pageIds("kept=true&rootsOnly=true");
     expect(before).not.toContain(mine.id);

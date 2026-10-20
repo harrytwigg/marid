@@ -31,10 +31,10 @@ vi.mock("@/routes/settings-provider", () => ({ useSettings: () => ({ settings: {
 import { ActivitySection } from "../task-page/activity"
 
 const item = {
-  id: "PLA-12", version: 1, title: "Item", body: null, status: "executing", department: null,
+  id: "TSK-12", version: 1, title: "Item", body: null, status: "executing", department: null,
   assignee: null, priority: 2, rank: null, source: "human", sourceRef: null,
   rounds: 0, budgetUsd: null, createdBy: "operator", parentId: null,
-  rootId: "PLA-12", depth: 0, dueAt: null, createdAt: "2026-07-20T08:00:00.000Z",
+  rootId: "TSK-12", depth: 0, dueAt: null, createdAt: "2026-07-20T08:00:00.000Z",
   updatedAt: "2026-07-20T08:00:00.000Z", closedAt: null,
 } as WorkItemFullWire
 
@@ -88,7 +88,7 @@ describe("replying", () => {
 
     await user.type(screen.getByTestId("composer-input"), "thanks")
     await user.keyboard("{Enter}")
-    await waitFor(() => expect(addWorkItemComment).toHaveBeenCalledWith("PLA-12", "thanks", "r1"))
+    await waitFor(() => expect(addWorkItemComment).toHaveBeenCalledWith("TSK-12", "thanks", "r1"))
   })
 
   it("still replies to a top-level comment with that comment's id", async () => {
@@ -98,7 +98,7 @@ describe("replying", () => {
     await user.click(await screen.findByTestId("activity-reply-root"))
     await user.type(screen.getByTestId("composer-input"), "again")
     await user.keyboard("{Enter}")
-    await waitFor(() => expect(addWorkItemComment).toHaveBeenCalledWith("PLA-12", "again", "root"))
+    await waitFor(() => expect(addWorkItemComment).toHaveBeenCalledWith("TSK-12", "again", "root"))
   })
 })
 
@@ -173,7 +173,7 @@ describe("the @mention picker", () => {
 
     // With the list closed, Enter submits as it always did.
     await user.keyboard("{Enter}")
-    await waitFor(() => expect(addWorkItemComment).toHaveBeenCalledWith("PLA-12", "hello @build-lead", undefined))
+    await waitFor(() => expect(addWorkItemComment).toHaveBeenCalledWith("TSK-12", "hello @build-lead", undefined))
   })
 
   it("moves the selection with the arrow keys and inserts on Tab", async () => {

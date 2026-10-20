@@ -7,7 +7,7 @@ import { UserMessageSlot } from '@/components/chat/user-message-slot'
 import { SessionQueueContext, indexByMessage, type SessionQueue } from '@/components/chat/use-session-queue'
 import type { MediaAttachment, Message } from '@/lib/conversations'
 
-/* ICI-1365 — a queued message is a card in message position, carrying exactly
+/* A queued message is a card in message position, carrying exactly
  * the three actions the operator asked for: edit it, drop it, or send it now. */
 
 const verbs = { cancel: vi.fn(), edit: vi.fn(), sendNow: vi.fn(), adopt: vi.fn() }

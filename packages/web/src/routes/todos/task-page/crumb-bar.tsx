@@ -56,7 +56,7 @@ export function CrumbBar({
   onOpenAncestor: OpenTodoFromClick
   onCopyId: () => void
   mobile: boolean
-  /** ICI-1357: whether this Todo is on the operator's Home board. */
+  /** Whether this Todo is on the operator's Home board. */
   kept?: boolean
   onKeep?: (vars: { id: string; kept: boolean }) => void
   /** Plugin actions are page-scoped (a contribution reads its Todo from the URL), so a Todo shown

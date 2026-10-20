@@ -202,7 +202,7 @@ describe("engine session refs", () => {
     expect(reverted.transportMeta?.engineOverride).toBeUndefined();
   });
 
-  it("restores the model the pin belonged to alongside the engine it belonged to (PLA-202)", async () => {
+  it("restores the model the pin belonged to alongside the engine it belonged to", async () => {
     const { maybeRevertEngineOverride } = await import("../engine-override.js");
     const s = reg.createSession({ engine: "codex", source: "web", sourceRef: "web:codex-model-revert" });
 

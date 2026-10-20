@@ -437,7 +437,7 @@ describe("runCronJob — engine selection", () => {
   });
 });
 
-describe("ICI-570 — cron mints emit a live todo event", () => {
+describe("cron mints emit a live todo event", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });

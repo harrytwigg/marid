@@ -17,7 +17,7 @@ export const DEFAULT_BLOCK_KIND: BlockKind = "needs_input";
  *  unblock, re-block. */
 export const BLOCK_RECURRENCE_LIMIT = 2;
 
-/** ICI-730: one row per Todo that has ever been blocked — the kind of its latest
+/** One row per Todo that has ever been blocked — the kind of its latest
  *  block and how many times that same kind has come back.
  *
  *  Additive, never a column on `work_items`: the exact-shape verifier refuses any

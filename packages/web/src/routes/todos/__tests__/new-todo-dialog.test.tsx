@@ -28,7 +28,7 @@ const employees: Employee[] = [
   { name: "mason", displayName: "Mason", department: "platform", rank: "senior", engine: "codex", model: "m", persona: "p" },
 ]
 const departments = [
-  { slug: "platform", prefix: "PLA", createdAt: "2026-07-01T00:00:00.000Z", todoCount: 4 },
+  { slug: "platform", prefix: "TSK", createdAt: "2026-07-01T00:00:00.000Z", todoCount: 4 },
   { slug: "operations", prefix: "OPS", createdAt: "2026-07-01T00:00:00.000Z", todoCount: 3 },
 ]
 
@@ -49,8 +49,8 @@ function renderDialog(overrides: { onCreated?: () => void; departments?: typeof 
 
 beforeEach(() => {
   vi.clearAllMocks()
-  createWorkItem.mockResolvedValue({ workItem: { id: "PLA-9" } })
-  assignWorkItem.mockResolvedValue({ workItem: { id: "PLA-9" } })
+  createWorkItem.mockResolvedValue({ workItem: { id: "TSK-9" } })
+  assignWorkItem.mockResolvedValue({ workItem: { id: "TSK-9" } })
   listLabels.mockResolvedValue({ labels: [
     { id: "lab_1", name: "release", color: "#5B9BD5", department: null, createdAt: "2026-07-01T00:00:00.000Z" },
   ] })
@@ -99,7 +99,7 @@ describe("NewTodoDialog", () => {
       labels: ["lab_1"],
     }))
     expect(createWorkItem.mock.calls[0][0]).not.toHaveProperty("acceptance")
-    expect(assignWorkItem).toHaveBeenCalledWith("PLA-9", "mason")
+    expect(assignWorkItem).toHaveBeenCalledWith("TSK-9", "mason")
     expect(createWorkItem.mock.invocationCallOrder[0]).toBeLessThan(assignWorkItem.mock.invocationCallOrder[0])
     // Thirteen keyboard-and-pointer round trips through userEvent's real timers.
     // The default 5s budget is enough on an idle machine and not on a loaded

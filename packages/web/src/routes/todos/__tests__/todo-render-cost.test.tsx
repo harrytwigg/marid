@@ -67,7 +67,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       getWorkItemTrees: vi.fn().mockResolvedValue({ trees: {} }),
       getWorkItems: vi.fn().mockResolvedValue({ workItems: [] }),
       getDepartments: vi.fn().mockResolvedValue({
-        departments: [{ slug: "platform", prefix: "PLA", createdAt: "2026-07-01", todoCount: 2 }],
+        departments: [{ slug: "platform", prefix: "TSK", createdAt: "2026-07-01", todoCount: 2 }],
       }),
       getOrg: vi.fn().mockResolvedValue({ departments: ["platform"], employees: [] }),
       createWorkItem: vi.fn(),
@@ -112,8 +112,8 @@ function compact(id: string, status: WorkItemStatusWire, rank: number): WorkItem
   }
 }
 
-const LIST_ITEMS = Array.from({ length: LIST_COUNT }, (_, i) => compact(`PLA-${i}`, "backlog", i))
-const BOARD_ITEMS = Array.from({ length: BOARD_COUNT }, (_, i) => compact(`PLA-${i}`, "backlog", i))
+const LIST_ITEMS = Array.from({ length: LIST_COUNT }, (_, i) => compact(`TSK-${i}`, "backlog", i))
+const BOARD_ITEMS = Array.from({ length: BOARD_COUNT }, (_, i) => compact(`TSK-${i}`, "backlog", i))
 
 /** Stable identities, as react-query hands them to the page. */
 const COLUMNS = Object.fromEntries(ALL_STATUSES.map((status) => [status, {
@@ -229,7 +229,7 @@ describe("Todo surface render cost", () => {
 
   it("leaves the board cards alone when unrelated page state changes", async () => {
     const { unmount } = renderBoard()
-    await screen.findByTestId("board-card-PLA-0")
+    await screen.findByTestId("board-card-TSK-0")
     const cards = document.querySelectorAll("[data-board-card]").length
     expect(cards).toBe(BOARD_COUNT)
     // A counter the card body stopped calling would make the assertion below

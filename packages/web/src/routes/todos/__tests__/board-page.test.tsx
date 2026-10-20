@@ -143,7 +143,7 @@ function BoardNavigationProbe() {
   const navigate = useNavigate()
   return (
     <>
-      <button type="button" data-testid="open-unloaded-todo" onClick={() => navigate("/todos/PLA-99", { state: { fromBoard: "my" } })}>
+      <button type="button" data-testid="open-unloaded-todo" onClick={() => navigate("/todos/TSK-99", { state: { fromBoard: "my" } })}>
         Open unloaded Todo
       </button>
       <TodoBoardPage />
@@ -269,7 +269,7 @@ beforeEach(() => {
   )
   getWorkItem.mockRejectedValue(Object.assign(new Error("not found"), { status: 404 }))
   getWorkItems.mockResolvedValue({ workItems: [] })
-  getDepartments.mockResolvedValue({ departments: [{ slug: "platform", prefix: "PLA", createdAt: "2026-07-01", todoCount: 3 }] })
+  getDepartments.mockResolvedValue({ departments: [{ slug: "platform", prefix: "TSK", createdAt: "2026-07-01", todoCount: 3 }] })
   getOrg.mockResolvedValue({ departments: ["platform"], employees: [{ name: "scout", displayName: "Scout", department: "platform", rank: "senior" }] })
 })
 
@@ -287,7 +287,7 @@ describe("the board surface", () => {
     ["browser Back", "detail-browser-back"],
     ["retired Home link", "detail-retired-home-link"],
   ])("resyncs invalidated columns after a detail status write via %s, but skips a fresh no-write return", async (_label, returnControl) => {
-    const todo = compact({ id: "PLA-1", status: "backlog", version: 4 })
+    const todo = compact({ id: "TSK-1", status: "backlog", version: 4 })
     rows.backlog = [todo]
     totals.backlog = 1
     setWorkItemStatus.mockImplementation(async () => {
@@ -299,7 +299,7 @@ describe("the board surface", () => {
     })
     const { client } = renderBoardNavigation()
 
-    fireEvent.click(await screen.findByTestId("board-card-PLA-1"))
+    fireEvent.click(await screen.findByTestId("board-card-TSK-1"))
     await screen.findByTestId("detail-change-status")
     fireEvent.click(screen.getByTestId("detail-change-status"))
     await waitFor(() => {
@@ -311,7 +311,7 @@ describe("the board surface", () => {
     fireEvent.click(screen.getByTestId(returnControl))
     expect(screen.queryByTestId("board-skeleton")).toBeNull()
     await waitFor(() => expect(boardStatusRequestCount()).toBe(12))
-    const moved = screen.getByTestId("board-card-PLA-1")
+    const moved = screen.getByTestId("board-card-TSK-1")
     expect(screen.getByTestId("board-column-backlog").contains(moved)).toBe(false)
     expect(screen.getByTestId("board-column-in_review").contains(moved)).toBe(true)
     expectColumnCountMatchesCards("backlog")
@@ -321,13 +321,13 @@ describe("the board surface", () => {
     await screen.findByTestId("detail-browser-back")
     listWorkItems.mockClear()
     fireEvent.click(screen.getByTestId(returnControl))
-    await screen.findByTestId("board-card-PLA-1")
+    await screen.findByTestId("board-card-TSK-1")
     expect(boardStatusRequestCount()).toBe(0)
   })
 
   it("recovers a changed Todo that was outside every cached board page without flashing cached content", async () => {
-    const cached = compact({ id: "PLA-1", status: "backlog" })
-    const outsidePage = compact({ id: "PLA-99", status: "backlog", version: 4 })
+    const cached = compact({ id: "TSK-1", status: "backlog" })
+    const outsidePage = compact({ id: "TSK-99", status: "backlog", version: 4 })
     rows.backlog = [cached]
     totals.backlog = 2
     setWorkItemStatus.mockImplementation(async () => {
@@ -338,7 +338,7 @@ describe("the board surface", () => {
     })
     const { client } = renderBoardNavigation()
 
-    await screen.findByTestId("board-card-PLA-1")
+    await screen.findByTestId("board-card-TSK-1")
     fireEvent.click(screen.getByTestId("open-unloaded-todo"))
     fireEvent.click(await screen.findByTestId("detail-change-status"))
     await waitFor(() => {
@@ -352,14 +352,14 @@ describe("the board surface", () => {
     }))
     fireEvent.click(screen.getByTestId("detail-browser-back"))
 
-    expect(screen.getByTestId("board-card-PLA-1")).toBeTruthy()
-    expect(screen.queryByTestId("board-card-PLA-99")).toBeNull()
+    expect(screen.getByTestId("board-card-TSK-1")).toBeTruthy()
+    expect(screen.queryByTestId("board-card-TSK-99")).toBeNull()
     expect(screen.queryByTestId("board-skeleton")).toBeNull()
     expect(screen.queryByTestId("board-filtered-empty")).toBeNull()
     await waitFor(() => expect(pending.filter(({ status }) => status)).toHaveLength(6))
     await act(async () => pending.splice(0).forEach(({ release }) => release()))
 
-    const moved = await screen.findByTestId("board-card-PLA-99")
+    const moved = await screen.findByTestId("board-card-TSK-99")
     expect(screen.getByTestId("board-column-backlog").contains(moved)).toBe(false)
     expect(screen.getByTestId("board-column-in_review").contains(moved)).toBe(true)
     expectColumnCountMatchesCards("backlog")
@@ -368,18 +368,18 @@ describe("the board surface", () => {
 
   it("loads enrichment for 60 cards in at most two batch requests", async () => {
     rows.executing = Array.from({ length: 20 }, (_, index) =>
-      compact({ id: `PLA-${index + 1}`, status: "executing" }),
+      compact({ id: `TSK-${index + 1}`, status: "executing" }),
     )
     rows.blocked = Array.from({ length: 20 }, (_, index) =>
-      compact({ id: `PLA-${index + 21}`, status: "blocked" }),
+      compact({ id: `TSK-${index + 21}`, status: "blocked" }),
     )
     rows.backlog = Array.from({ length: 20 }, (_, index) =>
-      compact({ id: `PLA-${index + 41}`, status: "backlog" }),
+      compact({ id: `TSK-${index + 41}`, status: "backlog" }),
     )
 
     renderBoard("/todos/b/platform")
 
-    await waitFor(() => expect(screen.getByTestId("board-card-PLA-60")).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId("board-card-TSK-60")).toBeTruthy())
     await waitFor(() => {
       const enrichmentRequests =
         getWorkItemTrees.mock.calls.length
@@ -395,9 +395,9 @@ describe("the board surface", () => {
   })
 
   it("renders the three pipeline columns always, exception columns only when non-empty", async () => {
-    rows.backlog = [compact({ id: "PLA-1", status: "backlog" })]
+    rows.backlog = [compact({ id: "TSK-1", status: "backlog" })]
     renderBoard("/todos/b/platform")
-    await waitFor(() => expect(screen.getByTestId("board-card-PLA-1")).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId("board-card-TSK-1")).toBeTruthy())
     for (const status of ["backlog", "executing", "in_review"]) {
       expect(screen.getByTestId(`board-column-${status}`)).toBeTruthy()
     }
@@ -405,7 +405,7 @@ describe("the board surface", () => {
   })
 
   it("materializes the Blocked column when non-empty and shows the true count", async () => {
-    rows.blocked = [compact({ id: "PLA-9", status: "blocked" })]
+    rows.blocked = [compact({ id: "TSK-9", status: "blocked" })]
     totals.blocked = 7
     renderBoard("/todos/b/platform")
     await waitFor(() => expect(screen.getByTestId("board-column-blocked")).toBeTruthy())
@@ -426,23 +426,23 @@ describe("the board surface", () => {
   it("passes the label filter to the wire and applies the due window client-side (review F1)", async () => {
     const soon = new Date(Date.now() + 2 * 24 * 3600 * 1000).toISOString()
     rows.backlog = [
-      compact({ id: "PLA-1", status: "backlog", dueAt: soon }),
-      compact({ id: "PLA-2", status: "backlog", dueAt: null }),
+      compact({ id: "TSK-1", status: "backlog", dueAt: soon }),
+      compact({ id: "TSK-2", status: "backlog", dueAt: null }),
     ]
     totals.backlog = 2
     renderBoard("/todos/b/platform?label=infra&due=week")
-    await waitFor(() => expect(screen.getByTestId("board-card-PLA-1")).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId("board-card-TSK-1")).toBeTruthy())
     // Label rides the server query (the gateway owns it)…
     const statusCalls = listWorkItems.mock.calls.map(([params]) => params).filter((p) => p?.status)
     for (const params of statusCalls) expect(params.label).toBe("infra")
     // …the due window filters the loaded columns, and the column count
     // follows what's visible, not the server total.
-    expect(screen.queryByTestId("board-card-PLA-2")).toBeNull()
+    expect(screen.queryByTestId("board-card-TSK-2")).toBeNull()
     expect(screen.getByTestId("board-column-backlog").textContent).toContain("1")
   })
 
   it("folds Done and Cancelled into the Closed rail with the combined true count", async () => {
-    rows.done = [compact({ id: "PLA-2", status: "done" })]
+    rows.done = [compact({ id: "TSK-2", status: "done" })]
     totals.done = 12
     totals.cancelled = 2
     renderBoard("/todos/b/platform")
@@ -455,27 +455,27 @@ describe("the board surface", () => {
   })
 
   it("shows the department prefix and open count in the sub-line", async () => {
-    rows.backlog = [compact({ id: "PLA-1", status: "backlog" })]
+    rows.backlog = [compact({ id: "TSK-1", status: "backlog" })]
     totals.backlog = 4
     renderBoard("/todos/b/platform")
-    await waitFor(() => expect(screen.getByText("PLA")).toBeTruthy())
+    await waitFor(() => expect(screen.getByText("TSK")).toBeTruthy())
     expect(screen.getByText("4 open")).toBeTruthy()
   })
 
   it("opens a card by navigating to its todo route (the board records scroll for POP return)", async () => {
-    rows.backlog = [compact({ id: "PLA-1", status: "backlog" })]
+    rows.backlog = [compact({ id: "TSK-1", status: "backlog" })]
     renderBoard("/todos/b/platform")
-    const card = await screen.findByTestId("board-card-PLA-1")
+    const card = await screen.findByTestId("board-card-TSK-1")
     fireEvent.click(card)
     const location = await screen.findByTestId("location")
-    expect(location.textContent).toBe("/todos/PLA-1")
+    expect(location.textContent).toBe("/todos/TSK-1")
     expect(JSON.parse(location.dataset.state!)).toMatchObject({ bannerExpected: false })
   })
 
   it("tells the task route when a card will render a banner", async () => {
-    rows.blocked = [compact({ id: "PLA-9", status: "blocked" })]
+    rows.blocked = [compact({ id: "TSK-9", status: "blocked" })]
     renderBoard("/todos/b/platform")
-    fireEvent.click(await screen.findByTestId("board-card-PLA-9"))
+    fireEvent.click(await screen.findByTestId("board-card-TSK-9"))
 
     const location = await screen.findByTestId("location")
     expect(JSON.parse(location.dataset.state!)).toMatchObject({ bannerExpected: true })
@@ -483,28 +483,28 @@ describe("the board surface", () => {
 
   it("re-renders only the card whose board row changed", async () => {
     rows.backlog = [
-      compact({ id: "PLA-1", status: "backlog", assignee: "scout" }),
-      compact({ id: "PLA-2", status: "backlog", assignee: "scout" }),
+      compact({ id: "TSK-1", status: "backlog", assignee: "scout" }),
+      compact({ id: "TSK-2", status: "backlog", assignee: "scout" }),
     ]
     const { client } = renderBoard("/todos/b/platform")
-    await screen.findByTestId("board-card-PLA-2")
+    await screen.findByTestId("board-card-TSK-2")
     await waitFor(() => expect(getWorkItemTrees).toHaveBeenCalledTimes(1))
     avatarRender.mockClear()
 
-    patchBacklogRow(client, "PLA-1", { title: "Changed title" })
+    patchBacklogRow(client, "TSK-1", { title: "Changed title" })
 
-    await waitFor(() => expect(screen.getByTestId("board-card-PLA-1").textContent).toContain("Changed title"))
+    await waitFor(() => expect(screen.getByTestId("board-card-TSK-1").textContent).toContain("Changed title"))
     expect(avatarRender).toHaveBeenCalledTimes(1)
     expect(avatarRender).toHaveBeenCalledWith("scout")
   })
 
   it("relocates a live Todo payload once and updates both column counts before refetch", async () => {
-    rows.executing = [compact({ id: "PLA-3", status: "executing", version: 4 })]
+    rows.executing = [compact({ id: "TSK-3", status: "executing", version: 4 })]
     totals.executing = 1
     totals.in_review = 0
     renderBoard("/todos/b/platform", true)
 
-    await screen.findByTestId("board-card-PLA-3")
+    await screen.findByTestId("board-card-TSK-3")
     await waitFor(() => {
       const boardCalls = listWorkItems.mock.calls.filter(([params]) => params?.status)
       expect(boardCalls).toHaveLength(6)
@@ -514,13 +514,13 @@ describe("the board surface", () => {
     act(() => gatewayListener?.("company:changed", {
       entity: "todo",
       action: "status-transitioned",
-      id: "PLA-3",
+      id: "TSK-3",
       version: 5,
-      value: { id: "PLA-3", version: 5, status: "in_review" },
+      value: { id: "TSK-3", version: 5, status: "in_review" },
     }))
 
     await waitFor(() => {
-      const cards = screen.getAllByTestId("board-card-PLA-3")
+      const cards = screen.getAllByTestId("board-card-TSK-3")
       expect(cards).toHaveLength(1)
       expect(screen.getByTestId("board-column-executing").contains(cards[0])).toBe(false)
       expect(screen.getByTestId("board-column-in_review").contains(cards[0])).toBe(true)
@@ -530,12 +530,12 @@ describe("the board surface", () => {
   })
 
   it("moves a live completed Todo into Closed with updated counts before refetch", async () => {
-    rows.in_review = [compact({ id: "PLA-4", status: "in_review", version: 4 })]
+    rows.in_review = [compact({ id: "TSK-4", status: "in_review", version: 4 })]
     totals.in_review = 1
     totals.done = 0
     renderBoard("/todos/b/platform", true)
 
-    await screen.findByTestId("board-card-PLA-4")
+    await screen.findByTestId("board-card-TSK-4")
     await waitFor(() => {
       const boardCalls = listWorkItems.mock.calls.filter(([params]) => params?.status)
       expect(boardCalls).toHaveLength(6)
@@ -545,13 +545,13 @@ describe("the board surface", () => {
     act(() => gatewayListener?.("company:changed", {
       entity: "todo",
       action: "status-transitioned",
-      id: "PLA-4",
+      id: "TSK-4",
       version: 5,
-      value: { id: "PLA-4", version: 5, status: "done" },
+      value: { id: "TSK-4", version: 5, status: "done" },
     }))
 
     await waitFor(() => {
-      expect(screen.queryByTestId("board-card-PLA-4")).toBeNull()
+      expect(screen.queryByTestId("board-card-TSK-4")).toBeNull()
       expect(screen.getByTestId("board-column-in_review").getAttribute("aria-label")).toBe("In review column, 0 items")
       expect(screen.getByTestId("board-closed-rail").getAttribute("aria-label")).toBe("Closed, 1 items — expand")
     })
@@ -559,7 +559,7 @@ describe("the board surface", () => {
     fireEvent.click(screen.getByTestId("board-closed-rail"))
 
     await waitFor(() => {
-      const cards = screen.getAllByTestId("board-card-PLA-4")
+      const cards = screen.getAllByTestId("board-card-TSK-4")
       expect(cards).toHaveLength(1)
       expect(screen.getByTestId("board-closed-group-done").contains(cards[0])).toBe(true)
       expect(screen.getByTestId("board-closed-group-done").textContent).toContain("Done1")
@@ -570,23 +570,23 @@ describe("the board surface", () => {
 
 describe("card anatomy", () => {
   it("never repeats the status as text on the card — the column says it", async () => {
-    rows.executing = [compact({ id: "PLA-3", status: "executing" })]
+    rows.executing = [compact({ id: "TSK-3", status: "executing" })]
     renderBoard("/todos/b/platform")
-    const card = await screen.findByTestId("board-card-PLA-3")
+    const card = await screen.findByTestId("board-card-TSK-3")
     expect(card.textContent).not.toMatch(/Executing/)
   })
 
   it("renders label chips and the overdue due date", async () => {
     rows.backlog = [
       compact({
-        id: "PLA-4",
+        id: "TSK-4",
         status: "backlog",
         dueAt: "2026-07-01T00:00:00.000Z",
         labels: [{ id: "lbl_1", name: "infra", color: "#5B9BD5", department: null, createdAt: "2026-07-01" }],
       }),
     ]
     renderBoard("/todos/b/platform")
-    const card = await screen.findByTestId("board-card-PLA-4")
+    const card = await screen.findByTestId("board-card-TSK-4")
     expect(card.textContent).toContain("infra")
     expect(card.textContent).toContain("Jul 1")
     // Skipping is desktop-only, at a fixed intrinsic size: a remembered one is revised mid-scroll and takes the reader's place with it.
@@ -594,34 +594,34 @@ describe("card anatomy", () => {
   })
 
   it("keeps the Todo body off the card entirely", async () => {
-    rows.backlog = [compact({ id: "PLA-15", status: "backlog" })]
-    const tree = emptyTree("PLA-15")
+    rows.backlog = [compact({ id: "TSK-15", status: "backlog" })]
+    const tree = emptyTree("TSK-15")
     tree.root.body = "## Plan\n\nShip the **quiet** card preview with `one renderer`."
-    getWorkItemTrees.mockResolvedValue({ trees: { "PLA-15": tree } })
+    getWorkItemTrees.mockResolvedValue({ trees: { "TSK-15": tree } })
     renderBoard("/todos/b/platform")
 
-    const card = await screen.findByTestId("board-card-PLA-15")
+    const card = await screen.findByTestId("board-card-TSK-15")
     expect(card.textContent).not.toContain("Ship the quiet card preview")
     expect(card.textContent).not.toContain("Plan")
   })
 
   it("FLIPs cards below an item when a stop lead grows its card", async () => {
-    rows.backlog = [compact({ id: "PLA-15", status: "backlog" }), compact({ id: "PLA-16", status: "backlog" })]
+    rows.backlog = [compact({ id: "TSK-15", status: "backlog" }), compact({ id: "TSK-16", status: "backlog" })]
     let grown = false
-    const flip = stubFlipLayout("PLA-16", () => grown)
+    const flip = stubFlipLayout("TSK-16", () => grown)
 
     const { client } = renderBoard("/todos/b/platform")
-    const lowerCard = await screen.findByTestId("board-card-PLA-16")
+    const lowerCard = await screen.findByTestId("board-card-TSK-16")
     await waitFor(() => expect(getWorkItemTrees).toHaveBeenCalled())
 
     // The four-row face grows for one reason only: a stop lead, which rides the
     // compact row rather than arriving with enrichment.
     grown = true
-    patchBacklogRow(client, "PLA-15", { unblockHint: { what: "sign the renewal", who: "the operator" } })
+    patchBacklogRow(client, "TSK-15", { unblockHint: { what: "sign the renewal", who: "the operator" } })
 
     // The phone list renders the same lead under the same id, so scope the wait to the card.
     await waitFor(() =>
-      expect(screen.getByTestId("board-card-PLA-15").querySelector('[data-testid="stop-lead-PLA-15"]')).toBeTruthy(),
+      expect(screen.getByTestId("board-card-TSK-15").querySelector('[data-testid="stop-lead-TSK-15"]')).toBeTruthy(),
     )
     expect(flip.animate).toHaveBeenCalledWith(
       [{ transform: "translateY(-32px)" }, { transform: "translateY(0)" }],
@@ -632,88 +632,88 @@ describe("card anatomy", () => {
   })
 
   it("does not FLIP when delayed enrichment lands — the four-row face cannot grow", async () => {
-    rows.backlog = [compact({ id: "PLA-15", status: "backlog" }), compact({ id: "PLA-16", status: "backlog" })]
-    const rich = emptyTree("PLA-15")
+    rows.backlog = [compact({ id: "TSK-15", status: "backlog" }), compact({ id: "TSK-16", status: "backlog" })]
+    const rich = emptyTree("TSK-15")
     rich.root.body = "A body the card no longer shows"
     rich.root.priority = 3
-    rich.root.children = [{ ...emptyTree("PLA-17", "done").root, children: [] }]
+    rich.root.children = [{ ...emptyTree("TSK-17", "done").root, children: [] }]
     rich.totals = { backlog: 1, done: 1 }
     rich.spendUsd = 12.5
     getWorkItemTrees.mockImplementation((ids: string[]) =>
-      Promise.resolve({ trees: Object.fromEntries(ids.map((id) => [id, id === "PLA-15" ? rich : emptyTree(id)])) }),
+      Promise.resolve({ trees: Object.fromEntries(ids.map((id) => [id, id === "TSK-15" ? rich : emptyTree(id)])) }),
     )
-    const flip = stubFlipLayout("PLA-16", () => false)
+    const flip = stubFlipLayout("TSK-16", () => false)
 
     renderBoard("/todos/b/platform")
-    await screen.findByTestId("board-card-PLA-16")
+    await screen.findByTestId("board-card-TSK-16")
 
     // The enrichment did land after first paint — the roll-up and the cost prove it.
-    await waitFor(() => expect(screen.getByTestId("board-rollup-PLA-15").textContent).toContain("1/1"))
-    expect(screen.getByTestId("board-card-PLA-15").textContent).toContain("$12.50")
+    await waitFor(() => expect(screen.getByTestId("board-rollup-TSK-15").textContent).toContain("1/1"))
+    expect(screen.getByTestId("board-card-TSK-15").textContent).toContain("$12.50")
     expect(flip.animate).not.toHaveBeenCalled()
     flip.restore()
   })
 
   it("renders the roll-up pill from the tree and expands the in-place tray", async () => {
-    rows.executing = [compact({ id: "PLA-6", status: "executing" })]
-    const tree = emptyTree("PLA-6", "executing")
+    rows.executing = [compact({ id: "TSK-6", status: "executing" })]
+    const tree = emptyTree("TSK-6", "executing")
     tree.root.children = [
-      { ...emptyTree("PLA-7", "done").root, children: [] },
+      { ...emptyTree("TSK-7", "done").root, children: [] },
       {
-        ...emptyTree("PLA-8", "executing").root,
-        children: [{ ...emptyTree("PLA-10", "backlog").root, children: [] }],
+        ...emptyTree("TSK-8", "executing").root,
+        children: [{ ...emptyTree("TSK-10", "backlog").root, children: [] }],
       },
     ]
     tree.totals = { executing: 2, done: 1, backlog: 1 }
     getWorkItemTrees.mockImplementation((ids: string[]) =>
       Promise.resolve({
-        trees: Object.fromEntries(ids.map((id) => [id, id === "PLA-6" ? tree : emptyTree(id)])),
+        trees: Object.fromEntries(ids.map((id) => [id, id === "TSK-6" ? tree : emptyTree(id)])),
       }),
     )
     renderBoard("/todos/b/platform")
-    const pill = await screen.findByTestId("board-rollup-PLA-6")
+    const pill = await screen.findByTestId("board-rollup-TSK-6")
     expect(pill.textContent).toContain("1/3")
     fireEvent.click(pill)
     await waitFor(() => expect(screen.getByTestId("board-card-tree")).toBeTruthy())
-    expect(screen.getByTestId("tree-row-PLA-7")).toBeTruthy()
+    expect(screen.getByTestId("tree-row-TSK-7")).toBeTruthy()
     // Depth-2 children indent under their parent row.
-    expect((screen.getByTestId("tree-row-PLA-10") as HTMLElement).style.marginLeft).toBe("22px")
+    expect((screen.getByTestId("tree-row-TSK-10") as HTMLElement).style.marginLeft).toBe("22px")
     expect(screen.getByTestId("tree-add-subtask")).toBeTruthy()
   })
 
   it("adds a sub-task through the tray quick add", async () => {
-    rows.executing = [compact({ id: "PLA-6", status: "executing" })]
-    const tree = emptyTree("PLA-6", "executing")
-    tree.root.children = [{ ...emptyTree("PLA-7", "backlog").root, children: [] }]
+    rows.executing = [compact({ id: "TSK-6", status: "executing" })]
+    const tree = emptyTree("TSK-6", "executing")
+    tree.root.children = [{ ...emptyTree("TSK-7", "backlog").root, children: [] }]
     tree.totals = { executing: 1, backlog: 1 }
     getWorkItemTrees.mockImplementation((ids: string[]) =>
       Promise.resolve({
-        trees: Object.fromEntries(ids.map((id) => [id, id === "PLA-6" ? tree : emptyTree(id)])),
+        trees: Object.fromEntries(ids.map((id) => [id, id === "TSK-6" ? tree : emptyTree(id)])),
       }),
     )
-    createWorkItem.mockResolvedValue({ workItem: emptyTree("PLA-11").root })
+    createWorkItem.mockResolvedValue({ workItem: emptyTree("TSK-11").root })
     renderBoard("/todos/b/platform")
-    fireEvent.click(await screen.findByTestId("board-rollup-PLA-6"))
+    fireEvent.click(await screen.findByTestId("board-rollup-TSK-6"))
     fireEvent.click(await screen.findByTestId("tree-add-subtask"))
     const input = screen.getByLabelText("New sub-task title")
     fireEvent.change(input, { target: { value: "Postal-code validation" } })
     fireEvent.keyDown(input, { key: "Enter" })
     await waitFor(() =>
-      expect(createWorkItem).toHaveBeenCalledWith({ title: "Postal-code validation", parentId: "PLA-6" }),
+      expect(createWorkItem).toHaveBeenCalledWith({ title: "Postal-code validation", parentId: "TSK-6" }),
     )
   })
 
   it("leaves the blocked transition note off the card — it has no row on the face", async () => {
-    rows.blocked = [compact({ id: "PLA-9", status: "blocked" })]
+    rows.blocked = [compact({ id: "TSK-9", status: "blocked" })]
     const note = {
-      id: "wie_1", workItemId: "PLA-9", kind: "status_change", fromStatus: "executing", toStatus: "blocked",
+      id: "wie_1", workItemId: "TSK-9", kind: "status_change", fromStatus: "executing", toStatus: "blocked",
       actor: "operator", detail: { note: "Waiting on vendor keys" }, createdAt: "2026-07-23T09:00:00.000Z",
     }
     getWorkItems.mockImplementation((ids: string[]) =>
       Promise.resolve({ workItems: ids.map((id) => ({ workItem: { ...emptyTree(id, "blocked").root }, events: [note] })) }),
     )
     renderBoard("/todos/b/platform")
-    const card = await screen.findByTestId("board-card-PLA-9")
+    const card = await screen.findByTestId("board-card-TSK-9")
     await waitFor(() => expect(getWorkItems).toHaveBeenCalled())
     expect(card.textContent).not.toContain("Waiting on vendor keys")
   })
@@ -721,7 +721,7 @@ describe("card anatomy", () => {
 
 describe("the switcher-in-title", () => {
   it("renders the board title as the menu trigger and lists attention, departments, everything", async () => {
-    rows.backlog = [compact({ id: "PLA-1", status: "backlog" })]
+    rows.backlog = [compact({ id: "TSK-1", status: "backlog" })]
     renderBoard("/todos/b/platform")
     const trigger = await screen.findByTestId("board-switcher")
     expect(trigger.textContent).toContain("Platform")
@@ -729,7 +729,7 @@ describe("the switcher-in-title", () => {
     fireEvent.click(trigger)
     await waitFor(() => expect(screen.getByTestId("board-menu-attention")).toBeTruthy())
     expect(screen.queryByTestId("board-menu-home")).toBeNull()
-    expect(screen.getByTestId("board-menu-platform").textContent).toContain("PLA")
+    expect(screen.getByTestId("board-menu-platform").textContent).toContain("TSK")
     expect(screen.getByTestId("board-menu-everything")).toBeTruthy()
   })
 
@@ -746,10 +746,10 @@ describe("the switcher-in-title", () => {
 
 describe("quick add", () => {
   it("offers + on To do only", async () => {
-    rows.backlog = [compact({ id: "PLA-1", status: "backlog" })]
-    rows.blocked = [compact({ id: "PLA-9", status: "blocked" })]
+    rows.backlog = [compact({ id: "TSK-1", status: "backlog" })]
+    rows.blocked = [compact({ id: "TSK-9", status: "blocked" })]
     renderBoard("/todos/b/platform")
-    await screen.findByTestId("board-card-PLA-1")
+    await screen.findByTestId("board-card-TSK-1")
     expect(screen.getByTestId("board-quick-add-backlog")).toBeTruthy()
     expect(screen.queryByTestId("board-quick-add-assigned")).toBeNull()
     expect(screen.queryByTestId("board-quick-add-executing")).toBeNull()
@@ -760,7 +760,7 @@ describe("quick add", () => {
   it("creates in the board's department from the To do column, assigning nobody", async () => {
     renderBoard("/todos/b/platform")
     await waitFor(() => expect(screen.getByTestId("board-quick-add-backlog")).toBeTruthy())
-    createWorkItem.mockResolvedValue({ workItem: { ...emptyTree("PLA-20").root } })
+    createWorkItem.mockResolvedValue({ workItem: { ...emptyTree("TSK-20").root } })
     fireEvent.click(screen.getByTestId("board-quick-add-backlog"))
     // The dialog is its own chunk: it arrives when the import settles.
     fireEvent.change(await screen.findByTestId("todo-new-title"), { target: { value: "Draft the launch note" } })
@@ -794,7 +794,7 @@ describe("the Todos dash on a phone", () => {
 
   it("the Filters pill opens the filter sheet, scoped to this board", async () => {
     stubMobileViewport()
-    rows.backlog = [compact({ id: "PLA-1", status: "backlog" })]
+    rows.backlog = [compact({ id: "TSK-1", status: "backlog" })]
     renderBoard("/todos/b/platform")
     fireEvent.click(await screen.findByTestId("todo-mobile-filters"))
     await waitFor(() => expect(screen.getByTestId("todo-filter-sheet")).toBeTruthy())

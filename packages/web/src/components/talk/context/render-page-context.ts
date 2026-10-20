@@ -165,7 +165,7 @@ function fixedLines(snapshot: PageSnapshot, instance: InstanceIdentity): string[
     // The one identifier the packet carries, and only for what the operator has
     // actually selected. Without it the model can read the chat's title off the
     // screen but cannot name the session to any tool, so asked what it is
-    // looking at it narrates instead of reading — the hallucination PLA-224 was
+    // looking at it narrates instead of reading — the hallucination this guards against was
     // raised for. Every other session on screen stays a title (`objectLine`
     // withholds ids on a chat page), and this one is stated as a handle so the
     // preamble's "speak names, not identifiers" still holds for what is said.

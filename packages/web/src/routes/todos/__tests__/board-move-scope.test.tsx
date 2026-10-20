@@ -118,7 +118,7 @@ beforeEach(() => {
   clearBoardScrollCache()
   sessionStorage.clear()
   localStorage.clear()
-  rows = { executing: [compact("PLA-3", "executing")] }
+  rows = { executing: [compact("TSK-3", "executing")] }
   listWorkItems.mockImplementation((params: { status?: WorkItemStatusWire }) => Promise.resolve(listResponse(params)))
 })
 
@@ -129,12 +129,12 @@ afterEach(() => {
 describe("an optimistic move and the board that made it", () => {
   it("is not drawn on a board the card is not on", async () => {
     setViewport(true)
-    const moving = compact("PLA-3", "executing")
+    const moving = compact("TSK-3", "executing")
     setWorkItemStatus.mockResolvedValue({ workItem: { ...moving, status: "in_review", version: 4 }, escalated: false })
     // Left in flight, like the write it follows.
     updateWorkItem.mockImplementation(() => new Promise(() => {}))
     renderBoard()
-    await screen.findByTestId("board-card-PLA-3")
+    await screen.findByTestId("board-card-TSK-3")
 
     /* The board's own refetches stay in flight, and the arriving board's are held and
      * then released: the move is still optimistic when the operator leaves, which is
@@ -145,15 +145,15 @@ describe("an optimistic move and the board that made it", () => {
       return new Promise(() => {})
     })
 
-    tap(screen.getByTestId("board-move-PLA-3"))
+    tap(screen.getByTestId("board-move-TSK-3"))
     await screen.findByRole("menu")
     tap(screen.getByRole("menuitemradio", { name: "In review" }))
-    await waitFor(() => expect(screen.getByTestId("board-column-in_review").contains(screen.getByTestId("board-card-PLA-3"))).toBe(true))
+    await waitFor(() => expect(screen.getByTestId("board-column-in_review").contains(screen.getByTestId("board-card-TSK-3"))).toBe(true))
 
     fireEvent.click(screen.getByTestId("switch-board"))
     await act(async () => { arriving.splice(0).forEach((release) => release()) })
     // The board that arrives holds nothing: the move made on the board it left is not drawn here.
     await waitFor(() => expect(screen.getByTestId("board-column-in_review").querySelectorAll("[data-board-card]")).toHaveLength(0))
-    expect(screen.queryByTestId("board-card-PLA-3")).toBeNull()
+    expect(screen.queryByTestId("board-card-TSK-3")).toBeNull()
   })
 })

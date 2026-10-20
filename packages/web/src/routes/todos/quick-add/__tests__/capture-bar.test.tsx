@@ -156,12 +156,12 @@ describe("QuickCaptureBar — the text path", () => {
     expect(screen.queryByTestId("capture-step-dispatching")).toBeNull()
     expect(screen.queryByTestId("capture-step-routed")).toBeNull()
 
-    getTodoCapture.mockResolvedValue(wire({ stage: "created", workItemId: "PLA-9", workItemTitle: "Shaped" }))
-    await act(async () => { listener?.("todo-capture:stage", { captureId: "cap-1", stage: "created", workItemId: "PLA-9" }) })
+    getTodoCapture.mockResolvedValue(wire({ stage: "created", workItemId: "TSK-9", workItemTitle: "Shaped" }))
+    await act(async () => { listener?.("todo-capture:stage", { captureId: "cap-1", stage: "created", workItemId: "TSK-9" }) })
 
     await waitFor(() => expect(screen.getByTestId("capture-step-created")).toBeTruthy())
     expect(screen.getByTestId("capture-step-shaping")).toBeTruthy()
-    expect(screen.getByTestId("capture-step-created").textContent).toContain("PLA-9 created")
+    expect(screen.getByTestId("capture-step-created").textContent).toContain("TSK-9 created")
     expect(screen.queryByTestId("capture-step-routed")).toBeNull()
 
     const order = Array.from(screen.getByTestId("capture-pipeline").querySelectorAll("li"))
@@ -181,10 +181,10 @@ describe("QuickCaptureBar — the text path", () => {
 
     getTodoCapture.mockResolvedValue(wire({
       stage: "routed",
-      workItemId: "PLA-9",
+      workItemId: "TSK-9",
       routedTo: { kind: "employee", employee: "route-worker", sessionId: "s-2" },
     }))
-    await act(async () => { listener?.("todo-capture:stage", { captureId: "cap-1", stage: "routed", workItemId: "PLA-9" }) })
+    await act(async () => { listener?.("todo-capture:stage", { captureId: "cap-1", stage: "routed", workItemId: "TSK-9" }) })
 
     await waitFor(() => expect(screen.getByTestId("capture-step-routed").textContent).toContain("Delegated to route-worker"))
   })
@@ -199,12 +199,12 @@ describe("QuickCaptureBar — the text path", () => {
 
     getTodoCapture.mockResolvedValue(wire({
       stage: "landed",
-      workItemId: "PLA-4",
+      workItemId: "TSK-4",
       workItemTitle: "Collapsed rail scrolls under the header",
     }))
-    await act(async () => { listener?.("todo-capture:stage", { captureId: "cap-1", stage: "landed", workItemId: "PLA-4" }) })
+    await act(async () => { listener?.("todo-capture:stage", { captureId: "cap-1", stage: "landed", workItemId: "TSK-4" }) })
 
-    await waitFor(() => expect(screen.getByTestId("capture-landed").textContent).toContain("Already tracked as PLA-4"))
+    await waitFor(() => expect(screen.getByTestId("capture-landed").textContent).toContain("Already tracked as TSK-4"))
     expect(screen.queryByTestId("capture-error")).toBeNull()
   })
 
@@ -216,8 +216,8 @@ describe("QuickCaptureBar — the text path", () => {
     const input = await type("a capture that restates something")
     await act(async () => { fireEvent.keyDown(input, { key: "Enter" }) })
 
-    getTodoCapture.mockResolvedValue(wire({ stage: "landed", workItemId: "PLA-4" }))
-    await act(async () => { listener?.("todo-capture:stage", { captureId: "cap-1", stage: "landed", workItemId: "PLA-4" }) })
+    getTodoCapture.mockResolvedValue(wire({ stage: "landed", workItemId: "TSK-4" }))
+    await act(async () => { listener?.("todo-capture:stage", { captureId: "cap-1", stage: "landed", workItemId: "TSK-4" }) })
 
     await waitFor(() => expect(screen.getByTestId("capture-landed")).toBeTruthy())
     for (const step of ["created", "dispatching", "routed"]) {

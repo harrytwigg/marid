@@ -19,7 +19,7 @@ export interface SituationRenderer {
    *  and still sit in one record: the registry key IS the discriminant, so the
    *  lookup site narrows the union once rather than every renderer widening. */
   Render: ComponentType<{ payload: never; onAnswer: AnswerHandler }>
-  /** What ICI-752 speaks. Derived from the payload, so nothing hardcodes copy. */
+  /** What the situation card speaks. Derived from the payload, so nothing hardcodes copy. */
   speech: (payload: never) => string
 }
 

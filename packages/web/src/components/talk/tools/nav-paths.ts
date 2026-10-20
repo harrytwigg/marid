@@ -67,7 +67,7 @@ export type TodoIdResolution = { id: string } | { error: string }
 const PREFIXED_TODO = /^([A-Za-z]{3})[-\s]?(\d+)$/
 const BARE_TODO = /^\d+$/
 
-/** "ICI-59", "ici 59" and a bare "59" are all things a voice model produces for
+/** "ISS-7", "iss 7" and a bare "7" are all things a voice model produces for
  *  the same Todo. A bare number needs the company prefix the operator's own
  *  Todos are minted under, which the app already holds from `/api/onboarding`. */
 export function resolveTodoId(spoken: unknown, companyPrefix: string | null): TodoIdResolution {

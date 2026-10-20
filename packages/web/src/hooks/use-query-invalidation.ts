@@ -21,7 +21,7 @@ function handleCompanyChanged(
     // Apply the safe version-aware patch synchronously; an older event can never
     // overwrite a newer cached revision. The patch alone cannot insert a created
     // Todo or prove that it still belongs under the board's other filters, so
-    // every todo event ALSO schedules the debounced reconciliation pass (ICI-570).
+    // every todo event ALSO schedules the debounced reconciliation pass.
     const value = p.value
     if (value && typeof value === 'object' && !Array.isArray(value) && typeof (value as { id?: unknown }).id === 'string') {
       mergeTodoIntoCaches(qc, value as { id: string; version?: number })

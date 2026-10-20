@@ -265,7 +265,7 @@ git commit -m "fix(antigravity): split work and terminal adapters"
 
 **Interfaces:**
 - Consumes: completed headless adapter and gateway split.
-- Produces: evidence that quota/network failure, managed-task completion, timeout, cancellation, resume identity, and sibling isolation satisfy PLA-139.
+- Produces: evidence that quota/network failure, managed-task completion, timeout, cancellation, resume identity, and sibling isolation satisfy the headless-adapter acceptance criteria.
 
 - [ ] **Step 1: Run the focused incident regression set**
 
@@ -316,6 +316,6 @@ git add <only-the-intended-files>
 git commit -m "test(antigravity): cover managed-turn settlement"
 ```
 
-- [ ] **Step 6: Update PLA-139 for independent review**
+- [ ] **Step 6: Update the Todo for independent review**
 
 Comment with root cause, isolated repro, exact focused/full gate results, commits, changed files, residual risks, and cleanup evidence. Move the existing Todo to `in_review`; do not mark producer-owned work `done`.

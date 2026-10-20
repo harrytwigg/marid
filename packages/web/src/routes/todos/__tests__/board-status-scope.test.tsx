@@ -71,10 +71,10 @@ function tree(id: string): WorkItemTreeWire {
  *  honestly-scoped board apart from one that just draws every column, and the
  *  closed pair tells it apart from one that treats "in scope" as "still open". */
 const ROWS: Partial<Record<WorkItemStatusWire, WorkItemCompactWire[]>> = {
-  backlog: [compact("PLA-1", "backlog")],
-  executing: [compact("PLA-2", "executing")],
-  done: [compact("PLA-3", "done")],
-  cancelled: [compact("PLA-4", "cancelled")],
+  backlog: [compact("TSK-1", "backlog")],
+  executing: [compact("TSK-2", "executing")],
+  done: [compact("TSK-3", "done")],
+  cancelled: [compact("TSK-4", "cancelled")],
 }
 
 function listResponse(params: { status?: WorkItemStatusWire }): WorkItemListWire {
@@ -90,7 +90,7 @@ beforeEach(() => {
   getWorkItemTrees.mockImplementation((ids: string[]) =>
     Promise.resolve({ trees: Object.fromEntries(ids.map((id) => [id, tree(id)])) }),
   )
-  getDepartments.mockResolvedValue({ departments: [{ slug: "platform", prefix: "PLA", createdAt: "2026-07-01", todoCount: 2 }] })
+  getDepartments.mockResolvedValue({ departments: [{ slug: "platform", prefix: "TSK", createdAt: "2026-07-01", todoCount: 2 }] })
   getOrg.mockResolvedValue({ departments: ["platform"], employees: [] })
   setWorkItemKept.mockResolvedValue({ kept: true })
 })
@@ -145,17 +145,17 @@ describe("board column order and the To do label", () => {
    *  status stays `backlog`. */
   it("draws To do, then Blocked, then In progress and In review, and labels the first column To do", async () => {
     const byStatus: Partial<Record<WorkItemStatusWire, WorkItemCompactWire[]>> = {
-      backlog: [compact("PLA-1", "backlog")],
-      blocked: [compact("PLA-9", "blocked")],
-      executing: [compact("PLA-2", "executing")],
-      in_review: [compact("PLA-5", "in_review")],
+      backlog: [compact("TSK-1", "backlog")],
+      blocked: [compact("TSK-9", "blocked")],
+      executing: [compact("TSK-2", "executing")],
+      in_review: [compact("TSK-5", "in_review")],
     }
     listWorkItems.mockImplementation((params: { status?: WorkItemStatusWire }) => {
       const items = byStatus[params.status!] ?? []
       return Promise.resolve({ workItems: items, total: items.length, totals: { [params.status!]: items.length }, nextOffset: null })
     })
     renderBoard("/todos/b/everything")
-    await waitFor(() => expect(screen.getByTestId("board-card-PLA-1")).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId("board-card-TSK-1")).toBeTruthy())
 
     const board = screen.getByTestId("todo-board-scroll")
     const rendered = Array.from(board.querySelectorAll("[data-board-column]"))
@@ -173,10 +173,10 @@ describe("/todos/b/everything?status=executing", () => {
     renderBoard("/todos/b/everything?status=executing")
 
     await waitFor(() => expect(screen.getByTestId("board-column-executing")).toBeTruthy())
-    expect(screen.getAllByText("Item PLA-2").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("Item TSK-2").length).toBeGreaterThan(0)
     // The backlog Todo exists and is in the board's scope; it is simply not
     // what the link asked for. Before this scoping it rendered anyway.
-    expect(screen.queryAllByText("Item PLA-1")).toEqual([])
+    expect(screen.queryAllByText("Item TSK-1")).toEqual([])
     expect(screen.queryByTestId("board-column-backlog")).toBeNull()
 
     const asked = listWorkItems.mock.calls.map(([params]) => params).filter((params) => params?.status)
@@ -191,8 +191,8 @@ describe("/todos/b/everything?status=executing", () => {
 
     await waitFor(() => expect(screen.getByTestId("board-column-backlog")).toBeTruthy())
     expect(screen.getByTestId("board-column-executing")).toBeTruthy()
-    expect(screen.getAllByText("Item PLA-1").length).toBeGreaterThan(0)
-    expect(screen.getAllByText("Item PLA-2").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("Item TSK-1").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("Item TSK-2").length).toBeGreaterThan(0)
   })
 })
 
@@ -205,9 +205,9 @@ describe("/todos/b/everything?status=done", () => {
 
     const list = screen.getByTestId("todo-list-scroll")
     await waitFor(() => expect(within(list).getByTestId("todo-list-group-closed")).toBeTruthy())
-    expect(within(list).getAllByText("Item PLA-3").length).toBeGreaterThan(0)
+    expect(within(list).getAllByText("Item TSK-3").length).toBeGreaterThan(0)
     expect(screen.queryByTestId("todo-list-filtered-empty")).toBeNull()
-    expect(within(list).queryAllByText("Item PLA-1")).toEqual([])
+    expect(within(list).queryAllByText("Item TSK-1")).toEqual([])
   })
 
   it("arrives on the desktop board with the closed column already expanded", async () => {
@@ -215,7 +215,7 @@ describe("/todos/b/everything?status=done", () => {
 
     const board = screen.getByTestId("todo-board-scroll")
     await waitFor(() => expect(within(board).getByTestId("board-closed-column")).toBeTruthy())
-    expect(within(board).getAllByText("Item PLA-3").length).toBeGreaterThan(0)
+    expect(within(board).getAllByText("Item TSK-3").length).toBeGreaterThan(0)
     // Cancelled was never asked for, so it is absent rather than drawn as a zero.
     expect(within(board).queryByTestId("board-closed-group-cancelled")).toBeNull()
     expect(within(board).queryByTestId("board-closed-rail")).toBeNull()
@@ -228,7 +228,7 @@ describe("/todos/b/everything?status=done", () => {
     renderMobileBoard("/todos/b/everything?status=done")
 
     const board = screen.getByTestId("todo-board-scroll")
-    await waitFor(() => expect(within(board).getAllByText("Item PLA-3").length).toBeGreaterThan(0))
+    await waitFor(() => expect(within(board).getAllByText("Item TSK-3").length).toBeGreaterThan(0))
   })
 
   it("shows the cancelled Todo the same way", async () => {
@@ -236,7 +236,7 @@ describe("/todos/b/everything?status=done", () => {
 
     const board = screen.getByTestId("todo-board-scroll")
     await waitFor(() => expect(within(board).getByTestId("board-closed-group-cancelled")).toBeTruthy())
-    expect(within(board).getAllByText("Item PLA-4").length).toBeGreaterThan(0)
+    expect(within(board).getAllByText("Item TSK-4").length).toBeGreaterThan(0)
     expect(within(board).queryByTestId("board-closed-group-done")).toBeNull()
   })
 
@@ -282,7 +282,7 @@ describe("/todos/b/everything with nothing on it", () => {
   })
 })
 
-/* ICI-1357 round 2. The phone board draws TodoList rows, not cards, so the card's
+/* Round 2. The phone board draws TodoList rows, not cards, so the card's
  * keep control never reached 390px. The row carries its own now. */
 describe("the phone board's keep control", () => {
   /** The desktop board stays mounted behind `hidden`, so a bare getByTestId
@@ -294,34 +294,34 @@ describe("the phone board's keep control", () => {
 
   it("gives every row a labelled keep button that survives without a pointer", async () => {
     renderMobileBoard("/todos/b/everything")
-    await screen.findByTestId("todo-list-row-PLA-1")
+    await screen.findByTestId("todo-list-row-TSK-1")
 
-    const button = await phoneRow("PLA-1")
+    const button = await phoneRow("TSK-1")
     expect(button.tagName).toBe("BUTTON")
-    expect(button.getAttribute("aria-label")).toBe("Keep PLA-1 on Home")
+    expect(button.getAttribute("aria-label")).toBe("Keep TSK-1 on Home")
     expect(button.getAttribute("aria-pressed")).toBe("false")
     // Nothing hover-gated on a touch surface: no pointer will ever arrive.
     expect(button.className).not.toContain("opacity-0")
     expect(button.className).not.toContain("group-hover:")
     // A sibling of the row button, never nested inside it.
-    expect(button.closest("[data-testid='todo-list-row-PLA-1']")).toBeNull()
+    expect(button.closest("[data-testid='todo-list-row-TSK-1']")).toBeNull()
   })
 
   it("keeps the Todo the row names", async () => {
     renderMobileBoard("/todos/b/everything")
-    await screen.findByTestId("todo-list-row-PLA-1")
+    await screen.findByTestId("todo-list-row-TSK-1")
 
-    fireEvent.click(await phoneRow("PLA-1"))
-    await waitFor(() => expect(setWorkItemKept).toHaveBeenCalledWith("PLA-1", true))
+    fireEvent.click(await phoneRow("TSK-1"))
+    await waitFor(() => expect(setWorkItemKept).toHaveBeenCalledWith("TSK-1", true))
   })
 
   /* Round-1 review: no onError anywhere, so a refused PUT said nothing. */
   it("says so when the gateway refuses, instead of looking like a dead click", async () => {
     setWorkItemKept.mockRejectedValue(new Error("boom"))
     renderMobileBoard("/todos/b/everything")
-    await screen.findByTestId("todo-list-row-PLA-1")
+    await screen.findByTestId("todo-list-row-TSK-1")
 
-    fireEvent.click(await phoneRow("PLA-1"))
+    fireEvent.click(await phoneRow("TSK-1"))
     const callout = await screen.findByTestId("board-callout")
     expect(callout.textContent).toContain("refused")
   })

@@ -228,7 +228,7 @@ describe("POST /api/work-items/:id/dispatch", () => {
     const sessionsBefore = registry.countSessions();
     const runsBefore = engineRuns.length;
 
-    const response = await call("POST", "/api/work-items/ICI-999999/dispatch", {});
+    const response = await call("POST", "/api/work-items/ISS-999999/dispatch", {});
 
     expect(response.status).toBe(404);
     expect(registry.countSessions()).toBe(sessionsBefore);

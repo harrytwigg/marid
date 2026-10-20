@@ -13,7 +13,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * exactly the orphans — overlays not backed by a known session — while keeping
  * live-session overlays and the shared caches.
  *
- * PLA-66 widened that to an age rule: `config.toml` is rewritten on every turn,
+ * A later change widened that to an age rule: `config.toml` is rewritten on every turn,
  * so its mtime is an exact DB-free last-activity stamp. An overlay idle past the
  * window goes even if its session row survives; one still warm stays even if the
  * row is gone. The keep-list only decides overlays with no stamp at all.
@@ -76,7 +76,7 @@ describe("sweepOrphanCodexSessionHomes", () => {
   });
 
   // The ids below reach the sweep only through listAllSessionIds — listSessions
-  // filters archived and workflow-phase rows out, so before PLA-66 every boot
+  // filters archived and workflow-phase rows out, so before that change every boot
   // reaped their overlays and killed codex-native resume for them.
   it("keeps a warm workflow-phase overlay", () => {
     mkOverlay("workflow-phase-session", 0);

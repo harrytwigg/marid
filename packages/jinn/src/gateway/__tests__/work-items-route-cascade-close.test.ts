@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { api, ctx, makeReq, makeRes, operatorHeaders, reg, store, toolHeaders } from "./helpers/work-items-route-harness.js";
 
-/* PLA-96: one operator action closes a container and everything open under it.
+/* One operator action closes a container and everything open under it.
  * The route decides WHO may ask for that — closing a tree touches work the
  * caller never opened, so it is the human surface's move alone. */
 

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 /**
- * PLA-56 — the MCP stdio server must follow the ACTIVE instance's home.
+ * The MCP stdio server must follow the ACTIVE instance's home.
  *
  * `resolveServerToken()` and `managedRoots()` each open-coded a home rule that
  * hardcoded the default `.jinn` and ignored JINN_INSTANCE. Both live in the MCP

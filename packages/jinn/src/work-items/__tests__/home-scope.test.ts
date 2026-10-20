@@ -14,8 +14,8 @@ let store: Store;
 let kept: Kept;
 let db: import("better-sqlite3").Database;
 
-/* PLA-230 — Home is the union of what the operator pinned and what they created,
- * evaluated at query time. PLA-172's rule that creating never writes a pin row
+/* Home is the union of what the operator pinned and what they created,
+ * evaluated at query time. The rule that creating never writes a pin row
  * still holds; this only widens what the Home query reads. */
 
 /** The mixed fixture every case below reads: one root of each kind, plus a
@@ -83,7 +83,7 @@ describe("the Home scope is the union of pinned and operator-created", () => {
     expect(page.total).toBe(3);
   });
 
-  it("leaves Home a strict subset of Everything (criterion 5, PLA-172 guard)", () => {
+  it("leaves Home a strict subset of Everything (criterion 5, auto-keep guard)", () => {
     const everything = store.queryWorkItems({ rootsOnly: true, limit: 100 }).workItems.map((i) => i.id);
     const home = homeIds();
     for (const id of home) expect(everything).toContain(id);

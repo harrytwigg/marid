@@ -18,7 +18,7 @@ let comments: Comments;
 let labels: Labels;
 let db: import("better-sqlite3").Database;
 
-/** The Todo the whole ICI-1368 search category is about. */
+/** The Todo the whole search category is about. */
 let redesign: import("../store.js").WorkItem;
 /** Matches only through a comment body — nothing in its own title or body. */
 let commented: import("../store.js").WorkItem;

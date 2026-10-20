@@ -43,7 +43,7 @@ afterAll(() => {
  * `-i` points the process at another instance. The binding and credentials it
  * inherited describe the instance it is leaving, and every command downstream reads
  * them as if they described the target — how a sandbox `jinn pair` reached the live
- * gateway instead of the one it was pointed at (ICI-851).
+ * gateway instead of the one it was pointed at.
  */
 describe("jinn -i", () => {
   it("drops the leaving instance's binding and session before the command runs", async () => {

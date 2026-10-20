@@ -74,7 +74,7 @@ describe("Todos v2 slice 2 — comment edit and delete authority", () => {
   });
 });
 
-describe("ICI-570 — comment writes emit company:changed for the parent Todo", () => {
+describe("comment writes emit company:changed for the parent Todo", () => {
   it("POST, PATCH, and DELETE each emit one entity=todo event", async () => {
     const item = store.createWorkItem({ title: "live comment item" });
 

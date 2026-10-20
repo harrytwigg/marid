@@ -68,8 +68,8 @@ export function closeGateCounts(node: WorkItemTreeNodeWire | undefined): CloseGa
 
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`
 
-/** The close targets when children are still open. Done is one cascade close
- *  (PLA-96): the gateway takes the open subtree deepest-first in the same
+/** The close targets when children are still open. Done is one cascade close:
+ *  the gateway takes the open subtree deepest-first in the same
  *  transaction, so the row stays live and says what else it closes. Cancel has
  *  no such lane. */
 function closeTarget(to: WorkItemStatusWire, ctx: LegalTargetsContext): LegalTargetOption {

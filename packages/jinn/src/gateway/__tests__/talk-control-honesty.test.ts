@@ -1,5 +1,5 @@
 /**
- * The honesty contract for the Talk control route (PLA-224, deliverable 2).
+ * The honesty contract for the Talk control route.
  *
  * The failure this suite exists for: the operator dictated a Todo, the agent
  * said "that attempt didn't go through", and the gateway log for that window

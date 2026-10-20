@@ -47,7 +47,7 @@ function seed(db: import("better-sqlite3").Database, createdBy: string): string 
 const keptIds = (db: import("better-sqlite3").Database): string[] =>
   db.prepare("SELECT work_item_id FROM work_item_kept ORDER BY work_item_id").pluck().all() as string[];
 
-/* ICI-1357 lands in a new table, never a column: `verifyCurrentWorkItemSchema`
+/* Keeping lands in a new table, never a column: `verifyCurrentWorkItemSchema`
  * compares every stored table DDL byte-for-byte, so a column on `work_items`
  * would make every deployed database refuse to boot. */
 describe("work_item_kept is additive", () => {
@@ -84,7 +84,7 @@ describe("work_item_kept is additive", () => {
   });
 });
 
-/* PLA-172. Auto-keep on create, plus the ICI-1357 backfill of every
+/* Auto-keep on create, plus the keep backfill of every
  * `created_by = 'operator'` row, filled Home with everything an agent had ever
  * minted with the operator's credential. Both are gone; the rows they wrote are
  * cleared once, on the first boot that carries this change. */

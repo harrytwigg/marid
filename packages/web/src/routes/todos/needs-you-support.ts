@@ -24,7 +24,7 @@ export function attentionKind(item: WorkItemCompactWire): AttentionKind {
   return "blocked"
 }
 
-/** A stopped Todo's own account of the wait (PLA-157), for the inbox line that
+/** A stopped Todo's own account of the wait, for the inbox line that
  *  otherwise says "Blocked and waiting on a decision or missing input." to a
  *  Todo that is waiting on a quota window and not on anybody. Null when the stop
  *  carries neither, and the caller's fallback copy still applies. */

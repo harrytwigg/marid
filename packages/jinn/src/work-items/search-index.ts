@@ -2,7 +2,7 @@ import type { Database as DatabaseType } from "better-sqlite3";
 import { sqlShape } from "./sql-shape.js";
 
 /**
- * Full-text search index over Todos and their comments (ICI-1369).
+ * Full-text search index over Todos and their comments.
  *
  * Two external-content FTS5 tables, mirroring `messages_fts`
  * (`sessions/migrate.ts`): the index lives here and the text is read back from

@@ -21,7 +21,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       getWorkItemTrees: (...args: unknown[]) => getWorkItemTrees(...args),
       getWorkItems: vi.fn().mockResolvedValue({ workItems: [] }),
       getDepartments: vi.fn().mockResolvedValue({
-        departments: [{ slug: "platform", prefix: "PLA", createdAt: "2026-07-01", todoCount: 2 }],
+        departments: [{ slug: "platform", prefix: "TSK", createdAt: "2026-07-01", todoCount: 2 }],
       }),
       getOrg: vi.fn().mockResolvedValue({
         departments: ["platform"],
@@ -154,10 +154,10 @@ afterEach(() => {
 describe("the viewport-driven Todos surface", () => {
   it("renders the board on a desktop viewport, with no view toggle in the DOM", async () => {
     setViewport(false)
-    rows.executing = [compact("PLA-1", "executing")]
+    rows.executing = [compact("TSK-1", "executing")]
     renderTodos("/todos/b/platform")
 
-    await screen.findByTestId("board-card-PLA-1")
+    await screen.findByTestId("board-card-TSK-1")
     expect((screen.getByTestId("todo-board-scroll") as HTMLDivElement).hidden).toBe(false)
     expect((screen.getByTestId("todo-list-scroll") as HTMLDivElement).hidden).toBe(true)
     expect(screen.queryByTestId("todos-view-list")).toBeNull()
@@ -165,17 +165,17 @@ describe("the viewport-driven Todos surface", () => {
   })
 
   it("renders the board when the page has no matchMedia to read (the SSR default)", async () => {
-    rows.executing = [compact("PLA-1", "executing")]
+    rows.executing = [compact("TSK-1", "executing")]
     renderTodos("/todos/b/platform")
 
-    await screen.findByTestId("board-card-PLA-1")
+    await screen.findByTestId("board-card-TSK-1")
     expect((screen.getByTestId("todo-board-scroll") as HTMLDivElement).hidden).toBe(false)
   })
 
   it("returns from a row to the list at its previous scroll position", async () => {
-    rows.backlog = [compact("PLA-3", "backlog")]
+    rows.backlog = [compact("TSK-3", "backlog")]
     renderTodos("/todos/b/platform")
-    const row = await screen.findByTestId("todo-list-row-PLA-3")
+    const row = await screen.findByTestId("todo-list-row-TSK-3")
     const scroll = screen.getByTestId("todo-list-scroll") as HTMLDivElement
     scroll.scrollTop = 320
     fireEvent.scroll(scroll)
@@ -186,8 +186,8 @@ describe("the viewport-driven Todos surface", () => {
   })
 
   it("loads the next page through the status column's existing loadMore", async () => {
-    const first = compact("PLA-4", "backlog")
-    const second = compact("PLA-5", "backlog")
+    const first = compact("TSK-4", "backlog")
+    const second = compact("TSK-5", "backlog")
     listWorkItems.mockImplementation((params: { status?: WorkItemStatusWire; needsAttentionFor?: string; offset?: number }) => {
       if (params.needsAttentionFor) return Promise.resolve({ workItems: [], total: 0, nextOffset: null })
       if (params.status !== "backlog") return Promise.resolve(response(params))
@@ -198,9 +198,9 @@ describe("the viewport-driven Todos surface", () => {
     rows.backlog = [first, second]
     renderTodos("/todos/b/platform")
 
-    await screen.findByTestId("todo-list-row-PLA-4")
+    await screen.findByTestId("todo-list-row-TSK-4")
     fireEvent.click(screen.getByTestId("todo-list-show-more-backlog"))
-    await screen.findByTestId("todo-list-row-PLA-5")
+    await screen.findByTestId("todo-list-row-TSK-5")
     expect(listWorkItems).toHaveBeenCalledWith(expect.objectContaining({ status: "backlog", offset: 1 }))
   })
 })

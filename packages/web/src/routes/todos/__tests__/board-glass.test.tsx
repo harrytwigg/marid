@@ -88,9 +88,9 @@ beforeEach(() => {
   clearBoardScrollCache()
   sessionStorage.clear()
   rows = {
-    backlog: [compact("PLA-1", "backlog")],
-    executing: [compact("PLA-3", "executing")],
-    done: [compact("PLA-8", "done")],
+    backlog: [compact("TSK-1", "backlog")],
+    executing: [compact("TSK-3", "executing")],
+    done: [compact("TSK-8", "done")],
   }
   listWorkItems.mockImplementation((params: { status?: WorkItemStatusWire }) => Promise.resolve(listResponse(params)))
 })
@@ -98,32 +98,32 @@ beforeEach(() => {
 describe("the glass board's markup", () => {
   it("marks the board container, each column with its sticky header, and every card", async () => {
     renderBoard()
-    await screen.findByTestId("board-card-PLA-3")
+    await screen.findByTestId("board-card-TSK-3")
 
     const board = screen.getByTestId("todo-board-scroll")
     expect(board.hasAttribute("data-board-glass")).toBe(true)
     const executing = screen.getByTestId("board-column-executing")
     expect(executing.getAttribute("data-board-column")).toBe("executing")
     expect(executing.querySelector("[data-board-column-head]")).toBeTruthy()
-    expect(executing.querySelector("[data-board-card]")).toBe(screen.getByTestId("board-card-PLA-3"))
+    expect(executing.querySelector("[data-board-card]")).toBe(screen.getByTestId("board-card-TSK-3"))
   })
 
   it("gives the opened Closed column the same marks, so its cards take the card glass", async () => {
     renderBoard("/todos/b/platform?status=all")
-    await screen.findByTestId("board-card-PLA-3")
+    await screen.findByTestId("board-card-TSK-3")
     screen.getByTestId("board-closed-rail").click()
 
     const closed = await screen.findByTestId("board-closed-column")
     expect(closed.getAttribute("data-board-column")).toBe("closed")
     expect(closed.hasAttribute("data-board-snap")).toBe(true)
     expect(closed.querySelector("[data-board-column-head]")).toBe(screen.getByTestId("board-closed-collapse"))
-    expect(closed.querySelector("[data-board-card]")).toBe(await screen.findByTestId("board-card-PLA-8"))
+    expect(closed.querySelector("[data-board-card]")).toBe(await screen.findByTestId("board-card-TSK-8"))
     expect(screen.getByTestId("todo-board-scroll").contains(closed)).toBe(true)
   })
 
   it("marks the Closed rail, which the phone's strip ends on, as a stop of the strip", async () => {
     renderBoard()
-    await screen.findByTestId("board-card-PLA-3")
+    await screen.findByTestId("board-card-TSK-3")
     const rail = screen.getByTestId("board-closed-rail")
     expect(rail.hasAttribute("data-board-rail")).toBe(true)
     expect(rail.hasAttribute("data-board-snap")).toBe(true)

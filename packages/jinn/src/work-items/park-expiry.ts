@@ -7,7 +7,7 @@ import { transition } from './transitions.js';
 /**
  * The un-park half of parking.
  *
- * A park is a `blocked` Todo whose stop cause carries `parkedUntil` (PLA-157):
+ * A park is a `blocked` Todo whose stop cause carries `parkedUntil`:
  * the board reads it as "waiting on a clock, not on you" and the needs-you
  * queue leaves it out. Until now nothing acted when that clock ran out. The
  * park simply stopped hiding the Todo, which then sat in `blocked` looking like

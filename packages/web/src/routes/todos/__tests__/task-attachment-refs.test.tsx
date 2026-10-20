@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkItemDetailWire, WorkItemFullWire, WorkItemTreeNodeWire } from "@/lib/api"
 import TaskPage from "../task-page/task-page"
 
-/* PLA-135 — attachment references are first-class run data, so a blocked
+/* Attachment references are first-class run data, so a blocked
  * reason that carries `attachment:<todo>:<id>:<mime>` has to read as the file
  * itself on the surface the operator reads it at, never as the raw token. */
 
@@ -41,7 +41,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       listWorkItemSessions: (...args: unknown[]) => listWorkItemSessions(...args),
       dispatchTodo: (...args: unknown[]) => dispatchTodo(...args),
       getDepartments: vi.fn().mockResolvedValue({
-        departments: [{ slug: "platform", prefix: "PLA", createdAt: "2026-07-01T00:00:00.000Z", todoCount: 4 }],
+        departments: [{ slug: "platform", prefix: "TSK", createdAt: "2026-07-01T00:00:00.000Z", todoCount: 4 }],
       }),
       getOrg: (...args: unknown[]) => getOrg(...args),
       listWorkItems: vi.fn().mockResolvedValue({ workItems: [], total: 0, nextOffset: null }),
@@ -83,9 +83,9 @@ function detailOf(item: WorkItemFullWire, extra: Partial<WorkItemDetailWire> = {
 
 /** A blocked Todo whose stop reason is `note`. */
 function blockedDetail(note: string): WorkItemDetailWire {
-  return detailOf(full("PLA-12", { status: "blocked" }), {
+  return detailOf(full("TSK-12", { status: "blocked" }), {
     events: [{
-      id: "e1", workItemId: "PLA-12", kind: "status_change", fromStatus: "executing",
+      id: "e1", workItemId: "TSK-12", kind: "status_change", fromStatus: "executing",
       toStatus: "blocked", actor: "mason", detail: { note },
       createdAt: "2026-07-23T07:00:00.000Z",
     }],
@@ -96,7 +96,7 @@ function treeNode(item: WorkItemFullWire, children: WorkItemTreeNodeWire[] = [])
   return { ...item, children }
 }
 
-function renderTask(path = "/todos/PLA-12", state?: Record<string, unknown>) {
+function renderTask(path = "/todos/TSK-12", state?: Record<string, unknown>) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
@@ -118,7 +118,7 @@ beforeEach(() => {
   listWorkItemAttachments.mockResolvedValue({ attachments: [] })
   listWorkItemComments.mockResolvedValue({ comments: [], total: 0 })
   listWorkItemSessions.mockResolvedValue([])
-  dispatchTodo.mockResolvedValue({ workItemId: "PLA-12", sessionId: "dispatcher-session", status: "running", reused: false })
+  dispatchTodo.mockResolvedValue({ workItemId: "TSK-12", sessionId: "dispatcher-session", status: "running", reused: false })
   getOrg.mockResolvedValue({
     departments: ["platform"],
     employees: [],
@@ -128,7 +128,7 @@ beforeEach(() => {
 
 describe("the task page blocked banner", () => {
   it("shows an attachment ref in the blocked reason as a thumbnail, not a token", async () => {
-    getWorkItem.mockResolvedValue(blockedDetail("Ship this? attachment:PLA-12:wia_ab12cd34ef56:image/png"))
+    getWorkItem.mockResolvedValue(blockedDetail("Ship this? attachment:TSK-12:wia_ab12cd34ef56:image/png"))
     renderTask()
 
     const banner = await screen.findByTestId("task-banner-blocked")
@@ -138,7 +138,7 @@ describe("the task page blocked banner", () => {
   })
 
   it("shows a non-image ref in the blocked reason as a named file row", async () => {
-    getWorkItem.mockResolvedValue(blockedDetail("Sign off? attachment:PLA-12:wia_00112233aabb:application/pdf"))
+    getWorkItem.mockResolvedValue(blockedDetail("Sign off? attachment:TSK-12:wia_00112233aabb:application/pdf"))
     renderTask()
 
     const banner = await screen.findByTestId("task-banner-blocked")

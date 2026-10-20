@@ -256,7 +256,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
       // Same values as edit_work_item (a sprint name or id, `active`); a sub-task takes none.
       const sprint = optionalSprintRef(args);
       if (sprint !== undefined && sprint !== null) body.sprint = sprint;
-      // ICI-733: repeating the same key returns the Todo the first call made,
+      // Repeating the same key returns the Todo the first call made,
       // so a retried cron or connector fire cannot mint a duplicate.
       const idempotencyKey = optionalString(args, "idempotencyKey");
       if (idempotencyKey !== undefined) body.idempotencyKey = idempotencyKey;

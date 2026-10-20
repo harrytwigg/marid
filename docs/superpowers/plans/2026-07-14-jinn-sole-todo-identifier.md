@@ -2,13 +2,13 @@
 
 > **Status:** Architecture only. Implementation requires a fresh independent review. This document does not authorize conversion, restart, release, deployment, or publication.
 
-**Goal:** Ship Todos with a stable three-letter company prefix (`IC-IDEV` → `ICI-1`, `ICI-2`) as the sole identifier, while converting the operator's one private prerelease instance with a disposable offline tool that never enters the installed product.
+**Goal:** Ship Todos with a stable three-letter company prefix (`AC-MEDIA` → `ACM-1`, `ACM-2`) as the sole identifier, while converting the operator's one private prerelease instance with a disposable offline tool that never enters the installed product.
 
 ## Locked Product Boundary
 
 Operator decision A is accepted:
 
-- `^[A-Z]{3}-[1-9][0-9]*$` is the only Todo grammar; suffixes above `Number.MAX_SAFE_INTEGER` are invalid. Normalize the configured company name with NFKD, uppercase, discard non-`A-Z` letters, and treat hyphens, dots, slashes, ampersands, and whitespace as word separators. Three or more parts use initials (`Build Sprint Labs` → `BSL`); a single part uses its first three letters (`Jinn` → `JIN`); two parts use the intuitive first-word fallback, with a short leading acronym completed from the next part (`Acme Corp` → `ACM`, `IC-IDEV` → `ICI`). Names unable to produce three letters are invalid. An explicit `portal.companyPrefix` wins and must match `^[A-Z]{3}$`.
+- `^[A-Z]{3}-[1-9][0-9]*$` is the only Todo grammar; suffixes above `Number.MAX_SAFE_INTEGER` are invalid. Normalize the configured company name with NFKD, uppercase, discard non-`A-Z` letters, and treat hyphens, dots, slashes, ampersands, and whitespace as word separators. Three or more parts use initials (`Build Sprint Labs` → `BSL`); a single part uses its first three letters (`Jinn` → `JIN`); two parts use the intuitive first-word fallback, with a short leading acronym completed from the next part (`Acme Corp` → `ACM`, `AC-MEDIA` → `ACM`). Names unable to produce three letters are invalid. An explicit `portal.companyPrefix` wins and must match `^[A-Z]{3}$`.
 - Before the prefix freezes, onboarding/settings display the concrete derived or overridden sequence and state that the first allocation makes it permanent. After freeze, they display the allocator's actual prefix and cannot select a second one.
 - The first committed allocation freezes the prefix in the singleton allocator. Later company-name changes never rewrite IDs or change that instance's prefix.
 - `work_items.id` is the database primary key and the visible/internal ID in REST, MCP, UI, URLs, search, logs, accessibility, copy/share, DOM state, and browser storage.
@@ -74,7 +74,7 @@ The raw claim is held only in memory for one create transaction and exposed to S
 
 ### Product surfaces and authority
 
-- REST may use `/api/work-items/ICI-42`; the browser route is `/todos/ICI-42`. MCP fields, search, logs, activity blocks, accessible names, Copy ID, and Copy Link emit the same value.
+- REST may use `/api/work-items/ACM-42`; the browser route is `/todos/ACM-42`. MCP fields, search, logs, activity blocks, accessible names, Copy ID, and Copy Link emit the same value.
 - Delete `todoPrivateRef`, salts, `td_*` history state, private lookup, DOM masking, and privacy-only fixtures. Draft/recovery state keys directly by canonical Todo ID, with clean-tab and no-draft-loss tests.
 - The current CLI has no Todo CRUD surface; do not add one. A future CLI must use the same parser.
 - Authentication precedes existence checks. Anonymous known/unknown IDs fail identically. Authenticated adjacent-ID reads and every mutation/delegation/approval are allowed only by existing explicit grants; predictability grants nothing.
@@ -92,7 +92,7 @@ work_item_events.work_item_id
 
 Validate the canonical company-prefixed ID at the event producer and before claim/run persistence, condition evaluation, or session creation. Remove unshipped `triggerTodoId` and poll `approvalWorkItemId` compatibility fields.
 
-Webhook and poll ingress treat only an own top-level `payload.todoId` as recognized Todo structure. Check prototype safety before reading it: an inherited/prototype `todoId` is invalid; an own value must be a string accepted by `parseTodoId`. Perform this validation before custom-trigger filtering, `fireRef` or hash derivation, claims, run/file persistence, Workflow conditions, callbacks, queues, or sessions. Exact legacy IDs, malformed company-prefixed IDs such as `ICI-0`, garbage, non-strings, and inherited values fail closed with zero side effects.
+Webhook and poll ingress treat only an own top-level `payload.todoId` as recognized Todo structure. Check prototype safety before reading it: an inherited/prototype `todoId` is invalid; an own value must be a string accepted by `parseTodoId`. Perform this validation before custom-trigger filtering, `fireRef` or hash derivation, claims, run/file persistence, Workflow conditions, callbacks, queues, or sessions. Exact legacy IDs, malformed company-prefixed IDs such as `ACM-0`, garbage, non-strings, and inherited values fail closed with zero side effects.
 
 An authored filter targeting `payload.todoId` may use only `equals` or `notEquals` with an own data-property `value` that is a string accepted by `parseTodoId`; valueless `exists` is also allowed. Reject `matches`, missing/inherited/accessor operands, and legacy, malformed, or non-string values. A condition targeting `trigger.payload.todoId` follows the same rule: only `eq` or `ne` may carry an own canonical string operand; valueless `exists` and `absent` are allowed; reject `gt`, `gte`, `lt`, `lte`, `contains`, `startsWith`, and every invalid operand shape/value. Enforce these restrictions when authoring/persisting the filter or definition and revalidate fail-closed immediately before execution, so malformed persisted artifacts cannot run. Unrelated payload fields—including free-form prose containing an exact `wi_*` literal—are untouched inert data.
 
