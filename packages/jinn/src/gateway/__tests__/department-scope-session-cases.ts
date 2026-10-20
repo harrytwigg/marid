@@ -50,7 +50,15 @@ const ids = (rows: Array<{ id: string }>) => rows.map((row) => row.id);
 
 const heartbeatList: CaseBuilder = (fx) => {
   armHeartbeat({ ownerSessionId: fx.coo.id, message: "tick", everySeconds: 600 });
-  return { allow: ["GET", "/api/heartbeats"], allowStatus: 200, refuse: { kind: "narrowed", req: ["GET", "/api/heartbeats"], check: (body) => expect(body.heartbeats).toEqual([]) } };
+  // The caller's own gateway child-watch (armed when an earlier case spawned work) is its own;
+  // only the other department's tick must stay hidden.
+  const ticks = (body: { heartbeats: Array<{ message: string }> }) =>
+    body.heartbeats.filter((heartbeat) => heartbeat.message === "tick");
+  return {
+    allow: ["GET", "/api/heartbeats"],
+    allowStatus: 200,
+    refuse: { kind: "narrowed", req: ["GET", "/api/heartbeats"], check: (body) => expect(ticks(body)).toEqual([]) },
+  };
 };
 
 const heartbeatStop: CaseBuilder = (fx) => {

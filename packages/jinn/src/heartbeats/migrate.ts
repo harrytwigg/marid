@@ -22,6 +22,20 @@ CREATE INDEX IF NOT EXISTS idx_heartbeats_owner
   ON heartbeats(owner_session_id, status);
 `;
 
+/** `purpose` marks a gateway-owned heartbeat (null for one a session armed itself). */
+function addPurposeColumn(db: Database.Database): void {
+  const columns = db.prepare("PRAGMA table_info(heartbeats)").all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === "purpose")) {
+    db.exec("ALTER TABLE heartbeats ADD COLUMN purpose TEXT");
+  }
+  // A race between two triggers cannot arm a second gateway heartbeat of one purpose.
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_heartbeats_owner_purpose
+      ON heartbeats(owner_session_id, purpose) WHERE status = 'armed' AND purpose IS NOT NULL
+  `);
+}
+
 export function migrateHeartbeatsSchema(db: Database.Database): void {
   db.exec(HEARTBEATS_DDL);
+  addPurposeColumn(db);
 }
