@@ -99,6 +99,7 @@ export const CHAT_SCREENS = [
     // virtualised rows, not grow to the height of the list (the sandbox has only a few chats, so pad it).
     name: 'chat-open-beside',
     viewports: ['desktop'],
+    serviceWorkers: 'block',
     title: 'Open chat picker, long list',
     url: (f) => `/?session=${f.chatSession}`,
     ready: PLAN_READY,
@@ -115,6 +116,7 @@ export const CHAT_SCREENS = [
       await page.getByRole('button', { name: 'More options' }).first().click()
       await page.getByText('Open beside').first().click()
       await page.getByTestId('session-picker-search').waitFor({ timeout: 10_000 })
+      await page.getByText('Padded chat 1', { exact: true }).first().waitFor({ timeout: 10_000 })
       await page.waitForTimeout(600)
       const scroll = page.getByTestId('session-picker-scroll')
       const { client, scrollHeight } = await scroll.evaluate((el) => ({ client: el.clientHeight, scrollHeight: el.scrollHeight }))
