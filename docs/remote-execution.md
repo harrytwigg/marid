@@ -410,6 +410,11 @@ What is staged, and what is not:
 Image attachments are read on the gateway and sent inline, as locally; any
 other attachment is named in the prompt as the session's staged home sees it.
 
+The Limits page's Muse Code card is the gateway's own login: usage a remote
+host reports is not recorded there, since that host may be signed in to
+another account. A quota a remote turn hits still ends the turn as a usage
+limit, so the session moves along its fallback chain as usual.
+
 ## Interrupting a remote Pi, opencode or Muse Code turn
 
 Killing the local `ssh` client is not enough for these three engines, and the

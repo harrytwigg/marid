@@ -181,7 +181,8 @@ export class MusecodeEngine implements InterruptibleEngine {
 
     const turn = new MuseTurn(session.sessionId, {
       onStream: opts.onStream ?? null,
-      onUsage: (usage) => this.options.onUsage?.(usage),
+      // The gateway's reading is its own login's; a remote host may be signed in to another account.
+      onUsage: (usage) => { if (!live.remote) this.options.onUsage?.(usage); },
     });
     live.turn = turn;
     if (session.projectionUnavailable) opts.onStream?.({ type: "status", content: "Muse Code could not read this conversation's history (projectionUnavailable); the turn may not start" });

@@ -130,6 +130,18 @@ describe("a remote employee's turn", () => {
     expect(hoisted.prepareCalls[0]).toMatchObject({ engine: "musecode", jinnSessionId: "s1", gatewayPort: 7777 });
   });
 
+  it("keeps the host's usage out of the gateway's reading, which is the gateway's own login", async () => {
+    const onUsage = vi.fn();
+    engine = new MusecodeEngine({ remote: () => ({ root, mount: "/mnt/jinn-home" }), gatewayPort: () => gatewayPort, onUsage });
+    const result = await engine.run(remoteOpts({ prompt: "work\n\n---\n\nUSAGE" }));
+    expect(result.error).toBeUndefined();
+    expect(requests().some((r) => r.method === "turn/start")).toBe(true);
+    expect(onUsage).not.toHaveBeenCalled();
+    // The same turn here, on the gateway, is the gateway's own usage.
+    await engine.run({ ...remoteOpts({ prompt: "work\n\n---\n\nUSAGE" }), remoteHost: undefined, bin: FAKE } as EngineRunOpts);
+    expect(onUsage).toHaveBeenCalledTimes(1);
+  });
+
   it("reaps a previous turn's host on that machine before starting this one", async () => {
     await engine.run(remoteOpts());
     const calls = sshCalls();
