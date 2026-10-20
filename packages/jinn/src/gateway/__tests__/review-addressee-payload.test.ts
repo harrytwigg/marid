@@ -148,6 +148,30 @@ describe("after the parent's owner sends a child back", () => {
   });
 });
 
+describe("a review taken back by someone who is not its producer", () => {
+  it("does not leave a stalled Todo hidden behind its old addressee row", async () => {
+    const runs = await import("../../work-items/runs.js");
+    const { transition } = await import("../../work-items/transitions.js");
+    const parent = workItems.createWorkItem({ title: "Take-back parent", status: "executing", assignee: "owner-dev" });
+    const child = workItems.createWorkItem({ title: "Take-back child", status: "executing", parentId: parent.id, assignee: "child-dev" });
+    const producer = await sessionOf("child-dev");
+    const run = runs.openWorkItemRun({ workItemId: child.id, sessionId: producer.id, startedAt: "2026-01-01T00:00:00.000Z" });
+    runs.closeWorkItemRun(run.id, { outcome: "completed", endedAt: "2026-01-01T00:10:00.000Z" });
+    transition(child.id, "in_review", "operator", { detail: { note: "ready" } });
+    sweep();
+    expect(getWorkItemRecovery(child.id)?.reason).toContain("owner-dev");
+
+    // A session that is no part of the work sends it back: an ordinary agent move, no bounce, row left in place.
+    expect((await statusPost((await sessionOf("third-dev")).id, child.id, { status: "executing" })).status).toBe(200);
+    sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ unavailable: "test" }) as never, now: () => new Date(Date.now() + 5 * 60 * 60_000) });
+
+    expect(getWorkItemRecovery(child.id)).toMatchObject({ lane: "manager", reason: expect.not.stringContaining("in review for") });
+    expect((await detail(child.id)).attentionLane).toBe("manager");
+    const feed = (await call("GET", "/api/work-items?needsAttentionFor=me&limit=200")).body.workItems.map((row: { id: string }) => row.id);
+    expect(feed).toContain(child.id);
+  });
+});
+
 describe("the recovery classifier", () => {
   it("rewrites the row and records the change when the review is addressed to someone else", async () => {
     const { listWorkItemEvents } = await import("../../work-items/event-log.js");

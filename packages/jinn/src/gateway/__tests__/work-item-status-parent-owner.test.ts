@@ -161,6 +161,26 @@ describe("what the parent-owner lane refuses", () => {
     }
   });
 
+  it.each(["backlog", "in_review"] as const)("does not serve the owner of a parent that is %s: its children's reviews are the operator's", async (parentStatus) => {
+    const { parent, child } = treeInReview(workItems, `Parent ${parentStatus}`, { parentStatus });
+    const owner = await sessionOf("owner-dev");
+
+    const res = await statusPost(owner.id, child.id, accept);
+
+    expect([res.status, statusOf(child.id)]).toEqual([403, "in_review"]);
+    expect(res.body.error).toMatch(/operator's decision/);
+    const moved = await statusPost(owner.id, child.id, sendBack);
+    expect([moved.status, moved.body.workItem.rounds]).toEqual([200, 0]);
+    expect(statusOf(parent.id)).toBe(parentStatus);
+  });
+
+  it("serves the owner of a blocked parent", async () => {
+    const { parent, child } = treeInReview(workItems, "Parent blocked");
+    transition(parent.id, "blocked", "operator", { human: true, blockKind: "needs_input" });
+    const res = await statusPost((await sessionOf("owner-dev")).id, child.id, accept);
+    expect([res.status, statusOf(child.id)]).toEqual([200, "done"]);
+  });
+
   it("does not let the child's own producer close it", async () => {
     const { child } = treeInReview(workItems, "Producer");
     const res = await statusPost((await sessionOf("child-dev")).id, child.id, accept);
