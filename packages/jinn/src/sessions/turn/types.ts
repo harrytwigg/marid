@@ -2,6 +2,7 @@ import type {
   Employee,
   Engine,
   JinnConfig,
+  JsonObject,
   OrgHierarchy,
   Session,
   StreamDelta,
@@ -36,8 +37,8 @@ export interface TurnSurface {
   started(): Promise<void>;
   /** One engine stream block. Transports without a live view ignore it. */
   delta(delta: StreamDelta): void;
-  /** Lifecycle prose that is not the answer — rate-limit banners, warnings. */
-  notice(text: string): Promise<void>;
+  /** Lifecycle prose that is not the answer — rate-limit banners, warnings. `meta` rides on the stored notification (a fallback hop's record), for transports that keep one. */
+  notice(text: string, meta?: JsonObject): Promise<void>;
   /** Deliver text to the human channel. Never throws; delivery is best-effort. */
   reply(text: string): Promise<void>;
   /** Enter (true) or leave (false) the rate-limit waiting affordance. */

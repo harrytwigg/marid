@@ -15,7 +15,9 @@ vi.mock("../paths.js", async (importOriginal) => ({
 import { collectEngineLimits } from "../engine-limits.js";
 import { collectMusecodeLimits, MUSECODE_NO_USAGE_REASON } from "../engine-limits-musecode.js";
 import { invalidateModelRegistry } from "../models.js";
-import { preferHealthySessionEngine, readEngineHealth } from "../engine-health.js";
+import { readEngineHealth } from "../engine-health.js";
+import { rerouteAtCreation } from "../../sessions/fallback-reroute.js";
+import type { ModelRegistry } from "../types.js";
 import { writeMusecodeUsage, musecodeUsageFile } from "../musecode-usage.js";
 
 const FAKE = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "engines", "__tests__", "fixtures", "fake-muse.mjs");
@@ -104,8 +106,14 @@ describe("collectEngineLimits for Muse Code", () => {
     expect(Date.parse(health.musecode!.until!)).toBe(Math.floor((NOW + resetsInMs) / 1000) * 1000);
 
     const cfg = config({ fallback: ["claude"] });
-    expect(preferHealthySessionEngine(cfg, "musecode", () => true, health)).toBe("claude");
-    expect(preferHealthySessionEngine(cfg, "claude", () => true, health)).toBe("claude");
+    const registry = {
+      musecode: { available: true, defaultModel: "m", models: [] },
+      claude: { available: true, defaultModel: "opus", models: [] },
+    } as unknown as ModelRegistry;
+    const scope = { scoped: false, remote: false };
+    // A new session on the spent engine starts on its chain's first healthy link; one on a healthy target stays.
+    expect(rerouteAtCreation({ config: cfg, engine: "musecode", registry, health, scope })?.engine).toBe("claude");
+    expect(rerouteAtCreation({ config: cfg, engine: "claude", registry, health, scope })).toBeUndefined();
   });
 
   it("an exceeded weekly block counts, and a window that has already reset does not", async () => {

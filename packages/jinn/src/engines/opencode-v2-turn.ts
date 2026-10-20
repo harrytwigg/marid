@@ -14,6 +14,7 @@ import {
   stoppedRequestsNotice,
   type ServerTurnDeps,
 } from "./opencode-server-turn.js";
+import { fallbackModelNotice, requestedModel, stepModel } from "./opencode-fallback-notice.js";
 import { abandonedRetryError, providerFailureReason, SettleWait, type ProviderRetry, type SettleKind } from "./opencode-server-settle.js";
 import { isAbortError, record, runLinesFromStoredReply, str, V2RunLines, v2ReplyIsDone, type V2Event, type V2Message } from "./opencode-v2-events.js";
 import { cancelledV2Requests, JINN_V2_PROMPT_METADATA, jinnSessionNotes, type JinnSessionNotes } from "./opencode-v2-history.js";
@@ -45,8 +46,7 @@ import { sameModelRef, unsupportedServerFlags, variantOf, type V2ModelRef } from
  * Approval matches 1.x: a permission this turn's steps ask for is granted
  * once; the `question` tool is denied on the sessions the turn creates (which
  * takes it out of the tool list), and a question that still comes is
- * dismissed. A provider fallback on 2.x switches the session's model in
- * place (see examples/opencode-plugins), so its answer is the turn's own steps.
+ * dismissed.
  */
 
 /** The turn's error when its execution ended without ever delivering the prompt. */
@@ -74,15 +74,15 @@ function reportKey(line: string): string | undefined {
   return undefined;
 }
 
-/** The replies (assistant items) answering any of `prompts`, oldest first,
- *  from a history listed newest first: what follows one of the prompts up to
- *  the next input someone else sent. */
-export function ownStoredReplies(newestFirst: V2Message[], prompts: ReadonlySet<string>): V2Message[] {
+/** The replies (assistant items) answering `prompt`, oldest first, from a
+ *  history listed newest first: what follows the prompt up to the next input
+ *  someone else sent. */
+export function ownStoredReplies(newestFirst: V2Message[], prompt: string): V2Message[] {
   const replies: V2Message[] = [];
   let ours = false;
   for (const message of [...newestFirst].reverse()) {
     const id = str(message.id) ?? "";
-    if (prompts.has(id)) ours = true;
+    if (id === prompt) ours = true;
     else if (message.type === "user" || message.type === "compaction") ours = false;
     else if (ours && message.type === "assistant") replies.push(message);
   }
@@ -97,6 +97,8 @@ export class OpencodeV2ServerTurn {
   /** The id the turn's prompt is posted under. */
   private readonly promptId = newMessageId();
   private promptText = "";
+  /** The model the turn's steps ran on, when a host plugin moved them off the one asked for. */
+  private ranOn?: string;
   /** What the session's metadata held for this turn to say (see opencode-v2-history.ts). */
   private notes: JinnSessionNotes = { stopped: [], reseed: false };
   /** The input the session runs now is the turn's prompt. */
@@ -180,13 +182,14 @@ export class OpencodeV2ServerTurn {
       this.settle.cancel();
       this.controller.abort();
     }
-    return this.failedTurn(this.turn.result({
+    const result = this.failedTurn(this.turn.result({
       code: this.failure ? 1 : 0,
       terminationReason: this.terminationReason,
       stderr: this.failure ?? "",
       failure: this.failure ?? undefined,
       noAnswer: this.noAnswer(),
     }));
+    return this.ranOn ? { ...result, notices: [fallbackModelNotice(this.ranOn)] } : result;
   }
 
   /** As 1.x: a usage window says when it ends, and a prompt the server took
@@ -420,7 +423,7 @@ export class OpencodeV2ServerTurn {
   /** The stream did not say how the turn ended: read its replies from the store. */
   private async recover(): Promise<void> {
     const history = await v2Messages(this.server, this.sessionId, HISTORY_LIMIT);
-    const replies = ownStoredReplies(history, new Set([this.promptId]));
+    const replies = ownStoredReplies(history, this.promptId);
     if (replies.length) this.ownReply = replies.at(-1);
     if (!replies.length && !(await this.mayStillRun())) {
       this.turn.readLine(JSON.stringify({ type: "error", sessionID: this.sessionId, error: PROMPT_NOT_RUN }), this.onStream);
@@ -577,6 +580,19 @@ export class OpencodeV2ServerTurn {
     this.own.add(id);
     this.newestOwnOpen = true;
     this.ownReply = { id };
+    this.noteModel(data);
+  }
+
+  /** A step that ran on another model than the turn asked for, on a host whose opencode has a
+   *  fallback plugin: the plugin switched it. Not a chain hop; the turn says so instead. */
+  private noteModel(data: Record<string, unknown>): void {
+    const ran = stepModel(data);
+    const asked = requestedModel(this.modelRef());
+    if (!ran || !asked || ran === asked || !this.deps.fallbackPluginOnHost?.()) return;
+    if (!this.ranOn) {
+      logger.warn(`opencode turn in ${this.sessionId} ran on ${ran}, not the requested ${asked}: the host's opencode fallback plugin switched models, not the gateway's chain (run \`jinn doctor\`)`);
+    }
+    this.ranOn = ran;
   }
 
   private onStepEnded(data: Record<string, unknown>, event: V2Event): void {
@@ -614,13 +630,12 @@ export class OpencodeV2ServerTurn {
   }
 
   /** The session's execution ended: the turn is over once its prompt is out.
-   *  Without a text answer it waits a moment, as 1.x does after an idle: a
-   *  fallback plugin re-posts the prompt just after the execution it stopped. */
+   *  Without a text answer it waits a moment, as 1.x does after an idle. */
   private onExecutionEnded(): void {
     if (!this.posting) return;
     this.ownInput = false;
     if (this.lastAnswer === "text" && !this.newestOwnOpen) return this.finish();
-    this.settle.arm("idle", this.providerRetry ? SERVER_TURN_TIMING.fallbackWaitMs : SERVER_TURN_TIMING.closeWaitMs);
+    this.settle.arm("idle", SERVER_TURN_TIMING.closeWaitMs);
   }
 
   private onReplyEnded(): void {

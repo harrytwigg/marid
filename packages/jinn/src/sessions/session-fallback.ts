@@ -1,7 +1,10 @@
-import { resolveHealthyAccountFallback, accountHasChain } from "../shared/account-fallback.js";
 import { declaredAccountByKey } from "../shared/claude-accounts-config.js";
 import { DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
-import { resolveFallbackEngine, resolveSubstituteModel } from "../shared/engine-fallback.js";
+import { resolveSubstituteModel } from "../shared/engine-fallback.js";
+import { sessionFallbackChain } from "../shared/fallback-chain.js";
+import { linkModelWritten } from "../shared/fallback-chain-links.js";
+import { effectivePosition } from "../shared/fallback-chain-next.js";
+import type { ResolvedFallbackLink } from "../shared/fallback-chain-wire.js";
 import { isSpellableModelId } from "../shared/model-id.js";
 import { isRemoteTarget } from "../shared/remote-target.js";
 import {
@@ -10,9 +13,12 @@ import {
 } from "../shared/session-fallback-config.js";
 import type { Employee, JinnConfig, ModelRegistry, Session } from "../shared/types.js";
 import { isKnownEngine, type EngineName } from "../shared/models.js";
+import type { FallbackHealthInputs } from "../shared/fallback-chain-health.js";
+import { sessionFallbackChainView } from "./session-fallback-chain.js";
 import { rateLimitAccount } from "./rate-limit-account.js";
 import { rateLimitRemoteTarget } from "./rate-limit-remote-target.js";
-import { accountWalkOptions, engineAllowedAsSubstitute, fallbackModelMapOf, sessionSubstituteScope, substituteScoped } from "./substitute-filters.js";
+import { metaOf, readFallbackRun, sessionAtOwnTarget } from "./fallback-run.js";
+import { engineAllowedAsSubstitute, fallbackModelMapOf, sessionSubstituteScope, substituteScoped } from "./substitute-filters.js";
 
 /**
  * Per-session usage-limit behaviour (`fallbackMode`): which mode a session
@@ -97,11 +103,21 @@ function accountTarget(config: JinnConfig, session: Session, from: string, accou
   return { engine: "claude", account, ...(model ? { model } : {}), label: model ? `${name} · ${model}` : name };
 }
 
+/** A link the chain names, as the view shows the target: a Claude account swap or an engine standing in, with the model the link names when it names one. */
+function linkTarget(config: JinnConfig, registry: ModelRegistry, own: Session, from: string, link: ResolvedFallbackLink): SessionFallbackTarget {
+  const base = from !== "" && link.engine === "claude" ? accountTarget(config, own, from, link.account) : engineTarget(config, registry, own, link.engine);
+  // A model the entry wrote is the target's; one it inherits from the session is derived as a swap derives it.
+  if (!linkModelWritten(link) || !link.model) return base;
+  const prefix = base.account ? `${accountName(config, base.account)} · ` : "";
+  return { ...base, model: link.model, label: `${prefix}${link.model}` };
+}
+
 /**
  * What the session would fall back to, from config alone: no health and no check that
- * a binary is installed. It walks the chains `chooseSubstitute` walks, with the same scoped
- * and remote filters, so it answers "where would this go if its model were limited now".
- * Null when the chain is empty or has nothing the session may use.
+ * a binary is installed. It reads the chain `chooseSubstitute` walks, with the same scoped
+ * and remote filters, from where the session's run stands, so it answers "where would this
+ * go if its model were limited now". Null when the chain is empty or has nothing the
+ * session may use.
  */
 export function resolveSessionFallbackTarget(
   config: JinnConfig,
@@ -111,15 +127,17 @@ export function resolveSessionFallbackTarget(
 ): SessionFallbackTarget | null {
   const remoteTarget = rateLimitRemoteTarget({ session, employee, config });
   const scope = { scoped: substituteScoped(session, remoteTarget), remote: isRemoteTarget(remoteTarget) };
-  if (!scope.remote && session.engine === "claude") {
-    const from = rateLimitAccount("claude", employee, session).account;
-    if (!accountHasChain(config, from)) return null;
-    const target = resolveHealthyAccountFallback(config, from, (candidate) => Boolean(registry[candidate.engine]), {}, accountWalkOptions(session));
-    if (!target) return null;
-    return target.engine === "claude" ? accountTarget(config, session, from, target.account) : engineTarget(config, registry, session, target.engine);
-  }
-  const to = resolveFallbackEngine(config, session.engine, (candidate) => Boolean(registry[candidate]) && engineAllowedAsSubstitute(scope, candidate));
-  return to ? engineTarget(config, registry, session, to) : null;
+  const own = sessionAtOwnTarget(session);
+  const { links } = sessionFallbackChain({ config, employee, session: own, registry, health: {}, scope });
+  const run = readFallbackRun(metaOf(session));
+  const position = effectivePosition(links, run);
+  const tried = new Set([...(run?.tried ?? []), links[0]!.key, links[position]!.key]);
+  // Whether a binary is installed is the turn's question, not this display's: only an engine the registry does not know at all is passed over.
+  const next = links.slice(position + 1).find((link) => !tried.has(link.key) && registry[link.engine] !== undefined && (link.skip === undefined || link.skip === "not-installed"));
+  if (!next) return null;
+  // A local Claude session swaps accounts; any other session (or a remote one) has an engine stand in.
+  const from = session.engine === "claude" && !scope.remote ? rateLimitAccount("claude", employee, session).account : "";
+  return linkTarget(config, registry, own, from, next);
 }
 
 /** The session's own chosen target as the view shows it: the model's label when the registry has one. */
@@ -136,15 +154,17 @@ function allowedFallbackEngines(config: JinnConfig, registry: ModelRegistry, ses
     .map(([name]) => name);
 }
 
-/** What `GET /api/sessions/:id` reports for fallback. */
+/** What `GET /api/sessions/:id` reports for fallback. `inputs` is the engine health and cached limits readings the chain reads its link states from; without them every link reads ok. */
 export function sessionFallbackView(
   config: JinnConfig,
   registry: ModelRegistry,
   session: Session,
   employee?: Employee,
+  inputs: FallbackHealthInputs = { health: {} },
 ): SessionFallbackView {
   const { mode, source } = effectiveFallbackMode(config, session);
   const allowedEngines = allowedFallbackEngines(config, registry, session, employee);
-  if (session.fallbackTarget) return { mode, modeSource: source, target: ownTarget(registry, session.fallbackTarget), targetSource: "session", allowedEngines };
-  return { mode, modeSource: source, target: resolveSessionFallbackTarget(config, registry, session, employee), targetSource: "config", allowedEngines };
+  const chain = sessionFallbackChainView({ config, registry, session, employee, ...inputs });
+  if (session.fallbackTarget) return { mode, modeSource: source, target: ownTarget(registry, session.fallbackTarget), targetSource: "session", allowedEngines, chain };
+  return { mode, modeSource: source, target: resolveSessionFallbackTarget(config, registry, session, employee), targetSource: "config", allowedEngines, chain };
 }

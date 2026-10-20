@@ -42,6 +42,7 @@ persona: |
 | `remoteUser` | string | no | SSH user on `remoteHost` (default: ssh's own resolution) |
 | `remoteCwd` | string | no | Absolute working directory on the remote host, required when `remoteHost` is set; must sit under `remote.root` in `config.yaml` |
 | `remoteClaudeConfigDir` | string | no | Absolute path used as `CLAUDE_CONFIG_DIR` for this employee's sessions on the remote host |
+| `fallback` | list | no | This employee's fallback chain, overriding its account's and its engine's: `{engine, profile?, model?}` mappings tried in order when its own target cannot serve a turn. Unset inherits; `[]` means no fallback. A chain that is invalid is ignored (the employee inherits) and logged at load |
 | `claudeConfigDir` | string | no | Absolute path of the Claude Code profile this employee's **local** sessions run on (see "Claude profiles" below). Not allowed with `remoteHost` |
 | `closeTodos` | boolean | no | Lets this employee move a Todo to `done`, with a reason (default `false`; see "Closing Todos" below). Only a literal `true` grants it. YAML only |
 

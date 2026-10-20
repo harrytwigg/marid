@@ -1,7 +1,8 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type React from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import '@/test/preload-menus'
 import SettingsPage from '../../page'
 
 /* The Engine Fallbacks section as the operator drives it: chains are edited into the
@@ -18,6 +19,8 @@ const apiMocks = vi.hoisted(() => ({
 }))
 const fetchTalkCapability = vi.hoisted(() => vi.fn())
 const registry = vi.hoisted(() => ({ current: undefined as unknown }))
+const chains = vi.hoisted(() => ({ current: undefined as unknown }))
+// `'failed'` stands for a chains request that errored.
 
 vi.mock('@/lib/api', () => ({ api: apiMocks }))
 vi.mock('@/lib/talk-capability', () => ({ fetchTalkCapability }))
@@ -36,7 +39,14 @@ vi.mock('@/routes/settings-provider', () => ({
     resetAll: vi.fn(),
   }),
 }))
-vi.mock('@/hooks/use-model-registry', () => ({ useModelRegistry: () => ({ data: registry.current }) }))
+vi.mock('@/hooks/use-model-registry', async (importActual) => ({
+  ...(await importActual<typeof import('@/hooks/use-model-registry')>()),
+  useModelRegistry: () => ({ data: registry.current }),
+}))
+vi.mock('@/hooks/use-fallback-chains', async (importActual) => ({
+  ...(await importActual<typeof import('@/hooks/use-fallback-chains')>()),
+  useFallbackChains: () => ({ data: chains.current, isError: chains.current === 'failed' }),
+}))
 vi.mock('@/hooks/use-onboarding', () => ({ useOnboarding: () => ({ data: undefined }) }))
 vi.mock('@/components/ui/emoji-picker', () => ({ EmojiPicker: () => null }))
 vi.mock('@/components/auth/remote-access-panel', () => ({ RemoteAccessPanel: () => null }))
@@ -47,8 +57,10 @@ vi.mock('@/routes/auth-provider', () => ({
 /** Six days out: the case a bare clock time used to render as this afternoon. */
 const EXHAUSTED_UNTIL = new Date(Date.now() + 6 * 24 * 60 * 60_000).toISOString()
 
-function engine(name: string, available: boolean, defaultModel: string, health?: unknown) {
-  return { name, available, defaultModel, effortMechanism: 'none', models: [], ...(health ? { health } : {}) }
+const model = (id: string, label = id) => ({ id, label, supportsEffort: false, effortLevels: [] })
+
+function engine(name: string, available: boolean, defaultModel: string, extra: Record<string, unknown> = {}) {
+  return { name, available, defaultModel, effortMechanism: 'none', models: [model(defaultModel)], ...extra }
 }
 
 async function renderSettings() {
@@ -57,9 +69,17 @@ async function renderSettings() {
 }
 
 /** The chain rows on one card, in the order they are rendered. */
-function chainRows(engineName: string): string[] {
-  const card = document.querySelector(`[data-engine-card="${engineName}"]`)!
+function chainRows(cardSelector: string): string[] {
+  const card = document.querySelector(cardSelector)!
   return Array.from(card.querySelectorAll('[data-chain-row]')).map((row) => row.getAttribute('data-chain-row')!)
+}
+const engineRows = (name: string) => chainRows(`[data-engine-card="${name}"]`)
+
+/** For a test that edits more than once: the write that follows the last edit, once the debounce has gone quiet. */
+async function saveLast() {
+  await waitFor(() => expect(apiMocks.updateConfig).toHaveBeenCalled())
+  await new Promise((resolve) => setTimeout(resolve, 700))
+  return apiMocks.updateConfig.mock.calls.at(-1)![0] as Record<string, any>
 }
 
 /** Settings save themselves; what a test waits for is the write. */
@@ -68,17 +88,26 @@ async function save() {
   return apiMocks.updateConfig.mock.calls[0][0] as Record<string, any>
 }
 
+function loadConfig(config: Record<string, unknown>) {
+  apiMocks.getConfig.mockResolvedValue({ config, revision: 'rev-1' })
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
+  chains.current = undefined
   registry.current = {
     default: 'claude',
     engines: {
-      claude: engine('claude', true, 'opus', { state: 'exhausted', until: EXHAUSTED_UNTIL, window: '7d' }),
+      claude: engine('claude', true, 'opus', {
+        health: { state: 'exhausted', until: EXHAUSTED_UNTIL, window: '7d' },
+        models: [model('opus', 'Opus'), model('sonnet', 'Sonnet')],
+      }),
       codex: engine('codex', true, 'gpt-5.6-sol'),
-      grok: engine('grok', false, 'grok-build', { state: 'degraded' }),
+      grok: engine('grok', false, 'grok-build', { health: { state: 'degraded' } }),
+      opencode: engine('opencode', true, 'x/one', { models: [model('x/one'), model('x/two')] }),
     },
   }
-  apiMocks.getConfig.mockResolvedValue({ config: { engines: { claude: { fallback: ['codex'] } } }, revision: 'rev-1' })
+  loadConfig({ engines: { claude: { fallback: [{ engine: 'codex' }] } } })
   apiMocks.updateConfig.mockResolvedValue({})
   apiMocks.getOrg.mockResolvedValue({ employees: [] })
   apiMocks.sttStatus.mockResolvedValue({ available: false, model: null, downloading: false, progress: 0, languages: ['en'] })
@@ -103,28 +132,65 @@ describe('Engine Fallbacks section', () => {
     expect(screen.getByText('Not installed · grok-build')).toBeTruthy()
     expect(screen.getByText('Weekly limit, back in 6d')).toBeTruthy()
     expect(screen.getByText('Degraded')).toBeTruthy()
-    expect(screen.getByText('Healthy')).toBeTruthy()
+    expect(screen.getAllByText('Healthy').length).toBeGreaterThan(0)
   })
 
-  it('offers neither the card own engine nor one already in its chain, and no free-text entry', async () => {
+  it('shows each link as engine, profile (Claude only) and model, with the profile choices Default plus the declared accounts', async () => {
+    loadConfig({ engines: { claude: {
+      accounts: { work: { configDir: '/w' } },
+      fallback: [{ engine: 'claude', profile: 'work', model: 'sonnet' }, { engine: 'opencode', model: 'x/two' }],
+    } } })
     await renderSettings()
-    const add = screen.getByRole('combobox', { name: 'Add an engine to the Claude chain' })
 
-    expect(add.tagName).toBe('SELECT')
-    const offered = within(add).getAllByRole('option').map((option) => (option as HTMLOptionElement).value)
-    expect(offered).not.toContain('claude')
-    expect(offered).not.toContain('codex')
-    expect(offered).toContain('grok')
+    const profile = screen.getByRole('combobox', { name: 'Profile of link 1 of the Claude chain' }) as HTMLSelectElement
+    expect(profile.value).toBe('work')
+    expect(within(profile).getAllByRole('option').map((o) => o.textContent)).toEqual(['Default profile', 'work'])
+    expect(screen.getByRole('button', { name: 'Model of link 1 of the Claude chain: Sonnet' })).toBeTruthy()
+    // opencode takes no profile: its row has two fields, not three.
+    expect(screen.queryByRole('combobox', { name: 'Profile of link 2 of the Claude chain' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Model of link 2 of the Claude chain: x/two' })).toBeTruthy()
   })
 
-  it('saves the edited chain as exactly the array on screen', async () => {
+  it('saves an added target as an object link, the array replaced as a whole', async () => {
     await renderSettings()
-    fireEvent.change(screen.getByRole('combobox', { name: 'Add an engine to the Claude chain' }), {
-      target: { value: 'grok' },
-    })
-    expect(chainRows('claude')).toEqual(['codex', 'grok'])
+    fireEvent.click(screen.getByRole('button', { name: 'Add a target to the Claude chain' }))
+    expect(engineRows('claude')).toEqual(['codex', 'opencode'])
 
-    expect((await save()).engines.claude.fallback).toEqual(['codex', 'grok'])
+    expect((await save()).engines.claude.fallback).toEqual([{ engine: 'codex' }, { engine: 'opencode' }])
+  })
+
+  it('saves a changed engine, profile and model on the row that changed', async () => {
+    loadConfig({ engines: { claude: { accounts: { work: { configDir: '/w' } }, fallback: [{ engine: 'codex' }] } } })
+    await renderSettings()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Engine of link 1 of the Claude chain' }), { target: { value: 'claude' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Profile of link 1 of the Claude chain' }), { target: { value: 'work' } })
+    fireEvent.keyDown(screen.getByRole('button', { name: /Model of link 1 of the Claude chain/ }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: /Sonnet/ }))
+
+    expect((await saveLast()).engines.claude.fallback).toEqual([{ engine: 'claude', profile: 'work', model: 'sonnet' }])
+  })
+
+  it('writes no model for "Same model" / "Engine default", and says which one it is', async () => {
+    loadConfig({ engines: { claude: {
+      accounts: { a: { configDir: '/a' } },
+      fallback: [{ engine: 'claude', profile: 'a', model: 'sonnet' }, { engine: 'codex', model: 'gpt-5.6-sol' }],
+    } } })
+    await renderSettings()
+    fireEvent.keyDown(screen.getByRole('button', { name: /Model of link 2 of the Claude chain/ }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Engine default' }))
+
+    expect((await save()).engines.claude.fallback[1]).toEqual({ engine: 'codex' })
+    expect(screen.getByRole('button', { name: 'Model of link 2 of the Claude chain: Engine default' })).toBeTruthy()
+  })
+
+  it('asks for the gateway view of the chains again once a save has landed', async () => {
+    const { queryClient } = await import('@/lib/query-client')
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    await renderSettings()
+    fireEvent.click(screen.getByRole('button', { name: 'Add a target to the Claude chain' }))
+    await save()
+
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['fallback-chains'] }))
   })
 
   it('saves a chain emptied in the UI as [], and says the engine waits', async () => {
@@ -136,28 +202,40 @@ describe('Engine Fallbacks section', () => {
   })
 
   it('reorders with the move controls a keyboard can reach', async () => {
-    apiMocks.getConfig.mockResolvedValue({ config: { engines: { claude: { fallback: ['codex', 'grok'] } } }, revision: 'rev-1' })
+    loadConfig({ engines: { claude: { fallback: [{ engine: 'codex' }, { engine: 'opencode' }] } } })
     await renderSettings()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Move Grok earlier in the Claude chain' }))
-    expect(chainRows('claude')).toEqual(['grok', 'codex'])
-    expect((await save()).engines.claude.fallback).toEqual(['grok', 'codex'])
+    fireEvent.click(screen.getByRole('button', { name: 'Move opencode earlier in the Claude chain' }))
+    expect(engineRows('claude')).toEqual(['opencode', 'codex'])
+    expect((await save()).engines.claude.fallback).toEqual([{ engine: 'opencode' }, { engine: 'codex' }])
+  })
+
+  it('refuses a duplicate under its row in the loader sentence, and writes nothing', async () => {
+    loadConfig({ engines: { claude: { fallback: [{ engine: 'codex' }] } } })
+    await renderSettings()
+    fireEvent.click(screen.getByRole('button', { name: 'Add a target to the Claude chain' }))
+    fireEvent.change(screen.getAllByRole('combobox', { name: /^Engine of link 2/ })[0], { target: { value: 'codex' } })
+
+    const problem = document.querySelector('[data-chain-problem]')!
+    expect(problem.textContent).toBe('engines.claude.fallback[1] duplicates engines.claude.fallback[0] (codex): a chain tries each target once, so list it once')
+    expect(problem.closest('[data-engine-card]')?.getAttribute('data-engine-card')).toBe('claude')
+    expect(await screen.findByText(/Cannot save: engines\.claude\.fallback\[1\] duplicates/)).toBeTruthy()
+    await new Promise((resolve) => setTimeout(resolve, 800))
+    expect(apiMocks.updateConfig).not.toHaveBeenCalled()
   })
 
   it('shows the map on the engine that falls through rather than on the stand-in', async () => {
-    apiMocks.getConfig.mockResolvedValue({ config: {
+    loadConfig({
       engines: {
-        claude: { fallback: ['codex'] },
-        codex: { fallback: ['claude'], fallbackModelMap: { 'gpt-5.6-luna': 'haiku' } },
+        claude: { fallback: [{ engine: 'codex' }] },
+        codex: { fallback: [{ engine: 'claude' }], fallbackModelMap: { 'gpt-5.6-luna': 'haiku' } },
       },
-    }, revision: 'rev-1' })
+    })
     await renderSettings()
     const codexCard = document.querySelector('[data-engine-card="codex"]') as HTMLElement
 
     expect(within(codexCard).getByText('Models carried onto the stand-in')).toBeTruthy()
     expect(codexCard.querySelector('[data-model-map-pair="gpt-5.6-luna"]')).toBeTruthy()
-    // The add form is progressive: nothing to type into until it is opened.
-    expect(within(codexCard).queryByRole('textbox')).toBeNull()
     expect(document.querySelector('[data-engine-card="claude"] [data-model-map-pair]')).toBeNull()
   })
 
@@ -165,49 +243,58 @@ describe('Engine Fallbacks section', () => {
     await renderSettings()
 
     expect(document.querySelectorAll('[data-model-map-pair]').length).toBe(0)
-    // An empty map is the common case; what happens to an unmapped model is
-    // exactly what an operator cannot infer from an empty list.
     expect(document.querySelector('[data-engine-card="claude"] [data-model-map-floor]')?.textContent)
       .toContain("Codex's own default")
   })
 
+  it('waits for the gateway before offering a chain written in engine names for editing', async () => {
+    loadConfig({ engines: { claude: { fallback: ['codex', { engine: 'opencode', model: 'x/two' }] } } })
+    await renderSettings()
+    expect(document.querySelector('[data-engine-card="claude"] [data-chain-loading]')).toBeTruthy()
+    expect(engineRows('claude')).toEqual([])
+  })
+
+  it('says the gateway could not be read, rather than loading for ever, when the chains request fails', async () => {
+    loadConfig({ engines: { claude: { fallback: ['codex', { engine: 'opencode', model: 'x/two' }] } } })
+    chains.current = 'failed'
+    await renderSettings()
+    expect(document.querySelector('[data-engine-card="claude"] [data-chain-unreadable]')?.textContent).toContain('could not say how this chain runs')
+    expect(document.querySelector('[data-engine-card="claude"] [data-chain-loading]')).toBeNull()
+    expect(engineRows('claude')).toEqual([])
+  })
+
+  it('reads a chain of mixed string and object entries, whichever way each was written', async () => {
+    loadConfig({ engines: { claude: { fallback: ['codex', { engine: 'opencode', model: 'x/two' }, { engine: 'codex', model: 'gpt-5.6-sol' }] } } })
+    // As the gateway answers: each link with the model it would run, and the link as written.
+    const run = (written: { engine: string; model?: string }, model: string) => ({ ...written, model, key: `${written.engine}||${model}`, account: written.engine, label: written.engine, origin: 'config' as const, written })
+    const effective = [run({ engine: 'codex' }, 'gpt-mapped'), run({ engine: 'opencode', model: 'x/two' }, 'x/two'), run({ engine: 'codex', model: 'gpt-5.6-sol' }, 'gpt-5.6-sol')]
+    chains.current = { profiles: [], subjects: [{ kind: 'engine', id: 'claude', primary: null, configured: null, legacy: true, effective }] }
+    await renderSettings()
+    expect(engineRows('claude')).toEqual(['codex', 'opencode · x/two', 'codex · gpt-5.6-sol'])
+    expect(document.querySelector('[data-engine-card="claude"] [data-chain-legacy-notice]')).toBeTruthy()
+    expect(document.querySelector('[data-engine-card="claude"] [data-model-map-floor]')?.textContent).toContain("Codex's own default") // only the bare "codex" link names no model
+  })
+
+  it('hides the map when every link names a model, since it would translate nothing', async () => {
+    loadConfig({ engines: { claude: { fallback: [{ engine: 'codex', model: 'gpt-5.6-sol' }] } } })
+    await renderSettings()
+
+    expect(document.querySelector('[data-engine-card="claude"] [data-model-map-floor]')).toBeNull()
+  })
+
+  it('keeps the map for a link without a model', async () => {
+    loadConfig({ engines: { claude: { fallback: [{ engine: 'codex', model: 'gpt-5.6-sol' }, { engine: 'opencode' }] } } })
+    await renderSettings()
+
+    expect(document.querySelector('[data-engine-card="claude"] [data-model-map-floor]')?.textContent).toContain("opencode's own default")
+  })
+
   it('surfaces a failed save and leaves the edited chain on screen', async () => {
-    apiMocks.updateConfig.mockRejectedValue(new Error('engines.claude.fallback[0] "grok" is not a known engine'))
+    apiMocks.updateConfig.mockRejectedValue(new Error('engines.claude.fallback[1] "opencode" is not a known engine'))
     await renderSettings()
-    fireEvent.change(screen.getByRole('combobox', { name: 'Add an engine to the Claude chain' }), {
-      target: { value: 'grok' },
-    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add a target to the Claude chain' }))
 
-    expect(await screen.findByText(/Failed to save: engines\.claude\.fallback\[0\]/)).toBeTruthy()
-    expect(chainRows('claude')).toEqual(['codex', 'grok'])
-  })
-})
-
-describe('legacy fallback mapping', () => {
-  beforeEach(() => {
-    // What GET /api/config serves for a legacy config: the mapped chain in the
-    // current spelling, with the deprecated pair still on the document.
-    apiMocks.getConfig.mockResolvedValue({ config: {
-      engines: { claude: { fallback: ['codex'] } },
-      sessions: { rateLimitStrategy: 'fallback', fallbackEngine: 'codex' },
-    }, revision: 'rev-1' })
-  })
-
-  it('shows the mapping read-only, and migrating writes the chain and nulls both legacy keys', async () => {
-    await renderSettings()
-    expect(screen.getByText('An older setting still routes Claude here. Migrate it into the chain above.')).toBeTruthy()
-    // Read-only: nothing edits the legacy pair but the one Migrate control.
-    expect(screen.queryByRole('combobox', { name: 'When Claude Hits Usage Limit' })).toBeNull()
-
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Migrate' })) })
-    expect(screen.queryByRole('button', { name: 'Migrate' })).toBeNull()
-
-    const sent = await save()
-    expect(sent.engines.claude.fallback).toEqual(['codex'])
-    // Null, not absent: the gateway keeps every key a PUT omits, so an omitted
-    // key would leave the deprecated pair on disk.
-    expect(Object.keys(sent.sessions)).toEqual(expect.arrayContaining(['rateLimitStrategy', 'fallbackEngine']))
-    expect(sent.sessions.rateLimitStrategy).toBeNull()
-    expect(sent.sessions.fallbackEngine).toBeNull()
+    expect(await screen.findByText(/Failed to save: engines\.claude\.fallback\[1\]/)).toBeTruthy()
+    expect(engineRows('claude')).toEqual(['codex', 'opencode'])
   })
 })

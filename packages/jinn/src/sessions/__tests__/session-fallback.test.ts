@@ -146,9 +146,20 @@ describe("resolveSessionFallbackTarget: Claude accounts", () => {
 
   it("a declared account with an empty chain has nothing to fall back to", () => {
     const config = cfg({ claude: { accounts } });
-    const onFriend = makeSession({ transportMeta: { engineOverride: { substituteAccount: `claude:${friendKey}`, originalAccount: "claude", originalEngine: "claude", until: "2999-01-01T00:00:00Z" } } });
-    // The session stands on the friend account now, whose chain is empty.
-    expect(resolveSessionFallbackTarget(config, registry, onFriend)).toBeNull();
+    // The employee's own account is friend, whose chain is empty (the default account's chain does not apply to it).
+    const onFriend = { name: "e", engine: "claude", claudeConfigDir: FRIEND } as Employee;
+    expect(resolveSessionFallbackTarget(config, registry, makeSession(), onFriend)).toBeNull();
+  });
+
+  it("a session standing on a stand-in goes on from there along its own target's chain, not back to a target it tried", () => {
+    const config = cfg({ claude: { fallback: ["claude:friend", "codex"], accounts } });
+    const onFriend = makeSession({
+      transportMeta: {
+        engineOverride: { substituteAccount: `claude:${friendKey}`, originalAccount: "claude", originalEngine: "claude", until: "2999-01-01T00:00:00Z" },
+        fallbackRun: { source: "engine", position: 1, tried: ["claude||opus"], startedAt: "2026-10-19T10:00:00.000Z" },
+      },
+    });
+    expect(resolveSessionFallbackTarget(config, registry, onFriend)).toMatchObject({ engine: "codex" });
   });
 
   it("an account chain may end on an engine, which is then an engine target", () => {
@@ -183,11 +194,11 @@ describe("resolveSessionFallbackTarget: scoped and remote sessions", () => {
 describe("sessionFallbackView", () => {
   it.each(["fallback", "fallback-children", "auto-resume"] as const)("reports %s with its target whatever the mode, chain present", (mode) => {
     expect(sessionFallbackView(cfg(), registry, withMode(mode))).toEqual({
-      mode, modeSource: "session", target: { engine: "codex", model: "gpt-config", label: "gpt-config" }, targetSource: "config", allowedEngines: expect.any(Array),
+      mode, modeSource: "session", target: { engine: "codex", model: "gpt-config", label: "gpt-config" }, targetSource: "config", allowedEngines: expect.any(Array), chain: expect.any(Object),
     });
   });
   it.each(["fallback", "fallback-children", "auto-resume"] as const)("reports %s with a null target when the chain is absent", (mode) => {
-    expect(sessionFallbackView(cfg({ claude: { fallback: [] } }), registry, withMode(mode))).toEqual({ mode, modeSource: "session", target: null, targetSource: "config", allowedEngines: expect.any(Array) });
+    expect(sessionFallbackView(cfg({ claude: { fallback: [] } }), registry, withMode(mode))).toEqual({ mode, modeSource: "session", target: null, targetSource: "config", allowedEngines: expect.any(Array), chain: expect.any(Object) });
   });
   it("marks a mode that came from the config", () => {
     expect(sessionFallbackView(cfg({}, { fallbackMode: "auto-resume" }), registry, withMode(null)).modeSource).toBe("default");

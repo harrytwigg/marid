@@ -29,6 +29,7 @@ import { reviewHeldInterimRepliesOnTodoStatusChange, reviewHeldInterimReply } fr
 import { InteractiveClaudeEngine } from "../engines/claude-interactive.js";
 import { enforcePtyIdleCap, ptyIdleCapForHost, PtyLifecycleManager, type PtyLifecycleOpts } from "../engines/pty-lifecycle.js";
 import { CodexEngine, startCodexSessionHomeSweeps } from "../engines/codex.js";
+import { warnOpencodeInternalFallback } from "../engines/opencode-internal-fallback.js";
 import { CodexInteractiveEngine } from "../engines/codex-interactive.js";
 import { createAntigravityEnginePair } from "../engines/antigravity-runtime.js";
 import { PiEngine } from "../engines/pi.js";
@@ -402,6 +403,7 @@ export async function startGateway(
   const gatewayName = config.portal?.portalName || PRODUCT_NAME;
   logger.info(productBanner(getPackageVersion()));
   logger.info(`Starting ${gatewayName} gateway (boot ${bootId}, pid ${process.pid})...`);
+  if (config.engines.opencode) warnOpencodeInternalFallback();
 
   // Initialize database and recover any sessions stuck from a previous run
   initDb();

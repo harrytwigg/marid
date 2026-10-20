@@ -6,7 +6,6 @@ vi.mock("../codename-constant.js", () => ({ CODENAME: "acme" }));
 import { parseDocument } from "yaml";
 import { MAIN_AGENT_SENTINEL, SsePtyProxy } from "../../engines/sse-pty-proxy.js";
 import { readMetadataTag, metadataTag } from "../../engines/opencode-metadata-tag.js";
-import { repeatsPrompt } from "../../engines/opencode-server-settle.js";
 import { stampVersionInYaml, versionMarkerKey } from "../../migrations/version-marker.js";
 import { evaluateCommandPolicy } from "../command-policy.js";
 import { CONFIG_TOP_LEVEL_KEYS } from "../config.js";
@@ -49,10 +48,6 @@ describe("a session started before the rename", () => {
     expect(readMetadataTag({ jinn: "prompt" })).toBe("prompt");
     expect(readMetadataTag({ acme: "context-reseed" })).toBe("context-reseed");
     expect(readMetadataTag({ other: 1 })).toBeUndefined();
-    // A part either build tagged is never taken for a model fallback's copy of the prompt.
-    expect(repeatsPrompt({ type: "text", text: "hi", metadata: { jinn: "prompt" } }, "hi")).toBe(false);
-    expect(repeatsPrompt({ type: "text", text: "hi", metadata: { acme: "prompt" } }, "hi")).toBe(false);
-    expect(repeatsPrompt({ type: "text", text: "hi" }, "hi")).toBe(true);
   });
 });
 

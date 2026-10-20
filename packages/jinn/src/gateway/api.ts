@@ -23,6 +23,7 @@ import {
   refreshMusecodeModels,
 } from "../shared/models.js";
 import { withEngineHealth } from "../shared/engine-health.js";
+import { withInternalFallback } from "../engines/opencode-internal-fallback.js";
 import { validateNewSessionSelection, validateSessionPatch } from "../sessions/session-patch.js";
 import { parseFallbackModeParam, parseFallbackModePatch, withFallbackView } from "./session-fallback-api.js";
 import { childFallbackMode } from "../sessions/session-fallback.js";
@@ -135,6 +136,8 @@ import { handleSessionQueueRoute } from "./queue-routes.js";
 export { matchRoute } from "./route-helpers.js";
 import { handleCronApi } from "./cron-api.js";
 import { handleOrgApi } from "./org-api.js";
+import { handleFallbackChainsApi } from "./fallback-chains-api.js";
+import { unchangedDuplicates } from "../shared/fallback-chain-load.js";
 import { handleTodoCaptureApi } from "./todo-capture-api.js";
 import { handleSkillsApi } from "./skills-api.js";
 import { handleSearchApi, type NeedsAttentionTarget } from "./search-api.js";
@@ -1876,7 +1879,7 @@ export async function handleApiRequest(
         ...serializeSessionResponse(session, context),
         ...(includeMessages ? { messages } : {}),
         ...(page ? { messagesPage: { hasOlder: page.hasOlder } } : {}),
-      }, session, context));
+      }, session, context, resolveScopedCaller(resolveScopedWriteCallerIdentity(req, context)) !== null));
     }
 
     // PUT|PATCH /api/sessions/:id — update title and/or mid-chat model/effort
@@ -2051,6 +2054,7 @@ export async function handleApiRequest(
       context.sessionManager.getQueue().clearQueue(session.sessionKey || session.sourceRef || session.id);
       const meta = { ...(session.transportMeta || {}) } as Record<string, unknown>;
       delete meta["engineOverride"];
+      delete meta["fallbackRun"]; // off a stand-in, so no run; the hops stay
       clearEngineSessionRefs(params.id);
       ptySnapshotStore.deleteSync(params.id);
       updateSession(params.id, {
@@ -4208,6 +4212,7 @@ export async function handleApiRequest(
     if (await handleCronApi(req, res, { method, pathname, url }, context)) return;
     if (await handleTodoCaptureApi(req, res, { method, pathname, url }, context)) return;
     if (await handleOrgApi(req, res, { method, pathname, url }, context)) return;
+    if (await handleFallbackChainsApi(res, { method, pathname, url }, context)) return;
     if (await handleSkillsApi(req, res, { method, pathname, url }, context)) return;
     if (await handlePluginsApi(req, res, { method, pathname, url }, context)) return;
 
@@ -4216,7 +4221,7 @@ export async function handleApiRequest(
     // when no `models:` block is configured.
     if (method === "GET" && pathname === "/api/engines") {
       const config = context.getConfig();
-      return json(res, { default: config.engines.default, engines: withEngineHealth(getModelRegistry(config)) });
+      return json(res, { default: config.engines.default, engines: withInternalFallback(withEngineHealth(getModelRegistry(config))) });
     }
 
     // POST /api/engines/refresh — re-run dynamic model discovery and return the
@@ -4235,7 +4240,7 @@ export async function handleApiRequest(
         refreshHermesModels(config),
       ]);
       context.emit("engines:updated", {});
-      return json(res, { default: config.engines.default, engines: withEngineHealth(getModelRegistry(config)) });
+      return json(res, { default: config.engines.default, engines: withInternalFallback(withEngineHealth(getModelRegistry(config))) });
     }
 
     // GET /api/engine-limits — live/snapshot quota windows and static capability
@@ -4315,7 +4320,7 @@ export async function handleApiRequest(
       }
       const merged = deepMerge(existing, body);
       // A value the shape validator would reject must not reach the file: loadConfig() then throws and the gateway cannot restart.
-      const problems = validateConfigShape(merged);
+      const problems = validateConfigShape(merged, { tolerateDuplicates: unchangedDuplicates(existing) });
       if (problems.length > 0) return badRequest(res, `Invalid config: ${problems.join("; ")}`);
       saveConfigAtomic(merged);
       context.reloadConfig?.(); // refresh in-memory config now (don't wait on the watcher)

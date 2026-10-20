@@ -1,3 +1,5 @@
+import type { SessionFallbackChainView } from '@jinn/fallback-chain-wire'
+
 export type SessionFallbackMode = 'fallback' | 'fallback-children' | 'auto-resume'
 
 export interface SessionFallbackTarget {
@@ -15,6 +17,18 @@ export interface SessionFallbackView {
   targetSource?: 'session' | 'config'
   /** Installed engines the session may pick as its fallback. Absent on an older gateway: no limit. */
   allowedEngines?: string[]
+  /** The session's resolved chain, where it is on it and its hops. Absent on an older gateway. */
+  chain?: SessionFallbackChainView
+}
+
+/** "claude · B · sonnet": the target that served the session's latest turn, or null when none did or the gateway does not say. */
+export function servedByLabel(view: SessionFallbackView | null | undefined): string | null {
+  const chain = view?.chain
+  if (!chain?.servedBy) return null
+  const link = chain.links?.find((l) => l.key === chain.servedBy)
+  if (link) return link.label
+  const [engine = '', profile = '', model = ''] = chain.servedBy.split('|')
+  return [engine, profile, model].filter(Boolean).join(' · ') || null
 }
 
 /** A fallback target the operator picks: what PUT /api/sessions/:id takes. */
@@ -36,8 +50,9 @@ export const FALLBACK_MODE_OPTIONS: ReadonlyArray<{
 /** Visible chip text. */
 export function fallbackChipText(view: SessionFallbackView): string {
   if (view.mode === 'auto-resume') return 'Fallback: off (auto-resume)'
-  if (!view.target) return 'Fallback: disabled'
-  return `Fallback: ${view.target.label}`
+  if (view.target) return `Fallback: ${view.target.label}`
+  // No next target: the session has used up its chain (it is on a later link), or it has none at all.
+  return (view.chain?.position ?? 0) > 0 ? 'Fallback: none left' : 'Fallback: none'
 }
 
 const MODES: ReadonlyArray<string> = ['fallback', 'fallback-children', 'auto-resume']
@@ -85,4 +100,10 @@ export function withTarget(view: SessionFallbackView, choice: FallbackTargetChoi
 /** Whether the target is the session's own pick, which the menu offers to clear. */
 export function hasOwnTarget(view: SessionFallbackView): boolean {
   return view.targetSource === 'session' && view.target !== null
+}
+
+/** The session info's "Served by" line, or null when there is nothing to say. */
+export function servedByInfoLine(rawFallback: unknown): string | null {
+  const label = servedByLabel(parseFallbackView(rawFallback))
+  return label ? `Served by: ${label}` : null
 }

@@ -86,6 +86,7 @@ export interface Employee {
   depth?: number;
   chain?: string[];
   claudeProfile?: { path: string; key: string } | null; // named Claude profile (YAML only); null = the gateway's own
+  fallback?: import("@jinn/fallback-chain-wire").FallbackLink[]; // chain override; absent inherits, [] is none
 }
 
 /** Editable employee fields accepted by PATCH /api/org/employees/:name; `name` is immutable and omitted. */
@@ -100,6 +101,7 @@ export interface EmployeeUpdate {
   reportsTo?: string | string[];
   cliFlags?: string[];
   alwaysNotify?: boolean;
+  fallback?: import("@jinn/fallback-chain-wire").FallbackLink[] | null; // null removes the override (inherit)
 }
 
 export interface OrgWarning {

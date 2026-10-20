@@ -22,8 +22,7 @@ import { findBuiltinMcp } from "../../mcp/builtin-name.js";
 import type { TurnHierarchy, TurnInput, TurnPlan, TurnPreflight } from "./types.js";
 export { warnIfNearUsageLimit } from "./usage-warning.js";
 
-/** How many prior messages a synthesized engine-switch transcript carries. */
-const SYNC_TRANSCRIPT_MESSAGES = 20;
+import { SYNC_TRANSCRIPT_MESSAGES, syncTranscriptPrompt } from "./sync-transcript.js";
 
 /**
  * Marks a session whose conversation on this engine was found gone: its next
@@ -282,27 +281,13 @@ export function resolveSyncPrompt(
   if (!sync) return { promptToRun: prompt, syncRequested: false };
 
   const recentMessages = getMessages(session.id).filter((message) => message.timestamp >= sync.sinceMs);
-  const transcript = recentMessages
-    .filter((message) => message.role === "user" || message.role === "assistant")
-    .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
-    .slice(-SYNC_TRANSCRIPT_MESSAGES)
-    .join("\n\n");
-
-  const latest = recentMessages.at(-1);
-  const promptAlreadyInTranscript = latest?.content === prompt
-    && (latest.role === "user" || latest.role === "assistant");
-  const currentPrompt = promptAlreadyInTranscript || !prompt.trim() ? "" : `CURRENT MESSAGE:\n${prompt}`;
-
   const intro = sync.engineSwitch
     ? "We switched engines in this Jinn session. Sync your context with this transcript (most recent last), then respond to the current message."
     : sync.accountSwap
       ? "We temporarily ran this session on another Claude account due to a usage limit. Sync your context with this transcript (most recent last), then respond to the current message."
       : "We temporarily ran this session on another engine due to a Claude usage limit. Sync your context with this transcript (most recent last), then respond to the current message.";
 
-  return {
-    promptToRun: [intro, transcript, currentPrompt].filter(Boolean).join("\n\n"),
-    syncRequested: true,
-  };
+  return { promptToRun: syncTranscriptPrompt({ recentMessages, prompt, intro }), syncRequested: true };
 }
 
 /**

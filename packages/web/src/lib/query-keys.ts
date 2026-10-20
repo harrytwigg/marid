@@ -49,6 +49,8 @@ export const queryKeys = {
   engines: {
     all: ['engines'] as const,
   },
+  /** GET /api/fallback-chains, optionally with an employee subject. */
+  fallbackChains: (employee?: string) => ['fallback-chains', employee ?? null] as const,
   config: ['config'] as const,
   status: ['status'] as const,
   workspaces: ['workspaces'] as const,

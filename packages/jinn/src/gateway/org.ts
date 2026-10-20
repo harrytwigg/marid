@@ -8,6 +8,7 @@ import { logger } from "../shared/logger.js";
 import { getModelRegistry, effortLevelsForModel, hasDynamicModelCatalog } from "../shared/models.js";
 import { effortLevelsPending } from "../shared/opencode-catalogue.js";
 import { validateEmployeeTargets } from "../shared/claude-profile.js";
+import { employeeFallbackUpdate, loadEmployeeFallback, storedFallbackProblems } from "../shared/employee-fallback.js";
 import { departmentDisagreement, resolveEmployeeDepartment, scopedEmployeeRefusal } from "./org-department-check.js";
 import { walkEmployeeYamls, WRITABLE_FIELDS, type EmployeeUpdate } from "./org-yaml-files.js";
 import {
@@ -100,6 +101,9 @@ export function scanOrg(config?: JinnConfig, scopeOf: (slug: string) => Departme
               .map((s: any) => ({ name: s.name as string, description: s.description as string }))
             : undefined,
         };
+        const chain = loadEmployeeFallback(data.fallback, employee, config, fullPath);
+        if (chain.fallback) employee.fallback = chain.fallback;
+        if (chain.problems) employee.fallbackProblems = chain.problems;
         const departmentProblem = departmentDisagreement(orgDir, fullPath, employee.department, scopeOf) ?? scopedEmployeeRefusal(employee, scopeOf, config?.remote);
         if (departmentProblem) {
           // Same containment as a bad remote target: this employee does not load, the
@@ -150,6 +154,7 @@ export interface EmployeeUpdateResult {
  *  - an invalid rank enum
  *  - an unknown engine, or a model/effortLevel invalid for the *resulting* engine
  *  - wrong-typed cliFlags / alwaysNotify / reportsTo
+ *  - a fallback that is not a valid chain of links (null clears it)
  *
  * `current` supplies the existing engine/model so model+effort can be validated
  * even when those fields aren't part of this update.
@@ -294,6 +299,18 @@ export function validateEmployeeUpdate(
       return { ok: false, error: "alwaysNotify must be a boolean" };
     }
     updates.alwaysNotify = body.alwaysNotify;
+  }
+
+  // --- fallback (links, or null to inherit) ---
+  const target = { ...current, engine: resultingEngine, model: updates.model ?? current.model };
+  if (body.fallback !== undefined) {
+    const chain = employeeFallbackUpdate(config, target, body.fallback);
+    if (!chain.ok) return { ok: false, error: chain.error };
+    updates.fallback = chain.value;
+  } else {
+    // A new engine or model can make the chain already written one that names the employee's own target.
+    const stale = storedFallbackProblems(config, current, target);
+    if (stale.length > 0) return { ok: false, error: `the engine or model change leaves the employee's fallback invalid (send a new fallback, or null to inherit): ${stale.join("; ")}` };
   }
 
   if (Object.keys(updates).length === 0) {

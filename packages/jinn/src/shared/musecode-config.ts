@@ -1,4 +1,4 @@
-import type { EngineName } from "./models.js";
+import type { FallbackChainEntry } from "./fallback-chain-wire.js";
 
 /**
  * `engines.musecode`: Muse Code (`muse` CLI). `bin` is optional and PATH-resolved.
@@ -10,6 +10,6 @@ export interface MusecodeEngineConfig {
   model?: string;
   effortLevel?: string;
   childEffortOverride?: string;
-  fallback?: EngineName[];
+  fallback?: FallbackChainEntry[];
   fallbackModelMap?: Record<string, string>;
 }

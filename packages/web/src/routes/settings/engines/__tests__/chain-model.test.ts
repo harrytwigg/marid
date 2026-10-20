@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
-  addOptionsFor,
-  chainFor,
+  accountEntriesFor,
+  accountNames,
+  chainEntriesFor,
   classifyEngineHealth,
   legacyFallbackEngine,
   legacyMigrationMutations,
-  moveInChain,
-  removeFromChain,
+  substituteChainFor,
 } from '../chain-model'
 
 describe('classifyEngineHealth', () => {
@@ -59,50 +59,49 @@ describe('classifyEngineHealth', () => {
   })
 })
 
-describe('addOptionsFor', () => {
-  it('offers neither the card own engine nor one the chain already holds', () => {
-    expect(addOptionsFor(['claude', 'codex', 'grok', 'pi'], 'claude', ['codex'])).toEqual(['grok', 'pi'])
-  })
-
-  it('offers nothing once every other engine is in the chain', () => {
-    expect(addOptionsFor(['claude', 'codex'], 'claude', ['codex'])).toEqual([])
-  })
-})
-
-describe('chainFor', () => {
-  it('reads the chain an engine block carries', () => {
-    expect(chainFor({ claude: { fallback: ['codex', 'grok'] } }, 'claude')).toEqual(['codex', 'grok'])
+describe('chainEntriesFor', () => {
+  it('reads the entries an engine block carries, in either spelling', () => {
+    expect(chainEntriesFor({ claude: { fallback: ['codex', { engine: 'grok' }] } }, 'claude')).toEqual(['codex', { engine: 'grok' }])
   })
 
   it('reads an engine with no block, and the `default` string key, as an empty chain', () => {
-    expect(chainFor({ default: 'claude' }, 'claude')).toEqual([])
-    expect(chainFor(undefined, 'claude')).toEqual([])
+    expect(chainEntriesFor({ default: 'claude' }, 'claude')).toEqual([])
+    expect(chainEntriesFor(undefined, 'claude')).toEqual([])
   })
 })
 
-describe('removeFromChain', () => {
-  it('drops the entry at the index and keeps the rest in order', () => {
-    expect(removeFromChain(['codex', 'grok', 'pi'], 1)).toEqual(['codex', 'pi'])
+describe('declared accounts', () => {
+  const engines = { claude: { accounts: { work: { configDir: '/a', fallback: [{ engine: 'codex' }] }, spare: { configDir: '/b' } } } }
+
+  it('lists the accounts in the order config states them, and reads their chains', () => {
+    expect(accountNames(engines)).toEqual(['work', 'spare'])
+    expect(accountEntriesFor(engines, 'work')).toEqual([{ engine: 'codex' }])
+    expect(accountEntriesFor(engines, 'spare')).toEqual([])
   })
 
-  it('empties a one-entry chain to an array rather than to undefined', () => {
-    expect(removeFromChain(['codex'], 0)).toEqual([])
+  it('reads none when claude declares none', () => {
+    expect(accountNames({ claude: {} })).toEqual([])
+    expect(accountNames(undefined)).toEqual([])
   })
 })
 
-describe('moveInChain', () => {
-  it('moves an entry later, keeping every other relative order', () => {
-    expect(moveInChain(['a', 'b', 'c'], 0, 2)).toEqual(['b', 'c', 'a'])
+describe('substituteChainFor', () => {
+  it('is the engines of the links that name no model and leave the engine', () => {
+    const engines = {
+      claude: {
+        fallback: [
+          { engine: 'claude', profile: 'work' },
+          { engine: 'opencode', model: 'x/y' },
+          { engine: 'codex' },
+          'grok',
+        ],
+      },
+    }
+    expect(substituteChainFor(engines, 'claude')).toEqual(['codex', 'grok'])
   })
 
-  it('moves an entry earlier', () => {
-    expect(moveInChain(['a', 'b', 'c'], 2, 0)).toEqual(['c', 'a', 'b'])
-  })
-
-  it('returns the chain unchanged for an index outside it, dropping nothing', () => {
-    expect(moveInChain(['a', 'b'], 0, 5)).toEqual(['a', 'b'])
-    expect(moveInChain(['a', 'b'], -1, 1)).toEqual(['a', 'b'])
-    expect(moveInChain(['a', 'b'], 1, 1)).toEqual(['a', 'b'])
+  it('is empty when every link names a model', () => {
+    expect(substituteChainFor({ claude: { fallback: [{ engine: 'codex', model: 'gpt-5.5' }] } }, 'claude')).toEqual([])
   })
 })
 
@@ -126,7 +125,7 @@ describe('legacyMigrationMutations', () => {
   it('writes the mapped engine as claude chain', () => {
     expect(legacyMigrationMutations('codex')).toContainEqual({
       path: ['engines', 'claude', 'fallback'],
-      value: ['codex'],
+      value: [{ engine: 'codex' }],
     })
   })
 

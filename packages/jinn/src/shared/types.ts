@@ -248,6 +248,10 @@ export interface EngineResult {
    * `resetsAt` is a Unix timestamp in seconds.
    */
   rateLimit?: EngineRateLimitInfo;
+  /** Session notices the engine asks the turn to post, once each (an opencode 2.x
+   *  host plugin that answered from another model, say). The turn posts them
+   *  wherever it takes this result: the attempt, a chain hop's substitute, a parked retry. */
+  notices?: string[];
 }
 
 export type { CompactionStats } from "./compaction-stats.js";
@@ -560,6 +564,8 @@ export interface Employee extends RemoteTarget {
   reportsTo?: string | string[];
   /** Services this employee provides to the org */
   provides?: ServiceDeclaration[];
+  fallback?: import("./fallback-chain-wire.js").FallbackLink[]; // chain override; absent inherits, [] is none
+  fallbackProblems?: string[]; // why a written chain was ignored at load (the employee then inherits)
 }
 
 /** A service that an employee can provide to other employees/departments. */

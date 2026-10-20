@@ -70,16 +70,18 @@
 //               and no error, and the session goes idle
 //   PROVIDERWAIT    a retry status whose next attempt is an hour away; the
 //               session stays in it until aborted
-//   FALLBACKIDLE    the first reply closes with nothing written and the
+//   NEWERREPLYIDLE  the first reply closes with nothing written and the
 //               session goes idle; 300 ms later it is busy again with a new
 //               reply to the same prompt, which answers
-//   FALLBACKREPLY   the first reply finishes "stop" with nothing written; 300 ms
+//   NEWERREPLYDONE  the first reply finishes "stop" with nothing written; 300 ms
 //               later a new reply to the same prompt opens and answers
-//   FALLBACKPROMPT  what the opencode-rate-limit plugin (1.4.0) does on 1.19.0:
-//               a retry status an hour off, then its abort (the reply closes
-//               with nothing written and no error; idle), then 300 ms later
-//               a new user message repeating the prompt's text parts without
-//               their metadata, whose reply answers
+//   TOOLFIRST   one tool round trip (finish=tool-calls) before any provider directive,
+//               so the trouble lands on the turn's second step
+//   TOOLNARRATE as TOOLFIRST, with the tool step also writing narration text
+//   COPYAFTERABORT  a retry status an hour off, then the session is aborted (the reply
+//               closes with nothing written and no error; idle), and 300 ms later
+//               another client posts the prompt's text as a NEW user message, with
+//               no Jinn metadata, whose reply answers and runs until aborted
 // Directives are read from the prompt's own text only, never from a synthetic
 // part (which may quote another prompt's directives).
 // Test hooks: FAKE_OPENCODE_SERVE_FAIL=1 makes `serve` exit at once;
@@ -106,6 +108,7 @@
 // GET /test/info how it was started.
 import http from "node:http";
 import fs from "node:fs";
+import { bodyModel, modelsListing, runTurnLines, scenarioMode, serverTurnPlan, takeOutcome } from "./fake-opencode-scenario.mjs";
 
 const argv = process.argv.slice(2);
 const verb = argv[0];
@@ -115,6 +118,17 @@ const flag = (name) => {
 };
 if (process.env.FAKE_OPENCODE_ENV_LOG && verb !== "--version") fs.appendFileSync(process.env.FAKE_OPENCODE_ENV_LOG, `${verb} ${process.env.OPENCODE_DISABLE_FFF ?? ""}\n`);
 const emitLine = (event) => process.stdout.write(`${JSON.stringify(event)}\n`);
+
+/** A run turn under a scenario file: the outcome for its `-m` model, as the lines the real CLI prints. */
+async function scenarioRun(prompt) {
+  const model = flag("-m") ?? "default";
+  const sessionID = flag("-s") ?? `ses_run_${(process.env.JINN_SESSION_ID ?? "fake").slice(0, 8)}`;
+  const outcome = takeOutcome({ model, resume: flag("-s"), text: prompt, mode: "run", sessionId: sessionID });
+  const { lines, code } = runTurnLines(outcome, { sessionID, model, version: process.env.FAKE_OPENCODE_VERSION });
+  for (const line of lines) emitLine(line);
+  if (code === null) await new Promise(() => setInterval(() => {}, 1000));
+  process.exitCode = code;
+}
 
 async function readStdin() {
   let text = "";
@@ -224,7 +238,9 @@ function serve() {
       return;
     }
     if (text.includes("MIDFAIL")) return midTurnFailure(sessionID, turn);
-    if (/PROVIDER|FALLBACK/.test(text) && await providerTrouble(sessionID, turn)) return;
+    if (text.includes("TOOLNARRATE")) part(sessionID, turn, { type: "text", text: "Let me read the file first.", time: { start: 1, end: 2 } });
+    if (text.includes("TOOLFIRST") || text.includes("TOOLNARRATE")) toolRound(sessionID, turn, 1);
+    if (/PROVIDER|NEWERREPLY|COPYAFTERABORT/.test(text) && await providerTrouble(sessionID, turn)) return;
     if (text.includes("MULTISTEP")) { toolRound(sessionID, turn, 1); toolRound(sessionID, turn, 2); }
     if (text.includes("TOOLONLY")) {
       toolRound(sessionID, turn, 1);
@@ -284,7 +300,7 @@ function serve() {
     part(sessionID, turn, { type: "text", text: "partial", time: { start: 1 } });
     part(sessionID, turn, {
       type: "text",
-      text: `answer:${text}${body.model ? ` model=${body.model.providerID}/${body.model.modelID}` : ""}${body.agent ? ` agent=${body.agent}` : ""}`,
+      text: `answer:${turn.shown ?? text}${body.model ? ` model=${body.model.providerID}/${body.model.modelID}` : ""}${body.agent ? ` agent=${body.agent}` : ""}`,
       time: { start: 1, end: 2 },
     });
     part(sessionID, turn, { type: "step-finish", reason: "stop", tokens: { input: 10, output: 2, cache: { read: 5, write: 0 } }, cost: 0.001 });
@@ -293,12 +309,12 @@ function serve() {
     turn.reply.info.tokens = { input: 1200, output: 2, cache: { read: 20000, write: 600 } };
   }
 
-  /** The PROVIDER* and FALLBACK* directives. True when the turn is over. */
+  /** The PROVIDER* and NEWERREPLY* directives. True when the turn is over. */
   async function providerTrouble(sessionID, turn) {
     const { text } = turn;
     const retry = (attempt, inMs) => publish("session.status", {
       sessionID,
-      status: { type: "retry", attempt, message: "Go usage limit exceeded", next: Date.now() + inMs },
+      status: { type: "retry", attempt, message: turn.limitMessage ?? "Go usage limit exceeded", next: Date.now() + inMs },
     });
     const closeEmpty = (finish) => {
       turn.reply.info.time.completed = Date.now();
@@ -311,13 +327,13 @@ function serve() {
       while (!turn.aborted) await sleep(20);
       return true;
     }
-    for (let attempt = 1; attempt <= (text.includes("PROVIDERGIVEUP") ? 2 : 1) && !text.includes("FALLBACK"); attempt++) {
+    for (let attempt = 1; attempt <= (text.includes("PROVIDERGIVEUP") ? 2 : 1) && !text.includes("NEWERREPLY"); attempt++) {
       retry(attempt, 100);
       await sleep(100);
       if (!text.includes("PROVIDERDROP")) setStatus(sessionID, "busy");
     }
     if (text.includes("PROVIDERGIVEUP")) {
-      const error = { name: "APIError", data: { message: "Go usage limit exceeded", statusCode: 429, isRetryable: true } };
+      const error = { name: "APIError", data: { message: turn.limitMessage ?? "Go usage limit exceeded", statusCode: 429, isRetryable: true } };
       turn.reply.info.error = error;
       turn.reply.info.time.completed = Date.now();
       turn.endedItself = true;
@@ -332,24 +348,26 @@ function serve() {
       setStatus(sessionID, "idle");
       return true;
     }
-    if (text.includes("FALLBACKIDLE")) {
+    if (text.includes("NEWERREPLYIDLE")) {
       closeEmpty();
       setStatus(sessionID, "idle");
       await sleep(300);
       setStatus(sessionID, "busy");
       newReply(sessionID, turn);
     }
-    if (text.includes("FALLBACKPROMPT")) {
+    if (text.includes("COPYAFTERABORT")) {
       retry(1, 3_600_000);
       await sleep(100);
       closeEmpty();
       setStatus(sessionID, "idle");
       await sleep(300);
-      repostPrompt(sessionID, turn);
+      postCopyOfPrompt(sessionID, turn);
       setStatus(sessionID, "busy");
       newReply(sessionID, turn);
+      while (!turn.aborted) await sleep(20);
+      return true;
     }
-    if (text.includes("FALLBACKREPLY")) {
+    if (text.includes("NEWERREPLYDONE")) {
       closeEmpty("stop");
       await sleep(300);
       newReply(sessionID, turn);
@@ -357,9 +375,9 @@ function serve() {
     return false;
   }
 
-  /** FALLBACKPROMPT: the plugin posts the last user message's text parts again,
-   *  without metadata, and the turn's next reply answers that copy. */
-  function repostPrompt(sessionID, turn) {
+  /** COPYAFTERABORT: another client posts the prompt's text parts again, without
+   *  metadata, and the turn's next reply answers that copy. */
+  function postCopyOfPrompt(sessionID, turn) {
     const userId = newId("msg");
     const parts = (turn.body.parts ?? []).filter((p) => p.type === "text")
       .map((p) => ({ id: newId("prt"), type: "text", text: p.text, messageID: userId, sessionID }));
@@ -564,7 +582,10 @@ function serve() {
       const id = decodeURIComponent(m[1]);
       const s = sessions.get(id);
       if (!s) return send({ name: "NotFoundError", data: { message: `Session not found: ${id}` } }, 404);
-      const text = (json.parts ?? []).filter((p) => !p.synthetic).map((p) => p.text ?? "").join("");
+      const promptText = (json.parts ?? []).filter((p) => !p.synthetic).map((p) => p.text ?? "").join("");
+      // With a scenario file the prompt's words steer nothing: the scenario's outcome for this model does.
+      const plan = scenarioMode() ? serverTurnPlan({ model: bodyModel(json), resume: id, text: promptText }) : undefined;
+      const text = plan ? plan.directive : promptText;
       const notices = (json.parts ?? []).filter((p) => p.synthetic).map((p) => p.text ?? "");
       const userId = json.messageID ?? newId("msg");
       // Stored as posted, metadata and synthetic flags included, as the real server does.
@@ -582,7 +603,7 @@ function serve() {
         return;
       }
       setTimeout(() => {
-        s.queue.push({ userId, text, notices, body: json, wire, aborted: false });
+        s.queue.push({ userId, text, shown: plan ? promptText : undefined, limitMessage: plan?.limitMessage, notices, body: json, wire, aborted: false });
         void pump(id);
       }, text.includes("SLOWBUSY") ? 500 : 10);
       return;
@@ -613,7 +634,10 @@ if (verb === "--version") {
 } else if (verb === "run") {
   const prompt = await readStdin();
   if (process.env.FAKE_OPENCODE_RUN_LOG) fs.appendFileSync(process.env.FAKE_OPENCODE_RUN_LOG, `${JSON.stringify(argv)}\n`);
-  emitLine({ type: "text", sessionID: flag("-s") ?? "ses_plain", part: { type: "text", text: `plain:${prompt}` } });
+  if (scenarioMode()) await scenarioRun(prompt);
+  else emitLine({ type: "text", sessionID: flag("-s") ?? "ses_plain", part: { type: "text", text: `plain:${prompt}` } });
+} else if (verb === "models" && scenarioMode()) {
+  process.stdout.write(`${modelsListing(argv.includes("--verbose"))}\n`);
 } else if (verb === "attach") {
   process.stdout.write(`ATTACHED ${flag("-s") ?? "none"} pw=${process.env.OPENCODE_SERVER_PASSWORD ? "yes" : "no"}\r\n`);
   process.stdin.on("data", (d) => process.stdout.write(`TYPED ${JSON.stringify(String(d))}\r\n`));

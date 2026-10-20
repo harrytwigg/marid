@@ -6,7 +6,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import { FALLBACK_MODE_OPTIONS, hasOwnTarget, type SessionFallbackView } from './fallback-mode-model'
+import { FALLBACK_MODE_OPTIONS, hasOwnTarget, servedByLabel, type SessionFallbackView } from './fallback-mode-model'
 
 /** The three modes, as a radio list; the session's current one is checked. */
 function ModeOptions({ local, onPick }: { local: SessionFallbackView; onPick: (mode: string) => void }) {
@@ -75,7 +75,12 @@ export function FallbackModeMenu({ local, error, onPick, onChooseModel, onUseCon
       <TargetRows local={local} onChooseModel={onChooseModel} onUseConfig={onUseConfig} />
       {!local.target && (
         <DropdownMenuLabel className="pt-1 pb-0.5 text-[length:var(--text-caption2)] font-normal text-[var(--text-quaternary)]">
-          No fallback configured for this model
+          {(local.chain?.position ?? 0) > 0 ? "No fallback left in this session's chain" : 'No fallback configured for this model'}
+        </DropdownMenuLabel>
+      )}
+      {servedByLabel(local) && (
+        <DropdownMenuLabel data-testid="fallback-served-by" className="pt-1 pb-0.5 text-[length:var(--text-caption2)] font-normal text-[var(--text-tertiary)]">
+          Served by {servedByLabel(local)}
         </DropdownMenuLabel>
       )}
       {error && (
