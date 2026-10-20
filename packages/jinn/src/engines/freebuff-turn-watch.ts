@@ -1,4 +1,4 @@
-import { FreebuffFailure, UNKNOWN_SCREEN_LIMIT_MS, refusalFailure, screenFailure, unknownScreenFailure, type FreebuffPlace } from "./freebuff-failure.js";
+import { SessionReleased, UNKNOWN_SCREEN_LIMIT_MS, refusalFailure, screenFailure, unknownScreenFailure, type FreebuffPlace } from "./freebuff-failure.js";
 import type { FreebuffScreenInfo } from "./freebuff-screen.js";
 
 /** Idle after busy, with the `⎘ • 11s` footer up, for this long: the turn is over. */
@@ -33,6 +33,9 @@ export type WatchVerdict = "wait" | "done" | "stalled";
  * earlier turn can still be on screen, so nothing counts until this turn has been
  * seen busy. Throws the failure when the screen says the turn cannot go on.
  *
+ * A session the hour ran out on is released with the message still in the
+ * input: that throws {@link SessionReleased}, and the caller starts again.
+ *
  * `stalled` is an idle input that never went busy: either the turn was so short it
  * came and went between looks, or the message was not taken. Only the chat can say
  * which, so the caller asks it.
@@ -65,7 +68,7 @@ export class FinishWatch {
     const failure = screenFailure(info, this.place);
     if (failure) throw failure;
     // Only before the model starts answering: once it has, its words are its own.
-    if (!this.sawBusy && info.refusal) throw refusalFailure(info.refusal) ?? droppedSession(info.refusal.text);
+    if (!this.sawBusy && info.refusal) throw refusalFailure(info.refusal) ?? new SessionReleased(info.refusal.text);
     this.unknown.check(info, lines);
   }
 
@@ -79,8 +82,4 @@ export class FinishWatch {
   private accepted(): WatchVerdict {
     return this.now() - this.submittedAt >= NOT_ACCEPTED_MS ? "stalled" : "wait";
   }
-}
-
-function droppedSession(text: string): FreebuffFailure {
-  return new FreebuffFailure(`Freebuff dropped its session as the message went in (${text}); the next turn starts the process afresh and re-joins the chat`);
 }

@@ -94,7 +94,8 @@ An employee with `remoteHost` and `remoteCwd` runs Freebuff over `ssh -tt`, on t
 | `0/21 hours remaining` before a session starts, `Not enough hours`, `Session limit reached`, `Too many Freebuff sessions on this network` | A rate limit, so the configured `fallback` engines take over. |
 | `concurrent-session limit … Take over` | Fails: only a person at the terminal can take another session over. |
 | The hour session ran out while the process sat idle | Nothing to do: the screen goes back to the panel that says `Your first message starts the session.` (seen on a real expiry), and the next message starts a new session, which spends hours again. |
-| `This session was released` before the message goes in | The process is stopped and started again once, which re-joins the chat and the session. |
+| `This session was released` before the model starts answering (the hour ran out under a warm process) | The process is stopped and started again once and the message sent again, which re-joins the chat and starts a new session. |
+| The model ends the turn with no text (an API error on its side) | Fails with the end of the screen in the error. |
 | A model or level the picker does not have | Fails with the labels the picker showed. Nothing is sent. |
 | A screen nothing recognises for 60 s | Fails with that screen in the error. |
 

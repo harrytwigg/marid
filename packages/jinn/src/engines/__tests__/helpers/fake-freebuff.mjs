@@ -7,6 +7,9 @@
 //   FAKE_BUSY_MS     how long a turn stays busy (default 700)
 //   FAKE_MODE        "signed-out" shows the sign-in screen on the first message
 //   FAKE_HOURS       the hours balance on the panel (default 17); 0 = none left
+//   FAKE_RELEASED_ON_SUBMIT  a file path: the first message sent (no such file yet) is answered with the
+//                    "session was released" message and never run, as when the hour ran out under a warm process
+//   FAKE_EMPTY_ANSWER  1: the model ends every turn with a complete reply that says nothing
 //   FAKE_RELEASED_ONCE  a file path: the first process to start (no such file yet) shows the
 //                    "session was released" message, creates the file, and every later one is fine
 //   FAKE_START_LOG   a file each start and each Enter on the sign-in screen is appended to
@@ -78,6 +81,11 @@ function render() {
 const lastUser = () => { const u = [...messages].reverse().find((m) => m.variant === "user"); return (u?.content || u?.textAttachments?.[0]?.content || "").slice(0, 80).replace(/\n/g, " "); };
 
 function submit(text) {
+  if (process.env.FAKE_RELEASED_ON_SUBMIT && !fs.existsSync(process.env.FAKE_RELEASED_ON_SUBMIT)) {
+    fs.writeFileSync(process.env.FAKE_RELEASED_ON_SUBMIT, "");
+    notice = "This session was released. Choose a model to start a new session.";
+    return render();
+  }
   if (process.env.FAKE_MODE === "signed-out") { screen = "signed-out"; return render(); }
   started = true;
   const long = text.length > 500 || text.includes("\n");
@@ -93,8 +101,8 @@ function submit(text) {
   const tick = setInterval(() => { busyFor += 250; render(); }, 250);
   setTimeout(() => {
     clearInterval(tick);
-    answer = `ANSWER[${model.label}${effortOf()}] ${text.replace(/\s+/g, " ").slice(-60)}`;
-    messages.push({ id: `ai-${Date.now()}`, variant: "ai", content: "", blocks: [{ type: "text", textType: "reasoning", content: "thinking" }, { type: "text", textType: "text", content: answer }], timestamp: "05:00 PM", isComplete: true, completionTime: "2s", credits: 0 });
+    answer = process.env.FAKE_EMPTY_ANSWER ? "" : `ANSWER[${model.label}${effortOf()}] ${text.replace(/\s+/g, " ").slice(-60)}`;
+    messages.push({ id: `ai-${Date.now()}`, variant: "ai", content: "", blocks: [{ type: "text", textType: "reasoning", content: "thinking" }, ...(answer ? [{ type: "text", textType: "text", content: answer }] : [])], timestamp: "05:00 PM", isComplete: true, completionTime: "2s", credits: 0 });
     fs.writeFileSync(path.join(chatDir, "chat-messages.json"), JSON.stringify(messages));
     fs.writeFileSync(path.join(chatDir, "chat-meta.json"), JSON.stringify({ messageCount: messages.length, firstPrompt: first.content || "(empty chat)", messagesSize: 1, messagesMtimeMs: Date.now() }));
     screen = "idle";

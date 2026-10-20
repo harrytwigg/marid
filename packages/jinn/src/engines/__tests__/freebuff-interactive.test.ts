@@ -148,6 +148,24 @@ describe.skipIf(process.platform === "win32")("FreebuffInteractiveEngine", () =>
     expect(starts().filter((l) => l.startsWith("start "))).toHaveLength(2);
   }, 30_000);
 
+  it("starts the process afresh when the session is released as the message goes in, and the message runs once", async () => {
+    process.env.FAKE_RELEASED_ON_SUBMIT = path.join(home, "released-on-submit");
+    const result = await turn(engine(), "rel2", "after the release");
+    delete process.env.FAKE_RELEASED_ON_SUBMIT;
+    expect(result.error).toBeUndefined();
+    expect(result.result).toContain("after the release");
+    expect(starts().filter((l) => l.startsWith("start "))).toHaveLength(2);
+    expect(chatMessages(result.sessionId).filter((m) => m.variant === "user")).toHaveLength(1);
+  }, 40_000);
+
+  it("fails a turn the model ended without saying anything, rather than returning an empty answer", async () => {
+    process.env.FAKE_EMPTY_ANSWER = "1";
+    const result = await turn(engine(), "empty", "say nothing");
+    delete process.env.FAKE_EMPTY_ANSWER;
+    expect(result.error).toContain("ended the turn without an answer");
+    expect(result.conversationIntact).toBe(true);
+  }, 30_000);
+
   it("queues a second session's turn behind the first at maxConcurrent 1, taking over the idle process", async () => {
     const e = engine(1);
     const a = await turn(e, "qa", "first session");

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FinishWatch, FOOTER_GRACE_MS, NOT_ACCEPTED_MS, SETTLE_MS } from "../freebuff-turn-watch.js";
-import { UNKNOWN_SCREEN_LIMIT_MS } from "../freebuff-failure.js";
+import { SessionReleased, UNKNOWN_SCREEN_LIMIT_MS } from "../freebuff-failure.js";
 import { parseFreebuffScreen } from "../freebuff-screen.js";
 import { screen } from "./helpers/freebuff-fixtures.js";
 
@@ -55,6 +55,11 @@ describe("FinishWatch", () => {
     const { look } = watch();
     look(screen("busy.txt"));
     expect(look(refused)).toBe("wait");
+  });
+
+  it("asks to start again when the session was released as the message went in", () => {
+    const released = ["", "  This session was released. Choose a model to start a new session.", ...screen("idle-session-active.txt")];
+    expect(() => watch().look(released)).toThrow(SessionReleased);
   });
 
   it("fails on a sign-in screen at any point", () => {

@@ -26,6 +26,12 @@ export { buildFreebuffArgs, composeFreebuffMessage, reusableProcess };
 export { remoteLocationNote } from "./freebuff-message.js";
 export type { FreebuffEngineDeps } from "./freebuff-pool.js";
 
+/** The model finished (or gave up) without saying anything: an error on its side, which the screen may name. */
+function emptyAnswer(lines: readonly string[]): FreebuffFailure {
+  const shown = lines.filter((l) => l.trim()).slice(-8).join("\n");
+  return new FreebuffFailure(`Freebuff ended the turn without an answer; the end of its screen:\n${shown}`);
+}
+
 /** A turn is bounded by the hour session it runs in, with room to spare. */
 const TURN_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 /** The chat file may lag the screen; wait this long for the answer to be in it. */
@@ -107,14 +113,14 @@ export class FreebuffInteractiveEngine extends FreebuffProcessPool implements In
 
     try {
       await this.getReady(driver, opts);
+      return await this.sendAndRead(live, driver, signal, opts, target?.remoteCwd);
     } catch (err) {
       if (!(err instanceof SessionReleased) || rejoined) throw err;
-      // The process outlived its hour session. A fresh one re-joins the chat (and the session, if one is still running).
-      logger.info(`FreebuffInteractiveEngine: ${id}'s Freebuff session was released (${err.message}); starting the process afresh`);
+      // The process outlived its hour session (nothing of this turn was taken). A fresh one starts a new session in the same chat.
+      logger.info(`FreebuffInteractiveEngine: ${id}'s Freebuff session was released (${err.message.trim()}); starting the process afresh`);
       this.lifecycle.releaseSession(id);
       return await this.runTurn(opts, id, signal, true);
     }
-    return await this.sendAndRead(live, driver, signal, opts, target?.remoteCwd);
   }
 
   /** The TUI is up and showing the model the turn asked for. */
@@ -129,6 +135,7 @@ export class FreebuffInteractiveEngine extends FreebuffProcessPool implements In
     const finish = await driver.waitForFinish(() => this.answerInChat(live, message));
     const { answer, usedScreen } = await this.readAnswer(live, signal, message, finish.lines);
     this.recordUsage(finish.info);
+    if (!answer.trim()) throw emptyAnswer(finish.lines);
     if (usedScreen) logger.warn(`FreebuffInteractiveEngine: ${opts.sessionId}: the answer was read from the screen, not the chat file`);
     return {
       sessionId: live.chat?.chatId ?? opts.resumeSessionId ?? "",
