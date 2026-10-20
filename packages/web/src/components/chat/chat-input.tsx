@@ -838,7 +838,7 @@ export function ChatInput({
           onPointerDown={(e) => e.stopPropagation()}
           placeholder={
             disabled ? 'Waiting for response...'
-              : loading ? 'Queue another message...'
+              : loading ? (sendDelivery === 'now' ? 'Send now, interrupting the reply...' : 'Queue another message...')
                 : 'Type a message...'
           }
           rows={1}

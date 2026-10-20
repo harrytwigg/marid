@@ -17,6 +17,9 @@ export interface SessionQueue {
   byMessageId: ReadonlyMap<string, QueuedMessage>
   /** Parked messages waiting for the running turn, in delivery order. */
   pendingCount: number
+  /** Transcript ids of messages cancelled out of the queue. The server drops
+   *  their rows; the pane hides them until its next load no longer has them. */
+  withdrawn: ReadonlySet<string>
   /** Each verb REJECTS on failure. The card is the only caller and it reports. */
   cancel: (itemId: string) => Promise<void>
   edit: (itemId: string, prompt: string) => Promise<void>
@@ -30,6 +33,7 @@ export interface SessionQueue {
 const EMPTY: SessionQueue = {
   byMessageId: new Map(),
   pendingCount: 0,
+  withdrawn: new Set(),
   cancel: async () => {},
   edit: async () => {},
   sendNow: async () => {},
@@ -81,10 +85,25 @@ function useMessageIdAliases(sessionId: string | null) {
   return { aliases, adopt }
 }
 
-export function useSessionQueue(
-  sessionId: string | null,
-  subscribe: (fn: GatewayEventListener) => () => void,
-): SessionQueue {
+/** Every transcript id a withdrawn message may be showing under: the canonical
+ *  one, and any optimistic id that was adopted onto it. */
+function withdrawnIds(canonical: ReadonlySet<string>, aliases: ReadonlyMap<string, string>): ReadonlySet<string> {
+  if (canonical.size === 0) return canonical
+  const ids = new Set(canonical)
+  for (const [localId, canonicalId] of aliases) if (canonical.has(canonicalId)) ids.add(localId)
+  return ids
+}
+
+function useWithdrawn(sessionId: string | null) {
+  const [canonical, setCanonical] = useState<ReadonlySet<string>>(new Set())
+  useEffect(() => { setCanonical(new Set()) }, [sessionId])
+  const withdraw = useCallback((messageId: string) => setCanonical((prev) => new Set(prev).add(messageId)), [])
+  return { canonical, withdraw }
+}
+
+/** The session's queue rows, re-read on every queue:updated, and the wrapper
+ *  each verb runs through. */
+function useQueueItems(sessionId: string | null, subscribe: (fn: GatewayEventListener) => () => void) {
   const [items, setItems] = useState<QueueItem[]>([])
 
   const refresh = useCallback(async () => {
@@ -115,19 +134,35 @@ export function useSessionQueue(
     }
   }, [refresh])
 
+  return { items, act }
+}
+
+export function useSessionQueue(
+  sessionId: string | null,
+  subscribe: (fn: GatewayEventListener) => () => void,
+): SessionQueue {
+  const { items, act } = useQueueItems(sessionId, subscribe)
   const { aliases, adopt } = useMessageIdAliases(sessionId)
 
   const byMessageId = useMemo(() => withAliases(indexByMessage(items), aliases), [items, aliases])
 
   const pendingCount = useMemo(() => items.filter((item) => item.status === 'pending').length, [items])
 
+  const { canonical, withdraw } = useWithdrawn(sessionId)
+  const withdrawn = useMemo(() => withdrawnIds(canonical, aliases), [canonical, aliases])
+
   return useMemo<SessionQueue>(() => sessionId === null ? EMPTY : {
     byMessageId,
     pendingCount,
-    cancel: (itemId) => act(() => api.cancelQueueItem(sessionId, itemId)),
+    withdrawn,
+    cancel: async (itemId) => {
+      const messageId = items.find((item) => item.id === itemId)?.messageId
+      await act(() => api.cancelQueueItem(sessionId, itemId))
+      if (messageId) withdraw(messageId)
+    },
     edit: (itemId, prompt) => act(() => api.editQueueItem(sessionId, itemId, prompt)),
     sendNow: (itemId) => act(() => api.sendQueueItemNow(sessionId, itemId)),
     sendAllNow: () => act(() => api.sendAllQueueItemsNow(sessionId)),
     adopt,
-  }, [sessionId, byMessageId, pendingCount, act, adopt])
+  }, [sessionId, byMessageId, pendingCount, withdrawn, items, withdraw, act, adopt])
 }

@@ -112,6 +112,25 @@ export function cancelQueueItem(itemId: string): boolean {
 }
 
 /**
+ * Withdraw a parked operator message: cancel the queue row and drop the bubble
+ * it was showing, together. A message no engine ever saw, left in the
+ * transcript, reads exactly like one that was sent. Same transaction reasoning
+ * as the edit below.
+ *
+ * Returns false when the item is gone or has already left `pending`.
+ */
+export function withdrawPendingQueueItem(itemId: string): boolean {
+  const db = initDb();
+  return db.transaction(() => {
+    const item = getQueueItem(itemId);
+    if (!item || item.status !== 'pending') return false;
+    db.prepare("UPDATE queue_items SET status = 'cancelled' WHERE id = ? AND status = 'pending'").run(itemId);
+    if (item.messageId) db.prepare('DELETE FROM messages WHERE id = ?').run(item.messageId);
+    return true;
+  }).immediate();
+}
+
+/**
  * Rewrite a parked item's text, and the bubble it is showing, together.
  *
  * The two writes share a transaction because a queue row and its transcript row

@@ -64,6 +64,28 @@ describe('useSessionQueue', () => {
     expect(sendAllQueueItemsNow).toHaveBeenCalledWith('s1')
   })
 
+  it('withdraws a cancelled message from the transcript, under its optimistic id too', async () => {
+    const { result } = renderHook(() => useSessionQueue('s1', noEvents))
+    await waitFor(() => expect(result.current.byMessageId.size).toBe(1))
+    act(() => result.current.adopt('local-uuid', { messageId: 'canonical-id' }))
+    getSessionQueue.mockResolvedValue([])
+
+    await act(async () => { await result.current.cancel('qi_1') })
+
+    expect(cancelQueueItem).toHaveBeenCalledWith('s1', 'qi_1')
+    expect([...result.current.withdrawn].sort()).toEqual(['canonical-id', 'local-uuid'])
+  })
+
+  it('keeps a message whose cancel the server refused', async () => {
+    cancelQueueItem.mockRejectedValue(new Error('Only a pending message can be cancelled'))
+    const { result } = renderHook(() => useSessionQueue('s1', noEvents))
+    await waitFor(() => expect(result.current.byMessageId.size).toBe(1))
+
+    await act(async () => { await result.current.cancel('qi_1').catch(() => {}) })
+
+    expect(result.current.withdrawn.size).toBe(0)
+  })
+
   it('lets a rejected action reach its caller, having refreshed anyway', async () => {
     cancelQueueItem.mockRejectedValue(new Error('Item not found or already running'))
     const { result } = renderHook(() => useSessionQueue('s1', noEvents))

@@ -52,6 +52,16 @@ describe('composer delivery choice while a turn runs', () => {
     expect(screen.getByRole('button', { name: 'Queue' }).getAttribute('aria-pressed')).toBe('true')
   })
 
+  it('the placeholder says what Enter will do', () => {
+    render(<ChatInput {...props} sessionId="s1" onSend={vi.fn()} />)
+    expect(screen.getByRole('textbox').getAttribute('placeholder')).toMatch(/queue/i)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send now' }))
+
+    expect(screen.getByRole('textbox').getAttribute('placeholder')).toMatch(/interrupt/i)
+    expect(screen.getByRole('textbox').getAttribute('placeholder')).not.toMatch(/queue/i)
+  })
+
   it('shows no delivery choice when no turn is running', () => {
     render(<ChatInput {...props} loading={false} sessionId="s1" onSend={vi.fn()} />)
     expect(screen.queryByRole('button', { name: 'Queue' })).toBeNull()

@@ -53,6 +53,10 @@ const parkedRows = async (context: ApiContext, sessionId: string): Promise<Queue
   ((await request(context, "GET", `/api/sessions/${sessionId}/queue`)).body as QueueRow[])
     .filter((row) => row.status === "pending");
 
+const transcriptTexts = async (context: ApiContext, sessionId: string): Promise<string[]> =>
+  (((await request(context, "GET", `/api/sessions/${sessionId}`)).body as { messages?: Array<{ content: string }> }).messages ?? [])
+    .map((message) => message.content);
+
 /** An interruptible engine whose turn ends only when released or killed. */
 function interruptibleBlockingEngine() {
   const prompts: string[] = [];
@@ -120,6 +124,9 @@ describe("POST /message delivery choice", () => {
 
     const cancelled = await request(context, "DELETE", `/api/sessions/${session.id}/queue/${dropped.id}`);
     expect(cancelled.status).toBe(200);
+    // Its bubble goes with it: a message that never ran must not read as sent.
+    expect(await transcriptTexts(context, session.id)).toContain("keep me");
+    expect(await transcriptTexts(context, session.id)).not.toContain("drop me");
 
     releaseNext();
     await eventually(() => expect(prompts).toEqual(["running turn", "keep me"]));
@@ -127,6 +134,21 @@ describe("POST /message delivery choice", () => {
     // Give a wrongly-delivered cancelled message a chance to appear, then check it did not.
     await new Promise((resolve) => setTimeout(resolve, 25));
     expect(prompts).toEqual(["running turn", "keep me"]);
+  });
+
+  it("refuses to cancel a queued message through another session", async () => {
+    const { context, session, releaseNext } = await runningInterruptibleSession("delivery-cancel-owner");
+    await send(context, session.id, "not yours", { delivery: "queue" });
+    const parked = (await parkedRows(context, session.id))[0]!;
+    const other = createParent("delivery-cancel-other");
+
+    const refused = await request(context, "DELETE", `/api/sessions/${other.id}/queue/${parked.id}`);
+
+    expect(refused.status).toBe(404);
+    expect((await parkedRows(context, session.id)).map((row) => row.prompt)).toEqual(["not yours"]);
+    expect(await transcriptTexts(context, session.id)).toContain("not yours");
+    releaseNext();
+    releaseNext();
   });
 });
 

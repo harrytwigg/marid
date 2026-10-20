@@ -3,12 +3,12 @@
 import type { IncomingMessage as HttpRequest, ServerResponse } from "node:http";
 import {
   cancelAllPendingQueueItems,
-  cancelQueueItem,
   editPendingQueueItem,
   getQueueItem,
   getQueueItems,
   getSession,
   reassignPendingQueuePayloads,
+  withdrawPendingQueueItem,
 } from "../sessions/registry.js";
 import { rotatePendingToFront } from "../sessions/queue-rotation.js";
 import { supersedeRunningTurn } from "../sessions/turn/superseded.js";
@@ -50,8 +50,10 @@ function resolveEditableItem(res: ServerResponse, params: Record<string, string>
 }
 
 function cancelOneItem({ res, context, session, params }: QueueRouteArgs): void {
-  if (!cancelQueueItem(params.itemId)) {
-    return json(res, { error: "Item not found or already running" }, 409);
+  if (!resolveEditableItem(res, params, "cancelled")) return;
+  // The item can leave `pending` between the check and the write, as with edit.
+  if (!withdrawPendingQueueItem(params.itemId)) {
+    return json(res, { error: "Only a pending message can be cancelled" }, 409);
   }
   context.emit("queue:updated", { sessionId: params.id, sessionKey: session.sessionKey });
   return json(res, { status: "cancelled", itemId: params.itemId });

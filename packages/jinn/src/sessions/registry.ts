@@ -2761,7 +2761,7 @@ export function acceptSessionDelivery(
 // queue-item-registry.ts.
 export {
   enqueueQueueItem, markQueueItemRunning, markQueueItemCompleted, markRunningQueueItemsCompletedForSession,
-  getQueueItem, cancelQueueItem, getQueueItems, cancelAllPendingQueueItems, recoverStaleQueueItems,
+  getQueueItem, cancelQueueItem, withdrawPendingQueueItem, getQueueItems, cancelAllPendingQueueItems, recoverStaleQueueItems,
   listAllPendingQueueItems, listPendingQueueItemIdsForSession, editPendingQueueItem, reassignPendingQueuePayloads, type QueueItem,
 } from './queue-item-registry.js';
 // ── File management ──────────────────────────────────────────────────

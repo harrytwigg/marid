@@ -162,6 +162,9 @@ export function ChatPane({
     reload: reloadSession,
   } = live
   const sessionQueue = useSessionQueue(sessionId, subscribe)
+  // A message cancelled out of the queue never ran: it leaves the transcript.
+  const shownMessages = useMemo(() => sessionQueue.withdrawn.size === 0 ? messages
+    : messages.filter((message) => !sessionQueue.withdrawn.has(message.id)), [messages, sessionQueue.withdrawn])
   const { notice: staleChatNotice, answerBySending: answerStaleChatBySending } = useStaleChatNotice({
     sessionId,
     session: currentSession,
@@ -492,7 +495,7 @@ export function ChatPane({
         <SessionQueueContext.Provider value={sessionQueue}>
           <ChatMessages
             initialScrollTop={initialScrollTop}
-            messages={messages}
+            messages={shownMessages}
             loading={loading}
             hydrating={hydrating}
             turnPending={turnPending}
