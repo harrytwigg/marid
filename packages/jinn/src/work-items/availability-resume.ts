@@ -72,6 +72,9 @@ export interface AvailabilityRearmed {
 
 export type AvailabilityRearmResult = AvailabilityRearmed | { unavailable: string };
 
+/** The refusal that is not a failure: the Todo already has a Dispatcher running, which will read whatever prompted this restart. */
+export const DISPATCHER_ALREADY_RUNNING = "a Dispatcher is already running for it";
+
 export interface AvailabilityResumeDeps {
   /**
    * Restart the Todo's work, or say why nothing was started. Injected because

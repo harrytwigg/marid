@@ -130,6 +130,14 @@ export function markChildSettles(
   for (const id of ids) mark.run(now, outcome, options.deliveryId ?? null, id);
 }
 
+/** Change what an already-flushed row says became of it, once the action it
+ *  named turned out not to happen. */
+export function reclassifyChildSettles(ids: readonly number[], outcome: ChildSettleOutcome): void {
+  const db = initDb();
+  const update = db.prepare("UPDATE work_item_child_settles SET outcome = ? WHERE id = ? AND flushed_at IS NOT NULL");
+  for (const id of ids) update.run(outcome, id);
+}
+
 /** Put rows back to pending: a flush whose re-dispatch threw is tried again by the sweep. */
 export function reopenChildSettles(ids: readonly number[]): void {
   const db = initDb();

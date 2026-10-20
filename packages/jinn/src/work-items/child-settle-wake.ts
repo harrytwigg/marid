@@ -11,12 +11,13 @@ import { owningEmployeeSession } from "./todo-owner-session.js";
 import { addTodoStatusChangeListener } from "./live-events.js";
 import { addComment } from "./comment-add.js";
 import { getWorkItem, type WorkItem } from "./store.js";
-import type { AvailabilityRearmResult } from "./availability-resume.js";
+import { DISPATCHER_ALREADY_RUNNING, type AvailabilityRearmResult } from "./availability-resume.js";
 import {
   isChildSettle,
   markChildSettles,
   parentsWithPendingSettles,
   pendingChildSettles,
+  reclassifyChildSettles,
   reopenChildSettles,
   type ChildSettleRow,
 } from "./child-settles.js";
@@ -160,24 +161,34 @@ function deliverWake(parentId: string, target: Session, deliveryId: string): voi
 }
 
 function redispatchParent(parent: WorkItem, rows: ChildSettleRow[], deps: ChildSettleWakeDeps): void {
+  let result: AvailabilityRearmResult;
   try {
-    // Refused because a dispatcher is already running still counts: the new
-    // session reads the tree.
-    deps.redispatch(parent.id, childSettleReason(parent, rows));
+    result = deps.redispatch(parent.id, childSettleReason(parent, rows));
   } catch (error) {
     // Put the rows back so the sweep tries again, rather than losing the wake.
+    // An unexpected throw is rare and the sweep retries each minute with no cap;
+    // the pending rows keep the parent "in flight" until one try goes through.
     reopenChildSettles(ids(rows));
     logger.warn(`[child-settle-wake] Re-dispatching ${parent.id} failed, will retry: ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+  // A Dispatcher already running will read the tree, so that refusal is done.
+  // Any other refusal (a hold, a start date, a claim) started nothing: say so on
+  // the parent, where whoever resumes it will read it, instead of retrying a
+  // hold that may never lift or leaving the wake lost.
+  if ("unavailable" in result && result.unavailable !== DISPATCHER_ALREADY_RUNNING) {
+    reclassifyChildSettles(ids(rows), "recorded");
+    commentOnParent(parent, rows, `Nothing could be started for it (${result.unavailable}), so nobody was woken.`);
   }
 }
 
-function commentOnParent(parent: WorkItem, rows: ChildSettleRow[]): void {
+function commentOnParent(parent: WorkItem, rows: ChildSettleRow[], why: string): void {
   try {
     addComment({
       workItemId: parent.id,
       author: "child-settle-wake",
       authorKind: "system",
-      body: `${childSettleReason(parent, rows)}\n\nThis Todo is blocked, so nobody was woken. Whoever resumes it should read the children above first.`,
+      body: `${childSettleReason(parent, rows)}\n\n${why} Whoever resumes this Todo should read the children above first.`,
       idempotencyKey: `child-settles:${parent.id}:${rows[0]!.id}-${rows[rows.length - 1]!.id}`,
     });
   } catch (error) {
@@ -209,7 +220,7 @@ export function flushChildSettles(parentId: string, deps: ChildSettleWakeDeps): 
       redispatchParent(decision.parent, decision.rows, deps);
       break;
     case "comment":
-      commentOnParent(decision.parent, decision.rows);
+      commentOnParent(decision.parent, decision.rows, "This Todo is blocked, so nobody was woken.");
       break;
     case "none":
       break;

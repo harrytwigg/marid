@@ -28,8 +28,10 @@ let registry: typeof import("../../sessions/registry.js");
 let childWatch: typeof import("../../heartbeats/child-watch.js");
 let heartbeatStore: typeof import("../../heartbeats/store.js");
 let db: import("better-sqlite3").Database;
+let DISPATCHER_ALREADY_RUNNING: string;
 
 beforeAll(async () => {
+  ({ DISPATCHER_ALREADY_RUNNING } = await import("../availability-resume.js"));
   store = await import("../store.js");
   transitions = await import("../transitions.js");
   wake = await import("../child-settle-wake.js");
@@ -50,6 +52,8 @@ const deps = {
 };
 
 beforeEach(() => {
+  // A row an earlier test left pending would be met by this one's startup pass.
+  db.prepare("DELETE FROM work_item_child_settles").run();
   delivered.length = 0;
   deps.redispatch.mockClear();
   deps.redispatch.mockImplementation(() => ({ status: "executing" as const }));
@@ -188,10 +192,36 @@ describe("the parent's owner has no session to wake", () => {
   it("a refused re-dispatch still counts: the new session reads the tree", () => {
     const { parent } = parentWithOwner("executing", "error");
     settle(childOf(parent.id).id);
-    deps.redispatch.mockReturnValue({ unavailable: "a Dispatcher is already running for it" } as never);
+    deps.redispatch.mockReturnValue({ unavailable: DISPATCHER_ALREADY_RUNNING } as never);
     wake.flushChildSettles(parent.id, deps);
     expect(rowsOf(parent.id)).toEqual([expect.objectContaining({ outcome: "redispatched" })]);
     expect(settles.hasPendingChildSettles(parent.id)).toBe(false);
+  });
+
+  it.each([
+    "its start date is still ahead",
+    "it is held: waiting on a dependency",
+    "the Dispatcher could not take its claim",
+  ])("a refusal that started nothing (%s) is recorded on the parent, not lost and not retried forever", (reason) => {
+    const { parent, ownerSession } = parentWithOwner("executing", "error");
+    const child = childOf(parent.id);
+    settle(child.id);
+    deps.redispatch.mockReturnValue({ unavailable: reason } as never);
+
+    wake.flushChildSettles(parent.id, deps);
+
+    expect(deps.redispatch).toHaveBeenCalledTimes(1);
+    expect(rowsOf(parent.id)).toEqual([expect.objectContaining({ outcome: "recorded" })]);
+    const posted = comments.listComments(parent.id).comments;
+    expect(posted).toHaveLength(1);
+    expect(posted[0]!.body).toContain(child.id);
+    expect(posted[0]!.body).toContain(reason);
+    // Nothing keeps a held parent "in flight" for the stall check.
+    expect(settles.hasPendingChildSettles(parent.id)).toBe(false);
+    expect(delegations.hasOpenDelegations(parent.id, [{ id: ownerSession }])).toBe(false);
+    wake.flushChildSettles(parent.id, deps);
+    expect(deps.redispatch).toHaveBeenCalledTimes(1);
+    expect(comments.listComments(parent.id).comments).toHaveLength(1);
   });
 
   it("a re-dispatch that throws leaves the rows for the sweep", () => {
@@ -399,6 +429,43 @@ describe("batching", () => {
       vi.advanceTimersByTime(wake.CHILD_SETTLE_BATCH_MS);
       expect(delivered).toHaveLength(2);
       expect(deliveryOf(delivered[0]!).sourceAttempt).not.toBe(deliveryOf(delivered[1]!).sourceAttempt);
+    } finally {
+      stop();
+    }
+  });
+
+  it("stopping leaves no timer and no sweep behind", () => {
+    const { parent } = parentWithOwner();
+    const stop = wake.startChildSettleWake(deps);
+    settle(childOf(parent.id).id);
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+    stop();
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(wake.CHILD_SETTLE_SWEEP_MS * 2);
+    expect(delivered).toEqual([]);
+    // Nor does a settle after the stop schedule anything.
+    settle(childOf(parent.id).id);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("a settle heard while an older row is still pending times the flush from the older row", () => {
+    const { parent } = parentWithOwner();
+    const older = childOf(parent.id);
+    const newer = childOf(parent.id);
+    const stop = wake.startChildSettleWake(deps);
+    try {
+      // A row written 7 s ago that nothing signalled (the sweep has not met it yet).
+      db.prepare(
+        `INSERT INTO work_item_child_settles (parent_id, child_id, event_id, from_status, to_status, actor, created_at)
+         VALUES (?, ?, 'wie_older_row', 'executing', 'in_review', 'board-walk', ?)`,
+      ).run(parent.id, older.id, new Date(Date.now() - 7_000).toISOString());
+      settle(newer.id);
+      vi.advanceTimersByTime(2_900);
+      expect(delivered).toEqual([]);
+      vi.advanceTimersByTime(200);
+      expect(delivered).toHaveLength(1);
+      expect(deliveryOf(delivered[0]!).payload.message).toContain(older.id);
+      expect(deliveryOf(delivered[0]!).payload.message).toContain(newer.id);
     } finally {
       stop();
     }
