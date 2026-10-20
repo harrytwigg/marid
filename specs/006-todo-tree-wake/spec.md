@@ -167,10 +167,14 @@ child, and carries the tree to completion. Only the root goes to the operator.
    manifest budget.
 4. **The operator's desk shows only what is addressed to the operator.** A child in
    `in_review` addressed to an employee gets attention lane `manager` (not `operator`); the
-   recovery classifier gives it lane `manager` with a reason naming the addressee; the
-   board shows it in the review column with a "for <employee>" chip and leaves it out of
-   any operator review count. The root Todo, and any child whose parent the operator owns,
-   reach the desk exactly as today.
+   recovery classifier gives it lane `manager` with a reason naming the addressee. The
+   operator's Needs-you list and its "N waiting" count leave it out (the web filter and
+   the server's `needsAttentionFor` query agree, so counts and paging match). Board columns
+   list root Todos only, so the "for <employee>" chip goes where children are shown: the
+   card's tree tray and the Todo page's status header (tree nodes carry
+   `reviewAddressee`). If the parent owner never acts, the parent trips the ordinary 4 h
+   stall check and reaches the operator that way. The root Todo, and any child whose
+   parent the operator owns, reach the desk exactly as today.
 5. **Board hooks** get `reviewAddressee` in the payload and a matcher field
    `reviewAddressee: operator | employee`, so a hook meant for the operator's desk can
    skip parent-addressed reviews. Existing hooks are unchanged until their config adds the
