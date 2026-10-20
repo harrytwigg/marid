@@ -479,6 +479,20 @@ describe("the board surface", () => {
       for (const status of ["backlog", "executing", "in_review", "blocked"] as const) expect(orderOf(status)).toBeUndefined()
     })
 
+    it("keeps the gateway's order in a closed column even when a card carries an old rank", async () => {
+      Object.assign(closedAt, { "TSK-1": "2026-07-01", "TSK-2": "2026-07-03", "TSK-3": "2026-07-02" })
+      rows.done = [
+        compact({ id: "TSK-1", status: "done", rank: 1 }),
+        compact({ id: "TSK-2", status: "done", updatedAt: "2026-06-01T00:00:00.000Z" }),
+        compact({ id: "TSK-3", status: "done", updatedAt: "2026-08-01T00:00:00.000Z" }),
+      ]
+      serveClosedOrder()
+      renderBoard("/todos/b/platform")
+      fireEvent.click(await screen.findByTestId("board-closed-rail"))
+      await screen.findByTestId("board-closed-group-done")
+      expect(ids("board-closed-group-done")).toEqual(["board-card-TSK-2", "board-card-TSK-3", "board-card-TSK-1"])
+    })
+
     it("lists Done and Cancelled cards newest-closed first, and puts a Todo moved to Done on top after a refresh", async () => {
       Object.assign(closedAt, {
         "TSK-1": "2026-07-01", "TSK-2": "2026-07-03", "TSK-3": "2026-07-02",

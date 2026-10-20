@@ -12,7 +12,7 @@ import { TODO_QUERY_FRESHNESS, TODO_WRITE_KEY } from "@/lib/query-keys"
 import { todoStatusMutationOptions } from "../todo-status-mutation"
 import type { BoardId } from "./board-route"
 import { boardKey } from "./board-route"
-import { BOARD_STATUS_ORDER, CLOSED_STATUSES, EXCEPTION_STATUSES, isColumnInStatusFilter, PIPELINE_STATUSES } from "./status-scope"
+import { BOARD_STATUS_ORDER, CLOSED_STATUSES, EXCEPTION_STATUSES, isClosedStatus, isColumnInStatusFilter, PIPELINE_STATUSES } from "./status-scope"
 
 /* Todos v2 slice 6 — the board data layer (design-doc §11 queries).
  * One infinite query per status column, scoped per board:
@@ -70,7 +70,7 @@ async function fetchBoardPage(
     since,
     until,
     // Closed columns read newest-closed first, not by manual rank.
-    order: CLOSED_STATUSES.includes(status) ? "closed" : undefined,
+    order: isClosedStatus(status) ? "closed" : undefined,
     offset,
     limit: BOARD_PAGE_SIZE,
   })

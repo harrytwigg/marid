@@ -38,7 +38,7 @@ import { ClosedColumnGroup, ClosedColumnHeader, ClosedRail } from "./closed-rail
 import { departmentTitle } from "./board-switcher"
 import { boardDetailIds, useBoardData, useBoardRank, useBoardTransition, useBoardTrees, useCreateSubTask, useKeepWorkItem } from "./use-board"
 import {
-  BOARD_STATUS_ORDER, CLOSED_STATUSES, EXCEPTION_STATUSES, isColumnInStatusFilter, OPEN_COLUMN_ORDER, PIPELINE_STATUSES, visibleItemCount,
+  BOARD_STATUS_ORDER, CLOSED_STATUSES, EXCEPTION_STATUSES, isClosedStatus, isColumnInStatusFilter, OPEN_COLUMN_ORDER, PIPELINE_STATUSES, visibleItemCount,
 } from "./status-scope"
 import { useBoardDrag } from "./use-board-drag"
 import { boardKey, parseBoardParam } from "./board-route"
@@ -151,7 +151,8 @@ export default function TodoBoardPage() {
         // server param) — it filters the loaded columns.
         .filter((item) => matchesDueFilter(item.dueAt, filters.due, now))
         .map(withRank)
-      base.sort(compareRank)
+      // A closed column keeps the order the gateway returned (newest-closed first); manual rank is for open work.
+      if (!isClosedStatus(status)) base.sort(compareRank)
       out[status] = base
     }
     // Insert moved cards into their optimistic column at the drop index. The card
@@ -253,7 +254,10 @@ export default function TodoBoardPage() {
   )
 
   const commitTransition = useCallback(
-    (item: WorkItemCompactWire, to: WorkItemStatusWire, index: number, { announceMove = false } = {}) => {
+    (item: WorkItemCompactWire, to: WorkItemStatusWire, dropIndex: number, { announceMove = false } = {}) => {
+      // A card entering Done or Cancelled is the newest closed: it lands on top and takes no manual rank.
+      const closing = isClosedStatus(to)
+      const index = closing ? 0 : dropIndex
       // The drop position is a promise: once the status PUT lands, write the
       // rank at the landing slot too (Stage-A review F3) so the next refetch
       // never reorders a drop the gateway accepted.
@@ -262,7 +266,7 @@ export default function TodoBoardPage() {
       const after = index < siblings.length ? siblings[index] : null
       const rank = rankBetween(before?.rank ?? null, after?.rank ?? null)
       setMoves((prev) => new Map(prev).set(item.id, { status: to, index, item, board: key }))
-      setRankOverrides((prev) => new Map(prev).set(item.id, rank))
+      if (!closing) setRankOverrides((prev) => new Map(prev).set(item.id, rank))
       const clearRankOverride = () =>
         setRankOverrides((prev) => {
           const next = new Map(prev)
@@ -283,6 +287,7 @@ export default function TodoBoardPage() {
               navigate(todoPath(item.id), { state: { fromBoard: key, focusBannerReason: true } })
             }
             const version = result.workItem?.version
+            if (closing) return
             if (!isPositiveTodoVersion(version)) {
               clearRankOverride()
               return

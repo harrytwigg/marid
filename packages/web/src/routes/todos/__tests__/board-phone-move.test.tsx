@@ -239,6 +239,26 @@ describe("moving a card on a phone", () => {
     expect(JSON.parse(probe.dataset.state!)).toMatchObject({ focusBannerReason: true, fromBoard: "platform" })
   })
 
+  it("lands a card moved to Done on top of the closed column and writes no manual rank", async () => {
+    setViewport(true)
+    rows.done = [{ ...compact("TSK-7", "done"), rank: 1 }]
+    setWorkItemStatus.mockResolvedValue({ workItem: { ...compact("TSK-3", "done"), version: 4 }, escalated: false })
+    renderBoard()
+    await screen.findByTestId("board-card-TSK-3")
+    fireEvent.click(screen.getByTestId("board-closed-rail"))
+    await screen.findByTestId("board-closed-group-done")
+
+    tap(screen.getByTestId("board-move-TSK-3"))
+    await screen.findByRole("menu")
+    tap(screen.getByRole("menuitemradio", { name: "Done" }))
+
+    await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("TSK-3", "done"))
+    const done = screen.getByTestId("board-closed-group-done")
+    await waitFor(() => expect(done.querySelectorAll("[data-board-card]")[0]?.getAttribute("data-board-card")).toBe("TSK-3"))
+    await waitFor(() => expect(screen.getByTestId("board-callout").textContent).toBe("TSK-3 moved to Done"))
+    expect(updateWorkItem).not.toHaveBeenCalled()
+  })
+
   it("a refused move puts the card back and shows the gateway's words", async () => {
     setViewport(true)
     setWorkItemStatus.mockRejectedValue(new Error("The gateway refused the move"))
