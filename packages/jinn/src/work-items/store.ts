@@ -159,6 +159,10 @@ export interface ListWorkItemsFilter {
   /** Inclusive ISO timestamp bounds over `updated_at`. */
   since?: string;
   until?: string;
+  /** `closed`: newest-closed first (the time each Todo entered its current status, `updated_at` when the
+   *  log has none), ignoring manual rank. For done and cancelled lists, where a leftover rank from the
+   *  Todo's open days and a later comment must not bury recently closed work. */
+  order?: 'closed';
   /** Cap rows in SQL (LIMIT) instead of the caller slicing after a full-table load. */
   limit?: number;
   /** Zero-based row offset, applied after the canonical ordering. */
@@ -564,6 +568,9 @@ function workItemWhere(filter: ListWorkItemsFilter, textIds?: readonly string[])
   };
 }
 
+/** Newest-closed first: the latest event that moved the Todo into the status it is in now. */
+const CLOSED_ORDER_SQL = `COALESCE((SELECT MAX(e.created_at) FROM work_item_events e WHERE e.work_item_id = work_items.id AND e.to_status = work_items.status), work_items.updated_at) DESC`;
+
 /** Paginated, deterministic AND-composed Todo query. Counts are computed from
  * the identical WHERE clause before pagination, so a capped page can never
  * masquerade as the full ledger. */
@@ -580,8 +587,9 @@ export function queryWorkItems(filter: ListWorkItemsFilter = {}): WorkItemPage {
   // Relevance leads only when text was given; otherwise the order is byte-identical to before, and it still breaks relevance ties.
   const relevance = textIds ? '(SELECT key FROM json_each(?) WHERE value = work_items.id) ASC, ' : '';
   const orderValues = textIds ? [JSON.stringify(textIds)] : [];
+  const order = filter.order === 'closed' ? CLOSED_ORDER_SQL : '(rank IS NULL) ASC, rank ASC, updated_at DESC';
   const rows = db
-    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL} FROM work_items ${where} ORDER BY ${relevance}(rank IS NULL) ASC, rank ASC, updated_at DESC, created_at DESC, id ASC LIMIT ? OFFSET ?`)
+    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL} FROM work_items ${where} ORDER BY ${relevance}${order}, created_at DESC, id ASC LIMIT ? OFFSET ?`)
     .all(...values, ...orderValues, limit, offset) as Record<string, unknown>[];
   const counts = db
     .prepare(`SELECT status, COUNT(*) AS total FROM work_items ${where} GROUP BY status`)

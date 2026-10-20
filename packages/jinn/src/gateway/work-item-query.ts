@@ -199,8 +199,17 @@ const readWindowFilters: FilterReader = (url, filter) => {
   return undefined;
 };
 
+/** `order=closed`: newest-closed first, for the done and cancelled lists. */
+const readOrderFilter: FilterReader = (url, filter) => {
+  const order = readCleanSearchParam(url, 'order');
+  if (!order) return undefined;
+  if (order !== 'closed') return 'order must be closed';
+  filter.order = order;
+  return undefined;
+};
+
 const FILTER_READERS: readonly FilterReader[] = [
-  readEnumFilters, readNameFilters, readTextFilter, readTreeFilters, readBoardScopeFilters, readLabelFilter, readSprintFilter, readWindowFilters,
+  readEnumFilters, readNameFilters, readTextFilter, readTreeFilters, readBoardScopeFilters, readLabelFilter, readSprintFilter, readWindowFilters, readOrderFilter,
 ];
 
 export function readWorkItemQueryParams(url: URL): { ok: true; value: WorkItemQueryParams } | { ok: false; error: string } {

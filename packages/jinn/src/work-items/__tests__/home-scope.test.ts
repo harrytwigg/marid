@@ -120,6 +120,18 @@ describe("the ?home=true query parameter", () => {
   });
 });
 
+describe("the ?order=closed query parameter", () => {
+  it("reaches the filter, and rejects other values", async () => {
+    const { readWorkItemQueryParams } = await import("../../gateway/work-item-query.js");
+    const read = (search: string) => readWorkItemQueryParams(new URL(`http://x/api/work-items${search}`));
+    const closed = read("?status=done&order=closed");
+    expect(closed.ok && closed.value.filter).toMatchObject({ status: "done", order: "closed" });
+    const absent = read("?status=done");
+    expect(absent.ok && absent.value.filter.order).toBeUndefined();
+    expect(read("?order=random")).toEqual({ ok: false, error: "order must be closed" });
+  });
+});
+
 describe("unpinning", () => {
   it("removes an agent-created root from Home (criterion 3)", () => {
     const theirs = store.createWorkItem({ title: "an agent's, pinned then dropped", createdBy: "session:agent-3" }).id;

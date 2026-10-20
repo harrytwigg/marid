@@ -105,6 +105,54 @@ describe("work-item store — manual rank", () => {
   });
 });
 
+describe("work-item store — closed order", () => {
+  function closeAt(id: string, status: "done" | "cancelled", at: string): void {
+    db.prepare("INSERT INTO work_item_events (id, work_item_id, kind, from_status, to_status, actor, detail, created_at) VALUES (?, ?, 'status_change', 'executing', ?, 'operator', NULL, ?)")
+      .run(`wie_${id}_${status}_${at}`, id, status, at);
+  }
+
+  for (const status of ["done", "cancelled"] as const) {
+    it(`lists ${status} Todos newest-closed first, ignoring rank and later activity`, () => {
+      const department = `closed-order-${status}`;
+      const make = (title: string) => store.createWorkItem({ title, status, department });
+      const oldest = make("closed first");
+      const middle = make("closed second");
+      const newest = make("closed last");
+      const unlogged = make("no status event");
+      closeAt(oldest.id, status, "2031-01-01T00:00:00.000Z");
+      closeAt(middle.id, status, "2031-02-01T00:00:00.000Z");
+      closeAt(newest.id, status, "2031-03-01T00:00:00.000Z");
+      // Rank left over from open days, and a comment long after closing, must not move a card.
+      store.updateWorkItem(oldest.id, { rank: 1 }, "operator");
+      db.prepare("UPDATE work_items SET updated_at = ? WHERE id = ?").run("2035-01-01T00:00:00.000Z", oldest.id);
+      db.prepare("UPDATE work_items SET updated_at = ? WHERE id = ?").run("2031-02-15T00:00:00.000Z", unlogged.id);
+      // A row from before the log existed has no event to date it: updated_at stands in.
+      db.prepare("DELETE FROM work_item_events WHERE work_item_id = ?").run(unlogged.id);
+
+      const closed = store.queryWorkItems({ status, department, order: "closed" }).workItems.map((i) => i.id);
+      expect(closed).toEqual([newest.id, unlogged.id, middle.id, oldest.id]);
+
+      // Pages walk the same order.
+      const page = store.queryWorkItems({ status, department, order: "closed", limit: 2, offset: 2 });
+      expect(page.workItems.map((i) => i.id)).toEqual([middle.id, oldest.id]);
+
+      // Without the opt-in the default (rank, then updated_at) order is unchanged.
+      expect(store.queryWorkItems({ status, department }).workItems[0]?.id).toBe(oldest.id);
+    });
+  }
+
+  it("uses the latest entry into the current status after a reopen", () => {
+    const department = "closed-order-reopen";
+    const reopened = store.createWorkItem({ title: "reopened", status: "done", department });
+    const steady = store.createWorkItem({ title: "steady", status: "done", department });
+    closeAt(reopened.id, "done", "2031-01-01T00:00:00.000Z");
+    closeAt(steady.id, "done", "2031-02-01T00:00:00.000Z");
+    closeAt(reopened.id, "done", "2031-03-01T00:00:00.000Z");
+    expect(store.queryWorkItems({ status: "done", department, order: "closed" }).workItems.map((i) => i.id))
+      .toEqual([reopened.id, steady.id]);
+  });
+});
+
 describe("work-item store — idempotent source_ref", () => {
   it("returns the existing row for a repeated (source, source_ref)", () => {
     const ref = "cron:job-x:1751328000000";

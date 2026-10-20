@@ -553,7 +553,7 @@ export interface LinkedSessionWire {
 }
 
 /** Todo list params that pass straight through as a same-named query param. */
-const TODO_LIST_PARAMS = ["status", "assignee", "department", "source", "needsAttentionFor", "since", "until", "q", "createdBy", "label", "sprint", "offset"] as const
+const TODO_LIST_PARAMS = ["status", "assignee", "department", "source", "needsAttentionFor", "since", "until", "q", "createdBy", "label", "sprint", "order", "offset"] as const
 
 export const api = {
   listWorkspaces: () => get<WorkspaceInfo[]>('/api/instances'),
@@ -704,6 +704,8 @@ export const api = {
     /** A sprint id or name, `active`, or `none`. */
     sprint?: string
     kept?: boolean
+    /** `closed`: newest-closed first (done and cancelled lists). */
+    order?: "closed"
   }, signal?: AbortSignal) => {
     const q = new URLSearchParams()
     for (const key of TODO_LIST_PARAMS) if (params?.[key]) q.set(key, String(params[key]))

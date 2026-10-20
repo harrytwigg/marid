@@ -69,6 +69,8 @@ async function fetchBoardPage(
     q: filters.q,
     since,
     until,
+    // Closed columns read newest-closed first, not by manual rank.
+    order: CLOSED_STATUSES.includes(status) ? "closed" : undefined,
     offset,
     limit: BOARD_PAGE_SIZE,
   })

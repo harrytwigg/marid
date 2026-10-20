@@ -454,6 +454,55 @@ describe("the board surface", () => {
     expect(screen.getByTestId("board-closed-group-done").textContent).toContain("12")
   })
 
+  describe("closed column order", () => {
+    // The gateway owns the order; this stand-in applies it the way `order=closed` does.
+    const closedAt: Record<string, string> = {}
+    function serveClosedOrder() {
+      listWorkItems.mockImplementation((params: { status?: WorkItemStatusWire; order?: string }) => {
+        const res = listResponse(params)
+        if (params.order === "closed") {
+          res.workItems = [...res.workItems].sort((a, b) => closedAt[b.id].localeCompare(closedAt[a.id]))
+        }
+        return Promise.resolve(res)
+      })
+    }
+    const ids = (group: string) =>
+      [...screen.getByTestId(group).querySelectorAll("[data-board-card]")].map((el) => el.getAttribute("data-testid"))
+
+    it("asks for newest-closed first on Done and Cancelled only", async () => {
+      renderBoard("/todos/b/platform")
+      await waitFor(() => expect(boardStatusRequestCount()).toBe(6))
+      const orderOf = (status: WorkItemStatusWire) =>
+        listWorkItems.mock.calls.map(([p]) => p).find((p) => p?.status === status)?.order
+      expect(orderOf("done")).toBe("closed")
+      expect(orderOf("cancelled")).toBe("closed")
+      for (const status of ["backlog", "executing", "in_review", "blocked"] as const) expect(orderOf(status)).toBeUndefined()
+    })
+
+    it("lists Done and Cancelled cards newest-closed first, and puts a Todo moved to Done on top after a refresh", async () => {
+      Object.assign(closedAt, {
+        "TSK-1": "2026-07-01", "TSK-2": "2026-07-03", "TSK-3": "2026-07-02",
+        "TSK-4": "2026-07-05", "TSK-5": "2026-07-04",
+      })
+      rows.done = ["TSK-1", "TSK-2", "TSK-3"].map((id) => compact({ id, status: "done" }))
+      rows.cancelled = ["TSK-4", "TSK-5"].map((id) => compact({ id, status: "cancelled" }))
+      serveClosedOrder()
+      const { client } = renderBoard("/todos/b/platform")
+      fireEvent.click(await screen.findByTestId("board-closed-rail"))
+      await screen.findByTestId("board-closed-group-done")
+      expect(ids("board-closed-group-done")).toEqual(["board-card-TSK-2", "board-card-TSK-3", "board-card-TSK-1"])
+      expect(ids("board-closed-group-cancelled")).toEqual(["board-card-TSK-4", "board-card-TSK-5"])
+
+      // A Todo finishes: the next refresh lists it first.
+      closedAt["TSK-6"] = "2026-07-09"
+      rows.done = [...(rows.done ?? []), compact({ id: "TSK-6", status: "done" })]
+      await client.invalidateQueries({ queryKey: ["work-items"] })
+      await waitFor(() =>
+        expect(ids("board-closed-group-done")).toEqual(["board-card-TSK-6", "board-card-TSK-2", "board-card-TSK-3", "board-card-TSK-1"]),
+      )
+    })
+  })
+
   it("shows the department prefix and open count in the sub-line", async () => {
     rows.backlog = [compact({ id: "TSK-1", status: "backlog" })]
     totals.backlog = 4
