@@ -18,7 +18,7 @@ function stub(status: number, body: unknown) {
 
 describe("update_work_item and closing a Todo", () => {
   it("names who may close, and still offers done", () => {
-    expect(update.description).toMatch(/done: operator or closeTodos employee, reason in note/);
+    expect(update.description).toMatch(/done: operator, closeTodos employee or parent owner; reason in note/);
     expect((update.inputSchema.properties as { status: { enum: string[] } }).status.enum).toContain("done");
   });
 
