@@ -69,6 +69,32 @@ export const CHAT_SCREENS = [
     },
   },
   {
+    // A new chat's employee picker. Needs the seeded org, or there is only the COO to pick.
+    name: 'chat-new',
+    title: 'New chat, employee picker',
+    url: () => '/',
+    ready: 'Delegation flow',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: 'New chat' }).first().click()
+      await page.getByText('Who do you want to talk to?').waitFor({ timeout: 10_000 })
+      await page.waitForTimeout(500)
+    },
+  },
+  {
+    // The same on a short viewport (a phone with its keyboard up, or turned on its side): the first rows
+    // have to stay reachable by scrolling.
+    name: 'chat-new-short',
+    title: 'New chat, employee picker, short viewport',
+    heights: { desktop: 420, narrow: 420 },
+    url: () => '/',
+    ready: 'Delegation flow',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: 'New chat' }).first().click()
+      await page.getByText('Who do you want to talk to?').waitFor({ timeout: 10_000 })
+      await page.waitForTimeout(500)
+    },
+  },
+  {
     // The header's More options menu.
     name: 'chat-header-menu',
     title: 'Chat header menu',

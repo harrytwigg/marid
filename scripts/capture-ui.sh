@@ -70,7 +70,7 @@ trap 'exit 130' INT TERM
 mkdir -p "$HOST_HOME"
 env HOME="$HOST_HOME" JINN_REPO="$REPO" "$HELPER" create "$INSTANCE" --port "$PORT" --seed
 # The org screens need the seeded org; every other screen keeps its fixtures unchanged.
-if [[ "${JINN_CAPTURE_TOOL:-capture.mjs}" == "capture.mjs" ]] && { [[ $# -eq 0 ]] || printf '%s\n' "$@" | grep -q '^org-'; }; then
+if [[ "${JINN_CAPTURE_TOOL:-capture.mjs}" == "capture.mjs" ]] && { [[ $# -eq 0 ]] || printf '%s\n' "$@" | grep -Eq '^(org-|chat-new)'; }; then
   export JINN_CAPTURE_SEED_ORG=1
 fi
 # Skills, cron and notes screens read their own fixtures (seed-pages.mjs), written the same way.
