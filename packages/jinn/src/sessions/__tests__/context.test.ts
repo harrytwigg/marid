@@ -1,9 +1,24 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { buildContext } from "../context.js";
 import type { Employee, JinnConfig, OrgHierarchy } from "../../shared/types.js";
+
+/**
+ * The maxChars trimming test budgets 1200 chars, and `## Current session`
+ * renders JINN_HOME verbatim as the working directory. The per-file test home
+ * is a temp path whose length is whatever the host's temp root makes it, so the
+ * assembled output sat ~18 chars under the cap on a short `/tmp` and over it on
+ * a longer temp root (a long TMPDIR, or macOS's `/var/folders/…`): the trimmer
+ * then dropped the whole `## Working roster` STANDARD section and the heading
+ * assertion failed. Pin the home to a fixed short path so this test exercises
+ * the trimmer, not the length of the host's temp directory.
+ */
+vi.mock("../../shared/paths.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../shared/paths.js")>()),
+  JINN_HOME: "/tmp/jinn-context-test-home",
+}));
 
 // These tests lock the CURRENT output of buildContext after the "context hygiene"
 // refactor: the static COO operating-manual base was dropped (engines auto-ingest
