@@ -10,6 +10,9 @@ import {
   firstPromptMatches,
   localChatSource,
   pickNewChat,
+  userMessageText,
+  lastUserMessage,
+  EMPTY_CHAT_PROMPT,
   type FreebuffChatListing,
 } from "../freebuff-chat.js";
 
@@ -148,5 +151,27 @@ describe("localChatSource", () => {
 
   it("names a chat file relative to the config dir", () => {
     expect(chatFileRelPath({ project: "p", chatId: "c" }, "chat-messages.json")).toBe("projects/p/chats/c/chat-messages.json");
+  });
+});
+
+describe("pasted messages", () => {
+  const pasted = (text: string) => ({ variant: "user", content: "", textAttachments: [{ id: "a", content: text, preview: text.slice(0, 40), charCount: text.length }] });
+
+  it("reads a message's text from its attachment when its content is empty", () => {
+    expect(userMessageText(pasted("long pasted body"))).toBe("long pasted body");
+    expect(userMessageText({ variant: "user", content: "typed" })).toBe("typed");
+    expect(userMessageText({ variant: "user", content: "" })).toBe("");
+    expect(lastUserMessage([{ variant: "user", content: "one" }, ai([text("x")]), pasted("two")])).toBe("two");
+  });
+
+  it("hands back chats that recorded no first prompt for the caller to read, newest first", () => {
+    const listing: FreebuffChatListing[] = [
+      { project: "work", chatId: "2026-10-20T15-00-00.000Z", meta: { firstPrompt: EMPTY_CHAT_PROMPT } },
+      { project: "work", chatId: "2026-10-20T15-10-00.000Z", meta: { firstPrompt: EMPTY_CHAT_PROMPT } },
+      { project: "work", chatId: "2026-10-20T15-20-00.000Z" },
+    ];
+    const picked = pickNewChat(listing, { before: new Set(), claimed: new Set(), sentPrompt: "a long pasted prompt" });
+    expect(picked.chat).toBeUndefined();
+    expect(picked.unresolved.map((c) => c.chatId)).toEqual(["2026-10-20T15-10-00.000Z", "2026-10-20T15-00-00.000Z"]);
   });
 });

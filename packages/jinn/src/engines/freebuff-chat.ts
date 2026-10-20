@@ -70,6 +70,14 @@ export function firstPromptMatches(recorded: string | undefined, sent: string): 
   return b.startsWith(a) || a.startsWith(b.slice(0, Math.min(b.length, NORMALIZE_WIDTH)));
 }
 
+/** What `chat-meta.json` records as the first prompt of a chat whose first message was pasted: the text is in an attachment, not in the message. */
+export const EMPTY_CHAT_PROMPT = "(empty chat)";
+
+/** Fresh chats first: newest chat id first. Chat ids are ISO times, so they sort as text. */
+function newestFirst<T extends { chatId: string }>(chats: readonly T[]): T[] {
+  return [...chats].sort((x, y) => (x.chatId < y.chatId ? 1 : x.chatId > y.chatId ? -1 : 0));
+}
+
 /**
  * Which of the chats now on disk is the one this turn created.
  *
@@ -78,16 +86,23 @@ export function firstPromptMatches(recorded: string | undefined, sent: string): 
  * not spoken for, is a candidate. Among those, the one whose first prompt is the
  * message that was sent wins; the newest breaks a tie (and is logged by the
  * caller, since it means two chats opened with the same words).
+ *
+ * A long message is pasted, and Freebuff keeps a pasted message as an
+ * attachment: its chat then records no first prompt (`(empty chat)`), so it
+ * cannot be told apart by `chat-meta.json` alone. Those come back as
+ * `unresolved`, newest first, for the caller to settle by reading their messages.
  */
 export function pickNewChat(
   listing: readonly FreebuffChatListing[],
   opts: { before: ReadonlySet<string>; claimed: ReadonlySet<string>; sentPrompt: string },
-): { chat?: FreebuffChatRef; ambiguous: boolean } {
-  const fresh = listing.filter((c) => !opts.before.has(chatKey(c)) && !opts.claimed.has(chatKey(c)));
+): { chat?: FreebuffChatRef; ambiguous: boolean; unresolved: FreebuffChatListing[] } {
+  const fresh = newestFirst(listing.filter((c) => !opts.before.has(chatKey(c)) && !opts.claimed.has(chatKey(c)) && c.meta));
   const matching = fresh.filter((c) => firstPromptMatches(c.meta?.firstPrompt, opts.sentPrompt));
-  if (matching.length === 0) return { ambiguous: false };
-  const newest = [...matching].sort((x, y) => (x.chatId < y.chatId ? 1 : x.chatId > y.chatId ? -1 : 0))[0];
-  return { chat: { chatId: newest.chatId, project: newest.project }, ambiguous: matching.length > 1 };
+  if (matching.length > 0) {
+    return { chat: { chatId: matching[0].chatId, project: matching[0].project }, ambiguous: matching.length > 1, unresolved: [] };
+  }
+  const unresolved = fresh.filter((c) => !c.meta?.firstPrompt || c.meta.firstPrompt === EMPTY_CHAT_PROMPT);
+  return { ambiguous: false, unresolved };
 }
 
 export interface FreebuffAnswer {
@@ -104,6 +119,7 @@ interface RawBlock {
 interface RawMessage {
   variant?: unknown;
   content?: unknown;
+  textAttachments?: unknown;
   blocks?: unknown;
   isComplete?: unknown;
   credits?: unknown;
@@ -135,6 +151,27 @@ export function extractAnswer(messages: unknown): FreebuffAnswer | undefined {
     if (m?.variant !== "ai" || m.isComplete !== true) continue;
     const text = messageText(m);
     return { text, ...(typeof m.credits === "number" ? { credits: m.credits } : {}) };
+  }
+  return undefined;
+}
+
+/**
+ * What a user message said. A pasted message has an empty `content`: the text is
+ * in `textAttachments[].content`, which is where every long message of Marid's lands.
+ */
+export function userMessageText(message: unknown): string {
+  const m = message as RawMessage | undefined;
+  const content = typeof m?.content === "string" ? m.content : "";
+  if (content.trim()) return content;
+  const attachments = Array.isArray(m?.textAttachments) ? (m!.textAttachments as Array<{ content?: unknown }>) : [];
+  return attachments.map((a) => (typeof a?.content === "string" ? a.content : "")).filter(Boolean).join("\n");
+}
+
+/** The text of the last user message in the chat, or undefined when there is none. */
+export function lastUserMessage(messages: unknown): string | undefined {
+  if (!Array.isArray(messages)) return undefined;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if ((messages[i] as RawMessage | undefined)?.variant === "user") return userMessageText(messages[i]);
   }
   return undefined;
 }

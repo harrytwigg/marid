@@ -213,6 +213,7 @@ export interface RemoteFacts {
   claudeBin?: string;
   piBin?: string;
   opencodeBin?: string;
+  freebuffBin?: string;
   /** What that opencode's `--version` said: which config shape it reads. */
   opencodeVersion?: string;
   jinnVersion: string;
@@ -261,6 +262,7 @@ printf 'node=%s\\n' "$(command -v node 2>/dev/null || true)"
 printf 'claude=%s\\n' "$(command -v claude 2>/dev/null || true)"
 printf 'pi=%s\\n' "$(command -v pi 2>/dev/null || true)"
 printf 'opencode=%s\\n' "$(command -v opencode 2>/dev/null || true)"
+printf 'freebuff=%s\\n' "$(command -v freebuff 2>/dev/null || true)"
 if command -v opencode >/dev/null 2>&1; then
   printf 'opencodeversion=%s\\n' "$(OPENCODE_DISABLE_AUTOUPDATE=1 opencode --version 2>/dev/null | tr -d '\\r' | head -n 1)"
 ${FALLBACK_FACTS_SNIPPET}
@@ -320,10 +322,11 @@ export function remoteEngineAvailable(destination: string, engine: RemoteEngineN
  *  than a ternary at each call site: a fourth engine that has to add a branch to
  *  two separate conditionals is how the two quietly stop agreeing about what is
  *  installed on a host. */
-const REMOTE_ENGINE_BIN_FIELD: Record<RemoteEngineName, "claudeBin" | "piBin" | "opencodeBin"> = {
+const REMOTE_ENGINE_BIN_FIELD: Record<RemoteEngineName, "claudeBin" | "piBin" | "opencodeBin" | "freebuffBin"> = {
   claude: "claudeBin",
   pi: "piBin",
   opencode: "opencodeBin",
+  freebuff: "freebuffBin",
 };
 
 /** Facts already learned about a host this gateway boot, without asking again.
@@ -369,6 +372,7 @@ const REMOTE_ENGINE_INSTALL_HINT: Record<RemoteEngineName, string> = {
   claude: "install Claude Code there and sign it in",
   pi: "install the Pi CLI there and configure its providers in ~/.pi/agent/models.json",
   opencode: "install the opencode CLI there and sign it in with `opencode auth login`",
+  freebuff: "install the Freebuff CLI there (`npm install -g freebuff`) and sign it in with `freebuff login`",
 };
 
 /**
@@ -415,12 +419,13 @@ export function assertRemoteVersion(destination: string, versionLine: string, lo
 }
 
 /** The agent CLIs the facts script found, and what the opencode one is. */
-function engineFacts(kv: Record<string, string>): Pick<RemoteFacts, "claudeBin" | "piBin" | "opencodeBin" | "opencodeVersion"> {
+function engineFacts(kv: Record<string, string>): Pick<RemoteFacts, "claudeBin" | "piBin" | "opencodeBin" | "freebuffBin" | "opencodeVersion"> {
   const opencodeVersion = parseOpencodeVersion(kv.opencodeversion ?? "");
   return {
     ...(kv.claude ? { claudeBin: kv.claude } : {}),
     ...(kv.pi ? { piBin: kv.pi } : {}),
     ...(kv.opencode ? { opencodeBin: kv.opencode } : {}),
+    ...(kv.freebuff ? { freebuffBin: kv.freebuff } : {}),
     ...(opencodeVersion ? { opencodeVersion } : {}),
   };
 }
@@ -556,7 +561,10 @@ export async function ensureRemoteReady(
     }
     const facts = await gatherFacts(destination);
     requireRemoteEngineBin(destination, facts, opts.engine);
-    const mountProblem = await verifyMount(destination, remote, mountWait(remote, opts, { now, sleep }, {
+    // Freebuff reads nothing from the gateway's home: it is a terminal program
+    // with no hooks, no MCP and no skills, so there is no farm to link and no
+    // mount to wait for. A host with its sshfs down is still a usable host.
+    const mountProblem = opts.engine === "freebuff" ? undefined : await verifyMount(destination, remote, mountWait(remote, opts, { now, sleep }, {
       // A host already announced as offline is reported once; the mount wait
       // then continues under the same `waiting` status.
       onWaitStart: () => { if (!announced) onWaitStart({ destination, waking: false, waitingFor: "mount" }); },
@@ -1198,8 +1206,9 @@ export interface PrepareRemoteSessionOpts {
    *  the other one's is not free: Claude's settings.json registers seven hooks
    *  against a relay Pi never invokes, and the folder-trust seed rewrites the
    *  remote user's `.claude.json` — a real side effect on a host that may have
-   *  no Claude Code on it at all. */
-  engine: RemoteEngineName;
+   *  no Claude Code on it at all. Never `freebuff`: it stages nothing, because
+   *  it reads nothing from the gateway. */
+  engine: Exclude<RemoteEngineName, "freebuff">;
   jinnSessionId: string;
   /** Gateway port the reverse tunnel forwards to. */
   gatewayPort: number;

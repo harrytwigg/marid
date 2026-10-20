@@ -58,9 +58,9 @@ import {
  */
 
 /** Engines registered in this build (mirrors server.ts engine map). */
-export const ENGINE_NAMES = ["claude", "codex", "antigravity", "grok", "pi", "hermes", "opencode", "musecode"] as const;
+export const ENGINE_NAMES = ["claude", "codex", "antigravity", "grok", "pi", "hermes", "opencode", "musecode", "freebuff"] as const;
 export type EngineName = (typeof ENGINE_NAMES)[number];
-export const PTY_VIEW_ENGINE_NAMES = ["claude", "codex", "antigravity", "grok", "hermes", "opencode", "musecode"] as const; // engines with a /ws/pty view
+export const PTY_VIEW_ENGINE_NAMES = ["claude", "codex", "antigravity", "grok", "hermes", "opencode", "musecode", "freebuff"] as const; // engines with a /ws/pty view
 export type PtyViewEngineName = (typeof PTY_VIEW_ENGINE_NAMES)[number];
 /** Engines whose terminal and chat turns cannot share a session, so the view switch locks while a turn runs. */
 const PTY_LOCKED_DURING_TURN_ENGINES: ReadonlySet<string> = new Set(["codex", "musecode"]);
@@ -85,7 +85,7 @@ export function engineOffersPty(name: string, config: Pick<JinnConfig, "engines"
  * Membership is a property of the ENGINE ADAPTER, not of the CLI it drives:
  * each of these branches on `remoteHost` and spawns `ssh` instead of its own
  * binary (`claude-interactive.ts` `spawnRemote`, `pi.ts` and `opencode.ts`
- * `runRemote`). Every other adapter ignores the field entirely and would run
+ * `runRemote`, `freebuff-interactive.ts`). Every other adapter ignores the field entirely and would run
  * the turn on the gateway — with `--dangerously-skip-permissions`, against a
  * checkout that is not there — while the UI showed a remote employee working
  * normally.
@@ -95,7 +95,7 @@ export function engineOffersPty(name: string, config: Pick<JinnConfig, "engines"
  * remote employee is never handed to an engine that would silently bring the
  * work back here.
  */
-export const REMOTE_ENGINE_NAMES = ["claude", "pi", "opencode"] as const;
+export const REMOTE_ENGINE_NAMES = ["claude", "pi", "opencode", "freebuff"] as const;
 export type RemoteEngineName = (typeof REMOTE_ENGINE_NAMES)[number];
 
 /** Type guard: can `name`'s adapter run a turn on another host? */
@@ -115,7 +115,7 @@ export function engineSupportsRemote(name: string): name is RemoteEngineName {
  * with the model — so the id is allowed through with a warning, and the engine
  * reports the real error if it turns out to be wrong.
  */
-const DYNAMIC_CATALOG_ENGINES: ReadonlySet<string> = new Set(["pi", "opencode", "musecode"]);
+const DYNAMIC_CATALOG_ENGINES: ReadonlySet<string> = new Set(["pi", "opencode", "musecode", "freebuff"]);
 
 /** Whether an unrecognised model id for `engine` should be allowed through. */
 export function hasDynamicModelCatalog(engine: string): boolean {
@@ -132,6 +132,7 @@ const ENGINE_BIN: Record<EngineName, string> = {
   hermes: "hermes",
   opencode: "opencode",
   musecode: "muse",
+  freebuff: "freebuff",
 };
 
 const EFFORT_MECHANISM: Record<EngineName, EffortMechanism> = {
@@ -144,6 +145,8 @@ const EFFORT_MECHANISM: Record<EngineName, EffortMechanism> = {
   // A model's variants are its effort levels; opencode lists them per model.
   opencode: "opencode-variant",
   musecode: "musecode-turn",
+  // The reasoning level is a row's setting in the `/model` picker, driven by key.
+  freebuff: "freebuff-picker",
 };
 
 export const CODEX_DEFAULT_MODEL = "gpt-5.5";
@@ -162,6 +165,9 @@ const SYNTH_DEFAULTS: Record<EngineName, { supportsEffort: boolean; effortLevels
   // completes; the provider/id form is what the engine hands back to `-m`.
   opencode: { supportsEffort: false, effortLevels: [], fallbackModel: "anthropic/claude-sonnet-5" },
   musecode: { supportsEffort: true, effortLevels: [...MUSECODE_EFFORT_LEVELS], fallbackModel: "muse-spark-1.2" },
+  // A picker label prefix; the cheapest model on the free tier. Only shown in the
+  // UI: a turn leaves the CLI's own choice alone until a model is configured.
+  freebuff: { supportsEffort: true, effortLevels: ["low", "medium", "high", "xhigh", "max"], fallbackModel: "MiMo v2.6 Flash Slow" },
 };
 
 /** Optional per-engine `bin` override from config. */
@@ -192,6 +198,7 @@ const ENGINE_INSTALL_HINT: Record<EngineName, string> = {
   hermes: "install the Hermes CLI: curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash",
   opencode: "install the opencode CLI: curl -fsSL https://opencode.ai/install | bash, then run `opencode auth login`",
   musecode: "install Muse Code: curl -fsSL https://dev.meta.ai/install.sh | bash, then run `muse login` or set META_API_KEY",
+  freebuff: "npm install -g freebuff, then run `freebuff login`",
 };
 
 /** Actionable error message for a session blocked by a missing engine binary. */
