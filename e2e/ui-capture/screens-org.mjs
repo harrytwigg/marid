@@ -34,6 +34,31 @@ export const ORG_SCREENS = [
       await page.waitForTimeout(900)
     },
   },
+  ...[
+    // Selection reveals a card's model (so does hover, which the capture browser does not send). It
+    // must be readable in full beside the badges: a short model under a profile badge, and the
+    // longest seeded model on an opencode card.
+    ['org-map-model', 'Org map, model shown', 'eng-principal-qa', 'Principal Developer QA'],
+    ['org-map-model-long', 'Org map, long model shown', 'eng-junior-qa', 'Junior Developer QA'],
+  ].map(([name, title, employee, text]) => ({
+    name,
+    title,
+    url: () => `/org?employee=${employee}`,
+    ready: READY,
+    viewports: ['desktop'],
+    prepare: async (page) => {
+      const node = page.locator('.react-flow__node', { hasText: text }).first()
+      await node.waitFor({ timeout: 10_000 })
+      await page.getByRole('button', { name: 'Edit employee' }).waitFor({ timeout: 10_000 })
+      await page.waitForTimeout(900)
+      const box = await node.boundingBox()
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+      await page.keyboard.down('Control')
+      await page.mouse.wheel(0, -500)
+      await page.keyboard.up('Control')
+      await page.waitForTimeout(900)
+    },
+  })),
   {
     // A selected employee: the detail panel beside the map (over it on a phone).
     name: 'org-employee',

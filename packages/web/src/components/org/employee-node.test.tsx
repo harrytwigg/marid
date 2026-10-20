@@ -17,28 +17,31 @@ const employee = {
   model: "deepseek-v4.1-flash",
 }
 
-const renderNode = (overrides: Record<string, unknown> = {}) =>
-  render(<EmployeeNode {...({ data: { ...employee, ...overrides }, selected: false } as unknown as NodeProps)} />)
+const renderNode = (overrides: Record<string, unknown> = {}, selected = false) =>
+  render(<EmployeeNode {...({ data: { ...employee, ...overrides }, selected } as unknown as NodeProps)} />)
 
 describe("EmployeeNode", () => {
-  it("gives the name its own row, wrapping rather than ellipsising, with the full name on hover", () => {
+  it("shows the whole name, with the full name as the hover title", () => {
     renderNode()
     const name = screen.getByTestId("employee-node-name")
     expect(name.textContent).toBe("Senior Developer Reviewer")
     expect(name.getAttribute("title")).toBe("Senior Developer Reviewer")
-    expect(name.className).toContain("line-clamp-2")
-    expect(name.className).not.toContain("whitespace-nowrap")
-  })
-
-  it("keeps the engine badge from shrinking so it never clips", () => {
-    renderNode()
-    const badge = screen.getByText("opencode")
-    expect(badge.className).toContain("shrink-0")
-    expect(badge.className).toContain("whitespace-nowrap")
   })
 
   it("falls back to the employee's name without a display name", () => {
     renderNode({ displayName: undefined })
     expect(screen.getByTestId("employee-node-name").textContent).toBe("senior-developer")
+  })
+
+  it("shows the engine, and carries the model with its full name on hover", () => {
+    renderNode()
+    expect(screen.getByText("opencode")).toBeTruthy()
+    expect(screen.getByTestId("employee-node-model").textContent).toBe("deepseek-v4.1-flash")
+    expect(screen.getByTestId("employee-node-model").getAttribute("title")).toBe("deepseek-v4.1-flash")
+  })
+
+  it("leaves out the model line for an employee with no model and no profile", () => {
+    renderNode({ model: undefined })
+    expect(screen.queryByTestId("employee-node-model")).toBeNull()
   })
 })

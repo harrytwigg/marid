@@ -57,19 +57,30 @@ export function EmployeeNode({ data, selected }: NodeProps) {
           <span className="shrink-0 text-[length:var(--text-caption1)] text-[var(--text-tertiary)] whitespace-nowrap">
             {roleLabel(employee)}
           </span>
-          {/* Engine always; model revealed on hover/selected to keep nodes quiet */}
+          {/* Engine always; the model joins below on hover or selection to keep nodes quiet */}
           <span className="shrink-0 whitespace-nowrap text-[length:var(--text-caption2)] font-[var(--weight-semibold)] text-[var(--accent)] bg-[var(--accent-fill)] py-px px-[7px] rounded-[10px]">
             {engineDisplayName(employee.engine)}
           </span>
-          {employee.model && (
-            <span
-              className={`min-w-0 truncate text-[length:var(--text-caption2)] text-[var(--text-tertiary)] bg-[var(--fill-quaternary)] py-px px-[7px] rounded-[10px] transition-opacity duration-150 ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
-            >
-              {employee.model}
-            </span>
-          )}
         </div>
-        <ClaudeProfileBadge profile={employee.claudeProfile} />
+        {/* The profile badge and the revealed model share this line, each able to shrink to ellipsis
+            but neither fighting the name or the engine badge. With no profile the line only exists
+            while the model is shown, so a quiet card keeps no empty row. */}
+        {(employee.claudeProfile || employee.model) && (
+          <div
+            className={`${employee.claudeProfile || selected ? "flex" : "hidden group-hover:flex"} items-center gap-[var(--space-1)] min-w-0`}
+          >
+            <ClaudeProfileBadge profile={employee.claudeProfile} />
+            {employee.model && (
+              <span
+                data-testid="employee-node-model"
+                title={employee.model}
+                className={`min-w-0 truncate text-[length:var(--text-caption2)] text-[var(--text-tertiary)] bg-[var(--fill-quaternary)] py-px px-[7px] rounded-[10px] ${selected ? "inline-block" : "hidden group-hover:inline-block"}`}
+              >
+                {employee.model}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
