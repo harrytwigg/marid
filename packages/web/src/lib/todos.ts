@@ -5,6 +5,7 @@
 // module only *arranges* what it returns — it never invents a status.
 
 import type {
+  ReviewAddresseeWire,
   WorkItemCompactWire,
   WorkItemStatusWire,
   WorkItemSourceWire,
@@ -112,7 +113,15 @@ const DAY_MS = 24 * 60 * 60 * 1000
 // gateway over-returns and a park runs out between refetches. An unexpired park leaves the set outright, gate included.
 export type NeedsYouSet = WorkItemCompactWire[]
 
+/** The employee a Todo in review waits on, when its review is addressed to one
+ *  (a child of an employee-owned Todo) rather than to the operator's desk. */
+export function reviewAddresseeEmployee(item: { status: WorkItemStatusWire; reviewAddressee?: ReviewAddresseeWire }): string | null {
+  return item.status === "in_review" && item.reviewAddressee?.kind === "employee" ? item.reviewAddressee.employee : null
+}
+
 export function needsAttention(item: WorkItemCompactWire, now = Date.now()): boolean {
+  // An employee-addressed review waits on that employee; the parent surfaces if they never act.
+  if (reviewAddresseeEmployee(item)) return false
   return item.attentionLane === "recovering" || item.attentionLane === "manager" || (!isParked(item.parkedUntil, now) && item.status === "blocked")
 }
 

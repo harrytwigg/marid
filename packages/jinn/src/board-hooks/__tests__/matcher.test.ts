@@ -69,4 +69,21 @@ describe("matchesHook", () => {
     expect(fits({ from: "executing" }, commented)).toBe(false);
     expect(fits({ department: "platform" }, commented)).toBe(true);
   });
+
+  it("matches reviewAddressee by the kind the review is addressed to", () => {
+    const toEmployee = basePayload({ todo: { ...payload.todo, parentId: "TSK-1", reviewAddressee: { kind: "employee", employee: "parent-owner" } } });
+    expect(fits({ reviewAddressee: "operator" })).toBe(true);
+    expect(fits({ reviewAddressee: "operator" }, toEmployee)).toBe(false);
+    expect(fits({ reviewAddressee: "employee" }, toEmployee)).toBe(true);
+    expect(fits({ reviewAddressee: "employee" })).toBe(false);
+    expect(fits({ reviewAddressee: ["operator", "employee"] }, toEmployee)).toBe(true);
+    expect(fits({ to: "in_review", reviewAddressee: "operator" }, toEmployee)).toBe(false);
+  });
+
+  it("fires a hook that does not name reviewAddressee for every addressee, as before", () => {
+    const toEmployee = basePayload({ todo: { ...payload.todo, reviewAddressee: { kind: "employee", employee: "parent-owner" } } });
+    const match = { from: "executing", to: "in_review", label: "auto-merge" };
+    expect(fits(match)).toBe(true);
+    expect(fits(match, toEmployee)).toBe(true);
+  });
 });

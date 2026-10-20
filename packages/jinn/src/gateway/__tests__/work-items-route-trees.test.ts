@@ -75,10 +75,12 @@ describe("GET /api/work-items — trees, batch reads, and filters", () => {
         {
           workItem: firstRes.body.workItem,
           events: firstRes.body.events,
+          reviewAddressee: firstRes.body.reviewAddressee,
         },
         {
           workItem: secondRes.body.workItem,
           events: secondRes.body.events,
+          reviewAddressee: secondRes.body.reviewAddressee,
         },
       ],
     });

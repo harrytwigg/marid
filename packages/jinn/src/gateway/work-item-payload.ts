@@ -1,4 +1,4 @@
-import { getWorkItemSpend, listWorkItemEvents, type queryWorkItems, type WorkItem } from "../work-items/store.js";
+import { getWorkItemSpend, listWorkItemEvents, type queryWorkItems, type WorkItem, type WorkItemTree, type WorkItemTreeNode } from "../work-items/store.js";
 import { commentsTail } from "../work-items/comments.js";
 import { blockedSet, isBlocked, listRelations } from "../work-items/relations.js";
 import { getWorkItemLabels, labelSets, type Label } from "../work-items/labels.js";
@@ -8,7 +8,8 @@ import { getTodoDispatchConfig } from "../work-items/dispatch-config.js";
 import { readStopCause, type TodoStopCause } from "../work-items/stop-cause.js";
 import { isWorkItemKept, keptSet } from "../work-items/kept.js";
 import { getWorkItemRecovery, recoveryByItem } from "../work-items/recovery-rows.js";
-import { isRecoverySweptStatus } from "../work-items/recovery.js";
+import { isRecoverySweptStatus, isReviewAddresseeReason } from "../work-items/recovery.js";
+import { addresseeOfParent, reviewAddressee, type ReviewAddressee } from "../work-items/review-addressee.js";
 import { initDb } from "../shared/db.js";
 
 /** The wire projections of a Todo the API routes return: one compact shape for
@@ -25,13 +26,23 @@ function attentionLaneOf(
   // the recovery sweep only visits RECOVERY_SWEPT_STATUSES, so a row
   // left behind by a move to backlog (or a terminal) is stale — reading it here
   // kept a lane the Todo no longer had a reason for.
-  if (recovery && isRecoverySweptStatus(item.status)) return recovery.lane;
+  if (item.status === "in_review") return reviewLaneOf(item, recovery);
+  if (recovery && isRecoverySweptStatus(item.status) && !isReviewAddresseeReason(recovery.reason)) return recovery.lane;
   if (item.status === "blocked") {
     const cause = readStopCause(initDb(), item.id);
     if (cause?.parkedUntil) return "recovering";
     return "operator";
   }
   return null;
+}
+
+/** A review waits on the employee it is addressed to, else on whatever the
+ *  sweep found. A row that names an addressee is current only while one holds:
+ *  once the review goes back to the operator it reads as the operator's. */
+function reviewLaneOf(item: WorkItem, recovery: { lane: string; reason: string } | undefined): string | null {
+  if (reviewAddressee(item).kind === "employee") return "manager";
+  if (!recovery) return null;
+  return isReviewAddresseeReason(recovery.reason) ? "operator" : recovery.lane;
 }
 
 export function compactWorkItem(
@@ -67,6 +78,7 @@ export function compactWorkItem(
     kept: extras ? extras.kept.has(item.id) : isWorkItemKept(initDb(), item.id),
     sessionRef: sessionRef(item),
     attentionLane: attentionLaneOf(item, extras?.recovery?.get(item.id)),
+    reviewAddressee: reviewAddressee(item),
     ...stopCause(item),
     updatedAt: item.updatedAt,
   };
@@ -129,6 +141,8 @@ export function fullWorkItemPayload(item: WorkItem): Record<string, unknown> {
     // Additive: the same stop cause and attention lane the compact row carries,
     // so the task page can say why a blocked Todo stopped as the card does.
     attentionLane: attentionLaneOf(item),
+    // Additive: who this Todo's review is addressed to, as the compact row carries it.
+    reviewAddressee: reviewAddressee(item),
     ...stopCause(item),
     // Additive: the attempt ledger, oldest first. Status says where the
     // Todo is; runs say what each attempt at it actually did.
@@ -146,5 +160,27 @@ export function openWorkItemPayload(item: WorkItem, events = listWorkItemEvents(
   return {
     workItem: item,
     events,
+    reviewAddressee: reviewAddressee(item),
   };
+}
+
+/** A tree node as the tree routes return it: the store row, its children and
+ *  who its review is addressed to, read from the node's parent in the tree. */
+export type WorkItemTreeNodePayload = Omit<WorkItemTreeNode, "children"> & { reviewAddressee: ReviewAddressee; children: WorkItemTreeNodePayload[] };
+
+function treeNodePayload(node: WorkItemTreeNode, parent?: WorkItemTreeNode): WorkItemTreeNodePayload {
+  return {
+    ...node,
+    reviewAddressee: parent ? addresseeOfParent(parent) : reviewAddressee(node),
+    children: node.children.map((child) => treeNodePayload(child, node)),
+  };
+}
+
+/** A subtree with `reviewAddressee` on every node, additive to the store shape. */
+export function workItemTreePayload(tree: WorkItemTree): Omit<WorkItemTree, "root"> & { root: WorkItemTreeNodePayload } {
+  return { ...tree, root: treeNodePayload(tree.root) };
+}
+
+export function workItemTreesPayload(trees: Record<string, WorkItemTree>): Record<string, ReturnType<typeof workItemTreePayload>> {
+  return Object.fromEntries(Object.entries(trees).map(([id, tree]) => [id, workItemTreePayload(tree)]));
 }

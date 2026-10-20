@@ -160,7 +160,8 @@ export function latestEvidenceFloorAt(workItemId: string): string | undefined {
  * run that ended before it cannot speak for the work after it. A note on the
  * stop, a block, or an agent's own unblock or take-back is no such answer, and
  * recovery keeps reading the runs across it. Same operator test as the floor
- * above: his actor, or a session carrying his lane.
+ * above: his actor, or a session carrying his lane. A review bounce by the
+ * parent's owner (`detail.bounce`) answers the review the same way.
  */
 export function latestOperatorResumeAt(workItemId: string): string | undefined {
   const db = initDb();
@@ -169,7 +170,8 @@ export function latestOperatorResumeAt(workItemId: string): string | undefined {
     .prepare(
       `SELECT created_at FROM work_item_events
        WHERE work_item_id = ? AND kind = 'status_change' AND from_status IN ('blocked', 'in_review') AND to_status = 'executing'
-         AND (actor = ? OR CASE WHEN json_valid(detail) THEN json_extract(detail, '$.operatorLane') END = 1)
+         AND (actor = ? OR CASE WHEN json_valid(detail) THEN json_extract(detail, '$.operatorLane') END = 1
+              OR CASE WHEN json_valid(detail) THEN json_extract(detail, '$.bounce') END = 1)
        ORDER BY created_at DESC, rowid DESC LIMIT 1`,
     )
     .get(id, HUMAN_ACTOR) as { created_at: string } | undefined;

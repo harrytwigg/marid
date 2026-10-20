@@ -113,7 +113,7 @@ describe("work-item tools — registry + schemas", () => {
     const status = tool("update_work_item").inputSchema.properties.status as { enum: string[] };
     expect(status.enum).toEqual(["backlog", "executing", "in_review", "blocked", "done"]);
     expect(status.enum).not.toContain("cancelled");
-    expect(tool("update_work_item").inputSchema.properties.asOperator).toMatchObject({ type: "boolean", description: expect.stringMatching(/coordinator.*done.*reason/i) });
+    expect(tool("update_work_item").inputSchema.properties.asOperator).toMatchObject({ type: "boolean", description: expect.stringMatching(/coordinator.*done/i) });
     expect(tool("update_work_item").inputSchema.properties).not.toHaveProperty("acknowledgeEscalated");
     expect(tool("get_work_item").inputSchema.properties.id).toMatchObject({ pattern: "^[A-Z]{3}-[1-9][0-9]*$" });
   });

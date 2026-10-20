@@ -19,6 +19,7 @@ import { searchWorkItemIds, workItemMatchReasons, type WorkItemMatch } from './s
 import type { WorkItemEventKind } from './event-log.js';
 import { OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from './operator-assignee.js';
 import { tapBoardEvent } from './board-event-tap.js';
+import { REVIEW_ADDRESSEE_REASON_PREFIX } from './recovery.js';
 
 /**
  * Work-item store — the substrate of the Todos ledger (GRS-002, elevated by
@@ -547,12 +548,13 @@ function workItemWhere(filter: ListWorkItemsFilter, textIds?: readonly string[])
     // A blocked Todo held by the caller, or one recovery routed to a human; the operator's own queue
     // adds blocked Todos held by @operator or by nobody (a Dispatcher or Shaper dead end). An unexpired
     // park is a clock-wait and leaves this set outright; an unreadable one is not a park.
+    // A review addressed to an employee (the parent's owner) waits on that employee, not on a person's inbox: its row is left out, and the parent surfaces if its owner never acts.
     // A recovery row only counts while the Todo is in a status the sweep visits — the sweep
     // statuses are RECOVERY_SWEPT_STATUSES in work-items/recovery.ts; keep this list in step with it.
     conditions.push(
-      "((((assignee IN (?, ?) OR (? = 1 AND assignee IS NULL)) AND status = 'blocked') OR EXISTS (SELECT 1 FROM work_item_recovery rec WHERE rec.work_item_id = work_items.id AND rec.lane IN ('recovering', 'manager') AND work_items.status IN ('executing', 'in_review', 'blocked'))) AND NOT EXISTS (SELECT 1 FROM work_item_stop_cause sc WHERE sc.work_item_id = work_items.id AND strftime('%s', sc.parked_until) > strftime('%s', ?) AND NOT EXISTS (SELECT 1 FROM work_item_recovery rec2 WHERE rec2.work_item_id = work_items.id AND rec2.lane IN ('recovering', 'manager'))))",
+      "((((assignee IN (?, ?) OR (? = 1 AND assignee IS NULL)) AND status = 'blocked') OR EXISTS (SELECT 1 FROM work_item_recovery rec WHERE rec.work_item_id = work_items.id AND rec.lane IN ('recovering', 'manager') AND rec.reason NOT LIKE ? AND work_items.status IN ('executing', 'in_review', 'blocked'))) AND NOT EXISTS (SELECT 1 FROM work_item_stop_cause sc WHERE sc.work_item_id = work_items.id AND strftime('%s', sc.parked_until) > strftime('%s', ?) AND NOT EXISTS (SELECT 1 FROM work_item_recovery rec2 WHERE rec2.work_item_id = work_items.id AND rec2.lane IN ('recovering', 'manager'))))",
     );
-    values.push(filter.needsAttentionFor, filter.needsAttentionOperator ? OPERATOR_ASSIGNEE : filter.needsAttentionFor, filter.needsAttentionOperator ? 1 : 0, new Date().toISOString());
+    values.push(filter.needsAttentionFor, filter.needsAttentionOperator ? OPERATOR_ASSIGNEE : filter.needsAttentionFor, filter.needsAttentionOperator ? 1 : 0, `${REVIEW_ADDRESSEE_REASON_PREFIX}%`, new Date().toISOString());
   }
   if (filter.since) {
     conditions.push('updated_at >= ?');
