@@ -20,6 +20,28 @@ export class FreebuffFailure extends Error {
 
 export type FreebuffPlace = "local" | "remote";
 
+/**
+ * A refusal printed in the chat, as the failure it is. Used while a message is
+ * going in, never while the model is answering: an answer can quote any of these.
+ * `released` is not a failure at all (the caller starts the process afresh) and is
+ * left to it.
+ */
+export function refusalFailure(refusal: NonNullable<FreebuffScreenInfo["refusal"]>): FreebuffFailure | undefined {
+  switch (refusal.kind) {
+    case "no-hours":
+      return new FreebuffFailure(`Freebuff would not start a session: ${refusal.text}`, { status: "rejected", rateLimitType: "hours" });
+    case "session-limit":
+    case "network-cap":
+      return new FreebuffFailure(`Freebuff would not start a session: ${refusal.text}`, { status: "rejected", rateLimitType: "sessions" });
+    case "concurrent-limit":
+      return new FreebuffFailure(`Freebuff will not start a session while another one holds the account's slot; only a person at the terminal can take it over. Freebuff said: ${refusal.text}`);
+    case "unavailable":
+      return new FreebuffFailure(`Freebuff cannot run here: ${refusal.text}`);
+    case "released":
+      return undefined;
+  }
+}
+
 export function notSignedInMessage(place: FreebuffPlace): string {
   return `freebuff is not signed in on ${place}; run "freebuff login" there`;
 }

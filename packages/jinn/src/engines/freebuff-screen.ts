@@ -10,6 +10,25 @@
 
 export type FreebuffScreenState = "signed-out" | "idle" | "busy" | "picker" | "unknown";
 
+/**
+ * What Freebuff prints in its chat when it will not start (or has dropped) a
+ * session. The wording is taken from the 0.2.30 binary's own strings, not from a
+ * recorded screen: these states cannot be reached on demand.
+ */
+export type FreebuffRefusal =
+  /** "Not enough hours: 0.4 available." */
+  | { kind: "no-hours"; text: string }
+  /** "Session limit reached." The day's free sessions are used up. */
+  | { kind: "session-limit"; text: string }
+  /** "Too many Freebuff sessions on this network." */
+  | { kind: "network-cap"; text: string }
+  /** "Your concurrent-session limit … is reached. Take over to …": only a person can take over. */
+  | { kind: "concurrent-limit"; text: string }
+  /** "Freebuff is unavailable in <country>." */
+  | { kind: "unavailable"; text: string }
+  /** "This session was released. Choose a model to start a new session." */
+  | { kind: "released"; text: string };
+
 export interface FreebuffStatusBar {
   /** The model's name, without its reasoning level. */
   modelLabel: string;
@@ -37,6 +56,8 @@ export interface FreebuffScreenInfo {
   turnFooter: boolean;
   /** Seconds the busy line says the turn has run. */
   busySeconds?: number;
+  /** A message saying Freebuff will not run (or has dropped) a session. */
+  refusal?: FreebuffRefusal;
 }
 
 const SIGNED_OUT_MARKERS = [
@@ -48,6 +69,15 @@ const SIGNED_OUT_MARKERS = [
 const IDLE_PLACEHOLDER = "Enter a coding task or / for commands";
 const BUSY_PLACEHOLDER = "Add to the current task";
 const PICKER_HINT = "choose model";
+
+const REFUSALS: Array<{ kind: FreebuffRefusal["kind"]; pattern: RegExp }> = [
+  { kind: "no-hours", pattern: /Not enough hours:[^\n]*/ },
+  { kind: "session-limit", pattern: /Session limit reached\.[^\n]*/ },
+  { kind: "network-cap", pattern: /Too many Freebuff sessions on this network\.[^\n]*/ },
+  { kind: "concurrent-limit", pattern: /[^\n]*(?:concurrent-session limit|allows one session across CLI and Desktop)[^\n]*/ },
+  { kind: "unavailable", pattern: /Freebuff is unavailable in [^\n]*/ },
+  { kind: "released", pattern: /This session was released\.[^\n]*/ },
+];
 
 const BUSY_LINE = /^\s*working\.\.\..*?(?:(\d+)s\s+)?■\s*Esc\s*$/;
 const TURN_FOOTER = /⎘\s*•\s*[0-9hms ]+•/;
@@ -111,6 +141,15 @@ export function parseFreebuffScreen(lines: readonly string[]): FreebuffScreenInf
 
   const busy = lines.map((l) => BUSY_LINE.exec(l)).find((m): m is RegExpExecArray => m !== null);
   if (busy?.[1] !== undefined) info.busySeconds = Number(busy[1]);
+
+  for (const { kind, pattern } of REFUSALS) {
+    const found = pattern.exec(text);
+    if (found) {
+      // The line as drawn: the transcript's margin and the scrollbar glyphs are not part of it.
+      info.refusal = { kind, text: found[0].replace(/[\s▀▄█]+$/, "").trim() };
+      break;
+    }
+  }
 
   // Order matters: a sign-in prompt and the picker each cover or replace the
   // input box, and the picker leaves the idle status bar on screen below it.

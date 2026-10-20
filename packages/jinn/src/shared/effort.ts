@@ -4,6 +4,17 @@ import type { Employee, Session } from "./types.js";
 const DEFAULT_EFFORT = "medium";
 
 /**
+ * Engines whose level is a setting on the CLI's own screen, not a flag: when
+ * nothing chose one, saying "medium" would change the model's reasoning from
+ * whatever it was set to, so they are told `default`, which they leave alone.
+ */
+const UNSET_EFFORT_ENGINES: ReadonlySet<string> = new Set(["freebuff"]);
+
+function unchosenEffort(engine: string | undefined): string {
+  return engine !== undefined && UNSET_EFFORT_ENGINES.has(engine) ? "default" : DEFAULT_EFFORT;
+}
+
+/**
  * Resolve the effort level for a session.
  *
  * Valid effort levels come from the model registry (`validLevels`) for the
@@ -29,8 +40,9 @@ export function resolveEffort(
   session: Pick<Session, "parentSessionId" | "effortLevel">,
   employee: Pick<Employee, "effortLevel"> | null | undefined,
   validLevels: string[],
+  engine?: string,
 ): string {
-  if (validLevels.length === 0) return DEFAULT_EFFORT;
+  if (validLevels.length === 0) return unchosenEffort(engine);
   const isValid = (level: string) => validLevels.includes(level);
   const clean = (level: string | null | undefined) => level && level !== "default" ? level : undefined;
 
@@ -70,7 +82,7 @@ export function resolveEffort(
   const engineDefault = clean(engineConfig.effortLevel);
   if (engineDefault && isValid(engineDefault)) return engineDefault;
   if (engineDefault) {
-    logger.warn(`Invalid effortLevel "${engineDefault}" in engine config (valid: ${validLevels.join(", ")}), defaulting to "${DEFAULT_EFFORT}"`);
+    logger.warn(`Invalid effortLevel "${engineDefault}" in engine config (valid: ${validLevels.join(", ")}), defaulting to "${unchosenEffort(engine)}"`);
   }
-  return DEFAULT_EFFORT;
+  return unchosenEffort(engine);
 }

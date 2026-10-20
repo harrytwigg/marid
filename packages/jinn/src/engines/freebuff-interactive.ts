@@ -45,6 +45,7 @@ import {
   FreebuffFailure,
   UNKNOWN_SCREEN_LIMIT_MS,
   notSignedInMessage,
+  refusalFailure,
   screenFailure,
   unknownScreenFailure,
   type FreebuffPlace,
@@ -81,6 +82,14 @@ class TurnStopped extends Error {
   constructor(readonly stop: Stop) {
     super(stop.kind === "interrupt" ? stop.reason : "freebuff exited");
     this.name = "TurnStopped";
+  }
+}
+
+/** Freebuff dropped its hour session before the message went in: start the process afresh and try once more. */
+class SessionReleased extends Error {
+  constructor(text: string) {
+    super(text);
+    this.name = "SessionReleased";
   }
 }
 
@@ -139,13 +148,27 @@ function configHome(): string {
   return os.homedir();
 }
 
+/**
+ * What a remote chat is told about where it is. The context built for every employee
+ * names the gateway's own home as the working directory, and on another machine that
+ * path is not there: a model that believes it creates it, and writes its files there.
+ */
+export function remoteLocationNote(remoteCwd: string): string {
+  return `**Where you run:** this session runs on a different machine from the gateway, and your working directory is \`${remoteCwd}\`. `
+    + "The gateway's instance home, and any path under it named above, does not exist on this machine: keep your files under your working directory.";
+}
+
 /** The message the CLI is sent: Freebuff has no system-prompt flag, so a new chat's context goes in front of the first message. */
-export function composeFreebuffMessage(opts: Pick<EngineRunOpts, "prompt" | "systemPrompt" | "resumeSessionId" | "platformContextRefresh" | "attachments">): string {
+export function composeFreebuffMessage(
+  opts: Pick<EngineRunOpts, "prompt" | "systemPrompt" | "resumeSessionId" | "platformContextRefresh" | "attachments">,
+  remoteCwd?: string,
+): string {
   const body = opts.attachments?.length
     ? `${opts.prompt}\n\nAttached files:\n${opts.attachments.map((a) => `- ${a}`).join("\n")}`
     : opts.prompt;
   const context = opts.resumeSessionId ? opts.platformContextRefresh : opts.systemPrompt;
-  return context ? `${context}\n\n---\n\n${body}` : body;
+  if (!context) return body;
+  return `${context}${remoteCwd ? `\n\n${remoteLocationNote(remoteCwd)}` : ""}\n\n---\n\n${body}`;
 }
 
 /** The arguments the CLI is started with. `--trust-agents` skips the folder-trust prompt nobody is there to answer. */
@@ -243,7 +266,7 @@ export class FreebuffInteractiveEngine implements InterruptibleEngine, PtyViewEn
     return { sessionId: chatId, result: "", error: `Freebuff interactive: ${message}`, conversationIntact: true };
   }
 
-  private async runTurn(opts: EngineRunOpts, id: string, signal: AbortSignal): Promise<EngineResult> {
+  private async runTurn(opts: EngineRunOpts, id: string, signal: AbortSignal, rejoined = false): Promise<EngineResult> {
     const target = isRemoteTarget(opts) ? (opts as RemoteTarget & { remoteHost: string }) : undefined;
     const wantedChat = opts.resumeSessionId || undefined;
 
@@ -261,12 +284,20 @@ export class FreebuffInteractiveEngine implements InterruptibleEngine, PtyViewEn
       this.lifecycle.turnStarted(id);
     }
 
-    const ready = await this.waitForState(live, signal, (info) => info.state === "idle", { what: "start" });
-    this.recordUsage(ready);
+    try {
+      const ready = await this.waitForState(live, signal, (info) => info.state === "idle", { what: "start" });
+      this.recordUsage(ready);
 
-    await this.ensureModel(live, signal, { model: opts.model?.trim() || undefined, effortLevel: opts.effortLevel });
+      await this.ensureModel(live, signal, { model: opts.model?.trim() || undefined, effortLevel: opts.effortLevel });
+    } catch (err) {
+      if (!(err instanceof SessionReleased) || rejoined) throw err;
+      // The process outlived its hour session. A fresh one re-joins the chat (and the session, if one is still running).
+      logger.info(`FreebuffInteractiveEngine: ${id}'s Freebuff session was released (${err.message}); starting the process afresh`);
+      this.lifecycle.releaseSession(id);
+      return await this.runTurn(opts, id, signal, true);
+    }
 
-    const message = composeFreebuffMessage(opts);
+    const message = composeFreebuffMessage(opts, target?.remoteCwd);
     await this.submit(live, signal, neutralizeForPaste(message));
     const finish = await this.waitForFinish(live, signal, message);
 
@@ -430,6 +461,7 @@ export class FreebuffInteractiveEngine implements InterruptibleEngine, PtyViewEn
       const { lines, info } = await this.screen(live);
       const failure = screenFailure(info, live.place);
       if (failure) throw failure;
+      if (info.refusal) this.refused(info.refusal);
       if (done(info)) return info;
       if (info.state === "unknown") {
         unknownSince ??= Date.now();
@@ -441,6 +473,13 @@ export class FreebuffInteractiveEngine implements InterruptibleEngine, PtyViewEn
         throw new FreebuffFailure(`Freebuff did not reach its ${opts.what} screen within ${Math.round(opts.timeoutMs / 1000)}s`);
       }
     }
+  }
+
+  /** A refusal the CLI printed: a failure to report, or a dropped session to start over from. */
+  private refused(refusal: NonNullable<FreebuffScreenInfo["refusal"]>): never {
+    const failure = refusalFailure(refusal);
+    if (failure) throw failure;
+    throw new SessionReleased(refusal.text);
   }
 
   private type(live: Live, text: string): void {
@@ -525,6 +564,11 @@ export class FreebuffInteractiveEngine implements InterruptibleEngine, PtyViewEn
       const { lines, info } = await this.screen(live);
       const failure = screenFailure(info, live.place);
       if (failure) throw failure;
+      // Only before the model starts answering: once it has, its words are its own.
+      if (!sawBusy && info.refusal) {
+        const refusal = refusalFailure(info.refusal);
+        throw refusal ?? new FreebuffFailure(`Freebuff dropped its session as the message went in (${info.refusal.text}); the next turn starts the process afresh and re-joins the chat`);
+      }
 
       if (info.state === "busy") {
         sawBusy = true;

@@ -109,3 +109,19 @@ describe("effortLevelsForModel (registry lookup)", () => {
     expect(effortLevelsForModel(cfg(), "claude")).toEqual(CLAUDE_REGISTRY);
   });
 });
+
+describe("resolveEffort for an engine whose level lives on the CLI's screen", () => {
+  const session = { parentSessionId: null, effortLevel: null } as never;
+  const levels = ["low", "medium", "high"];
+
+  it("says `default` when nothing chose a level, so the CLI's own setting stands", () => {
+    expect(resolveEffort({}, session, null, levels, "freebuff")).toBe("default");
+    expect(resolveEffort({}, session, null, [], "freebuff")).toBe("default");
+    expect(resolveEffort({}, session, null, levels, "codex")).toBe("medium");
+  });
+
+  it("still returns a level the employee or the engine chose", () => {
+    expect(resolveEffort({}, session, { effortLevel: "high" } as never, levels, "freebuff")).toBe("high");
+    expect(resolveEffort({ effortLevel: "low" }, session, null, levels, "freebuff")).toBe("low");
+  });
+});

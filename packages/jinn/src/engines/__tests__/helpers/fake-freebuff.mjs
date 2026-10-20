@@ -7,6 +7,8 @@
 //   FAKE_BUSY_MS     how long a turn stays busy (default 700)
 //   FAKE_MODE        "signed-out" shows the sign-in screen on the first message
 //   FAKE_HOURS       the hours balance on the panel (default 17); 0 = none left
+//   FAKE_RELEASED_ONCE  a file path: the first process to start (no such file yet) shows the
+//                    "session was released" message, creates the file, and every later one is fine
 //   FAKE_START_LOG   a file each start and each Enter on the sign-in screen is appended to
 import fs from "node:fs";
 import os from "node:os";
@@ -46,6 +48,11 @@ let pasted = "";
 let inPaste = false;
 let picker = 0;
 let minutes = 60;
+let notice = "";
+if (process.env.FAKE_RELEASED_ONCE && !fs.existsSync(process.env.FAKE_RELEASED_ONCE)) {
+  fs.writeFileSync(process.env.FAKE_RELEASED_ONCE, "");
+  notice = "This session was released. Choose a model to start a new session.";
+}
 
 const draw = (lines) => process.stdout.write("\x1b[2J\x1b[H" + lines.join("\r\n"));
 const effortOf = () => (model.efforts ? ` • ${model.efforts[model.effort]}` : "");
@@ -65,7 +72,7 @@ function render() {
   const conversation = messages.length ? ["", "   [05:00 PM]", `   ${lastUser()}`, "", ...(screen === "idle" || screen === "busy" ? [`  ${answer}`] : []), ""] : [];
   if (screen === "busy") return draw([...panel(), ...conversation, ` working...${" ".repeat(60)}${Math.floor(busyFor / 1000)}s  ■ Esc`, ...input("Add to the current task (/ for commands)"), statusBar()]);
   const footer = messages.length && answer ? [`${" ".repeat(60)}⎘ • 2s • △▽`, ` ${minutes}m left · 13.5K (1%)      ✕ End session`] : [` ${minutes}m left      ✕ End session`];
-  return draw([...panel(), ...conversation, ...footer, ...input("Enter a coding task or / for commands"), statusBar()]);
+  return draw([...panel(), ...conversation, ...(notice ? ["", `  ${notice}`] : []), ...footer, ...input("Enter a coding task or / for commands"), statusBar()]);
 }
 
 const lastUser = () => { const u = [...messages].reverse().find((m) => m.variant === "user"); return (u?.content || u?.textAttachments?.[0]?.content || "").slice(0, 80).replace(/\n/g, " "); };

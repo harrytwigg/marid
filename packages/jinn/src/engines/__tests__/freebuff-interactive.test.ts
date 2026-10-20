@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../../sessions/employee-env.js", () => ({ employeeSessionEnv: () => ({}) }));
 
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
-import { FreebuffInteractiveEngine, buildFreebuffArgs, composeFreebuffMessage } from "../freebuff-interactive.js";
+import { FreebuffInteractiveEngine, buildFreebuffArgs, composeFreebuffMessage, remoteLocationNote } from "../freebuff-interactive.js";
 import { detectRateLimit } from "../../shared/rateLimit.js";
 import { userMessageText } from "../freebuff-chat.js";
 
@@ -139,6 +139,15 @@ describe.skipIf(process.platform === "win32")("FreebuffInteractiveEngine", () =>
     expect(detectRateLimit(result).limited).toBe(true);
   }, 30_000);
 
+  it("starts the process afresh, once, when it finds its hour session already released", async () => {
+    process.env.FAKE_RELEASED_ONCE = path.join(home, "released-once");
+    const result = await turn(engine(), "rel", "after the release");
+    delete process.env.FAKE_RELEASED_ONCE;
+    expect(result.error).toBeUndefined();
+    expect(result.result).toContain("after the release");
+    expect(starts().filter((l) => l.startsWith("start "))).toHaveLength(2);
+  }, 30_000);
+
   it("queues a second session's turn behind the first at maxConcurrent 1, taking over the idle process", async () => {
     const e = engine(1);
     const a = await turn(e, "qa", "first session");
@@ -196,6 +205,15 @@ describe("composeFreebuffMessage", () => {
   it("does not repeat the system prompt on a resumed chat, but carries a platform refresh", () => {
     expect(composeFreebuffMessage({ prompt: "next", systemPrompt: "You are Ada.", resumeSessionId: "c" })).toBe("next");
     expect(composeFreebuffMessage({ prompt: "next", resumeSessionId: "c", platformContextRefresh: "It is Tuesday." })).toBe("It is Tuesday.\n\n---\n\nnext");
+  });
+
+  it("tells a remote chat where it really runs, after the context that names the gateway's home", () => {
+    const message = composeFreebuffMessage({ prompt: "do it", systemPrompt: "Your working directory is ~/.jinn." }, "/work/area");
+    expect(message).toBe(`Your working directory is ~/.jinn.\n\n${remoteLocationNote("/work/area")}\n\n---\n\ndo it`);
+    expect(remoteLocationNote("/work/area")).toContain("`/work/area`");
+    // Nothing to correct when there is no context, or when the chat already has it.
+    expect(composeFreebuffMessage({ prompt: "do it" }, "/work/area")).toBe("do it");
+    expect(composeFreebuffMessage({ prompt: "next", resumeSessionId: "c" }, "/work/area")).toBe("next");
   });
 
   it("lists attachments after the message", () => {

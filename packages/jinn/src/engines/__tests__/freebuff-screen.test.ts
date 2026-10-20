@@ -76,6 +76,31 @@ describe("parseFreebuffScreen", () => {
   });
 });
 
+describe("refusals", () => {
+  // The CLI's own wording for the states that cannot be reached on demand, taken from
+  // the 0.2.30 binary's strings rather than recorded: shown in the chat above the idle input.
+  const withNotice = (notice: string) => ["", `  ${notice}`, ...screen("idle-session-active.txt")];
+  const refusalOf = (notice: string) => parseFreebuffScreen(withNotice(notice)).refusal;
+
+  it.each([
+    ["no-hours", "Not enough hours: 0.4 available. See https://freebuff.com/plans or use /model."],
+    ["session-limit", "Session limit reached. See https://freebuff.com/plans or choose another model with /model."],
+    ["network-cap", "Too many Freebuff sessions on this network. Try again after another session finishes."],
+    ["concurrent-limit", "Your concurrent-session limit across CLI and Desktop is reached. Take over to stop another session and use its slot here."],
+    ["concurrent-limit", "Limited access without a subscription allows one session across CLI and Desktop. Take over to stop the other session and use it here."],
+    ["unavailable", "Freebuff is unavailable in Nowhere. Use /byok to use your own API key."],
+    ["released", "This session was released. Choose a model to start a new session."],
+  ])("reads %s", (kind, notice) => {
+    expect(refusalOf(notice)).toEqual({ kind, text: notice.split("\n")[0].trim() });
+  });
+
+  it("sees none on an ordinary screen", () => {
+    for (const name of ["idle-session-active.txt", "busy.txt", "turn-finished.txt", "picker.txt", "signed-out.txt"]) {
+      expect(parseFreebuffScreen(screen(name)).refusal, name).toBeUndefined();
+    }
+  });
+});
+
 describe("parseStatusBar", () => {
   it("splits the model from its reasoning level and ignores the cwd", () => {
     expect(parseStatusBar([" DeepSeek V4.1 Flash 10/17 • high · /tmp/x · /model to change · Chat: New chat"]))

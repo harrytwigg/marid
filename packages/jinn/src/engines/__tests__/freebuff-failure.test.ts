@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { detectRateLimit } from "../../shared/rateLimit.js";
-import { FreebuffFailure, noHoursFailure, notSignedInMessage, screenFailure, unknownScreenFailure } from "../freebuff-failure.js";
+import { FreebuffFailure, noHoursFailure, notSignedInMessage, refusalFailure, screenFailure, unknownScreenFailure } from "../freebuff-failure.js";
 import { parseFreebuffScreen } from "../freebuff-screen.js";
 import { screen } from "./helpers/freebuff-fixtures.js";
 
@@ -32,6 +32,26 @@ describe("screenFailure", () => {
   it("has nothing to say about an ordinary idle or busy screen", () => {
     expect(screenFailure(parseFreebuffScreen(screen("idle-before-session.txt")), "local")).toBeUndefined();
     expect(screenFailure(parseFreebuffScreen(screen("busy.txt")), "local")).toBeUndefined();
+  });
+});
+
+describe("refusalFailure", () => {
+  it("makes a quota of an hours or sessions limit, so a fallback engine takes the turn", () => {
+    const hours = refusalFailure({ kind: "no-hours", text: "Not enough hours: 0.4 available." });
+    expect(hours?.rateLimit).toEqual({ status: "rejected", rateLimitType: "hours" });
+    expect(hours?.message).toBe("Freebuff would not start a session: Not enough hours: 0.4 available.");
+    expect(refusalFailure({ kind: "session-limit", text: "Session limit reached." })?.rateLimit?.rateLimitType).toBe("sessions");
+    expect(refusalFailure({ kind: "network-cap", text: "Too many Freebuff sessions on this network." })?.rateLimit?.status).toBe("rejected");
+  });
+
+  it("fails plainly, with no fallback, when only a person could take the slot over", () => {
+    const failure = refusalFailure({ kind: "concurrent-limit", text: "Your concurrent-session limit across CLI and Desktop is reached." });
+    expect(failure?.rateLimit).toBeUndefined();
+    expect(failure?.message).toContain("only a person at the terminal can take it over");
+  });
+
+  it("leaves a released session to the caller, which starts the process afresh", () => {
+    expect(refusalFailure({ kind: "released", text: "This session was released." })).toBeUndefined();
   });
 });
 
