@@ -33,7 +33,7 @@ import { ChatPageHeader } from './chat-page-header'
 import { SidebarColumn } from './sidebar-column'
 import { formatMessage } from '@/components/chat/chat-messages'
 import { inFileLinkSession } from '@/components/chat/file-link-session-context'
-import { chatHeaderEmployee, chatHeaderTitle } from './header-title'
+import { chatHeaderEmployee, chatHeaderEmployeeLine, chatHeaderTitle } from './header-title'
 import { useMobileSessionTabs } from './use-mobile-session-tabs'
 import { adjacentSessionId } from './session-navigation'
 import { usePaneSessionActions } from './use-pane-session-actions'
@@ -924,7 +924,7 @@ function ChatPage() {
           {/* Mobile keeps its nav chrome; multi-pane desktop moves identity into panes. */}
           <ChatPageHeader
             hideOnMobile={onMobileList}
-            title={headerTitle} subtitle={headerEmployee} chatId={focusedSessionId}
+            title={headerTitle} subtitle={chatHeaderEmployeeLine(headerTitle, headerEmployee)} chatId={focusedSessionId}
             backTo={backTo}
             onBack={backToList}
             onNew={handleNewChat}

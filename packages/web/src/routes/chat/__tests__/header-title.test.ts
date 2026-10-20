@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chatHeaderEmployee, chatHeaderTitle } from '../header-title'
+import { chatHeaderEmployee, chatHeaderEmployeeLine, chatHeaderTitle } from '../header-title'
 
 const meta = (sessionId: string, title?: string, employee?: string) => ({ sessionId, title, employee })
 
@@ -122,5 +122,20 @@ describe('chatHeaderTitle for an untitled chat', () => {
     expect(chatHeaderTitle({ focusedSessionId: 'a', meta: meta('a', undefined, 'a-lead'), sessions: [], employees })).toBe('A Lead')
     expect(chatHeaderTitle({ focusedSessionId: 'a', meta: null, sessions: [{ id: 'a', employee: 'a-lead' }], employees })).toBe('A Lead')
     expect(chatHeaderTitle({ focusedSessionId: 'a', meta: meta('a', undefined, 'gone'), sessions: [], employees })).toBe('gone')
+  })
+})
+
+describe('the header for an untitled chat', () => {
+  it('says the employee once: the title carries it, so there is no line under it', () => {
+    const employees = [{ name: 'a-lead', displayName: 'A Lead' }]
+    const input = { focusedSessionId: 'a', meta: meta('a', undefined, 'a-lead'), sessions: [], employees }
+    const title = chatHeaderTitle(input)
+    expect(title).toBe('A Lead')
+    expect(chatHeaderEmployeeLine(title, chatHeaderEmployee({ ...input, portalName: 'Portal' }))).toBeUndefined()
+  })
+
+  it('keeps the line under a real title, and drops an empty one', () => {
+    expect(chatHeaderEmployeeLine('Standup', 'A Lead')).toBe('A Lead')
+    expect(chatHeaderEmployeeLine('Standup', '')).toBeUndefined()
   })
 })
