@@ -52,8 +52,8 @@ describe("the tree routes", () => {
     const tree = (await call("GET", `/api/work-items/${parent.id}/tree`)).body.tree;
     expect(tree.root.reviewAddressee).toEqual({ kind: "operator" });
     expect(tree.root.children[0].reviewAddressee).toEqual({ kind: "employee", employee: "owner-dev" });
-    // The grandchild's parent is the child, which is assigned to child-dev, an employee in the org.
-    expect(tree.root.children[0].children[0]).toMatchObject({ id: grandchild.id, reviewAddressee: { kind: "employee", employee: "child-dev" } });
+    // The grandchild's parent is the child, owned by an employee but itself in review, so nothing wakes that owner: the operator.
+    expect(tree.root.children[0].children[0]).toMatchObject({ id: grandchild.id, reviewAddressee: { kind: "operator" } });
 
     const batch = (await call("GET", `/api/work-items/trees?ids=${parent.id},${operatorTree.parent.id}`)).body.trees;
     expect(batch[parent.id].root.children[0].reviewAddressee).toEqual({ kind: "employee", employee: "owner-dev" });

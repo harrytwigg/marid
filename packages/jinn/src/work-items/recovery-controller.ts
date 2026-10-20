@@ -1,6 +1,7 @@
 import { getWorkItemRecovery, upsertWorkItemRecovery } from "./recovery-rows.js";
 import {
   classifyRecovery,
+  isReviewAddresseeReason,
   mayReplaceRecoveryLane,
   MAX_RECOVERY_ATTEMPTS,
   RECOVERY_SWEPT_STATUSES,
@@ -96,7 +97,10 @@ function incidentId(item: WorkItem, lastRunId: string | undefined): string {
 function recordClassified(item: WorkItem, verdict: RecoveryClassification, lastRunId: string | undefined, now: Date): void {
   const prior = getWorkItemRecovery(item.id);
   const id = incidentId(item, lastRunId);
-  if (prior?.incidentId === id && prior.class === verdict.class && prior.lane === verdict.lane && prior.reason === verdict.reason) return;
+  // A repair attempt rewrites the row's reason itself, so only an addressee verdict (whose reason
+  // names who the review waits on) is rewritten when nothing but the reason changed.
+  const sameAddressee = !isReviewAddresseeReason(verdict.reason) || prior?.reason === verdict.reason;
+  if (prior?.incidentId === id && prior.class === verdict.class && prior.lane === verdict.lane && sameAddressee) return;
   if (!mayReplaceRecoveryLane(prior, verdict, item.status)) return;
   upsertWorkItemRecovery({
     workItemId: item.id,

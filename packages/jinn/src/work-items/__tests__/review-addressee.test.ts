@@ -22,10 +22,23 @@ describe("reviewAddressee", () => {
     expect(reviewAddressee(root)).toEqual({ kind: "operator" });
   });
 
-  it.each(["backlog", "executing", "in_review", "blocked"] as const)("is the parent's owner while the parent is %s", (status) => {
-    const { child } = treeInReview(workItems, `Open parent ${status}`, { parentStatus: status === "blocked" ? "executing" : status });
-    if (status === "blocked") transition(child.parentId!, "blocked", "operator", { human: true, blockKind: "needs_input" });
-    expect(reviewAddressee(child)).toEqual(employee("owner-dev"));
+  it.each([
+    ["backlog", { kind: "operator" }],
+    ["executing", employee("owner-dev")],
+    ["blocked", employee("owner-dev")],
+    ["in_review", { kind: "operator" }],
+    ["done", { kind: "operator" }],
+    ["cancelled", { kind: "operator" }],
+  ] as const)("with the parent %s, is %j", (status, expected) => {
+    const { parent, child } = treeInReview(workItems, `Parent ${status}`);
+    if (status === "blocked") transition(parent.id, "blocked", "operator", { human: true, blockKind: "needs_input" });
+    else if (status === "backlog") transition(parent.id, "backlog", "operator", { human: true });
+    else if (status === "in_review") transition(parent.id, "in_review", "operator", { detail: { note: "ready" } });
+    else if (status === "done" || status === "cancelled") {
+      transition(child.id, status, "operator", { human: true });
+      transition(parent.id, status, "operator", { human: true });
+    }
+    expect(reviewAddressee(workItems.getWorkItem(child.id)!)).toEqual(expected);
   });
 
   it("is the operator when the operator owns the parent, or nobody does", () => {

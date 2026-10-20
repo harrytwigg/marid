@@ -164,7 +164,7 @@ release-reviewer. Reason: …`.
 
 `todo.reviewAddressee` says who the Todo's `in_review` is addressed to: the parent's owner
 (`{ "kind": "employee", "employee": … }`) when the Todo has a parent owned by an employee
-in the org and that parent is not closed, otherwise the operator. It is computed when the
+in the org and that parent is `executing` or `blocked`, otherwise the operator. It is computed when the
 event fires. A hook meant for the operator's desk can add `match: { reviewAddressee: operator }`
 to skip reviews that belong to a parent's owner; a hook without the field fires as before.
 
