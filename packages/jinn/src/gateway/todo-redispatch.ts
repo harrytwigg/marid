@@ -1,4 +1,4 @@
-import { isClockRestartable, type AvailabilityRearmResult } from "../work-items/availability-resume.js";
+import { DISPATCHER_ALREADY_RUNNING, isClockRestartable, type AvailabilityRearmResult } from "../work-items/availability-resume.js";
 import { getWorkItem } from "../work-items/store.js";
 import { emitTodoProjectionEvent, type ApiContext } from "./api.js";
 import { startTodoDispatcher } from "./todo-dispatch.js";
@@ -21,6 +21,6 @@ export function redispatchTodo(todoId: string, context: ApiContext, reason: stri
     emitProjectionEvent: (id, action) => emitTodoProjectionEvent(context, id, action),
   });
   if (!started.ok) return { unavailable: started.body.error };
-  if (started.body.reused) return { unavailable: "a Dispatcher is already running for it" };
+  if (started.body.reused) return { unavailable: DISPATCHER_ALREADY_RUNNING };
   return { status: item.status };
 }

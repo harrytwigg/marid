@@ -144,4 +144,61 @@ describe("completion batch acceptance", () => {
       .toHaveLength(2);
   });
 
+  describe("a Todo-tree wake folds like a completion", () => {
+    const acceptKind = (parent: ReturnType<typeof createSession>, deliveryKind: string, label: string) => {
+      const delivery = registry.claimSessionDelivery(callbackInput({
+        targetSessionId: parent.id,
+        sourceKind: deliveryKind === "todo-child-settled" ? "work-item" : "session",
+        sourceId: `fold-${label}`,
+        sourceAttempt: `fold-attempt-${label}`,
+        deliveryKind,
+        payload: { message: `${deliveryKind} ${label}`, displayMessage: `${deliveryKind} ${label}` },
+      })).delivery;
+      return registry.acceptSessionDelivery(delivery.id, parent.id, parent.sessionKey);
+    };
+
+    it("joins the pending completion turn while the owner is busy, and the other way round", () => {
+      const parent = createSession("parent-wake-fold");
+      const completion = acceptKind(parent, "parent-completion", "first");
+      const wake = acceptKind(parent, "todo-child-settled", "second");
+      const late = acceptKind(parent, "parent-completion", "third");
+
+      expect(wake.queueCreated).toBe(false);
+      expect(late.queueCreated).toBe(false);
+      const queued = registry.listAllPendingQueueItems();
+      expect(queued).toHaveLength(1);
+      expect(queued[0]!.id).toBe(completion.delivery.queueItemId);
+      expect(queued[0]!.prompt).toContain("3 durable completion updates");
+      expect(queued[0]!.prompt.indexOf("parent-completion first"))
+        .toBeLessThan(queued[0]!.prompt.indexOf("todo-child-settled second"));
+      expect(queued[0]!.prompt.indexOf("todo-child-settled second"))
+        .toBeLessThan(queued[0]!.prompt.indexOf("parent-completion third"));
+      expect(registry.getMessages(parent.id).filter((message) => message.role === "notification")).toHaveLength(3);
+    });
+
+    it("a wake alone is delivered verbatim, and two wakes share one turn", () => {
+      const parent = createSession("parent-wake-pair");
+      acceptKind(parent, "todo-child-settled", "one");
+      expect(registry.listAllPendingQueueItems()[0]!.prompt).toBe("todo-child-settled one");
+      acceptKind(parent, "todo-child-settled", "two");
+      const queued = registry.listAllPendingQueueItems();
+      expect(queued).toHaveLength(1);
+      expect(queued[0]!.prompt).toContain("2 durable completion updates");
+    });
+
+    it("never joins a turn that holds other work", () => {
+      const parent = createSession("parent-wake-fence");
+      acceptKind(parent, "parent-completion", "before");
+      const operatorQueueId = registry.enqueueQueueItem(parent.id, parent.sessionKey, "operator follow-up");
+      const wake = acceptKind(parent, "todo-child-settled", "after");
+      expect(wake.queueCreated).toBe(true);
+      expect(registry.listAllPendingQueueItems().map(({ prompt }) => prompt)).toEqual([
+        "parent-completion before",
+        "operator follow-up",
+        "todo-child-settled after",
+      ]);
+      expect(operatorQueueId).not.toBe(wake.delivery.queueItemId);
+    });
+  });
+
 });
