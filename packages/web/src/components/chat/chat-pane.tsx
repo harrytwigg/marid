@@ -56,6 +56,8 @@ interface ChatPaneProps {
   onNewChat?: () => void
   /** If set on mount, used as the initial user message before loadSession resolves — for the just-created-from-new-chat case. */
   pendingUserMessage?: Message
+  /** The employee the operator picks in this pane's own picker (not the "Open chat" picker's), for the page header. */
+  onNewChatEmployeeChange?: (employee: string | null) => void
   /** Notify parent when session meta changes */
   onSessionMetaChange?: (meta: { sessionId?: string; title?: string; employee?: string; engine?: string; engineSessionId?: string; model?: string; archivedAt?: string | null }) => void
   /** Notify parent to refresh sidebar */
@@ -103,6 +105,7 @@ export function ChatPane({
   sessionId, isActive, onFocus,
   onSessionCreated,
   onSessionMetaChange,
+  onNewChatEmployeeChange,
   onRefresh,
   portalName = PRODUCT_NAME,
   subscribe,
@@ -515,7 +518,7 @@ export function ChatPane({
                 <ChatEmployeePicker
                   employees={pickerEmployees}
                   selectedEmployee={selectedEmployee}
-                  onSelect={setSelectedEmployee}
+                  onSelect={(name) => { setSelectedEmployee(name); onNewChatEmployeeChange?.(name) }}
                   portalName={portalName}
                 />
               </ScrollingEmptyState>
