@@ -12,6 +12,7 @@ import {
 } from '@/components/chat/chat-route-helpers'
 import { useGateway } from '@/hooks/use-gateway'
 import { useModelRegistry } from '@/hooks/use-model-registry'
+import { useOrg } from '@/hooks/use-employees'
 import { PageLayout } from '@/components/page-layout'
 import { ChatSidebar, type SidebarOrder } from '@/components/chat/chat-sidebar'
 import { NavRibbon } from '@/components/pill-nav'
@@ -32,7 +33,7 @@ import { ChatPageHeader } from './chat-page-header'
 import { SidebarColumn } from './sidebar-column'
 import { formatMessage } from '@/components/chat/chat-messages'
 import { inFileLinkSession } from '@/components/chat/file-link-session-context'
-import { chatHeaderTitle } from './header-title'
+import { chatHeaderEmployee, chatHeaderTitle } from './header-title'
 import { useMobileSessionTabs } from './use-mobile-session-tabs'
 import { adjacentSessionId } from './session-navigation'
 import { usePaneSessionActions } from './use-pane-session-actions'
@@ -84,6 +85,7 @@ export default function ChatPageWrapper() {
 function ChatPage() {
   const { settings } = useSettings()
   const portalName = settings.portalName ?? PRODUCT_NAME
+  const orgQuery = useOrg()
   // The URL is the single source of truth for the selected session
   // (`/?session=<id>`) — selecting is a navigation, so browser back/forward
   // walk the session trail, refresh restores the thread, and links carry it.
@@ -857,6 +859,7 @@ function ChatPage() {
   )
   // The conversation title — slim inline (desktop) / centered nav bar (mobile).
   const headerTitle = chatHeaderTitle({ focusedSessionId, meta: sessionMeta, sessions: sessionsQuery.data })
+  const headerEmployee = chatHeaderEmployee({ focusedSessionId, meta: sessionMeta, sessions: sessionsQuery.data, employees: orgQuery.data?.employees, portalName })
   const mobileWorkingSet = useMobileSessionTabs({
     committedId, systemPrimedId, activeId: focusedSessionId, sessions: sessionsQuery.data,
     subscribe, connectionSeq, onSelect: handleMobileWorkingSetSelect,
@@ -914,7 +917,7 @@ function ChatPage() {
           {/* Mobile keeps its nav chrome; multi-pane desktop moves identity into panes. */}
           <ChatPageHeader
             hideOnMobile={onMobileList}
-            title={headerTitle} chatId={focusedSessionId}
+            title={headerTitle} subtitle={headerEmployee} chatId={focusedSessionId}
             backTo={backTo}
             onBack={backToList}
             onNew={handleNewChat}

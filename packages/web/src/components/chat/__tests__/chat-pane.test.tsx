@@ -98,7 +98,9 @@ vi.mock('@/components/chat/chat-messages', () => ({
 }))
 
 vi.mock('@/components/chat/chat-employee-picker', () => ({
-  ChatEmployeePicker: () => <div data-testid="employee-picker" />,
+  ChatEmployeePicker: ({ onSelect }: { onSelect: (name: string | null) => void }) => (
+    <button type="button" data-testid="employee-picker" onClick={() => onSelect('platform-lead')} />
+  ),
 }))
 
 
@@ -144,6 +146,39 @@ describe('ChatPane', () => {
     messagesOnRetry = null
     composerActive = undefined
     localStorage.clear()
+  })
+
+  describe('new chat employee, reported for the page header', () => {
+    it('reports the employee the picker chooses, and none until then', () => {
+      const onSessionMetaChange = vi.fn()
+      renderPane({ sessionId: null, onSessionMetaChange })
+      expect(onSessionMetaChange).toHaveBeenLastCalledWith({ employee: undefined })
+
+      fireEvent.click(screen.getByTestId('employee-picker'))
+      expect(onSessionMetaChange).toHaveBeenLastCalledWith({ employee: 'platform-lead' })
+    })
+
+    it('reports a preselected employee straight away', () => {
+      const onSessionMetaChange = vi.fn()
+      renderPane({ sessionId: null, initialEmployee: 'platform-lead', onSessionMetaChange })
+      expect(onSessionMetaChange).toHaveBeenLastCalledWith({ employee: 'platform-lead' })
+    })
+
+    it('does not report again when only the page hands it a new callback', () => {
+      const first = vi.fn()
+      const second = vi.fn()
+      const { rerender } = renderPane({ sessionId: null, onSessionMetaChange: first })
+      const calls = first.mock.calls.length
+      rerender(<ChatPane sessionId={null} isActive onFocus={() => {}} subscribe={() => () => {}} events={[]} onSessionMetaChange={second} />)
+      expect(first.mock.calls.length).toBe(calls)
+      expect(second).not.toHaveBeenCalled()
+    })
+
+    it('leaves an existing chat to report its own employee', () => {
+      const onSessionMetaChange = vi.fn()
+      renderPane({ sessionId: 's1', onSessionMetaChange })
+      expect(onSessionMetaChange).not.toHaveBeenCalled()
+    })
   })
 
   it('makes focus state real at the pane and composer boundaries', () => {
