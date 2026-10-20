@@ -233,12 +233,16 @@ describe("POST /api/sessions/:id/queue/send-now (all)", () => {
     const refused = await request(context, "POST", `/api/sessions/${session.id}/queue/send-now`, {});
     const held = (await parkedRows(context, session.id))[0]!;
     const refusedOne = await request(context, "POST", `/api/sessions/${session.id}/queue/${held.id}/send-now`, {});
+    // An interrupting message waits too: nothing would drain behind the cut.
+    const urgent = await send(context, session.id, "urgent while paused", { delivery: "now" });
 
     expect(refused.status).toBe(409);
     expect(refusedOne.status).toBe(409);
+    expect(urgent.status).toBe(200);
     expect(kills).toEqual([]);
-    expect((await parkedRows(context, session.id)).map((row) => row.prompt)).toEqual(["held"]);
+    expect((await parkedRows(context, session.id)).map((row) => row.prompt)).toEqual(["held", "urgent while paused"]);
     await request(context, "POST", `/api/sessions/${session.id}/queue/resume`, {});
+    releaseNext();
     releaseNext();
     releaseNext();
   });

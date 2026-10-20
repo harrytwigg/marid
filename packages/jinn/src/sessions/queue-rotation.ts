@@ -1,5 +1,6 @@
 /**
- * Reordering a parked queue, for "send this one now".
+ * Reordering a parked queue, so one message runs next: a queued message
+ * promoted with "send this one now", or a new message sent to interrupt.
  *
  * The rows themselves cannot move: `SessionQueue.enqueue` commits a promise
  * chain at enqueue time and that order is fixed. So the payloads move through

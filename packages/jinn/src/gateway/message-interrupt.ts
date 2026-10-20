@@ -35,7 +35,9 @@ export function messageDeliveryError(delivery: unknown): string | undefined {
  * turn, since cutting work off to compact it would lose the very turn the
  * summary should include. Nor does anything while the running turn is still
  * auto-compacting a cold session in front of its own message: cut
- * off, that compaction is wasted and the next turn starts it over.
+ * off, that compaction is wasted and the next turn starts it over. Nor does
+ * anything while the queue is paused: nothing would drain, so cutting the turn
+ * off would only lose its reply.
  * An explicit per-message `delivery` overrides the global default in both
  * directions, subject to those same guards.
  */
@@ -48,8 +50,10 @@ export function shouldInterruptRunningTurn(o: {
   autoCompacting?: boolean;
   /** Per-message choice; overrides `interruptOnNewMessage` when set. */
   delivery?: MessageDelivery;
+  /** The session's queue is paused. */
+  queuePaused?: boolean;
 }): boolean {
-  if (o.isNotification || !o.turnRunning || o.autoCompacting) return false;
+  if (o.isNotification || !o.turnRunning || o.autoCompacting || o.queuePaused) return false;
   if (isCompactCommand(o.prompt)) return false;
   if (o.delivery === "queue") return false;
   if (o.delivery === "now") return true;

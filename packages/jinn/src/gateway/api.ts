@@ -4013,6 +4013,7 @@ export async function handleApiRequest(
         turnRunning,
         autoCompacting: isAutoCompacting(session.id),
         delivery,
+        queuePaused: context.sessionManager.getQueue().isPaused(session.sessionKey || session.sourceRef || session.id),
       });
       if (shouldInterruptRunningTurn) supersedeRunningTurn(session);
 
