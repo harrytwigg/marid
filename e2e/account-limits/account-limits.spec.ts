@@ -94,12 +94,12 @@ for (const theme of THEMES) {
         await mockLimits(page, state)
         await page.goto('/limits', { waitUntil: 'networkidle' })
         await expect(page.getByRole('heading', { name: 'Limits', level: 1 })).toBeVisible()
-        const groups = page.getByTestId('account-group')
-        await expect(groups).toHaveCount(state === 'one' ? 0 : 1)
+        // One flat grid: the engine card plus one card per extra Claude account,
+        // and codex beside it. No group headings and no "other engines" section.
+        await expect(page.getByTestId('engine-card')).toHaveCount(state === 'one' ? 2 : state === 'three' ? 4 : 3)
+        await expect(page.getByTestId('account-group')).toHaveCount(0)
+        await expect(page.getByTestId('other-engines')).toHaveCount(0)
         for (const pattern of text) await expect(page.getByText(pattern).first()).toBeVisible()
-        if (state !== 'one') {
-          await expect(groups.getByRole('heading', { level: 3 })).toHaveCount(state === 'three' ? 3 : 2)
-        }
         await page.waitForTimeout(600)
         await shot(page, `limits-${name}-${theme}-${viewport}`)
         await page.context().close()

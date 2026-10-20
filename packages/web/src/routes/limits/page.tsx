@@ -13,7 +13,7 @@ export default function LimitsPage() {
   return (
     <PageLayout>
       <PageScaffold
-        contentWidth="840px"
+        contentWidth="1080px"
         header={
           <LargeTitleHeader
             title="Limits"
@@ -38,9 +38,10 @@ export default function LimitsPage() {
           )}
 
           {phase === "loading" ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              <Skeleton height={180} className="rounded-[var(--radius-xl)]" />
-              <Skeleton height={180} className="rounded-[var(--radius-xl)]" />
+            <div className="grid auto-rows-fr gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {[0, 1, 2].map((key) => (
+                <Skeleton key={key} height={220} className="rounded-[var(--radius-xl)]" />
+              ))}
             </div>
           ) : (
             <EngineCards data={data} now={now} />

@@ -1,8 +1,7 @@
 /**
- * Limits page — per-account cards. Without an `accounts` block the page is what
- * it has always been (no group headings, one card per engine); with one, an
- * engine with several accounts is a headed group with a card per account, and
- * each account's own state decides its badge and note.
+ * Limits page — the flat card grid. One card per configured agent: the engine
+ * itself, or one card per account (engine + profile) when it has several. No
+ * group headings and no "other engines" section: the grid is the layout.
  */
 import { describe, it, expect, vi } from "vitest"
 import { render, screen, within } from "@testing-library/react"
@@ -41,75 +40,60 @@ const account = (key: string, label: string, over: Partial<EngineLimitAccountSna
   ...engine("claude"), account: key, label, location: { kind: "local" }, employees: [], ...over,
 })
 
-function show(accounts: EngineLimitsResponse["accounts"]) {
+function show(accounts: EngineLimitsResponse["accounts"], engines: EngineLimitsResponse["engines"] = { claude: engine("claude", { accountPlan: "Max" }), codex: engine("codex") }) {
   state = {
     phase: "ready", refreshing: false, error: null, now, refresh: () => {},
-    data: {
-      generatedAt: iso(0),
-      default: "claude",
-      engines: { claude: engine("claude", { accountPlan: "Max" }), codex: engine("codex") },
-      accounts,
-    },
+    data: { generatedAt: iso(0), default: "claude", engines, accounts },
   }
   return render(<LimitsPage />)
 }
 
-const card = (title: string) => screen.getByRole("heading", { level: 3, name: title }).closest("section") as HTMLElement
+const card = (title: string) => screen.getByRole("heading", { level: 2, name: title }).closest("article") as HTMLElement
 
-describe("LimitsPage — accounts", () => {
-  it("renders one card per engine and no group headings without an accounts block", () => {
+describe("LimitsPage — cards", () => {
+  it("renders one card per engine in a single flat grid, with no group headings", () => {
     const { container } = show(undefined)
     expect(screen.queryAllByTestId("account-group")).toHaveLength(0)
+    expect(screen.queryAllByTestId("other-engines")).toHaveLength(0)
     expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["Claude", "Codex"])
-    expect(screen.queryAllByRole("heading", { level: 3 })).toHaveLength(0)
+    const grid = container.querySelector('[data-testid="limits-grid"]') as HTMLElement
+    expect(within(grid).getAllByTestId("engine-card")).toHaveLength(2)
+    for (const item of Array.from(grid.children)) expect(item.tagName).toBe("ARTICLE")
     expect(container.textContent).not.toMatch(/Used by|At limit|Host asleep|No live reading/)
   })
 
-  it("groups an engine with several accounts under its own heading, default first, other engines unchanged", () => {
-    show({
+  it("gives an engine with several accounts one card each, default first, in the same grid", () => {
+    const { container } = show({
       claude: [
         account("claude", "claude", { accountPlan: "Max" }),
         account("claude:ab12cd34", ".claude-friend", { employees: ["side-dev", "side-qa"] }),
       ],
     })
-    const [group] = screen.getAllByTestId("account-group")
-    expect(within(group).getByRole("heading", { level: 2 }).textContent).toBe("Claude")
-    expect(within(group).getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["Claude", ".claude-friend"])
-    // codex has one account: its card sits under its own "Other engines" heading, never in the Claude group.
-    expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["Claude", "Other engines"])
-    const others = screen.getByTestId("other-engines")
-    expect(within(others).getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["Codex"])
-    expect(within(group).queryByText("codex")).toBeNull()
+    expect(screen.queryAllByTestId("account-group")).toHaveLength(0)
+    expect(screen.queryAllByTestId("other-engines")).toHaveLength(0)
+    expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["Claude", ".claude-friend", "Codex"])
+    expect(container.querySelector('[data-testid="limits-grid"]')!.children).toHaveLength(3)
     expect(within(card(".claude-friend")).getByText("Used by side-dev, side-qa")).toBeTruthy()
     expect(within(card("Claude")).queryByText(/Used by/)).toBeNull()
   })
 
   it("spells an engine the way the project does — 'Muse Code', lowercase 'opencode'", () => {
-    state = {
-      phase: "ready", refreshing: false, error: null, now, refresh: () => {},
-      data: {
-        generatedAt: iso(0),
-        default: "musecode",
-        engines: { musecode: engine("musecode"), opencode: engine("opencode") },
-        accounts: {
-          musecode: [
-            account("musecode", "musecode", { name: "musecode" }),
-            account("musecode:ab12cd34", ".muse-work", { name: "musecode" }),
-          ],
-        },
+    show(
+      {
+        musecode: [
+          account("musecode", "musecode", { name: "musecode" }),
+          account("musecode:ab12cd34", ".muse-work", { name: "musecode" }),
+        ],
       },
-    }
-    render(<LimitsPage />)
-    // Group heading and the default account's own card both read "Muse Code";
-    // a CSS `capitalize` would have rendered both as "Musecode".
+      { musecode: engine("musecode"), opencode: engine("opencode") },
+    )
     expect(screen.getAllByText("Muse Code")).toHaveLength(2)
-    // The single-account engine stays lowercase — it is how the project spells it.
     expect(screen.getByText("opencode")).toBeTruthy()
     expect(screen.queryByText("Musecode")).toBeNull()
     expect(screen.queryByText("Opencode")).toBeNull()
   })
 
-  it("names the host beside the plan on a remote account's card", () => {
+  it("names the engine above a profile card and the host beside the plan", () => {
     show({
       claude: [
         account("claude", "claude"),
@@ -117,8 +101,17 @@ describe("LimitsPage — accounts", () => {
       ],
     })
     const remote = card("harry@studio")
+    expect(within(remote).getAllByText("Claude").length).toBeGreaterThan(0)
     expect(within(remote).getByText("Max")).toBeTruthy()
     expect(within(remote).getByText("on studio")).toBeTruthy()
+  })
+
+  it("shows each window's meter and reset time on the card", () => {
+    show(undefined)
+    const claude = card("Claude")
+    expect(within(claude).getByText("5h window")).toBeTruthy()
+    expect(within(claude).getByText("40%")).toBeTruthy()
+    expect(within(claude).getByText("resets in 2h")).toBeTruthy()
   })
 
   it("marks an account at its limit, with when it resets", () => {

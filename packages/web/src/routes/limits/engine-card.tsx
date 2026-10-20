@@ -96,12 +96,11 @@ function toneAndNote(engine: EngineLimitEngineSnapshot, account: EngineLimitAcco
   return { tone: badge(kind, engine, now), note: noteFor(engine, kind) }
 }
 
-function CardHeader({ engine, account, title, tone, Title }: {
+function CardHeader({ engine, account, title, tone }: {
   engine: EngineLimitEngineSnapshot
   account?: EngineLimitAccountSnapshot
   title?: string
   tone: Tone
-  Title: "h2" | "h3"
 }) {
   const where = account?.location
   const remoteHost = where?.kind === "remote" ? where.host : null
@@ -111,18 +110,27 @@ function CardHeader({ engine, account, title, tone, Title }: {
   const label = title ?? engine.name
   const isEngineName = !title || title === engine.name
   return (
-    <div className="flex items-center justify-between gap-[var(--space-3)]">
-      <div className="flex items-baseline gap-[var(--space-3)] min-w-0">
-        <Title className="text-[length:var(--text-body)] font-[var(--weight-semibold)] text-[var(--text-primary)] truncate">
-          {isEngineName ? engineDisplayName(label) : label}
-        </Title>
-        {engine.accountPlan && (
-          <span className="text-[length:var(--text-caption1)] text-[var(--text-tertiary)] truncate">
-            {engine.accountPlan}
-          </span>
+    <div className="flex items-start justify-between gap-[var(--space-3)]">
+      <div className="min-w-0">
+        {/* With no group headings left, a profile card names its engine above the
+            profile so an account never reads as an engine of its own. */}
+        {!isEngineName && (
+          <div className="text-[length:var(--text-caption1)] text-[var(--text-tertiary)] truncate">
+            {engineDisplayName(engine.name)}
+          </div>
         )}
+        <div className="flex items-baseline gap-[var(--space-3)] min-w-0">
+          <h2 className="text-[length:var(--text-body)] font-[var(--weight-semibold)] text-[var(--text-primary)] truncate">
+            {isEngineName ? engineDisplayName(label) : label}
+          </h2>
+          {engine.accountPlan && (
+            <span className="text-[length:var(--text-caption1)] text-[var(--text-tertiary)] truncate">
+              {engine.accountPlan}
+            </span>
+          )}
+        </div>
         {remoteHost && (
-          <span className="text-[length:var(--text-caption1)] text-[var(--text-tertiary)] truncate">on {remoteHost}</span>
+          <div className="text-[length:var(--text-caption1)] text-[var(--text-tertiary)] truncate">on {remoteHost}</div>
         )}
       </div>
       <span className="flex items-center gap-[var(--space-2)] text-[length:var(--text-caption1)] text-[var(--text-secondary)] whitespace-nowrap">
@@ -151,24 +159,24 @@ function Windows({ engine, now }: { engine: EngineLimitEngineSnapshot; now: numb
   )
 }
 
-/** One card per engine, or, for an engine with several accounts, one per
- *  account: `account` carries the per-account state and `title` its name. */
-export function EngineCard({ engine, now, account, title, nested }: {
+/** One configured agent: an engine, or an account (engine + profile) when the
+ *  engine reports several. `account` carries the per-account state and `title`
+ *  its name. */
+export function EngineCard({ engine, now, account, title }: {
   engine: EngineLimitEngineSnapshot
   now: number
   account?: EngineLimitAccountSnapshot
   title?: string
-  /** Under a section heading, so the card's own title is one level down. */
-  nested?: boolean
 }) {
   const { tone, note } = toneAndNote(engine, account, now)
   const creditLabel = creditLabelFor(engine)
 
   return (
     // Grouped-inset card (shared visual language): --bg-secondary carrying the
-    // page's only card shadow — no border at rest.
-    <section className="glass-card rounded-[var(--radius-xl)] p-[var(--space-6)]">
-      <CardHeader engine={engine} account={account} title={title} tone={tone} Title={account || nested ? "h3" : "h2"} />
+    // page's only card shadow — no border at rest. `h-full` in an even-row grid
+    // gives every card the same height whatever it has to say.
+    <article className="glass-card flex h-full flex-col rounded-[var(--radius-xl)] p-[var(--space-6)]" data-testid="engine-card">
+      <CardHeader engine={engine} account={account} title={title} tone={tone} />
 
       {account && account.employees.length > 0 && (
         <div className="mt-[var(--space-2)] text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">
@@ -176,7 +184,9 @@ export function EngineCard({ engine, now, account, title, nested }: {
         </div>
       )}
 
-      <Windows engine={engine} now={now} />
+      <div className="flex-1">
+        <Windows engine={engine} now={now} />
+      </div>
 
       {creditLabel && (
         <div className="mt-[var(--space-5)] text-[length:var(--text-footnote)] text-[var(--text-secondary)]">
@@ -190,6 +200,6 @@ export function EngineCard({ engine, now, account, title, nested }: {
           <span>{note}</span>
         </div>
       )}
-    </section>
+    </article>
   )
 }
