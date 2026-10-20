@@ -325,6 +325,7 @@ import {
   type RestartDetachedOptions,
 } from "./lifecycle.js";
 import { handleHeartbeatApi } from "./heartbeat-api.js";
+import { armChildWatch } from "../heartbeats/child-watch.js";
 import { handleSelfCompactionApi } from "./self-compaction-api.js";
 import { handleSessionContextApi } from "./session-context-api.js";
 import { shouldInterruptRunningTurn as interruptsRunningTurn } from "./message-interrupt.js";
@@ -2357,6 +2358,7 @@ export async function handleApiRequest(
             return result;
           })();
         if (created.replayed) return json(res, { workItem: created.item, replayed: true }, 200);
+        if (parentId && caller.kind === "session") armChildWatch(caller.callerId);
         const activityReceiptId = persistTodoMutationActivity(req, context, created.item, "created");
         const sprint = sprintRow(placed.sprint);
         if (sprint) {
@@ -3592,6 +3594,7 @@ export async function handleApiRequest(
           return json(res, { error: `delegation into session ${reused.id} failed: ${linkErr instanceof Error ? linkErr.message : linkErr}`, workItemId: workItem.id }, 500);
         }
         announceDelegation({ ...announcement, session: reused, dispatchedAt: Date.now() });
+        if (delegationCaller.kind === "session") armChildWatch(delegationCaller.callerId);
         return json(res, reusedDelegationBody(workItem.id, reused, title, { engine: engineName, model: selection.model, effortLevel: selection.effortLevel, fallbackMode: fallbackParam.mode }, config));
       }
       // The key is the session's turn lane: SessionQueue serializes turns per
@@ -3701,6 +3704,7 @@ export async function handleApiRequest(
         attachments: attachmentPaths.length > 0 ? attachmentPaths : undefined,
       });
       announceDelegation({ ...announcement, session, dispatchedAt: Date.parse(session.createdAt) || Date.now() });
+      if (delegationCaller.kind === "session") armChildWatch(delegationCaller.callerId);
 
       return json(res, {
         workItemId: workItem.id,
@@ -3769,6 +3773,7 @@ export async function handleApiRequest(
         speech: body.speech === true,
       });
       if (!spawned.ok) return badRequest(res, spawned.error);
+      if (spawnCaller.kind === "session" && body.parentSessionId === spawnCaller.callerId) armChildWatch(spawnCaller.callerId);
 
       return json(res, serializeSessionResponse(spawned.session, context), 201);
     }

@@ -1,6 +1,7 @@
 import { getSession } from "../sessions/registry.js";
 import { logger } from "../shared/logger.js";
 import type { Heartbeat } from "./types.js";
+import { childWatchSettledReason } from "./child-watch.js";
 import { deliverHeartbeat } from "./delivery.js";
 import { advanceHeartbeat, claimDueHeartbeats, disarmHeartbeat } from "./store.js";
 
@@ -22,7 +23,9 @@ export interface HeartbeatSchedulerDeps {
  * whose owning session is gone is the backstop that makes an orphan heartbeat
  * impossible even though sessions have no end hook. Stopping a session is
  * deliberately not one of these cases: a stopped session is recoverable, and its
- * heartbeats should come back with it.
+ * heartbeats should come back with it. The gateway's child-watch is disarmed
+ * rather than delivered when its session has no open children, so it never sends
+ * an idle wake.
  */
 function disarmReasonFor(
   heartbeat: Heartbeat,
@@ -31,7 +34,7 @@ function disarmReasonFor(
 ): string | null {
   if (heartbeat.expiresAt !== null && heartbeat.expiresAt <= now) return "expired";
   if (!ownerExists(heartbeat.ownerSessionId)) return "owner-session-deleted";
-  return null;
+  return childWatchSettledReason(heartbeat);
 }
 
 /**

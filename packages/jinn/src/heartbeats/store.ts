@@ -39,6 +39,7 @@ interface HeartbeatRow {
   created_at: string;
   disarmed_at: string | null;
   disarmed_reason: string | null;
+  purpose: string | null;
 }
 
 function toHeartbeat(row: HeartbeatRow): Heartbeat {
@@ -55,6 +56,7 @@ function toHeartbeat(row: HeartbeatRow): Heartbeat {
     createdAt: row.created_at,
     disarmedAt: row.disarmed_at,
     disarmedReason: row.disarmed_reason,
+    purpose: row.purpose,
   };
 }
 
@@ -136,6 +138,7 @@ export function armHeartbeat(input: ArmHeartbeatInput, now = Date.now()): Heartb
     createdAt: new Date(now).toISOString(),
     disarmedAt: null,
     disarmedReason: null,
+    purpose: null,
   };
   initDb().prepare(`
     INSERT INTO heartbeats (

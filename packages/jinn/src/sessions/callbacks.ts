@@ -19,6 +19,7 @@ import { isRemoteMcpSession } from "./remote-mcp-session.js";
 import { __resetHeldRepliesForTest, holdsInterimRelay, recoverHeldInterimReplies, releaseHeldReply, reviewHeldInterimReply, setHeldReplyRelay } from "./held-replies.js";
 import { withReportingParent } from "../work-items/employee-session-delegation.js";
 import type { SessionDeliveryPayload } from "../shared/types.js";
+import { releaseChildWatchIfSettled } from "../heartbeats/child-watch.js";
 
 export const CALLBACK_DELIVERY_RETRY_DELAYS_MS = [1_000, 5_000, 30_000] as const;
 export const CALLBACK_DELIVERY_MAX_ATTEMPTS = CALLBACK_DELIVERY_RETRY_DELAYS_MS.length + 1;
@@ -553,9 +554,13 @@ export async function deliverClaimedSessionDelivery(deliveryId: string): Promise
       callbackDeliveryId: attempt.id,
     });
     if (getSessionDelivery(attempt.id)?.status === "pending") armCallbackRetrySweep();
+    else releaseChildWatchAfterCompletion(attempt);
     return "accepted";
   } catch (error) {
-    if (getSessionDelivery(attempt.id)?.status === "accepted") return "accepted";
+    if (getSessionDelivery(attempt.id)?.status === "accepted") {
+      releaseChildWatchAfterCompletion(attempt);
+      return "accepted";
+    }
     const diagnostic = error instanceof Error ? error.message : String(error);
     const delayIndex = Math.min(attempt.attemptCount - 1, CALLBACK_DELIVERY_RETRY_DELAYS_MS.length - 1);
     const failed = recordSessionDeliveryFailure(attempt.id, diagnostic, {
@@ -571,6 +576,11 @@ export async function deliverClaimedSessionDelivery(deliveryId: string): Promise
     logger.error(`[callbacks] Delivery ${attempt.id} exhausted after ${attempt.attemptCount} attempts: ${diagnostic}`);
     return "scheduled";
   }
+}
+
+/** A child's completion reached its parent: if that was the last open child, the parent's child-watch has nothing left to watch. */
+function releaseChildWatchAfterCompletion(delivery: { targetSessionId: string; deliveryKind: string }): void {
+  if (delivery.deliveryKind === "parent-completion") releaseChildWatchIfSettled(delivery.targetSessionId);
 }
 
 function armCallbackRetrySweep(): void {
