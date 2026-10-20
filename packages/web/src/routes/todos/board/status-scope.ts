@@ -9,6 +9,11 @@ import type { StatusFilter } from "@/lib/todos"
 export const PIPELINE_STATUSES: readonly WorkItemStatusWire[] = ["backlog", "executing", "in_review"]
 export const EXCEPTION_STATUSES: readonly WorkItemStatusWire[] = ["blocked"]
 export const CLOSED_STATUSES: readonly WorkItemStatusWire[] = ["done", "cancelled"]
+
+export function isClosedStatus(status: string): boolean {
+  return CLOSED_STATUSES.some((closed) => closed === status)
+}
+
 export const BOARD_STATUS_ORDER: readonly WorkItemStatusWire[] = [
   ...PIPELINE_STATUSES, ...EXCEPTION_STATUSES, ...CLOSED_STATUSES,
 ]

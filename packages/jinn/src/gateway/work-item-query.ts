@@ -199,8 +199,19 @@ const readWindowFilters: FilterReader = (url, filter) => {
   return undefined;
 };
 
+/** `order=closed`: newest-closed first, for the done and cancelled lists. */
+const readOrderFilter: FilterReader = (url, filter) => {
+  const order = readCleanSearchParam(url, 'order');
+  if (!order) return undefined;
+  if (order !== 'closed') return 'order must be closed';
+  // Only done and cancelled have no manual order; elsewhere it would silently drop rank ordering.
+  if (filter.status !== 'done' && filter.status !== 'cancelled') return 'order=closed needs status=done or status=cancelled';
+  filter.order = order;
+  return undefined;
+};
+
 const FILTER_READERS: readonly FilterReader[] = [
-  readEnumFilters, readNameFilters, readTextFilter, readTreeFilters, readBoardScopeFilters, readLabelFilter, readSprintFilter, readWindowFilters,
+  readEnumFilters, readNameFilters, readTextFilter, readTreeFilters, readBoardScopeFilters, readLabelFilter, readSprintFilter, readWindowFilters, readOrderFilter,
 ];
 
 export function readWorkItemQueryParams(url: URL): { ok: true; value: WorkItemQueryParams } | { ok: false; error: string } {
