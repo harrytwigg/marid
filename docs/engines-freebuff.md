@@ -99,7 +99,7 @@ An employee with `remoteHost` and `remoteCwd` runs Freebuff over `ssh -tt`, on t
 | A model or level the picker does not have | Fails with the labels the picker showed. Nothing is sent. |
 | A screen nothing recognises for 60 s | Fails with that screen in the error. |
 
-The refusal messages come from the CLI's own wording as of 0.2.30; they are matched while a message is going in and never while the model is answering.
+The refusal messages come from the CLI's own wording as of 0.2.30. A refusal counts only when its line starts with the words (after a margin, a border or a glyph), is not inside a user message, and appeared after the message went in; the model's answer is never read for them. One limit: a second paragraph of the user's own message that starts with one of these phrases is read as a refusal.
 
 ---
 

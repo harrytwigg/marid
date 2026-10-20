@@ -75,8 +75,12 @@ const IDLE_PLACEHOLDER = "Enter a coding task or / for commands";
 const BUSY_PLACEHOLDER = "Add to the current task";
 const PICKER_HINT = "choose model";
 
-/** What may stand before a refusal on its line: margin, and the glyph Freebuff draws beside a notice. */
-const LEAD = "^[\\s⚠✕!•-]*";
+/**
+ * What may stand before a refusal on its line: margin, a box border, and the glyph
+ * Freebuff draws beside a notice. Not a quotation mark or a `>`: a line that opens a
+ * quote is somebody quoting the words, not the CLI saying them.
+ */
+const LEAD = "^[\\s│┃║|⚠✕!•*\\-–—]*";
 const REFUSALS: Array<{ kind: FreebuffRefusal["kind"]; pattern: RegExp }> = [
   { kind: "no-hours", pattern: new RegExp(`${LEAD}(Not enough hours:.*)$`) },
   { kind: "session-limit", pattern: new RegExp(`${LEAD}(Session limit reached\\..*)$`) },

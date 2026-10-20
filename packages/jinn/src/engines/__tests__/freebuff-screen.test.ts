@@ -105,6 +105,16 @@ describe("refusals", () => {
     expect(refusalOf(notice)).toEqual({ kind, text: notice.split("\n")[0].trim() });
   });
 
+  it("reads a refusal drawn in a bordered row or after a glyph, as the CLI draws its notices", () => {
+    for (const row of [
+      "│ This session was released. Choose a model to start a new session.                │",
+      "  ⚠ This session was released. Choose a model to start a new session.",
+      "┃  Session limit reached. See https://freebuff.com/plans.",
+    ]) {
+      expect(parseFreebuffScreen([row, ...screen("idle-session-active.txt")]).refusals.length, row).toBe(1);
+    }
+  });
+
   it("does not take a line that merely quotes a refusal for one", () => {
     const quoted = [
       "  Earlier answer: the CLI prints 'Not enough hours: 0.4 available.' when you are out,",

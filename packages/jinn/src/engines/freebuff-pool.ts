@@ -6,11 +6,11 @@ import { JINN_HOME } from "../shared/paths.js";
 import { neutralizeForPaste } from "../shared/skill-commands.js";
 import { isRemoteTarget } from "../shared/remote-target.js";
 import { PtyLifecycleManager, ptyHostKey, type PtyExit, type PtyHandle } from "./pty-lifecycle.js";
+import { TurnStopped, type ActiveTurn, type FreebuffEngineDeps, type Live } from "./freebuff-live.js";
 import { PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
 import type { PtyControlEvent, PtyIdleSpawnOpts, PtySnapshotSubscription, PtyViewEngine } from "./pty-view-engine.js";
 import { FREEBUFF_COLS, FREEBUFF_ROWS, FreebuffTerminal } from "./freebuff-terminal.js";
-import { localChatSource, type FreebuffChatRef, type FreebuffChatSource } from "./freebuff-chat.js";
-import type { FreebuffPlace } from "./freebuff-failure.js";
+import { localChatSource, type FreebuffChatSource } from "./freebuff-chat.js";
 import type { DriverTarget } from "./freebuff-driver.js";
 import { FreebuffSlots } from "./freebuff-slots.js";
 import { remoteChatSource } from "./freebuff-remote.js";
@@ -26,64 +26,6 @@ import {
 } from "./freebuff-spawn.js";
 
 const CURSOR_POSITION_RESPONSE = "\x1b[1;1R";
-
-/** Why a turn stopped other than by finishing. */
-export type Stop =
-  | { kind: "interrupt"; reason: string }
-  | { kind: "exit"; exit: PtyExit | undefined; output: string };
-
-export class TurnStopped extends Error {
-  constructor(readonly stop: Stop) {
-    super(stop.kind === "interrupt" ? stop.reason : "freebuff exited");
-    this.name = "TurnStopped";
-  }
-}
-
-export interface ActiveTurn {
-  abort: AbortController;
-}
-
-export interface Live {
-  proc: pty.IPty;
-  handle: PtyHandle;
-  terminal: FreebuffTerminal;
-  place: FreebuffPlace;
-  params: SpawnParams;
-  /** The chat this process is in: known up front for `--continue`, found after the first turn otherwise. */
-  chat?: FreebuffChatRef;
-  /** Every chat that existed before this process started, so a new one can be told apart. */
-  before: Set<string>;
-  chats: FreebuffChatSource;
-  /** Raw output kept until the TUI first shows itself, for a failed start. */
-  startOutput: { text: string };
-  booted: boolean;
-  exited?: PtyExit;
-}
-
-export interface FreebuffEngineDeps {
-  /** The `remote` block, read live so an edit takes effect on the next spawn. */
-  remote?: () => RemoteExecutionConfig | undefined;
-  /** `engines.freebuff`, read live. */
-  config?: () => FreebuffEngineConfig | undefined;
-  /** Test seams. */
-  spawnPty?: SpawnPty;
-  localChats?: () => FreebuffChatSource;
-}
-
-const hostOf = (target: FreebuffTarget | undefined): string => (target ? `${target.remoteUser ?? ""}@${target.remoteHost}` : "");
-const dirOf = (target: FreebuffTarget | undefined, cwd: string): string | undefined => (target ? target.remoteCwd : cwd);
-const chatIdOf = (chatId: string | undefined): string => chatId ?? "";
-
-/** Whether a process is still the one a turn wants: same host, same folder, same chat. */
-export function reusableProcess(
-  live: Pick<Live, "params" | "chat" | "exited">,
-  want: { target?: FreebuffTarget; cwd: string; chatId?: string },
-): boolean {
-  if (live.exited) return false;
-  if (hostOf(live.params.target) !== hostOf(want.target)) return false;
-  if (dirOf(live.params.target, live.params.cwd) !== dirOf(want.target, want.cwd)) return false;
-  return chatIdOf(want.chatId) === chatIdOf(live.chat?.chatId);
-}
 
 /**
  * The Freebuff processes: who is alive, where, and on whose slot, and the

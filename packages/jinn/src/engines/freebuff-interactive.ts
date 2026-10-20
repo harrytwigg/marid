@@ -18,13 +18,14 @@ import {
 import { FreebuffFailure, SessionReleased } from "./freebuff-failure.js";
 import { FreebuffDriver, sleep } from "./freebuff-driver.js";
 import { composeFreebuffMessage } from "./freebuff-message.js";
-import { FreebuffProcessPool, TurnStopped, reusableProcess, type ActiveTurn, type Live, type Stop } from "./freebuff-pool.js";
+import { FreebuffProcessPool } from "./freebuff-pool.js";
+import { TurnStopped, reusableProcess, type ActiveTurn, type Live, type Stop } from "./freebuff-live.js";
 import { scrapeAnswer } from "./freebuff-scrape.js";
 import { buildFreebuffArgs, type FreebuffTarget, type SpawnParams } from "./freebuff-spawn.js";
 
 export { buildFreebuffArgs, composeFreebuffMessage, reusableProcess };
 export { remoteLocationNote } from "./freebuff-message.js";
-export type { FreebuffEngineDeps } from "./freebuff-pool.js";
+export type { FreebuffEngineDeps } from "./freebuff-live.js";
 
 /** The model finished (or gave up) without saying anything: an error on its side, which the screen may name. */
 function emptyAnswer(lines: readonly string[]): FreebuffFailure {
