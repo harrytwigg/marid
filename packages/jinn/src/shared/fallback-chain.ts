@@ -11,6 +11,7 @@ import {
   type FallbackChainEntry, type FallbackChainSource, type FallbackLink, type FallbackSkipReason, type ResolvedFallbackLink,
 } from "./fallback-chain-wire.js";
 import { engineSupportsRemote, REMOTE_ENGINE_CLI, type EngineName } from "./models.js";
+import { remoteEngineAvailable } from "../engines/remote-stage.js";
 import type { Employee, JinnConfig, ModelRegistry, Session } from "./types.js";
 
 export { isLinkExhausted, linkHealthKey } from "./fallback-chain-health.js";
@@ -88,9 +89,10 @@ function skipReason(env: FallbackChainEnv, subject: FallbackChainSpec, link: Fal
   return scopeSkip(subject.scope, link) ?? (modelNotServed(entry, link) ? "model-not-served" : undefined);
 }
 
-/** What the gateway can add to a skip: the host that lacks a remote engine's CLI. */
+/** What the gateway can add to a skip: the host that lacks a remote engine's CLI, when its facts say so (an engine the gateway has no adapter for is not the host's fault). */
 function skipDetail(scope: FallbackChainSpec["scope"], link: FallbackLink, reason: FallbackSkipReason): string | undefined {
   if (reason !== "not-installed" || !scope.remote || !scope.host || !engineSupportsRemote(link.engine)) return undefined;
+  if (remoteEngineAvailable(scope.host, link.engine) !== false) return undefined;
   return `${scope.host} has no \`${REMOTE_ENGINE_CLI[link.engine]}\` on its non-interactive PATH`;
 }
 
