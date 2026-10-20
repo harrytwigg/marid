@@ -25,6 +25,8 @@ let settles: typeof import("../child-settles.js");
 let delegations: typeof import("../open-delegations.js");
 let comments: typeof import("../comments.js");
 let registry: typeof import("../../sessions/registry.js");
+let childWatch: typeof import("../../heartbeats/child-watch.js");
+let heartbeatStore: typeof import("../../heartbeats/store.js");
 let db: import("better-sqlite3").Database;
 
 beforeAll(async () => {
@@ -35,6 +37,8 @@ beforeAll(async () => {
   delegations = await import("../open-delegations.js");
   comments = await import("../comments.js");
   registry = await import("../../sessions/registry.js");
+  childWatch = await import("../../heartbeats/child-watch.js");
+  heartbeatStore = await import("../../heartbeats/store.js");
   db = (await import("../../shared/db.js")).initDb();
 });
 
@@ -509,5 +513,51 @@ describe("the stall check", () => {
     settle(childOf(parent.id).id);
     wake.flushChildSettles(parent.id, deps);
     expect(delegations.hasOpenDelegations(parent.id, [])).toBe(true);
+  });
+});
+
+describe("the child-watch heartbeat of the session the flush told", () => {
+  const watches = (sessionId: string) => heartbeatStore.listHeartbeatsForSession(sessionId).filter((heartbeat) => heartbeat.purpose === "child-watch");
+
+  beforeEach(() => {
+    wake.setReleaseChildWatchIfSettled(childWatch.releaseChildWatchIfSettled);
+  });
+
+  it("a flush that wakes the owner disarms its watch once no child is left open, and not before", () => {
+    const { parent, ownerSession } = parentWithOwner();
+    const first = childOf(parent.id);
+    const second = childOf(parent.id);
+    childWatch.armChildWatch(ownerSession);
+
+    settle(first.id);
+    wake.flushChildSettles(parent.id, deps);
+    expect(delivered).toHaveLength(1);
+    expect(watches(ownerSession)).toHaveLength(1); // the second child is still executing
+
+    settle(second.id, "done");
+    wake.flushChildSettles(parent.id, deps);
+    expect(delivered).toHaveLength(2);
+    expect(watches(ownerSession)).toHaveLength(0);
+    expect(db.prepare("SELECT disarmed_reason FROM heartbeats WHERE owner_session_id = ?").pluck().get(ownerSession)).toBe("children-settled");
+  });
+
+  it("a flush that only dedupes still disarms the owner's watch once its child session is no longer in flight", () => {
+    const { parent, ownerSession } = parentWithOwner();
+    const child = childOf(parent.id);
+    const childSession = sessionOn(WORKER, child.id, "running", { parent: ownerSession });
+    childWatch.armChildWatch(ownerSession);
+    settle(child.id, "in_review", `session:${childSession}`);
+
+    wake.flushChildSettles(parent.id, deps);
+    expect(delivered).toEqual([]);
+    expect(rowsOf(parent.id)).toEqual([expect.objectContaining({ outcome: "deduped" })]);
+    // The child's session is still running its turn, so it still counts as open work.
+    expect(watches(ownerSession)).toHaveLength(1);
+
+    db.prepare("UPDATE sessions SET status = 'idle' WHERE id = ?").run(childSession);
+    settle(childOf(parent.id).id, "in_review", `session:${childSession}`);
+    wake.flushChildSettles(parent.id, deps);
+    expect(rowsOf(parent.id).map((row) => row.outcome)).toEqual(["deduped", "deduped"]);
+    expect(watches(ownerSession)).toHaveLength(0);
   });
 });
