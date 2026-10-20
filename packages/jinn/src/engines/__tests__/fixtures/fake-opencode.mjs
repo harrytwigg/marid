@@ -100,7 +100,9 @@
 // FAKE_OPENCODE_SUMMARIZE_DELAY_MS holds POST …/summarize open; FAKE_OPENCODE_BOOTSTRAP_MS
 // holds every instance request (all but /global/health and /test/*) until the
 // server's first one is that old, as opencode bootstraps its instance on the
-// first such request; GET /test/log returns what the server saw;
+// first such request; FAKE_OPENCODE_EVENT_STALL=<n> makes every /event stream
+// after the server's first n open but silent (no `server.connected`), as a
+// server that bootstrapped and then stopped answering would; GET /test/log returns what the server saw;
 // GET /test/info how it was started.
 import http from "node:http";
 import fs from "node:fs";
@@ -132,6 +134,7 @@ function serve() {
   const log = [];
   const clients = new Set();
   let bootstrapped;
+  let eventStreams = 0;
   // id -> { busy, queue, running, messages, pending: Map<requestId, resolve> }
   const sessions = new Map();
   let seq = 0;
@@ -452,6 +455,10 @@ function serve() {
     };
     if (url === "/event") {
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
+      if (eventStreams++ >= Number(process.env.FAKE_OPENCODE_EVENT_STALL ?? Infinity)) {
+        req.on("close", () => res.end());
+        return;
+      }
       res.write(`data: ${JSON.stringify({ type: "server.connected", properties: {} })}\n\n`);
       clients.add(res);
       req.on("close", () => clients.delete(res));

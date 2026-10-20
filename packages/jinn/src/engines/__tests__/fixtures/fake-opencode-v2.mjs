@@ -71,6 +71,7 @@
 //   FAKE_V2_SERVE_FAIL=1      `serve` exits at once
 //   FAKE_V2_API_INFO_FAIL     `<n>[:<status>]`: the first n /api/info requests
 //                             answer that status (default 503) instead of the version
+//   FAKE_V2_MCP_FAIL=1        no MCP server ever connects: each is listed `failed`
 // GET /test/log returns the requests the server saw ({at, method, path, body}),
 // GET /test/info how it was started (argv, the OPENCODE_CONFIG file's contents).
 import http from "node:http";
@@ -666,7 +667,8 @@ function serve() {
     if (url.pathname === "/api/event") return openEventStream(res);
     if (url.pathname === "/api/mcp" && req.method === "GET") {
       const names = Object.keys(config?.mcp?.servers ?? {});
-      const listed = mcpCalls++ === 0 ? [] : names.map((name) => ({ name, status: { status: "connected" } }));
+      const status = process.env.FAKE_V2_MCP_FAIL === "1" ? "failed" : "connected";
+      const listed = mcpCalls++ === 0 ? [] : names.map((name) => ({ name, status: { status } }));
       entry.answered = listed.map((m) => `${m.name}:${m.status.status}`);
       return data(res, listed);
     }

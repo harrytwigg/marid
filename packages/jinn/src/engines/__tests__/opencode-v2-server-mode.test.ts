@@ -110,7 +110,7 @@ async function waitDelivered(h: Harness): Promise<void> {
   await new Promise((r) => setTimeout(r, 200));
 }
 
-const ENV_HOOKS = ["FAKE_V2_OPERATOR_BUSY_MS", "FAKE_V2_LOG", "FAKE_V2_VERSION", "FAKE_V2_CLI_VERSION", "FAKE_V2_SERVE_FAIL", "FAKE_V2_HEARTBEAT_MS", "FAKE_V2_API_INFO_FAIL"];
+const ENV_HOOKS = ["FAKE_V2_OPERATOR_BUSY_MS", "FAKE_V2_LOG", "FAKE_V2_VERSION", "FAKE_V2_CLI_VERSION", "FAKE_V2_SERVE_FAIL", "FAKE_V2_HEARTBEAT_MS", "FAKE_V2_API_INFO_FAIL", "FAKE_V2_MCP_FAIL"];
 
 beforeEach(() => {
   for (const name of ENV_HOOKS) delete process.env[name];
@@ -817,6 +817,15 @@ describe("the config staged for an OpenCode 2 server", { timeout: 30_000 }, () =
     // And it let them settle: the server is not used the moment they report connected.
     expect(log[promptAt]!.at - log[lastMcp]!.at).toBeGreaterThanOrEqual(900);
     expect(h.pool.get("sess-1")!.ready).toBe(true);
+  });
+
+  it("refuses a server none of whose MCP servers connected, rather than handing it a turn", async () => {
+    process.env.FAKE_V2_MCP_FAIL = "1";
+    const h = harness();
+    await expect(h.pool.acquire("sess-1", { cwd: JINN_HOME, bin: FAKE_V2, resolvedMcp: COMPANY_MCP })).rejects.toThrow(
+      /did not start: none of its MCP servers connected \(jinn\)/,
+    );
+    expect(h.pool.size()).toBe(0);
   });
 
   it("does not ask about MCP servers when none are staged", async () => {

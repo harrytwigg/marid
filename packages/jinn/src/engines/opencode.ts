@@ -235,7 +235,9 @@ export class OpencodeEngine implements InterruptibleEngine {
       const server = await this.serverForTurn(slot, opts, trackingId);
       if (!server) return interruptedBeforePost(opts, slot.interrupted!);
       if (server instanceof Error) return await this.fallBackToRun(opts, trackingId, onStream, server);
-      return await this.runServerTurn(server, slot, opts, trackingId, onStream);
+      const turn = await this.runServerTurn(server, slot, opts, trackingId, onStream);
+      if (turn instanceof Error) return await this.fallBackToRun(opts, trackingId, onStream, turn);
+      return turn;
     } finally {
       if (this.serverTurns.get(trackingId) === slot) this.serverTurns.delete(trackingId);
       for (const listener of this.serverTurnEndListeners) listener(trackingId);
@@ -285,20 +287,24 @@ export class OpencodeEngine implements InterruptibleEngine {
     return await this.runPlain(opts, trackingId, onStream);
   }
 
-  /** One turn on a server this session already holds; releases the hold. */
+  /** One turn on a server this session already holds; releases the hold.
+   *  An error, not a result, when the server's event stream never connected:
+   *  nothing was posted, and the server is stopped so the session's next turn
+   *  starts a fresh one rather than meeting this one again. */
   private async runServerTurn(
     server: OpencodeServer,
     slot: ServerTurnSlot,
     opts: EngineRunOpts,
     trackingId: string,
     onStream: ((delta: StreamDelta) => void) | null,
-  ): Promise<EngineResult> {
+  ): Promise<EngineResult | Error> {
     const servers = this.servers!;
     // `/compact` is opencode's own compaction, not a prompt (see
     // opencode-server-compaction.ts) — Jinn's self-compaction queues it, and an
     // operator may type it.
     if (isCompactCommand(opts.prompt)) return await this.runServerCompaction(server, slot, opts, trackingId);
     let drifted = false;
+    let unreachable = false;
     // Everything from here on is inside the try: a hold left behind would keep
     // the next turn for another spec waiting on this server for good.
     try {
@@ -321,10 +327,15 @@ export class OpencodeEngine implements InterruptibleEngine {
         + `(resume: ${opts.resumeSessionId || "none"})`,
       );
       const result = await turn.run();
+      if (turn.serverUnreachable) {
+        unreachable = true;
+        return new Error(result.error ?? "the server's event stream did not connect");
+      }
       if (result.error) logger.error(result.error);
       return result;
     } finally {
       servers.release(trackingId);
+      if (unreachable) await servers.stop(trackingId);
       // Off server mode for this host: the next turn resumes the same opencode
       // session with a plain `run`, which must not find a server still holding it.
       if (drifted) await servers.stop(trackingId);
