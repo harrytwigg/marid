@@ -312,17 +312,9 @@ export class OpencodeEngine implements InterruptibleEngine {
       // A remote server's session sees the gateway's files through its staged
       // home, so the turn names them there rather than by their gateway paths.
       const turnOpts = server.remote ? withRemoteAttachments(opts, server.remote.staging.sessionHome, trackingId) : opts;
-      // The API the server speaks decides which turn drives it (opencode-version.ts).
-      const Turn = server.api === 2 ? OpencodeV2ServerTurn : OpencodeServerTurn;
-      const turn = new Turn(server, turnOpts, onStream, {
-        abort: (target) => servers.abortTurn(trackingId, target),
-        onSessionId: (id) => servers.noteEngineSession(trackingId, id),
-        fallbackPluginOnHost: () => hostHasInternalFallback(server.remote?.staging.destination),
-        fallbackPluginAbortsTurns: () => fallbackPluginAbortsTurns(server.api, server.remote?.staging.destination),
-        onProtocolDrift: (reason) => {
-          retire = true;
-          servers.markUnsupported(server.hostKey, `opencode ${server.hostKey} server API drift: ${reason}`);
-        },
+      const turn = this.buildServerTurn(server, turnOpts, onStream, trackingId, (reason) => {
+        retire = true;
+        servers.markUnsupported(server.hostKey, `opencode ${server.hostKey} server API drift: ${reason}`);
       });
       slot.turn = turn;
       logger.info(
@@ -342,6 +334,28 @@ export class OpencodeEngine implements InterruptibleEngine {
       // A plain `run` resumes the same opencode session, so no server may still hold it.
       if (retire) await servers.stop(trackingId);
     }
+  }
+
+  /** The turn that drives this server's API, wired to the engine's server
+   *  registry. `onDrift` is called if the server's events stop matching what
+   *  the turn reads, so this engine can retire the server (see ServerTurnDeps). */
+  private buildServerTurn(
+    server: OpencodeServer,
+    opts: EngineRunOpts,
+    onStream: ((delta: StreamDelta) => void) | null,
+    trackingId: string,
+    onDrift: (reason: string) => void,
+  ): OpencodeServerTurn | OpencodeV2ServerTurn {
+    const servers = this.servers!;
+    // The API the server speaks decides which turn drives it (opencode-version.ts).
+    const Turn = server.api === 2 ? OpencodeV2ServerTurn : OpencodeServerTurn;
+    return new Turn(server, opts, onStream, {
+      abort: (target) => servers.abortTurn(trackingId, target),
+      onSessionId: (id) => servers.noteEngineSession(trackingId, id),
+      fallbackPluginOnHost: () => hostHasInternalFallback(server.remote?.staging.destination),
+      fallbackPluginAbortsTurns: () => fallbackPluginAbortsTurns(server.api, server.remote?.staging.destination),
+      onProtocolDrift: onDrift,
+    });
   }
 
   /** A `/compact` turn on the session's server; releases the hold. */
