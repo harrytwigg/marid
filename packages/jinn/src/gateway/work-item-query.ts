@@ -204,6 +204,8 @@ const readOrderFilter: FilterReader = (url, filter) => {
   const order = readCleanSearchParam(url, 'order');
   if (!order) return undefined;
   if (order !== 'closed') return 'order must be closed';
+  // Only done and cancelled have no manual order; elsewhere it would silently drop rank ordering.
+  if (filter.status !== 'done' && filter.status !== 'cancelled') return 'order=closed needs status=done or status=cancelled';
   filter.order = order;
   return undefined;
 };

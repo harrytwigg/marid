@@ -10,8 +10,8 @@ export const PIPELINE_STATUSES: readonly WorkItemStatusWire[] = ["backlog", "exe
 export const EXCEPTION_STATUSES: readonly WorkItemStatusWire[] = ["blocked"]
 export const CLOSED_STATUSES: readonly WorkItemStatusWire[] = ["done", "cancelled"]
 
-export function isClosedStatus(status: WorkItemStatusWire): boolean {
-  return CLOSED_STATUSES.includes(status)
+export function isClosedStatus(status: string): boolean {
+  return CLOSED_STATUSES.some((closed) => closed === status)
 }
 
 export const BOARD_STATUS_ORDER: readonly WorkItemStatusWire[] = [

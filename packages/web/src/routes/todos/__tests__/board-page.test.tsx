@@ -493,6 +493,19 @@ describe("the board surface", () => {
       expect(ids("board-closed-group-done")).toEqual(["board-card-TSK-2", "board-card-TSK-3", "board-card-TSK-1"])
     })
 
+    it("does nothing when a closed card is reordered from the keyboard", async () => {
+      Object.assign(closedAt, { "TSK-1": "2026-07-01", "TSK-2": "2026-07-03", "TSK-3": "2026-07-02" })
+      rows.done = ["TSK-1", "TSK-2", "TSK-3"].map((id) => compact({ id, status: "done", version: 3 }))
+      serveClosedOrder()
+      renderBoard("/todos/b/platform")
+      fireEvent.click(await screen.findByTestId("board-closed-rail"))
+      await screen.findByTestId("board-closed-group-done")
+      fireEvent.keyDown(screen.getByTestId("board-card-TSK-2"), { key: "ArrowDown", ctrlKey: true })
+      expect(updateWorkItem).not.toHaveBeenCalled()
+      expect(document.body.textContent).not.toContain("moved to position")
+      expect(ids("board-closed-group-done")).toEqual(["board-card-TSK-2", "board-card-TSK-3", "board-card-TSK-1"])
+    })
+
     it("lists Done and Cancelled cards newest-closed first, and puts a Todo moved to Done on top after a refresh", async () => {
       Object.assign(closedAt, {
         "TSK-1": "2026-07-01", "TSK-2": "2026-07-03", "TSK-3": "2026-07-02",

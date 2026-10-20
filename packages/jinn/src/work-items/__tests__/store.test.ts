@@ -141,6 +141,18 @@ describe("work-item store — closed order", () => {
     });
   }
 
+  it("ignores events that carry a status without moving the Todo into it", () => {
+    const department = "closed-order-note";
+    const settled = store.createWorkItem({ title: "settled", status: "done", department });
+    const other = store.createWorkItem({ title: "other", status: "done", department });
+    closeAt(settled.id, "done", "2031-01-01T00:00:00.000Z");
+    closeAt(other.id, "done", "2031-02-01T00:00:00.000Z");
+    db.prepare("INSERT INTO work_item_events (id, work_item_id, kind, from_status, to_status, actor, detail, created_at) VALUES (?, ?, 'note', NULL, 'done', 'operator', NULL, ?)")
+      .run("wie_stray_note", settled.id, "2035-01-01T00:00:00.000Z");
+    expect(store.queryWorkItems({ status: "done", department, order: "closed" }).workItems.map((i) => i.id))
+      .toEqual([other.id, settled.id]);
+  });
+
   it("uses the latest entry into the current status after a reopen", () => {
     const department = "closed-order-reopen";
     const reopened = store.createWorkItem({ title: "reopened", status: "done", department });

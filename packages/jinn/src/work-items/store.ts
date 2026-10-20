@@ -569,7 +569,7 @@ function workItemWhere(filter: ListWorkItemsFilter, textIds?: readonly string[])
 }
 
 /** Newest-closed first: the latest event that moved the Todo into the status it is in now. */
-const CLOSED_ORDER_SQL = `COALESCE((SELECT MAX(e.created_at) FROM work_item_events e WHERE e.work_item_id = work_items.id AND e.to_status = work_items.status), work_items.updated_at) DESC`;
+const CLOSED_ORDER_SQL = `COALESCE((SELECT MAX(e.created_at) FROM work_item_events e WHERE e.work_item_id = work_items.id AND e.kind IN ('status_change', 'created') AND e.to_status = work_items.status), work_items.updated_at) DESC`;
 
 /** Paginated, deterministic AND-composed Todo query. Counts are computed from
  * the identical WHERE clause before pagination, so a capped page can never

@@ -129,6 +129,11 @@ describe("the ?order=closed query parameter", () => {
     const absent = read("?status=done");
     expect(absent.ok && absent.value.filter.order).toBeUndefined();
     expect(read("?order=random")).toEqual({ ok: false, error: "order must be closed" });
+    // Only the closed statuses have an order of their own.
+    expect(read("?status=cancelled&order=closed").ok).toBe(true);
+    for (const search of ["?order=closed", "?status=backlog&order=closed"]) {
+      expect(read(search)).toEqual({ ok: false, error: "order=closed needs status=done or status=cancelled" });
+    }
   });
 });
 

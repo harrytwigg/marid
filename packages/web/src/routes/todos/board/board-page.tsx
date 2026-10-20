@@ -261,7 +261,7 @@ export default function TodoBoardPage() {
       // The drop position is a promise: once the status PUT lands, write the
       // rank at the landing slot too (Stage-A review F3) so the next refetch
       // never reorders a drop the gateway accepted.
-      const siblings = (itemsByStatus[to] ?? []).filter((it) => it.id !== item.id)
+      const siblings = closing ? [] : (itemsByStatus[to] ?? []).filter((it) => it.id !== item.id)
       const before = index > 0 ? siblings[Math.min(index, siblings.length) - 1] : null
       const after = index < siblings.length ? siblings[index] : null
       const rank = rankBetween(before?.rank ?? null, after?.rank ?? null)
@@ -318,6 +318,8 @@ export default function TodoBoardPage() {
 
   const commitRank = useCallback(
     (item: WorkItemCompactWire, beforeRank: number | null, afterRank: number | null) => {
+      // Closed columns order by when each card closed; a manual position would be lost on the next refetch.
+      if (isClosedStatus(item.status)) return
       if (!isPositiveTodoVersion(item.version)) return
       const rank = rankBetween(beforeRank, afterRank)
       setRankOverrides((prev) => new Map(prev).set(item.id, rank))
@@ -372,6 +374,7 @@ export default function TodoBoardPage() {
     (event: React.KeyboardEvent, item: WorkItemCompactWire) => {
       if (!(event.metaKey || event.ctrlKey) || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return
       event.preventDefault()
+      if (isClosedStatus(item.status)) return
       const list = itemsByStatus[item.status] ?? []
       const index = list.findIndex((it) => it.id === item.id)
       if (index < 0) return
@@ -398,7 +401,7 @@ export default function TodoBoardPage() {
   usePreloadQuickCapture()
   usePreloadNewTodoDialog()
   // A URL naming a closed status asked for closed work — never one tap short.
-  const closedFilter = CLOSED_STATUSES.some((status) => status === filters.status)
+  const closedFilter = isClosedStatus(filters.status)
   const [closedOpen, setClosedOpen] = useState(closedFilter)
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
   useEffect(() => {
