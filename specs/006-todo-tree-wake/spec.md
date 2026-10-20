@@ -199,7 +199,12 @@ check. Part D notices within minutes.
 1. **Quiet.** An `executing` Todo is quiet when it has at least one linked execution
    session, `attemptActivity()` says nothing is in flight (no running or waiting attempt,
    no live background sub-agent, no open delegation), and the newest of its attempts'
-   last activity and the moment it entered `executing` is older than the quiet window:
+   last activity and the moment it entered `executing` is older than the quiet window, and
+   none of its children is being worked or waits in `backlog` for the board walk to start
+   it (an orchestrator that split its work and ended its turn is waiting, not stalled; a
+   start-dated child counts as waiting, an `autoStart: false` or operator-held one does
+   not). When the quiet Todo has children that settled or that the walk will not start,
+   the nudge names them instead of talking about a lost background command:
    - `QUIET_AFTER_MS` = 15 min normally;
    - `QUIET_BACKGROUND_TASK_MS` = 60 min when the newest attempt still counts a
      background shell task of its own (`isAwaitingOwnBackgroundTask`): a test suite may

@@ -55,6 +55,6 @@ export function hasOpenDelegations(workItemId: string, attempts: readonly Pick<S
   const attemptIds = attempts.map((session) => session.id);
   return hasExecutingSubTask(workItemId)
     || hasInFlightChildSession(attemptIds, now)
-    || hasPendingChildSettles(workItemId)
+    || hasPendingChildSettles(workItemId, now)
     || hasPendingChildSettledDelivery(workItemId, attemptIds);
 }

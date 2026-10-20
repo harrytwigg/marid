@@ -313,6 +313,17 @@ describe("when the session or the restart is gone", () => {
     expect(parentComments(held.parent.id)[0]).toContain(held.child.id);
   });
 
+  it("leaves the escalation on the parent when its re-dispatch throws", () => {
+    const broken = tree();
+    db.prepare("UPDATE sessions SET status = 'error' WHERE id = ?").run(broken.ownerSession);
+    deps.redispatch.mockImplementationOnce(() => { throw new Error("dispatcher spawn failed"); });
+    at(16);
+    sweep();
+    at(40);
+    sweep();
+    expect(parentComments(broken.parent.id)).toEqual([expect.stringContaining("dispatcher spawn failed")]);
+  });
+
   it("leaves nothing more when a Dispatcher is already running for the parent", () => {
     const busy = tree();
     db.prepare("UPDATE sessions SET status = 'error' WHERE id = ?").run(busy.ownerSession);
@@ -323,6 +334,64 @@ describe("when the session or the restart is gone", () => {
     sweep();
     expect(deps.redispatch).toHaveBeenCalled();
     expect(parentComments(busy.parent.id)).toEqual([]);
+  });
+});
+
+describe("an orchestrator waiting on its children", () => {
+  /** A parent owned by OWNER, its owner session idle, with backlog children it created. */
+  function parentWithBacklog(count: number) {
+    const parent = executingTodo(OWNER);
+    const ownerSession = sessionOn(OWNER, parent.id);
+    counter += 1;
+    const children = Array.from({ length: count }, (_, i) =>
+      store.createWorkItem({ title: `waiting child ${counter}.${i}`, status: "backlog", source: "session", assignee: WORKER, parentId: parent.id }));
+    return { parent, ownerSession, children };
+  }
+
+  it("is not nudged or escalated while its children wait in backlog for the board walk", () => {
+    const { parent } = parentWithBacklog(2);
+    at(16);
+    sweep();
+    at(32);
+    sweep();
+    at(90);
+    sweep();
+    expect(kinds(parent.id)).toEqual([]);
+    expect(delivered).toEqual([]);
+  });
+
+  it("is nudged about a backlog child the walk will not start, by name", async () => {
+    const { writeAutoStartRow } = await import("../auto-start.js");
+    const { parent, ownerSession, children } = parentWithBacklog(1);
+    writeAutoStartRow(db, children[0]!.id, false, new Date().toISOString());
+    at(16);
+    sweep();
+    expect(deliveries()).toEqual([expect.objectContaining({ targetSessionId: ownerSession, sourceId: parent.id, deliveryKind: "todo-quiet-nudge" })]);
+    const { message } = deliveries()[0]!.payload;
+    expect(message).toContain(children[0]!.id);
+    expect(message).toContain("will not start them");
+    expect(message).not.toContain("background command");
+  });
+
+  it("names the settled children instead of a lost background command", () => {
+    const parent = executingTodo(OWNER);
+    sessionOn(OWNER, parent.id);
+    const child = executingTodo(WORKER, parent.id);
+    transitions.transition(child.id, "in_review", "board-walk", { detail: { note: "done" } });
+    at(16);
+    sweep();
+    const { message } = deliveries()[0]!.payload;
+    expect(message).toContain(`${child.id} (in_review)`);
+    expect(message).not.toContain("background command");
+  });
+
+  it("stops counting a settle wake that never got out as open work", async () => {
+    const delegations = await import("../open-delegations.js");
+    const parent = executingTodo(OWNER);
+    const child = executingTodo(WORKER, parent.id);
+    transitions.transition(child.id, "in_review", "board-walk", { detail: { note: "done" } });
+    expect(delegations.hasOpenDelegations(parent.id, [], Date.now())).toBe(true);
+    expect(delegations.hasOpenDelegations(parent.id, [], Date.now() + 16 * MIN)).toBe(false);
   });
 });
 

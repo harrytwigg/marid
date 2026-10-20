@@ -1,4 +1,5 @@
 import type { SessionDeliveryPayload } from "../shared/types.js";
+import type { ChildWork } from "./quiet-children.js";
 import type { WorkItem } from "./store.js";
 
 /**
@@ -25,16 +26,39 @@ export interface QuietNudgeInput {
   now: number;
   /** The session still counts a background shell task it started. */
   awaitingBackgroundTask: boolean;
+  /** Its children waiting on it, which the nudge names instead of a lost background command. */
+  children?: Pick<ChildWork, "settled" | "notStarting">;
+}
+
+/** What the Todo's children need from it, or undefined when none does. */
+function childrenLine(children: QuietNudgeInput["children"]): string | undefined {
+  if (!children || (children.settled.length === 0 && children.notStarting.length === 0)) return undefined;
+  const parts: string[] = [];
+  if (children.settled.length > 0) {
+    parts.push(`Its child Todos ${children.settled.map((child) => `${child.id} (${child.status})`).join(", ")} have been handed back and wait on you: `
+      + "accept or send back a review, unblock or re-plan a blocked one.");
+  }
+  if (children.notStarting.length > 0) {
+    parts.push(`Its child Todos ${children.notStarting.join(", ")} are in backlog where the board walk will not start them `
+      + "(automatic start is off, or they are the operator's): dispatch them, start them yourself, or drop them from the plan.");
+  }
+  return parts.join(" ");
+}
+
+function waitedLine(input: QuietNudgeInput, minutes: string): string {
+  const children = childrenLine(input.children);
+  if (children) return children;
+  return input.awaitingBackgroundTask
+    ? `This session still counts a background command it started, but it has been running for over ${minutes} with no word. `
+      + "Check it directly: if it is done, read its result; if it is stuck, stop it and run it again in the foreground."
+    : "If you ended your turn waiting on a background command, test run or build, it has finished or was lost, "
+      + "and its notification will not wake you. Check its result directly now.";
 }
 
 export function quietNudgePayload(input: QuietNudgeInput): SessionDeliveryPayload {
   const { item, quietSince, now } = input;
   const minutes = minutesSince(quietSince, now);
-  const waited = input.awaitingBackgroundTask
-    ? `This session still counts a background command it started, but it has been running for over ${minutes} with no word. `
-      + "Check it directly: if it is done, read its result; if it is stuck, stop it and run it again in the foreground."
-    : "If you ended your turn waiting on a background command, test run or build, it has finished or was lost, "
-      + "and its notification will not wake you. Check its result directly now.";
+  const waited = waitedLine(input, minutes);
   const message = [
     `[Gateway] Todo ${item.id} (${clip(item.title, DISPLAY_TITLE_MAX_CHARS)}) is still \`executing\`, `
       + `but nothing has run in this session for ${minutes}.`,

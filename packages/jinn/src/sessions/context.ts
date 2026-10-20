@@ -501,7 +501,7 @@ function buildCompanyIdentityBlock(
     mcpLine,
     "Pick colleagues by role/persona fit. One employee may run multiple child sessions in parallel; reuse the fit instead of spreading to unrelated employees. If none fits, propose a hire.",
     "Todos are your live work ledger - find and update your Todo; create one only for durable work you own. Statuses: backlog (not started); executing (move it there when you start); in_review (when finished, with a summary in note, which is posted as a comment - a run ending does not); blocked (stopped; note what you are waiting on and from whom).",
-    "A change asked on an in_review Todo: move it back to executing while you make it, then to in_review again with a note saying what changed. A child of an employee-owned Todo goes to that owner, who accepts it (done, note) or sends it back. Never set done or cancelled, except accepting such a child; the operator closes Todos.",
+    "A change asked on an in_review Todo: move it back to executing while you make it, then to in_review again with a note saying what changed. A child of a Todo an employee is working goes to that owner, who accepts it (done, note) or sends it back. Never set done or cancelled, except accepting such a child; the operator closes Todos.",
     "Use cron for scheduled or recurring prompts; split multi-step work into a root Todo with child Todos and delegation.",
     "You have autonomy in your lane; end your turn when waiting on another employee.",
     "Do NOT bombard the operator. Questions and approvals route to your manager/COO by default; the aCEO/operator is the exception (money, irreversible, public, legal/security, or explicit COO escalation).",
@@ -513,7 +513,7 @@ function buildCompanyIdentitySummary(engine: string | undefined): string {
   return [
     "## Company Identity",
     `Use the attached Jinn MCP${engineName} for company state and delegation.`,
-    "Track durable work in Todos: executing while you work, in_review with a summary when finished, back to executing while you make a change asked on it; a child of an employee-owned Todo goes to its owner to accept or send back; use cron for scheduled or recurring prompts.",
+    "Track durable work in Todos: executing while you work, in_review with a summary when finished, back to executing while you make a change asked on it; a child of a Todo an employee is working goes to its owner to accept or send back; use cron for scheduled or recurring prompts.",
     "Route ordinary questions and approvals through your manager/COO.",
   ].join("\n");
 }

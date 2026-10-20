@@ -10,6 +10,7 @@ import { withReportingParent } from "./employee-session-delegation.js";
 import { canMessageSession } from "./employee-sessions.js";
 import { isExecutionAttempt } from "./link-role.js";
 import { attemptActivity } from "./recovery-controller.js";
+import { childWork, type ChildWork } from "./quiet-children.js";
 import { appendWorkItemEvent, getWorkItem, listWorkItems, type WorkItem } from "./store.js";
 import { DISPATCHER_ALREADY_RUNNING, type AvailabilityRearmResult } from "./availability-resume.js";
 import { quietEscalationPayload, quietEscalationReason, quietNudgePayload, type QuietEscalationInput } from "./quiet-watch-message.js";
@@ -63,6 +64,8 @@ interface QuietTodo {
   assigneeSessionId: string | undefined;
   quietSince: number;
   awaitingBackgroundTask: boolean;
+  /** Its open children: settled ones, and backlog ones the walk will not start. */
+  children: ChildWork;
   row: QuietWatchRow | undefined;
 }
 
@@ -76,14 +79,24 @@ function producerSession(item: WorkItem, attempts: readonly Session[]): Session 
   return attempts.find((session) => session.employee === item.assignee && canMessageSession(session));
 }
 
-/** The Todo, read as quiet at `now`, or undefined while anything speaks for it. */
-export function quietTodo(item: WorkItem, now: number, windows: QuietWindows): QuietTodo | undefined {
+/** The Todo's attempts, stint and children, when nothing speaks for it: no attempt in
+ *  flight, nothing it delegated open, and no child being worked or waiting for the
+ *  board walk to start it (that is an orchestrator waiting, not a stall). */
+function idleTodo(item: WorkItem, now: number): { attempts: Session[]; stint: string; children: ChildWork } | undefined {
   if (item.status !== "executing") return undefined;
   const attempts = listSessionsByWorkItem(item.id).filter(isExecutionAttempt);
   if (attempts.length === 0) return undefined;
   const activity = attemptActivity(item.id, now);
   if (activity.inFlight || !activity.executingSince) return undefined;
-  const stint = activity.executingSince;
+  const children = childWork(item.id);
+  return children.waiting ? undefined : { attempts, stint: activity.executingSince, children };
+}
+
+/** The Todo, read as quiet at `now`, or undefined while anything speaks for it. */
+export function quietTodo(item: WorkItem, now: number, windows: QuietWindows): QuietTodo | undefined {
+  const idle = idleTodo(item, now);
+  if (!idle) return undefined;
+  const { attempts, stint, children } = idle;
   const producer = producerSession(item, attempts);
   const awaitingBackgroundTask = !!producer && isAwaitingOwnBackgroundTask(runtimeActivity.get(producer.id));
   const row = quietWatchFor(item.id, stint);
@@ -92,7 +105,7 @@ export function quietTodo(item: WorkItem, now: number, windows: QuietWindows): Q
   const window = awaitingBackgroundTask ? windows.backgroundTaskMs : windows.afterMs;
   if (now - quietSince < window) return undefined;
   const assigneeSessionId = attempts.find((session) => session.employee === item.assignee)?.id;
-  return { item, stint, producer, assigneeSessionId, quietSince, awaitingBackgroundTask, row };
+  return { item, stint, producer, assigneeSessionId, quietSince, awaitingBackgroundTask, children, row };
 }
 
 /** Claim one keyed outbox delivery; the id to deliver, or undefined when it was already taken. */
@@ -128,7 +141,9 @@ function audit(quiet: QuietTodo, kind: "quiet_nudged" | "quiet_escalated", detai
 }
 
 function nudge(quiet: QuietTodo, producer: Session, now: number): void {
-  const payload = quietNudgePayload({ item: quiet.item, quietSince: quiet.quietSince, now, awaitingBackgroundTask: quiet.awaitingBackgroundTask });
+  const payload = quietNudgePayload({
+    item: quiet.item, quietSince: quiet.quietSince, now, awaitingBackgroundTask: quiet.awaitingBackgroundTask, children: quiet.children,
+  });
   const db = initDb();
   const deliveryId = db.transaction(() => {
     const id = claim(producer, quiet, "nudge", payload);
