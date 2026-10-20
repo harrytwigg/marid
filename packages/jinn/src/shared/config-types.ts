@@ -64,6 +64,10 @@ export interface JinnConfig {
     /** Bounded Todo recovery. Unset = classify-only: lanes and
      *  metrics, no automatic re-arm. `auto` is a reviewed production gate. */
     todoRecovery?: { mode?: "off" | "classify-only" | "auto" };
+    /** Nudge an `executing` Todo's producer when nothing has run for a while, then
+     *  tell whoever owns the work from above if it stays quiet. Unset = on, 15 min
+     *  (60 min while the producer still counts a background shell task of its own). */
+    todoQuietWatch?: { enabled?: boolean; afterMinutes?: number; backgroundTaskMinutes?: number };
     /** Closed Todo departments (JIN-1): unset = open; see shared/todo-departments-config.ts. */
     todoDepartments?: TodoDepartmentsConfig;
     /** Remote MCP connector at `/mcp`: off unless enabled; see shared/remote-mcp-config.ts. */
