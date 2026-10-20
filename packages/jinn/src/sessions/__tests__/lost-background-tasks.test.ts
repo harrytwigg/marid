@@ -73,7 +73,7 @@ describe("notifyLostBackgroundTasks", () => {
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
     expect(first.claimed).toBe(true);
-    expect(again).toEqual({ claimed: false, reason: expect.stringMatching(/^already-/) });
+    expect(again.claimed).toBe(false);
     const [url] = fetchMock.mock.calls[0];
     expect(String(url)).toBe(`http://lost-background-fixture.invalid/api/sessions/${session.id}/message`);
     const [body] = sentBodies();
@@ -85,11 +85,18 @@ describe("notifyLostBackgroundTasks", () => {
     expect(body.message).toContain("will never arrive");
   });
 
-  it("nudges a later loss of different tasks again", async () => {
+  it("nudges a session at most once per window, then again once it has passed", async () => {
     const session = idleSession();
-    lostBackground.notifyLostBackgroundTasks(session.id, TASKS.slice(0, 1));
-    lostBackground.notifyLostBackgroundTasks(session.id, TASKS.slice(1));
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const now = Date.now();
+    expect(lostBackground.notifyLostBackgroundTasks(session.id, TASKS.slice(0, 1), now).claimed).toBe(true);
+    // A different loss inside the window: the bound that ends an eviction loop.
+    expect(lostBackground.notifyLostBackgroundTasks(session.id, TASKS.slice(1), now + 60_000))
+      .toEqual({ claimed: false, reason: "rate-limited" });
+    // Another session is not held back by this one's nudge.
+    expect(lostBackground.notifyLostBackgroundTasks(idleSession().id, TASKS.slice(1), now + 60_000).claimed).toBe(true);
+    expect(lostBackground.notifyLostBackgroundTasks(session.id, TASKS.slice(1), now + lostBackground.LOST_BACKGROUND_NUDGE_WINDOW_MS + 1_000).claimed)
+      .toBe(true);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
   });
 
   it("sends nothing with no lost tasks", () => {

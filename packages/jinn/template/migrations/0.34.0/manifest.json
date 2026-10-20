@@ -27,7 +27,7 @@
       "path": "docs/architecture.md",
       "operation": "modify",
       "baseSha256": "28643e780ed43adba88d85f6c21521be223b22de28d49d1e5488f32c451ba313",
-      "targetSha256": "259c7eaf57b65b693075f5d5867312e25345984954a1cd43e7ee92d19751aa03",
+      "targetSha256": "7375859b52d8e1b544d9ce6d06d7b0288c92a4bfd6f579d421a72df89f45ec9b",
       "basePayload": "files/base/docs/architecture.md",
       "targetPayload": "files/target/docs/architecture.md"
     },

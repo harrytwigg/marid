@@ -1827,7 +1827,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     logger.warn(
       `InteractiveClaudeEngine: ${jinnSessionId}'s Claude Code process ended with ${tasks.length} background task(s) `
       + `still running (${tasks.map((task) => task.id).join(", ")}): `
-      + (deliberate ? "it was stopped on purpose, so the session is not asked to carry on" : "asking the session to carry on"),
+      + (deliberate ? "it was stopped on purpose, so the session is not asked to carry on" : "reporting them so the session can be asked to carry on"),
     );
     if (!deliberate) this.lostBackgroundTasksCb?.(jinnSessionId, tasks);
   }
