@@ -6,7 +6,7 @@ employee that declares a `remoteHost` is spawned through `ssh` on another machin
 instead, and everything it does — repository checkouts, builds, tests — happens
 there.
 
-Three engines can do this: **`claude`**, **`pi`** and **`opencode`**. Every other engine ignores
+Four engines can do this: **`claude`**, **`pi`**, **`opencode`** and **`musecode`**. Every other engine ignores
 `remoteHost`, and a remote employee configured with one has its turns refused
 rather than silently run on the gateway.
 
@@ -48,6 +48,8 @@ locally.
      `~/.pi/agent/models.json`. See *Running Pi remotely* below.
    - `opencode`: **the opencode CLI**, signed in there with
      `opencode auth login`. See *Running opencode remotely* below.
+   - `musecode`: **Muse Code** (`muse`), signed in there with `muse login`.
+     See *Running Muse Code remotely* below.
 2. **Node.js**. Note the PATH caveat below — this is the single most likely
    thing to bite you.
 3. **`jinn-cli` at the gateway's exact version**, installed globally:
@@ -92,8 +94,8 @@ default PATH:
 ln -s "$(command -v node)" ~/.local/bin/node
 ```
 
-Verify with `ssh <host> 'command -v node jinn'`, plus `claude`, `pi` or
-`opencode` for the engine that employee runs — each must print. `pi` needs this
+Verify with `ssh <host> 'command -v node jinn'`, plus `claude`, `pi`,
+`opencode` or `muse` for the engine that employee runs — each must print. `pi` needs this
 as much as Claude Code does: it is an npm-installed CLI, so its shebang resolves
 `node` through PATH, and a version-managed host gives a non-interactive ssh
 none.
@@ -362,9 +364,55 @@ providers, and none of them are stripped from the remote login environment. It
 has no subscription auth to fall off, and for a key-authenticated provider an
 inherited key is how it works at all.
 
-## Interrupting a remote Pi or opencode turn
+## Running Muse Code remotely
 
-Killing the local `ssh` client is not enough for these two engines, and the
+Muse Code is the fourth relocatable engine. A turn's host is `muse serve`
+speaking MSP, one JSON message per line on stdin and stdout, so it rides the
+same `ssh -T` transport as Pi and opencode, with the same argv it gets locally.
+
+```yaml
+name: scout
+displayName: Scout
+department: engineering
+engine: musecode
+model: muse-spark-1.3
+remoteHost: build-box
+remoteUser: jinn
+remoteCwd: /srv/agents/main
+```
+
+The login that matters is the remote one: `muse login` on that machine (or
+`META_API_KEY` in its login environment). The gateway does not check it before
+a turn; a turn that finds it signed out fails with Muse's own `authRequired`,
+said as "run `muse login` on the host the session runs on".
+
+What is staged, and what is not:
+
+- **The company toolset is not a file.** Muse takes its MCP servers per session
+  in `session/start` and `session/resume`, so the session's resolved set is
+  re-pointed at the remote install and the reverse tunnel exactly as Claude's
+  is, and then sent over the ssh channel's stdin. The capability in the jinn
+  server's environment is never written to that host's disk or command line.
+  The bearer comes from `<JINN_HOME>/gateway.json`, as for every engine.
+- **Workspace trust needs nothing staged.** Every host is started with
+  `--trust-workspace`, which trusts the working directory for that run only, so
+  no first-run question can block an unattended turn and nothing is saved in
+  the remote user's `~/.config/muse/trust.json`.
+- **Nothing relocates Muse's session store.** It sits beside the login under
+  the remote user's home, as opencode's does. A remote session's conversation
+  therefore lives on that host: the same employee's later turns resume it
+  there, and a session that moves between the gateway and a host starts a new
+  conversation carrying the recent messages, as any engine change does.
+- **No dashboard terminal view.** Muse's terminal view resumes the session's
+  conversation in a local `muse`, and the conversation is on the other host, so
+  the terminal says so instead of opening; the transcript shows each turn.
+
+Image attachments are read on the gateway and sent inline, as locally; any
+other attachment is named in the prompt as the session's staged home sees it.
+
+## Interrupting a remote Pi, opencode or Muse Code turn
+
+Killing the local `ssh` client is not enough for these three engines, and the
 gateway no longer pretends it is. A Claude session runs on `ssh -tt`, so when
 its client dies the remote pty hangs up and `claude` gets SIGHUP. Pi and
 opencode run on `ssh -T` — no tty, because a tty would fold their stderr into
@@ -409,10 +457,14 @@ turns are serialised per session, so a live process there can only be one that
 outlived its gateway turn. Usually a single cheap control connection answering
 `already-gone`; when it finds something, `gateway.log` says so.
 
-## Pi or opencode as the fallback when Claude hits its limit
+## Pi, opencode or Muse Code as the fallback when Claude hits its limit
 
 An engine's `fallback` chain works for remote employees, with one rule: a
-substitute must be an engine that can follow the session onto its host.
+substitute must be an engine that can follow the session onto its host, and be
+installed there. A link to `musecode` (`{engine: musecode, model: muse-spark-1.3}`)
+runs `muse` on the employee's host like any other remote turn; on a host with
+no `muse` it is passed over as `not-installed`, with the host named (see
+[fallback-chains.md](fallback-chains.md#why-a-link-is-passed-over)).
 
 ```yaml
 engines:
@@ -680,12 +732,13 @@ because making that depend on somebody remembering to run a command would put
   towards over-blocking — it refuses when a write-shaped command mentions an
   offending path anywhere, not only as its target — which is the safe direction
   for a rule of this kind.
-- **Only the `claude`, `pi` and `opencode` engines can go remote.** Every other
+- **Only the `claude`, `pi`, `opencode` and `musecode` engines can go remote.** Every other
   engine ignores `remoteHost`, so a remote employee configured with one has its turns
   refused rather than silently run on the gateway. `jinn remote status` says so
   per employee.
 - **A remote Pi turn has no dashboard terminal view**, because a Pi turn has none
-  locally either: it is a headless JSON run, not a TUI.
+  locally either: it is a headless JSON run, not a TUI. A remote Muse Code
+  session has none yet either: its conversation is on the remote host.
 - **Secrets reach a second machine.** The gateway's API bearer token and any MCP
   server API keys are staged into 0600 files on the remote host, and the mount
   makes the instance home — including `secrets/` — readable there. This is

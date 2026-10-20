@@ -1,10 +1,10 @@
 import type { Employee, Engine, JinnConfig, JsonObject } from "../shared/types.js";
-import { engineAvailable, getModelRegistry, type EngineName } from "../shared/models.js";
-import { isRemoteTarget } from "../shared/remote-target.js";
+import { getModelRegistry, type EngineName } from "../shared/models.js";
+import { isRemoteTarget, sshDestination } from "../shared/remote-target.js";
 import { resolveEmployeeClaudeProfile } from "../shared/claude-profile.js";
 import { substituteHealth } from "./rate-limit-account.js";
 import { engineHealthForTarget, readEngineHealth } from "../shared/engine-health.js";
-import { availabilityRegistry } from "./availability-registry.js";
+import { availabilityRegistry, engineInstalledWhereRun } from "./availability-registry.js";
 import { rerouteAtCreation, type RerouteChoice } from "./fallback-reroute.js";
 import { logger } from "../shared/logger.js";
 import { reroutedSessionMeta } from "./engine-override-window.js";
@@ -65,7 +65,9 @@ function healthyStart(
   // Scoped to the machine this session will actually run on: a login that
   // died on the gateway is no reason to move a remote employee's session.
   const health = substituteHealth(engineHealthForTarget(readEngineHealth(), preference.employee), preference.employee);
-  const registry = availabilityRegistry(getModelRegistry(config), (candidate) => engines.has(candidate) && engineAvailable(config, candidate as EngineName));
+  // Installed where the session will run: a remote employee's on its host.
+  const destination = isRemoteTarget(preference.employee) ? sshDestination(preference.employee) : undefined;
+  const registry = availabilityRegistry(getModelRegistry(config), (candidate) => engines.has(candidate) && engineInstalledWhereRun(config, candidate, destination));
   return rerouteAtCreation({
     config, employee: preference.employee, engine: preferred, model: preference.employee?.model, registry, health, scope: { scoped: false, remote },
   });

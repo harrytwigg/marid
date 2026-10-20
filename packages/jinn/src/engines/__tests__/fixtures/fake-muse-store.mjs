@@ -17,7 +17,7 @@ log({
   argv: process.argv.slice(2),
   cwd: process.cwd(),
   env: Object.fromEntries(
-    ["JINN_SESSION_ID", "JINN_EMPLOYEE", "CLAUDECODE", "CODEX_HOME", "META_API_KEY", "HOME"].filter((k) => k in process.env).map((k) => [k, process.env[k]]),
+    ["JINN_SESSION_ID", "JINN_EMPLOYEE", "JINN_HOME", "JINN_GATEWAY_URL", "CLAUDECODE", "CODEX_HOME", "META_API_KEY", "HOME"].filter((k) => k in process.env).map((k) => [k, process.env[k]]),
   ),
 });
 

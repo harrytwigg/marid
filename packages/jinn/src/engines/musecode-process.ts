@@ -11,6 +11,13 @@ export interface MspProcessSpec {
   args: string[];
   cwd: string;
   env: Record<string, string>;
+  /**
+   * For a host reached over ssh: how a signal reaches it. The local process is
+   * then only the ssh client, and signalling it closes a no-tty channel, which
+   * signals nothing on the other side; this ends the remote host first and
+   * calls `signalLocal` once it has (see `RemoteKills.terminate`).
+   */
+  signalVia?: (signalLocal: () => void) => void;
 }
 
 export interface MspProcessExit {
@@ -35,8 +42,10 @@ export class MspProcess {
   private exit: MspProcessExit | undefined;
   private readonly exited: Promise<MspProcessExit>;
   private spawnError: Error | undefined;
+  private readonly signalVia: MspProcessSpec["signalVia"];
 
   constructor(spec: MspProcessSpec) {
+    this.signalVia = spec.signalVia;
     this.proc = spawn(spec.bin, spec.args, {
       cwd: spec.cwd,
       env: spec.env,
@@ -111,8 +120,14 @@ export class MspProcess {
     return await this.exited;
   }
 
-  /** Signal the process group (SIGTERM by default). */
+  /** Signal the process group (SIGTERM by default); a remote host is ended on its own host first. */
   signal(signal: NodeJS.Signals = "SIGTERM"): void {
+    if (this.exit) return;
+    if (this.signalVia) this.signalVia(() => this.signalLocal(signal));
+    else this.signalLocal(signal);
+  }
+
+  private signalLocal(signal: NodeJS.Signals): void {
     if (this.exit) return;
     try {
       if (process.platform !== "win32" && this.proc.pid) process.kill(-this.proc.pid, signal);

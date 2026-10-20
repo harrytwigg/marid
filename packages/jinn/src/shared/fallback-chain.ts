@@ -10,7 +10,7 @@ import {
   fallbackLinkKey, fallbackLinkLabel,
   type FallbackChainEntry, type FallbackChainSource, type FallbackLink, type FallbackSkipReason, type ResolvedFallbackLink,
 } from "./fallback-chain-wire.js";
-import type { EngineName } from "./models.js";
+import { engineSupportsRemote, REMOTE_ENGINE_CLI, type EngineName } from "./models.js";
 import type { Employee, JinnConfig, ModelRegistry, Session } from "./types.js";
 
 export { isLinkExhausted, linkHealthKey } from "./fallback-chain-health.js";
@@ -41,8 +41,8 @@ export interface FallbackChainSpec {
   entries: readonly FallbackChainEntry[];
   /** `account` for a local Claude subject, else `engine`: see fallback-chain-expand.ts. */
   mode: FallbackExpansionMode;
-  /** Department-scoped, and/or running on a remote host. */
-  scope: { scoped: boolean; remote: boolean };
+  /** Department-scoped, and/or running on a remote host (`host`: its ssh destination, when known). */
+  scope: { scoped: boolean; remote: boolean; host?: string };
 }
 
 /**
@@ -88,6 +88,12 @@ function skipReason(env: FallbackChainEnv, subject: FallbackChainSpec, link: Fal
   return scopeSkip(subject.scope, link) ?? (modelNotServed(entry, link) ? "model-not-served" : undefined);
 }
 
+/** What the gateway can add to a skip: the host that lacks a remote engine's CLI. */
+function skipDetail(scope: FallbackChainSpec["scope"], link: FallbackLink, reason: FallbackSkipReason): string | undefined {
+  if (reason !== "not-installed" || !scope.remote || !scope.host || !engineSupportsRemote(link.engine)) return undefined;
+  return `${scope.host} has no \`${REMOTE_ENGINE_CLI[link.engine]}\` on its non-interactive PATH`;
+}
+
 function resolvedLink(env: FallbackChainEnv, link: FallbackLink, origin: ResolvedFallbackLink["origin"], written: FallbackLink): ResolvedFallbackLink {
   const account = linkAccount(link, env.config);
   const identity = { ...link, key: fallbackLinkKey(link), account, label: fallbackLinkLabel(link), origin, written: { ...written } };
@@ -117,7 +123,8 @@ export function resolveFallbackLinks(env: FallbackChainEnv, subject: FallbackCha
     if (seen.has(resolved.key)) continue;
     seen.add(resolved.key);
     const skip = skipReason(env, subject, target);
-    links.push(skip ? { ...resolved, skip } : resolved);
+    const detail = skip ? skipDetail(subject.scope, target, skip) : undefined;
+    links.push(skip ? { ...resolved, skip, ...(detail ? { skipDetail: detail } : {}) } : resolved);
   }
   return links;
 }

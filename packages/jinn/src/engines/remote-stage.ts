@@ -17,7 +17,7 @@ import { readGatewayInfo } from "../gateway/gateway-info.js";
 import { GATEWAY_INFO_FILE } from "../shared/paths.js";
 import { assertRemoteTarget, resolveRemoteClaudeConfigDir, sshDestination, REMOTE_STAGE_DIR_NAME } from "../shared/remote-target.js";
 import type { RemoteTarget, ResolvedMcpConfig, SessionRemoteTarget } from "../shared/types.js";
-import type { RemoteEngineName } from "../shared/models.js";
+import { REMOTE_ENGINE_CLI, type RemoteEngineName } from "../shared/models.js";
 import type { RemoteExecutionConfig } from "../shared/config-types.js";
 import { remapMcpConfigForRemote } from "../mcp/remote-config.js";
 import { confineMcpToDepartment } from "../gateway/department-scope/mcp-servers.js";
@@ -213,6 +213,8 @@ export interface RemoteFacts {
   claudeBin?: string;
   piBin?: string;
   opencodeBin?: string;
+  /** Muse Code's CLI, `muse`, for the `musecode` engine. */
+  museBin?: string;
   /** What that opencode's `--version` said: which config shape it reads. */
   opencodeVersion?: string;
   jinnVersion: string;
@@ -261,6 +263,7 @@ printf 'node=%s\\n' "$(command -v node 2>/dev/null || true)"
 printf 'claude=%s\\n' "$(command -v claude 2>/dev/null || true)"
 printf 'pi=%s\\n' "$(command -v pi 2>/dev/null || true)"
 printf 'opencode=%s\\n' "$(command -v opencode 2>/dev/null || true)"
+printf 'muse=%s\\n' "$(command -v muse 2>/dev/null || true)"
 if command -v opencode >/dev/null 2>&1; then
   printf 'opencodeversion=%s\\n' "$(OPENCODE_DISABLE_AUTOUPDATE=1 opencode --version 2>/dev/null | tr -d '\\r' | head -n 1)"
 ${FALLBACK_FACTS_SNIPPET}
@@ -320,10 +323,11 @@ export function remoteEngineAvailable(destination: string, engine: RemoteEngineN
  *  than a ternary at each call site: a fourth engine that has to add a branch to
  *  two separate conditionals is how the two quietly stop agreeing about what is
  *  installed on a host. */
-const REMOTE_ENGINE_BIN_FIELD: Record<RemoteEngineName, "claudeBin" | "piBin" | "opencodeBin"> = {
+const REMOTE_ENGINE_BIN_FIELD: Record<RemoteEngineName, "claudeBin" | "piBin" | "opencodeBin" | "museBin"> = {
   claude: "claudeBin",
   pi: "piBin",
   opencode: "opencodeBin",
+  musecode: "museBin",
 };
 
 /** Facts already learned about a host this gateway boot, without asking again.
@@ -369,6 +373,7 @@ const REMOTE_ENGINE_INSTALL_HINT: Record<RemoteEngineName, string> = {
   claude: "install Claude Code there and sign it in",
   pi: "install the Pi CLI there and configure its providers in ~/.pi/agent/models.json",
   opencode: "install the opencode CLI there and sign it in with `opencode auth login`",
+  musecode: "install Muse Code there and sign it in with `muse login`",
 };
 
 /**
@@ -393,9 +398,10 @@ export function requireRemoteEngineBin(
 ): string {
   const bin = remoteEngineBin(facts, engine);
   if (bin) return bin;
+  const cli = REMOTE_ENGINE_CLI[engine];
   throw new Error(
-    `${destination} has no \`${engine}\` on the non-interactive PATH. Check with `
-    + `\`ssh ${destination} 'command -v ${engine}'\` — ${REMOTE_ENGINE_INSTALL_HINT[engine]}, `
+    `${destination} has no \`${cli}\` on the non-interactive PATH. Check with `
+    + `\`ssh ${destination} 'command -v ${cli}'\` — ${REMOTE_ENGINE_INSTALL_HINT[engine]}, `
     + `or symlink it onto the default PATH if it is already installed`,
   );
 }
@@ -415,12 +421,13 @@ export function assertRemoteVersion(destination: string, versionLine: string, lo
 }
 
 /** The agent CLIs the facts script found, and what the opencode one is. */
-function engineFacts(kv: Record<string, string>): Pick<RemoteFacts, "claudeBin" | "piBin" | "opencodeBin" | "opencodeVersion"> {
+function engineFacts(kv: Record<string, string>): Pick<RemoteFacts, "claudeBin" | "piBin" | "opencodeBin" | "museBin" | "opencodeVersion"> {
   const opencodeVersion = parseOpencodeVersion(kv.opencodeversion ?? "");
   return {
     ...(kv.claude ? { claudeBin: kv.claude } : {}),
     ...(kv.pi ? { piBin: kv.pi } : {}),
     ...(kv.opencode ? { opencodeBin: kv.opencode } : {}),
+    ...(kv.muse ? { museBin: kv.muse } : {}),
     ...(opencodeVersion ? { opencodeVersion } : {}),
   };
 }
@@ -1263,7 +1270,23 @@ export interface RemoteOpencodeStaging extends RemoteSessionStagingBase {
   opencodeConfigPath?: string;
 }
 
-export type RemoteSessionStaging = RemoteClaudeStaging | RemotePiStaging | RemoteOpencodeStaging;
+export interface RemoteMusecodeStaging extends RemoteSessionStagingBase {
+  engine: "musecode";
+  /** The session's MCP set, re-pointed at the remote install and the tunnel.
+   *  Not a file: Muse takes its servers in `session/start` and
+   *  `session/resume`, over the host's stdin, so the capability the jinn
+   *  server's environment carries travels inside the ssh channel and is never
+   *  written to that host's disk or command line. Undefined when the session
+   *  carries no servers.
+   *
+   *  Nothing else is staged. Muse keeps its sessions and its login together
+   *  under the remote user's home, as opencode does, so moving the store would
+   *  take the login with it; and workspace trust is the `--trust-workspace`
+   *  every host is started with, for that run only. */
+  resolvedMcp?: ResolvedMcpConfig;
+}
+
+export type RemoteSessionStaging = RemoteClaudeStaging | RemotePiStaging | RemoteOpencodeStaging | RemoteMusecodeStaging;
 
 /**
  * Stage everything one remote session needs and return the remote paths its
@@ -1276,6 +1299,7 @@ export type RemoteSessionStaging = RemoteClaudeStaging | RemotePiStaging | Remot
 export async function prepareRemoteSession(opts: PrepareRemoteSessionOpts & { engine: "claude" }): Promise<RemoteClaudeStaging>;
 export async function prepareRemoteSession(opts: PrepareRemoteSessionOpts & { engine: "pi" }): Promise<RemotePiStaging>;
 export async function prepareRemoteSession(opts: PrepareRemoteSessionOpts & { engine: "opencode" }): Promise<RemoteOpencodeStaging>;
+export async function prepareRemoteSession(opts: PrepareRemoteSessionOpts & { engine: "musecode" }): Promise<RemoteMusecodeStaging>;
 export async function prepareRemoteSession(opts: PrepareRemoteSessionOpts): Promise<RemoteSessionStaging> {
   const { target, remote, facts, jinnSessionId, engine } = opts;
   assertRemoteTarget(target, remote);
@@ -1304,17 +1328,8 @@ export async function prepareRemoteSession(opts: PrepareRemoteSessionOpts): Prom
     },
   );
   const base = { destination, tunnelPort, sessionHome, envFilePath };
-
-  if (engine === "pi") {
-    const piSessionDir = await stagePiSessionDir(destination, sessionHome);
-    const piExtensionPath = await stagePiExtension(destination, facts, sessionHome, jinnSessionId, resolvedMcp);
-    return { ...base, engine, piSessionDir, ...(piExtensionPath ? { piExtensionPath } : {}) };
-  }
-
-  if (engine === "opencode") {
-    const opencodeConfigPath = await stageOpencodeConfig(destination, facts, sessionHome, tunnelPort, { resolvedMcp, commandTimeout: opts.opencodeCommandTimeout === true });
-    return { ...base, engine, ...(opencodeConfigPath ? { opencodeConfigPath } : {}) };
-  }
+  const batch = await stageBatchEngine(opts, base, resolvedMcp);
+  if (batch) return batch;
 
   const settingsPath = await stageSettings(destination, facts, sessionHome, jinnSessionId, {
     carry: remoteOperatorSettingsCarry(resolveRemoteClaudeConfigDir(target, remote)),
@@ -1323,7 +1338,31 @@ export async function prepareRemoteSession(opts: PrepareRemoteSessionOpts): Prom
   });
   const mcp = { resolved: resolvedMcp, departmentFileRoots: remoteDepartmentFileRoots(target) };
   const mcpConfigPath = await stageMcpConfig(destination, facts, sessionHome, tunnelPort, mcp);
-  return { ...base, engine, settingsPath, ...(mcpConfigPath ? { mcpConfigPath } : {}) };
+  return { ...base, engine: "claude", settingsPath, ...(mcpConfigPath ? { mcpConfigPath } : {}) };
+}
+
+/** What a batch engine (pi, opencode, Muse Code) stages beyond the common base; undefined for Claude. */
+async function stageBatchEngine(
+  opts: PrepareRemoteSessionOpts,
+  base: RemoteSessionStagingBase,
+  resolvedMcp: ResolvedMcpConfig | undefined,
+): Promise<RemotePiStaging | RemoteOpencodeStaging | RemoteMusecodeStaging | undefined> {
+  const { facts, jinnSessionId, engine } = opts;
+  const { destination, sessionHome, tunnelPort } = base;
+  if (engine === "pi") {
+    const piSessionDir = await stagePiSessionDir(destination, sessionHome);
+    const piExtensionPath = await stagePiExtension(destination, facts, sessionHome, jinnSessionId, resolvedMcp);
+    return { ...base, engine, piSessionDir, ...(piExtensionPath ? { piExtensionPath } : {}) };
+  }
+  if (engine === "opencode") {
+    const opencodeConfigPath = await stageOpencodeConfig(destination, facts, sessionHome, tunnelPort, { resolvedMcp, commandTimeout: opts.opencodeCommandTimeout === true });
+    return { ...base, engine, ...(opencodeConfigPath ? { opencodeConfigPath } : {}) };
+  }
+  if (engine === "musecode") {
+    const remapped = remoteMcpFor(facts, sessionHome, tunnelPort, resolvedMcp);
+    return { ...base, engine, ...(remapped ? { resolvedMcp: remapped } : {}) };
+  }
+  return undefined;
 }
 
 /**
@@ -1443,6 +1482,23 @@ async function stageSettings(
   });
   await stageRemoteFile(destination, settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
   return settingsPath;
+}
+
+/** The resolved MCP set re-pointed at the remote install and this session's
+ *  tunnel, or undefined when it has no servers. */
+function remoteMcpFor(
+  facts: RemoteFacts,
+  sessionHome: string,
+  tunnelPort: number,
+  resolvedMcp: ResolvedMcpConfig | undefined,
+): ResolvedMcpConfig | undefined {
+  if (!resolvedMcp || Object.keys(resolvedMcp.mcpServers ?? {}).length === 0) return undefined;
+  return remapMcpConfigForRemote(resolvedMcp, {
+    remoteNode: facts.nodeBin,
+    remoteEntryDir: facts.entryDir,
+    remoteHome: sessionHome,
+    gatewayUrl: `http://127.0.0.1:${tunnelPort}`,
+  });
 }
 
 /** Rewrite the resolved MCP set for the remote install and stage it.

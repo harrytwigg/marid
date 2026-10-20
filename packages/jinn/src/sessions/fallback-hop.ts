@@ -1,6 +1,6 @@
 import { classifyEngineFailureText, hasEngineFailureClass } from "../shared/engine-failure.js";
 import { UNSTATED_RESET_WINDOW_MS } from "../shared/engine-health.js";
-import type { FallbackHop, FallbackHopReason, FallbackSkipReason } from "../shared/fallback-chain-wire.js";
+import type { FallbackHop, FallbackHopReason, FallbackHopSkip } from "../shared/fallback-chain-wire.js";
 import { isModelAvailabilityError } from "../shared/model-fallback.js";
 import { computeNextRetryDelayMs } from "../shared/rateLimit.js";
 import type { EngineResult } from "../shared/types.js";
@@ -48,7 +48,7 @@ export interface BuiltHop {
   to: HopEnd | null;
   reason: FallbackHopReason;
   resetsAt?: number;
-  skipped: Array<{ key: string; reason: FallbackSkipReason }>;
+  skipped: FallbackHopSkip[];
 }
 
 export function buildHop(hop: BuiltHop): FallbackHop {
@@ -66,7 +66,7 @@ export function buildHop(hop: BuiltHop): FallbackHop {
 
 /** The one info line a hop logs: who, where to, why, and what was passed over. */
 export function hopLogLine(sessionId: string, hop: FallbackHop): string {
-  const skipped = hop.skipped?.length ? `; skipped ${hop.skipped.map((entry) => `${entry.key} (${entry.reason})`).join(", ")}` : "";
+  const skipped = hop.skipped?.length ? `; skipped ${hop.skipped.map((entry) => `${entry.key} (${entry.detail ?? entry.reason})`).join(", ")}` : "";
   return `Session ${sessionId}: fallback hop ${hop.fromLabel} -> ${hop.toLabel ?? "(chain exhausted)"} (${hop.reason})${skipped}`;
 }
 

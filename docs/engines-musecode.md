@@ -173,7 +173,7 @@ Other behaviour:
 
 ## Known limits
 
-- **Local only.** Muse Code does not run on remote (SSH) hosts.
+- **Remote hosts: headless turns only.** An employee with a `remoteHost` runs its turns' `muse serve` on that host over `ssh -T`, signed in there (see [remote-execution.md](remote-execution.md#running-muse-code-remotely)). Its conversation lives in that host's Muse store, so the dashboard terminal view does not open for it.
 - **No department-scoped sessions.** Employees in a scoped or dedicated department run on Claude only.
 - **A session log Muse cannot read.** A killed host can leave a torn or empty `session.jsonl`. On 1.4.8 an empty log (or one whose permission frame is unreadable) makes `session/resume` fail with `resume_refused_class_c` and the remedy "start a new session"; Marid reads any `resume_refused*` as a lost conversation, so the next turn starts afresh with the session so far. A torn tail is worse: the host resumes (`history.noneReason: projectionUnavailable`), accepts `turn/start` and then never sends anything. Marid says so in the stream and, if the host does not announce `turn/started` for an accepted (`disposition: started`) turn within 120 seconds, stops it (nothing later counts, since a retrying provider announces the start and can then go quiet for a long time): a lost conversation when the history was unreadable at resume, otherwise a failed turn ("Muse Code accepted the turn but never started it") on a conversation that is kept. The bound is `firstEventTimeoutMs` on the engine's options.
 - **Workspace trust is on.** Marid passes `--trust-workspace` (this run only, nothing saved), so the working directory's rules, skills and hooks load and its `CLAUDE.md` or `AGENTS.md` reaches the model.
