@@ -27,6 +27,7 @@ const RATE_LIMIT_ENGINE_LABELS: Record<string, string> = {
   // Lowercase on purpose: it is how the project spells its own name.
   opencode: "opencode",
   musecode: "Muse Code",
+  freebuff: "Freebuff",
 };
 
 /** Human-facing provider/engine name for rate-limit state and notifications. */

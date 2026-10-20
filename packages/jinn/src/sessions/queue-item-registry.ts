@@ -187,6 +187,20 @@ export function getQueueItems(sessionKey: string): QueueItem[] {
   return rows.map(rowToQueueItem);
 }
 
+/**
+ * How many operator-visible turns each session key has parked, in one grouped
+ * read. This is what the session list's queue badge shows, so it must agree with
+ * `getQueueItems` rather than with the in-process promise chain, which only
+ * shrinks when a cancelled row's slot is reached and skipped.
+ */
+export function countPendingQueueItemsByKey(): Map<string, number> {
+  const db = initDb();
+  const rows = db.prepare(
+    "SELECT session_key AS sessionKey, COUNT(*) AS n FROM queue_items WHERE status = 'pending' AND internal = 0 GROUP BY session_key"
+  ).all() as Array<{ sessionKey: string; n: number }>;
+  return new Map(rows.map((row) => [row.sessionKey, row.n]));
+}
+
 export function cancelAllPendingQueueItems(sessionKey: string): number {
   const db = initDb();
   const result = db.prepare(

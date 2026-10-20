@@ -161,7 +161,7 @@ function substitutionOf(opts: BeginSubstitutionOpts, flipped: { engineConfig: En
   return {
     engineConfig,
     model,
-    effortLevel: resolveEffort(engineConfig, session, employee, effortLevelsForModel(config, substitute, model ?? engineConfig.model)),
+    effortLevel: resolveEffort(engineConfig, session, employee, effortLevelsForModel(config, substitute, model ?? engineConfig.model), substitute),
     resumeSessionId: slot.id,
     syncedThrough: slot.lastSyncedAt,
   };

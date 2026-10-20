@@ -37,7 +37,7 @@ let terminalConfig: Record<string, unknown> | undefined;
 const killedShells: string[] = [];
 const emitted: Array<[string, unknown]> = [];
 const engineStub = { name: "stub", run: async () => ({ result: "ok" }), isAlive: () => false, kill: () => {}, killAll: () => {} };
-const queueStub = { clearQueue: () => {}, enqueue: async () => {}, getPendingCount: () => 0, getTransportState: (_k: string, s: string) => s };
+const queueStub = { clearQueue: () => {}, enqueue: async () => {}, getPendingCount: () => 0, getRowlessWaitingCount: () => 0, getTransportState: (_k: string, s: string) => s };
 const apiCtx = {
   getConfig: () => ({ gateway: {}, engines: { default: "codex" }, sessions: {}, ...(terminalConfig ? { terminal: terminalConfig } : {}) }),
   connectors: new Map(),

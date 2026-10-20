@@ -24,7 +24,7 @@ const context = {
     getEngines: () => new Map(),
     getEngine: () => undefined,
     getQueue: () => ({
-      getPendingCount: () => 0,
+      getPendingCount: () => 0, getRowlessWaitingCount: () => 0,
       getTransportState: (_key: string, status: string) => status,
     }),
   },

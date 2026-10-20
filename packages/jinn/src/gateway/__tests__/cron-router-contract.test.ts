@@ -173,7 +173,7 @@ describe("a cron job that runs a built-in action", () => {
 
     const badEngine = await call("POST", "/api/cron", { ...WALK, id: "walk-2", engine: "self-destruct" });
     expect(badEngine.status).toBe(400);
-    expect(badEngine.body).toEqual({ error: "engine must be one of claude, codex, antigravity, grok, pi, hermes, opencode, musecode" });
+    expect(badEngine.body).toEqual({ error: "engine must be one of claude, codex, antigravity, grok, pi, hermes, opencode, musecode, freebuff" });
 
     // claude is clampable, and the harness's claude catalog has no sonnet, so a
     // model that is not Claude's is refused against the effective engine.

@@ -765,6 +765,56 @@ export default function SettingsPage() {
                     ])}
                   />
                 </FieldRow>
+
+                <div
+                  className="border-t border-[var(--separator)] mt-[var(--space-3)] pt-[var(--space-3)]"
+                />
+
+                <div
+                  className="text-[length:var(--text-caption1)] font-[var(--weight-semibold)] text-[var(--text-tertiary)] mb-[var(--space-2)]"
+                >
+                  Freebuff
+                </div>
+                <FieldRow label="Binary Path">
+                  <SettingsInput
+                    value={config.engines?.freebuff?.bin ?? ""}
+                    onChange={(v) =>
+                      updateConfig(["engines", "freebuff", "bin"], v)
+                    }
+                    placeholder="freebuff"
+                  />
+                </FieldRow>
+                <FieldRow label="Model">
+                  <SettingsInput
+                    ariaLabel="Freebuff model"
+                    value={config.engines?.freebuff?.model ?? ""}
+                    onChange={(v) =>
+                      updateConfig(["engines", "freebuff", "model"], v)
+                    }
+                    placeholder="CLI's own choice, or a /model label such as MiMo v2.6 Flash Slow"
+                  />
+                </FieldRow>
+                <FieldRow label="Effort Level">
+                  <SettingsInput
+                    ariaLabel="Freebuff effort level"
+                    value={config.engines?.freebuff?.effortLevel ?? ""}
+                    onChange={(v) =>
+                      updateConfig(["engines", "freebuff", "effortLevel"], v)
+                    }
+                    placeholder="CLI's own choice, or the level shown in /model (high)"
+                  />
+                </FieldRow>
+                <FieldRow label="Max Concurrent">
+                  <SettingsInput
+                    type="number"
+                    min={1}
+                    ariaLabel="Freebuff max concurrent processes"
+                    value={String(config.engines?.freebuff?.maxConcurrent ?? 1)}
+                    onChange={(v) =>
+                      updateConfig(["engines", "freebuff", "maxConcurrent"], Math.max(1, Number(v) || 1))
+                    }
+                  />
+                </FieldRow>
               </Section>
 
               {/* -- Section 4b: Engine Fallbacks — health and fallback chains -- */}

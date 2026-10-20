@@ -1,0 +1,282 @@
+import * as pty from "node-pty";
+import type { RemoteExecutionConfig } from "../shared/config-types.js";
+import { freebuffMaxConcurrent, type FreebuffEngineConfig } from "../shared/freebuff-config.js";
+import { logger } from "../shared/logger.js";
+import { JINN_HOME } from "../shared/paths.js";
+import { neutralizeForPaste } from "../shared/skill-commands.js";
+import { isRemoteTarget } from "../shared/remote-target.js";
+import { PtyLifecycleManager, ptyHostKey, type PtyExit, type PtyHandle } from "./pty-lifecycle.js";
+import { TurnStopped, type ActiveTurn, type FreebuffEngineDeps, type Live } from "./freebuff-live.js";
+import { PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
+import type { PtyControlEvent, PtyIdleSpawnOpts, PtySnapshotSubscription, PtyViewEngine } from "./pty-view-engine.js";
+import { FREEBUFF_COLS, FREEBUFF_ROWS, FreebuffTerminal } from "./freebuff-terminal.js";
+import { FreebuffFailure } from "./freebuff-failure.js";
+import { localChatSource, type FreebuffChatSource } from "./freebuff-chat.js";
+import type { DriverTarget } from "./freebuff-driver.js";
+import { FreebuffSlots } from "./freebuff-slots.js";
+import { remoteChatSource } from "./freebuff-remote.js";
+import {
+  assertSignedIn,
+  chatsBefore,
+  freebuffChildEnv,
+  spawnLocalFreebuff,
+  spawnRemoteFreebuff,
+  type FreebuffTarget,
+  type SpawnParams,
+  type SpawnPty,
+} from "./freebuff-spawn.js";
+
+const CURSOR_POSITION_RESPONSE = "\x1b[1;1R";
+
+export function clampGeometry(cols: number, rows: number): { cols: number; rows: number } {
+  return { cols: Math.max(cols, FREEBUFF_COLS), rows: Math.max(rows, FREEBUFF_ROWS) };
+}
+
+/**
+ * The Freebuff processes: who is alive, where, and on whose slot, and the
+ * dashboard's terminal on them. A turn (see the engine that extends this) types
+ * into a process from here; the terminal view looks at the same one.
+ */
+export class FreebuffProcessPool implements PtyViewEngine {
+  protected readonly active = new Map<string, ActiveTurn>();
+  protected readonly live = new Map<string, Live>();
+  protected readonly slots: FreebuffSlots;
+  protected readonly readRemote: () => RemoteExecutionConfig | undefined;
+  protected readonly readConfig: () => FreebuffEngineConfig | undefined;
+  private readonly streams: PtyStreamManager;
+  /** A start in flight per session, so a terminal and a turn that race share one process. */
+  private readonly starting = new Map<string, Promise<Live>>();
+  /** Sessions whose process is being replaced under a turn that keeps its slot. */
+  private readonly keepSlot = new Set<string>();
+  private readonly lastGeom = new Map<string, { cols: number; rows: number }>();
+  private readonly spawnPty: SpawnPty;
+  private readonly localChats: () => FreebuffChatSource;
+
+  constructor(protected readonly lifecycle: PtyLifecycleManager, deps: FreebuffEngineDeps = {}) {
+    this.readRemote = deps.remote ?? (() => undefined);
+    this.readConfig = deps.config ?? (() => undefined);
+    this.spawnPty = deps.spawnPty ?? pty.spawn;
+    this.localChats = deps.localChats ?? (() => localChatSource());
+    this.streams = new PtyStreamManager("Freebuff PTY", (id) => this.lifecycle.getWarm(id) !== undefined);
+    this.slots = new FreebuffSlots({
+      max: () => freebuffMaxConcurrent(this.readConfig()),
+      evict: (id) => {
+        logger.info(`FreebuffInteractiveEngine: stopping ${id}'s idle process to give its slot to a waiting turn`);
+        this.lifecycle.releaseSession(id);
+      },
+    });
+    this.lifecycle.onRelease((id) => {
+      const live = this.live.get(id);
+      this.live.delete(id);
+      live?.terminal.dispose();
+      if (!this.keepSlot.delete(id)) this.slots.release(id);
+    });
+  }
+
+  // ── The process ────────────────────────────────────────────────────────────
+
+  /**
+   * The process for this session, started if it is not up. Two callers that arrive
+   * while it is starting (the dashboard's terminal and a turn) get the same one:
+   * a second process would open a second hour session and charge it again. The
+   * process is adopted here, once, as idle; a turn then marks it running.
+   */
+  protected spawnProcess(id: string, params: SpawnParams): Promise<Live> {
+    const pending = this.starting.get(id);
+    if (pending) return pending;
+    const started = this.startProcess(id, params).finally(() => this.starting.delete(id));
+    this.starting.set(id, started);
+    return started;
+  }
+
+  /** Resolves once a start in flight for this session (if any) has finished, however it ended. */
+  protected async whenStarted(id: string): Promise<void> {
+    await this.starting.get(id)?.catch(() => undefined);
+  }
+
+  private async startProcess(id: string, params: SpawnParams): Promise<Live> {
+    const live = await this.launch(id, params);
+    // A slot given away while this was starting (an idle terminal that a turn took over)
+    // is not ours any more: a process that outlives it would be one more than the cap.
+    if (!this.slots.holds(id)) {
+      this.discard(id, live);
+      throw new FreebuffFailure("its slot was taken while the process was starting");
+    }
+    this.lifecycle.adopt(id, live.handle, { hostKey: ptyHostKey(params.target) });
+    return live;
+  }
+
+  /** Stop a process that never became the session's. */
+  private discard(id: string, live: Live): void {
+    if (this.live.get(id) === live) this.live.delete(id);
+    live.terminal.dispose();
+    live.handle.kill("SIGKILL");
+    // It was wired to the stream manager when it started, so a dashboard viewer of it is told it is gone.
+    this.streams.onPtyExit(id, { exitCode: 0, signal: 9 });
+  }
+
+  /** Stop the session's process but keep its slot, for a turn that starts again at once. */
+  protected releaseKeepingSlot(id: string): void {
+    this.keepSlot.add(id);
+    this.lifecycle.releaseSession(id);
+    this.keepSlot.delete(id);
+  }
+
+  private async launch(id: string, params: SpawnParams): Promise<Live> {
+    const { target } = params;
+    await assertSignedIn(target);
+    const chats = target ? remoteChatSource(target, id) : this.localChats();
+    const before = params.chatId ? new Set<string>() : await chatsBefore(chats, id);
+    if (!this.slots.holds(id)) throw new FreebuffFailure("its slot was taken before the process started");
+    const geom = this.lastGeom.get(id) ?? { cols: FREEBUFF_COLS, rows: FREEBUFF_ROWS };
+    const env = freebuffChildEnv(id);
+    const proc = target
+      ? await spawnRemoteFreebuff({ spawnPty: this.spawnPty, target, remote: this.readRemote(), chatId: params.chatId, geom, env })
+      : spawnLocalFreebuff(this.spawnPty, params, this.readConfig()?.bin, geom, env);
+    return this.wireProcess({ id, proc, params, chats, before, geom });
+  }
+
+  private wireProcess(w: { id: string; proc: pty.IPty; params: SpawnParams; chats: FreebuffChatSource; before: Set<string>; geom: { cols: number; rows: number } }): Live {
+    const { id, proc, params, chats, before, geom } = w;
+    const handle = createPtyHandle(proc);
+    const live: Live = {
+      proc,
+      handle,
+      terminal: new FreebuffTerminal(geom.cols, geom.rows),
+      place: params.target ? "remote" : "local",
+      params,
+      ...(params.chatId ? { chat: { chatId: params.chatId, project: "" } } : {}),
+      before,
+      chats,
+      startOutput: { text: "" },
+      booted: false,
+    };
+    this.live.set(id, live);
+
+    proc.onData((data) => {
+      if (data.includes("\x1b[6n")) proc.write(CURSOR_POSITION_RESPONSE);
+      live.terminal.write(data);
+    });
+    live.startOutput = this.streams.attachWithOutputTail(id, proc, () => live.booted);
+    proc.onExit((event) => this.onProcessExit(id, live, handle, event));
+    return live;
+  }
+
+  private onProcessExit(id: string, live: Live, handle: PtyHandle, event: PtyExit | undefined): void {
+    live.exited = event ?? { exitCode: 0, signal: 0 };
+    // Judged before the release below drops it: a process we already replaced
+    // or stopped is not the one the current turn is talking to.
+    const isCurrent = this.live.get(id) === live;
+    if (this.lifecycle.getWarm(id) === handle) {
+      this.streams.onPtyExit(id, { exitCode: event?.exitCode ?? 0, signal: event?.signal ?? 0 });
+      this.lifecycle.releaseSession(id);
+    }
+    if (isCurrent) this.active.get(id)?.abort.abort(new TurnStopped({ kind: "exit", exit: live.exited, output: live.startOutput.text }));
+  }
+
+  protected driverTarget(live: Live): DriverTarget {
+    return {
+      proc: live.proc,
+      terminal: live.terminal,
+      place: live.place,
+      markBooted: () => { live.booted = true; },
+    };
+  }
+
+  // ── The dashboard's terminal ───────────────────────────────────────────────
+
+  ensureIdleSpawn(id: string, opts: PtyIdleSpawnOpts): void {
+    if (this.active.has(id)) return;
+    if (opts.cols && opts.rows) setCapped(this.lastGeom, id, clampGeometry(opts.cols, opts.rows));
+    const wantedChat = opts.engineSessionId || undefined;
+    if (!this.dropStaleTerminal(id, wantedChat)) return;
+    // A view never waits for a slot and never displaces a turn: no slot, no terminal.
+    if (!this.slots.tryAcquireIdle(id)) {
+      logger.info(`FreebuffInteractiveEngine: no free slot (maxConcurrent ${freebuffMaxConcurrent(this.readConfig())}); not starting a terminal for ${id}`);
+      return;
+    }
+    const target = isRemoteTarget(opts) ? (opts as FreebuffTarget) : undefined;
+    void this.startTerminal(id, { cwd: opts.cwd || JINN_HOME, bin: opts.bin, chatId: wantedChat, target });
+  }
+
+  /** Whether a new terminal should be started: false when a good one is already up. */
+  private dropStaleTerminal(id: string, wantedChat: string | undefined): boolean {
+    const warm = this.live.get(id);
+    if (!warm) return true;
+    if (!warm.exited && (wantedChat === undefined || wantedChat === warm.chat?.chatId)) return false;
+    this.lifecycle.releaseSession(id);
+    return true;
+  }
+
+  private async startTerminal(id: string, params: SpawnParams): Promise<void> {
+    try {
+      await this.spawnProcess(id, params);
+    } catch (err) {
+      logger.warn(`FreebuffInteractiveEngine: could not start a terminal for ${id}: ${err instanceof Error ? err.message : err}`);
+      this.slots.release(id);
+    }
+  }
+
+  subscribeWithSnapshot(sessionId: string, cb: (data: Buffer) => void, onControl?: (event: PtyControlEvent) => void): PtySnapshotSubscription {
+    return this.streams.subscribeWithSnapshot(sessionId, cb, onControl);
+  }
+
+  restartPty(sessionId: string, opts: PtyIdleSpawnOpts): void {
+    this.kill(sessionId, "Interrupted: terminal restart requested");
+    this.ensureIdleSpawn(sessionId, opts);
+  }
+
+  writeStdin(sessionId: string, text: string): void {
+    const live = this.live.get(sessionId);
+    if (live) live.proc.write(neutralizeForPaste(text) + "\r");
+  }
+
+  writeRaw(sessionId: string, data: string): void {
+    this.live.get(sessionId)?.proc.write(data);
+  }
+
+  resizePty(sessionId: string, cols: number, rows: number): void {
+    // The CLI and the screen reader stay at least as wide as the parser was written for;
+    // a narrower dashboard pane scrolls instead (see FREEBUFF_COLS).
+    const geom = clampGeometry(cols, rows);
+    setCapped(this.lastGeom, sessionId, geom);
+    this.streams.resize(sessionId, geom.cols, geom.rows);
+    const live = this.live.get(sessionId);
+    if (!live) return;
+    live.terminal.resize(geom.cols, geom.rows);
+    try { live.proc.resize(geom.cols, geom.rows); } catch { /* gone */ }
+  }
+
+  setViewing(sessionId: string, viewing: boolean): void {
+    if (viewing) this.lifecycle.viewerEnter(sessionId);
+    else this.lifecycle.viewerLeave(sessionId);
+  }
+
+  hasWarmPty(sessionId: string): boolean {
+    return this.lifecycle.getWarm(sessionId) !== undefined;
+  }
+
+  isTurnRunning(sessionId: string): boolean {
+    return this.active.has(sessionId);
+  }
+
+  kill(sessionId: string, reason = "Interrupted"): void {
+    this.active.get(sessionId)?.abort.abort(new TurnStopped({ kind: "interrupt", reason: reason.startsWith("Interrupted") ? reason : `Interrupted: ${reason}` }));
+    this.lifecycle.releaseSession(sessionId);
+  }
+
+  killAll(): void {
+    this.slots.rejectAll(new Error("Interrupted: gateway shutting down"));
+    for (const id of [...this.active.keys()]) this.kill(id, "Interrupted: gateway shutting down");
+    this.lifecycle.killAll();
+  }
+
+  /** Recycle idle warm PTYs only (org-reload); a turn in flight is never interrupted. */
+  killIdle(): void {
+    this.lifecycle.releaseIdle((id) => this.active.has(id));
+  }
+
+  isAlive(sessionId: string): boolean {
+    return this.active.has(sessionId) || this.lifecycle.getWarm(sessionId) !== undefined;
+  }
+}

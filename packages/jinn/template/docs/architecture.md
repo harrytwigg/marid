@@ -39,7 +39,7 @@ Pushes live events (session updates, engine output, cron results) to connected c
 Central router. Receives messages from connectors, resolves the target employee and engine, creates or reuses sessions, and delivers responses back through the originating connector.
 
 ### Engine Abstraction
-Uniform adapters support the canonical engines: claude, codex, antigravity, grok, pi, hermes, opencode, musecode. Each adapter owns its engine-specific session and tool integration while the gateway keeps routing uniform.
+Uniform adapters support the canonical engines: claude, codex, antigravity, grok, pi, hermes, opencode, musecode, freebuff. Each adapter owns its engine-specific session and tool integration while the gateway keeps routing uniform.
 
 ### Accounts
 An account is an engine plus the login it runs as. Claude has one per login: the gateway's own profile (`claude`), each local named profile (`claude:<key>`) and each remote host's login (`claude@<user>@<host>`). Every other engine has one. Usage limits, engine health, the usage history, the rate-limit backoff, fallback chains (`engines.<engine>.fallback`, and `engines.claude.accounts.<name>.fallback` for a declared Claude account), the Limits page and the board walk all work per account, so one account at its limit holds back only its own sessions. With a single Claude account all of this reads exactly as one engine did. See `docs/org.md`, "Claude accounts".
@@ -73,6 +73,9 @@ Both halves are written to `sessions/restart-interrupted.jsonl`, one JSON line p
 - `{"event":"resume", "outcome":"nudged"|"queue-replay"|"deferred"|"disabled"|"no-attempt-token"|"already-nudged"|"already-delivered"|"loop-guard"|"stale", ...}` — written by the new gateway for every conversational session it took over, with its own `bootId`. A `nudged` line's `detail` carries the delivery id, followed by `(requested)` or `(background)` when the session was not caught mid-turn.
 
 `grep <session id> sessions/restart-interrupted.jsonl` answers "was this session running at the restart, and what happened to it". `restart-resume` and `restart-notice` entries get a `resume` line; one with no `resume` line, or with an outcome other than `nudged` or `queue-replay`, was left for the operator. The file rotates once to `.1` at 1 MiB.
+
+### Background tasks lost outside a restart
+A claude session's Claude Code process can also end while the gateway keeps running: it exits or crashes, the idle PTY cap evicts it, or a turn respawns it on another model, effort or Claude profile. Any background Bash task, Monitor or background sub-agent it launched is no longer tracked (it is stopped with the process, or left running after a crash), and its completion notification never arrives, so nothing would re-invoke the model. The gateway sends the session one continue turn (a `[Gateway]` notification in its transcript) naming each lost task id and what it was running, and clears those tasks from the session's "waiting on" list. The nudge goes through the delivery outbox keyed on the lost task ids, so one loss is nudged once, and a session is nudged at most once in 30 minutes: a later loss inside that window is only logged. Without that bound, sessions that keep background tasks running and outnumber the idle PTY cap would evict and nudge each other for ever. It is not sent when the session was stopped on purpose (stop, reset, delete, an interrupting message, an engine switch, a terminal restart), when the gateway is shutting down (the restart record covers that), for an archived session or a board walk turn, or when `gateway.resumeInterruptedSessions: false`; the gateway log names the lost tasks either way. The idle PTY cap evicts a PTY with live background tasks only after every other idle PTY.
 
 ## Data Flow
 

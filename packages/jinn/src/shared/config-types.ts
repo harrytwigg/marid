@@ -15,6 +15,7 @@ import type { ClaudeAccountConfig } from "./claude-accounts-config.js";
 import type { FallbackChainEntry } from "./fallback-chain-wire.js";
 import type { EngineName } from "./models.js";
 import type { MusecodeEngineConfig } from "./musecode-config.js";
+import type { FreebuffEngineConfig } from "./freebuff-config.js";
 import type { RealtimeConfig, SttConfig, TalkConfig } from "./voice.js";
 import type {
   ConnectorInstance,
@@ -59,7 +60,8 @@ export interface JinnConfig {
     /** Explicit escape hatch for unauthenticated 0.0.0.0/LAN/Tailscale binds. */
     insecureAllowUnauthenticatedNetwork?: boolean;
     /** Nudge sessions this gateway's own restart interrupted to continue on the
-     *  next boot. Default true; false leaves them interrupted for the operator. */
+     *  next boot, and a claude session whose process ended under background
+     *  tasks to carry on. Default true; false leaves them for the operator. */
     resumeInterruptedSessions?: boolean;
     /** Bounded Todo recovery. Unset = classify-only: lanes and
      *  metrics, no automatic re-arm. `auto` is a reviewed production gate. */
@@ -170,6 +172,7 @@ export interface JinnConfig {
       autoCompact?: AutoCompactConfig; // server mode only
     };
     musecode?: MusecodeEngineConfig;
+    freebuff?: FreebuffEngineConfig;
   };
   /** Optional model + capability registry. When absent, synthesized from engines.<name>.model. */
   models?: ModelsConfig;

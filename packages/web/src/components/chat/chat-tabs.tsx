@@ -11,6 +11,8 @@ export interface ChatHeaderPillsProps {
   /** Conversation title — slim inline title on desktop, centered on the mobile
    *  thread nav bar. */
   title?: string
+  /** Who the chat runs as — a quiet line under the centred title on the mobile nav bar. */
+  subtitle?: string
   /** Hide the thread chrome on mobile (e.g. over the chat-list view, which is the
    *  body and has its own header + the bottom tab bar). */
   hideOnMobile?: boolean
@@ -104,6 +106,7 @@ function DesktopThreadChrome({ title, backTo, onNew, moreMenu }: Pick<ChatHeader
 // right actions pill (compose · more) stays.
 export function ChatHeaderPills({
   title,
+  subtitle,
   chatId,
   hideOnMobile,
   onBack,
@@ -191,12 +194,22 @@ export function ChatHeaderPills({
                 <ChevronLeft size={24} className="shrink-0" />
               </button>
             )}
-            <span
-              data-title-enter={titleEntering || undefined}
-              className="pointer-events-none min-w-0 truncate text-center text-body font-[var(--weight-semibold)] text-[var(--text-primary)]"
-            >
-              {navTitle}
-            </span>
+            <div className="pointer-events-none flex min-w-0 flex-col items-center">
+              <span
+                data-title-enter={titleEntering || undefined}
+                className="max-w-full truncate text-center text-body font-[var(--weight-semibold)] text-[var(--text-primary)]"
+              >
+                {navTitle}
+              </span>
+              {subtitle ? (
+                <span
+                  data-chat-mobile-employee
+                  className="max-w-full truncate text-center text-[length:var(--text-caption1)] leading-tight text-[var(--text-tertiary)]"
+                >
+                  {subtitle}
+                </span>
+              ) : null}
+            </div>
             <div ref={setActions} className="flex shrink-0 items-center justify-self-end">
               <PillButton onClick={onNew} title="New chat (N)" ariaLabel="New chat">
                 <SquarePen size={18} />

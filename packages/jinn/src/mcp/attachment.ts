@@ -66,6 +66,9 @@ export const JINN_ATTACH_DEFAULT = true;
  *   - pi:     per-session generated `--extension` file; id/capability ride the
  *             Pi child env.
  *   - antigravity: guarded Gemini MCP config entry plus per-session child env.
+ * Not on the list: freebuff. It is a terminal program that loads MCP servers
+ * only from a repository's own `mcp.json`, and writing one into an employee's
+ * checkout is too invasive, so a Freebuff employee has no Marid tools.
  * (Lives here, not in resolver.ts, so the attachment decision can consult it
  * without an import cycle; resolver.ts re-exports it.)
  */

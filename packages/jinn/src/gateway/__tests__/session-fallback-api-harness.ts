@@ -50,7 +50,7 @@ export function resetFallbackFixture(): void {
 const engineStub = { name: "stub", run: () => new Promise(() => {}), isAlive: () => false, kill: () => {}, killAll: () => {} };
 const queueStub = {
   enqueue: async () => {}, clearCancelled: () => {}, clearQueue: () => {}, holdForCallbackDrain: () => {},
-  releaseCallbackDrain: () => {}, hasInFlightItem: () => false, getPendingCount: () => 0,
+  releaseCallbackDrain: () => {}, hasInFlightItem: () => false, getPendingCount: () => 0, getRowlessWaitingCount: () => 0,
   getTransportState: (_key: string, status: string) => status,
 };
 

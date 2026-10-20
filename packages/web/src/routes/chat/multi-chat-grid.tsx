@@ -30,6 +30,7 @@ interface MultiChatGridProps {
     pendingUserMessage: PaneProps['pendingUserMessage']
     initialEmployee: PaneProps['initialEmployee']
     onSessionCreated: PaneProps['onSessionCreated']
+    onNewChatEmployeeChange?: PaneProps['onNewChatEmployeeChange']
     viewMode: ViewMode
     focusTrigger: number
     delegatedActivity: DelegatedActivity | null | undefined
@@ -155,10 +156,10 @@ function paneChrome(owner: MultiChatGridProps, sessionId: string | null): Pick<P
 
 /** What a pane composes with when it has no session yet, by which composer it is: the route's own
  *  (primary), the "Open chat" picker, or a new chat tab of the layout, which becomes its chat in place. */
-function paneComposer(owner: MultiChatGridProps, gridId: string): Pick<PaneProps, 'onSessionCreated' | 'initialEmployee' | 'pendingUserMessage' | 'newChatEmptyState'> {
+function paneComposer(owner: MultiChatGridProps, gridId: string): Pick<PaneProps, 'onSessionCreated' | 'initialEmployee' | 'pendingUserMessage' | 'newChatEmptyState' | 'onNewChatEmployeeChange'> {
   if (gridId === owner.primary.paneKey) {
-    const { onSessionCreated, initialEmployee, pendingUserMessage } = owner.primary
-    return { onSessionCreated, initialEmployee, pendingUserMessage }
+    const { onSessionCreated, initialEmployee, pendingUserMessage, onNewChatEmployeeChange } = owner.primary
+    return { onSessionCreated, initialEmployee, pendingUserMessage, onNewChatEmployeeChange }
   }
   const pickerPane = gridId === owner.pickerPane?.paneKey ? owner.pickerPane : undefined
   if (pickerPane) return { onSessionCreated: pickerPane.onSessionCreated, newChatEmptyState: <SessionPicker onPick={pickerPane.onPick} /> }

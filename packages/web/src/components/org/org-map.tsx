@@ -25,7 +25,14 @@ interface OrgMapProps {
   onDepartmentClick?: (slug: string) => void
 }
 
-export function OrgMap({ employees, hierarchy, selectedName, onNodeClick, scopes, onDepartmentClick }: OrgMapProps) {
+/** The flow's nodes and edges, rebuilt whenever the roster, the hierarchy, the
+ *  selection or a department's scope changes. */
+function useOrgLayout(
+  employees: Employee[],
+  hierarchy: OrgHierarchy | undefined,
+  selectedName: string | null,
+  scopes: Record<string, DepartmentScopeWire> | undefined,
+) {
   const buildLayout = useCallback(
     () => computeOrgLayout(employees, hierarchy, selectedName, scopes),
     [employees, hierarchy, selectedName, scopes],
@@ -40,6 +47,12 @@ export function OrgMap({ employees, hierarchy, selectedName, onNodeClick, scopes
     setNodes(n)
     setEdges(e)
   }, [buildLayout, setNodes, setEdges])
+
+  return { nodes, edges, onNodesChange, onEdgesChange }
+}
+
+export function OrgMap({ employees, hierarchy, selectedName, onNodeClick, scopes, onDepartmentClick }: OrgMapProps) {
+  const { nodes, edges, onNodesChange, onEdgesChange } = useOrgLayout(employees, hierarchy, selectedName, scopes)
 
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
