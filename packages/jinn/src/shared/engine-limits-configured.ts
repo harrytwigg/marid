@@ -36,6 +36,7 @@ export function scopeEngineLimitsToConfigured(
   if (response.accounts) {
     const accounts = Object.fromEntries(Object.entries(response.accounts).filter(([name]) => names.has(name)));
     if (Object.keys(accounts).length > 0) scoped.accounts = accounts;
+    else delete scoped.accounts;
   }
   return scoped;
 }

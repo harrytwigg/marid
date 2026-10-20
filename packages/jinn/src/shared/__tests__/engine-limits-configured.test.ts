@@ -92,4 +92,13 @@ describe("scopeEngineLimitsToConfigured", () => {
     expect(Object.keys(scoped.engines)).toEqual(["claude"]);
     expect(scoped.accounts).toBeUndefined();
   });
+
+  it("drops an accounts block whose every engine was filtered out", () => {
+    const scoped = scopeEngineLimitsToConfigured(
+      response(["claude", "grok"], { grok: ["grok", "grok:ab12cd34"] }),
+      config({}),
+    );
+    expect(Object.keys(scoped.engines)).toEqual(["claude"]);
+    expect(scoped.accounts).toBeUndefined();
+  });
 });
