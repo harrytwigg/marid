@@ -185,6 +185,64 @@ child, and carries the tree to completion. Only the root goes to the operator.
    review, does exactly that. "Never set done" becomes "never set done, except accepting
    a child of a Todo you own".
 
+## Part D: Quiet executing Todos
+
+Parts A to C act when a child Todo changes status. The commonest stall changes nothing:
+the producer ends its turn saying it is waiting on something (a background test run, a
+build), the thing finishes or dies without waking the session, and the Todo sits in
+`executing` with nothing running. Its parent counts an `executing` child as an open
+delegation, so the parent looks busy too, and the first thing to notice is the 4 h stall
+check. Part D notices within minutes.
+
+1. **Quiet.** An `executing` Todo is quiet when it has at least one linked execution
+   session, `attemptActivity()` says nothing is in flight (no running or waiting attempt,
+   no live background sub-agent, no open delegation), and the newest of its attempts'
+   last activity and the moment it entered `executing` is older than the quiet window:
+   - `QUIET_AFTER_MS` = 15 min normally;
+   - `QUIET_BACKGROUND_TASK_MS` = 60 min when the newest attempt still counts a
+     background shell task of its own (`isAwaitingOwnBackgroundTask`): a test suite may
+     legitimately run that long, but a shell task may also never end (a dev server), so
+     it only stretches the window rather than counting as work.
+2. **Ladder**, at most one step of each per executing stint (a stint is keyed on the
+   moment the Todo last entered `executing`; any status move starts a new one):
+   1. **Nudge the producer**: one outbox delivery (`deliveryKind: "todo-quiet-nudge"`,
+      `sourceKind: "work-item"`, `sourceId: <todo>`, `sourceAttempt:
+      "quiet-nudge:<stint>"`) to the newest messageable execution session, saying the Todo
+      is still `executing` with nothing running, that a background command it waited on
+      has finished or was lost and will not wake it, and what to do: check the result and
+      continue, `blocked` with a note if it waits on a person, `in_review` if it is done.
+      If no execution session can be messaged, skip straight to step 2.
+   2. **Escalate**: when the Todo is quiet again after the nudge (its own window measured
+      from the nudge or the turn that answered it, whichever is later), one delivery
+      (`deliveryKind: "todo-quiet-escalation"`, `sourceAttempt:
+      "quiet-escalation:<stint>"`) to whoever owns the work from above: the parent
+      owner session (Part A's resolution) for a child Todo, else the session the
+      producer reports to. If the Todo has a parent in `executing` and no owner session
+      can be messaged, the parent is re-dispatched with the escalation as the reason. The
+      message names the Todo, its producer session, when it went quiet and that a nudge
+      did not move it, and offers: read the session, nudge it, re-dispatch the child, or
+      take it back.
+3. **State**: an additive table, one row per Todo, reset when the stint changes:
+
+   ```sql
+   CREATE TABLE IF NOT EXISTS work_item_quiet_watch (
+     work_item_id     TEXT PRIMARY KEY REFERENCES work_items(id) ON DELETE CASCADE,
+     stint            TEXT NOT NULL,   -- when the Todo last entered executing
+     nudged_at        TEXT,
+     nudge_session_id TEXT,
+     escalated_at     TEXT,
+     updated_at       TEXT NOT NULL
+   );
+   ```
+4. **Sweep** every 60 s from the gateway's Todo sweeps; startup-safe because the state
+   is durable and the deliveries are keyed. `gateway.todoQuietWatch: { enabled?,
+   afterMinutes?, backgroundTaskMinutes? }` tunes it; unset means on with the defaults
+   above.
+5. **Fit with the rest.** The engine-process-death nudge (a session whose Claude Code
+   process ended under background tasks gets one continue turn) covers one cause sooner;
+   Part D is the backstop for every cause. Part B's hourly heartbeat remains the parent's
+   own periodic look; Part D makes a stalled child reach the parent without waiting for it.
+
 ## Acceptance
 
 - A child Todo started by the board walk or `dispatch_work_item` (no session parent) wakes
@@ -197,5 +255,9 @@ child, and carries the tree to completion. Only the root goes to the operator.
   duplicated, and disarmed when the last child settles. Tests.
 - A child in `in_review` under an employee-owned parent is accepted or bounced by the
   parent owner, stays off the operator's desk, and the stall check agrees. Tests.
+- An `executing` Todo whose session went idle with nothing running is nudged once after
+  15 min (60 min while its own background shell task is counted), and escalated once to
+  its parent owner if it goes quiet again; a working, delegating or blocked Todo never is.
+  Tests.
 - An isolated instance shows a parent with two board-walk children being woken and
   completing.
