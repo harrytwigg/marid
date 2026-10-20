@@ -908,6 +908,11 @@ export function useLiveSession(
         setStreamingText('')
         setLiveContextTokens(null)
         clearStatusMessage()
+        // `session:started` marked the record running; nothing else clears that for a stopped turn.
+        setCurrentSession((prev) => prev ? { ...prev, status: 'interrupted' } : prev)
+        api.getSession(sid, { messages: false })
+          .then((s) => { if (sessionIdRef.current === sid) setCurrentSession(s as Record<string, unknown>) })
+          .catch(() => { /* best-effort; the next load picks it up */ })
       }
 
       if (event === 'session:completed') {

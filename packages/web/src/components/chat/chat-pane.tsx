@@ -437,7 +437,8 @@ export function ChatPane({
   const showSessionHydration = useHydrationSpinner(Boolean(sessionId && hydrating && messages.length === 0 && !streamingText))
   const titleBarState = paneTitleBarState({ sessionId, currentSession, loading, turnPending,
     backgroundActivity, delegatedActivity, paneTitle, paneEmployee, portalName })
-  const titleBarViewControls = paneViewControls(titleBarState.session, engineRegistry)
+  // The view lock follows the live turn, not `turnPending`: a stopped turn has no answer, so it stays pending.
+  const titleBarViewControls = paneViewControls(titleBarState.session, engineRegistry, loading || currentSession?.status === 'running')
   const paneDelegatedActivity = (titleBarState.session.delegatedActivity as DelegatedActivity | null | undefined) ?? null
   const subagentView = useSubagentView(sessionId)
   // A terminal session is its shell and nothing else: no transcript, no composer.

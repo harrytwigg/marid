@@ -17,7 +17,7 @@ import { ChatSidebar, type SidebarOrder } from '@/components/chat/chat-sidebar'
 import { NavRibbon } from '@/components/pill-nav'
 import { MobileTabBar } from '@/components/chat/mobile-tab-bar'
 import type { FreshChatSourceSession } from '@/components/chat/chat-pane'
-import { viewSwitchLockedEngine, viewSwitchLockedTitle } from '@/components/chat/chat-pane-title-bar'
+import { cliUnavailableTitle, viewSwitchLockedEngine, viewSwitchLockedTitle } from '@/components/chat/chat-pane-title-bar'
 import { ThreadPeek, type CommsPeekData } from '@/components/chat/thread-peek'
 import { ChatErrorBoundary } from './chat-error-boundary'
 import { ChatHeaderMenu } from './chat-header-menu'
@@ -829,7 +829,7 @@ function ChatPage() {
   const viewSwitchLocked = viewSwitchLockedEngine(sessionMeta?.engine, engineRegistry) && activeSessionTab?.sessionId === focusedSessionId && activeSessionTab.status === 'running'
   const cliTitle = viewSwitchLocked
     ? viewSwitchLockedTitle(sessionMeta?.engine)
-    : cliModeAvailable ? undefined : 'CLI view is not available for this engine'
+    : cliModeAvailable ? undefined : cliUnavailableTitle(engineRegistry)
   const effectiveViewMode: ViewMode = cliModeAvailable ? viewMode : 'chat'
 
   const moreMenu = (

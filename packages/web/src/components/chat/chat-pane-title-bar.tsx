@@ -73,17 +73,29 @@ export function viewSwitchLockedTitle(engine: string | undefined): string {
   return `${engineDisplayName(engine ?? '')} view switching is locked while a turn is running`
 }
 
-export function paneViewControls(session: Session, engineRegistry?: EnginesResponse) {
+/** Why the CLI view is off for an engine the registry does not (yet) offer it for. */
+export function cliUnavailableTitle(engineRegistry?: EnginesResponse): string {
+  return engineRegistry ? 'CLI view is not available for this engine' : 'Checking which engines offer a CLI view…'
+}
+
+function cliTitleFor(engine: string | undefined, locked: boolean, available: boolean, engineRegistry?: EnginesResponse): string | undefined {
+  if (locked) return viewSwitchLockedTitle(engine)
+  return available ? undefined : cliUnavailableTitle(engineRegistry)
+}
+
+/**
+ * `turnRunning` is whether a turn is live now. It defaults to the session's status, which in a pane also
+ * reads "running" for a turn that was stopped and never answered; a pane passes the live signal itself.
+ */
+export function paneViewControls(session: Session, engineRegistry?: EnginesResponse, turnRunning = session.status === 'running') {
   const engine = typeof session.engine === 'string' ? session.engine : undefined
   if (isTerminalSession(session)) return { cliModeAvailable: false, viewSwitchLocked: false, cliTitle: 'A terminal has no chat view' }
   const cliModeAvailable = !engine || engineRegistry?.engines?.[engine]?.supportsPty === true
-  const viewSwitchLocked = viewSwitchLockedEngine(engine, engineRegistry) && session.status === 'running'
+  const viewSwitchLocked = viewSwitchLockedEngine(engine, engineRegistry) && turnRunning
   return {
     cliModeAvailable,
     viewSwitchLocked,
-    cliTitle: viewSwitchLocked
-      ? viewSwitchLockedTitle(engine)
-      : cliModeAvailable ? undefined : 'CLI view is not available for this engine',
+    cliTitle: cliTitleFor(engine, viewSwitchLocked, cliModeAvailable, engineRegistry),
   }
 }
 
