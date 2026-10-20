@@ -511,6 +511,7 @@ export function useLiveSession(
   const loadingRef = useRef(loading)
   useEffect(() => { loadingRef.current = loading }, [loading])
   const lastDeltaAtRef = useRef<number>(0)
+  const turnStartsRef = useRef(0) // bumped by every turn start, so a late refetch can tell it was overtaken
   const streamingTextRef = useRef(initialSnapshot?.streamingText ?? '')
   const [streamingText, setStreamingText] = useState(initialSnapshot?.streamingText ?? '')
   const [liveContextTokens, setLiveContextTokens] = useState<number | null>(initialSnapshot?.liveContextTokens ?? null)
@@ -683,6 +684,7 @@ export function useLiveSession(
       if (event === 'session:started' || event === 'session:delta') setMessages(clearPendingSend)
 
       if (event === 'session:started') {
+        turnStartsRef.current += 1
         setLoading(true)
         setTurnPending(true)
         setLiveFinalResponseId(null)
@@ -908,6 +910,13 @@ export function useLiveSession(
         setStreamingText('')
         setLiveContextTokens(null)
         clearStatusMessage()
+        // `session:started` marked the record running; nothing else clears that for a stopped turn.
+        setCurrentSession((prev) => prev ? { ...prev, status: 'interrupted' } : prev)
+        // A resend can start the next turn before this answers; its record must not be overwritten.
+        const startsBefore = turnStartsRef.current
+        api.getSession(sid, { messages: false })
+          .then((s) => { if (sessionIdRef.current === sid && turnStartsRef.current === startsBefore) setCurrentSession(s as Record<string, unknown>) })
+          .catch(() => { /* best-effort; the next load picks it up */ })
       }
 
       if (event === 'session:completed') {
@@ -1328,6 +1337,7 @@ export function useLiveSession(
       intermediateStartRef.current = next.length
       return next
     })
+    turnStartsRef.current += 1
     setLoading(true)
     setTurnPending(true)
     setLiveFinalResponseId(null)

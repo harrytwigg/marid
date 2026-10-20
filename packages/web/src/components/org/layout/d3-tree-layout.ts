@@ -19,9 +19,23 @@ const ROW_GAP = 40 // vertical gap between rows of blocks
 const COO_ROW_GAP = 56 // gap below the COO node before the department rows
 const MIN_TARGET_W = 2200 // target row width the packer wraps at
 
+// Inter-department routes. A COO -> root edge drawn directly crosses every
+// block stacked between them once the packer wraps to a second row, so rows
+// below the first are reached through a margin lane and the clear band above
+// their own row. The margin is reserved on both sides so a lane never runs
+// through a block, and the trunk is the shared band under the COO.
+const LANE_PAD = 56 // margin reserved outside the packed blocks
+const LANE_INSET = 16 // distance from the canvas edge to a route lane
+const TRUNK_Y = NODE_H + 16 // shared horizontal band below the COO node
+
 export interface LayoutResult {
   nodes: Node[]
   edges: Edge[]
+}
+
+interface Point {
+  x: number
+  y: number
 }
 
 interface TreeDatum {
@@ -90,6 +104,49 @@ function buildDeptBlock(dept: string, members: Employee[]): DeptBlock {
   return { dept, rootNames, local, w, h, x: 0, y: 0 }
 }
 
+function dedupePoints(points: Point[]): Point[] {
+  return points.filter(
+    (p, i) => i === 0 || p.x !== points[i - 1].x || p.y !== points[i - 1].y,
+  )
+}
+
+interface RouteLanes {
+  left: number
+  right: number
+  firstRowY: number
+}
+
+/**
+ * Route a COO -> department-root edge. Block-local roots sit at the top of
+ * their block, so the edge may enter from above; it just may not cross another
+ * block or card on the way there.
+ *
+ * First row: fan out in the clear band below the COO, above every block.
+ * Later rows: drop down a margin lane to the band above the target's row, then
+ * run across that band to the root's column. Both bands are outside every
+ * department box by construction, so the route never has to negotiate a card.
+ */
+function routeToRoot(
+  coo: Point,
+  target: Point,
+  block: DeptBlock,
+  lanes: RouteLanes,
+): Point[] {
+  const head: Point[] = [coo, { x: coo.x, y: TRUNK_Y }]
+  if (block.y <= lanes.firstRowY) {
+    return dedupePoints([...head, { x: target.x, y: TRUNK_Y }, target])
+  }
+  const laneX = target.x < coo.x ? lanes.left : lanes.right
+  const rowGapY = block.y - ROW_GAP / 2
+  return dedupePoints([
+    ...head,
+    { x: laneX, y: TRUNK_Y },
+    { x: laneX, y: rowGapY },
+    { x: target.x, y: rowGapY },
+    target,
+  ])
+}
+
 /**
  * Compact org layout: COO anchored on top, each department laid as its own
  * tidy subtree, department blocks shelf-packed into balanced rows. Keeps a
@@ -153,14 +210,16 @@ export function buildTreeLayout(
   }
   if (row.blocks.length > 0) rows.push(row)
 
-  const canvasW = rows.reduce((m, r) => Math.max(m, r.w - BLOCK_GAP), 0)
+  const packedW = rows.reduce((m, r) => Math.max(m, r.w - BLOCK_GAP), 0)
+  const canvasW = packedW + LANE_PAD * 2
   const deptTop = NODE_H + COO_ROW_GAP
 
-  // Assign final canvas coords: center each row horizontally, stack rows.
+  // Assign final canvas coords: center each row horizontally inside the
+  // margin-reserved canvas, stack rows.
   let cursorY = deptTop
   for (const r of rows) {
     const rowW = r.w - BLOCK_GAP
-    const offsetX = (canvasW - rowW) / 2
+    const offsetX = (packedW - rowW) / 2 + LANE_PAD
     for (const b of r.blocks) {
       b.x += offsetX
       b.y = cursorY
@@ -224,16 +283,22 @@ export function buildTreeLayout(
 
   // ── Edges ──
   const rfEdges: Edge[] = []
-  const pushEdge = (source: string, target: string) => {
+  const pushEdge = (source: string, target: string, points?: Point[]) => {
     const hi = highlighted.has(source) && highlighted.has(target)
     rfEdges.push({
       id: `${source}-${target}`,
       source,
       target,
-      type: "smoothstep",
-      data: { highlighted: hi },
+      type: points ? "orgRoute" : "smoothstep",
+      data: points ? { highlighted: hi, points } : { highlighted: hi },
     })
   }
+  const lanes: RouteLanes = {
+    left: LANE_INSET,
+    right: canvasW - LANE_INSET,
+    firstRowY: deptTop,
+  }
+  const cooPoint = { x: canvasW / 2, y: NODE_H }
   // within-department parent -> child
   for (const b of blocks) {
     const members = deptMembers.get(b.dept) ?? []
@@ -241,8 +306,14 @@ export function buildTreeLayout(
     for (const m of members) {
       if (m.parentName && set.has(m.parentName)) pushEdge(m.parentName, m.name)
     }
-    // COO -> each department root
-    if (executive) for (const r of b.rootNames) pushEdge(executive.name, r)
+    if (!executive) continue
+    // COO -> each department root, routed clear of every block between them.
+    for (const r of b.rootNames) {
+      const lp = b.local.get(r)
+      if (!lp) continue
+      const target = { x: b.x + lp.x + NODE_W / 2, y: b.y + lp.y }
+      pushEdge(executive.name, r, routeToRoot(cooPoint, target, b, lanes))
+    }
   }
 
   return { nodes: rfNodes, edges: rfEdges }

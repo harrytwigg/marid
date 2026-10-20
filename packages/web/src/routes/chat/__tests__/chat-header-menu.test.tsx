@@ -157,6 +157,20 @@ describe('ChatHeaderMenu', () => {
     expect(setAndPersistViewMode).not.toHaveBeenCalled()
   })
 
+  // A disabled item takes no pointer events, so its title tooltip never shows: the reason has to be on the page.
+  it('says in the menu why the view switch is locked or the CLI is unavailable', () => {
+    const { unmount } = renderMenu({ viewSwitchLocked: true, cliTitle: 'Muse Code view switching is locked while a turn is running' })
+    expect(screen.getByTestId('view-mode-reason').textContent).toBe('Muse Code view switching is locked while a turn is running')
+    unmount()
+
+    const unavailable = renderMenu({ cliModeAvailable: false, cliTitle: 'CLI view is not available for this engine' })
+    expect(screen.getByTestId('view-mode-reason').textContent).toBe('CLI view is not available for this engine')
+    unavailable.unmount()
+
+    renderMenu()
+    expect(screen.queryByTestId('view-mode-reason')).toBeNull()
+  })
+
   it('archives, or unarchives an archived chat', () => {
     const onArchive = vi.fn()
     const onUnarchive = vi.fn()

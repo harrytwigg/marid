@@ -3508,6 +3508,7 @@ export async function handleApiRequest(
           const authorized = authorizeWorkItemDelegation(
             { kind: "session", callerId: delegationCaller.callerId, session: getSession(delegationCaller.callerId)! },
             workItem,
+            employeeName,
           );
           if (!authorized.ok) return json(res, { error: authorized.error }, authorized.status);
         }

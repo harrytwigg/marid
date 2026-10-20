@@ -21,6 +21,7 @@ import { runtimeActivity, type RuntimeActivityInfo } from "../sessions/backgroun
 import { createRuntimeActivityHandler } from "./runtime-activity.js";
 import { getPackageVersion } from "../shared/version.js";
 import { PRODUCT_NAME, productBanner } from "../shared/brand.js";
+import { LOST_BACKGROUND_NUDGE_WINDOW_MS, notifyLostBackgroundTasks } from "../sessions/lost-background-tasks.js";
 import { acknowledgeRestartRequesters, backgroundWorkAtShutdown, interruptRunningSessionsForShutdown, recordSessionsRunningAtBoot, resumeRestartInterruptedSessions } from "../sessions/restart-resume.js";
 import { initDb } from "../shared/db.js";
 import { SessionManager, type RouteOptions } from "../sessions/manager.js";
@@ -876,6 +877,22 @@ export async function startGateway(
     });
   }
 
+  // A claude session whose process ended under background tasks (idle eviction,
+  // a respawn, a crash) is never re-invoked by them: ask it to carry on. Not
+  // while shutting down, when the restart record nudges what the shutdown kills.
+  let shuttingDown = false;
+  interactiveClaudeEngine.onLostBackgroundTasks((sessionId, tasks) => {
+    if (shuttingDown) return;
+    const result = notifyLostBackgroundTasks(sessionId, tasks);
+    const ids = tasks.map((task) => task.id).join(", ");
+    if (result.claimed) logger.info(`Asked session ${sessionId} to carry on after its process ended under ${tasks.length} background task(s)`);
+    else if (result.reason === "rate-limited") {
+      logger.warn(`Did not ask session ${sessionId} to carry on after losing background tasks (${ids}): it was already asked within the last ${LOST_BACKGROUND_NUDGE_WINDOW_MS / 60_000}m`);
+    } else if (result.reason !== "already-nudged" && result.reason !== "already-delivered") {
+      logger.info(`Did not ask session ${sessionId} to carry on after losing background tasks (${ids}): ${result.reason}`);
+    }
+  });
+
   // Unsolicited-Stop consumer: a Stop hook nobody claims within the registry's
   // grace delay means a PTY-native turn (typed straight into the CLI/xterm
   // view — no run() in flight), a Stop past the late-recovery window, or Claude
@@ -1277,6 +1294,7 @@ export async function startGateway(
   // Return cleanup function
   return async () => {
     logger.info("Gateway cleanup starting...");
+    shuttingDown = true;
 
     // Stop the periodic sweeps before we start marking sessions interrupted below — a mid-shutdown sweep must not race the teardown.
     stopStatusReconciler(); stopWorkItemReconciler(); stopTodoSweeps(); stopSessionSchedulers();

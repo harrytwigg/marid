@@ -1,11 +1,12 @@
-import { DropdownMenuRadioGroup, DropdownMenuRadioItem } from '@/components/ui/dropdown-menu'
+import { DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem } from '@/components/ui/dropdown-menu'
 import { SESSION_MENU_ITEM_CLASS } from '@/components/chat/session-row-menu'
 import { cn } from '@/lib/utils'
 import type { ViewMode } from '@/lib/view-mode'
 
 // The Chat/CLI choice shared by the header's More menu and a pane's title-bar menu, so the two read
 // alike: two radio items, which arrows, typeahead and Enter reach (a pair of buttons inside the menu
-// are skipped by the menu's own keys). Choosing one closes the menu.
+// are skipped by the menu's own keys). Choosing one closes the menu. A disabled item takes no
+// pointer events, so its `title` never shows: the reason it is disabled is written under the pair.
 const VIEW_ITEM_CLASS = cn(
   SESSION_MENU_ITEM_CLASS,
   'pl-8 data-[selected]:bg-[var(--accent-fill)] data-[selected]:text-[var(--accent)] disabled:opacity-45',
@@ -24,14 +25,22 @@ export function ViewModeItems({ viewMode, cliModeAvailable, viewSwitchLocked, cl
     if (viewSwitchLocked || (mode === 'cli' && !cliModeAvailable)) return
     onChange(mode === 'cli' ? 'cli' : 'chat')
   }
+  const disabledReason = (viewSwitchLocked || !cliModeAvailable) ? cliTitle : undefined
   return (
-    <DropdownMenuRadioGroup aria-label="View" value={viewMode} onValueChange={choose}>
-      <DropdownMenuRadioItem value="chat" className={VIEW_ITEM_CLASS} disabled={viewSwitchLocked} title={viewSwitchLocked ? cliTitle : undefined}>
-        Chat
-      </DropdownMenuRadioItem>
-      <DropdownMenuRadioItem value="cli" className={cn(VIEW_ITEM_CLASS, 'font-mono')} disabled={!cliModeAvailable || viewSwitchLocked} title={cliTitle}>
-        CLI
-      </DropdownMenuRadioItem>
-    </DropdownMenuRadioGroup>
+    <>
+      <DropdownMenuRadioGroup aria-label="View" value={viewMode} onValueChange={choose}>
+        <DropdownMenuRadioItem value="chat" className={VIEW_ITEM_CLASS} disabled={viewSwitchLocked} title={viewSwitchLocked ? cliTitle : undefined}>
+          Chat
+        </DropdownMenuRadioItem>
+        <DropdownMenuRadioItem value="cli" className={cn(VIEW_ITEM_CLASS, 'font-mono')} disabled={!cliModeAvailable || viewSwitchLocked} title={cliTitle}>
+          CLI
+        </DropdownMenuRadioItem>
+      </DropdownMenuRadioGroup>
+      {disabledReason ? (
+        <DropdownMenuLabel data-testid="view-mode-reason" className="max-w-[15rem] whitespace-normal px-8 pb-1.5 pt-0 text-[length:var(--text-caption2)] font-normal text-[var(--text-tertiary)]">
+          {disabledReason}
+        </DropdownMenuLabel>
+      ) : null}
+    </>
   )
 }

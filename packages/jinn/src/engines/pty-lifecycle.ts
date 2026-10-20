@@ -102,6 +102,8 @@ interface Entry {
   handle: PtyHandle;
   turnRunning: boolean;
   runtimeActive: boolean;
+  /** Background tasks run in it that would die with it; it is evicted last. */
+  holdsBackgroundTasks: boolean;
   viewerCount: number;
   viewingEndedAt: number; // epoch ms; 0 while at least one viewer is attached
   lastTurnEndedAt: number; // epoch ms; 0 if no turn has completed yet
@@ -115,6 +117,7 @@ export interface PtyIdleCandidate {
   idleSince: number;
   hostKey: string;
   selfCapped: boolean;
+  holdsBackgroundTasks: boolean;
 }
 
 /** Release the stalest idle PTYs on every host that is over its cap. A number
@@ -133,7 +136,8 @@ export function enforcePtyIdleCap(
   }
   for (const [hostKey, list] of byHost) {
     const max = Math.max(0, capFor(hostKey));
-    const stalestFirst = list.sort((a, b) => a.idleSince - b.idleSince);
+    // A PTY running background tasks goes last: they die with it.
+    const stalestFirst = list.sort((a, b) => Number(a.holdsBackgroundTasks) - Number(b.holdsBackgroundTasks) || a.idleSince - b.idleSince);
     for (const victim of stalestFirst.slice(0, Math.max(0, stalestFirst.length - max))) {
       victim.manager.releaseSession(victim.sessionId);
     }
@@ -153,6 +157,7 @@ export class PtyLifecycleManager {
       handle,
       turnRunning,
       runtimeActive: false,
+      holdsBackgroundTasks: false,
       viewerCount,
       viewingEndedAt: viewerCount > 0 ? 0 : Date.now(),
       lastTurnEndedAt: turnRunning ? 0 : Date.now(),
@@ -206,6 +211,12 @@ export class PtyLifecycleManager {
     e.runtimeActive = active;
     this.enforceLocalIdleCap();
     this.opts.onIdleStateChange?.();
+  }
+
+  /** Order only: the idle cap still evicts it once every other candidate is gone. */
+  setHoldsBackgroundTasks(sessionId: string, holds: boolean): void {
+    const e = this.entries.get(sessionId);
+    if (e) e.holdsBackgroundTasks = holds;
   }
 
   turnEnded(sessionId: string): void {
@@ -269,6 +280,7 @@ export class PtyLifecycleManager {
         idleSince: Math.max(e.viewingEndedAt, e.lastTurnEndedAt),
         hostKey: e.hostKey,
         selfCapped: e.selfCapped,
+        holdsBackgroundTasks: e.holdsBackgroundTasks,
       });
     }
     return candidates;

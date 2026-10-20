@@ -228,6 +228,17 @@ describe('paneViewControls', () => {
     expect(paneViewControls(session('claude', 'running'), registry).viewSwitchLocked).toBe(false)
   })
 
+  it('takes the live-turn signal from the caller over the session status', () => {
+    expect(paneViewControls(session('musecode', 'running'), registry, false).viewSwitchLocked).toBe(false)
+    expect(paneViewControls(session('musecode', 'idle'), registry, true).viewSwitchLocked).toBe(true)
+  })
+
+  it('says the registry is still loading, not that the engine has no CLI view, until it has', () => {
+    expect(paneViewControls(session('musecode', 'idle')).cliModeAvailable).toBe(false)
+    expect(paneViewControls(session('musecode', 'idle')).cliTitle).toBe('Checking which engines offer a CLI view…')
+    expect(paneViewControls(session('musecode', 'idle'), { engines: { musecode: { supportsPty: false } } } as never).cliTitle).toBe('CLI view is not available for this engine')
+  })
+
   it('does not lock while the registry has not loaded', () => {
     expect(paneViewControls(session('codex', 'running')).viewSwitchLocked).toBe(false)
   })

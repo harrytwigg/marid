@@ -11,6 +11,7 @@ import { useCallback, useEffect } from "react"
 import type { Employee, OrgHierarchy } from "@/lib/api"
 import type { DepartmentScopeWire } from "@/lib/department-api"
 import { nodeTypes } from "@/components/org/employee-node"
+import { edgeTypes } from "@/components/org/org-route-edge"
 import { computeOrgLayout } from "@/components/org/layout/use-layouted-elements"
 
 interface OrgMapProps {
@@ -57,6 +58,7 @@ export function OrgMap({ employees, hierarchy, selectedName, onNodeClick, scopes
       onEdgesChange={onEdgesChange}
       onNodeClick={handleNodeClick}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
       connectionLineType={ConnectionLineType.SmoothStep}
       fitView
       fitViewOptions={{ padding: 0.22, duration: 400 }}
