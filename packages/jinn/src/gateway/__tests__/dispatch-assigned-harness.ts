@@ -190,6 +190,16 @@ export function delegate(callerSessionId: string, workItemId: string, employee: 
   );
 }
 
+/** `delegate_task` onto an existing Todo naming an engine but no employee, as the given session. */
+export function delegateEngine(callerSessionId: string, workItemId: string, engine = "codex") {
+  return call(
+    "POST",
+    "/api/delegations",
+    { workItemId, engine, task: "Complete the Todo acceptance criteria and report evidence." },
+    toolCallHeaders(callerSessionId),
+  );
+}
+
 /** A plain session of `employee`, not linked to anything. */
 export function employeeSession(employee: string, sourceRef: string) {
   return registry.createSession({ engine: "codex", source: "web", sourceRef, connector: "web", employee, prompt: "work it" });

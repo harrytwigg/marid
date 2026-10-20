@@ -165,22 +165,27 @@ function dispatcherRefusal(callerId: string, session: Session, item: WorkItem, a
  * And a Dispatcher the board walk started carries the walk's own routing brief
  * (a reason and an engine preference) in its prompt; its routing stays its own
  * decision, marked by the transportMeta the walk stamps on its session.
+ *
+ * An unnamed engine-only delegation names nobody, but it still starts
+ * execution outside the assignee, so a bound Dispatcher is refused that too:
+ * the binding names the one employee who may take the Todo.
  */
 function dispatcherAssigneeBinding(
   session: Session,
   item: WorkItem,
   delegate: string | undefined,
 ): { ok: false; status: 403; error: string } | undefined {
-  if (!delegate || delegate === item.assignee) return undefined;
+  if (delegate === item.assignee) return undefined;
   if (!isDispatcherRoutingTodo(session, item)) return undefined;
   if (session.transportMeta?.startedBy === BOARD_WALK_STARTED_BY) return undefined;
   const assignee = item.assignee;
   if (!assignee || assignee === OPERATOR_ASSIGNEE) return undefined;
+  const target = delegate === undefined ? "an unnamed engine" : `"${delegate}"`;
   return {
     ok: false,
     status: 403,
     error: `this Dispatcher was started by the operator's Dispatch on Todo ${item.id}, whose assignee is employee "${assignee}": `
-      + `that assignment is binding, so it cannot hand the Todo to "${delegate}" — `
+      + `that assignment is binding, so it cannot hand the Todo to ${target} — `
       + `hand it to its assignee with delegate_task { task, employee: "${assignee}", workItemId: "${item.id}" }. `
       + `If that delegation is refused, block the Todo for the operator with the refusal and options rather than choosing someone else.`,
   };

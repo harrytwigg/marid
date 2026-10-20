@@ -3,6 +3,7 @@ import { BOARD_WALK_STARTED_BY } from "../../board-walk/started-sessions.js";
 import {
   assignedTodo,
   delegate,
+  delegateEngine,
   dispatch,
   dispatchAs,
   employeeSession,
@@ -49,6 +50,20 @@ describe("Dispatch on a backlog Todo that has an assignee", () => {
     expect(delegated.body.error).toContain(item.assignee);
     expect(workItems.getWorkItem(item.id)).toMatchObject({ assignee: "first-worker", status: "executing" });
     expect(sessionsOf(item.id, "second-worker")).toHaveLength(0);
+  });
+
+  // An engine-only delegation names nobody, but it still starts execution
+  // outside the assignee — so the binding refuses that too.
+  it("refuses a bound Dispatcher that delegates to an unnamed engine", async () => {
+    const item = assignedTodo("Assigned by the operator, engine-only Dispatch");
+    const dispatcherId = (await dispatch(item.id)).body.sessionId as string;
+
+    const delegated = await delegateEngine(dispatcherId, item.id);
+
+    expect(delegated.status).toBe(403);
+    expect(delegated.body.error).toMatch(/binding/);
+    expect(delegated.body.error).toContain(item.assignee);
+    expect(workItems.getWorkItem(item.id)).toMatchObject({ assignee: "first-worker" });
   });
 
   // The board walk starts the same Dispatcher with its own routing brief (a
