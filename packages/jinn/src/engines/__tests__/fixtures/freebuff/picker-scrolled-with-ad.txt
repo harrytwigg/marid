@@ -1,0 +1,48 @@
+ │ May use data for AI training                                     │
+ │ Session active                                                   │
+ │ 17/21 hours remaining                                            │
+ │ 1 day streak                                                     │
+ │                                                                  │
+ │ ✦ Refer friends → earn hours:                                    │
+ │                                                                  │
+ │ ⎘ Copy invite link  Learn More ↵                                 │
+ └──────────────────────────────────────────────────────────────────┘
+                                                                                                                                                               █
+ ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │ Auto top-up                                                                                                                                             Ad │
+ │ Enable auto top ups                                                                                                                                        │
+ │  Top up  freebuff.com                                                                                                                                      │
+ ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ 51m left                                                                                                                                        ✕ End session
+ ↑↓ choose model · Tab reasoning · Enter select · Esc cancel
+ │   GLM 5.3 Flash • high · Deep reasoning · Images                             │
+ │                                      4x                                      │
+ └──────────────────────────────────────────────────────────────────────────────┘
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │   GPT-6 Luna • high · Strong all-around · Images                             │
+ │                                      4x                                      │
+ └──────────────────────────────────────────────────────────────────────────────┘
+
+ POWERFUL · Frontier models like GPT-6.1 Sol and more
+ ┌──────────────────────────────────────────────────────────────────────────────┐▄
+ │   Gemini 4 Argon • medium · Google flagship · Images · Promotional · 1       │
+ │ session a day                                                                │
+ │                                  Paid plan                                   │
+ └──────────────────────────────────────────────────────────────────────────────┘
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │   Claude Haiku 5.5 · 100k context • medium · Anthropic · fast · Images · New │
+ │                                      6x                                      │
+ └──────────────────────────────────────────────────────────────────────────────┘
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │   MiMo 2.6 Pro · Strong reasoning · Images                                   │
+ │                                      5x                                      │
+ └──────────────────────────────────────────────────────────────────────────────┘
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │ › DeepSeek V4.1 Flash Fast 10/17 • high · Parallel agents · Images           │
+ │                      5x · May use data for AI training                       │
+ │ Gathers context with parallel subagents. Runs on DeepSeek’s own API.         │
+ │ Peak: 10x Mon–Fri, 1 AM–11 AM GMT+1, when DeepSeek’s API costs double. 5x    │
+ │ otherwise.                                                                   │
+ └──────────────────────────────────────────────────────────────────────────────┘
+ DeepSeek V4.1 Flash 10/17 • high · /tmp/freebuff-demo/work · /model to change · Chat: New chat
+ ← for history · ? for help

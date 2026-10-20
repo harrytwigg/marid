@@ -1,0 +1,33 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                ███████████                        ██                 ▄████  ▄██
+                                                ███▀▀▀▀▀▀▀▀                        ██                 ██    ██▀
+                                                ███ █████  ██████ ▄█████   ▄████▄  ██████▄  ██   ██ ████████████
+                                                ███ ███▀▀  ██▀   ███▄▄▄██ ██▄▄▄███ ██   ▀██ ██   ██   ██    ██
+                                                ███ ███    ███   ███▀▀▀▀▀ ██▀▀▀▀▀  ██▄  ▄██ ██▄  ██   ██    ██
+                                                ███ ██▀    ██▀    ▀█████   ▀████▀  ██████▀   ▀████▀   ██    ██
+
+                                                            Open this URL in your browser to login:
+
+                                        https://freebuff.com/login?auth_code=CODE&cli_flow=FLOW
+
+                                         ⚠ The link wraps across lines — clicking it will cut it off. Press c to copy
+                                         the full link instead.
+
+                                                                        [ Copy link (c) ]
+
+
+
+                                                                      Waiting for login...
+                                                      Tip: Can't copy? Exit and run freebuff login instead.

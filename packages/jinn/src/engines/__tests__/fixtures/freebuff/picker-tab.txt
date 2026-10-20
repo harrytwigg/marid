@@ -1,0 +1,48 @@
+ ███ ███▀▀  ██▀   ███▄▄▄██ ██▄▄▄███ ██   ▀██ ██   ██   ██    ██
+ ███ ███    ███   ███▀▀▀▀▀ ██▀▀▀▀▀  ██▄  ▄██ ██▄  ██   ██    ██
+ ███ ██▀    ██▀    ▀█████   ▀████▀  ██████▀   ▀████▀   ██    ██
+
+ ┌──────────────────────────────────────────────────────────────────┐
+ │ May use data for AI training                                     │
+ │ Session active                                                   │
+ │ 17/21 hours remaining                                            │
+ │ 1 day streak                                                     │
+ │                                                                  │
+ │ ✦ Refer friends → earn hours:                                    │
+ │                                                                  │                                                                                          ▄
+ │ ⎘ Copy invite link  Learn More ↵                                 │                                                                                          █
+ └──────────────────────────────────────────────────────────────────┘                                                                                          █
+                                                                                                                                                               █
+ 53m left                                                                                                                                        ✕ End session
+ ↑↓ choose model · Tab reasoning · Enter select · Esc cancel
+                                                                                 ▀
+ OPTIMIZED · Strongest price-to-performance models
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │   DeepSeek V4.1 Flash 10/17 • high · Smart & Fast · Images                   │
+ │               3x · Recommended · May use data for AI training                │
+ └──────────────────────────────────────────────────────────────────────────────┘
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │ › MiMo v2.6 Flash Slow · Slow · cheapest · Images                            │
+ │                                      1x                                      │
+ │ The same model as MiMo v2.6 Flash Fast, streamed more slowly: answers keep   │
+ │ arriving, a little slower the more the session has done, so an hour costs    │
+ │ less.                                                                        │
+ └──────────────────────────────────────────────────────────────────────────────┘
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │   MiMo v2.6 Flash Fast · Balanced · Images                                   │
+ │                                      2x                                      │
+ └──────────────────────────────────────────────────────────────────────────────┘
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │   Muse Spark 1.3 • high · Falls back when busy                               │
+ │                      3x · May use data for AI training                       │
+ └──────────────────────────────────────────────────────────────────────────────┘
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │   GLM 5.3 Flash • high · Deep reasoning · Images                             │
+ │                                      4x                                      │
+ └──────────────────────────────────────────────────────────────────────────────┘
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │   GPT-6 Luna • high · Strong all-around · Images                             │
+ │                                      4x                                      │
+ └──────────────────────────────────────────────────────────────────────────────┘
+ DeepSeek V4.1 Flash 10/17 • high · /tmp/freebuff-demo/work · /model to change · Chat: New chat
+ ← for history · ? for help

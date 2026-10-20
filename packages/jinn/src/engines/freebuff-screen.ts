@@ -1,0 +1,192 @@
+/**
+ * Reads a rendered Freebuff screen (see freebuff-terminal.ts) into the state the
+ * engine acts on. Pure: lines in, a plain object out, so every screen the CLI
+ * has been seen to draw is a fixture and nothing here touches a PTY.
+ *
+ * Freebuff has no machine-readable mode, so the strings below are its own
+ * wording as of 0.2.30. A screen none of them recognises is `unknown`, never a
+ * guess: the engine waits on unknown, and fails it with a dump after a minute.
+ */
+
+export type FreebuffScreenState = "signed-out" | "idle" | "busy" | "picker" | "unknown";
+
+export interface FreebuffStatusBar {
+  /** The model's name, without its reasoning level. */
+  modelLabel: string;
+  /** The reasoning level shown after the `•`, when the model has one. */
+  effort?: string;
+}
+
+export interface FreebuffScreenInfo {
+  state: FreebuffScreenState;
+  /** Time left in the hour session, in minutes (rounded down). */
+  sessionLeftMinutes?: number;
+  /** Context tokens in use, and the share of the window they fill. */
+  contextTokens?: number;
+  contextPct?: number;
+  /** The daily hours balance from the panel above the chat. */
+  hoursRemaining?: number;
+  hoursTotal?: number;
+  /** The panel says the next message starts a session (none is running yet). */
+  sessionNotStarted: boolean;
+  /** The panel says a session is running. */
+  sessionActive: boolean;
+  /** `modelLabel`/`effort` as the status bar shows them. */
+  statusBar?: FreebuffStatusBar;
+  /** A `⎘ • 11s • △▽` footer is on screen: some turn finished, not necessarily this one. */
+  turnFooter: boolean;
+  /** Seconds the busy line says the turn has run. */
+  busySeconds?: number;
+}
+
+const SIGNED_OUT_MARKERS = [
+  "Press ENTER to login",
+  "Open this URL in your browser to login",
+  "Waiting for login",
+];
+
+const IDLE_PLACEHOLDER = "Enter a coding task or / for commands";
+const BUSY_PLACEHOLDER = "Add to the current task";
+const PICKER_HINT = "choose model";
+
+const BUSY_LINE = /^\s*working\.\.\..*?(?:(\d+)s\s+)?■\s*Esc\s*$/;
+const TURN_FOOTER = /⎘\s*•\s*[0-9hms ]+•/;
+const HOURS_REMAINING = /(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*hours?\s+remaining/i;
+// `58m left · 13.5K (1%)`, `1h left · …`, `1h 1m left`, `45s left`.
+const SESSION_LINE = /^\s*((?:\d+h)?\s*(?:\d+m)?\s*(?:\d+s)?)\s*left\b(?:\s*·\s*([\d.]+)\s*([KMkm])?\s*\((\d+)%\))?/;
+
+export function parseTokenCount(value: string, unit: string | undefined): number {
+  const n = Number(value);
+  const multiplier = unit?.toLowerCase() === "m" ? 1_000_000 : unit?.toLowerCase() === "k" ? 1_000 : 1;
+  return Math.round(n * multiplier);
+}
+
+function minutesOf(duration: string): number | undefined {
+  const h = /(\d+)h/.exec(duration)?.[1];
+  const m = /(\d+)m/.exec(duration)?.[1];
+  const s = /(\d+)s/.exec(duration)?.[1];
+  if (h === undefined && m === undefined && s === undefined) return undefined;
+  return Number(h ?? 0) * 60 + Number(m ?? 0);
+}
+
+/** The status bar: `<model> • <effort> · <cwd> · /model to change · Chat: <title>`. */
+export function parseStatusBar(lines: readonly string[]): FreebuffStatusBar | undefined {
+  const line = lines.find((l) => l.includes("/model to change"));
+  if (!line) return undefined;
+  const modelSegment = line.trim().split(" · ")[0];
+  const bullet = modelSegment.lastIndexOf(" • ");
+  if (bullet < 0) return { modelLabel: modelSegment.trim() };
+  const effort = modelSegment.slice(bullet + 3).trim();
+  return { modelLabel: modelSegment.slice(0, bullet).trim(), ...(effort ? { effort } : {}) };
+}
+
+export function parseFreebuffScreen(lines: readonly string[]): FreebuffScreenInfo {
+  const text = lines.join("\n");
+  const info: FreebuffScreenInfo = {
+    state: "unknown",
+    sessionNotStarted: text.includes("Your first message starts the session"),
+    sessionActive: /\bSession active\b/.test(text),
+    turnFooter: lines.some((l) => TURN_FOOTER.test(l)),
+  };
+
+  const hours = HOURS_REMAINING.exec(text);
+  if (hours) {
+    info.hoursRemaining = Number(hours[1]);
+    info.hoursTotal = Number(hours[2]);
+  }
+  for (const line of lines) {
+    const session = SESSION_LINE.exec(line);
+    if (!session) continue;
+    const minutes = minutesOf(session[1]);
+    if (minutes === undefined) continue;
+    info.sessionLeftMinutes = minutes;
+    if (session[2] !== undefined) {
+      info.contextTokens = parseTokenCount(session[2], session[3]);
+      info.contextPct = Number(session[4]);
+    }
+    break;
+  }
+  const statusBar = parseStatusBar(lines);
+  if (statusBar) info.statusBar = statusBar;
+
+  const busy = lines.map((l) => BUSY_LINE.exec(l)).find((m): m is RegExpExecArray => m !== null);
+  if (busy?.[1] !== undefined) info.busySeconds = Number(busy[1]);
+
+  // Order matters: a sign-in prompt and the picker each cover or replace the
+  // input box, and the picker leaves the idle status bar on screen below it.
+  if (SIGNED_OUT_MARKERS.some((marker) => text.includes(marker))) info.state = "signed-out";
+  else if (text.includes(PICKER_HINT)) info.state = "picker";
+  else if (busy || text.includes(BUSY_PLACEHOLDER)) info.state = "busy";
+  else if (text.includes(IDLE_PLACEHOLDER)) info.state = "idle";
+  return info;
+}
+
+// ── The /model picker ────────────────────────────────────────────────────────
+
+export interface FreebuffPickerRow {
+  /** The model's name as the picker prints it, without its reasoning level. */
+  label: string;
+  /** The reasoning level this row is currently set to, when it has one. */
+  effort?: string;
+  /** The cursor is on this row. */
+  selected: boolean;
+  /** The cost multiplier on the row's second line (`3x`), when visible. */
+  multiplier?: number;
+}
+
+const BOX_TOP = /^\s*┌─+┐[\s▀▄█]*$/;
+const BOX_BOTTOM = /^\s*└─+┘[\s▀▄█]*$/;
+// The picker scrolls and draws a scrollbar glyph in the margin, so a row's
+// right edge can carry one extra character after the border.
+const BOX_INNER = /^\s*│\s?(.*?)\s*│[\s▀▄█]*$/;
+
+/** `DeepSeek V4.1 Flash 10/17 • high · Smart & Fast` → label and effort. */
+export function parsePickerLabel(firstLine: string): { label: string; effort?: string } {
+  const text = firstLine.replace(/^[›>]\s*/, "").trim();
+  const bullet = text.indexOf(" • ");
+  if (bullet >= 0) {
+    const label = text.slice(0, bullet).trim();
+    const effort = text.slice(bullet + 3).split(" · ")[0].trim();
+    return { label, ...(effort ? { effort } : {}) };
+  }
+  return { label: text.split(" · ")[0].trim() };
+}
+
+/** The boxed rows of the `/model` picker, in screen order. Empty if it is not open. */
+export function parsePickerRows(lines: readonly string[]): FreebuffPickerRow[] {
+  const hint = lines.findIndex((l) => l.includes(PICKER_HINT));
+  if (hint < 0) return [];
+  const rows: FreebuffPickerRow[] = [];
+  let inner: string[] | undefined;
+  for (const line of lines.slice(hint + 1)) {
+    if (BOX_TOP.test(line)) {
+      inner = [];
+    } else if (BOX_BOTTOM.test(line)) {
+      if (inner?.length) rows.push(rowFromInner(inner));
+      inner = undefined;
+    } else if (inner) {
+      const match = BOX_INNER.exec(line);
+      if (match) inner.push(match[1]);
+    }
+  }
+  return rows;
+}
+
+function rowFromInner(inner: readonly string[]): FreebuffPickerRow {
+  const first = inner[0];
+  const selected = /^[›>]/.test(first.trim());
+  const { label, effort } = parsePickerLabel(first);
+  // A long first line wraps ("… · Promotional · 1" / "session a day"); the
+  // multiplier is the line that starts with `<n>x`.
+  const multiplier = inner.slice(1).map((l) => /^(\d+(?:\.\d+)?)x\b/.exec(l.trim())).find((m) => m !== null);
+  return { label, ...(effort ? { effort } : {}), selected, ...(multiplier ? { multiplier: Number(multiplier[1]) } : {}) };
+}
+
+/** Whether a picker label or status-bar model name satisfies a configured prefix. */
+export function modelMatches(label: string, wanted: string): boolean {
+  return label.trim().toLowerCase().startsWith(wanted.trim().toLowerCase());
+}
+
+export function effortMatches(shown: string | undefined, wanted: string): boolean {
+  return shown !== undefined && shown.trim().toLowerCase() === wanted.trim().toLowerCase();
+}
