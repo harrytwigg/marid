@@ -277,3 +277,127 @@ describe("a Dispatcher whose delegate stopped", () => {
     expect(attempted.body.error).toMatch(/owner, their manager or the operator/);
   });
 });
+
+/**
+ * A Dispatcher that blocked its Todo without handing it on, then waited
+ * longer than the claim lease for the operator's answer. The lease running
+ * out is not a hand-off: nobody was delegated, so the same Dispatcher must
+ * still be able to hand the Todo on when the answer arrives. A hand-off
+ * that did happen stays spent, lease or no lease.
+ */
+describe("a Dispatcher whose claim expired before it handed off", () => {
+  /** Dispatch, block the Todo as the Dispatcher without delegating, then
+   *  run the claim lease out the way the reconciler's expiry sweep does. */
+  async function blockedThenExpired(title: string) {
+    const item = assignedTodo(title);
+    const dispatcherId = (await dispatch(item.id)).body.sessionId as string;
+    expect(workItems.getWorkItem(item.id)).toMatchObject({ status: "executing" });
+    const { transition } = await import("../../work-items/transitions.js");
+    transition(item.id, "blocked", `session:${dispatcherId}`, { agent: true, callerSessionId: dispatcherId });
+    expect(workItems.getWorkItem(item.id)).toMatchObject({ status: "blocked" });
+    expect(sessionsOf(item.id, "first-worker")).toHaveLength(0);
+
+    const claims = await import("../../work-items/claims.js");
+    claims.expireWorkItemClaims(new Date(Date.now() + claims.TODO_CLAIM_LEASE_MS + 60_000));
+    expect(claims.getWorkItemClaim(item.id)).toBeUndefined();
+    expect(workItems.listWorkItemEvents(item.id).filter((event) => event.kind === "claim_expired")).toHaveLength(1);
+
+    // The operator's answer arrives in the same Dispatcher session and the
+    // Todo goes back to executing for the retry, as in the live incident.
+    transition(item.id, "executing", `session:${dispatcherId}`, { agent: true, callerSessionId: dispatcherId });
+    return { item, dispatcherId };
+  }
+
+  it("lets the same Dispatcher delegate after its claim expired with no hand-off made", async () => {
+    const { item, dispatcherId } = await blockedThenExpired("Blocked, claim expired, never delegated");
+
+    const delegated = await delegate(dispatcherId, item.id, "first-worker");
+
+    expect(delegated.status).toBe(201);
+    expect(registry.getSession(delegated.body.sessionId)).toMatchObject({
+      employee: "first-worker",
+      parentSessionId: dispatcherId,
+      workItemId: item.id,
+    });
+    expect(workItems.getWorkItem(item.id)).toMatchObject({ assignee: "first-worker", status: "executing" });
+    expect(sessionsOf(item.id, "todo-dispatcher")).toHaveLength(1);
+  });
+
+  it("does not call the expired claim spent when the Dispatcher asks for dispatch instead", async () => {
+    const { item, dispatcherId } = await blockedThenExpired("Blocked, claim expired, Dispatcher tries dispatch");
+
+    const refused = await dispatchAs(dispatcherId, item.id);
+
+    expect(refused.status).toBe(403);
+    expect(refused.body.error).not.toMatch(/spent/);
+    expect(refused.body.error).toContain(`delegate_task { workItemId: "${item.id}" }`);
+    expect(sessionsOf(item.id, "todo-dispatcher")).toHaveLength(1);
+    expect(workItems.getWorkItem(item.id)).toMatchObject({ assignee: "first-worker", status: "executing" });
+  });
+
+  it("still refuses a Dispatcher that really handed off, even after the claim expires", async () => {
+    const item = assignedTodo("Handed off, then the claim expired");
+    const dispatcherId = (await dispatch(item.id)).body.sessionId as string;
+    const delegated = await delegate(dispatcherId, item.id, "first-worker");
+    expect(delegated.status).toBe(201);
+
+    const claims = await import("../../work-items/claims.js");
+    claims.expireWorkItemClaims(new Date(Date.now() + claims.TODO_CLAIM_LEASE_MS + 60_000));
+    expect(claims.getWorkItemClaim(item.id)).toBeUndefined();
+    const before = workItems.getWorkItem(item.id);
+
+    const again = await delegate(dispatcherId, item.id, "second-worker");
+
+    expect(again.status).toBe(403);
+    expect(again.body.error).toMatch(/this Dispatcher's hand-off is spent/);
+    expect(workItems.getWorkItem(item.id)).toMatchObject({
+      assignee: before?.assignee,
+      status: before?.status,
+      version: before?.version,
+    });
+    expect(sessionsOf(item.id, "first-worker")).toHaveLength(1);
+    expect(sessionsOf(item.id, "second-worker")).toHaveLength(0);
+  });
+
+  // A delegation that lands in a session somebody else started spawns no
+  // child of the Dispatcher; its brief record is the only trace of the hand-off.
+  it("treats a brief the Dispatcher landed in an existing session as its hand-off", async () => {
+    const { item, dispatcherId } = await blockedThenExpired("Brief landed in a live session, claim expired");
+    const { recordLandedBrief } = await import("../../work-items/employee-session-delegation.js");
+    const live = employeeSession("first-worker", "live:1");
+    recordLandedBrief({
+      briefKey: `queue:${live.id}`,
+      workItemId: item.id,
+      employee: "first-worker",
+      sessionId: live.id,
+      delegatorSessionId: dispatcherId,
+    });
+
+    const again = await delegate(dispatcherId, item.id, "second-worker");
+
+    expect(again.status).toBe(403);
+    expect(again.body.error).toMatch(/this Dispatcher's hand-off is spent/);
+    expect(sessionsOf(item.id, "second-worker")).toHaveLength(0);
+  });
+
+  // A re-Dispatch starts a newer Dispatcher beside the first. The first never
+  // delegated, but it is superseded: a late answer waking it must not hand the
+  // Todo on a second time once the newer Dispatcher's delegate went idle.
+  it("refuses a Dispatcher that a newer Dispatcher superseded, even after the newer one's delegate went idle", async () => {
+    const item = assignedTodo("Re-dispatched, the first Dispatcher answered late");
+    const first = (await dispatch(item.id)).body.sessionId as string;
+    registry.updateSession(first, { status: "idle" });
+    const second = (await dispatch(item.id)).body.sessionId as string;
+    expect(second).not.toBe(first);
+    const delegated = await delegate(second, item.id, "first-worker");
+    expect(delegated.status).toBe(201);
+    registry.updateSession(delegated.body.sessionId, { status: "idle" });
+
+    const late = await delegate(first, item.id, "first-worker");
+
+    expect(late.status).toBe(403);
+    expect(late.body.error).toMatch(/superseded/);
+    expect(late.body.error).toContain(second);
+    expect(sessionsOf(item.id, "first-worker")).toHaveLength(1);
+  });
+});
