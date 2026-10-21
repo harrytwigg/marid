@@ -35,15 +35,16 @@ export function markSendFailed(current: Message[], failedId: string | undefined,
 }
 
 /**
- * Clear the pending flag: the server has acknowledged the send.
+ * Clear every pending flag: the server has acknowledged the sends.
+ *
+ * Every one, not the oldest: a turn can answer several messages at once (send
+ * now takes the queued ones with it), so one frame per message never comes. A
+ * send whose request then fails is still marked failed, by its own id.
  *
  * Returns the identical array when nothing is pending, so the per-frame call
  * this sits behind cannot re-render the transcript on every streamed token.
  */
 export function clearPendingSend(current: Message[]): Message[] {
-  const index = current.findIndex((m) => m.sendState === 'pending')
-  if (index === -1) return current
-  const next = current.slice()
-  next[index] = { ...next[index], sendState: undefined }
-  return next
+  if (!current.some((m) => m.sendState === 'pending')) return current
+  return current.map((m) => (m.sendState === 'pending' ? { ...m, sendState: undefined } : m))
 }
