@@ -98,6 +98,29 @@ describe('useSessionQueue', () => {
     expect([...result.current.withdrawn]).toEqual(['elsewhere-id'])
   })
 
+  it('withdraws every message a cleared queue names, under its optimistic id too', async () => {
+    let listener: ((frame: unknown) => void) | undefined
+    const subscribe = (fn: (frame: unknown) => void) => { listener = fn; return () => {} }
+    const { result } = renderHook(() => useSessionQueue('s1', subscribe as never))
+    await waitFor(() => expect(listener).toBeDefined())
+    act(() => result.current.adopt('local-uuid', { messageId: 'cleared-one' }))
+
+    act(() => listener!({ event: 'queue:updated', payload: { sessionId: 's1', sessionKey: 'k', depth: 0, withdrawnMessageIds: ['cleared-one', 'cleared-two'] } }))
+
+    expect([...result.current.withdrawn].sort()).toEqual(['cleared-one', 'cleared-two', 'local-uuid'])
+  })
+
+  it('ignores a clear that names messages of another session', async () => {
+    let listener: ((frame: unknown) => void) | undefined
+    const subscribe = (fn: (frame: unknown) => void) => { listener = fn; return () => {} }
+    const { result } = renderHook(() => useSessionQueue('s1', subscribe as never))
+    await waitFor(() => expect(listener).toBeDefined())
+
+    act(() => listener!({ event: 'queue:updated', payload: { sessionId: 's2', sessionKey: 'k', depth: 0, withdrawnMessageIds: ['not-ours'] } }))
+
+    expect(result.current.withdrawn.size).toBe(0)
+  })
+
   it('keeps a message whose cancel the server refused', async () => {
     cancelQueueItem.mockRejectedValue(new Error('Only a pending message can be cancelled'))
     const { result } = renderHook(() => useSessionQueue('s1', noEvents))

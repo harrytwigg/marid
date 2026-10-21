@@ -97,7 +97,7 @@ function withdrawnIds(canonical: ReadonlySet<string>, aliases: ReadonlyMap<strin
 function useWithdrawn(sessionId: string | null) {
   const [canonical, setCanonical] = useState<ReadonlySet<string>>(new Set())
   useEffect(() => { setCanonical(new Set()) }, [sessionId])
-  const withdraw = useCallback((messageId: string) => setCanonical((prev) => new Set(prev).add(messageId)), [])
+  const withdraw = useCallback((...messageIds: string[]) => setCanonical((prev) => new Set([...prev, ...messageIds])), [])
   return { canonical, withdraw }
 }
 
@@ -107,7 +107,7 @@ function useWithdrawn(sessionId: string | null) {
 function useQueueItems(
   sessionId: string | null,
   subscribe: (fn: GatewayEventListener) => () => void,
-  withdraw: (messageId: string) => void,
+  withdraw: (...messageIds: string[]) => void,
 ) {
   const [items, setItems] = useState<QueueItem[]>([])
 
@@ -126,7 +126,9 @@ function useQueueItems(
   useEffect(() => subscribe((frame) => {
     if (frame.event !== 'queue:updated') return
     if (frame.payload.sessionId !== sessionId) return
-    if (frame.payload.withdrawnMessageId) withdraw(frame.payload.withdrawnMessageId)
+    const { withdrawnMessageId, withdrawnMessageIds = [] } = frame.payload
+    if (withdrawnMessageId) withdraw(withdrawnMessageId)
+    if (withdrawnMessageIds.length > 0) withdraw(...withdrawnMessageIds)
     void refresh()
   }), [subscribe, sessionId, refresh, withdraw])
 

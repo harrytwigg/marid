@@ -6,6 +6,7 @@ import {
   eventually,
   makeContext,
   queueModule,
+  registry,
   resetCallbackState,
   type ApiContext,
 } from "./helpers/callback-harness.js";
@@ -82,11 +83,12 @@ function interruptibleBlockingEngine() {
 async function runningInterruptibleSession(suffix: string) {
   const stub = interruptibleBlockingEngine();
   const queue = new queueModule.SessionQueue();
-  const context = makeContext(stub.engine, queue, []);
+  const events: Array<{ event: string; data: unknown }> = [];
+  const context = makeContext(stub.engine, queue, events);
   const session = createParent(suffix);
   await send(context, session.id, "running turn");
   await eventually(() => expect(stub.prompts).toEqual(["running turn"]));
-  return { ...stub, context, queue, session };
+  return { ...stub, context, queue, session, events };
 }
 
 describe("POST /message delivery choice", () => {
@@ -201,6 +203,64 @@ describe("POST /message delivery choice", () => {
     expect((await parkedRows(context, session.id)).map((row) => row.prompt)).toEqual(["not yours"]);
     expect(await transcriptTexts(context, session.id)).toContain("not yours");
     releaseNext();
+    releaseNext();
+  });
+});
+
+describe("DELETE /api/sessions/:id/queue (clear all)", () => {
+  it("withdraws every parked message's bubble, names them in the event, and delivers none", async () => {
+    const { context, session, prompts, events, releaseNext } = await runningInterruptibleSession("clear-all");
+    const first = await send(context, session.id, "clear me one", { delivery: "queue" });
+    const second = await send(context, session.id, "clear me two", { delivery: "queue" });
+    events.length = 0;
+
+    const cleared = await request(context, "DELETE", `/api/sessions/${session.id}/queue`);
+
+    const ids = [(first.body as { messageId: string }).messageId, (second.body as { messageId: string }).messageId];
+    expect(cleared.status).toBe(200);
+    expect(cleared.body).toMatchObject({ status: "cleared", cancelled: 2, messageIds: ids });
+    expect(events).toEqual([
+      { event: "queue:updated", data: expect.objectContaining({ sessionId: session.id, depth: 0, withdrawnMessageIds: ids }) },
+    ]);
+    // The running turn's bubble stays; the two that never ran leave the transcript.
+    const texts = await transcriptTexts(context, session.id);
+    expect(texts).toContain("running turn");
+    expect(texts).not.toContain("clear me one");
+    expect(texts).not.toContain("clear me two");
+    expect(await parkedRows(context, session.id)).toEqual([]);
+
+    releaseNext();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(prompts).toEqual(["running turn"]);
+  });
+
+  it("leaves an internal callback row, and the message it carries, in place", async () => {
+    const { context, session, events, releaseNext } = await runningInterruptibleSession("clear-internal");
+    await send(context, session.id, "operator parked", { delivery: "queue" });
+    const callbackMessageId = registry.insertMessage(session.id, "notification", "child finished");
+    registry.enqueueQueueItem(session.id, session.sessionKey, "callback prompt", { internal: true, messageId: callbackMessageId });
+    events.length = 0;
+
+    const cleared = await request(context, "DELETE", `/api/sessions/${session.id}/queue`);
+
+    expect(cleared.body).toMatchObject({ status: "cleared", cancelled: 1 });
+    expect(events).toHaveLength(1);
+    expect((events[0].data as { withdrawnMessageIds: string[] }).withdrawnMessageIds).toHaveLength(1);
+    expect((events[0].data as { withdrawnMessageIds: string[] }).withdrawnMessageIds).not.toContain(callbackMessageId);
+    expect(await transcriptTexts(context, session.id)).not.toContain("operator parked");
+    expect(await transcriptTexts(context, session.id)).toContain("child finished");
+    expect(registry.listAllPendingQueueItems().map((item) => item.prompt)).toEqual(["callback prompt"]);
+    releaseNext();
+  });
+
+  it("names no messages when nothing was parked", async () => {
+    const { context, session, events, releaseNext } = await runningInterruptibleSession("clear-empty");
+    events.length = 0;
+
+    const cleared = await request(context, "DELETE", `/api/sessions/${session.id}/queue`);
+
+    expect(cleared.body).toEqual({ status: "cleared", cancelled: 0 });
+    expect(events).toEqual([{ event: "queue:updated", data: { sessionId: session.id, sessionKey: session.sessionKey, depth: 0 } }]);
     releaseNext();
   });
 });
