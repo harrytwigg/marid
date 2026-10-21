@@ -126,8 +126,7 @@ describe("POST /message delivery choice", () => {
     const urgent = await send(context, session.id, "urgent correction", { delivery: "now" });
 
     expect(kills).toHaveLength(1);
-    // Nothing parked earlier is left behind a message sent later: the new one
-    // takes the tail, and the response names its own row.
+    // Nothing parked earlier is left behind it: the new message takes the tail.
     const parked = await parkedRows(context, session.id);
     expect(parked.map((row) => row.prompt)).toEqual(["parked one", "parked two", "urgent correction"]);
     expect((urgent.body as { queueItemId: string }).queueItemId).toBe(parked[2].id);
@@ -139,7 +138,6 @@ describe("POST /message delivery choice", () => {
     releaseNext();
     await eventually(() => expect(prompts[3]).toBe("urgent correction"));
     releaseNext();
-    // The drain never cut a turn off again, and the queue is empty.
     expect(kills).toHaveLength(1);
     expect(await parkedRows(context, session.id)).toEqual([]);
   });
