@@ -123,6 +123,7 @@ import {
 } from "../stt/settings-store.js";
 import { CODEX_HOMES_DIR, JINN_HOME } from "../shared/paths.js";
 import { collectEngineLimits } from "../shared/engine-limits.js";
+import { scopeEngineLimitsToConfigured } from "../shared/engine-limits-configured.js";
 import { supersedeRunningTurn } from "../sessions/turn/superseded.js";
 import { dispatchWebSessionRun, resolveAttachmentPaths } from "./web-session-dispatch.js";
 import { spawnSession } from "./spawn-session.js";
@@ -4254,9 +4255,13 @@ export async function handleApiRequest(
     // GET /api/engine-limits — live/snapshot quota windows and static capability
     // metadata for each engine. Some CLIs expose full quota buckets (Codex), some
     // only expose session snapshots (Claude), and some expose no aggregate quota.
+    // The dashboard's set is the configured one; `?engine=` still asks for one
+    // engine by name, configured or not.
     if (method === "GET" && pathname === "/api/engine-limits") {
       const engine = url.searchParams.get("engine") || undefined;
-      return json(res, await collectEngineLimits(context.getConfig(), { engine }));
+      const config = context.getConfig();
+      const limits = await collectEngineLimits(config, { engine });
+      return json(res, engine ? limits : scopeEngineLimitsToConfigured(limits, config, orgRegistry(config).values()));
     }
 
     if (await handleBoardWalkApi(req, res, { method, pathname, url }, context)) return;
@@ -4267,7 +4272,9 @@ export async function handleApiRequest(
     // deliberate refresh without changing the public contract later.
     if (method === "POST" && pathname === "/api/engine-limits/refresh") {
       const engine = url.searchParams.get("engine") || undefined;
-      return json(res, await collectEngineLimits(context.getConfig(), { engine }));
+      const config = context.getConfig();
+      const limits = await collectEngineLimits(config, { engine });
+      return json(res, engine ? limits : scopeEngineLimitsToConfigured(limits, config, orgRegistry(config).values()));
     }
 
     // GET /api/config

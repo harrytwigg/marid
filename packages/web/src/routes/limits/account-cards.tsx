@@ -1,50 +1,43 @@
-import type { EngineLimitsResponse } from "@/lib/api"
-import { engineDisplayName } from "@/lib/engine-names"
+import type { EngineLimitAccountSnapshot, EngineLimitEngineSnapshot, EngineLimitsResponse } from "@/lib/api"
 import { EngineCard } from "./engine-card"
 
-/**
- * The cards for every engine. With no `accounts` block this is the page as it
- * has always been: one card per engine in one grid. With it, an engine that has
- * several accounts becomes a headed group with a card per account, the default
- * first, and the engines with one account follow under their own heading.
- */
-const HEADING = "text-[length:var(--text-title3)] font-[var(--weight-semibold)] text-[var(--text-primary)]"
+interface CardItem {
+  key: string
+  engine: EngineLimitEngineSnapshot
+  account?: EngineLimitAccountSnapshot
+  title?: string
+}
 
+/**
+ * Every configured agent as one card in one grid: an engine on its own, or one
+ * card per account (engine + profile) when the gateway reports accounts for it.
+ * The gateway has already dropped the engines this instance does not use, so
+ * this file only lays the cards out — no group headings, no nested sections.
+ */
 export function EngineCards({ data, now }: { data: EngineLimitsResponse | null; now: number }) {
-  const engines = Object.values(data?.engines ?? {})
-  const accounts = data?.accounts
-  const grouped = engines.filter((engine) => accounts?.[engine.name]?.length)
-  const single = engines.filter((engine) => !accounts?.[engine.name]?.length)
-  // No accounts block: the page as it has always been, one card per engine in one grid.
-  if (grouped.length === 0) {
+  const cards: CardItem[] = []
+  for (const engine of Object.values(data?.engines ?? {})) {
+    const accounts = data?.accounts?.[engine.name]
+    if (accounts?.length) {
+      for (const account of accounts) cards.push({ key: account.account, engine: account, account, title: account.label })
+    } else {
+      cards.push({ key: engine.name, engine })
+    }
+  }
+
+  if (cards.length === 0) {
     return (
-      <div className="grid items-start gap-4 md:grid-cols-2">
-        {single.map((engine) => <EngineCard key={engine.name} engine={engine} now={now} />)}
+      <div className="glass-card rounded-[var(--radius-xl)] p-[var(--space-6)] text-[length:var(--text-footnote)] text-[var(--text-tertiary)]">
+        No configured engines to show.
       </div>
     )
   }
-  // With it, every engine sits under a heading, so a single-account engine never
-  // reads as one more account of the group above it.
+
   return (
-    <div className="grid gap-6">
-      {grouped.map((engine) => (
-        <section key={engine.name} data-testid="account-group" className="grid gap-4">
-          <h2 className={HEADING}>{engineDisplayName(engine.name)}</h2>
-          <div className="grid items-start gap-4 md:grid-cols-2">
-            {accounts![engine.name]!.map((account, index) => (
-              <EngineCard key={account.account} engine={account} account={account} title={index === 0 ? account.name : account.label} now={now} />
-            ))}
-          </div>
-        </section>
+    <div className="grid auto-rows-fr items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="limits-grid">
+      {cards.map(({ key, engine, account, title }) => (
+        <EngineCard key={key} engine={engine} now={now} account={account} title={title} />
       ))}
-      {single.length > 0 && (
-        <section data-testid="other-engines" className="grid gap-4">
-          <h2 className={HEADING}>Other engines</h2>
-          <div className="grid items-start gap-4 md:grid-cols-2">
-            {single.map((engine) => <EngineCard key={engine.name} engine={engine} now={now} nested />)}
-          </div>
-        </section>
-      )}
     </div>
   )
 }
