@@ -379,4 +379,25 @@ describe("a Dispatcher whose claim expired before it handed off", () => {
     expect(again.body.error).toMatch(/this Dispatcher's hand-off is spent/);
     expect(sessionsOf(item.id, "second-worker")).toHaveLength(0);
   });
+
+  // A re-Dispatch starts a newer Dispatcher beside the first. The first never
+  // delegated, but it is superseded: a late answer waking it must not hand the
+  // Todo on a second time once the newer Dispatcher's delegate went idle.
+  it("refuses a Dispatcher that a newer Dispatcher superseded, even after the newer one's delegate went idle", async () => {
+    const item = assignedTodo("Re-dispatched, the first Dispatcher answered late");
+    const first = (await dispatch(item.id)).body.sessionId as string;
+    registry.updateSession(first, { status: "idle" });
+    const second = (await dispatch(item.id)).body.sessionId as string;
+    expect(second).not.toBe(first);
+    const delegated = await delegate(second, item.id, "first-worker");
+    expect(delegated.status).toBe(201);
+    registry.updateSession(delegated.body.sessionId, { status: "idle" });
+
+    const late = await delegate(first, item.id, "first-worker");
+
+    expect(late.status).toBe(403);
+    expect(late.body.error).toMatch(/superseded/);
+    expect(late.body.error).toContain(second);
+    expect(sessionsOf(item.id, "first-worker")).toHaveLength(1);
+  });
 });

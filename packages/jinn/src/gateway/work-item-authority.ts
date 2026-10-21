@@ -103,9 +103,23 @@ function todoDispatcherSessionKeyPrefix(workItemId: string): string {
  * is its child, so every callback from that delegate wakes it again, and a
  * Dispatcher woken after its producer went idle could otherwise reassign
  * the Todo and start a second attempt beside the first.
+ *
+ * A Dispatcher is also spent once a newer one has been started on the Todo
+ * (a re-Dispatch): the newest Dispatcher is the one routing, and an older one
+ * woken by a late answer must not hand the Todo on beside it. The claim used
+ * to rule that out, and the claim no longer decides standing.
  */
 function isDispatcherRoutingTodo(session: Session, item: WorkItem): boolean {
-  return isDispatcherStartedFor(session, item) && !dispatcherHasHandedOff(session.id, item);
+  return isDispatcherStartedFor(session, item)
+    && !dispatcherHasHandedOff(session.id, item)
+    && !newerDispatcher(session, item);
+}
+
+/** A Dispatcher started on this Todo after `session`, if any. */
+function newerDispatcher(session: Session, item: WorkItem): Session | undefined {
+  return listSessionsByWorkItem(item.id).find((other) => other.id !== session.id
+    && isDispatcherStartedFor(other, item)
+    && (other.createdAt.localeCompare(session.createdAt) || other.id.localeCompare(session.id)) > 0);
 }
 
 /** Whether this Dispatcher has already handed the Todo on: one of its own
@@ -148,6 +162,15 @@ function dispatcherRefusal(callerId: string, session: Session, item: WorkItem, a
       status: 403,
       error: `this Dispatcher cannot ${action} Todo ${item.id}, but it still holds the Todo's hand-off: `
         + `hand it on with delegate_task { workItemId: "${item.id}" }`,
+    };
+  }
+  const newer = newerDispatcher(session, item);
+  if (newer && !dispatcherHasHandedOff(callerId, item)) {
+    return {
+      ok: false,
+      status: 403,
+      error: `this Dispatcher has been superseded: a newer Dispatcher (session ${newer.id}) was started on Todo ${item.id}, `
+        + `so it routes the Todo and this one cannot ${action} it. Leave the routing to that Dispatcher.`,
     };
   }
   const delegate = listSessionsByWorkItem(item.id)
@@ -223,7 +246,8 @@ function dispatcherAssigneeBinding(
  * A claim that expired is not a hand-off either: a Dispatcher that never
  * delegated keeps this standing however long it waited, and the delegation
  * it then makes takes a fresh claim. That is the non-operator path that
- * re-arms an expired claim — no fresh Dispatch press is needed.
+ * re-arms an expired claim — no fresh Dispatch press is needed. A Dispatcher
+ * that a newer one has superseded is excluded: it does not keep standing.
  *
  * A hand-off that never started is not spent either: a caller whose own
  * delegate on this Todo was refused before its engine ever ran may hand the
