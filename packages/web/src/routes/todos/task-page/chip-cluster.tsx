@@ -1,8 +1,9 @@
 import type { Employee, WorkItemDetailWire } from "@/lib/api"
-import { STATUS_LABEL, priorityLabel } from "@/lib/todos"
+import { STATUS_LABEL, priorityLabel, reviewAddresseeEmployee } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { StatusCircle } from "../state-glyph"
 import { displayNameOf } from "../util"
+import { ReviewForChip } from "../review-for-chip"
 import { type RailPickers } from "./props-rail"
 import { RailPriorityBars } from "./rail-rows"
 import { RemoveButton } from "./label-chip"
@@ -61,6 +62,7 @@ export function ChipCluster({
   const item = detail.workItem
   const labels = detail.labels ?? []
   const onClearAssignee = rowFor("assignee")?.onClear
+  const reviewFor = reviewAddresseeEmployee({ status: item.status, reviewAddressee: detail.reviewAddressee })
   return (
     <div
       data-testid="task-chip-cluster"
@@ -69,6 +71,7 @@ export function ChipCluster({
       <Chip mobile={mobile} label="Status" testId="chip-status" onOpen={() => rowFor("status")?.onOpen()}>
         <StatusCircle status={item.status} size={16} />
         {STATUS_LABEL[item.status]}
+        {reviewFor && <ReviewForChip employee={reviewFor} byName={byName} />}
         {working && (
           <span className="flex items-center gap-1.5 text-[var(--system-blue)]" data-testid="chip-working">
             <span

@@ -27,7 +27,8 @@ function fieldsMatch(match: BoardHookMatch, payload: BasePayload, labels: readon
     && anyOf(listOf(match.department), [payload.todo.department])
     && anyOf(listOf(match.label), labels)
     && anyOf(assignee && assigneeNames(assignee), [payload.todo.assignee])
-    && anyOf(listOf(match.actor), actorNames(payload));
+    && anyOf(listOf(match.actor), actorNames(payload))
+    && anyOf(listOf(match.reviewAddressee), [payload.todo.reviewAddressee.kind]);
 }
 
 /** Whether `hook`'s matcher fits: every field present must match (AND); a list inside one field is any-of. */

@@ -39,6 +39,7 @@ interface HeartbeatRow {
   created_at: string;
   disarmed_at: string | null;
   disarmed_reason: string | null;
+  purpose: string | null;
 }
 
 function toHeartbeat(row: HeartbeatRow): Heartbeat {
@@ -55,6 +56,7 @@ function toHeartbeat(row: HeartbeatRow): Heartbeat {
     createdAt: row.created_at,
     disarmedAt: row.disarmed_at,
     disarmedReason: row.disarmed_reason,
+    purpose: row.purpose,
   };
 }
 
@@ -100,9 +102,10 @@ function validateExpiresAt(expiresAt: unknown): number | null {
   return Math.floor(expiresAt);
 }
 
+/** Manual heartbeats only: a gateway-owned one (`purpose` set) is exempt from the cap. */
 function countArmed(ownerSessionId: string): number {
   return initDb()
-    .prepare("SELECT COUNT(*) FROM heartbeats WHERE owner_session_id = ? AND status = 'armed'")
+    .prepare("SELECT COUNT(*) FROM heartbeats WHERE owner_session_id = ? AND status = 'armed' AND purpose IS NULL")
     .pluck()
     .get(ownerSessionId) as number;
 }
@@ -136,6 +139,7 @@ export function armHeartbeat(input: ArmHeartbeatInput, now = Date.now()): Heartb
     createdAt: new Date(now).toISOString(),
     disarmedAt: null,
     disarmedReason: null,
+    purpose: null,
   };
   initDb().prepare(`
     INSERT INTO heartbeats (

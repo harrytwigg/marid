@@ -2,6 +2,7 @@ import { listSessionsByWorkItem } from '../sessions/registry.js';
 import { isExecutionAttempt } from './link-role.js';
 import { initDb } from '../shared/db.js';
 import { clearWorkItemRecovery } from './recovery-rows.js';
+import { isChildSettle, recordChildSettle } from './child-settles.js';
 import { clearBlockRecord, DEFAULT_BLOCK_KIND, recordBlock, resolveBlock, type BlockKind } from './blocks.js';
 import { cascadeCloseDescendants } from './cascade.js';
 import { holdLiveSignalsUntilCommit, notifyTodoChanged, notifyTodoStatusChange } from './live-events.js';
@@ -112,7 +113,7 @@ export interface TransitionResult {
 // The status-change bridge lives with the other live listener (`live-events.ts`)
 // and is re-exported here, because this write path is what registering against
 // it actually observes.
-export { setTodoStatusChangeListener, type TodoStatusChangeEvent, type TodoStatusChangeListener } from './live-events.js';
+export { addTodoStatusChangeListener, setTodoStatusChangeListener, type TodoStatusChangeEvent, type TodoStatusChangeListener } from './live-events.js';
 // Assignment answers who owns a Todo, not where it sits, so it has its own
 // module — re-exported here because its callers reach for both through this
 // one import.
@@ -235,7 +236,7 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
     // answers the incident the recovery sweep classified before it (the sweep
     // reads only runs that ended after this move, `latestOperatorResumeAt`, so
     // it will not write it back).
-    if ((from === 'blocked' || from === 'in_review') && target === 'executing' && opts.human && opts.manual) clearWorkItemRecovery(id);
+    if ((from === 'blocked' || from === 'in_review') && target === 'executing' && ((opts.human && opts.manual) || opts.bounce)) clearWorkItemRecovery(id);
 
     if (block) recordBlock(db, id, block, now);
     // Only a successful completion resets the block history; `cancelled` keeps
@@ -269,6 +270,11 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
         todoProvenance: todoProvenanceSnapshot(item),
       },
     });
+
+    // A child settling is recorded with the move, so its parent's owner is
+    // woken for it (child-settle-wake.ts): a rollback drops the row with the
+    // move, and a crash after the commit leaves it for the sweep.
+    if (isChildSettle(item.parentId, from, target)) recordChildSettle(db, item.parentId!, event);
 
     return { item: getWorkItem(id)!, escalated, event };
   });

@@ -264,9 +264,14 @@ const ATTESTED = {
   // tool ("done: operator or closeTodos employee, reason in note"); the gateway's
   // refusal stays the only check. The ceiling moves by exactly the 12 and Pi
   // stays one under it.
-  rpc: { tokens: 3989, sha256: "cdee20b0cc3ba4eb24c8a56c9327aa7fb32f8e712cd3ada991d1828340e94a37" },
-  pi: { tokens: 4324, sha256: "708f50a5974e93822cf61d99a60ff2bdfebb87ef7f975206dc11bc691def632c" },
-  openai: { tokens: 4128, sha256: "b8e0581d69bb8358bdd90e04e8e715fd52e8ead20a1a6473beb53fa4ecd31e9e" },
+  // Rebased for a child's parent owner accepting it: the same clause names the
+  // third closer ("done: operator, closeTodos employee or parent owner; reason
+  // in note"), and `asOperator` drops its own "; reason in note", which the
+  // tool line above already says. Net one token under the old text, so the
+  // ceiling does not move and Pi stays two under it.
+  rpc: { tokens: 3988, sha256: "2ddd2e3cb0bf7de2d63f3e69104e9d7a7093f82322c473bf272fbafcb3bc3cfa" },
+  pi: { tokens: 4323, sha256: "e570bd64af1e4dc15a4b5c1ff53960231d806821fecbe55b64368de2b86a4681" },
+  openai: { tokens: 4127, sha256: "d02380287b4b4211d4d5f498f0a5ca130d38b74e13892702c9cf71a546d31e7e" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;

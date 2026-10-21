@@ -107,41 +107,56 @@ export type TodoStatusChangeListener = (event: TodoStatusChangeEvent) => void | 
 export type TodoLabelsChangeListener = (workItemId: string) => void | Promise<void>;
 
 let todoStatusChangeListener: TodoStatusChangeListener | null = null;
+const extraStatusChangeListeners = new Set<TodoStatusChangeListener>();
 let todoLabelsChangeListener: TodoLabelsChangeListener | null = null;
 
 export function setTodoStatusChangeListener(listener: TodoStatusChangeListener | null): void {
   todoStatusChangeListener = listener;
 }
 
+/** Another listener on the same committed status write, beside the single slot
+ *  above. Returns the function that removes it. Each listener is isolated: one
+ *  that throws or rejects never stops the others or the write. */
+export function addTodoStatusChangeListener(listener: TodoStatusChangeListener): () => void {
+  extraStatusChangeListeners.add(listener);
+  return () => {
+    extraStatusChangeListeners.delete(listener);
+  };
+}
+
 export function setTodoLabelsChangeListener(listener: TodoLabelsChangeListener | null): void {
   todoLabelsChangeListener = listener;
 }
 
-/** Hand a committed write to a bridge listener. The listener is read when the
- *  signal releases, not when it was raised, and whatever it does — throw or
- *  reject — must never roll back or throw from the write that already committed. */
-function bridge<T>(current: () => ((value: T) => void | Promise<void>) | null, value: T): void {
-  emitOrHold(() => {
-    const listener = current();
-    if (!listener) return;
-    try {
-      const maybe = listener(value);
-      if (maybe && typeof (maybe as Promise<void>).catch === "function") {
-        void (maybe as Promise<void>).catch(() => undefined);
-      }
-    } catch {
-      // Best-effort bridge: a workflow-fire failure must never roll back or throw
-      // from the guarded lifecycle write that already committed.
+/** Hand a committed write to one bridge listener, whatever it does — throw or
+ *  reject — never rolling back or throwing from the write that already committed. */
+function callListener<T>(listener: ((value: T) => void | Promise<void>) | null, value: T): void {
+  if (!listener) return;
+  try {
+    const maybe = listener(value);
+    if (maybe && typeof (maybe as Promise<void>).catch === "function") {
+      void (maybe as Promise<void>).catch(() => undefined);
     }
+  } catch {
+    // Best-effort bridge: a workflow-fire failure must never roll back or throw
+    // from the guarded lifecycle write that already committed.
+  }
+}
+
+/** Hand a committed write to the bridge listeners. They are read when the
+ *  signal releases, not when it was raised. */
+function bridge<T>(current: () => Iterable<((value: T) => void | Promise<void>) | null>, value: T): void {
+  emitOrHold(() => {
+    for (const listener of [...current()]) callListener(listener, value);
   });
 }
 
 export function notifyTodoStatusChange(event: WorkItemEvent | undefined, item: WorkItem): void {
   if (!event || !event.fromStatus || !event.toStatus) return;
-  bridge(() => todoStatusChangeListener,
+  bridge(() => [todoStatusChangeListener, ...extraStatusChangeListeners],
     { ...event, fromStatus: event.fromStatus, toStatus: event.toStatus, item });
 }
 
 export function notifyTodoLabelsChanged(workItemId: string): void {
-  bridge(() => todoLabelsChangeListener, workItemId);
+  bridge(() => [todoLabelsChangeListener], workItemId);
 }

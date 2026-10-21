@@ -44,6 +44,18 @@ export function runIsFresh(endedAt: string | null | undefined, now: number): boo
 
 export const EXECUTING_UNHANDED_REASON = "executing with nothing running for over 4h, and not handed in for review since";
 
+/** The reason recovery gives an employee-addressed review. A prefix test keys
+ *  on it, so a row left behind by a later reassignment can be told apart. */
+export const REVIEW_ADDRESSEE_REASON_PREFIX = "in review for ";
+
+export function reviewAddresseeReason(employee: string): string {
+  return `${REVIEW_ADDRESSEE_REASON_PREFIX}${employee}, the owner of its parent Todo, to accept or send back`;
+}
+
+export function isReviewAddresseeReason(reason: string | undefined): boolean {
+  return reason?.startsWith(REVIEW_ADDRESSEE_REASON_PREFIX) === true;
+}
+
 /** Generic fallback: classifyRecovery found no specific incident. */
 export const GENERIC_OPERATOR_REASON = "no safe automatic recovery is known";
 
@@ -81,6 +93,9 @@ export function mayReplaceRecoveryLane(
   if (!prior) return true;
   if (itemStatus === "done" || itemStatus === "cancelled") return true;
   if (prior.reason !== undefined && RETIRED_RECOVERY_REASONS.has(prior.reason)) return true;
+  // An employee-addressed review is current only while the parent's owner is its
+  // addressee: after a reassignment the verdict that replaces it must win.
+  if (isReviewAddresseeReason(prior.reason)) return true;
   if (isGenericOperatorFallback(next) && prior.lane !== "operator") return false;
   return true;
 }
@@ -123,6 +138,8 @@ export interface RecoveryIncidentInput {
   openRun?: { startedAt: string; sessionInFlight: boolean };
   /** The Todo's linked execution attempts (review and phase links excluded). */
   attempts?: AttemptActivity;
+  /** The employee the Todo's review is addressed to (`reviewAddressee`), when it is not the operator. */
+  reviewAddressee?: string;
   now?: Date;
 }
 
@@ -170,6 +187,10 @@ function classifyLeftover(input: RecoveryIncidentInput, now: number): RecoveryCl
 export function classifyRecovery(input: RecoveryIncidentInput): RecoveryClassification {
   if (input.todo.status === "backlog") {
     return { class: "operator", lane: "operator", reason: "ordinary backlog work is never auto-started" };
+  }
+  // A child in review waits on the employee that owns its parent, not on the operator's desk.
+  if (input.todo.status === "in_review" && input.reviewAddressee) {
+    return { class: "operator", lane: "manager", reason: reviewAddresseeReason(input.reviewAddressee) };
   }
   const fromFailure = classifyFromFailure(input);
   if (fromFailure) return fromFailure;

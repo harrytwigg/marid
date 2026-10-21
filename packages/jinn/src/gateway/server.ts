@@ -67,6 +67,8 @@ import { reapableGatewayPids } from "./process-home.js";
 import { enforceOwnerOnlyDirectory, pathIsOwnerOnly } from "../shared/owner-only.js";
 import { emitTodoProjectionEvent, interruptSessionTurn, isSameOriginBrowserRequest, resumePendingWebQueueItems, sessionsHoldingEngineCapacity, type ApiContext } from "./api.js";
 import { startTodoSweeps } from "./todo-sweeps.js";
+import { startTodoTreeWake } from "./todo-tree-wake.js";
+import { startTodoQuietWatch } from "./todo-quiet-watch.js";
 import { createGatewayRequestHandler } from "./request-handler.js";
 import { sessionCommGuards, LATERAL_MAX_HOPS } from "./session-comm-guards.js";
 import { rejectCrossOriginUpgrade, rejectPtyUpgrade, rejectUnverifiedIdentifiedUpgradeCaller } from "./upgrade-guards.js";
@@ -834,7 +836,7 @@ export async function startGateway(
   setTodoLiveEmitter((event) => emit("company:changed", event));
   // A child's reply held while it waited on its own background work goes out
   // once its Todo leaves execution, even if a task it launched never ends.
-  // The listener is a single slot: a second user must fan out from here.
+  // The listener is a single slot: a second user takes `addTodoStatusChangeListener` instead.
   setTodoStatusChangeListener(reviewHeldInterimRepliesOnTodoStatusChange);
 
   const backgroundRefreshes = startBackgroundRefreshes(() => currentConfig, emit);
@@ -1229,6 +1231,11 @@ export async function startGateway(
     }
     reconcileWorkItemsOnStartup();
   });
+  // A settled child wakes its parent's owner; the startup pass delivers through
+  // this server, so it starts only now that it accepts requests.
+  const stopTodoTreeWake = startTodoTreeWake(apiContext);
+  // An executing Todo with nothing running is nudged, then escalated upward.
+  const stopTodoQuietWatch = startTodoQuietWatch(apiContext);
   // FTS migration installs guarded triggers synchronously, but historical row
   // seeding is a yielded, resumable maintenance job. Start it only after the HTTP
   // server accepts requests so first-upgrade history never delays readiness.
@@ -1297,7 +1304,7 @@ export async function startGateway(
     shuttingDown = true;
 
     // Stop the periodic sweeps before we start marking sessions interrupted below — a mid-shutdown sweep must not race the teardown.
-    stopStatusReconciler(); stopWorkItemReconciler(); stopTodoSweeps(); stopSessionSchedulers();
+    stopStatusReconciler(); stopWorkItemReconciler(); stopTodoSweeps(); stopTodoTreeWake(); stopTodoQuietWatch(); stopSessionSchedulers();
     backgroundRefreshes.stop(); stopCommentRouting(); stopBoardHooks();
 
     // Stop caffeinate

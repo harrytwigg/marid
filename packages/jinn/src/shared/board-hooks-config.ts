@@ -18,7 +18,9 @@ export type BoardHookEvent = (typeof BOARD_HOOK_EVENTS)[number];
 /** A Todo status, as `match.from` / `match.to` name it. */
 const HOOK_STATUSES: ReadonlySet<string> = new Set(["backlog", "executing", "in_review", "blocked", "done", "cancelled"]);
 const HOOK_NAME = /^[a-z0-9-]{1,64}$/;
-const MATCH_FIELDS = ["from", "to", "department", "label", "assignee", "actor"] as const;
+const MATCH_FIELDS = ["from", "to", "department", "label", "assignee", "actor", "reviewAddressee"] as const;
+/** Who a Todo's review is addressed to, as `match.reviewAddressee` names it. */
+const REVIEW_ADDRESSEES: ReadonlySet<string> = new Set(["operator", "employee"]);
 const ACTION_KINDS = ["spawn", "command", "notify"] as const;
 
 export interface BoardHookMatch {
@@ -28,6 +30,7 @@ export interface BoardHookMatch {
   label?: string | string[];
   assignee?: string | string[];
   actor?: string | string[];
+  reviewAddressee?: string | string[];
 }
 
 export interface BoardHookSpawn {
@@ -98,7 +101,13 @@ function matchProblems(match: unknown): string[] {
     const bad = asList(match[key]).filter((status) => !HOOK_STATUSES.has(status as string));
     if (bad.length > 0) problems.push(`match.${key} names an unknown status ${bad.map((status) => JSON.stringify(status)).join(", ")}`);
   }
-  return problems;
+  return [...problems, ...reviewAddresseeProblems(match.reviewAddressee)];
+}
+
+function reviewAddresseeProblems(value: unknown): string[] {
+  if (!isStringOrList(value)) return [];
+  const bad = asList(value).filter((kind) => !REVIEW_ADDRESSEES.has(kind as string));
+  return bad.length === 0 ? [] : [`match.reviewAddressee names an unknown addressee ${bad.map((kind) => JSON.stringify(kind)).join(", ")} (operator, employee)`];
 }
 
 function requireStrings(owner: string, block: Mapping, keys: readonly string[]): string[] {

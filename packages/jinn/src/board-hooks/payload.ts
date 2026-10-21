@@ -2,6 +2,7 @@ import { findLinks } from "../board-walk/pr-state.js";
 import type { BoardHookEvent } from "../shared/board-hooks-config.js";
 import { commentsTail, getComment, type WorkItemComment } from "../work-items/comments.js";
 import { getWorkItemLabels } from "../work-items/labels.js";
+import { reviewAddressee } from "../work-items/review-addressee.js";
 import { getWorkItem, listWorkItems, type WorkItem, type WorkItemEvent } from "../work-items/store.js";
 import { actorOf, creatorOf } from "./actor.js";
 import type { BasePayload } from "./types.js";
@@ -52,6 +53,7 @@ function todoOf(item: WorkItem): BasePayload["todo"] {
     parentId: item.parentId,
     rootId: item.rootId,
     childIds: listWorkItems({ parentId: item.id }).map((child) => child.id),
+    reviewAddressee: reviewAddressee(item),
     url: `/todos/${item.id}`,
   };
 }

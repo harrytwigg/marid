@@ -1,12 +1,14 @@
 import { getWorkItemRecovery, upsertWorkItemRecovery } from "./recovery-rows.js";
 import {
   classifyRecovery,
+  isReviewAddresseeReason,
   mayReplaceRecoveryLane,
   MAX_RECOVERY_ATTEMPTS,
   RECOVERY_SWEPT_STATUSES,
   TODO_RECOVERY_ACTOR,
   type AttemptActivity,
   type RecoveryClassification,
+  type WorkItemRecovery,
 } from "./recovery.js";
 import { isExecutionAttempt } from "./link-role.js";
 import { listWorkItemAttemptRuns } from "./runs.js";
@@ -17,6 +19,7 @@ import type { Session } from "../shared/types.js";
 import { listSessionsByWorkItem } from "../sessions/registry.js";
 import { hasOpenDelegations, isSessionInFlight } from "./open-delegations.js";
 import type { AvailabilityRearmResult } from "./availability-resume.js";
+import { reviewAddresseeEmployee } from "./review-addressee.js";
 
 export type TodoRecoveryMode = "off" | "classify-only" | "auto";
 
@@ -83,6 +86,7 @@ export function classifyWorkItem(item: WorkItem, now = new Date()): RecoveryClas
       : undefined,
     openRun: open ? { startedAt: open.startedAt, sessionInFlight: sessionInFlight(open.sessionId) } : undefined,
     attempts: item.status === "executing" ? attemptActivity(item.id, now.getTime()) : undefined,
+    reviewAddressee: item.status === "in_review" ? reviewAddresseeEmployee(item) : undefined,
     now,
   });
 }
@@ -91,10 +95,19 @@ function incidentId(item: WorkItem, lastRunId: string | undefined): string {
   return lastRunId ?? `status:${item.id}:${item.status}:${item.updatedAt}`;
 }
 
+/** Whether the stored row already says what the verdict does. A repair attempt rewrites the row's
+ *  reason itself, so a reason change alone counts only when an addressee verdict (whose reason
+ *  names who the review waits on) is on either side of it. */
+function rowStatesVerdict(prior: WorkItemRecovery | undefined, verdict: RecoveryClassification, id: string): boolean {
+  if (prior?.incidentId !== id || prior.class !== verdict.class || prior.lane !== verdict.lane) return false;
+  const addressee = isReviewAddresseeReason(verdict.reason) || isReviewAddresseeReason(prior.reason);
+  return !addressee || prior.reason === verdict.reason;
+}
+
 function recordClassified(item: WorkItem, verdict: RecoveryClassification, lastRunId: string | undefined, now: Date): void {
   const prior = getWorkItemRecovery(item.id);
   const id = incidentId(item, lastRunId);
-  if (prior?.incidentId === id && prior.class === verdict.class && prior.lane === verdict.lane) return;
+  if (rowStatesVerdict(prior, verdict, id)) return;
   if (!mayReplaceRecoveryLane(prior, verdict, item.status)) return;
   upsertWorkItemRecovery({
     workItemId: item.id,

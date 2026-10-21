@@ -17,4 +17,6 @@ export interface Heartbeat {
   createdAt: string;
   disarmedAt: string | null;
   disarmedReason: string | null;
+  /** Set on a gateway-owned heartbeat (e.g. `child-watch`); null when a session armed it. */
+  purpose: string | null;
 }

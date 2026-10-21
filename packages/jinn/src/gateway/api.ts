@@ -240,12 +240,12 @@ import { isToolCallMarker, readHookSessionId, wireHeader } from "../shared/wire-
 import { readWriteOrigin, writeDetail, WRITE_ORIGIN_HEADER } from "../work-items/origin.js";
 import { workItemActor, workItemActorEmployee, type WorkItemCaller } from "./work-item-arming.js";
 import { authorizeWorkItemDelegation, authorizeWorkItemOwnerManagerOrRoot } from "./work-item-authority.js";
-import { fullWorkItemPayload, openWorkItemPayload, workItemPagePayload } from "./work-item-payload.js";
+import { fullWorkItemPayload, openWorkItemPayload, workItemPagePayload, workItemTreePayload, workItemTreesPayload } from "./work-item-payload.js";
 import { TodoDepartmentNotAllowedError } from "../shared/todo-departments-config.js";
 import { DepartmentArchivedError, isDepartmentArchived } from "../work-items/department-archive.js";
 import { DepartmentBoundaryError, scopedDepartmentOf } from "../work-items/department-scope.js";
 import { parseStatusUpdateFields } from "./work-item-status-fields.js";
-import { hasOperatorLane, resolveStatusLane, WORK_ITEM_STATUSES } from "./work-item-status-lane.js";
+import { employeeCloseComment, hasOperatorLane, resolveStatusLane, WORK_ITEM_STATUSES } from "./work-item-status-lane.js";
 import { assignWorkItem, changedStopCause, transition, TransitionError } from "../work-items/transitions.js";
 import { checkAssignee } from "./todo-assignee.js";
 import { reconcileWorkItem } from "../work-items/reconcile.js";
@@ -328,6 +328,7 @@ import {
   type RestartDetachedOptions,
 } from "./lifecycle.js";
 import { handleHeartbeatApi } from "./heartbeat-api.js";
+import { armChildWatch } from "../heartbeats/child-watch.js";
 import { handleSelfCompactionApi } from "./self-compaction-api.js";
 import { handleSessionContextApi } from "./session-context-api.js";
 import { messageDeliveryError, resolveMessageDelivery, shouldInterruptRunningTurn as interruptsRunningTurn } from "./message-interrupt.js";
@@ -2366,6 +2367,7 @@ export async function handleApiRequest(
             return result;
           })();
         if (created.replayed) return json(res, { workItem: created.item, replayed: true }, 200);
+        if (parentId && caller.kind === "session") armChildWatch(caller.callerId);
         const activityReceiptId = persistTodoMutationActivity(req, context, created.item, "created");
         const sprint = sprintRow(placed.sprint);
         if (sprint) {
@@ -2393,7 +2395,7 @@ export async function handleApiRequest(
       if (ids.some((id) => !isTodoId(id))) {
         return badRequest(res, "ids must be a comma-separated list of Todo IDs in <AAA>-N format");
       }
-      return json(res, { trees: getWorkItemTrees(ids) });
+      return json(res, { trees: workItemTreesPayload(getWorkItemTrees(ids)) });
     }
 
     // GET /api/work-items/:id — full Todo detail.
@@ -2624,6 +2626,8 @@ export async function handleApiRequest(
         ...(lane.kind === "operator" && caller.kind === "session" ? { operatorLane: true } : {}),
         // A close on the operator's standing grant says so: the actor stays the closer's own session.
         ...(lane.kind === "closer" ? { closeTodos: true } : {}),
+        // The parent's owner accepting or sending back a child's review: the actor stays its own session.
+        ...(lane.kind === "parent-owner" ? { parentOwner: true } : {}),
       }, caller.origin);
       // The banner's asked-for-after reason (design-doc §5): a same-status
       // operator move with a note annotates the CURRENT stop instead of
@@ -2656,6 +2660,8 @@ export async function handleApiRequest(
               // Agent lane: resolveStatusLane already held the move to the
               // agent pairs, so the manual-start rule does not also govern it.
               agent: lane.kind === "agent" || undefined,
+              // The parent's owner sending a child back from review is the review bounce.
+              ...(lane.kind === "parent-owner" && target === "executing" ? { bounce: true } : {}),
               callerSessionId: caller.kind === "session" ? caller.callerId : undefined, ...(blockKind ? { blockKind } : {}),
               ...(cascade ? { cascade: true } : {}), ...(stopCause ? { stopCause } : {}),
               detail,
@@ -2665,8 +2671,9 @@ export async function handleApiRequest(
         if (actingAsOperator && result.item.status === "done") {
           addComment({ workItemId: params.id, ...workItemCommentAuthor(caller), ...workItemCommentSession(caller), body: `Closed as done for the operator. Reason: ${note}`, origin: caller.origin });
         }
-        if (lane.kind === "closer" && result.item.status === "done") {
-          addComment({ workItemId: params.id, ...workItemCommentAuthor(caller), ...workItemCommentSession(caller), body: `Closed as done by ${lane.employee}. Reason: ${note}`, origin: caller.origin });
+        const closeComment = result.item.status === "done" ? employeeCloseComment(lane, note) : undefined;
+        if (closeComment) {
+          addComment({ workItemId: params.id, ...workItemCommentAuthor(caller), ...workItemCommentSession(caller), body: closeComment, origin: caller.origin });
         }
         if (result.item.status !== item.status) result.item = linkSelfStartedTodo(caller, result.item, actor);
         // A review handoff or send-back note is a comment under whoever moved it; a retried move posts it too.
@@ -2828,7 +2835,7 @@ export async function handleApiRequest(
       if (!requireTodoRouteId(res, params.id)) return;
       const tree = getWorkItemTree(params.id);
       if (!tree) return notFound(res);
-      return json(res, { tree });
+      return json(res, { tree: workItemTreePayload(tree) });
     }
 
     // GET /api/work-items/:id/comments — chronological thread page (any caller).
@@ -3602,6 +3609,7 @@ export async function handleApiRequest(
           return json(res, { error: `delegation into session ${reused.id} failed: ${linkErr instanceof Error ? linkErr.message : linkErr}`, workItemId: workItem.id }, 500);
         }
         announceDelegation({ ...announcement, session: reused, dispatchedAt: Date.now() });
+        if (delegationCaller.kind === "session") armChildWatch(delegationCaller.callerId);
         return json(res, reusedDelegationBody(workItem.id, reused, title, { engine: engineName, model: selection.model, effortLevel: selection.effortLevel, fallbackMode: fallbackParam.mode }, config));
       }
       // The key is the session's turn lane: SessionQueue serializes turns per
@@ -3711,6 +3719,7 @@ export async function handleApiRequest(
         attachments: attachmentPaths.length > 0 ? attachmentPaths : undefined,
       });
       announceDelegation({ ...announcement, session, dispatchedAt: Date.parse(session.createdAt) || Date.now() });
+      if (delegationCaller.kind === "session") armChildWatch(delegationCaller.callerId);
 
       return json(res, {
         workItemId: workItem.id,
@@ -3779,6 +3788,7 @@ export async function handleApiRequest(
         speech: body.speech === true,
       });
       if (!spawned.ok) return badRequest(res, spawned.error);
+      if (spawnCaller.kind === "session" && body.parentSessionId === spawnCaller.callerId) armChildWatch(spawnCaller.callerId);
 
       return json(res, serializeSessionResponse(spawned.session, context), 201);
     }

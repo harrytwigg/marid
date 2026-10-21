@@ -1,0 +1,275 @@
+# Feature Specification: Todo-Tree Wake, Child-Watch Heartbeat, Parent-Addressed Review
+
+**Feature Branch**: `feat/todo-tree-wake`
+
+**Created**: 2026-10-20
+
+**Status**: Design. Built in three parts (A, B, C below) on branches stacked on this one.
+
+## Problem
+
+An employee splits its Todo into child Todos, but the parent's owner often never learns
+the children finished:
+
+- Parents are woken session to session only. `notifyParentSessionAndWait`
+  (`sessions/callbacks.ts`) returns early when the child session has no reporting parent.
+  A child Todo made with `create_work_item { parentId }` and started by the board walk or
+  `dispatch_work_item` has no reporting parent session, so its completion wakes nobody.
+- `hasOpenDelegations` (`work-items/open-delegations.ts`) counts only `executing`
+  sub-tasks and in-flight child sessions. Once a child reaches `in_review` or `done` the
+  parent looks idle to the stall check, and nothing tells it the child landed.
+- The only safety net is an instruction telling orchestrators to arm an hourly heartbeat
+  themselves. It is voluntary and regularly skipped.
+- Every child moved to `in_review` lands on the operator's review desk, even when an
+  employee owns the parent and is the one who has to integrate it.
+
+## Goal
+
+A parent Todo's owner is reliably woken when any child Todo settles, whoever started the
+child, and carries the tree to completion. Only the root goes to the operator.
+
+## Terms
+
+- **Settled**: a Todo status in `in_review`, `blocked`, `done`, `cancelled`.
+- **Open child**: a child Todo in `backlog` or `executing`.
+- **Parent owner**: the parent Todo's assignee, when that is an employee in the org
+  (not the operator, not empty).
+- **Parent owner session**: resolved at wake time, first match wins:
+  1. the parent owner's newest messageable session linked to execute the parent
+     (`isExecutionAttempt`, `canMessageSession`, held by the assignee);
+  2. `owningEmployeeSession(parent, assignee)` (`work-items/todo-owner-session.ts`).
+
+  An `idle` or `interrupted` session is messageable: a message starts a turn on it, which
+  is how a stopped owner is resumed. An `error`, archived or missing session is not.
+
+## Part A: Todo-tree wake
+
+1. **Record, atomically.** Inside `transition()`'s transaction, when the Todo has a
+   `parentId`, `to` is settled and `to !== from`, insert a row into a new additive table:
+
+   ```sql
+   CREATE TABLE IF NOT EXISTS work_item_child_settles (
+     id           INTEGER PRIMARY KEY AUTOINCREMENT,
+     parent_id    TEXT NOT NULL REFERENCES work_items(id) ON DELETE CASCADE,
+     child_id     TEXT NOT NULL REFERENCES work_items(id) ON DELETE CASCADE,
+     event_id     TEXT NOT NULL UNIQUE,
+     from_status  TEXT NOT NULL,
+     to_status    TEXT NOT NULL,
+     actor        TEXT NOT NULL,
+     created_at   TEXT NOT NULL,
+     flushed_at   TEXT,
+     outcome      TEXT,          -- woken | deduped | redispatched | recorded
+     delivery_id  TEXT
+   );
+   CREATE INDEX IF NOT EXISTS idx_child_settles_pending
+     ON work_item_child_settles(parent_id) WHERE flushed_at IS NULL;
+   ```
+
+   A rollback drops the row with the move. A crash after commit leaves the row pending,
+   and the sweep (step 3) picks it up.
+
+2. **Batch.** After commit, schedule a flush of that parent at
+   `CHILD_SETTLE_BATCH_MS` (10 s) after its oldest pending row. The window is fixed from
+   the first row, not reset by later ones, so a stream of settles cannot starve the wake.
+   Every settle inside the window goes out in one wake.
+
+3. **Sweep.** On startup and every 60 s, flush every parent whose oldest pending row is
+   older than the window. This is what makes the wake durable across restarts.
+
+4. **Flush** (one transaction per parent, then delivery after commit):
+   - **Parent closed or in `backlog`/`in_review`**: mark rows `recorded`; no wake.
+   - **Self-moves**: a row whose actor is the parent owner (the actor session's employee
+     is the parent's assignee) is marked `deduped`. The owner made the move and knows.
+   - **Dedupe against the session callback**: a row whose actor is a session that reports
+     to the resolved target (`withReportingParent(actorSession).parentSessionId ===
+     target.id`) is marked `deduped`. That child's own turn-end callback reaches the same
+     session, so a `delegate_task` child never wakes the parent twice. A child moved by
+     anyone else (the operator, a reviewer, the board walk's dispatcher, a session that
+     reports elsewhere) still wakes the parent.
+   - **Owner session found**: claim ONE outbox delivery for all remaining rows through
+     `claimSessionDelivery` (the durable outbox parent callbacks and heartbeats use):
+     `sourceKind: "work-item"`, `sourceId: parentId`,
+     `sourceAttempt: "child-settles:<lowest row id>-<highest row id>"`,
+     `sourceOutcome: "children-settled"`, `deliveryKind: "todo-child-settled"`. Rows are
+     marked `woken` with the delivery id in the same transaction. The message lists each
+     child (id, title, `from → to`, who moved it, the move's note clipped to 500 chars) and
+     says how to act: `get_work_item` on each, accept or send back a child in `in_review`
+     (Part C), unblock or re-plan a `blocked` one, and carry the parent on when nothing is
+     left open.
+   - **No owner session, parent `executing`**: `redispatchTodo(parentId, ctx, reason)`
+     (`gateway/todo-redispatch.ts`) with the same child list as the reason; rows
+     `redispatched`. If the re-dispatch is refused because a dispatcher is already running,
+     the rows are still `redispatched`: the new session reads the tree.
+   - **No owner session, parent `blocked`**: rows `recorded` and one comment on the parent
+     listing the children, so whoever resumes it sees them. A blocked parent waits on a
+     person, and a sweep never restarts it.
+5. **Busy targets.** `todo-child-settled` deliveries fold into the pending tail turn the
+   same way `parent-completion` deliveries do (`sessions/completion-batching.ts`), so a
+   wake that lands while the owner is busy joins the queued completion turn rather than
+   making another.
+6. **Stall check.** `hasOpenDelegations` also counts a parent with pending
+   `work_item_child_settles` rows, or with a `todo-child-settled` delivery still `pending`
+   in the outbox: a wake is on its way, so the parent is not idle. A child in `in_review`
+   addressed to the parent (Part C) is not an open delegation: the parent has been woken
+   and the next move is its own, so the ordinary 4 h stall clock runs from that wake.
+
+## Part B: Automatic child-watch heartbeat
+
+1. **One per session, gateway-owned.** A heartbeat carries a `purpose`. The gateway arms
+   `purpose = 'child-watch'` for the calling session when that session:
+   - creates a Todo with `parentId` (`POST /api/work-items`),
+   - delegates (`POST /api/delegations`), or
+   - spawns a session (`POST /api/sessions` with the caller as parent).
+
+   Interval 3600 s; `expiresAt` = now + 24 h. If the session already holds an armed
+   child-watch heartbeat it is not duplicated: its expiry is pushed to now + 24 h. The
+   gateway's own heartbeat does not count against `MAX_ARMED_PER_SESSION`. Sessions with
+   no session identity (the operator's web surface) arm nothing.
+2. **Storage.** A nullable `purpose TEXT` column on `heartbeats`, added by an idempotent
+   `ALTER TABLE` guarded on `PRAGMA table_info`, and a partial unique index
+   `ON heartbeats(owner_session_id, purpose) WHERE status = 'armed' AND purpose IS NOT NULL`
+   so a duplicate cannot be armed even by a race. `list_heartbeats` shows the purpose;
+   `stop_heartbeat` stops it like any other (a later trigger arms it again).
+3. **Message**, delivered verbatim:
+   > Child check (armed by the gateway because you have open child work): run
+   > get_work_item_tree on your Todo and read the child sessions you started; act on any
+   > child that has settled. If nothing needs you, end your turn.
+4. **Open children of a session** `S`: a Todo with status `backlog` or `executing` whose
+   parent is `S`'s linked Todo or that `S` created with a `parentId` (`sourceRef`
+   `session:<S>:` or `delegate:<S>:`), or a child session of `S` that is in flight
+   (`isSessionInFlight`).
+5. **Auto-stop.** `releaseChildWatchIfSettled(sessionId)` disarms the session's child-watch
+   heartbeat with reason `children-settled` when `S` has no open children. It is called:
+   - when a heartbeat with that purpose comes due (the scheduler disarms instead of
+     delivering, so no idle wake is ever sent),
+   - after a parent-completion callback is accepted for `S`, and
+   - after a Part A flush targets `S`.
+
+## Part C: Children report to the parent owner
+
+1. **Review addressee.** `reviewAddressee(item)` is the parent owner when the item has a
+   parent, the parent's assignee is an employee in the org, and the parent is `executing`
+   or `blocked` (the states in which Parts A and D wake or tell its owner); otherwise the
+   operator. A parent in `backlog` or `in_review` would never hear of the child, so its
+   children's reviews reach the operator. Computed on read, never stored, so a parent reassigned to the
+   operator sends its children's reviews to the operator from then on. The Todo payloads
+   (compact, board and full) carry `reviewAddressee: { kind: "operator" } | { kind:
+   "employee", employee }`.
+2. **The child producer does nothing new.** It moves its Todo to `in_review` with a note
+   as today. Part A wakes the parent owner with that note.
+3. **Parent-owner lane.** The status route (`gateway/work-item-status-lane.ts`) gains a
+   lane: a session whose employee is the child's review addressee may move that child
+   - `in_review → done` with a note (posted as a comment, as the closer lane does), and
+   - `in_review → executing`, recorded as a review bounce (`bounce: true`, `rounds`
+     counts, the policy's max rounds escalates to `blocked` as for the operator).
+
+   The self-review ban holds (`closerHandIn`): an employee that worked the child, started
+   it, or handed it to review cannot close it. Cancelling, reopening and cascading stay the
+   operator's. The `update_work_item` description names the new case within the tool
+   manifest budget.
+4. **The operator's desk shows only what is addressed to the operator.** A child in
+   `in_review` addressed to an employee gets attention lane `manager` (not `operator`); the
+   recovery classifier gives it lane `manager` with a reason naming the addressee. The
+   operator's Needs-you list and its "N waiting" count leave it out (the web filter and
+   the server's `needsAttentionFor` query agree, so counts and paging match). Board columns
+   list root Todos only, so the "for <employee>" chip goes where children are shown: the
+   card's tree tray and the Todo page's status header (tree nodes carry
+   `reviewAddressee`). If the parent owner never acts, the parent trips the ordinary 4 h
+   stall check and reaches the operator that way. The root Todo, and any child whose
+   parent the operator owns, reach the desk exactly as today.
+5. **Board hooks** get `reviewAddressee` in the payload and a matcher field
+   `reviewAddressee: operator | employee`, so a hook meant for the operator's desk can
+   skip parent-addressed reviews. Existing hooks are unchanged until their config adds the
+   field (see the deployment notes).
+6. **Brief wording.** The lifecycle lines in `sessions/context.ts` gain: a Todo whose
+   parent an employee owns hands its `in_review` to that employee, who accepts it (`done`
+   with a note) or sends it back; and the parent owner, when woken about a child in
+   review, does exactly that. "Never set done" becomes "never set done, except accepting
+   a child of a Todo you own".
+
+## Part D: Quiet executing Todos
+
+Parts A to C act when a child Todo changes status. The commonest stall changes nothing:
+the producer ends its turn saying it is waiting on something (a background test run, a
+build), the thing finishes or dies without waking the session, and the Todo sits in
+`executing` with nothing running. Its parent counts an `executing` child as an open
+delegation, so the parent looks busy too, and the first thing to notice is the 4 h stall
+check. Part D notices within minutes.
+
+1. **Quiet.** An `executing` Todo is quiet when it has at least one linked execution
+   session, `attemptActivity()` says nothing is in flight (no running or waiting attempt,
+   no live background sub-agent, no open delegation), and the newest of its attempts'
+   last activity and the moment it entered `executing` is older than the quiet window, and
+   none of its children is being worked or waits in `backlog` for the board walk to start
+   it (an orchestrator that split its work and ended its turn is waiting, not stalled; a
+   start-dated child counts as waiting, an `autoStart: false` or operator-held one does
+   not). When the quiet Todo has children that settled or that the walk will not start,
+   the nudge names them instead of talking about a lost background command:
+   - `QUIET_AFTER_MS` = 15 min normally;
+   - `QUIET_BACKGROUND_TASK_MS` = 60 min when the newest attempt still counts a
+     background shell task of its own (`isAwaitingOwnBackgroundTask`): a test suite may
+     legitimately run that long, but a shell task may also never end (a dev server), so
+     it only stretches the window rather than counting as work.
+2. **Ladder**, at most one step of each per executing stint (a stint is keyed on the
+   moment the Todo last entered `executing`; any status move starts a new one):
+   1. **Nudge the producer**: one outbox delivery (`deliveryKind: "todo-quiet-nudge"`,
+      `sourceKind: "work-item"`, `sourceId: <todo>`, `sourceAttempt:
+      "quiet-nudge:<stint>"`) to the assignee's newest messageable execution session
+      (only the assignee's: a Todo reassigned while executing keeps its previous holder's
+      session linked, and a Dispatcher is linked to execute too), saying the Todo is still
+      `executing` with nothing running, that a background command it waited on has
+      finished or was lost and will not wake it, and what to do: check the result and
+      continue, `blocked` with a note if it waits on a person, `in_review` if it is done.
+      If none of the assignee's sessions can be messaged, skip straight to step 2.
+   2. **Escalate**: when the Todo is quiet again after the nudge (its own window measured
+      from the nudge or the turn that answered it, whichever is later), one delivery
+      (`deliveryKind: "todo-quiet-escalation"`, `sourceAttempt:
+      "quiet-escalation:<stint>"`) to whoever owns the work from above: the parent
+      owner session (Part A's resolution) for a child Todo, else the session the
+      producer reports to unless that is a system employee (the Dispatcher that started
+      board-walk work can only nudge again), else a system comment on the Todo. If the
+      Todo has a parent in `executing` and no owner session can be messaged, the parent
+      is re-dispatched with the escalation as the reason. The message names the Todo,
+      its producer session and how long nothing has run, and offers only what works:
+      read the session, then message it, or take the work back or reassign it. A
+      re-dispatch of the child is offered only when none of its assignee's sessions can
+      be messaged, because a dispatch is refused while that session is idle.
+3. **State**: an additive table, one row per Todo, reset when the stint changes:
+
+   ```sql
+   CREATE TABLE IF NOT EXISTS work_item_quiet_watch (
+     work_item_id     TEXT PRIMARY KEY REFERENCES work_items(id) ON DELETE CASCADE,
+     stint            TEXT NOT NULL,   -- when the Todo last entered executing
+     nudged_at        TEXT,
+     nudge_session_id TEXT,
+     escalated_at     TEXT,
+     updated_at       TEXT NOT NULL
+   );
+   ```
+4. **Sweep** every 60 s from the gateway's Todo sweeps; startup-safe because the state
+   is durable and the deliveries are keyed. `gateway.todoQuietWatch: { enabled?,
+   afterMinutes?, backgroundTaskMinutes? }` tunes it; unset means on with the defaults
+   above.
+5. **Fit with the rest.** The engine-process-death nudge (a session whose Claude Code
+   process ended under background tasks gets one continue turn) covers one cause sooner;
+   Part D is the backstop for every cause. Part B's hourly heartbeat remains the parent's
+   own periodic look; Part D makes a stalled child reach the parent without waiting for it.
+
+## Acceptance
+
+- A child Todo started by the board walk or `dispatch_work_item` (no session parent) wakes
+  the parent owner when it settles. Test.
+- A dead (error/archived) parent owner session re-dispatches the parent; a stopped
+  (`interrupted`/idle) one is resumed by the wake. Tests.
+- A `delegate_task` child wakes the parent once, not twice. Two children settling inside
+  the window produce one wake. Tests.
+- The child-watch heartbeat is armed on child creation, delegation and spawn, not
+  duplicated, and disarmed when the last child settles. Tests.
+- A child in `in_review` under an employee-owned parent is accepted or bounced by the
+  parent owner, stays off the operator's desk, and the stall check agrees. Tests.
+- An `executing` Todo whose session went idle with nothing running is nudged once after
+  15 min (60 min while its own background shell task is counted), and escalated once to
+  its parent owner if it goes quiet again; a working, delegating or blocked Todo never is.
+  Tests.
+- An isolated instance shows a parent with two board-walk children being woken and
+  completing.

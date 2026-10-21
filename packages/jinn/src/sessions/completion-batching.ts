@@ -8,6 +8,14 @@ const COMPLETION_BATCH_MAX_ITEMS = 32;
 const COMPLETION_BATCH_MAX_CHARS = 128_000;
 
 /**
+ * The deliveries that share one pending turn while their target is busy: a
+ * child session's completion, and the wake for a child Todo that settled. Both
+ * tell the target that work it is waiting on landed, so they read as one batch.
+ */
+const FOLDABLE_DELIVERY_KINDS = ["parent-completion", "todo-child-settled"] as const;
+const FOLDABLE_KINDS_SQL = FOLDABLE_DELIVERY_KINDS.map((kind) => `'${kind}'`).join(", ");
+
+/**
  * Build one engine-facing turn from immutable completion receipts that arrived
  * while the target was already busy. The receipts and their transcript banners
  * remain separate; only the expensive engine dispatch is shared.
@@ -30,7 +38,7 @@ export function pendingCompletionBatch(
   targetSessionId: string,
   sessionKey: string,
 ): { queueItemId: string; prompt: string } | undefined {
-  if (delivery.deliveryKind !== "parent-completion") return undefined;
+  if (!(FOLDABLE_DELIVERY_KINDS as readonly string[]).includes(delivery.deliveryKind)) return undefined;
   // A newly accepted callback belongs at the tail. Only fold it into the
   // existing tail row: reaching past an intervening operator/workflow turn
   // would reorder work even though the queue positions stayed unchanged.
@@ -47,7 +55,7 @@ export function pendingCompletionBatch(
   const kinds = database.prepare(`
     SELECT
       COUNT(*) AS total,
-      SUM(CASE WHEN status = 'accepted' AND delivery_kind = 'parent-completion' THEN 1 ELSE 0 END) AS completions
+      SUM(CASE WHEN status = 'accepted' AND delivery_kind IN (${FOLDABLE_KINDS_SQL}) THEN 1 ELSE 0 END) AS completions
     FROM callback_deliveries
     WHERE queue_item_id = ?
   `).get(candidate.id) as { total: number; completions: number | null };
@@ -56,7 +64,7 @@ export function pendingCompletionBatch(
     ${CALLBACK_DELIVERY_SELECT}
     WHERE queue_item_id = ?
       AND status = 'accepted'
-      AND delivery_kind = 'parent-completion'
+      AND delivery_kind IN (${FOLDABLE_KINDS_SQL})
     ORDER BY (
       SELECT m.rowid FROM messages m WHERE m.id = callback_deliveries.message_id
     ), callback_deliveries.rowid

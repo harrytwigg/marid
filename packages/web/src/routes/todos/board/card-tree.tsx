@@ -1,9 +1,10 @@
 import { memo, useState } from "react"
 import { Plus } from "@/components/ui/icon"
-import type { WorkItemTreeNodeWire, WorkItemTreeWire } from "@/lib/api"
+import type { Employee, WorkItemTreeNodeWire, WorkItemTreeWire } from "@/lib/api"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { StateCircle } from "../state-glyph"
-import { stateKeyOf } from "@/lib/todos"
+import { reviewAddresseeEmployee, stateKeyOf } from "@/lib/todos"
+import { ReviewForChip } from "../review-for-chip"
 
 /* Todos v2 slice 6 — the in-place tree tray (design-doc §4, polish law 8:
  * the tray sits flush on the card's 13px content edge; rows use the standard
@@ -30,11 +31,13 @@ function flatten(nodes: WorkItemTreeNodeWire[], level: number, out: FlatRow[]): 
 export const CardTree = memo(function CardTree({
   tree,
   cardDepth,
+  byName,
   onOpenChild,
   onAddSubTask,
 }: {
   tree: WorkItemTreeWire
   cardDepth: number
+  byName: Map<string, Employee>
   onOpenChild: (id: string) => void
   onAddSubTask: (title: string) => void
 }) {
@@ -63,6 +66,7 @@ export const CardTree = memo(function CardTree({
     >
       {rows.map(({ node, level }) => {
         const closed = node.status === "done" || node.status === "cancelled"
+        const reviewFor = reviewAddresseeEmployee(node)
         return (
           <div
             key={node.id}
@@ -90,6 +94,7 @@ export const CardTree = memo(function CardTree({
             >
               {node.title}
             </span>
+            {reviewFor && <ReviewForChip employee={reviewFor} byName={byName} />}
             {node.assignee && (
               <EmployeeAvatar name={node.assignee} size={16} fontSize={9} className="bg-[var(--fill-secondary)]" />
             )}

@@ -267,6 +267,7 @@ export const BoardCard = memo(function BoardCard({
         <CardTree
           tree={tree}
           cardDepth={item.depth ?? 0}
+          byName={byName}
           onOpenChild={onOpenChild}
           onAddSubTask={addSubTask}
         />

@@ -382,6 +382,9 @@ export interface WorkItemRelationWire {
   createdAt: string
 }
 
+/** Who a Todo's review is addressed to (gateway `reviewAddressee`): the operator, or the employee that owns its parent. */
+export type ReviewAddresseeWire = { kind: "operator" } | { kind: "employee"; employee: string }
+
 export interface WorkItemCompactWire extends TodoStopCauseWire {
   id: string
   /** Positive monotonic whole-row revision on CAS-capable gateways. */
@@ -408,6 +411,8 @@ export interface WorkItemCompactWire extends TodoStopCauseWire {
   sprint?: WorkItemSprintRefWire | null
   blocked?: boolean
   kept?: boolean
+  /** Optional: older gateways omit it, which reads as the operator. */
+  reviewAddressee?: ReviewAddresseeWire
   updatedAt: string
   /** Manual sort rank (design-todos §7.3). Null until the operator reorders. */
   rank?: number | null
@@ -449,6 +454,8 @@ export interface WorkItemFullWire {
   depth?: number
   dueAt?: string | null
   startAt?: string | null
+  /** On tree nodes and the detail payload; optional: older gateways omit it. */
+  reviewAddressee?: ReviewAddresseeWire
   createdAt: string
   updatedAt: string
   closedAt: string | null
@@ -526,6 +533,8 @@ export interface DepartmentSummaryWire {
 export interface WorkItemDetailWire extends TodoStopCauseWire {
   workItem: WorkItemFullWire
   kept?: boolean
+  /** Who this Todo's review is addressed to (optional: older gateways omit it). */
+  reviewAddressee?: ReviewAddresseeWire
   spendUsd: number
   events: WorkItemEventWire[]
   /** Last-10 comments tail + total (optional: older gateways omit it). */
