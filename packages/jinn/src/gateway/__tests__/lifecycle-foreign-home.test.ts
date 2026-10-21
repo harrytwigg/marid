@@ -23,6 +23,11 @@ const { PID_FILE, GATEWAY_INFO_FILE, JINN_HOME_IDENTITY } = await import("../../
 const { pidBelongsToAnotherHome, reapableGatewayPids } = await import("../process-home.js");
 const { readGatewayInfo, writeGatewayInfo } = await import("../gateway-info.js");
 
+// Every port lookup shells out to lsof, which walks the whole process table: about a
+// second per call on a busy host, and these tests make several. The default 5s test
+// timeout is not enough headroom, so the suites that probe real listeners get their own.
+const LSOF_PROBE_TIMEOUT_MS = 30_000;
+
 const itNeedsProcessEnvReads = it.skipIf(process.platform === "win32");
 
 async function freePort(): Promise<number> {
@@ -88,7 +93,7 @@ function spawnDaemonLookalike(port: number, jinnHome: string, scriptDir: string)
  * A second home beside a running instance — a throwaway made by copying the live home,
  * PID file and all, or one left on the live port — must never act on that instance.
  */
-describe("a home that shares a machine with another instance", () => {
+describe("a home that shares a machine with another instance", { timeout: LSOF_PROBE_TIMEOUT_MS }, () => {
   const children: ChildProcess[] = [];
   const tempDirs: string[] = [];
 

@@ -22,6 +22,11 @@ const { assertPortTakeoverAllowed, buildGatewayChildEnv, lookupPidOnPort, select
 const { CONFIG_PATH, PID_FILE, GATEWAY_INFO_FILE } = await import("../../shared/paths.js");
 const tmpHomeIdentity = fs.realpathSync.native(tmpHome);
 
+// Every port lookup shells out to lsof, which walks the whole process table: about a
+// second per call on a busy host, and these tests make several. The default 5s test
+// timeout is not enough headroom, so the suites that probe real listeners get their own.
+const LSOF_PROBE_TIMEOUT_MS = 30_000;
+
 /** Pick a free ephemeral port (nothing will be listening on it afterwards). */
 async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -119,7 +124,7 @@ async function waitForListening(port: number, host = "127.0.0.1"): Promise<void>
  *  fixtures are plain listeners with no gateway.json, so that path cannot apply. */
 const itNeedsProcessEnvReads = it.skipIf(process.platform === "win32");
 
-describe("stop / stopAndWait PID-file race", () => {
+describe("stop / stopAndWait PID-file race", { timeout: LSOF_PROBE_TIMEOUT_MS }, () => {
   const children: ChildProcess[] = [];
   const tempDirs: string[] = [];
 
@@ -330,7 +335,7 @@ describe("stop / stopAndWait PID-file race", () => {
  * spawns in daemon shape, because the helper merges process.env (which the
  * harness sets) — which is exactly why the gap went uncovered.
  */
-describe("foreground gateway ownership (no JINN_HOME in env)", () => {
+describe("foreground gateway ownership (no JINN_HOME in env)", { timeout: LSOF_PROBE_TIMEOUT_MS }, () => {
   const children: ChildProcess[] = [];
 
   afterEach(async () => {
