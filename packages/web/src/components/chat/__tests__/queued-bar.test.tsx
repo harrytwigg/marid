@@ -8,6 +8,15 @@ describe('QueuedBar', () => {
     expect(container.firstChild).toBeNull()
   })
 
+  it('clears the floating composer that overlaps whatever sits above it', () => {
+    const { container } = render(<QueuedBar count={2} onSendAllNow={vi.fn()} />)
+    const bar = container.querySelector('[data-queued-bar]')
+    // The composer's negative top margin is --composer-overlap; the strip's bottom margin cancels it,
+    // and it stacks above the composer's scrim. Real geometry is checked by the chat-queued capture screen.
+    expect(bar?.className).toContain('mb-[var(--composer-overlap,0px)]')
+    expect(bar?.className).toContain('z-[12]')
+  })
+
   it('shows the count and force-sends on click', async () => {
     const onSendAllNow = vi.fn().mockResolvedValue(undefined)
     render(<QueuedBar count={2} onSendAllNow={onSendAllNow} />)

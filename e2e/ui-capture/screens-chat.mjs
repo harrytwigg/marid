@@ -151,4 +151,53 @@ export const CHAT_SCREENS = [
       await page.waitForTimeout(500)
     },
   },
+  {
+    // A turn is running and two messages are parked: the queued bar must sit wholly above the composer,
+    // with Send all now under the pointer. The sandbox has no engine, so the
+    // session reports running and the queue is two parked rows.
+    name: 'chat-queued',
+    title: 'Chat with queued messages and a running turn',
+    serviceWorkers: 'block',
+    url: (f) => `/?session=${f.chatSession}`,
+    ready: PLAN_READY,
+    setup: async (page) => {
+      await page.route(/\/api\/sessions\/[^/?]+(\?.*)?$/, async (route) => {
+        if (route.request().method() !== 'GET') return route.fallback()
+        const response = await route.fetch()
+        await route.fulfill({ response, json: { ...(await response.json()), status: 'running' } })
+      })
+      await page.route(/\/api\/sessions\/[^/]+\/queue$/, async (route) => {
+        if (route.request().method() !== 'GET') return route.fallback()
+        const row = (n) => ({ id: `queued-${n}`, sessionId: 'sandbox', prompt: `Follow-up ${n}`, status: 'pending', position: n, createdAt: new Date().toISOString(), messageId: null })
+        await route.fulfill({ json: [row(1), row(2)] })
+      })
+    },
+    prepare: async (page) => {
+      const bar = page.locator('[data-queued-bar]')
+      await bar.waitFor({ timeout: 10_000 })
+      await page.waitForTimeout(400)
+      const problems = await page.evaluate(() => {
+        const box = (el) => { const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right } }
+        const barEl = document.querySelector('[data-queued-bar]')
+        const composer = document.querySelector('[data-chat-composer]')
+        const button = barEl.querySelector('button')
+        const label = barEl.querySelector('span')
+        const out = []
+        const b = box(barEl)
+        if (b.bottom > box(composer).top + 0.5) out.push(`the bar ends at ${b.bottom}, below the composer's top ${box(composer).top}`)
+        for (const [name, el] of [['Send all now', button], ['the count', label]]) {
+          const r = box(el)
+          const cy = (r.top + r.bottom) / 2
+          for (const [x, y] of [[r.left + (r.right - r.left) / 4, cy], [(r.left + r.right) / 2, r.top + 4], [(r.left + r.right) / 2, r.bottom - 4], [r.right - (r.right - r.left) / 4, cy]]) {
+            const hit = document.elementFromPoint(x, y)
+            if (hit !== el && !el.contains(hit)) { out.push(`${name} is covered at ${Math.round(x)},${Math.round(y)} by ${hit?.tagName.toLowerCase()}`); break }
+          }
+          if (r.right > window.innerWidth + 0.5 || r.left < -0.5) out.push(`${name} runs off the screen`)
+        }
+        return out
+      })
+      if (problems.length) throw new Error(`queued bar: ${problems.join('; ')}`)
+      await page.getByRole('button', { name: 'Send all now' }).click({ trial: true, timeout: 3_000 })
+    },
+  },
 ]

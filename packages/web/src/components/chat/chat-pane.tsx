@@ -538,7 +538,7 @@ export function ChatPane({
       <Slot
         area={AREAS.chatComposer}
         variant="chip"
-        className="flex shrink-0 flex-wrap items-center gap-1 px-[var(--space-4)] py-[var(--space-1)]"
+        className="relative z-[12] mb-[var(--composer-overlap,0px)] flex shrink-0 flex-wrap items-center gap-1 px-[var(--space-4)] py-[var(--space-1)]"
       />
 
       {/* Queued messages wait above the composer too: force-send them all,
