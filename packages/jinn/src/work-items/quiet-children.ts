@@ -23,8 +23,9 @@ export interface ChildWork {
 
 /** The refusals the board walk applies to a backlog Todo (`noAutoStartReason`):
  *  `autoStart` off, the operator's, and a department hold on the assignee. The
- *  start-date hold (`startDateHold`) is left out on purpose: a child scheduled for
- *  later is part of the plan, so it still counts as waiting. */
+ *  start-date hold (`startDateHold`) and an exhausted account are left out on
+ *  purpose: both pass with time, so such a child is still part of the plan and
+ *  counts as waiting. */
 function walkWillStart(child: { id: string; assignee: string | null }): boolean {
   if (getTodoDispatchConfig(child.id)?.autoStart === false || child.assignee === OPERATOR_ASSIGNEE) return false;
   const item = getWorkItem(child.id);

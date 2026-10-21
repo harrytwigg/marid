@@ -402,6 +402,7 @@ describe("an orchestrator waiting on its children", () => {
     const { message } = deliveries()[0]!.payload;
     expect(message).toContain(children[0]!.id);
     expect(message).toContain("will not start them");
+    expect(message).toContain("their assignee may not hold them");
   });
 
   it("still counts a backlog child with a future start date as waiting", () => {

@@ -40,7 +40,7 @@ function childrenLine(children: QuietNudgeInput["children"]): string | undefined
   }
   if (children.notStarting.length > 0) {
     parts.push(`Its child Todos ${children.notStarting.join(", ")} are in backlog where the board walk will not start them `
-      + "(automatic start is off, or they are the operator's): dispatch them, start them yourself, or drop them from the plan.");
+      + "(automatic start is off, they are the operator's, or their assignee may not hold them): dispatch them, start them yourself, or drop them from the plan.");
   }
   return parts.join(" ");
 }
