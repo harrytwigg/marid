@@ -99,12 +99,12 @@ export function pendingChildSettles(parentId: string, db: DatabaseType = initDb(
     .all(parentId) as SettleDbRow[]).map(toRow);
 }
 
-/** Whether a wake for this parent is still on its way: any row not yet flushed. */
 /** How long a pending row speaks for its parent. A wake flushes within seconds;
  *  a row still pending after this is a wake that keeps failing, and it must not
  *  keep the parent out of the stall check for ever. */
 export const CHILD_SETTLE_PENDING_COUNTS_MS = 15 * 60_000;
 
+/** Whether a wake for this parent is still on its way: any row not yet flushed. */
 export function hasPendingChildSettles(parentId: string, now = Date.now()): boolean {
   return initDb().prepare("SELECT 1 FROM work_item_child_settles WHERE parent_id = ? AND flushed_at IS NULL AND created_at >= ? LIMIT 1")
     .get(parentId, new Date(now - CHILD_SETTLE_PENDING_COUNTS_MS).toISOString()) !== undefined;

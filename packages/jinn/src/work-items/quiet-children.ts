@@ -1,7 +1,8 @@
 import { initDb } from "../shared/db.js";
 import { getTodoDispatchConfig } from "./dispatch-config.js";
 import { OPERATOR_ASSIGNEE } from "./operator-assignee.js";
-import type { WorkItemStatus } from "./store.js";
+import { getWorkItem, type WorkItemStatus } from "./store.js";
+import { todoHoldRefusal } from "./todo-hold.js";
 
 /**
  * What a Todo's open children say about its quiet. An orchestrator that split
@@ -16,14 +17,18 @@ export interface ChildWork {
   waiting: boolean;
   /** Children in `in_review` or `blocked`: handed back, waiting on the parent. */
   settled: Array<{ id: string; status: WorkItemStatus }>;
-  /** Backlog children the walk will not start (`autoStart` off, or the operator's). */
+  /** Backlog children the walk will not start (`autoStart` off, the operator's, or held outside its assignee's department). */
   notStarting: string[];
 }
 
-/** The same per-Todo opt-outs the board walk reads (`noAutoStartReason`), less the
- *  start-date hold: a child scheduled for later is part of the plan. */
+/** The refusals the board walk applies to a backlog Todo (`noAutoStartReason`):
+ *  `autoStart` off, the operator's, and a department hold on the assignee. The
+ *  start-date hold (`startDateHold`) is left out on purpose: a child scheduled for
+ *  later is part of the plan, so it still counts as waiting. */
 function walkWillStart(child: { id: string; assignee: string | null }): boolean {
-  return getTodoDispatchConfig(child.id)?.autoStart !== false && child.assignee !== OPERATOR_ASSIGNEE;
+  if (getTodoDispatchConfig(child.id)?.autoStart === false || child.assignee === OPERATOR_ASSIGNEE) return false;
+  const item = getWorkItem(child.id);
+  return !item || todoHoldRefusal(item) === null;
 }
 
 export function childWork(workItemId: string): ChildWork {

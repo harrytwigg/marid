@@ -373,6 +373,48 @@ describe("an orchestrator waiting on its children", () => {
     expect(message).not.toContain("background command");
   });
 
+  it("is nudged about a backlog child assigned to the operator, by name", () => {
+    const { parent, ownerSession, children } = parentWithBacklog(1);
+    db.prepare("UPDATE work_items SET assignee = '@operator' WHERE id = ?").run(children[0]!.id);
+    at(16);
+    sweep();
+    expect(deliveries()).toEqual([expect.objectContaining({ targetSessionId: ownerSession, sourceId: parent.id, deliveryKind: "todo-quiet-nudge" })]);
+    const { message } = deliveries()[0]!.payload;
+    expect(message).toContain(children[0]!.id);
+    expect(message).toContain("will not start them");
+  });
+
+  it("is nudged about a backlog child its assignee may not hold, by name", async () => {
+    const scope = await import("../department-scope.js");
+    const { parent, ownerSession, children } = parentWithBacklog(1);
+    // A hand edit, the only way a holding outside the department rules comes about.
+    db.prepare("UPDATE work_items SET assignee = 'lab-dev' WHERE id = ?").run(children[0]!.id);
+    scope.setEmployeeDepartmentResolver((employee) => (employee === "lab-dev" ? "lab" : undefined));
+    scope.setDepartmentScopeResolver((department) => (department === "lab" ? "scoped" : "open"));
+    try {
+      at(16);
+      sweep();
+    } finally {
+      scope.setEmployeeDepartmentResolver(null);
+      scope.setDepartmentScopeResolver(null);
+    }
+    expect(deliveries()).toEqual([expect.objectContaining({ targetSessionId: ownerSession, sourceId: parent.id, deliveryKind: "todo-quiet-nudge" })]);
+    const { message } = deliveries()[0]!.payload;
+    expect(message).toContain(children[0]!.id);
+    expect(message).toContain("will not start them");
+  });
+
+  it("still counts a backlog child with a future start date as waiting", () => {
+    const { parent } = parentWithBacklog(0);
+    store.createWorkItem({ title: "scheduled child", status: "backlog", source: "session", assignee: WORKER, parentId: parent.id, startAt: new Date(base + 24 * 60 * MIN).toISOString() });
+    at(16);
+    sweep();
+    at(90);
+    sweep();
+    expect(kinds(parent.id)).toEqual([]);
+    expect(delivered).toEqual([]);
+  });
+
   it("names the settled children instead of a lost background command", () => {
     const parent = executingTodo(OWNER);
     sessionOn(OWNER, parent.id);
