@@ -70,7 +70,6 @@ import {
   getMessages,
   getMessagePage,
   enqueueQueueItem,
-  promotePendingQueueItem,
   markRunningQueueItemsCompletedForSession,
   shouldHoldParentCompletionQueueDispatch,
   listReleasableParentCompletionQueuesForSource,
@@ -4206,9 +4205,10 @@ export async function handleApiRequest(
       // only real user messages create a visible queue-panel item here. The row
       // carries the whole payload, and keeps it if "send this one now" moves it.
       if (!isNotification) {
+        // A message that cut the turn off joins the tail, like any other: the
+        // cut releases everything already parked ahead of it, in the order it
+        // was sent, as the queue's "send all now" does.
         queueItemId = enqueueQueueItem(session.id, sessionKey, prompt, { messageId: incomingMessageId, dispatch: { attachments: attachmentPaths, speechDerived } });
-        // A message that cut the turn off runs next, not behind what was already parked.
-        if (shouldInterruptRunningTurn) promotePendingQueueItem(sessionKey, queueItemId);
         context.emit("queue:updated", { sessionId: session.id, sessionKey });
       }
 
