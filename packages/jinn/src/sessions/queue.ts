@@ -1,5 +1,6 @@
 import { getQueueItem, markQueueItemRunning, markQueueItemCompleted } from "./registry.js";
 import { logger } from "../shared/logger.js";
+import { WaitingRows, type WaitingRow } from "./queue-waiting-rows.js";
 
 export class SessionQueue {
   private queues = new Map<string, Promise<void>>();
@@ -18,6 +19,11 @@ export class SessionQueue {
   private pauseWaiters = new Map<string, Array<() => void>>();
   /** Queue rows this process has already taken responsibility for. */
   private inFlightItems = new Set<string>();
+  /** Per lane, the dispatches of rows that no slot has claimed yet. */
+  private waitingRows = new WaitingRows((row) => this.inFlightItems.delete(row.id));
+  /** Tasks waiting per key that have no durable row (connector turns, the talk
+   * handoff). The row count alone cannot see them; they leave when they start. */
+  private rowlessWaiting = new Map<string, number>();
 
   /**
    * Check if a session is currently running.
@@ -41,6 +47,11 @@ export class SessionQueue {
     return this.running.has(sessionKey) ? Math.max(0, total - 1) : total;
   }
 
+  /** Row-less tasks parked behind the running one: what the durable rows miss. */
+  getRowlessWaitingCount(sessionKey: string): number {
+    return this.rowlessWaiting.get(sessionKey) || 0;
+  }
+
   getTransportState(sessionKey: string, status?: "idle" | "running" | "error" | "waiting" | "interrupted"): "idle" | "queued" | "running" | "error" | "interrupted" {
     if (status === "error") return "error";
     if (status === "interrupted") return "interrupted";
@@ -56,6 +67,7 @@ export class SessionQueue {
   clearQueue(sessionKey: string): void {
     this.cancelled.add(sessionKey);
     this.pending.delete(sessionKey);
+    this.rowlessWaiting.delete(sessionKey);
     this.callbackDrainHeld.delete(sessionKey);
     this.wakePauseWaiters(sessionKey);
   }
@@ -106,22 +118,30 @@ export class SessionQueue {
     return queueItemId ? held?.has(queueItemId) === true : Boolean(held?.size);
   }
 
-  private async waitUntilRunnable(sessionKey: string, queueItemId?: string): Promise<void> {
-    while (this.paused.has(sessionKey) || (
-      queueItemId !== undefined && this.isCallbackDrainHeld(sessionKey, queueItemId)
-    )) {
-      await new Promise<void>(resolve => {
-        const waiters = this.pauseWaiters.get(sessionKey) ?? [];
-        waiters.push(resolve);
-        this.pauseWaiters.set(sessionKey, waiters);
-      });
-    }
+  /** Park until a resume, a released callback hold or a cleared lane wakes the waiters. */
+  private parkUntilWoken(sessionKey: string): Promise<void> {
+    return new Promise<void>(resolve => {
+      const waiters = this.pauseWaiters.get(sessionKey) ?? [];
+      waiters.push(resolve);
+      this.pauseWaiters.set(sessionKey, waiters);
+    });
+  }
+
+  private async waitWhilePaused(sessionKey: string): Promise<void> {
+    while (this.paused.has(sessionKey)) await this.parkUntilWoken(sessionKey);
   }
 
   /**
    * Enqueue a task for a session. Tasks are serialized per session key.
+   *
+   * A task with a queue row does not run in the slot it was enqueued into. Each
+   * slot, when its turn comes, claims the next pending row of the lane by
+   * position and runs that row's own function, so the order of the rows can
+   * change while they wait (a promoted message) without a row ever running
+   * another row's dispatch. The returned promise settles with that function's
+   * outcome, whichever slot ran it.
    */
-  async enqueue(sessionKey: string, fn: () => Promise<void>, queueItemId?: string, claimed = false): Promise<void> {
+  async enqueue(sessionKey: string, fn: () => Promise<void>, queueItemId?: string): Promise<void> {
     if (queueItemId) this.inFlightItems.add(queueItemId);
     const ahead = this.pending.get(sessionKey) || 0;
     this.pending.set(sessionKey, ahead + 1);
@@ -132,32 +152,31 @@ export class SessionQueue {
       const owner = getQueueItem(queueItemId)?.sessionId ?? "?";
       logger.info(`Session ${owner} turn ${queueItemId} queued behind ${ahead} turn(s) on lane ${sessionKey}`);
     }
-    const prev = this.queues.get(sessionKey) || Promise.resolve();
+    return queueItemId ? this.enqueueRow(sessionKey, fn, queueItemId) : this.enqueueRowless(sessionKey, fn);
+  }
+
+  /** A task with no durable row (a connector turn, the talk handoff): it runs in its own slot. */
+  private enqueueRowless(sessionKey: string, fn: () => Promise<void>): Promise<void> {
+    this.rowlessWaiting.set(sessionKey, this.getRowlessWaitingCount(sessionKey) + 1);
     const runTask = async () => {
+      this.leaveRowlessWaiting(sessionKey);
       this.running.add(sessionKey);
-      let queueItemStarted = false;
       try {
         // Wait while paused — blocks until resumeQueue() wakes us (no polling)
-        await this.waitUntilRunnable(sessionKey, queueItemId);
-        if (queueItemId) {
-          if (!this.takeQueueRow(sessionKey, queueItemId, claimed)) return;
-          queueItemStarted = true;
-        }
+        await this.waitWhilePaused(sessionKey);
         if (!this.cancelled.has(sessionKey)) {
           await fn();
         }
       } finally {
-        // Mark the DB row done in finally so an errored/cancelled task can't
-        // leave the item stuck as 'running' (getQueueItems returns 'running'
-        // rows, so a stuck row would keep the UI badge from draining).
-        if (queueItemId) {
-          if (queueItemStarted) markQueueItemCompleted(queueItemId);
-          this.inFlightItems.delete(queueItemId);
-        }
         this.running.delete(sessionKey);
         this.decrementPending(sessionKey);
       }
     };
+    return this.chain(sessionKey, runTask);
+  }
+
+  private chain(sessionKey: string, runTask: () => Promise<void>): Promise<void> {
+    const prev = this.queues.get(sessionKey) || Promise.resolve();
     const next = prev.then(runTask, runTask);
     this.queues.set(sessionKey, next);
     void next.finally(() => {
@@ -168,18 +187,85 @@ export class SessionQueue {
     return next;
   }
 
+  private enqueueRow(sessionKey: string, fn: () => Promise<void>, queueItemId: string): Promise<void> {
+    const settled = new Promise<void>((resolve, reject) => {
+      this.waitingRows.add(sessionKey, { id: queueItemId, fn, resolve, reject });
+    });
+    const runSlot = async () => {
+      this.running.add(sessionKey);
+      let row: WaitingRow | undefined;
+      let failure: { error: unknown } | undefined;
+      try {
+        row = await this.claimNextRow(sessionKey);
+        if (row && !this.cancelled.has(sessionKey)) await row.fn();
+      } catch (error) {
+        failure = { error };
+      } finally {
+        // Mark the DB row done in finally so an errored/cancelled task can't
+        // leave the item stuck as 'running' (getQueueItems returns 'running'
+        // rows, so a stuck row would keep the UI badge from draining).
+        if (row) {
+          try {
+            markQueueItemCompleted(row.id);
+          } catch (error) {
+            failure ??= { error };
+          }
+          this.inFlightItems.delete(row.id);
+        }
+        this.running.delete(sessionKey);
+        this.decrementPending(sessionKey);
+      }
+      this.settleSlot(sessionKey, row, failure);
+    };
+    void this.chain(sessionKey, runSlot);
+    return settled;
+  }
+
   /**
-   * Flip the row to running as the turn starts, or say why it will not start.
-   * A row that is no longer runnable is usually a cancel or an edit that
-   * rotated it away, but this is also the last point at which a dispatch can
-   * end without a spawn — so it is never silent.
+   * Tell the caller how its slot went. A slot that failed before claiming any
+   * row (the durable store erroring) still owes the lane one row: that one is
+   * failed rather than left waiting on a slot that will never come for it.
    */
-  private takeQueueRow(sessionKey: string, queueItemId: string, claimed: boolean): boolean {
-    const item = getQueueItem(queueItemId);
-    const runnable = !!item && (claimed ? item.status === "running"
-      : item.status === "pending" && markQueueItemRunning(queueItemId));
-    if (!runnable) logger.warn(`Turn ${queueItemId} on lane ${sessionKey} skipped: queue row is ${item ? item.status : "gone"}`);
-    return runnable;
+  private settleSlot(sessionKey: string, row: WaitingRow | undefined, failure: { error: unknown } | undefined): void {
+    if (row) {
+      if (failure) row.reject(failure.error);
+      else row.resolve();
+    } else if (failure) {
+      this.waitingRows.failOldest(sessionKey, failure.error);
+    }
+    this.waitingRows.forgetIfEmpty(sessionKey);
+  }
+
+  /**
+   * Claim the lane's next row: the pending one with the lowest position, once
+   * the lane is neither paused nor holding that row for a callback drain.
+   * Position is read here, as the slot starts, which is what lets a row be
+   * promoted while it waits. Undefined when no row is left to run.
+   */
+  private async claimNextRow(sessionKey: string): Promise<WaitingRow | undefined> {
+    for (;;) {
+      if (this.paused.has(sessionKey)) {
+        await this.parkUntilWoken(sessionKey);
+        continue;
+      }
+      const head = this.waitingRows.next(sessionKey);
+      if (!head) return undefined;
+      if (this.isCallbackDrainHeld(sessionKey, head.id)) {
+        await this.parkUntilWoken(sessionKey);
+        continue;
+      }
+      if (markQueueItemRunning(head.id)) {
+        this.waitingRows.take(sessionKey, head);
+        return head;
+      }
+      this.waitingRows.skip(sessionKey, head, "no longer pending");
+    }
+  }
+
+  private leaveRowlessWaiting(sessionKey: string): void {
+    const remaining = this.getRowlessWaitingCount(sessionKey) - 1;
+    if (remaining > 0) this.rowlessWaiting.set(sessionKey, remaining);
+    else this.rowlessWaiting.delete(sessionKey);
   }
 
   private decrementPending(sessionKey: string): void {

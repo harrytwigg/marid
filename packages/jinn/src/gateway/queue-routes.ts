@@ -7,10 +7,9 @@ import {
   getQueueItem,
   getQueueItems,
   getSession,
-  reassignPendingQueuePayloads,
+  promotePendingQueueItem,
   withdrawPendingQueueItem,
 } from "../sessions/registry.js";
-import { rotatePendingToFront } from "../sessions/queue-rotation.js";
 import { supersedeRunningTurn } from "../sessions/turn/superseded.js";
 import { USER_MESSAGE_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
 import { messageBodyError } from "../shared/message-body.js";
@@ -133,18 +132,6 @@ function interruptRunningTurn(context: ApiContext, session: Session): void {
   context.emit("session:interrupted", { sessionId: session.id, reason: "send now" });
 }
 
-/**
- * Move a parked item's payload to the head of the pending rows, everything
- * else keeping its order (see queue-rotation.ts for why payloads move, not
- * rows). Returns the id of the row that now carries the item.
- */
-export function promotePendingQueueItem(sessionKey: string, itemId: string): string {
-  const parked = getQueueItems(sessionKey).filter((row) => row.status === "pending");
-  const promoted = rotatePendingToFront(parked, itemId);
-  reassignPendingQueuePayloads(promoted.map((payload, index) => ({ id: parked[index].id, payload })));
-  return promoted[0]?.id === itemId ? parked[0].id : itemId;
-}
-
 /** A paused queue drains nothing: cutting the turn off there only loses the reply. */
 function refusePaused(res: ServerResponse, context: ApiContext, sessionKey: string): boolean {
   if (!context.sessionManager.getQueue().isPaused(sessionKey)) return false;
@@ -171,7 +158,8 @@ function sendNow({ res, context, session, params }: QueueRouteArgs): void {
   if (!item) return;
   const sessionKey = queueKey(session);
   if (refusePaused(res, context, sessionKey)) return;
-  promotePendingQueueItem(sessionKey, item.id);
+  // The item can leave `pending` between the check and the write, as with edit.
+  if (!promotePendingQueueItem(sessionKey, item.id)) return json(res, { error: "Only a pending message can be sent now" }, 409);
   interruptRunningTurn(context, session);
   context.emit("queue:updated", { sessionId: params.id, sessionKey });
   return json(res, { status: "sent-now", itemId: params.itemId });

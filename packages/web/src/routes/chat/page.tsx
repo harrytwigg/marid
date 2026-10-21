@@ -12,6 +12,7 @@ import {
 } from '@/components/chat/chat-route-helpers'
 import { useGateway } from '@/hooks/use-gateway'
 import { useModelRegistry } from '@/hooks/use-model-registry'
+import { useOrg } from '@/hooks/use-employees'
 import { PageLayout } from '@/components/page-layout'
 import { ChatSidebar, type SidebarOrder } from '@/components/chat/chat-sidebar'
 import { NavRibbon } from '@/components/pill-nav'
@@ -32,7 +33,7 @@ import { ChatPageHeader } from './chat-page-header'
 import { SidebarColumn } from './sidebar-column'
 import { formatMessage } from '@/components/chat/chat-messages'
 import { inFileLinkSession } from '@/components/chat/file-link-session-context'
-import { chatHeaderTitle } from './header-title'
+import { chatHeaderEmployee, chatHeaderEmployeeLine, chatHeaderTitle } from './header-title'
 import { useMobileSessionTabs } from './use-mobile-session-tabs'
 import { adjacentSessionId } from './session-navigation'
 import { usePaneSessionActions } from './use-pane-session-actions'
@@ -84,6 +85,8 @@ export default function ChatPageWrapper() {
 function ChatPage() {
   const { settings } = useSettings()
   const portalName = settings.portalName ?? PRODUCT_NAME
+  const orgQuery = useOrg()
+  const [pickedEmployee, setPickedEmployee] = useState<{ paneKey: string; employee: string | null } | null>(null)
   // The URL is the single source of truth for the selected session
   // (`/?session=<id>`) — selecting is a navigation, so browser back/forward
   // walk the session trail, refresh restores the thread, and links carry it.
@@ -856,7 +859,14 @@ function ChatPage() {
     />
   )
   // The conversation title — slim inline (desktop) / centered nav bar (mobile).
-  const headerTitle = chatHeaderTitle({ focusedSessionId, meta: sessionMeta, sessions: sessionsQuery.data })
+  const headerEmployees = orgQuery.data?.employees
+  const headerTitle = chatHeaderTitle({ focusedSessionId, meta: sessionMeta, sessions: sessionsQuery.data, employees: headerEmployees })
+  // A composer pane keeps its key through its first send, so the pick follows the chat it becomes until
+  // the chat's own meta lands; any other pane's key retires it.
+  const onComposerPane = paneKey.startsWith('__new__')
+  const composerPick = !onComposerPane ? null : pickedEmployee?.paneKey === paneKey ? pickedEmployee.employee : pendingEmployee
+  useEffect(() => { if (!onComposerPane) setPickedEmployee(null) }, [onComposerPane])
+  const headerEmployee = chatHeaderEmployee({ focusedSessionId, meta: sessionMeta, sessions: sessionsQuery.data, employees: headerEmployees, portalName, picked: composerPick })
   const mobileWorkingSet = useMobileSessionTabs({
     committedId, systemPrimedId, activeId: focusedSessionId, sessions: sessionsQuery.data,
     subscribe, connectionSeq, onSelect: handleMobileWorkingSetSelect,
@@ -914,7 +924,7 @@ function ChatPage() {
           {/* Mobile keeps its nav chrome; multi-pane desktop moves identity into panes. */}
           <ChatPageHeader
             hideOnMobile={onMobileList}
-            title={headerTitle} chatId={focusedSessionId}
+            title={headerTitle} subtitle={chatHeaderEmployeeLine(headerTitle, headerEmployee)} chatId={focusedSessionId}
             backTo={backTo}
             onBack={backToList}
             onNew={handleNewChat}
@@ -974,6 +984,7 @@ function ChatPage() {
                   pendingUserMessage: pendingMessage,
                   initialEmployee: committedId ? undefined : pendingEmployee,
                   onSessionCreated: handleSessionCreated,
+                  onNewChatEmployeeChange: (employee) => setPickedEmployee({ paneKey, employee }),
                   onClose: () => { if (workingSet.state.focusedId) handleFocusPane(workingSet.state.focusedId) },
                   viewMode: effectiveViewMode,
                   focusTrigger: paneState.focusTriggerFor(committedId),

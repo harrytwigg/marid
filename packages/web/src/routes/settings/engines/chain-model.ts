@@ -7,6 +7,8 @@ export interface EngineSettings {
   bin?: string
   model?: string
   effortLevel?: string
+  /** Freebuff only: how many of its processes may be alive at once. */
+  maxConcurrent?: number
   /** The chain as written: object links, or the legacy string forms. */
   fallback?: FallbackChainEntry[]
   /** Claude only: the declared accounts, each with a chain of its own. */
@@ -31,6 +33,7 @@ export interface EnginesConfig {
   claude?: EngineSettings
   codex?: EngineSettings
   grok?: EngineSettings
+  freebuff?: EngineSettings
   [engine: string]: EngineSettings | string | undefined
 }
 

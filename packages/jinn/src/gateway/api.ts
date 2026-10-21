@@ -39,6 +39,7 @@ import { reroutedSessionMeta } from "../sessions/engine-override-window.js";
 import { stripControlChars, hasControlBytes } from "../shared/sanitize.js";
 import { CONNECTOR_ID_REQUIREMENTS, isValidConnectorId } from "../shared/connector-id.js";
 import { initDb } from "../shared/db.js";
+import { countPendingQueueItemsByKey } from "../sessions/queue-item-registry.js";
 import {
   listSessions,
   listChatPins,
@@ -69,6 +70,7 @@ import {
   getMessages,
   getMessagePage,
   enqueueQueueItem,
+  promotePendingQueueItem,
   markRunningQueueItemsCompletedForSession,
   shouldHoldParentCompletionQueueDispatch,
   listReleasableParentCompletionQueuesForSource,
@@ -132,7 +134,7 @@ export {
 } from "../sessions/turn/text.js";
 import { getPackageVersion } from "../shared/version.js";
 import { badRequest, json, matchRoute, notFound, serverError, type ResWithEncoding } from "./route-helpers.js";
-import { handleSessionQueueRoute, promotePendingQueueItem } from "./queue-routes.js";
+import { handleSessionQueueRoute } from "./queue-routes.js";
 export { matchRoute } from "./route-helpers.js";
 import { handleCronApi } from "./cron-api.js";
 import { handleOrgApi } from "./org-api.js";
@@ -1093,9 +1095,14 @@ export function serializeSession(
   session: Session,
   context: ApiContext,
   delegatedActivityIndex?: ReadonlyMap<string, DelegatedActivity>,
+  pendingQueueItems?: ReadonlyMap<string, number>,
 ): Session {
-  const queue = context.sessionManager.getQueue();
-  const queueDepth = queue.getPendingCount(session.sessionKey || session.sourceRef);
+  // The badge counts the durable pending rows the chat's queued bar lists, not
+  // the in-process chain, which keeps a cancelled row until its slot is skipped;
+  // plus the turns that only ever exist in that chain (connector messages).
+  const queueKey = session.sessionKey || session.sourceRef;
+  const queueDepth = (pendingQueueItems?.get(queueKey) ?? 0)
+    + context.sessionManager.getQueue().getRowlessWaitingCount(queueKey);
   const transportState = getSessionTransportState(session, context);
   const bg = currentRuntimeActivity(session, context);
   const working = isBackgroundWorkLive(bg);
@@ -1118,12 +1125,13 @@ export function serializeSession(
 
 function serializeSessionList(sessions: readonly Session[], context: ApiContext): Session[] {
   const delegatedActivityIndex = buildSessionDelegatedActivityIndex(listSessions(), context);
-  return sessions.map((session) => serializeSession(session, context, delegatedActivityIndex));
+  const pendingQueueItems = countPendingQueueItemsByKey();
+  return sessions.map((session) => serializeSession(session, context, delegatedActivityIndex, pendingQueueItems));
 }
 
 function serializeSessionResponse(session: Session, context: ApiContext): Session {
   const delegatedActivityIndex = buildSessionDelegatedActivityIndex(listSessions(), context);
-  return serializeSession(session, context, delegatedActivityIndex);
+  return serializeSession(session, context, delegatedActivityIndex, countPendingQueueItemsByKey());
 }
 
 function isSessionLiveRunning(session: Session, context: ApiContext): boolean {
@@ -4195,12 +4203,11 @@ export async function handleApiRequest(
 
       // Internal notification-role messages are already durably queued above;
       // only real user messages create a visible queue-panel item here. The row
-      // carries the whole payload so "send this one now" can move all of it.
-      let carrierQueueItemId = queueItemId;
+      // carries the whole payload, and keeps it if "send this one now" moves it.
       if (!isNotification) {
         queueItemId = enqueueQueueItem(session.id, sessionKey, prompt, { messageId: incomingMessageId, dispatch: { attachments: attachmentPaths, speechDerived } });
         // A message that cut the turn off runs next, not behind what was already parked.
-        carrierQueueItemId = shouldInterruptRunningTurn ? promotePendingQueueItem(sessionKey, queueItemId) : queueItemId;
+        if (shouldInterruptRunningTurn) promotePendingQueueItem(sessionKey, queueItemId);
         context.emit("queue:updated", { sessionId: session.id, sessionKey });
       }
 
@@ -4212,7 +4219,7 @@ export async function handleApiRequest(
         status: "queued",
         sessionId: session.id,
         messageId: incomingMessageId,
-        queueItemId: carrierQueueItemId,
+        queueItemId,
         ...(delivery ? { delivery } : {}),
         ...(callbackDelivery ? { callbackDeliveryId: callbackDelivery.id } : {}),
       });

@@ -17,8 +17,10 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/api', () => ({ api: apiMocks }))
 
+// One object for every render: a new chat's selector pre-fill depends on the org, so a fresh one each time never settles.
+const orgResult = vi.hoisted(() => ({ data: { employees: [{ name: 'platform-lead', displayName: 'Platform Lead' }] } }))
 vi.mock('@/hooks/use-employees', () => ({
-  useOrg: () => ({ data: { employees: [{ name: 'platform-lead', displayName: 'Platform Lead' }] } }),
+  useOrg: () => orgResult,
 }))
 
 vi.mock('@/hooks/use-features', () => ({
@@ -91,14 +93,16 @@ vi.mock('@/components/chat/model-selector-row', () => ({
 }))
 
 vi.mock('@/components/chat/chat-messages', () => ({
-  ChatMessages: ({ footer, onRetry }: { footer?: React.ReactNode; onRetry?: (message: string) => void }) => {
+  ChatMessages: ({ footer, onRetry, emptyState }: { footer?: React.ReactNode; onRetry?: (message: string) => void; emptyState?: React.ReactNode }) => {
     messagesOnRetry = onRetry ?? null
-    return <div data-testid="messages">{footer}</div>
+    return <div data-testid="messages">{footer}{emptyState}</div>
   },
 }))
 
 vi.mock('@/components/chat/chat-employee-picker', () => ({
-  ChatEmployeePicker: () => <div data-testid="employee-picker" />,
+  ChatEmployeePicker: ({ onSelect }: { onSelect: (name: string | null) => void }) => (
+    <button type="button" data-testid="employee-picker" onClick={() => onSelect('platform-lead')} />
+  ),
 }))
 
 
@@ -144,6 +148,31 @@ describe('ChatPane', () => {
     messagesOnRetry = null
     composerActive = undefined
     localStorage.clear()
+  })
+
+  describe('new chat employee, reported for the page header', () => {
+    it('reports the employee the picker chooses', () => {
+      const onNewChatEmployeeChange = vi.fn()
+      renderPane({ sessionId: null, onNewChatEmployeeChange })
+      expect(onNewChatEmployeeChange).not.toHaveBeenCalled()
+
+      fireEvent.click(screen.getByTestId('employee-picker'))
+      expect(onNewChatEmployeeChange).toHaveBeenCalledExactlyOnceWith('platform-lead')
+    })
+
+    it('reports nothing from a pane that stands another picker in the picker\'s place', () => {
+      const onNewChatEmployeeChange = vi.fn()
+      renderPane({ sessionId: null, newChatEmptyState: <div data-testid="other-picker" />, onNewChatEmployeeChange })
+      expect(screen.queryByTestId('employee-picker')).toBeNull()
+      expect(onNewChatEmployeeChange).not.toHaveBeenCalled()
+    })
+
+    it('reports nothing for an existing chat, which has no picker', () => {
+      const onNewChatEmployeeChange = vi.fn()
+      renderPane({ sessionId: 's1', onNewChatEmployeeChange })
+      expect(screen.queryByTestId('employee-picker')).toBeNull()
+      expect(onNewChatEmployeeChange).not.toHaveBeenCalled()
+    })
   })
 
   it('makes focus state real at the pane and composer boundaries', () => {

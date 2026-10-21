@@ -55,7 +55,7 @@ const queueStub = {
   holdForCallbackDrain: () => {},
   releaseCallbackDrain: () => {},
   hasInFlightItem: () => false,
-  getPendingCount: () => 0,
+  getPendingCount: () => 0, getRowlessWaitingCount: () => 0,
   getTransportState: (_key: string, status: string) => status,
 };
 const engineStub = {

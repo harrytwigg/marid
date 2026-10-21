@@ -99,13 +99,10 @@ async function runQueuedTurn(
  * What this turn actually runs, decided when the queue lets it through rather
  * than when it was enqueued.
  *
- * A parked row can be edited, or have another message's payload rotated onto it
- * by "send this one now", while it waits. The operator is looking at the row, so
- * the row wins — and it wins whole: text, attachments and speech origin travel
- * together, because a promoted message arriving with the attachment of the row
- * it displaced would be worse than not reordering at all. The speech note is
- * recomputed from that text exactly as `resolveMessageAudiences` requires:
- * derived per dispatch, never persisted.
+ * A parked row can be edited while it waits. The operator is looking at the
+ * row, so the row wins — and it wins whole: text, attachments and speech origin
+ * travel together. The speech note is recomputed from that text exactly as
+ * `resolveMessageAudiences` requires: derived per dispatch, never persisted.
  */
 function requestForTurn(
   dispatched: Omit<WebTurnRequest, "attemptToken">,

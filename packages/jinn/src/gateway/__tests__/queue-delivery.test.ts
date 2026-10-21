@@ -126,7 +126,7 @@ describe("POST /message delivery choice", () => {
     const urgent = await send(context, session.id, "urgent correction", { delivery: "now" });
 
     expect(kills).toHaveLength(1);
-    // The response names the row that now carries the urgent message: the head.
+    // The response names the urgent message's own row, which is now the head.
     const parked = await parkedRows(context, session.id);
     expect(parked.map((row) => row.prompt)).toEqual(["urgent correction", "parked one", "parked two"]);
     expect((urgent.body as { queueItemId: string }).queueItemId).toBe(parked[0].id);
@@ -173,20 +173,19 @@ describe("POST /message delivery choice", () => {
     expect(prompts).toEqual(["running turn", "keep me"]);
   });
 
-  it("cancel withdraws whichever message the row holds now, after a send-now moved it", async () => {
+  it("cancel withdraws the message the row was created for, after a send-now moved another ahead", async () => {
     const { context, session, releaseNext } = await runningInterruptibleSession("delivery-cancel-moved");
-    await send(context, session.id, "first parked", { delivery: "queue" });
-    const second = await send(context, session.id, "second parked", { delivery: "queue" });
+    const first = await send(context, session.id, "first parked", { delivery: "queue" });
+    await send(context, session.id, "second parked", { delivery: "queue" });
     const [headRow, secondRow] = await parkedRows(context, session.id);
-    // Promote the second; its payload moves onto the head row, and the first onto the other.
     await request(context, "POST", `/api/sessions/${session.id}/queue/${secondRow.id}/send-now`, {});
 
     const cancelled = await request(context, "DELETE", `/api/sessions/${session.id}/queue/${headRow.id}`);
 
     expect(cancelled.status).toBe(200);
-    expect((cancelled.body as { messageId?: string }).messageId).toBe((second.body as { messageId: string }).messageId);
-    expect(await transcriptTexts(context, session.id)).not.toContain("second parked");
-    expect(await transcriptTexts(context, session.id)).toContain("first parked");
+    expect((cancelled.body as { messageId?: string }).messageId).toBe((first.body as { messageId: string }).messageId);
+    expect(await transcriptTexts(context, session.id)).not.toContain("first parked");
+    expect(await transcriptTexts(context, session.id)).toContain("second parked");
     releaseNext();
     releaseNext();
   });

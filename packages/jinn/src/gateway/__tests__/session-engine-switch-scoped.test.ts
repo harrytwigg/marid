@@ -27,7 +27,7 @@ const ctx = {
   emit: () => {},
   sessionManager: {
     getQueue: () => ({
-      getPendingCount: () => 0,
+      getPendingCount: () => 0, getRowlessWaitingCount: () => 0,
       getTransportState: (_key: string, status: string) => status,
     }),
   },

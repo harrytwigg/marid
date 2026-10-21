@@ -1,0 +1,45 @@
+
+  • Thinking
+    Verify the file content matches exactly.
+
+  $ od -c hello.txt; echo "bytes: $(wc -c < hello.txt)"
+  0000000   h   i
+  0000002
+  bytes: 2
+
+  Verified:  hello.txt  exists with exactly 2 bytes,  hi  (no trailing newline). No checks failed.
+
+  DONE                                                                                                                                     ▄
+                                                                                                                            ⎘ • 11s • △▽   █
+ 58m left · 13.5K (1%)                                                                                                       ✕ End session
+ ↑↓ choose model · Tab reasoning · Enter select · Esc cancel
+                                                                                 ▀
+ OPTIMIZED · Strongest price-to-performance models
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │ › DeepSeek V4.1 Flash 10/17 • high · Smart & Fast · Images                   │
+ │               3x · Recommended · May use data for AI training                │
+ └──────────────────────────────────────────────────────────────────────────────┘
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │   MiMo v2.6 Flash Slow · Slow · cheapest · Images                            │
+ │                                      1x                                      │
+ └──────────────────────────────────────────────────────────────────────────────┘
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │   MiMo v2.6 Flash Fast · Balanced · Images                                   │
+ │                                      2x                                      │
+ └──────────────────────────────────────────────────────────────────────────────┘
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │   Muse Spark 1.3 • high · Falls back when busy                               │
+ │                      3x · May use data for AI training                       │
+ └──────────────────────────────────────────────────────────────────────────────┘
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │   GLM 5.3 Flash • high · Deep reasoning · Images                             │
+ │                                      4x                                      │
+ └──────────────────────────────────────────────────────────────────────────────┘
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │   GPT-6 Luna • high · Strong all-around · Images                             │
+ │                                      4x                                      │
+ └──────────────────────────────────────────────────────────────────────────────┘
+
+ DeepSeek V4.1 Flash 10/17 • high · /tmp/freebuff-demo/work · /model to change · Chat: Create a file hello.txt containing
+ exactly the word hi, then reply with the single word DONE.
+ ← for history · ? for help

@@ -34,7 +34,7 @@ vi.mock("../../../engines/remote-stage.js", async (importOriginal) => ({
 
 import { preflightTurn } from "../preflight.js";
 
-const ENGINES = ["claude", "pi", "opencode", "musecode", "codex"];
+const ENGINES = ["claude", "pi", "opencode", "musecode", "freebuff", "codex"];
 const config = { engines: { default: "claude", claude: {}, musecode: {} } } as unknown as JinnConfig;
 const REMOTE = { remoteHost: "build-box", remoteUser: "builder", remoteCwd: "/srv/agents/main" };
 
@@ -79,6 +79,21 @@ describe("preflightTurn — where the engine must be installed", () => {
     onGateway = new Set(["pi"]);
     onHost = { pi: false };
     expect(preflightTurn(input("pi", REMOTE)).ok).toBe(false);
+  });
+
+  it("judges Freebuff on its host too: a host that lacks it is refused cleanly, one that has it runs the turn", () => {
+    onHost = { freebuff: false };
+    const refused = preflightTurn(input("freebuff", REMOTE));
+    expect(refused.ok).toBe(false);
+    expect(refused.ok === false && refused.error).toMatch(/^builder@build-box has no `freebuff` on the non-interactive PATH/);
+    expect(asked).toContain("builder@build-box:freebuff");
+
+    onGateway = new Set();
+    onHost = { freebuff: true };
+    expect(preflightTurn(input("freebuff", REMOTE)).ok).toBe(true);
+    // A host nobody has probed yet is left for the spawn to report.
+    onHost = {};
+    expect(preflightTurn(input("freebuff", REMOTE)).ok).toBe(true);
   });
 
   it("still asks the gateway for a local session", () => {

@@ -109,9 +109,10 @@ describe('mobile chat header title centring', () => {
     expect(back.className).toContain('justify-self-start')
     expect(actions.className).toContain('justify-self-end')
     expect(title.textContent).toBe('Standup')
-    expect(title.className).toContain('truncate')
     expect(title.className).toContain('min-w-0')
-    expect(title.className).toContain('text-center')
+    const text = title.firstElementChild as HTMLElement
+    expect(text.className).toContain('truncate')
+    expect(text.className).toContain('text-center')
   })
 
   it('keeps the title in the middle track and puts the session tabs in their own row under the bar', () => {
@@ -140,5 +141,19 @@ describe('mobile chat header title centring', () => {
 
     expect(back(true)).toContain('max-w-[34vw]')
     expect(back(false)).toContain('max-w-[34vw]')
+  })
+})
+
+describe('mobile chat header employee line', () => {
+  it('shows who the chat runs as under the title, on the mobile bar only', () => {
+    render(<ChatHeaderPills title="Standup" subtitle="A Lead" onBack={vi.fn()} onNew={vi.fn()} />)
+    const bar = document.querySelector<HTMLElement>('[data-chat-mobile-header]')!
+    expect(bar.querySelector('[data-chat-mobile-employee]')?.textContent).toBe('A Lead')
+    expect(document.querySelector('[data-chat-desktop-title]')?.textContent).not.toContain('A Lead')
+  })
+
+  it('draws nothing without one', () => {
+    render(<ChatHeaderPills title="Standup" onBack={vi.fn()} onNew={vi.fn()} />)
+    expect(document.querySelector('[data-chat-mobile-employee]')).toBeNull()
   })
 })

@@ -297,7 +297,7 @@ export class SessionManager {
         `Session: ${session.id}`,
         `Engine: ${session.engine}`,
         `Connector: ${session.connector || session.source}`,
-        `Model: ${session.model || this.config.engines[session.engine as "claude" | "codex" | "antigravity" | "grok" | "pi" | "hermes" | "opencode" | "musecode"]?.model || "default"}`,
+        `Model: ${session.model || this.config.engines[session.engine as "claude" | "codex" | "antigravity" | "grok" | "pi" | "hermes" | "opencode" | "musecode" | "freebuff"]?.model || "default"}`,
         `State: ${transportState}`,
         `Queue depth: ${queueDepth}`,
         `Created: ${session.createdAt}`,
@@ -344,6 +344,7 @@ export class SessionManager {
         `Codex: ${this.config.engines.codex.model}`,
         ...(this.config.engines.antigravity ? [`Antigravity: ${this.config.engines.antigravity.model ?? "Gemini 3.5 Flash (Medium)"}`] : []),
         ...(this.config.engines.grok ? [`Grok: ${this.config.engines.grok.model ?? "grok-build"}`] : []),
+        ...(this.config.engines.freebuff ? [`Freebuff: ${this.config.engines.freebuff.model ?? "CLI default"}`] : []),
         "Connectors:",
         ...connectorLines,
       ].join("\n");

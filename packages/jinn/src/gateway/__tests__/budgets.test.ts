@@ -16,7 +16,7 @@ for (const n of ["over-cap", "under-cap"]) fs.writeFileSync(path.join(tmpHome, "
 const dbModule = await import("../../shared/db.js");
 const engineRuns: string[] = [];
 const engineStub = { name: "stub", run: async (o: { sessionId?: string }) => { engineRuns.push(String(o.sessionId)); return { result: "ok" }; }, isAlive: () => false, kill: () => {}, killAll: () => {} };
-const queueStub = { enqueue: async (_k: string, fn: () => Promise<void>) => { await fn(); }, clearCancelled: () => {}, clearQueue: () => {}, pauseQueue: () => {}, resumeQueue: () => {}, getPendingCount: () => 0, getTransportState: (_k: string, s: string) => s };
+const queueStub = { enqueue: async (_k: string, fn: () => Promise<void>) => { await fn(); }, clearCancelled: () => {}, clearQueue: () => {}, pauseQueue: () => {}, resumeQueue: () => {}, getPendingCount: () => 0, getRowlessWaitingCount: () => 0, getTransportState: (_k: string, s: string) => s };
 const apiCtx = {
   getConfig: () => ({ gateway: {}, sessions: {}, engines: { default: "codex", codex: { bin: "codex", model: "gpt-5.5" } }, budgets: { employees: { "over-cap": 10, "under-cap": 10 } } }),
   connectors: new Map(), startTime: Date.now(), gatewayAuthToken: "test-token", emit: () => {},
