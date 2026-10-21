@@ -12,6 +12,7 @@ import { ChatEmployeePicker } from '@/components/chat/chat-employee-picker'
 import { ScrollingEmptyState } from '@/components/chat/chat-transcript-empty'
 import { ChatHydrationOverlay, useHydrationSpinner } from '@/components/chat/chat-hydration'
 import { SessionQueueContext, useSessionQueue } from '@/components/chat/use-session-queue'
+import { QueuedBar } from '@/components/chat/queued-bar'
 import { BackgroundActivityStatus } from '@/components/chat/background-activity-status'
 import { useSubagentView } from '@/components/chat/use-subagent-view'
 import { TerminalWaitStatus } from '@/components/chat/terminal-wait-status'
@@ -164,6 +165,9 @@ export function ChatPane({
     reload: reloadSession,
   } = live
   const sessionQueue = useSessionQueue(sessionId, subscribe)
+  // A message cancelled out of the queue never ran: it leaves the transcript.
+  const shownMessages = useMemo(() => sessionQueue.withdrawn.size === 0 ? messages
+    : messages.filter((message) => !sessionQueue.withdrawn.has(message.id)), [messages, sessionQueue.withdrawn])
   const { notice: staleChatNotice, answerBySending: answerStaleChatBySending } = useStaleChatNotice({
     sessionId,
     session: currentSession,
@@ -365,7 +369,7 @@ export function ChatPane({
           // CLI view → route to the interactive PTY engine so the user sees the prompt
           // get injected into the live xterm + claude's streaming response.
           const mode = viewMode === 'cli' && engineRegistry?.engines?.[String(currentSession?.engine ?? '')]?.supportsPty ? 'interactive' : undefined
-          sessionQueue.adopt(userMsg.id, await api.sendMessage(sid, { message, interrupt: interrupt || undefined, attachments: attachmentIds, mode, speech: speech || undefined }))
+          sessionQueue.adopt(userMsg.id, await api.sendMessage(sid, { message, delivery: interrupt === undefined ? undefined : interrupt ? 'now' : 'queue', attachments: attachmentIds, mode, speech: speech || undefined }))
           onRefresh?.()
         }
         keepPaneTab(sid)
@@ -494,7 +498,7 @@ export function ChatPane({
         <SessionQueueContext.Provider value={sessionQueue}>
           <ChatMessages
             initialScrollTop={initialScrollTop}
-            messages={messages}
+            messages={shownMessages}
             loading={loading}
             hydrating={hydrating}
             turnPending={turnPending}
@@ -536,6 +540,10 @@ export function ChatPane({
         variant="chip"
         className="flex shrink-0 flex-wrap items-center gap-1 px-[var(--space-4)] py-[var(--space-1)]"
       />
+
+      {/* Queued messages wait above the composer too: force-send them all,
+          in order, without hunting for each card in the transcript. */}
+      {sessionId ? <QueuedBar count={sessionQueue.pendingCount} onSendAllNow={sessionQueue.sendAllNow} /> : null}
 
       {/* Input — chat-style composer for every view, including CLI (the PTY engine
           accepts attachments + the prompt is injected into xterm via bracketed-paste). */}

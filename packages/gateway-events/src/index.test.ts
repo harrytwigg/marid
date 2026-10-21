@@ -29,6 +29,13 @@ describe("decodeGatewayEvent", () => {
     expect(decodeGatewayEvent({ event: "hooks:run", payload: { ...payload, status: 3 } })).toBeNull()
   })
 
+  it("accepts a queue frame naming every withdrawn message, and rejects a malformed list", () => {
+    const payload = { sessionId: "s-1", sessionKey: "k", depth: 0, withdrawnMessageIds: ["m-1", "m-2"] }
+    expect(decodeGatewayEvent({ event: "queue:updated", payload })).toEqual({ event: "queue:updated", payload })
+    expect(decodeGatewayEvent({ event: "queue:updated", payload: { ...payload, withdrawnMessageIds: "m-1" } })).toBeNull()
+    expect(decodeGatewayEvent({ event: "queue:updated", payload: { ...payload, withdrawnMessageIds: ["m-1", 2] } })).toBeNull()
+  })
+
   it("accepts the status a session reports while its background sub-agents work", () => {
     const payload = {
       sessionId: "s-1",

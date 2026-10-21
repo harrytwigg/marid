@@ -70,6 +70,7 @@ import {
   getMessages,
   getMessagePage,
   enqueueQueueItem,
+  promotePendingQueueItem,
   markRunningQueueItemsCompletedForSession,
   shouldHoldParentCompletionQueueDispatch,
   listReleasableParentCompletionQueuesForSource,
@@ -329,7 +330,7 @@ import {
 import { handleHeartbeatApi } from "./heartbeat-api.js";
 import { handleSelfCompactionApi } from "./self-compaction-api.js";
 import { handleSessionContextApi } from "./session-context-api.js";
-import { shouldInterruptRunningTurn as interruptsRunningTurn } from "./message-interrupt.js";
+import { messageDeliveryError, resolveMessageDelivery, shouldInterruptRunningTurn as interruptsRunningTurn } from "./message-interrupt.js";
 import { isAutoCompacting } from "../sessions/auto-compaction.js";
 import { isRawEngineCommand } from "../shared/skill-commands.js";
 import { handleTerminalApi, type TerminalApiOptions } from "./terminal-api.js";
@@ -3924,7 +3925,7 @@ export async function handleApiRequest(
       }
 
       const prompt = body.message || body.prompt;
-      const messageError = messageBodyError(prompt);
+      const messageError = messageBodyError(prompt) ?? messageDeliveryError(body.delivery);
       if (messageError) return badRequest(res, messageError);
 
       // Allow internal callers (e.g. child session callbacks) to specify a non-user role
@@ -4010,12 +4011,19 @@ export async function handleApiRequest(
       // Headless engines lack isTurnRunning; their isAlive ≈ "turn running".
       const turnRunning = session.status === "running" && isInterruptibleEngine(engine)
         && ("isTurnRunning" in engine ? (engine as any).isTurnRunning(session.id) : engine.isAlive(session.id));
+      // Per-message delivery choice (`delivery: "queue" | "now"`, or the legacy
+      // `interrupt` boolean): queue waits for the running turn, now cuts it off.
+      // Queued messages drain one per turn, in order, through the serial queue.
+      const delivery = resolveMessageDelivery({ delivery: body.delivery, interrupt: body.interrupt });
+      const pausableKey = session.sessionKey || session.sourceRef || session.id;
       const shouldInterruptRunningTurn = interruptsRunningTurn({
         isNotification,
         prompt: String(prompt),
         interruptOnNewMessage: config.sessions?.interruptOnNewMessage,
         turnRunning,
         autoCompacting: isAutoCompacting(session.id),
+        delivery,
+        queuePaused: () => context.sessionManager.getQueue().isPaused(pausableKey),
       });
       if (shouldInterruptRunningTurn) supersedeRunningTurn(session);
 
@@ -4196,9 +4204,11 @@ export async function handleApiRequest(
 
       // Internal notification-role messages are already durably queued above;
       // only real user messages create a visible queue-panel item here. The row
-      // carries the whole payload so "send this one now" can move all of it.
+      // carries the whole payload, and keeps it if "send this one now" moves it.
       if (!isNotification) {
         queueItemId = enqueueQueueItem(session.id, sessionKey, prompt, { messageId: incomingMessageId, dispatch: { attachments: attachmentPaths, speechDerived } });
+        // A message that cut the turn off runs next, not behind what was already parked.
+        if (shouldInterruptRunningTurn) promotePendingQueueItem(sessionKey, queueItemId);
         context.emit("queue:updated", { sessionId: session.id, sessionKey });
       }
 
@@ -4211,6 +4221,7 @@ export async function handleApiRequest(
         sessionId: session.id,
         messageId: incomingMessageId,
         queueItemId,
+        ...(delivery ? { delivery } : {}),
         ...(callbackDelivery ? { callbackDeliveryId: callbackDelivery.id } : {}),
       });
     }

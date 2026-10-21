@@ -37,6 +37,10 @@ function isOptionalNumber(value: unknown): value is number | undefined {
   return value === undefined || isNumber(value)
 }
 
+function isOptionalStringArray(value: unknown): value is string[] | undefined {
+  return value === undefined || (Array.isArray(value) && value.every(isString))
+}
+
 function isOptionalBoolean(value: unknown): value is boolean | undefined {
   return value === undefined || typeof value === "boolean"
 }
@@ -211,7 +215,9 @@ export const payloadGuards: Record<GatewayEventName, PayloadGuard> = {
       && isString(value.sessionId)
       && isString(value.sessionKey)
       && isOptionalNumber(value.depth)
-      && isOptionalBoolean(value.paused),
+      && isOptionalBoolean(value.paused)
+      && isOptionalString(value.withdrawnMessageId)
+      && isOptionalStringArray(value.withdrawnMessageIds),
   "hooks:run": (value) => isRecord(value) && isString(value.id) && isString(value.hook) && isString(value.status),
   "company:changed": isCompanyChangedEvent,
   "pins:changed": isEmptyPayload,

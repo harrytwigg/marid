@@ -41,8 +41,7 @@ export const CREATE_QUEUE_ITEMS_TABLE = `
  *
  * `dispatch_payload` holds the rest of what the turn runs on - its attachments
  * and whether its text was spoken. Those used to live only in the dispatch
- * closure, which is wrong the moment "send this one now" moves a payload onto a
- * different row: the text would arrive with the other message's attachments.
+ * closure, which a row edited or replayed after a restart no longer has to hand.
  * Null whenever there is nothing extra to carry, which is most rows.
  */
 export function migrateQueueItemsSchema(database: Database.Database): void {

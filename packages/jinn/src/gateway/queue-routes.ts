@@ -2,15 +2,14 @@
 // api.ts, which carries these routes' history and is at its size baseline.
 import type { IncomingMessage as HttpRequest, ServerResponse } from "node:http";
 import {
-  cancelAllPendingQueueItems,
-  cancelQueueItem,
+  withdrawAllPendingQueueItems,
   editPendingQueueItem,
   getQueueItem,
   getQueueItems,
   getSession,
-  reassignPendingQueuePayloads,
+  promotePendingQueueItem,
+  withdrawPendingQueueItem,
 } from "../sessions/registry.js";
-import { rotatePendingToFront } from "../sessions/queue-rotation.js";
 import { supersedeRunningTurn } from "../sessions/turn/superseded.js";
 import { USER_MESSAGE_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
 import { messageBodyError } from "../shared/message-body.js";
@@ -50,11 +49,14 @@ function resolveEditableItem(res: ServerResponse, params: Record<string, string>
 }
 
 function cancelOneItem({ res, context, session, params }: QueueRouteArgs): void {
-  if (!cancelQueueItem(params.itemId)) {
-    return json(res, { error: "Item not found or already running" }, 409);
-  }
-  context.emit("queue:updated", { sessionId: params.id, sessionKey: session.sessionKey });
-  return json(res, { status: "cancelled", itemId: params.itemId });
+  if (!resolveEditableItem(res, params, "cancelled")) return;
+  // The item can leave `pending` between the check and the write, as with edit.
+  const withdrawn = withdrawPendingQueueItem(params.itemId);
+  if (!withdrawn) return json(res, { error: "Only a pending message can be cancelled" }, 409);
+  // The message id comes from the write, not the caller: every view drops that bubble.
+  const messageId = withdrawn.messageId ?? undefined;
+  context.emit("queue:updated", { sessionId: params.id, sessionKey: queueKey(session), ...(messageId ? { withdrawnMessageId: messageId } : {}) });
+  return json(res, { status: "cancelled", itemId: params.itemId, ...(messageId ? { messageId } : {}) });
 }
 
 function listItems({ res, session }: QueueRouteArgs): void {
@@ -63,12 +65,19 @@ function listItems({ res, session }: QueueRouteArgs): void {
 
 function clearPendingItems({ res, context, session, params }: QueueRouteArgs): void {
   const sessionKey = queueKey(session);
-  // Cancel only operator-visible rows. SessionQueue checks each durable row
-  // before execution, so no coarse in-memory cancellation is needed here;
-  // setting one would also discard protected internal callback rows.
-  const cancelled = cancelAllPendingQueueItems(sessionKey);
-  context.emit("queue:updated", { sessionId: params.id, sessionKey, depth: 0 });
-  return json(res, { status: "cleared", cancelled });
+  // Withdraw only operator-visible rows, bubbles and all. SessionQueue checks
+  // each durable row before execution, so no coarse in-memory cancellation is
+  // needed here; setting one would also discard protected internal callback rows.
+  const withdrawn = withdrawAllPendingQueueItems(sessionKey);
+  // The ids come from the write, as for a single cancel: every view drops those bubbles.
+  const messageIds = withdrawn.flatMap((item) => item.messageId ? [item.messageId] : []);
+  context.emit("queue:updated", {
+    sessionId: params.id,
+    sessionKey,
+    depth: 0,
+    ...(messageIds.length > 0 ? { withdrawnMessageIds: messageIds } : {}),
+  });
+  return json(res, { status: "cleared", cancelled: withdrawn.length, ...(messageIds.length > 0 ? { messageIds } : {}) });
 }
 
 function pause({ res, context, session, params }: QueueRouteArgs): void {
@@ -123,13 +132,34 @@ function interruptRunningTurn(context: ApiContext, session: Session): void {
   context.emit("session:interrupted", { sessionId: session.id, reason: "send now" });
 }
 
+/** A paused queue drains nothing: cutting the turn off there only loses the reply. */
+function refusePaused(res: ServerResponse, context: ApiContext, sessionKey: string): boolean {
+  if (!context.sessionManager.getQueue().isPaused(sessionKey)) return false;
+  json(res, { error: "The queue is paused; resume it to send" }, 409);
+  return true;
+}
+
+/**
+ * Force-send everything parked: cut the running turn and let the queue drain
+ * in its existing order, one message per turn. Unlike the single-item verb
+ * there is no rotation: the head stays the head.
+ */
+function sendAllNow({ res, context, session, params }: QueueRouteArgs): void {
+  const sessionKey = queueKey(session);
+  if (refusePaused(res, context, sessionKey)) return;
+  const count = getQueueItems(sessionKey).filter((row) => row.status === "pending").length;
+  if (count > 0) interruptRunningTurn(context, session);
+  context.emit("queue:updated", { sessionId: params.id, sessionKey });
+  return json(res, { status: "sent-now", count });
+}
+
 function sendNow({ res, context, session, params }: QueueRouteArgs): void {
   const item = resolveEditableItem(res, params, "sent now");
   if (!item) return;
   const sessionKey = queueKey(session);
-  const parked = getQueueItems(sessionKey).filter((row) => row.status === "pending");
-  const promoted = rotatePendingToFront(parked, item.id);
-  reassignPendingQueuePayloads(promoted.map((payload, index) => ({ id: parked[index].id, payload })));
+  if (refusePaused(res, context, sessionKey)) return;
+  // The item can leave `pending` between the check and the write, as with edit.
+  if (!promotePendingQueueItem(sessionKey, item.id)) return json(res, { error: "Only a pending message can be sent now" }, 409);
   interruptRunningTurn(context, session);
   context.emit("queue:updated", { sessionId: params.id, sessionKey });
   return json(res, { status: "sent-now", itemId: params.itemId });
@@ -140,6 +170,7 @@ function sendNow({ res, context, session, params }: QueueRouteArgs): void {
  * method keeps those two apart.
  */
 const QUEUE_ROUTES: Array<{ method: string; pattern: string; run: (args: QueueRouteArgs) => void | Promise<void> }> = [
+  { method: "POST", pattern: "/api/sessions/:id/queue/send-now", run: sendAllNow },
   { method: "POST", pattern: "/api/sessions/:id/queue/:itemId/send-now", run: sendNow },
   { method: "PATCH", pattern: "/api/sessions/:id/queue/:itemId", run: editItem },
   { method: "DELETE", pattern: "/api/sessions/:id/queue/:itemId", run: cancelOneItem },

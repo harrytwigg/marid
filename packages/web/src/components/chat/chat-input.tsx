@@ -11,6 +11,7 @@ import { useChatComposerControl } from './chat-composer-control'
 import { composerCardPresentation } from './chat-composer-presentation'
 import { useChatDraft } from './use-chat-draft'
 import { classifyMicGesture, MIC_HOLD_THRESHOLD_MS, resolveSendTap, resolveTranscriptLanding } from './armed-send'
+import { deliveryForSend, readSendDelivery, writeSendDelivery, type SendDelivery } from './send-delivery'
 
 export { classifyMicGesture, MIC_HOLD_THRESHOLD_MS, resolveSendTap, resolveTranscriptLanding } from './armed-send'
 export type { MicGesture } from './armed-send'
@@ -211,6 +212,10 @@ export function ChatInput({
   // Armed-send (STT): true once the operator has queued a send that will fire
   // automatically the instant the dictated transcript lands in the field.
   const [sendArmed, setSendArmed] = useState(false)
+  // While a turn runs, a sent message either waits for it or cuts it off.
+  // The standing choice is remembered; Alt+Enter flips it for one send.
+  const [sendDelivery, setSendDelivery] = useState<SendDelivery>(() => readSendDelivery(typeof localStorage === 'undefined' ? null : localStorage))
+  useEffect(() => { writeSendDelivery(typeof localStorage === 'undefined' ? null : localStorage, sendDelivery) }, [sendDelivery])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const handledFocusTriggerRef = useRef(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -446,14 +451,14 @@ export function ChatInput({
     }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      handleSubmit()
+      handleSubmit(e.altKey)
     }
   }
 
   // Send core — resolves client-only commands, otherwise keeps the draft until
   // onSend acknowledges it. Shared by the Enter/tap path (handleSubmit) and
   // the STT auto-send path (applyTranscript), so both behave identically.
-  async function sendText(rawText: string, media: MediaAttachment[]): Promise<boolean> {
+  async function sendText(rawText: string, media: MediaAttachment[], delivery: SendDelivery = sendDelivery): Promise<boolean> {
     const trimmed = rawText.trim()
     const hasMedia = media.length > 0
 
@@ -488,7 +493,7 @@ export function ChatInput({
     setShowMentions(false)
     setShowCommands(false)
     try {
-      const sending = onSend(trimmed, mediaToSend, false, speech)
+      const sending = onSend(trimmed, mediaToSend, delivery === 'now', speech)
       const accepted = typeof sending === 'boolean' ? sending : sending ? (await sending) !== false : true
       if (!accepted) {
         if (valueRef.current === rawText) speechRef.current = speech
@@ -517,8 +522,8 @@ export function ChatInput({
     pendingAttachmentsRef, sendTextRef, setValue, setSendArmed, setShowMentions, setShowCommands,
   })
 
-  function handleSubmit() {
-    void sendText(value, pendingAttachments)
+  function handleSubmit(flipDelivery = false) {
+    void sendText(value, pendingAttachments, deliveryForSend(sendDelivery, flipDelivery))
   }
 
   async function handleFileAttach(e: React.ChangeEvent<HTMLInputElement>) {
@@ -800,6 +805,26 @@ export function ChatInput({
           textareaRef.current?.focus()
         }}
       >
+        {/* Delivery choice — only meaningful while a turn is running: queue
+            waits for it, send-now cuts it off. Remembered across sessions. */}
+        {loading && (
+          <div className="flex items-center gap-[var(--space-2)] px-1 pb-[var(--space-2)]" role="group" aria-label="Delivery for the next message">
+            <span className="text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">Next message:</span>
+            {(['queue', 'now'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={sendDelivery === mode}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => setSendDelivery(mode)}
+                className={`h-7 shrink-0 cursor-pointer rounded-full border-none px-[var(--space-3)] text-[length:var(--text-caption1)] transition-colors ${sendDelivery === mode ? 'bg-[var(--accent)] text-[var(--accent-contrast)]' : 'bg-[var(--fill-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]'}`}
+              >
+                {mode === 'queue' ? 'Queue' : 'Send now'}
+              </button>
+            ))}
+            <span className="hidden text-[length:var(--text-caption2)] text-[var(--text-quaternary)] sm:inline">Alt+Enter flips</span>
+          </div>
+        )}
         {/* Textarea */}
         <textarea
           id={isActive ? 'chat-textarea' : undefined}
@@ -813,7 +838,7 @@ export function ChatInput({
           onPointerDown={(e) => e.stopPropagation()}
           placeholder={
             disabled ? 'Waiting for response...'
-              : loading ? 'Queue another message...'
+              : loading ? (sendDelivery === 'now' ? 'Send now, interrupting the reply...' : 'Queue another message...')
                 : 'Type a message...'
           }
           rows={1}

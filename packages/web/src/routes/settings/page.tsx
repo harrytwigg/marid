@@ -879,9 +879,10 @@ export default function SettingsPage() {
                 <div
                   className="text-[length:var(--text-caption1)] text-[var(--text-tertiary)] mt-[4px]"
                 >
-                  When enabled, sending a new message to a running session will stop the
-                  current agent and start processing your new message immediately. When
-                  disabled, messages are queued.
+                  The default for clients that do not choose per message: when enabled,
+                  a new message to a running session stops the current agent and starts
+                  immediately; when disabled, messages are queued. The chat composer's
+                  Queue / Send now choice (remembered per browser) overrides this.
                 </div>
 
               </Section>

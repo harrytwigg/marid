@@ -165,7 +165,7 @@ describe("accepted callback queue intents survive a restart", () => {
       }),
     ]);
     expect(registry.getQueueItems(parent.sessionKey)).toEqual([]);
-    expect(registry.cancelAllPendingQueueItems(parent.sessionKey)).toBe(0);
+    expect(registry.withdrawAllPendingQueueItems(parent.sessionKey)).toEqual([]);
     expect(registry.listAllPendingQueueItems()).toHaveLength(1);
 
     const postRestartQueue = new queueModule.SessionQueue();

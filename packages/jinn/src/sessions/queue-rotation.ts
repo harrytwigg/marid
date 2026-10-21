@@ -1,10 +1,10 @@
 /**
- * Reordering a parked queue, for "send this one now".
+ * Reordering a parked queue, so one message runs next: a queued message
+ * promoted with "send this one now", or a new message sent to interrupt.
  *
- * The rows themselves cannot move: `SessionQueue.enqueue` commits a promise
- * chain at enqueue time and that order is fixed. So the payloads move through
- * the rows instead — this decides the order they land in, and the caller writes
- * payload N onto row N.
+ * This decides the new order; the caller hands the rows' existing positions out
+ * in it. `SessionQueue` claims the next row by position as each slot starts, so
+ * a row's position is the only thing a reorder has to change.
  */
 
 /** Target first, everyone else in the order they were already in. */
