@@ -14,6 +14,7 @@ export interface QueueItem {
   sessionKey: string;
   prompt: string;
   status: "pending" | "running" | "cancelled" | "completed";
+  /** Not the operator's to act on: a callback delivery, or a send-now merged row (queue-merge.ts). */
   internal: boolean;
   /** The transcript row this item will run, when the enqueuing path had one. */
   messageId: string | null;
