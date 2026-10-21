@@ -8,7 +8,6 @@ import { isPortalAgentSession, listSessionsByWorkItem } from "../sessions/regist
 import { remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
 import { TODO_DISPATCHER_NAME } from "./system-employees.js";
 import type { Employee, Session } from "../shared/types.js";
-import { getWorkItemClaim } from "../work-items/claims.js";
 import type { WorkItem } from "../work-items/store.js";
 import { isExecutionAttempt } from "../work-items/link-role.js";
 import { neverReachedEngine } from "../sessions/engine-reach.js";
@@ -89,17 +88,30 @@ function todoDispatcherSessionKeyPrefix(workItemId: string): string {
 /**
  * A Dispatcher the gateway started on THIS Todo and that has not handed it on
  * yet: the built-in employee, linked to the Todo, under the key minted for it,
- * and still holding the Todo's claim. A session that is only called
+ * with no delegate of its own on the Todo. A session that is only called
  * `todo-dispatcher`, or a Dispatcher started on another Todo, is not one.
  *
- * The claim is what makes the standing one-shot. The hand-off releases it, and
- * the delegate's session is the Dispatcher's child, so every callback from that
- * delegate wakes the Dispatcher again. Without the claim clause, a Dispatcher
- * woken after its producer went idle could reassign the Todo and start a second
- * attempt beside the first.
+ * The hand-off is per-Todo, not per-claim: it is spent only when a delegation
+ * from this Dispatcher actually exists. The claim is a lease, and a lease
+ * running out is not a hand-off — a Dispatcher that blocked its Todo without
+ * delegating and waited out the lease for the operator's answer still holds
+ * the hand-off, or its answer could never be acted on. The claim keeps its
+ * own job: the delegation takes it next, under its compare-and-swap, so
+ * standing alone never starts a second attempt beside live work. And once a
+ * delegate exists, the Dispatcher is spent for good: the delegate's session
+ * is its child, so every callback from that delegate wakes it again, and a
+ * Dispatcher woken after its producer went idle could otherwise reassign
+ * the Todo and start a second attempt beside the first.
  */
 function isDispatcherRoutingTodo(session: Session, item: WorkItem): boolean {
-  return isDispatcherStartedFor(session, item) && getWorkItemClaim(item.id)?.sessionId === session.id;
+  return isDispatcherStartedFor(session, item) && !dispatcherHasHandedOff(session.id, item);
+}
+
+/** Whether this Dispatcher has already handed the Todo on: one of its own
+ *  delegates is linked to the Todo as an execution attempt. */
+function dispatcherHasHandedOff(callerId: string, item: WorkItem): boolean {
+  return listSessionsByWorkItem(item.id)
+    .some((attempt) => isExecutionAttempt(attempt) && attempt.parentSessionId === callerId);
 }
 
 /** A Dispatcher the gateway started on THIS Todo, whether or not it has handed it on since. */
@@ -204,6 +216,11 @@ function dispatcherAssigneeBinding(
  * through the ordinary rule. On a hand-pressed Dispatch the standing carries
  * the assignee binding above: the Dispatcher hands the Todo to its assignee
  * and to nobody else.
+ *
+ * A claim that expired is not a hand-off either: a Dispatcher that never
+ * delegated keeps this standing however long it waited, and the delegation
+ * it then makes takes a fresh claim. That is the non-operator path that
+ * re-arms an expired claim — no fresh Dispatch press is needed.
  *
  * A hand-off that never started is not spent either: a caller whose own
  * delegate on this Todo was refused before its engine ever ran may hand the
