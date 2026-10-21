@@ -118,26 +118,28 @@ describe("POST /message delivery choice", () => {
     releaseNext();
   });
 
-  it("send-now with messages already queued runs next, ahead of them, then the queue in order", async () => {
-    const { context, session, prompts, kills, releaseNext } = await runningInterruptibleSession("delivery-now-ahead");
+  it("send-now with messages already queued sends them first, in order, then itself, on one interruption", async () => {
+    const { context, session, prompts, kills, releaseNext } = await runningInterruptibleSession("delivery-now-flush");
     await send(context, session.id, "parked one", { delivery: "queue" });
     await send(context, session.id, "parked two", { delivery: "queue" });
 
     const urgent = await send(context, session.id, "urgent correction", { delivery: "now" });
 
     expect(kills).toHaveLength(1);
-    // The response names the urgent message's own row, which is now the head.
+    // Nothing parked earlier is left behind it: the new message takes the tail.
     const parked = await parkedRows(context, session.id);
-    expect(parked.map((row) => row.prompt)).toEqual(["urgent correction", "parked one", "parked two"]);
-    expect((urgent.body as { queueItemId: string }).queueItemId).toBe(parked[0].id);
-    // The cut-off turn's prompt is carried forward into the urgent one.
-    await eventually(() => expect(prompts[1]).toContain("urgent correction"));
-    expect(prompts[1]).not.toContain("parked one");
+    expect(parked.map((row) => row.prompt)).toEqual(["parked one", "parked two", "urgent correction"]);
+    expect((urgent.body as { queueItemId: string }).queueItemId).toBe(parked[2].id);
+    // The cut-off turn's prompt is carried forward into the first parked one.
+    await eventually(() => expect(prompts[1]).toContain("parked one"));
+    expect(prompts[1]).not.toContain("urgent correction");
     releaseNext();
-    await eventually(() => expect(prompts[2]).toBe("parked one"));
+    await eventually(() => expect(prompts[2]).toBe("parked two"));
     releaseNext();
-    await eventually(() => expect(prompts[3]).toBe("parked two"));
+    await eventually(() => expect(prompts[3]).toBe("urgent correction"));
     releaseNext();
+    expect(kills).toHaveLength(1);
+    expect(await parkedRows(context, session.id)).toEqual([]);
   });
 
   it("refuses an unknown delivery value instead of falling back to interrupting", async () => {

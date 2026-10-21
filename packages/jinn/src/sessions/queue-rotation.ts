@@ -1,6 +1,6 @@
 /**
  * Reordering a parked queue, so one message runs next: a queued message
- * promoted with "send this one now", or a new message sent to interrupt.
+ * promoted with "send this one now".
  *
  * This decides the new order; the caller hands the rows' existing positions out
  * in it. `SessionQueue` claims the next row by position as each slot starts, so
