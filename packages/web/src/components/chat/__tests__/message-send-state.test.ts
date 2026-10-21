@@ -59,6 +59,11 @@ describe('clearPendingSend', () => {
     expect(next[0].sendState).toBeUndefined()
   })
 
+  it('settles every pending message at once: one turn can answer several', () => {
+    const next = clearPendingSend([user('u1', 'one', { sendState: 'pending' }), user('u2', 'two'), user('u3', 'now', { sendState: 'pending' })])
+    expect(next.map((m) => m.sendState)).toEqual([undefined, undefined, undefined])
+  })
+
   it('returns the identical array when nothing is pending, so a per-token call cannot re-render', () => {
     const current = [user('u1', 'hi'), user('u2', 'ho', { sendState: 'failed' })]
     expect(clearPendingSend(current)).toBe(current)
