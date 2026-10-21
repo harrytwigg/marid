@@ -2,7 +2,7 @@
 // api.ts, which carries these routes' history and is at its size baseline.
 import type { IncomingMessage as HttpRequest, ServerResponse } from "node:http";
 import {
-  cancelAllPendingQueueItems,
+  withdrawAllPendingQueueItems,
   editPendingQueueItem,
   getQueueItem,
   getQueueItems,
@@ -66,12 +66,19 @@ function listItems({ res, session }: QueueRouteArgs): void {
 
 function clearPendingItems({ res, context, session, params }: QueueRouteArgs): void {
   const sessionKey = queueKey(session);
-  // Cancel only operator-visible rows. SessionQueue checks each durable row
-  // before execution, so no coarse in-memory cancellation is needed here;
-  // setting one would also discard protected internal callback rows.
-  const cancelled = cancelAllPendingQueueItems(sessionKey);
-  context.emit("queue:updated", { sessionId: params.id, sessionKey, depth: 0 });
-  return json(res, { status: "cleared", cancelled });
+  // Withdraw only operator-visible rows, bubbles and all. SessionQueue checks
+  // each durable row before execution, so no coarse in-memory cancellation is
+  // needed here; setting one would also discard protected internal callback rows.
+  const withdrawn = withdrawAllPendingQueueItems(sessionKey);
+  // The ids come from the write, as for a single cancel: every view drops those bubbles.
+  const messageIds = withdrawn.flatMap((item) => item.messageId ? [item.messageId] : []);
+  context.emit("queue:updated", {
+    sessionId: params.id,
+    sessionKey,
+    depth: 0,
+    ...(messageIds.length > 0 ? { withdrawnMessageIds: messageIds } : {}),
+  });
+  return json(res, { status: "cleared", cancelled: withdrawn.length, ...(messageIds.length > 0 ? { messageIds } : {}) });
 }
 
 function pause({ res, context, session, params }: QueueRouteArgs): void {
