@@ -118,28 +118,25 @@ describe("POST /message delivery choice", () => {
     releaseNext();
   });
 
-  it("send-now with messages already queued sends them first, in order, then itself, on one interruption", async () => {
-    const { context, session, prompts, kills, releaseNext } = await runningInterruptibleSession("delivery-now-flush");
+  it("send-now with messages already queued sends them and itself as one turn, in send order", async () => {
+    const { context, session, prompts, kills, releaseNext } = await runningInterruptibleSession("delivery-now-squash");
     await send(context, session.id, "parked one", { delivery: "queue" });
     await send(context, session.id, "parked two", { delivery: "queue" });
 
     const urgent = await send(context, session.id, "urgent correction", { delivery: "now" });
 
     expect(kills).toHaveLength(1);
-    // Nothing parked earlier is left behind it: the new message takes the tail.
-    const parked = await parkedRows(context, session.id);
-    expect(parked.map((row) => row.prompt)).toEqual(["parked one", "parked two", "urgent correction"]);
-    expect((urgent.body as { queueItemId: string }).queueItemId).toBe(parked[2].id);
-    // The cut-off turn's prompt is carried forward into the first parked one.
-    await eventually(() => expect(prompts[1]).toContain("parked one"));
-    expect(prompts[1]).not.toContain("urgent correction");
+    // One row is left, the new message's, carrying all three in send order.
+    const [merged, ...rest] = await parkedRows(context, session.id);
+    expect(rest).toEqual([]);
+    expect(merged.id).toBe((urgent.body as { queueItemId: string }).queueItemId);
+    expect(merged.prompt).toBe("parked one\n\nparked two\n\nurgent correction");
+    await eventually(() => expect(prompts[1]).toContain(merged.prompt));
+    // Every message was sent, so every bubble stays.
+    expect(await transcriptTexts(context, session.id)).toEqual(expect.arrayContaining(["parked one", "parked two", "urgent correction"]));
     releaseNext();
-    await eventually(() => expect(prompts[2]).toBe("parked two"));
-    releaseNext();
-    await eventually(() => expect(prompts[3]).toBe("urgent correction"));
-    releaseNext();
-    expect(kills).toHaveLength(1);
-    expect(await parkedRows(context, session.id)).toEqual([]);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(prompts).toHaveLength(2);
   });
 
   it("refuses an unknown delivery value instead of falling back to interrupting", async () => {
@@ -267,7 +264,7 @@ describe("DELETE /api/sessions/:id/queue (clear all)", () => {
 });
 
 describe("POST /api/sessions/:id/queue/send-now (all)", () => {
-  it("interrupts the running turn and drains every queued message in queue order", async () => {
+  it("interrupts the running turn and sends every queued message as one turn, in queue order", async () => {
     const { context, session, prompts, kills, releaseNext } = await runningInterruptibleSession("force-all");
     await send(context, session.id, "first queued", { delivery: "queue" });
     await send(context, session.id, "second queued", { delivery: "queue" });
@@ -278,12 +275,11 @@ describe("POST /api/sessions/:id/queue/send-now (all)", () => {
     expect(forced.status).toBe(200);
     expect(forced.body).toMatchObject({ status: "sent-now", count: 2 });
     expect(kills).toHaveLength(1);
-    // The interrupted turn's prompt is carried forward into the next turn's.
-    await eventually(() => expect(prompts[1]).toContain("first queued"));
+    await eventually(() => expect(prompts[1]).toContain("first queued\n\nsecond queued"));
+    expect(await parkedRows(context, session.id)).toEqual([]);
     releaseNext();
-    await eventually(() => expect(prompts[2]).toContain("second queued"));
-    expect(prompts).toHaveLength(3);
-    releaseNext();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(prompts).toHaveLength(2);
   });
 
   it("refuses while the queue is paused, leaving the running turn alone", async () => {

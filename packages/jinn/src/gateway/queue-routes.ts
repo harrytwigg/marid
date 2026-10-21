@@ -10,6 +10,7 @@ import {
   promotePendingQueueItem,
   withdrawPendingQueueItem,
 } from "../sessions/registry.js";
+import { mergePendingQueueItems } from "../sessions/queue-merge.js";
 import { supersedeRunningTurn } from "../sessions/turn/superseded.js";
 import { USER_MESSAGE_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
 import { messageBodyError } from "../shared/message-body.js";
@@ -140,14 +141,17 @@ function refusePaused(res: ServerResponse, context: ApiContext, sessionKey: stri
 }
 
 /**
- * Force-send everything parked: cut the running turn and let the queue drain
- * in its existing order, one message per turn. Unlike the single-item verb
- * there is no rotation: the head stays the head.
+ * Force-send everything parked: cut the running turn and send the parked
+ * messages as one turn, folded into the head in their existing order, as a
+ * message sent now does with them. Unlike the single-item verb there is no
+ * rotation: the head stays the head.
  */
 function sendAllNow({ res, context, session, params }: QueueRouteArgs): void {
   const sessionKey = queueKey(session);
   if (refusePaused(res, context, sessionKey)) return;
-  const count = getQueueItems(sessionKey).filter((row) => row.status === "pending").length;
+  const parked = getQueueItems(sessionKey).filter((row) => row.status === "pending");
+  const count = parked.length;
+  if (count > 1) mergePendingQueueItems(sessionKey, parked[0].id);
   if (count > 0) interruptRunningTurn(context, session);
   context.emit("queue:updated", { sessionId: params.id, sessionKey });
   return json(res, { status: "sent-now", count });
