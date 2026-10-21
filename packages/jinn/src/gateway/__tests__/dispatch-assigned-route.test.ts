@@ -358,4 +358,25 @@ describe("a Dispatcher whose claim expired before it handed off", () => {
     expect(sessionsOf(item.id, "first-worker")).toHaveLength(1);
     expect(sessionsOf(item.id, "second-worker")).toHaveLength(0);
   });
+
+  // A delegation that lands in a session somebody else started spawns no
+  // child of the Dispatcher; its brief record is the only trace of the hand-off.
+  it("treats a brief the Dispatcher landed in an existing session as its hand-off", async () => {
+    const { item, dispatcherId } = await blockedThenExpired("Brief landed in a live session, claim expired");
+    const { recordLandedBrief } = await import("../../work-items/employee-session-delegation.js");
+    const live = employeeSession("first-worker", "live:1");
+    recordLandedBrief({
+      briefKey: `queue:${live.id}`,
+      workItemId: item.id,
+      employee: "first-worker",
+      sessionId: live.id,
+      delegatorSessionId: dispatcherId,
+    });
+
+    const again = await delegate(dispatcherId, item.id, "second-worker");
+
+    expect(again.status).toBe(403);
+    expect(again.body.error).toMatch(/this Dispatcher's hand-off is spent/);
+    expect(sessionsOf(item.id, "second-worker")).toHaveLength(0);
+  });
 });

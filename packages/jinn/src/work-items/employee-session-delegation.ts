@@ -72,6 +72,23 @@ interface BriefRow {
   delegator_session_id: string | null;
 }
 
+/**
+ * The session a delegation from `delegatorSessionId` on this Todo went to:
+ * a brief still waiting to run in it, or the employee-session record a
+ * started brief (or a spawned delegate) left behind. A delegation that
+ * landed in a session somebody else started spawns no child, so these
+ * records are the only trace of who handed the Todo on.
+ */
+export function recordedDelegateSessionId(workItemId: string, delegatorSessionId: string): string | undefined {
+  const brief = briefsTable().prepare(
+    'SELECT session_id FROM work_item_delegation_briefs WHERE work_item_id = ? AND delegator_session_id = ? ORDER BY created_at DESC LIMIT 1',
+  ).pluck().get(workItemId, delegatorSessionId) as string | undefined;
+  if (brief) return brief;
+  return employeeSessionsTable().prepare(
+    'SELECT session_id FROM work_item_employee_sessions WHERE work_item_id = ? AND delegator_session_id = ? AND delegated_at IS NOT NULL ORDER BY delegated_at DESC LIMIT 1',
+  ).pluck().get(workItemId, delegatorSessionId) as string | undefined;
+}
+
 /** A brief landed in a live session; its delegator waits for its turn. */
 export function recordLandedBrief(brief: LandedBrief): void {
   briefsTable().prepare(

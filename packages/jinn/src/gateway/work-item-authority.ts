@@ -10,6 +10,7 @@ import { TODO_DISPATCHER_NAME } from "./system-employees.js";
 import type { Employee, Session } from "../shared/types.js";
 import type { WorkItem } from "../work-items/store.js";
 import { isExecutionAttempt } from "../work-items/link-role.js";
+import { recordedDelegateSessionId } from "../work-items/employee-session-delegation.js";
 import { neverReachedEngine } from "../sessions/engine-reach.js";
 import { OPERATOR_ASSIGNEE } from "../work-items/operator-assignee.js";
 
@@ -108,10 +109,12 @@ function isDispatcherRoutingTodo(session: Session, item: WorkItem): boolean {
 }
 
 /** Whether this Dispatcher has already handed the Todo on: one of its own
- *  delegates is linked to the Todo as an execution attempt. */
+ *  delegates is linked to the Todo as an execution attempt, or its brief
+ *  landed in a session somebody else started (which spawns no child). */
 function dispatcherHasHandedOff(callerId: string, item: WorkItem): boolean {
   return listSessionsByWorkItem(item.id)
-    .some((attempt) => isExecutionAttempt(attempt) && attempt.parentSessionId === callerId);
+    .some((attempt) => isExecutionAttempt(attempt) && attempt.parentSessionId === callerId)
+    || recordedDelegateSessionId(item.id, callerId) !== undefined;
 }
 
 /** A Dispatcher the gateway started on THIS Todo, whether or not it has handed it on since. */
