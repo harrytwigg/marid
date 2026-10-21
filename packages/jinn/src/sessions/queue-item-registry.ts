@@ -208,12 +208,29 @@ export function countPendingQueueItemsByKey(): Map<string, number> {
   return new Map(rows.map((row) => [row.sessionKey, row.n]));
 }
 
-export function cancelAllPendingQueueItems(sessionKey: string): number {
+/**
+ * Clear a session's operator-visible queue: {@link withdrawPendingQueueItem} for
+ * every parked row at once, so the cancels and the bubble deletes commit
+ * together. Internal callback rows are left alone (they are not the operator's
+ * to clear, and their messages are not operator bubbles).
+ *
+ * Returns the rows withdrawn, as they were read inside the transaction.
+ */
+export function withdrawAllPendingQueueItems(sessionKey: string): QueueItem[] {
   const db = initDb();
-  const result = db.prepare(
-    "UPDATE queue_items SET status = 'cancelled' WHERE session_key = ? AND internal = 0 AND status = 'pending'"
-  ).run(sessionKey);
-  return result.changes;
+  return db.transaction(() => {
+    const rows = db.prepare(
+      `${QUEUE_ITEM_SELECT} WHERE session_key = ? AND internal = 0 AND status = 'pending'`
+    ).all(sessionKey) as QueueItemRow[];
+    const cancel = db.prepare("UPDATE queue_items SET status = 'cancelled' WHERE id = ? AND status = 'pending'");
+    const drop = db.prepare('DELETE FROM messages WHERE id = ?');
+    const items = rows.map(rowToQueueItem);
+    for (const item of items) {
+      cancel.run(item.id);
+      if (item.messageId) drop.run(item.messageId);
+    }
+    return items;
+  }).immediate();
 }
 
 export function recoverStaleQueueItems(): number {

@@ -54,8 +54,16 @@ export interface GatewayEventMap {
       lastActivityAt: string
     } | null
   }
-  /** `withdrawnMessageId`: a parked message was cancelled and its transcript row removed. */
-  "queue:updated": { sessionId: string; sessionKey: string; depth?: number; paused?: boolean; withdrawnMessageId?: string }
+  /** `withdrawnMessageId` / `withdrawnMessageIds`: parked messages were cancelled (one, or the whole queue
+   *  cleared) and their transcript rows removed. */
+  "queue:updated": {
+    sessionId: string
+    sessionKey: string
+    depth?: number
+    paused?: boolean
+    withdrawnMessageId?: string
+    withdrawnMessageIds?: string[]
+  }
   /** A board hook run row was written or finished; the Hooks page refetches. */
   "hooks:run": { id: string; hook: string; status: string }
   "company:changed": CompanyChangedEvent
