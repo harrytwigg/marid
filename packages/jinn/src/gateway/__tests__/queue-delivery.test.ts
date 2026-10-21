@@ -1,95 +1,16 @@
-import { Readable } from "node:stream";
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  api,
-  createParent,
-  eventually,
-  makeContext,
-  queueModule,
-  registry,
-  resetCallbackState,
-  type ApiContext,
-} from "./helpers/callback-harness.js";
-import { makeResponse } from "./helpers/callback-requests.js";
-import type { Engine, EngineRunOpts } from "../../shared/types.js";
+import { createParent, eventually, registry, resetCallbackState } from "./helpers/callback-harness.js";
+import { parkedRows, request, runningInterruptibleSession, send, transcriptTexts } from "./helpers/queue-delivery-harness.js";
 
 /**
  * The per-message delivery choice against the real route handler, a real
  * SessionQueue and real SQLite: `delivery: "queue"` waits for the running
  * turn, `delivery: "now"` cuts it off, and the queue's send-now verb
  * force-sends everything parked. Queued messages drain one per turn, in
- * the order they were sent.
+ * the order they were sent, unless a send-now takes them with it as one turn.
  */
 
 beforeEach(resetCallbackState);
-
-const HEADERS = {
-  host: "gateway.test",
-  authorization: "Bearer test-token",
-  "content-type": "application/json",
-};
-
-async function request(
-  context: ApiContext,
-  method: string,
-  url: string,
-  body?: unknown,
-) {
-  const req = Object.assign(Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))]), {
-    method,
-    url,
-    headers: { ...HEADERS },
-  });
-  const captured = makeResponse();
-  await api.handleApiRequest(req as never, captured.res, context);
-  return captured;
-}
-
-const send = (context: ApiContext, sessionId: string, message: string, extra: Record<string, unknown> = {}) =>
-  request(context, "POST", `/api/sessions/${sessionId}/message`, { message, ...extra });
-
-interface QueueRow { id: string; prompt: string; status: string }
-
-const parkedRows = async (context: ApiContext, sessionId: string): Promise<QueueRow[]> =>
-  ((await request(context, "GET", `/api/sessions/${sessionId}/queue`)).body as QueueRow[])
-    .filter((row) => row.status === "pending");
-
-const transcriptTexts = async (context: ApiContext, sessionId: string): Promise<string[]> =>
-  (((await request(context, "GET", `/api/sessions/${sessionId}`)).body as { messages?: Array<{ content: string }> }).messages ?? [])
-    .map((message) => message.content);
-
-/** An interruptible engine whose turn ends only when released or killed. */
-function interruptibleBlockingEngine() {
-  const prompts: string[] = [];
-  const kills: Array<string | undefined> = [];
-  const releases: Array<() => void> = [];
-  let alive = false;
-  const engine = {
-    name: "stub",
-    run: async (opts: EngineRunOpts) => {
-      prompts.push(opts.prompt);
-      alive = true;
-      await new Promise<void>((resolve) => { releases.push(resolve); });
-      alive = false;
-      return { sessionId: "stub", result: "acknowledged" };
-    },
-    kill: (_sessionId: string, reason?: string) => { kills.push(reason); releases.shift()?.(); },
-    isAlive: () => alive,
-    killAll: () => {},
-  } as unknown as Engine;
-  return { engine, prompts, kills, releaseNext: () => releases.shift()?.() };
-}
-
-async function runningInterruptibleSession(suffix: string) {
-  const stub = interruptibleBlockingEngine();
-  const queue = new queueModule.SessionQueue();
-  const events: Array<{ event: string; data: unknown }> = [];
-  const context = makeContext(stub.engine, queue, events);
-  const session = createParent(suffix);
-  await send(context, session.id, "running turn");
-  await eventually(() => expect(stub.prompts).toEqual(["running turn"]));
-  return { ...stub, context, queue, session, events };
-}
 
 describe("POST /message delivery choice", () => {
   it("queues two messages behind a running turn without interrupting, then delivers them in order, one per turn", async () => {
@@ -119,23 +40,24 @@ describe("POST /message delivery choice", () => {
   });
 
   it("send-now with messages already queued sends them and itself as one turn, in send order", async () => {
-    const { context, session, prompts, kills, releaseNext } = await runningInterruptibleSession("delivery-now-squash");
+    const { context, queue, session, prompts, kills, releaseNext } = await runningInterruptibleSession("delivery-now-squash");
     await send(context, session.id, "parked one", { delivery: "queue" });
     await send(context, session.id, "parked two", { delivery: "queue" });
 
     const urgent = await send(context, session.id, "urgent correction", { delivery: "now" });
 
     expect(kills).toHaveLength(1);
-    // One row is left, the new message's, carrying all three in send order.
-    const [merged, ...rest] = await parkedRows(context, session.id);
-    expect(rest).toEqual([]);
-    expect(merged.id).toBe((urgent.body as { queueItemId: string }).queueItemId);
-    expect(merged.prompt).toBe("parked one\n\nparked two\n\nurgent correction");
-    await eventually(() => expect(prompts[1]).toContain(merged.prompt));
+    // Nothing is left for the operator to act on: the cards clear at once.
+    expect(await parkedRows(context, session.id)).toEqual([]);
+    const mergedId = (urgent.body as { queueItemId: string }).queueItemId;
+    expect(registry.getQueueItem(mergedId)!.prompt).toBe("parked one\n\nparked two\n\nurgent correction");
+    // The merged message was sent: it cannot be withdrawn from under its turn.
+    expect((await request(context, "DELETE", `/api/sessions/${session.id}/queue/${mergedId}`)).status).toBe(404);
+    await eventually(() => expect(prompts[1]).toContain("parked one\n\nparked two\n\nurgent correction"));
     // Every message was sent, so every bubble stays.
     expect(await transcriptTexts(context, session.id)).toEqual(expect.arrayContaining(["parked one", "parked two", "urgent correction"]));
     releaseNext();
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await eventually(() => expect(queue.getPendingCount(session.sessionKey)).toBe(0));
     expect(prompts).toHaveLength(2);
   });
 
@@ -265,7 +187,7 @@ describe("DELETE /api/sessions/:id/queue (clear all)", () => {
 
 describe("POST /api/sessions/:id/queue/send-now (all)", () => {
   it("interrupts the running turn and sends every queued message as one turn, in queue order", async () => {
-    const { context, session, prompts, kills, releaseNext } = await runningInterruptibleSession("force-all");
+    const { context, queue, session, prompts, kills, releaseNext } = await runningInterruptibleSession("force-all");
     await send(context, session.id, "first queued", { delivery: "queue" });
     await send(context, session.id, "second queued", { delivery: "queue" });
     expect(kills).toEqual([]);
@@ -278,8 +200,24 @@ describe("POST /api/sessions/:id/queue/send-now (all)", () => {
     await eventually(() => expect(prompts[1]).toContain("first queued\n\nsecond queued"));
     expect(await parkedRows(context, session.id)).toEqual([]);
     releaseNext();
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await eventually(() => expect(queue.getPendingCount(session.sessionKey)).toBe(0));
     expect(prompts).toHaveLength(2);
+  });
+
+  it("folds into the first message that recorded its payload, leaving a row without one to run on its own", async () => {
+    const { context, queue, session, prompts, releaseNext } = await runningInterruptibleSession("force-all-no-payload");
+    // A row with no recorded payload, as a delegation brief's is, parked first.
+    const brief = registry.enqueueQueueItem(session.id, session.sessionKey, "brief");
+    void queue.enqueue(session.sessionKey, async () => { prompts.push("brief"); }, brief);
+    await send(context, session.id, "first queued", { delivery: "queue" });
+    await send(context, session.id, "second queued", { delivery: "queue" });
+
+    await request(context, "POST", `/api/sessions/${session.id}/queue/send-now`, {});
+
+    await eventually(() => expect(prompts.slice(1)).toEqual(["brief", expect.stringContaining("first queued\n\nsecond queued")]));
+    releaseNext();
+    await eventually(() => expect(queue.getPendingCount(session.sessionKey)).toBe(0));
+    expect(prompts).toHaveLength(3);
   });
 
   it("refuses while the queue is paused, leaving the running turn alone", async () => {

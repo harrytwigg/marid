@@ -4,6 +4,9 @@
 import { randomUUID } from 'node:crypto';
 import { initDb } from '../shared/db.js';
 import { rotatePendingToFront } from './queue-rotation.js';
+import { parseDispatchPayload, serializeDispatchPayload, type QueueDispatch } from './queue-dispatch.js';
+
+export type { QueueDispatch } from './queue-dispatch.js';
 
 export interface QueueItem {
   id: string;
@@ -23,33 +26,9 @@ export interface QueueItem {
   completedAt: string | null;
 }
 
-/** What a turn runs on besides its text. */
-export interface QueueDispatch {
-  attachments: string[];
-  speechDerived: boolean;
-}
-
 interface QueueItemRow extends Omit<QueueItem, "internal" | "dispatch"> {
   internal: number;
   dispatch_payload: string | null;
-}
-
-/**
- * Null and empty are NOT the same thing here, and conflating them drops files.
- * Null means no payload was ever recorded for this row - the notification,
- * workflow and plugin paths never record one - so the dispatch closure still
- * decides. An empty recorded payload means "this row runs with nothing extra",
- * which is what a message sent without a file must say, so that it never falls back
- * to whatever the dispatch closure captured.
- */
-function parseDispatchPayload(raw: string | null): QueueDispatch | null {
-  if (raw === null) return null;
-  const parsed = JSON.parse(raw) as { attachments?: string[]; speechDerived?: boolean };
-  return { attachments: parsed.attachments ?? [], speechDerived: parsed.speechDerived === true };
-}
-
-function serializeDispatchPayload(dispatch: QueueDispatch | null): string | null {
-  return dispatch === null ? null : JSON.stringify(dispatch);
 }
 
 function rowToQueueItem(row: QueueItemRow): QueueItem {
@@ -279,9 +258,10 @@ export function runningQueuePromptsForSession(sessionId: string): string[] {
 export function openTurnMessages(sessionId: string): { prompts: string[]; messageIds: Set<string> } {
   const db = initDb();
   const items = db.prepare(
-    "SELECT id, prompt, message_id AS messageId FROM queue_items WHERE session_id = ? AND status IN ('pending', 'running')",
-  ).all(sessionId) as Array<{ id: string; prompt: string; messageId: string | null }>;
-  const messageIds = new Set(items.flatMap((item) => (item.messageId ? [item.messageId] : [])));
+    "SELECT id, prompt, message_id AS messageId, dispatch_payload FROM queue_items WHERE session_id = ? AND status IN ('pending', 'running')",
+  ).all(sessionId) as Array<{ id: string; prompt: string; messageId: string | null; dispatch_payload: string | null }>;
+  const messageIds = new Set(items.flatMap((item) => [
+    ...(item.messageId ? [item.messageId] : []), ...(parseDispatchPayload(item.dispatch_payload)?.foldedMessageIds ?? [])]));
   if (items.length > 0) {
     const delivered = db.prepare(
       `SELECT message_id AS messageId FROM callback_deliveries WHERE message_id IS NOT NULL AND queue_item_id IN (${items.map(() => "?").join(", ")})`,

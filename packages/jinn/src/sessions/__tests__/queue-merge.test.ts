@@ -11,10 +11,14 @@ process.env.JINN_HOME = tmp;
 type Reg = typeof import("../registry.js");
 let reg: Reg;
 let mergePendingQueueItems: typeof import("../queue-merge.js").mergePendingQueueItems;
+let openTurnMessages: typeof import("../queue-item-registry.js").openTurnMessages;
+let resolveLostConversationPrompt: typeof import("../turn/preflight.js").resolveLostConversationPrompt;
 
 beforeAll(async () => {
   reg = await import("../registry.js");
   ({ mergePendingQueueItems } = await import("../queue-merge.js"));
+  ({ openTurnMessages } = await import("../queue-item-registry.js"));
+  ({ resolveLostConversationPrompt } = await import("../turn/preflight.js"));
   (await import("../../shared/db.js")).initDb();
 });
 
@@ -22,21 +26,59 @@ const dispatch = (attachments: string[] = [], speechDerived = false) => ({ dispa
 const pendingPrompts = (lane: string) =>
   reg.getQueueItems(lane).filter((row) => row.status === "pending").map((row) => row.prompt);
 
+/** A session with operator messages parked on its lane, each with its bubble. */
+function parkedSession(ref: string, texts: string[], speech: boolean[] = []) {
+  const session = reg.createSession({ engine: "claude", source: "web", sourceRef: ref });
+  const lane = session.sessionKey || session.sourceRef || session.id;
+  const messageIds = texts.map((text) => reg.insertMessage(session.id, "user", text));
+  const ids = texts.map((text, index) =>
+    reg.enqueueQueueItem(session.id, lane, text, { messageId: messageIds[index], ...dispatch([], speech[index] ?? false) }));
+  return { session, lane, ids, messageIds };
+}
+
 describe("mergePendingQueueItems", () => {
   it("folds every parked message into the target, in send order, with every attachment", () => {
     const lane = "lane-merge";
     const one = reg.enqueueQueueItem("s-merge", lane, "one", dispatch(["/a.png"]));
-    const two = reg.enqueueQueueItem("s-merge", lane, "two", dispatch(["/b.png", "/a.png"], true));
+    const two = reg.enqueueQueueItem("s-merge", lane, "two", dispatch(["/b.png", "/a.png"]));
     const now = reg.enqueueQueueItem("s-merge", lane, "now", dispatch(["/c.png"]));
 
     expect(mergePendingQueueItems(lane, now)).toEqual([one, two]);
 
-    expect(pendingPrompts(lane)).toEqual(["one\n\ntwo\n\nnow"]);
     const merged = reg.getQueueItem(now)!;
-    expect(merged.dispatch).toEqual({ attachments: ["/a.png", "/b.png", "/c.png"], speechDerived: true });
+    expect(merged.prompt).toBe("one\n\ntwo\n\nnow");
+    expect(merged.dispatch).toMatchObject({ attachments: ["/a.png", "/b.png", "/c.png"], speechDerived: false });
     expect(merged.position).toBe(reg.getQueueItem(one)!.position);
     expect(reg.getQueueItem(one)!.status).toBe("cancelled");
     expect(reg.getQueueItem(two)!.status).toBe("cancelled");
+  });
+
+  it("takes the merged row off the operator's queue: it is sent, not parked", () => {
+    const { lane, ids } = parkedSession("web:merge-sent", ["one", "now"]);
+    mergePendingQueueItems(lane, ids[1]);
+    expect(reg.getQueueItem(ids[1])).toMatchObject({ status: "pending", internal: true });
+    expect(reg.getQueueItems(lane)).toEqual([]);
+  });
+
+  it("keeps the speech note only when every message was spoken", () => {
+    const mixed = parkedSession("web:merge-speech-mixed", ["typed id-42", "spoken"], [false, true]);
+    mergePendingQueueItems(mixed.lane, mixed.ids[1]);
+    expect(reg.getQueueItem(mixed.ids[1])!.dispatch!.speechDerived).toBe(false);
+    const spoken = parkedSession("web:merge-speech-all", ["spoken one", "spoken two"], [true, true]);
+    mergePendingQueueItems(spoken.lane, spoken.ids[1]);
+    expect(reg.getQueueItem(spoken.ids[1])!.dispatch!.speechDerived).toBe(true);
+  });
+
+  it("records the folded messages, so the open turn answers them and a fresh conversation is not told them twice", () => {
+    const { session, lane, ids, messageIds } = parkedSession("web:merge-open", ["parked one", "parked two", "urgent"]);
+    mergePendingQueueItems(lane, ids[2]);
+    expect(reg.getQueueItem(ids[2])!.dispatch!.foldedMessageIds).toEqual(messageIds.slice(0, 2));
+    expect([...openTurnMessages(session.id).messageIds].sort()).toEqual([...messageIds].sort());
+
+    reg.markQueueItemRunning(ids[2]);
+    const { promptToRun } = resolveLostConversationPrompt(reg.getSession(session.id)!, reg.getQueueItem(ids[2])!.prompt);
+    expect(promptToRun.match(/parked one/g)).toHaveLength(1);
+    expect(promptToRun).not.toContain("USER: parked");
   });
 
   it("leaves internal rows and rows with no recorded dispatch where they are", () => {

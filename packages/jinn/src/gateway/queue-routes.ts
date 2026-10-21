@@ -142,16 +142,17 @@ function refusePaused(res: ServerResponse, context: ApiContext, sessionKey: stri
 
 /**
  * Force-send everything parked: cut the running turn and send the parked
- * messages as one turn, folded into the head in their existing order, as a
- * message sent now does with them. Unlike the single-item verb there is no
- * rotation: the head stays the head.
+ * messages as one turn, folded in their existing order into the first that
+ * recorded its payload, as a message sent now does with them. A row with no
+ * payload cannot be folded and still runs on its own, in its place.
  */
 function sendAllNow({ res, context, session, params }: QueueRouteArgs): void {
   const sessionKey = queueKey(session);
   if (refusePaused(res, context, sessionKey)) return;
   const parked = getQueueItems(sessionKey).filter((row) => row.status === "pending");
   const count = parked.length;
-  if (count > 1) mergePendingQueueItems(sessionKey, parked[0].id);
+  const into = parked.find((row) => row.dispatch !== null);
+  if (into) mergePendingQueueItems(sessionKey, into.id);
   if (count > 0) interruptRunningTurn(context, session);
   context.emit("queue:updated", { sessionId: params.id, sessionKey });
   return json(res, { status: "sent-now", count });
