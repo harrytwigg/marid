@@ -11,6 +11,7 @@ import { useChatComposerControl } from './chat-composer-control'
 import { composerCardPresentation } from './chat-composer-presentation'
 import { useChatDraft } from './use-chat-draft'
 import { classifyMicGesture, MIC_HOLD_THRESHOLD_MS, resolveSendTap, resolveTranscriptLanding } from './armed-send'
+import { isCoarsePointer } from '@/lib/terminal-input'
 import { deliveryForSend, readSendDelivery, writeSendDelivery, type SendDelivery } from './send-delivery'
 
 export { classifyMicGesture, MIC_HOLD_THRESHOLD_MS, resolveSendTap, resolveTranscriptLanding } from './armed-send'
@@ -450,6 +451,13 @@ export function ChatInput({
       }
     }
     if (e.key === 'Enter' && !e.shiftKey) {
+      // Enter that confirms an IME composition belongs to the IME (keyCode 229
+      // covers browsers that clear isComposing before keydown fires).
+      if (e.nativeEvent.isComposing || e.keyCode === 229) return
+      // Soft keyboards have no Shift+Enter: the return key writes a newline and
+      // the Send button is the only way to send. Checked per keypress so a
+      // keyboard docked to a tablet is honoured as soon as the pointer changes.
+      if (isCoarsePointer()) return
       e.preventDefault()
       handleSubmit(e.altKey)
     }
