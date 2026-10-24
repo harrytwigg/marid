@@ -57,6 +57,8 @@ vi.mock("../../shared/rateLimit.js", () => ({
 
 import { makeSession } from "./helpers/session-fixture.js";
 import { handleRateLimit, type RateLimitHandlerOpts } from "../rate-limit-handler.js";
+import { effectiveSessionStatus } from "../background-work.js";
+import { isProbingLimit } from "../limit-probe.js";
 import { applyLegacyFallbackMigration } from "../../shared/engine-fallback.js";
 import { computeNextRetryDelayMs, computeRateLimitDeadlineMs } from "../../shared/rateLimit.js";
 import type { Session, EngineResult } from "../../shared/types.js";
@@ -265,6 +267,63 @@ describe("handleRateLimit — wait cancellation", () => {
     expect(statuses.lastIndexOf("running")).toBeGreaterThan(statuses.indexOf("waiting"));
     const parked = updateSessionForAttemptMock.mock.calls.find(([, , updates]) => updates.status === "waiting")![2];
     expect(parked.lastError).toBe(`Claude usage limit — resumes ${resumeAt.toISOString()}`);
+  });
+
+  it("keeps the session reported as waiting while a retry against the limit has shown no output, and running once it does", async () => {
+    vi.useFakeTimers();
+    updateSessionForAttemptMock.mockClear();
+    engineAvailableMock.mockReturnValue(false);
+    vi.mocked(computeNextRetryDelayMs).mockReturnValue({ delayMs: 0, resumeAt: undefined });
+    vi.mocked(computeRateLimitDeadlineMs).mockReturnValue(Date.now() + 60_000);
+    getSessionMock.mockImplementation(() => makeSession({ status: "waiting" }));
+    const seen: Array<Session["status"]> = [];
+    const retryEngine = {
+      run: vi.fn(async (runOpts: { onStream?: (delta: { type: string; content: string }) => void }) => {
+        seen.push(effectiveSessionStatus({ id: "sess-1", status: "running" }, undefined));
+        runOpts.onStream?.({ type: "status", content: "starting" });
+        seen.push(effectiveSessionStatus({ id: "sess-1", status: "running" }, undefined));
+        runOpts.onStream?.({ type: "text", content: "hello" });
+        seen.push(effectiveSessionStatus({ id: "sess-1", status: "running" }, undefined));
+        return { result: "retry", sessionId: "claude-thread-1" } as EngineResult;
+      }),
+    };
+    const opts = {
+      ...makeOpts(vi.fn()),
+      config: {
+        sessions: { rateLimitStrategy: "wait" },
+        engines: { claude: { bin: "claude", model: "opus" } },
+      } as unknown as RateLimitHandlerOpts["config"],
+      engine: retryEngine as unknown as RateLimitHandlerOpts["engine"],
+      hooks: { onRetryStream: vi.fn() },
+    } satisfies RateLimitHandlerOpts;
+
+    const outcome = await handleRateLimit(opts);
+
+    expect(outcome.kind).toBe("resumed");
+    expect(seen).toEqual(["waiting", "waiting", "running"]);
+    expect(opts.hooks.onRetryStream).toHaveBeenCalledTimes(2);
+    expect(effectiveSessionStatus({ id: "sess-1", status: "running" }, undefined)).toBe("running");
+  });
+
+  it("ends the probe when the retry fails, so a stopped session is never left looking like it waits", async () => {
+    vi.useFakeTimers();
+    engineAvailableMock.mockReturnValue(false);
+    vi.mocked(computeNextRetryDelayMs).mockReturnValue({ delayMs: 0, resumeAt: undefined });
+    vi.mocked(computeRateLimitDeadlineMs).mockReturnValue(Date.now() + 60_000);
+    getSessionMock.mockImplementation(() => makeSession({ status: "waiting" }));
+    const retryEngine = { run: vi.fn(async () => { throw new Error("engine crashed"); }) };
+    const opts = {
+      ...makeOpts(vi.fn()),
+      config: {
+        sessions: { rateLimitStrategy: "wait" },
+        engines: { claude: { bin: "claude", model: "opus" } },
+      } as unknown as RateLimitHandlerOpts["config"],
+      engine: retryEngine as unknown as RateLimitHandlerOpts["engine"],
+      hooks: {},
+    } satisfies RateLimitHandlerOpts;
+
+    await expect(handleRateLimit(opts)).rejects.toThrow("engine crashed");
+    expect(isProbingLimit("sess-1")).toBe(false);
   });
 
   it("retries a historical Talk session through the generic web runtime", async () => {
