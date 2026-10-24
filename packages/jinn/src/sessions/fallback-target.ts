@@ -32,6 +32,19 @@ export function parseFallbackTargetPatch(value: unknown): { ok: true; target?: S
   return target ? { ok: true, target } : { ok: false, error: sessionFallbackTargetShapeError(value) };
 }
 
+/** A session that does not exist yet, as far as fallback reads of it: its engine, model and employee (whose department and host decide the scope). */
+export function prospectiveSession(
+  config: JinnConfig,
+  spec: { engine: string; model?: string | null; employee: string | null | undefined },
+): { session: Session; employee: Employee | undefined } {
+  const employee = spec.employee ? orgRegistry(config).get(spec.employee) : undefined;
+  const session = {
+    id: "", engine: spec.engine, model: spec.model ?? null, employee: spec.employee ?? null,
+    scopeDepartment: scopedDepartmentOf(spec.employee) ?? null, fallbackTarget: null,
+  } as unknown as Session;
+  return { session, employee };
+}
+
 /**
  * The target a child of `parent` is created with: the parent's, when the parent passes its fallback on
  * (`fallback-children`) and the child is not explicitly told to wait out limits. The operator chose it for the
@@ -49,9 +62,8 @@ export function childFallbackTarget(
   if (effectiveFallbackMode(config, parent).mode !== "fallback-children") return undefined;
   const target = parent.fallbackTarget;
   if (!child) return target;
-  const employee = child.employee ? orgRegistry(config).get(child.employee) : undefined;
-  const forChild = { id: "", employee: child.employee ?? null, scopeDepartment: scopedDepartmentOf(child.employee) ?? null } as Session;
-  return fallbackTargetRefusal(config, forChild, employee, target) ? undefined : target;
+  const { session, employee } = prospectiveSession(config, { engine: "", employee: child.employee });
+  return fallbackTargetRefusal(config, session, employee, target) ? undefined : target;
 }
 
 function targetName(target: StoredFallbackTarget): string {
