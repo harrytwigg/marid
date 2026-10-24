@@ -164,6 +164,7 @@ export function SessionTreePanel({
   // A Todo nothing has worked reads exactly as it did before this existed: the
   // rail's Dispatch affordance and no empty region above it.
   if (!tree || tree.roots.length === 0) return null
+  const working = workingCount(tree.roots)
   return (
     <div data-testid="session-tree" className="flex flex-col gap-[1px]">
       {tree.roots.map((node) => (
@@ -171,9 +172,16 @@ export function SessionTreePanel({
       ))}
       {tree.totals.nodes > 1 && (
         <div className="pt-1 text-[11.5px] text-[var(--text-quaternary)]" data-testid="session-tree-totals">
-          {tree.totals.nodes} sessions{tree.totals.live > 0 ? ` · ${tree.totals.live} working` : ""}
+          {tree.totals.nodes} sessions{working > 0 ? ` · ${working} working` : ""}
         </div>
       )}
     </div>
   )
+}
+
+/** How many rows are actually working. The tree's `live` total counts paused
+ *  (`waiting`) sessions too, and a footer that called those "working" would
+ *  contradict the row above it. */
+function workingCount(nodes: readonly SessionTreeNodeWire[]): number {
+  return nodes.reduce((total, node) => total + (node.status === "running" ? 1 : 0) + workingCount(node.children), 0)
 }

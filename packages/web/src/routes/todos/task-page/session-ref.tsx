@@ -44,8 +44,9 @@ export function useSessionDirectory(): Record<string, SessionDirectoryEntryWire>
   return useContext(SessionDirectory)
 }
 
-/** Live states get the pulsing dot. Matches the rail's existing dispatch chip
- *  rather than introducing a second vocabulary for the same thing. */
+/** Live states are the ones worth a state dot. `running` pulses; `waiting` is
+ *  returned above as an amber dot that stays still. Matches the rail's existing
+ *  dispatch chip rather than introducing a second vocabulary for the same thing. */
 const LIVE = new Set(["running", "waiting"])
 
 export interface SessionRefProps {
