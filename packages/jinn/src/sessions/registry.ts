@@ -1187,11 +1187,15 @@ export interface ListSessionsFilter {
   engine?: string;
   /** Only sessions bound to this department (FR-008). */
   scopeDepartment?: string;
+  /** Archived chats too. Archiving only declutters the lists, so a reader that resolves a session by id
+   *  (a Todo's links to the sessions that worked it) must not mistake an archived one for a missing one. */
+  includeArchived?: boolean;
 }
 
 export function listSessions(filter?: ListSessionsFilter): Session[] {
   const db = initDb();
-  const conditions: string[] = ['archived_at IS NULL', 'workflow_kind IS NULL'];
+  const conditions: string[] = ['workflow_kind IS NULL'];
+  if (!filter?.includeArchived) conditions.unshift('archived_at IS NULL');
   const values: unknown[] = [];
   const equalities = [['status', filter?.status], ['source', filter?.source], ['engine', filter?.engine], ['scope_department', filter?.scopeDepartment]] as const;
   for (const [column, value] of equalities) {

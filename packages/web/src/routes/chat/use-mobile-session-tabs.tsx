@@ -56,7 +56,8 @@ function useTabIds({ committedId, systemPrimedId, sessions, subscribe }: {
     () => (sessions ? new Set(sessions.map((session) => String(session.id ?? ''))) : null),
     [sessions],
   )
-  const offList = useOffListTabSessions(ids, listedIds, dropTab)
+  // An archived chat stays viewable, so it keeps its tab as it does on the desktop.
+  const offList = useOffListTabSessions(ids, listedIds, dropTab, { keepArchived: true })
 
   useEffect(() => subscribe((frame) => {
     const payload = frame.payload as { sessionId?: unknown } | null

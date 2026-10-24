@@ -268,6 +268,8 @@ export function sessionIdFromActor(actor: string | null | undefined): string | n
  * `listSessions()` is the same whole-table read `serializeSessionList` already
  * performs on this route to build the delegated-activity index, so the tree
  * shape costs no extra query — it replaces that work rather than adding to it.
+ * Archived sessions are read too: archiving only hides a chat from the lists, and
+ * a Todo's link to one must still resolve (flagged `archived`), not read as `missing`.
  */
 export function readTodoSessionTree(
   todoId: string,
@@ -285,6 +287,6 @@ export function readTodoSessionTree(
     if (comment.sessionId) referenced.add(comment.sessionId);
   }
   for (const event of listWorkItemEvents(todoId)) add(event.actor);
-  const sessions = listSessions();
+  const sessions = listSessions({ includeArchived: true });
   return buildSessionTree({ todoId, sessions, activity: activityFor?.(sessions), referencedSessionIds: [...referenced] });
 }
