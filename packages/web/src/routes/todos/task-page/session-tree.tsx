@@ -36,7 +36,6 @@ function StateLabel({ node }: { node: SessionTreeNodeWire }) {
 }
 
 function stateLabel(node: SessionTreeNodeWire, pending: PendingWork | null): string {
-  if (node.archived) return "Archived"
   if (LIVE.has(node.status ?? "")) return "Working"
   if (node.status === "error") return "Error"
   return pending ? pendingCaption(pending) : "Finished"

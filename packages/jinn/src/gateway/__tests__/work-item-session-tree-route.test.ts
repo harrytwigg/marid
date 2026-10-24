@@ -171,3 +171,29 @@ describe("GET /api/work-items/:id/sessions", () => {
     expect(reg.getSession(rootSessionId)!.workItemId).toBe(todoId);
   });
 });
+
+describe("GET /api/work-items/:id/sessions?tree=1 and archived sessions", () => {
+  it("resolves an archived session the Todo links or names, rather than reporting it missing", async () => {
+    const creator = session("archived-creator", { employee: "coo" });
+    const worker = session("archived-worker", { employee: "senior-developer" });
+    const todo = store.createWorkItem({ title: "Worked by archived sessions", createdBy: `session:${creator}` }).id;
+    store.linkSession(todo, worker, "operator");
+    reg.archiveSession(creator);
+    reg.archiveSession(worker);
+
+    const resp = await get(`/api/work-items/${todo}/sessions?tree=1`);
+
+    expect(resp.body.roots.map((n: { id: string }) => n.id)).toEqual([worker]);
+    expect(resp.body.roots[0].archived).toBe(true);
+    expect(resp.body.directory[worker]).toMatchObject({ archived: true, missing: false });
+    expect(resp.body.directory[creator]).toMatchObject({ employee: "coo", archived: true, missing: false });
+  });
+
+  it("still reports an id no session carries as missing", async () => {
+    const todo = store.createWorkItem({ title: "Created by a deleted session", createdBy: "session:00000000-0000-4000-8000-000000000000" }).id;
+
+    const resp = await get(`/api/work-items/${todo}/sessions?tree=1`);
+
+    expect(resp.body.directory["00000000-0000-4000-8000-000000000000"]).toMatchObject({ missing: true });
+  });
+});

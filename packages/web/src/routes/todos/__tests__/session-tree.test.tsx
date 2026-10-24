@@ -197,7 +197,8 @@ describe("the session tree", () => {
       "s-1": entry({ id: "s-1", employee: "senior-developer", archived: true }),
     })
 
-    expect(screen.getByTestId("session-tree-node-s-1").textContent).toContain("Archived")
+    // The link says it, once; the row's own state still says how the session ended.
+    expect(screen.getByTestId("session-tree-node-s-1").textContent?.match(/Archived/g)).toHaveLength(1)
     expect(screen.getByTestId("session-ref-s-1")).toBeTruthy()
   })
 })
