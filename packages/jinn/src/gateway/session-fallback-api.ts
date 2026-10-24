@@ -9,7 +9,7 @@ import {
 } from "../shared/session-fallback-config.js";
 import type { Session } from "../shared/types.js";
 import type { UpdateSessionFields } from "../sessions/registry.js";
-import { fallbackTargetRefusal, parseFallbackTargetPatch } from "../sessions/fallback-target.js";
+import { fallbackTargetRefusal, parseFallbackTargetPatch, prospectiveSession } from "../sessions/fallback-target.js";
 import { sessionFallbackView } from "../sessions/session-fallback.js";
 import type { ApiContext } from "./api.js";
 
@@ -52,6 +52,20 @@ export function fallbackViewFor(session: Session, context: ApiContext, scopedCal
   const limits = latestLimitReadings(config, [accountForEmployee(employee, session.engine)]);
   const view = sessionFallbackView(config, getModelRegistry(config), session, employee, { health, limits });
   return scopedCaller ? withoutUsage(view) : view;
+}
+
+/**
+ * The view a session started with this engine, model and employee would have, for the new-chat screen:
+ * the config's default mode, the chain's next target and the engines it may pick, before any session exists.
+ */
+export function fallbackPreviewFor(
+  context: ApiContext,
+  spec: { engine?: string; model?: string; employee?: string },
+  scopedCaller = false,
+): SessionFallbackView {
+  const config = context.getConfig();
+  const { session } = prospectiveSession(config, { engine: spec.engine || config.engines.default, model: spec.model, employee: spec.employee });
+  return fallbackViewFor(session, context, scopedCaller);
 }
 
 /** A single-session response body with its fallback view. */

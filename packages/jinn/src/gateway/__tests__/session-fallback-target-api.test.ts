@@ -147,3 +147,58 @@ describe("inheritance", () => {
     expect(storedTarget((await spawn({})).body.id)).toBeNull();
   });
 });
+
+describe("POST /api/sessions { fallbackTarget }", () => {
+  it("stores the mode and target the new session was created with", async () => {
+    const created = await spawn({ fallbackMode: "fallback-children", fallbackTarget: target });
+    expect(created.status).toBe(201);
+    expect(registry.getSession(created.body.id)).toMatchObject({ fallbackMode: "fallback-children", fallbackTarget: target });
+    const got = await call("GET", `/api/sessions/${created.body.id}`);
+    expect(got.body.fallback).toMatchObject({ mode: "fallback-children", targetSource: "session", target: { engine: "codex", model: "gpt-mapped" } });
+  });
+
+  it("outranks the target a fallback-children parent would pass on", async () => {
+    const parent = parentWith("fallback-children");
+    const own = { engine: "claude", model: "opus" };
+    const child = await spawn({ parentSessionId: parent.id, fallbackTarget: own });
+    expect(storedTarget(child.body.id)).toEqual(own);
+  });
+
+  it("refuses a malformed, unknown or department-barred target with a 400 and creates nothing", async () => {
+    const before = registry.listSessions().length;
+    for (const [bad, message] of [
+      ["codex", /fallbackTarget must be null or an object/],
+      [{ engine: "nope", model: "x" }, /fallbackTarget refused: unknown engine "nope"/],
+      [{ engine: "codex", model: "gpt-9" }, /unknown model "gpt-9" for engine "codex"/],
+    ] as const) {
+      const res = await spawn({ fallbackTarget: bad });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(message);
+    }
+    expect(registry.listSessions().length).toBe(before);
+  });
+});
+
+describe("GET /api/fallback-preview", () => {
+  it("answers the view a new session would start with: the config's default mode and the chain's target", async () => {
+    const preview = await call("GET", "/api/fallback-preview?engine=claude&model=opus");
+    expect(preview.status).toBe(200);
+    expect(preview.body.fallback).toMatchObject({
+      mode: "fallback", modeSource: "default", targetSource: "config", target: { engine: "codex", model: "gpt-mapped" },
+    });
+    expect(preview.body.fallback.allowedEngines).toEqual(expect.arrayContaining(["claude", "codex"]));
+  });
+
+  it("follows the config's default mode, and works with no selection at all", async () => {
+    setConfig({ ...baseConfig, sessions: { fallbackMode: "auto-resume" } } as JinnConfig);
+    const preview = await call("GET", "/api/fallback-preview");
+    expect(preview.status).toBe(200);
+    expect(preview.body.fallback).toMatchObject({ mode: "auto-resume", modeSource: "default" });
+  });
+
+  it("takes an employee into account", async () => {
+    const preview = await call("GET", "/api/fallback-preview?engine=claude&model=opus&employee=a-worker");
+    expect(preview.status).toBe(200);
+    expect(preview.body.fallback.mode).toBe("fallback");
+  });
+});
