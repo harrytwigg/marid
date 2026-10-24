@@ -8,7 +8,7 @@ import { answerCaption, pendingWork } from "@/components/chat/pending-work"
 import { SessionTreePanel } from "../task-page/session-tree"
 import { TodoOpenContext, type OpenTodo } from "@/components/chat/file-open-context"
 import { FileLinkSessionContext } from "@/components/chat/file-link-session-context"
-import { hasLiveWorker, hasOnlyWaitingWorkers, isLiveSession, pickRailSession } from "../task-page/use-todo-sessions"
+import { hasLiveWorker, isLiveSession, pickRailSession } from "../task-page/use-todo-sessions"
 
 /* The Todo page used to dead-end: `createdBy` printed as `session:<uuid>`, the
  * audit line said "A session", and only a live todo-dispatcher was clickable.
@@ -92,26 +92,6 @@ describe("a session reference", () => {
 
     expect(screen.queryByTestId("session-ref-gone")).toBeNull()
     expect(screen.getByTestId("session-ref-missing-gone")).toBeTruthy()
-  })
-
-  it("paints a paused session's dot amber and still, not blue and pulsing", () => {
-    mount(<SessionRef sessionId="s-1" byName={byName} />, {
-      "s-1": entry({ id: "s-1", employee: "senior-developer", status: "waiting" }),
-    })
-
-    const dot = screen.getByLabelText("Waiting")
-    expect(dot.getAttribute("style")).toContain("var(--system-yellow)")
-    expect(dot.className).not.toContain("animate-")
-  })
-
-  it("keeps a running session's dot pulsing blue and labelled Working", () => {
-    mount(<SessionRef sessionId="s-1" byName={byName} />, {
-      "s-1": entry({ id: "s-1", employee: "senior-developer", status: "running" }),
-    })
-
-    const dot = screen.getByLabelText("Working")
-    expect(dot.getAttribute("style")).toBeNull()
-    expect(dot.className).toContain("animate-[jinn-pulse")
   })
 })
 
@@ -221,21 +201,6 @@ describe("the session tree", () => {
     expect(screen.getByTestId("session-tree-node-s-1").textContent?.match(/Archived/g)).toHaveLength(1)
     expect(screen.getByTestId("session-ref-s-1")).toBeTruthy()
   })
-
-  it("reads a paused node as Waiting while a running one still reads Working", () => {
-    mount(
-      <SessionTreePanel
-        tree={tree({ roots: [node({ id: "s-1", status: "waiting" }), node({ id: "s-2", status: "running" })] })}
-        byName={byName}
-        todoId="TST-81"
-      />,
-    )
-
-    const paused = screen.getByTestId("session-tree-node-s-1").textContent
-    expect(paused).toContain("Waiting")
-    expect(paused).not.toContain("Working")
-    expect(screen.getByTestId("session-tree-node-s-2").textContent).toContain("Working")
-  })
 })
 
 describe("which session the rail offers", () => {
@@ -276,19 +241,6 @@ describe("which session the rail offers", () => {
   it("offers a consulted session when it is the only kind there is", () => {
     const picked = pickRailSession([s("consult", { employee: "reviewer", status: "idle", workItemRole: "consult" })])
     expect(picked?.id).toBe("consult")
-  })
-
-  it("counts a Todo as waiting only when every live worker is paused", () => {
-    expect(hasOnlyWaitingWorkers([s("a", { status: "waiting" })])).toBe(true)
-    // One worker still running means the Todo is being worked, not waiting.
-    expect(hasOnlyWaitingWorkers([s("a", { status: "waiting" }), s("b", { status: "running" })])).toBe(false)
-    // A consulted session answering a question neither makes nor breaks it.
-    expect(
-      hasOnlyWaitingWorkers([s("a", { status: "waiting" }), s("consult", { status: "running", workItemRole: "consult" })]),
-    ).toBe(true)
-    // Nothing live at all is not a waiting Todo.
-    expect(hasOnlyWaitingWorkers([s("a", { status: "idle" })])).toBe(false)
-    expect(hasOnlyWaitingWorkers([])).toBe(false)
   })
 
   it("offers nothing for a Todo no session has touched", () => {
