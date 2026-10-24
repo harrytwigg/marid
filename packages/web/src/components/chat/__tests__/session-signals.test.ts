@@ -216,6 +216,28 @@ describe('getStatusDot: a stalled turn must not look like a working one', () => 
     expect(getStatusDot({ id: 's1', status: 'running', backgroundActivity: { ...background, backgroundAgents: 0, backgroundRerun: true } }, read)?.label).toBe('running')
   })
 
+  it('paints a session paused on a usage limit amber and still, with the gateway\'s reason as the tooltip', () => {
+    const dot = getStatusDot(
+      { id: 's1', status: 'waiting', lastError: 'claude usage limit — resumes 2026-10-24T18:00:00.000Z' },
+      read,
+    )
+    expect(dot).toEqual({
+      color: 'var(--system-yellow)',
+      label: 'Waiting: claude usage limit — resumes 2026-10-24T18:00:00.000Z',
+      pulse: false,
+    })
+  })
+
+  it('still says why a paused session waits when the gateway recorded no reason', () => {
+    expect(getStatusDot({ id: 's1', status: 'waiting' }, read)?.label).toBe("Waiting: paused until the engine's usage limit resets")
+  })
+
+  it('keeps a paused session off the blue working dot and the red error dot', () => {
+    const dot = getStatusDot({ id: 's1', status: 'waiting', lastActivity: new Date().toISOString() }, read)
+    expect(dot?.color).not.toBe('var(--system-blue)')
+    expect(dot?.color).not.toBe('var(--system-red)')
+  })
+
   it('paints a working turn blue and pulsing', () => {
     expect(getStatusDot({ id: 's1', status: 'running' }, read)).toEqual({
       color: 'var(--system-blue)',
