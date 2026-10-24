@@ -598,6 +598,7 @@ export function ChatPane({
             onChange={handleSelectorChange}
             pendingNote={effortPendingNote}
             errorNote={selectorError ?? undefined}
+            disabled={loading}
             contextTokens={liveContextTokens ?? (currentSession?.lastContextTokens as number | null | undefined) ?? undefined}
           />
           {/* Never locked by a running turn: a change reaches the gateway at once and applies from the next usage limit. */}

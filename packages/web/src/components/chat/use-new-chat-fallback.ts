@@ -39,13 +39,13 @@ export function useNewChatFallback(opts: { active: boolean; engine?: string; mod
   useEffect(() => { setChoice({}) }, [employee, active])
 
   // The preview for the selection, kept while the next one loads so the chip does not blink on a model change.
-  // No cache: it is one small read per selection, and an older gateway without the route just shows no chip.
+  // No cache: it is one small read per selection, and an older gateway without the route just shows no chip, and a choice the chip no longer shows is dropped rather than sent.
   const [base, setBase] = useState<SessionFallbackView | null>(null)
   useEffect(() => {
     if (!active) return
     let stale = false
     const load = async () => parseFallbackView((await api.getFallbackPreview({ engine, model, employee })).fallback)
-    load().then((next) => { if (!stale) setBase(next) }).catch(() => { if (!stale) setBase(null) })
+    load().then((next) => { if (!stale) setBase(next) }).catch(() => { if (!stale) { setBase(null); setChoice({}) } })
     return () => { stale = true }
   }, [active, engine, model, employee])
   const view = useMemo(() => (base ? applyChoice(base, choice) : null), [base, choice])

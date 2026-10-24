@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { setDepartmentScopeResolver, setEmployeeDepartmentResolver } from "../../work-items/department-scope.js";
 import type { JinnConfig } from "../../shared/types.js";
 import type { SessionFallbackMode } from "../../shared/session-fallback-config.js";
 import {
@@ -164,7 +165,7 @@ describe("POST /api/sessions { fallbackTarget }", () => {
     expect(storedTarget(child.body.id)).toEqual(own);
   });
 
-  it("refuses a malformed, unknown or department-barred target with a 400 and creates nothing", async () => {
+  it("refuses a malformed target, an unknown engine and an unknown model with a 400 and creates nothing", async () => {
     const before = registry.listSessions().length;
     for (const [bad, message] of [
       ["codex", /fallbackTarget must be null or an object/],
@@ -176,6 +177,30 @@ describe("POST /api/sessions { fallbackTarget }", () => {
       expect(res.body.error).toMatch(message);
     }
     expect(registry.listSessions().length).toBe(before);
+  });
+});
+
+describe("POST /api/sessions { fallbackTarget } for a department-scoped employee", () => {
+  afterEach(() => { setEmployeeDepartmentResolver(null); setDepartmentScopeResolver(null); });
+  const confine = () => { setEmployeeDepartmentResolver((name) => (name === "a-worker" ? "platform" : undefined)); setDepartmentScopeResolver(() => "scoped"); };
+
+  it("refuses a non-claude target, creating nothing, and takes a claude one", async () => {
+    confine();
+    const before = registry.listSessions().length;
+    const refused = await spawn({ employee: "a-worker", fallbackTarget: target });
+    expect(refused.status).toBe(400);
+    expect(refused.body.error).toMatch(/fallbackTarget refused: .*confined to a department.*claude/);
+    expect(registry.listSessions().length).toBe(before);
+    const own = { engine: "claude", model: "opus" };
+    const taken = await spawn({ employee: "a-worker", fallbackTarget: own });
+    expect(taken.status).toBe(201);
+    expect(storedTarget(taken.body.id)).toEqual(own);
+  });
+
+  it("is not refused for an unscoped employee, which may fall back to any engine", async () => {
+    const taken = await spawn({ employee: "a-worker", fallbackTarget: target });
+    expect(taken.status).toBe(201);
+    expect(storedTarget(taken.body.id)).toEqual(target);
   });
 });
 

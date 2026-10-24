@@ -4259,8 +4259,7 @@ export async function handleApiRequest(
     // with that selection would start with (the new-chat screen's chip, before a session exists).
     if (method === "GET" && pathname === "/api/fallback-preview") {
       const param = (name: string) => url.searchParams.get(name)?.trim() || undefined;
-      const scopedCaller = resolveScopedCaller(resolveScopedWriteCallerIdentity(req, context)) !== null;
-      return json(res, { fallback: fallbackPreviewFor(context, { engine: param("engine"), model: param("model"), employee: param("employee") }, scopedCaller) });
+      return json(res, { fallback: fallbackPreviewFor(context, { engine: param("engine"), model: param("model"), employee: param("employee") }) });
     }
 
     // POST /api/engines/refresh — re-run dynamic model discovery and return the
