@@ -4,6 +4,7 @@ import { splitTitleId } from '@/components/chat/chat-tabs'
 import { StatusDot } from '@/components/chat/session-signals'
 import { TERMINAL_AVATAR } from '@/components/ui/employee-avatar'
 import { emojiForName } from '@/lib/emoji-pool'
+import { SESSION_WAITING_COLOR } from '@/lib/session-waiting'
 import { activeChatSessionDrag, hasChatSessionDrag, readChatSessionDrop } from '../chat-session-dnd'
 import { PaneKindTabLabel } from './pane-kind-tab-label'
 import type { PaneTabKind } from './tab-kind'
@@ -21,7 +22,7 @@ export interface PaneTabItem {
   id: string
   title: string
   employee?: string
-  status?: 'running' | 'error'
+  status?: 'running' | 'error' | 'waiting'
   /** VS Code preview tab: italic, replaced by the next preview open until pinned. */
   preview?: boolean
   /** Set on a tab that is no chat: what it is, which picks its glyph. */
@@ -54,6 +55,7 @@ export interface PaneTabStripProps {
 const STATUS_DOT = {
   running: { color: 'var(--system-green)', label: 'running', pulse: true },
   error: { color: 'var(--system-red)', label: 'error', pulse: false },
+  waiting: { color: SESSION_WAITING_COLOR, label: 'waiting', pulse: false },
 } as const
 
 type TabKeyAction = { kind: 'focus'; index: number } | { kind: 'reorder'; index: number } | { kind: 'close' }

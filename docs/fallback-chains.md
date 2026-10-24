@@ -123,7 +123,8 @@ reset, as before.
   hop has no target, and the notice says plainly that no hop is left and what
   was tried. If a stand-in held the session when it ran out, the wait ends
   where the stand-in's window does (the own target's reset), and the turn runs
-  again on the own target.
+  again on the own target. See [session statuses](session-statuses.md) for what
+  `waiting` means and how to read it.
 - At its own target's reset the session goes back to it and the run ends, as
   substitution reverts today. So does a manual engine switch, an API reset and a
   conversation the engine lost: the run ends, the hops stay.

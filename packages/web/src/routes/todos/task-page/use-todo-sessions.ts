@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { api, type LinkedSessionWire } from "@/lib/api"
+import { isSessionWaiting } from "@/lib/session-waiting"
 import { getWorkItemSessionTree, sessionTreeQueryKey, type SessionTreeWire } from "@/lib/session-tree-api"
 
 /**
@@ -58,6 +59,15 @@ export function isLiveSession(session: LinkedSessionWire | undefined): boolean {
  *  stays on offer. A consulted session answering a question does not count. */
 export function hasLiveWorker(sessions: readonly LinkedSessionWire[]): boolean {
   return sessions.some((s) => !isConsult(s) && LIVE_SESSION_STATES.has(s.status ?? ""))
+}
+
+/** Whether the only work in flight is paused. Every non-consult worker is
+ *  `waiting` and none is `running` (a consulted session answering a question
+ *  never counts either way). Such a Todo has a live worker, so Dispatch stays
+ *  hidden, but the elapsed time is time spent waiting. */
+export function hasOnlyWaitingWorkers(sessions: readonly LinkedSessionWire[]): boolean {
+  const workers = sessions.filter((s) => !isConsult(s))
+  return hasLiveWorker(sessions) && !workers.some((s) => s.status === "running") && workers.some((s) => isSessionWaiting(s.status))
 }
 
 export function useTodoSessions(id: string | null | undefined): TodoSessions {

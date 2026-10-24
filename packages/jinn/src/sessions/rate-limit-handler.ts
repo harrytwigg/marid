@@ -24,6 +24,7 @@
  */
 
 import type { RateLimitHandlerOpts, RateLimitOutcome } from "./rate-limit-contract.js";
+import type { EngineResult, StreamDelta } from "../shared/types.js";
 import { rateLimitRemoteTarget } from "./rate-limit-remote-target.js";
 import { isRemoteTarget } from "../shared/remote-target.js";
 import { spawnCwd } from "./session-cwd.js";
@@ -36,6 +37,7 @@ import {
 } from "../shared/rateLimit.js";
 import { rateLimitAccount, recordAccountRateLimit } from "./rate-limit-account.js";
 import { walkFallbackChain } from "./fallback-walk.js";
+import { beginLimitProbe, endLimitProbe } from "./limit-probe.js";
 import { chainExhaustedLastError } from "./fallback-hop.js";
 import { standingOverrideUntil } from "./engine-override.js";
 import { earlier, handBack, handBackAt as accountHandBackAt } from "./rate-limit-handback.js";
@@ -188,28 +190,40 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
         return { kind: "cancelled" };
       }
 
-      const retryResult = await engine.run({
-        prompt,
-        resumeSessionId: currentSession.engineSessionId ?? undefined,
-        systemPrompt,
-        platformContextRefresh,
-        cwd: spawnCwd(session, Boolean(remote)),
-        bin: engineConfig.bin,
-        model: currentSession.model ?? engineConfig.model,
-        effortLevel,
-        cliFlags,
-        // The retry is a fresh spawn, not a resume of the limited process, so it
-        // re-states where the session runs. Omit this and a rate-limited remote
-        // turn silently comes back on the gateway.
-        ...remoteTarget,
-        claudeProfile,
-        mcpConfigPath,
-        resolvedMcp,
-        attachments: attachments?.length ? attachments : undefined,
-        sessionId: session.id,
-        source: runtimeSessionSource(session.source),
-        ...(hooks.onRetryStream ? { onStream: hooks.onRetryStream } : {}),
-      });
+      // Reported as waiting until the engine shows output: a probe against a limit that is
+      // still up can hang for minutes, and that is not the session running.
+      beginLimitProbe(session.id);
+      const probeShowedOutput = () => { endLimitProbe(session.id); };
+      let retryResult: EngineResult;
+      try {
+        retryResult = await engine.run({
+          prompt,
+          resumeSessionId: currentSession.engineSessionId ?? undefined,
+          systemPrompt,
+          platformContextRefresh,
+          cwd: spawnCwd(session, Boolean(remote)),
+          bin: engineConfig.bin,
+          model: currentSession.model ?? engineConfig.model,
+          effortLevel,
+          cliFlags,
+          // The retry is a fresh spawn, not a resume of the limited process, so it
+          // re-states where the session runs. Omit this and a rate-limited remote
+          // turn silently comes back on the gateway.
+          ...remoteTarget,
+          claudeProfile,
+          mcpConfigPath,
+          resolvedMcp,
+          attachments: attachments?.length ? attachments : undefined,
+          sessionId: session.id,
+          source: runtimeSessionSource(session.source),
+          ...(hooks.onRetryStream ? { onStream: (delta: StreamDelta) => {
+            if (delta.type === "text" || delta.type === "text_snapshot" || delta.type === "tool_use" || delta.type === "tool_result") probeShowedOutput();
+            hooks.onRetryStream!(delta);
+          } } : {}),
+        });
+      } finally {
+        endLimitProbe(session.id);
+      }
 
       const retryInterrupted = retryResult.error?.startsWith("Interrupted");
       const retryRateLimit = !retryInterrupted ? detectRateLimit(retryResult) : { limited: false as const };

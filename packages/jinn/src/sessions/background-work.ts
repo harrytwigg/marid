@@ -1,4 +1,5 @@
 import type { Session } from "../shared/types.js";
+import { isProbingLimit } from "./limit-probe.js";
 
 /**
  * Post-settle runtime activity an engine reports for a session: work still
@@ -88,9 +89,11 @@ export function reportedSessionStatus(session: Pick<Session, "id" | "status">): 
  * where status is read, not written.
  */
 export function effectiveSessionStatus(
-  session: Pick<Session, "status">,
+  session: Pick<Session, "id" | "status">,
   info: RuntimeActivityInfo | undefined,
 ): Session["status"] {
+  // A retry against a usage limit that has shown no output yet is still a wait (see limit-probe.ts).
+  if (session.status === "running" && isProbingLimit(session.id)) return "waiting";
   return session.status === "idle" && isBackgroundWorkLive(info) ? "running" : session.status;
 }
 

@@ -6,6 +6,7 @@ import { pendingCaption, usePendingWork, type PendingWork } from "@/components/c
 import { SessionDepartmentBadge } from "@/components/session-department-badge"
 import { useOpenTodo } from "@/components/chat/file-open-context"
 import { useFileLinkSession } from "@/components/chat/file-link-session-context"
+import { SESSION_WAITING_LABEL, isSessionWaiting } from "@/lib/session-waiting"
 import { SessionRef } from "./session-ref"
 
 /**
@@ -36,6 +37,7 @@ function StateLabel({ node }: { node: SessionTreeNodeWire }) {
 }
 
 function stateLabel(node: SessionTreeNodeWire, pending: PendingWork | null): string {
+  if (isSessionWaiting(node.status)) return SESSION_WAITING_LABEL
   if (LIVE.has(node.status ?? "")) return "Working"
   if (node.status === "error") return "Error"
   return pending ? pendingCaption(pending) : "Finished"
