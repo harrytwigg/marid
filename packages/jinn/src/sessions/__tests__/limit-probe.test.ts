@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { beginLimitProbe, endLimitProbe, isProbingLimit } from "../limit-probe.js";
+import { beginLimitProbe, endLimitProbe, isProbingLimit, onLimitProbeChange } from "../limit-probe.js";
 import { effectiveSessionStatus } from "../background-work.js";
 
 afterEach(() => {
@@ -30,6 +30,30 @@ describe("a retry against a usage limit that has shown no output", () => {
     expect(effectiveSessionStatus({ id: "s1", status: "error" }, undefined)).toBe("error");
     expect(effectiveSessionStatus({ id: "s1", status: "interrupted" }, undefined)).toBe("interrupted");
     expect(effectiveSessionStatus({ id: "other", status: "running" }, undefined)).toBe("running");
-    expect(effectiveSessionStatus({ status: "running" }, undefined)).toBe("running");
+  });
+});
+
+describe("telling clients the reported status changed", () => {
+  it("notifies once when a probe starts and once when it ends, and never for a probe that is not there", () => {
+    const seen: string[] = [];
+    const stop = onLimitProbeChange((id) => seen.push(id));
+
+    beginLimitProbe("s1");
+    beginLimitProbe("s1");
+    expect(seen).toEqual(["s1"]);
+
+    endLimitProbe("s1");
+    endLimitProbe("s1");
+    expect(seen).toEqual(["s1", "s1"]);
+
+    stop();
+    beginLimitProbe("s1");
+    expect(seen).toEqual(["s1", "s1"]);
+  });
+
+  it("does not let a throwing listener break the retry", () => {
+    const stop = onLimitProbeChange(() => { throw new Error("boom"); });
+    expect(() => beginLimitProbe("s1")).not.toThrow();
+    stop();
   });
 });

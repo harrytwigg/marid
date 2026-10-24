@@ -193,9 +193,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
       // Reported as waiting until the engine shows output: a probe against a limit that is
       // still up can hang for minutes, and that is not the session running.
       beginLimitProbe(session.id);
-      const probeShowedOutput = () => {
-        if (endLimitProbe(session.id)) updateSessionForAttempt(session.id, attemptToken, { lastActivity: new Date().toISOString() });
-      };
+      const probeShowedOutput = () => { endLimitProbe(session.id); };
       let retryResult: EngineResult;
       try {
         retryResult = await engine.run({

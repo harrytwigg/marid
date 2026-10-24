@@ -9,14 +9,32 @@
  * In memory on purpose: the probe cannot outlive the process that runs it.
  */
 const probing = new Set<string>();
+const listeners = new Set<(sessionId: string) => void>();
 
-export function beginLimitProbe(sessionId: string): void {
-  probing.add(sessionId);
+/** Called when a session starts or stops being reported as probing, so the gateway can tell
+ *  clients its status changed (nothing is written to the session row when a probe ends). */
+export function onLimitProbeChange(listener: (sessionId: string) => void): () => void {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
 }
 
-/** True when the session was probing, so the caller knows to tell clients it changed. */
+function changed(sessionId: string): void {
+  for (const listener of listeners) {
+    try { listener(sessionId); } catch { /* a listener must not break the retry */ }
+  }
+}
+
+export function beginLimitProbe(sessionId: string): void {
+  if (probing.has(sessionId)) return;
+  probing.add(sessionId);
+  changed(sessionId);
+}
+
+/** True when the session was probing. */
 export function endLimitProbe(sessionId: string): boolean {
-  return probing.delete(sessionId);
+  const was = probing.delete(sessionId);
+  if (was) changed(sessionId);
+  return was;
 }
 
 export function isProbingLimit(sessionId: string): boolean {

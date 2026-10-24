@@ -18,6 +18,7 @@ import { configureLogger, logger } from "../shared/logger.js";
 import { CONNECTOR_ID_REQUIREMENTS, isValidConnectorId } from "../shared/connector-id.js";
 import { scheduleFtsBackfill, recoverStaleSessions, settleLegacyWorkflowPhaseSessions, recoverStaleQueueItems, clearAllPartialMessages, getInterruptedSessions, listSessions, getSession, listAllSessionIds, listPendingQueueItemIdsForSession, getSessionBySessionKey, updateSession } from "../sessions/registry.js";
 import { runtimeActivity, type RuntimeActivityInfo } from "../sessions/background-work.js";
+import { onLimitProbeChange } from "../sessions/limit-probe.js";
 import { createRuntimeActivityHandler } from "./runtime-activity.js";
 import { getPackageVersion } from "../shared/version.js";
 import { PRODUCT_NAME, productBanner } from "../shared/brand.js";
@@ -863,6 +864,9 @@ export async function startGateway(
   // Jinn's queue; engines can expose onRuntimeActivity so the UI stops showing
   // those sessions as transport-idle while the native work is awake.
   const backgroundActivity = runtimeActivity;
+  // A retry against a standing usage limit is reported as waiting until it shows output; nothing is
+  // written to the session row when that changes, so clients are told here.
+  onLimitProbeChange((sessionId) => emit("session:updated", { sessionId }));
   const handleRuntimeActivity = createRuntimeActivityHandler({
     activity: backgroundActivity,
     getSession,

@@ -58,7 +58,7 @@ vi.mock("../../shared/rateLimit.js", () => ({
 import { makeSession } from "./helpers/session-fixture.js";
 import { handleRateLimit, type RateLimitHandlerOpts } from "../rate-limit-handler.js";
 import { effectiveSessionStatus } from "../background-work.js";
-import { isProbingLimit } from "../limit-probe.js";
+import { isProbingLimit, onLimitProbeChange } from "../limit-probe.js";
 import { applyLegacyFallbackMigration } from "../../shared/engine-fallback.js";
 import { computeNextRetryDelayMs, computeRateLimitDeadlineMs } from "../../shared/rateLimit.js";
 import type { Session, EngineResult } from "../../shared/types.js";
@@ -277,6 +277,8 @@ describe("handleRateLimit — wait cancellation", () => {
     vi.mocked(computeRateLimitDeadlineMs).mockReturnValue(Date.now() + 60_000);
     getSessionMock.mockImplementation(() => makeSession({ status: "waiting" }));
     const seen: Array<Session["status"]> = [];
+    const changes: string[] = [];
+    const stopListening = onLimitProbeChange((id) => changes.push(id));
     const retryEngine = {
       run: vi.fn(async (runOpts: { onStream?: (delta: { type: string; content: string }) => void }) => {
         seen.push(effectiveSessionStatus({ id: "sess-1", status: "running" }, undefined));
@@ -301,8 +303,11 @@ describe("handleRateLimit — wait cancellation", () => {
 
     expect(outcome.kind).toBe("resumed");
     expect(seen).toEqual(["waiting", "waiting", "running"]);
+    // Clients are told when the reported status flips: the probe starting and its first output.
+    expect(changes).toEqual(["sess-1", "sess-1"]);
     expect(opts.hooks.onRetryStream).toHaveBeenCalledTimes(2);
     expect(effectiveSessionStatus({ id: "sess-1", status: "running" }, undefined)).toBe("running");
+    stopListening();
   });
 
   it("ends the probe when the retry fails, so a stopped session is never left looking like it waits", async () => {

@@ -25,7 +25,7 @@ The chat sidebar, the chat title bar, the mobile session rows, the pane tabs and
 
 ### A retry that has shown no output is still a wait
 
-Each time the wait is up the gateway retries the turn on the limited engine. While the limit is still up that retry can hang for many minutes before it fails, so its stored status is `running` (stopping the session must still reach the engine) but the session is *reported* as `waiting` — by the API, the MCP tools and the UI alike — until the retry streams its first text or tool output. Only then does it read `running`. If the retry fails with the limit still in place the session goes back to a plain `waiting`.
+Each time the wait is up the gateway retries the turn on the limited engine. While the limit is still up that retry can hang for many minutes before it fails, so its stored status is `running` (stopping the session must still reach the engine) but the session is *reported* as `waiting` — by the API, the MCP tools and the UI alike — until the retry streams its first text or tool output. Only then does it read `running`, and clients are told when it flips. A retry that thinks for a while before its first text or tool call, or that only reports status, stays `waiting` for that stretch. If the retry fails with the limit still in place the session goes back to a plain `waiting`.
 
 ### How the wait ends
 
