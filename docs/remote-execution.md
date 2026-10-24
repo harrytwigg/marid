@@ -664,7 +664,8 @@ because a command line is readable by every process on that host.
 A desktop is usually off, so this is part of the feature rather than an error
 case. When a turn starts and the host is unreachable, the gateway sends the wake
 (`wakeCommand`, else a Wake-on-LAN magic packet), moves the session to
-`waiting`, tells the operator, and polls until `waitMs` runs out.
+`waiting` (see [session statuses](session-statuses.md)), tells the operator, and
+polls until `waitMs` runs out.
 
 A `wakeCommand` gets `wakeTimeoutMs` (default five minutes) to finish. That is
 deliberately generous: a real startup path is not a fire-and-forget packet — it
