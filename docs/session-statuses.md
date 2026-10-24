@@ -6,7 +6,7 @@ Every session has one stored `status` — `Session["status"]` in `packages/jinn/
 
 | Status | What it means | Who sets it | In the web UI |
 |---|---|---|---|
-| `running` | A turn is in flight. | The turn path when it starts a turn, including a usage-limit retry. | Blue pulsing dot. |
+| `running` | A turn is in flight. | The turn path when it starts a turn, including a usage-limit retry (reported as `waiting` until the retry streams output, see below). | Blue pulsing dot. |
 | `waiting` | Paused: not working, not failed, and not waiting for a person. | The usage-limit wait (`sessions/rate-limit-handler.ts`) or the remote-host gate (`sessions/turn/remote-ready.ts`). | Amber still dot; its tooltip carries `lastError`. |
 | `error` | The last attempt failed. | The turn path when an engine fails. | Red dot for 24 hours after the last activity, then none. |
 | `idle` | Nothing is in flight. | The turn path when a turn settles, and `stop`. | No status dot (an unread idle chat shows the neutral unread dot). |
@@ -19,9 +19,13 @@ A session is `waiting` for one of two reasons.
 - **A usage limit.** The engine reported a limit and no fallback chain entry could serve the turn, so the session sleeps until the limit's reset time and retries on its own engine. When the limit names no reset time it retries on a back-off instead. `lastError` reads like `Claude usage limit — resumes <ISO time>` or `Claude usage limit — waiting for reset`. While it waits, `lastActivity` is refreshed every 60 seconds, so the session never reads as abandoned. See [fallback chains](fallback-chains.md).
 - **A remote host that is not ready.** A remote employee's turn waits for the host to wake, or for its instance-home mount to appear, and `lastError` says which: `<host> is offline — waking it` or `<host> is up — waiting for the instance-home mount`. See [remote execution](remote-execution.md#when-the-host-is-off).
 
-The sidebar, the chat title bar, the mobile session rows and the pane tabs paint the wait as an amber, still dot — not the blue of a working session and not the red of a failure — and the dot's tooltip is `lastError`.
+The sidebar, the chat title bar, the mobile session rows, the pane tabs and the search results paint the wait as an amber, still dot — not the blue of a working session and not the red of a failure — and the dot's tooltip is `lastError`. On a Todo's page the session list, the session tree and the status chip read "Waiting" in amber instead of "Working" in blue.
 
 `waiting` never means "waiting for a person": a turn that needs an answer ends and the session goes `idle`. This status is only the machine-side wait, which is why a new message, a stop or the limit passing are all it takes to end one.
+
+### A retry that has shown no output is still a wait
+
+Each time the wait is up the gateway retries the turn on the limited engine. While the limit is still up that retry can hang for many minutes before it fails, so its stored status is `running` (stopping the session must still reach the engine) but the session is *reported* as `waiting` — by the API, the MCP tools and the UI alike — until the retry streams its first text or tool output. Only then does it read `running`. If the retry fails with the limit still in place the session goes back to a plain `waiting`.
 
 ### How the wait ends
 
