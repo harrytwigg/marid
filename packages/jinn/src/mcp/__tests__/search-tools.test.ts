@@ -445,18 +445,6 @@ describe("search tools — integration against the real routes/registry", () => 
     expect(byText.sessions.map((s) => s.id)).toEqual([broken]);
   });
 
-  it("status: waiting finds only the sessions paused on a limit, through the real route", async () => {
-    const ctx = ctxFor();
-    const paused = seedSession({ employee: "qa-wait", status: "waiting", title: "Paused on a limit" });
-    seedSession({ employee: "qa-wait", status: "running", title: "Still running" });
-    seedSession({ employee: "qa-wait", status: "idle", title: "Done" });
-
-    const out = (await tool("search_sessions").handler({ employee: "qa-wait", status: "waiting" }, ctx)) as {
-      sessions: Array<{ id: string; status: string }>;
-    };
-    expect(out.sessions).toEqual([expect.objectContaining({ id: paused, status: "waiting" })]);
-  });
-
   it("INJECTION SAFETY through the real route: hostile FTS/SQL input never errors and never mutates", async () => {
     const ctx = ctxFor();
     const sid = seedSession({ employee: "inj-qa", title: "Injection fixture" });

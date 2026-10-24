@@ -114,12 +114,8 @@ function isArchived(session: Session): boolean {
   return Boolean(session.archivedAt);
 }
 
-/** The stored status, except that a retry against a standing usage limit that has shown no output reads
- *  `waiting` (see limit-probe.ts). Only that overlay: the tree carries background work separately. */
-function treeStatus(session: Session): Session['status'] | null {
-  if (session.status === 'running' && isProbingLimit(session.id)) return 'waiting';
-  return session.status ?? null;
-}
+/** Stored status, but a limit retry that has shown no output reads `waiting` (limit-probe.ts); background work is carried separately. */
+const treeStatus = (s: Session): Session['status'] | null => (s.status === 'running' && isProbingLimit(s.id) ? 'waiting' : s.status ?? null);
 
 function directoryEntry(session: Session): SessionDirectoryEntry {
   return {
