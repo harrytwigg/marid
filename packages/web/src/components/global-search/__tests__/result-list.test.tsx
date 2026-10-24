@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { ResultList } from "../result-list"
+import { statusTint } from "../kind-meta"
 import { recentRows, resultRows } from "../rows"
 import { searchResult } from "./fixtures"
 
@@ -80,5 +81,11 @@ describe("ResultList", () => {
 
     expect(screen.getByRole("presentation").textContent).toBe("Recent")
     expect(screen.getByTestId("search-row-recent:todo-AAA-1").textContent).toContain("A row")
+  })
+})
+
+describe("statusTint", () => {
+  it("paints a paused session amber rather than leaving it neutral", () => {
+    expect(statusTint("waiting")).toBe("var(--system-yellow)")
   })
 })

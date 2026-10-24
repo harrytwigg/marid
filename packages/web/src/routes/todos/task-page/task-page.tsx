@@ -20,7 +20,7 @@ import { TaskFrame, useOpenTodoInPlace } from "./task-frame"
 import { TaskBanner } from "./banner"
 import { PropsRail } from "./props-rail"
 import { SessionDirectoryProvider } from "./session-ref"
-import { useTodoSessions } from "./use-todo-sessions"
+import { useTodoSessions, hasOnlyWaitingWorkers } from "./use-todo-sessions"
 import { ChipCluster } from "./chip-cluster"
 import { useTaskPickers } from "./use-task-pickers"
 import { BodyEditor } from "./body-editor"
@@ -107,7 +107,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
   const departments = useDepartments()
 
   // `treeQuery` above is the Todo relations tree; this one is the sessions working it.
-  const { tree: sessionTree, hasLiveSession, railSession } = useTodoSessions(id)
+  const { tree: sessionTree, hasLiveSession, railSession, sessions } = useTodoSessions(id)
 
   // ── Transient refusal callout — always the gateway's words; renders above the picker sheet, which is where the refusals it reports come from ──
   const [callout, setCallout] = useState<string | null>(null)
@@ -198,6 +198,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
   ))
 
   const working = detail ? workingElapsed(detail) : null
+  const onlyWaiting = sessions ? hasOnlyWaitingWorkers(sessions) : false
   // A tab's own close is the way out of it; leaving for the Todos page would take the chat with it.
   const backToTodos = embedded ? undefined : () => navigate("/todos")
 
@@ -352,6 +353,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
                   byName={byName}
                   mobile={mobile}
                   working={hasLiveSession ? working : null}
+                  waiting={onlyWaiting}
                   rowFor={pickers.rowFor}
                 />
               )}

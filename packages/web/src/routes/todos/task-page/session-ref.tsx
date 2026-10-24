@@ -4,6 +4,12 @@ import type { Employee } from "@/lib/api"
 import { useOpenSession } from "@/components/chat/file-open-context"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { sessionIdFromActor, type SessionDirectoryEntryWire } from "@/lib/session-tree-api"
+import {
+  SESSION_WAITING_COLOR,
+  SESSION_WAITING_LABEL,
+  isSessionWaiting,
+  sessionWaitingTitle,
+} from "@/lib/session-waiting"
 import { displayNameOf } from "../util"
 
 /**
@@ -131,6 +137,17 @@ function RefGlyph({ employee }: { employee: string | null | undefined }) {
 /** What the session is doing right now, if anything worth a glance. */
 function RefState({ entry }: { entry: SessionDirectoryEntryWire | undefined }) {
   if (entry?.archived) return <span className="flex-none text-[11.5px] text-[var(--text-quaternary)]">Archived</span>
+  if (isSessionWaiting(entry?.status)) {
+    // Paused, not running: amber and still, so it never reads as progress.
+    return (
+      <span
+        className="size-1.5 flex-none rounded-full"
+        style={{ background: SESSION_WAITING_COLOR }}
+        aria-label={SESSION_WAITING_LABEL}
+        title={sessionWaitingTitle()}
+      />
+    )
+  }
   if (!LIVE.has(entry?.status ?? "")) return null
   return (
     <span
