@@ -265,9 +265,10 @@ export function sessionIdFromActor(actor: string | null | undefined): string | n
 /**
  * The route-facing read: gather what the Todo names, then walk.
  *
- * `listSessions()` is the same whole-table read `serializeSessionList` already
- * performs on this route to build the delegated-activity index, so the tree
- * shape costs no extra query — it replaces that work rather than adding to it.
+ * The tree is built from one whole-table read of the sessions, which the
+ * delegated-activity index is computed over as well. That read includes the
+ * archived rows, so it grows with the archive on every `?tree=1` request; if
+ * that ever shows, read only the linked ids and their descendants instead.
  * Archived sessions are read too: archiving only hides a chat from the lists, and
  * a Todo's link to one must still resolve (flagged `archived`), not read as `missing`.
  */
