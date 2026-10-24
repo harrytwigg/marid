@@ -79,6 +79,28 @@ describe("serializeSession", () => {
     vi.useRealTimers();
   });
 
+  it("exposes a session paused on a usage limit as waiting, with the reason, never as running or error", () => {
+    const session = makeSession({
+      status: "waiting",
+      lastError: "Claude usage limit — resumes 2026-06-01T06:00:00.000Z",
+    });
+    // The wait holds the session's queue slot, so the queue reports it running.
+    const serialized = serializeSession(session, makeContext(undefined, { "web:sess-1": "running" }));
+
+    expect(serialized.status).toBe("waiting");
+    expect(serialized.lastError).toBe("Claude usage limit — resumes 2026-06-01T06:00:00.000Z");
+    expect(serialized.turnProgress).toBeNull();
+  });
+
+  it("keeps a waiting session waiting while background work of its own is live", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-01T00:00:00.000Z"));
+    const context = makeContext(new Map([["sess-1", { activeStreams: 1, lastActivityAt: Date.now() }]]));
+
+    expect(serializeSession(makeSession({ status: "waiting" }), context).status).toBe("waiting");
+    vi.useRealTimers();
+  });
+
   it("serializes agent and monitor counts without changing active-stream transport semantics", () => {
     const session = makeSession({ status: "idle" });
     const context = makeContext(new Map([

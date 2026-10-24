@@ -59,9 +59,10 @@ export function patchSessionBackgroundActivity(
       const active = (backgroundActivity?.activeStreams ?? 0) > 0
       const status = typeof s.status === 'string' ? s.status : undefined
       const queueDepth = typeof s.queueDepth === 'number' ? s.queueDepth : 0
+      // A session paused on a limit holds its queue slot, so its transport is still running.
       const nextTransportState = transportState ?? (active
         ? 'running'
-        : status === 'running'
+        : status === 'running' || status === 'waiting'
           ? 'running'
           : status === 'error'
             ? 'error'
