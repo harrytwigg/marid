@@ -351,6 +351,45 @@ describe("the task page", () => {
     expect(screen.queryByTestId("rail-dispatch")).toBeNull()
   })
 
+  it("shows a paused session as amber Waiting in the rail and the elapsed chip", async () => {
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
+    listWorkItemSessions.mockResolvedValue([
+      { id: "paused-session", employee: "todo-dispatcher", status: "waiting", title: "Dispatch TSK-12" },
+    ])
+    renderTask()
+
+    const linked = await screen.findByTestId("rail-dispatch-session")
+    expect(linked.textContent).toContain("todo-dispatcher waiting")
+
+    const railDot = linked.querySelector("span[aria-hidden]")
+    expect(railDot?.getAttribute("style")).toContain("var(--system-yellow)")
+    expect(railDot?.className).not.toContain("animate-")
+
+    const chip = screen.getByTestId("chip-working")
+    expect(chip.textContent).toContain("Waiting · ")
+    expect(chip.className).toContain("text-[var(--system-yellow)]")
+    expect(chip.querySelector("span")?.className).not.toContain("animate-")
+    // Dispatch stays hidden: a paused session is still a live worker.
+    expect(screen.queryByTestId("rail-dispatch")).toBeNull()
+  })
+
+  it("keeps a running session's rail and elapsed chip blue and pulsing", async () => {
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
+    listWorkItemSessions.mockResolvedValue([
+      { id: "running-session", employee: "todo-dispatcher", status: "running", title: "Dispatch TSK-12" },
+    ])
+    renderTask()
+
+    const linked = await screen.findByTestId("rail-dispatch-session")
+    expect(linked.textContent).toContain("todo-dispatcher working")
+    const railDot = linked.querySelector("span[aria-hidden]")
+    expect(railDot?.className).toContain("animate-[jinn-pulse")
+
+    const chip = screen.getByTestId("chip-working")
+    expect(chip.textContent).toContain("Working · ")
+    expect(chip.className).toContain("text-[var(--system-blue)]")
+  })
+
   it("an in_review Todo shows no banner and no approval controls", async () => {
     getWorkItem.mockResolvedValue(detailOf(full("TSK-12", { status: "in_review" })))
     renderTask()

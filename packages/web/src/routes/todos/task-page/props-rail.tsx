@@ -5,6 +5,7 @@ import { STATUS_LABEL, priorityLabel } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { StatusCircle } from "../state-glyph"
 import { sessionIdFromActor, type SessionTreeWire } from "@/lib/session-tree-api"
+import { isSessionWaiting, SESSION_WAITING_COLOR } from "@/lib/session-waiting"
 import { SessionRef } from "./session-ref"
 import { SessionTreePanel } from "./session-tree"
 import { LabelChip, RemoveButton } from "./label-chip"
@@ -66,6 +67,7 @@ export function PropsRail({
   const createdByLabel = !item.createdBy || item.createdBy === "operator" ? "You" : displayNameOf(item.createdBy, byName)
   const overdue = !!item.dueAt && Date.parse(item.dueAt) < Date.now()
   const railSessionLive = LIVE_RAIL_STATES.has(railSession?.status ?? "")
+  const railSessionWaiting = isSessionWaiting(railSession?.status)
 
   const pick = (row: Parameters<NonNullable<RailPickers["rowFor"]>>[0]) => rowFor?.(row)
 
@@ -134,12 +136,21 @@ export function PropsRail({
               the rail now offers a finished attempt too, and a finished attempt
               that pretends to be live is worse than no chip at all. */}
           <span
-            className={`size-1.5 flex-none rounded-full ${railSessionLive ? "bg-[var(--system-blue)] motion-safe:animate-[jinn-pulse_1.4s_ease-in-out_infinite]" : "bg-[var(--fill-primary)]"}`}
+            className={`size-1.5 flex-none rounded-full ${
+              railSessionWaiting
+                ? ""
+                : railSessionLive
+                  ? "bg-[var(--system-blue)] motion-safe:animate-[jinn-pulse_1.4s_ease-in-out_infinite]"
+                  : "bg-[var(--fill-primary)]"
+            }`}
+            style={railSessionWaiting ? { background: SESSION_WAITING_COLOR } : undefined}
             aria-hidden
           />
           <span className="min-w-0 truncate">
             {railSession.employee ? displayNameOf(railSession.employee, byName) : "A session"}{" "}
-            <span className="font-normal text-[var(--text-tertiary)]">{railSessionLive ? "working" : "worked this"}</span>
+            <span className="font-normal text-[var(--text-tertiary)]">
+              {railSessionWaiting ? "waiting" : railSessionLive ? "working" : "worked this"}
+            </span>
           </span>
           <ArrowUpRight size={12} aria-hidden className="ml-auto text-[var(--text-quaternary)] opacity-0 transition-opacity group-hover/dispatch:opacity-100" />
         </button>

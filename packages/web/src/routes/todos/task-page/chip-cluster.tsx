@@ -5,6 +5,7 @@ import { StatusCircle } from "../state-glyph"
 import { displayNameOf } from "../util"
 import { ReviewForChip } from "../review-for-chip"
 import { type RailPickers } from "./props-rail"
+import { SESSION_WAITING_COLOR, SESSION_WAITING_LABEL } from "@/lib/session-waiting"
 import { RailPriorityBars } from "./rail-rows"
 import { RemoveButton } from "./label-chip"
 
@@ -45,12 +46,35 @@ function Chip({
   )
 }
 
+/** The elapsed time under the status chip: blue and pulsing while anything is
+ *  working, amber and still when every live worker is paused. */
+function ElapsedChip({ working, waiting }: { working: string; waiting: boolean }) {
+  return (
+    <span
+      className={`flex items-center gap-1.5 ${waiting ? "text-[var(--system-yellow)]" : "text-[var(--system-blue)]"}`}
+      data-testid="chip-working"
+    >
+      <span
+        className={
+          waiting
+            ? "size-1.5 rounded-full"
+            : "size-1.5 rounded-full bg-[var(--system-blue)] motion-safe:animate-[jinn-pulse_1.4s_ease-in-out_infinite]"
+        }
+        style={waiting ? { background: SESSION_WAITING_COLOR } : undefined}
+        aria-hidden
+      />
+      {waiting ? `${SESSION_WAITING_LABEL} · ${working}` : `Working · ${working}`}
+    </span>
+  )
+}
+
 export function ChipCluster({
   detail,
   byName,
   rowFor,
   mobile,
   working,
+  waiting = false,
 }: {
   detail: WorkItemDetailWire
   byName: Map<string, Employee>
@@ -58,6 +82,9 @@ export function ChipCluster({
   rowFor: NonNullable<RailPickers["rowFor"]>
   mobile: boolean
   working?: string | null
+  /** Every live worker is paused: the elapsed time is time spent waiting, not
+   *  working, so the chip says so in amber rather than pulsing blue. */
+  waiting?: boolean
 }) {
   const item = detail.workItem
   const labels = detail.labels ?? []
@@ -72,15 +99,7 @@ export function ChipCluster({
         <StatusCircle status={item.status} size={16} />
         {STATUS_LABEL[item.status]}
         {reviewFor && <ReviewForChip employee={reviewFor} byName={byName} />}
-        {working && (
-          <span className="flex items-center gap-1.5 text-[var(--system-blue)]" data-testid="chip-working">
-            <span
-              className="size-1.5 rounded-full bg-[var(--system-blue)] motion-safe:animate-[jinn-pulse_1.4s_ease-in-out_infinite]"
-              aria-hidden
-            />
-            Working · {working}
-          </span>
-        )}
+        {working && <ElapsedChip working={working} waiting={waiting} />}
       </Chip>
       <div className="relative flex-none">
         <Chip mobile={mobile} label="Assignee" testId="chip-assignee" clearSlot={!!onClearAssignee} onOpen={() => rowFor("assignee")?.onOpen()}>
