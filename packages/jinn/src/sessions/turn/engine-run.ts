@@ -1,6 +1,6 @@
-import { sessionClaudeProfile } from "../session-account.js";
+import { sessionClaudeProfile, sessionRemoteTarget } from "../session-account.js";
 import { remoteScopeFor, spawnCwd } from "../session-cwd.js";
-import { employeeRemoteTarget, isRemoteTarget } from "../../shared/remote-target.js";
+import { isRemoteTarget } from "../../shared/remote-target.js";
 import { logger } from "../../shared/logger.js";
 import { postEngineNotices } from "./engine-notices.js";
 import { selectClaudeModelFallback } from "../../shared/model-fallback.js";
@@ -57,7 +57,7 @@ export async function runEngineAttempt(args: EngineAttemptArgs): Promise<EngineA
     // uses `remoteCwd` instead — passing both is what lets one code path serve
     // a local and a remote employee.
     // A scoped employee's remote cwd is its department's stage directory on the host.
-    ...employeeRemoteTarget(input.employee, remoteScopeFor(input.config.remote, input.session)),
+    ...sessionRemoteTarget(input.employee, remoteScopeFor(input.config.remote, input.session), input.session),
     claudeProfile: sessionClaudeProfile(input.session, input.employee),
     mcpConfigPath: plan.mcpConfigPath,
     resolvedMcp: plan.resolvedMcp,

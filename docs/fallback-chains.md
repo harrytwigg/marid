@@ -52,7 +52,9 @@ An entry is a mapping `{engine, profile?, model?}`:
 
 - `engine`: any known engine.
 - `profile`: a declared account name under `engines.claude.accounts`. Only
-  Claude links take one. Absent means the default Claude profile.
+  Claude links take one. Absent means the default Claude profile. A profile
+  runs where its account is declared: a local account on the gateway, an
+  account with `remoteHost` on that host (see Remote sessions below).
 - `model`: a model id the engine serves (opencode's `provider/model`). Absent
   means: on the same engine as the session, the session's own model; on
   another engine, the `fallbackModelMap` translation of the session's model if
@@ -138,7 +140,7 @@ reset, as before.
 |---|---|
 | `tried` | already tried in this run (the loop guard) |
 | `not-installed` | its engine is not installed where the session runs: on the gateway, or for a session on a remote host, on that host. For an engine that runs remotely the link also carries `skipDetail` naming the host, e.g. "build-box has no \`muse\` on its non-interactive PATH", and the hop record carries it as `detail` |
-| `remote` | the session runs on a remote host and the link cannot follow it there: an engine other than `claude`, `pi`, `opencode` and `musecode`, or a link naming a local Claude profile |
+| `remote` | the link cannot run where the session does: for a remote session, an engine other than `claude`, `pi`, `opencode` and `musecode`, a local Claude profile, or a remote account on another `user@host`; for a local session, a remote account. A profile link carries `skipDetail` saying which, e.g. `profile "spare" is on me@build-host, not this session's host other-host`, `profile "x" is a profile on the gateway, not on build-host`, `profile "spare" is on remote host build-host` |
 | `scoped` | the session is department-scoped and the link is not a Claude account |
 | `exhausted` | its health says it is at its limit; tried only when nothing else is left |
 | `model-not-served` | the engine's catalog does not list the link's model |
@@ -150,6 +152,22 @@ non-interactive ssh). A host this gateway has not probed since it started counts
 as having it, and the spawn then says if it does not. `GET /api/fallback-chains`
 judges an employee on a remote host the same way, so its chain shows what its
 turns would do.
+### Remote sessions and remote accounts
+
+A session on a remote host follows its chain on that host: engines that run
+there, and Claude **accounts declared on its own `user@host`** (an entry under
+`engines.claude.accounts` with `remoteHost`, and `remoteUser` when the employee
+has one; `configDir` is the profile directory on the host). A link naming such
+an account runs the session on that directory, with the recent history in the
+prompt, under the account's key (`claude@<user>@<host>:<key>`), the key a remote
+employee on that directory has. A remote account has no chain of its own: its
+employees write theirs. When the employee's own login is a declared account,
+its own link carries that profile, so a chain naming it is the employee's own
+target and is refused. A local profile is refused on a remote session, a remote
+account on a local one, and a remote account on another `user@host` is refused
+on both. `employeeFallbackProblems` reports each at load, and a chain that
+still names one passes it over as `remote`.
+
 ### Health keys
 
 A Claude target's health is its account's. An opencode target's health is kept

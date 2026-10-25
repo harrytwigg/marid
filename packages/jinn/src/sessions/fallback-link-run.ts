@@ -10,6 +10,7 @@ import { limitReason, isInvalidModelFailure, type LinkFailure } from "./fallback
 import type { WalkInput } from "./fallback-walk.js";
 import { resolveEngineRunMcp } from "./engine-run-mcp.js";
 import type { EngineSubstitution } from "./engine-override.js";
+import { isRemoteClaudeAccount } from "../shared/engine-account.js";
 import { recordAccountRateLimit } from "./rate-limit-account.js";
 import type { SubstituteChoice } from "./rate-limit-substitute.js";
 
@@ -67,6 +68,14 @@ export interface RunLinkArgs {
   cwd: string;
 }
 
+/** The profile directory on the host for a link that moves a remote session onto a remote account; the employee's own dir (already on the target) otherwise. */
+function remoteAccountDir(choice: SubstituteChoice): { remoteClaudeConfigDir?: string } {
+  const swap = choice.accounts;
+  return choice.engine === "claude" && swap && isRemoteClaudeAccount(swap.substitute) && swap.substituteConfigDir
+    ? { remoteClaudeConfigDir: swap.substituteConfigDir }
+    : {};
+}
+
 /**
  * Run the turn on the link, turning a thrown spawn into the error result every
  * other engine failure already is.
@@ -103,6 +112,7 @@ export async function runLink(args: RunLinkArgs): Promise<EngineResult> {
       // instead. Omit this and a remote employee's fallback turn comes back to the
       // gateway — the failure Branch A used to be skipped entirely to avoid.
       ...remoteTarget,
+      ...remoteAccountDir(choice),
       ...resolveEngineRunMcp({ config: opts.config, employee: opts.employee, engine: name, sessionId: opts.session.id }),
       claudeProfile: choice.claudeProfile,
       attachments: opts.attachments?.length ? opts.attachments : undefined,

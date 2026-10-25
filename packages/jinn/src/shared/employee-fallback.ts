@@ -1,11 +1,12 @@
-import { accountNames } from "./claude-accounts-config.js";
+import { accountNames, declaredRemoteAccountByName } from "./claude-accounts-config.js";
 import { resolveEmployeeClaudeProfile } from "./claude-profile.js";
-import { claudeAccountKey } from "./engine-account.js";
+import { claudeAccountKey, remoteClaudeAccountKey } from "./engine-account.js";
 import { ownTargetLink } from "./fallback-chain-links.js";
 import { fallbackChainProblems, fallbackLinkOf, type FallbackLink } from "./fallback-chain-wire.js";
 import type { DuplicateTolerance } from "./fallback-chain-load.js";
 import { logger } from "./logger.js";
 import { ENGINE_NAMES } from "./models.js";
+import { isRemoteTarget, resolveRemoteClaudeConfigDir, sshDestination } from "./remote-target.js";
 import type { Employee, JinnConfig } from "./types.js";
 
 /**
@@ -17,11 +18,17 @@ import type { Employee, JinnConfig } from "./types.js";
  */
 
 /** The parts of an employee its own target is made of. */
-type EmployeeTarget = Pick<Employee, "engine" | "model" | "claudeConfigDir" | "remoteHost">;
+type EmployeeTarget = Pick<Employee, "engine" | "model" | "claudeConfigDir" | "remoteHost" | "remoteUser" | "remoteClaudeConfigDir">;
 
-/** The target an employee's chain falls back from: its engine, its model and, for a local Claude profile that is a declared account, that account's name. */
+/** The Claude account an employee's own target runs as: a local profile's, or a remote login's (with the instance-wide profile directory applied). */
+function ownAccountKey(config: JinnConfig, employee: EmployeeTarget): string {
+  if (!isRemoteTarget(employee)) return claudeAccountKey(resolveEmployeeClaudeProfile(employee));
+  return remoteClaudeAccountKey(employee, resolveRemoteClaudeConfigDir(employee, config.remote));
+}
+
+/** The target an employee's chain falls back from: its engine, its model and, for a Claude profile (local, or a remote login) that is a declared account, that account's name. */
 export function employeeOwnLink(config: JinnConfig, employee: EmployeeTarget): FallbackLink {
-  const account = employee.engine === "claude" ? claudeAccountKey(resolveEmployeeClaudeProfile(employee)) : undefined;
+  const account = employee.engine === "claude" ? ownAccountKey(config, employee) : undefined;
   return ownTargetLink(config, { engine: employee.engine, model: employee.model, ...(account === undefined ? {} : { account }) });
 }
 
@@ -35,9 +42,33 @@ export function employeeFallbackProblems(config: JinnConfig | undefined, employe
   const ctx = { engines: ENGINE_NAMES, profiles, onDuplicate };
   if (!config) return [...strings, ...fallbackChainProblems("fallback", chain, ctx)];
   // A link with no model runs the employee's own model on its own engine, so it is the own target as well: check both spellings.
+  // A remote employee on a declared account also reaches its own login by naming no profile at all.
   const self = employeeOwnLink(config, employee);
   const { model: _model, ...modelless } = self;
-  return [...new Set([...strings, ...fallbackChainProblems("fallback", chain, { ...ctx, self }), ...fallbackChainProblems("fallback", chain, { ...ctx, self: modelless })])];
+  const spellings: FallbackLink[] = [self, modelless];
+  if (isRemoteTarget(employee) && self.profile !== undefined) {
+    const { profile: _profile, ...unprofiled } = self;
+    spellings.push(unprofiled, { engine: self.engine });
+  }
+  const problems = spellings.flatMap((spelling) => fallbackChainProblems("fallback", chain, { ...ctx, self: spelling }));
+  return [...new Set([...strings, ...problems, ...hostProfileProblems(config, employee, chain)])];
+}
+
+/** Where a profile link may run: a remote employee falls back only to an account declared on its own `user@host`, a local one to no remote account. Unknown names are the wire module's to refuse. */
+function hostProfileProblems(config: JinnConfig, employee: EmployeeTarget, chain: unknown[]): string[] {
+  return chain.flatMap((entry, index) => {
+    const link = fallbackLinkOf(entry);
+    if (link?.engine !== "claude" || link.profile === undefined) return [];
+    const at = `fallback[${index}]: profile "${link.profile}"`;
+    const remote = declaredRemoteAccountByName(config, link.profile);
+    const local = accountNames(config.engines).has(link.profile) && !remote;
+    if (!isRemoteTarget(employee)) {
+      return remote ? [`${at} is declared on ${remote.destination}; a local employee falls back only to a local account`] : [];
+    }
+    const destination = sshDestination(employee);
+    if (local) return [`${at} is a local profile; a remote employee falls back only to an account declared with remoteHost ${employee.remoteHost}`];
+    return remote && remote.destination !== destination ? [`${at} is declared on ${remote.destination}, not ${destination}`] : [];
+  });
 }
 
 /** A valid chain as the links it holds. */

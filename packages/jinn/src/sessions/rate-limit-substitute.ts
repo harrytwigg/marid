@@ -18,6 +18,7 @@ export interface SubstituteChoice {
   /** The model to run, when the chain or the session's own fallback target names one; otherwise the substitute's own default. */
   model?: string;
   claudeProfile: ClaudeProfile;
+  /** `substituteConfigDir` is a directory on the gateway for a local session and on the session's host for a remote one (a declared remote account). */
   accounts?: { original: string; substitute: string; substituteConfigDir: string | null; fallbackModelMap?: Record<string, string> };
 }
 

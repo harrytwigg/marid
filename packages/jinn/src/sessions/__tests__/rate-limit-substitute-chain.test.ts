@@ -116,7 +116,10 @@ describe("remote sessions keep the remote rule", () => {
     const config = configWith({ fallback: [{ engine: "claude", profile: "friend" }, { engine: "codex" }, { engine: "pi" }] });
     const { choice, next } = asRemote(config);
     expect(choice).toEqual({ engine: "pi", claudeProfile: null });
-    expect(next?.skipped).toEqual([{ key: "claude|friend|opus", reason: "remote" }, { key: "codex||", reason: "remote" }]);
+    expect(next?.skipped).toEqual([
+      { key: "claude|friend|opus", reason: "remote", detail: 'profile "friend" is a profile on the gateway, not on box' },
+      { key: "codex||", reason: "remote" },
+    ]);
   });
 
   it("wait when no link can run there", () => {

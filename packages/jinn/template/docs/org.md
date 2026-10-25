@@ -102,7 +102,34 @@ engines:
 - A substitute on another account runs on that account's profile, as a fresh session with the recent history in its prompt (a transcript cannot be resumed across profiles). Further turns inside the limit's window stay on it and resume its thread; after the window the session goes back to its own account and thread.
 - If the substitute is limited too, the session moves on to the next one, but what it goes back to does not change: when the first limit's window ends it returns to the engine, account, thread and model it had before the first swap, and a Claude thread is caught up on everything since then. This holds for an engine chain as well (claude → codex, then codex limited → pi returns to claude).
 - **Naming `claude:<name>` in `engines.claude.fallback` moves the default account's sessions onto that account when yours is limited, company sessions included**, with everything they load. Only do that with an account that may see your company's context.
-- An undeclared profile, or a declared one with no `fallback`, has none. Remote employees keep their engine chain, limited to engines their host can run; account entries apply to local sessions only. A board walk turn never changes engine or account.
+- An undeclared profile, or a declared one with no `fallback`, has none. A board walk turn never changes engine or account.
+
+**Remote accounts.** A remote employee can fall back to another Claude login on its own host. Declare that login with `remoteHost` (and `remoteUser` when the employee names one); its `configDir` is then a profile directory on that host, not on this machine:
+
+```yaml
+engines:
+  claude:
+    accounts:
+      spare:
+        remoteHost: build-host
+        remoteUser: me                # optional, as on an employee
+        configDir: /home/me/.claude-b
+```
+
+```yaml
+# an employee on build-host, signed in as me
+remoteHost: build-host
+remoteUser: me
+fallback:
+  - { engine: claude, profile: spare }
+  - { engine: opencode, model: openrouter/x }
+```
+
+- A remote account matches the employees on **the same `user@host`** (with no `remoteUser`, the bare host). A remote employee takes only a remote account declared on its own `user@host`; a local employee takes none, and a remote employee takes no local profile. Anything else is refused when the employee loads, and a chain that names it at runtime passes it over as `remote`.
+- It has no chain of its own (`fallback` and `fallbackModelMap` on it are refused): the chain is written on the employees that use it. `configDir` must be an absolute path on the host (no `~`), and two accounts may not name one directory of one `user@host`.
+- Its key is the one a remote employee on that directory has (`claude@<user>@<host>:<key>`), so its health, limits, usage history and thread are the same whether the account is reached by a chain or run as an employee's own. The Limits page lists it as a remote card, read over SSH, before anyone has run on it.
+- A session moved onto it runs there on its own thread, with the recent history in the prompt, and goes back to its own account and thread when the window ends.
+- A department-scoped employee on a remote host can use it too: a scoped session falls back only to Claude accounts, and this is one.
 
 ## Departments
 

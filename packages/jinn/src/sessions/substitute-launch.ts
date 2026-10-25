@@ -1,4 +1,4 @@
-import { declaredAccountByKey } from "../shared/claude-accounts-config.js";
+import { declaredAccountByKey, declaredRemoteAccountByKey } from "../shared/claude-accounts-config.js";
 import { resolveEmployeeClaudeProfile } from "../shared/claude-profile.js";
 import { accountForEmployee, DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
 import type { ResolvedFallbackLink } from "../shared/fallback-chain-wire.js";
@@ -10,7 +10,9 @@ import { fallbackModelMapOf } from "./substitute-filters.js";
 /**
  * What it takes to run a chain link: the Claude profile, and for a link that is
  * another Claude account the swap the override records. Other engines need
- * neither, and nothing but a local Claude link ever does.
+ * neither. On a remote host the only Claude link that is another account is a
+ * remote account declared on the session's own `user@host`, and it needs no local
+ * profile: the swap carries the directory on that host.
  */
 
 type Launch = Pick<SubstituteChoice, "claudeProfile" | "accounts">;
@@ -44,7 +46,19 @@ function engineLaunch(input: ChooseSubstituteInput, link: ResolvedFallbackLink):
   return { claudeProfile: profile, accounts: { original, substitute: link.account, substituteConfigDir: profile?.dir ?? null } };
 }
 
+/** A remote session's Claude link: a declared remote account other than the one it stands on is a swap onto that account's directory on the host; the account it stands on keeps the swap it holds. */
+function remoteLaunch(input: ChooseSubstituteInput, link: ResolvedFallbackLink): Launch {
+  const declared = declaredRemoteAccountByKey(input.config, link.account);
+  if (!declared) return { claudeProfile: null };
+  if (link.account === input.account) {
+    const standing = standingAccountSwap(input);
+    return { claudeProfile: null, ...(standing ? { accounts: standing } : {}) };
+  }
+  return { claudeProfile: null, accounts: { original: input.account, substitute: link.account, substituteConfigDir: declared.configDir } };
+}
+
 export function launchFor(input: ChooseSubstituteInput, accountMode: boolean, link: ResolvedFallbackLink): Launch {
-  if (link.engine !== "claude" || input.remote) return { claudeProfile: null };
+  if (link.engine !== "claude") return { claudeProfile: null };
+  if (input.remote) return remoteLaunch(input, link);
   return accountMode ? accountLaunch(input, link) : engineLaunch(input, link);
 }

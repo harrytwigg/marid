@@ -5,9 +5,8 @@ import { getSession, insertMessage, type UpdateSessionFields } from "../registry
 import { notifyOperatorChannel, notifyRateLimited, notifyRateLimitResumed } from "../callbacks.js";
 import { handleRateLimit, type RateLimitHandlerHooks, type RateLimitInfo } from "../rate-limit-handler.js";
 import { remoteScopeFor } from "../session-cwd.js";
-import { accountOverride } from "../session-account.js";
+import { accountOverride, sessionRemoteTarget } from "../session-account.js";
 import { servedFields } from "./served-fields.js";
-import { employeeRemoteTarget } from "../../shared/remote-target.js";
 import { settleTurn, type SettleTurnInput } from "./completion.js";
 import { formatResumeTime, turnDisplayText } from "./text.js";
 import type { TurnInput, TurnPlan, TurnSurface } from "./types.js";
@@ -200,7 +199,7 @@ export async function runRateLimitTurn(args: RateLimitTurnArgs): Promise<Session
     engineConfig: plan.engineConfig,
     effortLevel: plan.effortLevel,
     cliFlags: input.employee?.cliFlags,
-    ...employeeRemoteTarget(input.employee, remoteScopeFor(input.config.remote, input.session)),
+    ...sessionRemoteTarget(input.employee, remoteScopeFor(input.config.remote, input.session), input.session),
     mcpConfigPath: plan.mcpConfigPath,
     resolvedMcp: plan.resolvedMcp,
     attachments: input.attachments.length ? input.attachments : undefined,
