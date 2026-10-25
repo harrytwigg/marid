@@ -15,7 +15,7 @@ vi.mock("@/hooks/use-fallback-chains", async (importActual) => ({
 }))
 
 import { EmployeeFallbackField } from "./employee-fallback-field"
-import { chainBlocked, declaredAccountOf, employeeDestination, profileLabels, profilesForEmployee } from "./employee-fallback"
+import { chainBlocked, declaredAccountOf, employeeDestination, fallbackFieldState, profileLabels, profilesForEmployee } from "./employee-fallback"
 
 /* Which declared accounts an employee's chain may name: a remote employee's are the remote accounts on
  * its own user@host, a local employee's the local ones, and its own account is found the same way. */
@@ -122,5 +122,26 @@ describe("the chain editor for a remote employee", () => {
     const own = (links: { engine: string; profile?: string }[]) => ({ links, expanded: links.map(() => false), legacy: false })
     const selves = [{ engine: "claude", profile: "spare", model: "sonnet" }, { engine: "claude", profile: "spare" }, { engine: "claude" }, { engine: "claude", model: "sonnet" }]
     expect(chainBlocked(registryValue, own([{ engine: "claude", profile: "spare" }]), selves, ["spare"], true)).toBe(true)
+  })
+})
+
+describe("what a remote employee inherits", () => {
+  it("is its engine's chain, even when its directory is a declared remote account", () => {
+    const withEngineChain: FallbackChainsResponse = {
+      ...CHAINS,
+      subjects: [{
+        kind: "engine", id: "claude", primary: null, configured: null, legacy: false,
+        effective: [{ engine: "codex", key: "codex||", account: "codex", label: "codex", origin: "config" }],
+      }],
+    }
+    const state = fallbackFieldState(REMOTE, "claude", null, withEngineChain)
+    expect(state.inherited).toMatchObject({ label: "Claude", source: "engine", links: [{ engine: "codex" }] })
+    // The own target is still its declared account, for refusing a link to it.
+    expect(state.self).toMatchObject({ engine: "claude", profile: "spare" })
+  })
+
+  it("is still a local employee's account chain when it is on a declared account", () => {
+    const state = fallbackFieldState(LOCAL, "claude", null, CHAINS)
+    expect(state.inherited).toMatchObject({ label: "Claude · work", source: "account" })
   })
 })

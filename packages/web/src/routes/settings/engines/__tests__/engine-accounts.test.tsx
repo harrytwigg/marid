@@ -142,7 +142,7 @@ describe('Remote Claude accounts', () => {
   beforeEach(() => {
     loadConfig({ engines: {
       claude: {
-        fallback: [{ engine: 'claude', profile: 'spare' }],
+        fallback: [{ engine: 'claude', profile: 'spare' }, { engine: 'claude' }],
         accounts: {
           work: { configDir: '/w' },
           spare: { remoteHost: 'build-host', remoteUser: 'me', configDir: '/home/me/.claude-b' },
@@ -174,7 +174,7 @@ describe('Remote Claude accounts', () => {
   it('does not offer a remote account to an engine or account chain', async () => {
     await renderSettings()
 
-    const profile = screen.getByRole('combobox', { name: 'Profile of link 1 of the Claude chain' })
+    const profile = screen.getByRole('combobox', { name: 'Profile of link 2 of the Claude chain' })
     expect(within(profile).getAllByRole('option').map((o) => o.textContent)).toEqual(['Default profile', 'work'])
   })
 
@@ -182,7 +182,10 @@ describe('Remote Claude accounts', () => {
     await renderSettings()
 
     expect(document.body.textContent).not.toContain('names no account')
-    expect(chainRows('[data-engine-card="claude"]')).toEqual(['claude · spare'])
+    expect(chainRows('[data-engine-card="claude"]')).toEqual(['claude · spare', 'claude'])
+    // The select shows the stored profile rather than a blank or the default.
+    const profile = screen.getByRole('combobox', { name: 'Profile of link 1 of the Claude chain' }) as HTMLSelectElement
+    expect(profile.value).toBe('spare')
   })
 })
 

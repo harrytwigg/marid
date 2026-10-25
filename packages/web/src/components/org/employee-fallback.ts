@@ -60,6 +60,7 @@ const trimmedDir = (dir: string): string => (dir.length > 1 ? dir.trim().replace
  */
 export function declaredAccountOf(employee: EmployeeHost, chains: FallbackChainsResponse | undefined): string | undefined {
   if (employeeDestination(employee) !== undefined) {
+    // The instance-wide `remote.claudeConfigDir` is not visible here: an employee relying on it has no directory to match.
     const dir = employee.remoteClaudeConfigDir
     return dir ? profilesForEmployee(employee, chains).find((p) => trimmedDir(p.configDir) === trimmedDir(dir))?.name : undefined
   }
@@ -176,7 +177,9 @@ export function fallbackFieldState(
 ) {
   const account = engine === "claude" ? declaredAccountOf(employee, chains) : undefined
   const subject = employeeSubject(chains, employee.name)
-  const inherited = serverInherited(subject, inheritedChain(engine, employee.claudeProfile, account, chains), engine !== employee.engine, engine)
+  // A remote account has no chain of its own: a remote employee inherits its engine's, whatever account it is on.
+  const inheritedAccount = employeeDestination(employee) === undefined ? account : undefined
+  const inherited = serverInherited(subject, inheritedChain(engine, employee.claudeProfile, inheritedAccount, chains), engine !== employee.engine, engine)
   const { self, selves } = ownTargetSpellings(employee, engine, account, model)
   const own = value === null ? null : ownChainOf(employee, value, subject)
   const changed = !sameChain(value, employeeChainOf(employee))
