@@ -25,6 +25,7 @@ function Strip() {
     subscribe,
     connectionSeq: 0,
     onSelect: noop,
+    onCloseAll: noop,
   })
   return <div>{tabs.strip}</div>
 }

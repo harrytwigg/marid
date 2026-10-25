@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Archive, ArchiveRestore, Copy, ExternalLink, MoreHorizontal, PanelRightOpen, Pin, PinOff, Search, Share2, Trash2, X } from '@/components/ui/icon'
+import { Archive, ArchiveRestore, Copy, ExternalLink, MoreHorizontal, PanelRightOpen, Pin, PinOff, Search, Share2, Trash2 } from '@/components/ui/icon'
 import { sessionUrl } from '@/components/chat/chat-route-helpers'
 import { ViewModeItems } from '@/components/chat/view-mode-items'
 import { SESSION_MENU_CONTENT_CLASS, SESSION_MENU_ITEM_CLASS, SESSION_MENU_SEPARATOR_CLASS } from '@/components/chat/session-row-menu'
@@ -50,10 +50,6 @@ interface ChatHeaderMenuProps {
   onClearDebugLog: () => void
   onDeleteSession: (id: string) => void
   onOpenChatBeside: () => void
-  /** Closes every open tab — desktop panes and the phone's strip alike. */
-  onCloseAllTabs: () => void
-  /** Nothing is open, so there is nothing to close: the item still shows, greyed, so the menu's shape is stable. */
-  closeAllTabsDisabled: boolean
 }
 
 /** The items below the view toggle, where a session is guaranteed to exist. */
@@ -109,8 +105,8 @@ export function ChatHeaderMenu(props: ChatHeaderMenuProps) {
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className={SESSION_MENU_CONTENT_CLASS}>
-        {/* PRIMARY group — Search (⌘K), the Chat/CLI view toggle, Close all tabs, Open beside,
-            then Open in new tab, Pin and Duplicate (only when a session is selected). */}
+        {/* PRIMARY group — Search (⌘K), the Chat/CLI view toggle, Open beside, then Open in new
+            tab, Pin and Duplicate (only when a session is selected). */}
         {/* D4: Search lives at the very top — the only visible ⌘K entry point on desktop. */}
         <DropdownMenuItem className={SESSION_MENU_ITEM_CLASS} onClick={props.openGlobalSearch}>
           <Search aria-hidden />
@@ -121,10 +117,6 @@ export function ChatHeaderMenu(props: ChatHeaderMenuProps) {
         <DropdownMenuItem className={SESSION_MENU_ITEM_CLASS} onClick={props.onOpenChatBeside}>
           <PanelRightOpen aria-hidden />
           <span className="flex-1">Open beside</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem className={SESSION_MENU_ITEM_CLASS} disabled={props.closeAllTabsDisabled} onClick={props.onCloseAllTabs}>
-          <X aria-hidden />
-          <span className="flex-1">Close all tabs</span>
         </DropdownMenuItem>
         {selectedId && <SelectedChatItems {...props} selectedId={selectedId} />}
       </DropdownMenuContent>

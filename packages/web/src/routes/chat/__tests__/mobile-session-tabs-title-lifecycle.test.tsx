@@ -31,6 +31,7 @@ function NavBar({ title, openedId, loaded = true }: { title: string; openedId: s
     subscribe,
     connectionSeq: 0,
     onSelect: noop,
+    onCloseAll: noop,
   })
   return <ChatHeaderPills title={title} onNew={noop} onBack={noop} mobileWorkingSet={tabs.strip} />
 }

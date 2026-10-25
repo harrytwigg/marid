@@ -1,6 +1,7 @@
 import { ChevronLeft, X } from '@/components/ui/icon'
 import { useEffect, useState } from 'react'
-import { usePaneTabsStrip, usePaneTitleDrag } from '@/components/chat/pane-tabs-context'
+import { usePaneCloseAll, usePaneTabsStrip, usePaneTitleDrag } from '@/components/chat/pane-tabs-context'
+import { CloseAllTabsButton } from '@/components/chat/close-all-tabs-button'
 import { ChatPaneSessionMenu } from '@/components/chat/chat-pane-session-menu'
 import type { PaneSessionActions } from '@/components/chat/pane-session-actions'
 import { splitTitleId } from '@/components/chat/chat-tabs'
@@ -114,40 +115,54 @@ interface ChatPaneTitleBarProps {
   cliTitle?: string
 }
 
-function PaneTitleActions({ title, session, onClose, sessionActions, onRenamed, viewMode, cliModeAvailable, viewSwitchLocked, cliTitle }: Pick<ChatPaneTitleBarProps, 'title' | 'session' | 'onClose' | 'sessionActions' | 'viewMode' | 'cliModeAvailable' | 'viewSwitchLocked' | 'cliTitle'> & { onRenamed: (title: string) => void }) {
+/**
+ * The close-all a pane with one tab carries: with no strip drawn, its title bar is that pane's whole
+ * tab bar, so the action rides there. Only the focused pane offers it — a strip would have been that
+ * pane's bar — so one bar carries it rather than every pane's.
+ */
+function PaneCloseAll({ active, hasStrip }: { active: boolean; hasStrip: boolean }) {
+  const closeAll = usePaneCloseAll()
+  if (hasStrip || !active || !closeAll) return null
+  return <CloseAllTabsButton onClick={closeAll} />
+}
+
+function PaneTitleActions({ title, session, onClose, sessionActions, onRenamed, viewMode, cliModeAvailable, viewSwitchLocked, cliTitle, active, hasStrip }: Pick<ChatPaneTitleBarProps, 'title' | 'session' | 'onClose' | 'sessionActions' | 'viewMode' | 'cliModeAvailable' | 'viewSwitchLocked' | 'cliTitle'> & { onRenamed: (title: string) => void; active: boolean; hasStrip: boolean }) {
   const stallNow = useStallClock(session.status === 'running')
   const status = getStatusDot(session, new Set([session.id]), false, stallNow)
   return (
-    <span data-testid="chat-pane-title-actions" className="group/title-actions relative flex h-full w-[52px] shrink-0 items-center justify-end">
-      {sessionActions ? (
-        <ChatPaneSessionMenu
-          title={title}
-          session={session}
-          actions={sessionActions}
-          onRenamed={onRenamed}
-          viewMode={viewMode ?? 'chat'}
-          cliModeAvailable={cliModeAvailable ?? false}
-          viewSwitchLocked={viewSwitchLocked ?? false}
-          cliTitle={cliTitle}
-        />
-      ) : null}
-      {/* The dot gives way to the close button on hover; with no close button it stays. */}
-      <span className={`grid size-[26px] place-items-center transition-opacity duration-[var(--duration-fast)] ${onClose ? 'group-hover/chat-pane:opacity-0 group-focus-within/title-actions:opacity-0' : ''}`}>
-        {status ? <StatusDot data-testid="chat-pane-status-dot" color={status.color} pulse={status.pulse} title={status.label} className="size-2" /> : null}
+    <>
+    <PaneCloseAll active={active} hasStrip={hasStrip} />
+      <span data-testid="chat-pane-title-actions" className="group/title-actions relative flex h-full w-[52px] shrink-0 items-center justify-end">
+        {sessionActions ? (
+          <ChatPaneSessionMenu
+            title={title}
+            session={session}
+            actions={sessionActions}
+            onRenamed={onRenamed}
+            viewMode={viewMode ?? 'chat'}
+            cliModeAvailable={cliModeAvailable ?? false}
+            viewSwitchLocked={viewSwitchLocked ?? false}
+            cliTitle={cliTitle}
+          />
+        ) : null}
+        {/* The dot gives way to the close button on hover; with no close button it stays. */}
+        <span className={`grid size-[26px] place-items-center transition-opacity duration-[var(--duration-fast)] ${onClose ? 'group-hover/chat-pane:opacity-0 group-focus-within/title-actions:opacity-0' : ''}`}>
+          {status ? <StatusDot data-testid="chat-pane-status-dot" color={status.color} pulse={status.pulse} title={status.label} className="size-2" /> : null}
+        </span>
+        {onClose ? <button
+          type="button"
+          data-pane-focus-preserving
+          aria-label={`Close ${title}`}
+          onClick={(event) => {
+            event.stopPropagation()
+            onClose()
+          }}
+          className="absolute right-0 grid size-[26px] place-items-center rounded-[var(--radius-sm)] border-0 bg-[var(--bg)] text-[var(--text-secondary)] opacity-0 transition-[color,opacity] duration-[var(--duration-fast)] hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)] focus-visible:opacity-100 group-hover/chat-pane:opacity-100 group-focus-within/title-actions:opacity-100"
+        >
+          <X size={14} aria-hidden />
+        </button> : null}
       </span>
-      {onClose ? <button
-        type="button"
-        data-pane-focus-preserving
-        aria-label={`Close ${title}`}
-        onClick={(event) => {
-          event.stopPropagation()
-          onClose()
-        }}
-        className="absolute right-0 grid size-[26px] place-items-center rounded-[var(--radius-sm)] border-0 bg-[var(--bg)] text-[var(--text-secondary)] opacity-0 transition-[color,opacity] duration-[var(--duration-fast)] hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)] focus-visible:opacity-100 group-hover/chat-pane:opacity-100 group-focus-within/title-actions:opacity-100"
-      >
-        <X size={14} aria-hidden />
-      </button> : null}
-    </span>
+    </>
   )
 }
 
@@ -197,7 +212,7 @@ export function ChatPaneTitleBar({ active, title, employee, session, backTo, onC
           </span>
         </>
       )}
-      <PaneTitleActions title={visibleTitle} session={session} onClose={onClose} sessionActions={sessionActions} onRenamed={setRenamedTitle} viewMode={viewMode} cliModeAvailable={cliModeAvailable} viewSwitchLocked={viewSwitchLocked} cliTitle={cliTitle} />
+      <PaneTitleActions title={visibleTitle} session={session} onClose={onClose} sessionActions={sessionActions} onRenamed={setRenamedTitle} viewMode={viewMode} cliModeAvailable={cliModeAvailable} viewSwitchLocked={viewSwitchLocked} cliTitle={cliTitle} active={active} hasStrip={tabs !== null} />
     </div>
   )
 }

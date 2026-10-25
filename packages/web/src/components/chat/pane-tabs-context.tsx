@@ -7,6 +7,8 @@ import type { DocTabRef } from '@/routes/chat/layout/tab-kind'
  */
 export interface PaneTabsBinding {
   renderStrip: (sessionId: string) => ReactNode | null
+  /** Closes every open tab, in every pane and on the phone's strip. Absent when there is nothing to close. */
+  closeAll?: () => void
   /** Whether any pane has a strip to show, so single-group layouts with tabs still get a title bar. */
   hasStrips: boolean
   /** The operator is working in this chat: keep its tab if it is a preview. */
@@ -52,6 +54,11 @@ export function usePaneTabsStrip(sessionId: string): ReactNode | null {
 export function usePaneTitleDrag(sessionId: string): PaneTitleDrag | null {
   const tabId = useContext(PaneTabIdContext) ?? sessionId
   return useContext(PaneTabsContext)?.titleDrag?.(tabId) ?? null
+}
+
+/** The close-all a bar offers, or null when nothing is open to close. */
+export function usePaneCloseAll(): (() => void) | null {
+  return useContext(PaneTabsContext)?.closeAll ?? null
 }
 
 export function usePaneTabsShown(): boolean {
