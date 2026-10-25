@@ -835,6 +835,33 @@ function ChatPage() {
     : cliModeAvailable ? undefined : cliUnavailableTitle(engineRegistry)
   const effectiveViewMode: ViewMode = cliModeAvailable ? viewMode : 'chat'
 
+  // The phone's open-chat strip, and the close-all the header menu runs.
+  const mobileTabs = useMobileSessionTabs({
+    committedId, systemPrimedId, activeId: focusedSessionId, sessions: sessionsQuery.data,
+    subscribe, connectionSeq, onSelect: handleMobileWorkingSetSelect,
+  })
+
+  /**
+   * Every tab, in every pane and on the phone's strip, closed at once. Landing on
+   * the bare route is the app's empty state, and the intent mark is what stops the
+   * sidebar's auto-select from opening the newest chat straight back up in place of
+   * what was just closed. Closing a tab abandons a new chat's draft, as single-tab
+   * close already does, so nothing here asks first: it would be the only close that
+   * does, and no chat is destroyed.
+   */
+  const handleCloseAllTabs = useCallback(() => {
+    setShowMoreMenu(false)
+    workingSet.split.closeAll()
+    chatTabs.closeAllTabs()
+    mobileTabs.closeAll()
+    releaseMobilePicker()
+    startComposer()
+    newChatIntentRef.current = true
+    pendingNavRef.current = null
+    setMobileView('sidebar')
+    if (selectedIdRef.current) navigate('/')
+  }, [chatTabs, mobileTabs.closeAll, navigate, releaseMobilePicker, startComposer, workingSet.split])
+
   const moreMenu = (
     <ChatHeaderMenu
       open={showMoreMenu}
@@ -856,6 +883,8 @@ function ChatPage() {
       onClearDebugLog={clearDebugLog}
       onDeleteSession={handleDeleteSession}
       onOpenChatBeside={gridPicker.open}
+      onCloseAllTabs={handleCloseAllTabs}
+      closeAllTabsDisabled={workingSet.split.layout.root === null && chatTabs.tabs.length === 0}
     />
   )
   // The conversation title — slim inline (desktop) / centered nav bar (mobile).
@@ -867,10 +896,6 @@ function ChatPage() {
   const composerPick = !onComposerPane ? null : pickedEmployee?.paneKey === paneKey ? pickedEmployee.employee : pendingEmployee
   useEffect(() => { if (!onComposerPane) setPickedEmployee(null) }, [onComposerPane])
   const headerEmployee = chatHeaderEmployee({ focusedSessionId, meta: sessionMeta, sessions: sessionsQuery.data, employees: headerEmployees, portalName, picked: composerPick })
-  const mobileWorkingSet = useMobileSessionTabs({
-    committedId, systemPrimedId, activeId: focusedSessionId, sessions: sessionsQuery.data,
-    subscribe, connectionSeq, onSelect: handleMobileWorkingSetSelect,
-  })
   const onMobileList = mobileView === 'sidebar'
   const pickerPane = gridPicker.bind(gridAdd.addPane, workingSet.add, handleSessionCreated)
   const desktopMultiPane = chatTabs.activeTab?.kind !== 'file' && !awaitingOpen && !viewport.mobile && (deriveChatGridIds({ sessionIds: gridPaneKeys, primaryPaneKey: paneKey, primarySessionId: committedId, pickerPaneKey: pickerPane?.paneKey }).length > 1 || hasTabbedGroup(workingSet.split.layout))
@@ -929,7 +954,7 @@ function ChatPage() {
             onBack={backToList}
             onNew={handleNewChat}
             moreMenu={moreMenu}
-            mobileWorkingSet={mobileWorkingSet}
+            mobileWorkingSet={mobileTabs.strip}
             copiedField={desktopMultiPane ? null : copiedField}
             hideDesktop={desktopMultiPane}
           />

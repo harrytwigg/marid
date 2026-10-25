@@ -32,7 +32,7 @@ function NavBar({ title, openedId, loaded = true }: { title: string; openedId: s
     connectionSeq: 0,
     onSelect: noop,
   })
-  return <ChatHeaderPills title={title} onNew={noop} onBack={noop} mobileWorkingSet={tabs} />
+  return <ChatHeaderPills title={title} onNew={noop} onBack={noop} mobileWorkingSet={tabs.strip} />
 }
 
 const entering = (container: HTMLElement) => container.querySelectorAll('[data-title-enter]')

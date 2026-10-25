@@ -146,6 +146,7 @@ vi.mock('@/hooks/use-chat-tabs', async (importOriginal) => {
       updateTabStatus: noop,
       closeTabBySessionId: noop,
       reconcileTabs: noop,
+      closeAllTabs: noop,
     }),
   }
 })

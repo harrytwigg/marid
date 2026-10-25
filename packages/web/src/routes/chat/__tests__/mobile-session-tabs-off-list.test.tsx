@@ -26,7 +26,7 @@ function Strip() {
     connectionSeq: 0,
     onSelect: noop,
   })
-  return <div>{tabs}</div>
+  return <div>{tabs.strip}</div>
 }
 
 const persisted = () => restoreMobileTabs(localStorage.getItem(MOBILE_TABS_STORAGE_KEY))

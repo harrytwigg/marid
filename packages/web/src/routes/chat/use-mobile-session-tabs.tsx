@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { GatewayEventListener } from '@jinn/gateway-events'
 import { splitTitleId } from '@/components/chat/chat-tabs'
-import { useMobileWorkingSetActivity } from './mobile-working-set-activity'
+import { useMobileWorkingSetActivity, type MobileWorkingSetActivity } from './mobile-working-set-activity'
 import { MobileSessionTabs } from './mobile-session-tabs'
 import { useTabSwitchSelect } from '@/components/chat/tab-switch-mark'
 import { useOffListTabSessions, type TabSession } from './use-off-list-tab-sessions'
@@ -52,6 +52,7 @@ function useTabIds({ committedId, systemPrimedId, sessions, subscribe }: {
 }) {
   const [ids, setIds] = useOpenedTabIds(committedId, systemPrimedId)
   const dropTab = useCallback((sessionId: string) => setIds((current) => closeMobileTab(current, sessionId)), [setIds])
+  const clearTabs = useCallback(() => setIds((current) => (current.length === 0 ? current : [])), [setIds])
   const listedIds = useMemo(
     () => (sessions ? new Set(sessions.map((session) => String(session.id ?? ''))) : null),
     [sessions],
@@ -64,12 +65,21 @@ function useTabIds({ committedId, systemPrimedId, sessions, subscribe }: {
     if (frame.event === 'session:deleted' && typeof payload?.sessionId === 'string') dropTab(payload.sessionId)
   }), [subscribe, dropTab])
 
-  return { ids, dropTab, offList }
+  return { ids, dropTab, clearTabs, offList }
+}
+
+/** The phone's tab strip and the close-all the page's header menu runs. */
+export interface MobileSessionTabsControls {
+  /** The strip, or `undefined` while fewer than two chats are open (the header keeps its plain title). */
+  strip: ReactNode | undefined
+  /** Closes every open tab: the stored list is emptied, so a reload does not bring them back. */
+  closeAll: () => void
 }
 
 /**
- * The phone's tab strip, or `undefined` while fewer than two chats are open so
- * the header keeps its plain centred title.
+ * The phone's tab strip (and the close-all the header menu runs). The strip is
+ * `undefined` while fewer than two chats are open, so the header keeps its plain
+ * centred title.
  */
 export function useMobileSessionTabs({
   committedId,
@@ -88,13 +98,10 @@ export function useMobileSessionTabs({
   connectionSeq: number
   onSelect: (sessionId: string) => void
 }) {
-  const { ids, dropTab, offList } = useTabIds({ committedId, systemPrimedId, sessions, subscribe })
+  const { ids, dropTab, clearTabs, offList } = useTabIds({ committedId, systemPrimedId, sessions, subscribe })
   // The focused chat always has a tab, even one nobody opened (a primed chat
   // that a deep link landed on) — it just does not persist.
-  const shownIds = useMemo(
-    () => (activeId && !ids.includes(activeId) ? [...ids, activeId] : ids),
-    [activeId, ids],
-  )
+  const shownIds = useMemo(() => (activeId && !ids.includes(activeId) ? [...ids, activeId] : ids), [activeId, ids])
   const activity = useMobileWorkingSetActivity({ sessionIds: shownIds, activeId, subscribe, connectionSeq })
 
   // Pressing a tab and closing the one in front both switch chats: neither replays an open's entrance.
@@ -106,14 +113,42 @@ export function useMobileSessionTabs({
   }, [activeId, dropTab, selectTab, shownIds])
 
   // Titles come from the session list, so until it arrives every tab would read "Chat".
-  if (!sessions || shownIds.length < 2) return undefined
+  if (!sessions || shownIds.length < 2) return { strip: undefined, closeAll: clearTabs }
+  return {
+    closeAll: clearTabs,
+    strip: (
+      <MobileSessionTabStrip
+        ids={shownIds}
+        activeId={activeId}
+        sessions={sessions}
+        offList={offList}
+        activity={activity}
+        onSelect={selectTab}
+        onClose={close}
+      />
+    ),
+  }
+}
+
+interface MobileSessionTabStripProps {
+  ids: readonly string[]
+  activeId: string | null
+  sessions: NonNullable<TabSessions>
+  offList: Record<string, TabSession>
+  activity: Record<string, MobileWorkingSetActivity>
+  onSelect: (sessionId: string) => void
+  onClose: (sessionId: string) => void
+}
+
+/** The strip itself: a tab per open chat, titled from the session list or the off-list lookup. */
+function MobileSessionTabStrip({ ids, activeId, sessions, offList, activity, onSelect, onClose }: MobileSessionTabStripProps) {
   const sessionsById = new Map(sessions.map((session) => [String(session.id ?? ''), session]))
   return (
     <MobileSessionTabs
       activeId={activeId}
-      onSelect={selectTab}
-      onClose={close}
-      tabs={shownIds.map((id) => ({
+      onSelect={onSelect}
+      onClose={onClose}
+      tabs={ids.map((id) => ({
         id,
         title: tabTitle(sessionsById.get(id) ?? offList[id]),
         moved: activity[id]?.moved ?? false,

@@ -52,6 +52,8 @@ function renderMenu(overrides: Partial<Parameters<typeof ChatHeaderMenu>[0]> = {
       onClearDebugLog={vi.fn()}
       onDeleteSession={vi.fn()}
       onOpenChatBeside={vi.fn()}
+      onCloseAllTabs={vi.fn()}
+      closeAllTabsDisabled={false}
       {...overrides}
     />,
   )
@@ -74,6 +76,23 @@ afterEach(() => {
 })
 
 describe('ChatHeaderMenu', () => {
+  it('closes every tab from the menu, and greys the item when nothing is open', () => {
+    const onCloseAllTabs = vi.fn()
+    renderMenu({ onCloseAllTabs })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Close all tabs' }))
+    expect(onCloseAllTabs).toHaveBeenCalledTimes(1)
+  })
+
+  it('disables Close all tabs when no tab is open', () => {
+    const onCloseAllTabs = vi.fn()
+    renderMenu({ onCloseAllTabs, closeAllTabsDisabled: true })
+
+    const item = screen.getByRole('menuitem', { name: 'Close all tabs' })
+    expect(item.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(item)
+    expect(onCloseAllTabs).not.toHaveBeenCalled()
+  })
+
   it('renders Pin directly above Duplicate and pins the selected session', () => {
     const onOpenChange = vi.fn()
     renderMenu({ onOpenChange })
@@ -113,7 +132,8 @@ describe('ChatHeaderMenu', () => {
 
     const labels = itemLabels()
     expect(labels.indexOf('Open beside')).toBe(labels.indexOf('CLI') + 1)
-    expect(labels.indexOf('Open beside')).toBe(labels.indexOf('Open in new tab') - 1)
+    expect(labels.indexOf('Close all tabs')).toBe(labels.indexOf('Open beside') + 1)
+    expect(labels.indexOf('Open in new tab')).toBe(labels.indexOf('Close all tabs') + 1)
     fireEvent.click(screen.getByRole('menuitem', { name: 'Open beside' }))
 
     expect(onOpenChatBeside).toHaveBeenCalledOnce()
@@ -125,7 +145,7 @@ describe('ChatHeaderMenu', () => {
     renderMenu({ onOpenChange })
 
     const labels = itemLabels()
-    expect(labels.indexOf('Open in new tab')).toBe(labels.indexOf('Open beside') + 1)
+    expect(labels.indexOf('Open in new tab')).toBe(labels.indexOf('Close all tabs') + 1)
     expect(labels.indexOf('Open in new tab')).toBe(labels.indexOf('Pin') - 1)
 
     fireEvent.click(screen.getByRole('menuitem', { name: 'Open in new tab' }))
@@ -224,6 +244,8 @@ describe('ChatHeaderMenu', () => {
           onClearDebugLog={vi.fn()}
           onDeleteSession={vi.fn()}
           onOpenChatBeside={vi.fn()}
+          onCloseAllTabs={vi.fn()}
+          closeAllTabsDisabled={false}
         />
       </div>,
     )

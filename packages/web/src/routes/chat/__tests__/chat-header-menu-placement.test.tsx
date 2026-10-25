@@ -31,6 +31,8 @@ function menu(overrides: Partial<Parameters<typeof ChatHeaderMenu>[0]>) {
       onClearDebugLog={vi.fn()}
       onDeleteSession={vi.fn()}
       onOpenChatBeside={vi.fn()}
+      onCloseAllTabs={vi.fn()}
+      closeAllTabsDisabled={false}
       {...overrides}
     />
   )
