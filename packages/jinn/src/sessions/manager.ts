@@ -42,6 +42,13 @@ export interface RouteOptions {
   model?: string;
   effortLevel?: string;
   title?: string;
+  /**
+   * Called once the session row exists and before its turn is queued. `route()`
+   * only resolves when the whole turn has finished, so a caller that needs the
+   * session recorded elsewhere WHILE it works (a Todo link, a claim) must do it
+   * here, not after `route()` returns. A throw is logged and does not stop the turn.
+   */
+  onSessionReady?: (session: Session) => void;
 }
 
 export function mergeTransportMeta(
@@ -182,6 +189,14 @@ export class SessionManager {
     }
 
     const sessionId = session.id;
+
+    if (opts.onSessionReady) {
+      try {
+        opts.onSessionReady(session);
+      } catch (hookErr) {
+        logger.warn(`onSessionReady hook for session ${sessionId} failed: ${hookErr instanceof Error ? hookErr.message : hookErr}`);
+      }
+    }
 
     await this.queue.enqueue(msg.sessionKey, () =>
       this.runSession(session!, msg, attachmentPaths, connector, target, opts.employee),

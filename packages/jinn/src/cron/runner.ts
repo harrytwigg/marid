@@ -8,6 +8,7 @@ import type { SessionManager } from "../sessions/manager.js";
 import { getSession, getSessionBySessionKey } from "../sessions/registry.js";
 import { createWorkItem, linkSession, type WorkItem } from "../work-items/store.js";
 import { reconcileWorkItem } from "../work-items/reconcile.js";
+import { claimWorkItem } from "../work-items/claims.js";
 import { notifyTodoChanged } from "../work-items/live-events.js";
 import type { GatewayEmit } from "../shared/gateway-events.js";
 import { runActionJob, type CronActionTrigger } from "./actions.js";
@@ -187,6 +188,17 @@ export async function runCronJob(
         // default and defeat resolveEffort()'s graceful skip→employee fallback.
         effortLevel: job.effortLevel,
         title: job.name,
+        // `route()` resolves only after the whole turn, so the link and claim cannot
+        // wait for it: until they exist the item reads as unstarted, and the board
+        // walk would start a second session on the same brief. Claim first, so a
+        // pickup racing the first turn is refused by the claim, not just by liveness.
+        onSessionReady: workItem
+          ? (session) => {
+              claimWorkItem({ workItemId: workItem!.id, owner: `cron:${job.id}`, sessionId: session.id });
+              linkSession(workItem!.id, session.id);
+              reconcileWorkItem(workItem!.id);
+            }
+          : undefined,
       },
     );
 
