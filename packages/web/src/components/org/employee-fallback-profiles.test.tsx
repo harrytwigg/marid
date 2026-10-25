@@ -1,0 +1,126 @@
+import { render, screen, within } from "@testing-library/react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import type { FallbackChainsResponse } from "@jinn/fallback-chain-wire"
+import type { Employee } from "@/lib/api"
+
+const registry = vi.hoisted(() => ({ current: undefined as unknown }))
+const chains = vi.hoisted(() => ({ current: undefined as unknown }))
+vi.mock("@/hooks/use-model-registry", async (importActual) => ({
+  ...(await importActual<typeof import("@/hooks/use-model-registry")>()),
+  useModelRegistry: () => ({ data: registry.current }),
+}))
+vi.mock("@/hooks/use-fallback-chains", async (importActual) => ({
+  ...(await importActual<typeof import("@/hooks/use-fallback-chains")>()),
+  useFallbackChains: () => ({ data: chains.current }),
+}))
+
+import { EmployeeFallbackField } from "./employee-fallback-field"
+import { chainBlocked, declaredAccountOf, employeeDestination, profileLabels, profilesForEmployee } from "./employee-fallback"
+
+/* Which declared accounts an employee's chain may name: a remote employee's are the remote accounts on
+ * its own user@host, a local employee's the local ones, and its own account is found the same way. */
+
+const model = (id: string) => ({ id, label: id, supportsEffort: false, effortLevels: [] })
+const entry = (name: string) => ({ name, available: true, defaultModel: "m", effortMechanism: "none", models: [model("m")] })
+
+const CHAINS: FallbackChainsResponse = {
+  profiles: [
+    { name: "work", account: "claude:k1", configDir: "/home/me/.claude-b" },
+    { name: "spare", account: "claude@me@build-host:k2", configDir: "/home/me/.claude-b", remote: { host: "build-host", destination: "me@build-host" } },
+    { name: "bare", account: "claude@build-host:k3", configDir: "/home/me/.claude-c", remote: { host: "build-host", destination: "build-host" } },
+    { name: "elsewhere", account: "claude@me@other-host:k4", configDir: "/home/me/.claude-d", remote: { host: "other-host", destination: "me@other-host" } },
+  ],
+  subjects: [],
+}
+
+const LOCAL: Employee = {
+  name: "writer", displayName: "Writer", department: "content", rank: "employee",
+  engine: "claude", model: "sonnet", persona: "p", claudeProfile: { path: "/home/me/.claude-b", key: "k1" },
+}
+const REMOTE: Employee = {
+  ...LOCAL, name: "builder", displayName: "Builder", claudeProfile: null,
+  remoteHost: "build-host", remoteUser: "me", remoteClaudeConfigDir: "/home/me/.claude-b",
+}
+
+beforeEach(() => {
+  registry.current = { default: "claude", engines: { claude: entry("claude"), codex: entry("codex") } }
+  chains.current = CHAINS
+})
+
+describe("profilesForEmployee", () => {
+  it("gives a local employee only the local accounts", () => {
+    expect(profilesForEmployee(LOCAL, CHAINS).map((p) => p.name)).toEqual(["work"])
+  })
+
+  it("gives a remote employee only the remote accounts on its own user@host", () => {
+    expect(profilesForEmployee(REMOTE, CHAINS).map((p) => p.name)).toEqual(["spare"])
+  })
+
+  it("matches an employee with no user on the bare host, and never across users", () => {
+    expect(profilesForEmployee({ ...REMOTE, remoteUser: undefined }, CHAINS).map((p) => p.name)).toEqual(["bare"])
+    expect(profilesForEmployee({ ...REMOTE, remoteUser: "you" }, CHAINS)).toEqual([])
+  })
+
+  it("names the destination for the host, and none for a local employee", () => {
+    expect(employeeDestination(REMOTE)).toBe("me@build-host")
+    expect(employeeDestination(LOCAL)).toBeUndefined()
+  })
+
+  it("labels a remote account with its destination and leaves a local one as its name", () => {
+    expect(profileLabels(CHAINS.profiles)).toEqual({
+      spare: "spare (me@build-host)", bare: "bare (build-host)", elsewhere: "elsewhere (me@other-host)",
+    })
+  })
+})
+
+describe("declaredAccountOf", () => {
+  it("finds a local employee's account by directory among the local accounts only", () => {
+    // The remote account has the same path; it is on another machine and is not this profile.
+    expect(declaredAccountOf(LOCAL, CHAINS)).toBe("work")
+    expect(declaredAccountOf(LOCAL, { ...CHAINS, profiles: CHAINS.profiles.slice(1) })).toBeUndefined()
+  })
+
+  it("finds a remote employee's account by destination and directory", () => {
+    expect(declaredAccountOf(REMOTE, CHAINS)).toBe("spare")
+    expect(declaredAccountOf({ ...REMOTE, remoteClaudeConfigDir: "/home/me/.claude-b/" }, CHAINS)).toBe("spare")
+  })
+
+  it("finds none for a remote employee that names no directory, or one that is not a declared account", () => {
+    expect(declaredAccountOf({ ...REMOTE, remoteClaudeConfigDir: undefined }, CHAINS)).toBeUndefined()
+    expect(declaredAccountOf({ ...REMOTE, remoteClaudeConfigDir: "/home/me/.claude-z" }, CHAINS)).toBeUndefined()
+    expect(declaredAccountOf({ ...REMOTE, remoteHost: "other-host" }, CHAINS)).toBeUndefined()
+  })
+})
+
+describe("the chain editor for a remote employee", () => {
+  it("offers the default profile and its own host's accounts, labelled with the host", () => {
+    render(<EmployeeFallbackField employee={REMOTE} engine="claude" value={[{ engine: "claude" }]} onChange={() => {}} />)
+
+    const profile = screen.getByRole("combobox", { name: "Profile of link 1 of the Builder chain" })
+    expect(within(profile).getAllByRole("option").map((o) => o.textContent)).toEqual(["Default profile", "spare (me@build-host)"])
+  })
+
+  it("offers a local employee only its local accounts", () => {
+    render(<EmployeeFallbackField employee={LOCAL} engine="claude" value={[{ engine: "claude" }]} onChange={() => {}} />)
+
+    const profile = screen.getByRole("combobox", { name: "Profile of link 1 of the Writer chain" })
+    expect(within(profile).getAllByRole("option").map((o) => o.textContent)).toEqual(["Default profile", "work"])
+  })
+
+  it("holds a save whose chain names a local profile, and lets one that names its own host's account through", () => {
+    const registryValue = registry.current as never
+    const own = (links: { engine: string; profile?: string }[]) => ({ links, expanded: links.map(() => false), legacy: false })
+    const profiles = profilesForEmployee(REMOTE, CHAINS).map((p) => p.name)
+    expect(chainBlocked(registryValue, own([{ engine: "claude", profile: "work" }]), [], profiles, true)).toBe(true)
+    expect(chainBlocked(registryValue, own([{ engine: "claude", profile: "elsewhere" }]), [], profiles, true)).toBe(true)
+    expect(chainBlocked(registryValue, own([{ engine: "claude", profile: "spare" }]), [], profiles, true)).toBe(false)
+  })
+
+  it("keeps a remote employee's own declared account out of its own chain, with or without the profile", () => {
+    // spare is this employee's own login: a chain naming it, spelled either way, is its own target.
+    const registryValue = registry.current as never
+    const own = (links: { engine: string; profile?: string }[]) => ({ links, expanded: links.map(() => false), legacy: false })
+    const selves = [{ engine: "claude", profile: "spare", model: "sonnet" }, { engine: "claude", profile: "spare" }, { engine: "claude" }, { engine: "claude", model: "sonnet" }]
+    expect(chainBlocked(registryValue, own([{ engine: "claude", profile: "spare" }]), selves, ["spare"], true)).toBe(true)
+  })
+})

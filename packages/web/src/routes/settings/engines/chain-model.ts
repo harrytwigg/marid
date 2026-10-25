@@ -22,7 +22,11 @@ export interface EngineSettings {
 
 /** A declared Claude account under `engines.claude.accounts`. */
 export interface AccountSettings {
+  /** A directory on the gateway, or on `remoteHost` when that is set. */
   configDir?: string
+  /** Set: the account is a login on that host, with no chain of its own (a remote employee's `fallback` names it). */
+  remoteHost?: string
+  remoteUser?: string
   fallback?: FallbackChainEntry[]
   [key: string]: unknown
 }
@@ -54,9 +58,37 @@ export function accountEntriesFor(engines: EnginesConfig | undefined, account: s
   return engines?.claude?.accounts?.[account]?.fallback ?? []
 }
 
-/** The declared Claude account names, in the order config.yaml states them. */
+/** A declared Claude account on another host. */
+export interface RemoteAccount {
+  name: string
+  /** `user@host`, or the bare host with no user: what a remote employee's own destination is matched against. */
+  destination: string
+  /** The profile directory on that host. */
+  configDir: string
+}
+
+function remoteHostOf(settings: AccountSettings | undefined): string {
+  return typeof settings?.remoteHost === "string" ? settings.remoteHost.trim() : ""
+}
+
+/** The declared LOCAL Claude account names, in the order config.yaml states them: the ones that have a chain, and the ones an engine or account chain is offered. */
 export function accountNames(engines: EnginesConfig | undefined): string[] {
+  return Object.entries(engines?.claude?.accounts ?? {}).filter(([, settings]) => !remoteHostOf(settings)).map(([name]) => name)
+}
+
+/** Every declared account name, local and remote: what a stored chain's `profile` is checked against (the gateway accepts a remote account in any chain and passes it over where it cannot run). */
+export function allAccountNames(engines: EnginesConfig | undefined): string[] {
   return Object.keys(engines?.claude?.accounts ?? {})
+}
+
+/** The declared accounts on other hosts, in the order config.yaml states them. */
+export function remoteAccounts(engines: EnginesConfig | undefined): RemoteAccount[] {
+  return Object.entries(engines?.claude?.accounts ?? {}).flatMap(([name, settings]) => {
+    const host = remoteHostOf(settings)
+    if (!host) return []
+    const user = typeof settings.remoteUser === "string" ? settings.remoteUser.trim() : ""
+    return [{ name, destination: user ? `${user}@${host}` : host, configDir: settings.configDir ?? "" }]
+  })
 }
 
 /**

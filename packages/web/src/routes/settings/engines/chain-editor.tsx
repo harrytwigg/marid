@@ -101,7 +101,7 @@ export function ChainEditor(props: ChainEditorProps) {
   const { chainName, ownEngine, self, where, links, expanded, fields, waitsAs, serverProblems = [], onChange } = props
   const moves = useChainMoves(links, onChange)
   const { drag, listRef, liftPointerDown, reducedMotion } = useChainDrag(moves.move)
-  const ctx: ChainContext = { engines: Object.values(fields.registry.engines), profiles: fields.profiles }
+  const ctx: ChainContext = { engines: Object.values(fields.registry.engines), profiles: fields.knownProfiles ?? fields.profiles }
   const selves = selfSpellings(self)
   const problems = rowProblemsAgainst(where, links, ctx, selves)
   const rowFields: RowFields = { ...fields, ownEngine, chainName }

@@ -1,6 +1,6 @@
 import type { EngineRegistryEntry } from "@/lib/api"
 import { ChainBody, type ChainBodyProps } from "./chain-body"
-import { classifyEngineHealth, type EngineHealthTone } from "./chain-model"
+import { classifyEngineHealth, type EngineHealthTone, type RemoteAccount } from "./chain-model"
 import { engineDisplayName } from "@/lib/engine-names"
 import { ModelMapEditor } from "./model-map-editor"
 import type { ModelMapPair, ServedModels } from "./model-map-model"
@@ -72,6 +72,24 @@ export function EngineCard({ entry, body, map }: {
           onChange={map.onChange}
         />
       )}
+    </div>
+  )
+}
+
+/** A declared Claude account on another host: no chain and no model map here, since a remote
+ *  account has none of its own; the chain is written on each remote employee that falls back to it. */
+export function RemoteAccountCard({ account }: { account: RemoteAccount }) {
+  return (
+    <div data-account-card={account.name} data-remote-account className="rounded-[var(--radius-lg)] bg-[var(--fill-quaternary)] p-[var(--space-3)]">
+      <div className="flex items-baseline justify-between gap-[var(--space-3)]">
+        <span className="min-w-0 truncate text-[length:var(--text-subheadline)] font-[var(--weight-medium)] text-[var(--text-primary)]">
+          {account.name}
+        </span>
+        <span className="shrink-0 text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">Claude account</span>
+      </div>
+      <p className="mt-[var(--space-1)] text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">
+        Remote account on {account.destination} · {account.configDir}. Its chain is written on each employee's fallback.
+      </p>
     </div>
   )
 }

@@ -92,8 +92,8 @@ function ChainChoice({ custom, ready, inherited, onChange }: {
 export function EmployeeFallbackField({ employee, engine, model, value, onChange, onBlockedChange }: EmployeeFallbackFieldProps) {
   const { data: registry } = useModelRegistry()
   const { data: chains } = useFallbackChains(employee.name)
-  const { inherited, self, selves, shown, own, subject, changed } = fallbackFieldState(employee, engine, value, chains, model)
-  const blocked = chainBlocked(registry, own, selves, chains, changed)
+  const { inherited, self, selves, shown, own, subject, changed, profiles, profileLabels } = fallbackFieldState(employee, engine, value, chains, model)
+  const blocked = chainBlocked(registry, own, selves, profiles, changed)
   useEffect(() => { onBlockedChange?.(blocked) }, [blocked, onBlockedChange])
   if (!registry) return null
 
@@ -112,7 +112,7 @@ export function EmployeeFallbackField({ employee, engine, model, value, onChange
             where="fallback"
             links={own.links}
             expanded={own.expanded}
-            fields={{ registry, profiles: chains?.profiles.map((p) => p.name) ?? [] }}
+            fields={{ registry, profiles, profileLabels }}
             waitsAs={engineDisplayName(engine)}
             // The gateway's own sentences about the stored chain, only while it is the stored chain: once edited they describe what was.
             serverProblems={changed ? [] : subjectProblems(subject)}

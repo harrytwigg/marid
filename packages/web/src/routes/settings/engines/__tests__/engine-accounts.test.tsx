@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type React from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -135,6 +135,54 @@ describe('Claude accounts', () => {
     expect(sent.engines.claude.accounts.spare.fallback).toEqual([{ engine: 'claude' }])
     expect(sent.engines.claude.accounts.work.fallback).toEqual([{ engine: 'opencode', model: 'x/two' }])
     expect(sent.engines.claude.fallback).toBeUndefined()
+  })
+})
+
+describe('Remote Claude accounts', () => {
+  beforeEach(() => {
+    loadConfig({ engines: {
+      claude: {
+        fallback: [{ engine: 'claude', profile: 'spare' }],
+        accounts: {
+          work: { configDir: '/w' },
+          spare: { remoteHost: 'build-host', remoteUser: 'me', configDir: '/home/me/.claude-b' },
+          bare: { remoteHost: 'build-host', configDir: '/home/me/.claude-c' },
+        },
+      },
+    } })
+  })
+
+  it('shows a remote account as a card of one line, with no chain editor and no model map', async () => {
+    await renderSettings()
+
+    const card = document.querySelector('[data-account-card="spare"]')!
+    expect(card.textContent).toContain("Remote account on me@build-host · /home/me/.claude-b. Its chain is written on each employee's fallback.")
+    expect(card.querySelector('[data-chain-row]')).toBeNull()
+    expect(within(card as HTMLElement).queryByRole('button')).toBeNull()
+    expect(document.querySelector('[data-account-card="bare"]')!.textContent).toContain('Remote account on build-host · /home/me/.claude-c.')
+    // The local account keeps its chain card.
+    expect(document.querySelector('[data-account-card="work"] [data-chain-row]')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Add a target to the Claude · work chain' })).toBeTruthy()
+  })
+
+  it('keeps the cards in the order config.yaml states the accounts', async () => {
+    await renderSettings()
+
+    expect(Array.from(document.querySelectorAll('[data-account-card]')).map((card) => card.getAttribute('data-account-card'))).toEqual(['work', 'spare', 'bare'])
+  })
+
+  it('does not offer a remote account to an engine or account chain', async () => {
+    await renderSettings()
+
+    const profile = screen.getByRole('combobox', { name: 'Profile of link 1 of the Claude chain' })
+    expect(within(profile).getAllByRole('option').map((o) => o.textContent)).toEqual(['Default profile', 'work'])
+  })
+
+  it('does not flag a remote account already written in a chain as unknown', async () => {
+    await renderSettings()
+
+    expect(document.body.textContent).not.toContain('names no account')
+    expect(chainRows('[data-engine-card="claude"]')).toEqual(['claude · spare'])
   })
 })
 

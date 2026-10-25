@@ -18,7 +18,7 @@ import { remoteClaudeAccountKey } from "../engine-account.js";
 import { claudeAccountsFor } from "../engine-limits-accounts.js";
 import { latestLimitReadings } from "../fallback-chain-limits.js";
 import { linkAccount, sessionFallbackChain } from "../fallback-chain.js";
-import { employeeSubject } from "../fallback-chain-subjects.js";
+import { employeeSubject, fallbackProfiles } from "../fallback-chain-subjects.js";
 import type { ModelRegistry, Employee, JinnConfig } from "../types.js";
 
 /**
@@ -206,6 +206,19 @@ describe("an employee's chain at load", () => {
     const loaded = loadEmployeeFallback([{ engine: "claude", profile: "local" }], { ...remoteEmployee() }, configWith({}), "dev.yaml");
     expect(loaded.fallback).toBeUndefined();
     expect(loaded.problems?.[0]).toContain("is a local profile");
+  });
+});
+
+describe("the profiles the editor offers", () => {
+  it("lists a declared remote account after the local ones, marked with the host it is on", () => {
+    expect(fallbackProfiles(configWith({}))).toEqual([
+      { name: "local", account: expect.stringMatching(/^claude:/), configDir: LOCAL_DIR },
+      { name: "spare", account: SPARE_KEY, configDir: REMOTE_DIR, remote: { host: "build-host", destination: "me@build-host" } },
+    ]);
+  });
+
+  it("leaves the remote key off a local profile", () => {
+    expect(fallbackProfiles(configWith({}))[0]).not.toHaveProperty("remote");
   });
 });
 

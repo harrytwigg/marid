@@ -135,7 +135,11 @@ export interface SessionFallbackChainView {
 export interface FallbackProfileOption {
   name: string;
   account: string;
+  /** The profile directory: on the gateway, or on `remote.host` when that is set. */
   configDir: string;
+  /** Set for an account declared on another host (`remoteHost`): only a remote employee on the same
+   *  `destination` (`user@host`, or the bare host with no user) can fall back to it. Absent: a local profile. */
+  remote?: { host: string; destination: string };
 }
 
 /** One editable chain: an engine default, a declared account's, or an employee's. */

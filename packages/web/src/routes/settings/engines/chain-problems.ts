@@ -3,7 +3,7 @@ import {
   type FallbackChainContext,
   type FallbackLink,
 } from "@jinn/fallback-chain-wire"
-import { accountEntriesFor, accountNames, chainEntriesFor, type EnginesConfig } from "./chain-model"
+import { accountEntriesFor, accountNames, allAccountNames, chainEntriesFor, type EnginesConfig } from "./chain-model"
 import type { ChainContext } from "./chain-links"
 
 /* Chain validation on the client. The sentences are the wire module's own, so a
@@ -69,7 +69,7 @@ export function chainSaveBlocker(
 ): string | null {
   const names = Object.keys(registry ?? {})
   if (names.length === 0) return null
-  const ctx = { engines: names, profiles: new Set(accountNames(engines)) }
+  const ctx = { engines: names, profiles: new Set(allAccountNames(engines)) }
   const before = new Map(chainsOf(loaded, names).map(({ where, chain }) => [where, JSON.stringify(chain)]))
   const problems = chainsOf(engines, names)
     // A chain this edit did not change is the gateway's to report, not a reason to refuse an unrelated save.

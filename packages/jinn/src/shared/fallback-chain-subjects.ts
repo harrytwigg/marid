@@ -1,4 +1,4 @@
-import { declaredAccountByKey, declaredClaudeAccounts, type DeclaredClaudeAccount } from "./claude-accounts-config.js";
+import { declaredAccountByKey, declaredClaudeAccounts, declaredRemoteClaudeAccounts, type DeclaredClaudeAccount } from "./claude-accounts-config.js";
 import { accountForEmployee } from "./engine-account.js";
 import { employeeOwnLink } from "./employee-fallback.js";
 import type { FallbackExpansionMode } from "./fallback-chain-expand.js";
@@ -27,9 +27,14 @@ function defaultModel(config: JinnConfig, registry: ModelRegistry, engine: strin
   return section?.model ?? registry[engine]?.defaultModel ?? undefined;
 }
 
-/** The declared accounts a chain may name, as the editor's profile picker lists them. */
+/** The declared accounts a chain may name, as the editor's profile picker lists them: the local ones, then those on other hosts (marked `remote`). */
 export function fallbackProfiles(config: JinnConfig): FallbackProfileOption[] {
-  return declaredClaudeAccounts(config).map((account) => ({ name: account.name, account: account.key, configDir: account.profile.dir }));
+  return [
+    ...declaredClaudeAccounts(config).map((account) => ({ name: account.name, account: account.key, configDir: account.profile.dir })),
+    ...declaredRemoteClaudeAccounts(config).map((account) => ({
+      name: account.name, account: account.key, configDir: account.configDir, remote: { host: account.remoteHost, destination: account.destination },
+    })),
+  ];
 }
 
 function subjectOf(
