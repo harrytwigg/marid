@@ -4,7 +4,7 @@ import { Plus } from "@/components/ui/icon"
 import { Button } from "@/components/ui/button"
 import { engineDisplayName } from "@/lib/engine-names"
 import { blankLink, moveLink, removeLink, replaceLink, selfSpellings, type ChainContext } from "./chain-links"
-import { rowProblemsAgainst } from "./chain-problems"
+import { rowProblemsWithHost, type HostProblem } from "./chain-problems"
 import { ChainRow, type RowFields } from "./chain-row"
 import { rowShift, useChainDrag } from "./use-chain-drag"
 import { useRowIds } from "./use-row-ids"
@@ -29,6 +29,8 @@ export interface ChainEditorProps {
   waitsAs: string
   /** The gateway's own sentences about this chain; those the editor does not already show are added. */
   serverProblems?: string[]
+  /** Why a declared account is the wrong side for this chain's employee, in the gateway's words; the validator alone calls such a name unknown. */
+  hostProblem?: HostProblem
   onChange: (links: FallbackLink[]) => void
 }
 
@@ -98,12 +100,12 @@ function useChainMoves(links: FallbackLink[], onChange: (links: FallbackLink[]) 
 /** The ordered chain: engine, profile and model per link; drag a row by its grip,
  *  or move it with the buttons a keyboard reaches. A problem shows under its row. */
 export function ChainEditor(props: ChainEditorProps) {
-  const { chainName, ownEngine, self, where, links, expanded, fields, waitsAs, serverProblems = [], onChange } = props
+  const { chainName, ownEngine, self, where, links, expanded, fields, waitsAs, serverProblems = [], hostProblem, onChange } = props
   const moves = useChainMoves(links, onChange)
   const { drag, listRef, liftPointerDown, reducedMotion } = useChainDrag(moves.move)
   const ctx: ChainContext = { engines: Object.values(fields.registry.engines), profiles: fields.knownProfiles ?? fields.profiles }
   const selves = selfSpellings(self)
-  const problems = rowProblemsAgainst(where, links, ctx, selves)
+  const problems = rowProblemsWithHost(where, links, ctx, selves, hostProblem)
   const rowFields: RowFields = { ...fields, ownEngine, chainName }
 
   return (
