@@ -131,7 +131,7 @@ function PaneTitleActions({ title, session, onClose, sessionActions, onRenamed, 
   const status = getStatusDot(session, new Set([session.id]), false, stallNow)
   return (
     <>
-    <PaneCloseAll active={active} hasStrip={hasStrip} />
+      <PaneCloseAll active={active} hasStrip={hasStrip} />
       <span data-testid="chat-pane-title-actions" className="group/title-actions relative flex h-full w-[52px] shrink-0 items-center justify-end">
         {sessionActions ? (
           <ChatPaneSessionMenu

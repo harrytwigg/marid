@@ -864,7 +864,7 @@ function ChatPage() {
     subscribe, connectionSeq, onSelect: handleMobileWorkingSetSelect, onCloseAll: closeAllWorkspace,
   })
 
-  /** The deskop bars' close-all: the reset above, plus the phone's strip, which is written from
+  /** The desktop bars' close-all: the reset above, plus the phone's strip, which is written from
    *  the desktop too and would otherwise bring tabs back on the next phone visit. */
   const handleCloseAllTabs = useCallback(() => {
     mobileTabs.closeAll()

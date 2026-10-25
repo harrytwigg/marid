@@ -68,7 +68,7 @@ function useTabIds({ committedId, systemPrimedId, sessions, subscribe }: {
   return { ids, dropTab, clearTabs, offList }
 }
 
-/** The phone's tab strip and the close-all the page's header menu runs. */
+/** The phone's tab strip, which carries its own close-all. */
 export interface MobileSessionTabsControls {
   /** The strip, or `undefined` while fewer than two chats are open (the header keeps its plain title). */
   strip: ReactNode | undefined

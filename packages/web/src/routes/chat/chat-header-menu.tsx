@@ -105,8 +105,8 @@ export function ChatHeaderMenu(props: ChatHeaderMenuProps) {
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className={SESSION_MENU_CONTENT_CLASS}>
-        {/* PRIMARY group — Search (⌘K), the Chat/CLI view toggle, Open beside, then Open in new
-            tab, Pin and Duplicate (only when a session is selected). */}
+        {/* PRIMARY group — Search (⌘K), the Chat/CLI view toggle, Open beside, then Open in
+            new tab, Pin and Duplicate (only when a session is selected). */}
         {/* D4: Search lives at the very top — the only visible ⌘K entry point on desktop. */}
         <DropdownMenuItem className={SESSION_MENU_ITEM_CLASS} onClick={props.openGlobalSearch}>
           <Search aria-hidden />

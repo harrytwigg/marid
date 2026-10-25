@@ -22,6 +22,23 @@ function stored(key: string): Record<string, unknown> {
 const sessionPanes = () => document.querySelectorAll('[data-chat-pane-session]:not([data-chat-pane-session="new"])')
 const composerPane = () => document.querySelector('[data-chat-pane-session="new"]')
 
+/** The phone's strip store, which is written from the desktop too. */
+function storedMobileTabs(): string[] {
+  const raw = localStorage.getItem(MOBILE_TABS_STORAGE_KEY)
+  return raw ? (JSON.parse(raw) as { sessionIds: string[] }).sessionIds : []
+}
+
+/** The pane tree a reload restores: one group per entry, the `focused` one in front. */
+function seedLayout(groups: string[][], focused = 0) {
+  const children = groups.map((tabs, index) => ({ type: 'group', id: `g${index + 1}`, tabs, activeTab: tabs[0] }))
+  const root = children.length === 1
+    ? children[0]
+    : { type: 'split', id: 's1', direction: 'row', children, sizes: children.map(() => 1 / children.length) }
+  localStorage.setItem(SPLIT_LAYOUT_STORAGE_KEY, JSON.stringify({
+    version: 1, auto: false, focusedGroupId: `g${focused + 1}`, focusHistory: groups.flat(), nextId: 9, root,
+  }))
+}
+
 /**
  * Presses the close-all the tab bars carry. Exactly one is on screen at a time: the focused pane's
  * strip when it shows tabs, that pane's title bar when it shows one, and the phone's strip.
@@ -51,12 +68,16 @@ describe('closing every tab from the tab bar', () => {
     renderRoute()
 
     await waitFor(() => expect(document.querySelectorAll('[data-chat-pane-session]')).toHaveLength(4))
+    // Opening chats writes the phone's strip store from the desktop too, so there is something here
+    // to clear: a desktop close-all that skipped it would put tabs back on the next phone visit.
+    expect(storedMobileTabs().length).toBeGreaterThan(0)
 
     await pressCloseAll()
 
     await waitFor(() => expect(sessionPanes()).toHaveLength(0))
     expect(composerPane()).not.toBeNull()
     expect(screen.getByTestId('route-location').textContent).toBe('/')
+    expect(storedMobileTabs()).toEqual([])
     // What a reload hydrates from: no panes, nobody to reopen.
     expect(stored(SPLIT_LAYOUT_STORAGE_KEY).root).toBeNull()
     expect(stored(WORKING_SET_STORAGE_KEY).sessionIds).toEqual([])
@@ -156,6 +177,48 @@ describe('closing every tab from the tab bar', () => {
     const buttons = document.querySelectorAll('[data-close-all-tabs]')
     expect(buttons).toHaveLength(1)
     expect(buttons[0].closest('[data-chat-pane-titlebar="true"]')).not.toBeNull()
+  })
+
+  it('closes every tab from the strip when one pane is holding them all', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1440 })
+    Object.defineProperty(window, 'innerHeight', { configurable: true, writable: true, value: 900 })
+    seedLayout([['a', 'b']])
+    renderRoute('/?session=a')
+    await waitFor(() => expect(document.querySelector('[data-testid="pane-tab-strip"]')).not.toBeNull())
+
+    // The button is a sibling of the tablist, at the end of the bar, not a tab inside it.
+    const buttons = document.querySelectorAll('[data-close-all-tabs]')
+    expect(buttons).toHaveLength(1)
+    expect(buttons[0].closest('[data-testid="pane-tab-strip"]')).toBeNull()
+    expect(buttons[0].parentElement!.querySelector('[data-testid="pane-tab-strip"]')).not.toBeNull()
+
+    await pressCloseAll()
+    await waitFor(() => expect(sessionPanes()).toHaveLength(0))
+    expect(composerPane()).not.toBeNull()
+    expect(stored(SPLIT_LAYOUT_STORAGE_KEY).root).toBeNull()
+  })
+
+  it('carries the close in a document pane\'s bar when that pane has focus', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1440 })
+    Object.defineProperty(window, 'innerHeight', { configurable: true, writable: true, value: 900 })
+    // A chat beside a file opened into a pane of its own: the chat's bar is not the focused one and
+    // draws no strip, and the document's pane draws a title bar instead. Focusing it is the click a
+    // person makes on a document's pane.
+    seedLayout([['a'], ['file:path=README.md']])
+    renderRoute('/?session=a')
+    await waitFor(() => expect(document.querySelector('[data-testid="doc-pane-title"]')).not.toBeNull())
+    fireEvent.click(document.querySelector('[data-testid="file-pane"]')!)
+    await waitFor(() => expect(document.querySelector('[data-testid="doc-pane-title"]')?.closest('[data-doc-pane-active="true"]')).not.toBeNull())
+
+    const buttons = document.querySelectorAll('[data-close-all-tabs]')
+    expect(buttons).toHaveLength(1)
+    expect(buttons[0].closest('[data-testid="doc-pane-title"]')).not.toBeNull()
+
+    await pressCloseAll()
+    await waitFor(() => expect(sessionPanes()).toHaveLength(0))
+    expect(document.querySelector('[data-testid="doc-pane-title"]')).toBeNull()
+    expect(screen.getByTestId('route-location').textContent).toBe('/')
+    expect(stored(SPLIT_LAYOUT_STORAGE_KEY).root).toBeNull()
   })
 
   it('asks the open-chats list to clear itself, which is what empties jinn-chat-tabs', async () => {
