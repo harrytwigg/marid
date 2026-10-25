@@ -18,6 +18,7 @@ import { useSubagentView } from '@/components/chat/use-subagent-view'
 import { TerminalWaitStatus } from '@/components/chat/terminal-wait-status'
 import { FallbackModeChip } from './fallback-mode-chip'
 import { parseFallbackView, servedByInfoLine } from './fallback-mode-model'
+import { newChatFallbackParams, useNewChatFallback } from './use-new-chat-fallback'
 import { ModelSelectorRow, type SelectorValue } from '@/components/chat/model-selector-row'
 import { useLiveSession } from '@/hooks/use-live-session'
 import { useStaleChatNotice, type FreshChatSourceSession } from '@/components/chat/use-stale-chat-notice'
@@ -234,6 +235,15 @@ export function ChatPane({
     }
     previousSessionIdForSelectorRef.current = sessionId
   }, [sessionId])
+  // New chat only: the fallback the operator chose, sent with the create request.
+  const newChatFallback = useNewChatFallback({
+    active: !sessionId,
+    engine: selector.engine,
+    model: selector.model,
+    employee: selectedEmployee ?? undefined,
+  })
+  const newChatFallbackRef = useRef(newChatFallback.choice)
+  newChatFallbackRef.current = newChatFallback.choice
   const [effortPendingNote, setEffortPendingNote] = useState(false)
   const [selectorError, setSelectorError] = useState<string | null>(null)
   const cliTerminalRef = useRef<CliTerminalHandle | null>(null)
@@ -357,6 +367,7 @@ export function ChatPane({
             effortLevel: selector.effortLevel,
             speech,
           })
+          Object.assign(params, newChatFallbackParams(newChatFallbackRef.current))
           if (viewMode === 'cli' && (!selector.engine || engineRegistry?.engines?.[selector.engine]?.supportsPty)) (params as Record<string, unknown>).mode = 'interactive'
           const session = (await api.createSession(params)) as Record<string, unknown>
           if (shouldPersistNewSessionSelector({ selectedEmployee, manuallyChanged: newSessionSelectorDirtyRef.current })) {
@@ -590,14 +601,13 @@ export function ChatPane({
             disabled={loading}
             contextTokens={liveContextTokens ?? (currentSession?.lastContextTokens as number | null | undefined) ?? undefined}
           />
-          {sessionId ? (
-            <FallbackModeChip
-              sessionId={sessionId}
-              view={parseFallbackView(currentSession?.fallback)}
-              subscribe={subscribe}
-              disabled={loading}
-            />
-          ) : null}
+          {/* Never locked by a running turn: a change reaches the gateway at once and applies from the next usage limit. */}
+          <FallbackModeChip
+            sessionId={sessionId ?? NEW_CHAT_FALLBACK_KEY}
+            view={sessionId ? parseFallbackView(currentSession?.fallback) : newChatFallback.view}
+            subscribe={sessionId ? subscribe : undefined}
+            save={sessionId ? undefined : newChatFallback.save}
+          />
           </>
         }
         sessionStatusSlot={sessionId ? (
@@ -628,6 +638,9 @@ export function ChatPane({
     </div>
   )
 }
+
+/** Stands in for a session id while the chip edits the chat that is not started yet. */
+const NEW_CHAT_FALLBACK_KEY = 'new-chat'
 
 /** The pane below its title bar, and the chat inside it: a file shown over the chat covers exactly this. */
 const PANE_REGION = { position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' } as const

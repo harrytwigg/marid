@@ -3,7 +3,7 @@ import type { JinnConfig, Session } from "../shared/types.js";
 import { createSession, getSession, insertMessage, updateSession, enqueueQueueItem } from "../sessions/registry.js";
 import { validateNewSessionSelection } from "../sessions/session-patch.js";
 import { childFallbackMode } from "../sessions/session-fallback.js";
-import { childFallbackTarget } from "../sessions/fallback-target.js";
+import { childFallbackTarget, fallbackTargetRefusal, parseFallbackTargetPatch, prospectiveSession } from "../sessions/fallback-target.js";
 import type { StoredFallbackTarget } from "../shared/session-fallback-config.js";
 import type { SessionFallbackMode } from "../shared/session-fallback-config.js";
 import { parseFallbackModeParam } from "./session-fallback-api.js";
@@ -42,6 +42,8 @@ export interface SpawnSessionInput {
   effortLevel?: unknown;
   /** Usage-limit mode for the new session (shared/session-fallback-config.ts); default: inherited from the parent. */
   fallbackMode?: unknown;
+  /** The engine and model this session falls back to at a usage limit (`{ engine, model }`); default: the parent's when it passes its fallback on, else the config's chain. */
+  fallbackTarget?: unknown;
   parentSessionId?: string;
   promptExcerpt?: string;
   userId?: string;
@@ -89,12 +91,30 @@ function resolveFallbackMode(
   return { ok: true, mode: childFallbackMode(config, parent, param.mode) };
 }
 
-/** What a spawn stores for fallback: its mode, and the parent's target when the parent passes its fallback on. */
+/**
+ * The target a spawn names for itself, or why it cannot have it. It is checked against the session it will be
+ * (its employee's scope and host) with the same filters PUT applies, so a refusal reads the same either way.
+ */
+function resolveFallbackTarget(
+  config: JinnConfig, input: SpawnSessionInput, employee: string | null, engineName: string, model: string | undefined,
+): { ok: true; target: StoredFallbackTarget | undefined } | { ok: false; error: string } {
+  const parsed = parseFallbackTargetPatch(input.fallbackTarget);
+  if (!parsed.ok) return parsed;
+  if (!parsed.target) return { ok: true, target: undefined };
+  const prospective = prospectiveSession(config, { engine: engineName, model, employee });
+  const refusal = fallbackTargetRefusal(config, prospective.session, prospective.employee, parsed.target);
+  return refusal ? { ok: false, error: `fallbackTarget refused: ${refusal}` } : { ok: true, target: parsed.target };
+}
+
+/** What a spawn stores for fallback: its mode, and its target: the one it named, else the parent's when the parent passes its fallback on. */
 function storedFallback(
-  config: JinnConfig, input: SpawnSessionInput, employee: string | null, mode: SessionFallbackMode | undefined,
-): { fallbackMode: SessionFallbackMode | undefined; fallbackTarget: StoredFallbackTarget | undefined } {
+  config: JinnConfig, input: SpawnSessionInput, employee: string | null, selection: { engineName: string; model?: string; fallbackMode?: SessionFallbackMode },
+): { ok: true; stored: { fallbackMode: SessionFallbackMode | undefined; fallbackTarget: StoredFallbackTarget | undefined } } | { ok: false; error: string } {
+  const own = resolveFallbackTarget(config, input, employee, selection.engineName, selection.model);
+  if (!own.ok) return own;
   const parent = input.parentSessionId ? getSession(input.parentSessionId) : undefined;
-  return { fallbackMode: mode, fallbackTarget: childFallbackTarget(config, parent, mode, { employee }) };
+  const mode = selection.fallbackMode;
+  return { ok: true, stored: { fallbackMode: mode, fallbackTarget: own.target ?? childFallbackTarget(config, parent, mode, { employee }) } };
 }
 
 async function resolveSelection(
@@ -192,6 +212,17 @@ function startFirstTurn(
   return { ok: true, session, dispatched: true };
 }
 
+/**
+ * First-message attachments were uploaded before the session existed (FILES_DIR).
+ * Re-home them under uploads/<date>/<sessionId>/ now that we have an id, then persist
+ * the media on the user message so the bubble renders chips/thumbnails on reload.
+ */
+function recordFirstMessage(session: Session, input: SpawnSessionInput): void {
+  rehomeAttachmentsToSession(input.attachments, session.id);
+  const newSessionMedia = fileIdsToMedia(input.attachments);
+  insertMessage(session.id, "user", input.prompt, newSessionMedia.length > 0 ? newSessionMedia : undefined);
+}
+
 export async function spawnSession(
   context: ApiContext,
   input: SpawnSessionInput,
@@ -200,6 +231,8 @@ export async function spawnSession(
   const employeeName = input.employee ?? null;
   const selection = await resolveSelection(config, input, employeeName);
   if (!selection.ok) return selection;
+  const fallback = storedFallback(config, input, employeeName, selection);
+  if (!fallback.ok) return fallback;
 
   const provenance = input.provenance ?? defaultProvenance();
   const session = createSession({
@@ -219,7 +252,7 @@ export async function spawnSession(
     employee: employeeName,
     parentSessionId: input.parentSessionId,
     effortLevel: selection.effortLevel,
-    ...storedFallback(config, input, employeeName, selection.fallbackMode),
+    ...fallback.stored,
     // Honor the requested model so API clients can pin per-employee models
     // (e.g. MCP servers that look up org/<employee>.yaml and pass the
     // employee's configured model). Without this, the turn falls back to
@@ -233,12 +266,7 @@ export async function spawnSession(
     transportMeta: reroutedSessionMeta(selection.reroute),
   });
   logger.info(`Web session created: ${session.id} (model=${selection.model || "default"})`);
-  // First-message attachments were uploaded before the session existed (FILES_DIR).
-  // Re-home them under uploads/<date>/<sessionId>/ now that we have an id, then persist
-  // the media on the user message so the bubble renders chips/thumbnails on reload.
-  rehomeAttachmentsToSession(input.attachments, session.id);
-  const newSessionMedia = fileIdsToMedia(input.attachments);
-  insertMessage(session.id, "user", input.prompt, newSessionMedia.length > 0 ? newSessionMedia : undefined);
+  recordFirstMessage(session, input);
 
   return startFirstTurn(context, session, input, selection.engineName);
 }

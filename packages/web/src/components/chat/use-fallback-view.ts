@@ -12,7 +12,10 @@ import {
 
 export type FallbackSubscribe = (fn: GatewayEventListener) => () => void
 
-type ChangeBody = { fallbackMode?: SessionFallbackMode; fallbackTarget?: FallbackTargetChoice | null }
+export type FallbackChange = { fallbackMode?: SessionFallbackMode; fallbackTarget?: FallbackTargetChoice | null }
+
+/** Where a change goes: the session's own PUT by default; a new chat keeps it until the session is created. */
+export type FallbackSave = (change: FallbackChange) => Promise<{ fallback?: unknown } | undefined | void>
 
 /** Re-read the view when the gateway says this session changed, dropping a read that lands after a session switch. */
 function useFallbackResync(
@@ -65,24 +68,24 @@ function useFallbackView(sessionId: string, view: SessionFallbackView | null | u
  * A change shows at once; the server's own view (or, without one, the same change applied
  * to what it last confirmed) replaces it, and a refusal puts the confirmed view back.
  */
-export function useFallbackMode(sessionId: string, view: SessionFallbackView | null | undefined, subscribe?: FallbackSubscribe) {
+export function useFallbackMode(sessionId: string, view: SessionFallbackView | null | undefined, subscribe?: FallbackSubscribe, save?: FallbackSave) {
   const { local, setLocal, error, setError, gen, seq, inFlight, confirmed } = useFallbackView(sessionId, view, subscribe)
 
   /** Send one change and show it at once; `optimistic` is the view if the server accepts it.
    *  Resolves true when the server took it, false when it refused (the error is on the chip). */
-  const change = (body: ChangeBody, optimistic: (view: SessionFallbackView) => SessionFallbackView): Promise<boolean> => {
+  const change = (body: FallbackChange, optimistic: (view: SessionFallbackView) => SessionFallbackView): Promise<boolean> => {
     if (!local) return Promise.resolve(false)
     const session = gen.current
     const mine = ++seq.current
     inFlight.current++
     setLocal(optimistic(local))
     setError(null)
-    return api.updateSession(sessionId, body)
+    return (save ? save(body) : api.updateSession(sessionId, body))
       .then((res) => {
         if (gen.current !== session) return true
         // What the server now holds, even when a newer pick has taken over the chip:
         // a later failure rolls back to it, not to the view before this pick.
-        const next = parseFallbackView(res?.fallback) ?? optimistic(confirmed.current ?? local)
+        const next = parseFallbackView((res as { fallback?: unknown } | undefined | void)?.fallback) ?? optimistic(confirmed.current ?? local)
         confirmed.current = next
         if (seq.current === mine) setLocal(next)
         return true

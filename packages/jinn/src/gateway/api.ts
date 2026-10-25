@@ -25,7 +25,7 @@ import {
 import { withEngineHealth } from "../shared/engine-health.js";
 import { withInternalFallback } from "../engines/opencode-internal-fallback.js";
 import { validateNewSessionSelection, validateSessionPatch } from "../sessions/session-patch.js";
-import { parseFallbackModeParam, parseFallbackModePatch, withFallbackView } from "./session-fallback-api.js";
+import { fallbackPreviewFor, parseFallbackModeParam, parseFallbackModePatch, withFallbackView } from "./session-fallback-api.js";
 import { childFallbackMode } from "../sessions/session-fallback.js";
 import { childFallbackTarget } from "../sessions/fallback-target.js";
 import { applyFallbackTargetPatch } from "./session-fallback-api.js";
@@ -3780,6 +3780,7 @@ export async function handleApiRequest(
         model: body.model,
         effortLevel: body.effortLevel,
         fallbackMode: body.fallbackMode,
+        fallbackTarget: body.fallbackTarget,
         parentSessionId: body.parentSessionId,
         promptExcerpt: typeof body.promptExcerpt === "string" ? body.promptExcerpt : undefined,
         userId,
@@ -4252,6 +4253,13 @@ export async function handleApiRequest(
     if (method === "GET" && pathname === "/api/engines") {
       const config = context.getConfig();
       return json(res, { default: config.engines.default, engines: withInternalFallback(withEngineHealth(getModelRegistry(config))) });
+    }
+
+    // GET /api/fallback-preview?engine=&model=&employee= — the fallback view a new session
+    // with that selection would start with (the new-chat screen's chip, before a session exists).
+    if (method === "GET" && pathname === "/api/fallback-preview") {
+      const param = (name: string) => url.searchParams.get(name)?.trim() || undefined;
+      return json(res, { fallback: fallbackPreviewFor(context, { engine: param("engine"), model: param("model"), employee: param("employee") }) });
     }
 
     // POST /api/engines/refresh — re-run dynamic model discovery and return the

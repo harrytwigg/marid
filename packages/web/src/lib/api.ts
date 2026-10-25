@@ -586,6 +586,12 @@ export const api = {
   getStatus: () => get<Record<string, unknown>>("/api/status"),
   /** Resolved model + capability registry (engines, their models, effort levels). */
   getEngines: () => get<EnginesResponse>("/api/engines"),
+  /** The `fallback` view a new session with this engine, model and employee would start with. */
+  getFallbackPreview: (selection: { engine?: string; model?: string; employee?: string }) => {
+    const query = new URLSearchParams()
+    for (const [key, value] of Object.entries(selection)) if (value) query.set(key, value)
+    return get<{ fallback?: unknown }>(`/api/fallback-preview${query.size ? `?${query}` : ""}`)
+  },
   /** Force re-discovery of dynamic (pi) models, returning the rebuilt registry. */
   refreshEngines: () => post<EnginesResponse>("/api/engines/refresh"),
   getEngineLimits: (engine?: string, init?: RequestInit) =>

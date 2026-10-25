@@ -3,7 +3,7 @@ import { ArrowRightLeftIcon } from '@/components/ui/icon'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from '@/components/ui/dropdown-menu'
 import { FallbackTargetPicker } from './fallback-target-picker'
 import { FallbackModeMenu } from './fallback-mode-menu'
-import { useFallbackMode, type FallbackSubscribe } from './use-fallback-view'
+import { useFallbackMode, type FallbackSave, type FallbackSubscribe } from './use-fallback-view'
 import {
   fallbackChipText,
   fallbackChipTitle,
@@ -18,6 +18,8 @@ interface FallbackModeChipProps {
   disabled?: boolean
   /** Gateway event subscription; a `session:updated` for this session re-reads its fallback view. */
   subscribe?: FallbackSubscribe
+  /** Takes a change instead of the session's PUT: the new-chat screen, where no session exists yet. */
+  save?: FallbackSave
 }
 
 /** The chip's button: what happens at a usage limit, in one truncating line. */
@@ -60,8 +62,8 @@ function ChipButton({ local, disabled }: { local: SessionFallbackView; disabled?
  * usage limit, with a menu to change the mode and to choose the model it falls
  * back to. Renders nothing when the gateway sends no `fallback` view.
  */
-export function FallbackModeChip({ sessionId, view, disabled, subscribe }: FallbackModeChipProps) {
-  const { local, error, pick, pickTarget } = useFallbackMode(sessionId, view, subscribe)
+export function FallbackModeChip({ sessionId, view, disabled, subscribe, save }: FallbackModeChipProps) {
+  const { local, error, pick, pickTarget } = useFallbackMode(sessionId, view, subscribe, save)
   // The menu is the mode list, or the model picker the "Choose fallback model…" row opens in its place.
   const [open, setOpen] = useState(false)
   const [panel, setPanel] = useState<'mode' | 'pick'>('mode')
