@@ -74,6 +74,9 @@ export interface MobileSessionTabsControls {
   strip: ReactNode | undefined
   /** Closes every open tab: the stored list is emptied, so a reload does not bring them back. */
   closeAll: () => void
+  /** The chats the strip is holding. Written on every platform, so it is also the phone's own
+   *  answer to "is any tab open" — the split layout's root does not see these. */
+  openIds: readonly string[]
 }
 
 /**
@@ -113,9 +116,10 @@ export function useMobileSessionTabs({
   }, [activeId, dropTab, selectTab, shownIds])
 
   // Titles come from the session list, so until it arrives every tab would read "Chat".
-  if (!sessions || shownIds.length < 2) return { strip: undefined, closeAll: clearTabs }
+  if (!sessions || shownIds.length < 2) return { strip: undefined, closeAll: clearTabs, openIds: ids }
   return {
     closeAll: clearTabs,
+    openIds: ids,
     strip: (
       <MobileSessionTabStrip
         ids={shownIds}

@@ -255,19 +255,6 @@ export const SCREENS = [
     },
   },
   {
-    // The chat header's own More menu, in the desktop actions pill and the phone's nav bar alike:
-    // it carries Search, the view toggle, Open beside and Close all tabs.
-    name: 'chat-menu',
-    title: 'Chat header menu',
-    url: (f) => `/?session=${f.chatSession}`,
-    ready: 'Add a step for the changelog',
-    prepare: async (page) => {
-      await page.getByRole('button', { name: 'More options' }).locator('visible=true').first().click()
-      await page.getByRole('menu').waitFor({ timeout: 5_000 })
-      await page.waitForTimeout(500)
-    },
-  },
-  {
     // A board card's menu, opened by a right-click (desktop only: a long press is the card's drag).
     name: 'board-card-menu',
     viewports: ['desktop'],

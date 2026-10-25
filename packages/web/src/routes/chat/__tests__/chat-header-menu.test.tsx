@@ -76,7 +76,7 @@ afterEach(() => {
 })
 
 describe('ChatHeaderMenu', () => {
-  it('closes every tab from the menu, and greys the item when nothing is open', () => {
+  it('closes every tab from the menu', () => {
     const onCloseAllTabs = vi.fn()
     renderMenu({ onCloseAllTabs })
     fireEvent.click(screen.getByRole('menuitem', { name: 'Close all tabs' }))

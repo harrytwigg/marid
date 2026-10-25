@@ -854,13 +854,16 @@ function ChatPage() {
     workingSet.split.closeAll()
     chatTabs.closeAllTabs()
     mobileTabs.closeAll()
-    releaseMobilePicker()
+    // The beside-picker is a pane the layout does not hold, so emptying the layout leaves it
+    // standing: close it here, on the desktop as well as the phone (releaseMobilePicker is a
+    // no-op off mobile). Anything else and "the normal empty state" is two composers.
+    gridPicker.close()
     startComposer()
     newChatIntentRef.current = true
     pendingNavRef.current = null
     setMobileView('sidebar')
     if (selectedIdRef.current) navigate('/')
-  }, [chatTabs, mobileTabs.closeAll, navigate, releaseMobilePicker, startComposer, workingSet.split])
+  }, [chatTabs, gridPicker, mobileTabs.closeAll, navigate, startComposer, workingSet.split])
 
   const moreMenu = (
     <ChatHeaderMenu
@@ -884,7 +887,7 @@ function ChatPage() {
       onDeleteSession={handleDeleteSession}
       onOpenChatBeside={gridPicker.open}
       onCloseAllTabs={handleCloseAllTabs}
-      closeAllTabsDisabled={workingSet.split.layout.root === null && chatTabs.tabs.length === 0}
+      closeAllTabsDisabled={workingSet.split.layout.root === null && chatTabs.tabs.length === 0 && mobileTabs.openIds.length === 0}
     />
   )
   // The conversation title — slim inline (desktop) / centered nav bar (mobile).

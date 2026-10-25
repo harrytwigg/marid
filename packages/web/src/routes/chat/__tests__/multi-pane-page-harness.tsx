@@ -1,13 +1,21 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { vi } from 'vitest'
+import { vi, type Mock } from 'vitest'
 import type { OrgData } from '@/lib/api'
 import type { SessionWaitsResponse } from '@/lib/session-waits'
 import ChatPageWrapper from '../page'
 import { CHAT_SESSION_DND_MIME } from '../chat-session-dnd'
 
-const { sessionIds } = vi.hoisted(() => ({ sessionIds: ['a', 'b', 'c', 'd'] }))
+const { sessionIds, chatTabsMock } = vi.hoisted((): {
+  sessionIds: string[]
+  // The page's open-chats list. A suite that needs it empty, or needs to see the page clear it,
+  // moves `tabs` or reads the spy; every other suite gets the four seeded chats, as before.
+  chatTabsMock: { tabs: unknown[]; closeAllTabs: Mock }
+} => ({
+  sessionIds: ['a', 'b', 'c', 'd'],
+  chatTabsMock: { tabs: [], closeAllTabs: vi.fn() },
+}))
 const gateway = vi.hoisted(() => ({
   listeners: new Set<(frame: { event: string; payload: unknown }) => void>(),
 }))
@@ -117,22 +125,27 @@ vi.mock('@/components/chat/chat-sidebar', async () => {
   }
 })
 
-vi.mock('@/hooks/use-chat-tabs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/hooks/use-chat-tabs')>()
-  const tabs = sessionIds.map((sessionId) => ({
+/** The list the harness starts every suite with: one tab per seeded chat. */
+export function seededChatTabs() {
+  return sessionIds.map((sessionId) => ({
     kind: 'session' as const,
     sessionId,
     label: sessionId,
     status: 'idle' as const,
     unread: false,
   }))
+}
+chatTabsMock.tabs = seededChatTabs()
+
+vi.mock('@/hooks/use-chat-tabs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/hooks/use-chat-tabs')>()
   const noop = () => {}
   return {
     ...actual,
     useChatTabs: () => ({
-      tabs,
-      activeTab: tabs[0],
-      activeIndex: 0,
+      tabs: chatTabsMock.tabs,
+      activeTab: chatTabsMock.tabs[0] ?? null,
+      activeIndex: chatTabsMock.tabs.length ? 0 : -1,
       hydrated: true,
       openTab: noop,
       openFileTab: noop,
@@ -146,7 +159,7 @@ vi.mock('@/hooks/use-chat-tabs', async (importOriginal) => {
       updateTabStatus: noop,
       closeTabBySessionId: noop,
       reconcileTabs: noop,
-      closeAllTabs: noop,
+      closeAllTabs: chatTabsMock.closeAllTabs,
     }),
   }
 })
@@ -202,4 +215,4 @@ export async function openChatBeside() {
   fireEvent.click((await screen.findAllByRole('menuitem', { name: 'Open beside' }))[0])
 }
 
-export { apiMocks, gateway, sessionIds }
+export { apiMocks, chatTabsMock, gateway, sessionIds }
