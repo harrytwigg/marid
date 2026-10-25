@@ -94,6 +94,20 @@ describe("a turn that settles the ordinary way", () => {
   });
 });
 
+describe("a remote session on a declared remote account", () => {
+  const HOST = { remoteHost: "build-host", remoteUser: "me" };
+  const SPARE_DIR = "/home/me/.claude-b";
+  const SPARE_KEY = `claude@me@build-host:${claudeProfileFromDir(SPARE_DIR).key}`;
+  const remoteConfig = { ...config, engines: { ...config.engines, claude: { model: "opus", accounts: { spare: { ...HOST, configDir: SPARE_DIR } } } } } as unknown as JinnConfig;
+
+  it("records the standby link by the remote account's name", () => {
+    const session = reg.createSession({ engine: "claude", source: "web", sourceRef: "web:served-remote", model: "opus" });
+    const standing = { ...session, transportMeta: { engineOverride: { substituteAccount: SPARE_KEY, substituteConfigDir: SPARE_DIR }, fallbackRun: { source: "employee", position: 1, tried: ["x"], startedAt: "t" } } } as typeof session;
+    const out = withServedTarget(remoteConfig, standing, {} as never);
+    expect(out.transportMeta).toMatchObject({ fallbackServedBy: { key: "claude|spare|opus", label: "claude · spare · opus" } });
+  });
+});
+
 describe("withServedTarget", () => {
   it("leaves fields alone for a session with nothing walked, and for no session", () => {
     const fields = { status: "idle" } as never;

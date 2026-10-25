@@ -521,6 +521,74 @@ describe("InteractiveClaudeEngine — claude profile", () => {
 });
 
 /**
+ * A remote session moved onto a remote account (and back) changes the profile
+ * directory it runs on. A warm PTY keeps the directory it was spawned with, so a
+ * launch asking for another one must replace it, as for a local profile.
+ */
+describe("a warm remote PTY and the profile directory a launch asks for", () => {
+  let lifecycle: PtyLifecycleManager;
+  let engine: InteractiveClaudeEngine;
+  const OWN = "/home/builder/.claude-a";
+  const SPARE = "/home/builder/.claude-b";
+
+  beforeEach(() => {
+    hoisted.spawns.length = 0;
+    hoisted.writes.length = 0;
+    hoisted.ready = true;
+    lifecycle = new PtyLifecycleManager({ maxLivePtys: 10 });
+    engine = new InteractiveClaudeEngine(lifecycle, { register: () => {}, unregister: () => {} } as any, { remote: () => REMOTE_CONFIG, gatewayPort: () => 8722 });
+  });
+  afterEach(() => {
+    lifecycle.killAll();
+    cleanupSessionSettings(CLAUDE_SETTINGS_DIR, SID);
+  });
+
+  /** A warm PTY on `dir`, carrying its persona, the state a PTY is in from the second turn on. */
+  async function warmOn(dir: string): Promise<void> {
+    engine.ensureIdleSpawn(SID, { engineSessionId: "eng-1", cols: 80, rows: 24, ...TARGET, remoteClaudeConfigDir: dir } as any);
+    await vi.waitFor(() => expect(engine.hasWarmPty(SID)).toBe(true));
+    (engine as any).spawnParams.set(SID, { ...(engine as any).spawnParams.get(SID), appendApplied: true });
+  }
+  const dirOf = (index: number) => remoteFlagValue(remoteCommandOf(hoisted.spawns[index].args), "CLAUDE_CONFIG_DIR") ?? remoteCommandOf(hoisted.spawns[index].args).match(/CLAUDE_CONFIG_DIR='([^']*)'/)?.[1];
+
+  it("takes the next turn in the same process while the directory stays", async () => {
+    await warmOn(OWN);
+    void engine.run({ sessionId: SID, prompt: "two", cwd: "/tmp", ...TARGET, remoteClaudeConfigDir: OWN } as any).catch(() => {});
+    await vi.waitFor(() => expect(hoisted.writes.join("")).toContain("two"));
+    expect(hoisted.spawns).toHaveLength(1);
+  });
+
+  it("respawns on the substitute's directory when a turn asks for it", async () => {
+    await warmOn(OWN);
+    void engine.run({ sessionId: SID, prompt: "on spare", cwd: "/tmp", ...TARGET, remoteClaudeConfigDir: SPARE } as any).catch(() => {});
+    await vi.waitFor(() => expect(hoisted.spawns).toHaveLength(2));
+    expect(dirOf(1)).toBe(SPARE);
+    expect((engine as any).spawnParams.get(SID).profileKey).toBe(`remote:${SPARE}`);
+  });
+
+  it("respawns on its own directory when the window has ended and a turn asks for it again", async () => {
+    await warmOn(SPARE);
+    void engine.run({ sessionId: SID, prompt: "back home", cwd: "/tmp", ...TARGET, remoteClaudeConfigDir: OWN } as any).catch(() => {});
+    await vi.waitFor(() => expect(hoisted.spawns).toHaveLength(2));
+    expect(dirOf(1)).toBe(OWN);
+  });
+
+  it("drops an idle PTY on another directory before the terminal view attaches", async () => {
+    await warmOn(OWN);
+    engine.ensureIdleSpawn(SID, { engineSessionId: "eng-1", cols: 80, rows: 24, ...TARGET, remoteClaudeConfigDir: SPARE } as any);
+    await vi.waitFor(() => expect(hoisted.spawns).toHaveLength(2));
+    expect(dirOf(1)).toBe(SPARE);
+  });
+
+  it("leaves an idle PTY on the same directory alone", async () => {
+    await warmOn(OWN);
+    engine.ensureIdleSpawn(SID, { engineSessionId: "eng-1", cols: 80, rows: 24, ...TARGET, remoteClaudeConfigDir: OWN } as any);
+    await flush();
+    expect(hoisted.spawns).toHaveLength(1);
+  });
+});
+
+/**
  * The ssh argv shape.
  *
  * This is the regression that took the whole feature down: ssh's option parsing

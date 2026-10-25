@@ -202,6 +202,7 @@ function remoteDirProblems(where: string, entry: Record<string, unknown>, seenDi
   if (dir.startsWith("~")) return [`${where}.configDir "${dir}" must be an absolute path, not home-relative`];
   if (!path.posix.isAbsolute(dir)) return [`${where}.configDir "${dir}" must be an absolute path on ${host}`];
   const canonical = canonicalClaudeConfigDir(dir);
+  if (canonical === "/") return [`${where}.configDir must be a profile directory, not the root of ${host}`];
   const destination = sshDestination({ remoteHost: text(entry.remoteHost), remoteUser: text(entry.remoteUser) });
   const seen = `remote:${destination}:${canonical}`;
   const other = seenDirs.get(seen);

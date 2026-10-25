@@ -79,6 +79,10 @@ describe("validation", () => {
     expect(problems({ spare: { remoteUser: "me", configDir: REMOTE_DIR } }).join()).toContain("remoteUser is set but remoteHost is not");
   });
 
+  it("refuses the root of the host as a profile directory", () => {
+    expect(problems({ spare: { ...SPARE, configDir: "/" } }).join()).toContain("not the root of build-host");
+  });
+
   it("refuses a host or user that would reach ssh's own arguments", () => {
     expect(problems({ spare: { ...SPARE, remoteHost: "-oProxyCommand=x" } }).join()).toContain("not a plain hostname");
     expect(problems({ spare: { ...SPARE, remoteUser: "a b" } }).join()).toContain("not a plain username");
