@@ -9,6 +9,7 @@ import { claudeAuthScope } from "../claude-auth-watch.js";
 import { rateLimitAccount } from "../rate-limit-account.js";
 import { remoteScopeFor } from "../session-cwd.js";
 import { accountOverride, sessionRemoteTarget, threadSlot } from "../session-account.js";
+import { RemoteProfileNotReadyError } from "../../shared/remote-profile-error.js";
 
 /**
  * A remote employee falls back to a Claude account declared on its own `user@host`
@@ -128,6 +129,60 @@ describe("a scoped remote employee rate-limited on its own account", () => {
     expect(threadSlot(reverted, "claude")).toBe(OWN_KEY);
     expect(rateLimitAccount("claude", who, reverted).account).toBe(OWN_KEY);
     expect(claudeAuthScope(who, reverted)).toBe(`me@build-host:${HOME_DIR}`);
+  });
+});
+
+describe("a remote session moving on from its substitute account", () => {
+  it("resumes its own thread on its own directory when the substitute is limited and the next link is its own login", async () => {
+    useRemoteAccounts();
+    const who = remoteEmployee({ fallback: [{ engine: "claude", profile: "spare" }, { engine: "claude", model: "sonnet" }] });
+    const id = newSession();
+    expect((await handleRateLimit(turn(id, who, remoteScripted(() => answer("on spare", "spare-thread")).engines))).kind).toBe("fallback");
+
+    // A turn inside the window: spare is limited too, and the walk takes the own login on another model.
+    const second = remoteScripted(() => answer("on own sonnet", "a-thread-2"));
+    expect((await handleRateLimit(turn(id, who, second.engines))).kind).toBe("fallback");
+
+    expect(second.calls).toHaveLength(1);
+    expect(second.calls[0]).toMatchObject({ remoteClaudeConfigDir: HOME_DIR, resumeSessionId: "a-thread", model: "sonnet" });
+    const session = reg.getSession(id)!;
+    expect(overrideOf(id)).toMatchObject({ originalAccount: OWN_KEY, substituteAccount: OWN_KEY, substituteConfigDir: HOME_DIR });
+    expect(threadSlot(session, "claude")).toBe(OWN_KEY);
+    expect((session.engineSessions as Record<string, { id: string }>)[SPARE_KEY]?.id).toBe("spare-thread");
+  });
+
+  it("moves on from a remote account whose profile cannot run unattended instead of staying on it for the window", async () => {
+    useRemoteAccounts();
+    const { engines, calls } = remoteScripted((opts) => {
+      if (opts.remoteClaudeConfigDir === SPARE_DIR) throw new RemoteProfileNotReadyError(`remote host not ready: the Claude profile at ${SPARE_DIR} on me@build-host is not signed in`);
+      return answer("on opencode", "oc-thread");
+    });
+    const id = newSession();
+    const outcome = await handleRateLimit(turn(id, remoteEmployee(), engines));
+
+    expect(outcome.kind).toBe("fallback");
+    expect(calls.map((call) => call.remoteClaudeConfigDir === SPARE_DIR ? "spare" : call.model)).toEqual(["spare", "x-provider/model-x"]);
+    expect(reg.getSession(id)!.engine).toBe("opencode");
+    expect(accountOverride(reg.getSession(id)!)).toBeUndefined();
+    expect(readEngineHealth()[SPARE_KEY]).toBeUndefined();
+  });
+
+  it("goes back to its own account when a scoped session's only remote account cannot run, rather than standing on a dead login", async () => {
+    useRemoteAccounts();
+    setEmployeeDepartmentResolver(() => "ops");
+    setDepartmentScopeResolver(() => "scoped");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+    const { engines, calls } = remoteScripted(() => { throw new RemoteProfileNotReadyError("remote host not ready: profile signed out"); });
+    const id = newSession();
+    void handleRateLimit(turn(id, remoteEmployee(), engines));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(calls).toHaveLength(1);
+    const session = reg.getSession(id)!;
+    expect(accountOverride(session)).toBeUndefined();
+    expect(session.engine).toBe("claude");
+    expect(sessionRemoteTarget(remoteEmployee(), remoteScopeFor(config.remote, session), session)).toMatchObject({ remoteClaudeConfigDir: HOME_DIR });
+    expect(session.status).toBe("waiting");
   });
 });
 

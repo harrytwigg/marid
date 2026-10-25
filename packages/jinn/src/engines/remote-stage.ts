@@ -482,7 +482,8 @@ export { runLocalWakeCommand, sendWakeOnLan };
 
 export type RemoteReadiness =
   | { ready: true; facts: RemoteFacts }
-  | { ready: false; reason: string };
+  /** `profile`: the host is up but the engine's profile cannot run unattended (missing, signed out, no consent). */
+  | { ready: false; reason: string; profile?: true };
 
 export interface WaitStartInfo {
   destination: string;
@@ -579,7 +580,7 @@ export async function ensureRemoteReady(
     });
     if (mountProblem) return { ready: false, reason: mountProblem };
     const profileProblem = await verifyEngineProfile(destination, target, remote, opts.engine);
-    if (profileProblem) return { ready: false, reason: profileProblem };
+    if (profileProblem) return { ready: false, reason: profileProblem, profile: true };
     return { ready: true, facts };
   } catch (err) {
     return { ready: false, reason: err instanceof Error ? err.message : String(err) };

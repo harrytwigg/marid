@@ -30,6 +30,8 @@ const hoisted = vi.hoisted(() => ({
   writes: [] as string[],
   /** Flipped by one test to prove an unready host never reaches pty.spawn. */
   ready: true as boolean,
+  /** Set with `ready: false`: the host is up but the profile cannot run unattended. */
+  profileProblem: false as boolean,
 }));
 
 // ── node-pty ─────────────────────────────────────────────────────────────────
@@ -71,7 +73,11 @@ vi.mock("../remote-stage.js", async (importOriginal) => {
     ...actual,
     ensureRemoteReady: vi.fn(async (target: any, remote: any, opts: any) => {
       hoisted.ensureCalls.push({ target, remote, opts });
-      if (!hoisted.ready) return { ready: false, reason: "build-box is not reachable" };
+      if (!hoisted.ready) {
+        return hoisted.profileProblem
+          ? { ready: false, reason: "the Claude profile at /p on build-box is not signed in", profile: true }
+          : { ready: false, reason: "build-box is not reachable" };
+      }
       return {
         ready: true,
         facts: {
@@ -123,6 +129,7 @@ vi.mock("../sse-pty-proxy.js", () => ({
 }));
 
 import { InteractiveClaudeEngine } from "../claude-interactive.js";
+import { RemoteProfileNotReadyError } from "../../shared/remote-profile-error.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
 import { CLAUDE_SETTINGS_DIR, JINN_HOME } from "../../shared/paths.js";
 import { cleanupSessionSettings } from "../../shared/claude-settings.js";
@@ -340,6 +347,21 @@ describe("InteractiveClaudeEngine — remote branch", () => {
       await expect(engine.run({ sessionId: SID, prompt: "hi", cwd: "/tmp", ...TARGET } as any))
         .rejects.toThrow(/remote host not ready/);
       expect(hoisted.spawns).toHaveLength(0);
+    });
+
+    it("says when it is the profile, not the host, that is not ready, so a fallback walk can move on", async () => {
+      hoisted.ready = false;
+      hoisted.profileProblem = true;
+      try {
+        const run = engine.run({ sessionId: SID, prompt: "hi", cwd: "/tmp", ...TARGET } as any);
+        await expect(run).rejects.toBeInstanceOf(RemoteProfileNotReadyError);
+        await expect(run).rejects.toThrow(/remote host not ready: the Claude profile at \/p on build-box is not signed in/);
+        hoisted.profileProblem = false;
+        await expect(engine.run({ sessionId: SID, prompt: "hi", cwd: "/tmp", ...TARGET } as any)).rejects.not.toBeInstanceOf(RemoteProfileNotReadyError);
+        expect(hoisted.spawns).toHaveLength(0);
+      } finally {
+        hoisted.profileProblem = false;
+      }
     });
 
     it("a purely local employee is unaffected — local claude, with a proxy", async () => {

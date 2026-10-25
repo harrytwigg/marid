@@ -45,6 +45,7 @@ import {
   type RemoteFacts,
   type RemoteClaudeStaging,
 } from "./remote-stage.js";
+import { RemoteProfileNotReadyError } from "../shared/remote-profile-error.js";
 import { employeeSessionEnv } from "../sessions/employee-env.js";
 
 export type { PtyControlEvent } from "./pty-view-engine.js";
@@ -3126,7 +3127,10 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       throw new Error("remote spawn needs the gateway's port for the reverse tunnel, and none was provided");
     }
     const readiness = await ensureRemoteReady(target, remote, { engine: "claude", allowWake: false });
-    if (!readiness.ready) throw new Error(`remote host not ready: ${readiness.reason}`);
+    if (!readiness.ready) {
+      const message = `remote host not ready: ${readiness.reason}`;
+      throw readiness.profile ? new RemoteProfileNotReadyError(message) : new Error(message);
+    }
     // Last chance to stand down without having written anything. Staging
     // rewrites this session's gateway.json with a freshly probed tunnel port,
     // and the hook relay reads that file on every hook — so a caller that

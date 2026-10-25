@@ -11,6 +11,7 @@ import type { WalkInput } from "./fallback-walk.js";
 import { resolveEngineRunMcp } from "./engine-run-mcp.js";
 import type { EngineSubstitution } from "./engine-override.js";
 import { isRemoteClaudeAccount } from "../shared/engine-account.js";
+import { RemoteProfileNotReadyError } from "../shared/remote-profile-error.js";
 import { recordAccountRateLimit } from "./rate-limit-account.js";
 import type { SubstituteChoice } from "./rate-limit-substitute.js";
 
@@ -45,12 +46,12 @@ export function claudeLinkRefusal(opts: WalkInput["opts"], choice: SubstituteCho
  * link; a model the engine refuses and a Claude login that is down move it on
  * from a fallback link, which every link the walk runs is.
  */
-export function linkFailure(result: EngineResult, engine: string): LinkFailure | undefined {
+export function linkFailure(result: LinkResult, engine: string): LinkFailure | undefined {
   if (result.error?.startsWith("Interrupted")) return undefined;
   const limit = detectRateLimit(result);
   if (limit.limited) return { reason: limitReason(result), ...(limit.resetsAt === undefined ? {} : { resetsAt: limit.resetsAt }), isLimit: true };
   if (!result.error) return undefined;
-  if (engine === "claude" && isClaudeAuthFailure(result.error)) return { reason: "auth", isLimit: false };
+  if (engine === "claude" && (result.profileNotReady || isClaudeAuthFailure(result.error))) return { reason: "auth", isLimit: false };
   return isInvalidModelFailure(result.error) ? { reason: "invalid-model", isLimit: false } : undefined;
 }
 
@@ -58,6 +59,10 @@ export function linkFailure(result: EngineResult, engine: string): LinkFailure |
 export function recordLinkLimit(link: Pick<ResolvedFallbackLink, "engine" | "model" | "account">, resetsAt: number | undefined): void {
   recordAccountRateLimit(link.account, link.engine, rateLimitEngineLabel(link.engine), resetsAt, linkHealthKey(link));
 }
+
+/** A link's result. `profileNotReady`: the launch was refused because the profile it runs as cannot run unattended on its
+ *  host (missing, signed out, no consent), which moves the walk on as a login that is down does. */
+export type LinkResult = EngineResult & { profileNotReady?: true };
 
 export interface RunLinkArgs {
   walk: WalkInput;
@@ -91,7 +96,7 @@ function remoteAccountDir(choice: SubstituteChoice): { remoteClaudeConfigDir?: s
  * swallowed into Branch B: the operator was told a substitute is running, so the
  * honest outcome is that substitute failing, with its reason.
  */
-export async function runLink(args: RunLinkArgs): Promise<EngineResult> {
+export async function runLink(args: RunLinkArgs): Promise<LinkResult> {
   const { walk, choice, engine, substitution, prompt, cwd } = args;
   const { opts, remoteTarget } = walk;
   const name = choice.engine as EngineName;
@@ -122,7 +127,9 @@ export async function runLink(args: RunLinkArgs): Promise<EngineResult> {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error(`Session ${opts.session.id}: ${rateLimitEngineLabel(name)} substitution failed to start: ${message}`);
-    return { sessionId: "", result: "", error: `${rateLimitEngineLabel(name)} could not start: ${message}` };
+    // A remote substitute account that is signed out must not hold the session for the window: the walk moves on (or back).
+    const profileNotReady = err instanceof RemoteProfileNotReadyError ? { profileNotReady: true as const } : {};
+    return { sessionId: "", result: "", error: `${rateLimitEngineLabel(name)} could not start: ${message}`, ...profileNotReady };
   }
 }
 

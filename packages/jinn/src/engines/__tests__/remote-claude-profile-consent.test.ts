@@ -150,6 +150,8 @@ describe.skipIf(process.platform === "win32")("a remote named Claude profile tha
     fs.rmSync(path.join(profile, ".credentials.json"));
     const readiness = await ready();
     expect(readiness.ready ? "" : readiness.reason).toContain("is not signed in");
+    // The profile, not the host: a fallback walk moves on from it rather than standing on it.
+    expect(readiness.ready ? undefined : readiness.profile).toBe(true);
   });
 
   it("leaves the remote user's default profile unprobed, as before", async () => {
