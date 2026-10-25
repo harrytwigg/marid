@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react"
 import { type BackgroundActivity, type DelegatedActivity } from "@/lib/api"
+import { isSessionWaiting, SESSION_WAITING_COLOR, sessionWaitingTitle } from "@/lib/session-waiting"
 import { cn } from "@/lib/utils"
 import { isBackgroundActivityStale } from "./pending-work"
 
@@ -224,6 +225,11 @@ export function getStatusDot(
   now: number = Date.now(),
 ): StatusDotState | null {
   if (session.status === "running") return runningStatusDot(session, now)
+  // Paused on a usage limit (or a remote host coming up): amber and still. A pulse
+  // would read as working, red as failed, and it is neither.
+  if (isSessionWaiting(session.status)) {
+    return { color: SESSION_WAITING_COLOR, label: sessionWaitingTitle(session.lastError), pulse: false }
+  }
   if (isRecentError(session.status, getSessionActivity(session), Date.now())) {
     return { color: "var(--system-red)", label: "error", pulse: false }
   }

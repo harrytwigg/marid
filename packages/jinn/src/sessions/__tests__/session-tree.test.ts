@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { beginLimitProbe, endLimitProbe } from "../limit-probe.js";
 import type { Session } from "../../shared/types.js";
 import {
   SESSION_TREE_MAX_DEPTH,
@@ -56,6 +57,8 @@ function find(nodes: readonly SessionTreeNode[], id: string): SessionTreeNode | 
 function chain(root: string, length: number): Session[] {
   return Array.from({ length }, (_, i) => session(`${root}-d${i + 1}`, { parentSessionId: i === 0 ? root : `${root}-d${i}` }));
 }
+
+afterEach(() => { endLimitProbe("probing"); });
 
 describe("buildSessionTree", () => {
   it("nests a delegated child under the linked session rather than flattening it", () => {
@@ -161,6 +164,28 @@ describe("buildSessionTree", () => {
     });
 
     expect(tree.totals).toEqual({ nodes: 3, live: 2 });
+  });
+
+  it("reports a session retrying against a standing usage limit as waiting, on its node and in the directory", () => {
+    beginLimitProbe("probing");
+    const tree = buildSessionTree({
+      todoId: TODO,
+      sessions: [
+        session("probing", { workItemId: TODO, status: "running" }),
+        session("working", { parentSessionId: "probing", status: "running" }),
+      ],
+    });
+
+    expect(find(tree.roots, "probing")?.status).toBe("waiting");
+    expect(tree.directory.probing?.status).toBe("waiting");
+    // Only the probing session: a session truly running stays running.
+    expect(find(tree.roots, "working")?.status).toBe("running");
+    expect(tree.directory.working?.status).toBe("running");
+    expect(tree.totals.live).toBe(2);
+
+    endLimitProbe("probing");
+    const after = buildSessionTree({ todoId: TODO, sessions: [session("probing", { workItemId: TODO, status: "running" })] });
+    expect(find(after.roots, "probing")?.status).toBe("running");
   });
 
   it("resolves a referenced session that is not linked to the Todo — the creator case", () => {

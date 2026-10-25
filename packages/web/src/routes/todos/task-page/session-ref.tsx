@@ -4,6 +4,12 @@ import type { Employee } from "@/lib/api"
 import { useOpenSession } from "@/components/chat/file-open-context"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { sessionIdFromActor, type SessionDirectoryEntryWire } from "@/lib/session-tree-api"
+import {
+  SESSION_WAITING_COLOR,
+  SESSION_WAITING_LABEL,
+  isSessionWaiting,
+  sessionWaitingTitle,
+} from "@/lib/session-waiting"
 import { displayNameOf } from "../util"
 
 /**
@@ -38,8 +44,9 @@ export function useSessionDirectory(): Record<string, SessionDirectoryEntryWire>
   return useContext(SessionDirectory)
 }
 
-/** Live states get the pulsing dot. Matches the rail's existing dispatch chip
- *  rather than introducing a second vocabulary for the same thing. */
+/** Live states are the ones worth a state dot. `running` pulses; `waiting` is
+ *  returned above as an amber dot that stays still. Matches the rail's existing
+ *  dispatch chip rather than introducing a second vocabulary for the same thing. */
 const LIVE = new Set(["running", "waiting"])
 
 export interface SessionRefProps {
@@ -131,6 +138,17 @@ function RefGlyph({ employee }: { employee: string | null | undefined }) {
 /** What the session is doing right now, if anything worth a glance. */
 function RefState({ entry }: { entry: SessionDirectoryEntryWire | undefined }) {
   if (entry?.archived) return <span className="flex-none text-[11.5px] text-[var(--text-quaternary)]">Archived</span>
+  if (isSessionWaiting(entry?.status)) {
+    // Paused, not running: amber and still, so it never reads as progress.
+    return (
+      <span
+        className="size-1.5 flex-none rounded-full"
+        style={{ background: SESSION_WAITING_COLOR }}
+        aria-label={SESSION_WAITING_LABEL}
+        title={sessionWaitingTitle()}
+      />
+    )
+  }
   if (!LIVE.has(entry?.status ?? "")) return null
   return (
     <span

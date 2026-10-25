@@ -268,6 +268,18 @@ describe("session tools — unit (stub gateway)", () => {
     expect(r2.hint.length).toBeLessThanOrEqual(80);
   });
 
+  it("read_session tells a caller a session paused on a usage limit needs no action", async () => {
+    const waiting = stub(
+      () => ({ status: 200, body: { id: "s", status: "waiting", lastError: "Claude usage limit — waiting for reset", messages: [] } }),
+      "reader",
+    );
+    const out = (await tool("read_session").handler({ sessionId: "s" }, waiting.ctx)) as { status: string; hint: string };
+    expect(out.status).toBe("waiting");
+    expect(out.hint).toMatch(/^Waiting on limit/);
+    expect(out.hint).toMatch(/no action/i);
+    expect(out.hint.length).toBeLessThanOrEqual(80);
+  });
+
   it("read_session maps 404 to a discovery hint", async () => {
     const { ctx } = stub(() => ({ status: 404, body: { error: "not found" } }), "reader");
     await expect(tool("read_session").handler({ sessionId: "ghost" }, ctx)).rejects.toThrow(/404.*list_sessions/);

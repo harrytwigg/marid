@@ -1,5 +1,6 @@
 import { Clock, Hash, ListChecks, MessageSquare, NotebookPen, Users, Zap, type IconComponent } from "@/components/ui/icon"
 import type { SearchKind, SearchMatchFieldWire } from "@/lib/search-api"
+import { SESSION_WAITING_COLOR } from "@/lib/session-waiting"
 
 export interface KindMeta {
   label: string
@@ -52,6 +53,7 @@ export const FIELD_ATTRIBUTION: Record<SearchMatchFieldWire, string> = {
  *  because that is the colour the Todos board already gives it. */
 export function statusTint(status: string): string {
   const state = status.toLowerCase()
+  if (state === "waiting") return SESSION_WAITING_COLOR
   if (state === "blocked") return "var(--system-orange)"
   if (state === "crashed" || state === "failed" || state === "disabled") return "var(--system-red)"
   if (state === "done" || state === "completed" || state === "enabled") return "var(--system-green)"

@@ -84,6 +84,8 @@ export interface RateLimitHandlerHooks {
 
   /**
    * Optional stream callback for the retry engine's run (web emits deltas).
+   * Supplying it also ends the retry's `waiting` report on the first output
+   * (limit-probe.ts); without it the session reads `waiting` for the whole retry.
    */
   onRetryStream?: (delta: StreamDelta) => void;
 

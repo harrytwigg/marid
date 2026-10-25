@@ -19,7 +19,7 @@ interface SessionRow {
 
 function tabSession(row: SessionRow | undefined): PaneTabSession | undefined {
   if (!row) return undefined
-  const status = row.status === 'running' || row.status === 'error' ? row.status : undefined
+  const status = row.status === 'running' || row.status === 'error' || row.status === 'waiting' ? row.status : undefined
   return {
     title: safePaneTitle(row.title) ?? 'Chat',
     employee: typeof row.employee === 'string' ? row.employee : undefined,

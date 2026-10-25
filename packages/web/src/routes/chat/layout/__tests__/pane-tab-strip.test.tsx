@@ -92,6 +92,15 @@ describe('PaneTabStrip', () => {
     expect(tab('b').querySelector('[data-pane-tab-status="running"]')).toBeTruthy()
   })
 
+  it('marks a tab whose session is paused on a limit with the amber waiting dot, not the running one', () => {
+    const tabs = TABS.map((item) => (item.id === 'c' ? { ...item, status: 'waiting' as const } : item))
+    const { tab } = setup({ tabs })
+    const dot = tab('c').querySelector<HTMLElement>('[data-pane-tab-status="waiting"]')
+    expect(dot).toBeTruthy()
+    expect(dot!.style.background).toBe('var(--system-yellow)')
+    expect(tab('c').querySelector('[data-pane-tab-status="running"]')).toBeNull()
+  })
+
   it('activates on click, closes on × and middle-click, pins a preview on double-click', () => {
     const { tab, onActivate, onClose, onPin } = setup()
     fireEvent.click(tab('c'))

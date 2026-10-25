@@ -5,6 +5,7 @@ import { toWorkItemLinkRole } from '../work-items/link-role.js';
 import { getWorkItem } from '../work-items/store.js';
 import { listSessions } from './registry.js';
 import { reportedSessionStatus } from './background-work.js';
+import { isProbingLimit } from './limit-probe.js';
 
 /**
  * The tree of sessions a Todo caused: the sessions linked to it, and beneath
@@ -113,11 +114,14 @@ function isArchived(session: Session): boolean {
   return Boolean(session.archivedAt);
 }
 
+/** Stored status, but a limit retry that has shown no output reads `waiting` (limit-probe.ts); background work is carried separately. */
+const treeStatus = (s: Session): Session['status'] | null => (s.status === 'running' && isProbingLimit(s.id) ? 'waiting' : s.status ?? null);
+
 function directoryEntry(session: Session): SessionDirectoryEntry {
   return {
     id: session.id,
     employee: session.employee ?? null,
-    status: session.status ?? null,
+    status: treeStatus(session),
     title: session.title ?? null,
     archived: isArchived(session),
     missing: false,
@@ -132,7 +136,7 @@ function nodeFor(session: Session, todoId: string, activity: SessionTreeActivity
   return {
     id: session.id,
     employee: session.employee ?? null,
-    status: session.status ?? null,
+    status: treeStatus(session),
     title: session.title ?? null,
     role: toWorkItemLinkRole(session.workItemRole),
     workItemId: session.workItemId ?? null,

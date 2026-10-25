@@ -82,6 +82,17 @@ describe('patchSessionBackgroundActivity', () => {
     expect(data.sessions.find((s) => s.id === 'a')?.transportState).toBe('running')
   })
 
+  it('keeps the transport of a waiting session running, and leaves its status alone', () => {
+    const qc = new QueryClient()
+    qc.setQueryData(queryKeys.sessions.all, resp([session('a', { status: 'waiting', transportState: 'running' })]))
+
+    patchSessionBackgroundActivity(qc, 'a', null)
+
+    const row = qc.getQueryData<SessionsResponse>(queryKeys.sessions.all)!.sessions.find((s) => s.id === 'a')
+    expect(row?.status).toBe('waiting')
+    expect(row?.transportState).toBe('running')
+  })
+
   it('clears the row on the null (cleared) event', () => {
     const qc = new QueryClient()
     qc.setQueryData(

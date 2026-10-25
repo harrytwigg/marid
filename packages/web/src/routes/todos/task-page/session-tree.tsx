@@ -6,6 +6,7 @@ import { pendingCaption, usePendingWork, type PendingWork } from "@/components/c
 import { SessionDepartmentBadge } from "@/components/session-department-badge"
 import { useOpenTodo } from "@/components/chat/file-open-context"
 import { useFileLinkSession } from "@/components/chat/file-link-session-context"
+import { SESSION_WAITING_LABEL, isSessionWaiting } from "@/lib/session-waiting"
 import { SessionRef } from "./session-ref"
 
 /**
@@ -36,6 +37,7 @@ function StateLabel({ node }: { node: SessionTreeNodeWire }) {
 }
 
 function stateLabel(node: SessionTreeNodeWire, pending: PendingWork | null): string {
+  if (isSessionWaiting(node.status)) return SESSION_WAITING_LABEL
   if (LIVE.has(node.status ?? "")) return "Working"
   if (node.status === "error") return "Error"
   return pending ? pendingCaption(pending) : "Finished"
@@ -162,6 +164,7 @@ export function SessionTreePanel({
   // A Todo nothing has worked reads exactly as it did before this existed: the
   // rail's Dispatch affordance and no empty region above it.
   if (!tree || tree.roots.length === 0) return null
+  const working = workingCount(tree.roots)
   return (
     <div data-testid="session-tree" className="flex flex-col gap-[1px]">
       {tree.roots.map((node) => (
@@ -169,9 +172,16 @@ export function SessionTreePanel({
       ))}
       {tree.totals.nodes > 1 && (
         <div className="pt-1 text-[11.5px] text-[var(--text-quaternary)]" data-testid="session-tree-totals">
-          {tree.totals.nodes} sessions{tree.totals.live > 0 ? ` · ${tree.totals.live} working` : ""}
+          {tree.totals.nodes} sessions{working > 0 ? ` · ${working} working` : ""}
         </div>
       )}
     </div>
   )
+}
+
+/** How many rows are actually working. The tree's `live` total counts paused
+ *  (`waiting`) sessions too, and a footer that called those "working" would
+ *  contradict the row above it. */
+function workingCount(nodes: readonly SessionTreeNodeWire[]): number {
+  return nodes.reduce((total, node) => total + (node.status === "running" ? 1 : 0) + workingCount(node.children), 0)
 }
