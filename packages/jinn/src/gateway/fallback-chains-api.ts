@@ -1,11 +1,10 @@
 import type { ServerResponse } from "node:http";
 import { engineHealthForTarget, readEngineHealth } from "../shared/engine-health.js";
-import { latestLimitReadings } from "../shared/fallback-chain-limits.js";
+import { employeeLimitAccounts, latestLimitReadings } from "../shared/fallback-chain-limits.js";
 import { fallbackChainsResponse } from "../shared/fallback-chain-subjects.js";
 import { getModelRegistry } from "../shared/models.js";
 import { isRemoteTarget, sshDestination } from "../shared/remote-target.js";
 import { availabilityRegistry, engineInstalledWhereRun } from "../sessions/availability-registry.js";
-import { accountForEmployee } from "../shared/engine-account.js";
 import type { Employee, JinnConfig, ModelRegistry } from "../shared/types.js";
 import type { ApiContext } from "./api.js";
 import { departmentScopeOf } from "./department-registry.js";
@@ -27,7 +26,7 @@ async function getFallbackChains(res: ServerResponse, url: URL, context: ApiCont
   const employee = name ? orgRegistry(config).get(name) : undefined;
   if (name && !employee) return notFound(res);
   const health = engineHealthForTarget(readEngineHealth(), isRemoteTarget(employee) ? employee : undefined);
-  const limits = latestLimitReadings(config, employee ? [accountForEmployee(employee, employee.engine)] : []);
+  const limits = latestLimitReadings(config, employee ? employeeLimitAccounts(employee, employee.engine) : []);
   const registry = getModelRegistry(config);
   json(res, fallbackChainsResponse({ config, registry, health, limits }, employee ? employeeChainInput(config, registry, employee) : undefined));
 }

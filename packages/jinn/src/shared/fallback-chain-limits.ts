@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import { readClaudeUsageHistory, usageHistoryPath, type UsageSample } from "./claude-usage-history.js";
 import { declaredClaudeAccounts } from "./claude-accounts-config.js";
-import { DEFAULT_CLAUDE_ACCOUNT } from "./engine-account.js";
+import { accountForEmployee, DEFAULT_CLAUDE_ACCOUNT } from "./engine-account.js";
 import type { FallbackLimitReadings } from "./fallback-chain-health.js";
-import type { JinnConfig } from "./types.js";
+import type { Employee, JinnConfig } from "./types.js";
 
 /**
  * The latest limits reading of each Claude account a chain may name, from the
@@ -36,4 +36,9 @@ export function latestLimitReadings(config: JinnConfig, extraAccounts: Iterable<
   const readings: FallbackLimitReadings = {};
   for (const account of accounts) readings[account] = newestSample(account);
   return readings;
+}
+
+/** The accounts an employee's chain is judged on: the one its turns on `engine` run as, and the Claude login a Claude link in its chain runs as (the two differ for an employee off Claude). */
+export function employeeLimitAccounts(employee: Employee | undefined, engine: string): string[] {
+  return [...new Set([accountForEmployee(employee, engine), accountForEmployee(employee, "claude")])];
 }

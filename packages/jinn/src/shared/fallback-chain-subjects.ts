@@ -88,7 +88,7 @@ export function employeeSubject(env: FallbackChainEnv, employee: Employee, scope
   const entries = employee.fallback ?? inherited?.entries ?? [];
   const own = employeeOwnLink(env.config, employee);
   const subject = {
-    ...subjectOf(env, { kind: "employee", id: employee.name }, { own, ownAccount, entries, mode, scope }, employee.fallback),
+    ...subjectOf(env, { kind: "employee", id: employee.name }, { own, ownAccount, claudeAccount: accountForEmployee(employee, "claude"), entries, mode, scope }, employee.fallback),
     ...inheritedSource(env.config, employee.engine, ownAccount, inherited?.source),
   };
   return employee.fallbackProblems?.length ? { ...subject, problems: employee.fallbackProblems } : subject;

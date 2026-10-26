@@ -1,4 +1,3 @@
-import { accountForEmployee, DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
 import type { EngineHealthReading } from "../shared/engine-health.js";
 import { sessionFallbackChain } from "../shared/fallback-chain.js";
 import { linkModelWritten } from "../shared/fallback-chain-links.js";
@@ -19,7 +18,7 @@ import { substituteScoped } from "./substitute-filters.js";
  * - which engines are installed and registered, on this host or the remote one;
  * - health, read for the host the turn runs on;
  * - an unprofiled Claude link reached from another engine runs on the
- *   employee's own Claude account, as it always has, so it is judged there.
+ *   employee's own Claude account, as it always has: the resolver judges it there.
  */
 
 export interface SubstituteChain {
@@ -39,14 +38,6 @@ function runtimeRegistry(input: ChooseSubstituteInput): ModelRegistry {
   return availabilityRegistry(getModelRegistry(config), (name) => engines.has(name) && engineInstalledWhereRun(config, name, destination));
 }
 
-/** An unprofiled Claude link in an engine chain is the employee's own account (the default's when it has none). */
-function judgedOnEmployeeAccount(links: ResolvedFallbackLink[], input: ChooseSubstituteInput, accountMode: boolean): ResolvedFallbackLink[] {
-  if (accountMode) return links;
-  const account = accountForEmployee(input.employee, "claude");
-  if (account === DEFAULT_CLAUDE_ACCOUNT) return links;
-  return links.map((link) => (link.engine === "claude" && link.profile === undefined ? { ...link, account } : link));
-}
-
 /** The session's chain, resolved for the turn that just hit a limit. `health` is the reading for the host the turn runs on. */
 export function resolveSubstituteChain(input: ChooseSubstituteInput, health: EngineHealthReading): SubstituteChain {
   const { config, employee, session, remote } = input;
@@ -57,5 +48,5 @@ export function resolveSubstituteChain(input: ChooseSubstituteInput, health: Eng
   const { source, links } = sessionFallbackChain({ config, employee, session: own, registry, health, scope });
   const namedModel = (link: ResolvedFallbackLink): string | undefined => (linkModelWritten(link) ? link.model : undefined);
   const accountMode = own.engine === "claude" && !remote;
-  return { source, links: judgedOnEmployeeAccount(links, input, accountMode), accountMode, namedModel };
+  return { source, links, accountMode, namedModel };
 }
