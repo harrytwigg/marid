@@ -107,13 +107,30 @@ describe("the chain editor for a remote employee", () => {
     expect(within(profile).getAllByRole("option").map((o) => o.textContent)).toEqual(["Default profile", "work"])
   })
 
+  it("tells an account on the wrong side from the host, and keeps 'names no account' for a name declared nowhere", () => {
+    const show = (employee: Employee, profile: string) => {
+      const { unmount } = render(<EmployeeFallbackField employee={employee} engine="claude" value={[{ engine: "claude", profile }]} onChange={() => {}} />)
+      const shown = [...document.querySelectorAll("[data-chain-problem]")].map((p) => p.textContent)
+      unmount()
+      return shown
+    }
+    expect(show(REMOTE, "work")).toEqual(['fallback[0]: profile "work" is a local profile; a remote employee falls back only to an account declared with remoteHost build-host'])
+    expect(show(REMOTE, "elsewhere")).toEqual(['fallback[0]: profile "elsewhere" is declared on me@other-host, not me@build-host'])
+    expect(show(LOCAL, "spare")).toEqual(['fallback[0]: profile "spare" is declared on me@build-host; a local employee falls back only to a local account'])
+    expect(show(REMOTE, "ghost")).toEqual(['fallback[0]: profile "ghost" names no account under engines.claude.accounts'])
+    expect(show(REMOTE, "bare")).toEqual(['fallback[0]: profile "bare" is declared on build-host, not me@build-host'])
+    // Its own host's account raises nothing (this employee names no directory, so it is not its own target).
+    expect(show({ ...REMOTE, remoteClaudeConfigDir: undefined }, "spare")).toEqual([])
+  })
+
   it("holds a save whose chain names a local profile, and lets one that names its own host's account through", () => {
     const registryValue = registry.current as never
     const own = (links: { engine: string; profile?: string }[]) => ({ links, expanded: links.map(() => false), legacy: false })
-    const profiles = profilesForEmployee(REMOTE, CHAINS).map((p) => p.name)
-    expect(chainBlocked(registryValue, own([{ engine: "claude", profile: "work" }]), [], profiles, true)).toBe(true)
-    expect(chainBlocked(registryValue, own([{ engine: "claude", profile: "elsewhere" }]), [], profiles, true)).toBe(true)
-    expect(chainBlocked(registryValue, own([{ engine: "claude", profile: "spare" }]), [], profiles, true)).toBe(false)
+    const { accounts } = fallbackFieldState(REMOTE, "claude", null, CHAINS)
+    expect(chainBlocked(registryValue, own([{ engine: "claude", profile: "work" }]), [], accounts, true)).toBe(true)
+    expect(chainBlocked(registryValue, own([{ engine: "claude", profile: "elsewhere" }]), [], accounts, true)).toBe(true)
+    expect(chainBlocked(registryValue, own([{ engine: "claude", profile: "ghost" }]), [], accounts, true)).toBe(true)
+    expect(chainBlocked(registryValue, own([{ engine: "claude", profile: "spare" }]), [], accounts, true)).toBe(false)
   })
 
   it("keeps a remote employee's own declared account out of its own chain, with or without the profile", () => {
@@ -121,7 +138,7 @@ describe("the chain editor for a remote employee", () => {
     const registryValue = registry.current as never
     const own = (links: { engine: string; profile?: string }[]) => ({ links, expanded: links.map(() => false), legacy: false })
     const selves = [{ engine: "claude", profile: "spare", model: "sonnet" }, { engine: "claude", profile: "spare" }, { engine: "claude" }, { engine: "claude", model: "sonnet" }]
-    expect(chainBlocked(registryValue, own([{ engine: "claude", profile: "spare" }]), selves, ["spare"], true)).toBe(true)
+    expect(chainBlocked(registryValue, own([{ engine: "claude", profile: "spare" }]), selves, { names: ["spare"] }, true)).toBe(true)
   })
 })
 

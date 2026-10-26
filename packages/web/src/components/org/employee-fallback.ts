@@ -1,5 +1,6 @@
 import {
   fallbackLinkKey,
+  employeeProfileHostProblem,
   fallbackLinkOf,
   type FallbackChainEntry,
   type FallbackChainSubject,
@@ -11,7 +12,7 @@ import type { Employee } from "@/lib/api"
 import { engineDisplayName } from "@/lib/engine-names"
 import type { EnginesResponse } from "@/lib/api"
 import { linkOfResolved } from "@/routes/settings/engines/chain-links"
-import { rowProblemsAgainst } from "@/routes/settings/engines/chain-problems"
+import { hostRowProblems, rowProblemsAgainst, type HostProblem } from "@/routes/settings/engines/chain-problems"
 
 /* What the employee screens need to know about a chain: whether it is the
  * employee's own, where an inherited one comes from, and what would run. */
@@ -44,6 +45,19 @@ export function employeeDestination(employee: Pick<Employee, "remoteHost" | "rem
 export function profilesForEmployee(employee: EmployeeHost, chains: FallbackChainsResponse | undefined): FallbackProfileOption[] {
   const destination = employeeDestination(employee)
   return (chains?.profiles ?? []).filter((p) => (destination === undefined ? p.remote === undefined : p.remote?.destination === destination))
+}
+
+/**
+ * Why a declared account is the wrong side for this employee's chain, as the gateway words it at load, or
+ * undefined when it may be named (or is declared nowhere: the validator calls that name unknown).
+ */
+export function employeeHostProblem(employee: Pick<Employee, "remoteHost" | "remoteUser">, chains: FallbackChainsResponse | undefined): HostProblem {
+  const destination = employeeDestination(employee)
+  const host = destination === undefined ? undefined : { host: employee.remoteHost!, destination }
+  return (at, profile) => {
+    const declared = chains?.profiles.find((p) => p.name === profile)
+    return declared ? employeeProfileHostProblem(at, declared.remote, host) : undefined
+  }
 }
 
 /** How the picker names an account: a remote one with the host it is on. */
@@ -184,7 +198,14 @@ export function fallbackFieldState(
   const own = value === null ? null : ownChainOf(employee, value, subject)
   const changed = !sameChain(value, employeeChainOf(employee))
   const options = profilesForEmployee(employee, chains)
-  return { inherited, self, selves, shown: own?.links ?? inherited.links, own, subject, changed, profiles: options.map((p) => p.name), profileLabels: profileLabels(options) }
+  const accounts: DeclaredAccounts = { names: (chains?.profiles ?? []).map((p) => p.name), hostProblem: employeeHostProblem(employee, chains) }
+  return { inherited, self, selves, shown: own?.links ?? inherited.links, own, subject, changed, profiles: options.map((p) => p.name), accounts, profileLabels: profileLabels(options) }
+}
+
+/** What a chain's profile links are checked against: every declared account's name, and why one on the wrong side for the employee may not be named. */
+export interface DeclaredAccounts {
+  names: readonly string[]
+  hostProblem?: HostProblem
 }
 
 /** How many problems the validator finds in an employee's own chain: a chain with any is not saved. */
@@ -192,12 +213,12 @@ export function chainProblemCount(
   links: FallbackLink[],
   selves: readonly FallbackLink[],
   registry: EnginesResponse,
-  /** The account names this employee's chain may name (`profilesForEmployee`). */
-  profiles: readonly string[],
+  /** A name that is not among the declared accounts names no account. */
+  accounts: DeclaredAccounts,
 ): number {
-  const ctx = { engines: Object.values(registry.engines), profiles: [...profiles] }
+  const ctx = { engines: Object.values(registry.engines), profiles: [...accounts.names] }
   const found = rowProblemsAgainst("fallback", links, ctx, selves)
-  return found.byRow.flat().length + found.general.length
+  return found.byRow.flat().length + found.general.length + hostRowProblems("fallback", links, accounts.hostProblem).flat().length
 }
 
 export { subjectProblems } from "@/hooks/use-fallback-chains"
@@ -212,8 +233,8 @@ export function chainBlocked(
   registry: EnginesResponse | undefined,
   own: OwnChain | null,
   selves: readonly FallbackLink[],
-  profiles: readonly string[],
+  accounts: DeclaredAccounts,
   changed: boolean,
 ): boolean {
-  return changed && registry !== undefined && own !== null && chainProblemCount(own.links, selves, registry, profiles) > 0
+  return changed && registry !== undefined && own !== null && chainProblemCount(own.links, selves, registry, accounts) > 0
 }

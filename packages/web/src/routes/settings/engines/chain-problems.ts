@@ -97,3 +97,30 @@ export function rowProblemsAgainst(
   }
 }
 
+
+/** Why a declared account may not be named on this chain: the sentence for `at` (`fallback[0]: profile "x"`) and the profile's name, or undefined when it may. */
+export type HostProblem = (at: string, profile: string) => string | undefined
+
+/**
+ * Per row, the host-specific reason its Claude profile is refused (an account on the wrong side),
+ * in the gateway's own sentence. A name that is declared nowhere gets none: the validator refuses it as naming no account.
+ */
+export function hostRowProblems(where: string, links: FallbackLink[], hostProblem: HostProblem | undefined): string[][] {
+  return links.map((link, index) => {
+    const reason = hostProblem && link.engine === "claude" && link.profile !== undefined ? hostProblem(`${where}[${index}]: profile "${link.profile}"`, link.profile) : undefined
+    return reason ? [reason] : []
+  })
+}
+
+/** {@link rowProblemsAgainst}, with the host reasons added under their rows. */
+export function rowProblemsWithHost(
+  where: string,
+  links: FallbackLink[],
+  ctx: ChainContext,
+  selves: readonly FallbackLink[],
+  hostProblem: HostProblem | undefined,
+): { byRow: string[][]; general: string[] } {
+  const found = rowProblemsAgainst(where, links, ctx, selves)
+  const host = hostRowProblems(where, links, hostProblem)
+  return { ...found, byRow: found.byRow.map((row, i) => [...row, ...host[i]]) }
+}

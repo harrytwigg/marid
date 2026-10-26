@@ -2,7 +2,7 @@ import { accountNames, declaredRemoteAccountByName } from "./claude-accounts-con
 import { resolveEmployeeClaudeProfile } from "./claude-profile.js";
 import { claudeAccountKey, remoteClaudeAccountKey } from "./engine-account.js";
 import { ownTargetLink } from "./fallback-chain-links.js";
-import { fallbackChainProblems, fallbackLinkOf, type FallbackLink } from "./fallback-chain-wire.js";
+import { fallbackChainProblems, fallbackLinkOf, employeeProfileHostProblem, type FallbackLink } from "./fallback-chain-wire.js";
 import type { DuplicateTolerance } from "./fallback-chain-load.js";
 import { logger } from "./logger.js";
 import { ENGINE_NAMES } from "./models.js";
@@ -56,18 +56,13 @@ export function employeeFallbackProblems(config: JinnConfig | undefined, employe
 
 /** Where a profile link may run: a remote employee falls back only to an account declared on its own `user@host`, a local one to no remote account. Unknown names are the wire module's to refuse. */
 function hostProfileProblems(config: JinnConfig, employee: EmployeeTarget, chain: unknown[]): string[] {
+  const host = isRemoteTarget(employee) ? { host: employee.remoteHost, destination: sshDestination(employee) } : undefined;
   return chain.flatMap((entry, index) => {
     const link = fallbackLinkOf(entry);
     if (link?.engine !== "claude" || link.profile === undefined) return [];
-    const at = `fallback[${index}]: profile "${link.profile}"`;
     const remote = declaredRemoteAccountByName(config, link.profile);
-    const local = accountNames(config.engines).has(link.profile) && !remote;
-    if (!isRemoteTarget(employee)) {
-      return remote ? [`${at} is declared on ${remote.destination}; a local employee falls back only to a local account`] : [];
-    }
-    const destination = sshDestination(employee);
-    if (local) return [`${at} is a local profile; a remote employee falls back only to an account declared with remoteHost ${employee.remoteHost}`];
-    return remote && remote.destination !== destination ? [`${at} is declared on ${remote.destination}, not ${destination}`] : [];
+    if (!remote && !accountNames(config.engines).has(link.profile)) return [];
+    return employeeProfileHostProblem(`fallback[${index}]: profile "${link.profile}"`, remote, host) ?? [];
   });
 }
 
