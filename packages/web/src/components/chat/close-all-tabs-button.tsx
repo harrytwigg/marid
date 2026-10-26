@@ -2,9 +2,10 @@ import { X } from '@/components/ui/icon'
 import { cn } from '@/lib/utils'
 
 /**
- * "Close all" as the tab bars carry it: a labelled button at the end of the tabs, standing where
- * they are rather than buried in the overflow menu. `compact` is the phone's 44px strip; the
- * desktop bars take the tighter size.
+ * Close every tab, at the end of a tab bar: a boxed × so it reads as one action on the whole set
+ * rather than one more per-tab close, and icon-only so the bar keeps its height — its name is the
+ * label and the hover tooltip. `self-center` is deliberate: the strips lay their children out
+ * stretched, which would otherwise pin a fixed-size button to the top of the bar.
  */
 export function CloseAllTabsButton({ onClick, compact }: { onClick: () => void; compact?: boolean }) {
   return (
@@ -17,12 +18,11 @@ export function CloseAllTabsButton({ onClick, compact }: { onClick: () => void; 
       onClick={(event) => { event.stopPropagation(); onClick() }}
       onMouseDown={(event) => event.stopPropagation()}
       className={cn(
-        'inline-flex shrink-0 items-center gap-1 rounded-[var(--radius-sm)] text-[length:var(--text-caption1)] text-[var(--text-tertiary)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)]',
-        compact ? 'h-9 px-2' : 'h-6 px-1.5',
+        'grid shrink-0 self-center place-items-center rounded-[var(--radius-sm)] border border-[var(--glass-edge)] bg-[var(--fill-tertiary)] text-[var(--text-secondary)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)] focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-[var(--accent)]',
+        compact ? 'size-8' : 'size-6',
       )}
     >
-      <X size={compact ? 12 : 11} aria-hidden />
-      <span>Close all</span>
+      <X size={compact ? 14 : 12} aria-hidden />
     </button>
   )
 }
