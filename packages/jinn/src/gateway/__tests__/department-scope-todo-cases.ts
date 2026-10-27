@@ -63,6 +63,20 @@ const assign: CaseBuilder = (fx) => {
   };
 };
 
+const reparent: CaseBuilder = (fx) => {
+  const [mine, home, theirs] = [fx.mine(), fx.mine(), fx.theirs()];
+  const at = (id: string, parentId: string): [string, string, unknown] => ["PUT", `/api/work-items/${id}/parent`, { parentId }];
+  const unknown = unknownOf(theirs.id);
+  return {
+    allow: at(mine.id, home.id),
+    allowStatus: 200,
+    refuse: [
+      { kind: "unknown", req: at(theirs.id, home.id), like: at(unknown, home.id), ids: [theirs.id, unknown] },
+      { kind: "unknown", req: at(fx.mine().id, theirs.id), like: at(fx.mine().id, unknown), ids: [theirs.id, unknown] },
+    ],
+  };
+};
+
 const dispatch: CaseBuilder = (fx) => {
   const [mine, theirs] = [fx.mine(), fx.theirs()];
   const at = (id: string): [string, string, unknown] => ["POST", `/api/work-items/${id}/dispatch`, {}];
@@ -131,6 +145,7 @@ export const TODO_CASES: Record<string, CaseBuilder> = {
   "DELETE /api/work-items/:id/relations": unrelate,
   "GET /api/work-items/:id/sessions": todoRoute("GET", "/sessions", 200, undefined, 200),
   "POST /api/work-items/:id/assign": assign,
+  "PUT /api/work-items/:id/parent": reparent,
   "POST /api/work-items/:id/dispatch": dispatch,
   "POST /api/work-items/:id/capture-landing": todoRoute("POST", "/capture-landing", 200, {}),
   "PUT /api/work-items/:id/dispatch-config": config("PUT"),

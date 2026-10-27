@@ -8,7 +8,7 @@ import { EXPECTED_ENUMS, EXPECTED_REQUIRED, EXPECTED_TOOL_NAMES } from "./tool-m
 // concise rather than growing into this ceiling. Rebased down when the
 // Experiments and Workflow tools were removed, so the ceiling again sits ON
 // the largest wrapper (Pi).
-const MAX_MANIFEST_TOKENS = 4325;
+const MAX_MANIFEST_TOKENS = 4344;
 // Exact gate: js-tiktoken 1.0.21 with its local o200k_base ranks. The provider
 // projection is the OpenAI Responses API function-tool request shape pinned on 2026-07-12.
 const ATTESTED = {
@@ -269,9 +269,16 @@ const ATTESTED = {
   // in note"), and `asOperator` drops its own "; reason in note", which the
   // tool line above already says. Net one token under the old text, so the
   // ceiling does not move and Pi stays two under it.
-  rpc: { tokens: 3988, sha256: "2ddd2e3cb0bf7de2d63f3e69104e9d7a7093f82322c473bf272fbafcb3bc3cfa" },
-  pi: { tokens: 4323, sha256: "e570bd64af1e4dc15a4b5c1ff53960231d806821fecbe55b64368de2b86a4681" },
-  openai: { tokens: 4127, sha256: "d02380287b4b4211d4d5f498f0a5ca130d38b74e13892702c9cf71a546d31e7e" },
+  // Rebased for `parentId` on edit_work_item: a Todo's parent can be changed
+  // after creation (a Todo id makes it a sub-task, null detaches it to a root,
+  // and its own sub-tasks move with it). Rung 1: no tool of its own, one bare
+  // `string|null` property beside `sprint` and a clause on the tool line, since
+  // null meaning "detach" is not guessable. 21 tokens on every wrapper, and
+  // there is no dead prose left on this surface to buy them back with, so the
+  // ceiling moves by exactly that and Pi sits ON it again.
+  rpc: { tokens: 4009, sha256: "68d80125f7f1c7a72e5ac6efaae9146c248d7ac269fc0b7c99d610d177337b9c" },
+  pi: { tokens: 4344, sha256: "336d5afd984c777aaeae8c18e32128e675d91784c0b27c30ea87214a32d0354c" },
+  openai: { tokens: 4148, sha256: "68b0bf5db1d82f1e5cfc3e49957aa0aa13752df46951fc5ac0c1753ca69fb4e6" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;

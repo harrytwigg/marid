@@ -1,6 +1,7 @@
 import { gatewayRequest, JinnMcpToolError, type JinnMcpTool } from "./toolkit.js";
 import { labelTools } from "./label-tools.js";
 import { editWithSprintMove } from "./work-item-sprint-edit.js";
+import { editWithReparent, optionalParentRef } from "./work-item-reparent-edit.js";
 import {
   uploadCommentAttachments,
   uploadWorkItemAttachment,
@@ -322,7 +323,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
 
   const edit: JinnMcpTool = {
     name: "edit_work_item",
-    description: "Edit Todo content.",
+    description: "Edit Todo content; parentId re-parents (null detaches).",
     inputSchema: {
       type: "object",
       properties: {
@@ -333,6 +334,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         dueAt: { type: ["string", "null"] },
         startAt: { type: ["string", "null"] },
         sprint: { type: ["string", "null"] },
+        parentId: { type: ["string", "null"] },
       },
       required: ["id"],
     },
@@ -373,9 +375,14 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         if (v !== undefined) patch[key] = v;
       }
       const sprint = optionalSprintRef(args);
-      if (Object.keys(patch).length === 0 && sprint === undefined) {
-        throw new JinnMcpToolError("pass at least one editable field (title, body, priority, dueAt, startAt, sprint)");
+      const parentId = optionalParentRef(args);
+      if (parentId !== undefined && sprint !== undefined) {
+        throw new JinnMcpToolError("sprint and parentId are separate edits: sub-tasks follow their root's sprint, so make one call for each");
       }
+      if (Object.keys(patch).length === 0 && sprint === undefined && parentId === undefined) {
+        throw new JinnMcpToolError("pass at least one editable field (title, body, priority, dueAt, startAt, sprint, parentId)");
+      }
+      if (parentId !== undefined) return editWithReparent(ctx, id, parentId, patch, (edit) => patchWorkItem(ctx, id, edit, `editing work item "${id}"`));
       if (sprint === undefined) return mutationResult(await patchWorkItem(ctx, id, patch, `editing work item "${id}"`), "Todo metadata edited.");
       return editWithSprintMove(ctx, id, sprint, patch, (edit) => patchWorkItem(ctx, id, edit, `editing work item "${id}"`));
     },
