@@ -3,10 +3,10 @@ import { BOARD_WALK_STARTED_BY } from "../board-walk/started-sessions.js";
 import { isOrgAncestor, resolveOrgHierarchy } from "./org-hierarchy.js";
 import { orgRegistry } from "./org-registry.js";
 import type { WorkItemCaller } from "./work-item-arming.js";
-import { resolveOrgRoot, resolveWorkItemOwner } from "./work-item-owner.js";
-import { isPortalAgentSession, listSessionsByWorkItem } from "../sessions/registry.js";
+import { resolveOrgRoot, resolveWorkItemOwner, sourceSessionId } from "./work-item-owner.js";
+import { getSession, isPortalAgentSession, listSessionsByWorkItem } from "../sessions/registry.js";
 import { remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
-import { TODO_DISPATCHER_NAME } from "./system-employees.js";
+import { TODO_DISPATCHER_NAME, isSystemEmployeeName } from "./system-employees.js";
 import type { Employee, Session } from "../shared/types.js";
 import { getWorkItem, type WorkItem } from "../work-items/store.js";
 import { isExecutionAttempt } from "../work-items/link-role.js";
@@ -24,30 +24,47 @@ import { OPERATOR_ASSIGNEE } from "../work-items/operator-assignee.js";
  */
 
 /** The four ways an employee has standing over a Todo: the org root has it
- *  everywhere, the routed owner has it on its own, the owner of the Todo's root
- *  has it over everything below it, and a manager or executive has it over
- *  anyone below them in the tree.
+ *  everywhere, the routed owner has it on its own, the owner of any Todo above
+ *  it in its tree has it over everything below, and a manager or executive has
+ *  it over anyone below them in the tree.
  *
- *  The root's owner needs its own clause because assigning a sub-task moves its
- *  owner to the assignee: a lead who hands a sub-task to a report would
- *  otherwise lose the standing to dispatch, delegate or reassign it, unless
- *  their rank and place in the org tree happened to cover the assignee. */
+ *  The ancestor clause is needed because assigning a sub-task moves its owner
+ *  to the assignee: whoever hands a sub-task on, at any depth, would otherwise
+ *  lose the standing to dispatch, delegate or reassign it, unless their rank
+ *  and place in the org tree happened to cover the assignee. */
 function hasStandingOverWorkItem(roster: Map<string, Employee>, employee: Employee, employeeName: string, item: WorkItem): boolean {
   const root = resolveOrgRoot();
   if (root?.kind === 'employee' && root.name === employeeName) return true;
   const owner = resolveWorkItemOwner(item);
   if (owner === employeeName) return true;
-  if (ownsRootOf(item, employeeName)) return true;
+  if (ownsAncestorOf(roster, item, employeeName)) return true;
   if (!owner || (employee.rank !== 'manager' && employee.rank !== 'executive')) return false;
   return isOrgAncestor(resolveOrgHierarchy(roster), employeeName, owner);
 }
 
-/** Whether `employeeName` owns the root of the tree `item` sits in. A root
- *  Todo is its own root, which the owner clause above already answered. */
-function ownsRootOf(item: WorkItem, employeeName: string): boolean {
-  if (item.rootId === item.id) return false;
-  const rootItem = getWorkItem(item.rootId);
-  return !!rootItem && resolveWorkItemOwner(rootItem) === employeeName;
+/** Whether `employeeName` owns a Todo above `item`. An ancestor's owner is its
+ *  assignee, or, while it is unassigned, the employee whose session created it.
+ *  Unlike `resolveWorkItemOwner` this never falls back to whoever has a session
+ *  linked to it, which would hand a reviewer or consultant the whole tree, and
+ *  an ancestor assigned to the operator has no employee owner at all. */
+function ownsAncestorOf(roster: Map<string, Employee>, item: WorkItem, employeeName: string): boolean {
+  const seen = new Set<string>([item.id]);
+  let parentId = item.parentId;
+  while (parentId && !seen.has(parentId)) {
+    seen.add(parentId);
+    const ancestor = getWorkItem(parentId);
+    if (!ancestor) return false;
+    if (ancestorOwner(roster, ancestor) === employeeName) return true;
+    parentId = ancestor.parentId;
+  }
+  return false;
+}
+
+function ancestorOwner(roster: Map<string, Employee>, ancestor: WorkItem): string | null {
+  if (ancestor.assignee) return roster.has(ancestor.assignee) ? ancestor.assignee : null;
+  const creatorId = sourceSessionId(ancestor);
+  const creator = creatorId ? getSession(creatorId)?.employee : null;
+  return creator && roster.has(creator) && !isSystemEmployeeName(creator) ? creator : null;
 }
 
 export function authorizeWorkItemOwnerManagerOrRoot(

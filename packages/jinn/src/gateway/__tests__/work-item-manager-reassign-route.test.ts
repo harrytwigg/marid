@@ -42,6 +42,8 @@ writeEmployee("lead-report", "employee", "lead");
 writeEmployee("peer-owner", "senior", "boss");
 writeEmployee("peer-report", "employee", "boss");
 writeEmployee("outsider", "senior", "boss");
+writeEmployee("sub-lead", "senior", "boss");
+writeEmployee("sub-report", "employee", "sub-lead");
 
 let registry: Registry;
 let workItems: WorkItems;
@@ -62,8 +64,11 @@ function sessionOf(employee: string, tag: string) {
  * A root `owner` holds and a backlog child under it, made by one session of the
  * owner and assigned to `report` by another, as a lead does across turns.
  */
-async function assignedChild(owner: string, report: string, tag: string) {
-  const root = workItems.createWorkItem({ title: `root of ${tag}`, assignee: owner, status: "executing" });
+async function assignedChild(owner: string, report: string, tag: string, rootAssignee: string | null = owner) {
+  const root = workItems.createWorkItem({
+    title: `root of ${tag}`,
+    ...(rootAssignee ? { assignee: rootAssignee, status: "executing" as const } : {}),
+  });
   const creator = sessionOf(owner, `${tag}-create`);
   const child = workItems.createWorkItem({
     title: `child of ${tag}`,
@@ -87,7 +92,7 @@ afterAll(async () => {
 });
 
 describe.each([
-  ["a manager over its report", "mgr", "mgr-report"],
+  ["a root owner who is also a manager over its report", "mgr", "mgr-report"],
   ["a root owner who leads its report", "lead", "lead-report"],
   ["a root owner with no reporting line to the assignee", "peer-owner", "peer-report"],
 ])("%s, after assigning a child", (_label, owner, report) => {
@@ -143,5 +148,52 @@ describe("standing over an assigned child stays bounded", () => {
 
     const response = await call("POST", `/api/work-items/${child.id}/dispatch`, {}, callerHeaders(otherOwner.id));
     expect(response.status).toBe(403);
+  });
+
+  it("does not give a session linked to an operator-owned root standing over its children", async () => {
+    const { child } = await assignedChild("peer-owner", "peer-report", "operator-root", "@operator");
+    const linked = sessionOf("outsider", "operator-root-linked");
+    workItems.linkSession(child.rootId, linked.id, `session:${linked.id}`, "review");
+    const response = await call("POST", `/api/work-items/${child.id}/dispatch`, {}, callerHeaders(linked.id));
+    expect(response.status).toBe(403);
+  });
+
+  it("does not give a session linked to an unassigned root standing over its children", async () => {
+    const { child } = await assignedChild("peer-owner", "peer-report", "unassigned-root", null);
+    const linked = sessionOf("outsider", "unassigned-root-linked");
+    workItems.linkSession(child.rootId, linked.id, `session:${linked.id}`, "execute");
+    const response = await call("POST", `/api/work-items/${child.id}/dispatch`, {}, callerHeaders(linked.id));
+    expect(response.status).toBe(403);
+  });
+});
+
+describe("a manager who does not own the root", () => {
+  it("keeps standing over a Todo assigned to a report it manages", async () => {
+    const root = workItems.createWorkItem({ title: "root of the manager case", assignee: "outsider", status: "executing" });
+    const child = workItems.createWorkItem({ title: "assigned below the manager", parentId: root.id, assignee: "mgr-report" });
+    const session = sessionOf("mgr", "manager-not-root-owner");
+    const response = await call("POST", `/api/work-items/${child.id}/assign`, { assignee: "mgr" }, callerHeaders(session.id));
+    expect(response.status).toBe(200);
+  });
+});
+
+describe("a Todo handed down two levels", () => {
+  it("leaves the middle assignee able to dispatch the grandchild it assigned", async () => {
+    const { child } = await assignedChild("lead", "sub-lead", "grandchild");
+    const creator = sessionOf("sub-lead", "grandchild-create");
+    const grandchild = workItems.createWorkItem({
+      title: "grandchild",
+      parentId: child.id,
+      source: "session",
+      sourceRef: `session:${creator.id}:idempotency:grandchild`,
+      createdBy: `session:${creator.id}`,
+    });
+    const session = sessionOf("sub-lead", "grandchild-assign");
+    const assigned = await call("POST", `/api/work-items/${grandchild.id}/assign`, { assignee: "sub-report" }, callerHeaders(session.id));
+    expect(assigned.status).toBe(200);
+
+    const dispatched = await call("POST", `/api/work-items/${grandchild.id}/dispatch`, {}, callerHeaders(session.id));
+    expect(dispatched.body.error).toBeUndefined();
+    expect(dispatched.status).toBe(201);
   });
 });
