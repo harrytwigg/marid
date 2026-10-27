@@ -17,7 +17,7 @@ import { useTheme } from "@/routes/providers"
 import { THEMES } from "@/lib/themes"
 import { engineDisplayName } from "@/lib/engine-names"
 import { api, type ModelInfo } from "@/lib/api"
-import { useModelRegistry } from "@/hooks/use-model-registry"
+import { useModelRegistry, effortLevelsFor, defaultEffort, DEFAULT_EFFORT } from "@/hooks/use-model-registry"
 import { buildNewSessionParams } from "@/components/chat/new-chat-helpers"
 import { resolveTodoIdPrefix } from "@/lib/todo-id"
 import { PRODUCT_NAME } from "@/lib/brand"
@@ -116,7 +116,7 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
   }>({
     engine: undefined,
     model: undefined,
-    effortLevel: "medium",
+    effortLevel: DEFAULT_EFFORT,
   })
 
   const TOTAL_STEPS = 5
@@ -158,7 +158,11 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
     const models: ModelInfo[] = defaultEntry?.models ?? []
     if (models.length === 0) return
     const defaultModel = defaultEntry?.defaultModel ?? models[0]?.id
-    setEngineChoice({ engine: defaultEng, model: defaultModel, effortLevel: "medium" })
+    setEngineChoice({
+      engine: defaultEng,
+      model: defaultModel,
+      effortLevel: defaultEffort(effortLevelsFor(enginesData, defaultEng, defaultModel)) ?? DEFAULT_EFFORT,
+    })
   }, [engineChoice.engine, enginesData])
 
   // Dismiss the loading bridge once the ?session= navigation has landed.
@@ -562,7 +566,11 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
                               onClick={() => {
                                 const entry = enginesData!.engines[key]
                                 const newModel = entry.defaultModel ?? entry.models[0]?.id
-                                setEngineChoice({ engine: key, model: newModel, effortLevel: "medium" })
+                                setEngineChoice({
+                                  engine: key,
+                                  model: newModel,
+                                  effortLevel: defaultEffort(effortLevelsFor(enginesData, key, newModel)) ?? DEFAULT_EFFORT,
+                                })
                               }}
                               className="flex items-center gap-[var(--space-3)] px-[var(--space-4)] py-[var(--space-2)] rounded-[var(--radius-md)] cursor-pointer transition-all duration-150 text-left"
                               style={{
@@ -617,7 +625,11 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
                               <button
                                 key={m.id}
                                 onClick={() =>
-                                  setEngineChoice({ engine: engineChoice.engine, model: m.id, effortLevel: "medium" })
+                                  setEngineChoice({
+                                    engine: engineChoice.engine,
+                                    model: m.id,
+                                    effortLevel: defaultEffort(effortLevelsFor(enginesData, engineChoice.engine, m.id)) ?? DEFAULT_EFFORT,
+                                  })
                                 }
                                 className="flex items-center gap-[var(--space-3)] px-[var(--space-4)] py-[var(--space-3)] rounded-[var(--radius-md)] cursor-pointer transition-all duration-150 text-left"
                                 style={{

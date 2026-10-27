@@ -248,7 +248,7 @@ engines:
   claude:
     bin: claude
     model: opus
-    effortLevel: medium
+    effortLevel: high
   codex:
     bin: codex
     model: gpt-5.5

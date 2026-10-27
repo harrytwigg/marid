@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { MemoryRouter } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -6,6 +6,7 @@ import { queryKeys } from "@/lib/query-keys"
 import type { EnginesResponse } from "@/lib/api"
 
 const getEngines = vi.fn()
+const completeOnboarding = vi.fn()
 const setCompanyName = vi.fn()
 const setPortalName = vi.fn()
 const setOperatorName = vi.fn()
@@ -16,7 +17,7 @@ const setTheme = vi.fn()
 vi.mock("@/lib/api", () => ({
   api: {
     getEngines: (...args: unknown[]) => getEngines(...args),
-    completeOnboarding: vi.fn(),
+    completeOnboarding: (...args: unknown[]) => completeOnboarding(...args),
     createSession: vi.fn(),
   },
 }))
@@ -83,6 +84,8 @@ function renderWizard() {
 beforeEach(() => {
   getEngines.mockReset()
   getEngines.mockRejectedValue(new Error("raw engine fetch should not run"))
+  completeOnboarding.mockReset()
+  completeOnboarding.mockRejectedValue(new Error("stop after recording the choice"))
   setCompanyName.mockReset()
   setPortalName.mockReset()
   setOperatorName.mockReset()
@@ -137,5 +140,18 @@ describe("OnboardingWizard model registry", () => {
     expect(await screen.findByText("Codex")).toBeTruthy()
     expect(screen.getByText("GPT-5.5")).toBeTruthy()
     expect(getEngines).not.toHaveBeenCalled()
+  })
+
+  it("preselects high effort for the default engine and model", async () => {
+    renderWizard()
+
+    fireEvent.click(await screen.findByRole("button", { name: "Next" }))
+    fireEvent.click(screen.getByRole("button", { name: "Next" }))
+    fireEvent.click(screen.getByRole("button", { name: "Next" }))
+    fireEvent.click(screen.getByRole("button", { name: "Next" }))
+    fireEvent.click(await screen.findByRole("button", { name: "Get Started" }))
+
+    await waitFor(() => expect(completeOnboarding).toHaveBeenCalled())
+    expect(completeOnboarding.mock.calls[0][0]).toMatchObject({ engine: "codex", model: "gpt-5.5", effortLevel: "high" })
   })
 })

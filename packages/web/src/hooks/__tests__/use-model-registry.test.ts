@@ -82,14 +82,18 @@ describe('opencode variants', () => {
 })
 
 describe('defaultEffort', () => {
-  it('prefers medium', () => expect(defaultEffort(['low', 'medium', 'high'])).toBe('medium'))
-  it('uses the first when no medium', () => expect(defaultEffort(['low', 'xhigh'])).toBe('low'))
+  it('prefers high', () => expect(defaultEffort(['low', 'medium', 'high'])).toBe('high'))
+  it('prefers high over higher levels', () => expect(defaultEffort(['low', 'medium', 'high', 'xhigh', 'max'])).toBe('high'))
+  it('falls back to the nearest level below when there is no high', () => expect(defaultEffort(['low', 'medium'])).toBe('medium'))
+  it('falls back to the nearest level above when nothing lighter is closer', () => expect(defaultEffort(['xhigh', 'max'])).toBe('xhigh'))
+  it('takes the lighter level on a tie', () => expect(defaultEffort(['medium', 'xhigh'])).toBe('medium'))
+  it('uses the first when no level is a known one', () => expect(defaultEffort(['fast', 'slow'])).toBe('fast'))
   it('undefined for empty', () => expect(defaultEffort([])).toBeUndefined())
 })
 
 describe('clampEffort', () => {
   it('keeps a still-valid current level', () => expect(clampEffort(['low', 'medium', 'high'], 'high')).toBe('high'))
-  it('replaces an invalid level with the default', () => expect(clampEffort(['low', 'medium', 'high'], 'xhigh')).toBe('medium'))
+  it('replaces an invalid level with the default', () => expect(clampEffort(['low', 'medium', 'high'], 'xhigh')).toBe('high'))
   it('undefined when the new model has no effort', () => expect(clampEffort([], 'high')).toBeUndefined())
 })
 

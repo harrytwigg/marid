@@ -285,7 +285,7 @@ engines:
   claude:
     bin: claude
     model: opus
-    effortLevel: medium
+    effortLevel: high
     fallback: [codex, grok]
   codex:
     bin: codex
@@ -593,7 +593,7 @@ engines:
   claude:
     bin: claude
     model: opus
-    effortLevel: medium
+    effortLevel: high
     fallback: [codex, grok]
   codex:
     bin: codex

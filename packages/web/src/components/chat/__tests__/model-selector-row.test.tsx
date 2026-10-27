@@ -246,7 +246,7 @@ describe('ModelSelectorRow in-place engine panel', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: /codex/i }))
 
     // onChange fired with the new engine + its default model (cascade preserved).
-    expect(onChange).toHaveBeenCalledWith({ engine: 'codex', model: 'gpt-5.5', effortLevel: 'medium' })
+    expect(onChange).toHaveBeenCalledWith({ engine: 'codex', model: 'gpt-5.5', effortLevel: 'high' })
     // Auto-returned to the main panel (Back gone) now showing codex's model
     // (the menu is modal while open, so the chip itself isn't queryable here).
     expect(await screen.findByRole('menuitemradio', { name: /gpt-5\.5/i })).toBeTruthy()
@@ -290,7 +290,7 @@ describe('ModelSelectorRow in-place engine panel', () => {
     openMenu()
     fireEvent.click(await screen.findByRole('menuitem', { name: /switch engine/i }))
     fireEvent.click(await screen.findByRole('menuitem', { name: /codex/i }))
-    expect(onChange).toHaveBeenCalledWith({ engine: 'codex', model: 'gpt-5.5', effortLevel: 'medium' })
+    expect(onChange).toHaveBeenCalledWith({ engine: 'codex', model: 'gpt-5.5', effortLevel: 'high' })
   })
 })
 

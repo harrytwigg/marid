@@ -54,10 +54,29 @@ export function contextWindowFor(
   return findModel(reg, engine, modelId)?.contextWindow
 }
 
-/** Sensible default effort: 'medium' if available, else the first level, else undefined. */
+/** The built-in default effort, matching the gateway's own default. */
+export const DEFAULT_EFFORT = 'high'
+
+/** Known level names, lightest to heaviest; used to find the level nearest the default. */
+const EFFORT_LADDER = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']
+
+/** Distance of a known level from the default; unknown names are skipped. */
+function distanceFromDefault(level: string): number | undefined {
+  const rank = EFFORT_LADDER.indexOf(level)
+  return rank < 0 ? undefined : Math.abs(rank - EFFORT_LADDER.indexOf(DEFAULT_EFFORT))
+}
+
+/**
+ * Sensible default effort: 'high' if available, else the nearest known level
+ * (the lighter one on a tie), else the first level, else undefined.
+ */
 export function defaultEffort(levels: string[]): string | undefined {
   if (!levels.length) return undefined
-  return levels.includes('medium') ? 'medium' : levels[0]
+  if (levels.includes(DEFAULT_EFFORT)) return DEFAULT_EFFORT
+  const known = levels
+    .filter((level) => distanceFromDefault(level) !== undefined)
+    .sort((a, b) => distanceFromDefault(a)! - distanceFromDefault(b)! || EFFORT_LADDER.indexOf(a) - EFFORT_LADDER.indexOf(b))
+  return known[0] ?? levels[0]
 }
 
 /** Keep `current` if still valid for the new level set, otherwise pick a default. */
