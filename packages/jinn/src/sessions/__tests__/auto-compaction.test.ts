@@ -74,6 +74,40 @@ describe("decideAutoCompaction", () => {
     expect(decideAutoCompaction(input(over as Partial<AutoCompactInput>))).toEqual({ compact: false, skip });
   });
 
+  describe("a sync turn", () => {
+    const movedBack = (meta: Record<string, unknown>) => ({ session: session("claude", { transportMeta: meta as never }), syncRequested: true });
+    const SINCE = iso(NOW - 80 * MINUTE);
+
+    it.each([
+      ["moves a session back from a stand-in account", { claudeSyncSince: SINCE, claudeSyncAccount: true }],
+      ["moves a session back from another engine's stand-in", { claudeSyncSince: SINCE }],
+    ])("compacts a long, cold session that %s", (_label, meta) => {
+      expect(decideAutoCompaction(input(movedBack(meta)))).toMatchObject({ compact: true, trigger: "cold" });
+    });
+
+    it("compacts a session that moved back over its budget while warm", () => {
+      const budgeted = { config: config("claude", { ...ON, maxContextTokens: 140_000 }) };
+      const warm = session("claude", { transportMeta: { claudeSyncSince: SINCE } }, MINUTE);
+      expect(decideAutoCompaction(input({ ...budgeted, session: warm, syncRequested: true })))
+        .toMatchObject({ compact: true, trigger: "budget" });
+    });
+
+    it.each([
+      ["an engine switch to Claude", { engineSyncTarget: "claude", engineSyncSince: SINCE }],
+      ["an engine switch to Claude that lands on a pending move-back", { engineSyncTarget: "claude", engineSyncSince: SINCE, claudeSyncSince: SINCE }],
+      ["a sync marker that names no instant", { claudeSyncSince: "not a time" }],
+    ])("still leaves %s alone", (_label, meta) => {
+      expect(decideAutoCompaction(input(movedBack(meta)))).toEqual({ compact: false, skip: "engine-switch" });
+    });
+
+    it("leaves a sync turn on another engine's switch alone", () => {
+      const opencode = { engineSyncTarget: "opencode", engineSyncSince: SINCE };
+      expect(decideAutoCompaction(input({
+        config: config("opencode", ON), engine: "opencode", session: session("opencode", { transportMeta: opencode as never }), syncRequested: true,
+      }))).toEqual({ compact: false, skip: "engine-switch" });
+    });
+  });
+
   it("decides opencode on opencode's own policy", () => {
     const cfg = config("opencode", { enabled: true, cacheWindowSeconds: 3600 });
     const cold = decideAutoCompaction(input({ config: cfg, engine: "opencode", session: session("opencode", {}, 61 * MINUTE) }));

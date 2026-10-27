@@ -86,6 +86,60 @@ describe("a default-account session moved onto a declared account", () => {
   });
 });
 
+describe("the context meter across a swap", () => {
+  const swap = (sessionId: string) => beginEngineSubstitution({
+    session: reg.getSession(sessionId)!, attemptToken: running(sessionId), config, employee: undefined, substitute: "claude",
+    accounts: { original: "claude", substitute: FRIEND_ACCOUNT, substituteConfigDir: friend.dir },
+    until: new Date(Date.now() + 3600_000), syncSince: new Date().toISOString(), lastError: "limit",
+  });
+  const expire = (sessionId: string) => {
+    const meta = reg.getSession(sessionId)!.transportMeta as Record<string, Record<string, unknown>>;
+    reg.updateSession(sessionId, { transportMeta: { ...meta, engineOverride: { ...meta.engineOverride, until: "2020-01-01T00:00:00.000Z" } } as never });
+  };
+
+  it("goes back to the original thread's reading, not the stand-in's", () => {
+    const s = reg.createSession({ engine: "claude", source: "web", sourceRef: "web:meter-1", model: "opus" });
+    reg.recordEngineSessionId(s.id, "claude", "default-thread-1");
+    reg.updateSession(s.id, { lastContextTokens: 540_000 });
+    swap(s.id);
+    reg.recordEngineSessionId(s.id, "claude", "friend-thread-1");
+    reg.updateSession(s.id, { lastContextTokens: 9_000 });
+    expect(reg.getSession(s.id)!.lastContextTokens).toBe(9_000);
+
+    expire(s.id);
+    const after = maybeRevertEngineOverride(reg.getSession(s.id)!);
+    expect(after.engineSessionId).toBe("default-thread-1");
+    expect(after.lastContextTokens).toBe(540_000);
+    expect(reg.getSession(s.id)!.lastContextTokens).toBe(540_000);
+  });
+
+  it("keeps the first swap's reading through a nested swap", () => {
+    const s = reg.createSession({ engine: "claude", source: "web", sourceRef: "web:meter-2", model: "opus" });
+    reg.recordEngineSessionId(s.id, "claude", "default-thread-1");
+    reg.updateSession(s.id, { lastContextTokens: 540_000 });
+    swap(s.id);
+    reg.updateSession(s.id, { lastContextTokens: 9_000 });
+    beginEngineSubstitution({
+      session: reg.getSession(s.id)!, attemptToken: running(s.id), config, employee: undefined, substitute: "claude",
+      accounts: { original: FRIEND_ACCOUNT, substitute: THIRD_ACCOUNT, substituteConfigDir: third.dir },
+      until: new Date(Date.now() + 3600_000), syncSince: new Date().toISOString(), lastError: "limit",
+    });
+    reg.updateSession(s.id, { lastContextTokens: 4_000 });
+
+    expire(s.id);
+    expect(maybeRevertEngineOverride(reg.getSession(s.id)!).lastContextTokens).toBe(540_000);
+  });
+
+  it("leaves the reading alone when the swap parked none", () => {
+    const s = reg.createSession({ engine: "claude", source: "web", sourceRef: "web:meter-3", model: "opus" });
+    reg.recordEngineSessionId(s.id, "claude", "default-thread-1");
+    swap(s.id);
+    reg.updateSession(s.id, { lastContextTokens: 9_000 });
+    expire(s.id);
+    expect(maybeRevertEngineOverride(reg.getSession(s.id)!).lastContextTokens).toBe(9_000);
+  });
+});
+
 describe("a named-profile session moved onto the default account", () => {
   it("parks its own thread under its account and runs the default account under `claude`", () => {
     const s = reg.createSession({ engine: "claude", source: "web", sourceRef: "web:acct-2", employee: "side-dev" });

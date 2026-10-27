@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 🐛 Fixed
+- **Auto-compaction no longer skips the turn that moves a Claude session back from a stand-in.** The sync transcript on that turn was taken for an engine switch, so a long, cold session woke on its full context however large it was, and the context budget was skipped too. The move-back now also restores the context size the conversation had before the swap, and a long session skipped for a reason other than a warm cache or its budget is logged at `info`.
+
 ### 💥 Removed / Not supported
 - **opencode no longer falls back between models by itself; fallback is the gateway's.**
   - **What is gone:** the server turn's handling of a prompt re-sent by a fallback plugin (it adopted the copy as its own), the `model-fallback.js` example plugin and its tests, and the gated fallback end-to-end tests. opencode's own provider-retry handling stays: it is what turns a usage limit into the gateway's rate-limit result.
