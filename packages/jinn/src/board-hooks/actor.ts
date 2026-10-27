@@ -42,7 +42,11 @@ export function actorOf(event: WorkItemEvent, comment?: WorkItemComment): HookAc
   const sessionId = actorSessionId(event, comment);
   const raw = comment ? comment.author : event.actor;
   const base = { raw, ...(sessionId ? { sessionId } : {}) };
-  if (isOperator(event, comment)) return { ...base, kind: "operator" };
+  if (isOperator(event, comment)) {
+    // A close an employee carried out on the operator's word in their chat is the operator's, made by that employee.
+    const onBehalf = comment ? undefined : stringDetail(event, "asOperatorEmployee");
+    return { ...base, kind: "operator", ...(onBehalf ? { employee: onBehalf } : {}) };
+  }
   const employee = employeeOf(event, comment, sessionId);
   return employee ? { ...base, kind: "employee", employee } : { ...base, kind: "system" };
 }

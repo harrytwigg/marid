@@ -233,6 +233,7 @@ function startFirstTurn(
   dispatchWebSessionRun(session, enginePrompt, engine, context, {
     queueItemId,
     attachments: attachmentPaths.length > 0 ? attachmentPaths : undefined,
+    operatorTurn: input.operatorCaller === true,
   });
 
   return { ok: true, session, dispatched: true };

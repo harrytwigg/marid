@@ -128,6 +128,12 @@ describe("payloads", () => {
     expect(build(lastOf("status_change", item.id)).actor).toEqual({ raw: "reconciler", kind: "system" });
   });
 
+  it("actor: an operator's close an employee carried out names the employee, and stays the operator's", () => {
+    const item = store.createWorkItem({ title: "Closed on the operator's word", status: "in_review" });
+    transitions.transition(item.id, "done", "operator", { manual: true, detail: { asOperator: "session:chat", asOperatorEmployee: "closer" } });
+    expect(build(lastOf("status_change", item.id)).actor).toEqual({ raw: "operator", kind: "operator", employee: "closer" });
+  });
+
   it("todo.assigned: a note carrying the assignee, and a metadata edit of it", () => {
     const item = store.createWorkItem({ title: "Assigned", department: "platform" });
     transitions.assignWorkItem(item.id, "senior-developer", "platform", "operator");

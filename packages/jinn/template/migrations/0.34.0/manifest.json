@@ -67,7 +67,7 @@
       "path": "docs/org.md",
       "operation": "modify",
       "baseSha256": "3ed3540abb2997cde6ef0d8cecf61281f4e96c0909807d51040fba1709f3a968",
-      "targetSha256": "3ef1df93daa58480c088d9e33f95b629f9fc7f11d9fd1443a6a12cf0b7a71e59",
+      "targetSha256": "c98dfaad085bd5446efaac5f9b749b54031b97ea2135f7f75651ac49a7f47cad",
       "basePayload": "files/base/docs/org.md",
       "targetPayload": "files/target/docs/org.md"
     },
@@ -147,7 +147,7 @@
       "path": "skills/todo-handling/SKILL.md",
       "operation": "modify",
       "baseSha256": "07f721103523c7a5cf33489338ccb0afd4756d44905ba575119f575612b59456",
-      "targetSha256": "8e839758fd6a20e8f46c86cc5d72bf0f99ced97417e4e0810fae2604c351d4fa",
+      "targetSha256": "bec97a91cca913ea0ea21109b941266a2581e726f72f99e9c50aee6c93bc38d8",
       "basePayload": "files/base/skills/todo-handling/SKILL.md",
       "targetPayload": "files/target/skills/todo-handling/SKILL.md"
     },

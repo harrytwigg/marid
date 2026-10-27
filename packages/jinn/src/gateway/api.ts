@@ -2636,6 +2636,8 @@ export async function handleApiRequest(
       const detail = writeDetail({
         ...(note ? { note } : {}),
         ...(actingAsOperator ? { asOperator: actingAsOperator } : {}),
+        // An employee carrying out the operator's close in their chat: the actor is the operator, this names who did it.
+        ...(lane.kind === "coordinator" && lane.employee ? { asOperatorEmployee: lane.employee } : {}),
         ...(actorEmployee ? { actorEmployee } : {}),
         // The connector moves with the operator's authority but is recorded as its
         // own session; the marker is what lets the reconciler treat it as his.
@@ -4274,7 +4276,11 @@ export async function handleApiRequest(
       }
 
       if (!callbackDelivery || callbackQueueNeedsDispatch) {
-        dispatchWebSessionRun(session, enginePrompt, engine, context, { queueItemId, attachments: attachmentPaths.length > 0 ? attachmentPaths : undefined });
+        dispatchWebSessionRun(session, enginePrompt, engine, context, {
+          queueItemId,
+          attachments: attachmentPaths.length > 0 ? attachmentPaths : undefined,
+          operatorTurn: !isNotification && msgCaller.kind === "operator",
+        });
       }
 
       return json(res, {

@@ -29,6 +29,8 @@ Agent sessions work inside the open statuses: pick work up or put it down (backl
 
 The one exception is the top-level coordinator session the operator is talking to, which carries no employee identity of its own and was opened from the web console, Talk or a chat connector. In exceptional circumstances it may close a Todo as `done` on the operator's behalf: `update_work_item` with `status: "done"`, `asOperator: true`, and the operator's reason in `note`. The reason is required. The audit event records the operator as the actor and names the calling session, and the reason is posted as a comment on the Todo. `asOperator` does nothing else: cancelling, archiving and reopening stay with the operator, and closing a Todo's open descendants along with it stays on the human surface.
 
+An employee the operator has granted `closeTodos` (see "Closing Todos" in `docs/org.md`) may use `asOperator` too, in the same way and only for a Todo in review, while the operator is talking to it in a web chat the operator opened with it, and only on a turn the operator's own message started. A delegation brief, a message from another session or a sub-task's report landing in that chat is not the operator talking, and neither is a connector chat, a delegated, cron or child session: there `asOperator` is refused. A chat that is itself the Todo's working session cannot close it (the self-review ban).
+
 ## Shape the hierarchy
 
 One operator outcome should normally map to one root Todo. A checklist does not imply one Todo per item. Keep procedural steps, commands, and release checklists in the root Todo body, comments, or session activity.
