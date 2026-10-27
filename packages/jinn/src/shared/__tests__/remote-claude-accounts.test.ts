@@ -247,10 +247,10 @@ describe("a new session whose account is spent", () => {
   const NOW = new Date("2026-10-19T10:00:00.000Z");
   const spent = { state: "exhausted" as const, until: new Date(NOW.getTime() + 3600_000).toISOString(), recheckAt: new Date(NOW.getTime() + 3600_000).toISOString() };
 
-  // The caller reads the employee's own login's health as `claude` (substituteHealth), as for a new session.
+  // The caller passes health as substituteHealth gives it for a new session: the employee's own login under its key, and as `claude`.
   it("starts a remote employee on the remote account, with its directory on the host, and refuses it elsewhere", () => {
     const employee = remoteEmployee({ fallback: [{ engine: "claude", profile: "spare" }] });
-    const args = { config: configWith({}), employee, engine: "claude", model: "opus", registry: availabilityRegistry({}, () => true), health: { claude: spent }, now: NOW };
+    const args = { config: configWith({}), employee, engine: "claude", model: "opus", registry: availabilityRegistry({}, () => true), health: { [HOME_KEY]: spent, claude: spent }, now: NOW };
     const choice = rerouteAtCreation({ ...args, scope: { scoped: false, remote: true, host: "me@build-host" } });
     expect(choice).toMatchObject({ engine: "claude", reroute: { account: { original: HOME_KEY, substitute: SPARE_KEY, configDir: REMOTE_DIR } } });
     expect(rerouteAtCreation({ ...args, scope: { scoped: false, remote: true, host: "you@build-host" } })).toBeUndefined();

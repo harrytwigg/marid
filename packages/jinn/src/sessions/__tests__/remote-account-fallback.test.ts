@@ -1,9 +1,11 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { remoteClaudeAccountKey } from "../../shared/engine-account.js";
 import type { Employee, Engine, EngineResult, EngineRunOpts, JinnConfig } from "../../shared/types.js";
 import {
   answer, config as baseConfig, handleRateLimit, HOUR, limited, limitedTurn, maybeRevertEngineOverride, newSession, overrideOf,
-  readEngineHealth, reg, registerEmployeeAccountResolver, resetsIn, runOf, setDepartmentScopeResolver, setEmployeeDepartmentResolver, useWalkHarness,
+  readEngineHealth, reg, registerEmployeeAccountResolver, resetsIn, runOf, setDepartmentScopeResolver, setEmployeeDepartmentResolver, tmp, useWalkHarness,
 } from "./fallback-walk-harness.js";
 import { claudeAuthScope } from "../claude-auth-watch.js";
 import { rateLimitAccount } from "../rate-limit-account.js";
@@ -119,7 +121,8 @@ describe("a scoped remote employee rate-limited on its own account", () => {
     const who = remoteEmployee();
     await handleRateLimit(turn(id, who, engines));
 
-    // The window ends: the override record's `until` is in the past.
+    // The window ends: the override record's `until` is in the past, and its own account's recorded limit with it.
+    fs.rmSync(path.join(tmp, "tmp", "engine-health.json"), { force: true });
     const meta = reg.getSession(id)!.transportMeta as Record<string, Record<string, unknown>>;
     reg.updateSession(id, { transportMeta: { ...meta, engineOverride: { ...meta.engineOverride, until: new Date(Date.now() - 1000).toISOString() } } as never });
     const reverted = maybeRevertEngineOverride(reg.getSession(id)!, who, config);
