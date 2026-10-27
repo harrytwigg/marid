@@ -1,8 +1,8 @@
 import { engineAllowedAsSubstitute, sessionSubstituteScope } from "../sessions/substitute-filters.js";
-import { declaredAccountByKey, declaredClaudeAccounts } from "./claude-accounts-config.js";
+import { declaredAccountByKey, declaredClaudeAccounts, declaredRemoteAccountByName } from "./claude-accounts-config.js";
 import { linkAccount, ownTargetLink } from "./fallback-chain-links.js";
 import { resolveEmployeeClaudeProfile } from "./claude-profile.js";
-import { accountForEmployee, claudeAccountKey, DEFAULT_CLAUDE_ACCOUNT } from "./engine-account.js";
+import { accountForEmployee, claudeAccountKey, DEFAULT_CLAUDE_ACCOUNT, isRemoteClaudeAccount } from "./engine-account.js";
 import { resolveSubstituteModel } from "./engine-fallback.js";
 import { engineChain, expandFallbackChain, type FallbackExpansionMode } from "./fallback-chain-expand.js";
 import { linkHealth, type FallbackHealthInputs } from "./fallback-chain-health.js";
@@ -67,14 +67,26 @@ export function resolveLinkModel(
 /** A profile that is not a declared account, or sits on a link that cannot take one. */
 function profileUnknown(config: JinnConfig, link: FallbackLink): boolean {
   if (link.profile === undefined) return false;
-  return link.engine !== "claude" || !declaredClaudeAccounts(config).some((account) => account.name === link.profile);
+  return link.engine !== "claude" || !(declaredClaudeAccounts(config).some((account) => account.name === link.profile) || declaredRemoteAccountByName(config, link.profile));
 }
 
-/** Why the subject's department or host rules the link out: a scoped session takes Claude only, a remote one an engine that runs on a host and no local profile. */
-function scopeSkip(scope: FallbackChainSpec["scope"], link: FallbackLink): "scoped" | "remote" | undefined {
+/**
+ * Why a profile link cannot run where the subject does, in words; undefined for a link that can (or names no profile).
+ * A remote subject takes only an account declared on its own `user@host`; a local one takes no remote account.
+ */
+function profileHostProblem(config: JinnConfig, scope: FallbackChainSpec["scope"], link: FallbackLink): string | undefined {
+  if (link.engine !== "claude" || link.profile === undefined) return undefined;
+  const remote = declaredRemoteAccountByName(config, link.profile);
+  if (!scope.remote) return remote ? `profile "${link.profile}" is on remote host ${remote.remoteHost}` : undefined;
+  if (!remote) return `profile "${link.profile}" is a profile on the gateway, not on ${scope.host ?? "this session's host"}`;
+  return remote.destination === scope.host ? undefined : `profile "${link.profile}" is on ${remote.destination}, not this session's host ${scope.host ?? "(unknown)"}`;
+}
+
+/** Why the subject's department or host rules the link out: a scoped session takes Claude only, a remote one an engine that runs on a host and a profile only on its own host, a local one no profile on another. */
+function scopeSkip(config: JinnConfig, scope: FallbackChainSpec["scope"], link: FallbackLink): "scoped" | "remote" | undefined {
   const engine = link.engine as EngineName;
   if (!engineAllowedAsSubstitute({ scoped: scope.scoped, remote: false }, engine)) return "scoped";
-  const remoteRefused = !engineAllowedAsSubstitute({ scoped: false, remote: scope.remote }, engine) || (scope.remote && link.profile !== undefined);
+  const remoteRefused = !engineAllowedAsSubstitute({ scoped: false, remote: scope.remote }, engine) || profileHostProblem(config, scope, link) !== undefined;
   return remoteRefused ? "remote" : undefined;
 }
 
@@ -88,11 +100,12 @@ function skipReason(env: FallbackChainEnv, subject: FallbackChainSpec, link: Fal
   if (profileUnknown(env.config, link)) return "profile-unknown";
   const entry = env.registry[link.engine];
   if (!entry?.available) return "not-installed";
-  return scopeSkip(subject.scope, link) ?? (modelNotServed(entry, link) ? "model-not-served" : undefined);
+  return scopeSkip(env.config, subject.scope, link) ?? (modelNotServed(entry, link) ? "model-not-served" : undefined);
 }
 
-/** What the gateway can add to a skip: the host that lacks a remote engine's CLI, when its facts say so (an engine the gateway has no adapter for is not the host's fault). */
-function skipDetail(scope: FallbackChainSpec["scope"], link: FallbackLink, reason: FallbackSkipReason): string | undefined {
+/** What the gateway can add to a skip: the profile that is on another host, or the host that lacks a remote engine's CLI, when its facts say so (an engine the gateway has no adapter for is not the host's fault). */
+function skipDetail(config: JinnConfig, scope: FallbackChainSpec["scope"], link: FallbackLink, reason: FallbackSkipReason): string | undefined {
+  if (reason === "remote") return profileHostProblem(config, scope, link);
   if (reason !== "not-installed" || !scope.remote || !scope.host || !engineSupportsRemote(link.engine)) return undefined;
   if (remoteEngineAvailable(scope.host, link.engine) !== false) return undefined;
   return `${scope.host} has no \`${REMOTE_ENGINE_CLI[link.engine]}\` on its non-interactive PATH`;
@@ -123,6 +136,8 @@ export function resolveFallbackLinks(env: FallbackChainEnv, subject: FallbackCha
   const claudeAccount = subject.mode === "engine" ? subject.claudeAccount : undefined;
   const own = resolvedLink(env, subject.own, "config", subject.own, claudeAccount);
   const seen = new Set<string>([own.key]);
+  // A remote subject on a declared account is also its own target when a link names no profile: that runs the account it has.
+  if (subject.scope.remote && own.profile !== undefined) seen.add(fallbackLinkKey({ engine: own.engine, ...(own.model === undefined ? {} : { model: own.model }) }));
   const expanded = expandFallbackChain(env.config, subject.entries, { mode: subject.mode, selfAccount: subject.ownAccount, selfKey: own.key });
   const links: ResolvedFallbackLink[] = [own];
   for (const { link, origin } of expanded) {
@@ -131,7 +146,7 @@ export function resolveFallbackLinks(env: FallbackChainEnv, subject: FallbackCha
     if (seen.has(resolved.key)) continue;
     seen.add(resolved.key);
     const skip = skipReason(env, subject, target);
-    const detail = skip ? skipDetail(subject.scope, target, skip) : undefined;
+    const detail = skip ? skipDetail(env.config, subject.scope, target, skip) : undefined;
     links.push(skip ? { ...resolved, skip, ...(detail ? { skipDetail: detail } : {}) } : resolved);
   }
   return links;
@@ -182,7 +197,9 @@ export function sessionFallbackChain(options: SessionFallbackChainOptions): { so
   const scope = givenScope ?? sessionSubstituteScope(session, employee, config);
   const mode: FallbackExpansionMode = session.engine === "claude" && !scope.remote ? "account" : "engine";
   const ownAccount = accountForEmployee(employee, session.engine);
-  const ownProfile = session.engine === "claude" && !scope.remote ? claudeAccountKey(resolveEmployeeClaudeProfile(employee)) : undefined;
+  // A remote subject's own link names the declared remote account it runs as, so a chain naming that account is the same target.
+  const remoteOwn = isRemoteClaudeAccount(ownAccount) ? ownAccount : undefined;
+  const ownProfile = session.engine === "claude" ? (scope.remote ? remoteOwn : claudeAccountKey(resolveEmployeeClaudeProfile(employee))) : undefined;
   const own = ownTargetLink(config, { engine: session.engine, model: session.model, account: ownProfile });
   const { source, entries } = chainSource(config, session, employee, mode, ownAccount);
   const env: FallbackChainEnv = { config, registry, ...inputs };

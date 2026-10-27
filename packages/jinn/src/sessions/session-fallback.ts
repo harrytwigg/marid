@@ -1,4 +1,4 @@
-import { declaredAccountByKey } from "../shared/claude-accounts-config.js";
+import { declaredAccountByKey, declaredRemoteAccountByKey } from "../shared/claude-accounts-config.js";
 import { DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
 import { resolveSubstituteModel } from "../shared/engine-fallback.js";
 import { sessionFallbackChain } from "../shared/fallback-chain.js";
@@ -6,7 +6,6 @@ import { linkModelWritten } from "../shared/fallback-chain-links.js";
 import { effectivePosition } from "../shared/fallback-chain-next.js";
 import type { ResolvedFallbackLink } from "../shared/fallback-chain-wire.js";
 import { isSpellableModelId } from "../shared/model-id.js";
-import { isRemoteTarget } from "../shared/remote-target.js";
 import {
   DEFAULT_SESSION_FALLBACK_MODE, isSessionFallbackMode,
   type SessionFallbackMode, type SessionFallbackTarget, type SessionFallbackView, type StoredFallbackTarget,
@@ -16,9 +15,8 @@ import { isKnownEngine, type EngineName } from "../shared/models.js";
 import type { FallbackHealthInputs } from "../shared/fallback-chain-health.js";
 import { sessionFallbackChainView } from "./session-fallback-chain.js";
 import { rateLimitAccount } from "./rate-limit-account.js";
-import { rateLimitRemoteTarget } from "./rate-limit-remote-target.js";
 import { metaOf, readFallbackRun, sessionAtOwnTarget } from "./fallback-run.js";
-import { engineAllowedAsSubstitute, fallbackModelMapOf, sessionSubstituteScope, substituteScoped } from "./substitute-filters.js";
+import { engineAllowedAsSubstitute, fallbackModelMapOf, sessionSubstituteScope } from "./substitute-filters.js";
 
 /**
  * Per-session usage-limit behaviour (`fallbackMode`): which mode a session
@@ -87,7 +85,7 @@ function engineTarget(config: JinnConfig, registry: ModelRegistry, session: Sess
 /** An account as people name it: `claude` for the default, else `claude:<declared name>`. */
 function accountName(config: JinnConfig, account: string): string {
   if (account === DEFAULT_CLAUDE_ACCOUNT) return account;
-  return `claude:${declaredAccountByKey(config, account)?.name ?? account.slice(DEFAULT_CLAUDE_ACCOUNT.length + 1)}`;
+  return `claude:${(declaredAccountByKey(config, account) ?? declaredRemoteAccountByKey(config, account))?.name ?? account.slice(DEFAULT_CLAUDE_ACCOUNT.length + 1)}`;
 }
 
 /** The pin an account swap carries: through the limited account's map when it maps it, else as it is. */
@@ -125,8 +123,7 @@ export function resolveSessionFallbackTarget(
   session: Session,
   employee?: Employee,
 ): SessionFallbackTarget | null {
-  const remoteTarget = rateLimitRemoteTarget({ session, employee, config });
-  const scope = { scoped: substituteScoped(session, remoteTarget), remote: isRemoteTarget(remoteTarget) };
+  const scope = sessionSubstituteScope(session, employee, config);
   const own = sessionAtOwnTarget(session);
   const { links } = sessionFallbackChain({ config, employee, session: own, registry, health: {}, scope });
   const run = readFallbackRun(metaOf(session));
@@ -135,8 +132,9 @@ export function resolveSessionFallbackTarget(
   // Whether a binary is installed is the turn's question, not this display's: only an engine the registry does not know at all is passed over.
   const next = links.slice(position + 1).find((link) => !tried.has(link.key) && registry[link.engine] !== undefined && (link.skip === undefined || link.skip === "not-installed"));
   if (!next) return null;
-  // A local Claude session swaps accounts; any other session (or a remote one) has an engine stand in.
-  const from = session.engine === "claude" && !scope.remote ? rateLimitAccount("claude", employee, session).account : "";
+  // A local Claude session swaps accounts, and so does a remote one onto a remote account; any other has an engine stand in.
+  const swaps = session.engine === "claude" && (!scope.remote || next.profile !== undefined);
+  const from = swaps ? rateLimitAccount("claude", employee, session).account : "";
   return linkTarget(config, registry, own, from, next);
 }
 

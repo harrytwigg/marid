@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fallbackChainProblems, fallbackLinkKey, fallbackLinkLabel, fallbackLinkOf, type FallbackChainContext } from "../fallback-chain-wire.js";
+import { employeeProfileHostProblem, fallbackChainProblems, fallbackLinkKey, fallbackLinkLabel, fallbackLinkOf, type FallbackChainContext } from "../fallback-chain-wire.js";
 
 const engines = ["claude", "codex", "opencode"] as const;
 
@@ -84,5 +84,24 @@ describe("fallbackChainProblems", () => {
   it("refuses a chain that is not a list, and says nothing of an absent one", () => {
     expect(fallbackChainProblems("c", "codex", ctx())).toEqual(["c must be a list of fallback targets"]);
     expect(fallbackChainProblems("c", undefined, ctx())).toEqual([]);
+  });
+});
+
+describe("employeeProfileHostProblem", () => {
+  const at = 'fallback[0]: profile "x"';
+  const remote = { host: "build-host", destination: "me@build-host" };
+
+  it("refuses a remote account for a local employee, naming where it is declared", () => {
+    expect(employeeProfileHostProblem(at, { destination: "me@other-host" }, undefined))
+      .toBe('fallback[0]: profile "x" is declared on me@other-host; a local employee falls back only to a local account');
+    expect(employeeProfileHostProblem(at, undefined, undefined)).toBeUndefined();
+  });
+
+  it("refuses a local profile, and an account on another host, for a remote employee", () => {
+    expect(employeeProfileHostProblem(at, undefined, remote))
+      .toBe('fallback[0]: profile "x" is a local profile; a remote employee falls back only to an account declared with remoteHost build-host');
+    expect(employeeProfileHostProblem(at, { destination: "me@other-host" }, remote))
+      .toBe('fallback[0]: profile "x" is declared on me@other-host, not me@build-host');
+    expect(employeeProfileHostProblem(at, { destination: "me@build-host" }, remote)).toBeUndefined();
   });
 });

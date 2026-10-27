@@ -1,16 +1,18 @@
 import {
   fallbackLinkKey,
+  employeeProfileHostProblem,
   fallbackLinkOf,
   type FallbackChainEntry,
   type FallbackChainSubject,
   type FallbackChainsResponse,
   type FallbackLink,
+  type FallbackProfileOption,
 } from "@jinn/fallback-chain-wire"
 import type { Employee } from "@/lib/api"
 import { engineDisplayName } from "@/lib/engine-names"
 import type { EnginesResponse } from "@/lib/api"
 import { linkOfResolved } from "@/routes/settings/engines/chain-links"
-import { rowProblemsAgainst } from "@/routes/settings/engines/chain-problems"
+import { hostRowProblems, rowProblemsAgainst, type HostProblem } from "@/routes/settings/engines/chain-problems"
 
 /* What the employee screens need to know about a chain: whether it is the
  * employee's own, where an inherited one comes from, and what would run. */
@@ -29,13 +31,55 @@ export function sameChain(a: FallbackLink[] | null, b: FallbackLink[] | null): b
   return a.length === b.length && a.every((link, i) => fallbackLinkKey(link) === fallbackLinkKey(b[i]))
 }
 
-/** The declared account an employee's Claude profile is, by directory, when it is one. */
-export function declaredAccountOf(
-  claudeProfile: Employee["claudeProfile"],
-  chains: FallbackChainsResponse | undefined,
-): string | undefined {
-  if (!claudeProfile) return undefined
-  return chains?.profiles.find((p) => p.configDir === claudeProfile.path)?.name
+type EmployeeHost = Pick<Employee, "remoteHost" | "remoteUser" | "remoteClaudeConfigDir" | "claudeProfile">
+
+/** The ssh destination a remote employee runs on, as the gateway matches an account to it: `user@host`, or the bare host with no user. */
+export function employeeDestination(employee: Pick<Employee, "remoteHost" | "remoteUser">): string | undefined {
+  const host = employee.remoteHost?.trim()
+  if (!host) return undefined
+  const user = employee.remoteUser?.trim()
+  return user ? `${user}@${host}` : host
+}
+
+/** The declared accounts this employee's chain may name: a remote employee's are those declared on its own `user@host`, a local one's the local ones. */
+export function profilesForEmployee(employee: EmployeeHost, chains: FallbackChainsResponse | undefined): FallbackProfileOption[] {
+  const destination = employeeDestination(employee)
+  return (chains?.profiles ?? []).filter((p) => (destination === undefined ? p.remote === undefined : p.remote?.destination === destination))
+}
+
+/**
+ * Why a declared account is the wrong side for this employee's chain, as the gateway words it at load, or
+ * undefined when it may be named (or is declared nowhere: the validator calls that name unknown).
+ */
+export function employeeHostProblem(employee: Pick<Employee, "remoteHost" | "remoteUser">, chains: FallbackChainsResponse | undefined): HostProblem {
+  const destination = employeeDestination(employee)
+  const host = destination === undefined ? undefined : { host: employee.remoteHost!, destination }
+  return (at, profile) => {
+    const declared = chains?.profiles.find((p) => p.name === profile)
+    return declared ? employeeProfileHostProblem(at, declared.remote, host) : undefined
+  }
+}
+
+/** How the picker names an account: a remote one with the host it is on. */
+export function profileLabels(profiles: readonly FallbackProfileOption[]): Record<string, string> {
+  return Object.fromEntries(profiles.filter((p) => p.remote).map((p) => [p.name, `${p.name} (${p.remote!.destination})`]))
+}
+
+const trimmedDir = (dir: string): string => (dir.length > 1 ? dir.trim().replace(/\/+$/, "") : dir)
+
+/**
+ * The declared account an employee's Claude profile is, when it is one: a local profile by its
+ * directory among the local accounts; a remote employee's by its `remoteClaudeConfigDir` among the
+ * accounts on its own destination (an employee that names no directory has none to match).
+ */
+export function declaredAccountOf(employee: EmployeeHost, chains: FallbackChainsResponse | undefined): string | undefined {
+  if (employeeDestination(employee) !== undefined) {
+    // The instance-wide `remote.claudeConfigDir` is not visible here: an employee relying on it has no directory to match.
+    const dir = employee.remoteClaudeConfigDir
+    return dir ? profilesForEmployee(employee, chains).find((p) => trimmedDir(p.configDir) === trimmedDir(dir))?.name : undefined
+  }
+  if (!employee.claudeProfile) return undefined
+  return profilesForEmployee(employee, chains).find((p) => p.configDir === employee.claudeProfile!.path)?.name
 }
 
 export interface InheritedChain {
@@ -130,7 +174,10 @@ function ownTargetSpellings(employee: Employee, engine: string, account: string 
   const target = model ?? (engine === employee.engine ? employee.model : undefined)
   const bare: FallbackLink = { engine, ...(account ? { profile: account } : {}) }
   const self: FallbackLink = target ? { ...bare, model: target } : bare
-  return { self, selves: target ? [self, bare] : [self] }
+  const selves = target ? [self, bare] : [self]
+  // A remote employee on a declared account also reaches its own login by naming no profile at all.
+  if (account && employeeDestination(employee) !== undefined) selves.push({ engine }, ...(target ? [{ engine, model: target }] : []))
+  return { self, selves }
 }
 
 /** What the field shows for an employee on `engine`, with `value` as its own chain (null inherits). */
@@ -142,13 +189,23 @@ export function fallbackFieldState(
   /** The model the editor now has; the saved one when it does not say. */
   model?: string,
 ) {
-  const account = engine === "claude" ? declaredAccountOf(employee.claudeProfile, chains) : undefined
+  const account = engine === "claude" ? declaredAccountOf(employee, chains) : undefined
   const subject = employeeSubject(chains, employee.name)
-  const inherited = serverInherited(subject, inheritedChain(engine, employee.claudeProfile, account, chains), engine !== employee.engine, engine)
+  // A remote account has no chain of its own: a remote employee inherits its engine's, whatever account it is on.
+  const inheritedAccount = employeeDestination(employee) === undefined ? account : undefined
+  const inherited = serverInherited(subject, inheritedChain(engine, employee.claudeProfile, inheritedAccount, chains), engine !== employee.engine, engine)
   const { self, selves } = ownTargetSpellings(employee, engine, account, model)
   const own = value === null ? null : ownChainOf(employee, value, subject)
   const changed = !sameChain(value, employeeChainOf(employee))
-  return { inherited, self, selves, shown: own?.links ?? inherited.links, own, subject, changed }
+  const options = profilesForEmployee(employee, chains)
+  const accounts: DeclaredAccounts = { names: (chains?.profiles ?? []).map((p) => p.name), hostProblem: employeeHostProblem(employee, chains) }
+  return { inherited, self, selves, shown: own?.links ?? inherited.links, own, subject, changed, profiles: options.map((p) => p.name), accounts, profileLabels: profileLabels(options) }
+}
+
+/** What a chain's profile links are checked against: every declared account's name, and why one on the wrong side for the employee may not be named. */
+export interface DeclaredAccounts {
+  names: readonly string[]
+  hostProblem?: HostProblem
 }
 
 /** How many problems the validator finds in an employee's own chain: a chain with any is not saved. */
@@ -156,11 +213,12 @@ export function chainProblemCount(
   links: FallbackLink[],
   selves: readonly FallbackLink[],
   registry: EnginesResponse,
-  chains: FallbackChainsResponse | undefined,
+  /** A name that is not among the declared accounts names no account. */
+  accounts: DeclaredAccounts,
 ): number {
-  const ctx = { engines: Object.values(registry.engines), profiles: chains?.profiles.map((p) => p.name) ?? [] }
+  const ctx = { engines: Object.values(registry.engines), profiles: [...accounts.names] }
   const found = rowProblemsAgainst("fallback", links, ctx, selves)
-  return found.byRow.flat().length + found.general.length
+  return found.byRow.flat().length + found.general.length + hostRowProblems("fallback", links, accounts.hostProblem).flat().length
 }
 
 export { subjectProblems } from "@/hooks/use-fallback-chains"
@@ -175,8 +233,8 @@ export function chainBlocked(
   registry: EnginesResponse | undefined,
   own: OwnChain | null,
   selves: readonly FallbackLink[],
-  chains: FallbackChainsResponse | undefined,
+  accounts: DeclaredAccounts,
   changed: boolean,
 ): boolean {
-  return changed && registry !== undefined && own !== null && chainProblemCount(own.links, selves, registry, chains) > 0
+  return changed && registry !== undefined && own !== null && chainProblemCount(own.links, selves, registry, accounts) > 0
 }

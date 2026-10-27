@@ -1,5 +1,5 @@
 import path from "node:path";
-import { declaredClaudeAccounts } from "./claude-accounts-config.js";
+import { declaredClaudeAccounts, declaredRemoteClaudeAccounts } from "./claude-accounts-config.js";
 import { resolveEmployeeClaudeProfile, type ClaudeProfile } from "./claude-profile.js";
 import { accountForEmployee, DEFAULT_CLAUDE_ACCOUNT } from "./engine-account.js";
 import { isEngineExhausted, readEngineHealth, recordExhaustedWindows, type EngineHealthReading } from "./engine-health.js";
@@ -73,6 +73,13 @@ export function claudeAccountsFor(employees: Iterable<Employee>, config: JinnCon
   }]]);
   for (const account of declared) {
     byKey.set(account.key, { key: account.key, label: account.name, location: { kind: "local" }, profile: account.profile, employees: [] });
+  }
+  // A declared remote account is read over SSH like any remote login, so a stand-in that nobody runs on yet still has a card.
+  for (const account of declaredRemoteClaudeAccounts(config)) {
+    byKey.set(account.key, {
+      key: account.key, label: account.name, location: { kind: "remote", host: account.remoteHost }, profile: null,
+      remote: { destination: account.destination, configDir: account.configDir }, employees: [],
+    });
   }
   for (const employee of employees) {
     if (!usesClaude(employee, config)) continue;

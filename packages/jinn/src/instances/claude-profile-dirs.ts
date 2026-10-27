@@ -29,6 +29,8 @@ function absoluteDir(value: unknown): string | undefined {
 function accountDirs(home: string): string[] {
   const accounts = record(record(record(readYaml(path.join(home, "config.yaml")))?.engines)?.claude)?.accounts;
   return Object.values(record(accounts) ?? {}).flatMap((entry) => {
+    // A remote account's directory is on another host, not a profile directory of this one.
+    if (record(entry)?.remoteHost !== undefined) return [];
     const dir = absoluteDir(record(entry)?.configDir);
     return dir ? [dir] : [];
   });

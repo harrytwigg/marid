@@ -102,9 +102,9 @@ export function withModel(link: FallbackLink, model: string): FallbackLink {
 }
 
 /** Only a Claude link takes a profile: "Default profile" plus the declared accounts. */
-export function profileOptionsFor(engine: string, profiles: string[]): { value: string; label: string }[] | null {
+export function profileOptionsFor(engine: string, profiles: string[], labels: Record<string, string> = {}): { value: string; label: string }[] | null {
   if (engine !== "claude") return null
-  return [{ value: "", label: "Default profile" }, ...profiles.map((name) => ({ value: name, label: name }))]
+  return [{ value: "", label: "Default profile" }, ...profiles.map((name) => ({ value: name, label: labels[name] ?? name }))]
 }
 
 /**

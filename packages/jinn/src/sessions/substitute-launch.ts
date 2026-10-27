@@ -1,6 +1,7 @@
-import { declaredAccountByKey } from "../shared/claude-accounts-config.js";
+import { declaredAccountByKey, declaredRemoteAccountByKey } from "../shared/claude-accounts-config.js";
 import { resolveEmployeeClaudeProfile } from "../shared/claude-profile.js";
 import { accountForEmployee, DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
+import { resolveRemoteClaudeConfigDir } from "../shared/remote-target.js";
 import type { ResolvedFallbackLink } from "../shared/fallback-chain-wire.js";
 import type { ChooseSubstituteInput, SubstituteChoice } from "./rate-limit-substitute.js";
 import { rateLimitAccount } from "./rate-limit-account.js";
@@ -10,7 +11,9 @@ import { fallbackModelMapOf } from "./substitute-filters.js";
 /**
  * What it takes to run a chain link: the Claude profile, and for a link that is
  * another Claude account the swap the override records. Other engines need
- * neither, and nothing but a local Claude link ever does.
+ * neither. On a remote host the only Claude link that is another account is a
+ * remote account declared on the session's own `user@host`, and it needs no local
+ * profile: the swap carries the directory on that host.
  */
 
 type Launch = Pick<SubstituteChoice, "claudeProfile" | "accounts">;
@@ -44,7 +47,28 @@ function engineLaunch(input: ChooseSubstituteInput, link: ResolvedFallbackLink):
   return { claudeProfile: profile, accounts: { original, substitute: link.account, substituteConfigDir: profile?.dir ?? null } };
 }
 
+/**
+ * A remote session's Claude link. The account it stands on keeps the swap it holds. Any other account
+ * it can run as on its host is a swap onto that account's directory there: a declared remote account,
+ * or, from a substitute, back onto the employee's own login (its own directory, null for the host's
+ * default profile). That way the override always names the account the turn runs as, so the thread it
+ * resumes is that account's and never another's.
+ */
+function remoteLaunch(input: ChooseSubstituteInput, link: ResolvedFallbackLink): Launch {
+  if (link.account === input.account) {
+    const standing = standingAccountSwap(input);
+    return { claudeProfile: null, ...(standing ? { accounts: standing } : {}) };
+  }
+  const own = accountForEmployee(input.employee, "claude");
+  const dir = link.account === own
+    ? resolveRemoteClaudeConfigDir(input.remoteTarget, input.config.remote) ?? null
+    : declaredRemoteAccountByKey(input.config, link.account)?.configDir;
+  if (dir === undefined) return { claudeProfile: null };
+  return { claudeProfile: null, accounts: { original: input.account, substitute: link.account, substituteConfigDir: dir } };
+}
+
 export function launchFor(input: ChooseSubstituteInput, accountMode: boolean, link: ResolvedFallbackLink): Launch {
-  if (link.engine !== "claude" || input.remote) return { claudeProfile: null };
+  if (link.engine !== "claude") return { claudeProfile: null };
+  if (input.remote) return remoteLaunch(input, link);
   return accountMode ? accountLaunch(input, link) : engineLaunch(input, link);
 }

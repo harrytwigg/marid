@@ -135,7 +135,30 @@ export interface SessionFallbackChainView {
 export interface FallbackProfileOption {
   name: string;
   account: string;
+  /** The profile directory: on the gateway, or on `remote.host` when that is set. */
   configDir: string;
+  /** Set for an account declared on another host (`remoteHost`): only a remote employee on the same
+   *  `destination` (`user@host`, or the bare host with no user) can fall back to it. Absent: a local profile. */
+  remote?: { host: string; destination: string };
+}
+
+/** Where an employee runs, as an account is matched to it: `destination` is `user@host`, or the bare host with no user. Absent for a local employee. */
+export interface FallbackEmployeeHost {
+  host: string;
+  destination: string;
+}
+
+/**
+ * Why a declared account may not be named by an employee's chain, or undefined when it may: a remote
+ * employee falls back only to an account declared on its own `user@host`, a local one to no remote
+ * account. `at` is the sentence's subject (`fallback[0]: profile "x"`); `remote` is the account's
+ * `remote` (absent for a local profile). A name that is declared nowhere is not this function's: the
+ * validator refuses it as naming no account.
+ */
+export function employeeProfileHostProblem(at: string, remote: { destination: string } | undefined, employee: FallbackEmployeeHost | undefined): string | undefined {
+  if (!employee) return remote ? `${at} is declared on ${remote.destination}; a local employee falls back only to a local account` : undefined;
+  if (!remote) return `${at} is a local profile; a remote employee falls back only to an account declared with remoteHost ${employee.host}`;
+  return remote.destination === employee.destination ? undefined : `${at} is declared on ${remote.destination}, not ${employee.destination}`;
 }
 
 /** One editable chain: an engine default, a declared account's, or an employee's. */

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { readClaudeUsageHistory, usageHistoryPath, type UsageSample } from "./claude-usage-history.js";
-import { declaredClaudeAccounts } from "./claude-accounts-config.js";
+import { declaredClaudeAccounts, declaredRemoteClaudeAccounts } from "./claude-accounts-config.js";
 import { accountForEmployee, DEFAULT_CLAUDE_ACCOUNT } from "./engine-account.js";
 import type { FallbackLimitReadings } from "./fallback-chain-health.js";
 import type { Employee, JinnConfig } from "./types.js";
@@ -32,7 +32,7 @@ function newestSample(account: string): UsageSample | undefined {
 }
 
 export function latestLimitReadings(config: JinnConfig, extraAccounts: Iterable<string> = []): FallbackLimitReadings {
-  const accounts = new Set([DEFAULT_CLAUDE_ACCOUNT, ...declaredClaudeAccounts(config).map((account) => account.key), ...extraAccounts]);
+  const accounts = new Set([DEFAULT_CLAUDE_ACCOUNT, ...declaredClaudeAccounts(config).map((account) => account.key), ...declaredRemoteClaudeAccounts(config).map((account) => account.key), ...extraAccounts]);
   const readings: FallbackLimitReadings = {};
   for (const account of accounts) readings[account] = newestSample(account);
   return readings;

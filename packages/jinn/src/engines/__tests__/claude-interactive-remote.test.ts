@@ -30,6 +30,8 @@ const hoisted = vi.hoisted(() => ({
   writes: [] as string[],
   /** Flipped by one test to prove an unready host never reaches pty.spawn. */
   ready: true as boolean,
+  /** Set with `ready: false`: the host is up but the profile cannot run unattended. */
+  profileProblem: false as boolean,
 }));
 
 // ── node-pty ─────────────────────────────────────────────────────────────────
@@ -71,7 +73,11 @@ vi.mock("../remote-stage.js", async (importOriginal) => {
     ...actual,
     ensureRemoteReady: vi.fn(async (target: any, remote: any, opts: any) => {
       hoisted.ensureCalls.push({ target, remote, opts });
-      if (!hoisted.ready) return { ready: false, reason: "build-box is not reachable" };
+      if (!hoisted.ready) {
+        return hoisted.profileProblem
+          ? { ready: false, reason: "the Claude profile at /p on build-box is not signed in", profile: true }
+          : { ready: false, reason: "build-box is not reachable" };
+      }
       return {
         ready: true,
         facts: {
@@ -123,6 +129,7 @@ vi.mock("../sse-pty-proxy.js", () => ({
 }));
 
 import { InteractiveClaudeEngine } from "../claude-interactive.js";
+import { RemoteProfileNotReadyError } from "../../shared/remote-profile-error.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
 import { CLAUDE_SETTINGS_DIR, JINN_HOME } from "../../shared/paths.js";
 import { cleanupSessionSettings } from "../../shared/claude-settings.js";
@@ -342,6 +349,21 @@ describe("InteractiveClaudeEngine — remote branch", () => {
       expect(hoisted.spawns).toHaveLength(0);
     });
 
+    it("says when it is the profile, not the host, that is not ready, so a fallback walk can move on", async () => {
+      hoisted.ready = false;
+      hoisted.profileProblem = true;
+      try {
+        const run = engine.run({ sessionId: SID, prompt: "hi", cwd: "/tmp", ...TARGET } as any);
+        await expect(run).rejects.toBeInstanceOf(RemoteProfileNotReadyError);
+        await expect(run).rejects.toThrow(/remote host not ready: the Claude profile at \/p on build-box is not signed in/);
+        hoisted.profileProblem = false;
+        await expect(engine.run({ sessionId: SID, prompt: "hi", cwd: "/tmp", ...TARGET } as any)).rejects.not.toBeInstanceOf(RemoteProfileNotReadyError);
+        expect(hoisted.spawns).toHaveLength(0);
+      } finally {
+        hoisted.profileProblem = false;
+      }
+    });
+
     it("a purely local employee is unaffected — local claude, with a proxy", async () => {
       void engine.run({ sessionId: "local-sess", prompt: "hi", cwd: "/tmp" } as any).catch(() => {});
       await flush();
@@ -517,6 +539,74 @@ describe("InteractiveClaudeEngine — claude profile", () => {
     // .claude.json the session never opens and the first turn hangs.
     await remoteCommandFor({ ...REMOTE_CONFIG, claudeConfigDir: "/home/u/.claude-profiles/personal" });
     expect(hoisted.ensureCalls[0].remote.claudeConfigDir).toBe("/home/u/.claude-profiles/personal");
+  });
+});
+
+/**
+ * A remote session moved onto a remote account (and back) changes the profile
+ * directory it runs on. A warm PTY keeps the directory it was spawned with, so a
+ * launch asking for another one must replace it, as for a local profile.
+ */
+describe("a warm remote PTY and the profile directory a launch asks for", () => {
+  let lifecycle: PtyLifecycleManager;
+  let engine: InteractiveClaudeEngine;
+  const OWN = "/home/builder/.claude-a";
+  const SPARE = "/home/builder/.claude-b";
+
+  beforeEach(() => {
+    hoisted.spawns.length = 0;
+    hoisted.writes.length = 0;
+    hoisted.ready = true;
+    lifecycle = new PtyLifecycleManager({ maxLivePtys: 10 });
+    engine = new InteractiveClaudeEngine(lifecycle, { register: () => {}, unregister: () => {} } as any, { remote: () => REMOTE_CONFIG, gatewayPort: () => 8722 });
+  });
+  afterEach(() => {
+    lifecycle.killAll();
+    cleanupSessionSettings(CLAUDE_SETTINGS_DIR, SID);
+  });
+
+  /** A warm PTY on `dir`, carrying its persona, the state a PTY is in from the second turn on. */
+  async function warmOn(dir: string): Promise<void> {
+    engine.ensureIdleSpawn(SID, { engineSessionId: "eng-1", cols: 80, rows: 24, ...TARGET, remoteClaudeConfigDir: dir } as any);
+    await vi.waitFor(() => expect(engine.hasWarmPty(SID)).toBe(true));
+    (engine as any).spawnParams.set(SID, { ...(engine as any).spawnParams.get(SID), appendApplied: true });
+  }
+  const dirOf = (index: number) => remoteFlagValue(remoteCommandOf(hoisted.spawns[index].args), "CLAUDE_CONFIG_DIR") ?? remoteCommandOf(hoisted.spawns[index].args).match(/CLAUDE_CONFIG_DIR='([^']*)'/)?.[1];
+
+  it("takes the next turn in the same process while the directory stays", async () => {
+    await warmOn(OWN);
+    void engine.run({ sessionId: SID, prompt: "two", cwd: "/tmp", ...TARGET, remoteClaudeConfigDir: OWN } as any).catch(() => {});
+    await vi.waitFor(() => expect(hoisted.writes.join("")).toContain("two"));
+    expect(hoisted.spawns).toHaveLength(1);
+  });
+
+  it("respawns on the substitute's directory when a turn asks for it", async () => {
+    await warmOn(OWN);
+    void engine.run({ sessionId: SID, prompt: "on spare", cwd: "/tmp", ...TARGET, remoteClaudeConfigDir: SPARE } as any).catch(() => {});
+    await vi.waitFor(() => expect(hoisted.spawns).toHaveLength(2));
+    expect(dirOf(1)).toBe(SPARE);
+    expect((engine as any).spawnParams.get(SID).profileKey).toBe(`remote:${SPARE}`);
+  });
+
+  it("respawns on its own directory when the window has ended and a turn asks for it again", async () => {
+    await warmOn(SPARE);
+    void engine.run({ sessionId: SID, prompt: "back home", cwd: "/tmp", ...TARGET, remoteClaudeConfigDir: OWN } as any).catch(() => {});
+    await vi.waitFor(() => expect(hoisted.spawns).toHaveLength(2));
+    expect(dirOf(1)).toBe(OWN);
+  });
+
+  it("drops an idle PTY on another directory before the terminal view attaches", async () => {
+    await warmOn(OWN);
+    engine.ensureIdleSpawn(SID, { engineSessionId: "eng-1", cols: 80, rows: 24, ...TARGET, remoteClaudeConfigDir: SPARE } as any);
+    await vi.waitFor(() => expect(hoisted.spawns).toHaveLength(2));
+    expect(dirOf(1)).toBe(SPARE);
+  });
+
+  it("leaves an idle PTY on the same directory alone", async () => {
+    await warmOn(OWN);
+    engine.ensureIdleSpawn(SID, { engineSessionId: "eng-1", cols: 80, rows: 24, ...TARGET, remoteClaudeConfigDir: OWN } as any);
+    await flush();
+    expect(hoisted.spawns).toHaveLength(1);
   });
 });
 

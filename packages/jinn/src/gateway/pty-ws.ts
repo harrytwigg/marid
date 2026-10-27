@@ -2,8 +2,7 @@ import type { WebSocket } from "ws";
 import type { PtyControlEvent, PtyIdleSpawnOpts, PtyViewEngine } from "../engines/pty-view-engine.js";
 import { getEngineSessionRef, getSession } from "../sessions/registry.js";
 import { orgRegistry } from "./org-registry.js";
-import { employeeRemoteTarget } from "../shared/remote-target.js";
-import { sessionClaudeProfile } from "../sessions/session-account.js";
+import { sessionClaudeProfile, sessionRemoteTarget } from "../sessions/session-account.js";
 import { remoteScopeFor, spawnCwd } from "../sessions/session-cwd.js";
 import { localScopedClaudeRefusal } from "../sessions/turn/scoped-turn.js";
 import { logger } from "../shared/logger.js";
@@ -133,7 +132,7 @@ export function attachPtyWebSocket(
     const employee = session?.employee
       ? orgRegistry(options.getConfig?.()).get(session.employee)
       : undefined;
-    const remote = employeeRemoteTarget(employee, remoteScopeFor(options.getConfig?.()?.remote, session));
+    const remote = sessionRemoteTarget(employee, remoteScopeFor(options.getConfig?.()?.remote, session), session);
     const refused = session && !remote ? localScopedClaudeRefusal(session) : null; // the PTY runs the PATH claude
     if (refused) throw new Error(refused);
     return {

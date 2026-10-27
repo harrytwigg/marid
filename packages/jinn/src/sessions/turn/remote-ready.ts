@@ -1,5 +1,5 @@
 import { logger } from "../../shared/logger.js";
-import { employeeRemoteTarget } from "../../shared/remote-target.js";
+import { sessionRemoteTarget } from "../session-account.js";
 import { remoteScopeFor } from "../session-cwd.js";
 import { engineSupportsRemote, REMOTE_ENGINE_NAMES, type RemoteEngineName } from "../../shared/models.js";
 import { ensureRemoteReady, type WaitStartInfo } from "../../engines/remote-stage.js";
@@ -89,7 +89,7 @@ export async function ensureRemoteHostReady(
   input: TurnInput,
   engineName: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const target = employeeRemoteTarget(input.employee, remoteScopeFor(input.config.remote, input.session));
+  const target = sessionRemoteTarget(input.employee, remoteScopeFor(input.config.remote, input.session), input.session);
   if (!target) return { ok: true };
 
   const wrongEngine = refuseNonRemoteEngine(input, target.remoteHost!, engineName);

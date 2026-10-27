@@ -1,4 +1,4 @@
-import { declaredAccountByKey } from "../shared/claude-accounts-config.js";
+import { declaredAccountByKey, declaredRemoteAccountByKey } from "../shared/claude-accounts-config.js";
 import { fallbackLinkKey, fallbackLinkLabel } from "../shared/fallback-chain-wire.js";
 import type { JinnConfig, Session } from "../shared/types.js";
 import { metaOf, servedBy, withServedBy } from "./fallback-run.js";
@@ -20,7 +20,7 @@ function hasWalkedChain(meta: Record<string, unknown>): boolean {
 /** The target a session is running on now, as a chain link names it. */
 function currentTarget(config: Pick<JinnConfig, "engines">, session: Session): { key: string; label: string } {
   const account = session.engine === "claude" ? currentClaudeAccount(session) : undefined;
-  const profile = account === undefined ? undefined : declaredAccountByKey(config, account)?.name;
+  const profile = account === undefined ? undefined : (declaredAccountByKey(config, account) ?? declaredRemoteAccountByKey(config, account))?.name;
   const link = { engine: session.engine, ...(profile === undefined ? {} : { profile }), ...(session.model ? { model: session.model } : {}) };
   return { key: fallbackLinkKey(link), label: fallbackLinkLabel(link) };
 }

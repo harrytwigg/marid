@@ -1,6 +1,8 @@
 import { claudeProfileFromDir, resolveEmployeeClaudeProfile, type ClaudeProfile } from "../shared/claude-profile.js";
-import { DEFAULT_CLAUDE_ACCOUNT, employeeClaudeAccount, isClaudeAccount } from "../shared/engine-account.js";
-import type { Employee, Session } from "../shared/types.js";
+import { DEFAULT_CLAUDE_ACCOUNT, employeeClaudeAccount, isClaudeAccount, isRemoteClaudeAccount } from "../shared/engine-account.js";
+import type { RemoteScope } from "../shared/remote-department.js";
+import { employeeRemoteTarget } from "../shared/remote-target.js";
+import type { Employee, Session, SessionRemoteTarget } from "../shared/types.js";
 
 /** The parts of a session this module reads; the transport meta is optional so
  *  a caller holding only an id-and-employee view can ask too. */
@@ -19,14 +21,17 @@ type SessionView = { employee?: string | null; transportMeta?: Session["transpor
  * revert (`maybeRevertEngineOverride`) lifts it once its `until` has passed,
  * which is what hands the session back to its own account and thread.
  *
- * Account substitution is local only in v1: a remote employee's substitute is
- * an engine on its host, never another account.
+ * A remote employee's substitute account is a remote account declared on its
+ * own `user@host` (`engines.claude.accounts.<name>.remoteHost`): its key is
+ * `claude@<user>@<host>:<profile key>` and `substituteConfigDir` is the profile
+ * directory ON THAT HOST. No other account is ever a remote session's substitute.
  */
 
 export interface AccountOverride {
   originalAccount: string;
   substituteAccount: string;
-  /** The substitute's profile directory; null for the default account. */
+  /** The substitute's profile directory: on the gateway for a local session, on
+   *  the session's host for a remote one (a remote account); null for the default account. */
   substituteConfigDir: string | null;
 }
 
@@ -40,6 +45,29 @@ export function accountOverride(session: SessionView): AccountOverride | undefin
     substituteAccount: substitute,
     substituteConfigDir: typeof record?.substituteConfigDir === "string" ? record.substituteConfigDir : null,
   };
+}
+
+/** The standing override when it moves a session onto a remote account: the one account swap a remote session can hold. */
+export function remoteAccountOverride(session: SessionView): AccountOverride | undefined {
+  const override = accountOverride(session);
+  return override && isRemoteClaudeAccount(override.substituteAccount) && override.substituteConfigDir ? override : undefined;
+}
+
+/** The target with the profile directory of the remote account the session stands on, when it stands on one; else as it is. */
+export function withStandingRemoteAccount<T extends SessionRemoteTarget>(target: T, session: SessionView | null | undefined): T {
+  const override = session ? remoteAccountOverride(session) : undefined;
+  return override ? { ...target, remoteClaudeConfigDir: override.substituteConfigDir! } : target;
+}
+
+/**
+ * Where this session's Claude runs now: its employee's remote target, on the
+ * profile directory of the remote account an override has moved it onto. The
+ * stage, the folder-trust seed and the department sync all read the directory
+ * off this one target, so they cannot disagree about which profile the session uses.
+ */
+export function sessionRemoteTarget(employee: Employee | undefined, scope: RemoteScope, session: SessionView | null | undefined): SessionRemoteTarget | undefined {
+  const target = employeeRemoteTarget(employee, scope);
+  return target && withStandingRemoteAccount(target, session);
 }
 
 /** The session's own Claude account: its employee's, or the default. */
