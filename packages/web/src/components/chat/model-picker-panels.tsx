@@ -138,33 +138,59 @@ export function ModelListPanel({ engine, modelId, list, onPickModel, keepOpenOnP
   )
 }
 
-/** The engine list: pick one to browse its models. */
-export function EnginePanel({ engines, engine, onBack, onChoose, onRefresh }: {
+/** One engine row in the engine panel. */
+function EngineRow({ label, on, onPick }: { label: string; on: boolean; onPick: () => void }) {
+  return (
+    <DropdownMenuItem
+      onSelect={(ev) => { ev.preventDefault(); onPick() }}
+      aria-checked={on}
+      className="justify-between rounded-[9px] py-1.5 pl-2 pr-2 text-[length:var(--text-footnote)] text-[var(--text-secondary)]"
+    >
+      <span className={on ? 'font-[var(--weight-semibold)] text-[var(--text-primary)]' : undefined}>
+        {label}
+      </span>
+      {on && <CheckIcon className="size-3.5 shrink-0 text-[var(--accent)]" />}
+    </DropdownMenuItem>
+  )
+}
+
+/** The engine list: pick one to browse its models. With declared Claude accounts, Claude is
+ *  listed once per profile — the plain row is the employee's/gateway's own login. */
+export function EnginePanel({ engines, engine, onBack, onChoose, onRefresh, profiles, profile, onChooseProfile }: {
   engines: EngineRegistryEntry[]
   engine: string
   onBack: () => void
   onChoose: (engine: string) => void
   onRefresh: () => void
+  /** Declared Claude account names; empty/absent leaves the panel exactly as before. */
+  profiles?: string[]
+  profile?: string
+  onChooseProfile?: (profile: string | undefined) => void
 }) {
   return (
     <>
       <BackRow onBack={onBack} />
       <DropdownMenuLabel className={SECTION_LABEL}>Switch engine</DropdownMenuLabel>
-      {engines.map((e) => {
-        const on = e.name === engine
-        return (
-          <DropdownMenuItem
-            key={e.name}
-            onSelect={(ev) => { ev.preventDefault(); onChoose(e.name) }}
-            aria-checked={on}
-            className="justify-between rounded-[9px] py-1.5 pl-2 pr-2 text-[length:var(--text-footnote)] text-[var(--text-secondary)]"
-          >
-            <span className={on ? 'font-[var(--weight-semibold)] text-[var(--text-primary)]' : undefined}>
-              {engineDisplayName(e.name)}
-            </span>
-            {on && <CheckIcon className="size-3.5 shrink-0 text-[var(--accent)]" />}
-          </DropdownMenuItem>
-        )
+      {engines.flatMap((e) => {
+        if (e.name !== 'claude' || !profiles?.length || !onChooseProfile) {
+          return [<EngineRow key={e.name} label={engineDisplayName(e.name)} on={e.name === engine} onPick={() => onChoose(e.name)} />]
+        }
+        return [
+          <EngineRow
+            key="claude"
+            label={engineDisplayName('claude')}
+            on={engine === 'claude' && !profile}
+            onPick={() => onChooseProfile(undefined)}
+          />,
+          ...profiles.map((name) => (
+            <EngineRow
+              key={`claude:${name}`}
+              label={`${engineDisplayName('claude')} · ${name}`}
+              on={engine === 'claude' && profile === name}
+              onPick={() => onChooseProfile(name)}
+            />
+          )),
+        ]
       })}
       <DropdownMenuSeparator className="bg-[var(--separator)]" />
       <DropdownMenuItem

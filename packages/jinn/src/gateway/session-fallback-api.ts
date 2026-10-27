@@ -57,9 +57,9 @@ export function fallbackViewFor(session: Session, context: ApiContext, scopedCal
  * The view a session started with this engine, model and employee would have, for the new-chat screen:
  * the config's default mode, the chain's next target and the engines it may pick, before any session exists.
  */
-export function fallbackPreviewFor(context: ApiContext, spec: { engine?: string; model?: string; employee?: string }): SessionFallbackView {
+export function fallbackPreviewFor(context: ApiContext, spec: { engine?: string; model?: string; employee?: string; claudeConfigDir?: string }): SessionFallbackView {
   const config = context.getConfig();
-  const { session } = prospectiveSession(config, { engine: spec.engine || config.engines.default, model: spec.model, employee: spec.employee });
+  const { session } = prospectiveSession(config, { engine: spec.engine || config.engines.default, model: spec.model, employee: spec.employee, claudeConfigDir: spec.claudeConfigDir });
   return fallbackViewFor(session, context);
 }
 

@@ -16,6 +16,7 @@ export function readNewSessionSelector(): SelectorValue {
       engine: typeof parsed.engine === 'string' ? parsed.engine : undefined,
       model: typeof parsed.model === 'string' ? parsed.model : undefined,
       effortLevel: typeof parsed.effortLevel === 'string' ? parsed.effortLevel : undefined,
+      profile: typeof parsed.profile === 'string' ? parsed.profile : undefined,
     }
   } catch {
     return {}
@@ -28,5 +29,6 @@ export function writeNewSessionSelector(value: SelectorValue): void {
     engine: value.engine,
     model: value.model,
     effortLevel: value.effortLevel,
+    profile: value.profile,
   }))
 }

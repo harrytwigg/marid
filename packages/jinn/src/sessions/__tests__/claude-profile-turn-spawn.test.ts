@@ -39,9 +39,9 @@ const flush = () => new Promise((r) => setTimeout(r, 30));
 let tmp: string;
 let lifecycle: PtyLifecycleManager;
 
-function turn(engine: { run: (opts: EngineRunOpts) => Promise<EngineResult> }, employee: Partial<Employee>): void {
+function turn(engine: { run: (opts: EngineRunOpts) => Promise<EngineResult> }, employee: Partial<Employee>, session: Record<string, unknown> = {}): void {
   void runEngineAttempt({
-    input: { session: { id: "turn-spawn-1" }, attachments: [], employee, attemptToken: "t1", config: {} } as any,
+    input: { session: { id: "turn-spawn-1", ...session }, attachments: [], employee, attemptToken: "t1", config: {} } as any,
     plan: {
       engine, engineConfig: {}, promptToRun: "hi", runtimeSource: "web",
       prepareContext: () => ({ systemPrompt: "sys", fingerprint: "f", refresh: undefined }),
@@ -77,6 +77,18 @@ describe("a turn reaches the spawned claude on the employee's profile", () => {
     await flush();
     expect(spawns).toHaveLength(1);
     expect(spawns[0]!.env.CLAUDE_CONFIG_DIR).toBe(profileDir);
+  });
+
+  it("a session started on a declared profile spawns with that profile, over its employee's own", async () => {
+    const engine = new InteractiveClaudeEngine(lifecycle, { register: () => {}, unregister: () => {} } as any);
+    const employeeDir = path.join(tmp, "claude-employee");
+    const chosenDir = path.join(tmp, "claude-chosen");
+    fs.mkdirSync(employeeDir);
+    fs.mkdirSync(chosenDir);
+    turn(engine, { name: "side-dev", claudeConfigDir: employeeDir }, { claudeConfigDir: chosenDir });
+    await flush();
+    expect(spawns).toHaveLength(1);
+    expect(spawns[0]!.env.CLAUDE_CONFIG_DIR).toBe(chosenDir);
   });
 
   it("a remote employee's ordinary turn carries remoteClaudeConfigDir", async () => {

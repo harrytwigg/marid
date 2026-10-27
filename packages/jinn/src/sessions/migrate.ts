@@ -315,6 +315,8 @@ export function migrateSessionsSchema(database: Database.Database): void {
     ['fallback_mode', 'TEXT'],
     // JSON `{engine, model}`: the operator's chosen usage-limit fallback. NULL follows the config's chain.
     ['fallback_target', 'TEXT'],
+    // Canonical directory of the declared Claude account the session was started on; NULL runs as its employee does.
+    ['claude_config_dir', 'TEXT'],
     ['user_id', 'TEXT'],
     // No backfill: pre-existing sessions stay NULL (no excerpt); only new sessions populate it.
     ['prompt_excerpt', 'TEXT'],

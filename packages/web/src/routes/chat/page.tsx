@@ -62,7 +62,8 @@ import { cn } from '@/lib/utils'
 import type { ViewMode } from '@/lib/view-mode'
 import type { GatewayEvent } from '@jinn/gateway-events'
 import { shareDebugLog, clearDebugLog } from '@/lib/debug-log'
-import { buildNewSessionParams } from '@/components/chat/new-chat-helpers'
+import { buildFreshChatParams, effectivePrimaryProfile, startableProfileNames } from '@/components/chat/new-chat-helpers'
+import { fetchFallbackChains } from '@/lib/api-fallback-chains'
 import { buildContinuationPrompt } from '@/lib/stale-chat'
 import { PRODUCT_NAME } from "@/lib/brand"
 
@@ -530,12 +531,18 @@ function ChatPage() {
 
   const handleStartFreshChat = useCallback(async (previous: FreshChatSourceSession) => {
     const prompt = buildContinuationPrompt(previous.id)
-    const result = await api.createSession(buildNewSessionParams({
+    const employeeRemote = Boolean(previous.employee && orgQuery.data?.employees.find((e) => e.name === previous.employee)?.remoteHost)
+    // Continue on the same Claude account, but only one confirmed still declared: a read that fails stops
+    // the fresh chat rather than silently moving it to another login.
+    let profile = previous.profile
+    if (profile && !employeeRemote) {
+      const chains = await qc.fetchQuery({ queryKey: queryKeys.fallbackChains(undefined), queryFn: () => fetchFallbackChains(), staleTime: 15_000 })
+      profile = effectivePrimaryProfile({ profile, declared: startableProfileNames(chains) })
+    }
+    const result = await api.createSession(buildFreshChatParams({
       message: prompt,
-      selectedEmployee: previous.employee ?? null,
-      engine: previous.engine,
-      model: previous.model,
-      effortLevel: previous.effortLevel,
+      previous: { ...previous, profile },
+      employeeRemote,
     }))
     const newSessionId = typeof result.id === 'string' ? result.id : ''
     if (!newSessionId) throw new Error('The gateway did not return a new session id')
@@ -551,7 +558,7 @@ function ChatPage() {
     pendingNavRef.current = newSessionId
     navigate(sessionPath(newSessionId))
     qc.invalidateQueries({ queryKey: queryKeys.sessions.all })
-  }, [chatTabs, navigate, qc])
+  }, [chatTabs, navigate, qc, orgQuery.data])
 
   // ChatPane callbacks
   const handleSessionCreated = useCallback((newId: string, pending?: Message, history: 'replace' | 'push' = 'replace') => {

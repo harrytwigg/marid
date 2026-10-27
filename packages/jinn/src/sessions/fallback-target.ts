@@ -2,7 +2,6 @@ import type { EngineName } from "../shared/models.js";
 import { engineAvailable, getModelRegistry, hasDynamicModelCatalog, isKnownEngine } from "../shared/models.js";
 import { sshDestination } from "../shared/remote-target.js";
 import { isEngineExhausted, type EngineHealthReading } from "../shared/engine-health.js";
-import { resolveEmployeeClaudeProfile } from "../shared/claude-profile.js";
 import {
   sessionFallbackTargetShapeError, parseStoredFallbackTarget, type StoredFallbackTarget,
 } from "../shared/session-fallback-config.js";
@@ -13,7 +12,7 @@ import { remoteEngineAvailable } from "../engines/remote-stage.js";
 import type { RemoteEngineName } from "../shared/models.js";
 import { effectiveFallbackMode } from "./session-fallback.js";
 import { rateLimitAccount, substituteHealth } from "./rate-limit-account.js";
-import { accountOverride, remoteAccountOverride } from "./session-account.js";
+import { accountOverride, ownClaudeProfile, remoteAccountOverride } from "./session-account.js";
 import { engineAllowedAsSubstitute, sessionSubstituteScope, substituteScoped } from "./substitute-filters.js";
 import type { ChooseSubstituteInput, SubstituteChoice } from "./rate-limit-substitute.js";
 
@@ -32,15 +31,15 @@ export function parseFallbackTargetPatch(value: unknown): { ok: true; target?: S
   return target ? { ok: true, target } : { ok: false, error: sessionFallbackTargetShapeError(value) };
 }
 
-/** A session that does not exist yet, as far as fallback reads of it: its engine, model and employee (whose department and host decide the scope). */
+/** A session that does not exist yet, as far as fallback reads of it: its engine, model, employee (whose department and host decide the scope) and the Claude profile it would start on. */
 export function prospectiveSession(
   config: JinnConfig,
-  spec: { engine: string; model?: string | null; employee: string | null | undefined },
+  spec: { engine: string; model?: string | null; employee: string | null | undefined; claudeConfigDir?: string },
 ): { session: Session; employee: Employee | undefined } {
   const employee = spec.employee ? orgRegistry(config).get(spec.employee) : undefined;
   const session = {
     id: "", engine: spec.engine, model: spec.model ?? null, employee: spec.employee ?? null,
-    scopeDepartment: scopedDepartmentOf(spec.employee) ?? null, fallbackTarget: null,
+    scopeDepartment: scopedDepartmentOf(spec.employee) ?? null, fallbackTarget: null, claudeConfigDir: spec.claudeConfigDir ?? null,
   } as unknown as Session;
   return { session, employee };
 }
@@ -129,7 +128,7 @@ function modelRefusal(input: ChooseSubstituteInput, health: EngineHealthReading,
   const offered = getModelRegistry(config)[target.engine]?.models ?? [];
   if (!offered.some((m) => m.id === target.model) && !hasDynamicModelCatalog(target.engine)) return "names a model that is no longer offered";
   if (session.engine === target.engine) return session.model === target.model ? "is the model that just hit its limit" : undefined;
-  return isEngineExhausted(substituteHealth(health, employee), target.engine) ? "has hit its own usage limit" : undefined;
+  return isEngineExhausted(substituteHealth(health, employee, session), target.engine) ? "has hit its own usage limit" : undefined;
 }
 
 /**
@@ -147,6 +146,6 @@ export function chooseTargetSubstitute(input: ChooseSubstituteInput, health: Eng
   const sameEngine = session.engine === target.engine;
   const accounts = target.engine === "claude" && sameEngine ? keptAccountSwap(session, Boolean(remote)) : undefined;
   const claudeProfile = target.engine !== "claude" || remote ? null
-    : sameEngine ? rateLimitAccount("claude", employee, session).claudeProfile : resolveEmployeeClaudeProfile(employee);
+    : sameEngine ? rateLimitAccount("claude", employee, session).claudeProfile : ownClaudeProfile(session, employee);
   return { choice: { engine: target.engine as EngineName, model: target.model, claudeProfile, ...(accounts ? { accounts } : {}) } };
 }

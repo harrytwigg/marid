@@ -21,6 +21,7 @@ import { parseFallbackView, servedByInfoLine } from './fallback-mode-model'
 import { newChatFallbackParams, useNewChatFallback } from './use-new-chat-fallback'
 import { ModelSelectorRow, type SelectorValue } from '@/components/chat/model-selector-row'
 import { useLiveSession } from '@/hooks/use-live-session'
+import type { Session } from '@/components/chat/session-signals'
 import { useStaleChatNotice, type FreshChatSourceSession } from '@/components/chat/use-stale-chat-notice'
 import { useFileDrop } from '@/hooks/use-file-drop'
 import { FileDropOverlay } from '@/components/ui/file-drop-overlay'
@@ -34,7 +35,7 @@ import { useOnboardingSeed } from '@/components/chat/use-onboarding-seed'
 
 const CliTerminal = lazy(() => import('@/components/cli-terminal').then(m => ({ default: m.CliTerminal })))
 import type { CliTerminalHandle } from '@/components/cli-terminal'
-import { buildNewSessionParams, resolveNewSessionSelector, shouldPersistNewSessionSelector } from '@/components/chat/new-chat-helpers'
+import { buildNewSessionParams, composeSessionEngine, resolveNewSessionSelector, shouldPersistNewSessionSelector } from '@/components/chat/new-chat-helpers'
 import { readNewSessionSelector, writeNewSessionSelector } from '@/components/chat/new-session-selector'
 import { Slot } from '@/contrib/slot'
 import { AREAS } from '@/contrib/types'
@@ -211,8 +212,12 @@ export function ChatPane({
         engine: emp.engine,
         model: emp.model,
         effortLevel: emp.effortLevel,
+        remoteHost: emp.remoteHost,
       }))
     : []
+  const selectedEmployeeRemote = Boolean(
+    selectedEmployee && pickerEmployees.find((e) => e.name === selectedEmployee)?.remoteHost,
+  )
   const employeeDisplayNames = useMemo(
     () => Object.fromEntries((orgData?.employees ?? []).map((employee) => [employee.name, employee.displayName])),
     [orgData],
@@ -235,10 +240,13 @@ export function ChatPane({
     }
     previousSessionIdForSelectorRef.current = sessionId
   }, [sessionId])
+  // The remembered profile as it may be sent, reported by the selector once it is confirmed declared for a
+  // local employee. It is derived there and never written back to the selector's own value.
+  const [effectiveProfile, setEffectiveProfile] = useState<string | undefined>(undefined)
   // New chat only: the fallback the operator chose, sent with the create request.
   const newChatFallback = useNewChatFallback({
     active: !sessionId,
-    engine: selector.engine,
+    engine: composeSessionEngine(selector.engine, effectiveProfile),
     model: selector.model,
     employee: selectedEmployee ?? undefined,
   })
@@ -363,6 +371,7 @@ export function ChatPane({
             selectedEmployee,
             attachmentIds,
             engine: selector.engine,
+            profile: effectiveProfile,
             model: selector.model,
             effortLevel: selector.effortLevel,
             speech,
@@ -391,7 +400,7 @@ export function ChatPane({
       }
     },
     // Keep viewMode and stale-notice handling fresh across chat↔CLI sends.
-    [sessionId, selectedEmployee, onSessionCreated, onRefresh, viewMode, selector, currentSession?.engine, engineRegistry, beginSend, failSend, answerStaleChatBySending, sessionQueue, keepPaneTab]
+    [sessionId, selectedEmployee, onSessionCreated, onRefresh, viewMode, selector, effectiveProfile, currentSession?.engine, engineRegistry, beginSend, failSend, answerStaleChatBySending, sessionQueue, keepPaneTab]
   )
 
   const handleStatusRequest = useCallback(async () => {
@@ -600,6 +609,10 @@ export function ChatPane({
             errorNote={selectorError ?? undefined}
             disabled={loading}
             contextTokens={liveContextTokens ?? (currentSession?.lastContextTokens as number | null | undefined) ?? undefined}
+            allowProfiles={!sessionId}
+            onEffectiveProfile={setEffectiveProfile}
+            employeeRemote={selectedEmployeeRemote}
+            sessionProfileName={(currentSession?.claudeProfile as Session['claudeProfile'])?.name ?? null}
           />
           {/* Never locked by a running turn: a change reaches the gateway at once and applies from the next usage limit. */}
           <FallbackModeChip

@@ -128,6 +128,7 @@ function rowToSession(row: Record<string, unknown>): Session {
     effortLevel: (row.effort_level as string) ?? null,
     fallbackMode: storedFallbackMode(row.fallback_mode),
     fallbackTarget: storedFallbackTarget(row.fallback_target),
+    claudeConfigDir: (row.claude_config_dir as string) ?? null,
     status: row.status as Session['status'],
     attemptOutcome: (row.attempt_outcome as SessionAttemptOutcome) ?? null,
     attemptToken: (row.attempt_token as string) ?? null,
@@ -416,6 +417,8 @@ export interface CreateSessionOpts {
   fallbackMode?: SessionFallbackMode;
   /** The usage-limit fallback a parent passes on (sessions/fallback-target.ts); undefined stores NULL. */
   fallbackTarget?: StoredFallbackTarget;
+  /** The declared Claude account's canonical directory the session runs on instead of its employee's own (sessions/primary-profile.ts); undefined stores NULL. */
+  claudeConfigDir?: string;
   /**
    * Optional human-facing excerpt override. When the prompt is scaffolded
    * (e.g. talk delegation wraps the operator's ask in a brief + verbatim
@@ -466,12 +469,12 @@ export function createSession(opts: CreateSessionOpts & { prompt?: string; porta
     INSERT INTO sessions (
       id, engine, source, source_ref, connector, session_key, reply_context, message_id, transport_meta,
       employee, model, title, prompt_excerpt, parent_session_id,
-      user_id, effort_level, fallback_mode, fallback_target, status, created_at, last_activity, scope_department
+      user_id, effort_level, fallback_mode, fallback_target, claude_config_dir, status, created_at, last_activity, scope_department
     )
     VALUES (
       ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, 'idle', ?, ?, ?
+      ?, ?, ?, ?, ?, 'idle', ?, ?, ?
     )
   `);
   stmt.run(
@@ -493,6 +496,7 @@ export function createSession(opts: CreateSessionOpts & { prompt?: string; porta
     opts.effortLevel ?? null,
     opts.fallbackMode ?? null,
     opts.fallbackTarget ? JSON.stringify(opts.fallbackTarget) : null,
+    opts.claudeConfigDir ?? null,
     now,
     now,
     scopeDepartment,
@@ -522,6 +526,7 @@ export function createSession(opts: CreateSessionOpts & { prompt?: string; porta
     effortLevel: opts.effortLevel ?? null,
     fallbackMode: opts.fallbackMode ?? null,
     fallbackTarget: opts.fallbackTarget ?? null,
+    claudeConfigDir: opts.claudeConfigDir ?? null,
     status: 'idle',
     attemptOutcome: null,
     attemptToken: null,
@@ -1926,10 +1931,10 @@ export function duplicateSession(sourceId: string, newTitle?: string): { session
       INSERT INTO sessions (
         id, engine, engine_session_id, source, source_ref, connector, session_key,
         reply_context, message_id, transport_meta,
-        employee, model, title, parent_session_id, effort_level, fallback_mode, fallback_target, status,
+        employee, model, title, parent_session_id, effort_level, fallback_mode, fallback_target, claude_config_dir, status,
         total_cost, total_turns, created_at, last_activity, scope_department
       )
-      VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, 'idle', 0, 0, ?, ?, ?)
+      VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, 'idle', 0, 0, ?, ?, ?)
     `).run(
       newId,
       source.engine,
@@ -1946,6 +1951,7 @@ export function duplicateSession(sourceId: string, newTitle?: string): { session
       source.effortLevel,
       source.fallbackMode,
       source.fallbackTarget ? JSON.stringify(source.fallbackTarget) : null,
+      source.claudeConfigDir,
       now,
       now,
       scopedDepartmentOf(source.employee),

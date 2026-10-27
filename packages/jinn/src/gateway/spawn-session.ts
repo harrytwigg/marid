@@ -1,5 +1,5 @@
 import { logger } from "../shared/logger.js";
-import type { JinnConfig, Session } from "../shared/types.js";
+import type { Employee, JinnConfig, Session } from "../shared/types.js";
 import { createSession, getSession, insertMessage, updateSession, enqueueQueueItem } from "../sessions/registry.js";
 import { validateNewSessionSelection } from "../sessions/session-patch.js";
 import { childFallbackMode } from "../sessions/session-fallback.js";
@@ -7,6 +7,7 @@ import { childFallbackTarget, fallbackTargetRefusal, parseFallbackTargetPatch, p
 import type { StoredFallbackTarget } from "../shared/session-fallback-config.js";
 import type { SessionFallbackMode } from "../shared/session-fallback-config.js";
 import { parseFallbackModeParam } from "./session-fallback-api.js";
+import { resolvePrimaryEngine } from "../sessions/primary-profile.js";
 import { reroutedSessionMeta, type SessionReroute } from "../sessions/engine-override-window.js";
 import { fileIdsToMedia, rehomeAttachmentsToSession } from "./files.js";
 import { resolveMessageAudiences, speechContextApplies } from "./speech-context.js";
@@ -37,9 +38,14 @@ export interface SpawnSessionInput {
   /** Already coerced against the portal name by the caller, because whether a
    *  name is a pseudo-employee depends on config the caller has read. */
   employee?: string | null;
+  /** An engine name, or `claude:<name>` to start on a declared Claude account (sessions/primary-profile.ts). */
   engine?: unknown;
   model?: unknown;
   effortLevel?: unknown;
+  /** The caller is a department-scoped session, which may not pick a Claude profile. */
+  scopedCaller?: boolean;
+  /** The caller is the operator, the only one who may pick a Claude profile for a member of a scoped department. */
+  operatorCaller?: boolean;
   /** Usage-limit mode for the new session (shared/session-fallback-config.ts); default: inherited from the parent. */
   fallbackMode?: unknown;
   /** The engine and model this session falls back to at a usage limit (`{ engine, model }`); default: the parent's when it passes its fallback on, else the config's chain. */
@@ -65,7 +71,7 @@ export interface SpawnSessionInput {
  * Collapsing that into an error would change what an existing caller sees.
  */
 export type SpawnSessionOutcome =
-  | { ok: false; error: string }
+  | { ok: false; error: string; /** The HTTP status the refusal maps to; absent: 400. */ status?: 400 | 403 }
   | { ok: true; session: Session; dispatched: boolean };
 
 function defaultProvenance(): SpawnProvenance {
@@ -77,8 +83,8 @@ function defaultProvenance(): SpawnProvenance {
  *  employee that no longer resolves fails closed rather than quietly becoming a
  *  gateway-default session. */
 type SpawnSelection =
-  | { ok: false; error: string }
-  | { ok: true; engineName: string; model?: string; effortLevel?: string; reroute?: SessionReroute; fallbackMode?: SessionFallbackMode };
+  | { ok: false; error: string; status?: 400 | 403 }
+  | { ok: true; engineName: string; model?: string; effortLevel?: string; reroute?: SessionReroute; fallbackMode?: SessionFallbackMode; claudeConfigDir?: string };
 
 /** The mode a spawn stores: its explicit one, else the parent's rule (undefined for a root). */
 function resolveFallbackMode(
@@ -117,6 +123,33 @@ function storedFallback(
   return { ok: true, stored: { fallbackMode: mode, fallbackTarget: own.target ?? childFallbackTarget(config, parent, mode, { employee }) } };
 }
 
+/** The engine a spawn names, and the Claude profile directory when it named one: `claude:<name>` is the engine "claude" on that declared account, and everything after this sees the bare engine. */
+function engineChoice(
+  config: JinnConfig, input: SpawnSessionInput, employee: Employee | undefined,
+): { ok: true; engine: unknown; claudeConfigDir?: string } | { ok: false; error: string; status?: 400 | 403 } {
+  if (typeof input.engine !== "string" || !input.engine.trim()) return { ok: true, engine: input.engine };
+  const primary = resolvePrimaryEngine(config, input.engine, { employee, scopedCaller: input.scopedCaller, operatorCaller: input.operatorCaller });
+  return primary.ok ? { ok: true, engine: primary.engine, claudeConfigDir: primary.profile?.profile.dir } : primary;
+}
+
+/** The employee a spawn is for and the defaults it brings, or why there is none. */
+async function resolveSpawnEmployee(
+  config: JinnConfig, employeeName: string | null,
+): Promise<{ ok: false; error: string } | { ok: true; employee?: Employee; defaults?: { engine: string; model: string; effortLevel?: string; employee?: string } }> {
+  if (!employeeName) return { ok: true };
+  const { orgRegistry } = await import("./org-registry.js");
+  const emp = orgRegistry(config).get(employeeName);
+  // A transient org-registry/file-watcher miss must not silently turn an
+  // employee spawn into a gateway-default session. Resolve the employee
+  // first or fail closed, matching the delegation route.
+  if (!emp) return { ok: false, error: `unknown employee "${employeeName}" — GET /api/org lists valid employees` };
+  // GRS-017f: carry the employee slug so an unregistered configured
+  // model produces the same actionable, employee-named error the
+  // delegation route surfaces (not a cryptic bare-engine string).
+  const defaults = { engine: emp.engine, model: emp.model, employee: employeeName, ...(emp.effortLevel ? { effortLevel: emp.effortLevel } : {}) };
+  return { ok: true, employee: emp, defaults };
+}
+
 async function resolveSelection(
   config: JinnConfig,
   input: SpawnSessionInput,
@@ -125,22 +158,14 @@ async function resolveSelection(
   const fallback = resolveFallbackMode(config, input);
   if (!fallback.ok) return fallback;
   const fallbackMode = fallback.mode;
-  let employeeDefaults: { engine: string; model: string; effortLevel?: string; employee?: string } | undefined;
-  if (employeeName) {
-    const { orgRegistry } = await import("./org-registry.js");
-    const emp = orgRegistry(config).get(employeeName);
-    // A transient org-registry/file-watcher miss must not silently turn an
-    // employee spawn into a gateway-default session. Resolve the employee
-    // first or fail closed, matching the delegation route.
-    if (!emp) return { ok: false, error: `unknown employee "${employeeName}" — GET /api/org lists valid employees` };
-    // GRS-017f: carry the employee slug so an unregistered configured
-    // model produces the same actionable, employee-named error the
-    // delegation route surfaces (not a cryptic bare-engine string).
-    employeeDefaults = { engine: emp.engine, model: emp.model, employee: employeeName };
-    if (emp.effortLevel) employeeDefaults.effortLevel = emp.effortLevel;
-  }
+  const who = await resolveSpawnEmployee(config, employeeName);
+  if (!who.ok) return who;
+  const employeeRecord = who.employee;
+  const employeeDefaults = who.defaults;
+  const choice = engineChoice(config, input, employeeRecord);
+  if (!choice.ok) return choice;
   const selection = validateNewSessionSelection(config, {
-    engine: input.engine,
+    engine: choice.engine,
     model: input.model,
     effortLevel: input.effortLevel,
   }, { ...employeeDefaults, ...(fallbackMode ? { fallbackMode } : {}) });
@@ -152,6 +177,7 @@ async function resolveSelection(
     effortLevel: selection.effortLevel,
     reroute: selection.reroute,
     ...(fallbackMode ? { fallbackMode } : {}),
+    ...(choice.claudeConfigDir ? { claudeConfigDir: choice.claudeConfigDir } : {}),
   };
 }
 
@@ -253,6 +279,7 @@ export async function spawnSession(
     parentSessionId: input.parentSessionId,
     effortLevel: selection.effortLevel,
     ...fallback.stored,
+    claudeConfigDir: selection.claudeConfigDir,
     // Honor the requested model so API clients can pin per-employee models
     // (e.g. MCP servers that look up org/<employee>.yaml and pass the
     // employee's configured model). Without this, the turn falls back to

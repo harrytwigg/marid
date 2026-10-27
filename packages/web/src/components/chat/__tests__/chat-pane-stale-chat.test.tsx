@@ -127,6 +127,22 @@ describe('the stale-chat notice', () => {
     expect(screen.queryByText('Start a fresh chat?')).toBeNull()
   })
 
+  it('hands the Claude account the stale session runs on to the fresh chat, only while it is still on claude', async () => {
+    const onStartFreshChat = vi.fn(() => Promise.resolve())
+    const base = staleSession(61)
+    liveSessionState = { ...base, session: { ...base.session, claudeProfile: { name: 'work', key: 'k' } } }
+    const onClaude = render(<ChatPane {...paneProps} onStartFreshChat={onStartFreshChat} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Start fresh' }))
+    expect(onStartFreshChat).toHaveBeenCalledWith(expect.objectContaining({ id: 's1', engine: 'claude', profile: 'work' }))
+    onClaude.unmount()
+
+    onStartFreshChat.mockClear()
+    liveSessionState = { ...base, session: { ...base.session, engine: 'opencode', claudeProfile: { name: 'work', key: 'k' } } }
+    render(<ChatPane {...paneProps} onStartFreshChat={onStartFreshChat} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Start fresh' }))
+    expect(onStartFreshChat).toHaveBeenCalledWith(expect.objectContaining({ engine: 'opencode', profile: undefined }))
+  })
+
   it('keeps a dismissal across a remount of the same session', async () => {
     liveSessionState = staleSession(61)
 

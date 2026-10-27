@@ -1,8 +1,8 @@
+import { ownClaudeAccountOf, ownClaudeProfile } from "../sessions/session-account.js";
 import { engineAllowedAsSubstitute, sessionSubstituteScope } from "../sessions/substitute-filters.js";
 import { declaredAccountByKey, declaredClaudeAccounts, declaredRemoteAccountByName } from "./claude-accounts-config.js";
 import { linkAccount, ownTargetLink } from "./fallback-chain-links.js";
-import { resolveEmployeeClaudeProfile } from "./claude-profile.js";
-import { accountForEmployee, claudeAccountKey, DEFAULT_CLAUDE_ACCOUNT, isRemoteClaudeAccount } from "./engine-account.js";
+import { claudeAccountKey, DEFAULT_CLAUDE_ACCOUNT, isRemoteClaudeAccount } from "./engine-account.js";
 import { resolveSubstituteModel } from "./engine-fallback.js";
 import { engineChain, expandFallbackChain, type FallbackExpansionMode } from "./fallback-chain-expand.js";
 import { linkHealth, type FallbackHealthInputs } from "./fallback-chain-health.js";
@@ -196,13 +196,14 @@ export function sessionFallbackChain(options: SessionFallbackChainOptions): { so
   const { config, employee, session, registry, scope: givenScope, ...inputs } = options;
   const scope = givenScope ?? sessionSubstituteScope(session, employee, config);
   const mode: FallbackExpansionMode = session.engine === "claude" && !scope.remote ? "account" : "engine";
-  const ownAccount = accountForEmployee(employee, session.engine);
+  // The session's own Claude login: the profile it was started on, else its employee's.
+  const claudeAccount = ownClaudeAccountOf(session, employee);
+  const ownAccount = session.engine === "claude" ? claudeAccount : session.engine;
   // A remote subject's own link names the declared remote account it runs as, so a chain naming that account is the same target.
   const remoteOwn = isRemoteClaudeAccount(ownAccount) ? ownAccount : undefined;
-  const ownProfile = session.engine === "claude" ? (scope.remote ? remoteOwn : claudeAccountKey(resolveEmployeeClaudeProfile(employee))) : undefined;
+  const ownProfile = session.engine === "claude" ? (scope.remote ? remoteOwn : claudeAccountKey(ownClaudeProfile(session, employee))) : undefined;
   const own = ownTargetLink(config, { engine: session.engine, model: session.model, account: ownProfile });
   const { source, entries } = chainSource(config, session, employee, mode, ownAccount);
   const env: FallbackChainEnv = { config, registry, ...inputs };
-  const claudeAccount = accountForEmployee(employee, "claude");
   return { source, links: resolveFallbackLinks(env, { own, ownAccount, claudeAccount, entries, mode, scope }) };
 }

@@ -319,7 +319,9 @@ import {
 } from "./pairing-challenge.js";
 import { scheduleOnLoadTailSync } from "./external-turns.js";
 import { loadRawTranscript, loadTranscriptMessages } from "./claude-transcript-loaders.js";
-import type { ClaudeProfile } from "../shared/claude-profile.js";
+import { claudeProfileFromDir, type ClaudeProfile } from "../shared/claude-profile.js";
+import { declaredAccountByKey } from "../shared/claude-accounts-config.js";
+import { claudeAccountKey } from "../shared/engine-account.js";
 import { handleTalkApi } from "./talk-api.js";
 import { onboardingNeeded, applyEngineChoice, personalizeOperatingManual } from "./onboarding-policy.js";
 import {
@@ -343,6 +345,7 @@ import { handleSessionsListApi } from "./sessions-list-api.js";
 import { handleSessionWaitsApi } from "./session-waits-api.js";
 import { handleSubagentTranscriptApi } from "./subagent-transcript-api.js";
 import { resolveScopedCaller } from "./department-scope/caller.js";
+import { namesClaudeProfile, resolvePrimaryEngine } from "../sessions/primary-profile.js";
 import { handleDepartmentsApi } from "./departments-api.js";
 import { setWorkItemSprint, type Sprint } from "../work-items/sprints.js";
 import { readCreateSprint, sprintRow } from "./work-item-create-sprint.js";
@@ -1123,7 +1126,15 @@ export function serializeSession(
     turnProgress: computeLiveTurnProgress(session, context),
     backgroundActivity: bg ? serializeRuntimeActivity(bg) : null,
     delegatedActivity: delegatedActivityIndex?.get(session.id) ?? null,
+    claudeProfile: sessionClaudeProfileWire(session, context),
   };
+}
+
+/** The Claude account the session was started on instead of its employee's own; `name` is null once config no longer declares it. */
+function sessionClaudeProfileWire(session: Session, context: ApiContext): Session["claudeProfile"] {
+  if (!session.claudeConfigDir) return null;
+  const key = claudeAccountKey(claudeProfileFromDir(session.claudeConfigDir));
+  return { name: declaredAccountByKey(context.getConfig(), key)?.name ?? null, key };
 }
 
 function serializeSessionList(sessions: readonly Session[], context: ApiContext): Session[] {
@@ -1920,6 +1931,9 @@ export async function handleApiRequest(
           return badRequest(res, "engine must be a non-empty string");
         }
         requestedEngine = body.engine.trim();
+        if (namesClaudeProfile(requestedEngine)) {
+          return badRequest(res, `engine "${requestedEngine}" names a Claude profile, which is chosen when a session is created and cannot be changed afterwards; engine must be an engine name`);
+        }
       }
 
       const engineChanging = Boolean(requestedEngine && requestedEngine !== session.engine);
@@ -3505,8 +3519,16 @@ export async function handleApiRequest(
       const todoOverride = todoDispatch.preamble;
       const fallbackMode = childFallbackMode(config, delegatorSession, fallbackParam.mode);
       const fallbackTarget = childFallbackTarget(config, delegatorSession, fallbackMode, { employee: employeeName });
+      // `engine: "claude:<name>"` starts the delegate on that declared Claude account. A Todo's engine override outranks the
+      // request's engine, profile included, like it does for any other engine named.
+      const primary = todoOverride.engine || engineParam === undefined
+        ? undefined
+        : resolvePrimaryEngine(config, engineParam, { employee: delegateEmployee, scopedCaller: resolveScopedCaller(delegationCaller) !== null, operatorCaller: delegationCaller.kind === "operator" });
+      if (primary && !primary.ok) return json(res, { error: primary.error }, primary.status);
+      const requestedEngine = primary?.engine ?? body.engine;
+      const claudeConfigDir = primary?.profile?.profile.dir;
       const selection = validateNewSessionSelection(config, {
-        engine: todoOverride.engine ?? body.engine,
+        engine: todoOverride.engine ?? requestedEngine,
         model: todoOverride.engine ? todoOverride.model ?? undefined : body.model,
         effortLevel: body.effortLevel,
       }, { ...(todoOverride.engine ? { employee: employeeName } : employeeDefaults), ...(fallbackMode ? { fallbackMode } : {}) });
@@ -3628,7 +3650,7 @@ export async function handleApiRequest(
         }
         announceDelegation({ ...announcement, session: reused, dispatchedAt: Date.now() });
         if (delegationCaller.kind === "session") armChildWatch(delegationCaller.callerId);
-        return json(res, reusedDelegationBody(workItem.id, reused, title, { engine: engineName, model: selection.model, effortLevel: selection.effortLevel, fallbackMode: fallbackParam.mode }, config));
+        return json(res, reusedDelegationBody(workItem.id, reused, title, { engine: engineName, model: selection.model, effortLevel: selection.effortLevel, fallbackMode: fallbackParam.mode, claudeConfigDir }, config));
       }
       // The key is the session's turn lane: SessionQueue serializes turns per
       // key, so it must be unique per session. Keyed on the Todo alone, every
@@ -3652,6 +3674,7 @@ export async function handleApiRequest(
           effortLevel: selection.effortLevel,
           fallbackMode,
           fallbackTarget,
+          claudeConfigDir,
           prompt: brief,
           title,
           portalName: config.portal?.portalName,
@@ -3797,6 +3820,8 @@ export async function handleApiRequest(
         engine: body.engine,
         model: body.model,
         effortLevel: body.effortLevel,
+        scopedCaller: resolveScopedCaller(spawnCaller) !== null,
+        operatorCaller: spawnCaller.kind === "operator",
         fallbackMode: body.fallbackMode,
         fallbackTarget: body.fallbackTarget,
         parentSessionId: body.parentSessionId,
@@ -3806,7 +3831,7 @@ export async function handleApiRequest(
         interactive: body.mode === "interactive",
         speech: body.speech === true,
       });
-      if (!spawned.ok) return badRequest(res, spawned.error);
+      if (!spawned.ok) return spawned.status === 403 ? json(res, { error: spawned.error }, 403) : badRequest(res, spawned.error);
       if (spawnCaller.kind === "session" && body.parentSessionId === spawnCaller.callerId) armChildWatch(spawnCaller.callerId);
 
       return json(res, serializeSessionResponse(spawned.session, context), 201);
@@ -4277,7 +4302,14 @@ export async function handleApiRequest(
     // with that selection would start with (the new-chat screen's chip, before a session exists).
     if (method === "GET" && pathname === "/api/fallback-preview") {
       const param = (name: string) => url.searchParams.get(name)?.trim() || undefined;
-      return json(res, { fallback: fallbackPreviewFor(context, { engine: param("engine"), model: param("model"), employee: param("employee") }) });
+      // `engine=claude:<name>`: the chain a session started on that declared Claude account would get.
+      const requested = param("engine");
+      // Previewed as the caller would be refused or allowed creating it, so the operator's chip works for a scoped department's employee too.
+      const operatorCaller = resolveScopedWriteCallerIdentity(req, context).kind === "operator";
+      const employee = param("employee") ? orgRegistry(context.getConfig()).get(param("employee")!) : undefined;
+      const primary = requested === undefined ? undefined : resolvePrimaryEngine(context.getConfig(), requested, { employee, operatorCaller });
+      if (primary && !primary.ok) return json(res, { error: primary.error }, primary.status);
+      return json(res, { fallback: fallbackPreviewFor(context, { engine: primary?.engine, model: param("model"), employee: param("employee"), claudeConfigDir: primary?.profile?.profile.dir }) });
     }
 
     // POST /api/engines/refresh — re-run dynamic model discovery and return the

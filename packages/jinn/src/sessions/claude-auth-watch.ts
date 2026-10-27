@@ -50,7 +50,7 @@ export function isClaudeAuthFailure(error: string | null | undefined): boolean {
  * `claude` on its own host with that host's login, so its failures are a
  * different outage from the gateway's — and one this host cannot inspect.
  */
-export function claudeAuthScope(employee: Employee | undefined, session?: { transportMeta?: Session["transportMeta"] } | null): string {
+export function claudeAuthScope(employee: Employee | undefined, session?: { transportMeta?: Session["transportMeta"]; claudeConfigDir?: string | null } | null): string {
   // A local named profile is its own login on this host: `local:<profile key>` (FR-055). A
   // session moved onto another account runs on that account's login (FR-079).
   const profile = session && !isRemoteTarget(employee) ? sessionClaudeProfile(session, employee) : resolveEmployeeClaudeProfile(employee);

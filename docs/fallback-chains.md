@@ -250,6 +250,10 @@ names the stand-in as `substituteTarget {engine, profile?, model?}`. The
 session API reports the chain, its position, the next hop and the hops under
 `fallback.chain`.
 
+## A session started on a chosen profile
+
+A session's own target is normally its employee's Claude login. A session created with `engine: "claude:<name>"` (see [Starting on a chosen profile](session-fallback-mode.md#starting-on-a-chosen-profile)) has that declared account as its own target instead: its chain starts there, an employee-less session inherits the account's chain from `engines.claude.accounts.<name>.fallback`, and an entry that names the chosen account is the own target, so it is not listed a second time. An account swap made at a usage limit still returns to the chosen account, not to the employee's.
+
 ## API
 
 - `GET /api/fallback-chains`: declared profiles, plus every engine and account
@@ -260,6 +264,7 @@ session API reports the chain, its position, the next hop and the hops under
 - Engine and account chains are written through `PUT /api/config`; an
   employee's through `PATCH /api/org/employees/<name>` with `fallback` (a list,
   or `null` to inherit).
+- `GET /api/fallback-preview?engine=claude:<name>` previews the chain a session started on that account would get.
 - `GET /api/sessions/<id>`: `fallback.chain` (`SessionFallbackChainView`): the
   links, the position, the next hop, the hops and `servedBy`. A
   department-scoped session reading its own session gets each link's `state`

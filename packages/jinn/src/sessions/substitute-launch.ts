@@ -1,11 +1,10 @@
 import { declaredAccountByKey, declaredRemoteAccountByKey } from "../shared/claude-accounts-config.js";
-import { resolveEmployeeClaudeProfile } from "../shared/claude-profile.js";
 import { accountForEmployee, DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
 import { resolveRemoteClaudeConfigDir } from "../shared/remote-target.js";
 import type { ResolvedFallbackLink } from "../shared/fallback-chain-wire.js";
 import type { ChooseSubstituteInput, SubstituteChoice } from "./rate-limit-substitute.js";
 import { rateLimitAccount } from "./rate-limit-account.js";
-import { accountOverride } from "./session-account.js";
+import { accountOverride, ownClaudeAccountOf, ownClaudeProfile } from "./session-account.js";
 import { fallbackModelMapOf } from "./substitute-filters.js";
 
 /**
@@ -41,9 +40,9 @@ function accountLaunch(input: ChooseSubstituteInput, link: ResolvedFallbackLink)
 
 /** A Claude link reached from another engine: the employee's own profile, unless the link names one (then it is that account, as a swap, so its thread has its own slot). */
 function engineLaunch(input: ChooseSubstituteInput, link: ResolvedFallbackLink): Launch {
-  if (link.profile === undefined) return { claudeProfile: resolveEmployeeClaudeProfile(input.employee) };
+  if (link.profile === undefined) return { claudeProfile: ownClaudeProfile(input.session, input.employee) };
   const profile = declaredAccountByKey(input.config, link.account)?.profile ?? null;
-  const original = accountForEmployee(input.employee, "claude");
+  const original = ownClaudeAccountOf(input.session, input.employee);
   return { claudeProfile: profile, accounts: { original, substitute: link.account, substituteConfigDir: profile?.dir ?? null } };
 }
 

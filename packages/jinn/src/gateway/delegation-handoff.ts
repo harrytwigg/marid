@@ -1,5 +1,8 @@
 import crypto from "node:crypto";
 import { initDb } from "../shared/db.js";
+import { declaredAccountByKey } from "../shared/claude-accounts-config.js";
+import { claudeProfileFromDir } from "../shared/claude-profile.js";
+import { claudeAccountKey } from "../shared/engine-account.js";
 import { logger } from "../shared/logger.js";
 import type { SessionFallbackMode } from "../shared/session-fallback-config.js";
 import type { ChatBlockEnvelope, Employee, JinnConfig, JsonObject, Session, WorkItemLinkRole } from "../shared/types.js";
@@ -243,7 +246,7 @@ export function delegationReplayBody(replay: Session, reused: boolean): JsonObje
 }
 
 /** What a delegation resolved to. `fallbackMode` is only the one the request named: an inherited default is not a request. */
-export interface DelegationSelection { engine: string; model?: string; effortLevel?: string; fallbackMode?: SessionFallbackMode }
+export interface DelegationSelection { engine: string; model?: string; effortLevel?: string; fallbackMode?: SessionFallbackMode; claudeConfigDir?: string }
 
 /**
  * The route's answer for a delegation that landed in a live session. The
@@ -260,12 +263,28 @@ function keptMode(requested: DelegationSelection, current: Session, config: Pick
   return requested.fallbackMode ? { fallbackMode: effectiveFallbackMode(config, current).mode } : {};
 }
 
+/** A profile directory as a delegation names it: the declared account's `claude:<name>`, else its account key; never a path. */
+function profileLabel(config: Partial<Pick<JinnConfig, "engines">>, dir: string): string {
+  const profile = claudeProfileFromDir(dir);
+  const declared = config.engines ? declaredAccountByKey({ engines: config.engines }, claudeAccountKey(profile)) : undefined;
+  return declared ? `claude:${declared.name}` : claudeAccountKey(profile);
+}
+
+/** The Claude profile the live session runs on, named only when the delegation asked for one to compare it with (as `fallbackMode` is). */
+function keptProfile(requested: DelegationSelection, current: Session, config: Partial<Pick<JinnConfig, "engines">>): { claudeProfile?: string | null } {
+  return requested.claudeConfigDir ? { claudeProfile: current.claudeConfigDir ? profileLabel(config, current.claudeConfigDir) : null } : {};
+}
+
 export function reusedDelegationBody(
-  workItemId: string, reused: Session, title: string, requested: DelegationSelection, config: Pick<JinnConfig, "sessions">,
+  workItemId: string, reused: Session, title: string, requested: DelegationSelection, config: Pick<JinnConfig, "sessions"> & Partial<Pick<JinnConfig, "engines">>,
 ): JsonObject {
   const current = getSession(reused.id) ?? reused;
-  const kept = { ...selectionOf(current), ...keptMode(requested, current, config) };
-  const asked = { ...selectionOf(requested), ...(requested.fallbackMode ? { fallbackMode: requested.fallbackMode } : {}) };
+  const kept = { ...selectionOf(current), ...keptMode(requested, current, config), ...keptProfile(requested, current, config) };
+  const asked = {
+    ...selectionOf(requested),
+    ...(requested.fallbackMode ? { fallbackMode: requested.fallbackMode } : {}),
+    ...(requested.claudeConfigDir ? { claudeProfile: profileLabel(config, requested.claudeConfigDir) } : {}),
+  };
   const differs = JSON.stringify(kept) !== JSON.stringify(asked);
   if (differs) logger.info(`Delegation ${workItemId}: session ${reused.id} keeps ${JSON.stringify(kept)}; the delegation resolved to ${JSON.stringify(asked)}`);
   return {

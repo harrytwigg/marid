@@ -10,12 +10,13 @@ import { queryKeys } from '@/lib/query-keys'
  * subject is added. Advisory for the editor: a gateway without the route, or a
  * failed read, leaves the editor on the chains as config states them.
  */
-export function useFallbackChains(employee?: string) {
+export function useFallbackChains(employee?: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.fallbackChains(employee),
     queryFn: () => fetchFallbackChains(employee),
     retry: false,
     staleTime: 15_000,
+    enabled,
   })
 }
 
