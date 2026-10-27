@@ -1,4 +1,4 @@
-import { accountForEmployee } from "../../shared/engine-account.js";
+import { ownClaudeAccountOf } from "../session-account.js";
 import { getClaudeExpectedResetAt, isLikelyNearClaudeUsageLimit } from "../../shared/usageAwareness.js";
 import { formatResumeTime } from "./text.js";
 import type { TurnInput, TurnPlan, TurnSurface } from "./types.js";
@@ -22,7 +22,7 @@ function isExpensiveTurn(input: TurnInput, plan: TurnPlan): boolean {
 export async function warnIfNearUsageLimit(input: TurnInput, plan: TurnPlan, surface: TurnSurface): Promise<void> {
   if (!input.announceUsageWarnings || plan.engineName !== "claude") return;
   // The memory of the account this turn runs on: a named profile's limit is not the operator's.
-  const account = accountForEmployee(input.employee, "claude");
+  const account = ownClaudeAccountOf(input.session, input.employee);
   if (!isLikelyNearClaudeUsageLimit(undefined, account) || !isExpensiveTurn(input, plan)) return;
 
   const resumeText = formatResumeTime(getClaudeExpectedResetAt(undefined, account));

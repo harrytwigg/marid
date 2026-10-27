@@ -22,7 +22,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     effortLevel: null,
     totalCost: 0,
     totalTurns: 0,
-    lastContextTokens: null, fallbackMode: null, fallbackTarget: null,
+    lastContextTokens: null, fallbackMode: null, fallbackTarget: null, claudeConfigDir: null,
     createdAt: "2026-06-01T00:00:00.000Z",
     lastActivity: "2026-06-01T00:00:00.000Z",
     lastError: null,

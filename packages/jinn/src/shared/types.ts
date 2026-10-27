@@ -408,6 +408,10 @@ export interface Session {
   fallbackMode: SessionFallbackMode | null;
   /** The engine and model the operator chose to switch to at a usage limit; null follows the config's fallback chain. */
   fallbackTarget: StoredFallbackTarget | null;
+  /** The canonical directory of the declared Claude account the session was started on, instead of its employee's own login; null runs as the employee does. Chosen at creation only. */
+  claudeConfigDir: string | null;
+  /** Serialize-time only (derived, never persisted): the declared Claude account the session was started on, from `claudeConfigDir`. `name` is null once config no longer declares it; null when the session runs as its employee does. */
+  claudeProfile?: { name: string | null; key: string } | null;
   totalCost: number;
   totalTurns: number;
   /** Most recent turn's input-context token count (for the UI context meter). */

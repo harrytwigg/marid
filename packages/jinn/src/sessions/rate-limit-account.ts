@@ -1,28 +1,28 @@
 import { resolveEmployeeClaudeProfile, type ClaudeProfile } from "../shared/claude-profile.js";
-import { accountForEmployee, DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
+import { DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
 import { recordEngineUnavailable, type EngineHealthReading } from "../shared/engine-health.js";
 import { recordClaudeRateLimit } from "../shared/usageAwareness.js";
 import type { Employee, Session } from "../shared/types.js";
-import { accountOverride, sessionClaudeProfile } from "./session-account.js";
+import { accountOverride, ownClaudeAccountOf, ownClaudeProfile, sessionClaudeProfile } from "./session-account.js";
 
 export { resolveEmployeeClaudeProfile };
 
 /**
  * Which account a rate-limited turn ran on (FR-055, FR-070): the session's
- * current Claude account (its employee's, or the substitute account an
- * override has moved it onto), a remote employee's own login, or the engine's
+ * current Claude account (the profile it was started on, else its employee's,
+ * or the substitute account an override has moved it onto), a remote employee's own login, or the engine's
  * single account for every other engine. Its limit is recorded under that key,
  * so it holds back only that account's sessions.
  */
 export function rateLimitAccount(
   engine: string,
   employee: Employee | undefined,
-  session?: Pick<Session, "transportMeta">,
+  session?: Pick<Session, "transportMeta" | "claudeConfigDir">,
 ): { claudeProfile: ClaudeProfile; account: string } {
   if (engine !== "claude") return { claudeProfile: null, account: engine };
   const override = session && !employee?.remoteHost ? accountOverride(session) : undefined;
   if (override) return { claudeProfile: sessionClaudeProfile(session, employee), account: override.substituteAccount };
-  return { claudeProfile: resolveEmployeeClaudeProfile(employee), account: accountForEmployee(employee, "claude") };
+  return { claudeProfile: ownClaudeProfile(session, employee), account: ownClaudeAccountOf(session, employee) };
 }
 
 /** Record a usage limit for the account: the generic record the chain walk
@@ -35,13 +35,13 @@ export function recordAccountRateLimit(account: string, engine: string, engineLa
 }
 
 /**
- * Health as a substitute chosen for this employee reads it. A substitute that
- * lands on claude runs on the employee's own account when it has one (a local
- * named profile, or a remote employee's own login), so that account's record
- * stands in for the default account's `claude`.
+ * Health as a substitute chosen for this session reads it. A substitute that
+ * lands on claude runs on the session's own account when it has one (the profile
+ * it was started on, an employee's local named profile, or a remote employee's
+ * own login), so that account's record stands in for the default account's `claude`.
  */
-export function substituteHealth(health: EngineHealthReading, employee: Employee | undefined): EngineHealthReading {
-  const account = accountForEmployee(employee, "claude");
+export function substituteHealth(health: EngineHealthReading, employee: Employee | undefined, session?: Pick<Session, "claudeConfigDir">): EngineHealthReading {
+  const account = ownClaudeAccountOf(session, employee);
   if (account === DEFAULT_CLAUDE_ACCOUNT) return health;
   const { claude: _defaultAccount, ...rest } = health;
   const own = health[account];

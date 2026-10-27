@@ -68,8 +68,22 @@ By default a session falls back along the config's chain. The operator can inste
 - **Children.** A `fallback-children` session passes its target on with the mode, to children created by spawns, delegations and Talk delegations. Any other child gets no target. A child is checked against its own filters when the limit comes, so a target it may not use parks it.
 - **MCP.** Not exposed through the MCP tools.
 
+## Starting on a chosen profile
+
+A session normally runs on its employee's Claude login (the default profile when the employee names none). It can instead be started on one of the declared accounts (`engines.claude.accounts.<name>`) by naming it in the `engine` field as `claude:<name>`, the spelling a chain entry already uses:
+
+- **Where.** `POST /api/sessions` and `POST /api/delegations` take `"engine": "claude:friend"`; so do the MCP tools `spawn_session` and `delegate_task`, which pass the string through unchanged. The session runs the `claude` engine on that account. The choice is made at creation and never changed: `PATCH`/`PUT /api/sessions/:id` refuses an `engine` of that form with a 400. A bare engine name means what it always did, and a Todo's engine override outranks the request's engine, profile included.
+- **Stored and reported.** The account's canonical directory is stored on the session (`sessions.claude_config_dir`, null when the session runs as its employee does). The session wire carries `claudeProfile: { name, key }` (`name` is null once config no longer declares the account), or null.
+- **What follows it.** The session's own account is the chosen one wherever it used to be its employee's: the profile its turns spawn with, the account a usage limit is recorded against, the signed-in check, the thread slot, and the chain. A rate-limit swap onto another account still wins while its window stands, and when it ends the session returns to the chosen profile, not to the employee's. A chosen profile is a named target, so the session is never reordered at creation because another account is out of allowance.
+- **Chain.** Precedence is unchanged (the session's own target, then its employee's `fallback`, then the account's chain, then the engine's). With no employee, or an employee without a `fallback`, the session inherits the chosen account's own chain, and the chosen account never appears in it as its own fallback.
+- **Fork.** A duplicate of the session starts on the same profile, because its transcript lives there.
+- **Preview.** `GET /api/fallback-preview?engine=claude:<name>` shows the chain such a session would get.
+- **Refused.** An undeclared name is a 400 listing the declared ones; a remote employee is a 400 (it runs on its host's login); a department-scoped caller is a 403 (its department's separate allowance is not its to spend elsewhere). An operator may pick a profile for any local employee.
+
 ## MCP
 
 `delegate_task` and `spawn_session` take an optional `fallbackMode` (`fallback`, `fallback-children` or `auto-resume`). Left out, the new session follows the inheritance rule above. A bad value is refused with a 400 that names the three.
 
 When a delegation lands in a session the employee already has on the Todo, that session keeps its own mode, as it keeps its engine and model. If the delegation named a `fallbackMode` the session does not have, the response reports it under `selectionIgnored`.
+
+Both tools also take `engine: "claude:<name>"` to start the session on a declared Claude account; see [Starting on a chosen profile](#starting-on-a-chosen-profile).

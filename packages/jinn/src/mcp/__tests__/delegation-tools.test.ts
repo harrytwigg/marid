@@ -96,6 +96,14 @@ describe("delegate_task — registry + schema", () => {
   });
 });
 
+describe("delegate_task — a Claude profile rides the engine string", () => {
+  it("forwards `claude:<name>` to the delegation route untouched", async () => {
+    const { calls, ctx } = stub(() => ({ status: 201, body: { workItemId: "MAR-1", sessionId: "s-1", engine: "claude", status: "running" } }), "me");
+    await delegateTool().handler({ employee: "worker", task: "do it", engine: "claude:friend" }, ctx);
+    expect(calls[0]!.body).toMatchObject({ employee: "worker", engine: "claude:friend" });
+  });
+});
+
 describe("delegate_task — unit (stub gateway)", () => {
   it("FAILS CLOSED with no caller identity: refuses locally, zero round trips", async () => {
     const { calls, ctx } = stub(() => ({ status: 200, body: {} }));

@@ -17,6 +17,8 @@ export interface Session {
   parentSessionId?: string | null
   /** The department a scoped employee's session is bound to; null for every other session. */
   scopeDepartment?: string | null
+  /** The declared Claude account the session was started on instead of its employee's own login; `name` is null once config no longer declares it, and the field null when it runs as its employee does. */
+  claudeProfile?: { name: string | null; key: string } | null
   transportState?: string
   queueDepth?: number
   lastActivity?: string
