@@ -54,7 +54,7 @@ First, all of these must be true:
 
 1. `autoCompact.enabled` is `true` for the session's engine, and the engine can compact (Claude, or opencode in server mode).
 2. The turn is not a compaction itself: an operator's `/compact`, or a session's own `compact_session`. It is also not another native command such as `/clear`.
-3. The session already has a conversation on this engine, and has no engine switch pending. After a switch, the engine's own conversation is behind the chat, so there is nothing sensible to compact.
+3. The session already has a conversation on this engine, and has no engine switch pending. After a switch, the engine's own conversation is behind the chat, so there is nothing sensible to compact. A Claude session moved back from a stand-in (another account, or another engine's fallback) is not switched: it resumes its own conversation, so its first turn back compacts like any other, and the sync transcript is sent after the compaction. The move-back also puts back the context size the conversation had when it was left, since the stand-in's turns overwrote the meter.
 4. The context meter has a reading. The meter is the input size of the session's last turn as the engine reported it. An unread meter never counts as "long".
 
 Then the turn compacts first if either trigger applies.
@@ -130,7 +130,7 @@ Each auto-compaction writes one line to `logs/gateway.log`:
 [auto-compact] session=<id> engine=opencode outcome=compacted trigger=budget budget=300000 context=320000 pre=320000 post=- costUsd=0.0200 durationMs=41230
 ```
 
-`budget`, `context`, `pre` and `post` are sizes in tokens; `-` means the engine reported none (opencode reports no size after compacting). The keys avoid the word "token" because the logger redacts any `…token…=` value. `outcome` is one of `compacted`, `unconfirmed`, `failed`, `rate-limited`, `preempted` or `not-planned`. Outcomes other than `compacted` and `preempted` are logged at `warn` level with the error. `grep '\[auto-compact\]'` lists every compaction. Compare the session's spend before and after in the ledger (`jinn limits`, or `cost_report`) to see the effect. A session left alone is logged at `debug` level with the reason (`context-small`, `cache-warm`, `budget-held`, …).
+`budget`, `context`, `pre` and `post` are sizes in tokens; `-` means the engine reported none (opencode reports no size after compacting). The keys avoid the word "token" because the logger redacts any `…token…=` value. `outcome` is one of `compacted`, `unconfirmed`, `failed`, `rate-limited`, `preempted` or `not-planned`. Outcomes other than `compacted` and `preempted` are logged at `warn` level with the error. `grep '\[auto-compact\]'` lists every compaction. Compare the session's spend before and after in the ledger (`jinn limits`, or `cost_report`) to see the effect. A session left alone is logged at `debug` level with the reason (`context-small`, `cache-warm`, `budget-held`, …), except that a session at or over `minContextTokens` skipped for any other reason (`engine-switch`, `no-engine-session`, `activity-unknown`, an engine that cannot compact) is logged at `info` as `[auto-compact] session=… engine=… outcome=skipped skip=… context=…`.
 
 ## Limits
 
