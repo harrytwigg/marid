@@ -17,6 +17,7 @@ import { matchRoute } from "../route-helpers.js";
  *   todo-attach     as todo, plus FR-018's path check on a JSON {path} upload
  *   todo-relation   as todo, and the other end must be in D too
  *   todo-sessions   the Todo's sessions: only those bound to D, plus a hidden count
+ *   todo-reparent   as todo, and a named new parent must be in D too
  *   todo-assign     as todo, and the assignee must be a member of D (or @operator)
  *   todo-dispatch   as todo, and the Todo's assignee must be a member of D
  *   dispatch-config as todo, and every skill must be on D's allow-list
@@ -36,7 +37,7 @@ import { matchRoute } from "../route-helpers.js";
  */
 export type ScopedRouteKind =
   | "todo-list" | "todo-trees" | "todo-create" | "todo-read" | "todo" | "todo-attach" | "todo-relation"
-  | "todo-sessions" | "todo-assign" | "todo-dispatch" | "dispatch-config"
+  | "todo-sessions" | "todo-reparent" | "todo-assign" | "todo-dispatch" | "dispatch-config"
   | "delegation" | "spawn"
   | "sessions-list" | "session-search" | "message-search" | "session" | "session-children" | "session-message" | "own-session"
   | "org" | "org-employee" | "departments" | "knowledge" | "pass";
@@ -69,6 +70,7 @@ export const SCOPED_ROUTES: readonly ScopedRoute[] = [
   ...rows("todo-relation", ["POST", "DELETE"], "/api/work-items/:id/relations"),
   ...rows("todo-sessions", ["GET"], "/api/work-items/:id/sessions"),
   ...rows("todo-assign", ["POST"], "/api/work-items/:id/assign"),
+  ...rows("todo-reparent", ["PUT"], "/api/work-items/:id/parent"),
   { method: "POST", route: "/api/work-items/:id/dispatch", kind: "todo-dispatch", namedNotFound: true },
   { method: "POST", route: "/api/work-items/:id/capture-landing", kind: "todo", namedNotFound: true },
   ...rows("dispatch-config", ["PUT"], "/api/work-items/:id/dispatch-config"),

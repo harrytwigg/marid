@@ -341,6 +341,7 @@ import { handleTerminalApi, type TerminalApiOptions } from "./terminal-api.js";
 import { isTerminalSession, TERMINAL_HAS_NO_TURN, TERMINAL_REFUSES_MESSAGES } from "../terminals/session.js";
 import { handleWorkItemKeptApi } from "./work-item-kept-api.js";
 import { handleSprintsApi } from "./sprints-api.js";
+import { handleReparentApi } from "./work-item-reparent-api.js";
 import { handleSessionsListApi } from "./sessions-list-api.js";
 import { handleSessionWaitsApi } from "./session-waits-api.js";
 import { handleSubagentTranscriptApi } from "./subagent-transcript-api.js";
@@ -3280,6 +3281,12 @@ export async function handleApiRequest(
       getConfig: context.getConfig,
       emitProjection: (id) => emitTodoProjectionEvent(context, id, "sprint-updated"),
       emitSprintChange: (action, id) => context.emit("company:changed", { entity: "sprint", action, id }),
+    })) return;
+
+    // PUT /api/work-items/:id/parent — make a Todo a sub-task of another, or detach it to a root.
+    if (await handleReparentApi(req, res, { method, pathname, url }, {
+      resolveCaller: () => resolveWorkItemCaller(req, res, context),
+      emitProjection: (id) => emitTodoProjectionEvent(context, id, "reparented"),
     })) return;
 
     // PUT /api/work-items/:id/labels — `labels` replaces the whole set, `add`/`remove`

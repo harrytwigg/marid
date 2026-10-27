@@ -147,7 +147,7 @@
       "path": "skills/todo-handling/SKILL.md",
       "operation": "modify",
       "baseSha256": "07f721103523c7a5cf33489338ccb0afd4756d44905ba575119f575612b59456",
-      "targetSha256": "a906a05b760cbc1f05a4c2f6b3bd91dfea9c7d5f8c4440415fc4bdea8b94affc",
+      "targetSha256": "8e839758fd6a20e8f46c86cc5d72bf0f99ced97417e4e0810fae2604c351d4fa",
       "basePayload": "files/base/skills/todo-handling/SKILL.md",
       "targetPayload": "files/target/skills/todo-handling/SKILL.md"
     },

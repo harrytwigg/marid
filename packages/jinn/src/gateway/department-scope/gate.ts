@@ -165,6 +165,18 @@ async function relateInDepartment(g: GateRequest): Promise<boolean> {
   return false;
 }
 
+/** The new parent is held to D like the Todo: one outside D reads as unknown. */
+async function reparentInDepartment(g: GateRequest): Promise<boolean> {
+  const held = holdTodo(g, g.rule.params.id);
+  if (held !== null) return held;
+  const body = await peekJsonObject(g.req, g.res);
+  if (body === null) return true;
+  if (!body) return false;
+  const parentId = namedTodoOutside(body.parentId, g.caller.department);
+  if (parentId) return json(g.res, { error: `parent Todo ${parentId} not found` }, 404), true;
+  return false;
+}
+
 async function assignInDepartment(g: GateRequest): Promise<boolean> {
   const held = holdTodo(g, g.rule.params.id);
   if (held !== null) return held;
@@ -238,6 +250,7 @@ const TODO_KINDS: Partial<Record<ScopedRouteKind, KindHandler>> = {
   "todo-relation": relateInDepartment,
   "todo-sessions": (g) => holdTodo(g, g.rule.params.id) ?? serveTodoSessions(g),
   "todo-assign": assignInDepartment,
+  "todo-reparent": reparentInDepartment,
   "todo-dispatch": dispatchInDepartment,
   "dispatch-config": dispatchConfigInDepartment,
   "delegation": delegateInDepartment,
