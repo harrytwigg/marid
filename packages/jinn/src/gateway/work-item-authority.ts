@@ -8,7 +8,7 @@ import { isPortalAgentSession, listSessionsByWorkItem } from "../sessions/regist
 import { remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
 import { TODO_DISPATCHER_NAME } from "./system-employees.js";
 import type { Employee, Session } from "../shared/types.js";
-import type { WorkItem } from "../work-items/store.js";
+import { getWorkItem, type WorkItem } from "../work-items/store.js";
 import { isExecutionAttempt } from "../work-items/link-role.js";
 import { recordedDelegateSessionId } from "../work-items/employee-session-delegation.js";
 import { neverReachedEngine } from "../sessions/engine-reach.js";
@@ -23,16 +23,31 @@ import { OPERATOR_ASSIGNEE } from "../work-items/operator-assignee.js";
  * handlers. Who owns a Todo and who the root is live in `work-item-owner.ts`.
  */
 
-/** The three ways an employee has standing over a Todo: the org root has it
- *  everywhere, the routed owner has it on its own, and a manager or executive
- *  has it over anyone below them in the tree. */
+/** The four ways an employee has standing over a Todo: the org root has it
+ *  everywhere, the routed owner has it on its own, the owner of the Todo's root
+ *  has it over everything below it, and a manager or executive has it over
+ *  anyone below them in the tree.
+ *
+ *  The root's owner needs its own clause because assigning a sub-task moves its
+ *  owner to the assignee: a lead who hands a sub-task to a report would
+ *  otherwise lose the standing to dispatch, delegate or reassign it, unless
+ *  their rank and place in the org tree happened to cover the assignee. */
 function hasStandingOverWorkItem(roster: Map<string, Employee>, employee: Employee, employeeName: string, item: WorkItem): boolean {
   const root = resolveOrgRoot();
   if (root?.kind === 'employee' && root.name === employeeName) return true;
   const owner = resolveWorkItemOwner(item);
   if (owner === employeeName) return true;
+  if (ownsRootOf(item, employeeName)) return true;
   if (!owner || (employee.rank !== 'manager' && employee.rank !== 'executive')) return false;
   return isOrgAncestor(resolveOrgHierarchy(roster), employeeName, owner);
+}
+
+/** Whether `employeeName` owns the root of the tree `item` sits in. A root
+ *  Todo is its own root, which the owner clause above already answered. */
+function ownsRootOf(item: WorkItem, employeeName: string): boolean {
+  if (item.rootId === item.id) return false;
+  const rootItem = getWorkItem(item.rootId);
+  return !!rootItem && resolveWorkItemOwner(rootItem) === employeeName;
 }
 
 export function authorizeWorkItemOwnerManagerOrRoot(
