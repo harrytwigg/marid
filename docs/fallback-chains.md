@@ -126,11 +126,57 @@ reset, as before.
   again on the own target. See [session statuses](session-statuses.md) for what
   `waiting` means and how to read it.
 - At its own target's reset the session goes back to it and the run ends, as
-  substitution reverts today. So does a manual engine switch, an API reset and a
-  conversation the engine lost: the run ends, the hops stay.
+  substitution reverts today (see [returning to the own target](#returning-to-the-own-target)).
+  So does a manual engine switch, an API reset and a conversation the engine lost:
+  the run ends, the hops stay.
 - A **new** session whose own target is out of allowance starts on the first
   healthy link instead, with a run that starts there.
 
+
+### Returning to the own target
+
+A hop is temporary. Every swap onto a link records the own target it left (engine,
+Claude account, model, thread) and the moment that target reopens, taken from the
+limit that moved the session: its stated reset, else six hours. The record is
+`transportMeta.engineOverride`, and a nested hop (a link limited in turn) keeps the
+first swap's record, so the session still goes back to where it started, not to the
+link before.
+
+- **Automatic, not an action.** Nothing in a session prefers a stand-in, so there
+  is no "switch back" button to forget. The return is checked when a turn is
+  admitted: the web dispatch when the queue releases the turn, and a connector
+  message, the `/message` route and a callback when the message arrives (so a
+  message queued behind a running turn is judged at arrival, before a reset that
+  falls while it waits). It is never made mid-turn: a turn that began on a link
+  finishes there, and the session returns on a later one. A manual engine switch,
+  an API reset or a conversation the engine lost ends the run the same way.
+- **Same for every kind of link.** An engine, another Claude account, another model
+  of the same account, an opencode model on another provider and a chain of several
+  links all return the same way, to the own target and not to a link on the way.
+- **One source for the reopening.** The window is the limit's reset as recorded in
+  engine health, the store the chain walk reads and the limits readout writes. When
+  the window has passed, health is asked once more, under the own target's key
+  (its account for Claude; its provider for an opencode model, from the model the
+  session pins, else its employee's or the engine's default; the engine for the
+  rest). If the target is recorded as spent, typically because another session's
+  probe or the limits readout found it limited again, the window moves out to that
+  return and the session stays where it is, with no turn spent probing. The first
+  session to meet a limit still finds it out with a turn.
+- **A turn that outlives its window.** A turn on a stand-in that hits the stand-in's
+  own limit after the window has passed, with the own target recorded as still
+  spent, runs once more on the stand-in and then waits for the new window. It says
+  it is back on its own target only when it is.
+- **Loop guard.** A session goes back at most once per window. If the own target
+  is limited when it is tried, the turn falls back as before with the new reset,
+  a new run starts at the first link, and the next return is at that reset. Within
+  one turn the run's tried set still stops any target being visited twice.
+- **Context.** The own target's thread resumes with everything exchanged elsewhere
+  prepended. A target that never had a thread of its own (the session was born on
+  the stand-in, or the first turn there was the one that hit the limit) starts a
+  fresh run that carries the conversation; it is never handed the stand-in
+  account's thread.
+- **Waiting.** A session whose chain ran out waits for the own target's reset and
+  runs there, as described above.
 
 ### Why a link is passed over
 

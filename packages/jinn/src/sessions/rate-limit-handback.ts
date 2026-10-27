@@ -6,7 +6,7 @@
  */
 
 import type { RateLimitHandlerOpts, RateLimitOutcome } from "./rate-limit-contract.js";
-import type { Session } from "../shared/types.js";
+import type { Employee, JinnConfig, Session } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
 import { maybeRevertEngineOverride, standingOverrideUntil } from "./engine-override.js";
 import { accountOverride } from "./session-account.js";
@@ -30,7 +30,7 @@ export async function handBack(
   sessionId: string,
   attemptToken: string,
   hooks: RateLimitHandlerOpts["hooks"],
-  from: { waited: boolean; fields?: UpdateSessionFields },
+  from: { waited: boolean; fields?: UpdateSessionFields; employee?: Employee; config?: JinnConfig },
 ): Promise<RateLimitOutcome> {
   const running = updateSessionForAttempt(sessionId, attemptToken, {
     ...from.fields,
@@ -43,7 +43,8 @@ export async function handBack(
     return { kind: "cancelled" };
   }
   logger.info(`Session ${sessionId} back on its own target after ${from.waited ? "waiting on" : "hitting"} a substitute's usage limit`);
-  return { kind: "handback", session: maybeRevertEngineOverride(running), waited: from.waited };
+  const session = maybeRevertEngineOverride(running, from.employee, from.config);
+  return { kind: "handback", session, waited: from.waited, reverted: standingOverrideUntil(session) === undefined };
 }
 
 /** The earlier of two optional instants. */

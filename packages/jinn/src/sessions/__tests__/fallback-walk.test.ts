@@ -1,5 +1,7 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { ACCOUNT_A, CLAUDE_B, DIR_B, HOUR, OPENCODE_X, OPENCODE_Y, answer, claudeProfileFromDir, employee, handleRateLimit, hopsOf, key, limited, limitedTurn, newSession, overrideOf, readEngineHealth, reg, resetsIn, runOf, scripted, who, useWalkHarness } from "./fallback-walk-harness.js";
+import { ACCOUNT_A, CLAUDE_B, DIR_B, HOUR, OPENCODE_X, OPENCODE_Y, answer, claudeProfileFromDir, employee, handleRateLimit, hopsOf, key, limited, limitedTurn, newSession, overrideOf, readEngineHealth, reg, resetsIn, runOf, scripted, tmp, who, useWalkHarness } from "./fallback-walk-harness.js";
 
 /** A rate-limited turn walks the session's fallback chain (docs/fallback-chains.md): hop after hop within the turn, each target once, each on its own profile and model, until one serves it or the chain runs out and the session waits on its own target. */
 
@@ -157,7 +159,8 @@ describe("a chain that runs out while a stand-in holds the session", () => {
     const id = newSession();
     await handleRateLimit(limitedTurn(id, employee(), first.engines).opts);
     reg.updateSession(id, { status: "idle" } as never);
-    // The own target reopens in a moment; the stand-in's own limit would not lift for days.
+    // The own target reopens in a moment (its recorded limit with it); the stand-in's own limit would not lift for days.
+    fs.rmSync(path.join(tmp, "tmp", "engine-health.json"), { force: true });
     const standing = (reg.getSession(id)!.transportMeta as Record<string, Record<string, unknown>>).engineOverride!;
     const until = new Date(Date.now() + 1500);
     reg.updateSession(id, { transportMeta: { ...(reg.getSession(id)!.transportMeta as object), engineOverride: { ...standing, until: until.toISOString() } } } as never);

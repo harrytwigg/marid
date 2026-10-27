@@ -75,7 +75,8 @@ describe("a revert", () => {
     expect(runOf(id)).toBeDefined();
     reg.updateSession(id, { status: "idle" } as never);
 
-    // The window the swap was given has passed.
+    // The window the swap was given has passed, and nothing has found the own target limited since.
+    fs.rmSync(path.join(tmp, "tmp", "engine-health.json"), { force: true });
     const standing = (reg.getSession(id)!.transportMeta as Record<string, Record<string, unknown>>).engineOverride!;
     reg.updateSession(id, { transportMeta: { ...(reg.getSession(id)!.transportMeta as object), engineOverride: { ...standing, until: new Date(Date.now() - 1000).toISOString() } } } as never);
     const reverted = maybeRevertEngineOverride(reg.getSession(id)!);

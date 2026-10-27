@@ -5,7 +5,7 @@
 //
 // To add one: append an entry to SCENARIOS (see README.md). Ids are single letters; the shell
 // script's --pending list names the ones that wait on runtime work not yet merged (none now).
-import { expectEqual, expectTrue, triesBy, walkOf } from "./lib.mjs";
+import { expectEqual, expectTrue, sleep, triesBy, walkOf } from "./lib.mjs";
 
 const RATE_LIMITS = ["rate-limit", "quota"];
 const WALK_A = "claude/profile-a/opus:rate-limit -> claude/profile-b/sonnet:rate-limit -> opencode/x-provider/model-x:rate-limit -> opencode/y-provider/model-y:ok";
@@ -157,6 +157,65 @@ async function opencodeProviderHop(h) {
   expectServedBy(session, opencodeY);
 }
 
+/** A limit that reopens `seconds` from now, in the form the fake provider takes. */
+const limitedFor = (seconds) => ({ outcome: "rate-limit", resetsAt: Math.floor(Date.now() / 1000) + seconds });
+
+/** The session's own target serves again from the first turn after its limit reopens, not before. */
+async function returnAfterReset(h) {
+  const { claudeB } = h.links();
+  await h.putConfig({ engines: { claude: { accounts: { A: { fallback: [claudeB] } } } } });
+  const resetSeconds = 25;
+  const resetsAtMs = Date.now() + resetSeconds * 1000;
+  h.writeScenario({ claude: { "profile-a|opus": [limitedFor(resetSeconds), "ok"], "profile-b|*": "ok" } });
+  const tag = h.newTag();
+  const id = await h.startSession({ employee: h.layout.employees.onA, tag });
+  await h.settled(id);
+  expectEqual("the hop", walkOf(h.rowsFor(tag)), "claude/profile-a/opus:rate-limit -> claude/profile-b/sonnet:ok");
+
+  // Inside the window the turn stays on the stand-in, and does not probe the own target.
+  await h.sendMessage(id, tag);
+  const during = await h.settled(id);
+  expectEqual("inside the window", walkOf(h.rowsFor(tag)), "claude/profile-a/opus:rate-limit -> claude/profile-b/sonnet:ok -> claude/profile-b/sonnet:ok");
+  expectTrue("the session is still on its stand-in", during.fallback?.chain?.position > 0, JSON.stringify(during.fallback?.chain));
+
+  await sleep(Math.max(0, resetsAtMs - Date.now()) + 2000);
+  await h.sendMessage(id, tag);
+  const after = await h.settled(id);
+  const rows = h.rowsFor(tag);
+  const last = rows[rows.length - 1];
+  expectEqual("the first turn after the reset", [last.profile, last.model, last.outcome], ["profile-a", "opus", "ok"]);
+  expectEqual("the stand-in took no further turn", rows.filter((row) => row.profile === "profile-b").length, 2);
+  expectEqual("the session is back on its own target", [after.engine, after.model, after.fallback?.chain?.position], ["claude", "opus", 0]);
+  expectEqual("no stand-in record is left", after.transportMeta?.engineOverride, undefined);
+  expectEqual("the hops are kept", chainHops(after).map((hop) => hop.to), [linkKey(claudeB)]);
+}
+
+/** A own target still limited at the reset is probed once, and the session stays on its stand-in for the new window. */
+async function stillLimitedAtReset(h) {
+  const { claudeB } = h.links();
+  await h.putConfig({ engines: { claude: { accounts: { A: { fallback: [claudeB] } } } } });
+  const resetSeconds = 15;
+  const resetsAtMs = Date.now() + resetSeconds * 1000;
+  h.writeScenario({ claude: { "profile-a|opus": [limitedFor(resetSeconds), limitedFor(3600), "ok"], "profile-b|*": "ok" } });
+  const tag = h.newTag();
+  const id = await h.startSession({ employee: h.layout.employees.onA, tag });
+  await h.settled(id);
+
+  await sleep(Math.max(0, resetsAtMs - Date.now()) + 2000);
+  await h.sendMessage(id, tag);
+  const probed = await h.settled(id);
+  expectEqual("one probe of the own target, which hops again", walkOf(h.rowsFor(tag)),
+    "claude/profile-a/opus:rate-limit -> claude/profile-b/sonnet:ok -> claude/profile-a/opus:rate-limit -> claude/profile-b/sonnet:ok");
+  expectTrue("still on the stand-in", probed.fallback?.chain?.position > 0, JSON.stringify(probed.fallback?.chain));
+
+  // The new window is an hour: the next turns do not probe again.
+  await h.sendMessage(id, tag);
+  await h.settled(id);
+  const rows = h.rowsFor(tag);
+  expectEqual("no second probe", rows.filter((row) => row.profile === "profile-a").length, 2);
+  expectEqual("the stand-in served", rows[rows.length - 1].profile, "profile-b");
+}
+
 export const SCENARIOS = [
   { id: "a", title: "four-link chain walks hop by hop, each hop on its own profile and model", run: fourLinkWalk },
   { id: "b", title: "every link limited: each target once, then the session waits on its own", run: everyLinkLimited },
@@ -166,4 +225,6 @@ export const SCENARIOS = [
   { id: "f", title: "PUT /api/config refuses a duplicate and a self-referencing link", run: duplicateRefused },
   { id: "g", title: "a profile hop starts fresh with the conversation; a model hop resumes the thread", run: contextAcrossHops },
   { id: "h", title: "an opencode provider hop X to Y within one opencode session", run: opencodeProviderHop },
+  { id: "i", title: "the own target serves again from the first turn after its limit reopens", run: returnAfterReset },
+  { id: "j", title: "an own target still limited at the reset is probed once, then left alone for the new window", run: stillLimitedAtReset },
 ];
