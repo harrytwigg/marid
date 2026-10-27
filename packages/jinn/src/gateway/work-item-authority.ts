@@ -8,7 +8,7 @@ import { getSession, isPortalAgentSession, listSessionsByWorkItem } from "../ses
 import { remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
 import { TODO_DISPATCHER_NAME, isSystemEmployeeName } from "./system-employees.js";
 import type { Employee, Session } from "../shared/types.js";
-import { getWorkItem, type WorkItem } from "../work-items/store.js";
+import { STICKY_STATUSES, getWorkItem, getWorkItemTree, type WorkItem } from "../work-items/store.js";
 import { isExecutionAttempt } from "../work-items/link-role.js";
 import { recordedDelegateSessionId } from "../work-items/employee-session-delegation.js";
 import { neverReachedEngine } from "../sessions/engine-reach.js";
@@ -65,6 +65,41 @@ function ancestorOwner(roster: Map<string, Employee>, ancestor: WorkItem): strin
   const creatorId = sourceSessionId(ancestor);
   const creator = creatorId ? getSession(creatorId)?.employee : null;
   return creator && roster.has(creator) && !isSystemEmployeeName(creator) ? creator : null;
+}
+
+/**
+ * Whether the caller may give `item` to a new employee owner, judged on what
+ * sits below it. Owning a Todo carries standing over every Todo under it
+ * (`ownsAncestorOf`), so an assignment hands the assignee that standing too.
+ * A caller may pass on only the standing it already holds: it needs standing
+ * over each open sub-task as well. Without this, claiming an unassigned parent
+ * for yourself, or being the session linked to one, would win a whole subtree
+ * of other people's work. A Todo with nothing open below it passes.
+ */
+export function authorizeAssignOverSubTasks(
+  caller: WorkItemCaller,
+  item: WorkItem,
+): { ok: true } | { ok: false; status: 403; error: string } {
+  const tree = getWorkItemTree(item.id);
+  if (!tree) return { ok: true };
+  const below: WorkItem[] = [];
+  const walk = (node: typeof tree.root): void => {
+    for (const child of node.children) {
+      if (!STICKY_STATUSES.has(child.status)) below.push(child);
+      walk(child);
+    }
+  };
+  walk(tree.root);
+  for (const sub of below) {
+    if (authorizeWorkItemOwnerManagerOrRoot(caller, sub, "assign").ok) continue;
+    return {
+      ok: false,
+      status: 403,
+      error: `cannot assign Todo ${item.id}: its owner takes standing over the open sub-tasks below it, `
+        + `and this caller has no standing over sub-task ${sub.id}, so the Todo's owner, their manager or the operator has to assign it`,
+    };
+  }
+  return { ok: true };
 }
 
 export function authorizeWorkItemOwnerManagerOrRoot(

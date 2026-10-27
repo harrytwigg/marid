@@ -232,3 +232,85 @@ describe("a root nobody is assigned to", () => {
     expect(response.status).toBe(403);
   });
 });
+
+describe("claiming a parent", () => {
+  /** An unassigned backlog parent, made by a session of `creator` or by the operator, with one open child. */
+  function parentWithChild(tag: string, creator: string | null, childAssignee: string, childStatus: "backlog" | "executing" = "executing") {
+    const maker = creator ? sessionOf(creator, `${tag}-maker`) : null;
+    const root = workItems.createWorkItem({
+      title: `parent of ${tag}`,
+      ...(maker ? { source: "session" as const, sourceRef: `session:${maker.id}:idempotency:${tag}`, createdBy: `session:${maker.id}` } : {}),
+    });
+    const child = workItems.createWorkItem({ title: `child of ${tag}`, parentId: root.id, assignee: childAssignee, status: childStatus });
+    return { root, child };
+  }
+
+  it("refuses a self-claim of an operator-made parent by someone with no standing over its open child", async () => {
+    const { root, child } = parentWithChild("claim-operator", null, "peer-report");
+    const stranger = sessionOf("outsider", "claim-operator-stranger");
+
+    const claim = await call("POST", `/api/work-items/${root.id}/assign`, { assignee: "outsider" }, callerHeaders(stranger.id));
+    expect(claim.status).toBe(403);
+    expect(claim.body.error).toContain(child.id);
+    expect(workItems.getWorkItem(root.id)?.assignee).toBeNull();
+
+    const take = await call("POST", `/api/work-items/${child.id}/assign`, { assignee: "outsider" }, callerHeaders(stranger.id));
+    expect(take.status).toBe(403);
+    expect(workItems.getWorkItem(child.id)?.assignee).toBe("peer-report");
+  });
+
+  it("refuses a self-claim of another employee's parent, and leaves the creator its standing", async () => {
+    const { root, child } = parentWithChild("claim-creator", "lead", "lead-report", "backlog");
+    const stranger = sessionOf("outsider", "claim-creator-stranger");
+
+    const claim = await call("POST", `/api/work-items/${root.id}/assign`, { assignee: "outsider" }, callerHeaders(stranger.id));
+    expect(claim.status).toBe(403);
+    const take = await call("POST", `/api/work-items/${child.id}/assign`, { assignee: "outsider" }, callerHeaders(stranger.id));
+    expect(take.status).toBe(403);
+
+    const lead = sessionOf("lead", "claim-creator-lead");
+    const dispatched = await call("POST", `/api/work-items/${child.id}/dispatch`, {}, callerHeaders(lead.id));
+    expect(dispatched.body.error).toBeUndefined();
+    expect(dispatched.status).toBe(201);
+  });
+
+  it("refuses a session linked to an unassigned parent claiming it over someone else's open child", async () => {
+    const { root } = parentWithChild("claim-linked", null, "peer-report");
+    const linked = sessionOf("outsider", "claim-linked-session");
+    workItems.linkSession(root.id, linked.id, `session:${linked.id}`, "review");
+
+    const claim = await call("POST", `/api/work-items/${root.id}/assign`, { assignee: "outsider" }, callerHeaders(linked.id));
+    expect(claim.status).toBe(403);
+  });
+
+  it("lets the parent's creator claim it and then reassign its child", async () => {
+    const { root, child } = parentWithChild("claim-own", "lead", "lead-report", "backlog");
+    const lead = sessionOf("lead", "claim-own-lead");
+
+    const claim = await call("POST", `/api/work-items/${root.id}/assign`, { assignee: "lead" }, callerHeaders(lead.id));
+    expect(claim.body.error).toBeUndefined();
+    expect(claim.status).toBe(200);
+    const reassign = await call("POST", `/api/work-items/${child.id}/assign`, { assignee: "lead" }, callerHeaders(lead.id));
+    expect(reassign.status).toBe(200);
+  });
+
+  it("still lets anyone claim an unassigned Todo with nothing open below it", async () => {
+    const leaf = workItems.createWorkItem({ title: "unclaimed leaf" });
+    const parent = workItems.createWorkItem({ title: "parent of finished work" });
+    workItems.createWorkItem({ title: "finished child", parentId: parent.id, assignee: "peer-report", status: "done" });
+    const stranger = sessionOf("outsider", "claim-free");
+
+    for (const id of [leaf.id, parent.id]) {
+      const claim = await call("POST", `/api/work-items/${id}/assign`, { assignee: "outsider" }, callerHeaders(stranger.id));
+      expect(claim.body.error, id).toBeUndefined();
+      expect(claim.status, id).toBe(200);
+    }
+  });
+
+  it("lets the operator assign a parent to anyone", async () => {
+    const { root } = parentWithChild("claim-by-operator", null, "peer-report");
+    const response = await call("POST", `/api/work-items/${root.id}/assign`, { assignee: "outsider" });
+    expect(response.body.error).toBeUndefined();
+    expect(response.status).toBe(200);
+  });
+});

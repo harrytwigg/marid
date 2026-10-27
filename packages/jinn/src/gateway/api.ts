@@ -238,7 +238,7 @@ import { NAMES, currentInstanceName } from "../shared/codename.js";
 import { isToolCallMarker, readHookSessionId, wireHeader } from "../shared/wire-names.js";
 import { readWriteOrigin, writeDetail, WRITE_ORIGIN_HEADER } from "../work-items/origin.js";
 import { workItemActor, workItemActorEmployee, type WorkItemCaller } from "./work-item-arming.js";
-import { authorizeWorkItemDelegation, authorizeWorkItemOwnerManagerOrRoot } from "./work-item-authority.js";
+import { authorizeAssignOverSubTasks, authorizeWorkItemDelegation, authorizeWorkItemOwnerManagerOrRoot } from "./work-item-authority.js";
 import { fullWorkItemPayload, openWorkItemPayload, workItemPagePayload, workItemTreePayload, workItemTreesPayload } from "./work-item-payload.js";
 import { TodoDepartmentNotAllowedError } from "../shared/todo-departments-config.js";
 import { DepartmentArchivedError, isDepartmentArchived } from "../work-items/department-archive.js";
@@ -2735,6 +2735,13 @@ export async function handleApiRequest(
       if (!explicitSelfClaim) {
         const authorized = authorizeWorkItemOwnerManagerOrRoot(caller, current, "assign");
         if (!authorized.ok) return json(res, { error: authorized.error }, authorized.status);
+      }
+      // A self-claim skips the check above, but neither it nor any other
+      // assignment may hand an employee standing over sub-tasks the caller
+      // has none over. The operator as assignee owns nothing, so gains nothing.
+      if (employee && assignee !== current.assignee) {
+        const overSubTasks = authorizeAssignOverSubTasks(caller, current);
+        if (!overSubTasks.ok) return json(res, { error: overSubTasks.error }, overSubTasks.status);
       }
       try {
         const assigned = assignWorkItem(params.id, assignee, employee?.department ?? null, workItemActor(caller),
