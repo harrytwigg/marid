@@ -101,8 +101,11 @@ function earliestPending(pending: unknown, parked: string): string {
 function restoredThread(session: Session, meta: Record<string, unknown>, parked: ParkedOverride): string | null {
   if (session.engine === parked.engine && !accountOverride(session) && session.engineSessionId) return session.engineSessionId;
   // The original account's own slot, read without the record that points the
-  // session's Claude slot at the substitute account.
-  const unswapped: Session = { ...session, transportMeta: { ...meta, engineOverride: undefined } as never };
+  // session's Claude slot at the substitute account. The mirror is the
+  // substitute's thread, which belongs to no slot of the account going back: an
+  // account that never had a thread (the session began on the substitute) starts
+  // a fresh one, caught up from the sync point.
+  const unswapped: Session = { ...session, engineSessionId: null, transportMeta: { ...meta, engineOverride: undefined } as never };
   return parked.engineSessionId ?? getEngineSessionRef(unswapped, parked.engine).id ?? null;
 }
 
@@ -115,7 +118,7 @@ function heldOverride(opts: {
   const { session, meta, override, parked, employee, config } = opts;
   if (isAutoResume(config ?? {}, session)) return undefined;
   if (parked.until.getTime() > Date.now()) return session;
-  return extendSpentWindow(session, meta, override, parked.engine, employee);
+  return extendSpentWindow(session, meta, override, parked, employee);
 }
 
 /** Restore the pre-rate-limit engine, and the model that belonged to it, once the
