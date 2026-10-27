@@ -199,6 +199,7 @@ import {
 } from "../work-items/store.js";
 import { resolveDelegationLinkRole, WORK_ITEM_LINK_ROLES, type WorkItemLinkRole } from "../work-items/link-role.js";
 import { retiredTodoFieldError } from "../work-items/retired-fields.js";
+import { OPERATOR_ASSIGNEE } from "../work-items/operator-assignee.js";
 import { resolveTodoEditAuthority, todoEditRefusal } from "./todo-edit-authority.js";
 import { isTodoId, resolveTodoIdPrefix } from "../work-items/id.js";
 import {
@@ -238,7 +239,7 @@ import { NAMES, currentInstanceName } from "../shared/codename.js";
 import { isToolCallMarker, readHookSessionId, wireHeader } from "../shared/wire-names.js";
 import { readWriteOrigin, writeDetail, WRITE_ORIGIN_HEADER } from "../work-items/origin.js";
 import { workItemActor, workItemActorEmployee, type WorkItemCaller } from "./work-item-arming.js";
-import { authorizeWorkItemDelegation, authorizeWorkItemOwnerManagerOrRoot } from "./work-item-authority.js";
+import { DISPATCH_PRESSED_BY_META_KEY, authorizeAssignOverSubTasks, authorizeWorkItemDelegation, authorizeWorkItemOwnerManagerOrRoot } from "./work-item-authority.js";
 import { fullWorkItemPayload, openWorkItemPayload, workItemPagePayload, workItemTreePayload, workItemTreesPayload } from "./work-item-payload.js";
 import { TodoDepartmentNotAllowedError } from "../shared/todo-departments-config.js";
 import { DepartmentArchivedError, isDepartmentArchived } from "../work-items/department-archive.js";
@@ -2736,6 +2737,13 @@ export async function handleApiRequest(
         const authorized = authorizeWorkItemOwnerManagerOrRoot(caller, current, "assign");
         if (!authorized.ok) return json(res, { error: authorized.error }, authorized.status);
       }
+      // A self-claim skips the check above, but neither it nor any other
+      // assignment may hand an employee standing over sub-tasks the caller
+      // has none over. The operator as assignee owns nothing, so gains nothing.
+      if (employee && assignee !== current.assignee) {
+        const overSubTasks = authorizeAssignOverSubTasks(caller, current);
+        if (!overSubTasks.ok) return json(res, { error: overSubTasks.error }, overSubTasks.status);
+      }
       try {
         const assigned = assignWorkItem(params.id, assignee, employee?.department ?? null, workItemActor(caller),
           { origin: caller.origin, actorEmployee: workItemActorEmployee(caller) });
@@ -2820,10 +2828,20 @@ export async function handleApiRequest(
       if (caller.kind === "session") {
         const authorized = authorizeWorkItemOwnerManagerOrRoot(caller, item, "dispatch");
         if (!authorized.ok) return json(res, { error: authorized.error }, authorized.status);
+        // With no employee assignee to bind it to, the Dispatcher chooses who
+        // takes the Todo, handing on the presser's standing over its open
+        // sub-tasks. Refuse now, not after the Dispatcher has run; the
+        // Dispatcher's delegation checks again, since the Todo can move first.
+        if (!item.assignee || item.assignee === OPERATOR_ASSIGNEE) {
+          const overSubTasks = authorizeAssignOverSubTasks(caller, item, "dispatch");
+          if (!overSubTasks.ok) return json(res, { error: overSubTasks.error }, overSubTasks.status);
+        }
       }
 
       const started = startTodoDispatcher(item, context, {
         actor: workItemActor(caller),
+        // The Dispatcher hands the Todo on with the presser's standing.
+        ...(caller.kind === "session" ? { transportMeta: { [DISPATCH_PRESSED_BY_META_KEY]: caller.callerId } } : {}),
         emitProjectionEvent: (id, action) => emitTodoProjectionEvent(context, id, action),
       });
       return json(res, started.body, started.status);
