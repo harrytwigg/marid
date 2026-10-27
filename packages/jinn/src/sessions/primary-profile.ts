@@ -1,6 +1,7 @@
 import { declaredClaudeAccounts, type DeclaredClaudeAccount } from "../shared/claude-accounts-config.js";
 import { DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
 import { isRemoteTarget } from "../shared/remote-target.js";
+import { scopedDepartmentOf } from "../work-items/department-scope.js";
 import type { Employee, JinnConfig } from "../shared/types.js";
 
 /**
@@ -42,23 +43,33 @@ export function parsePrimaryEngine(config: Pick<JinnConfig, "engines">, raw: str
   };
 }
 
+type RequestContext = { employee?: Employee; scopedCaller?: boolean; operatorCaller?: boolean };
+
+/** Why this caller may not start this employee on a declared profile of this machine, or undefined when it may. */
+function profileRefusal(profile: DeclaredClaudeAccount, context: RequestContext): Extract<PrimaryEngine, { ok: false }> | undefined {
+  const { employee } = context;
+  const department = context.operatorCaller ? null : scopedDepartmentOf(employee?.name);
+  if (department) {
+    return { ok: false, status: 403, error: `employee "${employee!.name}" belongs to the department-scoped "${department}"; only the operator can start it on another Claude profile` };
+  }
+  if (isRemoteTarget(employee)) {
+    return { ok: false, status: 400, error: `employee "${employee.name}" runs on a remote host and uses that host's Claude login; it cannot start on the local profile "${profile.name}"` };
+  }
+  return undefined;
+}
+
 /**
- * `parsePrimaryEngine` for a request that creates a session, with the two refusals that depend on who asks and for whom:
- * a department-scoped caller never picks a profile (its department's separate allowance is not its to spend elsewhere),
- * and a remote employee runs on its host's own login, which a profile of this machine cannot replace.
+ * `parsePrimaryEngine` for a request that creates a session, with the refusals that depend on who asks and for whom:
+ * a department-scoped caller never picks a profile (its department's separate allowance is not its to spend elsewhere);
+ * nor does anyone but the operator pick one for a member of a scoped department, since an unscoped agent (the
+ * dispatcher working that department's Todo, say) would otherwise move the department off its own account; and a
+ * remote employee runs on its host's own login, which a profile of this machine cannot replace.
  */
-export function resolvePrimaryEngine(
-  config: Pick<JinnConfig, "engines">,
-  raw: string,
-  context: { employee?: Employee; scopedCaller?: boolean },
-): PrimaryEngine {
+export function resolvePrimaryEngine(config: Pick<JinnConfig, "engines">, raw: string, context: RequestContext): PrimaryEngine {
   // Before the lookup: a scoped caller is not told which profiles exist.
   if (namesClaudeProfile(raw) && context.scopedCaller) {
     return { ok: false, status: 403, error: "a department-scoped session cannot start a session on another Claude profile" };
   }
   const parsed = parsePrimaryEngine(config, raw);
-  if (parsed.ok && parsed.profile && isRemoteTarget(context.employee)) {
-    return { ok: false, status: 400, error: `employee "${context.employee.name}" runs on a remote host and uses that host's Claude login; it cannot start on the local profile "${parsed.profile.name}"` };
-  }
-  return parsed;
+  return (parsed.ok && parsed.profile ? profileRefusal(parsed.profile, context) : undefined) ?? parsed;
 }

@@ -78,7 +78,7 @@ A session normally runs on its employee's Claude login (the default profile when
 - **Chain.** Precedence is unchanged (the session's own target, then its employee's `fallback`, then the account's chain, then the engine's). With no employee, or an employee without a `fallback`, the session inherits the chosen account's own chain, and the chosen account never appears in it as its own fallback.
 - **Fork.** A duplicate of the session starts on the same profile, because its transcript lives there.
 - **Preview.** `GET /api/fallback-preview?engine=claude:<name>` shows the chain such a session would get.
-- **Refused.** An undeclared name is a 400 listing the declared ones; a remote employee is a 400 (it runs on its host's login); a department-scoped caller is a 403 (its department's separate allowance is not its to spend elsewhere). An operator may pick a profile for any local employee.
+- **Refused.** An undeclared name is a 400 listing the declared ones, and so is an account declared on another host (`remoteHost`), which only a remote employee's fallback can use; a remote employee is a 400 (it runs on its host's login); a department-scoped caller is a 403 (its department's separate allowance is not its to spend elsewhere), and so is any caller but the operator naming a profile for a member of a scoped department (an unscoped agent, such as the session working that department's Todo, would otherwise move it off its own account). The operator may pick a profile for any local employee, and the new-chat picker offers only the accounts on this machine.
 
 ## MCP
 

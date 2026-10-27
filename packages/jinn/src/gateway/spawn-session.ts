@@ -44,6 +44,8 @@ export interface SpawnSessionInput {
   effortLevel?: unknown;
   /** The caller is a department-scoped session, which may not pick a Claude profile. */
   scopedCaller?: boolean;
+  /** The caller is the operator, the only one who may pick a Claude profile for a member of a scoped department. */
+  operatorCaller?: boolean;
   /** Usage-limit mode for the new session (shared/session-fallback-config.ts); default: inherited from the parent. */
   fallbackMode?: unknown;
   /** The engine and model this session falls back to at a usage limit (`{ engine, model }`); default: the parent's when it passes its fallback on, else the config's chain. */
@@ -126,7 +128,7 @@ function engineChoice(
   config: JinnConfig, input: SpawnSessionInput, employee: Employee | undefined,
 ): { ok: true; engine: unknown; claudeConfigDir?: string } | { ok: false; error: string; status?: 400 | 403 } {
   if (typeof input.engine !== "string" || !input.engine.trim()) return { ok: true, engine: input.engine };
-  const primary = resolvePrimaryEngine(config, input.engine, { employee, scopedCaller: input.scopedCaller });
+  const primary = resolvePrimaryEngine(config, input.engine, { employee, scopedCaller: input.scopedCaller, operatorCaller: input.operatorCaller });
   return primary.ok ? { ok: true, engine: primary.engine, claudeConfigDir: primary.profile?.profile.dir } : primary;
 }
 

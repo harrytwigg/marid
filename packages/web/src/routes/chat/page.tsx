@@ -62,7 +62,7 @@ import { cn } from '@/lib/utils'
 import type { ViewMode } from '@/lib/view-mode'
 import type { GatewayEvent } from '@jinn/gateway-events'
 import { shareDebugLog, clearDebugLog } from '@/lib/debug-log'
-import { buildFreshChatParams, effectivePrimaryProfile } from '@/components/chat/new-chat-helpers'
+import { buildFreshChatParams, effectivePrimaryProfile, startableProfileNames } from '@/components/chat/new-chat-helpers'
 import { fetchFallbackChains } from '@/lib/api-fallback-chains'
 import { buildContinuationPrompt } from '@/lib/stale-chat'
 import { PRODUCT_NAME } from "@/lib/brand"
@@ -537,7 +537,7 @@ function ChatPage() {
     let profile = previous.profile
     if (profile && !employeeRemote) {
       const chains = await qc.fetchQuery({ queryKey: queryKeys.fallbackChains(undefined), queryFn: () => fetchFallbackChains(), staleTime: 15_000 })
-      profile = effectivePrimaryProfile({ profile, declared: chains.profiles?.map((p) => p.name) })
+      profile = effectivePrimaryProfile({ profile, declared: startableProfileNames(chains) })
     }
     const result = await api.createSession(buildFreshChatParams({
       message: prompt,

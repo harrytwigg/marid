@@ -43,10 +43,18 @@ vi.mock('@/hooks/use-model-registry', async (importActual) => {
 
 // `null` = the chains read has not loaded (or failed): data is undefined.
 const profilesHolder: { current: string[] | null } = { current: ['work'] }
+// Accounts declared on another host: the chains read lists them too, for a remote employee's fallback.
+const remoteProfilesHolder: { current: string[] } = { current: [] }
 vi.mock('@/hooks/use-fallback-chains', () => ({
   useFallbackChains: () => ({
     data: profilesHolder.current
-      ? { profiles: profilesHolder.current.map((name) => ({ name, account: name, configDir: `/x/${name}` })), subjects: [] }
+      ? {
+          profiles: [
+            ...profilesHolder.current.map((name) => ({ name, account: name, configDir: `/x/${name}` })),
+            ...remoteProfilesHolder.current.map((name) => ({ name, account: `claude@ci@box:${name}`, configDir: `/x/${name}`, remote: { host: 'box', destination: 'ci@box' } })),
+          ],
+          subjects: [],
+        }
       : undefined,
   }),
 }))
@@ -69,7 +77,7 @@ vi.mock('@/lib/api', async (importActual) => {
 import { ModelSelectorRow, type SelectorValue } from '../model-selector-row'
 import { useNewChatFallback } from '../use-new-chat-fallback'
 import { renderHook } from '@testing-library/react'
-import { buildFreshChatParams, buildNewSessionParams, composeSessionEngine, effectivePrimaryProfile, resolveNewSessionSelector } from '../new-chat-helpers'
+import { buildFreshChatParams, buildNewSessionParams, composeSessionEngine, effectivePrimaryProfile, resolveNewSessionSelector, startableProfileNames } from '../new-chat-helpers'
 import { readNewSessionSelector, writeNewSessionSelector } from '../new-session-selector'
 
 function Harness({ initial, onChange }: { initial: SelectorValue; onChange?: (v: SelectorValue) => void }) {
@@ -89,6 +97,18 @@ function openMenu() {
 }
 
 describe('primary profile wire composition', () => {
+  it('starts only on local accounts: a remote-declared one is not a primary the gateway takes', () => {
+    const chains = {
+      profiles: [
+        { name: 'work', account: 'claude:1', configDir: '/x/work' },
+        { name: 'box', account: 'claude@ci@box:2', configDir: '/x/box', remote: { host: 'box', destination: 'ci@box' } },
+      ],
+    }
+    expect(startableProfileNames(chains)).toEqual(['work'])
+    expect(effectivePrimaryProfile({ profile: 'box', declared: startableProfileNames(chains) })).toBeUndefined()
+    expect(startableProfileNames(undefined)).toBeUndefined()
+  })
+
   it('composes claude:<name> for create, and only for claude', () => {
     expect(composeSessionEngine('claude', 'work')).toBe('claude:work')
     expect(composeSessionEngine('claude', undefined)).toBe('claude')
@@ -126,7 +146,18 @@ describe('fallback preview for a chosen profile', () => {
 })
 
 describe('ModelSelectorRow primary profile picker', () => {
-  beforeEach(() => { profilesHolder.current = ['work'] })
+  beforeEach(() => { profilesHolder.current = ['work']; remoteProfilesHolder.current = [] })
+
+  it('offers only accounts on this machine, never one declared on another host', async () => {
+    remoteProfilesHolder.current = ['box']
+    const onChange = vi.fn()
+    renderRow(<Harness initial={{ engine: 'claude', model: 'opus', profile: 'box' }} onChange={onChange} />)
+    expect(screen.getByRole('button', { name: /model and effort/i }).getAttribute('aria-label')).not.toContain('box')
+    openMenu()
+    fireEvent.click(await screen.findByRole('menuitem', { name: /switch engine/i }))
+    expect(await screen.findByRole('menuitem', { name: /claude · work/i })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: /claude · box/i })).toBeNull()
+  })
 
   it('lists Claude once per declared profile and picking one records it beside the engine', async () => {
     const onChange = vi.fn()

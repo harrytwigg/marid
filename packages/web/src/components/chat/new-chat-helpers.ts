@@ -1,3 +1,5 @@
+import type { FallbackChainsResponse } from '@jinn/fallback-chain-wire'
+
 export interface NewSessionSelectorValue {
   engine?: string
   model?: string
@@ -25,6 +27,14 @@ export function effectivePrimaryProfile(opts: {
 }): string | undefined {
   if (!opts.profile || opts.employeeRemote || !opts.declared) return undefined
   return opts.declared.includes(opts.profile) ? opts.profile : undefined
+}
+
+/**
+ * The declared accounts a new chat may start on: the local ones. The chains read also lists accounts declared on
+ * another host, which only a remote employee's fallback can use; the gateway refuses them as a primary.
+ */
+export function startableProfileNames(chains: Pick<FallbackChainsResponse, 'profiles'> | null | undefined): string[] | undefined {
+  return chains?.profiles?.filter((p) => !p.remote).map((p) => p.name)
 }
 
 export interface NewSessionEmployeeDefaults {

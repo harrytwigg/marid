@@ -131,6 +131,7 @@ beforeEach(() => {
 });
 
 const scopedCaller = () => registry.createSession({ engine: "claude", source: "web", sourceRef: `web:scoped-${Math.random()}`, employee: "lab-dev" }).id;
+const agentCaller = () => registry.createSession({ engine: "claude", source: "web", sourceRef: `web:agent-${Math.random()}`, employee: "plain-dev" }).id;
 const todoCount = () => workItems.listWorkItems({}).length;
 
 describe("POST /api/sessions", () => {
@@ -189,6 +190,19 @@ describe("POST /api/sessions", () => {
     const plain = await spawn({ employee: "lab-dev", engine: "claude" }, caller);
     expect(plain.status).toBe(201);
   });
+
+  it("lets only the operator start a member of a scoped department on another profile", async () => {
+    const before = registry.listSessions().length;
+    const refused = await spawn({ employee: "lab-dev", engine: "claude:friend" }, agentCaller());
+    expect(refused.status).toBe(403);
+    expect(refused.body.error).toMatch(/department-scoped "lab".*only the operator/);
+    expect(registry.listSessions().length).toBe(before + 1);
+    const operator = await spawn({ employee: "lab-dev", engine: "claude:friend" });
+    expect(operator.status).toBe(201);
+    expect(registry.getSession(operator.body.id)!.claudeConfigDir).toBe(friend.dir);
+    const agentPlain = await spawn({ employee: "plain-dev", engine: "claude:friend" }, agentCaller());
+    expect(agentPlain.status).toBe(201);
+  });
 });
 
 describe("POST /api/delegations", () => {
@@ -219,6 +233,14 @@ describe("POST /api/delegations", () => {
     const before = todoCount();
     const refused = await delegate({ employee: "lab-dev", engine: "claude:friend" }, scopedCaller());
     expect(refused.status).toBe(403);
+    expect(todoCount()).toBe(before);
+  });
+
+  it("refuses an agent putting a member of a scoped department on another profile, before minting a Todo", async () => {
+    const before = todoCount();
+    const refused = await delegate({ employee: "lab-dev", engine: "claude:friend" }, agentCaller());
+    expect(refused.status).toBe(403);
+    expect(refused.body.error).toMatch(/only the operator/);
     expect(todoCount()).toBe(before);
   });
 

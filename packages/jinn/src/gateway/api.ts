@@ -3523,7 +3523,7 @@ export async function handleApiRequest(
       // request's engine, profile included, like it does for any other engine named.
       const primary = todoOverride.engine || engineParam === undefined
         ? undefined
-        : resolvePrimaryEngine(config, engineParam, { employee: delegateEmployee, scopedCaller: resolveScopedCaller(delegationCaller) !== null });
+        : resolvePrimaryEngine(config, engineParam, { employee: delegateEmployee, scopedCaller: resolveScopedCaller(delegationCaller) !== null, operatorCaller: delegationCaller.kind === "operator" });
       if (primary && !primary.ok) return json(res, { error: primary.error }, primary.status);
       const requestedEngine = primary?.engine ?? body.engine;
       const claudeConfigDir = primary?.profile?.profile.dir;
@@ -3821,6 +3821,7 @@ export async function handleApiRequest(
         model: body.model,
         effortLevel: body.effortLevel,
         scopedCaller: resolveScopedCaller(spawnCaller) !== null,
+        operatorCaller: spawnCaller.kind === "operator",
         fallbackMode: body.fallbackMode,
         fallbackTarget: body.fallbackTarget,
         parentSessionId: body.parentSessionId,

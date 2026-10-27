@@ -1,5 +1,5 @@
 import { useFallbackChains } from '@/hooks/use-fallback-chains'
-import { effectivePrimaryProfile } from './new-chat-helpers'
+import { effectivePrimaryProfile, startableProfileNames } from './new-chat-helpers'
 
 /**
  * The declared Claude accounts a new chat may start on, and the remembered
@@ -10,7 +10,7 @@ import { effectivePrimaryProfile } from './new-chat-helpers'
  */
 export function usePrimaryProfiles(enabled: boolean, profile: string | undefined, employeeRemote: boolean | undefined) {
   const { data: chains } = useFallbackChains(undefined, enabled)
-  const declared = enabled ? chains?.profiles?.map((p) => p.name) : undefined
+  const declared = enabled ? startableProfileNames(chains) : undefined
   return {
     /** Rows to offer; empty while unconfirmed or for a remote employee. */
     profiles: employeeRemote || !declared ? [] : declared,
