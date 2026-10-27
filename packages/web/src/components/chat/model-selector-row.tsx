@@ -10,7 +10,7 @@ import type { EnginesResponse } from '@/lib/api'
 import { useModelRegistry, engineList, effortLevelsFor, findModel, defaultEffort, clampEffort, contextWindowFor } from '@/hooks/use-model-registry'
 import { fmtK, formatContextUsage, type ContextUsage } from '@/lib/context-usage'
 import { ModelPicker } from './model-picker'
-import { useFallbackChains } from '@/hooks/use-fallback-chains'
+import { usePrimaryProfiles } from './use-primary-profiles'
 import { engineDisplayName } from '@/lib/engine-names'
 
 export interface SelectorValue {
@@ -38,6 +38,8 @@ interface ModelSelectorRowProps {
   allowProfiles?: boolean
   /** The chosen employee runs on a remote host, where the gateway refuses a profile: hide the rows. */
   employeeRemote?: boolean
+  /** Told the profile the new chat may actually start on: confirmed declared, employee local; undefined otherwise. */
+  onEffectiveProfile?: (profile: string | undefined) => void
   /** An existing session's chosen profile name, shown in the label read-only. */
   sessionProfileName?: string | null
 }
@@ -194,6 +196,19 @@ function SelectorNotes({ mode, errorNote, pendingNote }: Pick<ModelSelectorRowPr
   return <DropdownMenuLabel className="pt-0 pb-1 text-[length:var(--text-caption2)] font-normal italic text-[var(--text-quaternary)]">Applies to your next message</DropdownMenuLabel>
 }
 
+/** Keep the chosen profile when a pick stays on claude; drop it when it leaves. */
+function withProfile(next: SelectorValue, profile?: string): SelectorValue {
+  return next.engine === 'claude' && profile ? { ...next, profile } : next
+}
+
+/** The selection for picking a primary profile: claude and its model, with the profile beside it. */
+function profileSelection(registry: EnginesResponse, engine: string, modelId: string, value: SelectorValue, profile: string | undefined): SelectorValue {
+  if (engine === 'claude') return { engine, model: modelId, effortLevel: value.effortLevel, ...(profile ? { profile } : {}) }
+  const ne = registry.engines.claude
+  const nextModel = ne?.defaultModel ?? ne?.models[0]?.id
+  return { engine: 'claude', model: nextModel, effortLevel: defaultEffort(effortLevelsFor(registry, 'claude', nextModel)), ...(profile ? { profile } : {}) }
+}
+
 /**
  * Engine / Model / Effort selector for the chat composer, rendered as a single
  * "chip" trigger (`✦ Opus 4.8 · High ▾`) that opens one consolidated dropdown:
@@ -209,36 +224,12 @@ function SelectorNotes({ mode, errorNote, pendingNote }: Pick<ModelSelectorRowPr
  * The model list, search and engine panel are the shared `ModelPicker`; this adds
  * the effort row, notes and context footer around it.
  */
-/** Declared Claude accounts offered on a new chat; a remembered profile that is no
- *  longer declared (or whose employee went remote) is dropped, not sent on. */
-function usePrimaryProfiles(enabled: boolean, employeeRemote: boolean | undefined, value: SelectorValue, onChange: (next: SelectorValue) => void): string[] {
-  const { data: chains } = useFallbackChains(undefined, enabled)
-  const profiles = employeeRemote ? [] : (chains?.profiles.map((p) => p.name) ?? [])
-  const stale = enabled && chains !== undefined && Boolean(value.profile) && !profiles.includes(value.profile as string)
-  useEffect(() => {
-    if (stale) onChange({ ...value, profile: undefined })
-  }, [stale, value, onChange])
-  return profiles
-}
-
-/** Keep the chosen profile when a pick stays on claude; drop it when it leaves. */
-function withProfile(next: SelectorValue, profile?: string): SelectorValue {
-  return next.engine === 'claude' && profile ? { ...next, profile } : next
-}
-
-/** The selection for picking a primary profile: claude and its model, with the profile beside it. */
-function profileSelection(registry: EnginesResponse, engine: string, modelId: string, value: SelectorValue, profile: string | undefined): SelectorValue {
-  if (engine === 'claude') return { engine, model: modelId, effortLevel: value.effortLevel, ...(profile ? { profile } : {}) }
-  const ne = registry.engines.claude
-  const nextModel = ne?.defaultModel ?? ne?.models[0]?.id
-  return { engine: 'claude', model: nextModel, effortLevel: defaultEffort(effortLevelsFor(registry, 'claude', nextModel)), ...(profile ? { profile } : {}) }
-}
-
-export function ModelSelectorRow({ mode, value, onChange, pendingNote, errorNote, disabled, contextTokens, allowProfiles, employeeRemote, sessionProfileName }: ModelSelectorRowProps) {
+export function ModelSelectorRow({ mode, value, onChange, pendingNote, errorNote, disabled, contextTokens, allowProfiles, employeeRemote, onEffectiveProfile, sessionProfileName }: ModelSelectorRowProps) {
   const { data: registry, isLoading } = useModelRegistry()
   const engine = useResolvedEngine(registry, mode, value, onChange)
   const profilesEnabled = Boolean(allowProfiles && mode === 'new')
-  const profiles = usePrimaryProfiles(profilesEnabled, employeeRemote, value, onChange)
+  const { profiles, effective: effectiveProfile } = usePrimaryProfiles(profilesEnabled, value.profile, employeeRemote)
+  useEffect(() => { onEffectiveProfile?.(effectiveProfile) }, [onEffectiveProfile, effectiveProfile])
   if (isLoading || !registry) return null
 
   const { modelId, efforts, effort, effortLabel, modelLabel } = describeSelection(registry, engine, value)
@@ -250,7 +241,8 @@ export function ModelSelectorRow({ mode, value, onChange, pendingNote, errorNote
   const pickProfile = (profile: string | undefined) => onChange(profileSelection(registry, engine, modelId, value, profile))
   const pickModel = (next: string) => onChange(withProfile({ engine, model: next, effortLevel: clampEffort(effortLevelsFor(registry, engine, next), value.effortLevel) }, value.profile))
 
-  const profileName = mode === 'new' ? value.profile : (sessionProfileName ?? undefined)
+  // Only Claude has accounts: a session that fell back to another engine no longer runs on its profile.
+  const profileName = engine !== 'claude' ? undefined : mode === 'new' ? effectiveProfile : (sessionProfileName ?? undefined)
   const shownModelLabel = profileName ? `${engineDisplayName(engine)} · ${profileName} · ${modelLabel}` : modelLabel
 
   return (
@@ -262,7 +254,7 @@ export function ModelSelectorRow({ mode, value, onChange, pendingNote, errorNote
         sideOffset={8}
         className="w-64 max-w-[calc(100vw-2rem)] rounded-[var(--radius-lg)] p-1.5"
       >
-        <ModelPicker registry={registry} engine={engine} modelId={modelId} onPickEngine={pickEngine} onPickModel={pickModel} profiles={profilesEnabled ? profiles : undefined} profile={value.profile} onPickProfile={profilesEnabled ? pickProfile : undefined}>
+        <ModelPicker registry={registry} engine={engine} modelId={modelId} onPickEngine={pickEngine} onPickModel={pickModel} profiles={profilesEnabled ? profiles : undefined} profile={effectiveProfile} onPickProfile={profilesEnabled ? pickProfile : undefined}>
           <EffortRow efforts={efforts} effort={effort} onPick={(level) => onChange(withProfile({ engine, model: modelId, effortLevel: level }, value.profile))} />
           <SelectorNotes mode={mode} errorNote={errorNote} pendingNote={pendingNote} />
           <ContextFooter usage={formatContextUsage(contextTokens, contextWindowFor(registry, engine, modelId))} />

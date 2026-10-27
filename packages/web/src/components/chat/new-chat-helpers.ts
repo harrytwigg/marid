@@ -12,6 +12,21 @@ export function composeSessionEngine(engine?: string | null, profile?: string | 
   return engine === 'claude' && profile ? `claude:${profile}` : engine
 }
 
+/**
+ * The profile that may actually be sent for a remembered/chosen name: only one
+ * confirmed declared (the chains read has loaded and lists it) and only for a
+ * local employee. Derived at render and send time — the stored choice itself is
+ * never rewritten by this, so browsing a remote employee does not erase it.
+ */
+export function effectivePrimaryProfile(opts: {
+  profile?: string | null
+  declared?: readonly string[] | null
+  employeeRemote?: boolean
+}): string | undefined {
+  if (!opts.profile || opts.employeeRemote || !opts.declared) return undefined
+  return opts.declared.includes(opts.profile) ? opts.profile : undefined
+}
+
 export interface NewSessionEmployeeDefaults {
   name: string
   engine?: string | null
@@ -106,4 +121,22 @@ export function buildNewSessionParams(opts: {
   if (opts.effortLevel) params.effortLevel = opts.effortLevel
 
   return params
+}
+
+/** Create params for a fresh continuation chat: it inherits the previous
+ *  session's primary profile, except for a remote employee, whom the gateway
+ *  would refuse it for. */
+export function buildFreshChatParams(opts: {
+  message: string
+  previous: { employee?: string; engine?: string; model?: string; effortLevel?: string; profile?: string }
+  employeeRemote?: boolean
+}): Record<string, unknown> {
+  return buildNewSessionParams({
+    message: opts.message,
+    selectedEmployee: opts.previous.employee ?? null,
+    engine: opts.previous.engine,
+    profile: opts.employeeRemote ? undefined : opts.previous.profile,
+    model: opts.previous.model,
+    effortLevel: opts.previous.effortLevel,
+  })
 }

@@ -41,10 +41,13 @@ vi.mock('@/hooks/use-model-registry', async (importActual) => {
   return { ...actual, useModelRegistry: () => ({ data: REG, isLoading: false }) }
 })
 
-const profilesHolder: { current: string[] } = { current: ['work'] }
+// `null` = the chains read has not loaded (or failed): data is undefined.
+const profilesHolder: { current: string[] | null } = { current: ['work'] }
 vi.mock('@/hooks/use-fallback-chains', () => ({
   useFallbackChains: () => ({
-    data: { profiles: profilesHolder.current.map((name) => ({ name, account: name, configDir: `/x/${name}` })), subjects: [] },
+    data: profilesHolder.current
+      ? { profiles: profilesHolder.current.map((name) => ({ name, account: name, configDir: `/x/${name}` })), subjects: [] }
+      : undefined,
   }),
 }))
 
@@ -66,7 +69,7 @@ vi.mock('@/lib/api', async (importActual) => {
 import { ModelSelectorRow, type SelectorValue } from '../model-selector-row'
 import { useNewChatFallback } from '../use-new-chat-fallback'
 import { renderHook } from '@testing-library/react'
-import { buildNewSessionParams, composeSessionEngine, resolveNewSessionSelector } from '../new-chat-helpers'
+import { buildFreshChatParams, buildNewSessionParams, composeSessionEngine, effectivePrimaryProfile, resolveNewSessionSelector } from '../new-chat-helpers'
 import { readNewSessionSelector, writeNewSessionSelector } from '../new-session-selector'
 
 function Harness({ initial, onChange }: { initial: SelectorValue; onChange?: (v: SelectorValue) => void }) {
@@ -156,13 +159,44 @@ describe('ModelSelectorRow primary profile picker', () => {
     expect(last.profile).toBeUndefined()
   })
 
-  it('drops a remembered profile that is no longer declared', async () => {
+  it('does not offer or show a remembered profile that is no longer declared, and never rewrites the choice', async () => {
     const onChange = vi.fn()
     renderRow(<Harness initial={{ engine: 'claude', model: 'opus', profile: 'gone' }} onChange={onChange} />)
-    await waitFor(() => {
-      const calls = onChange.mock.calls.map((c) => c[0] as SelectorValue)
-      expect(calls.some((v) => v.profile === undefined && v.engine === 'claude')).toBe(true)
-    })
+    expect(screen.getByRole('button', { name: /model and effort/i }).getAttribute('aria-label')).not.toContain('gone')
+    // The correction is derived: nothing is reported as a user edit, so employee defaults keep applying and storage is untouched.
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('shows no remembered profile until the chains read has confirmed it', () => {
+    profilesHolder.current = null
+    renderRow(<Harness initial={{ engine: 'claude', model: 'opus', profile: 'work' }} />)
+    expect(screen.getByRole('button', { name: /model and effort/i }).getAttribute('aria-label')).not.toContain('work')
+  })
+
+  it('shows no remembered profile for a remote employee, and leaves the choice alone', () => {
+    const onChange = vi.fn()
+    renderRow(
+      <ModelSelectorRow mode="new" allowProfiles employeeRemote value={{ engine: 'claude', model: 'opus', profile: 'work' }} onChange={onChange} />,
+    )
+    expect(screen.getByRole('button', { name: /model and effort/i }).getAttribute('aria-label')).not.toContain('work')
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('shows the profile for an existing session only while it is on claude', () => {
+    renderRow(
+      <ModelSelectorRow mode="existing" sessionProfileName="work" value={{ engine: 'opencode', model: 'opencode-go/x' }} onChange={() => {}} />,
+    )
+    expect(screen.getByRole('button', { name: /model and effort/i }).getAttribute('aria-label')).not.toContain('work')
+  })
+
+  it('keeps a long profile name in the collapsed label, which truncates rather than growing the chip', () => {
+    const long = 'a-very-long-declared-account-name-for-the-work-login'
+    profilesHolder.current = [long]
+    renderRow(<Harness initial={{ engine: 'claude', model: 'opus', profile: long }} />)
+    const trigger = screen.getByRole('button', { name: /model and effort/i })
+    expect(trigger.getAttribute('aria-label')).toContain(`Claude · ${long} · Opus 4.8`)
+    expect(trigger.className).toContain('max-w-full')
+    expect(trigger.querySelector('.truncate')).toBeTruthy()
   })
 
   it('hides the profile rows for a remote employee', async () => {
@@ -180,5 +214,29 @@ describe('ModelSelectorRow primary profile picker', () => {
       <ModelSelectorRow mode="existing" sessionProfileName="work" value={{ engine: 'claude', model: 'opus' }} onChange={() => {}} />,
     )
     expect(screen.getByRole('button', { name: /model and effort/i }).getAttribute('aria-label')).toContain('Claude · work · Opus 4.8')
+  })
+})
+
+describe('effectivePrimaryProfile', () => {
+  it('only passes a profile confirmed declared for a local employee', () => {
+    expect(effectivePrimaryProfile({ profile: 'work', declared: ['work'] })).toBe('work')
+    expect(effectivePrimaryProfile({ profile: 'work', declared: undefined })).toBeUndefined()
+    expect(effectivePrimaryProfile({ profile: 'work', declared: [] })).toBeUndefined()
+    expect(effectivePrimaryProfile({ profile: 'gone', declared: ['work'] })).toBeUndefined()
+    expect(effectivePrimaryProfile({ profile: 'work', declared: ['work'], employeeRemote: true })).toBeUndefined()
+    expect(effectivePrimaryProfile({ declared: ['work'] })).toBeUndefined()
+  })
+})
+
+describe('a fresh continuation chat', () => {
+  const previous = { employee: 'lead', engine: 'claude', model: 'opus', effortLevel: 'high', profile: 'work' }
+
+  it('continues on the previous session\'s Claude account', () => {
+    expect(buildFreshChatParams({ message: 'go', previous })).toMatchObject({ employee: 'lead', engine: 'claude:work', model: 'opus', effortLevel: 'high' })
+  })
+
+  it('does not send the profile for a remote employee, or when there was none', () => {
+    expect(buildFreshChatParams({ message: 'go', previous, employeeRemote: true }).engine).toBe('claude')
+    expect(buildFreshChatParams({ message: 'go', previous: { ...previous, profile: undefined } }).engine).toBe('claude')
   })
 })

@@ -90,12 +90,6 @@ export interface Employee {
   fallback?: import("@jinn/fallback-chain-wire").FallbackLink[]; // chain override; absent inherits, [] is none
 }
 
-/** A session's chosen primary Claude profile on the wire; null = the employee's/gateway's own login. */
-export interface SessionClaudeProfile {
-  name: string | null;
-  key: string;
-}
-
 /** Editable employee fields accepted by PATCH /api/org/employees/:name; `name` is immutable and omitted. */
 export interface EmployeeUpdate {
   displayName?: string;
