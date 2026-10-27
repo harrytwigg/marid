@@ -127,6 +127,20 @@ describe("session tools — registry + schemas", () => {
   });
 });
 
+describe("spawn_session — a Claude profile rides the engine string", () => {
+  it("forwards `claude:<name>` to the gateway untouched, and relays the gateway's refusal", async () => {
+    const { calls, ctx } = stub((call) => (
+      (call.body as { engine?: string }).engine === "claude:friend"
+        ? { status: 201, body: { id: "child-1", engine: "claude", status: "running" } }
+        : { status: 400, body: { error: 'unknown Claude profile "nobody" — declared profiles: friend' } }
+    ), "me");
+    const ok = (await tool("spawn_session").handler({ prompt: "hi", engine: "claude:friend" }, ctx)) as Record<string, unknown>;
+    expect(calls[0]!.body).toMatchObject({ prompt: "hi", engine: "claude:friend" });
+    expect(ok.sessionId).toBe("child-1");
+    await expect(tool("spawn_session").handler({ prompt: "hi", engine: "claude:nobody" }, ctx)).rejects.toThrow(/declared profiles: friend/);
+  });
+});
+
 describe("compact_session — unit (stub gateway)", () => {
   it("POSTs the handoff to the self-compaction route, never a target session, and tells the agent to end its turn", async () => {
     const { calls, ctx } = stub(() => ({ status: 202, body: { status: "scheduled", sessionId: "me", engine: "claude", resume: "accepted" } }), "me");

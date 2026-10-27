@@ -1,15 +1,18 @@
 import { claudeProfileFromDir, resolveEmployeeClaudeProfile, type ClaudeProfile } from "../shared/claude-profile.js";
-import { DEFAULT_CLAUDE_ACCOUNT, employeeClaudeAccount, isClaudeAccount } from "../shared/engine-account.js";
+import {
+  accountForEmployee, claudeAccountKey, DEFAULT_CLAUDE_ACCOUNT, employeeClaudeAccount, isClaudeAccount, isRemoteClaudeAccount,
+} from "../shared/engine-account.js";
 import type { Employee, Session } from "../shared/types.js";
 
-/** The parts of a session this module reads; the transport meta is optional so
- *  a caller holding only an id-and-employee view can ask too. */
-type SessionView = { employee?: string | null; transportMeta?: Session["transportMeta"] };
+/** The parts of a session this module reads; the transport meta and the chosen
+ *  profile are optional so a caller holding only an id-and-employee view can ask too. */
+type SessionView = { employee?: string | null; transportMeta?: Session["transportMeta"]; claudeConfigDir?: string | null };
 
 /**
  * Which Claude account a session runs on now (spec FR-079).
  *
- * A session runs on its employee's account, unless a rate limit has moved it
+ * A session runs on its own account (the declared profile it was started on,
+ * else its employee's), unless a rate limit has moved it
  * onto another Claude account: then the `engineOverride` record names the
  * substitute account and its profile directory, and everything that runs or
  * reads the session's Claude state (the turn, the terminal attach, the
@@ -17,7 +20,8 @@ type SessionView = { employee?: string | null; transportMeta?: Session["transpor
  * it, so a second turn inside the override window resumes the substitute's
  * thread on the substitute's profile. The record stays until the turn-start
  * revert (`maybeRevertEngineOverride`) lifts it once its `until` has passed,
- * which is what hands the session back to its own account and thread.
+ * which is what hands the session back to its own account and thread: the profile
+ * it was started on, not its employee's.
  *
  * Account substitution is local only in v1: a remote employee's substitute is
  * an engine on its host, never another account.
@@ -42,9 +46,37 @@ export function accountOverride(session: SessionView): AccountOverride | undefin
   };
 }
 
-/** The session's own Claude account: its employee's, or the default. */
+/**
+ * The declared account the session was started on (sessions/primary-profile.ts),
+ * which replaces its employee's own login as the account it "belongs" to. A
+ * remote employee runs on its host's login, so a row that names a profile and
+ * later turned remote ignores it.
+ */
+function chosenProfile(session: SessionView | null | undefined, employee?: Pick<Employee, "remoteHost"> | null): Exclude<ClaudeProfile, null> | undefined {
+  const dir = session?.claudeConfigDir;
+  if (!dir || employee?.remoteHost) return undefined;
+  return claudeProfileFromDir(dir);
+}
+
+/** The session's own Claude account: the profile it was started on, else its employee's, else the default. */
 export function ownClaudeAccount(session: SessionView): string {
-  return session.employee ? employeeClaudeAccount(session.employee) : DEFAULT_CLAUDE_ACCOUNT;
+  const employeeAccount = session.employee ? employeeClaudeAccount(session.employee) : DEFAULT_CLAUDE_ACCOUNT;
+  if (!session.claudeConfigDir || isRemoteClaudeAccount(employeeAccount)) return employeeAccount;
+  return claudeAccountKey(claudeProfileFromDir(session.claudeConfigDir));
+}
+
+/** The local Claude profile the session's own turns run as when no override stands: the one it was started on, else its employee's. */
+export function ownClaudeProfile(
+  session: SessionView | null | undefined,
+  employee: Pick<Employee, "claudeConfigDir" | "remoteHost"> | null | undefined,
+): ClaudeProfile {
+  return chosenProfile(session, employee) ?? resolveEmployeeClaudeProfile(employee);
+}
+
+/** The account key of `ownClaudeProfile`, from the roster record in hand: a remote employee's own login, else the profile's. */
+export function ownClaudeAccountOf(session: SessionView | null | undefined, employee: Employee | undefined): string {
+  const chosen = chosenProfile(session, employee);
+  return chosen ? claudeAccountKey(chosen) : accountForEmployee(employee, "claude");
 }
 
 /** The Claude account the session's turns run on now. */
@@ -53,7 +85,8 @@ export function currentClaudeAccount(session: SessionView): string {
 }
 
 /** The local Claude profile the session's turns run as now: the substitute
- *  account's while an account override stands, else the employee's own. */
+ *  account's while an account override stands, else its own (the profile it was
+ *  started on, or its employee's). */
 export function sessionClaudeProfile(
   session: SessionView | null | undefined,
   employee: Pick<Employee, "claudeConfigDir" | "remoteHost"> | null | undefined,
@@ -62,7 +95,7 @@ export function sessionClaudeProfile(
   if (override && !employee?.remoteHost) {
     return override.substituteConfigDir ? claudeProfileFromDir(override.substituteConfigDir) : null;
   }
-  return resolveEmployeeClaudeProfile(employee);
+  return ownClaudeProfile(session, employee);
 }
 
 /**

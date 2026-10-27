@@ -8,6 +8,7 @@
 import { logger } from "../shared/logger.js";
 import { engineHealthForTarget, exhaustedEngineReturnsAt, isEngineExhausted, readEngineHealth } from "../shared/engine-health.js";
 import { accountForEmployee } from "../shared/engine-account.js";
+import { ownClaudeAccountOf } from "./session-account.js";
 import { healthKeys } from "../shared/fallback-chain-health.js";
 import { orgRegistry } from "../gateway/org-registry.js";
 import type { Employee, JinnConfig, JsonObject, Session } from "../shared/types.js";
@@ -71,6 +72,11 @@ function sessionEmployee(session: Session, employee: Employee | undefined): Empl
   }
 }
 
+/** The account the session's own target runs on: a Claude session's own login (the profile it was started on, else its employee's), else the engine's. */
+function ownAccountOf(session: Session, owner: Employee | undefined, engine: string): string {
+  return engine === "claude" ? ownClaudeAccountOf(session, owner) : accountForEmployee(owner, engine);
+}
+
 /** The target a swap left: the engine and the model it ran (null when it ran its default). */
 export interface OwnTarget {
   engine: string;
@@ -100,7 +106,7 @@ function stillSpentUntil(
   const model = own.model ?? owner?.model ?? defaults?.[engine]?.model;
   // Read as the session's own turns would: on its host.
   const health = engineHealthForTarget(readEngineHealth(), owner);
-  const account = typeof override.originalAccount === "string" ? override.originalAccount : accountForEmployee(owner, engine);
+  const account = typeof override.originalAccount === "string" ? override.originalAccount : ownAccountOf(session, owner, engine);
   const spent = healthKeys({ engine, model: model ?? undefined, account }).find((key) => isEngineExhausted(health, key));
   return spent === undefined ? undefined : exhaustedEngineReturnsAt(health, spent);
 }
