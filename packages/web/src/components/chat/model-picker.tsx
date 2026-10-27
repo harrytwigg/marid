@@ -24,6 +24,10 @@ export interface ModelPickerProps {
   onBack?: () => void
   /** Rows the parent adds below the model list (effort, context), above the engine switch. */
   children?: ReactNode
+  /** Declared Claude accounts offered as primary profiles in the engine panel (new chat only). */
+  profiles?: string[]
+  profile?: string
+  onPickProfile?: (profile: string | undefined) => void
 }
 
 /** Which panel is showing inside the one surface: 'main' (models) or 'engine' (the engine list). Switching swaps the
@@ -75,7 +79,7 @@ function EngineSwitchRow({ canSwitch, onSwitch, onRefresh }: { canSwitch: boolea
  * render it, so they search and list models the same way. It owns navigation and
  * search; what a pick means (apply at once, or just browse) is the parent's.
  */
-export function ModelPicker({ registry, engine, modelId, onPickEngine, onPickModel, isEngineAllowed, keepOpenOnPick, onBack, children }: ModelPickerProps) {
+export function ModelPicker({ registry, engine, modelId, onPickEngine, onPickModel, isEngineAllowed, keepOpenOnPick, onBack, children, profiles, profile, onPickProfile }: ModelPickerProps) {
   const list = useModelList(registry, engine, modelId)
   const nav = usePickerNav()
   const refreshModels = useRefreshModels()
@@ -92,6 +96,12 @@ export function ModelPicker({ registry, engine, modelId, onPickEngine, onPickMod
     nav.goToPanel('main')
   }
 
+  const chooseProfile = (next: string | undefined) => {
+    list.clearSearch()
+    onPickProfile?.(next)
+    nav.goToPanel('main')
+  }
+
   return nav.panel === 'main' ? (
     <>
       {onBack && <BackRow onBack={onBack} />}
@@ -104,6 +114,6 @@ export function ModelPicker({ registry, engine, modelId, onPickEngine, onPickMod
       />
     </>
   ) : (
-    <EnginePanel engines={engines} engine={engine} onBack={() => nav.goToPanel('main')} onChoose={chooseEngine} onRefresh={refreshModels} />
+    <EnginePanel engines={engines} engine={engine} onBack={() => nav.goToPanel('main')} onChoose={chooseEngine} onRefresh={refreshModels} profiles={profiles} profile={profile} onChooseProfile={onPickProfile ? chooseProfile : undefined} />
   )
 }

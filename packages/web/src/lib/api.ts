@@ -86,7 +86,14 @@ export interface Employee {
   depth?: number;
   chain?: string[];
   claudeProfile?: { path: string; key: string } | null; // named Claude profile (YAML only); null = the gateway's own
+  remoteHost?: string; // runs on a remote host; absent runs on the gateway's host
   fallback?: import("@jinn/fallback-chain-wire").FallbackLink[]; // chain override; absent inherits, [] is none
+}
+
+/** A session's chosen primary Claude profile on the wire; null = the employee's/gateway's own login. */
+export interface SessionClaudeProfile {
+  name: string | null;
+  key: string;
 }
 
 /** Editable employee fields accepted by PATCH /api/org/employees/:name; `name` is immutable and omitted. */

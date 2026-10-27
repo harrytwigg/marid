@@ -2,6 +2,14 @@ export interface NewSessionSelectorValue {
   engine?: string
   model?: string
   effortLevel?: string
+  /** Declared Claude account the new chat starts on; kept beside the bare engine, never inside it. */
+  profile?: string
+}
+
+/** The one place the primary profile is composed into the engine string the gateway takes: `claude:<name>`. */
+export function composeSessionEngine(engine?: string | null, profile?: string | null): string | undefined {
+  if (!engine) return undefined
+  return engine === 'claude' && profile ? `claude:${profile}` : engine
 }
 
 export interface NewSessionEmployeeDefaults {
@@ -16,10 +24,13 @@ function cleanSelector(value: NewSessionSelectorValue | undefined): NewSessionSe
     const t = typeof v === 'string' ? v.trim() : ''
     return t ? t : undefined
   }
+  const engine = clean(value?.engine)
   return {
-    engine: clean(value?.engine),
+    engine,
     model: clean(value?.model),
     effortLevel: clean(value?.effortLevel),
+    // A profile only means anything on claude; moving off it clears the choice.
+    profile: engine === 'claude' ? clean(value?.profile) : undefined,
   }
 }
 
@@ -65,6 +76,8 @@ export function buildNewSessionParams(opts: {
   attachmentIds?: string[]
   /** Engine for the new session (new-chat only). Omit to use the employee/global default. */
   engine?: string | null
+  /** Declared Claude account to start on; composed into the engine string here, nowhere else. */
+  profile?: string | null
   /** Model id for the new session. */
   model?: string | null
   /** Effort level for the new session (only sent for effort-capable models). */
@@ -87,7 +100,8 @@ export function buildNewSessionParams(opts: {
     params.attachments = opts.attachmentIds
   }
 
-  if (opts.engine) params.engine = opts.engine
+  const engine = composeSessionEngine(opts.engine, opts.profile)
+  if (engine) params.engine = engine
   if (opts.model) params.model = opts.model
   if (opts.effortLevel) params.effortLevel = opts.effortLevel
 

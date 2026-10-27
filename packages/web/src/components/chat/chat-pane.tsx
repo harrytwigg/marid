@@ -34,11 +34,11 @@ import { useOnboardingSeed } from '@/components/chat/use-onboarding-seed'
 
 const CliTerminal = lazy(() => import('@/components/cli-terminal').then(m => ({ default: m.CliTerminal })))
 import type { CliTerminalHandle } from '@/components/cli-terminal'
-import { buildNewSessionParams, resolveNewSessionSelector, shouldPersistNewSessionSelector } from '@/components/chat/new-chat-helpers'
+import { buildNewSessionParams, composeSessionEngine, resolveNewSessionSelector, shouldPersistNewSessionSelector } from '@/components/chat/new-chat-helpers'
 import { readNewSessionSelector, writeNewSessionSelector } from '@/components/chat/new-session-selector'
 import { Slot } from '@/contrib/slot'
 import { AREAS } from '@/contrib/types'
-import type { EnginesResponse } from '@/lib/api'
+import type { EnginesResponse, SessionClaudeProfile } from '@/lib/api'
 import type { Message, MediaAttachment } from '@/lib/conversations'
 import type { GatewayEvent, GatewayEventListener } from '@jinn/gateway-events'
 import { PRODUCT_NAME } from "@/lib/brand"
@@ -211,8 +211,12 @@ export function ChatPane({
         engine: emp.engine,
         model: emp.model,
         effortLevel: emp.effortLevel,
+        remoteHost: emp.remoteHost,
       }))
     : []
+  const selectedEmployeeRemote = Boolean(
+    selectedEmployee && pickerEmployees.find((e) => e.name === selectedEmployee)?.remoteHost,
+  )
   const employeeDisplayNames = useMemo(
     () => Object.fromEntries((orgData?.employees ?? []).map((employee) => [employee.name, employee.displayName])),
     [orgData],
@@ -238,7 +242,7 @@ export function ChatPane({
   // New chat only: the fallback the operator chose, sent with the create request.
   const newChatFallback = useNewChatFallback({
     active: !sessionId,
-    engine: selector.engine,
+    engine: composeSessionEngine(selector.engine, selector.profile),
     model: selector.model,
     employee: selectedEmployee ?? undefined,
   })
@@ -363,6 +367,7 @@ export function ChatPane({
             selectedEmployee,
             attachmentIds,
             engine: selector.engine,
+            profile: selector.profile,
             model: selector.model,
             effortLevel: selector.effortLevel,
             speech,
@@ -600,6 +605,9 @@ export function ChatPane({
             errorNote={selectorError ?? undefined}
             disabled={loading}
             contextTokens={liveContextTokens ?? (currentSession?.lastContextTokens as number | null | undefined) ?? undefined}
+            allowProfiles={!sessionId}
+            employeeRemote={selectedEmployeeRemote}
+            sessionProfileName={(currentSession?.claudeProfile as SessionClaudeProfile | null | undefined)?.name ?? null}
           />
           {/* Never locked by a running turn: a change reaches the gateway at once and applies from the next usage limit. */}
           <FallbackModeChip
