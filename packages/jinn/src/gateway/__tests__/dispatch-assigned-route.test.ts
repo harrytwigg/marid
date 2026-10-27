@@ -151,16 +151,30 @@ describe("Dispatch on a backlog Todo that has an assignee", () => {
     expect(sessionsOf(item.id, "first-worker")).toHaveLength(0);
   });
 
-  it("refuses a Dispatcher pressed on an unassigned Todo once someone is assigned mid-route", async () => {
+  // Pressed with nobody to bind it to, it may start whoever the Todo went to
+  // (which is also how its own half-made hand-off retries), and nobody else.
+  it("holds a Dispatcher pressed on an unassigned Todo to whoever is assigned mid-route", async () => {
     const item = unassignedTodo("Assigned while the Dispatcher routes");
     const dispatcherId = (await dispatch(item.id)).body.sessionId as string;
     workItems.updateWorkItem(item.id, { assignee: "first-worker" }, "operator");
 
-    const delegated = await delegate(dispatcherId, item.id, "second-worker");
+    const rerouted = await delegate(dispatcherId, item.id, "second-worker");
+    expect(rerouted.status).toBe(403);
+    expect(rerouted.body.error).toContain("assignee was nobody");
+    expect(rerouted.body.error).toContain(`hand the Todo only to them`);
 
-    expect(delegated.status).toBe(403);
-    expect(delegated.body.error).toContain("assignee was nobody");
+    const delegated = await delegate(dispatcherId, item.id, "first-worker");
+    expect(delegated.status).toBe(201);
     expect(workItems.getWorkItem(item.id)).toMatchObject({ assignee: "first-worker" });
+  });
+
+  it("leaves a Dispatcher pressed on an unassigned Todo free to choose when it is given to @operator mid-route", async () => {
+    const item = unassignedTodo("Given to the operator while the Dispatcher routes");
+    const dispatcherId = (await dispatch(item.id)).body.sessionId as string;
+    workItems.updateWorkItem(item.id, { assignee: "@operator" }, "operator");
+
+    const delegated = await delegate(dispatcherId, item.id, "second-worker");
+    expect(delegated.status).toBe(201);
   });
 
   // A Dispatcher started before the stamp existed is bound to the Todo as it stands.

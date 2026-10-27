@@ -277,10 +277,12 @@ function dispatcherRefusal(callerId: string, session: Session, item: WorkItem, a
  * on the Dispatcher's session (`DISPATCH_ASSIGNEE_META_KEY`), not the assignee
  * as it delegates. Read late, someone with standing over the Todo could give
  * it to @operator mid-route and leave the Dispatcher free to hand it, and
- * standing over its open sub-tasks, to anyone. So once the Todo has
- * changed hands since the press, in either direction, the Dispatcher routes
- * nobody: the press it acts on no longer describes the Todo, and a fresh
- * Dispatch on the new assignment is the operator's call. A Dispatcher started
+ * standing over its open sub-tasks, to anyone. So once a Todo pressed with an
+ * employee assignee has changed hands, the Dispatcher routes nobody: the press
+ * it acts on no longer describes the Todo, handing it back would undo the
+ * reassignment, and a fresh Dispatch on the new assignment is the operator's
+ * call. One pressed with nobody to bind it to, whose Todo has since gone to an
+ * employee, may hand it to that employee only. A Dispatcher started
  * before the stamp existed carries none, and is bound to the Todo as it stands.
  *
  * An unnamed engine-only delegation names nobody, but it still starts
@@ -296,18 +298,8 @@ function dispatcherAssigneeBinding(
   if (session.transportMeta?.startedBy === BOARD_WALK_STARTED_BY) return undefined;
   const pressed = assigneeAtPress(session, item);
   const current = item.assignee ?? "";
-  if (pressed !== current) {
-    return {
-      ok: false,
-      status: 403,
-      error: `this Dispatcher was started on Todo ${item.id} when its assignee was ${describeAssignee(pressed)}, `
-        + `and it has since been reassigned to ${describeAssignee(current)}: the Dispatch it acts on no longer describes the Todo, `
-        + `so it cannot hand the Todo on to anyone. Block the Todo for the operator with this refusal; `
-        + `a fresh start on the new assignment is their call (they press Dispatch on Todo ${item.id}).`,
-    };
-  }
-  if (delegate === current) return undefined;
-  if (!current || current === OPERATOR_ASSIGNEE) return undefined;
+  if (pressed !== current) return changedHandsRefusal(item, pressed, current, delegate);
+  if (delegate === current || !isEmployeeAssignee(current)) return undefined;
   const target = delegate === undefined ? "an unnamed engine" : `"${delegate}"`;
   return {
     ok: false,
@@ -316,6 +308,38 @@ function dispatcherAssigneeBinding(
       + `that assignment is binding, so it cannot hand the Todo to ${target} — `
       + `hand it to its assignee with delegate_task { task, employee: "${current}", workItemId: "${item.id}" }. `
       + `If that delegation is refused, block the Todo for the operator with the refusal and options rather than choosing someone else.`,
+  };
+}
+
+/** The binding once the Todo's assignee is no longer the one pressed: a bound
+ *  Dispatcher hands it to nobody, an unbound one only to an employee it has
+ *  since gone to. */
+function changedHandsRefusal(
+  item: WorkItem,
+  pressed: string,
+  current: string,
+  delegate: string | undefined,
+): { ok: false; status: 403; error: string } | undefined {
+  if (!isEmployeeAssignee(pressed)) {
+    // Pressed unbound, it could choose anyone; since given to an employee, it
+    // may still start that employee, and its own failed hand-off may retry.
+    if (!isEmployeeAssignee(current) || delegate === current) return undefined;
+    return {
+      ok: false,
+      status: 403,
+      error: `this Dispatcher was started on Todo ${item.id} when its assignee was ${describeAssignee(pressed)}, `
+        + `and it has since been assigned to ${describeAssignee(current)}, so it may hand the Todo only to them: `
+        + `delegate_task { task, employee: "${current}", workItemId: "${item.id}" }. `
+        + `If that delegation is refused, block the Todo for the operator with the refusal and options rather than choosing someone else.`,
+    };
+  }
+  return {
+    ok: false,
+    status: 403,
+    error: `this Dispatcher was started on Todo ${item.id} when its assignee was ${describeAssignee(pressed)}, `
+      + `and it has since been reassigned to ${describeAssignee(current)}: the Dispatch it acts on no longer describes the Todo, `
+      + `so it cannot hand the Todo on to anyone. Block the Todo for the operator with this refusal; `
+      + `a fresh start on the new assignment is their call (they press Dispatch on Todo ${item.id}).`,
   };
 }
 
@@ -333,6 +357,10 @@ export function dispatchAssigneeMeta(item: WorkItem): Record<string, string> {
 function assigneeAtPress(session: Session, item: WorkItem): string {
   const stamped = session.transportMeta?.[DISPATCH_ASSIGNEE_META_KEY];
   return typeof stamped === "string" ? stamped : item.assignee ?? "";
+}
+
+function isEmployeeAssignee(assignee: string): boolean {
+  return !!assignee && assignee !== OPERATOR_ASSIGNEE;
 }
 
 function describeAssignee(assignee: string): string {
