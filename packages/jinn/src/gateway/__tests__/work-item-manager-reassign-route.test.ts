@@ -404,18 +404,57 @@ describe("a Dispatcher handing a parent on", () => {
     call("POST", "/api/delegations", { employee, task: "route it", workItemId: id }, callerHeaders(sessionId));
 
   it("judges a session-pressed Dispatcher by the presser's standing when it delegates, not when it was pressed", async () => {
-    const root = workItems.createWorkItem({ title: "report's parent", assignee: "mgr-report", status: "executing" });
-    const child = workItems.createWorkItem({ title: "peer's child", parentId: root.id, assignee: "peer-report", status: "executing" });
-    const mgr = sessionOf("mgr", "dispatcher-flip");
-
-    expect((await call("POST", `/api/work-items/${root.id}/assign`, { assignee: "mgr" }, callerHeaders(mgr.id))).status).toBe(403);
+    // mgr-report made the parent, so it owns it; mgr may dispatch it as mgr-report's manager.
+    const maker = sessionOf("mgr-report", "dispatcher-late-child-maker");
+    const root = workItems.createWorkItem({
+      title: "report's unassigned parent",
+      source: "session",
+      sourceRef: `session:${maker.id}:idempotency:dispatcher-late-child`,
+      createdBy: `session:${maker.id}`,
+    });
+    const mgr = sessionOf("mgr", "dispatcher-late-child");
     expect((await call("POST", `/api/work-items/${root.id}/dispatch`, {}, callerHeaders(mgr.id))).status).toBe(201);
-    // Giving the parent to the operator frees the Dispatcher from its assignee binding.
-    expect((await call("POST", `/api/work-items/${root.id}/assign`, { assignee: "@operator" }, callerHeaders(mgr.id))).status).toBe(200);
+    // A sub-task outside mgr's line lands while the Dispatcher routes.
+    const child = workItems.createWorkItem({ title: "peer's late child", parentId: root.id, assignee: "peer-report", status: "executing" });
 
     const response = await delegateAs(root.id, "mgr", dispatcherOn(root.id).id);
     expect(response.status).toBe(403);
     expect(response.body.error).toContain(child.id);
+    expect(workItems.getWorkItem(root.id)?.assignee).toBeNull();
+  });
+
+  // The assignee binding is read at the press, so giving the parent to
+  // the operator mid-route does not free the Dispatcher to hand it, and standing
+  // over its sub-tasks, to whoever flipped it.
+  it("keeps an operator-pressed Dispatcher bound when the parent is flipped to @operator mid-route", async () => {
+    const root = workItems.createWorkItem({ title: "report's umbrella", assignee: "mgr-report", status: "executing" });
+    const child = workItems.createWorkItem({ title: "peer's work", parentId: root.id, assignee: "peer-report", status: "executing" });
+    expect((await call("POST", `/api/work-items/${root.id}/dispatch`, {})).status).toBe(201);
+    const mgr = sessionOf("mgr", "operator-press-flip");
+    expect((await call("POST", `/api/work-items/${root.id}/assign`, { assignee: "@operator" }, callerHeaders(mgr.id))).status).toBe(200);
+
+    const response = await delegateAs(root.id, "mgr", dispatcherOn(root.id).id);
+    expect(response.status).toBe(403);
+    expect(response.body.error).toContain(`assignee was employee "mgr-report"`);
+    expect(workItems.getWorkItem(root.id)?.assignee).toBe("@operator");
+
+    const take = await call("POST", `/api/work-items/${child.id}/assign`, { assignee: "mgr-report" }, callerHeaders(sessionOf("mgr", "operator-press-take").id));
+    expect(take.status).toBe(403);
+    expect(workItems.getWorkItem(child.id)?.assignee).toBe("peer-report");
+  });
+
+  it("keeps a session-pressed Dispatcher bound when its presser flips the parent to @operator mid-route", async () => {
+    const root = workItems.createWorkItem({ title: "report's parent", assignee: "mgr-report", status: "executing" });
+    workItems.createWorkItem({ title: "peer's child", parentId: root.id, assignee: "peer-report", status: "executing" });
+    const mgr = sessionOf("mgr", "dispatcher-flip");
+
+    expect((await call("POST", `/api/work-items/${root.id}/assign`, { assignee: "mgr" }, callerHeaders(mgr.id))).status).toBe(403);
+    expect((await call("POST", `/api/work-items/${root.id}/dispatch`, {}, callerHeaders(mgr.id))).status).toBe(201);
+    expect((await call("POST", `/api/work-items/${root.id}/assign`, { assignee: "@operator" }, callerHeaders(mgr.id))).status).toBe(200);
+
+    const response = await delegateAs(root.id, "mgr", dispatcherOn(root.id).id);
+    expect(response.status).toBe(403);
+    expect(response.body.error).toContain(`assignee was employee "mgr-report"`);
     expect(workItems.getWorkItem(root.id)?.assignee).toBe("@operator");
   });
 
