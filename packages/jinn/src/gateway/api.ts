@@ -4304,7 +4304,10 @@ export async function handleApiRequest(
       const param = (name: string) => url.searchParams.get(name)?.trim() || undefined;
       // `engine=claude:<name>`: the chain a session started on that declared Claude account would get.
       const requested = param("engine");
-      const primary = requested === undefined ? undefined : resolvePrimaryEngine(context.getConfig(), requested, { employee: param("employee") ? orgRegistry(context.getConfig()).get(param("employee")!) : undefined });
+      // Previewed as the caller would be refused or allowed creating it, so the operator's chip works for a scoped department's employee too.
+      const operatorCaller = resolveScopedWriteCallerIdentity(req, context).kind === "operator";
+      const employee = param("employee") ? orgRegistry(context.getConfig()).get(param("employee")!) : undefined;
+      const primary = requested === undefined ? undefined : resolvePrimaryEngine(context.getConfig(), requested, { employee, operatorCaller });
       if (primary && !primary.ok) return json(res, { error: primary.error }, primary.status);
       return json(res, { fallback: fallbackPreviewFor(context, { engine: primary?.engine, model: param("model"), employee: param("employee"), claudeConfigDir: primary?.profile?.profile.dir }) });
     }

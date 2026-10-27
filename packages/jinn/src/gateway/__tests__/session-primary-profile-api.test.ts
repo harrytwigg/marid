@@ -278,6 +278,14 @@ describe("GET /api/fallback-preview", () => {
     expect(preview.body.fallback.chain.links.map((link: { account: string }) => link.account)).toEqual(["claude", "codex"]);
   });
 
+  it("previews a scoped department's employee on a profile for the operator, who may create it, and not for an agent, who may not", async () => {
+    const operator = await call("GET", "/api/fallback-preview?engine=claude:friend&employee=lab-dev");
+    expect(operator.status).toBe(200);
+    expect(operator.body.fallback.chain.links[0].account).toBe(`claude:${friend.key}`);
+    const agent = await call("GET", "/api/fallback-preview?engine=claude:friend&employee=lab-dev", undefined, agentCaller());
+    expect(agent.status).toBe(403);
+  });
+
   it("refuses an undeclared profile with a 400", async () => {
     const preview = await call("GET", "/api/fallback-preview?engine=claude:nobody");
     expect(preview.status).toBe(400);
