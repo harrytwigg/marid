@@ -15,6 +15,8 @@ export interface FreshChatSourceSession {
   engine?: string
   model?: string
   effortLevel?: string
+  /** The declared Claude account the session runs on (`claudeProfile.name`); absent on its employee's own login. */
+  profile?: string
 }
 
 const POLICY_OFF: StaleChatPolicy = { enabled: false, tokenThreshold: 300_000, staleAfterMinutes: 60 }
@@ -45,10 +47,14 @@ function readStaleness(
 
 function toFreshChatSource(id: string, session: Record<string, unknown>): FreshChatSourceSession {
   const effortLevel = session.effortLevel ?? session.effort_level
+  const profileName = (session.claudeProfile as { name?: unknown } | null | undefined)?.name
+  const engine = typeof session.engine === 'string' ? session.engine : undefined
   return {
     id,
     employee: typeof session.employee === 'string' ? session.employee : undefined,
-    engine: typeof session.engine === 'string' ? session.engine : undefined,
+    engine,
+    // The profile only means anything while the session is still on claude (a fallback leaves it).
+    profile: engine === 'claude' && typeof profileName === 'string' ? profileName : undefined,
     model: typeof session.model === 'string' ? session.model : undefined,
     effortLevel: typeof effortLevel === 'string' ? effortLevel : undefined,
   }

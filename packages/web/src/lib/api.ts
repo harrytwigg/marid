@@ -86,6 +86,7 @@ export interface Employee {
   depth?: number;
   chain?: string[];
   claudeProfile?: { path: string; key: string } | null; // named Claude profile (YAML only); null = the gateway's own
+  remoteHost?: string; // runs on a remote host; absent runs on the gateway's host
   fallback?: import("@jinn/fallback-chain-wire").FallbackLink[]; // chain override; absent inherits, [] is none
 }
 
