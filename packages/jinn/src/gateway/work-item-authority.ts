@@ -70,15 +70,17 @@ function ancestorOwner(roster: Map<string, Employee>, ancestor: WorkItem): strin
 /**
  * Whether the caller may give `item` to a new employee owner, judged on what
  * sits below it. Owning a Todo carries standing over every Todo under it
- * (`ownsAncestorOf`), so an assignment hands the assignee that standing too.
- * A caller may pass on only the standing it already holds: it needs standing
- * over each open sub-task as well. Without this, claiming an unassigned parent
- * for yourself, or being the session linked to one, would win a whole subtree
- * of other people's work. A Todo with nothing open below it passes.
+ * (`ownsAncestorOf`), so an assignment or a delegation hands the new owner
+ * that standing too. A caller may pass on only the standing it already holds:
+ * it needs standing over each open sub-task as well. Without this, claiming an
+ * unassigned parent for yourself, or being a session linked to one, would win
+ * a whole subtree of other people's work. A Todo with nothing open below it
+ * passes.
  */
 export function authorizeAssignOverSubTasks(
   caller: WorkItemCaller,
   item: WorkItem,
+  action: "assign" | "delegate" = "assign",
 ): { ok: true } | { ok: false; status: 403; error: string } {
   const tree = getWorkItemTree(item.id);
   if (!tree) return { ok: true };
@@ -95,8 +97,8 @@ export function authorizeAssignOverSubTasks(
     return {
       ok: false,
       status: 403,
-      error: `cannot assign Todo ${item.id}: its owner takes standing over the open sub-tasks below it, `
-        + `and this caller has no standing over sub-task ${sub.id}, so the Todo's owner, their manager or the operator has to assign it`,
+      error: `cannot ${action} Todo ${item.id}: its owner takes standing over the open sub-tasks below it, `
+        + `and this caller has no standing over sub-task ${sub.id}, so the Todo's owner, their manager or the operator has to ${action} it`,
     };
   }
   return { ok: true };
@@ -323,6 +325,13 @@ function dispatcherAssigneeBinding(
  * Whether the Todo is free to take is a separate question, answered by the
  * claim the delegation takes next, so none of these callers can start a second
  * attempt on top of a live one.
+ *
+ * Handing the Todo to a new employee also hands them standing over its open
+ * sub-tasks, so, as for an assignment, the caller needs standing over each of
+ * them, whichever of these routes let it delegate. The creating session is no
+ * exception: the Todo may have been given to someone else since it made it.
+ * Only a Dispatcher started on this Todo is exempt, since it acts for the
+ * operator.
  */
 export function authorizeWorkItemDelegation(
   caller: Extract<WorkItemCaller, { kind: 'session' }>,
@@ -332,6 +341,18 @@ export function authorizeWorkItemDelegation(
 ): { ok: true } | { ok: false; status: 403; error: string } {
   const binding = dispatcherAssigneeBinding(caller.session, item, delegateEmployee);
   if (binding) return binding;
+  const standing = delegationStanding(caller, item);
+  if (!standing.ok) return standing;
+  const newOwner = delegateEmployee !== undefined && delegateEmployee !== item.assignee;
+  if (!newOwner || isDispatcherStartedFor(caller.session, item)) return standing;
+  return authorizeAssignOverSubTasks(caller, item, "delegate");
+}
+
+/** Standing to delegate the Todo itself, before what sits below it is weighed. */
+function delegationStanding(
+  caller: Extract<WorkItemCaller, { kind: 'session' }>,
+  item: WorkItem,
+): { ok: true } | { ok: false; status: 403; error: string } {
   const created = item.sourceRef?.startsWith(`session:${caller.callerId}:`)
     || item.sourceRef?.startsWith(`delegate:${caller.callerId}:`);
   if (created || isDispatcherRoutingTodo(caller.session, item)) return { ok: true };

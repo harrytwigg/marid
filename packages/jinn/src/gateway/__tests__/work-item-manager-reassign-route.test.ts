@@ -314,3 +314,48 @@ describe("claiming a parent", () => {
     expect(response.status).toBe(200);
   });
 });
+
+describe("delegating a parent", () => {
+  const delegate = (id: string, employee: string, sessionId: string) =>
+    call("POST", "/api/delegations", { employee, task: "take it", workItemId: id }, callerHeaders(sessionId));
+
+  it("refuses a session linked to an unassigned parent handing it to anyone over someone else's open child", async () => {
+    const root = workItems.createWorkItem({ title: "linked umbrella" });
+    const child = workItems.createWorkItem({ title: "linked umbrella child", parentId: root.id, assignee: "peer-report", status: "executing" });
+    const linked = sessionOf("outsider", "delegate-linked");
+    workItems.linkSession(root.id, linked.id, `session:${linked.id}`, "consult");
+
+    for (const [caller, employee] of [[sessionOf("outsider", "delegate-linked-other").id, "outsider"], [linked.id, "sub-lead"]] as const) {
+      const response = await delegate(root.id, employee, caller);
+      expect(response.status, employee).toBe(403);
+      expect(response.body.error, employee).toContain(child.id);
+    }
+    expect(workItems.getWorkItem(root.id)?.assignee).toBeNull();
+  });
+
+  it("refuses the creating session once the parent belongs to someone else", async () => {
+    const maker = sessionOf("outsider", "delegate-moved-maker");
+    const root = workItems.createWorkItem({
+      title: "parent given away",
+      source: "session",
+      sourceRef: `session:${maker.id}:idempotency:delegate-moved`,
+      createdBy: `session:${maker.id}`,
+    });
+    expect((await call("POST", `/api/work-items/${root.id}/assign`, { assignee: "lead" })).status).toBe(200);
+    workItems.createWorkItem({ title: "lead's split", parentId: root.id, assignee: "lead-report", status: "executing" });
+
+    const response = await delegate(root.id, "outsider", maker.id);
+    expect(response.status).toBe(403);
+    expect(workItems.getWorkItem(root.id)?.assignee).toBe("lead");
+  });
+
+  it("lets the parent's owner delegate it over sub-tasks it handed out", async () => {
+    const root = workItems.createWorkItem({ title: "lead's parent", assignee: "lead", status: "executing" });
+    workItems.createWorkItem({ title: "lead's handed-out child", parentId: root.id, assignee: "lead-report", status: "executing" });
+
+    const response = await delegate(root.id, "sub-lead", sessionOf("lead", "delegate-owner").id);
+    expect(response.body.error).toBeUndefined();
+    expect(response.status).toBe(201);
+    expect(workItems.getWorkItem(root.id)?.assignee).toBe("sub-lead");
+  });
+});
