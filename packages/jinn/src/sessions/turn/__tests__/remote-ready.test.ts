@@ -47,7 +47,7 @@ const EMPLOYEE = {
   displayName: "Builder",
   remoteHost: "build-box",
   remoteUser: "builder",
-  remoteCwd: "/srv/jinn-work/proj",
+  remoteCwd: "/srv/agents/proj",
 } as any;
 
 function input(employee: any = EMPLOYEE) {
@@ -55,7 +55,7 @@ function input(employee: any = EMPLOYEE) {
     session: { id: "sess-1" },
     attemptToken: "tok-1",
     employee,
-    config: { remote: { root: "/srv/jinn-work", mount: "/mnt/jinn-home" } },
+    config: { remote: { root: "/srv/agents", mount: "/mnt/jinn-home" } },
   } as any;
 }
 

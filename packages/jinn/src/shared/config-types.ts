@@ -274,7 +274,7 @@ export type OpencodeMode = "run" | "server";
 /**
  * Limits for opencode server mode.
  *
- * A warm server holds a full opencode process (~650 MB on build-host) plus its
+ * A warm server holds a full opencode process (~650 MB on a remote host) plus its
  * MCP servers, so idle ones are bounded two ways: by COUNT per host, and by
  * AGE. Servers serving a turn or watched in the terminal are never counted or
  * reaped. A warm server on the gateway host also counts toward

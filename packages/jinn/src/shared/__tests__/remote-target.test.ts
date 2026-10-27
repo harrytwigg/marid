@@ -3,7 +3,7 @@ import { assertRemoteTarget, employeeRemoteTarget, isRemoteTarget, isUnderRoot, 
 import type { Employee, RemoteTarget } from "../types.js";
 import type { RemoteExecutionConfig } from "../config-types.js";
 
-const ROOT = "/srv/jinn-work";
+const ROOT = "/srv/agents";
 const remote = (over: Partial<RemoteExecutionConfig> = {}): RemoteExecutionConfig => ({
   root: ROOT,
   mount: "/mnt/jinn-home",
@@ -39,9 +39,9 @@ describe("isUnderRoot — containment", () => {
   it("REFUSES a sibling whose name merely starts with the root's", () => {
     // The trap a bare `candidate.startsWith(root)` waves through: this directory
     // is a sibling of the sandbox, not a child of it.
-    expect(isUnderRoot("/srv/jinn-work-evil", ROOT)).toBe(false);
-    expect(isUnderRoot("/srv/jinn-work-evil/proj", ROOT)).toBe(false);
-    expect(isUnderRoot("/srv/jinn-workshop", ROOT)).toBe(false);
+    expect(isUnderRoot("/srv/agents-evil", ROOT)).toBe(false);
+    expect(isUnderRoot("/srv/agents-evil/proj", ROOT)).toBe(false);
+    expect(isUnderRoot("/srv/agents-workshop", ROOT)).toBe(false);
   });
 
   it("REFUSES traversal that escapes after normalization", () => {
@@ -54,7 +54,7 @@ describe("isUnderRoot — containment", () => {
   });
 
   it("REFUSES a home-relative path — the gateway cannot resolve another host's ~", () => {
-    expect(isUnderRoot("~/jinn-work/proj", ROOT)).toBe(false);
+    expect(isUnderRoot("~/agents/proj", ROOT)).toBe(false);
   });
 
   it("REFUSES a relative path", () => {
@@ -64,8 +64,8 @@ describe("isUnderRoot — containment", () => {
   });
 
   it("REFUSES anything when the root itself is not absolute", () => {
-    expect(isUnderRoot(`${ROOT}/proj`, "srv/jinn-work")).toBe(false);
-    expect(isUnderRoot(`${ROOT}/proj`, "~/jinn-work")).toBe(false);
+    expect(isUnderRoot(`${ROOT}/proj`, "srv/agents")).toBe(false);
+    expect(isUnderRoot(`${ROOT}/proj`, "~/agents")).toBe(false);
   });
 
   it("treats a root of / as containing every absolute path", () => {
@@ -76,7 +76,7 @@ describe("isUnderRoot — containment", () => {
   it("judges POSIX-style even for backslash-bearing input (the remote is not Windows)", () => {
     // A Windows gateway must not apply Windows semantics to a Linux box's path:
     // a backslash is an ordinary filename character there, not a separator.
-    expect(isUnderRoot("/srv\\jinn-work\\proj", ROOT)).toBe(false);
+    expect(isUnderRoot("/srv\\agents\\proj", ROOT)).toBe(false);
   });
 });
 
@@ -115,7 +115,7 @@ describe("validateRemoteTarget", () => {
   });
 
   it("fails closed when remote.root is missing or not absolute", () => {
-    for (const root of ["", "jinn-work", "~/jinn-work", "./jinn-work"]) {
+    for (const root of ["", "agents", "~/agents", "./agents"]) {
       const p = validateRemoteTarget(
         { remoteHost: "build-box", remoteCwd: `${ROOT}/proj` },
         remote({ root }),
@@ -143,7 +143,7 @@ describe("validateRemoteTarget", () => {
 
   it("refuses a home-relative remoteCwd rather than expanding it", () => {
     const p = validateRemoteTarget(
-      { remoteHost: "build-box", remoteCwd: "~/jinn-work/proj" },
+      { remoteHost: "build-box", remoteCwd: "~/agents/proj" },
       remote(),
     );
     expect(p?.error).toMatch(/must be an absolute path, not home-relative/);
@@ -156,7 +156,7 @@ describe("validateRemoteTarget", () => {
 
   it("refuses the sibling-prefix directory", () => {
     const p = validateRemoteTarget(
-      { remoteHost: "build-box", remoteCwd: "/srv/jinn-work-evil/proj" },
+      { remoteHost: "build-box", remoteCwd: "/srv/agents-evil/proj" },
       remote(),
     );
     expect(p?.error).toMatch(/does not resolve under the configured remote\.root/);
@@ -181,7 +181,7 @@ describe("assertRemoteTarget", () => {
 
   it("throws with the validation reason for a contained-path violation", () => {
     expect(() => assertRemoteTarget(
-      { remoteHost: "build-box", remoteCwd: "/srv/jinn-work-evil/proj" },
+      { remoteHost: "build-box", remoteCwd: "/srv/agents-evil/proj" },
       remote(),
     )).toThrow(/Refusing to spawn a remote session: .*does not resolve under/);
   });
@@ -240,7 +240,7 @@ describe("employeeRemoteTarget", () => {
     const t = target({
       ...base,
       remoteHost: "build-box",
-      remoteCwd: "/srv/jinn-work-evil/proj",
+      remoteCwd: "/srv/agents-evil/proj",
     })!;
     expect(validateRemoteTarget(t, remote())?.error).toMatch(/does not resolve under/);
   });
@@ -285,7 +285,7 @@ describe("validateRemoteTarget — the destination cannot become an ssh option",
   it.each([
     "build-box",
     "build-box.local",
-    "build-host.example.com",
+    "build-box.example.com",
     "192.168.1.40",
     "fe80::1",
     "buildbox",
@@ -312,8 +312,8 @@ describe("validateRemoteTarget — the destination cannot become an ssh option",
  * reads — and the first turn hangs on the trust dialog with nothing reported.
  */
 describe("resolveRemoteClaudeConfigDir", () => {
-  const REMOTE = { root: "/srv/jinn-work", mount: "/mnt/jinn-home" };
-  const HOST = { remoteHost: "build-box", remoteCwd: "/srv/jinn-work/proj" };
+  const REMOTE = { root: "/srv/agents", mount: "/mnt/jinn-home" };
+  const HOST = { remoteHost: "build-box", remoteCwd: "/srv/agents/proj" };
 
   it("is undefined when neither side names a profile", () => {
     expect(resolveRemoteClaudeConfigDir(HOST, REMOTE)).toBeUndefined();
@@ -343,8 +343,8 @@ describe("resolveRemoteClaudeConfigDir", () => {
 });
 
 describe("validateRemoteTarget — claude profile directory", () => {
-  const REMOTE = { root: "/srv/jinn-work", mount: "/mnt/jinn-home" };
-  const HOST = { remoteHost: "build-box", remoteCwd: "/srv/jinn-work/proj" };
+  const REMOTE = { root: "/srv/agents", mount: "/mnt/jinn-home" };
+  const HOST = { remoteHost: "build-box", remoteCwd: "/srv/agents/proj" };
 
   it("accepts an absolute profile directory", () => {
     expect(validateRemoteTarget({ ...HOST, remoteClaudeConfigDir: "/home/u/.claude-profiles/personal" }, REMOTE))

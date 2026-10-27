@@ -157,7 +157,7 @@ import { REMOTE_KILL_SCRIPT } from "../remote-stage.js";
 import { JINN_HOME } from "../../shared/paths.js";
 import type { EngineRunOpts } from "../../shared/types.js";
 
-const REMOTE_CONFIG = { root: "/srv/jinn-work", mount: "/mnt/jinn-home" };
+const REMOTE_CONFIG = { root: "/srv/agents", mount: "/mnt/jinn-home" };
 const GATEWAY_PORT = 8722;
 
 function engine(gatewayPort = GATEWAY_PORT): PiEngine {
@@ -172,7 +172,7 @@ function runOpts(over: Partial<EngineRunOpts> = {}): EngineRunOpts {
     model: "ollama/gemma4:12b",
     remoteHost: "build-box",
     remoteUser: "builder",
-    remoteCwd: "/srv/jinn-work/proj",
+    remoteCwd: "/srv/agents/proj",
     ...over,
   };
 }
@@ -216,7 +216,7 @@ describe("PiEngine — a remote employee's turn runs on the other machine", () =
     // The pi that runs is the REMOTE install's, found on that host's PATH —
     // the gateway's own `pi` (if it even has one) appears nowhere.
     expect(remoteCommand()).toContain("/home/builder/.nvm/versions/node/v22.22.3/bin/pi");
-    expect(remoteCommand()).toContain("cd '/srv/jinn-work/proj'");
+    expect(remoteCommand()).toContain("cd '/srv/agents/proj'");
   });
 
   it("asks the host about pi's CLI, not Claude Code's", async () => {

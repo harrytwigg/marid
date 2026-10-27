@@ -48,9 +48,9 @@ export function isRemoteTarget(target: RemoteTarget | undefined): target is Remo
  * True when `candidate` resolves strictly inside `root`.
  *
  * Strictly: `root` itself is accepted, but a sibling whose name merely starts
- * with the root's (`/srv/jinn-work-other` against `/srv/jinn-work`) is not —
+ * with the root's (`/srv/agents-other` against `/srv/agents`) is not —
  * which a bare `startsWith` would wave through. Traversal is normalized away
- * first, so `/srv/jinn-work/../../etc` is judged as `/etc` and refused.
+ * first, so `/srv/agents/../../etc` is judged as `/etc` and refused.
  */
 export function isUnderRoot(candidate: string, root: string): boolean {
   const normalizedRoot = path.posix.normalize(root).replace(/\/+$/, "") || "/";

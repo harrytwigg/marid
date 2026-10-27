@@ -114,12 +114,12 @@ describe("readOrg — caching", () => {
     fs.writeFileSync(
       path.join(dir, "remote-reviewer.yaml"),
       "name: remote-reviewer\ndepartment: platform\npersona: You review on another machine.\n"
-      + "remoteHost: 10.0.0.5\nremoteUser: builder\nremoteCwd: /srv/jinn-work/project\n",
+      + "remoteHost: 10.0.0.5\nremoteUser: builder\nremoteCwd: /srv/agents/project\n",
       "utf-8",
     );
     const config = {
       ...configFor("claude", "opus"),
-      remote: { root: "/srv/jinn-work", mount: "/mnt/jinn-home" },
+      remote: { root: "/srv/agents", mount: "/mnt/jinn-home" },
     } as unknown as JinnConfig;
 
     expect(readOrg(config).registry.has("remote-reviewer")).toBe(true);

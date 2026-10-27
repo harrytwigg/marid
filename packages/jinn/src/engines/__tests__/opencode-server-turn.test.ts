@@ -26,7 +26,7 @@ import {
  * `opencode run --format json` would have printed out.
  *
  * Both halves of the fixture are REAL opencode 1.18.31 output captured on
- * build-host (local paths replaced): `runLines` is what `opencode run --attach
+ * a remote host (local paths replaced): `runLines` is what `opencode run --attach
  * --format json` printed for a turn that ran a bash tool and answered, in a git
  * repository where that client works; `sseEvents` is part of the `/event`
  * stream for a turn in a directory where it does not. Because a `run` line is

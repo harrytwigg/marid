@@ -325,7 +325,7 @@ export class OpencodeInteractiveEngine implements InterruptibleEngine, PtyViewEn
    *
    * Not `POST /tui/select-session`: opencode delivers that only to TUIs already
    * connected to the server's event stream, and an attach client takes seconds
-   * to get there (~3 s on build-host with 1.18.31, more over ssh or on a Pi).
+   * to get there (~3 s on a remote host with 1.18.31, more over ssh or on a Pi).
    * One that misses it stays on its home screen for good, while the turn runs
    * unseen. A turn names a session the view is not on only for a new
    * chat's first turn or a resume that found its session gone, so the restart

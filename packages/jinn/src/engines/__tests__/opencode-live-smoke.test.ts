@@ -9,7 +9,7 @@ import { describe, it, expect, vi, afterAll } from "vitest";
  * Skipped unless OPENCODE_LIVE_SMOKE=1 — it spends model tokens and needs a
  * signed-in opencode. It is the check the unit suites cannot make: that the
  * real CLI's `serve`, `run --attach` and `attach` behave the way the fake one
- * does. Run on build-host with:
+ * does. Run on a remote host with:
  *
  *   OPENCODE_LIVE_SMOKE=1 OPENCODE_BIN=~/.opencode/bin/opencode \
  *   OPENCODE_SMOKE_MODEL=opencode-go/deepseek-v4.1-flash \
@@ -226,7 +226,7 @@ function flow(label: string, target: RemoteTarget, remote?: { root: string; moun
     // 4. The same server keeps serving: a third turn, shown live in the terminal.
     //    The operator's aborted request is still unanswered in the history, and
     //    the model may take it up in this turn's own reply saw one
-    //    answer just "build-host". What Jinn owes is THIS turn's reply, so the
+    //    answer just "a remote host". What Jinn owes is THIS turn's reply, so the
     //    result must be exactly the last text of the replies to its own prompt
     //    in the server's store; whether the model obeyed is not Jinn's to test.
     //    What IS Jinn's: telling the model that request was cancelled,

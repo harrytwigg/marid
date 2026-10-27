@@ -92,7 +92,7 @@ describe.skipIf(isWindows)("shq — real `sh -c` round trip", () => {
 
 // ── buildSshSpawnArgs ────────────────────────────────────────────────────────
 
-const REMOTE_CWD = "/srv/jinn-work/proj";
+const REMOTE_CWD = "/srv/agents/proj";
 
 function build(over: Partial<Parameters<typeof buildSshSpawnArgs>[0]> = {}): string[] {
   return buildSshSpawnArgs({
@@ -508,7 +508,7 @@ describe("buildSshSpawnArgs — remote PATH", () => {
     destination: "builder@build-box",
     tunnelPort: 40001,
     gatewayPort: 7777,
-    remoteCwd: "/srv/jinn-work/main",
+    remoteCwd: "/srv/agents/main",
     remoteEnv: { JINN_HOME: "/home/u/.jinn-remote-stage" },
     bin: "/usr/bin/claude",
     args: ["--chrome"],
@@ -1102,14 +1102,14 @@ describe("trust seed — profile agreement", () => {
   const PROFILE = "/home/u/.claude-profiles/personal";
 
   it("runs the seeder under the session's CLAUDE_CONFIG_DIR", () => {
-    const cmd = buildTrustSeedCommand(FACTS, "/srv/jinn-work/proj", PROFILE);
+    const cmd = buildTrustSeedCommand(FACTS, "/srv/agents/proj", PROFILE);
     expect(cmd).toContain(`CLAUDE_CONFIG_DIR='${PROFILE}'`);
     // …and before the interpreter, so it is that process's environment.
     expect(cmd.indexOf("CLAUDE_CONFIG_DIR=")).toBeLessThan(cmd.indexOf("/usr/bin/node"));
   });
 
   it("sets no profile when none is configured, matching a default-profile session", () => {
-    expect(buildTrustSeedCommand(FACTS, "/srv/jinn-work/proj", undefined)).not.toContain("CLAUDE_CONFIG_DIR");
+    expect(buildTrustSeedCommand(FACTS, "/srv/agents/proj", undefined)).not.toContain("CLAUDE_CONFIG_DIR");
   });
 
   // Run the real command through a real shell, with `node` shadowed by a
@@ -1130,15 +1130,15 @@ describe("trust seed — profile agreement", () => {
   });
 
   it("re-seeds when the profile changes, because trust lives in the profile", () => {
-    const a = trustSeedKey("box", "/srv/jinn-work/proj", PROFILE);
-    const b = trustSeedKey("box", "/srv/jinn-work/proj", "/home/u/.claude-profiles/alt");
-    const none = trustSeedKey("box", "/srv/jinn-work/proj", undefined);
+    const a = trustSeedKey("box", "/srv/agents/proj", PROFILE);
+    const b = trustSeedKey("box", "/srv/agents/proj", "/home/u/.claude-profiles/alt");
+    const none = trustSeedKey("box", "/srv/agents/proj", undefined);
     expect(new Set([a, b, none]).size).toBe(3);
   });
 
   it("does not re-seed the same profile and directory twice", () => {
-    expect(trustSeedKey("box", "/srv/jinn-work/proj", PROFILE))
-      .toBe(trustSeedKey("box", "/srv/jinn-work/proj", PROFILE));
+    expect(trustSeedKey("box", "/srv/agents/proj", PROFILE))
+      .toBe(trustSeedKey("box", "/srv/agents/proj", PROFILE));
   });
 });
 

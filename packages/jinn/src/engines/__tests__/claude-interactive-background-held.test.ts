@@ -179,7 +179,7 @@ describe("InteractiveClaudeEngine — a session held in the daemon's background"
     hoisted.finishStop = undefined;
     lifecycle = new PtyLifecycleManager({ maxLivePtys: 10 });
     engine = new InteractiveClaudeEngine(lifecycle, { register: () => {}, unregister: () => {} } as any, {
-      remote: () => ({ root: "/srv/jinn-work", mount: "/mnt/jinn-home" }),
+      remote: () => ({ root: "/srv/agents", mount: "/mnt/jinn-home" }),
       gatewayPort: () => 8722,
     });
   });
@@ -295,7 +295,7 @@ describe("InteractiveClaudeEngine — a session held in the daemon's background"
   it("stops it on the remote host, over ssh, under the session's remote Claude profile", async () => {
     hoisted.deaths.push(HELD_LINE);
     void turn({
-      remoteHost: "build-box", remoteUser: "builder", remoteCwd: "/srv/jinn-work/proj",
+      remoteHost: "build-box", remoteUser: "builder", remoteCwd: "/srv/agents/proj",
       remoteClaudeConfigDir: "/home/builder/.claude-work",
     }).catch(() => {});
     await vi.waitFor(() => expect(hoisted.spawns).toHaveLength(2));
@@ -307,7 +307,7 @@ describe("InteractiveClaudeEngine — a session held in the daemon's background"
     expect(args).toContain("-T");
     expect(args).not.toContain("-R");
     const command = args[args.length - 1];
-    expect(command).toContain("cd '/srv/jinn-work/proj' && exec env");
+    expect(command).toContain("cd '/srv/agents/proj' && exec env");
     expect(command).toContain("CLAUDE_CONFIG_DIR='/home/builder/.claude-work'");
     expect(command).toContain(`PATH='/usr/bin':"$PATH"`);
     expect(command).toMatch(/'\/usr\/local\/bin\/claude' 'stop' '5a1c9d02'$/);

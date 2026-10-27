@@ -28,8 +28,8 @@ const asJsonBody = (value: string): string => JSON.stringify(value).slice(1, -1)
 
 const OPTS: RemoteMcpRemapOpts = {
   remoteNode: "/usr/local/lib/node/bin/node",
-  remoteEntryDir: "/srv/jinn-work/.jinn-remote/mcp",
-  remoteHome: "/srv/jinn-work/.jinn-remote/home",
+  remoteEntryDir: "/srv/agents/.jinn-remote/mcp",
+  remoteHome: "/srv/agents/.jinn-remote/home",
   gatewayUrl: "http://127.0.0.1:45123",
 };
 
@@ -76,7 +76,7 @@ describe("remapMcpConfigForRemote (real resolver → identity → scrub pipeline
 
     const jinn = stdio(remapMcpConfigForRemote(input, OPTS), "jinn");
     expect(jinn.command).toBe(OPTS.remoteNode);
-    expect(jinn.args?.[0]).toBe("/srv/jinn-work/.jinn-remote/mcp/server-entry.js");
+    expect(jinn.args?.[0]).toBe("/srv/agents/.jinn-remote/mcp/server-entry.js");
   });
 
   it("re-points a scrub-wrapped third-party server, keeping its real command and args", () => {
@@ -86,7 +86,7 @@ describe("remapMcpConfigForRemote (real resolver → identity → scrub pipeline
 
     const fetchServer = stdio(remapMcpConfigForRemote(input, OPTS), "fetch");
     expect(fetchServer.command).toBe(OPTS.remoteNode);
-    expect(fetchServer.args?.[0]).toBe("/srv/jinn-work/.jinn-remote/mcp/scrub-entry.js");
+    expect(fetchServer.args?.[0]).toBe("/srv/agents/.jinn-remote/mcp/scrub-entry.js");
     // The wrapped-in command the launcher execs is the remote's business, not ours.
     expect(fetchServer.args?.slice(1)).toEqual(["uvx", "mcp-server-fetch"]);
   });
@@ -141,7 +141,7 @@ describe("remapMcpConfigForRemote (argument boundaries)", () => {
       mcpServers: { jinn: { command: process.execPath, args: ["/gw/dist/mcp/server-entry.js"], env: { JINN_GATEWAY_URL: GATEWAY_URL, JINN_HOME: "/gw/home" } } },
     };
     const jinn = stdio(remapMcpConfigForRemote(input, OPTS), "jinn");
-    expect(jinn.args).toEqual(["/srv/jinn-work/.jinn-remote/mcp/server-entry.js"]);
+    expect(jinn.args).toEqual(["/srv/agents/.jinn-remote/mcp/server-entry.js"]);
     expect(jinn.env).toEqual({ JINN_GATEWAY_URL: OPTS.gatewayUrl, JINN_HOME: OPTS.remoteHome });
   });
 

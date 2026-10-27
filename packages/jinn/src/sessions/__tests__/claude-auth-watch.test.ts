@@ -56,7 +56,7 @@ const AUTH_FAILED = "Interactive turn failed: authentication_failed";
 
 const remoteDev: Employee = {
   name: "senior-developer", displayName: "Senior Developer", department: "general", rank: "senior",
-  engine: "claude", model: "opus", persona: "", remoteHost: "buildbox", remoteUser: "dev", remoteCwd: "/srv/jinn-work/main",
+  engine: "claude", model: "opus", persona: "", remoteHost: "buildbox", remoteUser: "dev", remoteCwd: "/srv/agents/main",
 };
 
 /** Run the delivery callbacks the operator channel still owes us. */
