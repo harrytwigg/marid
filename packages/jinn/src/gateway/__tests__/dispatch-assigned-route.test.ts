@@ -119,6 +119,64 @@ describe("Dispatch on a backlog Todo that has an assignee", () => {
     expect(workItems.getWorkItem(item.id)).toMatchObject({ assignee: "first-worker" });
   });
 
+  it("stamps the assignee as pressed on the Dispatcher's session", async () => {
+    const assigned = assignedTodo("Pressed with an assignee");
+    const unassigned = unassignedTodo("Pressed with nobody assigned");
+
+    const bound = registry.getSession((await dispatch(assigned.id)).body.sessionId);
+    const free = registry.getSession((await dispatch(unassigned.id)).body.sessionId);
+
+    expect(bound?.transportMeta).toMatchObject({ dispatchAssignee: "first-worker" });
+    expect(free?.transportMeta).toMatchObject({ dispatchAssignee: "" });
+  });
+
+  // The binding is the assignee as pressed. Reassigned mid-route, the
+  // Todo no longer matches the press, so the Dispatcher hands it to nobody —
+  // neither the new assignee, which nobody pressed for, nor the old one, which
+  // would undo the reassignment.
+  it("refuses a bound Dispatcher every hand-off once the Todo is reassigned mid-route", async () => {
+    const item = assignedTodo("Reassigned while the Dispatcher routes");
+    const dispatcherId = (await dispatch(item.id)).body.sessionId as string;
+    workItems.updateWorkItem(item.id, { assignee: "second-worker" }, "operator");
+
+    for (const employee of ["second-worker", "first-worker"]) {
+      const delegated = await delegate(dispatcherId, item.id, employee);
+      expect(delegated.status).toBe(403);
+      expect(delegated.body.error).toContain(`assignee was employee "first-worker"`);
+      expect(delegated.body.error).toContain(`reassigned to employee "second-worker"`);
+      expect(delegated.body.error).toMatch(/Block the Todo for the operator/);
+    }
+    expect(workItems.getWorkItem(item.id)).toMatchObject({ assignee: "second-worker" });
+    expect(sessionsOf(item.id, "second-worker")).toHaveLength(0);
+    expect(sessionsOf(item.id, "first-worker")).toHaveLength(0);
+  });
+
+  it("refuses a Dispatcher pressed on an unassigned Todo once someone is assigned mid-route", async () => {
+    const item = unassignedTodo("Assigned while the Dispatcher routes");
+    const dispatcherId = (await dispatch(item.id)).body.sessionId as string;
+    workItems.updateWorkItem(item.id, { assignee: "first-worker" }, "operator");
+
+    const delegated = await delegate(dispatcherId, item.id, "second-worker");
+
+    expect(delegated.status).toBe(403);
+    expect(delegated.body.error).toContain("assignee was nobody");
+    expect(workItems.getWorkItem(item.id)).toMatchObject({ assignee: "first-worker" });
+  });
+
+  // A Dispatcher started before the stamp existed is bound to the Todo as it stands.
+  it("binds a Dispatcher with no stamp to the current assignee", async () => {
+    const item = assignedTodo("Dispatcher from before the stamp");
+    const dispatcherId = (await dispatch(item.id)).body.sessionId as string;
+    registry.updateSession(dispatcherId, { transportMeta: {} });
+
+    const rerouted = await delegate(dispatcherId, item.id, "second-worker");
+    expect(rerouted.status).toBe(403);
+    expect(rerouted.body.error).toMatch(/binding/);
+
+    const delegated = await delegate(dispatcherId, item.id, "first-worker");
+    expect(delegated.status).toBe(201);
+  });
+
   it("puts the status and current assignee in the Dispatcher's brief", async () => {
     const item = assignedTodo("Brief names the assignee");
 

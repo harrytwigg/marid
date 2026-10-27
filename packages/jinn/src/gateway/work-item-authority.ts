@@ -273,6 +273,16 @@ function dispatcherRefusal(callerId: string, session: Session, item: WorkItem, a
  * (a reason and an engine preference) in its prompt; its routing stays its own
  * decision, marked by the transportMeta the walk stamps on its session.
  *
+ * The binding is the assignee as Dispatch was pressed, which the start stamps
+ * on the Dispatcher's session (`DISPATCH_ASSIGNEE_META_KEY`), not the assignee
+ * as it delegates. Read late, someone with standing over the Todo could give
+ * it to @operator mid-route and leave the Dispatcher free to hand it, and
+ * standing over its open sub-tasks, to anyone. So once the Todo has
+ * changed hands since the press, in either direction, the Dispatcher routes
+ * nobody: the press it acts on no longer describes the Todo, and a fresh
+ * Dispatch on the new assignment is the operator's call. A Dispatcher started
+ * before the stamp existed carries none, and is bound to the Todo as it stands.
+ *
  * An unnamed engine-only delegation names nobody, but it still starts
  * execution outside the assignee, so a bound Dispatcher is refused that too:
  * the binding names the one employee who may take the Todo.
@@ -282,20 +292,52 @@ function dispatcherAssigneeBinding(
   item: WorkItem,
   delegate: string | undefined,
 ): { ok: false; status: 403; error: string } | undefined {
-  if (delegate === item.assignee) return undefined;
   if (!isDispatcherRoutingTodo(session, item)) return undefined;
   if (session.transportMeta?.startedBy === BOARD_WALK_STARTED_BY) return undefined;
-  const assignee = item.assignee;
-  if (!assignee || assignee === OPERATOR_ASSIGNEE) return undefined;
+  const pressed = assigneeAtPress(session, item);
+  const current = item.assignee ?? "";
+  if (pressed !== current) {
+    return {
+      ok: false,
+      status: 403,
+      error: `this Dispatcher was started on Todo ${item.id} when its assignee was ${describeAssignee(pressed)}, `
+        + `and it has since been reassigned to ${describeAssignee(current)}: the Dispatch it acts on no longer describes the Todo, `
+        + `so it cannot hand the Todo on to anyone. Block the Todo for the operator with this refusal; `
+        + `a fresh start on the new assignment is their call (they press Dispatch on Todo ${item.id}).`,
+    };
+  }
+  if (delegate === current) return undefined;
+  if (!current || current === OPERATOR_ASSIGNEE) return undefined;
   const target = delegate === undefined ? "an unnamed engine" : `"${delegate}"`;
   return {
     ok: false,
     status: 403,
-    error: `this Dispatcher was started by the operator's Dispatch on Todo ${item.id}, whose assignee is employee "${assignee}": `
+    error: `this Dispatcher was started by the operator's Dispatch on Todo ${item.id}, whose assignee is employee "${current}": `
       + `that assignment is binding, so it cannot hand the Todo to ${target} — `
-      + `hand it to its assignee with delegate_task { task, employee: "${assignee}", workItemId: "${item.id}" }. `
+      + `hand it to its assignee with delegate_task { task, employee: "${current}", workItemId: "${item.id}" }. `
       + `If that delegation is refused, block the Todo for the operator with the refusal and options rather than choosing someone else.`,
   };
+}
+
+/** Where a Dispatcher's session records the Todo's assignee as Dispatch was
+ *  pressed: an employee, @operator, or empty for none. */
+export const DISPATCH_ASSIGNEE_META_KEY = "dispatchAssignee";
+
+/** The stamp a Dispatcher start puts on its session, read by the binding above. */
+export function dispatchAssigneeMeta(item: WorkItem): Record<string, string> {
+  return { [DISPATCH_ASSIGNEE_META_KEY]: item.assignee ?? "" };
+}
+
+/** The Todo's assignee when this Dispatcher was pressed, empty for none; the
+ *  current one for a Dispatcher started before the stamp existed. */
+function assigneeAtPress(session: Session, item: WorkItem): string {
+  const stamped = session.transportMeta?.[DISPATCH_ASSIGNEE_META_KEY];
+  return typeof stamped === "string" ? stamped : item.assignee ?? "";
+}
+
+function describeAssignee(assignee: string): string {
+  if (!assignee) return "nobody";
+  return assignee === OPERATOR_ASSIGNEE ? OPERATOR_ASSIGNEE : `employee "${assignee}"`;
 }
 
 /**
@@ -357,8 +399,7 @@ export const DISPATCH_PRESSED_BY_META_KEY = "dispatchPressedBy";
  * below it. A Dispatcher the operator, the board walk or a sweep started acts
  * for the operator and needs nothing more. One a session pressed acts for that
  * session, so it needs that session's standing over each open sub-task, judged
- * now rather than at the press: the Todo can change hands in between, which can
- * also free the Dispatcher from its assignee binding.
+ * now rather than at the press: sub-tasks can be added or handed out in between.
  */
 function dispatcherHandOn(session: Session, item: WorkItem): { ok: true } | { ok: false; status: 403; error: string } {
   const pressedBy = session.transportMeta?.[DISPATCH_PRESSED_BY_META_KEY];

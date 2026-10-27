@@ -13,7 +13,7 @@ import { preflightSystemEmployee } from "./system-employee-spawn.js";
 import { TODO_DISPATCHER_NAME } from "./system-employees.js";
 import { takeDispatchClaim, TODO_ALREADY_EXECUTING, type RouteTodoClaim } from "./todo-claim.js";
 import { dispatchWebSessionRun } from "./web-session-dispatch.js";
-import { todoDispatcherSessionKey } from "./work-item-authority.js";
+import { dispatchAssigneeMeta, todoDispatcherSessionKey } from "./work-item-authority.js";
 import type { ApiContext } from "./api.js";
 
 /**
@@ -173,7 +173,8 @@ function planDispatcher(item: WorkItem, context: ApiContext, suffix: string | un
 function createDispatcherSession(item: WorkItem, plan: DispatcherPlan, context: ApiContext, transportMeta?: Record<string, string>): Session {
   const sessionKey = todoDispatcherSessionKey(item.id);
   return createSession({
-    ...(transportMeta ? { transportMeta } : {}),
+    // The assignee as pressed binds the Dispatcher, whatever happens to the Todo while it routes.
+    transportMeta: { ...transportMeta, ...dispatchAssigneeMeta(item) },
     engine: plan.engineName,
     source: "web",
     sourceRef: sessionKey,
