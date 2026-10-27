@@ -49,6 +49,8 @@ inside an operator home. It tears everything down on exit.
 | f | `PUT /api/config` refuses a duplicate target (and a link equal to its own target) with the clear sentence |
 | g | a profile hop starts a fresh run carrying the conversation, with no `--resume` of A's session id under B; a model hop on the same thread resumes it |
 | h | an opencode provider hop X → Y within one opencode session |
+| i | the own target serves again from the first turn after its limit reopens (a real wall-clock reset a few seconds out), and not before |
+| j | an own target still limited at the reset is probed once; the next turns, inside the new window, do not probe it again |
 
 Every scenario runs and counts. `--pending a,b` marks scenarios that wait on runtime work not
 yet merged (none today: the default list is empty): a pending scenario is reported, never
