@@ -60,4 +60,15 @@ describe("PUT /api/work-items/:id/parent", () => {
     expect(inside.status).toBe(200);
     expect(workItems.getWorkItem(mine.id)).toMatchObject({ parentId: home.id, rootId: home.id });
   });
+
+  it("answers 409 for a move into an archived department, as create does", async () => {
+    const { setDepartmentArchived } = await import("../../work-items/department-archive.js");
+    const { initDb } = await import("../../shared/db.js");
+    const root = todoIn("retired-side");
+    const loose = workItems.createWorkItem({ title: "loose" });
+    setDepartmentArchived(initDb(), "retired-side", true, "JIN");
+    const refused = await call("PUT", `/api/work-items/${loose.id}/parent`, { parentId: root.id });
+    expect(refused.status).toBe(409);
+    expect(refused.body).toMatchObject({ code: "todo_department_archived", department: "retired-side" });
+  });
 });

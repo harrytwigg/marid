@@ -4,7 +4,7 @@
 
 ### ✨ Features
 - **A Todo's parent can now be changed after creation.** `PUT /api/work-items/:id/parent` with `{ "parentId": "<Todo id>" }` makes a Todo a sub-task of another, and `{ "parentId": null }` detaches a sub-task to a root; the Todo's own sub-tasks move with it and `rootId` and `depth` are recomputed for the whole subtree. Agents do the same with `parentId` on `edit_work_item`. It needs the standing that assigns a Todo, over the Todo and over the new parent, and the change is recorded in the history of the Todo, the Todos that moved with it and both parents.
-  - **Refused:** a cycle, a closed parent, a subtree that would pass the depth cap of 3, a root that still sits in a sprint (take it out first), a move across a non-open department's boundary, and a Todo in review going under a parent whose owner would not be told.
+  - **Refused:** a cycle, a closed parent, a subtree that would pass the depth cap of 3, a root that still sits in a sprint (take it out first), a finished Todo leaving a closed sprint or anything joining one, a move across a non-open department's boundary or into an archived one, and a Todo in review going under a parent whose owner would not be told.
   - **Review:** a Todo's review is addressed from its parent when read, so a detached sub-task is the operator's to review and a Todo made a sub-task is its new parent owner's.
 
 ### 🐛 Fixed

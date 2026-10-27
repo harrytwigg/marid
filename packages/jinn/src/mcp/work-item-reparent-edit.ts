@@ -29,7 +29,8 @@ export async function editWithReparent(
   if (moved.status >= 400) throw gatewayFailure(`reparenting work item "${id}" (nothing was saved)`, moved.status, moved.body);
   const movedBody = moved.body as Record<string, unknown>;
   const where = parentId ? `a sub-task of ${parentId}` : "a root Todo";
-  if (Object.keys(patch).length === 0) return mutationResult(movedBody, `Todo is now ${where}; its sub-tasks moved with it.`);
+  const moves = movedBody.changed === false ? `Todo was already ${where}; nothing moved.` : `Todo is now ${where}; its sub-tasks moved with it.`;
+  if (Object.keys(patch).length === 0) return mutationResult(movedBody, moves);
   try {
     const edited = (await edit(patch)) as Record<string, unknown>;
     return mutationResult({ ...edited, parentId: movedBody.parentId, rootId: movedBody.rootId, depth: movedBody.depth }, `Todo edited and made ${where}.`);

@@ -305,6 +305,9 @@ export {
 } from './event-log.js';
 export type { WorkItemEventKind } from './event-log.js';
 
+/** The sub-task depth cap (a root is depth 0). */
+export const MAX_SUBTASK_DEPTH = 3;
+
 /* ── Create / read ──────────────────────────────────────────────────────────── */
 
 /**
@@ -338,8 +341,8 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
     if (parent.status === 'done' || parent.status === 'cancelled') {
       throw new Error(`parent Todo ${parent.id} is ${parent.status} — sub-tasks cannot be added under a closed Todo`);
     }
-    if (parent.depth >= 3) {
-      throw new Error(`parent Todo ${parent.id} is at depth ${parent.depth} — the sub-task tree is capped at depth 3`);
+    if (parent.depth >= MAX_SUBTASK_DEPTH) {
+      throw new Error(`parent Todo ${parent.id} is at depth ${parent.depth} — the sub-task tree is capped at depth ${MAX_SUBTASK_DEPTH}`);
     }
   }
   const companyPrefix = resolveCompanyPrefix();

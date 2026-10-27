@@ -4,7 +4,10 @@ import { parseTodoId } from './id.js';
 import { holdLiveSignalsUntilCommit } from './live-events.js';
 import type { WriteOrigin } from './origin.js';
 import { addresseeOfParent } from './review-addressee.js';
-import { appendWorkItemEvent, getWorkItem, type WorkItem } from './store.js';
+import { assertDepartmentTakesNewTodos } from './department-archive.js';
+import { getWorkItemSprint } from './sprint-membership.js';
+import type { SprintRef } from './sprint-model.js';
+import { appendWorkItemEvent, getWorkItem, MAX_SUBTASK_DEPTH, type WorkItem } from './store.js';
 
 /**
  * Changing a Todo's parent after creation, in either direction: set it to
@@ -18,6 +21,10 @@ import { appendWorkItemEvent, getWorkItem, type WorkItem } from './store.js';
  *   - a subtree that would end deeper than the sub-task cap;
  *   - a root that still holds a sprint (sub-tasks follow their root's sprint, so
  *     the sprint has to be cleared first rather than dropped silently);
+ *   - a finished Todo leaving a closed sprint's root, which keeps it as its
+ *     record, and anything joining a root whose sprint is closed. Open work moving
+ *     between sprinted roots follows its new root's sprint, and the event says so;
+ *   - joining, or detaching into, an archived department, which takes no new Todos;
  *   - a move that would put part of the subtree across a non-open department's
  *     boundary, or strand an assignee in a department they may not hold Todos in
  *     (the department of a Todo is never changed implicitly);
@@ -37,9 +44,6 @@ export class ReparentError extends Error {
     this.name = 'ReparentError';
   }
 }
-
-/** The sub-task depth cap (a root is depth 0). */
-const MAX_DEPTH = 3;
 
 interface TreeRow {
   id: string;
@@ -126,8 +130,8 @@ function assertParentOpen(parent: WorkItem): void {
 
 function assertDepthFits(item: WorkItem, subtree: readonly TreeRow[], parent: WorkItem | undefined, shift: number): void {
   const deepest = Math.max(...subtree.map((row) => row.depth)) + shift;
-  if (deepest > MAX_DEPTH) {
-    throw new ReparentError(`moving ${item.id} under ${parent?.id} would put a sub-task at depth ${deepest} — the sub-task tree is capped at depth ${MAX_DEPTH}`, 'invalid');
+  if (deepest > MAX_SUBTASK_DEPTH) {
+    throw new ReparentError(`moving ${item.id} under ${parent?.id} would put a sub-task at depth ${deepest} — the sub-task tree is capped at depth ${MAX_SUBTASK_DEPTH}`, 'invalid');
   }
 }
 
@@ -150,12 +154,57 @@ function assertReviewReachesOwner(item: WorkItem, parent: WorkItem): void {
   );
 }
 
+function assertMayLeaveSprint(item: WorkItem, subtree: readonly TreeRow[], from: SprintRef | null): void {
+  if (from?.status === 'closed' && subtree.some((row) => isClosed(row.status))) {
+    throw new ReparentError(`${item.id} or a sub-task of it is finished in closed sprint "${from.name}", which keeps it as its record`, 'invalid');
+  }
+}
+
+function assertMayJoinSprint(item: WorkItem, parent: WorkItem | undefined, to: SprintRef | null): void {
+  if (to?.status === 'closed') {
+    throw new ReparentError(`sprint "${to.name}" is closed; ${item.id} cannot join ${parent?.id}, which is in it`, 'invalid');
+  }
+}
+
+const sprintIdOf = (ref: SprintRef | null): string | null => (ref ? ref.id : null);
+
+/** The sprint the tree follows before and after, checked and read before the write moves the root. */
+function planSprint(item: WorkItem, subtree: readonly TreeRow[], parent: WorkItem | undefined): Plan['sprint'] {
+  const from = getWorkItemSprint(item.id);
+  const to = parent ? getWorkItemSprint(parent.id) : null;
+  if (sprintIdOf(from) === sprintIdOf(to)) return undefined;
+  assertMayLeaveSprint(item, subtree, from);
+  assertMayJoinSprint(item, parent, to);
+  return { from: from ? from.name : null, to: to ? to.name : null };
+}
+
+/** An archived department takes no new Todos, so a Todo cannot move into its scope either. */
+function assertScopeTakesWork(db: ReturnType<typeof initDb>, item: WorkItem, parent: WorkItem | undefined, newRootDepartment: string | null): void {
+  const oldRoot = item.rootId === item.id ? item : getWorkItem(item.rootId) ?? item;
+  const next = parent ? newRootDepartment : item.department;
+  if (next !== oldRoot.department) assertDepartmentTakesNewTodos(db, next);
+}
+
 interface Plan {
   subtree: TreeRow[];
   parent: WorkItem | undefined;
   newRootId: string;
   newDepth: number;
   shift: number;
+  /** The sprint the tree follows before and after, when they differ. Read before the write moves the root. */
+  sprint?: { from: string | null; to: string | null };
+}
+
+/** Every refusal that depends on where the Todo lands, before anything is written. */
+function assertParentAccepts(db: ReturnType<typeof initDb>, item: WorkItem, subtree: readonly TreeRow[], parent: WorkItem, shift: number): void {
+  assertNoCycle(item, subtree, parent);
+  assertParentOpen(parent);
+  assertDepthFits(item, subtree, parent, shift);
+  assertNoSprint(db, item);
+  const newRoot = parent.rootId === parent.id ? parent : getWorkItem(parent.rootId) ?? parent;
+  assertSubtreeFits(item, subtree, newRoot.department, parent.rootId);
+  assertScopeTakesWork(db, item, parent, newRoot.department);
+  assertReviewReachesOwner(item, parent);
 }
 
 /** Every refusal, in one place, before anything is written. */
@@ -165,16 +214,10 @@ function planReparent(db: ReturnType<typeof initDb>, item: WorkItem, parent: Wor
   const subtree = subtreeOf(family, item.id);
   const newDepth = parent ? parent.depth + 1 : 0;
   const shift = newDepth - item.depth;
-  if (parent) {
-    assertNoCycle(item, subtree, parent);
-    assertParentOpen(parent);
-    assertDepthFits(item, subtree, parent, shift);
-    assertNoSprint(db, item);
-    const newRoot = parent.rootId === parent.id ? parent : getWorkItem(parent.rootId) ?? parent;
-    assertSubtreeFits(item, subtree, newRoot.department, parent.rootId);
-    assertReviewReachesOwner(item, parent);
-  }
-  return { subtree, parent, newRootId: parent ? parent.rootId : item.id, newDepth, shift };
+  if (parent) assertParentAccepts(db, item, subtree, parent, shift);
+  else assertScopeTakesWork(db, item, parent, null);
+  const sprint = planSprint(item, subtree, parent);
+  return { subtree, parent, newRootId: parent ? parent.rootId : item.id, newDepth, shift, ...(sprint ? { sprint } : {}) };
 }
 
 /** The audit trail: the Todo, each Todo that moved with it, and both parents. */
@@ -189,6 +232,7 @@ function recordReparent(item: WorkItem, plan: Plan, options: ReparentOptions): s
     detail: {
       reparented: { from: item.parentId, to: newParentId, rootFrom: item.rootId, rootTo: plan.newRootId, depth: plan.newDepth },
       ...(moved.length > 0 ? { movedWith: moved } : {}),
+      ...(plan.sprint ? { sprint: plan.sprint } : {}),
       ...(options.origin ? { origin: options.origin } : {}),
     },
     versionEffect: 'companion',

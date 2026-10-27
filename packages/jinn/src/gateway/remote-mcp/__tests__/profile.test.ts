@@ -184,6 +184,11 @@ describe("remote MCP tool profile", () => {
     expect(remoteMcpRouteAllowed("POST", "/api/sprints")).toBe(false);
   });
 
+  // edit_work_item { parentId } re-parents through its own route, after which any content edit follows.
+  it("admits the re-parent edit_work_item makes", () => {
+    expect(remoteMcpRouteAllowed("PUT", "/api/work-items/TST-1/parent")).toBe(true);
+  });
+
   it("refuses the routes behind excluded tools", () => {
     for (const [method, path] of [
       ["GET", "/api/sessions/abc/transcript"], ["GET", "/api/knowledge/read"],

@@ -5,6 +5,7 @@ import { workItemActor, type WorkItemCaller } from "./work-item-arming.js";
 import { authorizeWorkItemOwnerManagerOrRoot } from "./work-item-authority.js";
 import { isTodoId } from "../work-items/id.js";
 import { DepartmentBoundaryError } from "../work-items/department-scope.js";
+import { DepartmentArchivedError } from "../work-items/department-archive.js";
 import { ReparentError, reparentWorkItem } from "../work-items/reparent.js";
 import { getWorkItem, type WorkItem } from "../work-items/store.js";
 
@@ -43,6 +44,7 @@ async function readParentId(req: HttpRequest, res: ServerResponse): Promise<{ pa
 function refuse(res: ServerResponse, err: unknown): void {
   if (err instanceof ReparentError) return json(res, { error: err.message }, err.code === "not_found" ? 404 : err.code === "conflict" ? 409 : 400);
   if (err instanceof DepartmentBoundaryError) return json(res, { error: err.message, code: err.code, holders: err.holders }, 409);
+  if (err instanceof DepartmentArchivedError) return json(res, { error: err.message, code: "todo_department_archived", department: err.department }, 409);
   throw err;
 }
 

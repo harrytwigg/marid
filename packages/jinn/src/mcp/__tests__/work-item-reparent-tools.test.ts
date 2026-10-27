@@ -78,6 +78,14 @@ describe("edit_work_item { parentId }", () => {
     expect(store.getWorkItem(mine.id)!.parentId).toBeNull();
   });
 
+  it("says so when the Todo was already where it was asked to go", async () => {
+    const ctx = ctxFor(sessionOf("platform-dev").id);
+    const root = store.createWorkItem({ title: "stay root", assignee: "platform-dev" });
+    const result = (await edit(ctx, { id: root.id, parentId: null })) as { hint?: string; changed?: boolean };
+    expect(result.changed).toBe(false);
+    expect(JSON.stringify(result)).toMatch(/already a root Todo; nothing moved/);
+  });
+
   it("keeps sprint and parentId as separate edits", async () => {
     const ctx = ctxFor(sessionOf("platform-dev").id);
     const todo = store.createWorkItem({ title: "both", assignee: "platform-dev" });

@@ -174,4 +174,52 @@ describe("reparentWorkItem", () => {
     reparentWorkItem(child.id, null);
     expect(get(child.id)).toMatchObject({ status: "done", parentId: null, rootId: child.id });
   });
+
+  it("keeps a closed sprint's finished Todos in it, and lets nothing new join it", () => {
+    const sprint = sprints.createSprint({ name: "closing sprint" });
+    const root = make("record root");
+    const kept = make("finished child", root.id);
+    sprints.setWorkItemSprint(root.id, sprint.id, "operator");
+    sprints.startSprint(sprint.id);
+    transition(kept.id, "done", "operator", { human: true });
+    transition(root.id, "done", "operator", { human: true });
+    sprints.completeSprint(sprint.id, { carryTo: null }, "operator");
+
+    expect(() => reparentWorkItem(kept.id, null)).toThrow(/keeps it as its record/);
+    expect(sprints.getWorkItemSprint(kept.id)?.name).toBe("closing sprint");
+
+    // Reopened after the sprint closed, the root was never carried: work under it
+    // may leave (the event says where it went), but nothing new may join it.
+    transition(root.id, "backlog", "operator", { human: true });
+    const open = make("reopened child", root.id);
+    const loose = make("late arrival");
+    expect(() => reparentWorkItem(loose.id, root.id)).toThrow(/is closed/);
+    reparentWorkItem(open.id, null);
+    expect(sprints.getWorkItemSprint(open.id)).toBeNull();
+    expect(events(open.id).find((e) => (e.detail as { reparented?: unknown } | null)?.reparented)?.detail).toMatchObject({ sprint: { from: "closing sprint", to: null } });
+  });
+
+  it("lets open work follow its new root between open sprints, recording both", () => {
+    const a = sprints.createSprint({ name: "open sprint a" });
+    const b = sprints.createSprint({ name: "open sprint b" });
+    const rootA = make("root a");
+    const rootB = make("root b");
+    const child = make("child of a", rootA.id);
+    sprints.setWorkItemSprint(rootA.id, a.id, "operator");
+    sprints.setWorkItemSprint(rootB.id, b.id, "operator");
+    reparentWorkItem(child.id, rootB.id);
+    expect(sprints.getWorkItemSprint(child.id)?.name).toBe("open sprint b");
+    expect(events(child.id).find((e) => (e.detail as { reparented?: unknown } | null)?.reparented)?.detail).toMatchObject({ sprint: { from: "open sprint a", to: "open sprint b" } });
+  });
+
+  it("refuses to move a Todo into an archived department's scope, as create does", async () => {
+    const { setDepartmentArchived } = await import("../department-archive.js");
+    const { initDb } = await import("../../shared/db.js");
+    const root = make("archived root", undefined, { department: "retired-dept" });
+    const loose = make("loose todo");
+    setDepartmentArchived(initDb(), "retired-dept", true, "JIN");
+    expect(() => make("new child", root.id)).toThrow(/archived/);
+    expect(() => reparentWorkItem(loose.id, root.id)).toThrow(/archived/);
+    expect(get(loose.id).parentId).toBeNull();
+  });
 });
