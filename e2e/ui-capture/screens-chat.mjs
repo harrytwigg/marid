@@ -49,6 +49,21 @@ export const CHAT_SCREENS = [
     prepare: openBeside,
   },
   {
+    // Two tabs in one pane: the chat and the Todo its last message names. A plain click on the
+    // mention opens it beside the chat in the same group, which is what draws the strip — the tab
+    // bar the close-all rides in.
+    name: 'chat-pane-tabs',
+    viewports: ['desktop'],
+    title: 'Chat, a Todo tab beside it',
+    url: (f) => `/?session=${f.chatSession}`,
+    ready: PLAN_READY,
+    prepare: async (page) => {
+      await page.getByText('SAN-1', { exact: true }).first().click()
+      await page.getByTestId('pane-tab-strip').waitFor({ timeout: 10_000 })
+      await page.waitForTimeout(700)
+    },
+  },
+  {
     // The list a phone shows at the chat route (the panel from lg up).
     name: 'chat-list',
     title: 'Chat list',

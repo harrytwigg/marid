@@ -29,6 +29,8 @@ function tabSession(row: SessionRow | undefined): PaneTabSession | undefined {
 
 interface PaneTabsProviderProps {
   split: SplitLayoutControls
+  /** Closes every open tab; the pane bars carry it. Absent when there is nothing to close. */
+  onCloseAll?: () => void
   /** Shows a session in its pane and moves the route to it. The grid's focus handler takes a pane
    * key, and a pane's key is its session id, so a tab's session id is a valid key here. */
   onSelect: (sessionId: string) => void
@@ -121,7 +123,7 @@ function docPane(layout: SplitLayout, paneKey: string, groupStrip: (group: Layou
  * those: a pane holding one tab (a chat, a new chat, a document) shows its plain title bar instead,
  * which drags that tab as a strip would.
  */
-export function PaneTabsProvider({ split, onSelect, children }: PaneTabsProviderProps) {
+export function PaneTabsProvider({ split, onSelect, onCloseAll, children }: PaneTabsProviderProps) {
   const sessions = useSessions().data as SessionRow[] | undefined
   const byId = useMemo(() => new Map((sessions ?? []).map((row) => [String(row.id ?? ''), row])), [sessions])
   const { layout, pin } = split
@@ -138,11 +140,13 @@ export function PaneTabsProvider({ split, onSelect, children }: PaneTabsProvider
         tabs={paneTabItems(group, (id) => tabSession(byId.get(id))).map((tab) => (isLastChatWithTabs(layout, tab.id) ? { ...tab, closable: false } : tab))}
         activeId={group.activeTab}
         focused={layout.focusedGroupId === group.id}
+        onCloseAll={onCloseAll}
         {...paneTabHandlers(group.id, ops)}
       />
     )
     return {
       hasStrips: hasTabbedGroup(layout),
+      closeAll: onCloseAll,
       keep,
       closable: (sessionId) => !isLastChatWithTabs(layout, sessionId),
       shownDoc: (paneTabId) => {
@@ -160,7 +164,7 @@ export function PaneTabsProvider({ split, onSelect, children }: PaneTabsProvider
       },
       renderDocPane: (paneKey) => docPane(layout, paneKey, groupStrip, closeTab),
     }
-  }, [byId, closeTab, keep, layout, pin, selectChosenTab, split.place])
+  }, [byId, closeTab, keep, layout, onCloseAll, pin, selectChosenTab, split.place])
 
   return <PaneTabsContext.Provider value={binding}>{children}</PaneTabsContext.Provider>
 }

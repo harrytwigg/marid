@@ -155,6 +155,12 @@ describe("accounts and health keys", () => {
     expect(linkAccount({ engine: "opencode", model: "openrouter/x" }, config())).toBe("opencode");
   });
 
+  it("an unprofiled Claude link takes the account the subject's Claude turns run as; a named profile and other engines do not", () => {
+    expect(linkAccount({ engine: "claude" }, config(), "claude@ci@box")).toBe("claude@ci@box");
+    expect(linkAccount({ engine: "claude", profile: "A" }, config(), "claude@ci@box")).toBe(KEY_A);
+    expect(linkAccount({ engine: "opencode" }, config(), "claude@ci@box")).toBe("opencode");
+  });
+
   it("an opencode link with provider/model keys on the provider; with no provider on the engine", () => {
     expect(linkHealthKey({ engine: "opencode", model: "openrouter/z-ai/glm-5", account: "opencode" })).toBe("opencode/openrouter");
     expect(linkHealthKey({ engine: "opencode", account: "opencode" })).toBe("opencode");

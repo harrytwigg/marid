@@ -16,6 +16,8 @@ type ChatGridProps = ComponentProps<typeof ChatGrid>
 export interface SplitGridBinding {
   split: SplitLayoutControls
   sessionForKey: (key: string) => string | null
+  /** Closes every open tab; the pane bars carry it. Absent when there is nothing to close. */
+  onCloseAll?: () => void
 }
 
 /** How the page hands the layout to the grid MultiChatGrid mounts, which only passes
@@ -101,7 +103,7 @@ export function SplitChatGrid(props: ChatGridProps) {
   const binding = useContext(SplitGridContext)
   if (!binding) throw new Error('SplitChatGrid needs a SplitGridContext provider (routes/chat/page.tsx)')
   return (
-    <PaneTabsProvider split={binding.split} onSelect={props.onFocus}>
+    <PaneTabsProvider split={binding.split} onSelect={props.onFocus} onCloseAll={binding.onCloseAll}>
       <SplitLayoutGrid {...props} {...binding} />
     </PaneTabsProvider>
   )

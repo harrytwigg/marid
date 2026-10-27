@@ -149,10 +149,28 @@ export interface AutoCompactInput {
   prompt: string;
   /** The turn is itself a compaction (`/compact`, a self-compaction). */
   compactionTurn: boolean;
-  /** The turn carries an engine-switch transcript, so the engine's own
-   *  conversation is behind the chat and the meter describes another engine. */
+  /** The turn carries a sync transcript (an engine switch, or a move back from
+   *  a stand-in). Only an engine switch leaves the engine's own conversation
+   *  behind the chat; see {@link conversationBehindChat}. */
   syncRequested: boolean;
   now: number;
+}
+
+/**
+ * Whether a sync turn's engine is resuming a conversation that is not the one
+ * the meter measured: an engine switch (`engineSyncTarget`), whose target engine
+ * holds an older or no conversation. A move back from a stand-in (Claude after
+ * an account swap or another engine's fallback) is not: the engine resumes its
+ * own conversation, which the stand-in never touched, and the move-back puts
+ * that conversation's meter reading back. That turn is as long, and as cold, as
+ * any other and compacts like one. The sync transcript stays in the prompt, so
+ * it is delivered after the compaction.
+ */
+function conversationBehindChat(session: Session, engine: string): boolean {
+  const meta = (session.transportMeta ?? {}) as Record<string, unknown>;
+  const switchedHere = meta.engineSyncTarget === engine && Number.isFinite(isoMs(meta.engineSyncSince));
+  const movedBack = engine === "claude" && Number.isFinite(isoMs(meta.claudeSyncSince));
+  return switchedHere || !movedBack;
 }
 
 /** Why this turn is not one to compact in front of, whatever the session's
@@ -164,7 +182,7 @@ function turnSkip(input: AutoCompactInput): AutoCompactSkip | undefined {
   // another native command (/clear, /model) it is work thrown away.
   if (input.compactionTurn) return "compaction-turn";
   if (isRawEngineCommand(input.engine, input.prompt)) return "raw-command";
-  if (input.syncRequested) return "engine-switch";
+  if (input.syncRequested && conversationBehindChat(input.session, input.engine)) return "engine-switch";
   if (!getEngineSessionRef(input.session, input.engine).id) return "no-engine-session";
   return undefined;
 }

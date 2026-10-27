@@ -57,6 +57,9 @@ function overrideRecord(
   return {
     originalEngine: session.engine,
     originalEngineSessionId: session.engineSessionId,
+    // The context meter belongs to that thread; the stand-in's turns overwrite
+    // it, so the revert puts this reading back with the thread.
+    originalContextTokens: session.lastContextTokens ?? null,
     // The pin comes off the row for the duration, so the record is the only place
     // it survives to be handed back from.
     originalModel: session.model ?? null,

@@ -212,6 +212,8 @@ export async function runRateLimitTurn(args: RateLimitTurnArgs): Promise<Session
     hooks: rateLimitHooks(args),
   });
   if (outcome.kind !== "handback") return undefined;
+  // The own target was recorded as still limited: the window moved out and the turn runs on the stand-in, so nothing went back.
+  if (!outcome.reverted) return outcome.session;
   if (outcome.waited) {
     // The parent and the operator channel were told this session paused; tell them it is moving again.
     await args.surface.waiting(false);

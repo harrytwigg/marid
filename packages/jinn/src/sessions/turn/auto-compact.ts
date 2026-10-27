@@ -2,7 +2,7 @@ import { opencodeMode } from "../../engines/opencode-server.js";
 import { logger } from "../../shared/logger.js";
 import { detectRateLimit } from "../../shared/rateLimit.js";
 import type { EngineResult, Session } from "../../shared/types.js";
-import { AUTO_COMPACT_BUDGET_HOLD_KEY } from "../../shared/auto-compact-config.js";
+import { AUTO_COMPACT_BUDGET_HOLD_KEY, resolveAutoCompactPolicy } from "../../shared/auto-compact-config.js";
 import {
   autoCompactDoneNotice,
   autoCompactFailedNotice,
@@ -13,6 +13,7 @@ import {
   markAutoCompacting,
   type AutoCompactDecision,
   type AutoCompactGo,
+  type AutoCompactSkip,
   type BudgetHold,
 } from "../auto-compaction.js";
 import type { PartialStreamWriter } from "../partial-stream.js";
@@ -265,8 +266,26 @@ function decide(run: TurnRun): AutoCompactDecision {
 export async function compactColdSessionFirst(run: TurnRun): Promise<PreTurnCompaction> {
   const decision = decide(run);
   if (decision.compact) return await compactThenRun({ run, decision, startedAt: Date.now() });
-  if (decision.skip !== "disabled") logger.debug(`[auto-compact] ${run.input.session.id}: not compacting (${decision.skip})`);
+  if (decision.skip !== "disabled") logSkip(run, decision.skip);
   return { kind: "run", plan: run.plan };
+}
+
+/** Skips that are ordinary for a long session: it is warm, held at its budget, or
+ *  the turn is itself a command. Every other skip of a long session is a
+ *  compaction the operator may have expected, so it is logged where it shows. */
+const ROUTINE_SKIPS = new Set<AutoCompactSkip>(["cache-warm", "budget-held", "compaction-turn", "raw-command", "context-small"]);
+
+function logSkip(run: TurnRun, skip: AutoCompactSkip): void {
+  const sessionId = run.input.session.id;
+  const policy = resolveAutoCompactPolicy(run.input.config, run.plan.engineName);
+  const live = getSession(sessionId);
+  const context = live?.lastContextTokens ?? undefined;
+  const long = typeof context === "number" && policy !== undefined && context >= policy.minContextTokens;
+  if (long && !ROUTINE_SKIPS.has(skip)) {
+    logger.info(`[auto-compact] session=${sessionId} engine=${run.plan.engineName} outcome=skipped skip=${skip} context=${context}`);
+  } else {
+    logger.debug(`[auto-compact] ${sessionId}: not compacting (${skip})`);
+  }
 }
 
 async function compactThenRun(pending: Pending): Promise<PreTurnCompaction> {

@@ -1,6 +1,5 @@
-import { accountForEmployee } from "../shared/engine-account.js";
 import { engineHealthForTarget, readEngineHealth } from "../shared/engine-health.js";
-import { latestLimitReadings } from "../shared/fallback-chain-limits.js";
+import { employeeLimitAccounts, latestLimitReadings } from "../shared/fallback-chain-limits.js";
 import { isRemoteTarget } from "../shared/remote-target.js";
 import { orgRegistry } from "./org-registry.js";
 import { getModelRegistry } from "../shared/models.js";
@@ -49,7 +48,7 @@ export function fallbackViewFor(session: Session, context: ApiContext, scopedCal
   const config = context.getConfig();
   const employee = session.employee ? orgRegistry(config).get(session.employee) : undefined;
   const health = engineHealthForTarget(readEngineHealth(), isRemoteTarget(employee) ? employee : undefined);
-  const limits = latestLimitReadings(config, [accountForEmployee(employee, session.engine)]);
+  const limits = latestLimitReadings(config, employeeLimitAccounts(employee, session.engine));
   const view = sessionFallbackView(config, getModelRegistry(config), session, employee, { health, limits });
   return scopedCaller ? withoutUsage(view) : view;
 }

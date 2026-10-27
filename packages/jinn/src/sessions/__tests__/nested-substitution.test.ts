@@ -73,6 +73,7 @@ describe("an engine swap while an engine swap stands (claude → codex, then cod
     expect(record(id)).toEqual({
       originalEngine: "claude",
       originalEngineSessionId: "claude-thread",
+      originalContextTokens: null,
       originalModel: "opus",
       until: firstUntil.toISOString(),
       syncSince: FIRST_SYNC,
@@ -146,6 +147,7 @@ describe("an engine swap while an account swap's engine swap stands (account →
     expect(record(id)).toEqual({
       originalEngine: "claude",
       originalEngineSessionId: "claude-thread",
+      originalContextTokens: null,
       originalModel: "opus",
       until: firstUntil.toISOString(),
       syncSince: FIRST_SYNC,
@@ -176,6 +178,7 @@ describe("an account swap while an engine swap stands (codex → claude, then cl
     expect(record(s.id)).toMatchObject({
       originalEngine: "codex",
       originalEngineSessionId: "codex-thread",
+      originalContextTokens: null,
       originalModel: "gpt-5.6-sol",
       until: firstUntil.toISOString(),
       syncSince: FIRST_SYNC,

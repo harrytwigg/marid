@@ -835,6 +835,45 @@ function ChatPage() {
     : cliModeAvailable ? undefined : cliUnavailableTitle(engineRegistry)
   const effectiveViewMode: ViewMode = cliModeAvailable ? viewMode : 'chat'
 
+  /**
+   * Everything a close-all does apart from emptying the phone's own strip, which that strip's
+   * button does itself: its store belongs to the hook below, built before this page can hold a
+   * handler that clears it. Landing on the bare route is the app's empty state, and the intent
+   * mark is what stops the sidebar's auto-select from opening the newest chat straight back up in
+   * place of what was just closed. Closing a tab abandons a new chat's draft, as single-tab close
+   * already does, so nothing here asks first: it would be the only close that does, and no chat is
+   * destroyed.
+   */
+  const closeAllWorkspace = useCallback(() => {
+    workingSet.split.closeAll()
+    chatTabs.closeAllTabs()
+    // The beside-picker is a pane the layout does not hold, so emptying the layout leaves it
+    // standing: close it here, on the desktop as well as the phone (releaseMobilePicker is a
+    // no-op off mobile). Anything else and "the normal empty state" is two composers.
+    gridPicker.close()
+    startComposer()
+    newChatIntentRef.current = true
+    pendingNavRef.current = null
+    setMobileView('sidebar')
+    if (selectedIdRef.current) navigate('/')
+  }, [chatTabs, gridPicker, navigate, startComposer, workingSet.split])
+
+  // The phone's open-chat strip carries its own close-all, so it needs the reset above.
+  const mobileTabs = useMobileSessionTabs({
+    committedId, systemPrimedId, activeId: focusedSessionId, sessions: sessionsQuery.data,
+    subscribe, connectionSeq, onSelect: handleMobileWorkingSetSelect, onCloseAll: closeAllWorkspace,
+  })
+
+  /** The desktop bars' close-all: the reset above, plus the phone's strip, which is written from
+   *  the desktop too and would otherwise bring tabs back on the next phone visit. */
+  const handleCloseAllTabs = useCallback(() => {
+    mobileTabs.closeAll()
+    closeAllWorkspace()
+  }, [closeAllWorkspace, mobileTabs.closeAll])
+
+  /** A bar only offers the close when there is something to close. */
+  const canCloseAllTabs = workingSet.split.layout.root !== null || chatTabs.tabs.length > 0
+
   const moreMenu = (
     <ChatHeaderMenu
       open={showMoreMenu}
@@ -867,10 +906,6 @@ function ChatPage() {
   const composerPick = !onComposerPane ? null : pickedEmployee?.paneKey === paneKey ? pickedEmployee.employee : pendingEmployee
   useEffect(() => { if (!onComposerPane) setPickedEmployee(null) }, [onComposerPane])
   const headerEmployee = chatHeaderEmployee({ focusedSessionId, meta: sessionMeta, sessions: sessionsQuery.data, employees: headerEmployees, portalName, picked: composerPick })
-  const mobileWorkingSet = useMobileSessionTabs({
-    committedId, systemPrimedId, activeId: focusedSessionId, sessions: sessionsQuery.data,
-    subscribe, connectionSeq, onSelect: handleMobileWorkingSetSelect,
-  })
   const onMobileList = mobileView === 'sidebar'
   const pickerPane = gridPicker.bind(gridAdd.addPane, workingSet.add, handleSessionCreated)
   const desktopMultiPane = chatTabs.activeTab?.kind !== 'file' && !awaitingOpen && !viewport.mobile && (deriveChatGridIds({ sessionIds: gridPaneKeys, primaryPaneKey: paneKey, primarySessionId: committedId, pickerPaneKey: pickerPane?.paneKey }).length > 1 || hasTabbedGroup(workingSet.split.layout))
@@ -929,7 +964,7 @@ function ChatPage() {
             onBack={backToList}
             onNew={handleNewChat}
             moreMenu={moreMenu}
-            mobileWorkingSet={mobileWorkingSet}
+            mobileWorkingSet={mobileTabs.strip}
             copiedField={desktopMultiPane ? null : copiedField}
             hideDesktop={desktopMultiPane}
           />
@@ -973,7 +1008,7 @@ function ChatPage() {
                 <FileView path={chatTabs.activeTab.path} sessionId={chatTabs.activeTab.sessionId} embedded onBack={handleFileBack} />
               </Suspense>
             ) : awaitingOpen ? <div className="flex-1" /> : (
-              <SplitGridContext.Provider value={{ split: workingSet.split, sessionForKey: gridAdd.sessionForKey }}>
+              <SplitGridContext.Provider value={{ split: workingSet.split, sessionForKey: gridAdd.sessionForKey, onCloseAll: canCloseAllTabs ? handleCloseAllTabs : undefined }}>
               <MultiChatGrid
                 grid={SplitChatGrid}
                 sessionIds={gridPaneKeys}

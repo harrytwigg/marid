@@ -43,6 +43,7 @@ const { runTurn } = await import("../turn/runner.js");
 const { beginEngineSubstitution } = await import("../engine-override.js");
 const { handleRateLimit } = await import("../rate-limit-handler.js");
 const { currentClaudeAccount } = await import("../session-account.js");
+const { recordEngineUnavailable } = await import("../../shared/engine-health.js");
 const { claudeProfileFromDir } = await import("../../shared/claude-profile.js");
 
 const friend = claudeProfileFromDir(path.join(tmp, "claude-friend"));
@@ -190,6 +191,37 @@ describe("a nested account swap whose substitute hits its weekly limit", () => {
     expect(seen.notices.some((text) => text.startsWith("⏳"))).toBe(false);
     expect(resumed.sessions).toEqual([]);
   }, 15_000);
+});
+
+describe("a hand-back while the own account is recorded as still limited", () => {
+  it("says nothing about going back until it has, and runs on the own account at the new window", async () => {
+    // The turn runs past `until` on the substitute and hits its weekly limit; meanwhile
+    // another session's probe found the own account limited again, until a little later.
+    const until = new Date(Date.now() + 300);
+    const id = nestedSession("web:handback-own-still-limited", until);
+    const reopens = Math.ceil(Date.now() / 1000) + 3;
+    const { engine, calls } = claudeEngine(async (call) => {
+      if (call === 1) {
+        await new Promise((r) => setTimeout(r, 600));
+        recordEngineUnavailable("claude", "usage limit", reopens);
+        return weeklyLimit();
+      }
+      return call === 2 ? weeklyLimit() : { sessionId: "a-thread", result: "done on the own account" };
+    });
+    const { surface, seen } = recordingSurface();
+
+    await runOne(id, engine, surface);
+
+    // The window was moved out, not ended: the first re-run is still on the substitute, which is limited again.
+    expect(calls.map((call) => call.claudeProfile === null)).toEqual([false, false, true]);
+    expect(Date.now()).toBeGreaterThanOrEqual(reopens * 1000);
+    const back = seen.notices.filter((text) => text.startsWith("↩️"));
+    expect(back).toHaveLength(1);
+    // The one notice came after the session actually reverted: the own account's turn is the last call.
+    expect(seen.notices.findIndex((text) => text.startsWith("↩️"))).toBe(seen.notices.length - 1);
+    expect(resumed.sessions).toEqual([id]);
+    expect(currentClaudeAccount(reg.getSession(id)!)).toBe("claude");
+  }, 20_000);
 });
 
 describe("a substitute limit that never names a reset", () => {

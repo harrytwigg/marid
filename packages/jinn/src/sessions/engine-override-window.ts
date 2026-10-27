@@ -7,9 +7,10 @@
 
 import { logger } from "../shared/logger.js";
 import { engineHealthForTarget, exhaustedEngineReturnsAt, isEngineExhausted, readEngineHealth } from "../shared/engine-health.js";
+import { accountForEmployee } from "../shared/engine-account.js";
+import { healthKeys } from "../shared/fallback-chain-health.js";
 import { orgRegistry } from "../gateway/org-registry.js";
-import type { Employee, JsonObject, Session } from "../shared/types.js";
-import { substituteHealth } from "./rate-limit-account.js";
+import type { Employee, JinnConfig, JsonObject, Session } from "../shared/types.js";
 import { updateSession } from "./registry.js";
 import type { FallbackRunState } from "./fallback-run.js";
 
@@ -70,34 +71,52 @@ function sessionEmployee(session: Session, employee: Employee | undefined): Empl
   }
 }
 
-/**
- * When a window that has passed should be extended instead of ended: the engine
- * it was waiting for is still recorded as spent, typically because another
- * session's probe found it still limited and pushed its re-probe out. Every
- * session parked on it would otherwise spend a turn rediscovering that. Only an
- * engine swap reads this: an account swap's window is its own account's, and the
- * record under `claude` speaks for the default account.
- */
-function stillSpentUntil(session: Session, override: Record<string, unknown>, engine: string, employee: Employee | undefined): Date | undefined {
-  if (override.originalAccount !== undefined || override.substituteAccount !== undefined) return undefined;
-  const owner = sessionEmployee(session, employee);
-  // Read as the session's own turns would: on its host, and on its own Claude account when it has one.
-  const health = substituteHealth(engineHealthForTarget(readEngineHealth(), owner), owner);
-  return isEngineExhausted(health, engine) ? exhaustedEngineReturnsAt(health, engine) : undefined;
+/** The target a swap left: the engine and the model it ran (null when it ran its default). */
+export interface OwnTarget {
+  engine: string;
+  model: string | null | undefined;
 }
 
-/** The session with its window moved out to the engine's recorded return, when
- *  that engine is still spent; `undefined` when the window should end now. */
+/**
+ * When a window that has passed should be extended instead of ended: the target
+ * the session is waiting for is still recorded as spent, typically because
+ * another session's probe found it still limited and pushed its re-probe out.
+ * Every session parked on it would otherwise spend a turn rediscovering that.
+ *
+ * The target is read the way a chain reads a link's health: a Claude account by
+ * its own key (the account an account swap left, else the employee's), an
+ * opencode model by its provider, anything else by its engine. One health store,
+ * so the answer is the same one the limits readout and the chain walk give.
+ */
+function stillSpentUntil(
+  session: Session, override: Record<string, unknown>, own: OwnTarget, reader: { employee?: Employee; config?: Partial<Pick<JinnConfig, "engines">> },
+): Date | undefined {
+  const { engine } = own;
+  const { employee, config } = reader;
+  const owner = sessionEmployee(session, employee);
+  // An unpinned session ran its employee's model, else the engine's default: an opencode
+  // limit is held against that model's provider, so the key needs it.
+  const defaults = config?.engines as Record<string, { model?: string } | undefined> | undefined;
+  const model = own.model ?? owner?.model ?? defaults?.[engine]?.model;
+  // Read as the session's own turns would: on its host.
+  const health = engineHealthForTarget(readEngineHealth(), owner);
+  const account = typeof override.originalAccount === "string" ? override.originalAccount : accountForEmployee(owner, engine);
+  const spent = healthKeys({ engine, model: model ?? undefined, account }).find((key) => isEngineExhausted(health, key));
+  return spent === undefined ? undefined : exhaustedEngineReturnsAt(health, spent);
+}
+
+/** The session with its window moved out to the target's recorded return, when
+ *  that target is still spent; `undefined` when the window should end now. */
 export function extendSpentWindow(
   session: Session,
   meta: Record<string, unknown>,
   override: Record<string, unknown>,
-  engine: string,
-  employee: Employee | undefined,
+  own: OwnTarget,
+  reader: { employee?: Employee; config?: Partial<Pick<JinnConfig, "engines">> },
 ): Session | undefined {
-  const extendTo = stillSpentUntil(session, override, engine, employee);
+  const extendTo = stillSpentUntil(session, override, own, reader);
   if (!extendTo) return undefined;
-  logger.info(`Session ${session.id}: ${engine} is still out of allowance — staying on ${session.engine} until ${extendTo.toISOString()}`);
+  logger.info(`Session ${session.id}: ${own.engine} is still out of allowance — staying on ${session.engine} until ${extendTo.toISOString()}`);
   return updateSession(session.id, {
     transportMeta: { ...meta, engineOverride: { ...override, until: extendTo.toISOString() } } as never,
   }) ?? session;

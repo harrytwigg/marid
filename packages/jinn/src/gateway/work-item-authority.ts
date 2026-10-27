@@ -3,12 +3,12 @@ import { BOARD_WALK_STARTED_BY } from "../board-walk/started-sessions.js";
 import { isOrgAncestor, resolveOrgHierarchy } from "./org-hierarchy.js";
 import { orgRegistry } from "./org-registry.js";
 import type { WorkItemCaller } from "./work-item-arming.js";
-import { resolveOrgRoot, resolveWorkItemOwner } from "./work-item-owner.js";
-import { isPortalAgentSession, listSessionsByWorkItem } from "../sessions/registry.js";
+import { resolveOrgRoot, resolveWorkItemOwner, sourceSessionId } from "./work-item-owner.js";
+import { getSession, isPortalAgentSession, listSessionsByWorkItem } from "../sessions/registry.js";
 import { remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
-import { TODO_DISPATCHER_NAME } from "./system-employees.js";
+import { TODO_DISPATCHER_NAME, isSystemEmployeeName } from "./system-employees.js";
 import type { Employee, Session } from "../shared/types.js";
-import type { WorkItem } from "../work-items/store.js";
+import { STICKY_STATUSES, getWorkItem, getWorkItemTree, type WorkItem } from "../work-items/store.js";
 import { isExecutionAttempt } from "../work-items/link-role.js";
 import { recordedDelegateSessionId } from "../work-items/employee-session-delegation.js";
 import { neverReachedEngine } from "../sessions/engine-reach.js";
@@ -23,16 +23,85 @@ import { OPERATOR_ASSIGNEE } from "../work-items/operator-assignee.js";
  * handlers. Who owns a Todo and who the root is live in `work-item-owner.ts`.
  */
 
-/** The three ways an employee has standing over a Todo: the org root has it
- *  everywhere, the routed owner has it on its own, and a manager or executive
- *  has it over anyone below them in the tree. */
+/** The four ways an employee has standing over a Todo: the org root has it
+ *  everywhere, the routed owner has it on its own, the owner of any Todo above
+ *  it in its tree has it over everything below, and a manager or executive has
+ *  it over anyone below them in the tree.
+ *
+ *  The ancestor clause is needed because assigning a sub-task moves its owner
+ *  to the assignee: whoever hands a sub-task on, at any depth, would otherwise
+ *  lose the standing to dispatch, delegate or reassign it, unless their rank
+ *  and place in the org tree happened to cover the assignee. */
 function hasStandingOverWorkItem(roster: Map<string, Employee>, employee: Employee, employeeName: string, item: WorkItem): boolean {
   const root = resolveOrgRoot();
   if (root?.kind === 'employee' && root.name === employeeName) return true;
   const owner = resolveWorkItemOwner(item);
   if (owner === employeeName) return true;
+  if (ownsAncestorOf(roster, item, employeeName)) return true;
   if (!owner || (employee.rank !== 'manager' && employee.rank !== 'executive')) return false;
   return isOrgAncestor(resolveOrgHierarchy(roster), employeeName, owner);
+}
+
+/** Whether `employeeName` owns a Todo above `item`. An ancestor's owner is its
+ *  assignee, or, while it is unassigned, the employee whose session created it.
+ *  Unlike `resolveWorkItemOwner` this never falls back to whoever has a session
+ *  linked to it, which would hand a reviewer or consultant the whole tree, and
+ *  an ancestor assigned to the operator has no employee owner at all. */
+function ownsAncestorOf(roster: Map<string, Employee>, item: WorkItem, employeeName: string): boolean {
+  const seen = new Set<string>([item.id]);
+  let parentId = item.parentId;
+  while (parentId && !seen.has(parentId)) {
+    seen.add(parentId);
+    const ancestor = getWorkItem(parentId);
+    if (!ancestor) return false;
+    if (ancestorOwner(roster, ancestor) === employeeName) return true;
+    parentId = ancestor.parentId;
+  }
+  return false;
+}
+
+function ancestorOwner(roster: Map<string, Employee>, ancestor: WorkItem): string | null {
+  if (ancestor.assignee) return roster.has(ancestor.assignee) ? ancestor.assignee : null;
+  const creatorId = sourceSessionId(ancestor);
+  const creator = creatorId ? getSession(creatorId)?.employee : null;
+  return creator && roster.has(creator) && !isSystemEmployeeName(creator) ? creator : null;
+}
+
+/**
+ * Whether the caller may give `item` to a new employee owner, judged on what
+ * sits below it. Owning a Todo carries standing over every Todo under it
+ * (`ownsAncestorOf`), so an assignment or a delegation hands the new owner
+ * that standing too. A caller may pass on only the standing it already holds:
+ * it needs standing over each open sub-task as well. Without this, claiming an
+ * unassigned parent for yourself, or being a session linked to one, would win
+ * a whole subtree of other people's work. A Todo with nothing open below it
+ * passes.
+ */
+export function authorizeAssignOverSubTasks(
+  caller: WorkItemCaller,
+  item: WorkItem,
+  action: "assign" | "delegate" | "dispatch" = "assign",
+): { ok: true } | { ok: false; status: 403; error: string } {
+  const tree = getWorkItemTree(item.id);
+  if (!tree) return { ok: true };
+  const below: WorkItem[] = [];
+  const walk = (node: typeof tree.root): void => {
+    for (const child of node.children) {
+      if (!STICKY_STATUSES.has(child.status)) below.push(child);
+      walk(child);
+    }
+  };
+  walk(tree.root);
+  for (const sub of below) {
+    if (authorizeWorkItemOwnerManagerOrRoot(caller, sub, "assign").ok) continue;
+    return {
+      ok: false,
+      status: 403,
+      error: `cannot ${action} Todo ${item.id}: its owner takes standing over the open sub-tasks below it, `
+        + `and this caller has no standing over sub-task ${sub.id}, so the Todo's owner, their manager or the operator has to ${action} it`,
+    };
+  }
+  return { ok: true };
 }
 
 export function authorizeWorkItemOwnerManagerOrRoot(
@@ -256,6 +325,13 @@ function dispatcherAssigneeBinding(
  * Whether the Todo is free to take is a separate question, answered by the
  * claim the delegation takes next, so none of these callers can start a second
  * attempt on top of a live one.
+ *
+ * Handing the Todo to a new employee also hands them standing over its open
+ * sub-tasks, so, as for an assignment, the caller needs standing over each of
+ * them, whichever of these routes let it delegate. The creating session is no
+ * exception: the Todo may have been given to someone else since it made it.
+ * A Dispatcher started on this Todo acts for whoever started it, so it is
+ * judged by their standing, not its own (`dispatcherHandOn`).
  */
 export function authorizeWorkItemDelegation(
   caller: Extract<WorkItemCaller, { kind: 'session' }>,
@@ -265,6 +341,46 @@ export function authorizeWorkItemDelegation(
 ): { ok: true } | { ok: false; status: 403; error: string } {
   const binding = dispatcherAssigneeBinding(caller.session, item, delegateEmployee);
   if (binding) return binding;
+  const standing = delegationStanding(caller, item);
+  if (!standing.ok) return standing;
+  const newOwner = delegateEmployee !== undefined && delegateEmployee !== item.assignee;
+  if (!newOwner) return standing;
+  if (isDispatcherStartedFor(caller.session, item)) return dispatcherHandOn(caller.session, item);
+  return authorizeAssignOverSubTasks(caller, item, "delegate");
+}
+
+/** Where a Dispatcher's session records the session that pressed Dispatch. */
+export const DISPATCH_PRESSED_BY_META_KEY = "dispatchPressedBy";
+
+/**
+ * Whether a Dispatcher may hand its Todo to a new owner, judged by what sits
+ * below it. A Dispatcher the operator, the board walk or a sweep started acts
+ * for the operator and needs nothing more. One a session pressed acts for that
+ * session, so it needs that session's standing over each open sub-task, judged
+ * now rather than at the press: the Todo can change hands in between, which can
+ * also free the Dispatcher from its assignee binding.
+ */
+function dispatcherHandOn(session: Session, item: WorkItem): { ok: true } | { ok: false; status: 403; error: string } {
+  const pressedBy = session.transportMeta?.[DISPATCH_PRESSED_BY_META_KEY];
+  if (typeof pressedBy !== "string") return { ok: true };
+  const presser = getSession(pressedBy);
+  const handOn = presser
+    ? authorizeAssignOverSubTasks({ kind: "session", callerId: presser.id, session: presser }, item, "delegate")
+    : { ok: false as const, status: 403 as const, error: `the session that pressed Dispatch no longer exists` };
+  if (handOn.ok) return handOn;
+  return {
+    ok: false,
+    status: 403,
+    error: `this Dispatcher was started by session ${pressedBy}'s Dispatch and hands Todo ${item.id} on with that session's standing: ${handOn.error}. `
+      + `Hand it to its current assignee, or block it for the operator with this refusal`,
+  };
+}
+
+/** Standing to delegate the Todo itself, before what sits below it is weighed. */
+function delegationStanding(
+  caller: Extract<WorkItemCaller, { kind: 'session' }>,
+  item: WorkItem,
+): { ok: true } | { ok: false; status: 403; error: string } {
   const created = item.sourceRef?.startsWith(`session:${caller.callerId}:`)
     || item.sourceRef?.startsWith(`delegate:${caller.callerId}:`);
   if (created || isDispatcherRoutingTodo(caller.session, item)) return { ok: true };

@@ -39,6 +39,8 @@ export interface FallbackChainSpec {
   own: FallbackLink;
   /** Its account key (`claude`, `claude:<profile key>`, a remote login) or, off Claude, its engine. */
   ownAccount: string;
+  /** The account an unprofiled Claude link in an `engine` chain runs as: the subject's own Claude login (a remote employee's, a named profile's). Default: the gateway's own `claude`. */
+  claudeAccount?: string;
   entries: readonly FallbackChainEntry[];
   /** `account` for a local Claude subject, else `engine`: see fallback-chain-expand.ts. */
   mode: FallbackExpansionMode;
@@ -109,8 +111,10 @@ function skipDetail(config: JinnConfig, scope: FallbackChainSpec["scope"], link:
   return `${scope.host} has no \`${REMOTE_ENGINE_CLI[link.engine]}\` on its non-interactive PATH`;
 }
 
-function resolvedLink(env: FallbackChainEnv, link: FallbackLink, origin: ResolvedFallbackLink["origin"], written: FallbackLink): ResolvedFallbackLink {
-  const account = linkAccount(link, env.config);
+function resolvedLink(
+  env: FallbackChainEnv, link: FallbackLink, origin: ResolvedFallbackLink["origin"], written: FallbackLink, claudeAccount?: string,
+): ResolvedFallbackLink {
+  const account = linkAccount(link, env.config, claudeAccount);
   const identity = { ...link, key: fallbackLinkKey(link), account, label: fallbackLinkLabel(link), origin, written: { ...written } };
   return { ...identity, health: linkHealth(env, identity) };
 }
@@ -128,7 +132,9 @@ function withModel(env: FallbackChainEnv, subject: FallbackChainSpec, link: Fall
  * (the own one included) is dropped: it is the same target.
  */
 export function resolveFallbackLinks(env: FallbackChainEnv, subject: FallbackChainSpec): ResolvedFallbackLink[] {
-  const own = resolvedLink(env, subject.own, "config", subject.own);
+  // An account chain names its Claude accounts itself; an engine chain's unprofiled Claude link is the subject's own login.
+  const claudeAccount = subject.mode === "engine" ? subject.claudeAccount : undefined;
+  const own = resolvedLink(env, subject.own, "config", subject.own, claudeAccount);
   const seen = new Set<string>([own.key]);
   // A remote subject on a declared account is also its own target when a link names no profile: that runs the account it has.
   if (subject.scope.remote && own.profile !== undefined) seen.add(fallbackLinkKey({ engine: own.engine, ...(own.model === undefined ? {} : { model: own.model }) }));
@@ -136,7 +142,7 @@ export function resolveFallbackLinks(env: FallbackChainEnv, subject: FallbackCha
   const links: ResolvedFallbackLink[] = [own];
   for (const { link, origin } of expanded) {
     const target = withModel(env, subject, link);
-    const resolved = resolvedLink(env, target, origin, link);
+    const resolved = resolvedLink(env, target, origin, link, claudeAccount);
     if (seen.has(resolved.key)) continue;
     seen.add(resolved.key);
     const skip = skipReason(env, subject, target);
@@ -197,5 +203,6 @@ export function sessionFallbackChain(options: SessionFallbackChainOptions): { so
   const own = ownTargetLink(config, { engine: session.engine, model: session.model, account: ownProfile });
   const { source, entries } = chainSource(config, session, employee, mode, ownAccount);
   const env: FallbackChainEnv = { config, registry, ...inputs };
-  return { source, links: resolveFallbackLinks(env, { own, ownAccount, entries, mode, scope }) };
+  const claudeAccount = accountForEmployee(employee, "claude");
+  return { source, links: resolveFallbackLinks(env, { own, ownAccount, claudeAccount, entries, mode, scope }) };
 }

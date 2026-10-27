@@ -5,10 +5,15 @@ import type { JinnConfig } from "./types.js";
 
 /** Where a link runs and what a target is, from config alone: the light half of the resolver, which the roster loader needs without the session machinery. */
 
-/** The account a link runs as: a Claude link on its declared profile's account (a remote account's is the key a remote employee on that directory has), or on the default account with no profile; any other link on its engine. */
-export function linkAccount(link: FallbackLink, config: JinnConfig): string {
+/**
+ * The account a link runs as: a Claude link on its declared profile's account (a remote account's is the key
+ * a remote employee on that directory has); any other link on its engine. An unprofiled Claude link runs as
+ * the login the subject's Claude turns run as, `unprofiled`: the default account unless the subject is a
+ * remote employee (its remote login) or one on a named profile.
+ */
+export function linkAccount(link: FallbackLink, config: JinnConfig, unprofiled: string = DEFAULT_CLAUDE_ACCOUNT): string {
   if (link.engine !== "claude") return link.engine;
-  if (link.profile === undefined) return DEFAULT_CLAUDE_ACCOUNT;
+  if (link.profile === undefined) return unprofiled;
   const declared = declaredClaudeAccounts(config).find((account) => account.name === link.profile);
   return declared?.key ?? declaredRemoteAccountByName(config, link.profile)?.key ?? `${DEFAULT_CLAUDE_ACCOUNT}:${link.profile}`;
 }

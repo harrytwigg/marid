@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
 import { X } from '@/components/ui/icon'
 import { FileLinkSessionContext } from '@/components/chat/file-link-session-context'
-import type { PaneTitleDrag } from '@/components/chat/pane-tabs-context'
+import { usePaneCloseAll, type PaneTitleDrag } from '@/components/chat/pane-tabs-context'
+import { CloseAllTabsButton } from '@/components/chat/close-all-tabs-button'
 import { DocView } from '@/components/chat/doc-view'
 import { docViewTestId } from '@/components/chat/doc-view-test-id'
 import { fileTabTitle } from './file-tab'
@@ -36,6 +37,9 @@ function docTitle(doc: DocTabRef): string {
 /** A lone document's title bar: its glyph and title, dragged like its tab would be, and a close button. */
 export function DocPaneTitle({ doc, active, drag, onClose }: { doc: DocTabRef; active: boolean; drag: PaneTitleDrag; onClose: () => void }) {
   const title = docTitle(doc)
+  // A lone document's pane shows no strip, so this bar is that pane's whole tab bar, as a lone
+  // chat's is: the close-all belongs here for the same reason, and only when this pane has focus.
+  const closeAll = usePaneCloseAll()
   return (
     <div
       data-testid="doc-pane-title"
@@ -44,6 +48,7 @@ export function DocPaneTitle({ doc, active, drag, onClose }: { doc: DocTabRef; a
       className={`flex min-w-0 flex-1 items-center gap-1.5 px-[8px] pl-[12px] text-[length:var(--text-subheadline)] ${active ? 'text-[var(--text-primary)]' : 'text-[var(--text-tertiary)]'}`}
     >
       <PaneKindTabLabel kind={doc.kind} title={title} active={active} />
+      {active && closeAll ? <CloseAllTabsButton onClick={closeAll} /> : null}
       <button
         type="button"
         data-pane-focus-preserving

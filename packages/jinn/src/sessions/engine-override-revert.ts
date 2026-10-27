@@ -36,7 +36,13 @@ interface ParkedOverride {
   /** The pin to restore; `undefined` on a record written before the swap parked one. */
   model: string | null | undefined;
   syncSince: string | null;
+  /** The context meter the parked thread had when it was left; null on a record that parked none. */
+  contextTokens: number | null;
   until: Date;
+}
+
+function parkedContextTokens(override: Record<string, unknown>): number | null {
+  return typeof override.originalContextTokens === "number" ? override.originalContextTokens : null;
 }
 
 function parkedOverride(override: Record<string, unknown>): ParkedOverride | null {
@@ -50,6 +56,7 @@ function parkedOverride(override: Record<string, unknown>): ParkedOverride | nul
   return {
     engine,
     engineSessionId: typeof override.originalEngineSessionId === "string" ? override.originalEngineSessionId : null,
+    contextTokens: parkedContextTokens(override),
     model: "originalModel" in override
       ? (typeof override.originalModel === "string" ? override.originalModel : null)
       : undefined,
@@ -95,27 +102,45 @@ function earliestPending(pending: unknown, parked: string): string {
   return Number.isFinite(pendingMs) && pendingMs < Date.parse(parked) ? pending as string : parked;
 }
 
+/** Whether the session's live thread is the original engine's own: a chain handed
+ *  the turn back to it on its own account, so its meter reading is current. */
+function ranOnOriginalThread(session: Session, parked: ParkedOverride): session is Session & { engineSessionId: string } {
+  return session.engine === parked.engine && !accountOverride(session) && Boolean(session.engineSessionId);
+}
+
+/** The meter reading the restored thread goes back with: the reading parked
+ *  when it was left, unless the thread has run since and the live one is newer. */
+function restoredMeter(session: Session, parked: ParkedOverride): { lastContextTokens?: number } {
+  return !ranOnOriginalThread(session, parked) && parked.contextTokens !== null ? { lastContextTokens: parked.contextTokens } : {};
+}
+
 /** The thread the restored engine resumes. A chain that handed the turn back to
  *  the original engine on its own account ran that engine's own thread, so the
  *  live id is the newest one (and the one the revert parks in its slot). */
 function restoredThread(session: Session, meta: Record<string, unknown>, parked: ParkedOverride): string | null {
-  if (session.engine === parked.engine && !accountOverride(session) && session.engineSessionId) return session.engineSessionId;
+  if (ranOnOriginalThread(session, parked)) return session.engineSessionId;
   // The original account's own slot, read without the record that points the
-  // session's Claude slot at the substitute account.
-  const unswapped: Session = { ...session, transportMeta: { ...meta, engineOverride: undefined } as never };
+  // session's Claude slot at the substitute account. The mirror is the
+  // substitute's thread, which belongs to no slot of the account going back: an
+  // account that never had a thread (the session began on the substitute) starts
+  // a fresh one, caught up from the sync point.
+  const unswapped: Session = { ...session, engineSessionId: null, transportMeta: { ...meta, engineOverride: undefined } as never };
   return parked.engineSessionId ?? getEngineSessionRef(unswapped, parked.engine).id ?? null;
 }
+
+/** What the revert reads of the config: the fallback mode default, and the engines' default models. */
+type RevertConfig = Pick<JinnConfig, "sessions"> & Partial<Pick<JinnConfig, "engines">>;
 
 /** The session while its stand-in still holds: the window is open, or the engine is known to be
  *  spent still and the window moved out. Undefined when it is over, and always for `auto-resume`. */
 function heldOverride(opts: {
   session: Session; meta: Record<string, unknown>; override: Record<string, unknown>; parked: ParkedOverride;
-  employee?: Employee; config?: Pick<JinnConfig, "sessions">;
+  employee?: Employee; config?: RevertConfig;
 }): Session | undefined {
   const { session, meta, override, parked, employee, config } = opts;
   if (isAutoResume(config ?? {}, session)) return undefined;
   if (parked.until.getTime() > Date.now()) return session;
-  return extendSpentWindow(session, meta, override, parked.engine, employee);
+  return extendSpentWindow(session, meta, override, parked, { employee, config });
 }
 
 /** Restore the pre-rate-limit engine, and the model that belonged to it, once the
@@ -123,7 +148,7 @@ function heldOverride(opts: {
  *  known to be spent still. A session whose fallback mode is `auto-resume` never
  *  stands on a stand-in: its override counts as expired at once (`config` says
  *  whether the default makes it so; without it only the session's own mode counts). */
-export function maybeRevertEngineOverride(session: Session, employee?: Employee, config?: Pick<JinnConfig, "sessions">): Session {
+export function maybeRevertEngineOverride(session: Session, employee?: Employee, config?: RevertConfig): Session {
   const meta = (session.transportMeta || {}) as Record<string, unknown>;
   const override = meta["engineOverride"] as Record<string, unknown> | undefined;
   if (!override) return session;
@@ -149,6 +174,9 @@ export function maybeRevertEngineOverride(session: Session, employee?: Employee,
     engine: parked.engine,
     engineSessionId: thread,
     ...(parked.model !== undefined ? { model: parked.model } : {}),
+    // A stand-in's turns overwrote the meter with its own thread's size; the
+    // thread coming back is the one the parked reading measured.
+    ...restoredMeter(session, parked),
     transportMeta: revertedMeta(meta, session, parked, thread) as never,
     lastError: null,
   }) ?? session;

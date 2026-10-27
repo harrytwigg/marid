@@ -41,7 +41,7 @@ export function linkHealthKey(link: FallbackLinkIdentity): string {
 
 /** The keys a link's state is read under: its own, and the engine-wide one (the engine as a whole is out).
  *  A Claude link has no engine-wide key: `claude` is the default account's, not every account's. */
-function healthKeys(link: FallbackLinkIdentity): string[] {
+export function healthKeys(link: FallbackLinkIdentity): string[] {
   const key = linkHealthKey(link);
   return link.engine === "claude" || key === link.engine ? [key] : [key, link.engine];
 }

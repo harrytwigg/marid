@@ -228,6 +228,16 @@ export function useChatTabs() {
     setState((current) => ({ ...current, activeIndex: -1 }))
   }, [])
 
+  /**
+   * Closes every open tab, leaving the list as it is on a first visit — and,
+   * because the write-through effect saves whatever the list holds, clearing the
+   * stored key too. An already-empty list keeps its own object so a caller that
+   * closes all on an empty list does not churn a render.
+   */
+  const closeAllTabs = useCallback(() => {
+    setState((current) => (current.tabs.length === 0 && current.activeIndex === -1 ? current : { tabs: [], activeIndex: -1 }))
+  }, [])
+
   const updateTabStatus = useCallback((sessionId: string, updates: Partial<SessionTab>) => {
     setState((current) => {
       const idx = current.tabs.findIndex((t) => t.kind === 'session' && t.sessionId === sessionId)
@@ -314,10 +324,10 @@ export function useChatTabs() {
     openTab, openFileTab, closeTab, switchTab, nextTab, prevTab,
     pinTab, moveTab,
     clearActiveTab, updateTabStatus,
-    closeTabBySessionId, reconcileTabs,
+    closeTabBySessionId, reconcileTabs, closeAllTabs,
   }), [tabs, activeTab, activeIndex, hydrated,
     openTab, openFileTab, closeTab, switchTab, nextTab, prevTab,
     pinTab, moveTab,
     clearActiveTab, updateTabStatus,
-    closeTabBySessionId, reconcileTabs])
+    closeTabBySessionId, reconcileTabs, closeAllTabs])
 }

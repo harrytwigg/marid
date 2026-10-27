@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { X } from '@/components/ui/icon'
+import { CloseAllTabsButton } from '@/components/chat/close-all-tabs-button'
 import { StatusDot } from '@/components/chat/session-signals'
 import { cn } from '@/lib/utils'
 import './mobile-session-tabs.css'
@@ -85,11 +86,13 @@ export function MobileSessionTabs({
   activeId,
   onSelect,
   onClose,
+  onCloseAll,
 }: {
   tabs: MobileSessionTab[]
   activeId: string | null
   onSelect: (sessionId: string) => void
   onClose: (sessionId: string) => void
+  onCloseAll?: () => void
 }) {
   const activeRef = useRef<HTMLDivElement | null>(null)
 
@@ -124,6 +127,7 @@ export function MobileSessionTabs({
           )
         })}
       </div>
+      {onCloseAll ? <CloseAllTabsButton onClick={onCloseAll} compact /> : null}
     </nav>
   )
 }
