@@ -12,8 +12,8 @@ describe("resolveEffort (registry-driven validation)", () => {
     expect(resolveEffort({}, { parentSessionId: "p", effortLevel: "xhigh" }, null, CODEX)).toBe("xhigh");
   });
 
-  it("rejects xhigh for claude (not in its levels) and falls back to medium", () => {
-    expect(resolveEffort({}, { parentSessionId: "p", effortLevel: "xhigh" }, null, CLAUDE)).toBe("medium");
+  it("rejects xhigh for claude (not in its levels) and falls back to high", () => {
+    expect(resolveEffort({}, { parentSessionId: "p", effortLevel: "xhigh" }, null, CLAUDE)).toBe("high");
   });
 
   it("claude still accepts low/medium/high", () => {
@@ -22,11 +22,45 @@ describe("resolveEffort (registry-driven validation)", () => {
   });
 
   it("drops an unknown level and defaults (graceful degradation, no throw)", () => {
-    expect(resolveEffort({ effortLevel: "ultra" }, { parentSessionId: null, effortLevel: null }, null, CLAUDE)).toBe("medium");
+    expect(resolveEffort({ effortLevel: "ultra" }, { parentSessionId: null, effortLevel: null }, null, CLAUDE)).toBe("high");
   });
 
-  it("returns medium without warning when the engine has no effort concept (empty levels)", () => {
-    expect(resolveEffort({ effortLevel: "high" }, { parentSessionId: "p", effortLevel: "high" }, null, [])).toBe("medium");
+  it("returns the default without warning when the engine has no effort concept (empty levels)", () => {
+    expect(resolveEffort({ effortLevel: "low" }, { parentSessionId: "p", effortLevel: "low" }, null, [])).toBe("high");
+  });
+
+  describe("built-in default when nothing chooses a level", () => {
+    const unset = { parentSessionId: null, effortLevel: null } as never;
+    const child = { parentSessionId: "p", effortLevel: null } as never;
+
+    it("is high for a non-child and a child session", () => {
+      expect(resolveEffort({}, unset, null, CLAUDE_REGISTRY)).toBe("high");
+      expect(resolveEffort({}, child, { effortLevel: undefined } as never, CODEX)).toBe("high");
+    });
+
+    it("falls back to the nearest listed level when the model has no high", () => {
+      expect(resolveEffort({}, unset, null, ["low", "medium"])).toBe("medium");
+      expect(resolveEffort({}, unset, null, ["xhigh", "max"])).toBe("xhigh");
+      expect(resolveEffort({}, unset, null, ["minimal", "low"])).toBe("low");
+    });
+
+    it("takes the lighter level on a tie", () => {
+      expect(resolveEffort({}, unset, null, ["medium", "xhigh"])).toBe("medium");
+    });
+
+    it("uses the first level when none is a known name", () => {
+      expect(resolveEffort({}, unset, null, ["fast", "slow"])).toBe("fast");
+    });
+
+    it("never returns a level the model does not list", () => {
+      for (const levels of [["low"], ["low", "medium"], ["max"], ["fast"], ["low", "xhigh", "max"]]) {
+        expect(levels).toContain(resolveEffort({}, unset, null, levels));
+      }
+    });
+
+    it("still falls back to the built-in default when the engine config level is invalid", () => {
+      expect(resolveEffort({ effortLevel: "ultra" }, unset, null, ["low", "medium"])).toBe("medium");
+    });
   });
 
   describe("child-effort resolution chain", () => {
@@ -72,7 +106,7 @@ describe("resolveEffort (registry-driven validation)", () => {
       { parentSessionId: "p", effortLevel: "default" },
       { effortLevel: "default" },
       CLAUDE,
-    )).toBe("medium");
+    )).toBe("high");
   });
 });
 
@@ -117,7 +151,7 @@ describe("resolveEffort for an engine whose level lives on the CLI's screen", ()
   it("says `default` when nothing chose a level, so the CLI's own setting stands", () => {
     expect(resolveEffort({}, session, null, levels, "freebuff")).toBe("default");
     expect(resolveEffort({}, session, null, [], "freebuff")).toBe("default");
-    expect(resolveEffort({}, session, null, levels, "codex")).toBe("medium");
+    expect(resolveEffort({}, session, null, levels, "codex")).toBe("high");
   });
 
   it("still returns a level the employee or the engine chose", () => {
