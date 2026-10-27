@@ -197,3 +197,38 @@ describe("a Todo handed down two levels", () => {
     expect(dispatched.status).toBe(201);
   });
 });
+
+describe("a root nobody is assigned to", () => {
+  /** An unassigned root made by a session of `creator`, with a child assigned to `peer-report`. */
+  function unassignedRootBy(creator: string, tag: string, prefix: "session" | "delegate" = "session") {
+    const maker = sessionOf(creator, `${tag}-maker`);
+    const root = workItems.createWorkItem({
+      title: `unassigned root of ${tag}`,
+      source: "session",
+      sourceRef: `${prefix}:${maker.id}:idempotency:${tag}`,
+      createdBy: `session:${maker.id}`,
+    });
+    const child = workItems.createWorkItem({ title: `child of ${tag}`, parentId: root.id, assignee: "peer-report" });
+    return { root, child };
+  }
+
+  it.each(["session", "delegate"] as const)("belongs to the employee whose session made it (%s source)", async (prefix) => {
+    const { child } = unassignedRootBy("lead", `creator-${prefix}`, prefix);
+    const creator = sessionOf("lead", `creator-${prefix}-later`);
+    const stranger = sessionOf("outsider", `creator-${prefix}-stranger`);
+
+    const refused = await call("POST", `/api/work-items/${child.id}/dispatch`, {}, callerHeaders(stranger.id));
+    expect(refused.status).toBe(403);
+    const dispatched = await call("POST", `/api/work-items/${child.id}/dispatch`, {}, callerHeaders(creator.id));
+    expect(dispatched.body.error).toBeUndefined();
+    expect(dispatched.status).toBe(201);
+  });
+
+  it("does not make a Dispatcher the owner, so its own hand-off rules still decide", async () => {
+    const { child } = unassignedRootBy("todo-dispatcher", "dispatcher-made");
+    const dispatcher = sessionOf("todo-dispatcher", "dispatcher-made-other");
+
+    const response = await call("POST", `/api/work-items/${child.id}/dispatch`, {}, callerHeaders(dispatcher.id));
+    expect(response.status).toBe(403);
+  });
+});
