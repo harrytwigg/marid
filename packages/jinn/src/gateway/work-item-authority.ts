@@ -268,7 +268,8 @@ function dispatcherRefusal(callerId: string, session: Session, item: WorkItem, a
  * the refusal and options — never a second choice.
  *
  * Two starts are not bound. An unset assignee, or @operator (a person nobody
- * can delegate to), leaves nobody to be bound to, so the Dispatcher chooses.
+ * can delegate to), leaves nobody to be bound to, so the Dispatcher chooses
+ * (unless the Todo is given to an employee while it routes, below).
  * And a Dispatcher the board walk started carries the walk's own routing brief
  * (a reason and an engine preference) in its prompt; its routing stays its own
  * decision, marked by the transportMeta the walk stamps on its session.
@@ -278,7 +279,7 @@ function dispatcherRefusal(callerId: string, session: Session, item: WorkItem, a
  * as it delegates. Read late, someone with standing over the Todo could give
  * it to @operator mid-route and leave the Dispatcher free to hand it, and
  * standing over its open sub-tasks, to anyone. So once a Todo pressed with an
- * employee assignee has changed hands, the Dispatcher routes nobody: the press
+ * employee assignee has a different assignee, the Dispatcher routes nobody: the press
  * it acts on no longer describes the Todo, handing it back would undo the
  * reassignment, and a fresh Dispatch on the new assignment is the operator's
  * call. One pressed with nobody to bind it to, whose Todo has since gone to an
@@ -339,7 +340,7 @@ function changedHandsRefusal(
     error: `this Dispatcher was started on Todo ${item.id} when its assignee was ${describeAssignee(pressed)}, `
       + `and it has since been reassigned to ${describeAssignee(current)}: the Dispatch it acts on no longer describes the Todo, `
       + `so it cannot hand the Todo on to anyone. Block the Todo for the operator with this refusal; `
-      + `a fresh start on the new assignment is their call (they press Dispatch on Todo ${item.id}).`,
+      + `a fresh start on the new assignment is their call (they press Dispatch on Todo ${item.id} once this Dispatcher has stopped).`,
   };
 }
 
