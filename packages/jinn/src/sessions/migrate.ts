@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   attempt_turn INTEGER NOT NULL DEFAULT 0,
   attempt_interruption_cause TEXT,
   attempt_interruption_turn INTEGER,
+  attempt_operator_turn INTEGER NOT NULL DEFAULT 0,
   archived_at TEXT,
   created_at TEXT NOT NULL,
   last_activity TEXT NOT NULL,
@@ -337,6 +338,9 @@ export function migrateSessionsSchema(database: Database.Database): void {
     ['attempt_turn', 'INTEGER NOT NULL', '0'],
     ['attempt_interruption_cause', 'TEXT'],
     ['attempt_interruption_turn', 'INTEGER'],
+    // 1 while the attempt runs a message the operator sent themselves; every
+    // other turn (callbacks, sends between sessions, briefs, Todo wakes) is 0.
+    ['attempt_operator_turn', 'INTEGER NOT NULL', '0'],
     // Archive is reversible: it only hides the chat from lists. NULL keeps existing sessions visible.
     ['archived_at', 'TEXT'],
     ['scope_department', 'TEXT'], // a scoped employee's binding, set in registry.ts createSession

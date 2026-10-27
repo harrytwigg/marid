@@ -77,11 +77,12 @@ async function runQueuedTurn(
   session: Session,
   context: ApiContext,
   request: Omit<WebTurnRequest, "attemptToken">,
-  opts: { sessionKey: string; queueItemId?: string; onAttempt: (token: string) => void },
+  opts: { sessionKey: string; queueItemId?: string; operatorTurn?: boolean; onAttempt: (token: string) => void },
 ): Promise<void> {
   const startedAttempt = beginSessionAttempt(session.id, {
     lastActivity: new Date().toISOString(),
     lastError: null,
+    attemptOperatorTurn: opts.operatorTurn === true,
   });
   if (!startedAttempt?.attemptToken) {
     logger.info(`Skipping web session ${session.id}: attempt could not be started`);
@@ -123,7 +124,15 @@ export function dispatchWebSessionRun(
   prompt: string,
   engine: Engine,
   context: ApiContext,
-  opts?: { delayMs?: number; queueItemId?: string; attachments?: string[] },
+  opts?: {
+    delayMs?: number;
+    queueItemId?: string;
+    attachments?: string[];
+    /** The operator sent this message themselves (an operator-authenticated
+     *  user message, never a notification). Stamped on the attempt it runs in;
+     *  absent means it is not, which is what every other caller wants. */
+    operatorTurn?: boolean;
+  },
 ): void {
   let dispatchedAttemptToken: string | undefined;
   const sessionKey = session.sessionKey || session.sourceRef;
@@ -133,6 +142,7 @@ export function dispatchWebSessionRun(
         runQueuedTurn(session, context, requestForTurn({ prompt, engine, attachments: opts?.attachments }, opts?.queueItemId), {
           sessionKey,
           queueItemId: opts?.queueItemId,
+          operatorTurn: opts?.operatorTurn,
           onAttempt: (token) => {
             dispatchedAttemptToken = token;
           },

@@ -179,6 +179,11 @@ authoring session. For `todo.created` the event row records only the source kind
 `todo.dispatched` actor is whoever asked for the start (`operator`, the session, or
 `board-walk`). A session with no employee, and every other source, is `system`.
 
+A Todo an employee closed with `asOperator`, on the operator's word in a chat the
+operator opened with it, is the operator's close: `kind` is `operator`, and `employee`
+names the employee that carried it out. `match: { actor: operator }` matches it, and so
+does `match: { actor: <that employee> }`.
+
 ## Loop guard
 
 A hook's `spawn` action starts its session with provenance `source: "hook"`,
@@ -217,7 +222,10 @@ closes many Todos fires a hook for each.
   scrubbed child env plus `JINN_HOOK_NAME`, `JINN_HOOK_EVENT`, `JINN_HOOK_FIRE_ID`,
   `JINN_HOOK_TODO_ID`, `JINN_HOOK_FROM`, `JINN_HOOK_TO`, `JINN_HOOK_ACTOR`,
   `JINN_HOOK_CHAIN` (comma-separated) and `JINN_HOOK_PAYLOAD` (the JSON, omitted when
-  it is over 64 KB; stdin always carries it). The command
+  it is over 64 KB; stdin always carries it). `JINN_HOOK_ACTOR` is the actor's
+  employee when there is one, else its kind, so an operator's close an employee
+  carried out reads as that employee: a script that tells the operator apart reads
+  `actor.kind` from the payload instead. The command
   passes the gateway's command policy first; a refused command is an `error` run.
   Outcome: `ok` on exit 0, `error` otherwise, with the exit code and the redacted
   last 4 KB of stdout+stderr.

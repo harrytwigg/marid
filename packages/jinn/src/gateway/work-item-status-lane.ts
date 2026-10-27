@@ -1,4 +1,4 @@
-import { getSession, isCoordinatorSession } from "../sessions/registry.js";
+import { getSession, isCoordinatorSession, isOperatorEmployeeTurn } from "../sessions/registry.js";
 import { listWorkItemEvents } from "../work-items/event-log.js";
 import { toWorkItemLinkRole } from "../work-items/link-role.js";
 import { STICKY_STATUSES, type WorkItem, type WorkItemEvent, type WorkItemStatus } from "../work-items/store.js";
@@ -20,7 +20,13 @@ import { workItemActor, type WorkItemCaller } from "./work-item-arming.js";
  *   cancels or reopens; a move into `in_review` carries a summary.
  * - The **coordinator lane** is the one exception: the operator's coordinator
  *   chat may close a Todo as `done` on the operator's behalf, with a reason
- *   the gateway posts on the Todo. Nothing else rides on it.
+ *   the gateway posts on the Todo. Nothing else rides on it. The same holds, from
+ *   `in_review` only, for an employee holding `closeTodos` in a web chat the
+ *   operator opened with it, on a turn the operator's own message started: the
+ *   grant is what opts that employee in, and a mention, delegation, cron run,
+ *   child session, or a brief or send that lands in the chat never counts as the
+ *   operator talking. The close is the operator's, and the event names the
+ *   employee that carried it out.
  * - The **closer lane** is the operator's standing grant: an employee whose YAML
  *   says `closeTodos: true` may move a Todo to `done` as itself, with a reason
  *   the gateway posts on the Todo, from `in_review` only. `done` and nothing else: cancelling,
@@ -33,7 +39,7 @@ export const WORK_ITEM_STATUSES: readonly WorkItemStatus[] = ["backlog", "execut
 
 export type StatusLane =
   | { kind: "operator" }
-  | { kind: "coordinator"; actingAs: string }
+  | { kind: "coordinator"; actingAs: string; employee?: string }
   | { kind: "closer"; employee: string }
   | { kind: "parent-owner"; employee: string }
   | { kind: "agent" };
@@ -54,26 +60,46 @@ const AGENT_LANE_SHAPE =
   "agents pick work up and put it down (backlog ↔ executing), hand it to review and take it back (executing ↔ in_review), "
   + "and stop or resume it (↔ blocked)";
 
-/** `asOperator` from a session: the coordinator closing a Todo as `done` for
- *  the operator, with the reason it will post. Nothing else rides on it. */
+/** `asOperator` from a session: the coordinator, or an employee holding
+ *  `closeTodos` while the operator is talking to it ({@link isOperatorEmployeeTurn}),
+ *  closing a Todo as `done` for the operator, with the reason it will post.
+ *  Nothing else rides on it. */
 function resolveCoordinatorLane(
   caller: Extract<WorkItemCaller, { kind: "session" }>,
   item: WorkItem,
   target: WorkItemStatus,
   note: string,
 ): StatusLaneResult {
-  if (!isCoordinatorSession(caller.session)) {
-    const who = caller.session.employee ? `employee "${caller.session.employee}"` : `session ${caller.callerId}`;
-    return refuse(403, `asOperator is reserved for the operator's coordinator session; ${who} moves Todo ${item.id} as itself`);
-  }
+  const coordinator = isCoordinatorSession(caller.session);
+  const closer = closerOf(caller);
+  if (!coordinator && !(closer && isOperatorEmployeeTurn(caller.session))) return notTheOperatorTalking(caller, item, closer);
   if (target !== "done") {
     return refuse(403, "asOperator closes a Todo as done for the operator and nothing else: cancelling, archiving and reopening stay with the operator");
   }
   if (STICKY_STATUSES.has(item.status)) return refuse(403, `Todo ${item.id} is already ${item.status}; reopening closed work is the operator's`);
+  // The grant exists to close reviewed work, so an employee's chat holds to in_review as the closer lane does.
+  if (!coordinator && item.status !== "in_review") {
+    return refuse(403, `an employee with closeTodos closes Todos that are in review: Todo ${item.id} is ${item.status}; move it to in_review first`);
+  }
   if (!note) {
     return refuse(400, "asOperator needs the reason in note: closing a Todo for the operator is for exceptional cases, and the reason is posted on the Todo");
   }
-  return { ok: true, lane: { kind: "coordinator", actingAs: workItemActor(caller) } };
+  return { ok: true, lane: { kind: "coordinator", actingAs: workItemActor(caller), ...(coordinator ? {} : { employee: closer }) } };
+}
+
+/** Why `asOperator` is refused a session the operator is not talking through.
+ *  A closeTodos employee is told it can still close reviewed work as itself. */
+function notTheOperatorTalking(
+  caller: Extract<WorkItemCaller, { kind: "session" }>,
+  item: WorkItem,
+  closer: string | undefined,
+): StatusLaneResult {
+  if (closer) {
+    return refuse(403, `asOperator is for a web chat the operator opened with employee "${closer}", on a turn the operator's own message started; `
+      + `without asOperator, closeTodos closes a Todo that is in review as "${closer}", unless "${closer}" had a hand in it`);
+  }
+  const who = caller.session.employee ? `employee "${caller.session.employee}"` : `session ${caller.callerId}`;
+  return refuse(403, `asOperator is reserved for the operator's coordinator session and for a closeTodos employee in a chat the operator opened with it; ${who} moves Todo ${item.id} as itself`);
 }
 
 /** The employee a session acts as when the operator has granted it `closeTodos`.

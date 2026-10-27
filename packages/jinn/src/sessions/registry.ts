@@ -136,6 +136,7 @@ function rowToSession(row: Record<string, unknown>): Session {
     attemptTurn: (row.attempt_turn as number) ?? 0,
     attemptInterruptionCause: (row.attempt_interruption_cause as SessionAttemptInterruptionCause) ?? null,
     attemptInterruptionTurn: (row.attempt_interruption_turn as number) ?? null,
+    attemptOperatorTurn: row.attempt_operator_turn === 1,
     totalCost: (row.total_cost as number) ?? 0,
     totalTurns: (row.total_turns as number) ?? 0,
     lastContextTokens: (row.last_context_tokens as number) ?? null,
@@ -534,6 +535,7 @@ export function createSession(opts: CreateSessionOpts & { prompt?: string; porta
     attemptTurn: 0,
     attemptInterruptionCause: null,
     attemptInterruptionTurn: null,
+    attemptOperatorTurn: false,
     totalCost: 0,
     totalTurns: 0,
     lastContextTokens: null,
@@ -571,6 +573,7 @@ export interface UpdateSessionFields {
   attemptTurn?: number;
   attemptInterruptionCause?: SessionAttemptInterruptionCause | null;
   attemptInterruptionTurn?: number | null;
+  attemptOperatorTurn?: boolean;
   model?: string | null;
   effortLevel?: string | null;
   fallbackMode?: SessionFallbackMode | null;
@@ -652,6 +655,10 @@ export function updateSession(id: string, updates: UpdateSessionFields): Session
   if (updates.attemptInterruptionTurn !== undefined) {
     sets.push('attempt_interruption_turn = ?');
     values.push(updates.attemptInterruptionTurn);
+  }
+  if (updates.attemptOperatorTurn !== undefined) {
+    sets.push('attempt_operator_turn = ?');
+    values.push(updates.attemptOperatorTurn ? 1 : 0);
   }
   if (updates.model !== undefined) {
     sets.push('model = ?');
@@ -978,10 +985,12 @@ export function listDelegationCompletionNudgedSessions(): Session[] {
 
 /** Start a new execution generation and make it the sole owner of terminal
  * writes for this session. The token is durable so stop/reset wins across
- * asynchronous engine completion and process boundaries. */
+ * asynchronous engine completion and process boundaries. The attempt is an
+ * operator turn only when the caller says so: every other start clears it. */
 export function beginSessionAttempt(id: string, updates: UpdateSessionFields = {}): Session | undefined {
   return updateSession(id, {
     ...updates,
+    attemptOperatorTurn: updates.attemptOperatorTurn === true,
     status: 'running',
     attemptOutcome: null,
     attemptToken: uuidv4(),
@@ -1354,7 +1363,13 @@ export function coercePortalEmployee(
  * chat, operator cron, the gateway — except a remote MCP anchor (FR-012).
  */
 export function isPortalAgentSession(session: Session): boolean {
-  return !session.employee && !session.parentSessionId
+  return !session.employee && isOperatorRootShape(session);
+}
+
+/** A parentless session on a surface the operator drives: not a remote MCP
+ *  anchor, a legacy workflow phase or a terminal. */
+function isOperatorRootShape(session: Session): boolean {
+  return !session.parentSessionId
     && session.source !== "remote-mcp" && !isLegacyWorkflowPhaseSession(session)
     && session.source !== "terminal" && session.engine !== "terminal";
 }
@@ -1363,20 +1378,52 @@ export function isPortalAgentSession(session: Session): boolean {
  *  console, Talk, and the chat connectors. */
 const COORDINATOR_SOURCES: ReadonlySet<string> = new Set(["web", "talk", "slack", "telegram", "discord", "whatsapp"]);
 
+/** True when the operator opened this chat on one of {@link COORDINATOR_SOURCES}
+ *  itself: not a cron run, an engine-only delegation (`delegation:` key) nor a
+ *  root session the gateway started on a Todo for an `@mention` (`todo:` key).
+ *  Those are work the operator scheduled, handed off or tagged, not the operator
+ *  talking — and a Todo's thread, where employees write, keeps reaching the root
+ *  session afterwards. */
+function isOperatorOpenedChat(session: Session): boolean {
+  if (!COORDINATOR_SOURCES.has(session.source)) return false;
+  const keys = [session.sourceRef, session.sessionKey];
+  return !keys.some((key) => key !== undefined && key !== null && GATEWAY_STARTED_KEY_PREFIXES.has(key.split(":", 1)[0]));
+}
+
+/** The leading segment of the session keys the gateway mints for work it starts
+ *  itself — a schedule, a delegation (plain or idempotent), a Todo mention, the
+ *  dispatcher or the shaper, a hook — as opposed to a chat the operator opens.
+ *  Matched on the whole segment before the first `:`, so a longer sibling such
+ *  as `delegation-idempotency:` cannot slip past a bare `delegation:` check. */
+const GATEWAY_STARTED_KEY_PREFIXES: ReadonlySet<string> = new Set([
+  "cron", "delegation", "delegation-idempotency",
+  "todo", "todo-dispatcher", "todo-shaper", "hook", "talk-handoff", "archived",
+]);
+
 /**
- * True only for a coordinator chat the operator started: portal-shaped, opened
- * from one of {@link COORDINATOR_SOURCES}, and neither a cron run, an
- * engine-only delegation (`delegation:` key) nor a root session the gateway
- * started on a Todo for an `@mention` (`todo:` key). Those are portal-shaped
- * too, but they are work the operator scheduled, handed off or tagged, not the
- * operator talking — and a Todo's thread, where employees write, keeps reaching
- * the root session afterwards. Narrower than {@link isPortalAgentSession},
- * which still answers for root standing; this answers for acting AS the operator.
+ * True only for a coordinator chat the operator started: portal-shaped and
+ * opened by the operator ({@link isOperatorOpenedChat}). Narrower than
+ * {@link isPortalAgentSession}, which still answers for root standing; this
+ * answers for acting AS the operator.
  */
 export function isCoordinatorSession(session: Session): boolean {
-  if (!isPortalAgentSession(session) || !COORDINATOR_SOURCES.has(session.source)) return false;
-  const keys = [session.sourceRef, session.sessionKey];
-  return !keys.some((key) => key?.startsWith("cron:") || key?.startsWith("delegation:") || key?.startsWith("todo:"));
+  return isPortalAgentSession(session) && isOperatorOpenedChat(session);
+}
+
+/**
+ * True only while the operator is talking to an employee in a web chat they
+ * opened with it: a parentless, operator-opened `web` session with an employee
+ * identity, running a turn the operator's own message started
+ * ({@link Session.attemptOperatorTurn}). The session alone is not enough: a
+ * delegation brief reused into the chat, a send from another session and a
+ * child's callback all run there too, as notifications, and none of them is the
+ * operator. Chat connectors are left out because a bot may hear from people
+ * other than the operator.
+ */
+export function isOperatorEmployeeTurn(session: Session): boolean {
+  return !!session.employee && session.source === "web" && isOperatorRootShape(session)
+    && isOperatorOpenedChat(session)
+    && session.status === "running" && session.attemptOperatorTurn === true;
 }
 
 // Build the CASE that maps a row to its sidebar group. When a portalSlug is

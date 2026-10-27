@@ -403,6 +403,11 @@ export interface Session {
    * The paired turn fence prevents an older cause from leaking into a later turn. */
   attemptInterruptionCause?: SessionAttemptInterruptionCause | null;
   attemptInterruptionTurn?: number | null;
+  /** The attempt now running (or last run) was started by a message the
+   * operator sent: a web chat message or first prompt from an
+   * operator-authenticated caller. Set when the attempt begins and false for
+   * every other turn, so it fails closed on a path that does not stamp it. */
+  attemptOperatorTurn?: boolean;
   effortLevel: string | null;
   /** Usage-limit behaviour chosen for this session; null follows `sessions.fallbackMode`. */
   fallbackMode: SessionFallbackMode | null;

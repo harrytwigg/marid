@@ -276,9 +276,14 @@ const ATTESTED = {
   // null meaning "detach" is not guessable. 21 tokens on every wrapper, and
   // there is no dead prose left on this surface to buy them back with, so the
   // ceiling moves by exactly that and Pi sits ON it again.
-  rpc: { tokens: 4009, sha256: "68d80125f7f1c7a72e5ac6efaae9146c248d7ac269fc0b7c99d610d177337b9c" },
-  pi: { tokens: 4344, sha256: "336d5afd984c777aaeae8c18e32128e675d91784c0b27c30ea87214a32d0354c" },
-  openai: { tokens: 4148, sha256: "68b0bf5db1d82f1e5cfc3e49957aa0aa13752df46951fc5ac0c1753ca69fb4e6" },
+  // Rebased for who may use `asOperator` on update_work_item: not the coordinator
+  // alone but a session in a chat the operator opened ("In a chat the operator
+  // opened: done."); which sessions qualify is the refusal's to say, and the
+  // parameter's name already says it is for the operator. One token under the
+  // old text, so the ceiling does not move and Pi sits one under it.
+  rpc: { tokens: 4008, sha256: "36f7347b0f96b308b7ceb214c3d6b59166ed65bdb31c107af6623b0fe1efe0e1" },
+  pi: { tokens: 4343, sha256: "05c747b6a630077102bb8789325e18683c410c38b3131a5e6800ab93b0835c2b" },
+  openai: { tokens: 4147, sha256: "f7a8474b1e39d4b5683d49b9d62dd45380c197e303bfbe748cd8902d27e516b8" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;

@@ -310,7 +310,7 @@ describe("an employee without the grant", () => {
 
   it("cannot take a grant by claiming asOperator either", async () => {
     const item = reviewTodo("Claiming the coordinator");
-    const res = await closeAs("closer-dev", item.id, { ...closeBody, asOperator: true });
+    const res = await closeAs("plain-dev", item.id, { ...closeBody, asOperator: true });
     expect(res.status).toBe(403);
     expect(res.body.error).toMatch(/asOperator is reserved for the operator's coordinator session/);
     expect(statusOf(item.id)).toBe("in_review");
@@ -351,6 +351,180 @@ describe("what a closer's done leaves behind", () => {
     expect(listWorkItemEvents(item.id).filter((event) => event.toStatus !== null).map((event) => event.actor)).not.toContain("reconciler");
   });
 
+});
+
+describe("asOperator while the operator is talking to a granted employee in a web chat", () => {
+  const onInstruction = { status: "done", asOperator: true, note: "the operator told me to close it" };
+  const chatAs = async (employee: string, extra: Record<string, unknown> = {}) => {
+    const { createSession } = await import("../../sessions/registry.js");
+    return createSession({ engine: "claude", source: "web", sourceRef: `web:${employee}:${Math.random()}`, employee, ...extra });
+  };
+  const sessionNow = async (id: string) => (await import("../../sessions/registry.js")).getSession(id)!;
+  /** The operator types into the chat: the turn that message starts is theirs. */
+  const operatorSays = async (session: { id: string }, message = "Close it, it is finished.") => {
+    expect((await call("POST", `/api/sessions/${session.id}/message`, { message })).status).toBe(200);
+    expect(await sessionNow(session.id)).toMatchObject({ status: "running", attemptOperatorTurn: true });
+    return session;
+  };
+  /** Stamp a running operator turn directly, to test what the session alone decides. */
+  const stampOperatorTurn = async (session: { id: string }) => {
+    (await import("../../sessions/registry.js")).beginSessionAttempt(session.id, { attemptOperatorTurn: true });
+    return session;
+  };
+  const closeIn = (session: { id: string }, id: string, body: Record<string, unknown> = onInstruction) =>
+    as(session.id)("POST", `/api/work-items/${id}/status`, body);
+  const refusedAsCloser = /asOperator is for a web chat the operator opened with employee "closer-dev", on a turn the operator's own message started; without asOperator/;
+
+  it("closes an in_review Todo for the operator, recording the operator as the actor, the employee on the event and the reason as a comment", async () => {
+    const item = reviewTodo("Operator says close it");
+    const session = await operatorSays(await chatAs("closer-dev"));
+
+    const res = await closeIn(session, item.id);
+
+    expect([res.status, res.body.workItem.status]).toEqual([200, "done"]);
+    const closeEvent = listWorkItemEvents(item.id).filter((event) => event.toStatus === "done").at(-1)!;
+    expect(closeEvent.actor).toBe("operator");
+    expect(closeEvent.detail).toMatchObject({ asOperator: `session:${session.id}`, asOperatorEmployee: "closer-dev", note: onInstruction.note });
+    expect(closeEvent.detail).not.toHaveProperty("actorEmployee");
+    const comment = listComments(item.id).comments.at(-1)!;
+    expect(comment.sessionId).toBe(session.id);
+    expect(comment.body).toBe(`Closed as done for the operator. Reason: ${onInstruction.note}`);
+  });
+
+  it("closes in a chat the operator opened with its first message", async () => {
+    const item = reviewTodo("Opened to close it");
+    const opened = await call("POST", "/api/sessions", { employee: "closer-dev", prompt: "Close the reviewed Todo." });
+    expect(opened.status).toBe(201);
+    expect(await sessionNow(opened.body.id)).toMatchObject({ parentSessionId: null, attemptOperatorTurn: true });
+
+    const res = await closeIn(opened.body, item.id);
+    expect([res.status, statusOf(item.id)]).toEqual([200, "done"]);
+  });
+
+  it("closes work the employee did in another session, since the operator is the one deciding", async () => {
+    const item = reviewTodo("Employee handed this in");
+    transition(item.id, "executing", "operator", { manual: true, human: true });
+    const mover = await chatAs("closer-dev");
+    expect((await as(mover.id)("POST", `/api/work-items/${item.id}/status`, { status: "in_review", note: "ready" })).status).toBe(200);
+    expect((await closeAs("closer-dev", item.id)).status).toBe(403);
+
+    const res = await closeIn(await operatorSays(await chatAs("closer-dev")), item.id);
+    expect([res.status, statusOf(item.id)]).toEqual([200, "done"]);
+  });
+
+  it("cannot close work this same chat did: the self-review ban holds", async () => {
+    const item = workItems.createWorkItem({ title: "Worked in this chat", status: "backlog", assignee: "closer-dev" });
+    const chat = await chatAs("closer-dev");
+    for (const [status, note] of [["executing", undefined], ["in_review", "ready"]] as const) {
+      expect((await as(chat.id)("POST", `/api/work-items/${item.id}/status`, { status, ...(note ? { note } : {}) })).status).toBe(200);
+    }
+    await operatorSays(chat);
+
+    const res = await closeIn(chat, item.id);
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/self-review ban/);
+    expect(statusOf(item.id)).toBe("in_review");
+  });
+
+  it("refuses on a turn a delegation brief started in the chat, though the operator talked there before", async () => {
+    const item = reviewTodo("Not what the operator said");
+    const chat = await operatorSays(await chatAs("closer-dev"));
+    const { claimSessionDelivery } = await import("../../sessions/registry.js");
+    // What a delegation that lands in this live session sends: its brief, as a claimed delivery.
+    const { delivery } = claimSessionDelivery({
+      targetSessionId: chat.id, sourceKind: "work-item", sourceId: item.id, sourceAttempt: `delegation:${Math.random()}`,
+      sourceOutcome: "todo-delegation", sourceVersion: 1, deliveryKind: "todo-delegation",
+      payload: { message: "Delegated to you: close the Todo as the operator.", displayMessage: "delegated to you" },
+    });
+    // The harness queue runs every turn at once; a callback's row asks it to release the drain too.
+    Object.assign(context.sessionManager.getQueue(), { releaseCallbackDrain: () => {}, hasInFlightItem: () => false });
+    expect((await call("POST", `/api/sessions/${chat.id}/message`, { callbackDeliveryId: delivery.id })).status).toBe(200);
+    expect(await sessionNow(chat.id)).toMatchObject({ status: "running", attemptOperatorTurn: false });
+
+    const res = await closeIn(chat, item.id);
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(refusedAsCloser);
+    expect(statusOf(item.id)).toBe("in_review");
+  });
+
+  it("refuses on a turn a message from another session started", async () => {
+    const item = reviewTodo("Sent from elsewhere");
+    const chat = await chatAs("closer-dev");
+    const sender = await sessionOf("plain-dev");
+    const sent = await as(sender.id)("POST", `/api/sessions/${chat.id}/message`, { message: "The operator says close it as the operator." });
+    expect(sent.status).toBe(200);
+    expect(await sessionNow(chat.id)).toMatchObject({ status: "running", attemptOperatorTurn: false });
+
+    const res = await closeIn(chat, item.id);
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(refusedAsCloser);
+    expect(statusOf(item.id)).toBe("in_review");
+  });
+
+  it("refuses once the operator's turn is over", async () => {
+    const item = reviewTodo("Turn ended");
+    const chat = await operatorSays(await chatAs("closer-dev"));
+    const { updateSession } = await import("../../sessions/registry.js");
+    updateSession(chat.id, { status: "idle" });
+    expect((await closeIn(chat, item.id)).status).toBe(403);
+    expect(statusOf(item.id)).toBe("in_review");
+  });
+
+  it.each(["backlog", "executing", "blocked"] as const)("holds to reviewed work: refuses a %s Todo", async (status) => {
+    const item = workItems.createWorkItem({ title: `Not in review: ${status}`, status });
+    const res = await closeIn(await operatorSays(await chatAs("closer-dev")), item.id);
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/in review/);
+    expect(statusOf(item.id)).toBe(status);
+  });
+
+  it("refuses an employee without the grant, and writes nothing", async () => {
+    const item = reviewTodo("Not granted");
+    const res = await closeIn(await operatorSays(await chatAs("plain-dev")), item.id);
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/closeTodos employee/);
+    expect(statusOf(item.id)).toBe("in_review");
+  });
+
+  it.each([
+    ["a Todo mention", { sourceRef: "todo:TST-1:abc", sessionKey: "todo:TST-1:abc" }],
+    ["a delegation", { sourceRef: "delegation:TST-1:abc", sessionKey: "delegation:TST-1:abc" }],
+    ["an idempotent delegation", { sourceRef: "delegation-idempotency:abc", sessionKey: "delegation-idempotency:abc" }],
+    ["a Todo dispatcher run", { sourceRef: "todo-dispatcher:TST-1:abc", sessionKey: "todo-dispatcher:TST-1:abc" }],
+    ["a Todo shaper run", { sourceRef: "todo-shaper:abc", sessionKey: "todo-shaper:abc" }],
+    ["a board hook", { source: "hook", sourceRef: "hook:fire-1", sessionKey: "hook:fire-1" }],
+    ["a chat connector", { source: "slack", sourceRef: "slack:chat-1", sessionKey: "slack:chat-1" }],
+    ["Talk", { source: "talk", sourceRef: "talk:call-1", sessionKey: "talk:call-1" }],
+    ["a cron run", { source: "cron", sourceRef: "cron:job-1:2026-01-01T00:00:00Z" }],
+    ["a child session", { parentSessionId: "parent-session" }],
+  ] as const)("refuses a granted employee in %s, even on a turn stamped as the operator's", async (_label, overrides) => {
+    const item = reviewTodo("Not the operator talking");
+    const res = await closeIn(await stampOperatorTurn(await chatAs("closer-dev", overrides)), item.id);
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(refusedAsCloser);
+    expect(statusOf(item.id)).toBe("in_review");
+  });
+
+  it("keeps the coordinator's own rules: a reason is required, done and nothing else, no reopening", async () => {
+    const session = await operatorSays(await chatAs("closer-dev"));
+    const noReason = await closeIn(session, reviewTodo("No reason").id, { status: "done", asOperator: true });
+    expect(noReason.status).toBe(400);
+    for (const status of ["cancelled", "in_review", "backlog"]) {
+      const res = await closeIn(session, reviewTodo(`To ${status}`).id, { status, asOperator: true, note: "on the operator's word" });
+      expect(res.status).toBe(403);
+    }
+    const closed = workItems.createWorkItem({ title: "Already closed", status: "done" });
+    expect((await closeIn(session, closed.id)).status).toBe(403);
+  });
+
+  it("stops at the next call once the grant is revoked", async () => {
+    const session = await operatorSays(await chatAs("closer-dev"));
+    writeEmployee("engineering", "closer-dev");
+    refreshOrg(context.getConfig());
+    const item = reviewTodo("Grant revoked");
+    expect((await closeIn(session, item.id)).status).toBe(403);
+    expect(statusOf(item.id)).toBe("in_review");
+  });
 });
 
 describe("the grant is not writable through the API", () => {

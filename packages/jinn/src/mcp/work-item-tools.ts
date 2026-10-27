@@ -294,7 +294,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         status: { type: "string", enum: [...AGENT_UPDATE_STATUSES] },
         blockKind: { type: "string", enum: [...BLOCK_KINDS], description: "`dependency` re-queues it; the rest wait on a human." },
         note: { type: "string", description: "Required for in_review (your summary, posted as a comment) and blocked." },
-        asOperator: { type: "boolean", description: "Coordinator only: close as done for the operator." },
+        asOperator: { type: "boolean", description: "In a chat the operator opened: done." },
         cascade: { type: "boolean", description: "With `done`, close open sub-tasks. Operator only." },
         parkedUntil: { type: "string" },
         unblockHint: { type: "object", description: "{what, who}." },
