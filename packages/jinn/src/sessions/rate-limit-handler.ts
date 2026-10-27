@@ -111,7 +111,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
   const threadFields = originalResult.sessionId?.trim() ? nextEngineSessionFields(session, session.engine, originalResult.sessionId) : {};
   // The window closed while this turn ran: the own account has already reopened, so there is nothing to wait for.
   if (handBackAt && Date.now() >= handBackAt.getTime()) {
-    return await handBack(session.id, attemptToken, hooks, { waited: false, fields: threadFields });
+    return await handBack(session.id, attemptToken, hooks, { waited: false, fields: threadFields, employee, config: opts.config });
   }
 
   logger.info(
@@ -176,7 +176,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
         return { kind: "cancelled" };
       }
 
-      if (handBackAt && Date.now() >= handBackAt.getTime()) return await handBack(session.id, attemptToken, hooks, { waited: true });
+      if (handBackAt && Date.now() >= handBackAt.getTime()) return await handBack(session.id, attemptToken, hooks, { waited: true, employee, config: opts.config });
 
       await hooks.onRetryAttempt?.({ attempt });
       logger.info(`Session ${session.id} retrying after usage limit (attempt ${attempt})`);

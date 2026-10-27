@@ -10,7 +10,7 @@ import { engineHealthForTarget, exhaustedEngineReturnsAt, isEngineExhausted, rea
 import { accountForEmployee } from "../shared/engine-account.js";
 import { healthKeys } from "../shared/fallback-chain-health.js";
 import { orgRegistry } from "../gateway/org-registry.js";
-import type { Employee, JsonObject, Session } from "../shared/types.js";
+import type { Employee, JinnConfig, JsonObject, Session } from "../shared/types.js";
 import { updateSession } from "./registry.js";
 import type { FallbackRunState } from "./fallback-run.js";
 
@@ -89,10 +89,15 @@ export interface OwnTarget {
  * so the answer is the same one the limits readout and the chain walk give.
  */
 function stillSpentUntil(
-  session: Session, override: Record<string, unknown>, own: OwnTarget, employee: Employee | undefined,
+  session: Session, override: Record<string, unknown>, own: OwnTarget, reader: { employee?: Employee; config?: Partial<Pick<JinnConfig, "engines">> },
 ): Date | undefined {
-  const { engine, model } = own;
+  const { engine } = own;
+  const { employee, config } = reader;
   const owner = sessionEmployee(session, employee);
+  // An unpinned session ran its employee's model, else the engine's default: an opencode
+  // limit is held against that model's provider, so the key needs it.
+  const defaults = config?.engines as Record<string, { model?: string } | undefined> | undefined;
+  const model = own.model ?? owner?.model ?? defaults?.[engine]?.model;
   // Read as the session's own turns would: on its host.
   const health = engineHealthForTarget(readEngineHealth(), owner);
   const account = typeof override.originalAccount === "string" ? override.originalAccount : accountForEmployee(owner, engine);
@@ -107,9 +112,9 @@ export function extendSpentWindow(
   meta: Record<string, unknown>,
   override: Record<string, unknown>,
   own: OwnTarget,
-  employee: Employee | undefined,
+  reader: { employee?: Employee; config?: Partial<Pick<JinnConfig, "engines">> },
 ): Session | undefined {
-  const extendTo = stillSpentUntil(session, override, own, employee);
+  const extendTo = stillSpentUntil(session, override, own, reader);
   if (!extendTo) return undefined;
   logger.info(`Session ${session.id}: ${own.engine} is still out of allowance — staying on ${session.engine} until ${extendTo.toISOString()}`);
   return updateSession(session.id, {

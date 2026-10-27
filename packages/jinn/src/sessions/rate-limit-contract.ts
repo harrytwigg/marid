@@ -24,8 +24,10 @@ export type RateLimitOutcome =
   /** A substitute Claude account's limit met the override's `until` (at once,
    *  or after waiting for it): the session is back on its own account, running,
    *  and the caller re-runs the turn there from the start, on that account's
-   *  thread and sync point. `waited` is whether a pause was announced first. */
-  | { kind: "handback"; session: Session; waited: boolean }
+   *  thread and sync point. `waited` is whether a pause was announced first.
+   *  `reverted` is false when the own account was found still limited and the
+   *  window moved out: the session stays on the stand-in. */
+  | { kind: "handback"; session: Session; waited: boolean; reverted: boolean }
   | { kind: "timeout" }
   | { kind: "cancelled" };
 

@@ -196,6 +196,29 @@ describe("an opencode session on another provider's model", () => {
     expect(override(id)).toBeUndefined();
   }, 30_000);
 
+  it("reads the provider of an unpinned session's default model", async () => {
+    const unpinned = { name: "an-unpinned-worker", engine: "opencode", persona: "Return fixture" };
+    const { manager, seen } = build("opencode", chain, [
+      limitedUntil(new Date(START.getTime() + HOUR)), answer("on beta", "oc-thread"), answer("on beta 2", "oc-thread"), answer("back", "oc-thread"),
+    ]);
+    const key = "stub:return-opencode-unpinned";
+    const id = await turn(manager, key, "one", unpinned);
+    expect(seen.map((run) => run.model)).toEqual(["alpha/big", "beta/big"]);
+
+    at(2 * HOUR);
+    const secondReset = new Date(START.getTime() + 4 * HOUR);
+    recordEngineUnavailable("opencode/alpha", "usage limit", Math.floor(secondReset.getTime() / 1000));
+    await turn(manager, key, "two", unpinned);
+    // Held against the default model's provider: no probe of it.
+    expect(seen.map((run) => run.model)).toEqual(["alpha/big", "beta/big", "beta/big"]);
+    expect(Date.parse(String(override(id)!.until))).toBe(secondReset.getTime());
+
+    at(5 * HOUR);
+    await turn(manager, key, "three", unpinned);
+    expect(seen.at(-1)!.model).toBe("alpha/big");
+    expect(override(id)).toBeUndefined();
+  }, 30_000);
+
   it("stays on the other provider while its own provider is recorded as still limited", async () => {
     const { manager, seen } = build("opencode", chain, [
       limitedUntil(new Date(START.getTime() + HOUR)), answer("on beta", "oc-thread"), answer("on beta 2", "oc-thread"), answer("on beta 3", "oc-thread"), answer("back", "oc-thread"),

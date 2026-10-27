@@ -211,6 +211,8 @@ describe("an engine stand-in holds the session when the chain runs out", () => {
     await handleRateLimit(limitedTurn(id, chain, first.engines).opts);
     reg.updateSession(id, { status: "idle" } as never);
     expect(reg.getSession(id)!.engine).toBe("opencode");
+    // The own target reopens in a moment, and its recorded limit with it.
+    fs.rmSync(path.join(tmp, "tmp", "engine-health.json"), { force: true });
     const standing = (reg.getSession(id)!.transportMeta as Record<string, Record<string, unknown>>).engineOverride!;
     const until = new Date(Date.now() + 1500);
     reg.updateSession(id, { transportMeta: { ...(reg.getSession(id)!.transportMeta as object), engineOverride: { ...standing, until: until.toISOString() } } } as never);

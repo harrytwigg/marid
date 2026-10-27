@@ -143,21 +143,29 @@ first swap's record, so the session still goes back to where it started, not to 
 link before.
 
 - **Automatic, not an action.** Nothing in a session prefers a stand-in, so there
-  is no "switch back" button to forget. The return is a turn-start step: the web
-  dispatch, a connector message, the `/message` route and a callback all pass
-  through it. It is never made mid-turn: a turn that began on a link finishes
-  there, and the session returns on the next one. A manual engine switch, an API
-  reset or a conversation the engine lost ends the run the same way.
+  is no "switch back" button to forget. The return is checked when a turn is
+  admitted: the web dispatch when the queue releases the turn, and a connector
+  message, the `/message` route and a callback when the message arrives (so a
+  message queued behind a running turn is judged at arrival, before a reset that
+  falls while it waits). It is never made mid-turn: a turn that began on a link
+  finishes there, and the session returns on a later one. A manual engine switch,
+  an API reset or a conversation the engine lost ends the run the same way.
 - **Same for every kind of link.** An engine, another Claude account, another model
   of the same account, an opencode model on another provider and a chain of several
   links all return the same way, to the own target and not to a link on the way.
 - **One source for the reopening.** The window is the limit's reset as recorded in
   engine health, the store the chain walk reads and the limits readout writes. When
   the window has passed, health is asked once more, under the own target's key
-  (its account for Claude, its provider for an opencode model, its engine for the
-  rest). If the target is still recorded as spent, typically because another
-  session's probe found it limited again, the window moves out to that record's
-  return and the session stays where it is: no turn is spent finding out.
+  (its account for Claude; its provider for an opencode model, from the model the
+  session pins, else its employee's or the engine's default; the engine for the
+  rest). If the target is recorded as spent, typically because another session's
+  probe or the limits readout found it limited again, the window moves out to that
+  return and the session stays where it is, with no turn spent probing. The first
+  session to meet a limit still finds it out with a turn.
+- **A turn that outlives its window.** A turn on a stand-in that hits the stand-in's
+  own limit after the window has passed, with the own target recorded as still
+  spent, runs once more on the stand-in and then waits for the new window. It says
+  it is back on its own target only when it is.
 - **Loop guard.** A session goes back at most once per window. If the own target
   is limited when it is tried, the turn falls back as before with the new reset,
   a new run starts at the first link, and the next return is at that reset. Within
