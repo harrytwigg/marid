@@ -396,3 +396,52 @@ describe("dispatching a parent", () => {
     expect(response.status).toBe(201);
   });
 });
+
+describe("a Dispatcher handing a parent on", () => {
+  const dispatcherOn = (id: string) =>
+    registry.listSessionsByWorkItem(id).find((session) => session.employee === "todo-dispatcher")!;
+  const delegateAs = (id: string, employee: string, sessionId: string) =>
+    call("POST", "/api/delegations", { employee, task: "route it", workItemId: id }, callerHeaders(sessionId));
+
+  it("judges a session-pressed Dispatcher by the presser's standing when it delegates, not when it was pressed", async () => {
+    const root = workItems.createWorkItem({ title: "report's parent", assignee: "mgr-report", status: "executing" });
+    const child = workItems.createWorkItem({ title: "peer's child", parentId: root.id, assignee: "peer-report", status: "executing" });
+    const mgr = sessionOf("mgr", "dispatcher-flip");
+
+    expect((await call("POST", `/api/work-items/${root.id}/assign`, { assignee: "mgr" }, callerHeaders(mgr.id))).status).toBe(403);
+    expect((await call("POST", `/api/work-items/${root.id}/dispatch`, {}, callerHeaders(mgr.id))).status).toBe(201);
+    // Giving the parent to the operator frees the Dispatcher from its assignee binding.
+    expect((await call("POST", `/api/work-items/${root.id}/assign`, { assignee: "@operator" }, callerHeaders(mgr.id))).status).toBe(200);
+
+    const response = await delegateAs(root.id, "mgr", dispatcherOn(root.id).id);
+    expect(response.status).toBe(403);
+    expect(response.body.error).toContain(child.id);
+    expect(workItems.getWorkItem(root.id)?.assignee).toBe("@operator");
+  });
+
+  it("lets a Dispatcher the parent's owner pressed hand it to anyone", async () => {
+    const maker = sessionOf("lead", "dispatcher-owner-maker");
+    const root = workItems.createWorkItem({
+      title: "lead's parent to route",
+      source: "session",
+      sourceRef: `session:${maker.id}:idempotency:dispatcher-owner`,
+      createdBy: `session:${maker.id}`,
+    });
+    workItems.createWorkItem({ title: "lead's child to keep", parentId: root.id, assignee: "lead-report", status: "executing" });
+    expect((await call("POST", `/api/work-items/${root.id}/dispatch`, {}, callerHeaders(sessionOf("lead", "dispatcher-owner").id))).status).toBe(201);
+
+    const response = await delegateAs(root.id, "sub-lead", dispatcherOn(root.id).id);
+    expect(response.body.error).toBeUndefined();
+    expect(response.status).toBe(201);
+  });
+
+  it("lets a Dispatcher the operator pressed hand a parent to anyone", async () => {
+    const root = workItems.createWorkItem({ title: "operator's parent to route" });
+    workItems.createWorkItem({ title: "someone's child", parentId: root.id, assignee: "peer-report", status: "executing" });
+    expect((await call("POST", `/api/work-items/${root.id}/dispatch`, {})).status).toBe(201);
+
+    const response = await delegateAs(root.id, "outsider", dispatcherOn(root.id).id);
+    expect(response.body.error).toBeUndefined();
+    expect(response.status).toBe(201);
+  });
+});

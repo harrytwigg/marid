@@ -330,12 +330,8 @@ function dispatcherAssigneeBinding(
  * sub-tasks, so, as for an assignment, the caller needs standing over each of
  * them, whichever of these routes let it delegate. The creating session is no
  * exception: the Todo may have been given to someone else since it made it.
- * Only a Dispatcher started on this Todo is exempt. It acts for whoever
- * started it: the operator, the board walk, or a session that pressed Dispatch,
- * which `POST /dispatch` holds to this same check whenever the Dispatcher
- * would be free to choose (an unassigned Todo, or one assigned to the
- * operator). On an employee's Todo it is bound to that assignee, so it hands
- * nothing on.
+ * A Dispatcher started on this Todo acts for whoever started it, so it is
+ * judged by their standing, not its own (`dispatcherHandOn`).
  */
 export function authorizeWorkItemDelegation(
   caller: Extract<WorkItemCaller, { kind: 'session' }>,
@@ -348,8 +344,36 @@ export function authorizeWorkItemDelegation(
   const standing = delegationStanding(caller, item);
   if (!standing.ok) return standing;
   const newOwner = delegateEmployee !== undefined && delegateEmployee !== item.assignee;
-  if (!newOwner || isDispatcherStartedFor(caller.session, item)) return standing;
+  if (!newOwner) return standing;
+  if (isDispatcherStartedFor(caller.session, item)) return dispatcherHandOn(caller.session, item);
   return authorizeAssignOverSubTasks(caller, item, "delegate");
+}
+
+/** Where a Dispatcher's session records the session that pressed Dispatch. */
+export const DISPATCH_PRESSED_BY_META_KEY = "dispatchPressedBy";
+
+/**
+ * Whether a Dispatcher may hand its Todo to a new owner, judged by what sits
+ * below it. A Dispatcher the operator, the board walk or a sweep started acts
+ * for the operator and needs nothing more. One a session pressed acts for that
+ * session, so it needs that session's standing over each open sub-task, judged
+ * now rather than at the press: the Todo can change hands in between, which can
+ * also free the Dispatcher from its assignee binding.
+ */
+function dispatcherHandOn(session: Session, item: WorkItem): { ok: true } | { ok: false; status: 403; error: string } {
+  const pressedBy = session.transportMeta?.[DISPATCH_PRESSED_BY_META_KEY];
+  if (typeof pressedBy !== "string") return { ok: true };
+  const presser = getSession(pressedBy);
+  const handOn = presser
+    ? authorizeAssignOverSubTasks({ kind: "session", callerId: presser.id, session: presser }, item, "delegate")
+    : { ok: false as const, status: 403 as const, error: `the session that pressed Dispatch no longer exists` };
+  if (handOn.ok) return handOn;
+  return {
+    ok: false,
+    status: 403,
+    error: `this Dispatcher was started by session ${pressedBy}'s Dispatch and hands Todo ${item.id} on with that session's standing: ${handOn.error}. `
+      + `Hand it to its current assignee, or block it for the operator with this refusal`,
+  };
 }
 
 /** Standing to delegate the Todo itself, before what sits below it is weighed. */
