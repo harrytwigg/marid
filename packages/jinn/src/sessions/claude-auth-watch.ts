@@ -27,7 +27,7 @@ import {
   claudeRefreshExpiryWarning,
 } from "../shared/claude-auth-messages.js";
 import type { Employee, Session } from "../shared/types.js";
-import { sessionClaudeProfile } from "./session-account.js";
+import { remoteAccountOverride, sessionClaudeProfile } from "./session-account.js";
 import { notifyOperatorChannel } from "./callbacks.js";
 
 /**
@@ -57,7 +57,9 @@ export function claudeAuthScope(employee: Employee | undefined, session?: { tran
   if (profile) return `${LOCAL_CLAUDE_AUTH_SCOPE}:${profile.key}`;
   if (!isRemoteTarget(employee)) return LOCAL_CLAUDE_AUTH_SCOPE;
   const user = employee.remoteUser ? `${employee.remoteUser}@` : "";
-  const remoteProfile = employee.remoteClaudeConfigDir ? `:${employee.remoteClaudeConfigDir}` : "";
+  // A remote session moved onto a remote account runs on that account's login.
+  const remoteDir = (session ? remoteAccountOverride(session)?.substituteConfigDir : undefined) ?? employee.remoteClaudeConfigDir;
+  const remoteProfile = remoteDir ? `:${remoteDir}` : "";
   return `${user}${employee.remoteHost}${remoteProfile}`;
 }
 

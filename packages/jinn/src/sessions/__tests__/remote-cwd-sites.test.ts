@@ -70,6 +70,7 @@ describe("reads of an employee's remoteCwd", () => {
     "cli/remote.ts",
   ])("%s builds its target through employeeRemoteTarget with a scope", (file) => {
     const text = fs.readFileSync(path.join(SRC, file), "utf-8");
-    expect(text).toMatch(/employeeRemoteTarget\([^)]*,\s*(?:remoteScopeFor\(|scope\b)/);
+    // `sessionRemoteTarget` is employeeRemoteTarget plus the profile directory of a remote account the session stands on.
+    expect(text).toMatch(/(?:employeeRemoteTarget|sessionRemoteTarget)\([^)]*,\s*(?:remoteScopeFor\(|scope\b)/);
   });
 });

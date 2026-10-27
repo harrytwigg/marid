@@ -1,16 +1,18 @@
 import { useModelRegistry } from "@/hooks/use-model-registry"
 import { findSubject, useFallbackChains } from "@/hooks/use-fallback-chains"
 import { Section } from "../shared"
-import { AccountCard, EngineCard } from "./engine-card"
+import { AccountCard, EngineCard, RemoteAccountCard } from "./engine-card"
 import { LegacyFallbackRow } from "./legacy-row"
 import type { ChainBodyProps } from "./chain-body"
 import {
   accountEntriesFor,
   accountNames,
+  allAccountNames,
   chainEntriesFor,
   legacyFallbackEngine,
   legacyMigrationMutations,
   modelMapFor,
+  remoteAccounts,
   substituteChainFor,
   type EnginesConfig,
   type SessionsFallbackConfig,
@@ -46,7 +48,7 @@ function bodyForEngine(name: string, ctx: SectionContext): ChainBodyProps {
     self: { engine: name },
     where: `engines.${name}.fallback`,
     waitsAs: name === "claude" ? "Claude" : chainNameOf(name).replace(/ chain$/, ""),
-    fields: { registry: ctx.registry, profiles: accountNames(ctx.engines) },
+    fields: { registry: ctx.registry, profiles: accountNames(ctx.engines), knownProfiles: allAccountNames(ctx.engines) },
     onChange: (links) => ctx.onChange(["engines", name, "fallback"], writeLinks(chainEntriesFor(ctx.engines, name), links)),
   }
 }
@@ -61,7 +63,7 @@ function bodyForAccount(account: string, ctx: SectionContext): ChainBodyProps {
     self: { engine: "claude", profile: account },
     where: `engines.claude.accounts.${account}.fallback`,
     waitsAs: `Claude · ${account}`,
-    fields: { registry: ctx.registry, profiles: accountNames(ctx.engines) },
+    fields: { registry: ctx.registry, profiles: accountNames(ctx.engines), knownProfiles: allAccountNames(ctx.engines) },
     onChange: (links) => ctx.onChange(["engines", "claude", "accounts", account, "fallback"], writeLinks(accountEntriesFor(ctx.engines, account), links)),
   }
 }
@@ -102,9 +104,12 @@ function EnginesBody({ engines, sessions, onChange, registry }: EnginesSectionPr
         {Object.values(registry.engines).map((entry) => (
           <div key={entry.name} className="flex flex-col gap-[var(--space-2)]">
             <EngineCard entry={entry} body={bodyForEngine(entry.name, ctx)} map={mapFor(entry.name, ctx)} />
-            {entry.name === "claude" && accountNames(engines).map((account) => (
-              <AccountCard key={account} name={account} body={bodyForAccount(account, ctx)} />
-            ))}
+            {entry.name === "claude" && allAccountNames(engines).map((account) => {
+              const remote = remoteAccounts(engines).find((r) => r.name === account)
+              return remote
+                ? <RemoteAccountCard key={account} account={remote} />
+                : <AccountCard key={account} name={account} body={bodyForAccount(account, ctx)} />
+            })}
           </div>
         ))}
         {legacy && (

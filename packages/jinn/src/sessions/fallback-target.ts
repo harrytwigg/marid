@@ -12,7 +12,7 @@ import { remoteEngineAvailable } from "../engines/remote-stage.js";
 import type { RemoteEngineName } from "../shared/models.js";
 import { effectiveFallbackMode } from "./session-fallback.js";
 import { rateLimitAccount, substituteHealth } from "./rate-limit-account.js";
-import { accountOverride, ownClaudeProfile } from "./session-account.js";
+import { accountOverride, ownClaudeProfile, remoteAccountOverride } from "./session-account.js";
 import { engineAllowedAsSubstitute, sessionSubstituteScope, substituteScoped } from "./substitute-filters.js";
 import type { ChooseSubstituteInput, SubstituteChoice } from "./rate-limit-substitute.js";
 
@@ -100,6 +100,11 @@ function standingAccountSwap(session: Session): SubstituteChoice["accounts"] {
     : undefined;
 }
 
+/** The swap a model change on Claude keeps. A remote session keeps only a swap onto a remote account, whose directory is on its own host. */
+function keptAccountSwap(session: Session, remote: boolean): SubstituteChoice["accounts"] {
+  return !remote || remoteAccountOverride(session) ? standingAccountSwap(session) : undefined;
+}
+
 export type TargetDecision = { choice: SubstituteChoice } | { reason: string };
 
 /** Why the chosen engine cannot serve this session at all (not an engine we know, not allowed, not installed), or undefined. */
@@ -139,7 +144,7 @@ export function chooseTargetSubstitute(input: ChooseSubstituteInput, health: Eng
   const why = engineRefusal(input, target) ?? modelRefusal(input, health, target);
   if (why) return { reason: `the chosen fallback ${targetName(target)} ${why}` };
   const sameEngine = session.engine === target.engine;
-  const accounts = target.engine === "claude" && sameEngine && !remote ? standingAccountSwap(session) : undefined;
+  const accounts = target.engine === "claude" && sameEngine ? keptAccountSwap(session, Boolean(remote)) : undefined;
   const claudeProfile = target.engine !== "claude" || remote ? null
     : sameEngine ? rateLimitAccount("claude", employee, session).claudeProfile : ownClaudeProfile(session, employee);
   return { choice: { engine: target.engine as EngineName, model: target.model, claudeProfile, ...(accounts ? { accounts } : {}) } };

@@ -45,6 +45,7 @@ import {
   type RemoteFacts,
   type RemoteClaudeStaging,
 } from "./remote-stage.js";
+import { RemoteProfileNotReadyError } from "../shared/remote-profile-error.js";
 import { employeeSessionEnv } from "../sessions/employee-env.js";
 
 export type { PtyControlEvent } from "./pty-view-engine.js";
@@ -78,10 +79,18 @@ function profileKeyOf(profile: ClaudeProfile | undefined): string | null {
   return profile?.key ?? null;
 }
 
-/** Whether a warm local PTY runs as a different Claude profile than the one
- *  asked for now. A PTY with no recorded profile (a remote spawn) is never judged. */
-function warmProfileChanged(prev: { profileKey?: string | null } | undefined, profile: ClaudeProfile | undefined): boolean {
-  return prev?.profileKey !== undefined && prev.profileKey !== profileKeyOf(profile);
+/** The profile a launch runs as, in the form `spawnParams` records it: a local
+ *  profile's key, or for a remote launch the profile directory on its host
+ *  (empty: the remote user's default), which varies when a session is moved
+ *  onto a remote account and back. */
+function launchProfileKey(opts: { claudeProfile?: ClaudeProfile; remoteHost?: string; remoteClaudeConfigDir?: string }): string | null {
+  return isRemoteTarget(opts) ? `remote:${opts.remoteClaudeConfigDir ?? ""}` : profileKeyOf(opts.claudeProfile);
+}
+
+/** Whether a warm PTY runs as a different Claude profile than the launch asks for now.
+ *  A PTY with no recorded profile (spawned before this was recorded) is never judged. */
+function warmProfileChanged(prev: { profileKey?: string | null } | undefined, wanted: string | null): boolean {
+  return prev?.profileKey !== undefined && prev.profileKey !== wanted;
 }
 
 /**
@@ -1643,7 +1652,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
   /** Model/effort the live PTY was spawned with, per session. `--model`/`--effort`
    *  apply only at spawn, so a mid-chat switch must cold-respawn rather than reuse
    *  the warm PTY (which would keep running the old model). So does the Claude
-   *  profile (`profileKey`, local spawns only): a session moved onto another
+   *  profile (`profileKey`: a local profile's key, or a remote launch's directory on its host): a session moved onto another
    *  account and back must not keep answering in the other account's process. */
   private spawnParams = new Map<string, { model?: string; effortLevel?: string; appendApplied?: boolean; profileKey?: string | null }>();
   /** Sessions with a post-failure recovery listener armed (turn settled as an
@@ -2458,7 +2467,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       // chat pane (the sentinel is what makes the SSE proxy tee). --resume preserves
       // the conversation.
       const missingPrompt = !prev || prev.appendApplied !== true;
-      const profileChanged = warmProfileChanged(prev, opts.claudeProfile);
+      const profileChanged = warmProfileChanged(prev, launchProfileKey(opts));
       if (modelOrEffortChanged || missingPrompt || profileChanged) {
         const why = profileChanged ? "Claude profile changed" : modelOrEffortChanged ? "model/effort changed" : "warm PTY missing --append-system-prompt";
         logger.info(`InteractiveClaudeEngine: cold respawn for ${jinnSessionId} (${why})`);
@@ -3118,7 +3127,10 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       throw new Error("remote spawn needs the gateway's port for the reverse tunnel, and none was provided");
     }
     const readiness = await ensureRemoteReady(target, remote, { engine: "claude", allowWake: false });
-    if (!readiness.ready) throw new Error(`remote host not ready: ${readiness.reason}`);
+    if (!readiness.ready) {
+      const message = `remote host not ready: ${readiness.reason}`;
+      throw readiness.profile ? new RemoteProfileNotReadyError(message) : new Error(message);
+    }
     // Last chance to stand down without having written anything. Staging
     // rewrites this session's gateway.json with a freshly probed tunnel port,
     // and the hook relay reads that file on every hook — so a caller that
@@ -3218,7 +3230,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       cwd: JINN_HOME,
       env: this.buildPtyEnv(jinnSessionId, { sshClient: true }),
     });
-    this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: opts.effortLevel, appendApplied: true });
+    this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: opts.effortLevel, appendApplied: true, profileKey: launchProfileKey(opts) });
     // No proxy argument: a remote session runs without the SSE forward proxy, so
     // there is nothing to tear down when the PTY exits.
     return this.wireProcToStream(jinnSessionId, proc);
@@ -3272,7 +3284,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       cwd: opts.cwd || JINN_HOME,
       env,
     });
-    this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: opts.effortLevel, appendApplied: true, profileKey: profileKeyOf(opts.claudeProfile) });
+    this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: opts.effortLevel, appendApplied: true, profileKey: launchProfileKey(opts) });
     return this.wireProcToStream(jinnSessionId, proc, port ? proxy : undefined);
   }
 
@@ -3288,7 +3300,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       // A warm PTY on another Claude profile is the other account's conversation;
       // attaching to it would put the operator in front of the wrong login. One
       // the operator is typing a turn into is left alone, as run() leaves it.
-      if (this.terminalTurns.has(jinnSessionId) || !warmProfileChanged(this.spawnParams.get(jinnSessionId), opts.claudeProfile)) return;
+      if (this.terminalTurns.has(jinnSessionId) || !warmProfileChanged(this.spawnParams.get(jinnSessionId), launchProfileKey(opts))) return;
       logger.info(`InteractiveClaudeEngine: dropping ${jinnSessionId}'s idle PTY before attach (Claude profile changed)`);
       this.lifecycle.releaseSession(jinnSessionId);
     }
@@ -3361,7 +3373,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
             name: "xterm-256color", cols, rows, cwd: JINN_HOME, env: this.buildPtyEnv(jinnSessionId, { sshClient: true }),
           });
           const handle = this.wireProcToStream(jinnSessionId, proc);
-          this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: undefined, appendApplied: false });
+          this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: undefined, appendApplied: false, profileKey: launchProfileKey(opts) });
           this.lifecycle.adopt(jinnSessionId, handle, { hostKey: ptyHostKey(opts) });
           return;
         }
@@ -3387,7 +3399,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
         const handle = this.wireProcToStream(jinnSessionId, proc, port ? proxy : undefined);
         // Idle spawn carries no --append-system-prompt (the view-only PTY); mark it so
         // the first real turn through run() cold-respawns with the persona + sentinel.
-        this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: undefined, appendApplied: false, profileKey: profileKeyOf(opts.claudeProfile) });
+        this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: undefined, appendApplied: false, profileKey: launchProfileKey(opts) });
         this.lifecycle.adopt(jinnSessionId, handle, { hostKey: ptyHostKey(opts) });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

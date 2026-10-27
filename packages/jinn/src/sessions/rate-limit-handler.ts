@@ -23,6 +23,7 @@
  * or the order of side effects without auditing both call sites.
  */
 
+import { withStandingRemoteAccount } from "./session-account.js";
 import type { RateLimitHandlerOpts, RateLimitOutcome } from "./rate-limit-contract.js";
 import type { EngineResult, StreamDelta } from "../shared/types.js";
 import { rateLimitRemoteTarget } from "./rate-limit-remote-target.js";
@@ -208,8 +209,9 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
           cliFlags,
           // The retry is a fresh spawn, not a resume of the limited process, so it
           // re-states where the session runs. Omit this and a rate-limited remote
-          // turn silently comes back on the gateway.
-          ...remoteTarget,
+          // turn silently comes back on the gateway. A session standing on a remote
+          // account retries on that account's directory, as `claudeProfile` follows a local one.
+          ...withStandingRemoteAccount(remoteTarget, session),
           claudeProfile,
           mcpConfigPath,
           resolvedMcp,

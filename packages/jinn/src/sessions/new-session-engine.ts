@@ -39,6 +39,11 @@ function inheritedDefaults(
   };
 }
 
+/** The scope a new session's chain is judged by: its host, when it runs on one. */
+function startScope(destination: string | undefined): { scoped: false; remote: boolean; host?: string } {
+  return { scoped: false, remote: destination !== undefined, ...(destination ? { host: destination } : {}) };
+}
+
 /**
  * Where a session that preferred `preferred` should start instead, when that
  * target is out of allowance: the first usable link of its chain that is not out
@@ -61,7 +66,6 @@ function healthyStart(
   // can actually run on its host. Rerouting it onto one that ignores
   // `remoteHost` would start the session on an engine whose every turn the
   // remote gate then refuses — a session that looks started and can never run.
-  const remote = isRemoteTarget(preference.employee);
   // Scoped to the machine this session will actually run on: a login that
   // died on the gateway is no reason to move a remote employee's session.
   const health = substituteHealth(engineHealthForTarget(readEngineHealth(), preference.employee), preference.employee);
@@ -69,7 +73,7 @@ function healthyStart(
   const destination = isRemoteTarget(preference.employee) ? sshDestination(preference.employee) : undefined;
   const registry = availabilityRegistry(getModelRegistry(config), (candidate) => engines.has(candidate) && engineInstalledWhereRun(config, candidate, destination));
   return rerouteAtCreation({
-    config, employee: preference.employee, engine: preferred, model: preference.employee?.model, registry, health, scope: { scoped: false, remote },
+    config, employee: preference.employee, engine: preferred, model: preference.employee?.model, registry, health, scope: startScope(destination),
   });
 }
 

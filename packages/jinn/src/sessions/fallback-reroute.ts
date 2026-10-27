@@ -1,4 +1,4 @@
-import { declaredAccountByKey } from "../shared/claude-accounts-config.js";
+import { declaredAccountByKey, declaredRemoteAccountByKey } from "../shared/claude-accounts-config.js";
 import { accountForEmployee, DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
 import { exhaustedEngineReturnsAt, type EngineHealthReading } from "../shared/engine-health.js";
 import { sessionFallbackChain } from "../shared/fallback-chain.js";
@@ -30,7 +30,8 @@ export interface RerouteArgs {
   /** `available` is whether the caller can run the engine for this session. */
   registry: ModelRegistry;
   health: EngineHealthReading;
-  scope: { scoped: boolean; remote: boolean };
+  /** `host`: the session's ssh destination, when it runs remotely: a profile link is usable only on its own host. */
+  scope: { scoped: boolean; remote: boolean; host?: string };
   now?: Date;
 }
 
@@ -55,8 +56,11 @@ function swapsAccount(own: ResolvedFallbackLink, link: ResolvedFallbackLink): bo
 /** The account swap a link makes, when it is another Claude account than the session would run. */
 function accountSwapOf(args: RerouteArgs, own: ResolvedFallbackLink, link: ResolvedFallbackLink): SessionReroute["account"] {
   if (!swapsAccount(own, link)) return undefined;
+  const original = accountForEmployee(args.employee, "claude");
+  // A remote subject's swap is onto a remote account, whose directory is on its host.
+  if (args.scope.remote) return { original, substitute: link.account, configDir: declaredRemoteAccountByKey(args.config, link.account)?.configDir ?? null };
   const profile = link.account === DEFAULT_CLAUDE_ACCOUNT ? null : declaredAccountByKey(args.config, link.account)?.profile ?? null;
-  return { original: accountForEmployee(args.employee, "claude"), substitute: link.account, configDir: profile?.dir ?? null };
+  return { original, substitute: link.account, configDir: profile?.dir ?? null };
 }
 
 /** The record the session carries: the way back, the link it is on, the run that starts there, and the account swap when the link is another Claude account. */

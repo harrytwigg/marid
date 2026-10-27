@@ -30,6 +30,10 @@ function RowButton({ label, move, disabled, onClick, children }: {
 export interface RowFields {
   registry: EnginesResponse
   profiles: string[]
+  /** The names a link may carry without being flagged unknown, when that is more than the picker offers (default: `profiles`). */
+  knownProfiles?: string[]
+  /** How the picker names an account that is not just its name (a remote one carries its host). */
+  profileLabels?: Record<string, string>
   /** The engine the chain falls back from: where "Same model" is meant. */
   ownEngine: string | undefined
   /** "Claude chain", "Claude · work chain": names the chain in every control. */
@@ -44,7 +48,9 @@ function RowTarget({ link, index, fields, onChange }: {
   onChange: (link: FallbackLink) => void
 }) {
   const at = `link ${index + 1} of the ${fields.chainName}`
-  const profiles = profileOptionsFor(link.engine, fields.profiles)
+  const offered = profileOptionsFor(link.engine, fields.profiles, fields.profileLabels)
+  // A stored profile this chain is not offered (a remote account, in a chain on the gateway's own side) stays selectable as written, so the select shows it.
+  const profiles = offered && link.profile && !offered.some((o) => o.value === link.profile) ? [...offered, { value: link.profile, label: link.profile }] : offered
   return (
     <div className="flex w-full min-w-0 flex-col gap-[var(--space-1)] @[560px]/chain:flex-1 @[560px]/chain:flex-row @[560px]/chain:items-center">
       <div className="min-w-0 @[560px]/chain:w-[28%] @[560px]/chain:min-w-[7.5rem] @[560px]/chain:shrink-0">
