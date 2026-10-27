@@ -80,7 +80,7 @@ function ancestorOwner(roster: Map<string, Employee>, ancestor: WorkItem): strin
 export function authorizeAssignOverSubTasks(
   caller: WorkItemCaller,
   item: WorkItem,
-  action: "assign" | "delegate" = "assign",
+  action: "assign" | "delegate" | "dispatch" = "assign",
 ): { ok: true } | { ok: false; status: 403; error: string } {
   const tree = getWorkItemTree(item.id);
   if (!tree) return { ok: true };
@@ -330,8 +330,12 @@ function dispatcherAssigneeBinding(
  * sub-tasks, so, as for an assignment, the caller needs standing over each of
  * them, whichever of these routes let it delegate. The creating session is no
  * exception: the Todo may have been given to someone else since it made it.
- * Only a Dispatcher started on this Todo is exempt, since it acts for the
- * operator.
+ * Only a Dispatcher started on this Todo is exempt. It acts for whoever
+ * started it: the operator, the board walk, or a session that pressed Dispatch,
+ * which `POST /dispatch` holds to this same check whenever the Dispatcher
+ * would be free to choose (an unassigned Todo, or one assigned to the
+ * operator). On an employee's Todo it is bound to that assignee, so it hands
+ * nothing on.
  */
 export function authorizeWorkItemDelegation(
   caller: Extract<WorkItemCaller, { kind: 'session' }>,

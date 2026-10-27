@@ -359,3 +359,40 @@ describe("delegating a parent", () => {
     expect(workItems.getWorkItem(root.id)?.assignee).toBe("sub-lead");
   });
 });
+
+describe("dispatching a parent", () => {
+  /** An unassigned or operator-held parent with someone else's child, and an `outsider` session linked to it. */
+  function linkedParent(tag: string, assignee: string | null) {
+    const root = workItems.createWorkItem({ title: `dispatched parent ${tag}`, ...(assignee ? { assignee } : {}) });
+    const child = workItems.createWorkItem({ title: `dispatched child ${tag}`, parentId: root.id, assignee: "peer-report", status: "executing" });
+    const linked = sessionOf("outsider", `dispatch-${tag}`);
+    workItems.linkSession(root.id, linked.id, `session:${linked.id}`, "consult");
+    return { root, child, linked };
+  }
+
+  it.each([["unassigned", null], ["operator-held", "@operator"]] as const)(
+    "refuses a linked session starting a free Dispatcher on an %s parent over someone else's open child",
+    async (_label, assignee) => {
+      const { root, child, linked } = linkedParent(`free-${assignee ?? "none"}`, assignee);
+      const response = await call("POST", `/api/work-items/${root.id}/dispatch`, {}, callerHeaders(linked.id));
+      expect(response.status).toBe(403);
+      expect(response.body.error).toContain(child.id);
+      expect(registry.listSessionsByWorkItem(root.id).some((session) => session.employee === "todo-dispatcher")).toBe(false);
+    },
+  );
+
+  it("lets the owner of an unassigned parent dispatch it over the sub-tasks it handed out", async () => {
+    const maker = sessionOf("lead", "dispatch-owner-maker");
+    const root = workItems.createWorkItem({
+      title: "lead's unassigned parent",
+      source: "session",
+      sourceRef: `session:${maker.id}:idempotency:dispatch-owner`,
+      createdBy: `session:${maker.id}`,
+    });
+    workItems.createWorkItem({ title: "lead's handed-out child", parentId: root.id, assignee: "lead-report", status: "executing" });
+
+    const response = await call("POST", `/api/work-items/${root.id}/dispatch`, {}, callerHeaders(sessionOf("lead", "dispatch-owner").id));
+    expect(response.body.error).toBeUndefined();
+    expect(response.status).toBe(201);
+  });
+});

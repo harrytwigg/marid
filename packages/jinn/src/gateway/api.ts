@@ -199,6 +199,7 @@ import {
 } from "../work-items/store.js";
 import { resolveDelegationLinkRole, WORK_ITEM_LINK_ROLES, type WorkItemLinkRole } from "../work-items/link-role.js";
 import { retiredTodoFieldError } from "../work-items/retired-fields.js";
+import { OPERATOR_ASSIGNEE } from "../work-items/operator-assignee.js";
 import { resolveTodoEditAuthority, todoEditRefusal } from "./todo-edit-authority.js";
 import { isTodoId, resolveTodoIdPrefix } from "../work-items/id.js";
 import {
@@ -2827,6 +2828,13 @@ export async function handleApiRequest(
       if (caller.kind === "session") {
         const authorized = authorizeWorkItemOwnerManagerOrRoot(caller, item, "dispatch");
         if (!authorized.ok) return json(res, { error: authorized.error }, authorized.status);
+        // With no employee assignee to bind it to, the Dispatcher chooses who
+        // takes the Todo and hands it on free of the sub-task check, so pressing
+        // Dispatch here passes on standing over the Todo's open sub-tasks.
+        if (!item.assignee || item.assignee === OPERATOR_ASSIGNEE) {
+          const overSubTasks = authorizeAssignOverSubTasks(caller, item, "dispatch");
+          if (!overSubTasks.ok) return json(res, { error: overSubTasks.error }, overSubTasks.status);
+        }
       }
 
       const started = startTodoDispatcher(item, context, {
