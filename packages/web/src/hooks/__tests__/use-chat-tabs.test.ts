@@ -76,6 +76,21 @@ describe('useChatTabs', () => {
     expect(result.current.activeIndex).toBe(-1)
   })
 
+  it('closes every tab and leaves the stored list empty, so a reload brings none back', () => {
+    const { result } = renderHook(() => useChatTabs())
+    act(() => result.current.openTab({ sessionId: 's1', label: 'A', status: 'idle', unread: false, pinned: true }))
+    act(() => result.current.openTab({ sessionId: 's2', label: 'B', status: 'idle', unread: false, pinned: true }))
+    expect(result.current.tabs).toHaveLength(2)
+
+    act(() => result.current.closeAllTabs())
+
+    expect(result.current.tabs).toHaveLength(0)
+    expect(result.current.activeTab).toBeNull()
+    expect(JSON.parse(localStorage.getItem('jinn-chat-tabs')!)).toEqual({ tabs: [], activeIndex: -1 })
+    const reloaded = renderHook(() => useChatTabs())
+    expect(reloaded.result.current.tabs).toHaveLength(0)
+  })
+
   it('pinTab converts preview tab to pinned', () => {
     const { result } = renderHook(() => useChatTabs())
     act(() => result.current.openTab({ sessionId: 's1', label: 'A', status: 'idle', unread: false }))

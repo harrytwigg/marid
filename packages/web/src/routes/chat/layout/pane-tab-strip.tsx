@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent, type RefObject, type WheelEvent } from 'react'
 import { X } from '@/components/ui/icon'
 import { splitTitleId } from '@/components/chat/chat-tabs'
+import { CloseAllTabsButton } from '@/components/chat/close-all-tabs-button'
 import { StatusDot } from '@/components/chat/session-signals'
 import { TERMINAL_AVATAR } from '@/components/ui/employee-avatar'
 import { emojiForName } from '@/lib/emoji-pool'
@@ -50,6 +51,8 @@ export interface PaneTabStripProps {
   onPin?: (tabId: string) => void
   /** Whether this strip's group is the focused one; only its shown tab carries the top marker. */
   focused?: boolean
+  /** Closes every open tab. Offered by the focused strip only: one bar carries the action. */
+  onCloseAll?: () => void
 }
 
 const STATUS_DOT = {
@@ -257,7 +260,7 @@ function handleTabKey(
 }
 
 export function PaneTabStrip(props: PaneTabStripProps) {
-  const { groupId, tabs, activeId, onActivate, onClose, onPin } = props
+  const { groupId, tabs, activeId, onActivate, onClose, onPin, onCloseAll } = props
   const listRef = useRef<HTMLDivElement>(null)
   const drop = useStripDrop(listRef, props)
   const setFocusId = useTabVisibility(listRef, activeId, tabs)
@@ -270,34 +273,39 @@ export function PaneTabStrip(props: PaneTabStripProps) {
   }
 
   const tabStop = Math.max(0, tabs.findIndex((tab) => tab.id === activeId))
+  // The button is a sibling of the tablist, not a child: a tablist's children are its tabs.
+  const showCloseAll = Boolean(onCloseAll && props.focused)
   return (
-    <div
-      ref={listRef}
-      role="tablist"
-      aria-orientation="horizontal"
-      data-testid="pane-tab-strip"
-      data-pane-tab-group={groupId}
-      onDragOver={drop.onDragOver}
-      onDragLeave={drop.onDragLeave}
-      onDrop={drop.onDrop}
-      onWheel={onWheel}
-      className="flex h-full min-w-0 flex-1 items-stretch overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-    >
-      {tabs.map((tab, index) => (
-        <PaneTab
-          key={tab.id}
-          tab={tab}
-          groupId={groupId}
-          active={tab.id === activeId}
-          focused={props.focused ?? false}
-          tabStop={index === tabStop}
-          dropEdge={dropEdgeFor(drop.dropSlot, index, tabs.length)}
-          onActivate={() => onActivate(tab.id)}
-          onClose={() => onClose(tab.id)}
-          onPin={onPin ? () => onPin(tab.id) : undefined}
-          onKeyDown={(event) => onKeyDown(event, index)}
-        />
-      ))}
+    <div className="flex h-full min-w-0 flex-1 items-stretch">
+      <div
+        ref={listRef}
+        role="tablist"
+        aria-orientation="horizontal"
+        data-testid="pane-tab-strip"
+        data-pane-tab-group={groupId}
+        onDragOver={drop.onDragOver}
+        onDragLeave={drop.onDragLeave}
+        onDrop={drop.onDrop}
+        onWheel={onWheel}
+        className="flex h-full min-w-0 flex-1 items-stretch overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {tabs.map((tab, index) => (
+          <PaneTab
+            key={tab.id}
+            tab={tab}
+            groupId={groupId}
+            active={tab.id === activeId}
+            focused={props.focused ?? false}
+            tabStop={index === tabStop}
+            dropEdge={dropEdgeFor(drop.dropSlot, index, tabs.length)}
+            onActivate={() => onActivate(tab.id)}
+            onClose={() => onClose(tab.id)}
+            onPin={onPin ? () => onPin(tab.id) : undefined}
+            onKeyDown={(event) => onKeyDown(event, index)}
+          />
+        ))}
+      </div>
+      {showCloseAll && onCloseAll ? <CloseAllTabsButton onClick={onCloseAll} /> : null}
     </div>
   )
 }

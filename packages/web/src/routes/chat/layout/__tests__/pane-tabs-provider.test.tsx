@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { PaneTabsContext, usePaneTabsDocPane, usePaneTabsKeep, usePaneTabsStrip, usePaneTitleDrag } from '@/components/chat/pane-tabs-context'
 import { PaneTabsProvider } from '../pane-tabs-provider'
-import { closeSession, createSplitLayout, findGroup, focusSession, groupOfSession, groupsOf, materializeLayout, openDocTab, openInFocusedGroup, openNewChatTab, pinTab, placeTab, showTab, splitGroup, type SplitLayout } from '../split-layout'
+import { closeSession, createSplitLayout, emptySplitLayout, findGroup, focusSession, groupOfSession, groupsOf, materializeLayout, openDocTab, openInFocusedGroup, openNewChatTab, pinTab, placeTab, showTab, splitGroup, type SplitLayout } from '../split-layout'
 import { isNewChatTabId, todoTabId } from '../tab-kind'
 import { fileTabId } from '../file-tab'
 import { CHAT_SESSION_DND_MIME } from '../../chat-session-dnd'
@@ -52,6 +52,7 @@ function harness(start: SplitLayout) {
     equalize: vi.fn(),
     place: (groupId, id, index) => set(placeTab(layout, groupId, id, index)),
     close: (id) => set(closeSession(layout, id)),
+    closeAll: () => set(emptySplitLayout()),
     pin: (id) => { if (pinTab(layout, id) !== layout) set(pinTab(layout, id)) },
     show: (id) => { if (showTab(layout, id) !== layout) set(showTab(layout, id)) },
     focusPane: vi.fn(),

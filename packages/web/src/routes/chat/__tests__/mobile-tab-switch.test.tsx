@@ -51,11 +51,12 @@ function Phone({ ignoreSelect = false, lateTitleFor }: PhoneProps) {
     subscribe,
     connectionSeq: 0,
     onSelect: ignoreSelect ? noop : setOpenedId,
+    onCloseAll: noop,
   })
   const primary = { paneKey: openedId, sessionId: openedId, pendingUserMessage: undefined, initialEmployee: undefined, onSessionCreated: noop, viewMode: 'chat' as const, focusTrigger: 0, delegatedActivity: undefined }
   return (
     <>
-      <ChatHeaderPills title={title} chatId={openedId} hideOnMobile={onList} onNew={noop} onBack={() => setOnList(true)} mobileWorkingSet={tabs} />
+      <ChatHeaderPills title={title} chatId={openedId} hideOnMobile={onList} onNew={noop} onBack={() => setOnList(true)} mobileWorkingSet={tabs.strip} />
       <div hidden={onList}>
       <MultiChatGrid
         sessionIds={[openedId]}

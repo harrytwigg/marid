@@ -1,9 +1,11 @@
 import "@/test/preload-menus"
+import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { TURN_STALL_VISIBLE_MS } from '@/components/chat/session-signals'
 import { emojiForName } from '@/lib/emoji-pool'
 import type { Session } from '@/components/chat/session-signals'
+import { PaneTabsContext, type PaneTabsBinding } from '@/components/chat/pane-tabs-context'
 import { ChatPaneTitleBar, paneViewControls } from '../chat-pane-title-bar'
 
 describe('ChatPaneTitleBar', () => {
@@ -241,5 +243,44 @@ describe('paneViewControls', () => {
 
   it('does not lock while the registry has not loaded', () => {
     expect(paneViewControls(session('codex', 'running')).viewSwitchLocked).toBe(false)
+  })
+})
+
+describe('the close-all a lone pane carries', () => {
+  /** The binding the layout gives a pane's bar; `strip` draws a tab strip for the pane. */
+  function binding({ closeAll, strip = null }: { closeAll?: () => void; strip?: ReactNode | null }): PaneTabsBinding {
+    return { renderStrip: () => strip, hasStrips: strip !== null, keep: () => {}, shownDoc: () => null, closable: () => true, closeAll }
+  }
+  const bar = (active: boolean) => (
+    <ChatPaneTitleBar active={active} title="Chat" employee="op" session={{ id: 'a', status: 'idle' }} onClose={vi.fn()} />
+  )
+
+  it('sits in the focused bar when the pane shows no strip, and runs', () => {
+    const closeAll = vi.fn()
+    render(<PaneTabsContext.Provider value={binding({ closeAll })}>{bar(true)}</PaneTabsContext.Provider>)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close all tabs' }))
+    expect(closeAll).toHaveBeenCalledTimes(1)
+  })
+
+  it('is left to the strip when the pane has one, so one bar carries it', () => {
+    render(
+      <PaneTabsContext.Provider value={binding({ closeAll: vi.fn(), strip: <span data-testid="strip" /> })}>
+        {bar(true)}
+      </PaneTabsContext.Provider>,
+    )
+
+    expect(screen.getByTestId('strip')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Close all tabs' })).toBeNull()
+  })
+
+  it('is offered by the focused pane only', () => {
+    render(<PaneTabsContext.Provider value={binding({ closeAll: vi.fn() })}>{bar(false)}</PaneTabsContext.Provider>)
+    expect(screen.queryByRole('button', { name: 'Close all tabs' })).toBeNull()
+  })
+
+  it('is absent when nothing is open to close', () => {
+    render(<PaneTabsContext.Provider value={binding({})}>{bar(true)}</PaneTabsContext.Provider>)
+    expect(screen.queryByRole('button', { name: 'Close all tabs' })).toBeNull()
   })
 })

@@ -243,3 +243,25 @@ describe('PaneTabStrip', () => {
     expect(scrollIntoView).toHaveBeenLastCalledWith({ block: 'nearest', inline: 'nearest' })
   })
 })
+
+describe('the close-all a strip carries', () => {
+  it('sits at the end of the focused strip, outside the tablist, and runs', () => {
+    const onCloseAll = vi.fn()
+    const { strip } = setup({ focused: true, onCloseAll })
+    const button = screen.getByRole('button', { name: 'Close all tabs' })
+    // A tablist's children are its tabs, so the action rides beside it rather than inside it.
+    expect(strip.contains(button)).toBe(false)
+    fireEvent.click(button)
+    expect(onCloseAll).toHaveBeenCalledTimes(1)
+  })
+
+  it('is offered by the focused strip only, so one bar carries it', () => {
+    setup({ focused: false, onCloseAll: vi.fn() })
+    expect(screen.queryByRole('button', { name: 'Close all tabs' })).toBeNull()
+  })
+
+  it('is absent when there is nothing open to close', () => {
+    setup({ focused: true })
+    expect(screen.queryByRole('button', { name: 'Close all tabs' })).toBeNull()
+  })
+})
