@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { notifyParentSessionAndWait } from "../../sessions/callbacks.js";
+import { initDb } from "../../shared/db.js";
+import { armChildWatch, childWatchSettledReason, CHILD_WATCH_PURPOSE } from "../../heartbeats/child-watch.js";
 import { recordRefusedBeforeEngine } from "../../sessions/engine-reach.js";
 import {
   assignedTodo,
@@ -63,6 +65,36 @@ describe("a Dispatcher that has handed its Todo on", () => {
     notifyRateLimitResumed(registry.getSession(delegateId)!);
 
     expect(deliveriesTo(dispatcherId)).toHaveLength(0);
+  });
+
+  // delegate_task arms the hourly "check your children" wake on its caller; for a
+  // Dispatcher that is a wake into a Todo that is no longer its own.
+  it("arms no child-watch heartbeat when it delegates, and disarms one armed earlier", async () => {
+    const { dispatcherId, delegateId } = await handedOff("Dispatcher would be woken hourly");
+    registry.updateSession(delegateId, { status: "running" });
+    const armed = () => initDb()
+      .prepare("SELECT count(*) FROM heartbeats WHERE owner_session_id = ? AND purpose = ? AND status = 'armed'")
+      .pluck().get(dispatcherId, CHILD_WATCH_PURPOSE) as number;
+
+    armChildWatch(dispatcherId);
+
+    expect(armed()).toBe(0);
+    expect(childWatchSettledReason({ purpose: CHILD_WATCH_PURPOSE, ownerSessionId: dispatcherId })).toBe("children-settled");
+  });
+
+  it("still arms the child-watch for an ordinary employee with a child in flight", async () => {
+    const { delegateId } = await handedOff("Delegate that itself delegates");
+    registry.updateSession(delegateId, { status: "running" });
+    const parent = employeeSession("second-worker", "watcher:1");
+    const child = registry.createSession({
+      engine: "codex", source: "web", sourceRef: "watched:1", connector: "web",
+      employee: "first-worker", prompt: "work it", parentSessionId: parent.id,
+    });
+    registry.updateSession(child.id, { status: "running" });
+
+    armChildWatch(parent.id);
+
+    expect(childWatchSettledReason({ purpose: CHILD_WATCH_PURPOSE, ownerSessionId: parent.id })).toBeNull();
   });
 
   it("may not message the delegate, and the delegate's session gets nothing", async () => {

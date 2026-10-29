@@ -200,7 +200,7 @@ Question 2c above settled on a durable Dispatcher session, but the shipped Dispa
 comment is posted, the Todo belongs to the delegate and the operator, who may be settling it
 between themselves in chat; a Dispatcher that steps in cuts across what they agreed.
 
-- **No wake.** A delegate's replies, errors and rate-limit notices are not delivered to a
+- **No wake.** A delegate's replies, errors and rate-limit notices, and the hourly child check, are not delivered to a
   Dispatcher whose hand-off is spent. Comment mentions and replies already skip system
   employees.
 - **No messages.** `send_to_session` from a spent Dispatcher is refused, to the delegate and

@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { initDb } from "../shared/db.js";
 import { logger } from "../shared/logger.js";
-import { listChildSessions } from "../sessions/registry.js";
+import { getSession, listChildSessions } from "../sessions/registry.js";
+import { TODO_DISPATCHER_NAME } from "../gateway/system-employees.js";
 import { isSessionInFlight } from "../work-items/open-delegations.js";
 import { disarmHeartbeat } from "./store.js";
 import type { Heartbeat } from "./types.js";
@@ -16,6 +17,13 @@ export const CHILD_WATCH_MESSAGE =
   "your Todo and read the child sessions you started; act on any child that has settled. " +
   "If nothing needs you, end your turn.";
 
+/** The Todo Dispatcher hands its Todo on and is done with it, so it has no
+ *  children to watch: an hourly wake would pull it back into a Todo that now
+ *  belongs to the delegate and the operator. */
+function isTodoDispatcher(sessionId: string): boolean {
+  return getSession(sessionId)?.employee === TODO_DISPATCHER_NAME;
+}
+
 /**
  * Arm the session's child-watch heartbeat, or push the expiry of the one it
  * holds. One transaction, so two triggers racing cannot arm two (the partial
@@ -25,6 +33,7 @@ export const CHILD_WATCH_MESSAGE =
  */
 export function armChildWatch(sessionId: string, now = Date.now()): void {
   try {
+    if (isTodoDispatcher(sessionId)) return;
     const db = initDb();
     db.transaction(() => {
       const expiresAt = now + CHILD_WATCH_TTL_MS;
@@ -80,6 +89,8 @@ export function openChildrenOf(sessionId: string): OpenChildren {
 /** Why a due heartbeat is a child-watch with nothing left to watch, else null. */
 export function childWatchSettledReason(heartbeat: Pick<Heartbeat, "purpose" | "ownerSessionId">): string | null {
   if (heartbeat.purpose !== CHILD_WATCH_PURPOSE) return null;
+  // One armed before the Dispatcher stopped getting them is disarmed rather than delivered.
+  if (isTodoDispatcher(heartbeat.ownerSessionId)) return CHILD_WATCH_DISARM_REASON;
   const { todoIds, sessionIds } = openChildrenOf(heartbeat.ownerSessionId);
   return todoIds.length === 0 && sessionIds.length === 0 ? CHILD_WATCH_DISARM_REASON : null;
 }
