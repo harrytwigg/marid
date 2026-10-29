@@ -37,7 +37,8 @@ import { loadSplitLayout, persistSplitLayout } from './split-layout-storage'
 import { closeAllUnpinned, closeUserTab, pinTab, unpinTab } from './pinned-tabs'
 import { fileTabId, type FileTabRef } from './file-tab'
 import { subagentTabId, type SubagentTabRef } from './subagent-tab'
-import { isChatTabId, isNewChatTabId, todoTabId, TODOS_TAB_ID } from './tab-kind'
+import { isChatTabId, isNewChatTabId, todoTabId } from './tab-kind'
+import { useTodosTabOpener } from './use-todos-tab-opener'
 import { forgetNewChatDraft } from '@/components/chat/use-chat-draft'
 import { capWindowWidth, savedSidebarWidth } from '../sidebar-width-store'
 import { applySplitDrop, type SplitDropContext } from './split-drop'
@@ -253,19 +254,7 @@ function useTabOpeners(
     setLayout((current) => openNewChatTab(project(current), employee))
     return true
   }, [hydrated, project, shown])
-  /** The Todos board's tab: shown where it is open, else opened in the focused pane, or in a pane of its
-   *  own with none. It needs no chat to sit beside, so it opens on any layout; one asked for before the
-   *  stored layout has loaded waits for it, rather than land in a layout hydration is about to replace. */
-  const [todosWaiting, setTodosWaiting] = useState(false)
-  const openTodosTab = useCallback(() => {
-    if (!hydrated) return setTodosWaiting(true)
-    setLayout((current) => openDocTab(project(current), null, TODOS_TAB_ID))
-  }, [hydrated, project, setLayout])
-  useEffect(() => {
-    if (!hydrated || !todosWaiting) return
-    setTodosWaiting(false)
-    openTodosTab()
-  }, [hydrated, openTodosTab, todosWaiting])
+  const openTodosTab = useTodosTabOpener(hydrated, project, setLayout)
 
   return { openFile, openTodo, openSubagent, openNewChat, openTodosTab }
 }

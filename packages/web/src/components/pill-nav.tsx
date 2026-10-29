@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom"
 import { PanelLeft } from "@/components/ui/icon"
 import { useSettings } from "@/routes/settings-provider"
 import { useNavigation } from "@/lib/use-navigation"
-import { isNavLinkActive, openTodosFromLink, useNavSurface } from "@/components/nav-surface"
+import { isNavLinkActive, openTodosFromLink, useNavSurface, useShowChatFromLink } from "@/components/nav-surface"
 import { useOpenTodosTab } from "@/components/chat/file-open-context"
 import { cn } from "@/lib/utils"
 import { useFeatures } from "@/hooks/use-features"
@@ -194,6 +194,7 @@ export function NavRibbon({
   const pathname = useLocation().pathname
   const surface = useNavSurface()
   const openTodosTab = useOpenTodosTab()
+  const showChatFromLink = useShowChatFromLink()
   const { settings } = useSettings()
   useDismissLabelOnEscape()
   const portalName = settings.portalName ?? PRODUCT_NAME
@@ -205,6 +206,8 @@ export function NavRibbon({
   // control never means both open and close.
   const onChatIconClick = (e: ReactMouseEvent) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    showChatFromLink(e)
+    if (e.defaultPrevented) return
     if (onToggleList && pathname === "/" && !listOpen) {
       e.preventDefault()
       onToggleList()
@@ -284,7 +287,7 @@ export function NavRibbon({
             href={item.href}
             to={item.to}
             isActive={isNavLinkActive(item.href, pathname, surface)}
-            onClick={item.href === "/" ? onChatIconClick : item.to ? (event) => openTodosFromLink(event, openTodosTab) : undefined}
+            onClick={item.href === "/" ? onChatIconClick : item.href === "/todos" ? (event) => openTodosFromLink(event, openTodosTab) : undefined}
           />
         ))}
       </nav>

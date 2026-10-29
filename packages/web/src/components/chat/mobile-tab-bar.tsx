@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom"
-import { isNavItemActive, isNavLinkActive, openTodosFromLink, useNavSurface, type NavSurface } from "@/components/nav-surface"
+import { isNavItemActive, isNavLinkActive, openTodosFromLink, useNavSurface, useShowChatFromLink, type NavSurface } from "@/components/nav-surface"
 import { useOpenTodosTab } from "@/components/chat/file-open-context"
 import { MORE_NAV_ITEM } from "@/lib/nav"
 import { useNavigation } from "@/lib/use-navigation"
@@ -42,6 +42,7 @@ export function MobileTabBar() {
   const pathname = useLocation().pathname
   const surface = useNavSurface()
   const openTodosTab = useOpenTodosTab()
+  const showChatFromLink = useShowChatFromLink()
   const { data: features } = useFeatures()
   const navigation = useNavigation(features?.notesEnabled === true)
 
@@ -71,7 +72,8 @@ export function MobileTabBar() {
             aria-label={item.label}
             aria-current={isActive ? "page" : undefined}
             onClick={(event) => {
-              if (item.to) openTodosFromLink(event, openTodosTab)
+              if (item.href === "/todos") openTodosFromLink(event, openTodosTab)
+              if (item.href === "/") showChatFromLink(event)
               // HIG tab re-tap: tapping the already-active Chat tab scrolls the
               // chat list back to the top (the route is unchanged, so the Link is
               // otherwise a no-op). GRS-023.

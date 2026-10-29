@@ -82,6 +82,12 @@ function commit(board: BoardId, search: string): void {
   listeners.forEach((listener) => listener())
 }
 
+/** The tab's location now, and a subscription to its moves, for what describes the screen from outside it. */
+export function readTodosTabLocation(): { board: BoardId; search: string } {
+  return getSnapshot()
+}
+export { subscribe as subscribeTodosTabLocation }
+
 /** Test-only: forget a location held in memory because storage refused it. */
 export function clearTodosTabLocationMemory(): void {
   memoryRaw = null

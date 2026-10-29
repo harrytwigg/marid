@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { isNavLinkActive, openTodosFromLink } from '@/components/nav-surface'
 import { navigationFor } from '@/lib/nav'
 import { staticPagesFor } from '@/components/global-search'
-import { searchDestination } from '@/components/global-search/static-pages'
+import { openSearchResult, searchDestination } from '@/components/global-search/static-pages'
 import { TODOS_TAB_HREF } from '@/lib/todos-tab-entry'
 
 describe('which nav item is current', () => {
@@ -65,5 +65,22 @@ describe('a click on the Todos link inside the chat page', () => {
     const event = click()
     openTodosFromLink(event, null)
     expect(event.preventDefault).not.toHaveBeenCalled()
+  })
+})
+
+describe('opening a palette result', () => {
+  it('opens the Todos tab in place inside the chat page, with no navigation', () => {
+    const open = vi.fn()
+    const navigate = vi.fn()
+    openSearchResult('/todos', { openTodosTab: open, navigate })
+    expect(open).toHaveBeenCalledOnce()
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('navigates to the tab\'s route where there is no chat page around the palette, and to any other result\'s address', () => {
+    const navigate = vi.fn()
+    openSearchResult('/todos', { openTodosTab: null, navigate })
+    openSearchResult('/org', { openTodosTab: vi.fn(), navigate })
+    expect(navigate.mock.calls).toEqual([[TODOS_TAB_HREF], ['/org']])
   })
 })

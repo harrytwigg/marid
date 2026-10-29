@@ -35,3 +35,11 @@ export const STATIC_PAGES = staticPagesFor(false)
 export function searchDestination(href: string): string {
   return href === "/todos" ? TODOS_TAB_HREF : href
 }
+
+/** Opens a palette result. Inside the chat page the Todos tab opens in place, since a navigation to its route
+ *  would add a history entry that changes nothing; every other result is navigated to. */
+export function openSearchResult(href: string, { openTodosTab, navigate }: { openTodosTab: (() => void) | null; navigate: (to: string) => void }): void {
+  const destination = searchDestination(href)
+  if (destination === TODOS_TAB_HREF && openTodosTab) openTodosTab()
+  else navigate(destination)
+}

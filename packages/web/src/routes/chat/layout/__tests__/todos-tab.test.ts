@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { emptySplitLayout, groupsOf, openDocTab, openInFocusedGroup, openNewChatTab, createSplitLayout } from '../split-layout'
+import { emptySplitLayout, groupsOf, openDocTab, openInFocusedGroup, openNewChatTab, createSplitLayout, showTab } from '../split-layout'
 import { SPLIT_LAYOUT_STORAGE_KEY } from '../split-layout-storage'
 import { isChatlessLayout, loadsChatless, routeChatForTodosOpen, todosTabFocused, todosTabOpen } from '../todos-tab'
 import { TODOS_TAB_ID } from '../tab-kind'
@@ -22,9 +22,16 @@ describe('the Todos tab in a layout', () => {
     expect(routeChatForTodosOpen(layout)).toBe('b')
   })
 
-  it('names no chat for the route when it gets a pane of its own', () => {
+  it('names no chat for the route when the layout holds none', () => {
     expect(routeChatForTodosOpen(emptySplitLayout())).toBeNull()
     expect(routeChatForTodosOpen(withTodos())).toBeNull()
+  })
+
+  it('names the layout\'s own chat when the tab sits in a pane of its own beside chats, so the route is never left without one', () => {
+    const beside = showTab(openInFocusedGroup(withTodos(), 'a'), TODOS_TAB_ID)
+    expect(tabsOf(beside)).toEqual([[TODOS_TAB_ID], ['a']])
+    expect(todosTabFocused(beside)).toBe(true)
+    expect(routeChatForTodosOpen(beside)).toBe('a')
   })
 
   it('is focused only while the focused pane shows it', () => {

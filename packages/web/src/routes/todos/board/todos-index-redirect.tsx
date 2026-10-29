@@ -1,6 +1,6 @@
 import { Navigate, redirect, useLocation, type LoaderFunctionArgs } from "react-router-dom"
 import { TODOS_TAB_HREF } from "@/lib/todos-tab-entry"
-import { parseBoardParam, type BoardId } from "./board-route"
+import { boardPath, parseBoardParam, type BoardId } from "./board-route"
 
 /** The board a legacy /todos URL means, and the query string its filters ride on.
  *  Old deep links keep meaning what they meant: the needs-you lens maps to the
@@ -20,7 +20,7 @@ export function legacyTodosBoard(search: string): { board: BoardId; search: stri
 /** Where a legacy /todos URL lands now: the board path it maps to, as a link a person can read. */
 export function legacyTodosRedirectTarget(search: string): string {
   const { board, search: rest } = legacyTodosBoard(search)
-  return `/todos/b/${board.kind}${rest ? `?${rest}` : ""}`
+  return `${boardPath(board)}${rest ? `?${rest}` : ""}`
 }
 
 /** Takes a board link into the Todos tab: the tab is pointed at the board and its filters, then the chat

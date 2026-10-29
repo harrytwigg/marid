@@ -23,13 +23,34 @@ export function isNavLinkActive(href: string, pathname: string, surface: NavSurf
 }
 
 const NavSurfaceContext = createContext<NavSurface | null>(null)
+const ShowChatContext = createContext<(() => boolean) | null>(null)
 
-export function NavSurfaceProvider({ surface, children }: { surface: NavSurface; children: ReactNode }) {
-  return <NavSurfaceContext.Provider value={surface}>{children}</NavSurfaceContext.Provider>
+/** `onShowChat` leaves the Todos tab for a chat (the phone's chat list, a chat of the layout on the desktop);
+ *  it says whether it did, and a link it did not handle goes where it points. */
+export function NavSurfaceProvider({ surface, onShowChat, children }: { surface: NavSurface; onShowChat: () => boolean; children: ReactNode }) {
+  return (
+    <NavSurfaceContext.Provider value={surface}>
+      <ShowChatContext.Provider value={onShowChat}>{children}</ShowChatContext.Provider>
+    </NavSurfaceContext.Provider>
+  )
 }
 
 export function useNavSurface(): NavSurface | null {
   return useContext(NavSurfaceContext)
+}
+
+/**
+ * A click on the nav's Chat link while the Todos tab is in front, taken by the chat page when it can: the
+ * route is already "/", so following the link would change nothing the reader can see. A modified click
+ * (a new browser tab) is left to the link.
+ */
+export function useShowChatFromLink(): (event: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; preventDefault: () => void }) => void {
+  const surface = useContext(NavSurfaceContext)
+  const showChat = useContext(ShowChatContext)
+  return (event) => {
+    if (surface !== "todos" || !showChat || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    if (showChat()) event.preventDefault()
+  }
 }
 
 /**
