@@ -26,7 +26,7 @@ export interface ChildWork {
  *  start-date hold (`startDateHold`) and an exhausted account are left out on
  *  purpose: both pass with time, so such a child is still part of the plan and
  *  counts as waiting. */
-function walkWillStart(child: { id: string; assignee: string | null }): boolean {
+export function walkWillStart(child: { id: string; assignee: string | null }): boolean {
   if (getTodoDispatchConfig(child.id)?.autoStart === false || child.assignee === OPERATOR_ASSIGNEE) return false;
   const item = getWorkItem(child.id);
   return !item || todoHoldRefusal(item) === null;

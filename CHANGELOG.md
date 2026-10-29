@@ -8,6 +8,7 @@
   - **Review:** a Todo's review is addressed from its parent when read, so a detached sub-task is the operator's to review and a Todo made a sub-task is its new parent owner's.
 
 ### 🐛 Fixed
+- **A parked sub-task no longer keeps waking its parent's session.** The child check the gateway arms for a session with open child work counted any sub-task in `backlog`, so one with auto-start off or the operator's, and with no session running, woke the session every hour for up to 24 hours although nothing could move it. Such a child is no longer open work: once only those remain, the check disarms as settled. A backlog child that will be dispatched, an executing child and a child with a session in flight still keep it armed.
 - **Auto-compaction no longer skips the turn that moves a Claude session back from a stand-in.** The sync transcript on that turn was taken for an engine switch, so a long, cold session woke on its full context however large it was, and the context budget was skipped too. The move-back now also restores the context size the conversation had before the swap, and a long session skipped for a reason other than a warm cache or its budget is logged at `info`.
 
 ### 💥 Removed / Not supported
