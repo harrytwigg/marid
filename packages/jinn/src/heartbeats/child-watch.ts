@@ -58,7 +58,7 @@ export interface OpenChildren {
 
 function isOpenChild(child: { id: string; status: string; assignee: string | null }): boolean {
   if (child.status !== "backlog") return true;
-  if (child.assignee && walkWillStart(child)) return true;
+  if (walkWillStart(child)) return true;
   return listSessionsByWorkItem(child.id).some(isSessionInFlight);
 }
 
@@ -66,8 +66,8 @@ function isOpenChild(child: { id: string; status: string; assignee: string | nul
  * Open children of a session: Todos in `backlog`/`executing` whose parent is the
  * session's linked Todo, or that the session created with a parent (`sourceRef`
  * `session:<id>:` / `delegate:<id>:`), plus its in-flight child sessions. A
- * parked `backlog` child (no assignee, or one the board walk will not start) with
- * no session in flight is not open: nothing moves it without a person, so a wake
+ * parked `backlog` child (one the board walk will not start: auto-start off, the
+ * operator's, or held) with no session in flight is not open: nothing moves it without a person, so a wake
  * about it can do nothing.
  */
 export function openChildrenOf(sessionId: string): OpenChildren {

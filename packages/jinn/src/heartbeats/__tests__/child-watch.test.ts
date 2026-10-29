@@ -160,14 +160,21 @@ describe("openChildrenOf", () => {
     expect(watch.openChildrenOf(owner).todoIds.sort()).toEqual([viaLink.id, viaDelegate.id].sort());
   });
 
-  it("ignores a parked backlog child: unassigned, auto-start off, or the operator's", () => {
+  it("ignores a parked backlog child: auto-start off, assigned or not, or the operator's", () => {
     const owner = session().id;
-    const unassigned = childTodo(owner, "backlog", null);
     const optedOut = childTodo(owner, "backlog");
     setAutoStart(optedOut.id, false);
+    const optedOutUnassigned = childTodo(owner, "backlog", null);
+    setAutoStart(optedOutUnassigned.id, false);
     childTodo(owner, "backlog", "@operator");
-    expect(unassigned.assignee).toBeNull();
     expect(watch.openChildrenOf(owner).todoIds).toEqual([]);
+  });
+
+  it("counts an unassigned backlog child with auto-start on: the board walk picks its employee", () => {
+    const owner = session().id;
+    const unassigned = childTodo(owner, "backlog", null);
+    expect(unassigned.assignee).toBeNull();
+    expect(watch.openChildrenOf(owner).todoIds).toEqual([unassigned.id]);
   });
 
   it("counts a backlog child that will be dispatched, and a parked one with a session in flight", () => {
@@ -175,6 +182,7 @@ describe("openChildrenOf", () => {
     const dispatched = childTodo(owner, "backlog");
     setAutoStart(dispatched.id, true);
     const parked = childTodo(owner, "backlog", null);
+    setAutoStart(parked.id, false);
     const running = session();
     db.prepare("UPDATE sessions SET work_item_id = ? WHERE id = ?").run(parked.id, running.id);
     registry.updateSession(running.id, { status: "idle" });
@@ -218,7 +226,8 @@ describe("child-watch firing", () => {
 
   it("disarms with children-settled when only parked backlog children remain", () => {
     const owner = session().id;
-    childTodo(owner, "backlog", null);
+    const unassigned = childTodo(owner, "backlog", null);
+    setAutoStart(unassigned.id, false);
     const optedOut = childTodo(owner, "backlog");
     setAutoStart(optedOut.id, false);
     watch.armChildWatch(owner, 0);
@@ -250,7 +259,8 @@ describe("child-watch firing", () => {
 describe("releaseChildWatchIfSettled", () => {
   it("drops the watch when only a parked backlog child is left", () => {
     const owner = session().id;
-    childTodo(owner, "backlog", null);
+    const parked = childTodo(owner, "backlog", null);
+    setAutoStart(parked.id, false);
     watch.armChildWatch(owner);
     expect(watch.releaseChildWatchIfSettled(owner)).toBe(true);
     expect(armed(owner)).toHaveLength(0);
