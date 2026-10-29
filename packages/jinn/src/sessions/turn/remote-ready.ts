@@ -46,6 +46,15 @@ function refuseNonRemoteEngine(
   };
 }
 
+/**
+ * Whether the wait and started notices go to the operator's chat. Off unless the
+ * operator has set `remote.notifyWake: true`. The failure notice does not ask:
+ * a host that will not wake needs the operator whatever they chose here.
+ */
+export function shouldNotifyWake(remote: { notifyWake?: boolean } | undefined): boolean {
+  return remote?.notifyWake === true;
+}
+
 /** Hand the session back to the running path, or report that it is gone. */
 function restoreAfterWait(
   input: TurnInput,
@@ -65,7 +74,9 @@ function restoreAfterWait(
     logger.info(`Session ${sessionId}: remote host became ready but the session is no longer waiting — not starting`);
     return { ok: false, error: "Session was stopped while waiting for the remote host" };
   }
-  notifyOperatorChannel(`✅ ${announced} is up — ${input.employee?.displayName ?? "the employee"} is starting.`);
+  if (shouldNotifyWake(input.config.remote)) {
+    notifyOperatorChannel(`✅ ${announced} is up — ${input.employee?.displayName ?? "the employee"} is starting.`);
+  }
   logger.info(`Session ${sessionId}: ${announced} became ready`);
   return { ok: true };
 }
@@ -117,7 +128,7 @@ export async function ensureRemoteHostReady(
         lastActivity: new Date().toISOString(),
         lastError: notice.status,
       });
-      notifyOperatorChannel(notice.operator);
+      if (shouldNotifyWake(input.config.remote)) notifyOperatorChannel(notice.operator);
     },
     // The operator stopping the session is the one thing that should end the
     // wait early. `waiting` is the status this gate set; anything else means
