@@ -47,12 +47,12 @@ function refuseNonRemoteEngine(
 }
 
 /**
- * Whether the wait and started notices go to the operator's chat. On unless the
- * operator has set `remote.notifyWake: false`. The failure notice does not ask:
+ * Whether the wait and started notices go to the operator's chat. Off unless the
+ * operator has set `remote.notifyWake: true`. The failure notice does not ask:
  * a host that will not wake needs the operator whatever they chose here.
  */
 export function shouldNotifyWake(remote: { notifyWake?: boolean } | undefined): boolean {
-  return remote?.notifyWake !== false;
+  return remote?.notifyWake === true;
 }
 
 /** Hand the session back to the running path, or report that it is gone. */

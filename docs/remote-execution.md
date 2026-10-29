@@ -130,9 +130,9 @@ remote:
   # Bound on waiting for the mount once the host answers. Default 120000 (2 minutes).
   mountWaitMs: 120000
   # Tell the operator's chat when a turn waits on this host ("offline, waking it",
-  # "up, starting"). Default true. Set false for a host that wakes often. The
-  # session's own status and the failure notice are unaffected.
-  notifyWake: true
+  # "up, starting"). Default false. Set true to be told. The session's own
+  # status and the failure notice are sent either way.
+  notifyWake: false
 ```
 
 In the employee's YAML under `<instance home>/org/<department>/<name>.yaml`:
@@ -673,11 +673,11 @@ polls until `waitMs` runs out.
 
 The operator hears about a wait twice: when it starts ("offline, waking it", or
 "up, waiting for the mount") and when the host is ready ("up, starting"). On a
-host that is powered on and off on a schedule that is noise, so
-`remote.notifyWake: false` stops both messages going to any connector. The
-session still shows `waiting` with its reason in the dashboard, and a host that
-never comes up still sends its failure message: that one needs the operator
-whatever this is set to. Unset or `true` keeps all three.
+host that is powered on and off on a schedule that is noise, so by default
+neither message goes to any connector. Set `remote.notifyWake: true` to receive
+both. The session shows `waiting` with its reason in the dashboard either way,
+and a host that never comes up after a wait began still sends its failure
+message: that one needs the operator whatever this is set to.
 
 A `wakeCommand` gets `wakeTimeoutMs` (default five minutes) to finish. That is
 deliberately generous: a real startup path is not a fire-and-forget packet — it

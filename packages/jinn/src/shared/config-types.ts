@@ -363,11 +363,11 @@ export interface RemoteExecutionConfig {
   mountWaitMs?: number;
   /** Tell the operator's chat connector when a turn has to wait for a remote
    *  host: that it is offline (or its mount is not ready) and being waited for,
-   *  and that it is up and the employee is starting. Default true; `false`
-   *  silences those two notices for a host that wakes often. The session's own
-   *  status line ("<host> is offline — waking it") is unaffected, and the
-   *  failure notice stays on either way: a host that will not wake needs the
-   *  operator. */
+   *  and that it is up and the employee is starting. Default false: those two
+   *  notices are noise on a host that wakes often, so they are sent only when
+   *  this is `true`. The session's own status line ("<host> is offline — waking
+   *  it") is unaffected, and the failure notice is sent either way: a host that
+   *  will not wake needs the operator. */
   notifyWake?: boolean;
 }
 

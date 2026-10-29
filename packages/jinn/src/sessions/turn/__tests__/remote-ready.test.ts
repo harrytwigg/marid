@@ -131,7 +131,7 @@ describe("ensureRemoteHostReady", () => {
       opts.onWaitStart?.({ destination: "builder@build-box", waking: true });
       return { ready: true };
     });
-    await ensureRemoteHostReady(input(), "claude");
+    await ensureRemoteHostReady(input(EMPLOYEE, { notifyWake: true }), "claude");
     expect(hoisted.updates[0].fields.status).toBe("waiting");
     expect(hoisted.notifications[0]).toContain("offline");
     expect(hoisted.updates[1].fields.status).toBe("running");
@@ -144,7 +144,7 @@ describe("ensureRemoteHostReady", () => {
       opts.onWaitStart?.({ destination: "builder@build-box", waking: false, waitingFor: "mount" });
       return { ready: true };
     });
-    await ensureRemoteHostReady(input(), "claude");
+    await ensureRemoteHostReady(input(EMPLOYEE, { notifyWake: true }), "claude");
     expect(hoisted.updates[0].fields).toMatchObject({ status: "waiting", lastError: "builder@build-box is up — waiting for the instance-home mount" });
     expect(hoisted.notifications[0]).toContain("instance-home mount is not ready yet");
     expect(hoisted.notifications[0]).not.toContain("offline");
@@ -169,46 +169,53 @@ describe("remote.notifyWake", () => {
     return ensureRemoteHostReady(input(EMPLOYEE, remote), "claude");
   }
 
-  it("decides on notifyWake alone, defaulting to on", () => {
-    expect(shouldNotifyWake(undefined)).toBe(true);
-    expect(shouldNotifyWake({})).toBe(true);
-    expect(shouldNotifyWake({ notifyWake: true })).toBe(true);
+  it("decides on notifyWake alone, defaulting to off", () => {
+    expect(shouldNotifyWake(undefined)).toBe(false);
+    expect(shouldNotifyWake({})).toBe(false);
     expect(shouldNotifyWake({ notifyWake: false })).toBe(false);
+    expect(shouldNotifyWake({ notifyWake: true })).toBe(true);
   });
 
-  it("sends both notices when unset, and when true", async () => {
-    await wakeThen({ ready: true }, {});
+  it("sends both notices when true", async () => {
+    await wakeThen({ ready: true }, { notifyWake: true });
     expect(hoisted.notifications).toHaveLength(2);
     expect(hoisted.notifications[0]).toContain("offline");
     expect(hoisted.notifications[1]).toContain("is up");
-
-    hoisted.notifications = [];
-    await wakeThen({ ready: true }, { notifyWake: true });
-    expect(hoisted.notifications).toHaveLength(2);
   });
 
-  it("sends neither notice when off, but still moves the session through waiting with its reason", async () => {
-    const res = await wakeThen({ ready: true }, { notifyWake: false });
+  it.each([
+    ["unset", {}],
+    ["false", { notifyWake: false }],
+  ])("sends neither notice when %s, but still moves the session through waiting with its reason", async (_label, remote) => {
+    const res = await wakeThen({ ready: true }, remote);
     expect(res).toEqual({ ok: true });
     expect(hoisted.notifications).toEqual([]);
     expect(hoisted.updates[0].fields).toMatchObject({ status: "waiting", lastError: "builder@build-box is offline — waking it" });
     expect(hoisted.updates[1].fields.status).toBe("running");
   });
 
-  it("silences the mount-wait notice too, since it is the same wait", async () => {
-    await wakeThen({ ready: true }, { notifyWake: false }, "mount");
+  it("silences the mount-wait notice too by default, since it is the same wait", async () => {
+    await wakeThen({ ready: true }, {}, "mount");
     expect(hoisted.notifications).toEqual([]);
     expect(hoisted.updates[0].fields.lastError).toContain("instance-home mount");
   });
 
-  it("keeps the failure notice on when off: a host that will not wake needs the operator", async () => {
-    const res = await wakeThen({ ready: false, reason: "build-box did not come up within 240s" }, { notifyWake: false }) as any;
+  it("sends the mount-wait notice when true", async () => {
+    await wakeThen({ ready: true }, { notifyWake: true }, "mount");
+    expect(hoisted.notifications[0]).toContain("instance-home mount is not ready yet");
+  });
+
+  it.each([
+    ["unset", {}],
+    ["false", { notifyWake: false }],
+  ])("keeps the failure notice on when %s: a host that will not wake needs the operator", async (_label, remote) => {
+    const res = await wakeThen({ ready: false, reason: "build-box did not come up within 240s" }, remote) as any;
     expect(res.ok).toBe(false);
     expect(hoisted.notifications).toEqual(["❌ Remote host unavailable: build-box did not come up within 240s"]);
   });
 
-  it("sends the wait notice and the failure notice when on", async () => {
-    await wakeThen({ ready: false, reason: "build-box did not come up within 240s" }, {});
+  it("sends the wait notice and the failure notice when true", async () => {
+    await wakeThen({ ready: false, reason: "build-box did not come up within 240s" }, { notifyWake: true });
     expect(hoisted.notifications).toHaveLength(2);
     expect(hoisted.notifications[1]).toContain("❌");
   });
