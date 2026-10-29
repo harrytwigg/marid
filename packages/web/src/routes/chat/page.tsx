@@ -458,7 +458,11 @@ function ChatPage() {
   const openTodo = useTodoTabOpener(workingSet.openTodo, viewport.mobile)
   const openSubagent = useSubagentTabOpener(workingSet.openSubagent, viewport.mobile)
   // The Todos tab: opened or shown, the way back to a chat from it, and the phone's close of it.
-  const { openTodosTab, showChat, closePhoneTodos } = useTodosTabPage({ workingSet, selectedIdRef, handleSelect, mobile: viewport.mobile, setMobileView, setPhoneTodos })
+  const newestChatId = useCallback((): string | null => {
+    const id = sessionsQuery.data?.[0]?.id
+    return typeof id === 'string' ? id : null
+  }, [sessionsQuery.data])
+  const { openTodosTab, showChat, closePhoneTodos } = useTodosTabPage({ workingSet, selectedIdRef, handleSelect, newestChatId, mobile: viewport.mobile, setMobileView, setPhoneTodos })
 
   // Mobile-only: back from the file view to the chat it was opened from (closing the
   // file tab, so they do not pile up into the open-chats cap), or to the chat list
@@ -904,7 +908,7 @@ function ChatPage() {
 
   // The phone's Todos screen: the tab opened from the strip, the bottom bar or a link, and the list not in front of it.
   const phoneTodosShown = viewport.mobile && phoneTodos && mobileView === 'chat' && (todosTabOpen(workingSet.split.layout) || !workingSet.hydrated)
-  usePhoneTodosHistory(phoneTodosShown, viewport.mobile)
+  usePhoneTodosHistory(phoneTodosShown, viewport.mobile, { setPhoneTodos, setMobileView })
   // The pane that holds focus shows the Todos tab: its title is the tab's, and no chat's header actions apply.
   const todosFocused = viewport.mobile ? phoneTodosShown : todosTabFocused(workingSet.split.layout)
   // What lives outside the page (the voice assistant's snapshot) is told which tab is in front.
