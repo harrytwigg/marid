@@ -8,7 +8,7 @@ import { docViewTestId } from '@/components/chat/doc-view-test-id'
 import { fileTabTitle } from './file-tab'
 import { subagentTabTitle } from './subagent-tab'
 import { PaneKindTabLabel } from './pane-kind-tab-label'
-import type { DocTabRef } from './tab-kind'
+import { TODOS_TAB_TITLE, type DocTabRef } from './tab-kind'
 
 /**
  * A pane that holds only documents: a file, a Todo or a sub-agent's conversation dragged out of a chat's strip to its own side of
@@ -31,6 +31,7 @@ export function DocPane({ doc, header, active }: { doc: DocTabRef; header: React
 
 function docTitle(doc: DocTabRef): string {
   if (doc.kind === 'file') return fileTabTitle(doc.file.path)
+  if (doc.kind === 'todos') return TODOS_TAB_TITLE
   return doc.kind === 'todo' ? doc.todoId : subagentTabTitle(doc.subagent)
 }
 

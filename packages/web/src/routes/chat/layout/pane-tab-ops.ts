@@ -2,7 +2,7 @@ import type { PaneTabItem, PaneTabStripProps } from './pane-tab-strip'
 import { findGroup, paneSessionForTab, placeTab, type LayoutGroup, type SplitLayout } from './split-layout'
 import { fileTabTitle, parseFileTabId } from './file-tab'
 import { parseSubagentTabId, subagentTabTitle } from './subagent-tab'
-import { isNewChatTabId, parseTodoTabId } from './tab-kind'
+import { isNewChatTabId, isTodosTabId, parseTodoTabId, TODOS_TAB_TITLE } from './tab-kind'
 
 /** What the strip shows for one session; supplied by whoever knows the session list. */
 export interface PaneTabSession {
@@ -23,6 +23,7 @@ export function paneTabItems(group: LayoutGroup, lookup: PaneTabSessionLookup): 
     if (todoId) return { id: sessionId, kind: 'todo', title: todoId }
     const subagent = parseSubagentTabId(sessionId)
     if (subagent) return { id: sessionId, kind: 'subagent', title: subagentTabTitle(subagent) }
+    if (isTodosTabId(sessionId)) return { id: sessionId, kind: 'todos', title: TODOS_TAB_TITLE }
     if (isNewChatTabId(sessionId)) return { id: sessionId, kind: 'new-chat', title: 'New chat' }
     const session = lookup(sessionId)
     return { id: sessionId, ...session, title: session?.title || 'Chat', preview: group.previewTab === sessionId || undefined }

@@ -23,12 +23,13 @@ export function DocView({ doc }: { doc: DocTabRef }) {
 }
 
 function docKey(doc: DocTabRef): string {
+  if (doc.kind === 'todos') return 'todos'
   if (doc.kind === 'todo') return `todo:${doc.todoId}`
   if (doc.kind === 'subagent') return `subagent:${doc.subagent.sessionId}:${doc.subagent.agentId}`
   return `file:${doc.file.sessionId}:${doc.file.path}`
 }
 
-const DOC_NOUNS: Record<DocTabRef['kind'], string> = { file: 'file', todo: 'Todo', subagent: 'sub-agent' }
+const DOC_NOUNS: Record<DocTabRef['kind'], string> = { file: 'file', todo: 'Todo', subagent: 'sub-agent', todos: 'Todos board' }
 
 /** A document that fails to load or render — a chunk gone stale after a deploy, or a throw in the
  *  view — fails in its own tab, and the chat beside it stays up. */

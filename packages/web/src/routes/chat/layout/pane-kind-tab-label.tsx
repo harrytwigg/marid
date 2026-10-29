@@ -1,10 +1,10 @@
-import { Bot, FileText, ListTodo, SquarePen, type IconComponent } from '@/components/ui/icon'
+import { Bot, FileText, ListChecks, ListTodo, SquarePen, type IconComponent } from '@/components/ui/icon'
 import { useTodoPreview } from '@/lib/todo-preview'
 import type { PaneTabKind } from './tab-kind'
 
 type KindOfTab = Exclude<PaneTabKind, 'chat'>
 
-const ICONS: Record<KindOfTab, IconComponent> = { file: FileText, todo: ListTodo, 'new-chat': SquarePen, subagent: Bot }
+const ICONS: Record<KindOfTab, IconComponent> = { file: FileText, todo: ListTodo, 'new-chat': SquarePen, subagent: Bot, todos: ListChecks }
 
 /** The label of a tab that is no chat: its kind's glyph and its title (a file's basename in code type,
  * a Todo's id, then its title once the preview cache has it). */
