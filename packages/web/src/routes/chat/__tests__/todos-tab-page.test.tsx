@@ -2,6 +2,7 @@ import "@/test/preload-menus"
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { apiMocks, chatTabsMock, gateway, renderRoute, seededChatTabs, sessionIds } from './multi-pane-page-harness'
+import { getTodosTabFocused } from '@/lib/todos-tab-focus'
 import { chatPanes, composerPanes, railLink, seedLayout, settled, setViewport, storedGroups, todosPanes } from './todos-tab-page-support'
 
 // The board has its own suites; here it is a stand-in that says it is on screen.
@@ -175,6 +176,19 @@ describe('the Todos tab on the chat page', () => {
       await waitFor(() => expect(current('Chat')).toBe('page'))
       expect(current('Todos')).toBeNull()
       expect(screen.getByTestId('route-location').textContent).toBe('/?session=a')
+    })
+
+    it('tells what lives outside the page (the voice assistant\'s snapshot) while the tab is in front, and clears it when the page goes', async () => {
+      seedLayout([{ tabs: ['a'] }, { tabs: ['todos:'] }])
+      const page = renderRoute('/?session=a')
+      await waitFor(() => expect(todosPanes()).toHaveLength(1))
+      expect(getTodosTabFocused()).toBe(false)
+
+      fireEvent.click(document.querySelector('[data-doc-pane-kind="todos"]')!)
+      await waitFor(() => expect(getTodosTabFocused()).toBe(true))
+
+      page.unmount()
+      expect(getTodosTabFocused()).toBe(false)
     })
 
     it('points the Todos item at the chat route with the open parameter', () => {

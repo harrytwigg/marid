@@ -69,6 +69,7 @@ import { fetchFallbackChains } from '@/lib/api-fallback-chains'
 import { buildContinuationPrompt } from '@/lib/stale-chat'
 import { PRODUCT_NAME } from "@/lib/brand"
 import { hasTodosOpenIntent } from '@/lib/todos-tab-entry'
+import { setTodosTabFocused } from '@/lib/todos-tab-focus'
 import { NavSurfaceProvider } from '@/components/nav-surface'
 import { DocView } from '@/components/chat/doc-view'
 
@@ -906,6 +907,11 @@ function ChatPage() {
   usePhoneTodosHistory(phoneTodosShown, viewport.mobile)
   // The pane that holds focus shows the Todos tab: its title is the tab's, and no chat's header actions apply.
   const todosFocused = viewport.mobile ? phoneTodosShown : todosTabFocused(workingSet.split.layout)
+  // What lives outside the page (the voice assistant's snapshot) is told which tab is in front.
+  useEffect(() => {
+    setTodosTabFocused(todosFocused)
+    return () => setTodosTabFocused(false)
+  }, [todosFocused])
   // The phone's open-chat strip carries its own close-all, so it needs the reset above.
   const mobileTabs = useMobileSessionTabs({
     committedId, systemPrimedId, activeId: phoneTodosShown ? null : focusedSessionId, sessions: sessionsQuery.data,
