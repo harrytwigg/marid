@@ -177,7 +177,7 @@ export function emit(event: string, payload: unknown) {
 function BackProbe() {
   const navigate = useNavigate()
   const location = useLocation()
-  return <><output data-testid="route-location">{location.pathname}{location.search}</output><output data-testid="route-state">{JSON.stringify(location.state)}</output><button type="button" onClick={() => navigate(-1)}>Test browser back</button></>
+  return <><output data-testid="route-location">{location.pathname}{location.search}</output><output data-testid="route-state">{JSON.stringify(location.state)}</output><button type="button" onClick={() => navigate(-1)}>Test browser back</button><button type="button" onClick={() => navigate(1)}>Test browser forward</button></>
 }
 
 type RouteEntry = string | { pathname: string; search?: string; state?: unknown }

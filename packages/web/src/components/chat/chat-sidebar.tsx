@@ -52,6 +52,7 @@ import { mergeSidebarEmployees, bucketByDay, isFocusedSession } from "@/componen
 import { TerminalSectionHeader, useTerminalHosts } from "@/components/chat/sidebar-terminals"
 import { isTerminalSession } from "@/lib/terminal-session"
 import { TERMINAL_AVATAR } from "@/components/ui/employee-avatar"
+import { compareByRecency, isVisibleSource } from "@/components/chat/session-sources"
 import { MobileSessionRow } from "@/components/chat/mobile-session-row"
 import { SessionDepartmentBadge } from "@/components/session-department-badge"
 import {
@@ -215,10 +216,7 @@ export function isDirectSession(
   return !!portalSlug && session.employee.toLowerCase() === portalSlug
 }
 
-// Sources the sidebar renders (others, e.g. slack/telegram, are shown elsewhere).
-export function isVisibleSource(s: Pick<Session, "source">): boolean {
-  return s.source === "web" || s.source === "terminal" || s.source === "talk" || s.source === "cron" || s.source === "workflow" || s.source === "plugin" || s.source === "whatsapp" || s.source === "discord" || !s.source
-}
+export { isVisibleSource } from "@/components/chat/session-sources"
 
 export { pickDeleteFallbackId, pickNeighborSessionId } from "@/components/chat/session-delete-fallback"
 
@@ -901,11 +899,7 @@ export function ChatSidebar({
         loadedIds.add(session.id)
       }
     }
-    filtered.sort((a, b) => {
-      const ta = a.lastActivity || a.createdAt || ""
-      const tb = b.lastActivity || b.createdAt || ""
-      return tb.localeCompare(ta)
-    })
+    filtered.sort(compareByRecency)
     return filtered
   }, [rawSessions, pinnedSessionRows])
 

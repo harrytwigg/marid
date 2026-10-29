@@ -1,8 +1,8 @@
 import "@/test/preload-menus"
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { apiMocks, chatTabsMock, gateway, renderDataRoute, seededChatTabs, sessionIds } from './multi-pane-page-harness'
-import { chatPanes, railLink, seedLayout, setViewport, storedGroups, todosPanes } from './todos-tab-page-support'
+import { chatPanes, railLink, seedLayout, settled, setViewport, storedGroups, todosPanes } from './todos-tab-page-support'
 
 vi.mock('@/routes/todos/board/todos-tab-view', () => ({ default: () => <div data-testid="todos-board-stub" /> }))
 
@@ -51,7 +51,7 @@ describe('the Todos tab on a data router', () => {
       await waitFor(() => expect(routeLocation()).toBe('/?session=a'))
       await waitFor(() => expect(screen.queryByTestId('phone-todos')).toBeNull())
       // The route stays there once everything has settled, and its entry is not marked as the Todos screen.
-      await new Promise((resolve) => setTimeout(resolve, 150))
+      await settled()
       expect(routeLocation()).toBe('/?session=a')
       expect(stripTab('a').getAttribute('aria-selected')).toBe('true')
       expect(routeState()?.phoneTodos).not.toBe(true)
@@ -71,7 +71,7 @@ describe('the Todos tab on a data router', () => {
 
       await waitFor(() => expect(storedGroups().flatMap((group) => group.tabs).sort()).toEqual(['a', 'todos:']))
       await waitFor(() => expect(routeLocation()).toBe('/?session=a'))
-      await new Promise((resolve) => setTimeout(resolve, 150))
+      await settled()
       expect(routeLocation()).toBe('/?session=a')
     })
 
@@ -85,10 +85,32 @@ describe('the Todos tab on a data router', () => {
 
       await waitFor(() => expect(routeLocation()).toBe('/?session=a'))
       await waitFor(() => expect(screen.queryByTestId('phone-todos')).toBeNull())
-      await new Promise((resolve) => setTimeout(resolve, 150))
+      await settled()
       expect(routeLocation()).toBe('/?session=a')
       expect(screen.queryByTestId('phone-todos')).toBeNull()
       expect(routeState()?.phoneTodos).not.toBe(true)
+    })
+
+    it('brings the Todos screen back on forward to a bare entry marked with it', async () => {
+      renderDataRoute('/')
+      await openChat('a')
+      fireEvent.click(await screen.findByTestId('list-row-b'))
+      await waitFor(() => expect(routeLocation()).toBe('/?session=b'))
+      fireEvent.click((await screen.findAllByRole('button', { name: 'Close all tabs' }))[0])
+      await waitFor(() => expect(routeLocation()).toBe('/'))
+      await openTodosScreen()
+      expect(routeLocation()).toBe('/')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Test browser back' }))
+      await waitFor(() => expect(routeLocation()).toBe('/?session=b'))
+      await waitFor(() => expect(screen.queryByTestId('phone-todos')).toBeNull())
+      fireEvent.click(screen.getByRole('button', { name: 'Test browser forward' }))
+
+      expect(await screen.findByTestId('phone-todos')).toBeTruthy()
+      await settled()
+      expect(screen.getByTestId('phone-todos')).toBeTruthy()
+      expect(routeLocation()).toBe('/')
+      expect(routeState()).toMatchObject({ phoneTodos: true })
     })
   })
 
@@ -106,6 +128,31 @@ describe('the Todos tab on a data router', () => {
       await waitFor(() => expect(chatPanes()).toEqual(['a']))
       expect(routeLocation()).toBe('/?session=a')
       expect(railLink('Chat').getAttribute('aria-current')).toBe('page')
+    })
+
+    describe('with sessions of every source', () => {
+      const listed = apiMocks.getSessions.getMockImplementation()!
+      afterEach(() => { apiMocks.getSessions.mockImplementation(listed) })
+
+      it('opens the newest chat the list shows, not a connector\'s session or the first row the API returned', async () => {
+        apiMocks.getSessions.mockImplementation(async () => ({
+          sessions: [
+            { id: 'c', title: 'Title c', status: 'idle', source: 'telegram', lastActivity: '2026-01-04T00:00:00Z' },
+            { id: 'a', title: 'Title a', status: 'idle', lastActivity: '2026-01-01T00:00:00Z' },
+            { id: 'b', title: 'Title b', status: 'idle', lastActivity: '2026-01-03T00:00:00Z' },
+          ],
+          counts: {},
+          perGroup: {},
+        }))
+        seedLayout([{ tabs: ['todos:'] }])
+        renderDataRoute('/')
+        await waitFor(() => expect(todosPanes()).toHaveLength(1))
+
+        fireEvent.click(railLink('Chat'))
+
+        await waitFor(() => expect(chatPanes()).toEqual(['b']))
+        expect(routeLocation()).toBe('/?session=b')
+      })
     })
   })
 })

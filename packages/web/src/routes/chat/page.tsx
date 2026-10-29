@@ -15,6 +15,7 @@ import { useModelRegistry } from '@/hooks/use-model-registry'
 import { useOrg } from '@/hooks/use-employees'
 import { PageLayout } from '@/components/page-layout'
 import { ChatSidebar, type SidebarOrder } from '@/components/chat/chat-sidebar'
+import { newestVisibleSessionId } from '@/components/chat/session-sources'
 import { NavRibbon } from '@/components/pill-nav'
 import { MobileTabBar } from '@/components/chat/mobile-tab-bar'
 import type { FreshChatSourceSession } from '@/components/chat/chat-pane'
@@ -108,6 +109,8 @@ function ChatPage() {
   const selectedIdRef = useRef<string | null>(selectedId)
   const preservePaneFocusRef = useRef<string | null>(null)
   useEffect(() => { selectedIdRef.current = selectedId }, [selectedId])
+  const entryIsTodosScreenRef = useRef(false)
+  useEffect(() => { entryIsTodosScreenRef.current = restoresPhoneTodos(location.state) }, [location.state])
   // Router location updates are React TRANSITIONS (react-router wraps them in
   // startTransition), so our own urgent state (openTab, closeTab) can commit a
   // frame BEFORE the URL. While one of our navigations is in flight, the
@@ -379,7 +382,8 @@ function ChatPage() {
       // "before any selection" means the chat LIST, so land there.
       if (navigationType === 'POP') {
         newChatIntentRef.current = true
-        setMobileView('sidebar')
+        // An entry marked as the phone's Todos screen is that screen, not the list (usePhoneTodosHistory has taken it).
+        if (!entryIsTodosScreenRef.current) setMobileView('sidebar')
       }
       chatTabs.clearActiveTab()
     }
@@ -458,10 +462,7 @@ function ChatPage() {
   const openTodo = useTodoTabOpener(workingSet.openTodo, viewport.mobile)
   const openSubagent = useSubagentTabOpener(workingSet.openSubagent, viewport.mobile)
   // The Todos tab: opened or shown, the way back to a chat from it, and the phone's close of it.
-  const newestChatId = useCallback((): string | null => {
-    const id = sessionsQuery.data?.[0]?.id
-    return typeof id === 'string' ? id : null
-  }, [sessionsQuery.data])
+  const newestChatId = useCallback(() => newestVisibleSessionId(sessionsQuery.data), [sessionsQuery.data])
   const { openTodosTab, showChat, closePhoneTodos } = useTodosTabPage({ workingSet, selectedIdRef, handleSelect, newestChatId, mobile: viewport.mobile, setMobileView, setPhoneTodos })
 
   // Mobile-only: back from the file view to the chat it was opened from (closing the
