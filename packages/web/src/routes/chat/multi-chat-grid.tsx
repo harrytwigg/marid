@@ -38,6 +38,8 @@ interface MultiChatGridProps {
     onClose?: () => void
   }
   viewport: { width: number; height: number; mobile?: boolean }
+  /** The layout holds panes and no chat, and the route names none: no route composer pane is drawn (grid-placement.ts). */
+  chatless?: boolean
   metaById: Record<string, SessionMeta>
   sessionTitleFor: (sessionId: string) => unknown
   runtime: PaneRuntime
@@ -256,8 +258,9 @@ export function MultiChatGrid(props: MultiChatGridProps) {
     primarySessionId: props.primary.sessionId,
     pickerPaneKey: props.pickerPane?.paneKey,
     mobile: props.viewport.mobile,
+    chatless: props.chatless,
   })
-  const focusedGridIdValue = mobilePickerKey ?? focusedGridId(primaryKey, props.primary.sessionId, props.focusedId)
+  const focusedGridIdValue = mobilePickerKey ?? (props.chatless && !props.primary.sessionId ? props.focusedId ?? gridIds[0] ?? primaryKey : focusedGridId(primaryKey, props.primary.sessionId, props.focusedId))
 
   const Grid = props.grid ?? ChatGrid
   const grid = (

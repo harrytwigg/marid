@@ -7,3 +7,5 @@ export { focusedGroupTabs, hasTabbedGroup, isLastChatWithTabs, workingSetFromLay
 export { canCloseTab, closeAllUnpinned, hasUnpinnedTabs, holdsAfterClose, isPinned, pinnedChats } from './pinned-tabs'
 export { isChatTabId, isNewChatTabId, parseNewChatTabId } from './tab-kind'
 export { selectTab } from './pane-tab-ops'
+export { isChatlessLayout, loadsChatless, routeChatForTodosOpen, todosTabFocused, todosTabOpen } from './todos-tab'
+export { TODOS_TAB_ID } from './tab-kind'

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { X } from '@/components/ui/icon'
+import { ListChecks, Pin, X } from '@/components/ui/icon'
 import { CloseAllTabsButton } from '@/components/chat/close-all-tabs-button'
 import { StatusDot } from '@/components/chat/session-signals'
 import { cn } from '@/lib/utils'
@@ -10,6 +10,10 @@ export interface MobileSessionTab {
   title: string
   /** The chat received something while another one was in front. */
   moved: boolean
+  /** Set on the Todos tab, which is no chat: it carries its glyph. */
+  kind?: 'todos'
+  /** A pinned tab: first in the strip, and closed only by unpinning it. */
+  pinned?: boolean
 }
 
 function CloseButton({ tab, onClose }: { tab: MobileSessionTab; onClose: (sessionId: string) => void }) {
@@ -24,6 +28,23 @@ function CloseButton({ tab, onClose }: { tab: MobileSessionTab; onClose: (sessio
       <X size={12} aria-hidden />
     </button>
   )
+}
+
+/** What a tab says: its title, and what kind of tab it is (the Todos glyph, the pin). */
+function TabLabel({ tab }: { tab: MobileSessionTab }) {
+  return (
+    <>
+      {tab.kind === 'todos' ? <ListChecks size={12} aria-hidden className="shrink-0" /> : null}
+      <span className="min-w-0 truncate">{tab.title}</span>
+      {tab.pinned ? <Pin size={10} aria-label="Pinned" data-mobile-session-tab-pinned="" className="shrink-0 opacity-60" /> : null}
+    </>
+  )
+}
+
+/** The focused tab leaves room on its right for the close control, which a pinned tab has none of. */
+function tabInk(tab: MobileSessionTab, active: boolean): string {
+  if (!active) return 'pr-2.5 text-[var(--text-secondary)]'
+  return `${tab.pinned ? 'pr-2.5' : 'pr-0.5'} text-[var(--text-primary)]`
 }
 
 function TabCell({
@@ -57,11 +78,11 @@ function TabCell({
         data-mobile-session-tab-active={active ? 'true' : 'false'}
         onClick={() => onSelect(tab.id)}
         className={cn(
-          'h-11 min-w-11 max-w-[9.5rem] truncate pl-2.5 text-left text-[length:var(--text-footnote)]',
-          active ? 'pr-0.5 text-[var(--text-primary)]' : 'pr-2.5 text-[var(--text-secondary)]',
+          'flex h-11 min-w-11 max-w-[9.5rem] items-center gap-1 pl-2.5 text-left text-[length:var(--text-footnote)]',
+          tabInk(tab, active),
         )}
       >
-        {tab.title}
+        <TabLabel tab={tab} />
       </button>
       {tab.moved && !active ? (
         <StatusDot
@@ -71,7 +92,7 @@ function TabCell({
           className="pointer-events-none absolute right-1.5 top-2.5 size-1.5"
         />
       ) : null}
-      {active ? <CloseButton tab={tab} onClose={onClose} /> : null}
+      {active && !tab.pinned ? <CloseButton tab={tab} onClose={onClose} /> : null}
     </div>
   )
 }

@@ -2,6 +2,7 @@ import {
   MessageSquare, Users, ListChecks, Clock,
   Activity, Zap, Settings, Gauge, NotebookPen, Rocket, Workflow,
 } from "@/components/ui/icon"
+import { TODOS_TAB_HREF } from "@/lib/todos-tab-entry"
 
 // Every top-level destination, so the command palette can reach anything the
 // mobile tab bar / More overflow reaches (kept in step with lib/nav NAV_ITEMS).
@@ -9,7 +10,7 @@ import {
 // the navigation suites hold the palette's reach against.
 const BASE_STATIC_PAGES = [
   { id: "page-chat", label: "Chat", icon: MessageSquare, href: "/" },
-  { id: "page-todos", label: "Todos", icon: ListChecks, href: "/todos" },
+  { id: "page-todos", label: "Todos", icon: ListChecks, href: TODOS_TAB_HREF },
   { id: "page-org", label: "Organization", icon: Users, href: "/org" },
   { id: "page-cron", label: "Cron", icon: Clock, href: "/cron" },
   { id: "page-limits", label: "Limits", icon: Gauge, href: "/limits" },
@@ -28,3 +29,9 @@ export function staticPagesFor(notesEnabled: boolean) {
 }
 
 export const STATIC_PAGES = staticPagesFor(false)
+
+/** Where a palette result goes: the gateway lists the Todos page at its old address, which would reset the
+ *  tab to the default board on the way, so it goes straight to the tab; every other result is its own address. */
+export function searchDestination(href: string): string {
+  return href === "/todos" ? TODOS_TAB_HREF : href
+}

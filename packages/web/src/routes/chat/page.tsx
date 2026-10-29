@@ -28,12 +28,13 @@ import { deriveChatGridIds } from './grid-placement'
 import { usePaneIdentity } from './pane-identity'
 import { useChatPaneState } from './use-chat-pane-state'
 import { historyRecord, parseHistoryPreview } from './chat-history'
-import { SplitChatGrid, SplitDropOverlay, SplitGridContext, canCloseTab, closeAllUnpinned, focusedGroupTabs, hasTabbedGroup, hasUnpinnedTabs, holdsAfterClose, isChatTabId, isPinned, pinnedChats, selectTab, workingSetFromLayout, useSplitGridAdd, useSplitGridWorkspace } from './layout'
+import { SplitChatGrid, SplitDropOverlay, SplitGridContext, TODOS_TAB_ID, canCloseTab, closeAllUnpinned, focusedGroupTabs, hasTabbedGroup, hasUnpinnedTabs, holdsAfterClose, isChatTabId, isChatlessLayout, isPinned, loadsChatless, pinnedChats, routeChatForTodosOpen, selectTab, todosTabFocused, todosTabOpen, workingSetFromLayout, useSplitGridAdd, useSplitGridWorkspace } from './layout'
 import { ChatPageHeader } from './chat-page-header'
 import { SidebarColumn } from './sidebar-column'
 import { formatMessage } from '@/components/chat/chat-messages'
 import { inFileLinkSession } from '@/components/chat/file-link-session-context'
 import { chatHeaderEmployee, chatHeaderEmployeeLine, chatHeaderTitle } from './header-title'
+import { TODOS_TAB_TITLE } from './layout/tab-kind'
 import { useMobileSessionTabs } from './use-mobile-session-tabs'
 import { adjacentSessionId } from './session-navigation'
 import { usePaneSessionActions } from './use-pane-session-actions'
@@ -46,7 +47,7 @@ const FileView = lazy(() =>
   import('@/components/chat/file-view').then((m) => ({ default: m.FileView })),
 )
 import { LayoutOpenProviders, type OpenFile } from '@/components/chat/file-open-context'
-import { useEmployeeDeepLink, useNewChatTabHandlers, useNewChatTabOpener, useSubagentTabOpener, useTodoTabOpener } from './use-layout-tab-openers'
+import { useEmployeeDeepLink, useNewChatTabHandlers, useNewChatTabOpener, useSubagentTabOpener, useTodoTabOpener, useTodosOpenIntent } from './use-layout-tab-openers'
 import { fileBackPlan } from './file-back'
 import { ShortcutOverlay } from '@/components/chat/shortcut-overlay'
 import { useChatTabs, type ChatTab } from '@/hooks/use-chat-tabs'
@@ -66,6 +67,9 @@ import { buildFreshChatParams, effectivePrimaryProfile, startableProfileNames } 
 import { fetchFallbackChains } from '@/lib/api-fallback-chains'
 import { buildContinuationPrompt } from '@/lib/stale-chat'
 import { PRODUCT_NAME } from "@/lib/brand"
+import { hasTodosOpenIntent } from '@/lib/todos-tab-entry'
+import { NavSurfaceProvider } from '@/components/nav-surface'
+import { DocView } from '@/components/chat/doc-view'
 
 export default function ChatPageWrapper() {
   return (
@@ -114,10 +118,17 @@ function ChatPage() {
   const [mobileView, setMobileView] = useState<'sidebar' | 'chat'>(
     () => initialMobileView(location.search),
   )
+  // The phone shows the Todos tab on a screen of its own, which no layout focus can say: a chat opened
+  // or a new chat started from there leaves it, and the layout has no tab to show instead.
+  const [phoneTodos, setPhoneTodos] = useState(false)
   // Sibling sessions for the currently selected employee (empty if direct/single session)
   const [, setEmployeeSessions] = useState<Array<{ id: string; title?: string; lastActivity?: string; createdAt?: string }>>([])
   // When true, user explicitly started a new chat — don't auto-select first session
-  const newChatIntentRef = useRef(false)
+  // Also the state of a page that opens on standalone tabs alone (the Todos tab), which has no chat to
+  // auto-select: the newest chat stays closed, as it does once the last chat is closed beside that tab.
+  const newChatIntentRef = useRef(loadsChatless(location.search, typeof window === 'undefined' ? null : window.localStorage))
+  // A link to the Todos tab names no chat, and nothing the page would select belongs in front of it.
+  if (!selectedId && hasTodosOpenIntent(location.search)) newChatIntentRef.current = true
   const [systemPrimedId, setSystemPrimedId] = useState<string | null>(null)
   // Employee to preselect for a brand-new chat (contacting a session-less
   // employee from the sidebar, or via an ?employee= deep-link). Null = none.
@@ -285,7 +296,7 @@ function ChatPage() {
       const currentId = selectedIdRef.current
       const currentScroller = document.querySelector<HTMLElement>('.chat-messages-scroll') // display-toggled away on a phone, where it reports scrollTop 0
       if (currentId && currentScroller?.clientHeight) sessionScrollRef.current.set(currentId, currentScroller.scrollTop)
-      newChatIntentRef.current = false; setSystemPrimedId(opts?.system ? id : null); releaseMobilePicker()
+      newChatIntentRef.current = false; setSystemPrimedId(opts?.system ? id : null); releaseMobilePicker(); setPhoneTodos(false)
       // On mobile, opening a session pushes from the list into the thread, and the
       // pane arrives with it (see revealSelection). The one exception is the
       // background auto-select of the most-recent session (handleSessionsLoaded):
@@ -323,9 +334,11 @@ function ChatPage() {
     if (!removedSessionIdsRef.current.has(sessionId)) handleFocusPane(sessionId)
   }, [handleFocusPane])
 
+  // A strip tab chosen is shown, as a chat chosen from the list is: from the Todos screen it is the way back to the chat.
   const handleMobileWorkingSetSelect = useCallback((sessionId: string) => {
+    workingSet.split.show(sessionId)
     handleSelect(sessionId, { navigateMobile: false })
-  }, [handleSelect])
+  }, [handleSelect, workingSet.split])
 
   const gridAdd = useSplitGridAdd(workingSet, selectedId, handleSelect, { primaryPaneKey: paneKey, committedSessionId: committedId, pickerPaneKey: gridPicker.paneKey, viewport })
   // URL → tab/intent sync: covers selections that did NOT come through
@@ -390,7 +403,7 @@ function ChatPage() {
   const openNewChatInLayout = useNewChatTabOpener(workingSet.openNewChat, viewport.mobile)
   const handleNewChat = useCallback(() => {
     if (openNewChatInLayout(null)) return
-    newChatIntentRef.current = true; releaseMobilePicker()
+    newChatIntentRef.current = true; releaseMobilePicker(); setPhoneTodos(false)
     startComposer()
     setPendingEmployee(null)
     setMobileView('chat')
@@ -409,7 +422,7 @@ function ChatPage() {
   // The actual session is created on first send (ChatPane → buildNewSessionParams).
   const contactEmployee = useCallback((name: string) => {
     if (openNewChatInLayout(name)) return
-    newChatIntentRef.current = true; releaseMobilePicker()
+    newChatIntentRef.current = true; releaseMobilePicker(); setPhoneTodos(false)
     startComposer()
     setPendingEmployee(name)
     setMobileView('chat')
@@ -442,6 +455,18 @@ function ChatPage() {
   }, [chatTabs, viewport.mobile, workingSet])
   const openTodo = useTodoTabOpener(workingSet.openTodo, viewport.mobile)
   const openSubagent = useSubagentTabOpener(workingSet.openSubagent, viewport.mobile)
+  // The Todos tab: opened, or shown where it is open. The route follows to the chat of the pane that
+  // takes it (none, when the tab gets a pane of its own). A phone has no panes: the tab is a screen there.
+  const { openTodosTab: openTodosInLayout, split: layoutControls } = workingSet
+  const openTodosTab = useCallback((): boolean => {
+    const chat = routeChatForTodosOpen(layoutControls.layout)
+    openTodosInLayout()
+    const moved = chat !== null && chat !== selectedIdRef.current
+    if (moved) handleSelect(chat, { replace: true, navigateMobile: false })
+    if (viewport.mobile) { setPhoneTodos(true); setMobileView('chat') }
+    return moved
+  }, [handleSelect, layoutControls.layout, openTodosInLayout, viewport.mobile])
+  useTodosOpenIntent(openTodosTab, workingSet.hydrated)
 
   // Mobile-only: back from the file view to the chat it was opened from (closing the
   // file tab, so they do not pile up into the open-chats cap), or to the chat list
@@ -835,7 +860,10 @@ function ChatPage() {
     // bounced to '/' by the no-active-tab branch below.
     if (!tabChanged || urlMoved) return
 
-    if (at && at.kind === 'session' && at.sessionId !== selectedId) {
+    // A route on no chat by intent (a page opened on the Todos tab, a composer asked for) is not dragged to the
+    // open-chats list's last chat.
+    const noChatByIntent = !selectedId && newChatIntentRef.current
+    if (at && at.kind === 'session' && at.sessionId !== selectedId && !noChatByIntent) {
       handleSelect(at.sessionId, { replace: true, navigateMobile: false, system: true })
       return
     }
@@ -871,6 +899,7 @@ function ChatPage() {
     // the route goes to the chat left standing when its own went, and the empty state is for when none is.
     const kept = closeAllUnpinned(workingSet.split.layout)
     const route = workingSetFromLayout(kept).focusedId
+    if (!todosTabOpen(kept)) setPhoneTodos(false)
     workingSet.split.closeAll()
     chatTabs.closeAllTabs(pinnedChats(kept))
     if (route) {
@@ -881,10 +910,22 @@ function ChatPage() {
     leaveRoute()
   }, [chatTabs, gridPicker, handleSelect, leaveRoute, workingSet.split])
 
+  // The phone's Todos screen: the tab opened from the strip, the bottom bar or a link, and the list not in front of it.
+  const phoneTodosShown = viewport.mobile && phoneTodos && mobileView === 'chat'
+  // The pane that holds focus shows the Todos tab: its title is the tab's, and no chat's header actions apply.
+  const todosFocused = viewport.mobile ? phoneTodosShown : todosTabFocused(workingSet.split.layout)
+  const closePhoneTodos = useCallback(() => {
+    workingSet.split.close(TODOS_TAB_ID)
+    setPhoneTodos(false)
+  }, [workingSet.split])
   // The phone's open-chat strip carries its own close-all, so it needs the reset above.
   const mobileTabs = useMobileSessionTabs({
-    committedId, systemPrimedId, activeId: focusedSessionId, sessions: sessionsQuery.data,
+    committedId, systemPrimedId, activeId: phoneTodosShown ? null : focusedSessionId, sessions: sessionsQuery.data,
     subscribe, connectionSeq, onSelect: handleMobileWorkingSetSelect, onCloseAll: closeAllWorkspace,
+    layout: {
+      pinned: workingSet.split.layout.pinned,
+      todos: todosTabOpen(workingSet.split.layout) ? { active: phoneTodosShown, onSelect: openTodosTab, onClose: closePhoneTodos } : undefined,
+    },
   })
 
   /** The desktop bars' close-all: the reset above, plus the phone's strip, which is written from
@@ -901,7 +942,7 @@ function ChatPage() {
     <ChatHeaderMenu
       open={showMoreMenu}
       onOpenChange={setShowMoreMenu}
-      selectedId={focusedSessionId}
+      selectedId={todosFocused ? null : focusedSessionId}
       sessionMeta={sessionMeta}
       openGlobalSearch={openGlobalSearch}
       effectiveViewMode={effectiveViewMode}
@@ -922,7 +963,7 @@ function ChatPage() {
   )
   // The conversation title — slim inline (desktop) / centered nav bar (mobile).
   const headerEmployees = orgQuery.data?.employees
-  const headerTitle = chatHeaderTitle({ focusedSessionId, meta: sessionMeta, sessions: sessionsQuery.data, employees: headerEmployees })
+  const headerTitle = todosFocused ? TODOS_TAB_TITLE : chatHeaderTitle({ focusedSessionId, meta: sessionMeta, sessions: sessionsQuery.data, employees: headerEmployees })
   // A composer pane keeps its key through its first send, so the pick follows the chat it becomes until
   // the chat's own meta lands; any other pane's key retires it.
   const onComposerPane = paneKey.startsWith('__new__')
@@ -931,9 +972,12 @@ function ChatPage() {
   const headerEmployee = chatHeaderEmployee({ focusedSessionId, meta: sessionMeta, sessions: sessionsQuery.data, employees: headerEmployees, portalName, picked: composerPick })
   const onMobileList = mobileView === 'sidebar'
   const pickerPane = gridPicker.bind(gridAdd.addPane, workingSet.add, handleSessionCreated)
-  const desktopMultiPane = chatTabs.activeTab?.kind !== 'file' && !awaitingOpen && !viewport.mobile && (deriveChatGridIds({ sessionIds: gridPaneKeys, primaryPaneKey: paneKey, primarySessionId: committedId, pickerPaneKey: pickerPane?.paneKey }).length > 1 || hasTabbedGroup(workingSet.split.layout))
+  // Standalone tabs alone (no chat, no route composer): the panes carry their own identity, a lone one included.
+  const chatless = !viewport.mobile && !committedId && isChatlessLayout(workingSet.split.layout)
+  const desktopMultiPane = chatTabs.activeTab?.kind !== 'file' && !awaitingOpen && !viewport.mobile && (chatless || deriveChatGridIds({ sessionIds: gridPaneKeys, primaryPaneKey: paneKey, primarySessionId: committedId, pickerPaneKey: pickerPane?.paneKey }).length > 1 || hasTabbedGroup(workingSet.split.layout))
   return (
-    <LayoutOpenProviders file={openFile} todo={openTodo} subagent={openSubagent} session={handleOpenChat}>
+    <LayoutOpenProviders file={openFile} todo={openTodo} subagent={openSubagent} session={handleOpenChat} todos={openTodosTab}>
+    <NavSurfaceProvider surface={todosFocused ? 'todos' : 'chat'}>
     <PageLayout chromeless>
       <div className="flex overflow-hidden h-full">
         {/* Desktop keeps the slim nav ribbon while its chat list folds.
@@ -982,7 +1026,7 @@ function ChatPage() {
           {/* Mobile keeps its nav chrome; multi-pane desktop moves identity into panes. */}
           <ChatPageHeader
             hideOnMobile={onMobileList}
-            title={headerTitle} subtitle={chatHeaderEmployeeLine(headerTitle, headerEmployee)} chatId={focusedSessionId}
+            title={headerTitle} subtitle={todosFocused ? undefined : chatHeaderEmployeeLine(headerTitle, headerEmployee)} chatId={todosFocused ? TODOS_TAB_ID : focusedSessionId}
             backTo={backTo}
             onBack={backToList}
             onNew={handleNewChat}
@@ -1026,7 +1070,11 @@ function ChatPage() {
                 wrapper (so scrolling is contained). Otherwise the single ChatPane,
                 handling new-chat (sessionId=null) and the selected session. See
                 usePaneIdentity for what the key does and does not remount. */}
-            {chatTabs.activeTab?.kind === 'file' ? (
+            {phoneTodosShown ? (
+              <div data-testid="phone-todos" className={cn('flex min-h-0 flex-1 flex-col pb-[calc(49px+max(var(--safe-bottom),6px))]', mobileTabs.strip ? 'pt-[calc(var(--safe-top)+48px+var(--mobile-session-tabs-height))]' : 'pt-[calc(var(--safe-top)+48px)]')}>
+                <DocView doc={{ kind: 'todos' }} />
+              </div>
+            ) : chatTabs.activeTab?.kind === 'file' ? (
               <Suspense fallback={<div className="flex-1" />}>
                 <FileView path={chatTabs.activeTab.path} sessionId={chatTabs.activeTab.sessionId} embedded onBack={handleFileBack} />
               </Suspense>
@@ -1049,6 +1097,7 @@ function ChatPage() {
                   delegatedActivity: focusedDelegatedActivity,
                 }}
                 viewport={viewport}
+                chatless={chatless}
                 onFocus={handlePaneFocus}
                 onRemove={handleRemovePane}
                 metaById={paneState.metaById} sessionTitleFor={(id) => sessionsQuery.data?.find((session) => String(session.id ?? '') === id)?.title}
@@ -1089,7 +1138,7 @@ function ChatPage() {
 
       {/* Mobile bottom tab bar — persistent nav on the chat-list screen; hidden on
           the thread (Apple hidesBottomBarWhenPushed: the composer owns the bottom). */}
-      {onMobileList && <MobileTabBar />}
+      {(onMobileList || phoneTodosShown) && <MobileTabBar />}
 
       {showShortcutOverlay && (
         <ShortcutOverlay
@@ -1116,6 +1165,7 @@ function ChatPage() {
         }
       `}</style>
     </PageLayout>
+    </NavSurfaceProvider>
     </LayoutOpenProviders>
   )
 }

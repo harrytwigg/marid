@@ -7,6 +7,7 @@ import {
 } from '../working-set'
 import {
   appendSession,
+  canOpenNewChatTab,
   closeSession,
   createPreviewLayout,
   createSplitLayout,
@@ -36,7 +37,7 @@ import { loadSplitLayout, persistSplitLayout } from './split-layout-storage'
 import { closeAllUnpinned, closeUserTab, pinTab, unpinTab } from './pinned-tabs'
 import { fileTabId, type FileTabRef } from './file-tab'
 import { subagentTabId, type SubagentTabRef } from './subagent-tab'
-import { isChatTabId, isNewChatTabId, todoTabId } from './tab-kind'
+import { isChatTabId, isNewChatTabId, todoTabId, TODOS_TAB_ID } from './tab-kind'
 import { forgetNewChatDraft } from '@/components/chat/use-chat-draft'
 import { capWindowWidth, savedSidebarWidth } from '../sidebar-width-store'
 import { applySplitDrop, type SplitDropContext } from './split-drop'
@@ -244,16 +245,29 @@ function useTabOpeners(
   const openTodo = useCallback((ownerSessionId: string | null, todoId: string) => openDoc(ownerSessionId, todoTabId(todoId)), [openDoc])
   /** A background sub-agent's conversation as a tab beside the chat that launched it. */
   const openSubagent = useCallback((ownerSessionId: string | null, subagent: SubagentTabRef) => openDoc(ownerSessionId, subagentTabId(subagent)), [openDoc])
-  /** A new chat (addressed to `employee`, if given) as a tab of the focused pane. False when the layout
-   *  holds no chat to open it beside, or has yet to load, so the caller falls back to the route's own
-   *  composer. */
+  /** A new chat (addressed to `employee`, if given) as a tab of the focused pane, or a pane of its own
+   *  beside standalone tabs. False when the layout holds nothing to open it beside, or has yet to load,
+   *  so the caller falls back to the route's own composer. */
   const openNewChat = useCallback((employee: string | null) => {
-    if (!hydrated || !groupsOf(shown).some((group) => group.tabs.some(isChatTabId))) return false
+    if (!hydrated || !canOpenNewChatTab(shown)) return false
     setLayout((current) => openNewChatTab(project(current), employee))
     return true
   }, [hydrated, project, shown])
+  /** The Todos board's tab: shown where it is open, else opened in the focused pane, or in a pane of its
+   *  own with none. It needs no chat to sit beside, so it opens on any layout; one asked for before the
+   *  stored layout has loaded waits for it, rather than land in a layout hydration is about to replace. */
+  const [todosWaiting, setTodosWaiting] = useState(false)
+  const openTodosTab = useCallback(() => {
+    if (!hydrated) return setTodosWaiting(true)
+    setLayout((current) => openDocTab(project(current), null, TODOS_TAB_ID))
+  }, [hydrated, project, setLayout])
+  useEffect(() => {
+    if (!hydrated || !todosWaiting) return
+    setTodosWaiting(false)
+    openTodosTab()
+  }, [hydrated, openTodosTab, todosWaiting])
 
-  return { openFile, openTodo, openSubagent, openNewChat }
+  return { openFile, openTodo, openSubagent, openNewChat, openTodosTab }
 }
 
 /**
@@ -287,7 +301,7 @@ export function useSplitWorkingSet(
    * prediction (removeWorkingSetSession on `state`) cannot see a group's hidden tabs, which is
    * what the pane falls back to. */
   const afterRemove = useCallback((sessionId: string) => workingSetFromLayout(closeSession(shown, sessionId)), [shown])
-  const { openFile, openTodo, openSubagent, openNewChat } = useTabOpeners(shown, hydrated, project, setLayout)
+  const { openFile, openTodo, openSubagent, openNewChat, openTodosTab } = useTabOpeners(shown, hydrated, project, setLayout)
 
-  return { state, add, focus, remove, drop, split, afterRemove, openFile, openTodo, openSubagent, openNewChat, hydrated }
+  return { state, add, focus, remove, drop, split, afterRemove, openFile, openTodo, openSubagent, openNewChat, openTodosTab, hydrated }
 }

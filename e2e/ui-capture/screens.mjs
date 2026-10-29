@@ -7,6 +7,7 @@ import { AUTH_SCREENS } from './screens-auth.mjs'
 import { ORG_SCREENS } from './screens-org.mjs'
 import { PAGE_SCREENS } from './screens-pages.mjs'
 import { CHAT_SCREENS } from './screens-chat.mjs'
+import { TODOS_TAB_SCREENS } from './screens-todos-tab.mjs'
 
 export const SCREENS = [
   {
@@ -284,6 +285,7 @@ export const SCREENS = [
   ...AUTH_SCREENS,
   ...PAGE_SCREENS,
   ...CHAT_SCREENS,
+  ...TODOS_TAB_SCREENS,
 ]
 
 /** @type {Array<'light' | 'dark'>} */

@@ -18,11 +18,14 @@ import {
 } from "@/components/ui/icon"
 import { contributions } from "@/contrib/registry"
 import { AREAS } from "@/contrib/types"
+import { TODOS_TAB_HREF } from "./todos-tab-entry"
 
 export interface NavItem {
   href: string
   label: string
   icon: IconComponent
+  /** Where the link goes when that is not `href` itself: the Todos item opens a tab of the chat route. */
+  to?: string
 }
 
 /**
@@ -52,7 +55,7 @@ function contributedNavItems(): NavItem[] {
 
 const BASE_NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Chat", icon: MessageSquare },
-  { href: "/todos", label: "Todos", icon: ListChecks },
+  { href: "/todos", label: "Todos", icon: ListChecks, to: TODOS_TAB_HREF },
   { href: "/org", label: "Organization", icon: Users },
   { href: "/cron", label: "Cron", icon: Clock },
   { href: "/limits", label: "Limits", icon: Gauge },

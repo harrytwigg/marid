@@ -45,7 +45,7 @@ describe("NavRibbon", () => {
     renderRibbon({ listOpen: true })
     for (const item of NAV_ITEMS) {
       const link = screen.getByLabelText(item.label)
-      expect(link.getAttribute("href")).toBe(item.href)
+      expect(link.getAttribute("href")).toBe(item.to ?? item.href)
     }
   })
 

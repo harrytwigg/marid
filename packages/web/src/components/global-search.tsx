@@ -16,6 +16,7 @@ import { recentRows, resultRows, rowTarget, type SearchRow } from "./global-sear
 import { useCommandMode } from "./global-search/use-command"
 import { useGlobalSearch } from "./global-search/use-global-search"
 import { useSearchKeyboard } from "./global-search/use-search-keyboard"
+import { searchDestination } from "./global-search/static-pages"
 import { useTodoWorkbench } from "./global-search/use-todo-workbench"
 import { activatePrimary, commandFor, parseCommand, type Verb } from "./global-search/verbs"
 import { PRODUCT_NAME } from "@/lib/brand"
@@ -107,7 +108,7 @@ export function GlobalSearch({ initialOpen = false, initialScope, initialQuery }
     const recent = rowTarget(target)
     saveRecent(recent)
     changeOpen(false)
-    goTo(recent.href)
+    goTo(searchDestination(recent.href))
   }, [changeOpen, goTo])
 
   const toggleLiteral = useCallback(() => setLiteral(wasLiteral => !wasLiteral), [])

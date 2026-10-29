@@ -9,9 +9,9 @@
         "tiptap"
       ]
     },
-    "board-page": {
-      "pattern": "board-page-*.js",
-      "baselineGzipBytes": 23945,
+    "todos-tab-view": {
+      "pattern": "todos-tab-view-*.js",
+      "baselineGzipBytes": 24204,
       "budgetGzipBytes": 25000
     }
   },

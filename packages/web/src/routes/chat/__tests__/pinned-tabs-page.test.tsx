@@ -1,6 +1,6 @@
 import "@/test/preload-menus"
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { SPLIT_LAYOUT_STORAGE_KEY } from '../layout/split-layout-storage'
 import { apiMocks, chatTabsMock, gateway, renderRoute, seededChatTabs, sessionIds } from './multi-pane-page-harness'
 
@@ -27,7 +27,8 @@ const panes = () => [...document.querySelectorAll('[data-chat-pane-session]:not(
 
 async function pressCloseAll() {
   await new Promise((resolve) => setTimeout(resolve, 60))
-  fireEvent.click(await screen.findByRole('button', { name: 'Close all tabs' }))
+  // The pane bars', not the phone strip's, which stays in the DOM (hidden by CSS) on a desktop page.
+  fireEvent.click(await within(screen.getByTestId('chat-grid')).findByRole('button', { name: 'Close all tabs' }))
 }
 
 const strip = () => document.querySelector<HTMLElement>('[data-testid="pane-tab-strip"]')!

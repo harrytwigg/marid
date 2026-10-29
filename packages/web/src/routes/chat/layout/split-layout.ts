@@ -259,10 +259,6 @@ export function mapNodes(node: LayoutNode, fn: (node: LayoutNode) => LayoutNode)
     : { ...mapped, children }
 }
 
-function holdsChat(root: LayoutNode): boolean {
-  return groupsOf({ ...emptySplitLayout(), root }).some((group) => group.tabs.some(isChatTabId))
-}
-
 /** Whether the tree holds a chat or a standalone tab, either of which keeps a layout worth having. */
 function holdsAnchor(root: LayoutNode, pinned: readonly string[]): boolean {
   return groupsOf({ ...emptySplitLayout(), root }).some((group) => group.tabs.some((id) => isChatTabId(id) || isStandaloneTab(pinned, id)))
@@ -452,15 +448,23 @@ export function openDocTab(layout: SplitLayout, ownerSessionId: string | null, d
  * shown tab) and shows it, as a browser opens a new tab: it covers the chat it opened over rather than
  * splitting the grid, and is dragged out to a pane of its own like any tab. A new chat for the same
  * employee already open is shown instead, so pressing New chat twice does not stack blank composers.
- * With no chat in the layout nothing changes: the route's own composer is the new chat then.
+ * With no pane in the layout nothing changes: the route's own composer is the new chat then.
  */
 export function openNewChatTab(layout: SplitLayout, employee: string | null = null): SplitLayout {
-  if (!layout.root || !holdsChat(layout.root)) return layout
+  if (!canOpenNewChatTab(layout)) return layout
   const existing = newChatTabFor(layout, employee)
   if (existing) return showTab(layout, existing)
-  const target = openTargetGroup(layout) ?? groupsOf(layout).at(-1)
-  if (!target) return layout
-  return placeTab({ ...layout, nextId: layout.nextId + 1 }, target.id, newChatTabId({ serial: layout.nextId, employee }))
+  const target = openTargetGroup(layout)
+  const tabId = newChatTabId({ serial: layout.nextId, employee })
+  const numbered = { ...layout, nextId: layout.nextId + 1 }
+  // Beside standalone tabs only, with no chat to cover, the composer is a pane of its own.
+  if (!target) return appendGroup(numbered, tabId)
+  return placeTab(numbered, target.id, tabId)
+}
+
+/** Whether the layout has a chat or a standalone tab to open a new chat's tab beside. */
+export function canOpenNewChatTab(layout: SplitLayout): boolean {
+  return layout.root !== null && holdsAnchor(layout.root, layout.pinned)
 }
 
 /** The new chat tab addressed to `employee` (or to no one) the layout holds, if any. */
@@ -615,7 +619,11 @@ function openTargetGroup(layout: SplitLayout): LayoutGroup | null {
   const focused = focusedGroup(layout)
   if (!focused || focused.tabs.some(isChatTabId)) return focused
   const route = workingSetFromLayout(layout).focusedId
-  return (route ? groupOfSession(layout, route) : null) ?? focused
+  const routeGroup = route ? groupOfSession(layout, route) : null
+  if (routeGroup) return routeGroup
+  // A pane of standalone tabs only (the Todos board, pinned documents) is not where a chat opens: it
+  // takes a pane of its own beside it.
+  return focused.tabs.every((id) => isStandaloneTab(layout.pinned, id)) ? null : focused
 }
 
 /**

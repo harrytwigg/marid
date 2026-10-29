@@ -1,4 +1,7 @@
-import { describe, it, expect } from "vitest"
+import { beforeEach, describe, it, expect } from "vitest"
+import { TODOS_TAB_HREF } from "@/lib/todos-tab-entry"
+import { TODOS_TAB_LOCATION_KEY, clearTodosTabLocationMemory, seedTodosTabLocation } from "../board/todos-tab-location"
+import type { BoardId } from "../board/board-route"
 import { render, screen } from "@testing-library/react"
 import { MemoryRouter, Routes, Route, useParams } from "react-router-dom"
 import { TodosIndexRedirect, legacyTodosRedirectTarget } from "../board/todos-index-redirect"
@@ -65,19 +68,46 @@ describe("/todos route arrangement", () => {
 
 // The /todos redirect must resolve at the ROUTER level (loader), never as a
 // committed <Navigate> frame — an element redirect renders null for one commit
-// and the mobile tab bar visibly flashed out on every chat → todos tap.
-describe("todosIndexLoader", () => {
-  it("redirects to the default board before anything commits", async () => {
+// and the mobile tab bar visibly flashed out on every chat → todos tap. The
+// board is a tab of the chat route now, so the loader points the tab at the
+// board the address names and sends the page to the chat route to open it.
+describe("the board address loaders", () => {
+  beforeEach(() => {
+    localStorage.clear()
+    clearTodosTabLocationMemory()
+  })
+
+  const seeded = () => JSON.parse(localStorage.getItem(TODOS_TAB_LOCATION_KEY) ?? "{}") as { board?: string; search?: string }
+  /** The tab is somewhere else already, so a seed is a move the store records. */
+  const startOnPlatform = () => seedTodosTabLocation({ kind: "department", slug: "platform" } satisfies BoardId, "q=old")
+
+  it("sends /todos to the chat route's Todos tab, on the Everything board", async () => {
+    startOnPlatform()
     const { todosIndexLoader } = await import("../board/todos-index-redirect")
-    const res = todosIndexLoader({ request: new Request("http://x/todos"), params: {}, context: {} } as never) as Response
-    expect(res instanceof Response).toBe(true)
+    const res = (await todosIndexLoader({ request: new Request("http://x/todos"), params: {}, context: {} } as never)) as Response
     expect(res.status).toBe(302)
-    expect(res.headers.get("Location")).toBe("/todos/b/everything")
+    expect(res.headers.get("Location")).toBe(TODOS_TAB_HREF)
+    expect(seeded()).toMatchObject({ board: "everything", search: "" })
   })
 
   it("carries legacy view params to their mapped boards, keeping other filters", async () => {
     const { todosIndexLoader } = await import("../board/todos-index-redirect")
-    const res = todosIndexLoader({ request: new Request("http://x/todos?view=needs&q=a"), params: {}, context: {} } as never) as Response
-    expect(res.headers.get("Location")).toBe("/todos/b/attention?q=a")
+    const res = (await todosIndexLoader({ request: new Request("http://x/todos?view=needs&q=a"), params: {}, context: {} } as never)) as Response
+    expect(res.headers.get("Location")).toBe(TODOS_TAB_HREF)
+    expect(seeded()).toMatchObject({ board: "attention", search: "q=a" })
+  })
+
+  it("opens a department board's address as the tab on that board, with its filters", async () => {
+    const { todosBoardLoader } = await import("../board/todos-index-redirect")
+    const res = (await todosBoardLoader({ request: new Request("http://x/todos/b/platform?assignee=scout&date=week"), params: { board: "platform" }, context: {} } as never)) as Response
+    expect(res.headers.get("Location")).toBe(TODOS_TAB_HREF)
+    expect(seeded()).toMatchObject({ board: "platform", search: "assignee=scout&date=week" })
+  })
+
+  it("lands an unknown board on Everything rather than a dead tab", async () => {
+    startOnPlatform()
+    const { todosBoardLoader } = await import("../board/todos-index-redirect")
+    await todosBoardLoader({ request: new Request("http://x/todos/b/%20"), params: { board: " " }, context: {} } as never)
+    expect(seeded()).toMatchObject({ board: "everything" })
   })
 })
