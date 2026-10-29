@@ -1,8 +1,10 @@
 import "@/test/preload-menus"
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { SPLIT_LAYOUT_STORAGE_KEY } from '../layout/split-layout-storage'
 import { apiMocks, chatTabsMock, gateway, renderRoute, seededChatTabs, sessionIds } from './multi-pane-page-harness'
+
+vi.mock('@/routes/todos/task-page/task-page', () => ({ TaskView: ({ todoId }: { todoId: string }) => <div data-testid="todo-view">{todoId}</div> }))
 
 interface SeedGroup { tabs: string[]; activeTab?: string }
 
@@ -118,5 +120,52 @@ describe('pinned tabs on the chat page', () => {
     // Only the pinned tab is left, so its group has no strip any more.
     await waitFor(() => expect(document.querySelector('[data-testid="pane-tab-strip"]')).toBeNull())
     expect(storedLayout().pinned).toEqual(['a'])
+  })
+
+  describe('closing the route\'s last chat beside a standalone tab', () => {
+    // The layout then holds the standalone tab alone, which the route (naming a chat) cannot show over:
+    // the page leaves for the bare route, and what is left is the standalone tab, not a chat that is gone.
+    const settled = () => new Promise((resolve) => setTimeout(resolve, 80))
+    const chatPaneOf = (id: string) => document.querySelector(`[data-chat-pane-session="${id}"]`)
+
+    it.each([['the Todos tab', 'todos:'], ['a pinned Todo', 'todo:ACM-1']])('leaves the route when its chat is closed from the strip, beside %s', async (_name, standalone) => {
+      seedLayout([{ tabs: [standalone, 'a'], activeTab: 'a' }], [standalone])
+      renderRoute('/?session=a')
+      await waitFor(() => expect(tabIds()).toEqual([standalone, 'a']))
+
+      fireEvent.click(screen.getByRole('button', { name: 'Close tab Title a' }))
+
+      await waitFor(() => expect(screen.getByTestId('route-location').textContent).toBe('/'))
+      await settled()
+      expect(chatPaneOf('a')).toBeNull()
+      expect(storedLayout().root).toMatchObject({ tabs: [standalone] })
+      expect(storedLayout().pinned).toEqual([standalone])
+    })
+
+    it.each([['the Todos tab', 'todos:'], ['a pinned Todo', 'todo:ACM-1']])('leaves the route on Cmd+W, beside %s', async (_name, standalone) => {
+      seedLayout([{ tabs: [standalone, 'a'], activeTab: 'a' }], [standalone])
+      renderRoute('/?session=a')
+      await waitFor(() => expect(tabIds()).toEqual([standalone, 'a']))
+
+      fireEvent.keyDown(window, { key: 'w', metaKey: true })
+
+      await waitFor(() => expect(screen.getByTestId('route-location').textContent).toBe('/'))
+      await settled()
+      expect(chatPaneOf('a')).toBeNull()
+      expect(storedLayout().root).toMatchObject({ tabs: [standalone] })
+    })
+
+    it('leaves the route when the only chat pane is closed beside a pane of a pinned tab', async () => {
+      seedLayout([{ tabs: ['a'] }, { tabs: ['todo:ACM-1'] }], ['todo:ACM-1'])
+      renderRoute('/?session=a')
+      await waitFor(() => expect(chatPaneOf('a')).not.toBeNull())
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Close Title a' }))
+
+      await waitFor(() => expect(screen.getByTestId('route-location').textContent).toBe('/'))
+      await settled()
+      expect(chatPaneOf('a')).toBeNull()
+      expect(storedLayout().root).toMatchObject({ tabs: ['todo:ACM-1'] })
+    })
   })
 })

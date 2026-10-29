@@ -28,7 +28,7 @@ import { deriveChatGridIds } from './grid-placement'
 import { usePaneIdentity } from './pane-identity'
 import { useChatPaneState } from './use-chat-pane-state'
 import { historyRecord, parseHistoryPreview } from './chat-history'
-import { SplitChatGrid, SplitDropOverlay, SplitGridContext, canCloseTab, closeAllUnpinned, focusedGroupTabs, hasTabbedGroup, hasUnpinnedTabs, isChatTabId, isPinned, pinnedChats, selectTab, workingSetFromLayout, useSplitGridAdd, useSplitGridWorkspace } from './layout'
+import { SplitChatGrid, SplitDropOverlay, SplitGridContext, canCloseTab, closeAllUnpinned, focusedGroupTabs, hasTabbedGroup, hasUnpinnedTabs, holdsAfterClose, isChatTabId, isPinned, pinnedChats, selectTab, workingSetFromLayout, useSplitGridAdd, useSplitGridWorkspace } from './layout'
 import { ChatPageHeader } from './chat-page-header'
 import { SidebarColumn } from './sidebar-column'
 import { formatMessage } from '@/components/chat/chat-messages'
@@ -328,16 +328,6 @@ function ChatPage() {
   }, [handleSelect])
 
   const gridAdd = useSplitGridAdd(workingSet, selectedId, handleSelect, { primaryPaneKey: paneKey, committedSessionId: committedId, pickerPaneKey: gridPicker.paneKey, viewport })
-  const handleRemovePane = useCallback((sessionId: string) => {
-    // A pane's own close is the user's, and a pinned tab stays: a deleted session leaves through handleSessionsRemoved.
-    if (isPinned(workingSet.split.layout, sessionId)) return
-    const next = workingSet.afterRemove(sessionId)
-    workingSet.remove(sessionId)
-    if (workingSet.state.focusedId === sessionId && next.focusedId) {
-      handleSelect(next.focusedId, { replace: true, navigateMobile: false })
-    }
-  }, [handleSelect, workingSet])
-
   // URL → tab/intent sync: covers selections that did NOT come through
   // handleSelect — back/forward (POP), deep links, manual URL edits. openTab
   // dedupes and bails when already active, so re-running after a handleSelect
@@ -722,6 +712,29 @@ function ChatPage() {
   // tabs; file tabs stay a pure tab-model switch (they live outside the URL).
   // Beside a visible strip the tab shortcuts act on that strip's tabs, not on the separate
   // open-chats list (use-chat-tabs), which holds one preview and the chats made here.
+  const leaveRoute = useCallback(() => {
+    // The beside-picker is a pane the layout does not hold, so emptying the layout leaves it
+    // standing: close it here, on the desktop as well as the phone (releaseMobilePicker is a
+    // no-op off mobile). Anything else and "the normal empty state" is two composers.
+    gridPicker.close()
+    startComposer()
+    newChatIntentRef.current = true
+    pendingNavRef.current = null
+    setMobileView('sidebar')
+    if (selectedIdRef.current) navigate('/')
+  }, [gridPicker, navigate, startComposer])
+
+  const handleRemovePane = useCallback((sessionId: string) => {
+    // A pane's own close is the user's, and a pinned tab stays: a deleted session leaves through handleSessionsRemoved.
+    if (isPinned(workingSet.split.layout, sessionId)) return
+    const next = workingSet.afterRemove(sessionId)
+    const standaloneLeft = holdsAfterClose(workingSet.split.layout, sessionId)
+    workingSet.remove(sessionId)
+    if (workingSet.state.focusedId !== sessionId) return
+    if (next.focusedId) handleSelect(next.focusedId, { replace: true, navigateMobile: false })
+    else if (standaloneLeft) leaveRoute() // only standalone tabs remain: the route has no chat to stay on
+  }, [handleSelect, leaveRoute, workingSet])
+
   const groupTabs = useMemo(() => focusedGroupTabs(workingSet.split.layout), [workingSet.split.layout])
   // The strip's shown tab as the operator last chose it: the switch in flight, then the route. The
   // layout follows the URL a commit or more later, so a quick second key would otherwise act on the
@@ -865,16 +878,8 @@ function ChatPage() {
       if (route !== selectedIdRef.current) handleSelect(route, { replace: true, navigateMobile: false })
       return
     }
-    // The beside-picker is a pane the layout does not hold, so emptying the layout leaves it
-    // standing: close it here, on the desktop as well as the phone (releaseMobilePicker is a
-    // no-op off mobile). Anything else and "the normal empty state" is two composers.
-    gridPicker.close()
-    startComposer()
-    newChatIntentRef.current = true
-    pendingNavRef.current = null
-    setMobileView('sidebar')
-    if (selectedIdRef.current) navigate('/')
-  }, [chatTabs, gridPicker, handleSelect, navigate, startComposer, workingSet.split])
+    leaveRoute()
+  }, [chatTabs, gridPicker, handleSelect, leaveRoute, workingSet.split])
 
   // The phone's open-chat strip carries its own close-all, so it needs the reset above.
   const mobileTabs = useMobileSessionTabs({
@@ -1026,7 +1031,7 @@ function ChatPage() {
                 <FileView path={chatTabs.activeTab.path} sessionId={chatTabs.activeTab.sessionId} embedded onBack={handleFileBack} />
               </Suspense>
             ) : awaitingOpen ? <div className="flex-1" /> : (
-              <SplitGridContext.Provider value={{ split: workingSet.split, sessionForKey: gridAdd.sessionForKey, onCloseAll: canCloseAllTabs ? handleCloseAllTabs : undefined }}>
+              <SplitGridContext.Provider value={{ split: workingSet.split, sessionForKey: gridAdd.sessionForKey, onCloseAll: canCloseAllTabs ? handleCloseAllTabs : undefined, onLeaveRoute: leaveRoute }}>
               <MultiChatGrid
                 grid={SplitChatGrid}
                 sessionIds={gridPaneKeys}

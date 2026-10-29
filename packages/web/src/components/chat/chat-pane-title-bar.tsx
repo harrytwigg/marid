@@ -1,7 +1,7 @@
 import { ChevronLeft, X } from '@/components/ui/icon'
 import { useEffect, useState } from 'react'
 import { usePaneCloseAll, usePaneTabActions, usePaneTabsStrip, usePaneTitleDrag } from '@/components/chat/pane-tabs-context'
-import { PaneTabMenu, TabUnpinButton } from '@/routes/chat/layout/pane-tab-controls'
+import { TabUnpinButton, useTabPointMenu } from '@/routes/chat/layout/pane-tab-controls'
 import { CloseAllTabsButton } from '@/components/chat/close-all-tabs-button'
 import { ChatPaneSessionMenu } from '@/components/chat/chat-pane-session-menu'
 import type { PaneSessionActions } from '@/components/chat/pane-session-actions'
@@ -200,30 +200,34 @@ export function ChatPaneTitleBar({ active, title, employee, session, backTo, onC
   const tabs = usePaneTabsStrip(session.id)
   const drag = usePaneTitleDrag(session.id)
   const tabActions = usePaneTabActions(session.id)
-
-  const bar = (
-    <div
-      data-testid="chat-pane-title-bar" data-chat-pane-titlebar={String(active)}
-      {...drag}
-      className={`flex h-[34px] shrink-0 items-center gap-2 px-[8px] pl-[12px] transition-colors duration-[var(--duration-fast)] ${active ? 'bg-[var(--fill-secondary)]' : 'bg-transparent'}`}
-    >
-      {backTo ? (
-        <button
-          type="button"
-          data-pane-focus-preserving
-          aria-label={`Back to ${backTo.label}`}
-          title={`Back to ${backTo.label}`}
-          onClick={(event) => { event.stopPropagation(); backTo.onClick() }}
-          className="inline-flex min-w-0 shrink-0 items-center gap-0.5 text-[length:var(--text-footnote)] font-[var(--weight-medium)] text-[var(--text-tertiary)] transition-colors duration-[var(--duration-fast)] hover:text-[var(--text-primary)]"
-        >
-          <ChevronLeft size={14} aria-hidden className="shrink-0" />
-          <span className="max-w-[90px] truncate">{backTo.label}</span>
-        </button>
-      ) : null}
-      {tabs ?? <LonePaneLabel active={active} employee={employee} title={visibleTitle} onUnpin={tabActions?.pinned ? tabActions.unpin : undefined} />}
-      <PaneTitleActions title={visibleTitle} session={session} onClose={onClose} sessionActions={sessionActions} onRenamed={setRenamedTitle} viewMode={viewMode} cliModeAvailable={cliModeAvailable} viewSwitchLocked={viewSwitchLocked} cliTitle={cliTitle} active={active} hasStrip={tabs !== null} />
-    </div>
-  )
   // With a strip the tabs carry their own menus; a lone tab's bar is its tab, so it carries this one.
-  return tabs === null ? <PaneTabMenu actions={tabActions}>{bar}</PaneTabMenu> : bar
+  const tabMenu = useTabPointMenu(tabs === null ? tabActions : null)
+
+  return (
+    <>
+      <div
+        data-testid="chat-pane-title-bar" data-chat-pane-titlebar={String(active)}
+        {...drag}
+        onContextMenu={tabMenu.onContextMenu}
+        className={`flex h-[34px] shrink-0 items-center gap-2 px-[8px] pl-[12px] transition-colors duration-[var(--duration-fast)] ${active ? 'bg-[var(--fill-secondary)]' : 'bg-transparent'}`}
+      >
+        {backTo ? (
+          <button
+            type="button"
+            data-pane-focus-preserving
+            aria-label={`Back to ${backTo.label}`}
+            title={`Back to ${backTo.label}`}
+            onClick={(event) => { event.stopPropagation(); backTo.onClick() }}
+            className="inline-flex min-w-0 shrink-0 items-center gap-0.5 text-[length:var(--text-footnote)] font-[var(--weight-medium)] text-[var(--text-tertiary)] transition-colors duration-[var(--duration-fast)] hover:text-[var(--text-primary)]"
+          >
+            <ChevronLeft size={14} aria-hidden className="shrink-0" />
+            <span className="max-w-[90px] truncate">{backTo.label}</span>
+          </button>
+        ) : null}
+        {tabs ?? <LonePaneLabel active={active} employee={employee} title={visibleTitle} onUnpin={tabActions?.pinned ? tabActions.unpin : undefined} />}
+        <PaneTitleActions title={visibleTitle} session={session} onClose={onClose} sessionActions={sessionActions} onRenamed={setRenamedTitle} viewMode={viewMode} cliModeAvailable={cliModeAvailable} viewSwitchLocked={viewSwitchLocked} cliTitle={cliTitle} active={active} hasStrip={tabs !== null} />
+      </div>
+      {tabMenu.menu}
+    </>
+  )
 }

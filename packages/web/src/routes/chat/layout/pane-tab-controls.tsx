@@ -1,6 +1,6 @@
-import type { ReactNode, RefObject, WheelEvent } from 'react'
+import { useState, type MouseEvent, type ReactNode, type RefObject, type WheelEvent } from 'react'
 import { Pin, X } from '@/components/ui/icon'
-import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu'
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger, PointMenu } from '@/components/ui/context-menu'
 import { SESSION_MENU_CONTENT_CLASS, SESSION_MENU_ITEM_CLASS } from '@/components/chat/session-row-menu'
 import type { PaneTabActions } from '@/components/chat/pane-tabs-context'
 import type { PaneTabItem } from './pane-tab-strip'
@@ -62,26 +62,51 @@ export function PaneTitleTabButton({ title, actions, onClose }: { title: string;
   )
 }
 
-/** A tab's context menu around the one element that opens it: Pin tab / Unpin tab, and Close tab unless the tab cannot be closed. */
+/** The items of a tab's menu: Pin tab / Unpin tab, and Close tab unless the tab cannot be closed. */
+function TabMenuContent({ actions }: { actions: PaneTabActions }) {
+  return (
+    <ContextMenuContent className={SESSION_MENU_CONTENT_CLASS} aria-label="Tab menu">
+      <ContextMenuItem className={SESSION_MENU_ITEM_CLASS} onClick={actions.pinned ? actions.unpin : actions.pin}>
+        <Pin aria-hidden />
+        {actions.pinned ? 'Unpin tab' : 'Pin tab'}
+      </ContextMenuItem>
+      {actions.canClose ? (
+        <ContextMenuItem className={SESSION_MENU_ITEM_CLASS} onClick={actions.close}>
+          <X aria-hidden />
+          Close tab
+        </ContextMenuItem>
+      ) : null}
+    </ContextMenuContent>
+  )
+}
+
+/** A tab's context menu around the one element that opens it (a tab of a strip, which the keyboard can reach). */
 export function PaneTabMenu({ actions, children }: { actions: PaneTabActions | null; children: ReactNode }) {
   if (!actions) return <>{children}</>
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-      <ContextMenuContent className={SESSION_MENU_CONTENT_CLASS} aria-label="Tab menu">
-        <ContextMenuItem className={SESSION_MENU_ITEM_CLASS} onClick={actions.pinned ? actions.unpin : actions.pin}>
-          <Pin aria-hidden />
-          {actions.pinned ? 'Unpin tab' : 'Pin tab'}
-        </ContextMenuItem>
-        {actions.canClose ? (
-          <ContextMenuItem className={SESSION_MENU_ITEM_CLASS} onClick={actions.close}>
-            <X aria-hidden />
-            Close tab
-          </ContextMenuItem>
-        ) : null}
-      </ContextMenuContent>
+      <TabMenuContent actions={actions} />
     </ContextMenu>
   )
+}
+
+/**
+ * The same menu for a lone pane's title bar, as a handler for the bar and a menu to render beside it,
+ * so the bar keeps its place in the tree whether or not it has a menu (a strip replacing it, a tab
+ * not yet in the layout) and nothing inside it remounts.
+ */
+export function useTabPointMenu(actions: PaneTabActions | null): { onContextMenu?: (event: MouseEvent) => void; menu: ReactNode } {
+  const [point, setPoint] = useState<{ x: number; y: number } | null>(null)
+  if (!actions) return { menu: null }
+  return {
+    onContextMenu: (event) => { event.preventDefault(); setPoint({ x: event.clientX, y: event.clientY }) },
+    menu: point ? (
+      <PointMenu point={point} onOpenChange={(open) => { if (!open) setPoint(null) }}>
+        <TabMenuContent actions={actions} />
+      </PointMenu>
+    ) : null,
+  }
 }
 
 function TabCloseButton({ title, active, onClose }: { title: string; active: boolean; onClose: () => void }) {

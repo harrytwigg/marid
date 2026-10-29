@@ -63,6 +63,11 @@ export function canCloseTab(layout: SplitLayout, tabId: string): boolean {
   return !isPinned(layout, tabId) && !isLastChatWithTabs(layout, tabId)
 }
 
+/** Whether anything is left once the tab closes: only standalone tabs can be, when the tab is the last chat. */
+export function holdsAfterClose(layout: SplitLayout, tabId: string): boolean {
+  return closeSession(layout, tabId).root !== null
+}
+
 /** closeSession for a close the user asked for (a strip, a title bar, a shortcut): a pinned tab stays. */
 export function closeUserTab(layout: SplitLayout, tabId: string): SplitLayout {
   return isPinned(layout, tabId) ? layout : closeSession(layout, tabId)

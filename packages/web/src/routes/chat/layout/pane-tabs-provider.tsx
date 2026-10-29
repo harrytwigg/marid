@@ -6,7 +6,7 @@ import { safePaneTitle } from '@/components/chat/chat-pane-title-bar'
 import { paneTabHandlers, paneTabItems, selectTab, type PaneTabSession } from './pane-tab-ops'
 import { PaneTabStrip } from './pane-tab-strip'
 import { closeSession, findGroup, focusedGroup, groupIdsByPaneKey, groupOfSession, hasTabbedGroup, isLastChatWithTabs, paneSessionOf, routeSessionOf, workingSetFromLayout, type LayoutGroup, type SplitLayout } from './split-layout'
-import { parseDocTabId } from './tab-kind'
+import { isChatTabId, parseDocTabId } from './tab-kind'
 import { DocPane, DocPaneTitle } from './doc-pane'
 import { canCloseTab, isPinned } from './pinned-tabs'
 import { paneTabDragProps } from './pane-tab-dnd'
@@ -55,6 +55,8 @@ interface PaneTabsProviderProps {
   /** Shows a session in its pane and moves the route to it. The grid's focus handler takes a pane
    * key, and a pane's key is its session id, so a tab's session id is a valid key here. */
   onSelect: (sessionId: string) => void
+  /** The route's chat closed and only standalone tabs are left: the page leaves the route. */
+  onLeaveRoute?: () => void
   children: ReactNode
 }
 
@@ -92,7 +94,13 @@ function isRouteChat(layout: SplitLayout, owner: LayoutGroup, sessionId: string)
   return shownInFocused || workingSetFromLayout(layout).focusedId === sessionId
 }
 
-function useCloseTab(split: SplitLayoutControls, onSelect: (sessionId: string) => void) {
+/** The chat the route moves to once a tab of `ownerId`'s pane closes: that pane's, else the working set's. Empty when none is left. */
+function chatAfterClose(next: SplitLayout, ownerId: string): string {
+  const pane = findGroup(next, ownerId) ?? focusedGroup(next)
+  return (pane ? routeSessionOf(pane, next.focusHistory) : '') || workingSetFromLayout(next).focusedId || ''
+}
+
+function useCloseTab(split: SplitLayoutControls, onSelect: (sessionId: string) => void, onLeaveRoute?: () => void) {
   const { layout } = split
   return useCallback((sessionId: string) => {
     if (!canCloseTab(layout, sessionId)) return
@@ -103,10 +111,11 @@ function useCloseTab(split: SplitLayoutControls, onSelect: (sessionId: string) =
     split.close(sessionId)
     if (!owner || !wasRoute) return
     const next = closeSession(layout, sessionId)
-    const pane = findGroup(next, owner.id) ?? focusedGroup(next)
-    const replacement = (pane ? routeSessionOf(pane, next.focusHistory) : '') || workingSetFromLayout(next).focusedId
+    const replacement = chatAfterClose(next, owner.id)
     if (replacement) onSelect(replacement)
-  }, [layout, onSelect, split])
+    // The route's last chat closed beside standalone tabs: the route has no chat left to name.
+    else if (isChatTabId(sessionId) && next.root) onLeaveRoute?.()
+  }, [layout, onLeaveRoute, onSelect, split])
 }
 
 /** Activating a tab, or placing one (resolved on the layout it lands in): selectTab. */
@@ -144,14 +153,14 @@ function docPane(layout: SplitLayout, paneKey: string, groupStrip: (group: Layou
  * those: a pane holding one tab (a chat, a new chat, a document) shows its plain title bar instead,
  * which drags that tab as a strip would.
  */
-export function PaneTabsProvider({ split, onSelect, onCloseAll, children }: PaneTabsProviderProps) {
+export function PaneTabsProvider({ split, onSelect, onCloseAll, onLeaveRoute, children }: PaneTabsProviderProps) {
   const sessions = useSessions().data as SessionRow[] | undefined
   const byId = useMemo(() => new Map((sessions ?? []).map((row) => [String(row.id ?? ''), row])), [sessions])
   const employeeNames = useEmployeeNames()
   const { layout } = split
 
   const keep = useKeepRequests(layout, split.keep)
-  const closeTab = useCloseTab(split, onSelect)
+  const closeTab = useCloseTab(split, onSelect, onLeaveRoute)
   const selectChosenTab = useSelectTab(split, onSelect)
 
   const binding = useMemo<PaneTabsBinding>(() => {

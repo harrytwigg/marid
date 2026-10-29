@@ -1,6 +1,6 @@
 import type { ChatWorkingSet } from '../working-set'
 import { isChatTabId, isDocTabId, isTodosTabId, newChatTabId, parseNewChatTabId } from './tab-kind'
-import { evictionVictim, isStandaloneTab, normalizeGroup, pinnedFirst } from './pinned-order'
+import { evictionVictim, isStandaloneTab, normalizeGroup, pinnedAfterReplace, pinnedFirst } from './pinned-order'
 
 /**
  * The editor-group layout: a tree of row/column splits whose leaves are groups, each holding an
@@ -575,10 +575,9 @@ export function replaceSession(layout: SplitLayout, removedId: string, rawReplac
   const previewTab = owner.previewTab === removedId ? replacementId : owner.previewTab
   const root = mapNodes(layout.root, (node) => (node === owner ? withPreview({ ...owner, tabs, activeTab }, previewTab) : node))
   const focusHistory = layout.focusHistory.filter((id) => id !== removedId)
-  // The pin belongs to the tab that left, not to its slot.
-  const pinned = layout.pinned.filter((id) => id !== removedId)
+  const pinned = pinnedAfterReplace(layout.pinned, removedId, replacementId)
   const replaced = { ...layout, root, focusHistory, pinned }
-  return showTab(pinned.length === layout.pinned.length ? replaced : normalizeLayout(replaced), replacementId)
+  return showTab(pinned === layout.pinned ? replaced : normalizeLayout(replaced), replacementId)
 }
 
 /** The group with `previewTab` set (or cleared when undefined). */

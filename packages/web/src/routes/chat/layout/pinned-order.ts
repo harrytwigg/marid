@@ -1,5 +1,5 @@
 import type { LayoutGroup } from './split-layout'
-import { isTodosTabId } from './tab-kind'
+import { isNewChatTabId, isTodosTabId } from './tab-kind'
 
 /**
  * The parts of the pinned-tab model the layout's own normalisation needs, kept apart from the ops
@@ -41,4 +41,12 @@ export function normalizeGroup(node: LayoutGroup, pinned: readonly string[]): La
 export function evictionVictim(open: readonly LayoutGroup[], protectedIds: readonly string[], pinned: readonly string[]): LayoutGroup | undefined {
   const holds = (g: LayoutGroup, ids: readonly string[]) => g.tabs.some((id) => ids.includes(id))
   return open.find((g) => !holds(g, protectedIds) && !holds(g, pinned)) ?? open.find((g) => !holds(g, pinned)) ?? open[0]
+}
+
+/** `pinned` once `removedId` is swapped for `replacementId`: the pin goes with the tab that left, except
+ * a new chat that became that chat on its first send, which is the one tab and keeps it. */
+export function pinnedAfterReplace(pinned: string[], removedId: string, replacementId: string): string[] {
+  if (!pinned.includes(removedId)) return pinned
+  const rest = pinned.filter((id) => id !== removedId)
+  return isNewChatTabId(removedId) ? [...rest, replacementId] : rest
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { fileTabId } from '../file-tab'
-import { TODOS_TAB_ID, todoTabId } from '../tab-kind'
+import { TODOS_TAB_ID, isNewChatTabId, todoTabId } from '../tab-kind'
 import {
   appendSession,
   closeSession,
@@ -14,6 +14,7 @@ import {
   isLastChatWithTabs,
   normalizeLayout,
   openDocTab,
+  openNewChatTab,
   placeTab,
   pruneSessions,
   replaceSession,
@@ -211,6 +212,16 @@ describe('closing', () => {
     expect(groupOfSession(replaced, 'c')).not.toBeNull()
     expect(isPinned(replaced, 'c')).toBe(false)
     expect(replaced.pinned).toEqual([])
+  })
+
+  it('keeps the pin of a new chat that becomes a chat on its first send, in its slot', () => {
+    let layout = openNewChatTab(pinTab(openDocTab(createSplitLayout(['a'], 'a'), 'a', docA), docA), null)
+    const fresh = groupOfSession(layout, 'a')!.tabs.find(isNewChatTabId)!
+    layout = pinTab(layout, fresh)
+    expect(tabsOf(layout, 'a')).toEqual([docA, fresh, 'a'])
+    layout = replaceSession(layout, fresh, 'z')
+    expect(layout.pinned.sort()).toEqual([docA, 'z'].sort())
+    expect(tabsOf(layout, 'a')).toEqual([docA, 'z', 'a'])
   })
 
   it('keeps the order of a group whose pinned chat is replaced', () => {
