@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { initDb } from "../shared/db.js";
 import { logger } from "../shared/logger.js";
-import { listChildSessions } from "../sessions/registry.js";
+import { listChildSessions, listSessionsByWorkItem } from "../sessions/registry.js";
 import { isSessionInFlight } from "../work-items/open-delegations.js";
+import { walkWillStart } from "../work-items/quiet-children.js";
 import { disarmHeartbeat } from "./store.js";
 import type { Heartbeat } from "./types.js";
 
@@ -49,30 +50,40 @@ export function armChildWatch(sessionId: string, now = Date.now()): void {
 }
 
 export interface OpenChildren {
-  /** Child Todos in `backlog` or `executing`. */
+  /** Child Todos that are `executing`, or in `backlog` with a session in flight or a start coming. */
   todoIds: string[];
   /** Child sessions of the session that are still in flight. */
   sessionIds: string[];
 }
 
+function isOpenChild(child: { id: string; status: string; assignee: string | null }): boolean {
+  if (child.status !== "backlog") return true;
+  if (child.assignee && walkWillStart(child)) return true;
+  return listSessionsByWorkItem(child.id).some(isSessionInFlight);
+}
+
 /**
  * Open children of a session: Todos in `backlog`/`executing` whose parent is the
  * session's linked Todo, or that the session created with a parent (`sourceRef`
- * `session:<id>:` / `delegate:<id>:`), plus its in-flight child sessions.
+ * `session:<id>:` / `delegate:<id>:`), plus its in-flight child sessions. A
+ * parked `backlog` child (no assignee, or one the board walk will not start) with
+ * no session in flight is not open: nothing moves it without a person, so a wake
+ * about it can do nothing.
  */
 export function openChildrenOf(sessionId: string): OpenChildren {
   const db = initDb();
   const linked = db.prepare("SELECT work_item_id FROM sessions WHERE id = ?").pluck().get(sessionId) as string | null | undefined;
-  const todoIds = db.prepare(`
-    SELECT id FROM work_items
+  const rows = db.prepare(`
+    SELECT id, status, assignee FROM work_items
     WHERE status IN ('backlog', 'executing') AND parent_id IS NOT NULL
       AND (parent_id = ? OR substr(source_ref, 1, ?) = ? OR substr(source_ref, 1, ?) = ?)
     ORDER BY id
-  `).pluck().all(
+  `).all(
     linked ?? "",
     `session:${sessionId}:`.length, `session:${sessionId}:`,
     `delegate:${sessionId}:`.length, `delegate:${sessionId}:`,
-  ) as string[];
+  ) as Array<{ id: string; status: string; assignee: string | null }>;
+  const todoIds = rows.filter(isOpenChild).map((row) => row.id);
   const sessionIds = listChildSessions(sessionId).filter(isSessionInFlight).map((child) => child.id);
   return { todoIds, sessionIds };
 }
