@@ -361,6 +361,14 @@ export interface RemoteExecutionConfig {
    *  Default 120000. Separate from {@link waitMs}: a freshly booted host can
    *  answer ssh well before its sshfs has connected. */
   mountWaitMs?: number;
+  /** Tell the operator's chat connector when a turn has to wait for a remote
+   *  host: that it is offline (or its mount is not ready) and being waited for,
+   *  and that it is up and the employee is starting. Default true; `false`
+   *  silences those two notices for a host that wakes often. The session's own
+   *  status line ("<host> is offline — waking it") is unaffected, and the
+   *  failure notice stays on either way: a host that will not wake needs the
+   *  operator. */
+  notifyWake?: boolean;
 }
 
 /**
