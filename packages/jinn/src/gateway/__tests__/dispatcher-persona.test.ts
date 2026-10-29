@@ -128,26 +128,37 @@ describe("System employee personas — blocking a dead end for the operator", ()
 });
 
 /**
- * A delegate that stopped mid-work reports to the Dispatcher, whose one
- * hand-off is spent. Resuming the delegate's own session is the recovery that
- * keeps its work; a fresh start stays the operator's Dispatch.
+ * After the hand-off the Dispatcher is done with the Todo: the delegate and the
+ * operator settle it between themselves, and a Dispatcher that steps in cuts
+ * across what they agreed. A delegate that stopped is the operator's to restart
+ * with a fresh Dispatch, not the Dispatcher's to resume.
  */
-describe("Todo Dispatcher persona — a delegate that stopped", () => {
-  const recovery = persona.split("\n\n").find((paragraph) => paragraph.startsWith("If your delegate stops"))!;
+describe("Todo Dispatcher persona — after the hand-off", () => {
+  const afterHandOff = persona.split("\n\n").find((paragraph) => paragraph.startsWith("After the hand-off"))!;
 
-  it("resumes the delegate's own session rather than delegating again", () => {
-    expect(recovery).toContain("send_to_session { sessionId, message }");
-    expect(recovery).toMatch(/delegate's session id/);
-    expect(recovery).toMatch(/keeps the work it did/);
+  it("has a paragraph stating the rule", () => {
+    expect(afterHandOff).toBeDefined();
   });
 
-  it("never spawns a session to route the Todo for it", () => {
-    expect(recovery).toMatch(/never spawn one to do it for you/);
+  it("does not message the delegate, comment again, or dispatch again", () => {
+    expect(afterHandOff).toMatch(/Do not message the delegate/);
+    expect(afterHandOff).toMatch(/do not comment again/);
+    expect(afterHandOff).toMatch(/do not dispatch or delegate it again/);
   });
 
-  it("blocks for the operator, offering Dispatch, when the resumed session stops again", () => {
-    expect(recovery).toMatch(/block the Todo for the operator/);
-    expect(recovery).toMatch(/pressing Dispatch/);
+  it("does nothing when woken anyway, even by a delegate that stopped", () => {
+    expect(afterHandOff).toMatch(/do nothing and end your turn/);
+    expect(afterHandOff).toMatch(/stopped, errored or looks stuck/);
+  });
+
+  it("leaves a fresh start to the operator's Dispatch", () => {
+    expect(afterHandOff).toMatch(/operator pressing Dispatch/);
+  });
+
+  it("is not given send_to_session, and no longer resumes a delegate", () => {
+    expect(persona).not.toContain("send_to_session { sessionId, message }");
+    expect(persona).not.toMatch(/resuming that same session/);
+    expect(persona).not.toMatch(/never spawn one to do it for you/);
   });
 });
 

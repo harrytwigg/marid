@@ -20,6 +20,7 @@ import { __resetHeldRepliesForTest, holdsInterimRelay, recoverHeldInterimReplies
 import { withReportingParent } from "../work-items/employee-session-delegation.js";
 import type { SessionDeliveryPayload } from "../shared/types.js";
 import { releaseChildWatchIfSettled } from "../heartbeats/child-watch.js";
+import { isSpentDispatcher } from "../gateway/work-item-authority.js";
 
 export const CALLBACK_DELIVERY_RETRY_DELAYS_MS = [1_000, 5_000, 30_000] as const;
 export const CALLBACK_DELIVERY_MAX_ATTEMPTS = CALLBACK_DELIVERY_RETRY_DELAYS_MS.length + 1;
@@ -300,6 +301,8 @@ export function notifyRateLimitResumed(
   childSession = withReportingParent(childSession);
   if (!childSession.parentSessionId) return;
 
+  if (isSpentDispatcher(getSession(childSession.parentSessionId))) return;
+
   const employeeName = childSession.employee || "Unknown";
   const message = `🔄 Employee "${employeeName}" (session ${childSession.id}) has resumed after rate limit cleared.`;
 
@@ -367,6 +370,10 @@ async function _sendNotification(
     };
   }
   if (options?.alwaysNotify === false && contract !== "surface") return;
+  // The Todo Dispatcher is done once it has handed the Todo on: the delegate's
+  // replies belong to the operator and the delegate, and a Dispatcher woken by
+  // each of them comes in over whatever they settled.
+  if (isSpentDispatcher(parent)) return;
 
   const employeeName = childSession.employee || "Unknown";
   const childId = childSession.id;

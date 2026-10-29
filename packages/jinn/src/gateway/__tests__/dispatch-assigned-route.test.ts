@@ -266,10 +266,9 @@ describe("delegate_task ownership guard", () => {
 /**
  * A delegate that stopped before finishing: the Dispatcher's one hand-off is
  * spent, so it is refused, as it must be (a fresh start on top of partial work
- * is the operator's call). The refusal used to stop there, which left the
- * Dispatcher reaching for a second session that had no standing either. It now
- * names the recovery that keeps the work, resuming the delegate's own session,
- * and the operator action that starts afresh.
+ * is the operator's call). The refusal tells the Dispatcher to stop, not to
+ * resume the delegate: it is done with the Todo, and names the operator action
+ * that starts afresh.
  */
 describe("a Dispatcher whose delegate stopped", () => {
   async function crashedHandoff(title: string) {
@@ -283,15 +282,15 @@ describe("a Dispatcher whose delegate stopped", () => {
     return { item, dispatcherId, delegateId };
   }
 
-  it("is refused a second delegation, with the delegate session to resume and the operator's fresh start", async () => {
-    const { item, dispatcherId, delegateId } = await crashedHandoff("Delegate crashed mid-work");
+  it("is refused a second delegation, told to stand down, with the operator's fresh start", async () => {
+    const { item, dispatcherId } = await crashedHandoff("Delegate crashed mid-work");
 
     const again = await delegate(dispatcherId, item.id, "first-worker");
 
     expect(again.status).toBe(403);
     expect(again.body.error).toContain("hand-off is spent");
-    expect(again.body.error).toContain(`send_to_session { sessionId: "${delegateId}" }`);
-    expect(again.body.error).toMatch(/first-worker, error/);
+    expect(again.body.error).not.toContain("send_to_session");
+    expect(again.body.error).toContain("do not message the delegate");
     expect(again.body.error).toContain(`press Dispatch on Todo ${item.id}`);
     expect(sessionsOf(item.id, "first-worker")).toHaveLength(1);
   });
@@ -312,12 +311,12 @@ describe("a Dispatcher whose delegate stopped", () => {
   });
 
   it("gets the same guidance from dispatch_work_item, and starts no second Dispatcher", async () => {
-    const { item, dispatcherId, delegateId } = await crashedHandoff("Delegate crashed, Dispatcher tries dispatch");
+    const { item, dispatcherId } = await crashedHandoff("Delegate crashed, Dispatcher tries dispatch");
 
     const again = await dispatchAs(dispatcherId, item.id);
 
     expect(again.status).toBe(403);
-    expect(again.body.error).toContain(`send_to_session { sessionId: "${delegateId}" }`);
+    expect(again.body.error).not.toContain("send_to_session");
     expect(sessionsOf(item.id, "todo-dispatcher")).toHaveLength(1);
   });
 

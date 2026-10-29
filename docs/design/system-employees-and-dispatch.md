@@ -190,3 +190,29 @@ Thin vertical slices in the shape Todos v2 used, each independently mergeable.
 
 Implementation of any of the above. Changes to the existing Todos UI, which shipped. Schema or
 migration work. Re-designing the board, task page, or filters.
+
+---
+
+## 6. Rule as shipped: the Dispatcher is done after the hand-off
+
+Question 2c above settled on a durable Dispatcher session, but the shipped Dispatcher does
+**not** stay involved once it has handed a Todo on. After `delegate_task` succeeds and its one
+comment is posted, the Todo belongs to the delegate and the operator, who may be settling it
+between themselves in chat; a Dispatcher that steps in cuts across what they agreed.
+
+- **No wake.** A delegate's replies, errors and rate-limit notices are not delivered to a
+  Dispatcher whose hand-off is spent. Comment mentions and replies already skip system
+  employees.
+- **No messages.** `send_to_session` from a spent Dispatcher is refused, to the delegate and
+  to anyone else. `delegate_task`, `dispatch_work_item`, status and assignee changes on that
+  Todo were already refused.
+- **Persona.** An "After the hand-off" paragraph tells it to do nothing and end its turn if a
+  message reaches it anyway, even when the delegate stopped or looks stuck.
+- **The way back in** is the operator pressing Dispatch again, which starts a fresh Dispatcher
+  session (the old one stays spent). The one exception to the silence is a delegate refused
+  before its engine ever ran: the Dispatcher still hears of that, because it may retry the
+  hand-off once.
+
+Request-update (slice 4) is therefore not a Dispatcher behaviour: stalled work is the quiet
+watch's and the operator's.
+
