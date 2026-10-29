@@ -6,6 +6,7 @@ import { tabSwitchedIn } from '../pane-tab-switch'
 import { closeSession, createSplitLayout, focusSession, openInFocusedGroup, keepTab, splitGroup, type SplitLayout } from '../split-layout'
 import type { SplitLayoutControls } from '../use-split-working-set'
 
+vi.mock('@/hooks/use-employees', () => ({ useOrg: () => ({ data: { employees: [{ name: 'op', displayName: 'Operator' }] } }) }))
 vi.mock('@/hooks/use-sessions', () => ({ useSessions: () => ({ data: [] }) }))
 
 /** Three kept tabs in one group, `a` showing. */
@@ -64,7 +65,7 @@ type GridProps = ComponentProps<typeof SplitChatGrid>
 
 /** The grid the page mounts, driven by a layout the test owns and re-renders. */
 function Grid({ layout, sessionIds }: { layout: SplitLayout; sessionIds: string[] }) {
-  const split = { layout, resize: vi.fn(), equalize: vi.fn(), place: vi.fn(), close: vi.fn(), closeAll: vi.fn(), keep: vi.fn(), show: vi.fn(), focusPane: vi.fn() } as SplitLayoutControls
+  const split = { layout, resize: vi.fn(), equalize: vi.fn(), place: vi.fn(), close: vi.fn(), closeAll: vi.fn(), keep: vi.fn(), pin: vi.fn(), unpin: vi.fn(), show: vi.fn(), focusPane: vi.fn() } as SplitLayoutControls
   const props: GridProps = {
     sessionIds,
     focusedId: sessionIds[0],

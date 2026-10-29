@@ -28,7 +28,7 @@ import { deriveChatGridIds } from './grid-placement'
 import { usePaneIdentity } from './pane-identity'
 import { useChatPaneState } from './use-chat-pane-state'
 import { historyRecord, parseHistoryPreview } from './chat-history'
-import { SplitChatGrid, SplitDropOverlay, SplitGridContext, focusedGroupTabs, hasTabbedGroup, isChatTabId, isLastChatWithTabs, selectTab, useSplitGridAdd, useSplitGridWorkspace } from './layout'
+import { SplitChatGrid, SplitDropOverlay, SplitGridContext, canCloseTab, closeAllUnpinned, focusedGroupTabs, hasTabbedGroup, hasUnpinnedTabs, isChatTabId, isPinned, pinnedChats, selectTab, workingSetFromLayout, useSplitGridAdd, useSplitGridWorkspace } from './layout'
 import { ChatPageHeader } from './chat-page-header'
 import { SidebarColumn } from './sidebar-column'
 import { formatMessage } from '@/components/chat/chat-messages'
@@ -329,6 +329,8 @@ function ChatPage() {
 
   const gridAdd = useSplitGridAdd(workingSet, selectedId, handleSelect, { primaryPaneKey: paneKey, committedSessionId: committedId, pickerPaneKey: gridPicker.paneKey, viewport })
   const handleRemovePane = useCallback((sessionId: string) => {
+    // A pane's own close is the user's, and a pinned tab stays: a deleted session leaves through handleSessionsRemoved.
+    if (isPinned(workingSet.split.layout, sessionId)) return
     const next = workingSet.afterRemove(sessionId)
     workingSet.remove(sessionId)
     if (workingSet.state.focusedId === sessionId && next.focusedId) {
@@ -772,7 +774,7 @@ function ChatPage() {
       'keyboard-shortcuts': { action: () => setShowShortcutOverlay(v => !v) },
       'close-tab': { action: () => {
         const shown = groupTabs ? groupShownTab(groupTabs.tabs, groupTabs.active) : null
-        if (shown) { if (!isLastChatWithTabs(workingSet.split.layout, shown)) handleRemovePane(shown) }
+        if (shown) { if (canCloseTab(workingSet.split.layout, shown)) handleRemovePane(shown) }
         else if (chatTabs.activeIndex >= 0) chatTabs.closeTab(chatTabs.activeIndex)
       } },
       'prev-tab': { action: () => cycleTab(-1) },
@@ -852,8 +854,17 @@ function ChatPage() {
    * destroyed.
    */
   const closeAllWorkspace = useCallback(() => {
+    // Pinned tabs stay (the layout keeps them, and so does the open-chats list for the pinned chats);
+    // the route goes to the chat left standing when its own went, and the empty state is for when none is.
+    const kept = closeAllUnpinned(workingSet.split.layout)
+    const route = workingSetFromLayout(kept).focusedId
     workingSet.split.closeAll()
-    chatTabs.closeAllTabs()
+    chatTabs.closeAllTabs(pinnedChats(kept))
+    if (route) {
+      gridPicker.close()
+      if (route !== selectedIdRef.current) handleSelect(route, { replace: true, navigateMobile: false })
+      return
+    }
     // The beside-picker is a pane the layout does not hold, so emptying the layout leaves it
     // standing: close it here, on the desktop as well as the phone (releaseMobilePicker is a
     // no-op off mobile). Anything else and "the normal empty state" is two composers.
@@ -863,7 +874,7 @@ function ChatPage() {
     pendingNavRef.current = null
     setMobileView('sidebar')
     if (selectedIdRef.current) navigate('/')
-  }, [chatTabs, gridPicker, navigate, startComposer, workingSet.split])
+  }, [chatTabs, gridPicker, handleSelect, navigate, startComposer, workingSet.split])
 
   // The phone's open-chat strip carries its own close-all, so it needs the reset above.
   const mobileTabs = useMobileSessionTabs({
@@ -879,7 +890,7 @@ function ChatPage() {
   }, [closeAllWorkspace, mobileTabs.closeAll])
 
   /** A bar only offers the close when there is something to close. */
-  const canCloseAllTabs = workingSet.split.layout.root !== null || chatTabs.tabs.length > 0
+  const canCloseAllTabs = hasUnpinnedTabs(workingSet.split.layout) || chatTabs.tabs.some((tab) => !(tab.kind === 'session' && isPinned(workingSet.split.layout, tab.sessionId)))
 
   const moreMenu = (
     <ChatHeaderMenu

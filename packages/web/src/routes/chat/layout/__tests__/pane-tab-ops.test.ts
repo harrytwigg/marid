@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { paneTabHandlers, paneTabItems, selectTab, tabsOfGroup, type PaneTabOps } from '../pane-tab-ops'
 import { fileTabId } from '../file-tab'
+import { pinTab, unpinTab } from '../pinned-tabs'
 import {
   closeSession, createSplitLayout, findGroup, focusSession, groupOfSession, groupsOf, openDocTab, openInFocusedGroup, keepTab, placeTab, showTab, splitGroup, type SplitLayout,
 } from '../split-layout'
@@ -17,6 +18,8 @@ function drive(start: SplitLayout) {
     close: (id) => { layout = closeSession(layout, id) },
     select,
     keep: (id) => { layout = keepTab(layout, id) },
+    pin: (id) => { layout = pinTab(layout, id) },
+    unpin: (id) => { layout = unpinTab(layout, id) },
   }
   return { get layout() { return layout }, ops, select }
 }
@@ -118,6 +121,8 @@ describe('paneTabHandlers routing (selectTab, as the provider wires it)', () => 
       close: (id) => { layout = closeSession(layout, id) },
       select: (id, after = start) => selectTab(after, id, (tabId) => { layout = showTab(layout, tabId) }, route),
       keep: (id) => { layout = keepTab(layout, id) },
+      pin: (id) => { layout = pinTab(layout, id) },
+      unpin: (id) => { layout = unpinTab(layout, id) },
     }
     return { get layout() { return layout }, ops, route }
   }

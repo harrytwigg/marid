@@ -3,9 +3,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { PaneTabsContext, usePaneTabsDocPane, usePaneTabsKeep, usePaneTabsStrip, usePaneTitleDrag } from '@/components/chat/pane-tabs-context'
 import { PaneTabsProvider } from '../pane-tabs-provider'
-import { closeSession, createSplitLayout, emptySplitLayout, findGroup, focusSession, groupOfSession, groupsOf, materializeLayout, openDocTab, openInFocusedGroup, openNewChatTab, keepTab, placeTab, showTab, splitGroup, type SplitLayout } from '../split-layout'
+import { closeSession, createSplitLayout, findGroup, focusSession, groupOfSession, groupsOf, materializeLayout, openDocTab, openInFocusedGroup, openNewChatTab, keepTab, placeTab, showTab, splitGroup, type SplitLayout } from '../split-layout'
 import { isNewChatTabId, todoTabId } from '../tab-kind'
 import { fileTabId } from '../file-tab'
+import { closeAllUnpinned, closeUserTab, pinTab, unpinTab } from '../pinned-tabs'
 import { CHAT_SESSION_DND_MIME } from '../../chat-session-dnd'
 import { PANE_TAB_DND_MIME } from '../pane-tab-dnd'
 
@@ -31,6 +32,8 @@ vi.mock('@/lib/todo-preview', () => ({
   useTodoPreview: () => ({ data: { workItem: { title: 'Write the notes' } } }),
 }))
 
+vi.mock('@/hooks/use-employees', () => ({ useOrg: () => ({ data: { employees: [{ name: 'op', displayName: 'Operator' }] } }) }))
+
 vi.mock('@/hooks/use-sessions', () => ({
   useSessions: () => ({
     data: [
@@ -51,9 +54,11 @@ function harness(start: SplitLayout) {
     resize: vi.fn(),
     equalize: vi.fn(),
     place: (groupId, id, index) => set(placeTab(layout, groupId, id, index)),
-    close: (id) => set(closeSession(layout, id)),
-    closeAll: () => set(emptySplitLayout()),
+    close: (id) => set(closeUserTab(layout, id)),
+    closeAll: () => set(closeAllUnpinned(layout)),
     keep: (id) => { if (keepTab(layout, id) !== layout) set(keepTab(layout, id)) },
+    pin: (id) => set(pinTab(layout, id)),
+    unpin: (id) => set(unpinTab(layout, id)),
     show: (id) => { if (showTab(layout, id) !== layout) set(showTab(layout, id)) },
     focusPane: vi.fn(),
   } as SplitLayoutControls)

@@ -1,6 +1,7 @@
 import { ChevronLeft, X } from '@/components/ui/icon'
 import { useEffect, useState } from 'react'
-import { usePaneCloseAll, usePaneTabsStrip, usePaneTitleDrag } from '@/components/chat/pane-tabs-context'
+import { usePaneCloseAll, usePaneTabActions, usePaneTabsStrip, usePaneTitleDrag } from '@/components/chat/pane-tabs-context'
+import { PaneTabMenu, TabUnpinButton } from '@/routes/chat/layout/pane-tab-controls'
 import { CloseAllTabsButton } from '@/components/chat/close-all-tabs-button'
 import { ChatPaneSessionMenu } from '@/components/chat/chat-pane-session-menu'
 import type { PaneSessionActions } from '@/components/chat/pane-session-actions'
@@ -166,15 +167,41 @@ function PaneTitleActions({ title, session, onClose, sessionActions, onRenamed, 
   )
 }
 
+/** A lone chat's label in its bar, where a strip's tab would be: its employee's emoji and its title, and the
+ * pin glyph (which unpins it) when the tab is pinned. */
+function LonePaneLabel({ active, employee, title, onUnpin }: { active: boolean; employee: string; title: string; onUnpin?: () => void }) {
+  const { id, rest } = splitTitleId(title)
+  return (
+    <>
+      <span
+        aria-hidden
+        data-chat-pane-emoji
+        className={`shrink-0 leading-none transition-opacity duration-[var(--duration-fast)] ${active ? 'opacity-100' : 'opacity-50'}`}
+      >
+        {employee === TERMINAL_AVATAR ? '\u{1F5A5}\uFE0F' : emojiForName(employee)}
+      </span>
+      <span
+        title={title}
+        data-chat-pane-title
+        className={`min-w-0 flex-1 truncate text-[length:var(--text-subheadline)] transition-colors duration-[var(--duration-fast)] ${active ? 'font-[var(--weight-medium)] text-[var(--text-primary)]' : 'font-[var(--weight-regular)] text-[var(--text-tertiary)]'}`}
+      >
+        {id ? <span className={`transition-colors duration-[var(--duration-fast)] ${active ? 'text-[var(--text-secondary)]' : 'text-[var(--text-quaternary)]'}`}>{id} </span> : null}
+        <span>{rest}</span>
+      </span>
+      {onUnpin ? <TabUnpinButton title={title} onUnpin={onUnpin} /> : null}
+    </>
+  )
+}
+
 export function ChatPaneTitleBar({ active, title, employee, session, backTo, onClose, sessionActions, viewMode, cliModeAvailable, viewSwitchLocked, cliTitle }: ChatPaneTitleBarProps) {
   const [renamedTitle, setRenamedTitle] = useState<string>()
   useEffect(() => setRenamedTitle(undefined), [session.id, title])
   const visibleTitle = renamedTitle ?? title
-  const { id, rest } = splitTitleId(visibleTitle)
   const tabs = usePaneTabsStrip(session.id)
   const drag = usePaneTitleDrag(session.id)
+  const tabActions = usePaneTabActions(session.id)
 
-  return (
+  const bar = (
     <div
       data-testid="chat-pane-title-bar" data-chat-pane-titlebar={String(active)}
       {...drag}
@@ -193,26 +220,10 @@ export function ChatPaneTitleBar({ active, title, employee, session, backTo, onC
           <span className="max-w-[90px] truncate">{backTo.label}</span>
         </button>
       ) : null}
-      {tabs ?? (
-        <>
-          <span
-            aria-hidden
-            data-chat-pane-emoji
-            className={`shrink-0 leading-none transition-opacity duration-[var(--duration-fast)] ${active ? 'opacity-100' : 'opacity-50'}`}
-          >
-            {employee === TERMINAL_AVATAR ? '\u{1F5A5}\uFE0F' : emojiForName(employee)}
-          </span>
-          <span
-            title={visibleTitle}
-            data-chat-pane-title
-            className={`min-w-0 flex-1 truncate text-[length:var(--text-subheadline)] transition-colors duration-[var(--duration-fast)] ${active ? 'font-[var(--weight-medium)] text-[var(--text-primary)]' : 'font-[var(--weight-regular)] text-[var(--text-tertiary)]'}`}
-          >
-            {id ? <span className={`transition-colors duration-[var(--duration-fast)] ${active ? 'text-[var(--text-secondary)]' : 'text-[var(--text-quaternary)]'}`}>{id} </span> : null}
-            <span>{rest}</span>
-          </span>
-        </>
-      )}
+      {tabs ?? <LonePaneLabel active={active} employee={employee} title={visibleTitle} onUnpin={tabActions?.pinned ? tabActions.unpin : undefined} />}
       <PaneTitleActions title={visibleTitle} session={session} onClose={onClose} sessionActions={sessionActions} onRenamed={setRenamedTitle} viewMode={viewMode} cliModeAvailable={cliModeAvailable} viewSwitchLocked={viewSwitchLocked} cliTitle={cliTitle} active={active} hasStrip={tabs !== null} />
     </div>
   )
+  // With a strip the tabs carry their own menus; a lone tab's bar is its tab, so it carries this one.
+  return tabs === null ? <PaneTabMenu actions={tabActions}>{bar}</PaneTabMenu> : bar
 }

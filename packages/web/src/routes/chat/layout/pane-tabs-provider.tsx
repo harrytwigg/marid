@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
-import { PaneTabsContext, type PaneTabsBinding, type PaneTitleDrag } from '@/components/chat/pane-tabs-context'
+import { PaneTabsContext, type PaneTabActions, type PaneTabsBinding, type PaneTitleDrag } from '@/components/chat/pane-tabs-context'
+import { useOrg } from '@/hooks/use-employees'
 import { useSessions } from '@/hooks/use-sessions'
 import { safePaneTitle } from '@/components/chat/chat-pane-title-bar'
 import { paneTabHandlers, paneTabItems, selectTab, type PaneTabSession } from './pane-tab-ops'
@@ -7,6 +8,7 @@ import { PaneTabStrip } from './pane-tab-strip'
 import { closeSession, findGroup, focusedGroup, groupIdsByPaneKey, groupOfSession, hasTabbedGroup, isLastChatWithTabs, paneSessionOf, routeSessionOf, workingSetFromLayout, type LayoutGroup, type SplitLayout } from './split-layout'
 import { parseDocTabId } from './tab-kind'
 import { DocPane, DocPaneTitle } from './doc-pane'
+import { canCloseTab, isPinned } from './pinned-tabs'
 import { paneTabDragProps } from './pane-tab-dnd'
 import type { SplitLayoutControls } from './use-split-working-set'
 
@@ -17,14 +19,33 @@ interface SessionRow {
   status?: unknown
 }
 
-function tabSession(row: SessionRow | undefined): PaneTabSession | undefined {
+function tabSession(row: SessionRow | undefined, employeeNames: ReadonlyMap<string, string>): PaneTabSession | undefined {
   if (!row) return undefined
   const status = row.status === 'running' || row.status === 'error' || row.status === 'waiting' ? row.status : undefined
+  const employee = typeof row.employee === 'string' ? row.employee : undefined
   return {
-    title: safePaneTitle(row.title) ?? 'Chat',
-    employee: typeof row.employee === 'string' ? row.employee : undefined,
+    title: safePaneTitle(row.title) ?? '',
+    employee,
+    employeeName: employee ? employeeNames.get(employee) ?? employee : undefined,
     status,
   }
+}
+
+/** The roster's display names by employee name, for a chat tab that has no title of its own. */
+function useEmployeeNames(): ReadonlyMap<string, string> {
+  const { data: org } = useOrg()
+  return useMemo(() => new Map((org?.employees ?? []).map((employee) => [employee.name, employee.displayName || employee.name])), [org])
+}
+
+/** What a tab's menu and a lone title bar's pin glyph act on, by tab id; null for a tab not in the layout. */
+function paneTabActions(layout: SplitLayout, split: SplitLayoutControls, closeTab: (tabId: string) => void) {
+  return (tabId: string): PaneTabActions | null => (groupOfSession(layout, tabId) ? {
+    pinned: isPinned(layout, tabId),
+    canClose: canCloseTab(layout, tabId),
+    pin: () => split.pin(tabId),
+    unpin: () => split.unpin(tabId),
+    close: () => closeTab(tabId),
+  } : null)
 }
 
 interface PaneTabsProviderProps {
@@ -74,7 +95,7 @@ function isRouteChat(layout: SplitLayout, owner: LayoutGroup, sessionId: string)
 function useCloseTab(split: SplitLayoutControls, onSelect: (sessionId: string) => void) {
   const { layout } = split
   return useCallback((sessionId: string) => {
-    if (isLastChatWithTabs(layout, sessionId)) return
+    if (!canCloseTab(layout, sessionId)) return
     const owner = groupOfSession(layout, sessionId)
     // The route is the focused pane's chat, which a document shown over it does not change. With a
     // pane that has no chat focused it is the working set's chat, so the route is that one's.
@@ -106,7 +127,7 @@ function titleDragFor(group: LayoutGroup, tabId: string): PaneTitleDrag {
 }
 
 /** A document-only pane, by its pane key: under its strip, or alone under a title bar that drags it. */
-function docPane(layout: SplitLayout, paneKey: string, groupStrip: (group: LayoutGroup) => ReactNode, closeTab: (tabId: string) => void) {
+function docPane(layout: SplitLayout, paneKey: string, groupStrip: (group: LayoutGroup) => ReactNode, closeTab: (tabId: string) => void, tabActions: (tabId: string) => PaneTabActions | null) {
   const group = findGroup(layout, groupIdsByPaneKey(layout).get(paneKey) ?? '')
   const doc = group ? parseDocTabId(group.activeTab) : null
   if (!group || !doc) return null
@@ -114,7 +135,7 @@ function docPane(layout: SplitLayout, paneKey: string, groupStrip: (group: Layou
   const drag = titleDragFor(group, group.activeTab)
   const header = group.tabs.length >= 2
     ? groupStrip(group)
-    : <DocPaneTitle doc={doc} active={active} drag={drag} onClose={() => closeTab(group.activeTab)} />
+    : <DocPaneTitle doc={doc} active={active} drag={drag} actions={tabActions(group.activeTab)} onClose={() => closeTab(group.activeTab)} />
   return <DocPane doc={doc} header={header} active={active} />
 }
 
@@ -126,6 +147,7 @@ function docPane(layout: SplitLayout, paneKey: string, groupStrip: (group: Layou
 export function PaneTabsProvider({ split, onSelect, onCloseAll, children }: PaneTabsProviderProps) {
   const sessions = useSessions().data as SessionRow[] | undefined
   const byId = useMemo(() => new Map((sessions ?? []).map((row) => [String(row.id ?? ''), row])), [sessions])
+  const employeeNames = useEmployeeNames()
   const { layout } = split
 
   const keep = useKeepRequests(layout, split.keep)
@@ -133,11 +155,12 @@ export function PaneTabsProvider({ split, onSelect, onCloseAll, children }: Pane
   const selectChosenTab = useSelectTab(split, onSelect)
 
   const binding = useMemo<PaneTabsBinding>(() => {
-    const ops = { layout, place: split.place, close: closeTab, select: selectChosenTab, keep: split.keep }
+    const ops = { layout, place: split.place, close: closeTab, select: selectChosenTab, keep: split.keep, pin: split.pin, unpin: split.unpin }
+    const tabActions = paneTabActions(layout, split, closeTab)
     const groupStrip = (group: LayoutGroup) => (
       <PaneTabStrip
         groupId={group.id}
-        tabs={paneTabItems(group, (id) => tabSession(byId.get(id))).map((tab) => (isLastChatWithTabs(layout, tab.id) ? { ...tab, closable: false } : tab))}
+        tabs={paneTabItems(group, (id) => tabSession(byId.get(id), employeeNames), layout.pinned).map((tab) => (isLastChatWithTabs(layout, tab.id) ? { ...tab, closable: false } : tab))}
         activeId={group.activeTab}
         focused={layout.focusedGroupId === group.id}
         onCloseAll={onCloseAll}
@@ -148,7 +171,10 @@ export function PaneTabsProvider({ split, onSelect, onCloseAll, children }: Pane
       hasStrips: hasTabbedGroup(layout),
       closeAll: onCloseAll,
       keep,
-      closable: (sessionId) => !isLastChatWithTabs(layout, sessionId),
+      closable: (sessionId) => canCloseTab(layout, sessionId),
+      pin: split.pin,
+      unpin: split.unpin,
+      tabActions,
       shownDoc: (paneTabId) => {
         const group = groupOfSession(layout, paneTabId)
         if (!group || paneSessionOf(group, layout.focusHistory) !== paneTabId) return null
@@ -162,9 +188,9 @@ export function PaneTabsProvider({ split, onSelect, onCloseAll, children }: Pane
         const group = groupOfSession(layout, paneTabId)
         return group && group.tabs.length === 1 ? titleDragFor(group, paneTabId) : null
       },
-      renderDocPane: (paneKey) => docPane(layout, paneKey, groupStrip, closeTab),
+      renderDocPane: (paneKey) => docPane(layout, paneKey, groupStrip, closeTab, tabActions),
     }
-  }, [byId, closeTab, keep, layout, onCloseAll, selectChosenTab, split.keep, split.place])
+  }, [byId, closeTab, employeeNames, keep, layout, onCloseAll, selectChosenTab, split])
 
   return <PaneTabsContext.Provider value={binding}>{children}</PaneTabsContext.Provider>
 }

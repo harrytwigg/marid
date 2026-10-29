@@ -6,15 +6,34 @@ import { isNewChatTabId, isTodosTabId, parseTodoTabId, TODOS_TAB_TITLE } from '.
 
 /** What the strip shows for one session; supplied by whoever knows the session list. */
 export interface PaneTabSession {
+  /** The session's own title; empty while it has none, which the tab shows as its employee's name. */
   title: string
   employee?: string
+  /** The employee's display name, where the roster has it. */
+  employeeName?: string
   status?: PaneTabItem['status']
 }
 
 export type PaneTabSessionLookup = (sessionId: string) => PaneTabSession | undefined
 
-/** A group's tab list as strip items. A session the lookup does not know yet still gets a tab. */
-export function paneTabItems(group: LayoutGroup, lookup: PaneTabSessionLookup): PaneTabItem[] {
+/** A chat's tab: its title, else its employee's name, else "Chat"; the tooltip adds the employee. */
+function chatTabItem(sessionId: string, session: PaneTabSession | undefined, preview: boolean): PaneTabItem {
+  const title = session?.title || session?.employeeName || 'Chat'
+  return { id: sessionId, employee: session?.employee, status: session?.status, title, tooltip: chatTooltip(title, session?.employeeName), preview: preview || undefined }
+}
+
+/** "<title> — <employee>", or nothing to add when the title already is the employee's name. */
+function chatTooltip(title: string, employeeName: string | undefined): string | undefined {
+  return employeeName && employeeName !== title ? `${title} — ${employeeName}` : undefined
+}
+
+/** A group's tab list as strip items; the pinned ones are marked, and none of them can be closed. A
+ * session the lookup does not know yet still gets a tab. */
+export function paneTabItems(group: LayoutGroup, lookup: PaneTabSessionLookup, pinned: readonly string[] = []): PaneTabItem[] {
+  return paneTabItemsOf(group, lookup).map((item) => (pinned.includes(item.id) ? { ...item, pinned: true, closable: false } : item))
+}
+
+function paneTabItemsOf(group: LayoutGroup, lookup: PaneTabSessionLookup): PaneTabItem[] {
   return group.tabs.map((sessionId) => {
     const file = parseFileTabId(sessionId)
     if (file) return { id: sessionId, kind: 'file', title: fileTabTitle(file.path), filePath: file.path }
@@ -25,8 +44,7 @@ export function paneTabItems(group: LayoutGroup, lookup: PaneTabSessionLookup): 
     if (subagent) return { id: sessionId, kind: 'subagent', title: subagentTabTitle(subagent) }
     if (isTodosTabId(sessionId)) return { id: sessionId, kind: 'todos', title: TODOS_TAB_TITLE }
     if (isNewChatTabId(sessionId)) return { id: sessionId, kind: 'new-chat', title: 'New chat' }
-    const session = lookup(sessionId)
-    return { id: sessionId, ...session, title: session?.title || 'Chat', preview: group.previewTab === sessionId || undefined }
+    return chatTabItem(sessionId, lookup(sessionId), group.previewTab === sessionId)
   })
 }
 
@@ -60,9 +78,11 @@ export interface PaneTabOps {
   /** Makes a tab the shown one, and its group's chat the route's (resolved on `after`, if given). */
   select: (sessionId: string, after?: SplitLayout) => void
   keep: (sessionId: string) => void
+  pin: (sessionId: string) => void
+  unpin: (sessionId: string) => void
 }
 
-type StripHandlers = Pick<PaneTabStripProps, 'onActivate' | 'onClose' | 'onReorder' | 'onMoveIn' | 'onDropSession' | 'onKeep'>
+type StripHandlers = Pick<PaneTabStripProps, 'onActivate' | 'onClose' | 'onReorder' | 'onMoveIn' | 'onDropSession' | 'onKeep' | 'onPin' | 'onUnpin'>
 
 /**
  * The strip's callbacks for one group. Re-ordering, moving between groups and adding a sidebar chat
@@ -81,5 +101,7 @@ export function paneTabHandlers(groupId: string, ops: PaneTabOps): StripHandlers
     onMoveIn: (_fromGroupId, sessionId, index) => place(sessionId, index),
     onDropSession: place,
     onKeep: ops.keep,
+    onPin: ops.pin,
+    onUnpin: ops.unpin,
   }
 }
