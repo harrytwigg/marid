@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { PaneTabsContext, type PaneTabActions, type PaneTabsBinding, type PaneTitleDrag } from '@/components/chat/pane-tabs-context'
 import { useOrg } from '@/hooks/use-employees'
-import { useSessions } from '@/hooks/use-sessions'
+import { useSessions, useUpdateSession } from '@/hooks/use-sessions'
 import { safePaneTitle } from '@/components/chat/chat-pane-title-bar'
 import { paneTabHandlers, paneTabItems, selectTab, type PaneTabSession } from './pane-tab-ops'
 import { PaneTabStrip } from './pane-tab-strip'
@@ -31,20 +31,34 @@ function tabSession(row: SessionRow | undefined, employeeNames: ReadonlyMap<stri
   }
 }
 
+/** The sessions list by id, for the tabs that show a session's title and status. */
+function useSessionsById(): ReadonlyMap<string, SessionRow> {
+  const sessions = useSessions().data as SessionRow[] | undefined
+  return useMemo(() => new Map((sessions ?? []).map((row) => [String(row.id ?? ''), row])), [sessions])
+}
+
 /** The roster's display names by employee name, for a chat tab that has no title of its own. */
 function useEmployeeNames(): ReadonlyMap<string, string> {
   const { data: org } = useOrg()
   return useMemo(() => new Map((org?.employees ?? []).map((employee) => [employee.name, employee.displayName || employee.name])), [org])
 }
 
+/** Saves a chat tab's new title to its session; the sessions list shows it at once and the sidebar with it. */
+function useRenameChat() {
+  const { mutateAsync: updateSession } = useUpdateSession()
+  return useCallback((sessionId: string, title: string) => updateSession({ id: sessionId, data: { title } }).then(() => undefined), [updateSession])
+}
+
 /** What a tab's menu and a lone title bar's pin glyph act on, by tab id; null for a tab not in the layout. */
-function paneTabActions(layout: SplitLayout, split: SplitLayoutControls, closeTab: (tabId: string) => void) {
+function paneTabActions(layout: SplitLayout, split: SplitLayoutControls, closeTab: (tabId: string) => void, renameChat: (sessionId: string, title: string) => Promise<void>) {
   return (tabId: string): PaneTabActions | null => (groupOfSession(layout, tabId) ? {
     pinned: isPinned(layout, tabId),
     canClose: canCloseTab(layout, tabId),
     pin: () => split.pin(tabId),
     unpin: () => split.unpin(tabId),
     close: () => closeTab(tabId),
+    // Only a chat's tab has a title of its own to change: it is its session's.
+    rename: isChatTabId(tabId) ? (title) => renameChat(tabId, title) : undefined,
   } : null)
 }
 
@@ -154,18 +168,18 @@ function docPane(layout: SplitLayout, paneKey: string, groupStrip: (group: Layou
  * which drags that tab as a strip would.
  */
 export function PaneTabsProvider({ split, onSelect, onCloseAll, onLeaveRoute, children }: PaneTabsProviderProps) {
-  const sessions = useSessions().data as SessionRow[] | undefined
-  const byId = useMemo(() => new Map((sessions ?? []).map((row) => [String(row.id ?? ''), row])), [sessions])
+  const byId = useSessionsById()
   const employeeNames = useEmployeeNames()
   const { layout } = split
 
   const keep = useKeepRequests(layout, split.keep)
   const closeTab = useCloseTab(split, onSelect, onLeaveRoute)
   const selectChosenTab = useSelectTab(split, onSelect)
+  const renameChat = useRenameChat()
 
   const binding = useMemo<PaneTabsBinding>(() => {
-    const ops = { layout, place: split.place, close: closeTab, select: selectChosenTab, keep: split.keep, pin: split.pin, unpin: split.unpin }
-    const tabActions = paneTabActions(layout, split, closeTab)
+    const ops = { layout, place: split.place, close: closeTab, select: selectChosenTab, keep: split.keep, pin: split.pin, unpin: split.unpin, rename: renameChat }
+    const tabActions = paneTabActions(layout, split, closeTab, renameChat)
     const groupStrip = (group: LayoutGroup) => (
       <PaneTabStrip
         groupId={group.id}
@@ -199,7 +213,7 @@ export function PaneTabsProvider({ split, onSelect, onCloseAll, onLeaveRoute, ch
       },
       renderDocPane: (paneKey) => docPane(layout, paneKey, groupStrip, closeTab, tabActions),
     }
-  }, [byId, closeTab, employeeNames, keep, layout, onCloseAll, selectChosenTab, split])
+  }, [byId, closeTab, employeeNames, keep, layout, onCloseAll, renameChat, selectChosenTab, split])
 
   return <PaneTabsContext.Provider value={binding}>{children}</PaneTabsContext.Provider>
 }

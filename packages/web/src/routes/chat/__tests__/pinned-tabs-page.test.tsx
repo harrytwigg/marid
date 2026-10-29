@@ -100,7 +100,7 @@ describe('pinned tabs on the chat page', () => {
     await waitFor(() => expect(storedLayout().pinned).toEqual(['b']))
 
     fireEvent.contextMenu(bar(), { clientX: 20, clientY: 20 })
-    expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual(['Unpin tab'])
+    expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual(['Rename', 'Unpin tab'])
     fireEvent.click(screen.getByRole('menuitem', { name: 'Unpin tab' }))
     await waitFor(() => expect(storedLayout().pinned).toEqual([]))
   })

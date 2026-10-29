@@ -35,6 +35,7 @@ vi.mock('@/lib/todo-preview', () => ({
 vi.mock('@/hooks/use-employees', () => ({ useOrg: () => ({ data: { employees: [{ name: 'op', displayName: 'Operator' }] } }) }))
 
 vi.mock('@/hooks/use-sessions', () => ({
+  useUpdateSession: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined) }),
   useSessions: () => ({
     data: [
       { id: 'a', title: 'Alpha', employee: 'op', status: 'idle' },

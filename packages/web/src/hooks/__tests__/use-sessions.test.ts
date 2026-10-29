@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { QueryClient } from '@tanstack/react-query'
-import { mergeSessionsResponse, patchSessionBackgroundActivity, patchStoppedSession } from '../use-sessions'
+import { mergeSessionsResponse, patchRenamedSession, patchSessionBackgroundActivity, patchStoppedSession } from '../use-sessions'
 import { queryKeys } from '@/lib/query-keys'
 import type { SessionsResponse } from '@/lib/api'
 
@@ -173,5 +173,27 @@ describe('patchStoppedSession', () => {
       status: 'running',
       transportState: 'running',
     })
+  })
+})
+
+describe('patchRenamedSession', () => {
+  it('retitles only the renamed row immediately', () => {
+    const qc = new QueryClient()
+    qc.setQueryData(queryKeys.sessions.all, resp([session('a', { title: 'Old' }), session('b', { title: 'Other' })]))
+
+    patchRenamedSession(qc, 'a', 'New')
+
+    const data = qc.getQueryData<SessionsResponse>(queryKeys.sessions.all)!
+    expect(data.sessions.map((s) => s.title)).toEqual(['New', 'Other'])
+  })
+
+  it('leaves an unloaded list and an unknown id alone', () => {
+    const qc = new QueryClient()
+    patchRenamedSession(qc, 'a', 'New')
+    expect(qc.getQueryData(queryKeys.sessions.all)).toBeUndefined()
+    const loaded = resp([session('a', { title: 'Old' })])
+    qc.setQueryData(queryKeys.sessions.all, loaded)
+    patchRenamedSession(qc, 'zzz', 'New')
+    expect(qc.getQueryData(queryKeys.sessions.all)).toBe(loaded)
   })
 })

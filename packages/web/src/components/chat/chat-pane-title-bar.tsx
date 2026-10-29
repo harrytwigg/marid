@@ -1,7 +1,8 @@
 import { ChevronLeft, X } from '@/components/ui/icon'
 import { useEffect, useState } from 'react'
-import { usePaneCloseAll, usePaneTabActions, usePaneTabsStrip, usePaneTitleDrag } from '@/components/chat/pane-tabs-context'
+import { usePaneCloseAll, type PaneTabActions, usePaneTabActions, usePaneTabsStrip, usePaneTitleDrag } from '@/components/chat/pane-tabs-context'
 import { TabUnpinButton, useTabPointMenu } from '@/routes/chat/layout/pane-tab-controls'
+import { TabRenameInput, useInlineRename } from '@/routes/chat/layout/tab-rename'
 import { CloseAllTabsButton } from '@/components/chat/close-all-tabs-button'
 import { ChatPaneSessionMenu } from '@/components/chat/chat-pane-session-menu'
 import type { PaneSessionActions } from '@/components/chat/pane-session-actions'
@@ -127,7 +128,7 @@ function PaneCloseAll({ active, hasStrip }: { active: boolean; hasStrip: boolean
   return <CloseAllTabsButton onClick={closeAll} />
 }
 
-function PaneTitleActions({ title, session, onClose, sessionActions, onRenamed, viewMode, cliModeAvailable, viewSwitchLocked, cliTitle, active, hasStrip }: Pick<ChatPaneTitleBarProps, 'title' | 'session' | 'onClose' | 'sessionActions' | 'viewMode' | 'cliModeAvailable' | 'viewSwitchLocked' | 'cliTitle'> & { onRenamed: (title: string) => void; active: boolean; hasStrip: boolean }) {
+function PaneTitleActions({ title, session, onClose, sessionActions, onRenamed, onStartRename, viewMode, cliModeAvailable, viewSwitchLocked, cliTitle, active, hasStrip }: Pick<ChatPaneTitleBarProps, 'title' | 'session' | 'onClose' | 'sessionActions' | 'viewMode' | 'cliModeAvailable' | 'viewSwitchLocked' | 'cliTitle'> & { onRenamed: (title: string) => void; onStartRename?: () => void; active: boolean; hasStrip: boolean }) {
   const stallNow = useStallClock(session.status === 'running')
   const status = getStatusDot(session, new Set([session.id]), false, stallNow)
   return (
@@ -140,6 +141,7 @@ function PaneTitleActions({ title, session, onClose, sessionActions, onRenamed, 
             session={session}
             actions={sessionActions}
             onRenamed={onRenamed}
+            onStartRename={onStartRename}
             viewMode={viewMode ?? 'chat'}
             cliModeAvailable={cliModeAvailable ?? false}
             viewSwitchLocked={viewSwitchLocked ?? false}
@@ -169,7 +171,7 @@ function PaneTitleActions({ title, session, onClose, sessionActions, onRenamed, 
 
 /** A lone chat's label in its bar, where a strip's tab would be: its employee's emoji and its title, and the
  * pin glyph (which unpins it) when the tab is pinned. */
-function LonePaneLabel({ active, employee, title, onUnpin }: { active: boolean; employee: string; title: string; onUnpin?: () => void }) {
+function LonePaneLabel({ active, employee, title, onUnpin, rename }: { active: boolean; employee: string; title: string; onUnpin?: () => void; rename?: { onCommit: (title: string, byBlur: boolean) => void; onCancel: (byBlur: boolean) => void } }) {
   const { id, rest } = splitTitleId(title)
   return (
     <>
@@ -180,6 +182,7 @@ function LonePaneLabel({ active, employee, title, onUnpin }: { active: boolean; 
       >
         {employee === TERMINAL_AVATAR ? '\u{1F5A5}\uFE0F' : emojiForName(employee)}
       </span>
+      {rename ? <TabRenameInput value={title} onCommit={rename.onCommit} onCancel={rename.onCancel} className="text-[length:var(--text-subheadline)]" /> : (
       <span
         title={title}
         data-chat-pane-title
@@ -188,9 +191,22 @@ function LonePaneLabel({ active, employee, title, onUnpin }: { active: boolean; 
         {id ? <span className={`transition-colors duration-[var(--duration-fast)] ${active ? 'text-[var(--text-secondary)]' : 'text-[var(--text-quaternary)]'}`}>{id} </span> : null}
         <span>{rest}</span>
       </span>
+      )}
       {onUnpin ? <TabUnpinButton title={title} onUnpin={onUnpin} /> : null}
     </>
   )
+}
+
+/**
+ * A lone bar renames its chat in place; with a strip its tabs rename themselves, and outside the layout
+ * (no tab to speak for) the menu's prompt does. The new title shows at once, and a failed save puts the old one back.
+ */
+function useLoneRename(tabActions: PaneTabActions | null, setRenamedTitle: (title: string | undefined) => void) {
+  const save = tabActions?.rename
+  return useInlineRename(save ? (next) => {
+    setRenamedTitle(next)
+    return Promise.resolve(save(next)).catch(() => setRenamedTitle(undefined))
+  } : undefined)
 }
 
 export function ChatPaneTitleBar({ active, title, employee, session, backTo, onClose, sessionActions, viewMode, cliModeAvailable, viewSwitchLocked, cliTitle }: ChatPaneTitleBarProps) {
@@ -200,14 +216,15 @@ export function ChatPaneTitleBar({ active, title, employee, session, backTo, onC
   const tabs = usePaneTabsStrip(session.id)
   const drag = usePaneTitleDrag(session.id)
   const tabActions = usePaneTabActions(session.id)
+  const edit = useLoneRename(tabs === null ? tabActions : null, setRenamedTitle)
   // With a strip the tabs carry their own menus; a lone tab's bar is its tab, so it carries this one.
-  const tabMenu = useTabPointMenu(tabs === null ? tabActions : null)
+  const tabMenu = useTabPointMenu(tabs === null ? tabActions : null, edit.start)
 
   return (
     <>
       <div
         data-testid="chat-pane-title-bar" data-chat-pane-titlebar={String(active)}
-        {...drag}
+        {...(edit.renaming ? {} : drag)}
         onContextMenu={tabMenu.onContextMenu}
         className={`flex h-[34px] shrink-0 items-center gap-2 px-[8px] pl-[12px] transition-colors duration-[var(--duration-fast)] ${active ? 'bg-[var(--fill-secondary)]' : 'bg-transparent'}`}
       >
@@ -224,8 +241,8 @@ export function ChatPaneTitleBar({ active, title, employee, session, backTo, onC
             <span className="max-w-[90px] truncate">{backTo.label}</span>
           </button>
         ) : null}
-        {tabs ?? <LonePaneLabel active={active} employee={employee} title={visibleTitle} onUnpin={tabActions?.pinned ? tabActions.unpin : undefined} />}
-        <PaneTitleActions title={visibleTitle} session={session} onClose={onClose} sessionActions={sessionActions} onRenamed={setRenamedTitle} viewMode={viewMode} cliModeAvailable={cliModeAvailable} viewSwitchLocked={viewSwitchLocked} cliTitle={cliTitle} active={active} hasStrip={tabs !== null} />
+        {tabs ?? <LonePaneLabel active={active} employee={employee} title={visibleTitle} onUnpin={tabActions?.pinned ? tabActions.unpin : undefined} rename={edit.input} />}
+        <PaneTitleActions title={visibleTitle} session={session} onClose={onClose} sessionActions={sessionActions} onRenamed={setRenamedTitle} onStartRename={edit.start} viewMode={viewMode} cliModeAvailable={cliModeAvailable} viewSwitchLocked={viewSwitchLocked} cliTitle={cliTitle} active={active} hasStrip={tabs !== null} />
       </div>
       {tabMenu.menu}
     </>

@@ -22,7 +22,8 @@ import { closeAllUnpinned, closeUserTab, pinTab, unpinTab } from '../pinned-tabs
 import type { SplitLayoutControls } from '../use-split-working-set'
 
 vi.mock('@/hooks/use-employees', () => ({ useOrg: () => ({ data: { employees: [{ name: 'op', displayName: 'Operator' }] } }) }))
-vi.mock('@/hooks/use-sessions', () => ({ useSessions: () => ({ data: [{ id: 'a', title: 'Alpha' }, { id: 'b', title: 'Bravo' }] }) }))
+vi.mock('@/hooks/use-sessions', () => ({
+  useUpdateSession: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined) }), useSessions: () => ({ data: [{ id: 'a', title: 'Alpha' }, { id: 'b', title: 'Bravo' }] }) }))
 vi.mock('@/lib/todo-preview', () => ({ useTodoPreview: () => ({ data: undefined }) }))
 vi.mock('@/routes/todos/task-page/task-page', () => ({
   TaskView: ({ todoId }: { todoId: string }) => <div data-testid="todo-view">{todoId}</div>,
