@@ -6,6 +6,7 @@ import { TERMINAL_AVATAR } from '@/components/ui/employee-avatar'
 import { emojiForName } from '@/lib/emoji-pool'
 import { SESSION_WAITING_COLOR } from '@/lib/session-waiting'
 import { activeChatSessionDrag, hasChatSessionDrag, readChatSessionDrop } from '../chat-session-dnd'
+import { TabRenameInput, useInlineRename } from './tab-rename'
 import { PaneKindTabLabel } from './pane-kind-tab-label'
 import { PaneTabMenu, TabControls, endsPinnedRun, menuActions, sidewaysWheel, tabClassName, tabTooltip } from './pane-tab-controls'
 import type { PaneTabKind } from './tab-kind'
@@ -56,6 +57,8 @@ export interface PaneTabStripProps {
   /** Pin or unpin a tab: the buttons on it and its context menu. Without them the strip offers neither. */
   onPin?: (tabId: string) => void
   onUnpin?: (tabId: string) => void
+  /** Saves a new title for a chat tab (its session's); documents and new chats have none to change. Without it the strip offers no Rename. */
+  onRename?: (tabId: string, title: string) => void
   /** Whether this strip's group is the focused one; only its shown tab carries the top marker. */
   focused?: boolean
   /** Closes every open tab. Offered by the focused strip only: one bar carries the action. */
@@ -163,12 +166,13 @@ interface PaneTabProps {
   onKeep?: () => void
   onPin?: () => void
   onUnpin?: () => void
+  onRename?: (title: string) => void
   /** A pinned tab with an unpinned one after it carries the divider. */
   dividerAfter: boolean
   onKeyDown: (event: KeyboardEvent) => void
 }
 
-function PaneTabLabel({ tab, active }: { tab: PaneTabItem; active: boolean }) {
+function PaneTabLabel({ tab, active, rename }: { tab: PaneTabItem; active: boolean; rename?: { onCommit: (title: string) => void; onCancel: () => void } }) {
   const { id: numericId, rest } = splitTitleId(tab.title)
   const dot = tab.status ? STATUS_DOT[tab.status] : null
   return (
@@ -176,10 +180,12 @@ function PaneTabLabel({ tab, active }: { tab: PaneTabItem; active: boolean }) {
       <span aria-hidden className={`shrink-0 leading-none ${active ? 'opacity-100' : 'opacity-50'}`}>
         {tab.employee === TERMINAL_AVATAR ? '\u{1F5A5}\uFE0F' : emojiForName(tab.employee ?? 'chat')}
       </span>
-      <span data-pane-tab-title className={`min-w-0 flex-1 truncate ${tab.preview ? 'italic' : ''}`}>
-        {numericId ? <span data-pane-tab-number>{numericId} </span> : null}
-        {rest || 'Chat'}
-      </span>
+      {rename ? <TabRenameInput value={tab.title} onCommit={rename.onCommit} onCancel={rename.onCancel} /> : (
+        <span data-pane-tab-title className={`min-w-0 flex-1 truncate ${tab.preview ? 'italic' : ''}`}>
+          {numericId ? <span data-pane-tab-number>{numericId} </span> : null}
+          {rest || 'Chat'}
+        </span>
+      )}
       {dot ? <StatusDot color={dot.color} pulse={dot.pulse} title={dot.label} data-pane-tab-status={tab.status} className="size-1.5" /> : null}
     </>
   )
@@ -196,7 +202,8 @@ function tabFlags(tab: PaneTabItem, active: boolean, dropEdge: PaneTabProps['dro
   }
 }
 
-function PaneTab({ tab, groupId, active, focused, tabStop, dropEdge, dividerAfter, onActivate, onClose, onKeep, onPin, onUnpin, onKeyDown }: PaneTabProps) {
+function PaneTab({ tab, groupId, active, focused, tabStop, dropEdge, dividerAfter, onActivate, onClose, onKeep, onPin, onUnpin, onRename, onKeyDown }: PaneTabProps) {
+  const tabRef = useRef<HTMLDivElement>(null)
   // Middle-click closes; suppress the browser's autoscroll on mousedown.
   const onMouseDown = (event: MouseEvent) => {
     if (event.button !== 1) return
@@ -204,15 +211,22 @@ function PaneTab({ tab, groupId, active, focused, tabStop, dropEdge, dividerAfte
     event.stopPropagation()
     if (tab.closable !== false) onClose()
   }
-  const actions = menuActions(tab, { onPin, onUnpin, onClose })
+  const actions = menuActions(tab, { onPin, onUnpin, onClose, onRename })
+  // Ending an edit hands focus back to the tab, whose arrows and menu key the keyboard goes on with.
+  const edit = useInlineRename(actions?.rename, () => tabRef.current?.focus())
+  const onTabKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'F2' && edit.start && event.target === event.currentTarget) { event.preventDefault(); edit.start() }
+    else onKeyDown(event)
+  }
   return (
-    <PaneTabMenu actions={actions}>
+    <PaneTabMenu actions={actions} onRename={edit.start}>
       <div
+        ref={tabRef}
         role="tab"
         id={`pane-tab-${groupId}-${tab.id}`}
         aria-selected={active}
         tabIndex={tabStop ? 0 : -1}
-        draggable
+        draggable={!edit.renaming}
         data-pane-tab-id={tab.id}
         data-pane-tab-kind={tab.kind}
         data-pinned-end={dividerAfter ? 'true' : undefined}
@@ -222,11 +236,11 @@ function PaneTab({ tab, groupId, active, focused, tabStop, dropEdge, dividerAfte
         onClick={onActivate}
         onDoubleClick={tab.preview ? onKeep : undefined}
         onMouseDown={onMouseDown}
-        onKeyDown={onKeyDown}
+        onKeyDown={onTabKeyDown}
         className={tabClassName(tab, active, dividerAfter)}
       >
         {active && focused ? <span aria-hidden data-pane-tab-marker className="absolute inset-x-0 top-0 h-[2px] bg-[var(--text-primary)]" /> : null}
-        {tab.kind ? <PaneKindTabLabel kind={tab.kind} title={tab.title} active={active} /> : <PaneTabLabel tab={tab} active={active} />}
+        {tab.kind ? <PaneKindTabLabel kind={tab.kind} title={tab.title} active={active} /> : <PaneTabLabel tab={tab} active={active} rename={edit.input} />}
         <TabControls tab={tab} active={active} onClose={onClose} onPin={onPin} onUnpin={onUnpin} />
       </div>
     </PaneTabMenu>
@@ -258,7 +272,7 @@ function handleTabKey(
 }
 
 export function PaneTabStrip(props: PaneTabStripProps) {
-  const { groupId, tabs, activeId, onActivate, onClose, onKeep, onPin, onUnpin, onCloseAll } = props
+  const { groupId, tabs, activeId, onActivate, onClose, onKeep, onPin, onUnpin, onRename, onCloseAll } = props
   const listRef = useRef<HTMLDivElement>(null)
   const drop = useStripDrop(listRef, props)
   const setFocusId = useTabVisibility(listRef, activeId, tabs)
@@ -296,6 +310,7 @@ export function PaneTabStrip(props: PaneTabStripProps) {
             onKeep={onKeep ? () => onKeep(tab.id) : undefined}
             onPin={onPin ? () => onPin(tab.id) : undefined}
             onUnpin={onUnpin ? () => onUnpin(tab.id) : undefined}
+            onRename={onRename ? (title) => onRename(tab.id, title) : undefined}
             dividerAfter={endsPinnedRun(tabs, index)}
             onKeyDown={(event) => onKeyDown(event, index)}
           />

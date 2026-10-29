@@ -21,6 +21,8 @@ interface ChatPaneSessionMenuProps {
   session: Session
   actions: PaneSessionActions
   onRenamed: (title: string) => void
+  /** Edits the title in the bar itself; without it Rename asks in a prompt. */
+  onStartRename?: () => void
   viewMode: ViewMode
   cliModeAvailable: boolean
   viewSwitchLocked: boolean
@@ -99,14 +101,14 @@ function PaneDeveloperItems({ session, actions }: Pick<ChatPaneSessionMenuProps,
   )
 }
 
-function PaneMenuContent({ title, session, actions, onRenamed }: Pick<ChatPaneSessionMenuProps, 'title' | 'session' | 'actions' | 'onRenamed'>) {
+function PaneMenuContent({ title, session, actions, onRenamed, onStartRename }: Pick<ChatPaneSessionMenuProps, 'title' | 'session' | 'actions' | 'onRenamed' | 'onStartRename'>) {
   return (
     <SessionRowMenu
       variant="dropdown"
       session={session}
       isPinned={actions.pinnedIds.has(session.id)}
       isArchived={Boolean(session.archivedAt)}
-      onRename={() => { void renamePane(title, session.id, actions, onRenamed) }}
+      onRename={() => { if (onStartRename) onStartRename(); else void renamePane(title, session.id, actions, onRenamed) }}
       onTogglePin={() => actions.togglePin(session.id)}
       onDuplicate={() => actions.duplicate(session.id)}
       onArchive={() => actions.archive(session.id, Boolean(session.archivedAt))}

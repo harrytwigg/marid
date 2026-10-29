@@ -7,7 +7,8 @@ import { closeSession, createSplitLayout, focusSession, openInFocusedGroup, keep
 import type { SplitLayoutControls } from '../use-split-working-set'
 
 vi.mock('@/hooks/use-employees', () => ({ useOrg: () => ({ data: { employees: [{ name: 'op', displayName: 'Operator' }] } }) }))
-vi.mock('@/hooks/use-sessions', () => ({ useSessions: () => ({ data: [] }) }))
+vi.mock('@/hooks/use-sessions', () => ({
+  useUpdateSession: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined) }), useSessions: () => ({ data: [] }) }))
 
 /** Three kept tabs in one group, `a` showing. */
 function threeTabs(): SplitLayout {

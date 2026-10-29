@@ -36,6 +36,8 @@ export interface PaneTabActions {
   pin: () => void
   unpin: () => void
   close: () => void
+  /** Saves a new title for the tab; absent for a tab that has no title of its own to change (a document, a new chat). */
+  rename?: (title: string) => void | Promise<void>
 }
 
 export interface PaneTitleDrag {

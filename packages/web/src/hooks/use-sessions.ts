@@ -106,6 +106,20 @@ export function patchStoppedSession(qc: QueryClient, id: string) {
   })
 }
 
+/** Show a rename immediately; the authoritative refetch follows. */
+export function patchRenamedSession(qc: QueryClient, id: string, title: string) {
+  qc.setQueryData<SessionsResponse>(queryKeys.sessions.all, (old) => {
+    if (!old) return old
+    let changed = false
+    const sessions = old.sessions.map((session) => {
+      if (sessionId(session) !== id) return session
+      changed = true
+      return { ...session, title }
+    })
+    return changed ? { ...old, sessions } : old
+  })
+}
+
 export function useSessions() {
   const qc = useQueryClient()
   return useQuery({
@@ -148,6 +162,7 @@ export function useUpdateSession() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: { title?: string } }) =>
       api.updateSession(id, data),
+    onMutate: ({ id, data }) => { if (data.title !== undefined) patchRenamedSession(qc, id, data.title) },
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.sessions.all }),
     onError: () => qc.invalidateQueries({ queryKey: queryKeys.sessions.all }),
   })

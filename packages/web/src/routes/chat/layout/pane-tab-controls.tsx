@@ -1,5 +1,5 @@
 import { useState, type MouseEvent, type ReactNode, type RefObject, type WheelEvent } from 'react'
-import { Pin, X } from '@/components/ui/icon'
+import { Pencil, Pin, X } from '@/components/ui/icon'
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger, PointMenu } from '@/components/ui/context-menu'
 import { SESSION_MENU_CONTENT_CLASS, SESSION_MENU_ITEM_CLASS } from '@/components/chat/session-row-menu'
 import type { PaneTabActions } from '@/components/chat/pane-tabs-context'
@@ -62,10 +62,16 @@ export function PaneTitleTabButton({ title, actions, onClose }: { title: string;
   )
 }
 
-/** The items of a tab's menu: Pin tab / Unpin tab, and Close tab unless the tab cannot be closed. */
-function TabMenuContent({ actions }: { actions: PaneTabActions }) {
+/** The items of a tab's menu: Rename for a chat's, Pin tab / Unpin tab, and Close tab unless the tab cannot be closed. */
+function TabMenuContent({ actions, onRename }: { actions: PaneTabActions; onRename?: () => void }) {
   return (
     <ContextMenuContent className={SESSION_MENU_CONTENT_CLASS} aria-label="Tab menu">
+      {actions.rename && onRename ? (
+        <ContextMenuItem className={SESSION_MENU_ITEM_CLASS} onClick={onRename}>
+          <Pencil aria-hidden />
+          Rename
+        </ContextMenuItem>
+      ) : null}
       <ContextMenuItem className={SESSION_MENU_ITEM_CLASS} onClick={actions.pinned ? actions.unpin : actions.pin}>
         <Pin aria-hidden />
         {actions.pinned ? 'Unpin tab' : 'Pin tab'}
@@ -81,12 +87,12 @@ function TabMenuContent({ actions }: { actions: PaneTabActions }) {
 }
 
 /** A tab's context menu around the one element that opens it (a tab of a strip, which the keyboard can reach). */
-export function PaneTabMenu({ actions, children }: { actions: PaneTabActions | null; children: ReactNode }) {
+export function PaneTabMenu({ actions, onRename, children }: { actions: PaneTabActions | null; onRename?: () => void; children: ReactNode }) {
   if (!actions) return <>{children}</>
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-      <TabMenuContent actions={actions} />
+      <TabMenuContent actions={actions} onRename={onRename} />
     </ContextMenu>
   )
 }
@@ -96,14 +102,14 @@ export function PaneTabMenu({ actions, children }: { actions: PaneTabActions | n
  * so the bar keeps its place in the tree whether or not it has a menu (a strip replacing it, a tab
  * not yet in the layout) and nothing inside it remounts.
  */
-export function useTabPointMenu(actions: PaneTabActions | null): { onContextMenu?: (event: MouseEvent) => void; menu: ReactNode } {
+export function useTabPointMenu(actions: PaneTabActions | null, onRename?: () => void): { onContextMenu?: (event: MouseEvent) => void; menu: ReactNode } {
   const [point, setPoint] = useState<{ x: number; y: number } | null>(null)
   if (!actions) return { menu: null }
   return {
     onContextMenu: (event) => { event.preventDefault(); setPoint({ x: event.clientX, y: event.clientY }) },
     menu: point ? (
       <PointMenu point={point} onOpenChange={(open) => { if (!open) setPoint(null) }}>
-        <TabMenuContent actions={actions} />
+        <TabMenuContent actions={actions} onRename={onRename} />
       </PointMenu>
     ) : null,
   }
@@ -125,10 +131,11 @@ function TabCloseButton({ title, active, onClose }: { title: string; active: boo
   )
 }
 
-/** What the tab's context menu acts on; none when the strip was given no way to pin. */
-export function menuActions(tab: PaneTabItem, { onPin, onUnpin, onClose }: { onPin?: () => void; onUnpin?: () => void; onClose: () => void }): PaneTabActions | null {
+/** What the tab's context menu acts on; none when the strip was given no way to pin. A chat's tab can be renamed when the strip can. */
+export function menuActions(tab: PaneTabItem, { onPin, onUnpin, onClose, onRename }: { onPin?: () => void; onUnpin?: () => void; onClose: () => void; onRename?: (title: string) => void }): PaneTabActions | null {
   if (!onPin || !onUnpin) return null
-  return { pinned: tab.pinned === true, canClose: tab.closable !== false, pin: onPin, unpin: onUnpin, close: onClose }
+  const rename = onRename && !tab.kind ? onRename : undefined
+  return { pinned: tab.pinned === true, canClose: tab.closable !== false, pin: onPin, unpin: onUnpin, close: onClose, rename }
 }
 
 export function tabTooltip(tab: PaneTabItem): string {

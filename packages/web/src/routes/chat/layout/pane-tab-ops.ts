@@ -80,9 +80,11 @@ export interface PaneTabOps {
   keep: (sessionId: string) => void
   pin: (sessionId: string) => void
   unpin: (sessionId: string) => void
+  /** Saves a chat tab's new title to its session. A strip has nowhere to show a failed save: the list refetches and the tab shows the title the session has. */
+  rename?: (sessionId: string, title: string) => void | Promise<void>
 }
 
-type StripHandlers = Pick<PaneTabStripProps, 'onActivate' | 'onClose' | 'onReorder' | 'onMoveIn' | 'onDropSession' | 'onKeep' | 'onPin' | 'onUnpin'>
+type StripHandlers = Pick<PaneTabStripProps, 'onActivate' | 'onClose' | 'onReorder' | 'onMoveIn' | 'onDropSession' | 'onKeep' | 'onPin' | 'onUnpin' | 'onRename'>
 
 /**
  * The strip's callbacks for one group. Re-ordering, moving between groups and adding a sidebar chat
@@ -103,5 +105,6 @@ export function paneTabHandlers(groupId: string, ops: PaneTabOps): StripHandlers
     onKeep: ops.keep,
     onPin: ops.pin,
     onUnpin: ops.unpin,
+    onRename: ops.rename ? (sessionId, title) => { void Promise.resolve(ops.rename?.(sessionId, title)).catch(() => {}) } : undefined,
   }
 }
