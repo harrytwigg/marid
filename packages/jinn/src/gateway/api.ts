@@ -239,7 +239,7 @@ import { NAMES, currentInstanceName } from "../shared/codename.js";
 import { isToolCallMarker, readHookSessionId, wireHeader } from "../shared/wire-names.js";
 import { readWriteOrigin, writeDetail, WRITE_ORIGIN_HEADER } from "../work-items/origin.js";
 import { workItemActor, workItemActorEmployee, type WorkItemCaller } from "./work-item-arming.js";
-import { DISPATCH_PRESSED_BY_META_KEY, authorizeAssignOverSubTasks, authorizeWorkItemDelegation, authorizeWorkItemOwnerManagerOrRoot } from "./work-item-authority.js";
+import { DISPATCH_PRESSED_BY_META_KEY, authorizeAssignOverSubTasks, authorizeWorkItemDelegation, authorizeWorkItemOwnerManagerOrRoot, isSpentDispatcher, SPENT_DISPATCHER_MESSAGE_REFUSAL } from "./work-item-authority.js";
 import { fullWorkItemPayload, openWorkItemPayload, workItemPagePayload, workItemTreePayload, workItemTreesPayload } from "./work-item-payload.js";
 import { TodoDepartmentNotAllowedError } from "../shared/todo-departments-config.js";
 import { DepartmentArchivedError, isDepartmentArchived } from "../work-items/department-archive.js";
@@ -3913,6 +3913,11 @@ export async function handleApiRequest(
         const caller = getSession(msgCallerId);
         if (!caller) {
           return badRequest(res, `unknown caller session "${msgCallerId}" — agent-initiated sends need a live caller session`);
+        }
+        if (isSpentDispatcher(caller)) {
+          res.writeHead(403, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: SPENT_DISPATCHER_MESSAGE_REFUSAL }));
+          return;
         }
         const plan = prepareLateralSend({
           caller,

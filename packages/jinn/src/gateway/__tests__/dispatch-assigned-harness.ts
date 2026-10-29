@@ -180,6 +180,11 @@ function toolCallHeaders(callerSessionId: string): Record<string, string> {
   };
 }
 
+/** `send_to_session`, as the given session. */
+export function messageAs(callerSessionId: string, targetSessionId: string, message: string) {
+  return call("POST", `/api/sessions/${targetSessionId}/message`, { message }, toolCallHeaders(callerSessionId));
+}
+
 /** `delegate_task` onto an existing Todo, as the given session. */
 export function delegate(callerSessionId: string, workItemId: string, employee: string) {
   return call(

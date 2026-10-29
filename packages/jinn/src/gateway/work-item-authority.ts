@@ -207,6 +207,31 @@ function isDispatcherStartedFor(session: Session, item: WorkItem): boolean {
     && !!session.sessionKey?.startsWith(todoDispatcherSessionKeyPrefix(item.id));
 }
 
+/** What `send_to_session` answers a Dispatcher that has already handed its Todo on. */
+export const SPENT_DISPATCHER_MESSAGE_REFUSAL = "this Dispatcher has already handed its Todo on, so it takes no further part in it: "
+  + "it may not message the delegate or any other session. End your turn; a fresh start is the operator's Dispatch.";
+
+/**
+ * A Dispatcher that has done its one job: the gateway started it on a Todo and
+ * it has handed that Todo on. From then on the Todo belongs to the delegate and
+ * the operator, who may be settling it in chat with the delegate this very
+ * minute, and the Dispatcher takes no further part: nothing it did not choose
+ * wakes it (`notifyParentSession` skips it), and it may message no session.
+ * The one exception is a hand-off that never reached its engine, which the
+ * Dispatcher may retry once and so must hear about.
+ *
+ * Only a fresh press of Dispatch starts anything on the Todo again, and that
+ * is a new Dispatcher session, not this one waking.
+ */
+export function isSpentDispatcher(session: Session | undefined): boolean {
+  if (!session || session.employee !== TODO_DISPATCHER_NAME || !session.workItemId) return false;
+  const item = getWorkItem(session.workItemId);
+  return !!item
+    && isDispatcherStartedFor(session, item)
+    && dispatcherHasHandedOff(session.id, item)
+    && !handedOffStillborn(session.id, item);
+}
+
 /**
  * The refusal for a Dispatcher on its own Todo, with the way on.
  *
@@ -214,15 +239,10 @@ function isDispatcherStartedFor(session: Session, item: WorkItem): boolean {
  * asked for: delegate_task is still open to it, and a refusal that read as
  * spent would send it to block a Todo it could route.
  *
- * Once the hand-off is spent, its delegate is its child, so a delegate that
- * stopped before finishing reports to it, and the Dispatcher is woken holding
- * a Todo it may no longer route. Starting afresh on top of whatever that
- * delegate did is the operator's call. Resuming the delegate's own session is
- * not: that keeps the work, and the delegate is the Dispatcher's child to
- * message. A bare "not its owner" sent Dispatchers hunting for another session
- * to do it for them, which has no standing either. The delegate is named only
- * while the Todo still sits with it: after a reassignment, resuming it would
- * restart work the operator moved elsewhere.
+ * Once the hand-off is spent the Dispatcher is done with the Todo: its delegate
+ * is its child, but a delegate that stopped, or a chat the operator is having
+ * with it, is not the Dispatcher's to steer. It is told to stop rather than
+ * to resume the delegate, and a fresh start is the operator's Dispatch.
  */
 function dispatcherRefusal(callerId: string, session: Session, item: WorkItem, action: string): { ok: false; status: 403; error: string } {
   if (isDispatcherRoutingTodo(session, item) || handedOffStillborn(callerId, item)) {
@@ -242,17 +262,11 @@ function dispatcherRefusal(callerId: string, session: Session, item: WorkItem, a
         + `so it routes the Todo and this one cannot ${action} it. Leave the routing to that Dispatcher.`,
     };
   }
-  const delegate = listSessionsByWorkItem(item.id)
-    .filter((attempt) => isExecutionAttempt(attempt) && attempt.parentSessionId === callerId)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))[0];
-  const resume = delegate && delegate.employee === item.assignee
-    ? ` Its delegate is session ${delegate.id} (${delegate.employee}, ${delegate.status}): `
-      + `to carry on after it stopped, resume it with send_to_session { sessionId: "${delegate.id}" }, which keeps the work it did.`
-    : "";
   return {
     ok: false,
     status: 403,
-    error: `this Dispatcher's hand-off is spent: it already handed Todo ${item.id} on, and cannot ${action} it again.${resume} `
+    error: `this Dispatcher's hand-off is spent: it already handed Todo ${item.id} on, and cannot ${action} it again. `
+      + `The Todo belongs to its delegate and the operator now: do not message the delegate, comment on the Todo or start it again, and end your turn. `
       + `A fresh start is the operator's call: they press Dispatch on Todo ${item.id}.`,
   };
 }

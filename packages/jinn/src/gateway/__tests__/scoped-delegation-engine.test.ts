@@ -325,7 +325,7 @@ describe("a delegate refused before its engine ever ran", () => {
 
     expect(again.status).toBe(403);
     expect(again.body.error).toMatch(/this Dispatcher's hand-off is spent/);
-    // The refusal points at the recovery that keeps the work: the dead delegate's own session.
-    expect(again.body.error).toContain(`send_to_session { sessionId: "${dead.id}" }`);
+    // The Dispatcher is told to stand down, not to resume the dead delegate.
+    expect(again.body.error).not.toContain("send_to_session");
   });
 });
