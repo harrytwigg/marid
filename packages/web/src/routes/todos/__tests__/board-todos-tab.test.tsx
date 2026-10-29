@@ -196,6 +196,18 @@ describe("the Todos tab's board location", () => {
   })
 })
 
+describe("the Todos tab's board location with storage that only reads", () => {
+  it("still follows a board switch over a record already stored", async () => {
+    localStorage.setItem(TODOS_TAB_LOCATION_KEY, JSON.stringify({ version: 1, board: "platform", search: "" }))
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("quota") })
+    renderTab()
+    expect((await screen.findByTestId("board-switcher")).textContent).toContain("Platform")
+
+    await switchTo("board-menu-attention")
+    await waitFor(() => expect(screen.getByTestId("board-switcher").textContent).toContain("Attention"))
+  })
+})
+
 describe("a card in the Todos tab", () => {
   it("opens as a Todo tab where the layout can take one, and the pane does not take the click", async () => {
     rows.backlog = [compact("TSK-1", "backlog")]

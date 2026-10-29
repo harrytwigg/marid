@@ -29,7 +29,7 @@ const listeners = new Set<() => void>()
 
 function readRaw(): string | null {
   try {
-    return localStorage.getItem(TODOS_TAB_LOCATION_KEY) ?? memoryRaw
+    return memoryRaw ?? localStorage.getItem(TODOS_TAB_LOCATION_KEY)
   } catch {
     return memoryRaw
   }
