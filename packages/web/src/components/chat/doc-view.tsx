@@ -5,6 +5,8 @@ const FileView = lazy(() => import('@/components/chat/file-view').then((m) => ({
 // The task page's own chunk, so the chat pays for it only once a Todo tab opens.
 const SubagentChatView = lazy(() => import('@/components/chat/subagent-chat-view'))
 const TaskView = lazy(() => import('@/routes/todos/task-page/task-page').then((m) => ({ default: m.TaskView })))
+// The Todos board's own chunk, for the same reason.
+const TodosTabView = lazy(() => import('@/routes/todos/board/todos-tab-view'))
 
 /** A document tab's body, wherever it is shown: over its group's chat, or in a pane of its own. A Todo
  *  is the full Todo, as its page shows it. */
@@ -14,6 +16,7 @@ export function DocView({ doc }: { doc: DocTabRef }) {
     // Keyed, so the next document shown here starts clean rather than inheriting a failure.
     <DocErrorBoundary key={key} kind={doc.kind}>
       <Suspense fallback={<div className="flex-1" />}>
+        {doc.kind === 'todos' ? <TodosTabView /> : null}
         {doc.kind === 'todo' ? <TaskView todoId={doc.todoId} embedded /> : null}
         {doc.kind === 'file' ? <FileView path={doc.file.path} sessionId={doc.file.sessionId} embedded /> : null}
         {doc.kind === 'subagent' ? <SubagentChatView sessionId={doc.subagent.sessionId} agent={{ id: doc.subagent.agentId, description: doc.subagent.description, agentType: doc.subagent.agentType }} /> : null}
