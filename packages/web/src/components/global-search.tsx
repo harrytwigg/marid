@@ -16,9 +16,11 @@ import { recentRows, resultRows, rowTarget, type SearchRow } from "./global-sear
 import { useCommandMode } from "./global-search/use-command"
 import { useGlobalSearch } from "./global-search/use-global-search"
 import { useSearchKeyboard } from "./global-search/use-search-keyboard"
+import { openSearchResult } from "./global-search/static-pages"
 import { useTodoWorkbench } from "./global-search/use-todo-workbench"
 import { activatePrimary, commandFor, parseCommand, type Verb } from "./global-search/verbs"
 import { PRODUCT_NAME } from "@/lib/brand"
+import { useOpenTodosTab } from "@/components/chat/file-open-context"
 
 // The palette stays a module rather than becoming `global-search/index.tsx`, so
 // `import("./global-search")` and every `@/components/global-search` specifier
@@ -59,6 +61,7 @@ export function GlobalSearch({ initialOpen = false, initialScope, initialQuery }
   const [selected, setSelected] = useState(0)
   const [recents, setRecents] = useState<RecentItem[]>([])
   const goTo = useNavigate()
+  const openTodosTab = useOpenTodosTab()
 
   const changeOpen = useCallback((next: boolean) => {
     setOpen(next)
@@ -107,8 +110,8 @@ export function GlobalSearch({ initialOpen = false, initialScope, initialQuery }
     const recent = rowTarget(target)
     saveRecent(recent)
     changeOpen(false)
-    goTo(recent.href)
-  }, [changeOpen, goTo])
+    openSearchResult(recent.href, { openTodosTab, navigate: goTo })
+  }, [changeOpen, goTo, openTodosTab])
 
   const toggleLiteral = useCallback(() => setLiteral(wasLiteral => !wasLiteral), [])
 

@@ -12,7 +12,7 @@ import { startKeyboardInset } from './platform'
 import { RouteLoading } from './components/route-loading'
 import { RouteFailure } from './components/route-failure'
 import { AriaRouter } from './components/ui/aria-router'
-import { TodosIndexRedirect, todosIndexLoader } from './routes/todos/board/todos-index-redirect'
+import { TodosBoardRedirect, TodosIndexRedirect, todosBoardLoader, todosIndexLoader } from './routes/todos/board/todos-index-redirect'
 import { LegacyChatRedirect } from './routes/chat/legacy-chat-redirect'
 import { useFeatures } from './hooks/use-features'
 import { APP_ROUTES, type AppRouteId } from './lib/app-routes'
@@ -28,7 +28,6 @@ let PairingScreen: ComponentType<Record<string, never>> | undefined
 const ChatPage = lazyRoute(() => import('./routes/chat/page'), 'chat')
 const CronPage = lazyRoute(() => import('./routes/cron/page'), 'cron')
 const CronDetailPage = lazyRoute(() => import('./routes/cron/detail'), 'cron-detail')
-const TodoBoardPage = lazyRoute(() => import('./routes/todos/board/board-page'), 'todo-board')
 const TaskPage = lazyRoute(() => import('./routes/todos/task-page/task-page'), 'todo-task')
 const NotesPage = lazyRoute(() => import('./routes/notes/page'), 'notes')
 const LogsPage = lazyRoute(() => import('./routes/logs/page'), 'logs')
@@ -46,7 +45,10 @@ const TalkOrbHarnessPage = lazyRoute(() => import('./routes/talk-orb-harness/pag
 
 registerRoutePrefetch('/', ChatPage.prefetch)
 registerRoutePrefetch('/cron', CronPage.prefetch)
-registerRoutePrefetch('/todos', TodoBoardPage.prefetch)
+// The board is a tab of the chat route, which a link to it opens: the route's chunk and the tab's own.
+registerRoutePrefetch('/todos', async () => {
+  await Promise.all([ChatPage.prefetch(), import('./routes/todos/board/todos-tab-view')])
+})
 registerRoutePrefetch('/notes', NotesPage.prefetch)
 registerRoutePrefetch('/logs', LogsPage.prefetch)
 registerRoutePrefetch('/limits', LimitsPage.prefetch)
@@ -107,10 +109,11 @@ const routeElements: Partial<Record<AppRouteId, ReactNode>> = {
   "chat-redirect": <LegacyChatRedirect />,
   "cron-list": <CronPage />,
   "cron-detail": <CronDetailPage />,
-  // Todos v2 slice 6 (stage-C cutover): the board IS /todos and
-  // /todos/:todoId is the full task page. The legacy list is gone.
+  // Todos v2 slice 6 (stage-C cutover): the board is /todos and /todos/:todoId
+  // is the full task page. The board is a tab of the chat route now: both
+  // board addresses open it there (see their loaders).
   "todos-index": <TodosIndexRedirect />,
-  "todo-board": <TodoBoardPage />,
+  "todo-board": <TodosBoardRedirect />,
   "todo-detail": <TaskPage />,
   "notes-list": <NotesFeatureRoute />,
   // Folder/note deep links: /notes/f/<folder>, /notes/n/<rel>, or both.
@@ -141,6 +144,7 @@ const routeElements: Partial<Record<AppRouteId, ReactNode>> = {
 // to Todos" bug.
 const routeLoaders: Partial<Record<AppRouteId, RouteObject["loader"]>> = {
   "todos-index": todosIndexLoader,
+  "todo-board": todosBoardLoader,
   "kanban-redirect": todosIndexLoader,
 }
 

@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useNavigate, useNavigationType, useParams, useSearchParams } from "react-router-dom"
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react"
 import { ListFilter, Plus } from "@/components/ui/icon"
 import { Button } from "@/components/ui/button"
 import { PageLayout } from "@/components/page-layout"
@@ -16,7 +15,6 @@ import {
   isPositiveTodoVersion,
   STATUS_LABEL,
 } from "@/lib/todos"
-import { todoPath } from "@/lib/todo-id"
 import { useDepartments } from "@/hooks/use-departments"
 import {
   useEmployeesByName,
@@ -41,7 +39,9 @@ import {
   BOARD_STATUS_ORDER, CLOSED_STATUSES, EXCEPTION_STATUSES, isClosedStatus, isColumnInStatusFilter, OPEN_COLUMN_ORDER, PIPELINE_STATUSES, visibleItemCount,
 } from "./status-scope"
 import { useBoardDrag } from "./use-board-drag"
-import { boardKey, parseBoardParam } from "./board-route"
+import { boardKey } from "./board-route"
+import { RouteBoardLocationProvider, useBoardLocation } from "./board-location"
+import { BoardErrorCard, BoardSkeleton, TAB_COLUMNS } from "./board-states"
 import { useBoardScroll } from "./use-board-scroll"
 import { BoardViewSwitch, ColumnDots } from "./board-view-switch"
 import { loadBoardView, PHONE_CARD_MOVE, saveBoardView, useColumnPosition, useIsBoardMobile, type BoardView } from "./phone-board"
@@ -57,6 +57,10 @@ import { GroupSkeleton } from "./group-skeleton"
  * The task-page takeover is stage B; mobile polish + cutover are stage C. */
 
 const NOOP = () => {}
+
+/** What the board sits in: the app shell at its route, or nothing but the tab's own column. */
+const ROUTE_FRAME: ComponentType<{ children: ReactNode }> = PageLayout
+const TAB_FRAME: ComponentType<{ children: ReactNode }> = Fragment
 
 const TREE_OPEN_KEY = "jinn-board-tree-open"
 
@@ -77,13 +81,21 @@ function saveExpandedTrees(ids: Set<string>): void {
   }
 }
 
+/** The board at its route: the location is the URL. */
 export default function TodoBoardPage() {
-  const { board: boardParam } = useParams()
-  const board = parseBoardParam(boardParam)
+  return (
+    <RouteBoardLocationProvider>
+      <TodoBoard />
+    </RouteBoardLocationProvider>
+  )
+}
+
+/** The board over whatever location it is given (board-location.tsx). `embedded` is the chat layout
+ *  tab: its pane supplies the chrome, so the route's shell is left out. */
+export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
+  const { board, searchParams, setSearchParams, navigationType, openTodo } = useBoardLocation()
   const key = boardKey(board)
-  const navigationType = useNavigationType()
-  const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const Frame = embedded ? TAB_FRAME : ROUTE_FRAME
   const isAttention = board.kind === "attention"
   // Columns are the status dimension, so `status` narrows WHICH columns exist
   // rather than filtering within one (useBoardData gates the queries).
@@ -284,7 +296,7 @@ export default function TodoBoardPage() {
             // the reason is asked for, never demanded by a modal). Review F6:
             // an exception item must never silently sit reason-less.
             if (to === "blocked") {
-              navigate(todoPath(item.id), { state: { fromBoard: key, focusBannerReason: true } })
+              openTodo(item.id, { fromBoard: key, focusBannerReason: true })
             }
             const version = result.workItem?.version
             if (closing) return
@@ -313,7 +325,7 @@ export default function TodoBoardPage() {
         },
       )
     },
-    [transition, rankEdit, announce, itemsByStatus, navigate, key],
+    [transition, rankEdit, announce, itemsByStatus, openTodo, key],
   )
 
   const commitRank = useCallback(
@@ -414,15 +426,13 @@ export default function TodoBoardPage() {
   // its way back (the board name is the back affordance).
   const onOpen = useCallback(
     (id: string, item?: WorkItemCompactWire) =>
-      navigate(todoPath(id), {
-        state: {
-          fromBoard: key,
-          bannerExpected: item
-            ? item.status === "blocked"
-            : undefined,
-        },
+      openTodo(id, {
+        fromBoard: key,
+        bannerExpected: item
+          ? item.status === "blocked"
+          : undefined,
       }),
-    [navigate, key],
+    [openTodo, key],
   )
 
   // ── Derived chrome ──────────────────────────────────────────────────────────
@@ -534,7 +544,7 @@ export default function TodoBoardPage() {
   }
 
   return (
-    <PageLayout>
+    <Frame>
       <PageScaffold
         scroll="external"
         header={
@@ -678,18 +688,18 @@ export default function TodoBoardPage() {
             onContextMenu={sprintTools.onContextMenu}
             hidden={mobile && mobileView !== "board"}
             data-testid="todo-board-scroll"
-            data-board-glass=""
+            data-board-glass={embedded ? "tab" : ""}
             data-scrollable
             className="min-h-0 flex-1 overflow-auto pb-[var(--jinn-scaffold-bottom)] max-[700px]:snap-x max-[700px]:snap-mandatory max-[700px]:scroll-px-4 lg:pb-10"
           >
             {data.isError ? (
               <BoardErrorCard error={data.error} />
             ) : data.isLoading ? (
-              <BoardSkeleton />
+              <BoardSkeleton embedded={embedded} />
             ) : filteredEmpty ? (
               <FilteredEmptyCard count={filterCount} onClear={clearAllFilters} />
             ) : (
-            <div className="flex min-h-full items-start gap-3 px-10 pb-8 pt-5 max-[700px]:w-max max-[700px]:px-4 max-[700px]:pt-3">
+            <div className={`flex min-h-full items-start gap-3 px-10 pb-8 pt-5 max-[700px]:w-max max-[700px]:px-4 max-[700px]:pt-3 ${embedded ? TAB_COLUMNS : ""}`}>
               {visibleStatuses.map((status) => columnFor(status))}
               {CLOSED_STATUSES.some(listStatusInScope) && (closedOpen ? (
                 <section
@@ -755,7 +765,7 @@ export default function TodoBoardPage() {
         <div
           role="status"
           data-testid="board-callout"
-          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-[var(--radius-lg)] glass-overlay px-4 py-2.5 text-[length:var(--text-footnote)] text-[var(--text-primary)]"
+          className={`${embedded ? "absolute" : "fixed"} bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-[var(--radius-lg)] glass-overlay px-4 py-2.5 text-[length:var(--text-footnote)] text-[var(--text-primary)]`}
         >
           {callout}
         </div>
@@ -800,66 +810,6 @@ export default function TodoBoardPage() {
       )}
 
       {sprintTools.overlays}
-    </PageLayout>
-  )
-}
-
-function BoardErrorCard({ error, testId = "board-error" }: { error: unknown; testId?: string }) {
-  return (
-    <div className="px-10 pt-5 max-[700px]:px-0 max-[700px]:pt-2">
-      <div
-        data-testid={testId}
-        className="max-w-[560px] rounded-[var(--radius-lg)] bg-[var(--fill-quaternary)] p-4 text-[length:var(--text-subheadline)] text-[var(--system-red)]"
-      >
-        {operatorSafeTodoError(error, "Couldn't load this board")}
-      </div>
-    </div>
-  )
-}
-
-
-/** Loading keeps exact card geometry so nothing shifts when data lands
- *  (states mock §6 .skel-col: 56px overline bar, 85%/55% title bars). */
-function BoardSkeleton() {
-  const cardsPerColumn = [3, 2, 3, 2, 1]
-  return (
-    <div className="flex min-h-full items-start gap-3 px-10 pb-8 pt-5 max-[700px]:w-max max-[700px]:px-4 max-[700px]:pt-3" data-testid="board-skeleton" aria-hidden>
-      {cardsPerColumn.map((cards, column) => (
-        <div key={column} data-board-column="loading" className="flex min-w-0 flex-1 flex-col max-[700px]:w-[84vw] max-[700px]:flex-none">
-          <div className="flex items-center gap-2 px-[11px] pb-2.5 pt-0.5">
-            <span className="size-5 rounded-full bg-[var(--fill-tertiary)] motion-safe:animate-[skeletonPulse_1.6s_var(--ease-smooth)_infinite]" />
-            <span className="h-3 w-[74px] rounded-[6px] bg-[var(--fill-tertiary)] motion-safe:animate-[skeletonPulse_1.6s_var(--ease-smooth)_infinite]" />
-          </div>
-          <div className="flex flex-col gap-2">
-            {Array.from({ length: cards }, (_, i) => (
-              <div
-                key={i}
-                data-board-skeleton-card=""
-                className="rounded-[var(--radius-lg)] bg-[var(--bg-secondary)] px-[13px] py-3 shadow-[var(--shadow-ambient),var(--shadow-subtle)]"
-              >
-                <div
-                  className="h-2.5 w-14 rounded-[5px] bg-[var(--fill-tertiary)] motion-safe:animate-[skeletonPulse_1.6s_var(--ease-smooth)_infinite]"
-                  style={{ animationDelay: `${(column * 2 + i) * 120}ms` }}
-                />
-                <div
-                  className="mt-[9px] h-[13px] w-[85%] rounded-[6px] bg-[var(--fill-tertiary)] motion-safe:animate-[skeletonPulse_1.6s_var(--ease-smooth)_infinite]"
-                  style={{ animationDelay: `${(column * 2 + i) * 120}ms` }}
-                />
-                {i % 3 !== 2 && (
-                  <div
-                    className="mt-[5px] h-[13px] w-[55%] rounded-[6px] bg-[var(--fill-tertiary)] motion-safe:animate-[skeletonPulse_1.6s_var(--ease-smooth)_infinite]"
-                    style={{ animationDelay: `${(column * 2 + i) * 120}ms` }}
-                  />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-      <div
-        data-testid="board-skeleton-closed-rail"
-        className="h-24 w-11 flex-none rounded-[var(--radius-lg)] bg-[var(--fill-quaternary)] motion-safe:animate-[skeletonPulse_1.6s_var(--ease-smooth)_infinite]"
-      />
-    </div>
+    </Frame>
   )
 }

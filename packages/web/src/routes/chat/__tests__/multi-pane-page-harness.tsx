@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
-import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { MemoryRouter, Route, RouterProvider, Routes, createMemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { vi, type Mock } from 'vitest'
 import type { OrgData } from '@/lib/api'
 import type { SessionWaitsResponse } from '@/lib/session-waits'
@@ -177,7 +177,7 @@ export function emit(event: string, payload: unknown) {
 function BackProbe() {
   const navigate = useNavigate()
   const location = useLocation()
-  return <><output data-testid="route-location">{location.pathname}{location.search}</output><button type="button" onClick={() => navigate(-1)}>Test browser back</button></>
+  return <><output data-testid="route-location">{location.pathname}{location.search}</output><output data-testid="route-state">{JSON.stringify(location.state)}</output><button type="button" onClick={() => navigate(-1)}>Test browser back</button><button type="button" onClick={() => navigate(1)}>Test browser forward</button></>
 }
 
 type RouteEntry = string | { pathname: string; search?: string; state?: unknown }
@@ -193,6 +193,20 @@ export function renderRoute(initialEntry: RouteEntry | RouteEntry[] = '/?session
       </MemoryRouter>
     </QueryClientProvider>,
   )
+}
+
+/**
+ * `renderRoute` on the app's kind of router: a data router, where a navigation is asynchronous and a later one
+ * interrupts the one still pending, which MemoryRouter's synchronous history hides.
+ */
+export function renderDataRoute(initialEntry: RouteEntry | RouteEntry[] = '/?session=a'): { unmount: () => void } {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+  const initialEntries = Array.isArray(initialEntry) ? initialEntry : [initialEntry]
+  const router = createMemoryRouter(
+    [{ path: '/', loader: () => null, element: <><BackProbe /><ChatPageWrapper /></> }],
+    { initialEntries, initialIndex: initialEntries.length - 1 },
+  )
+  return render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
 }
 
 export function sessionTransfer(sessionId: string): DataTransfer {

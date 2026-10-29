@@ -69,3 +69,20 @@ describe('chat grid pointer placement', () => {
     expect(placementForPointer(point, panes, gridRect)).toBeNull()
   })
 })
+
+describe('the grid\'s panes when the layout holds only standalone panes', () => {
+  it('draws no route composer pane beside them', async () => {
+    const { deriveChatGridIds } = await import('../grid-placement')
+    const input = { sessionIds: ['todos:'], primaryPaneKey: '__new__:0:', primarySessionId: null }
+    // Without the flag a lone pane is taken for the composer's place, and two are joined by one.
+    expect(deriveChatGridIds(input)).toEqual(['__new__:0:'])
+    expect(deriveChatGridIds({ ...input, sessionIds: ['todos:', 'todo:ACM-1'] })).toEqual(['todos:', 'todo:ACM-1', '__new__:0:'])
+    expect(deriveChatGridIds({ ...input, chatless: true })).toEqual(['todos:'])
+    expect(deriveChatGridIds({ ...input, sessionIds: ['todos:', 'todo:ACM-1'], chatless: true })).toEqual(['todos:', 'todo:ACM-1'])
+  })
+
+  it('still adds the "Open chat" picker beside them', async () => {
+    const { deriveChatGridIds } = await import('../grid-placement')
+    expect(deriveChatGridIds({ sessionIds: ['todos:'], primaryPaneKey: '__new__:0:', primarySessionId: null, chatless: true, pickerPaneKey: '__picker__' })).toEqual(['todos:', '__picker__'])
+  })
+})

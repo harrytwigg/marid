@@ -5,23 +5,23 @@ import { PaneTabIdContext, usePaneTabsStrip } from '@/components/chat/pane-tabs-
 import { SplitChatGrid, SplitGridContext } from '../split-chat-grid'
 import {
   appendSession,
-  closeSession,
   createSplitLayout,
-  emptySplitLayout,
   focusGroupOfTab,
   groupOfSession,
   openDocTab,
   openNewChatTab,
   paneKeysFromLayout,
-  pinTab,
+  keepTab,
   placeTab,
   showTab,
   splitGroup,
   type SplitLayout,
 } from '../split-layout'
 import { isNewChatTabId, todoTabId } from '../tab-kind'
+import { closeAllUnpinned, closeUserTab, pinTab, unpinTab } from '../pinned-tabs'
 import type { SplitLayoutControls } from '../use-split-working-set'
 
+vi.mock('@/hooks/use-employees', () => ({ useOrg: () => ({ data: { employees: [{ name: 'op', displayName: 'Operator' }] } }) }))
 vi.mock('@/hooks/use-sessions', () => ({ useSessions: () => ({ data: [{ id: 'a', title: 'Alpha' }, { id: 'b', title: 'Bravo' }] }) }))
 vi.mock('@/lib/todo-preview', () => ({ useTodoPreview: () => ({ data: undefined }) }))
 vi.mock('@/routes/todos/task-page/task-page', () => ({
@@ -43,9 +43,11 @@ function Grid({ start, latest }: { start: SplitLayout; latest: { current: SplitL
     resize: vi.fn(),
     equalize: vi.fn(),
     place: (groupId: string, id: string, index: number) => apply((current) => placeTab(current, groupId, id, index)),
-    close: (id: string) => apply((current) => closeSession(current, id)),
-    closeAll: () => apply(() => emptySplitLayout()),
+    close: (id: string) => apply((current) => closeUserTab(current, id)),
+    closeAll: () => apply((current) => closeAllUnpinned(current)),
+    keep: (id: string) => apply((current) => keepTab(current, id)),
     pin: (id: string) => apply((current) => pinTab(current, id)),
+    unpin: (id: string) => apply((current) => unpinTab(current, id)),
     show: (id: string) => apply((current) => showTab(current, id)),
     focusPane: (id: string) => apply((current) => focusGroupOfTab(current, id)),
   } as SplitLayoutControls

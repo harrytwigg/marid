@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom"
-import { isNavItemActive } from "@/components/pill-nav"
+import { isNavItemActive, isNavLinkActive, openTodosFromLink, useNavSurface, useShowChatFromLink, type NavSurface } from "@/components/nav-surface"
+import { useOpenTodosTab } from "@/components/chat/file-open-context"
 import { MORE_NAV_ITEM } from "@/lib/nav"
 import { useNavigation } from "@/lib/use-navigation"
 import { cn } from "@/lib/utils"
@@ -27,18 +28,21 @@ import { useFeatures } from "@/hooks/use-features"
 // are even after a one-tap dive out of the overflow list.
 // ---------------------------------------------------------------------------
 
-function isTabActive(href: string, pathname: string, overflowHrefs: string[]): boolean {
+function isTabActive(href: string, pathname: string, overflowHrefs: string[], surface: NavSurface | null): boolean {
   if (href === MORE_NAV_ITEM.href) {
     return (
       pathname === MORE_NAV_ITEM.href ||
       overflowHrefs.some((h) => isNavItemActive(h, pathname))
     )
   }
-  return isNavItemActive(href, pathname)
+  return isNavLinkActive(href, pathname, surface)
 }
 
 export function MobileTabBar() {
   const pathname = useLocation().pathname
+  const surface = useNavSurface()
+  const openTodosTab = useOpenTodosTab()
+  const showChatFromLink = useShowChatFromLink()
   const { data: features } = useFeatures()
   const navigation = useNavigation(features?.notesEnabled === true)
 
@@ -58,16 +62,18 @@ export function MobileTabBar() {
       )}
     >
       {navigation.mobileItems.map((item) => {
-        const isActive = isTabActive(item.href, pathname, navigation.overflowHrefs)
+        const isActive = isTabActive(item.href, pathname, navigation.overflowHrefs, surface)
         const Icon = item.icon
         return (
           <Link
             key={item.href}
-            to={item.href}
+            to={item.to ?? item.href}
             viewTransition
             aria-label={item.label}
             aria-current={isActive ? "page" : undefined}
-            onClick={() => {
+            onClick={(event) => {
+              if (item.href === "/todos") openTodosFromLink(event, openTodosTab)
+              if (item.href === "/") showChatFromLink(event)
               // HIG tab re-tap: tapping the already-active Chat tab scrolls the
               // chat list back to the top (the route is unchanged, so the Link is
               // otherwise a no-op). GRS-023.

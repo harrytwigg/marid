@@ -3,6 +3,8 @@ import { Link, useLocation } from "react-router-dom"
 import { PanelLeft } from "@/components/ui/icon"
 import { useSettings } from "@/routes/settings-provider"
 import { useNavigation } from "@/lib/use-navigation"
+import { isNavLinkActive, openTodosFromLink, useNavSurface, useShowChatFromLink } from "@/components/nav-surface"
+import { useOpenTodosTab } from "@/components/chat/file-open-context"
 import { cn } from "@/lib/utils"
 import { useFeatures } from "@/hooks/use-features"
 import { prefetchRoute } from "@/lib/route-prefetch"
@@ -62,10 +64,7 @@ export function PillButton({
 // in-surface list⇄nav swap, so the nav links read identically everywhere.
 // ---------------------------------------------------------------------------
 
-/** The single active-route rule used across the nav rail and the mobile tab bar. */
-export function isNavItemActive(href: string, pathname: string): boolean {
-  return href === "/" ? pathname === "/" : pathname.startsWith(href)
-}
+export { isNavItemActive } from "@/components/nav-surface"
 
 // ---------------------------------------------------------------------------
 // NavRibbon — the chat route's permanent slim icon rail (~56px). Always mounted
@@ -123,12 +122,16 @@ function RibbonRow({
   label,
   isActive,
   href,
+  to = href,
   onClick,
 }: {
   Icon: ComponentType<{ size?: number | string; className?: string }>
   label: string
   isActive?: boolean
+  /** The route the row stands for: what is prefetched. */
   href?: string
+  /** Where the link goes, when that is not the route itself (the Todos tab opens through the chat route). */
+  to?: string
   // Receives the click event so a link row can preventDefault a no-op
   // same-route navigation (used by the Chat icon to reveal the list instead).
   onClick?: (e: ReactMouseEvent) => void
@@ -154,7 +157,7 @@ function RibbonRow({
   if (href) {
     return (
       <Link
-        to={href} viewTransition
+        to={to ?? href} viewTransition
         data-rail-row=""
         onClick={onClick}
         onPointerEnter={(event) => { restoreLabel(event); prefetchRoute(href) }}
@@ -189,6 +192,9 @@ export function NavRibbon({
   const { data: features } = useFeatures()
   const navItems = useNavigation(features?.notesEnabled === true).items
   const pathname = useLocation().pathname
+  const surface = useNavSurface()
+  const openTodosTab = useOpenTodosTab()
+  const showChatFromLink = useShowChatFromLink()
   const { settings } = useSettings()
   useDismissLabelOnEscape()
   const portalName = settings.portalName ?? PRODUCT_NAME
@@ -200,6 +206,8 @@ export function NavRibbon({
   // control never means both open and close.
   const onChatIconClick = (e: ReactMouseEvent) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    showChatFromLink(e)
+    if (e.defaultPrevented) return
     if (onToggleList && pathname === "/" && !listOpen) {
       e.preventDefault()
       onToggleList()
@@ -277,8 +285,9 @@ export function NavRibbon({
             Icon={item.icon}
             label={item.label}
             href={item.href}
-            isActive={isNavItemActive(item.href, pathname)}
-            onClick={item.href === "/" ? onChatIconClick : undefined}
+            to={item.to}
+            isActive={isNavLinkActive(item.href, pathname, surface)}
+            onClick={item.href === "/" ? onChatIconClick : item.href === "/todos" ? (event) => openTodosFromLink(event, openTodosTab) : undefined}
           />
         ))}
       </nav>

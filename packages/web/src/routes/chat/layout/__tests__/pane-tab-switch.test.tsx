@@ -3,15 +3,16 @@ import { render } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { SplitChatGrid, SplitGridContext } from '../split-chat-grid'
 import { tabSwitchedIn } from '../pane-tab-switch'
-import { closeSession, createSplitLayout, focusSession, openInFocusedGroup, pinTab, splitGroup, type SplitLayout } from '../split-layout'
+import { closeSession, createSplitLayout, focusSession, openInFocusedGroup, keepTab, splitGroup, type SplitLayout } from '../split-layout'
 import type { SplitLayoutControls } from '../use-split-working-set'
 
+vi.mock('@/hooks/use-employees', () => ({ useOrg: () => ({ data: { employees: [{ name: 'op', displayName: 'Operator' }] } }) }))
 vi.mock('@/hooks/use-sessions', () => ({ useSessions: () => ({ data: [] }) }))
 
 /** Three kept tabs in one group, `a` showing. */
 function threeTabs(): SplitLayout {
   let layout = createSplitLayout(['a'], 'a')
-  for (const id of ['b', 'c']) layout = pinTab(openInFocusedGroup(layout, id), id)
+  for (const id of ['b', 'c']) layout = keepTab(openInFocusedGroup(layout, id), id)
   return focusSession(layout, 'a')
 }
 
@@ -50,9 +51,9 @@ describe('tabSwitchedIn', () => {
 
   it('reads each group on its own: switching in one leaves the other pane alone', () => {
     let layout = createSplitLayout(['a'], 'a')
-    layout = pinTab(openInFocusedGroup(layout, 'b'), 'b')
+    layout = keepTab(openInFocusedGroup(layout, 'b'), 'b')
     layout = splitGroup(layout, layout.focusedGroupId!, 'right', 'x')
-    layout = pinTab(openInFocusedGroup(layout, 'y'), 'y')
+    layout = keepTab(openInFocusedGroup(layout, 'y'), 'y')
     layout = focusSession(layout, 'x')
     layout = focusSession(layout, 'a')
     expect([...tabSwitchedIn(layout, focusSession(layout, 'b'))]).toEqual(['b'])
@@ -64,7 +65,7 @@ type GridProps = ComponentProps<typeof SplitChatGrid>
 
 /** The grid the page mounts, driven by a layout the test owns and re-renders. */
 function Grid({ layout, sessionIds }: { layout: SplitLayout; sessionIds: string[] }) {
-  const split = { layout, resize: vi.fn(), equalize: vi.fn(), place: vi.fn(), close: vi.fn(), closeAll: vi.fn(), pin: vi.fn(), show: vi.fn(), focusPane: vi.fn() } as SplitLayoutControls
+  const split = { layout, resize: vi.fn(), equalize: vi.fn(), place: vi.fn(), close: vi.fn(), closeAll: vi.fn(), keep: vi.fn(), pin: vi.fn(), unpin: vi.fn(), show: vi.fn(), focusPane: vi.fn() } as SplitLayoutControls
   const props: GridProps = {
     sessionIds,
     focusedId: sessionIds[0],

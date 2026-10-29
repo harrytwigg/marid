@@ -43,6 +43,18 @@ export function useOpenSubagentTab(): OpenSubagent | null {
 }
 
 /**
+ * Opens the Todos board's tab inside the chat layout, or shows it where it is open. Provided by the chat
+ * page; without a provider a link to the board is its own route, which opens the tab through the page.
+ */
+export type OpenTodosTab = () => void
+
+export const TodosTabOpenContext = createContext<OpenTodosTab | null>(null)
+
+export function useOpenTodosTab(): OpenTodosTab | null {
+  return useContext(TodosTabOpenContext)
+}
+
+/**
  * Opens a chat from a link anywhere inside the chat layout (a Todo shown as a tab, its session
  * links): the chat's tab is shown and its pane focused if it is already open, else it opens as it
  * does from the list. Provided by the chat page.
@@ -65,19 +77,22 @@ export function useOpenSession(): OpenSession {
   }, [open, navigate])
 }
 
-/** The chat page's openers for what a link inside the layout can name: a file, a Todo, a sub-agent, a chat. */
-export function LayoutOpenProviders({ file, todo, subagent, session, children }: {
+/** The chat page's openers for what a link inside the layout can name: a file, a Todo, a sub-agent, a chat, the Todos board. */
+export function LayoutOpenProviders({ file, todo, subagent, session, todos, children }: {
   file: OpenFile
   todo: OpenTodo
   subagent: OpenSubagent
   session: OpenSession
+  todos: OpenTodosTab
   children: ReactNode
 }) {
   return (
     <FileOpenContext.Provider value={file}>
       <TodoOpenContext.Provider value={todo}>
         <SubagentOpenContext.Provider value={subagent}>
-          <SessionOpenContext.Provider value={session}>{children}</SessionOpenContext.Provider>
+          <TodosTabOpenContext.Provider value={todos}>
+            <SessionOpenContext.Provider value={session}>{children}</SessionOpenContext.Provider>
+          </TodosTabOpenContext.Provider>
         </SubagentOpenContext.Provider>
       </TodoOpenContext.Provider>
     </FileOpenContext.Provider>

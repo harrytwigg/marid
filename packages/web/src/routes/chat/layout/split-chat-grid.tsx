@@ -18,6 +18,8 @@ export interface SplitGridBinding {
   sessionForKey: (key: string) => string | null
   /** Closes every open tab; the pane bars carry it. Absent when there is nothing to close. */
   onCloseAll?: () => void
+  /** The route's chat closed with only standalone tabs left: the page leaves the route, which names no chat now. */
+  onLeaveRoute?: () => void
 }
 
 /** How the page hands the layout to the grid MultiChatGrid mounts, which only passes
@@ -103,7 +105,7 @@ export function SplitChatGrid(props: ChatGridProps) {
   const binding = useContext(SplitGridContext)
   if (!binding) throw new Error('SplitChatGrid needs a SplitGridContext provider (routes/chat/page.tsx)')
   return (
-    <PaneTabsProvider split={binding.split} onSelect={props.onFocus} onCloseAll={binding.onCloseAll}>
+    <PaneTabsProvider split={binding.split} onSelect={props.onFocus} onCloseAll={binding.onCloseAll} onLeaveRoute={binding.onLeaveRoute}>
       <SplitLayoutGrid {...props} {...binding} />
     </PaneTabsProvider>
   )

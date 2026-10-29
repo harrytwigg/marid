@@ -3,9 +3,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { PaneTabsContext, usePaneTabsDocPane, usePaneTabsKeep, usePaneTabsStrip, usePaneTitleDrag } from '@/components/chat/pane-tabs-context'
 import { PaneTabsProvider } from '../pane-tabs-provider'
-import { closeSession, createSplitLayout, emptySplitLayout, findGroup, focusSession, groupOfSession, groupsOf, materializeLayout, openDocTab, openInFocusedGroup, openNewChatTab, pinTab, placeTab, showTab, splitGroup, type SplitLayout } from '../split-layout'
+import { closeSession, createSplitLayout, findGroup, focusSession, groupOfSession, groupsOf, materializeLayout, openDocTab, openInFocusedGroup, openNewChatTab, keepTab, placeTab, showTab, splitGroup, type SplitLayout } from '../split-layout'
 import { isNewChatTabId, todoTabId } from '../tab-kind'
 import { fileTabId } from '../file-tab'
+import { closeAllUnpinned, closeUserTab, pinTab, unpinTab } from '../pinned-tabs'
 import { CHAT_SESSION_DND_MIME } from '../../chat-session-dnd'
 import { PANE_TAB_DND_MIME } from '../pane-tab-dnd'
 
@@ -31,6 +32,8 @@ vi.mock('@/lib/todo-preview', () => ({
   useTodoPreview: () => ({ data: { workItem: { title: 'Write the notes' } } }),
 }))
 
+vi.mock('@/hooks/use-employees', () => ({ useOrg: () => ({ data: { employees: [{ name: 'op', displayName: 'Operator' }] } }) }))
+
 vi.mock('@/hooks/use-sessions', () => ({
   useSessions: () => ({
     data: [
@@ -51,9 +54,11 @@ function harness(start: SplitLayout) {
     resize: vi.fn(),
     equalize: vi.fn(),
     place: (groupId, id, index) => set(placeTab(layout, groupId, id, index)),
-    close: (id) => set(closeSession(layout, id)),
-    closeAll: () => set(emptySplitLayout()),
-    pin: (id) => { if (pinTab(layout, id) !== layout) set(pinTab(layout, id)) },
+    close: (id) => set(closeUserTab(layout, id)),
+    closeAll: () => set(closeAllUnpinned(layout)),
+    keep: (id) => { if (keepTab(layout, id) !== layout) set(keepTab(layout, id)) },
+    pin: (id) => set(pinTab(layout, id)),
+    unpin: (id) => set(unpinTab(layout, id)),
     show: (id) => { if (showTab(layout, id) !== layout) set(showTab(layout, id)) },
     focusPane: vi.fn(),
   } as SplitLayoutControls)
@@ -103,7 +108,7 @@ describe('PaneTabsProvider', () => {
     expect(screen.getByRole('tab', { name: /Xray/ }).getAttribute('data-preview')).toBe('true')
   })
 
-  it('does not pin a preview tab just because its chat is running', () => {
+  it('does not keep a preview tab just because its chat is running', () => {
     const h = harness(twoTabs())
     render(<Mount h={h} sessionId="x" />)
     expect(findGroup(h.layout, groupsOf(h.layout)[0].id)!.previewTab).toBe('x')
@@ -128,7 +133,7 @@ describe('PaneTabsProvider', () => {
   })
 
   it('leaves no keep request behind for a tab that was already kept', () => {
-    const h = harness(pinTab(twoTabs(), 'x'))
+    const h = harness(keepTab(twoTabs(), 'x'))
     render(<Mount h={h} sessionId="x" keepId="x" />)
     fireEvent.click(screen.getByText('work'))
     h.set(closeSession(h.layout, 'x'))

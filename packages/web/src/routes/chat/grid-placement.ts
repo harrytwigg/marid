@@ -4,6 +4,9 @@ export interface ChatGridPlacementInput {
   primarySessionId: string | null
   pickerPaneKey?: string | null
   mobile?: boolean
+  /** The layout holds panes and no chat, and the route names none: the panes stand alone, and the
+   *  route's own composer is not drawn beside them (a new chat is a pane of the layout there). */
+  chatless?: boolean
 }
 
 export function deriveChatGridIds({
@@ -12,12 +15,15 @@ export function deriveChatGridIds({
   primarySessionId,
   pickerPaneKey,
   mobile,
+  chatless,
 }: ChatGridPlacementInput): string[] {
   const sessionGridIds = primarySessionId
     ? sessionIds.map((sessionId) => sessionId === primarySessionId ? primaryPaneKey : sessionId)
-    : sessionIds.length === 1
-      ? [primaryPaneKey]
-      : [...sessionIds, primaryPaneKey]
+    : chatless
+      ? [...sessionIds]
+      : sessionIds.length === 1
+        ? [primaryPaneKey]
+        : [...sessionIds, primaryPaneKey]
 
   if (mobile && pickerPaneKey) return [pickerPaneKey]
   return pickerPaneKey ? [...sessionGridIds, pickerPaneKey] : sessionGridIds

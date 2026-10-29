@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { hasTodosOpenIntent, withoutOpenIntent } from '@/lib/todos-tab-entry'
 import type { Message } from '@/lib/conversations'
 import { resolveDeepLink } from '@/components/chat/chat-route-helpers'
 import type { OpenSubagent, OpenTodo } from '@/components/chat/file-open-context'
@@ -80,4 +81,24 @@ export function useEmployeeDeepLink(contactEmployee: (name: string) => void, wai
     setLinked(null)
     contactEmployee(linked)
   }, [contactEmployee, linked, waitForLayout])
+}
+
+/**
+ * The `?open=todos` link (lib/todos-tab-entry.ts): an intent to open the Todos tab, consumed once. `open`
+ * runs when the layout can take the tab (`ready`), and the parameter is dropped in place, so a reload or
+ * the browser's back never replays it. The address keeps whatever else it carried. `open` says whether
+ * it moved the route itself (to the chat the tab opened beside), which leaves the address as it set it.
+ */
+export function useTodosOpenIntent(open: () => boolean, ready: boolean) {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const consumed = useRef(false)
+  const intent = hasTodosOpenIntent(location.search)
+  useEffect(() => {
+    if (!intent) consumed.current = false
+    if (!intent || !ready || consumed.current) return
+    consumed.current = true
+    if (open()) return
+    void navigate({ pathname: location.pathname, search: withoutOpenIntent(location.search), hash: location.hash }, { replace: true, state: location.state })
+  }, [intent, location.hash, location.pathname, location.search, location.state, navigate, open, ready])
 }

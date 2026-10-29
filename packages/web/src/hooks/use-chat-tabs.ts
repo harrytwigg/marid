@@ -232,10 +232,14 @@ export function useChatTabs() {
    * Closes every open tab, leaving the list as it is on a first visit — and,
    * because the write-through effect saves whatever the list holds, clearing the
    * stored key too. An already-empty list keeps its own object so a caller that
-   * closes all on an empty list does not churn a render.
+   * closes all on an empty list does not churn a render. `keepSessionIds` (pinned chats) stay, none active.
    */
-  const closeAllTabs = useCallback(() => {
-    setState((current) => (current.tabs.length === 0 && current.activeIndex === -1 ? current : { tabs: [], activeIndex: -1 }))
+  const closeAllTabs = useCallback((keepSessionIds: readonly string[] = []) => {
+    setState((current) => {
+      const kept = current.tabs.filter((tab) => tab.kind === 'session' && keepSessionIds.includes(tab.sessionId))
+      if (kept.length === current.tabs.length && current.activeIndex === -1) return current
+      return { tabs: kept, activeIndex: -1 }
+    })
   }, [])
 
   const updateTabStatus = useCallback((sessionId: string, updates: Partial<SessionTab>) => {

@@ -1,6 +1,5 @@
 import { Archive, Bell, ChevronDown, Globe } from "@/components/ui/icon"
 import { useState } from "react"
-import { useNavigate } from "react-router-dom"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,7 +9,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { DepartmentScopeBadge } from "@/components/department-scope-badge"
 import type { DepartmentRowWire } from "@/lib/department-api"
-import { boardPath, isSameBoard, type BoardId } from "./board-route"
+import { useSwitchBoard } from "./board-location"
+import { isSameBoard, type BoardId } from "./board-route"
 import { useBoardMenuCounts } from "./use-board"
 
 /* Todos v2 slice 6 — the switcher-in-title (design-doc §1.1, HIG title-menu).
@@ -39,7 +39,7 @@ export interface BoardSwitcherProps {
 }
 
 export function BoardSwitcher({ board, title, departments, attentionCount }: BoardSwitcherProps) {
-  const navigate = useNavigate()
+  const switchBoard = useSwitchBoard()
   const [open, setOpen] = useState(false)
   const archive = useArchivedRows(board, departments)
   // Counts only for the rows the menu shows: every archived department would otherwise
@@ -47,7 +47,7 @@ export function BoardSwitcher({ board, title, departments, attentionCount }: Boa
   const counts = useBoardMenuCounts(departments && archive.listed, open)
 
   const go = (target: BoardId) => {
-    if (!isSameBoard(board, target)) navigate(boardPath(target))
+    if (!isSameBoard(board, target)) switchBoard(target)
   }
   const countOf = (value: number | undefined) => (
     <span className="ml-auto text-[12px] tabular-nums text-[var(--text-quaternary)]">{value ?? ""}</span>
@@ -60,9 +60,9 @@ export function BoardSwitcher({ board, title, departments, attentionCount }: Boa
           type="button"
           data-testid="board-switcher"
           aria-label={`Board: ${title} — switch board`}
-          className="focus-outline -ml-0.5 flex items-center gap-2 rounded-xl py-0.5 pl-0.5 pr-2.5 transition-colors duration-150 hover:bg-[var(--fill-quaternary)]"
+          className="focus-outline -ml-0.5 flex min-w-0 max-w-full items-center gap-2 rounded-xl py-0.5 pl-0.5 pr-2.5 transition-colors duration-150 hover:bg-[var(--fill-quaternary)]"
         >
-          <h1>
+          <h1 className="min-w-0 truncate">
             {title}
           </h1>
           <ChevronDown size={18} aria-hidden className="mt-1.5 text-[var(--text-quaternary)]" />

@@ -304,8 +304,10 @@ body {
    its cards are near-opaque glass, so text still reads on a solid ground. Only
    tints and lit edges here, no blur: a card or a column that blurred would be
    one blurred surface per card, over the blur budget. The list view on a phone
-   hides the board, and the sheet comes back with it. */
-[data-shell="sheet"]:has([data-board-glass]:not([hidden])) {
+   hides the board, and the sheet comes back with it. The board shown as a chat
+   layout tab marks itself `tab`: it sits inside the sheet the chat is on, which
+   stays. */
+[data-shell="sheet"]:has([data-board-glass=""]:not([hidden])) {
   --bg: transparent;
   background: transparent;
   box-shadow: none;

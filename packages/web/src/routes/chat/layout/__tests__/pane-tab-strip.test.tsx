@@ -31,7 +31,7 @@ function dragAt(type: 'dragover' | 'drop', target: Element, dataTransfer: unknow
 
 function setup(props: Partial<PaneTabStripProps> = {}) {
   const handlers = {
-    onActivate: vi.fn(), onClose: vi.fn(), onReorder: vi.fn(), onMoveIn: vi.fn(), onDropSession: vi.fn(), onPin: vi.fn(),
+    onActivate: vi.fn(), onClose: vi.fn(), onReorder: vi.fn(), onMoveIn: vi.fn(), onDropSession: vi.fn(), onKeep: vi.fn(),
   }
   const utils = render(<PaneTabStrip groupId="g1" tabs={TABS} activeId="a" {...handlers} {...props} />)
   const tab = (id: string) => utils.container.querySelector<HTMLElement>(`[data-pane-tab-id="${id}"]`)!
@@ -101,8 +101,8 @@ describe('PaneTabStrip', () => {
     expect(tab('c').querySelector('[data-pane-tab-status="running"]')).toBeNull()
   })
 
-  it('activates on click, closes on × and middle-click, pins a preview on double-click', () => {
-    const { tab, onActivate, onClose, onPin } = setup()
+  it('activates on click, closes on × and middle-click, keeps a preview on double-click', () => {
+    const { tab, onActivate, onClose, onKeep } = setup()
     fireEvent.click(tab('c'))
     expect(onActivate).toHaveBeenCalledWith('c')
 
@@ -116,9 +116,9 @@ describe('PaneTabStrip', () => {
     expect(onClose).toHaveBeenCalledTimes(2)
 
     fireEvent.doubleClick(tab('a'))
-    expect(onPin).not.toHaveBeenCalled()
+    expect(onKeep).not.toHaveBeenCalled()
     fireEvent.doubleClick(tab('b'))
-    expect(onPin).toHaveBeenCalledWith('b')
+    expect(onKeep).toHaveBeenCalledWith('b')
   })
 
   it('moves focus and activation with the arrow keys, wrapping at the ends', () => {

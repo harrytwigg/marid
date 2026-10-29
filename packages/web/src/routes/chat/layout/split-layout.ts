@@ -1,5 +1,6 @@
 import type { ChatWorkingSet } from '../working-set'
-import { isChatTabId, isDocTabId, newChatTabId, parseNewChatTabId } from './tab-kind'
+import { isChatTabId, isDocTabId, isTodosTabId, newChatTabId, parseNewChatTabId } from './tab-kind'
+import { evictionVictim, isStandaloneTab, normalizeGroup, pinnedAfterReplace, pinnedFirst } from './pinned-order'
 
 /**
  * The editor-group layout: a tree of row/column splits whose leaves are groups, each holding an
@@ -17,8 +18,9 @@ import { isChatTabId, isDocTabId, newChatTabId, parseNewChatTabId } from './tab-
  * the documents opened beside it. A new chat is a pane of its own in the same way a chat is, and
  * becomes that chat, in place, when its first send creates it (replaceSession). A document dragged
  * out to its own pane makes a document-only group, whose pane key is its shown tab (paneKeyOf). The
- * layout as a whole must hold at least one chat — the route needs one — so it empties when its last
- * chat goes, taking every other pane with it. The working set and the URL only ever see chats
+ * layout as a whole must hold at least one chat — the route needs one — or a standalone tab (the Todos
+ * board, a pinned tab: pinned-order.ts), so it empties when the last of those goes, taking every other
+ * pane with it. The working set and the URL only ever see chats
  * (workingSetFromLayout); the grid sees every pane (paneKeysFromLayout).
  */
 
@@ -32,7 +34,7 @@ export interface LayoutGroup {
   tabs: string[]
   activeTab: string
   /** The tab opened by ordinary navigation and not yet kept (VS Code's italic preview tab): one of
-   * `tabs`, at most one per group. The next ordinary open replaces it; placing, moving, pinning or
+   * `tabs`, at most one per group. The next ordinary open replaces it; placing, moving, keeping or
    * working in it makes it an ordinary tab. */
   previewTab?: string
 }
@@ -56,12 +58,14 @@ export interface SplitLayout {
   focusedGroupId: string | null
   /** Every tab, least to most recently focused. Drives eviction and tab fallback. */
   focusHistory: string[]
+  /** The pinned tabs, of any kind (pinned-tabs.ts). Each group keeps its pinned tabs first. */
+  pinned: string[]
   /** Next id suffix. Ids are allocated from the layout so the ops stay pure and replayable. */
   nextId: number
 }
 
 export function emptySplitLayout(): SplitLayout {
-  return { root: null, auto: true, focusedGroupId: null, focusHistory: [], nextId: 1 }
+  return { root: null, auto: true, focusedGroupId: null, focusHistory: [], pinned: [], nextId: 1 }
 }
 
 export function groupsOf(layout: SplitLayout): LayoutGroup[] {
@@ -153,12 +157,13 @@ export function paneKeysFromLayout(layout: SplitLayout): string[] {
  * Whether `tabId` is the layout's only chat while a tab of another kind (a document, a new chat) is
  * open anywhere in it. Closing it would take every such tab with it and leave the route on a chat no
  * pane holds, so it stays. A lone chat with nothing else open closes as it always has (beside the
- * "Open chat" picker, which is a pane the layout does not hold).
+ * "Open chat" picker, which is a pane the layout does not hold). A standalone tab does not count: it
+ * outlives the chat.
  */
 export function isLastChatWithTabs(layout: SplitLayout, tabId: string): boolean {
   const tabs = groupsOf(layout).flatMap((group) => group.tabs)
   const chats = tabs.filter(isChatTabId)
-  return chats.length === 1 && chats[0] === tabId && tabs.some((id) => !isChatTabId(id))
+  return chats.length === 1 && chats[0] === tabId && tabs.some((id) => !isChatTabId(id) && !isStandaloneTab(layout.pinned, id))
 }
 
 /** Each group's id by its pane's key: how a pane key (a session id, or a file tab id) finds its group. */
@@ -219,22 +224,16 @@ export function normalizeSizes(sizes: readonly number[], count: number): number[
   return sizes.map((size) => size / total)
 }
 
-/** Restores the structural invariants after any edit: no empty groups, no single-child or
- * same-direction-nested splits, sizes that sum to 1. (That the layout holds a chat is withRoot's.) */
-function normalizeNode(node: LayoutNode): LayoutNode | null {
-  if (node.type === 'group') {
-    if (node.tabs.length === 0) return null
-    const activeTab = node.tabs.includes(node.activeTab) ? node.activeTab : node.tabs[0]
-    const { previewTab, ...rest } = node
-    const keptPreview = previewTab !== undefined && node.tabs.includes(previewTab)
-    if (activeTab === node.activeTab && keptPreview === (previewTab !== undefined)) return node
-    return keptPreview ? { ...rest, activeTab, previewTab } : { ...rest, activeTab }
-  }
+/** Restores the structural invariants after any edit: no empty groups, pinned tabs first in each group,
+ * no single-child or same-direction-nested splits, sizes that sum to 1. (That the layout holds a chat
+ * or a standalone tab is withRoot's.) */
+function normalizeNode(node: LayoutNode, pinned: readonly string[]): LayoutNode | null {
+  if (node.type === 'group') return normalizeGroup(node, pinned)
   const children: LayoutNode[] = []
   const sizes: number[] = []
   const inputSizes = normalizeSizes(node.sizes, node.children.length)
   node.children.forEach((child, index) => {
-    const normalized = normalizeNode(child)
+    const normalized = normalizeNode(child, pinned)
     if (!normalized) return
     if (normalized.type === 'split' && normalized.direction === node.direction) {
       normalized.children.forEach((grandchild, grandIndex) => {
@@ -251,7 +250,7 @@ function normalizeNode(node: LayoutNode): LayoutNode | null {
   return { ...node, children, sizes: normalizeSizes(sizes, children.length) }
 }
 
-function mapNodes(node: LayoutNode, fn: (node: LayoutNode) => LayoutNode): LayoutNode {
+export function mapNodes(node: LayoutNode, fn: (node: LayoutNode) => LayoutNode): LayoutNode {
   const mapped = fn(node)
   if (mapped !== node || mapped.type === 'group') return mapped
   const children = mapped.children.map((child) => mapNodes(child, fn))
@@ -260,20 +259,22 @@ function mapNodes(node: LayoutNode, fn: (node: LayoutNode) => LayoutNode): Layou
     : { ...mapped, children }
 }
 
-function holdsChat(root: LayoutNode): boolean {
-  return groupsOf({ ...emptySplitLayout(), root }).some((group) => group.tabs.some(isChatTabId))
+/** Whether the tree holds a chat or a standalone tab, either of which keeps a layout worth having. */
+function holdsAnchor(root: LayoutNode, pinned: readonly string[]): boolean {
+  return groupsOf({ ...emptySplitLayout(), root }).some((group) => group.tabs.some((id) => isChatTabId(id) || isStandaloneTab(pinned, id)))
 }
 
-/** The route needs a chat: without one no pane is worth keeping, document and new-chat panes included. */
-function normalizedRoot(root: LayoutNode | null, requireChat: boolean): LayoutNode | null {
-  const kept = root ? normalizeNode(root) : null
-  return kept && (!requireChat || holdsChat(kept)) ? kept : null
+/** The route needs a chat, or a standalone tab to stand in for one: without either no pane is worth
+ * keeping, document and new-chat panes included. */
+function normalizedRoot(root: LayoutNode | null, pinned: readonly string[], requireChat: boolean): LayoutNode | null {
+  const kept = root ? normalizeNode(root, pinned) : null
+  return kept && (!requireChat || holdsAnchor(kept, pinned)) ? kept : null
 }
 
 /** `requireChat` is false only mid-move: a chat in flight (detachForMove, detachForSplit) is on
  * its way to a group of the same layout, so the layout is not yet without one. */
 function withRoot(layout: SplitLayout, root: LayoutNode | null, requireChat = true): SplitLayout {
-  const normalized = normalizedRoot(root, requireChat)
+  const normalized = normalizedRoot(root, layout.pinned, requireChat)
   const groupCount = normalized ? countGroups(normalized) : 0
   const focusedStillThere = normalized && layout.focusedGroupId
     && groupsOf({ ...layout, root: normalized }).some((g) => g.id === layout.focusedGroupId)
@@ -284,6 +285,8 @@ function withRoot(layout: SplitLayout, root: LayoutNode | null, requireChat = tr
   return {
     ...layout,
     root: normalized,
+    // A tab in flight (requireChat false) is not in the tree yet, and keeps its pin until it lands.
+    pinned: requireChat ? layout.pinned.filter((id) => members.has(id)) : layout.pinned,
     auto: groupCount <= 1 ? true : layout.auto,
     focusedGroupId: focusedStillThere ? layout.focusedGroupId : null,
     focusHistory: layout.focusHistory.filter((id) => isChatTabId(id) || members.has(id)),
@@ -377,10 +380,10 @@ export function materializeLayout(layout: SplitLayout, columns: number): SplitLa
     next = allocated
     rows.push({ type: 'split', id, direction: 'row', children: chunk, sizes })
   }
-  if (rows.length === 1) return { ...next, auto: false, root: normalizeNode(rows[0]) }
+  if (rows.length === 1) return { ...next, auto: false, root: normalizeNode(rows[0], layout.pinned) }
   const [id, allocated] = allocate(next, 's')
   const root: LayoutSplit = { type: 'split', id, direction: 'column', children: rows, sizes: normalizeSizes([], rows.length) }
-  return { ...allocated, auto: false, root: normalizeNode(root) }
+  return { ...allocated, auto: false, root: normalizeNode(root, layout.pinned) }
 }
 
 /**
@@ -427,7 +430,7 @@ function focusGroupOn(layout: SplitLayout, owner: LayoutGroup, activeTab: string
  * Opens a document (a file preview, a Todo) as a tab beside a chat: in the group holding
  * `ownerSessionId`, else the focused group, just after its shown tab, and shows it. A document
  * already open anywhere is shown where it is. With no group to hold it the layout is returned
- * unchanged.
+ * unchanged, except for the Todos board, which makes a group of its own.
  */
 export function openDocTab(layout: SplitLayout, ownerSessionId: string | null, docTabId: string): SplitLayout {
   if (!isDocTabId(docTabId)) return layout
@@ -435,7 +438,9 @@ export function openDocTab(layout: SplitLayout, ownerSessionId: string | null, d
   // The linking chat is shown first, so the document lands beside it and it is the chat it covers.
   const base = ownerSessionId && groupOfSession(layout, ownerSessionId) ? showTab(layout, ownerSessionId) : layout
   const owner = focusedGroup(base) ?? groupsOf(base).at(-1)
-  return owner ? placeTab(base, owner.id, docTabId) : layout
+  if (owner) return placeTab(base, owner.id, docTabId)
+  // The Todos board needs no chat to sit beside: it opens a layout of its own.
+  return isTodosTabId(docTabId) ? appendGroup(layout, docTabId) : layout
 }
 
 /**
@@ -443,15 +448,23 @@ export function openDocTab(layout: SplitLayout, ownerSessionId: string | null, d
  * shown tab) and shows it, as a browser opens a new tab: it covers the chat it opened over rather than
  * splitting the grid, and is dragged out to a pane of its own like any tab. A new chat for the same
  * employee already open is shown instead, so pressing New chat twice does not stack blank composers.
- * With no chat in the layout nothing changes: the route's own composer is the new chat then.
+ * With no pane in the layout nothing changes: the route's own composer is the new chat then.
  */
 export function openNewChatTab(layout: SplitLayout, employee: string | null = null): SplitLayout {
-  if (!layout.root || !holdsChat(layout.root)) return layout
+  if (!canOpenNewChatTab(layout)) return layout
   const existing = newChatTabFor(layout, employee)
   if (existing) return showTab(layout, existing)
-  const target = openTargetGroup(layout) ?? groupsOf(layout).at(-1)
-  if (!target) return layout
-  return placeTab({ ...layout, nextId: layout.nextId + 1 }, target.id, newChatTabId({ serial: layout.nextId, employee }))
+  const target = openTargetGroup(layout)
+  const tabId = newChatTabId({ serial: layout.nextId, employee })
+  const numbered = { ...layout, nextId: layout.nextId + 1 }
+  // Beside standalone tabs only, with no chat to cover, the composer is a pane of its own.
+  if (!target) return appendGroup(numbered, tabId)
+  return placeTab(numbered, target.id, tabId)
+}
+
+/** Whether the layout has a chat or a standalone tab to open a new chat's tab beside. */
+export function canOpenNewChatTab(layout: SplitLayout): boolean {
+  return layout.root !== null && holdsAnchor(layout.root, layout.pinned)
 }
 
 /** The new chat tab addressed to `employee` (or to no one) the layout holds, if any. */
@@ -486,12 +499,13 @@ function placeOnly(layout: SplitLayout, groupId: string, sessionId: string, inde
 
 /**
  * The file tabs a chat would strand by leaving its group: all of the group's when it is the group's
- * only chat (they belong to it, so closing it closes them). A move carries them along instead.
+ * only chat (they belong to it, so closing it closes them). A move carries them along instead. A
+ * standalone tab (the Todos board, a pinned tab) belongs to no chat and is never among them.
  */
 function strandedFiles(layout: SplitLayout, sessionId: string): string[] {
   const owner = isDocTabId(sessionId) ? null : groupOfSession(layout, sessionId)
   if (!owner || owner.tabs.some((id) => id !== sessionId && !isDocTabId(id))) return []
-  return owner.tabs.filter(isDocTabId)
+  return owner.tabs.filter((id) => isDocTabId(id) && !isStandaloneTab(layout.pinned, id))
 }
 
 /** `move` applied to the layout, with any files the moving chat would strand put back beside it
@@ -506,7 +520,7 @@ export function keepingFiles(layout: SplitLayout, sessionId: string, move: (layo
   if (!owner || !moved.root) return afterMove
   const tabs = owner.tabs.filter((id) => !files.includes(id))
   tabs.splice(tabs.indexOf(sessionId) + 1, 0, ...files)
-  return showTab({ ...moved, root: mapNodes(moved.root, (node) => (node === owner ? { ...owner, tabs } : node)) }, sessionId)
+  return showTab({ ...moved, root: mapNodes(moved.root, (node) => (node === owner ? { ...owner, tabs: pinnedFirst(tabs, moved.pinned) } : node)) }, sessionId)
 }
 
 /** A group's only chat re-ordered among its file tabs: in place, since detaching it would close the group. */
@@ -516,7 +530,7 @@ function reorderLoneChat(layout: SplitLayout, owner: LayoutGroup, sessionId: str
   const anchor = owner.activeTab === sessionId ? tabs[owner.tabs.indexOf(sessionId) - 1] : owner.activeTab
   tabs.splice(index === undefined && anchor === undefined ? 0 : tabSlot(tabs, anchor ?? '', index), 0, sessionId)
   const previewTab = owner.previewTab === sessionId ? undefined : owner.previewTab
-  return showTab({ ...layout, root: mapNodes(layout.root, (node) => (node === owner ? withPreview({ ...owner, tabs }, previewTab) : node)) }, sessionId)
+  return showTab({ ...layout, root: mapNodes(layout.root, (node) => (node === owner ? withPreview({ ...owner, tabs: pinnedFirst(tabs, layout.pinned) }, previewTab) : node)) }, sessionId)
 }
 
 function tabSlot(tabs: readonly string[], activeTab: string, index: number | undefined): number {
@@ -565,7 +579,9 @@ export function replaceSession(layout: SplitLayout, removedId: string, rawReplac
   const previewTab = owner.previewTab === removedId ? replacementId : owner.previewTab
   const root = mapNodes(layout.root, (node) => (node === owner ? withPreview({ ...owner, tabs, activeTab }, previewTab) : node))
   const focusHistory = layout.focusHistory.filter((id) => id !== removedId)
-  return showTab({ ...layout, root, focusHistory }, replacementId)
+  const pinned = pinnedAfterReplace(layout.pinned, removedId, replacementId)
+  const replaced = { ...layout, root, focusHistory, pinned }
+  return showTab(pinned === layout.pinned ? replaced : normalizeLayout(replaced), replacementId)
 }
 
 /** The group with `previewTab` set (or cleared when undefined). */
@@ -574,8 +590,8 @@ function withPreview(target: LayoutGroup, previewTab: string | undefined): Layou
   return previewTab === undefined ? rest : { ...rest, previewTab }
 }
 
-/** Makes the session an ordinary tab: it is no longer replaced by the next ordinary open. */
-export function pinTab(layout: SplitLayout, sessionId: string): SplitLayout {
+/** Keeps a preview tab: it becomes an ordinary one, no longer replaced by the next ordinary open. */
+export function keepTab(layout: SplitLayout, sessionId: string): SplitLayout {
   const owner = groupOfSession(layout, sessionId)
   if (!owner || owner.previewTab !== sessionId || !layout.root) return layout
   return { ...layout, root: mapNodes(layout.root, (node) => (node === owner ? withPreview(owner, undefined) : node)) }
@@ -603,7 +619,11 @@ function openTargetGroup(layout: SplitLayout): LayoutGroup | null {
   const focused = focusedGroup(layout)
   if (!focused || focused.tabs.some(isChatTabId)) return focused
   const route = workingSetFromLayout(layout).focusedId
-  return (route ? groupOfSession(layout, route) : null) ?? focused
+  const routeGroup = route ? groupOfSession(layout, route) : null
+  if (routeGroup) return routeGroup
+  // A pane of standalone tabs only (the Todos board, pinned documents) is not where a chat opens: it
+  // takes a pane of its own beside it.
+  return focused.tabs.every((id) => isStandaloneTab(layout.pinned, id)) ? null : focused
 }
 
 /**
@@ -818,14 +838,11 @@ export function evictToCap(layout: SplitLayout, cap: number, protectedIds: reado
   let next = layout
   const recency = (g: LayoutGroup) => Math.max(...g.tabs.map((id) => next.focusHistory.indexOf(id)))
   while (groupsOf(next).length > limit) {
-    // The layout's last chat group stays: closing it would close every other pane with it (withRoot).
-    const chatGroups = groupsOf(next).filter((g) => g.tabs.some(isChatTabId))
-    const evictable = groupsOf(next).filter((g) => chatGroups.length > 1 || g !== chatGroups[0])
-    const candidates = evictable
-      .filter((g) => g.id !== next.focusedGroupId && !g.tabs.some((id) => protectedIds.includes(id)))
-      .sort((a, b) => recency(a) - recency(b))
-    const fallback = evictable.filter((g) => g.id !== next.focusedGroupId).sort((a, b) => recency(a) - recency(b))
-    const victim = candidates[0] ?? fallback[0] ?? (limit === 0 ? groupsOf(next)[0] : undefined)
+    // The layout's last chat (or standalone tab) group stays: closing it would close every other pane with it (withRoot).
+    const anchorGroups = groupsOf(next).filter((g) => g.tabs.some((id) => isChatTabId(id) || isStandaloneTab(next.pinned, id)))
+    const evictable = groupsOf(next).filter((g) => anchorGroups.length > 1 || g !== anchorGroups[0])
+    const open = evictable.filter((g) => g.id !== next.focusedGroupId).sort((a, b) => recency(a) - recency(b))
+    const victim = evictionVictim(open, protectedIds, next.pinned) ?? (limit === 0 ? groupsOf(next)[0] : undefined)
     if (!victim) break
     next = closeGroup(next, victim.id)
   }
