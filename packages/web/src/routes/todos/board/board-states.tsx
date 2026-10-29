@@ -1,5 +1,9 @@
 import { operatorSafeTodoError } from "@/lib/todos"
 
+/** In a chat layout tab the columns keep a readable width and the strip scrolls sideways, whatever
+ *  the pane's width: the route's columns share the screen's. */
+export const TAB_COLUMNS = "[&>[data-board-column]]:min-w-[238px]"
+
 export function BoardErrorCard({ error, testId = "board-error" }: { error: unknown; testId?: string }) {
   return (
     <div className="px-10 pt-5 max-[700px]:px-0 max-[700px]:pt-2">
@@ -17,10 +21,10 @@ export function BoardErrorCard({ error, testId = "board-error" }: { error: unkno
 
 /** Loading keeps exact card geometry so nothing shifts when data lands
  *  (states mock §6 .skel-col: 56px overline bar, 85%/55% title bars). */
-export function BoardSkeleton() {
+export function BoardSkeleton({ embedded = false }: { embedded?: boolean }) {
   const cardsPerColumn = [3, 2, 3, 2, 1]
   return (
-    <div className="flex min-h-full items-start gap-3 px-10 pb-8 pt-5 max-[700px]:w-max max-[700px]:px-4 max-[700px]:pt-3" data-testid="board-skeleton" aria-hidden>
+    <div className={`flex min-h-full items-start gap-3 px-10 pb-8 pt-5 max-[700px]:w-max max-[700px]:px-4 max-[700px]:pt-3 ${embedded ? TAB_COLUMNS : ""}`} data-testid="board-skeleton" aria-hidden>
       {cardsPerColumn.map((cards, column) => (
         <div key={column} data-board-column="loading" className="flex min-w-0 flex-1 flex-col max-[700px]:w-[84vw] max-[700px]:flex-none">
           <div className="flex items-center gap-2 px-[11px] pb-2.5 pt-0.5">

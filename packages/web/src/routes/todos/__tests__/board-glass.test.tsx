@@ -137,11 +137,11 @@ describe("the glass board's stylesheet", () => {
   })
 
   it("drops the reading sheet only while the board is shown", () => {
-    expect(IDENTITY).toContain('[data-shell="sheet"]:has([data-board-glass]:not([hidden]))')
+    expect(IDENTITY).toContain('[data-shell="sheet"]:has([data-board-glass=""]:not([hidden]))')
   })
 
   it("blurs nothing on the board: columns, headers and cards are tints", () => {
-    const start = IDENTITY.indexOf('[data-shell="sheet"]:has([data-board-glass]')
+    const start = IDENTITY.indexOf('[data-shell="sheet"]:has([data-board-glass=""]')
     const end = IDENTITY.indexOf(".glass-float, .glass-float-bar, .glass-tint, .glass-tint-bar {")
     expect(start).toBeGreaterThan(0)
     expect(end).toBeGreaterThan(start)

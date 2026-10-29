@@ -60,9 +60,9 @@ export function BoardSwitcher({ board, title, departments, attentionCount }: Boa
           type="button"
           data-testid="board-switcher"
           aria-label={`Board: ${title} — switch board`}
-          className="focus-outline -ml-0.5 flex items-center gap-2 rounded-xl py-0.5 pl-0.5 pr-2.5 transition-colors duration-150 hover:bg-[var(--fill-quaternary)]"
+          className="focus-outline -ml-0.5 flex min-w-0 max-w-full items-center gap-2 rounded-xl py-0.5 pl-0.5 pr-2.5 transition-colors duration-150 hover:bg-[var(--fill-quaternary)]"
         >
-          <h1>
+          <h1 className="min-w-0 truncate">
             {title}
           </h1>
           <ChevronDown size={18} aria-hidden className="mt-1.5 text-[var(--text-quaternary)]" />

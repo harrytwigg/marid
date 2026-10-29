@@ -93,26 +93,14 @@ export function seedTodosTabLocation(board: BoardId, search: string): void {
   commit(board, search.replace(/^\?/, ""))
 }
 
-/** The Todos tab's board location, in the tab's column. A card opens as a Todo tab where the layout
- *  can take one (a click it takes goes no further, or the pane the board sits in would take focus
- *  back from the new tab, as todo-mention does), else as the Todo's page, as at the route. */
-export function TodosTabLocationProvider({ children }: { children: ReactNode }) {
-  const stored = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+/** Opening a card: a Todo tab where the layout can take one, else the Todo's page, as at the route.
+ *  A click the layout takes goes no further (`onClick`, on the tab's column), or the pane the board
+ *  sits in would take focus back from the new tab, as todo-mention does. */
+function useTodoHandOff() {
   const navigate = useNavigate()
   const openTab = useOpenTodo()
   const sessionId = useFileLinkSession()
-  const searchParams = useMemo(() => new URLSearchParams(stored.search), [stored.search])
-  // Back on the board the tab opened on is a return, which has the scroll put back; a board
-  // reached from there is a fresh one, which starts at the top.
-  const openedOn = useRef(boardKey(stored.board)).current
-  const navigationType = boardKey(stored.board) === openedOn ? NavigationType.Pop : NavigationType.Push
   const handedOff = useRef(false)
-
-  const setBoard = useCallback((board: BoardId) => commit(board, ""), [])
-  const setSearchParams = useCallback(
-    (next: URLSearchParams) => commit(getSnapshot().board, next.toString()),
-    [],
-  )
   const openTodo = useCallback(
     (id: string, state?: Record<string, unknown>) => {
       if (openTab?.(id, sessionId)) {
@@ -130,14 +118,36 @@ export function TodosTabLocationProvider({ children }: { children: ReactNode }) 
     handedOff.current = false
     event.stopPropagation()
   }, [])
+  return { openTodo, onClick }
+}
 
+/** The Todos tab's board location, in the tab's column. */
+export function TodosTabLocationProvider({ children }: { children: ReactNode }) {
+  const stored = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  const { openTodo, onClick } = useTodoHandOff()
+  const searchParams = useMemo(() => new URLSearchParams(stored.search), [stored.search])
+  // Back on the board the tab opened on is a return, which has the scroll put back; a board
+  // reached from there is a fresh one, which starts at the top.
+  const openedOn = useRef(boardKey(stored.board)).current
+  const navigationType = boardKey(stored.board) === openedOn ? NavigationType.Pop : NavigationType.Push
+
+  const setBoard = useCallback((board: BoardId) => commit(board, ""), [])
+  const setSearchParams = useCallback(
+    (next: URLSearchParams) => commit(getSnapshot().board, next.toString()),
+    [],
+  )
   const value = useMemo<BoardLocation>(
     () => ({ board: stored.board, setBoard, searchParams, setSearchParams, navigationType, openTodo }),
     [stored.board, setBoard, searchParams, setSearchParams, navigationType, openTodo],
   )
   return (
     <BoardLocationContext.Provider value={value}>
-      <div data-testid="todos-tab-view" onClick={onClick} className="relative flex h-full min-h-0 flex-1 flex-col">
+      {/* The header's actions drop under the title once a narrow pane cannot hold both. */}
+      <div
+        data-testid="todos-tab-view"
+        onClick={onClick}
+        className="relative flex h-full min-h-0 flex-1 flex-col [&_[data-slot=large-title-header]]:flex-wrap [&_[data-slot=large-title-header]>div]:min-w-40"
+      >
         {children}
       </div>
     </BoardLocationContext.Provider>

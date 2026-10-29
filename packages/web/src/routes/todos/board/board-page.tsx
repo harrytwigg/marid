@@ -41,7 +41,7 @@ import {
 import { useBoardDrag } from "./use-board-drag"
 import { boardKey } from "./board-route"
 import { RouteBoardLocationProvider, useBoardLocation } from "./board-location"
-import { BoardErrorCard, BoardSkeleton } from "./board-states"
+import { BoardErrorCard, BoardSkeleton, TAB_COLUMNS } from "./board-states"
 import { useBoardScroll } from "./use-board-scroll"
 import { BoardViewSwitch, ColumnDots } from "./board-view-switch"
 import { loadBoardView, PHONE_CARD_MOVE, saveBoardView, useColumnPosition, useIsBoardMobile, type BoardView } from "./phone-board"
@@ -688,18 +688,18 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
             onContextMenu={sprintTools.onContextMenu}
             hidden={mobile && mobileView !== "board"}
             data-testid="todo-board-scroll"
-            data-board-glass=""
+            data-board-glass={embedded ? "tab" : ""}
             data-scrollable
             className="min-h-0 flex-1 overflow-auto pb-[var(--jinn-scaffold-bottom)] max-[700px]:snap-x max-[700px]:snap-mandatory max-[700px]:scroll-px-4 lg:pb-10"
           >
             {data.isError ? (
               <BoardErrorCard error={data.error} />
             ) : data.isLoading ? (
-              <BoardSkeleton />
+              <BoardSkeleton embedded={embedded} />
             ) : filteredEmpty ? (
               <FilteredEmptyCard count={filterCount} onClear={clearAllFilters} />
             ) : (
-            <div className="flex min-h-full items-start gap-3 px-10 pb-8 pt-5 max-[700px]:w-max max-[700px]:px-4 max-[700px]:pt-3">
+            <div className={`flex min-h-full items-start gap-3 px-10 pb-8 pt-5 max-[700px]:w-max max-[700px]:px-4 max-[700px]:pt-3 ${embedded ? TAB_COLUMNS : ""}`}>
               {visibleStatuses.map((status) => columnFor(status))}
               {CLOSED_STATUSES.some(listStatusInScope) && (closedOpen ? (
                 <section
