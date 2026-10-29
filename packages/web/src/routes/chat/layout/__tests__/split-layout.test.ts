@@ -16,7 +16,7 @@ import {
   focusSession,
   emptySplitLayout,
   openInFocusedGroup,
-  pinTab,
+  keepTab,
   placeTab,
   pruneSessions,
   replaceSession,
@@ -181,21 +181,21 @@ describe('navigation and replacement', () => {
     expect(findGroup(layout, groupId(layout, 'y'))).toMatchObject({ tabs: ['a', 'y'], activeTab: 'y', previewTab: 'y' })
   })
 
-  it('leaves a pinned tab alone: the next open adds a new preview tab', () => {
+  it('leaves a kept tab alone: the next open adds a new preview tab', () => {
     let layout = createSplitLayout(['a'], 'a')
-    layout = pinTab(openInFocusedGroup(layout, 'x'), 'x')
+    layout = keepTab(openInFocusedGroup(layout, 'x'), 'x')
     layout = openInFocusedGroup(layout, 'y')
 
     expect(findGroup(layout, groupId(layout, 'y'))).toMatchObject({ tabs: ['a', 'x', 'y'], previewTab: 'y' })
   })
 
-  it('pins by clearing previewTab, and pinning a non-preview tab changes nothing', () => {
+  it('keeps by clearing previewTab, and keeping a non-preview tab changes nothing', () => {
     const opened = openInFocusedGroup(createSplitLayout(['a'], 'a'), 'x')
-    const pinned = pinTab(opened, 'x')
-    expect(findGroup(pinned, groupId(pinned, 'x'))!.previewTab).toBeUndefined()
-    expect(pinTab(pinned, 'x')).toBe(pinned)
-    expect(pinTab(pinned, 'a')).toBe(pinned)
-    expect(pinTab(pinned, 'nope')).toBe(pinned)
+    const kept = keepTab(opened, 'x')
+    expect(findGroup(kept, groupId(kept, 'x'))!.previewTab).toBeUndefined()
+    expect(keepTab(kept, 'x')).toBe(kept)
+    expect(keepTab(kept, 'a')).toBe(kept)
+    expect(keepTab(kept, 'nope')).toBe(kept)
   })
 
   it('makes a preview tab ordinary when it is placed, re-ordered or moved', () => {
@@ -226,7 +226,7 @@ describe('navigation and replacement', () => {
     expect(findGroup(layout, groupId(layout, 'b'))).toMatchObject({ tabs: ['b'], previewTab: 'b' })
     expect(groupsOf(layout)).toHaveLength(1)
 
-    layout = pinTab(layout, 'b')
+    layout = keepTab(layout, 'b')
     layout = openInFocusedGroup(layout, 'c')
     expect(findGroup(layout, groupId(layout, 'c'))).toMatchObject({ tabs: ['b', 'c'], previewTab: 'c' })
   })

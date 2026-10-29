@@ -19,10 +19,11 @@ import {
   groupOfSession,
   groupsOf,
   materializeLayout,
+  normalizeLayout,
   openDocTab,
   openNewChatTab,
   openInFocusedGroup,
-  pinTab,
+  keepTab,
   placeTab,
   pruneSessions,
   replaceSession,
@@ -32,6 +33,7 @@ import {
   type SplitLayout,
 } from './split-layout'
 import { loadSplitLayout, persistSplitLayout } from './split-layout-storage'
+import { closeAllUnpinned, closeUserTab, pinTab, unpinTab } from './pinned-tabs'
 import { fileTabId, type FileTabRef } from './file-tab'
 import { subagentTabId, type SubagentTabRef } from './subagent-tab'
 import { isChatTabId, isNewChatTabId, todoTabId } from './tab-kind'
@@ -76,7 +78,7 @@ export function hydrateSplitLayout(storage: Pick<Storage, 'getItem'>, liveIds: R
   const agreed = sameOrder(storedMembers, upstream.sessionIds)
   const layout = agreed
     ? stored
-    : { ...createSplitLayout(upstream.sessionIds, upstream.focusedId), focusHistory: upstream.focusHistory }
+    : normalizeLayout({ ...createSplitLayout(upstream.sessionIds, upstream.focusedId), focusHistory: upstream.focusHistory, pinned: stored.pinned })
   return evictToCap(layout, cap)
 }
 
@@ -105,10 +107,15 @@ export interface SplitLayoutControls {
   equalize: (columns: number, splitId: string) => void
   /** Tab-strip edits: put a tab in a group at a slot (adds, moves or re-orders), close a tab, keep a preview tab. */
   place: (groupId: string, sessionId: string, index: number) => void
+  /** Closes a tab at the user's request: a pinned tab stays (a deleted session is `remove`'s). */
   close: (sessionId: string) => void
-  /** Closes every tab in every pane: no groups at all, the layout as it is on a first visit. */
+  /** Closes every unpinned tab in every pane: the pinned ones stay, and with none pinned no group
+   * is left, the layout as it is on a first visit. */
   closeAll: () => void
-  pin: (sessionId: string) => void
+  keep: (sessionId: string) => void
+  /** Pins a tab (keeping it, if it was a preview), or unpins it. */
+  pin: (tabId: string) => void
+  unpin: (tabId: string) => void
   /** Shows a tab in its group, file or chat; focusing a chat would keep a file shown over it. */
   show: (tabId: string) => void
   /** Focuses the pane holding a tab without changing the tab it shows (a pane with no chat). */
@@ -205,12 +212,14 @@ function useSplitControls(
   const place = useCallback((groupId: string, sessionId: string, index: number) => {
     setLayout((current) => placeTab(project(current), groupId, sessionId, index))
   }, [project, setLayout])
-  const close = useCallback((sessionId: string) => setLayout((current) => closeSession(current, sessionId)), [setLayout])
-  const closeAll = useCallback(() => setLayout(() => emptySplitLayout()), [setLayout])
-  const pin = useCallback((sessionId: string) => setLayout((current) => pinTab(current, sessionId)), [setLayout])
+  const close = useCallback((sessionId: string) => setLayout((current) => closeUserTab(current, sessionId)), [setLayout])
+  const closeAll = useCallback(() => setLayout((current) => closeAllUnpinned(current)), [setLayout])
+  const keep = useCallback((sessionId: string) => setLayout((current) => keepTab(current, sessionId)), [setLayout])
+  const pin = useCallback((tabId: string) => setLayout((current) => pinTab(current, tabId)), [setLayout])
+  const unpin = useCallback((tabId: string) => setLayout((current) => unpinTab(current, tabId)), [setLayout])
   const show = useCallback((tabId: string) => setLayout((current) => showTab(current, tabId)), [setLayout])
   const focusPane = useCallback((tabId: string) => setLayout((current) => focusGroupOfTab(current, tabId)), [setLayout])
-  return useMemo(() => ({ layout, resize, equalize, place, close, closeAll, pin, show, focusPane }), [close, closeAll, equalize, focusPane, layout, pin, place, resize, show])
+  return useMemo(() => ({ layout, resize, equalize, place, close, closeAll, keep, pin, unpin, show, focusPane }), [close, closeAll, equalize, focusPane, layout, keep, pin, place, resize, show, unpin])
 }
 
 /** The page's openers for tabs other than the route's chat: a file or a Todo beside a chat, a new chat. */

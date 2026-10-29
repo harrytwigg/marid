@@ -91,6 +91,22 @@ describe('useChatTabs', () => {
     expect(reloaded.result.current.tabs).toHaveLength(0)
   })
 
+  it('closes every tab but the sessions it is told to keep (the pane layout\'s pinned chats)', () => {
+    const { result } = renderHook(() => useChatTabs())
+    for (const sessionId of ['s1', 's2', 's3']) act(() => result.current.openTab({ sessionId, label: sessionId, status: 'idle', unread: false, pinned: true }))
+    act(() => result.current.openFileTab('docs/readme.md', 's2'))
+
+    act(() => result.current.closeAllTabs(['s2', 'gone']))
+
+    expect(result.current.tabs.map((tab) => tab.kind === 'session' && tab.sessionId)).toEqual(['s2'])
+    expect(result.current.activeIndex).toBe(-1)
+    expect(JSON.parse(localStorage.getItem('jinn-chat-tabs')!).tabs).toHaveLength(1)
+    // Nothing left to close beyond what is kept: the list keeps its own object.
+    const before = result.current.tabs
+    act(() => result.current.closeAllTabs(['s2']))
+    expect(result.current.tabs).toBe(before)
+  })
+
   it('pinTab converts preview tab to pinned', () => {
     const { result } = renderHook(() => useChatTabs())
     act(() => result.current.openTab({ sessionId: 's1', label: 'A', status: 'idle', unread: false }))

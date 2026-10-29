@@ -1,13 +1,13 @@
 import type { ReactNode } from 'react'
-import { X } from '@/components/ui/icon'
 import { FileLinkSessionContext } from '@/components/chat/file-link-session-context'
-import { usePaneCloseAll, type PaneTitleDrag } from '@/components/chat/pane-tabs-context'
+import { usePaneCloseAll, type PaneTabActions, type PaneTitleDrag } from '@/components/chat/pane-tabs-context'
 import { CloseAllTabsButton } from '@/components/chat/close-all-tabs-button'
 import { DocView } from '@/components/chat/doc-view'
 import { docViewTestId } from '@/components/chat/doc-view-test-id'
 import { fileTabTitle } from './file-tab'
 import { subagentTabTitle } from './subagent-tab'
 import { PaneKindTabLabel } from './pane-kind-tab-label'
+import { PaneTitleTabButton, useTabPointMenu } from './pane-tab-controls'
 import { TODOS_TAB_TITLE, type DocTabRef } from './tab-kind'
 
 /**
@@ -35,30 +35,28 @@ function docTitle(doc: DocTabRef): string {
   return doc.kind === 'todo' ? doc.todoId : subagentTabTitle(doc.subagent)
 }
 
-/** A lone document's title bar: its glyph and title, dragged like its tab would be, and a close button. */
-export function DocPaneTitle({ doc, active, drag, onClose }: { doc: DocTabRef; active: boolean; drag: PaneTitleDrag; onClose: () => void }) {
+/** A lone document's title bar: its glyph and title, dragged like its tab would be, a close button (its
+ * pin glyph, unpinning it, when pinned) and the tab's menu, since a lone tab has no strip to carry one. */
+export function DocPaneTitle({ doc, active, drag, actions = null, onClose }: { doc: DocTabRef; active: boolean; drag: PaneTitleDrag; actions?: PaneTabActions | null; onClose: () => void }) {
   const title = docTitle(doc)
   // A lone document's pane shows no strip, so this bar is that pane's whole tab bar, as a lone
   // chat's is: the close-all belongs here for the same reason, and only when this pane has focus.
   const closeAll = usePaneCloseAll()
+  const tabMenu = useTabPointMenu(actions)
   return (
-    <div
-      data-testid="doc-pane-title"
-      title={doc.kind === 'file' ? doc.file.path : undefined}
-      {...drag}
-      className={`flex min-w-0 flex-1 items-center gap-1.5 px-[8px] pl-[12px] text-[length:var(--text-subheadline)] ${active ? 'text-[var(--text-primary)]' : 'text-[var(--text-tertiary)]'}`}
-    >
-      <PaneKindTabLabel kind={doc.kind} title={title} active={active} />
-      {active && closeAll ? <CloseAllTabsButton onClick={closeAll} /> : null}
-      <button
-        type="button"
-        data-pane-focus-preserving
-        aria-label={`Close ${title}`}
-        onClick={(event) => { event.stopPropagation(); onClose() }}
-        className="grid size-[26px] shrink-0 place-items-center rounded-[var(--radius-sm)] border-0 bg-transparent text-[var(--text-secondary)] opacity-0 transition-[color,opacity] duration-[var(--duration-fast)] hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)] focus-visible:opacity-100 group-hover/doc-pane:opacity-100"
+    <>
+      <div
+        data-testid="doc-pane-title"
+        title={doc.kind === 'file' ? doc.file.path : undefined}
+        {...drag}
+        onContextMenu={tabMenu.onContextMenu}
+        className={`flex min-w-0 flex-1 items-center gap-1.5 px-[8px] pl-[12px] text-[length:var(--text-subheadline)] ${active ? 'text-[var(--text-primary)]' : 'text-[var(--text-tertiary)]'}`}
       >
-        <X size={14} aria-hidden />
-      </button>
-    </div>
+        <PaneKindTabLabel kind={doc.kind} title={title} active={active} />
+        {active && closeAll ? <CloseAllTabsButton onClick={closeAll} /> : null}
+        <PaneTitleTabButton title={title} actions={actions} onClose={onClose} />
+      </div>
+      {tabMenu.menu}
+    </>
   )
 }

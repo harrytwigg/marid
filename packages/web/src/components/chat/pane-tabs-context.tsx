@@ -22,6 +22,20 @@ export interface PaneTabsBinding {
   /** For a pane holding one tab, which shows no strip: its title bar drags that tab, as its strip
    *  would. Null when the pane has a strip (its tabs are dragged there) or is not in the layout. */
   titleDrag?: (paneTabId: string) => PaneTitleDrag | null
+  /** Pins a tab, wherever it is: the strips and title bars, the page's shortcuts and the phone's switcher. */
+  pin?: (tabId: string) => void
+  unpin?: (tabId: string) => void
+  /** What a lone tab's title bar (it has no strip) offers for the tab: its menu and its pin glyph. */
+  tabActions?: (paneTabId: string) => PaneTabActions | null
+}
+
+/** One tab's pinning and closing as a menu offers them. A pinned tab cannot be closed by the user. */
+export interface PaneTabActions {
+  pinned: boolean
+  canClose: boolean
+  pin: () => void
+  unpin: () => void
+  close: () => void
 }
 
 export interface PaneTitleDrag {
@@ -54,6 +68,13 @@ export function usePaneTabsStrip(sessionId: string): ReactNode | null {
 export function usePaneTitleDrag(sessionId: string): PaneTitleDrag | null {
   const tabId = useContext(PaneTabIdContext) ?? sessionId
   return useContext(PaneTabsContext)?.titleDrag?.(tabId) ?? null
+}
+
+/** The pin menu actions of the tab a pane's title bar sits in, or null when it has none (no layout binding). */
+export function usePaneTabActions(sessionId: string | null): PaneTabActions | null {
+  const tabId = useContext(PaneTabIdContext) ?? sessionId
+  const binding = useContext(PaneTabsContext)
+  return tabId ? binding?.tabActions?.(tabId) ?? null : null
 }
 
 /** The close-all a bar offers, or null when nothing is open to close. */

@@ -92,6 +92,8 @@ export function restoreSplitLayout(raw: string | null): SplitLayout {
       focusHistory: Array.isArray(parsed.focusHistory)
         ? parsed.focusHistory.filter((id): id is string => typeof id === 'string')
         : [],
+      // Ids the revived tree does not hold are dropped by normalizeLayout.
+      pinned: Array.isArray(parsed.pinned) ? [...new Set(parsed.pinned.filter((id): id is string => typeof id === 'string' && id !== ''))] : [],
       // Never below what the tree already uses, or a new group could reuse a live id.
       nextId: Math.max(
         typeof parsed.nextId === 'number' && Number.isInteger(parsed.nextId) ? parsed.nextId : 1,
