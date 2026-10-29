@@ -24,7 +24,7 @@ export interface PaneTabItem {
   title: string
   employee?: string
   status?: 'running' | 'error' | 'waiting'
-  /** VS Code preview tab: italic, replaced by the next preview open until pinned. */
+  /** VS Code preview tab: italic, replaced by the next preview open until kept. */
   preview?: boolean
   /** Set on a tab that is no chat: what it is, which picks its glyph. */
   kind?: Exclude<PaneTabKind, 'chat'>
@@ -47,8 +47,8 @@ export interface PaneTabStripProps {
   onMoveIn: (fromGroupId: string, tabId: string, toIndex: number) => void
   /** A chat dragged from the sidebar was dropped here; `toIndex` is the insertion slot. */
   onDropSession?: (sessionId: string, toIndex: number) => void
-  /** Double-click promotes a preview tab to a pinned one. */
-  onPin?: (tabId: string) => void
+  /** Double-click keeps a preview tab (it stops being replaced by the next preview open). */
+  onKeep?: (tabId: string) => void
   /** Whether this strip's group is the focused one; only its shown tab carries the top marker. */
   focused?: boolean
   /** Closes every open tab. Offered by the focused strip only: one bar carries the action. */
@@ -153,7 +153,7 @@ interface PaneTabProps {
   dropEdge: 'before' | 'after' | null
   onActivate: () => void
   onClose: () => void
-  onPin?: () => void
+  onKeep?: () => void
   onKeyDown: (event: KeyboardEvent) => void
 }
 
@@ -202,7 +202,7 @@ function TabCloseButton({ title, active, onClose }: { title: string; active: boo
   )
 }
 
-function PaneTab({ tab, groupId, active, focused, tabStop, dropEdge, onActivate, onClose, onPin, onKeyDown }: PaneTabProps) {
+function PaneTab({ tab, groupId, active, focused, tabStop, dropEdge, onActivate, onClose, onKeep, onKeyDown }: PaneTabProps) {
   // Middle-click closes; suppress the browser's autoscroll on mousedown.
   const onMouseDown = (event: MouseEvent) => {
     if (event.button !== 1) return
@@ -223,7 +223,7 @@ function PaneTab({ tab, groupId, active, focused, tabStop, dropEdge, onActivate,
       title={tab.filePath ?? tab.title}
       {...paneTabDragProps({ groupId, tabId: tab.id })}
       onClick={onActivate}
-      onDoubleClick={tab.preview ? onPin : undefined}
+      onDoubleClick={tab.preview ? onKeep : undefined}
       onMouseDown={onMouseDown}
       onKeyDown={onKeyDown}
       className={`${TAB_CLASS} ${active ? 'bg-[var(--fill-tertiary)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]'}`}
@@ -260,7 +260,7 @@ function handleTabKey(
 }
 
 export function PaneTabStrip(props: PaneTabStripProps) {
-  const { groupId, tabs, activeId, onActivate, onClose, onPin, onCloseAll } = props
+  const { groupId, tabs, activeId, onActivate, onClose, onKeep, onCloseAll } = props
   const listRef = useRef<HTMLDivElement>(null)
   const drop = useStripDrop(listRef, props)
   const setFocusId = useTabVisibility(listRef, activeId, tabs)
@@ -300,7 +300,7 @@ export function PaneTabStrip(props: PaneTabStripProps) {
             dropEdge={dropEdgeFor(drop.dropSlot, index, tabs.length)}
             onActivate={() => onActivate(tab.id)}
             onClose={() => onClose(tab.id)}
-            onPin={onPin ? () => onPin(tab.id) : undefined}
+            onKeep={onKeep ? () => onKeep(tab.id) : undefined}
             onKeyDown={(event) => onKeyDown(event, index)}
           />
         ))}

@@ -22,7 +22,7 @@ import {
   openDocTab,
   openNewChatTab,
   openInFocusedGroup,
-  pinTab,
+  keepTab,
   placeTab,
   pruneSessions,
   replaceSession,
@@ -108,7 +108,7 @@ export interface SplitLayoutControls {
   close: (sessionId: string) => void
   /** Closes every tab in every pane: no groups at all, the layout as it is on a first visit. */
   closeAll: () => void
-  pin: (sessionId: string) => void
+  keep: (sessionId: string) => void
   /** Shows a tab in its group, file or chat; focusing a chat would keep a file shown over it. */
   show: (tabId: string) => void
   /** Focuses the pane holding a tab without changing the tab it shows (a pane with no chat). */
@@ -207,10 +207,10 @@ function useSplitControls(
   }, [project, setLayout])
   const close = useCallback((sessionId: string) => setLayout((current) => closeSession(current, sessionId)), [setLayout])
   const closeAll = useCallback(() => setLayout(() => emptySplitLayout()), [setLayout])
-  const pin = useCallback((sessionId: string) => setLayout((current) => pinTab(current, sessionId)), [setLayout])
+  const keep = useCallback((sessionId: string) => setLayout((current) => keepTab(current, sessionId)), [setLayout])
   const show = useCallback((tabId: string) => setLayout((current) => showTab(current, tabId)), [setLayout])
   const focusPane = useCallback((tabId: string) => setLayout((current) => focusGroupOfTab(current, tabId)), [setLayout])
-  return useMemo(() => ({ layout, resize, equalize, place, close, closeAll, pin, show, focusPane }), [close, closeAll, equalize, focusPane, layout, pin, place, resize, show])
+  return useMemo(() => ({ layout, resize, equalize, place, close, closeAll, keep, show, focusPane }), [close, closeAll, equalize, focusPane, layout, keep, place, resize, show])
 }
 
 /** The page's openers for tabs other than the route's chat: a file or a Todo beside a chat, a new chat. */

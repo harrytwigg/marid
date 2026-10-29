@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { paneTabHandlers, paneTabItems, selectTab, tabsOfGroup, type PaneTabOps } from '../pane-tab-ops'
 import { fileTabId } from '../file-tab'
 import {
-  closeSession, createSplitLayout, findGroup, focusSession, groupOfSession, groupsOf, openDocTab, openInFocusedGroup, pinTab, placeTab, showTab, splitGroup, type SplitLayout,
+  closeSession, createSplitLayout, findGroup, focusSession, groupOfSession, groupsOf, openDocTab, openInFocusedGroup, keepTab, placeTab, showTab, splitGroup, type SplitLayout,
 } from '../split-layout'
 
 const lookup = (id: string) => ({ a: { title: 'Alpha', employee: 'op', status: 'running' as const } })[id as 'a']
@@ -16,7 +16,7 @@ function drive(start: SplitLayout) {
     place: (groupId, id, index) => { layout = placeTab(layout, groupId, id, index) },
     close: (id) => { layout = closeSession(layout, id) },
     select,
-    pin: (id) => { layout = pinTab(layout, id) },
+    keep: (id) => { layout = keepTab(layout, id) },
   }
   return { get layout() { return layout }, ops, select }
 }
@@ -88,14 +88,14 @@ describe('paneTabHandlers', () => {
     expect(findGroup(run.layout, groupId)!.tabs).toEqual(['b'])
   })
 
-  it('activates and pins by session id', () => {
+  it('activates and keeps by session id', () => {
     const start = openInFocusedGroup(createSplitLayout(['a'], 'a'), 'x')
     const groupId = groupsOf(start)[0].id
     const run = drive(start)
     const handlers = paneTabHandlers(groupId, run.ops)
     handlers.onActivate('a')
     expect(run.select).toHaveBeenCalledWith('a')
-    handlers.onPin!('x')
+    handlers.onKeep!('x')
     expect(findGroup(run.layout, groupId)!.previewTab).toBeUndefined()
   })
 
@@ -117,7 +117,7 @@ describe('paneTabHandlers routing (selectTab, as the provider wires it)', () => 
       place: (groupId, id, index) => { layout = placeTab(layout, groupId, id, index) },
       close: (id) => { layout = closeSession(layout, id) },
       select: (id, after = start) => selectTab(after, id, (tabId) => { layout = showTab(layout, tabId) }, route),
-      pin: (id) => { layout = pinTab(layout, id) },
+      keep: (id) => { layout = keepTab(layout, id) },
     }
     return { get layout() { return layout }, ops, route }
   }

@@ -59,10 +59,10 @@ export interface PaneTabOps {
   close: (sessionId: string) => void
   /** Makes a tab the shown one, and its group's chat the route's (resolved on `after`, if given). */
   select: (sessionId: string, after?: SplitLayout) => void
-  pin: (sessionId: string) => void
+  keep: (sessionId: string) => void
 }
 
-type StripHandlers = Pick<PaneTabStripProps, 'onActivate' | 'onClose' | 'onReorder' | 'onMoveIn' | 'onDropSession' | 'onPin'>
+type StripHandlers = Pick<PaneTabStripProps, 'onActivate' | 'onClose' | 'onReorder' | 'onMoveIn' | 'onDropSession' | 'onKeep'>
 
 /**
  * The strip's callbacks for one group. Re-ordering, moving between groups and adding a sidebar chat
@@ -80,6 +80,6 @@ export function paneTabHandlers(groupId: string, ops: PaneTabOps): StripHandlers
     onReorder: place,
     onMoveIn: (_fromGroupId, sessionId, index) => place(sessionId, index),
     onDropSession: place,
-    onPin: ops.pin,
+    onKeep: ops.keep,
   }
 }

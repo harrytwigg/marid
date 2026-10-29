@@ -13,7 +13,7 @@ import {
   openDocTab,
   openNewChatTab,
   paneKeysFromLayout,
-  pinTab,
+  keepTab,
   placeTab,
   showTab,
   splitGroup,
@@ -45,7 +45,7 @@ function Grid({ start, latest }: { start: SplitLayout; latest: { current: SplitL
     place: (groupId: string, id: string, index: number) => apply((current) => placeTab(current, groupId, id, index)),
     close: (id: string) => apply((current) => closeSession(current, id)),
     closeAll: () => apply(() => emptySplitLayout()),
-    pin: (id: string) => apply((current) => pinTab(current, id)),
+    keep: (id: string) => apply((current) => keepTab(current, id)),
     show: (id: string) => apply((current) => showTab(current, id)),
     focusPane: (id: string) => apply((current) => focusGroupOfTab(current, id)),
   } as SplitLayoutControls

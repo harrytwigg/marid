@@ -42,19 +42,19 @@ interface PaneTabsProviderProps {
  * yet (the route adds it a beat later), so only then does the request wait until its tab exists; a
  * request left waiting for a tab that is already there would keep that chat's next preview too.
  */
-function useKeepRequests(layout: SplitLayoutControls['layout'], pin: (sessionId: string) => void) {
+function useKeepRequests(layout: SplitLayoutControls['layout'], keep: (sessionId: string) => void) {
   const waiting = useRef(new Set<string>())
   useEffect(() => {
     for (const sessionId of waiting.current) {
       if (!groupOfSession(layout, sessionId)) continue
       waiting.current.delete(sessionId)
-      pin(sessionId)
+      keep(sessionId)
     }
-  }, [layout, pin])
+  }, [layout, keep])
   return useCallback((sessionId: string) => {
-    if (groupOfSession(layout, sessionId)) pin(sessionId)
+    if (groupOfSession(layout, sessionId)) keep(sessionId)
     else waiting.current.add(sessionId)
-  }, [layout, pin])
+  }, [layout, keep])
 }
 
 /**
@@ -126,14 +126,14 @@ function docPane(layout: SplitLayout, paneKey: string, groupStrip: (group: Layou
 export function PaneTabsProvider({ split, onSelect, onCloseAll, children }: PaneTabsProviderProps) {
   const sessions = useSessions().data as SessionRow[] | undefined
   const byId = useMemo(() => new Map((sessions ?? []).map((row) => [String(row.id ?? ''), row])), [sessions])
-  const { layout, pin } = split
+  const { layout } = split
 
-  const keep = useKeepRequests(layout, pin)
+  const keep = useKeepRequests(layout, split.keep)
   const closeTab = useCloseTab(split, onSelect)
   const selectChosenTab = useSelectTab(split, onSelect)
 
   const binding = useMemo<PaneTabsBinding>(() => {
-    const ops = { layout, place: split.place, close: closeTab, select: selectChosenTab, pin }
+    const ops = { layout, place: split.place, close: closeTab, select: selectChosenTab, keep: split.keep }
     const groupStrip = (group: LayoutGroup) => (
       <PaneTabStrip
         groupId={group.id}
@@ -164,7 +164,7 @@ export function PaneTabsProvider({ split, onSelect, onCloseAll, children }: Pane
       },
       renderDocPane: (paneKey) => docPane(layout, paneKey, groupStrip, closeTab),
     }
-  }, [byId, closeTab, keep, layout, onCloseAll, pin, selectChosenTab, split.place])
+  }, [byId, closeTab, keep, layout, onCloseAll, selectChosenTab, split.keep, split.place])
 
   return <PaneTabsContext.Provider value={binding}>{children}</PaneTabsContext.Provider>
 }

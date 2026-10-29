@@ -32,7 +32,7 @@ export interface LayoutGroup {
   tabs: string[]
   activeTab: string
   /** The tab opened by ordinary navigation and not yet kept (VS Code's italic preview tab): one of
-   * `tabs`, at most one per group. The next ordinary open replaces it; placing, moving, pinning or
+   * `tabs`, at most one per group. The next ordinary open replaces it; placing, moving, keeping or
    * working in it makes it an ordinary tab. */
   previewTab?: string
 }
@@ -574,8 +574,8 @@ function withPreview(target: LayoutGroup, previewTab: string | undefined): Layou
   return previewTab === undefined ? rest : { ...rest, previewTab }
 }
 
-/** Makes the session an ordinary tab: it is no longer replaced by the next ordinary open. */
-export function pinTab(layout: SplitLayout, sessionId: string): SplitLayout {
+/** Keeps a preview tab: it becomes an ordinary one, no longer replaced by the next ordinary open. */
+export function keepTab(layout: SplitLayout, sessionId: string): SplitLayout {
   const owner = groupOfSession(layout, sessionId)
   if (!owner || owner.previewTab !== sessionId || !layout.root) return layout
   return { ...layout, root: mapNodes(layout.root, (node) => (node === owner ? withPreview(owner, undefined) : node)) }
