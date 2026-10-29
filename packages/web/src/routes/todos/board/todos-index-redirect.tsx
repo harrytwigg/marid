@@ -25,10 +25,12 @@ export function legacyTodosRedirectTarget(search: string): string {
 
 /** Takes a board link into the Todos tab: the tab is pointed at the board and its filters, then the chat
  *  route is asked to open it. The tab's location store is loaded here, not at start-up, with the rest of
- *  the tab. */
-async function intoTodosTab(board: BoardId, search: string) {
-  const { seedTodosTabLocation } = await import("./todos-tab-location")
-  seedTodosTabLocation(board, search)
+ *  the tab. `seed` null leaves the tab where it was. */
+async function intoTodosTab(seed: { board: BoardId; search: string } | null) {
+  if (seed) {
+    const { seedTodosTabLocation } = await import("./todos-tab-location")
+    seedTodosTabLocation(seed.board, seed.search)
+  }
   return redirect(TODOS_TAB_HREF)
 }
 
@@ -40,14 +42,15 @@ async function intoTodosTab(board: BoardId, search: string) {
  *  stretching the flash to its full duration). A loader redirect produces one
  *  commit: old page → the chat route with the Todos tab open. */
 export function todosIndexLoader({ request }: LoaderFunctionArgs) {
-  const { board, search } = legacyTodosBoard(new URL(request.url).search)
-  return intoTodosTab(board, search)
+  const query = new URL(request.url).search
+  // A bare address names no board and no filter, so it must not undo the board the tab was last left on.
+  return intoTodosTab(query.replace(/^\?/, "") ? legacyTodosBoard(query) : null)
 }
 
 /** Router-level redirect for /todos/b/:board: the board is the Todos tab now, so a link to one (a bookmark,
- *  a department's board address) opens the tab on that board with the link's filters. */
+ *  a department's board address) opens the tab on that board with the link's filters. A bare /todos or /kanban opens the tab where it was left. */
 export function todosBoardLoader({ params, request }: LoaderFunctionArgs) {
-  return intoTodosTab(parseBoardParam(params.board), new URL(request.url).search)
+  return intoTodosTab({ board: parseBoardParam(params.board), search: new URL(request.url).search })
 }
 
 /** Route element for the /todos index: redirect into the Todos tab.

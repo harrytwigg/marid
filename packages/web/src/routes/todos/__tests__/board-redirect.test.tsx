@@ -81,13 +81,31 @@ describe("the board address loaders", () => {
   /** The tab is somewhere else already, so a seed is a move the store records. */
   const startOnPlatform = () => seedTodosTabLocation({ kind: "department", slug: "platform" } satisfies BoardId, "q=old")
 
-  it("sends /todos to the chat route's Todos tab, on the Everything board", async () => {
+  it("sends a bare /todos to the chat route's Todos tab and leaves the tab on the board it was on", async () => {
     startOnPlatform()
     const { todosIndexLoader } = await import("../board/todos-index-redirect")
     const res = (await todosIndexLoader({ request: new Request("http://x/todos"), params: {}, context: {} } as never)) as Response
     expect(res.status).toBe(302)
     expect(res.headers.get("Location")).toBe(TODOS_TAB_HREF)
-    expect(seeded()).toMatchObject({ board: "everything", search: "" })
+    expect(seeded()).toMatchObject({ board: "platform", search: "q=old" })
+  })
+
+  it("leaves the tab alone for a bare legacy /kanban, and for a bare query mark", async () => {
+    startOnPlatform()
+    const { todosIndexLoader } = await import("../board/todos-index-redirect")
+    for (const url of ["http://x/kanban", "http://x/todos?"]) {
+      const res = (await todosIndexLoader({ request: new Request(url), params: {}, context: {} } as never)) as Response
+      expect(res.headers.get("Location")).toBe(TODOS_TAB_HREF)
+    }
+    expect(seeded()).toMatchObject({ board: "platform", search: "q=old" })
+  })
+
+  it("seeds the tab from /todos when it carries filters", async () => {
+    startOnPlatform()
+    const { todosIndexLoader } = await import("../board/todos-index-redirect")
+    const res = (await todosIndexLoader({ request: new Request("http://x/todos?assignee=scout"), params: {}, context: {} } as never)) as Response
+    expect(res.headers.get("Location")).toBe(TODOS_TAB_HREF)
+    expect(seeded()).toMatchObject({ board: "everything", search: "assignee=scout" })
   })
 
   it("carries legacy view params to their mapped boards, keeping other filters", async () => {
