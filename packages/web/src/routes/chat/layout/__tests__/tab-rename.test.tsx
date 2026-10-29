@@ -1,12 +1,13 @@
 import "@/test/preload-menus"
 import { describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { PaneTabsContext, type PaneTabActions, type PaneTabsBinding } from '@/components/chat/pane-tabs-context'
 import { ChatPaneTitleBar } from '@/components/chat/chat-pane-title-bar'
 import { paneTabHandlers, paneTabItems } from '../pane-tab-ops'
 import { PaneTabStrip, type PaneTabItem, type PaneTabStripProps } from '../pane-tab-strip'
 import { menuActions } from '../pane-tab-controls'
-import { renamedTitle, TabRenameInput } from '../tab-rename'
+import { renderHook } from '@testing-library/react'
+import { renamedTitle, TabRenameInput, useInlineRename } from '../tab-rename'
 
 describe('renamedTitle', () => {
   it('trims the draft', () => expect(renamedTitle('Alpha', '  Beta  ')).toBe('Beta'))
@@ -39,7 +40,7 @@ describe('TabRenameInput', () => {
     fireEvent.change(input, { target: { value: ' Beta ' } })
     fireEvent.keyDown(input, { key: 'Enter' })
     fireEvent.blur(input)
-    expect(onCommit).toHaveBeenCalledExactlyOnceWith('Beta')
+    expect(onCommit).toHaveBeenCalledExactlyOnceWith('Beta', false)
     expect(onCancel).not.toHaveBeenCalled()
   })
 
@@ -64,7 +65,19 @@ describe('TabRenameInput', () => {
     const { input, onCommit } = setup()
     fireEvent.change(input, { target: { value: 'Beta' } })
     fireEvent.blur(input)
-    expect(onCommit).toHaveBeenCalledWith('Beta')
+    expect(onCommit).toHaveBeenCalledWith('Beta', true)
+  })
+
+  it('says whether it ended by blur, so focus can be left where it went', () => {
+    const onCommit = vi.fn()
+    const onCancel = vi.fn()
+    const { rerender } = render(<TabRenameInput value="Alpha" onCommit={onCommit} onCancel={onCancel} />)
+    fireEvent.change(screen.getByLabelText('Rename tab'), { target: { value: 'Beta' } })
+    fireEvent.blur(screen.getByLabelText('Rename tab'))
+    expect(onCommit).toHaveBeenLastCalledWith('Beta', true)
+    rerender(<TabRenameInput key="again" value="Alpha" onCommit={onCommit} onCancel={onCancel} />)
+    fireEvent.keyDown(screen.getByLabelText('Rename tab'), { key: 'Escape' })
+    expect(onCancel).toHaveBeenLastCalledWith(false)
   })
 
   it('keeps its keys from the tab around it, whose Delete closes and arrows move', () => {
@@ -72,6 +85,30 @@ describe('TabRenameInput', () => {
     render(<div onKeyDown={outer}><TabRenameInput value="Alpha" onCommit={vi.fn()} onCancel={vi.fn()} /></div>)
     for (const key of ['Delete', 'Backspace', 'ArrowLeft', 'Enter']) fireEvent.keyDown(screen.getByLabelText('Rename tab'), { key })
     expect(outer).not.toHaveBeenCalled()
+  })
+})
+
+describe('useInlineRename', () => {
+  it('hands focus back when a key ends the edit, and leaves it where it went when a blur does', () => {
+    const onEnd = vi.fn()
+    const save = vi.fn()
+    const { result } = renderHook(() => useInlineRename(save, onEnd))
+    act(() => result.current.start?.())
+    expect(result.current.renaming).toBe(true)
+    act(() => result.current.input?.onCommit('A', true))
+    expect(save).toHaveBeenCalledWith('A')
+    expect(onEnd).not.toHaveBeenCalled()
+    act(() => result.current.start?.())
+    act(() => result.current.input?.onCancel(true))
+    expect(onEnd).not.toHaveBeenCalled()
+    act(() => result.current.start?.())
+    act(() => result.current.input?.onCancel(false))
+    expect(onEnd).toHaveBeenCalledTimes(1)
+    expect(result.current.renaming).toBe(false)
+  })
+
+  it('offers no way to start with nothing to save with', () => {
+    expect(renderHook(() => useInlineRename(undefined)).result.current.start).toBeUndefined()
   })
 })
 

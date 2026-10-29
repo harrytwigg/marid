@@ -171,7 +171,7 @@ function PaneTitleActions({ title, session, onClose, sessionActions, onRenamed, 
 
 /** A lone chat's label in its bar, where a strip's tab would be: its employee's emoji and its title, and the
  * pin glyph (which unpins it) when the tab is pinned. */
-function LonePaneLabel({ active, employee, title, onUnpin, rename }: { active: boolean; employee: string; title: string; onUnpin?: () => void; rename?: { onCommit: (title: string) => void; onCancel: () => void } }) {
+function LonePaneLabel({ active, employee, title, onUnpin, rename }: { active: boolean; employee: string; title: string; onUnpin?: () => void; rename?: { onCommit: (title: string, byBlur: boolean) => void; onCancel: (byBlur: boolean) => void } }) {
   const { id, rest } = splitTitleId(title)
   return (
     <>

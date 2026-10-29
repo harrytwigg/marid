@@ -172,7 +172,7 @@ interface PaneTabProps {
   onKeyDown: (event: KeyboardEvent) => void
 }
 
-function PaneTabLabel({ tab, active, rename }: { tab: PaneTabItem; active: boolean; rename?: { onCommit: (title: string) => void; onCancel: () => void } }) {
+function PaneTabLabel({ tab, active, rename }: { tab: PaneTabItem; active: boolean; rename?: { onCommit: (title: string, byBlur: boolean) => void; onCancel: (byBlur: boolean) => void } }) {
   const { id: numericId, rest } = splitTitleId(tab.title)
   const dot = tab.status ? STATUS_DOT[tab.status] : null
   return (
