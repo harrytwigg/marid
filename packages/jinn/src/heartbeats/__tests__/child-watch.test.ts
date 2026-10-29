@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
+import { writeAutoStartRow } from "../../work-items/auto-start.js";
 
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-child-watch-"));
 process.env.JINN_HOME = home;
@@ -43,11 +44,19 @@ function armed(sessionId: string) {
 }
 
 /** A Todo the session minted under a parent, as POST /api/work-items stamps it. */
-function childTodo(owner: string, status: "backlog" | "executing" | "in_review" | "done" = "backlog") {
+function childTodo(
+  owner: string,
+  status: "backlog" | "executing" | "in_review" | "done" = "backlog",
+  assignee: string | null = status === "backlog" ? "worker" : null,
+) {
   const parent = workItems.createWorkItem({ title: "parent", source: "human" });
   return workItems.createWorkItem({
-    title: "child", source: "session", sourceRef: `session:${owner}:${++seq}`, parentId: parent.id, status,
+    title: "child", source: "session", sourceRef: `session:${owner}:${++seq}`, parentId: parent.id, status, assignee,
   });
+}
+
+function setAutoStart(workItemId: string, autoStart: boolean) {
+  writeAutoStartRow(db, workItemId, autoStart, new Date().toISOString());
 }
 
 describe("armChildWatch", () => {
@@ -146,9 +155,40 @@ describe("openChildrenOf", () => {
     const viaLink = workItems.createWorkItem({ title: "c1", source: "human", parentId: parent.id, status: "executing" });
     const other = workItems.createWorkItem({ title: "other parent", source: "human" });
     const viaDelegate = workItems.createWorkItem({
-      title: "c2", source: "session", sourceRef: `delegate:${owner}:abc`, parentId: other.id, status: "backlog",
+      title: "c2", source: "session", sourceRef: `delegate:${owner}:abc`, parentId: other.id, status: "backlog", assignee: "worker",
     });
     expect(watch.openChildrenOf(owner).todoIds.sort()).toEqual([viaLink.id, viaDelegate.id].sort());
+  });
+
+  it("ignores a parked backlog child: auto-start off, assigned or not, or the operator's", () => {
+    const owner = session().id;
+    const optedOut = childTodo(owner, "backlog");
+    setAutoStart(optedOut.id, false);
+    const optedOutUnassigned = childTodo(owner, "backlog", null);
+    setAutoStart(optedOutUnassigned.id, false);
+    childTodo(owner, "backlog", "@operator");
+    expect(watch.openChildrenOf(owner).todoIds).toEqual([]);
+  });
+
+  it("counts an unassigned backlog child with auto-start on: the board walk picks its employee", () => {
+    const owner = session().id;
+    const unassigned = childTodo(owner, "backlog", null);
+    expect(unassigned.assignee).toBeNull();
+    expect(watch.openChildrenOf(owner).todoIds).toEqual([unassigned.id]);
+  });
+
+  it("counts a backlog child that will be dispatched, and a parked one with a session in flight", () => {
+    const owner = session().id;
+    const dispatched = childTodo(owner, "backlog");
+    setAutoStart(dispatched.id, true);
+    const parked = childTodo(owner, "backlog", null);
+    setAutoStart(parked.id, false);
+    const running = session();
+    db.prepare("UPDATE sessions SET work_item_id = ? WHERE id = ?").run(parked.id, running.id);
+    registry.updateSession(running.id, { status: "idle" });
+    expect(watch.openChildrenOf(owner).todoIds).toEqual([dispatched.id]);
+    registry.updateSession(running.id, { status: "running" });
+    expect(watch.openChildrenOf(owner).todoIds.sort()).toEqual([dispatched.id, parked.id].sort());
   });
 
   it("counts in-flight child sessions only", () => {
@@ -184,6 +224,29 @@ describe("child-watch firing", () => {
     expect(store.getHeartbeat(id)).toMatchObject({ status: "disarmed", disarmedReason: "children-settled" });
   });
 
+  it("disarms with children-settled when only parked backlog children remain", () => {
+    const owner = session().id;
+    const unassigned = childTodo(owner, "backlog", null);
+    setAutoStart(unassigned.id, false);
+    const optedOut = childTodo(owner, "backlog");
+    setAutoStart(optedOut.id, false);
+    watch.armChildWatch(owner, 0);
+    const id = armed(owner)[0]!.id;
+    const deliver = vi.fn();
+    expect(scheduler.sweepOnce({ now: () => 3_600_001, deliver })).toBe(0);
+    expect(deliver).not.toHaveBeenCalled();
+    expect(store.getHeartbeat(id)).toMatchObject({ status: "disarmed", disarmedReason: "children-settled" });
+  });
+
+  it("keeps delivering for a dispatchable backlog child", () => {
+    const owner = session().id;
+    childTodo(owner, "backlog");
+    watch.armChildWatch(owner, 0);
+    const deliver = vi.fn();
+    expect(scheduler.sweepOnce({ now: () => 3_600_001, deliver })).toBe(1);
+    expect(deliver).toHaveBeenCalledOnce();
+  });
+
   it("leaves a manual heartbeat alone when it comes due with no children", () => {
     const owner = session().id;
     const manual = store.armHeartbeat({ ownerSessionId: owner, message: "mine", everySeconds: 60 }, 0);
@@ -194,6 +257,15 @@ describe("child-watch firing", () => {
 });
 
 describe("releaseChildWatchIfSettled", () => {
+  it("drops the watch when only a parked backlog child is left", () => {
+    const owner = session().id;
+    const parked = childTodo(owner, "backlog", null);
+    setAutoStart(parked.id, false);
+    watch.armChildWatch(owner);
+    expect(watch.releaseChildWatchIfSettled(owner)).toBe(true);
+    expect(armed(owner)).toHaveLength(0);
+  });
+
   it("keeps the watch while a child is open and drops it when the last one settles", () => {
     const owner = session().id;
     const child = childTodo(owner, "executing");
