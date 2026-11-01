@@ -33,7 +33,7 @@ export interface PaneTabItem {
   filePath?: string
   /** False for a tab that cannot be closed: no close button, and middle-click and Delete do nothing. */
   closable?: boolean
-  /** A pinned tab: compact, with its pin glyph where the close button would be, and never closed by the user. */
+  /** A pinned tab: full width like the rest, its pin glyph (which unpins) shown on hover or touch, and never closed by the user. */
   pinned?: boolean
   /** The tooltip, when it says more than the title (a chat's, with its employee). */
   tooltip?: string
@@ -177,7 +177,7 @@ function PaneTabLabel({ tab, active, rename }: { tab: PaneTabItem; active: boole
   const dot = tab.status ? STATUS_DOT[tab.status] : null
   return (
     <>
-      <span aria-hidden className={`shrink-0 leading-none ${active ? 'opacity-100' : 'opacity-50'}`}>
+      <span aria-hidden data-pane-tab-emoji className={`shrink-0 leading-none transition-[max-width,margin,opacity] hoverable:-mr-1.5 hoverable:max-w-0 hoverable:overflow-hidden hoverable:opacity-0 hoverable:group-hover/pane-tab:mr-0 hoverable:group-hover/pane-tab:max-w-6 hoverable:group-hover/pane-tab:opacity-100 hoverable:group-focus-visible/pane-tab:mr-0 hoverable:group-focus-visible/pane-tab:max-w-6 hoverable:group-focus-visible/pane-tab:opacity-100 ${active ? 'opacity-100' : 'opacity-50'}`}>
         {tab.employee === TERMINAL_AVATAR ? '\u{1F5A5}\uFE0F' : emojiForName(tab.employee ?? 'chat')}
       </span>
       {rename ? <TabRenameInput value={tab.title} onCommit={rename.onCommit} onCancel={rename.onCancel} /> : (

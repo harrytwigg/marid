@@ -21,13 +21,17 @@ function setup(props: Partial<PaneTabStripProps> = {}) {
 }
 
 describe('a strip with pinned tabs', () => {
-  it('marks the pinned tabs compact and puts one divider after the last of them', () => {
+  it('gives a pinned tab the same width as the rest, and puts one divider after the last of them', () => {
     const { tab } = setup()
     expect(tab('p1').dataset.pinned).toBe('true')
-    expect(tab('p1').className).toContain('max-w-[120px]')
-    expect(tab('p1').className).not.toContain('min-w-[96px]')
+    for (const id of ['p1', 'p2', 'a']) {
+      expect(tab(id).className).toContain('min-w-[96px]')
+      expect(tab(id).className).toContain('max-w-[200px]')
+    }
+    expect(tab('p1').className).not.toContain('max-w-[120px]')
+    expect(tab('p1').className).toContain('after:bottom-0')
     expect(tab('a').dataset.pinned).toBeUndefined()
-    expect(tab('a').className).toContain('min-w-[96px]')
+    expect(tab('a').className).not.toContain('after:bottom-0')
     expect([...document.querySelectorAll('[data-pinned-end]')].map((node) => (node as HTMLElement).dataset.paneTabId)).toEqual(['p2'])
   })
 
@@ -51,6 +55,20 @@ describe('a strip with pinned tabs', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Pin tab Beta' }))
     expect(onPin).toHaveBeenCalledWith('b')
     expect(onActivate).not.toHaveBeenCalled()
+  })
+
+  it('hides the pin glyph, unpin glyph and emoji on a mouse until hover or focus, and shows them on touch', () => {
+    const { tab } = setup()
+    const hidden = ['hoverable:w-0', 'hoverable:opacity-0', 'hoverable:group-hover/pane-tab:w-4', 'hoverable:group-focus-visible/pane-tab:w-4']
+    for (const el of [tab('a').querySelector('[data-pane-tab-pin]')!, tab('p1').querySelector('[data-pane-tab-unpin]')!]) {
+      for (const cls of hidden) expect(el.className).toContain(cls)
+      // Collapsed state is only under the hoverable variant: with no hover (touch) none of it applies.
+      expect(el.className.split(' ').filter((cls) => cls.startsWith('w-0') || cls === 'opacity-0')).toEqual([])
+    }
+    const emoji = tab('p1').querySelector('[data-pane-tab-emoji]')!
+    expect(emoji.className).toContain('hoverable:max-w-0')
+    expect(emoji.className).toContain('hoverable:group-hover/pane-tab:max-w-6')
+    expect(tab('p1').querySelector('[data-pane-tab-title]')?.textContent).toBe('Pinned one')
   })
 
   it('does nothing for Delete, Backspace or a middle-click on a pinned tab', () => {
