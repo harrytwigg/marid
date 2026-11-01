@@ -10,8 +10,12 @@ import type { PaneTabItem } from './pane-tab-strip'
 
 const GLYPH_CLASS = 'grid size-4 shrink-0 place-items-center rounded-[var(--radius-sm)] text-[var(--text-secondary)] transition-opacity duration-[var(--duration-fast)] hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)]'
 
-/** The pin button of an unpinned tab: out of sight until the tab is hovered or its controls focused. */
-export function TabPinButton({ title, active, onPin }: { title: string; active: boolean; onPin: () => void }) {
+/** On a mouse the glyph takes no room until the tab is hovered or focused; on a touchscreen, which has no hover, it always shows.
+ * The negative margin cancels the tab's flex gap while it is collapsed so it costs no space at all. */
+const REVEAL_CLASS = 'transition-[width,margin,opacity] hoverable:w-0 hoverable:-ml-1.5 hoverable:overflow-hidden hoverable:opacity-0 hoverable:group-hover/pane-tab:ml-0 hoverable:group-hover/pane-tab:w-4 hoverable:group-hover/pane-tab:opacity-100 hoverable:group-focus-visible/pane-tab:ml-0 hoverable:group-focus-visible/pane-tab:w-4 hoverable:group-focus-visible/pane-tab:opacity-100 hoverable:focus-visible:ml-0 hoverable:focus-visible:w-4 hoverable:focus-visible:opacity-100'
+
+/** The pin button of an unpinned tab: out of sight (and out of the tab's width) until the tab is hovered or focused on a mouse; always there on touch. */
+export function TabPinButton({ title, onPin }: { title: string; onPin: () => void }) {
   return (
     <button
       type="button"
@@ -21,7 +25,7 @@ export function TabPinButton({ title, active, onPin }: { title: string; active: 
       aria-label={`Pin tab ${title}`}
       onClick={(event) => { event.stopPropagation(); onPin() }}
       onMouseDown={(event) => event.stopPropagation()}
-      className={`${GLYPH_CLASS} focus-visible:opacity-100 ${active ? 'opacity-100' : 'opacity-0 group-hover/pane-tab:opacity-100'}`}
+      className={`${GLYPH_CLASS} ${REVEAL_CLASS}`}
     >
       <Pin size={11} aria-hidden />
     </button>
@@ -147,8 +151,8 @@ export function tabTooltip(tab: PaneTabItem): string {
 export function TabControls({ tab, active, onClose, onPin, onUnpin }: { tab: PaneTabItem; active: boolean; onClose: () => void; onPin?: () => void; onUnpin?: () => void }) {
   return (
     <>
-      {tab.pinned && onUnpin ? <TabUnpinButton title={tab.title} onUnpin={onUnpin} /> : null}
-      {!tab.pinned && onPin ? <TabPinButton title={tab.title} active={active} onPin={onPin} /> : null}
+      {tab.pinned && onUnpin ? <TabUnpinButton title={tab.title} onUnpin={onUnpin} className={REVEAL_CLASS} /> : null}
+      {!tab.pinned && onPin ? <TabPinButton title={tab.title} onPin={onPin} /> : null}
       {tab.closable === false ? null : <TabCloseButton title={tab.title} active={active} onClose={onClose} />}
     </>
   )
@@ -156,11 +160,12 @@ export function TabControls({ tab, active, onClose, onPin, onUnpin }: { tab: Pan
 
 const TAB_CLASS = 'group/pane-tab relative flex h-full shrink-0 cursor-default select-none items-center gap-1.5 px-2.5 text-[length:var(--text-footnote)] transition-colors duration-[var(--duration-fast)] focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-[var(--accent)] data-[drop-before]:shadow-[inset_2px_0_0_var(--accent)] data-[drop-after]:shadow-[inset_-2px_0_0_var(--accent)]'
 
-/** A pinned tab is compact (icon and label, no minimum width); the rest keep a readable width. */
+/** Every tab keeps a readable width, pinned or not; a pinned one shows a thin line along its foot instead of a permanent glyph. */
 export function tabClassName(tab: PaneTabItem, active: boolean, dividerAfter: boolean): string {
-  const width = tab.pinned ? 'max-w-[120px] min-w-0' : 'max-w-[200px] min-w-[96px]'
+  const width = 'max-w-[200px] min-w-[96px]'
+  const pinned = tab.pinned ? 'after:pointer-events-none after:absolute after:inset-x-2.5 after:bottom-0 after:h-px after:bg-[var(--text-tertiary)] after:content-[\'\']' : ''
   const look = active ? 'bg-[var(--fill-tertiary)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]'
-  return `${TAB_CLASS} ${width} ${dividerAfter ? 'border-r border-[var(--separator)]' : ''} ${look}`
+  return `${TAB_CLASS} ${width} ${pinned} ${dividerAfter ? 'border-r border-[var(--separator)]' : ''} ${look}`
 }
 
 /** The divider follows a pinned tab when an unpinned one comes after it. */

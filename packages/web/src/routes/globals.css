@@ -3,6 +3,8 @@
 /* :where() has zero specificity so shadcn's dark: utilities remain overridable.
    data-theme is never "system" after JS hydration — ThemeProvider resolves it to dark/light. */
 @custom-variant dark (:where([data-theme="dark"]) &);
+/* A mouse or trackpad: hover exists and the pointer is precise. Touchscreens (and hybrids whose primary input is touch) do not match. */
+@custom-variant hoverable (@media (hover: hover) and (pointer: fine));
 
 @theme inline {
   --color-background: var(--bg);
