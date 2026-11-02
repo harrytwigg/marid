@@ -24,6 +24,11 @@ function employeeSession() {
 function coordinatorSession(overrides: Partial<Parameters<typeof reg.createSession>[0]> = {}) {
   return reg.createSession({ engine: "codex", source: "web", sourceRef: `web:lane-${++n}`, ...overrides });
 }
+/** The operator types into the coordinator chat: the turn that message starts is theirs. */
+function operatorTurn<T extends { id: string }>(session: T): T {
+  reg.beginSessionAttempt(session.id, { attemptOperatorTurn: true });
+  return session;
+}
 function connectorSession() {
   return reg.createSession({ engine: "codex", source: "remote-mcp", sourceRef: `remote-mcp:op-${++n}@example.com` });
 }
@@ -99,7 +104,7 @@ describe("the agent lane", () => {
 describe("the coordinator's done lane", () => {
   it("closes an executing Todo for the operator and posts the reason under its session", async () => {
     const item = todo("executing");
-    const coo = coordinatorSession();
+    const coo = operatorTurn(coordinatorSession());
     const cap = await post(item.id, { status: "done", asOperator: true, note: "the operator shipped it by hand" }, toolHeaders(coo.id));
     expect([cap.status, cap.body.workItem?.status]).toEqual([200, "done"]);
 
@@ -113,7 +118,7 @@ describe("the coordinator's done lane", () => {
 
   it("refuses the same call without a reason", async () => {
     const item = todo("executing");
-    const cap = await post(item.id, { status: "done", asOperator: true }, toolHeaders(coordinatorSession().id));
+    const cap = await post(item.id, { status: "done", asOperator: true }, toolHeaders(operatorTurn(coordinatorSession()).id));
     expect(cap.status).toBe(400);
     expect(cap.body.error).toMatch(/reason in note/);
     expect(store.getWorkItem(item.id)?.status).toBe("executing");
@@ -121,7 +126,7 @@ describe("the coordinator's done lane", () => {
 
   it.each(["cancelled", "in_review", "backlog"] as const)("refuses asOperator with %s", async (status) => {
     const item = todo("executing");
-    const cap = await post(item.id, { status, asOperator: true, note: "on the operator's word" }, toolHeaders(coordinatorSession().id));
+    const cap = await post(item.id, { status, asOperator: true, note: "on the operator's word" }, toolHeaders(operatorTurn(coordinatorSession()).id));
     expect(cap.status).toBe(403);
     expect(store.getWorkItem(item.id)?.status).toBe("executing");
   });
@@ -133,7 +138,7 @@ describe("the coordinator's done lane", () => {
     expect(byEmployee.body.error).toMatch(/coordinator session/);
 
     const closed = todo("done");
-    const reopen = await post(closed.id, { status: "done", asOperator: true, note: "x" }, toolHeaders(coordinatorSession().id));
+    const reopen = await post(closed.id, { status: "done", asOperator: true, note: "x" }, toolHeaders(operatorTurn(coordinatorSession()).id));
     expect(reopen.status).toBe(403);
   });
 

@@ -1411,6 +1411,20 @@ export function isCoordinatorSession(session: Session): boolean {
 }
 
 /**
+ * True only while the operator is talking to the coordinator: a coordinator
+ * chat ({@link isCoordinatorSession}) running a turn the operator's own message
+ * started ({@link Session.attemptOperatorTurn}). The chat alone is not enough,
+ * for the reason {@link isOperatorEmployeeTurn} gives: a send from another
+ * session, a delegation brief and a sub-task's report all run in the same chat
+ * as notifications, and none of them is the operator. The stamp is the allow
+ * rule, so a path that starts a turn without setting it (a key shape the
+ * deny-list in {@link isOperatorOpenedChat} has not heard of yet) fails closed.
+ */
+export function isOperatorCoordinatorTurn(session: Session): boolean {
+  return isCoordinatorSession(session) && session.status === "running" && session.attemptOperatorTurn === true;
+}
+
+/**
  * True only while the operator is talking to an employee in a web chat they
  * opened with it: a parentless, operator-opened `web` session with an employee
  * identity, running a turn the operator's own message started

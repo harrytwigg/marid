@@ -229,6 +229,11 @@ export class SessionManager {
       messageId: msg.messageId ?? null,
       transportMeta: mergeTransportMeta(session.transportMeta, msg.transportMeta),
       lastActivity: new Date().toISOString(),
+      // A turn here exists because a message arrived in the connector's own
+      // conversation: the only way to start one on a connector chat. A send
+      // from another session, a delegation brief or a sub-task's report is
+      // delivered through the gateway's message route, which does not stamp.
+      attemptOperatorTurn: true,
     });
     if (!startedAttempt?.attemptToken) return;
 
