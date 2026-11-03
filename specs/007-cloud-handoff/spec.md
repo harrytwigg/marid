@@ -315,10 +315,16 @@ result block on the same PR, matched to the new nonce.
   that turn. No extra turn is enqueued. A result is delivered only through `settleTurn`.
   An open handoff that no turn re-attaches is closed `timed-out` at `timeoutMinutes`, with no
   delivery.
-- **FR-017a**: When the gateway derives a Todo's status and closes its runs, a session with an
-  open handoff counts as in flight. So a restart neither moves the Todo to `blocked`, nor
-  wakes a parent's owner, nor closes its run. Each Todo has at most one open handoff. A
-  further cloud delegation on that Todo re-attaches to it rather than firing.
+- **FR-017a**: A session with an open handoff counts as in flight wherever the gateway
+  derives a Todo's status or closes its runs. That includes the startup and periodic sweep
+  `closeRunsForSettledSessions`. So a restart neither moves the Todo to `blocked`, nor wakes a
+  parent's owner, nor closes its run.
+- **FR-017b**: At boot, if the feature is off or misconfigured, every open handoff is closed
+  `abandoned` before the startup reconcile, and a log line names each one. Its Todo then
+  derives from the real receipt. The flag takes effect at boot.
+- **FR-017c**: Each Todo has at most one open handoff. Starting a further `claude-cloud`
+  session for that Todo is refused at creation, on every start path. The refusal names the
+  open handoff and its cloud session link. A partial unique index is the backstop.
 - **FR-018**: A later turn on a session whose last handoff reached `done`, `blocked` or
   `failed` opens a new handoff. Its brief names the earlier branch and PR to continue on.
 

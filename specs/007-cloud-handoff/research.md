@@ -235,6 +235,7 @@ Verified against `origin/main` at `53e47059`. `src/` is `packages/jinn/src/`.
 | `src/sessions/registry.ts:1662` | `recoverStaleSessions`: at boot, every `running` session is marked `interrupted` | A handoff's session goes through this like any other (plan D5) |
 | `src/sessions/queue-item-registry.ts:216` | `recoverStaleQueueItems`: a `running` queue item is reset to `pending` and replayed | The replayed turn calls `run()` again with the original prompt. That replay is the re-attach (plan D5) |
 | `src/work-items/attempt-evidence.ts:93` | `collectAttemptEvidence`: closes runs for settled attempts (`:98`), then builds the evidence the status derivation reads (`:103`) | Treats a session with an open handoff as in flight (plan D5, FR-017a) |
+| `src/work-items/runs.ts:277` | `closeRunsForSettledSessions`: closes every open run whose session has an `attempt_outcome`, at startup (`src/work-items/reconcile.ts:239`) and periodically (`:281`) | Gains the open-handoff exclusion (FR-017a) |
 | `src/work-items/reconcile.ts:116` | With nothing in flight, an `interrupted` newest attempt derives `blocked` | Why boot would flap a handoff's Todo without FR-017a |
 | `src/work-items/child-settles.ts:43` | A child Todo moving to `blocked` is a child settle, and wakes the parent's owner | The wake FR-017a prevents during a handoff |
 | `src/sessions/restart-resume.ts:439` | Replaying sessions get no resume nudge, and others get one unless nudges are off (`:451`) | No skip list is needed: any turn on a session with an open handoff re-attaches |

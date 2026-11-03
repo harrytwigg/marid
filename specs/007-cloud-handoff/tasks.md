@@ -132,16 +132,27 @@ every run.
   - a session with no queue item, re-attached by a nudge turn, also fires nothing;
   - an open handoff with no turn closes `timed-out` at `timeoutMinutes` without a delivery;
   - a deleted session's handoff becomes `abandoned`.
-- [ ] T030a In flight during a handoff (FR-017a, plan D5). `collectAttemptEvidence`
-  (`src/work-items/attempt-evidence.ts:93`) reads a session with an open handoff as
-  `running`, and leaves it out of `closeRunsForSettledAttempts`. Add the two partial unique
-  indexes, and make a second cloud delegation on the same Todo re-attach. Tests:
+- [ ] T030a In flight during a handoff (FR-017a to FR-017c, plan D5).
+  - `collectAttemptEvidence` (`src/work-items/attempt-evidence.ts:93`) reads a session with
+    an open handoff as `running`, and leaves it out of `closeRunsForSettledAttempts`.
+  - `closeRunsForSettledSessions` (`src/work-items/runs.ts:277`) gets the same exclusion.
+  - The boot cleanup runs when the feature is not ready.
+  - Add both partial unique indexes, and the creation refusal on every Todo start path.
+
+  Tests:
   - **Red first** (Principle III): on an ephemeral gateway, a child Todo under an
     `executing` parent and a long turn on any engine, then a restart. Record the
-    `blocked` flap and the tree wake to the parent's owner. That proves the premise.
-  - Then with an open handoff: no flap, no child-settle row, no wake, and the run stays open.
-  - With the feature off, the derivation is unchanged: the existing reconcile tests pass
-    untouched.
+    `blocked` flap, the tree wake to the parent's owner, and the run closed at boot by the
+    startup sweep. That proves the premise.
+  - Then with an open handoff across a restart: no flap, no child-settle row, no wake, and
+    the run is still open after `reconcileWorkItemsOnStartup` and one periodic sweep.
+  - An open handoff, then `enabled: false`, then a restart: the row is closed `abandoned`,
+    the Todo derives `blocked` from the real receipt, and nothing is left `executing`.
+  - The same with a config that no longer validates.
+  - A second `claude-cloud` delegation, Dispatcher start or self-start on a Todo with an open
+    handoff is refused at creation with the handoff's link. With the check bypassed, the
+    index makes the turn fail without a fire.
+  - With no handoff rows, the existing reconcile and run tests pass untouched.
 - [ ] T031 Continuation (FR-018). A turn after a closed handoff opens a new row with
   `continues_handoff_id`, and the brief names the earlier branch and PR. Test: the second
   fire's text contains the first branch.

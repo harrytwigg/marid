@@ -161,18 +161,55 @@ misleading wake. For a handoff it is dangerous, because a manager told "blocked"
 re-delegate, and that would fire a second cloud session (SC-003). So the feature changes
 step 2 for handoffs only.
 
-`collectAttemptEvidence` treats a session that has an **open** `cloud_handoffs` row as in
-flight:
+A session that has an **open** `cloud_handoffs` row counts as in flight everywhere the
+gateway derives a Todo's status or closes its runs:
 
-- its status reads `running` where the evidence is built (`attempt-evidence.ts:103`);
-- it is left out of `closeRunsForSettledAttempts` (`:98`).
+- **`collectAttemptEvidence`** (`src/work-items/attempt-evidence.ts:93`): its status reads
+  `running` where the evidence is built (`:103`), and it is left out of
+  `closeRunsForSettledAttempts` (`:98`).
+- **`closeRunsForSettledSessions`** (`src/work-items/runs.ts:277`): this sweep closes every
+  open run whose session has a non-null `attempt_outcome`. It runs at startup
+  (`src/work-items/reconcile.ts:239`), right after `recoverStaleSessions` has set that
+  outcome to `interrupted`. It runs again periodically (`:281`). Its query gains
+  `AND NOT EXISTS` an open handoff row for the session.
 
-The Todo then stays `executing` across the restart, no child-settle row is written, and the
-Todo run stays open until the real settle closes it. The check is a single indexed lookup by
-session id, exported by the handoff store. When the feature is off, the table is empty, so
-it is a no-op. A second guard bounds the damage if anything else re-delegates: at most one
-open handoff per Todo (`data-model.md`). A second delegation to the cloud on a Todo with an
-open handoff re-attaches to it rather than firing.
+With both in place:
+
+- the Todo stays `executing` across the restart;
+- no child-settle row is written;
+- the Todo run stays open until the real settle closes it.
+
+`closeOrphanedWorkItemRuns` (`runs.ts:230`) is left alone: a run whose session is gone is
+crashed whatever its handoff says. The check is one indexed `NOT EXISTS` on the handoff
+table, which the migration creates whether or not the feature is on.
+
+**The override must never outlive the feature.** Two things can leave a row open with
+nothing behind it:
+
+- the operator sets `enabled: false`, which is the operator's stop (Principle II);
+- the config stops validating (FR-002).
+
+Either way the engine is no longer registered, so the replayed turn fails preflight, and the
+watcher is not started, so no timeout fires. Without a cleanup, the override would keep the
+Todo `executing` indefinitely. So at boot, right after `recoverStaleSessions`
+(`src/gateway/server.ts:444`) and before the startup reconcile, if the feature is not ready,
+every open row is closed `abandoned` with `cloud handoff disabled` and a log line. The Todo
+then derives from its real receipt, which is `interrupted`, so `blocked`, and its owner is
+told in the usual way. The flag is read at boot only. The doctor says that changing it takes
+effect at the next restart.
+
+**One open handoff per Todo.** A second session must never fire for a Todo whose handoff is
+open. If it re-attached instead, two sessions would settle with one result: two child
+settles and two parent callbacks. So every path that starts a session for a Todo on
+`claude-cloud` refuses at creation, naming the open handoff and its cloud session link:
+
+- delegation (`src/gateway/api.ts:3396`, through a helper);
+- the Todo Dispatcher;
+- self-start.
+
+The partial unique index on `work_item_id` is the backstop. A path that misses the check
+fails to open its row, and its turn fails without firing. Re-attach stays a rule for turns
+on the **same** session only.
 
 The replayed turn is the re-attach. Its `run()` finds the open handoff and awaits it. When
 the result lands, the turn settles through `settleTurn` like any other:
