@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { initDb } from '../shared/db.js';
 import { isRateLimitMessage } from '../shared/rateLimit.js';
-import type { SessionAttemptOutcome } from '../shared/types.js';
+import type { JsonObject, SessionAttemptOutcome } from '../shared/types.js';
 import { TODO_RUN_OUTCOMES, type TodoRunOutcome } from './runs-schema.js';
 import { LEGACY_WORKFLOW_PHASE_SQL } from '../sessions/legacy-workflow-phase.js';
+import { settledAttemptOutcome } from '../sessions/restart-resume-window.js';
 
 /**
  * The Todo run ledger — one row per work attempt.
@@ -237,6 +238,16 @@ export function closeOrphanedWorkItemRuns(endedAt: string = new Date().toISOStri
     .run(endedAt).changes;
 }
 
+function parseMeta(raw: string | null): JsonObject | null {
+  if (!raw) return null;
+  try {
+    const value: unknown = JSON.parse(raw);
+    return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonObject : null;
+  } catch {
+    return null;
+  }
+}
+
 /** How a session's terminal receipt reads in this ledger's vocabulary.
  *  `crashed` and `timed_out` are absent because no session receipt claims them:
  *  a vanished session is settled by the orphan sweep instead. */
@@ -277,13 +288,22 @@ export function runOutcomeForReceipt(receipt: SessionAttemptOutcome, error: stri
 export function closeRunsForSettledSessions(endedAt: string = new Date().toISOString()): number {
   const settled = initDb()
     .prepare(
-      `SELECT runs.id AS id, sessions.attempt_outcome AS outcome, sessions.last_error AS error
+      `SELECT runs.id AS id, sessions.attempt_outcome AS outcome, sessions.last_error AS error,
+              sessions.transport_meta AS meta, sessions.attempt_token AS token, sessions.attempt_terminal_version AS version
          FROM work_item_runs AS runs JOIN sessions ON sessions.id = runs.session_id
         WHERE runs.ended_at IS NULL AND sessions.attempt_outcome IS NOT NULL`,
     )
-    .all() as { id: string; outcome: SessionAttemptOutcome; error: string | null }[];
+    .all() as { id: string; outcome: SessionAttemptOutcome; error: string | null; meta: string | null; token: string | null; version: number }[];
+  let closed = 0;
   for (const run of settled) {
-    closeWorkItemRun(run.id, { outcome: runOutcomeForReceipt(run.outcome, run.error), endedAt });
+    // A turn the gateway is about to resume after a restart has not ended: its
+    // real settle closes the run (sessions/restart-resume-window.ts).
+    const outcome = settledAttemptOutcome({
+      attemptOutcome: run.outcome, transportMeta: parseMeta(run.meta), attemptToken: run.token, attemptTerminalVersion: run.version,
+    });
+    if (!outcome) continue;
+    closeWorkItemRun(run.id, { outcome: runOutcomeForReceipt(outcome, run.error), endedAt });
+    closed++;
   }
-  return settled.length;
+  return closed;
 }
