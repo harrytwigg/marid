@@ -1,6 +1,7 @@
 import { latestEvidenceFloorAt } from './event-log.js';
 import { closeWorkItemRun, findOpenWorkItemRunBySession, runOutcomeForReceipt } from './runs.js';
 import { listSessionsByWorkItem } from '../sessions/registry.js';
+import { settledAttemptOutcome } from '../sessions/restart-resume-window.js';
 import { isExecutionAttempt } from './link-role.js';
 import { logger } from '../shared/logger.js';
 import type { Session, SessionAttemptOutcome } from '../shared/types.js';
@@ -44,7 +45,8 @@ export interface WorkItemAttemptReading {
  */
 function closeRunsForSettledAttempts(sessions: readonly Session[]): void {
   for (const session of sessions) {
-    if (!session.attemptOutcome) continue;
+    const outcome = settledAttemptOutcome(session);
+    if (!outcome) continue;
     try {
       const run = findOpenWorkItemRunBySession(session.id);
       // Read the receipt through the same rate-limit-aware reading the sweep
@@ -52,7 +54,7 @@ function closeRunsForSettledAttempts(sessions: readonly Session[]): void {
       // same way, or a quota window becomes `blocked` purely because the
       // reconciler got there first — and `blocked` is what the respawn guards
       // read as "a human has to clear this".
-      if (run) closeWorkItemRun(run.id, { outcome: runOutcomeForReceipt(session.attemptOutcome, session.lastError) });
+      if (run) closeWorkItemRun(run.id, { outcome: runOutcomeForReceipt(outcome, session.lastError) });
     } catch (err) {
       logger.warn(`Run ledger close for session ${session.id} skipped: ${err instanceof Error ? err.message : err}`);
     }
@@ -84,6 +86,18 @@ function attemptsAfterDecision(floor: string | undefined, sessions: readonly Ses
 }
 
 /**
+ * One attempt's evidence. A turn the restart interrupted and the gateway is
+ * about to resume (queue replay or restart nudge) is still in flight, not a
+ * settled interruption: reading it as settled would block the Todo and wake its
+ * parent's owner for a turn that resumes seconds later (`settledAttemptOutcome`).
+ */
+function attemptEvidence(session: Session): WorkItemAttemptEvidence {
+  const outcome = settledAttemptOutcome(session);
+  if (session.attemptOutcome && !outcome) return { status: 'running', outcome: null };
+  return { status: session.status as SessionStatus, outcome };
+}
+
+/**
  * The receipts a Todo's status may be derived from, newest-first (the ordering
  * `listSessionsByWorkItem` returns and `deriveWorkItemStatus` relies on).
  * Settles the run ledger on the way through, for every non-phase attempt —
@@ -99,9 +113,6 @@ export function collectAttemptEvidence(workItemId: string): WorkItemAttemptReadi
   const decisionFloorAt = latestEvidenceFloorAt(workItemId);
   return {
     decisionFloorAt,
-    attempts: attemptsAfterDecision(decisionFloorAt, sessions).map((s) => ({
-      status: s.status as SessionStatus,
-      outcome: s.attemptOutcome ?? null,
-    })),
+    attempts: attemptsAfterDecision(decisionFloorAt, sessions).map(attemptEvidence),
   };
 }

@@ -21,6 +21,7 @@ import {
 } from "./registry.js";
 import { recordRestartInterruption, recordRestartResume, type RestartRecordGateway } from "./restart-record.js";
 import { isBoardWalkTurn } from "../board-walk/started-sessions.js";
+import { clearRestartResumeDue, stampRestartResumeDue } from "./restart-resume-window.js";
 
 /**
  * A restart can strand any number of conversational sessions at once. Waking
@@ -349,6 +350,12 @@ export function restartResumeMessage(gatewayVersion: string, reason: RestartResu
   );
 }
 
+/** The attempt token an interrupted-turn nudge is keyed on, minted on the attempt if it has none. */
+function resumeAttemptToken(session: Session): string | undefined {
+  return session.attemptToken
+    ?? ensureCallbackAttemptToken(session.id, session.attemptOutcome ?? "interrupted", Math.max(1, session.attemptTerminalVersion ?? 0));
+}
+
 /**
  * Wake one interrupted session through the durable delivery outbox, which
  * retries on its own and collapses a repeat claim onto the same row. Says
@@ -361,10 +368,8 @@ export function notifyGatewayRestartResume(
   mark?: Pick<RestartResumeCandidate, "reason" | "markedAt">,
 ): RestartNudgeResult {
   if (mark && mark.reason !== "interrupted") return notifyMarkedRestartResume(session, gatewayVersion, mark);
-  const terminalOutcome = session.attemptOutcome ?? "interrupted";
   const terminalVersion = Math.max(1, session.attemptTerminalVersion ?? 0);
-  const attemptToken = session.attemptToken
-    ?? ensureCallbackAttemptToken(session.id, terminalOutcome, terminalVersion);
+  const attemptToken = resumeAttemptToken(session);
   if (!attemptToken) {
     logger.warn(`[restart-resume] Session ${session.id} has no callback attempt token; not nudging it to continue`);
     return { claimed: false, reason: "no-attempt-token" };
@@ -435,6 +440,27 @@ function withoutBoardWalkTurns<T extends { session: Session }>(gateway: RestartR
   });
 }
 
+/** Plan one nudge: stamp it as due, so its Todo stays in flight while it waits, then fire it on time. */
+function scheduleRestartResume(gateway: RestartRecordGateway, candidate: RestartResumeCandidate, dueAt: number): void {
+  const { session } = candidate;
+  // Settle the token first, as the nudge will, so the stamp names the same attempt.
+  if (candidate.reason === "interrupted") resumeAttemptToken(session);
+  stampRestartResumeDue(session.id, new Date(dueAt).toISOString());
+  setTimeout(() => {
+    const result = notifyGatewayRestartResume(session, gateway.gatewayVersion, candidate);
+    if (result.claimed) {
+      const why = candidate.reason === "interrupted" ? "" : ` (${candidate.reason})`;
+      recordRestartResume(gateway, session, "nudged", `delivery ${result.deliveryId}${why}`);
+      logger.info(`Nudged ${candidate.reason} session ${session.id} (${describe(session)}) to continue after restart`);
+    } else {
+      // Nothing is going to resume it, unless an earlier claim of this same nudge is still landing.
+      if (result.reason !== "already-nudged") clearRestartResumeDue(session.id);
+      recordRestartResume(gateway, session, result.reason);
+      logger.info(`Did not nudge interrupted session ${session.id} (${describe(session)}) after restart: ${result.reason}`);
+    }
+  }, Math.max(0, dueAt - Date.now())).unref();
+}
+
 export function resumeRestartInterruptedSessions(gateway: RestartRecordGateway): void {
   // A requester re-driven by its own pending queue item is left to it like any other
   // replaying session: it gets the restart notice and its queued input, not the requester
@@ -459,19 +485,7 @@ export function resumeRestartInterruptedSessions(gateway: RestartRecordGateway):
   const plan = planRestartResumes({ candidates: resumable, now: Date.now() });
   const byId = new Map(resumable.map((candidate) => [candidate.session.id, candidate]));
   for (const resume of plan.resumes) {
-    const candidate = byId.get(resume.sessionId)!;
-    const { session } = candidate;
-    setTimeout(() => {
-      const result = notifyGatewayRestartResume(session, gateway.gatewayVersion, candidate);
-      if (result.claimed) {
-        const why = candidate.reason === "interrupted" ? "" : ` (${candidate.reason})`;
-        recordRestartResume(gateway, session, "nudged", `delivery ${result.deliveryId}${why}`);
-        logger.info(`Nudged ${candidate.reason} session ${session.id} (${describe(session)}) to continue after restart`);
-      } else {
-        recordRestartResume(gateway, session, result.reason);
-        logger.info(`Did not nudge interrupted session ${session.id} (${describe(session)}) after restart: ${result.reason}`);
-      }
-    }, Math.max(0, resume.dueAt - Date.now())).unref();
+    scheduleRestartResume(gateway, byId.get(resume.sessionId)!, resume.dueAt);
   }
   for (const sessionId of plan.deferred) {
     const { session } = byId.get(sessionId)!;
