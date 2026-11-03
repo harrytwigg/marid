@@ -13,6 +13,12 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import {
+  assertFilesExist,
+  assertRelativeImportsResolve,
+  parseEmittedFiles,
+  removeTreeVerified,
+} from "./dist-integrity.mjs";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const gatewayEventsRoot = path.resolve(packageRoot, "../gateway-events");
@@ -34,13 +40,29 @@ function runTsc(args, cwd = packageRoot) {
 runTsc(["-p", "tsconfig.json"], gatewayEventsRoot);
 
 // 2. Clear only the compiled output. dist/web is produced separately by
-//    scripts/sync-web-dist.mjs and must survive a package rebuild.
+//    scripts/sync-web-dist.mjs and must survive a package rebuild. Removal is
+//    retried when another process briefly holds files under the tree, and the
+//    build stops if the tree is still there afterwards: compiling over a
+//    half-removed dist/ is how a build could exit 0 with modules missing.
 for (const dir of ["bin", "src"]) {
-  fs.rmSync(path.join(dist, dir), { recursive: true, force: true });
+  removeTreeVerified(path.join(dist, dir));
 }
 
-// 3. Compile.
-runTsc(["-p", "tsconfig.build.json"]);
+// 3. Compile. tsc lists what it wrote so the result can be checked against disk
+//    once the build is done.
+const compile = spawnSync(process.execPath, [require.resolve("typescript/bin/tsc"), "-p", "tsconfig.build.json", "--listEmittedFiles"], {
+  cwd: packageRoot,
+  encoding: "utf8",
+  maxBuffer: 64 * 1024 * 1024,
+  stdio: ["inherit", "pipe", "inherit"],
+});
+if (compile.error) throw compile.error;
+if (compile.status !== 0) {
+  process.stdout.write(compile.stdout);
+  process.exit(compile.status ?? 1);
+}
+const emittedFiles = parseEmittedFiles(compile.stdout).map((file) => path.resolve(packageRoot, file));
+if (emittedFiles.length === 0) throw new Error("build: tsc reported no emitted files");
 
 // 4. Embed the neutral gateway protocol runtime and declaration. Backend source
 //    consumes the workspace package through src/shared/gateway-events.ts, but
@@ -85,4 +107,10 @@ try {
 } catch (error) {
   if (error.code !== "ENOENT") throw error;
 }
+// 6. A build that exits 0 has produced a complete dist/: everything tsc wrote
+//    is still on disk, and nothing under it imports a module that is not.
+//    (the embedded protocol's own source maps are the one thing removed on purpose, in step 4).
+const removedOnPurpose = new Set([`${embeddedGatewayEventsRuntime}.map`, `${embeddedGatewayEventsDeclaration}.map`]);
+assertFilesExist(emittedFiles.filter((file) => !removedOnPurpose.has(file)));
+assertRelativeImportsResolve([path.join(dist, "bin"), path.join(dist, "src")]);
 console.log(`build: compiled to dist/, embedded gateway protocol, copied ${copied} talk asset(s)`);
