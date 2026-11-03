@@ -92,14 +92,20 @@ The feature adds **no** MCP tool and no tool-schema field. Selection reuses the 
 
 The full table is in `research.md`. The load-bearing facts:
 
-- An engine is one awaited `run()` (`src/shared/types.ts:110`). A turn can wait for hours: the
-  heartbeat ticks while `run()` is pending. The status reconciler interrupts a `running`
-  session only when the engine reports no live turn (`src/gateway/status-reconciler.ts:21`).
+- An engine is one awaited `run()` (`src/shared/types.ts:110`). A turn can wait for hours. A
+  5 s heartbeat writes `lastActivity` while `run()` is pending
+  (`src/sessions/turn/heartbeat.ts:5`). The status reconciler looks at a `running` session
+  only once that is 45 s stale (`src/gateway/status-reconciler.ts:50`).
+- Creation refuses any engine with no model-registry entry
+  (`src/sessions/session-patch.ts:65`). The registry has an entry for every name in
+  `ENGINE_NAMES`, whatever the config says (`src/shared/models.ts:447`). So the off switch
+  has to be the registry entry itself, not list membership.
 - A child's result reaches its parent through `notifyParentSessionAndWait`
   (`src/sessions/callbacks.ts:112`), keyed and retried durably. A new engine needs no
   callback code of its own.
 - Scoped departments may run `claude` only (`src/sessions/turn/scoped-turn.ts:15`,
-  `src/work-items/dispatch-config.ts:276`). Any other engine name is already refused there.
+  `src/work-items/dispatch-config.ts:212` and `:279`). Any other engine name is already
+  refused there.
 - The gateway's tools are reachable off-host only as `/api` with the gateway bearer
   (operator-level) or `/mcp` with a Cloudflare Access assertion
   (`src/gateway/remote-mcp/http.ts:217`). Neither is safe to hand to a cloud VM (plan D4).
@@ -151,8 +157,9 @@ and the token in the gateway's environment. They then add a `cloudHandoff` block
 `claude-cloud` is an unknown engine everywhere.
 
 **Independent Test**: with no `cloudHandoff` block, `delegate_task` with
-`engine: "claude-cloud"` is refused as an unknown engine, `/api/engines` does not list it,
-and no watcher runs. With `enabled: false` and a full block, the result is the same.
+`engine: "claude-cloud"` is refused **at creation** as an unknown engine. No session or Todo
+attempt is created, `/api/engines` does not list it, and no watcher runs. With
+`enabled: false` and a full block, the result is the same.
 
 **Acceptance Scenarios**:
 
@@ -170,7 +177,9 @@ The operator, or the delegating manager, stops the delegate session. The gateway
 the cloud session, because no API exists. It stops waiting, marks the handoff `abandoned`,
 settles the turn `interrupted`, and tells the parent plainly that the cloud session may still
 be running, with its link. A handoff that sees no `done` or `blocked` block within
-`timeoutMinutes` settles `failed` with `timed out` and the same link.
+`timeoutMinutes` settles `failed` with `timed out` and the same link. The text says the cloud
+session may be waiting at a permission prompt or a question that only the claude.ai page
+shows (research R5).
 
 **Independent Test**: stop a session with an open handoff. No further GitHub polls are made
 for it, the result text says the cloud session was not stopped and gives the link, and a PR
@@ -178,13 +187,15 @@ that appears later does not reopen the session.
 
 ### User Story 4: The gateway restarts while a handoff is open (Priority: P2)
 
-The gateway restarts during a handoff. On boot, the watcher finds the open handoff and
-re-attaches it to a turn on its session, with no new fire and no restart-nudge text sent
-anywhere. The result is delivered once.
+The gateway restarts during a handoff. Boot marks the session `interrupted` and replays its
+queue item, as it does for every engine. The replayed turn finds the open handoff and
+re-attaches to it, with no new fire. The result is delivered once, through the normal
+settle.
 
-**Independent Test**: open a handoff, restart the gateway, then serve the `done` PR. Exactly
-one fire in total, exactly one parent callback, and the session's transcript has no
-restart-nudge prompt.
+**Independent Test**: open a handoff, restart the gateway with the queue replay in place,
+then serve the `done` PR. Exactly one fire in total, and exactly one parent callback with the
+delegation completion contract applied. The Todo's derived state follows the real result:
+`executing` while it waits, then whatever `done` derives.
 
 ### User Story 5: Rework on the same branch (Priority: P3)
 
@@ -204,10 +215,11 @@ result block on the same PR, matched to the new nonce.
   reports the PR it saw, so the work is not lost.
 - **The branch is pushed but no PR is opened** (S3). If the head commit carries the
   `Handoff-Result:` trailer (`contracts/handoff-brief.md`), it is read from there.
-- **A fire succeeds but its response is lost** (network). There is no idempotency key
-  (R3). The handoff is recorded as `fired-unconfirmed` and is **not** retried
-  automatically: a duplicate cloud session spends real usage. It reports to the parent and
-  waits for a human.
+- **A fire succeeds but its response is lost** (network), or the endpoint answers 5xx.
+  There is no idempotency key (R3), and a 5xx may still have created a session. The handoff
+  is recorded as `fired-unconfirmed` and is **not** retried automatically, because a
+  duplicate cloud session spends real usage. The watcher keeps polling the branch until the
+  timeout, in case the session was created.
 - **The routine was edited to attach connectors.** The gateway cannot see this, because the
   token has no read access (R3). The doctor check and the operator guide say so. Plan risk
   K3.
@@ -225,8 +237,11 @@ result block on the same PR, matched to the new nonce.
 **Opt-in and selection**
 
 - **FR-001**: The feature is off unless `cloudHandoff.enabled` is `true` in `config.yaml`.
-  When it is off, `claude-cloud` is not registered and is refused as an unknown engine, no
-  watcher runs, and no outbound call is made.
+  When it is off:
+  - `claude-cloud` has no model-registry entry and no engine registration, and it is not in
+    `ENGINE_NAMES`;
+  - it is refused at creation as an unknown engine, before any session or attempt exists;
+  - no watcher runs, and no outbound call is made.
 - **FR-002**: When it is enabled but invalid, the feature fails closed (`misconfigured`). The
   gateway still boots, the engine is not registered, and the doctor names each problem.
   Secret values are never printed.
@@ -235,8 +250,9 @@ result block on the same PR, matched to the new nonce.
 - **FR-004**: `claude-cloud` is selected through the existing selection paths only: the
   `engine` field of `delegate_task`, the Todo dispatch override, or an employee's YAML
   `engine`. No MCP tool or tool property is added.
-- **FR-005**: A `model` other than unset is refused for `claude-cloud`, with a message saying
-  that the routine fixes the model. Effort is ignored, and the session row says so.
+- **FR-005**: The `claude-cloud` registry entry offers no model choices. Any explicit `model`
+  is refused at creation, with a message saying that the routine fixes the model. Effort is
+  ignored.
 
 **Running a handoff**
 
@@ -250,15 +266,16 @@ result block on the same PR, matched to the new nonce.
 
   It never contains the employee persona, the department instructions, Notes, memory, MCP
   configuration, the gateway URL or any credential.
-- **FR-008**: While the handoff is open, the engine reports the session's turn as alive, so
-  the status reconciler leaves it alone. It also emits a status line at each change it sees:
-  fired, branch seen, PR seen.
+- **FR-008**: While the handoff is open, `run()` stays pending, so the turn heartbeat keeps
+  the session `running`. `isAlive` reports the awaited handoff as live, as a backstop. The
+  engine emits a status line at each change it sees: fired, branch seen, PR seen.
 - **FR-009**: A session in a scoped or dedicated department is refused `claude-cloud` by the
   existing gates (`src/sessions/turn/scoped-turn.ts:15`,
-  `src/work-items/dispatch-config.ts:276`). This feature adds no exemption.
-- **FR-010**: `claude-cloud` never appears in a fallback chain (the validator refuses it),
-  and a `claude-cloud` session never falls back to another engine. Its fallback mode is
-  `auto-resume`, whatever was asked.
+  `src/sessions/scoped-engine.ts:20`, `src/work-items/dispatch-config.ts:212` and `:279`).
+  This feature adds no exemption.
+- **FR-010**: `claude-cloud` never appears in a fallback chain. The validator checks chain
+  entries against `ENGINE_NAMES`, which does not contain it. A `claude-cloud` session never
+  falls back to another engine: its fallback mode is `auto-resume`, whatever was asked.
 
 **Results**
 
@@ -279,15 +296,20 @@ result block on the same PR, matched to the new nonce.
   exceeded: `maxConcurrent` open handoffs per instance, or `maxPerDay` fires per instance
   per UTC day. These count caps are the feature's stated spend ceiling (Principle II). The
   defaults are 1 and 4.
-- **FR-015**: A fire answered with `429` settles the turn as rate-limited, with `Retry-After`
-  as the reset, so the existing wait path retries it. Any other non-2xx answer settles the
-  turn `failed` with the status and error type. A fire with no response is recorded
-  `fired-unconfirmed` and is never retried automatically.
+- **FR-015**: Fire answers are handled as follows:
+  - A `429` settles the turn as rate-limited, with `Retry-After` as the reset, so the
+    existing wait path retries it. The endpoint creates no session on a `429`.
+  - A 4xx other than `429` settles the turn `failed` with the status and error type.
+  - A 5xx, or no response at all, is recorded `fired-unconfirmed`. It is never retried
+    automatically, and the branch is polled until the timeout.
 - **FR-016**: Stopping a session with an open handoff stops polling, marks the handoff
   `abandoned`, and says in the result that the cloud session was **not** stopped, with its
   link. A result that arrives later is ignored.
-- **FR-017**: After a gateway restart, each open handoff is re-attached to a turn on its
-  session without a new fire. Restart-resume nudges skip sessions with an open handoff.
+- **FR-017**: A turn on a session with an open handoff re-attaches to it, whatever its
+  prompt, and never fires. After a restart, the queue replay that boot already performs is
+  that turn. No extra turn is enqueued. A result is delivered only through `settleTurn`.
+  An open handoff that no turn re-attaches is closed `timed-out` at `timeoutMinutes`, with no
+  delivery.
 - **FR-018**: A later turn on a session whose last handoff reached `done`, `blocked` or
   `failed` opens a new handoff. Its brief names the earlier branch and PR to continue on.
 
@@ -375,16 +397,17 @@ Rules:
 ### Key Entities
 
 - **Cloud handoff**: one fire and its outcome. It is owned by one session and optionally one
-  Todo. Its state is one of `fired`, `fired-unconfirmed`, `done`, `blocked`, `failed`,
-  `timed-out` or `abandoned`. It also records the branch, the PR URL and the cloud session
+  Todo. Its state is one of `opened`, `fired`, `fired-unconfirmed`, `done`, `blocked`,
+  `failed`, `timed-out` or `abandoned`. It also records the branch, the PR URL and the cloud session
   URL. See `data-model.md`.
 - **Target**: one routine, meaning one repository, the routine's token, and the employees
   allowed to use it.
 
 ## Success Criteria *(mandatory)*
 
-- **SC-001**: With the feature off, no code path names `claude-cloud` as available, and a
-  full test run shows no outbound call to the routine endpoint or to GitHub.
+- **SC-001**: With the feature off, creation refuses `claude-cloud` as an unknown engine,
+  `/api/engines` omits it, and a full test run shows no outbound call to the routine
+  endpoint or to GitHub.
 - **SC-002**: In the Phase 0 spike, three handoffs on a throwaway repository each come back
   with a PR and a matching `done` block, with no human touching claude.ai between fire and
   result.

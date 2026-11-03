@@ -19,7 +19,9 @@ block validates. A turn on it does four things:
 4. Resolves with a normal `EngineResult`, so settle, the parent callback, the Todo run and
    the reconcile all work as they do for any engine.
 
-Stop abandons the wait honestly. A restart re-attaches the wait without firing again.
+Stop abandons the wait honestly. After a restart, the gateway replays the interrupted turn
+as it does for every engine. `run()` sees the open handoff and re-attaches to it instead of
+firing again.
 
 ## Existing infrastructure (constitution VII)
 
@@ -32,11 +34,13 @@ the rows the design leans on:
 | `packages/jinn/src/shared/types.ts:115` | `InterruptibleEngine`: `kill` (abandon) and `isAlive` (open handoff) |
 | `packages/jinn/src/gateway/server.ts:735` | The engine map. Registration is conditional on the config |
 | `packages/jinn/src/mcp/delegation-tools.ts:108` | `engine` is a free string. Selection needs no schema change |
-| `packages/jinn/src/sessions/session-patch.ts:50` | An unregistered engine is refused, which is what makes the feature off by default |
+| `packages/jinn/src/shared/models.ts:441` | `buildRegistry(config)`. The `claude-cloud` entry exists only when the feature is on |
+| `packages/jinn/src/sessions/session-patch.ts:65` | An engine with no model-registry entry is refused at creation, which is what makes the feature off by default |
 | `packages/jinn/src/sessions/turn/scoped-turn.ts:15` | Scoped sessions run `claude` only. FR-009 needs no new code |
 | `packages/jinn/src/sessions/callbacks.ts:112` | Parent callback. Reused unchanged |
 | `packages/jinn/src/gateway/status-reconciler.ts:21` | The 45 s stale rule the adapter must satisfy through `isAlive` |
-| `packages/jinn/src/sessions/restart-resume.ts:451` | Restart nudges. Gains a skip for sessions with an open handoff |
+| `packages/jinn/src/sessions/turn/heartbeat.ts:5` | The 5 s heartbeat that keeps a pending `run()` fresh |
+| `packages/jinn/src/sessions/queue-item-registry.ts:216` | Boot resets a `running` queue item to `pending` and replays it. That replay is the re-attach |
 | `packages/jinn/src/shared/env-ref.ts:17` | `${VAR}` resolution for both tokens |
 | `packages/jinn/src/shared/remote-mcp-config.ts:100` | The validator pattern `cloud-handoff-config.ts` copies |
 | `packages/jinn/src/shared/config.ts:37` | `validateConfigShape`, where the validator is hooked in |
@@ -113,8 +117,13 @@ written by the gateway on its behalf.
 
 ### D5. The turn waits, and a watcher does the polling
 
-`run()` opens the record, fires, and then awaits a promise registered with a single
-`CloudHandoffWatcher`, keyed by handoff id.
+`run()` first looks for an **open handoff on its session**.
+
+- If there is one, it re-attaches: no fire, and the prompt is ignored.
+- Otherwise it opens a record, fires, and awaits a promise registered with a single
+  `CloudHandoffWatcher`, keyed by handoff id.
+
+This one rule covers a restart, a nudge and a replay alike.
 
 The watcher:
 
@@ -124,23 +133,54 @@ The watcher:
 - falls back to `GET /repos/{owner}/{repo}/commits/{branch}` for the trailer;
 - settles the promise.
 
-While the promise is pending, `isAlive(sessionId)` is true, so the reconciler leaves the
-session `running`, and the heartbeat keeps ticking.
+While the promise is pending, the turn heartbeat writes `lastActivity` every 5 s
+(`src/sessions/turn/heartbeat.ts:5`). That keeps the session `running`, because the
+reconciler checks liveness only once `lastActivity` is 45 s stale
+(`src/gateway/status-reconciler.ts:50`). `isAlive(sessionId)` is true for an awaited
+handoff, which covers the case where the heartbeat lags.
 
-**Restart.** At boot, before restart-resume runs, the watcher lists open handoffs.
+**Restart.** This is what the gateway already does at boot for a session mid-turn on any
+engine. The feature changes none of it:
 
-- For each one whose session exists, it adds the session to a skip set that restart-resume
-  consults (FR-017). It then enqueues a turn tagged `cloud-handoff-reattach`, whose `run()`
-  finds the open handoff for that session and only awaits it.
-- If the session no longer exists, the handoff is marked `abandoned`.
-- If a result is found while no turn is attached (a narrow window during boot), it is
-  delivered through `notifyParentOfExternalTurn` (`src/sessions/callbacks.ts:153`), the
-  existing late-reply path.
+1. `recoverStaleSessions` (`src/sessions/registry.ts:1662`) marks the session `interrupted`.
+2. The startup work-item reconcile derives the Todo from that receipt and closes its open
+   run as `abandoned` (`src/work-items/attempt-evidence.ts:55`). No parent is woken, because
+   this is a database update, not a settle.
+3. `recoverStaleQueueItems` (`src/sessions/queue-item-registry.ts:216`) resets the turn's
+   queue item to `pending`, and the queue replays it. A replaying session gets no
+   restart-resume nudge (`src/sessions/restart-resume.ts:439`).
+
+The replayed turn is the re-attach. Its `run()` finds the open handoff and awaits it. When
+the result lands, the turn settles through `settleTurn` like any other:
+
+- the real receipt is written;
+- the parent is woken through `notifyParentSessionAndWait`, with the delegation completion
+  contract applied;
+- the Todo re-derives from the real outcome.
+
+If the session had no queue item, a restart-resume nudge turn re-attaches the same way. No
+separate re-attach turn is enqueued and no skip list is kept. Either would let a second turn
+run after the first closes the handoff, and under FR-018 that turn would fire a
+continuation.
+
+**Known limit.** The Todo run closed `abandoned` at boot stays closed, and the re-attached
+turn does not open another. The same is true today for every engine's session interrupted
+by a restart. This feature does not fix that.
+
+**Orphans.** The watcher polls only handoffs that a turn is awaiting. An open handoff that
+no turn re-attaches is closed `timed-out` once it passes `timeoutMinutes`, with no delivery
+and a log line, so it stops counting toward `maxConcurrent`. If its session was deleted, it
+is closed `abandoned`.
 
 **Rejected:**
 
 - **Polling inside `run()` with no persistent record.** A restart would lose the handoff,
-  and the nudge would fire a second cloud session.
+  and the replay would fire a second cloud session.
+- **A separate re-attach turn enqueued at boot.** It runs after the replay has already
+  re-attached and settled, so it would fire a continuation.
+- **Delivering a late result through `notifyParentOfExternalTurn`**
+  (`src/sessions/callbacks.ts:153`). It skips the delegation completion contract
+  (`:146`–`:151`), so the Todo would never be re-judged.
 - **A watcher that settles sessions directly.** That is a second settle path beside
   `settleTurn`.
 
@@ -169,21 +209,30 @@ The `cloudHandoff` top-level key joins `CONFIG_TOP_LEVEL_KEYS`. There is no sett
 That matches `remote` and `gateway.remoteMcp`, and `AGENTS.md` asks for no UI toggle
 without a consumer. The doctor and `/api/engines` are the visibility (FR-019).
 
-### D9. The engine tables
+### D9. The engine tables: present only when on
 
-`claude-cloud` joins:
+`claude-cloud` does **not** join `ENGINE_NAMES`. `buildRegistry` builds a model-registry
+entry for every name in that list, whatever the config says (`src/shared/models.ts:447`).
+Creation checks only for a registry entry (`src/sessions/session-patch.ts:65`), and
+`/api/engines` serves the registry (`src/gateway/api.ts:4314`). So list membership alone
+would make the engine creatable and visible with the feature off. Its first turn would then
+fail in preflight and strand its Todo.
 
-- `ENGINE_NAMES`;
-- the model registry, with one pseudo-model `routine`;
-- the rate-limit labels.
+Instead:
 
-It does **not** join `PTY_VIEW_ENGINE_NAMES` (there is no terminal), `REMOTE_ENGINE_NAMES`,
-`DYNAMIC_CATALOG_ENGINES` or `MCP_CAPABLE_ENGINES`. The fallback-chain validator refuses it
-by name (FR-010).
+- `buildRegistry`, which already receives the config, adds a `claude-cloud` entry, with no
+  model choices, **only** when `cloudHandoff` is enabled and valid. `ModelRegistry` is
+  `Record<string, …>` (`src/shared/types.ts:804`), so no type changes.
+- `src/gateway/server.ts:735` registers the engine under the same condition.
+- The rate-limit label table is `Record<string, string>`, so it gains a label.
 
-T013 audits every consumer of `ENGINE_NAMES`, so that a UI list or a health table does not
-start offering a cloud engine that is not registered. The rule is that "known" and
-"available" stay distinct.
+Everything keyed by `EngineName` stays as it is, so the PTY view, the remote and
+dynamic-catalog lists and MCP attachment never see the cloud engine. The fallback-chain
+validator checks entries against `ENGINE_NAMES`, so a chain naming `claude-cloud` is refused
+as unknown with no new code (FR-010).
+
+T013 audits every lookup by `session.engine` that assumes an `EngineName`, so that a session
+row naming `claude-cloud` does not throw anywhere.
 
 ## Rollout phases
 
@@ -203,12 +252,13 @@ start offering a cloud engine that is not registered. The rule is that "known" a
 | K3 | The routine is edited to attach connectors | The token cannot read the routine, so this is unverifiable. The guide and the doctor say so. This is the main reason the operator creates and owns routines by hand |
 | K4 | Cloud work spends the same plan limits, and local sessions on that account hit limits sooner | Low default caps. Phase 2 adds attribution if S5 allows |
 | K5 | A forged PR on a handoff branch supplies a fake result | A 96-bit nonce, never published before the fire. The block must carry the nonce. A PR author check in Phase 2 |
-| K6 | A retried fire creates duplicate cloud sessions | No automatic retry of an unconfirmed fire (FR-015) |
+| K6 | A retried fire creates duplicate cloud sessions | No automatic retry of an unconfirmed fire or a 5xx answer (FR-015) |
+| K12 | A run stops at a permission prompt after repeated classifier blocks (research R5). GitHub cannot see this | The timeout text names this case and gives the cloud session link. The guide suggests an environment and repository settings that keep the classifier quiet. Spike S6 measures how often it happens |
 | K7 | Stop cannot stop the cloud session | The result says so, with the link. The caps bound the damage |
 | K8 | The motivation, free credit, ends on 2026-11-04 | The spec's recommendation is to defer |
 | K9 | Task text is retained by Anthropic | Q4. The brief carries only task text and the operator's preamble (FR-007) |
 | K10 | An hours-long turn holds the session's queue | Accepted. Follow-ups queue, and FR-018 picks them up as a new handoff |
-| K11 | Todo recovery's 4 h rule treats a long handoff as stalled | Checked: no. Both checks skip a Todo whose open run has an in-flight session (`src/work-items/recovery.ts:169` and `src/work-items/anomaly-detect.ts:39`). A child counts as in flight while its `lastActivity` is under 4 h old (`src/work-items/open-delegations.ts:49`), and the heartbeat keeps that fresh for as long as `run()` is pending. T034 pins this with a test |
+| K11 | Todo recovery's 4 h rule treats a long handoff as stalled | Checked: no. Both checks skip a Todo whose open run has an in-flight session (`src/work-items/recovery.ts:169` and `src/work-items/anomaly-detect.ts:40`). A child counts as in flight while its `lastActivity` is under 4 h old (`src/work-items/open-delegations.ts:49`), and the heartbeat keeps that fresh for as long as `run()` is pending. T034 pins this with a test |
 
 ## Constitution check
 
@@ -236,4 +286,4 @@ start offering a cloud engine that is not registered. The rule is that "known" a
 | --- | --- | --- |
 | A persistent handoff table | Restart must not fire twice (FR-017, SC-003) | In-memory state loses the handoff at restart |
 | A watcher with one timer | Many open handoffs must not mean many timers, and boot re-attach needs one owner | Per-turn polling cannot survive a restart |
-| A restart-resume skip set | Nudge text must not become a second fire | Disabling nudges globally changes every other session |
+| "Open handoff on this session means re-attach" in `run()` | A replay, a nudge and a queued message must never fire twice (FR-017) | A separate re-attach turn fires a continuation after the replay settles (D5) |

@@ -65,6 +65,9 @@ documented. Phase 0 spike, question S2.
 
 ## R3. Routines (scheduled tasks) and the fire endpoint
 
+The docs now call routines "scheduled tasks", a research preview. This spec says "routine",
+the name the API and its token still use.
+
 - A routine pins a prompt, one or more repositories, an environment, a model and
   connectors. It runs as a cloud session on a schedule, on a GitHub event, or when its API
   trigger is fired (RT).
@@ -77,16 +80,21 @@ documented. Phase 0 spike, question S2.
 - The fire body is `{"text": "..."}`, freeform, at most 65,536 characters, "passed to the
   routine alongside its saved prompt" (FIRE). Per-fire variation is limited to this text:
   repository, environment, model and connectors are fixed by the routine.
+- The text "arrives wrapped in a `<routine-fire-payload>` block that labels it as untrusted
+  data". The routine's saved prompt has to opt in to acting on it (RT). The contract's saved
+  prompt does this, and names the block.
 - No idempotency key: "If a webhook caller retries, the endpoint creates multiple sessions"
   (FIRE).
 - Limits: 30 fires per hour per routine (shared with **Run now**) and 100 API fires per
   hour per account, with `429` and `Retry-After` (FIRE).
 - "The request returns once the session is created. It does not stream session output or
   wait for the session to complete" (FIRE).
-- Connectors: when a routine is created without an explicit connector list, the server
-  normally attaches all of the account's connected claude.ai connectors. Only an explicit
-  "clear connectors" setting leaves the list empty, and connectors that an organisation
-  admin set up can still reach a run (CLI tool surface for routines; consistent with RT).
+- Connectors are on by default: "When you create a scheduled task, all of your currently
+  connected connectors are included by default" (RT). They have to be removed from the
+  routine by hand.
+- **UNVERIFIED**: that connectors an organisation admin set up can still reach a run whose
+  own list is empty. This comes from the CLI's routine tool description, not the public
+  docs.
 - Work is pushed "to a branch prefixed with `claude/` unless your prompt directs it to push
   to another branch" (RT). Commits and PRs appear under the routine owner's GitHub identity
   (RT).
@@ -108,8 +116,10 @@ documented. Phase 0 spike, question S2.
 - GitHub inside the VM goes through a proxy that holds the credential. The proxy "rejects
   branch deletions and pushes of anything other than a branch", "doesn't limit which
   branches a push can update", and blocks GitHub GraphQL, so `gh pr` subcommands that use
-  GraphQL fail and `gh api` REST is the fallback (CE). **UNVERIFIED** whether a routine run
-  can open a PR through REST without the web UI's **Create PR** button. Phase 0 question S3.
+  GraphQL fail and `gh api` REST is the fallback (CE). CE also says that "`gh api` calls for
+  attached repositories work without a token of your own". So a routine run is **expected**
+  to be able to open a PR through REST without the web UI's **Create PR** button. Phase 0
+  confirms it (S3).
 
 **Finding R4.1.** For an Anthropic-hosted session, the one result channel a gateway can
 read without undocumented endpoints is GitHub: the branch, its commits and its PR. The
@@ -130,6 +140,10 @@ handoff contract (`contracts/handoff-brief.md`) is designed around that.
   once" but give no number (RT).
 - Permission modes in cloud sessions are Auto, Accept edits and Plan. There is no Manual
   and no Bypass (CW).
+- Routine runs start in auto mode. After repeated classifier blocks, "a permission prompt
+  appears in the run's session and waits until someone answers it" (RT, "Permission prompts
+  during a run"). GitHub cannot see that wait, and no instruction in the brief can prevent
+  it. To the gateway it looks like a slow session that ends in a timeout.
 
 ## R6. Authentication
 
@@ -204,19 +218,23 @@ Verified against `origin/main` at `53e47059`. `src/` is `packages/jinn/src/`.
 | --- | --- | --- |
 | `src/shared/types.ts:110` | `Engine`: `name` plus one awaited `run(opts)` | The adapter is an `Engine` (plan D1) |
 | `src/shared/types.ts:115` | `InterruptibleEngine`: `kill`, `isAlive`, `killAll`, `killIdle` | `kill` abandons a handoff; `isAlive` keeps the reconciler off a long wait |
-| `src/shared/types.ts:227` | `EngineRunOpts.onLateRecovery`: a result that arrives after a settle | Precedent for a result that lands after the turn ended (plan D5) |
-| `src/shared/models.ts:61` | `ENGINE_NAMES`, the closed engine list | Gains `claude-cloud` |
+| `src/shared/models.ts:61` | `ENGINE_NAMES`, the closed engine list | Does **not** gain `claude-cloud` (plan D9). `buildRegistry` builds an entry for every name in it, whatever the config says (`:447`) |
+| `src/shared/models.ts:441` | `buildRegistry(config)`, the model registry | Gains a `claude-cloud` entry **only** when the block is enabled and valid. `ModelRegistry` is `Record<string, …>` (`src/shared/types.ts:804`) |
 | `src/shared/models.ts:98` | `REMOTE_ENGINE_NAMES` | Does **not** gain it: a cloud session is not an ssh host |
 | `src/gateway/server.ts:735` | The engine registry map, filled at `:739`–`:750` | Registers the adapter only when the feature is enabled |
 | `src/mcp/delegation-tools.ts:108` | `delegate_task.engine` is a free `{ type: "string" }` | Selecting `claude-cloud` costs **zero** manifest tokens |
-| `src/sessions/session-patch.ts:50` | `validateNewSessionSelection`: refuses an unregistered engine | With the feature off, `claude-cloud` is refused as unknown |
-| `src/work-items/dispatch-config.ts:276` | A scoped department's dispatch override must be `claude` | Scoped departments are refused the cloud with no new code |
+| `src/sessions/session-patch.ts:65` | `validateNewSessionSelection` refuses an engine with no **model-registry** entry, before anything is created | This is the off switch: no registry entry, so `unknown engine` at creation |
+| `src/gateway/api.ts:4314` | `/api/engines` serves the model registry | Lists `claude-cloud` only when its entry exists |
+| `src/work-items/dispatch-config.ts:212`, `:279` | A scoped department's dispatch override must be `claude`, at write time and again at dispatch | Scoped departments are refused the cloud with no new code |
 | `src/sessions/turn/scoped-turn.ts:15` | `refuseScopedTurn`: scoped sessions run `claude` only | Same: the existing gate already refuses `claude-cloud` |
 | `src/sessions/turn/engine-run.ts:45` | `plan.engine.run({...})`, the single engine call | The adapter needs nothing new in the turn pipeline |
 | `src/sessions/callbacks.ts:112` | `notifyParentSessionAndWait`, the durable parent callback | A finished handoff reaches its parent through the existing path |
-| `src/sessions/callbacks.ts:153` | `notifyParentOfExternalTurn`, for replies after a settle | Fallback delivery after a gateway restart (plan D5) |
-| `src/gateway/status-reconciler.ts:21` | `DEFAULT_STALE_MS = 45_000`: a `running` session with no live turn is interrupted | The adapter must answer `isAlive` truthfully while it waits |
-| `src/sessions/restart-resume.ts:451` | Restart nudges are on by default and capped | An open handoff must not be nudged with prompt text (plan D5) |
+| `src/sessions/callbacks.ts:153` | `notifyParentOfExternalTurn`, for replies after a settle | **Not used.** It skips the delegation completion contract (`:146`–`:151`), so a result delivered through it would never re-judge the Todo |
+| `src/sessions/turn/heartbeat.ts:5` | A 5 s heartbeat writes `lastActivity` while `run()` is pending | This is what keeps a waiting handoff `running` |
+| `src/gateway/status-reconciler.ts:50` | The reconciler looks at liveness only once `lastActivity` is 45 s stale (`DEFAULT_STALE_MS`, `:21`) | `isAlive` is a backstop. The heartbeat is the main mechanism |
+| `src/sessions/registry.ts:1662` | `recoverStaleSessions`: at boot, every `running` session is marked `interrupted` | A handoff's session goes through this like any other (plan D5) |
+| `src/sessions/queue-item-registry.ts:216` | `recoverStaleQueueItems`: a `running` queue item is reset to `pending` and replayed | The replayed turn calls `run()` again with the original prompt. That replay is the re-attach (plan D5) |
+| `src/sessions/restart-resume.ts:439` | Replaying sessions get no resume nudge, and others get one unless nudges are off (`:451`) | No skip list is needed: any turn on a session with an open handoff re-attaches |
 | `src/work-items/runs.ts:171` | `closeWorkItemRun`, which carries `summary` and `handoff` | Production callers pass `outcome` only (`src/work-items/attempt-evidence.ts:55`). Phase 2 fills them |
 | `src/gateway/budgets.ts:6` | `isBudgetExhausted`: per-employee monthly USD, checked before a turn | Cannot bound a handoff, whose cost reads $0. The feature carries count caps (FR-012) |
 | `src/shared/env-ref.ts:17` | `resolveEnvVar`: `${VAR}` indirection for secrets in config | How the routine token and GitHub token are referenced |
@@ -239,8 +257,8 @@ everywhere else means an ssh build host (`docs/remote-execution.md`).
 | --- | --- | --- |
 | S1 | Does a routine run obey a branch name and a PR-body result block given in the fire `text`? | It is the whole result channel (R4.1) |
 | S2 | Does `claude -p ... --environment <anthropic-hosted id> --output-format json` create an Anthropic-hosted session? | It would remove the per-routine web-UI setup, at the price of the 30-day login |
-| S3 | Can a routine run open a draft PR through `gh api` REST, given the GraphQL block? | Without it the result has to live in a commit, not a PR |
+| S3 | Can a routine run open a draft PR through `gh api` REST, given the GraphQL block? Expected yes (R4, CE), but not yet confirmed | Without it the result has to live in a commit, not a PR |
 | S4 | Does the routine fire token expire? | Decides whether the feature needs an expiry alarm |
 | S5 | Does the existing OAuth usage reading include cloud-session usage? | Decides whether the Limits page and the rate-limit guard see handoffs |
-| S6 | What happens when a run asks a question and gets no answer: how long until the environment expires, and does the session ever reach a state GitHub can see? | Sets the default timeout |
+| S6 | What happens when a run asks a question, or stops at a permission prompt (R5), and nobody answers: how long until the environment expires, and does the session ever reach a state GitHub can see? | Sets the default timeout |
 | S7 | Maximum session length and concurrency on the target plan | Sets `maxConcurrent` and `timeoutMinutes` defaults |

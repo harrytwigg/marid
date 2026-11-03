@@ -63,12 +63,15 @@ every run.
 
   Tests: two concurrent opens against a cap of 1 give exactly one success, using an injected
   clock for the UTC day.
-- [ ] T013 Audit every consumer of `ENGINE_NAMES`, `getModelRegistry` and the engine health
-  tables, and list each one in the PR with what it does when `claude-cloud` is known but not
-  registered (plan D9). Add `claude-cloud` to `ENGINE_NAMES`, the model registry (`routine`)
-  and the rate-limit labels only. The fallback-chain validator refuses it by name (FR-010).
-  Tests: a chain naming `claude-cloud` is refused, and the UI engine list omits it when it
-  is unregistered.
+- [ ] T013 Plan D9. `buildRegistry` (`src/shared/models.ts:441`) adds a `claude-cloud` entry
+  with no model choices **only** when `cloudHandoff` is enabled and valid. The engine is
+  **not** added to `ENGINE_NAMES`. Add a rate-limit label. Audit every lookup by
+  `session.engine` that assumes an `EngineName` (engine health, limits, the UI engine lists),
+  and list each one in the PR with what it does for `claude-cloud`. Tests:
+  - feature off: creation is refused with `unknown engine`, no session row exists, and
+    `/api/engines` omits it;
+  - feature on: it is listed, and an explicit `model` is refused (FR-005);
+  - a fallback chain naming it is refused as unknown (FR-010).
 
 ### The engine
 
@@ -81,8 +84,9 @@ every run.
 - [ ] T021 `src/engines/cloud-handoff/fire.ts`: the POST, with `fetch` injected. It maps:
   - `200` to `fired`;
   - `429` with `Retry-After` to a rate-limited result;
-  - any other non-2xx to `failed`, with the error type;
-  - a network failure after the request was sent to `fired-unconfirmed`.
+  - any other 4xx to `failed`, with the error type;
+  - a 5xx, or a network failure after the request was sent, to `fired-unconfirmed` (no
+    retry).
 
   Tests: one per mapping. A pinned test that only the configured `fireUrl` host and path are
   ever called (FR-013).
@@ -111,18 +115,22 @@ every run.
   Tests: each outcome produces the result text in contract section 4.
 - [ ] T025 Register it in `src/gateway/server.ts:735`, only when the config validates and is
   enabled. Start the watcher with the gateway, and stop it on shutdown. Tests (SC-001):
-  - with the feature off, delegating to `claude-cloud` gets the unknown-engine refusal, and
-    the fakes record zero requests across the run;
-  - the red check: force registration on, and watch the zero-request assertion fail.
+  - with the feature off, delegating to `claude-cloud` gets the unknown-engine refusal at
+    creation, and the fakes record zero requests across the run;
+  - the red check: force the registry entry and registration on, and watch both assertions
+    fail.
 
 ### Gateway integration
 
-- [ ] T030 Restart re-attach (FR-017, plan D5). At boot, before restart-resume, add the
-  sessions of open handoffs to a skip set and enqueue a `cloud-handoff-reattach` turn for
-  each. `src/sessions/restart-resume.ts` consults the skip set. Tests (SC-003):
-  - one fire in total across a restart;
-  - one parent callback;
-  - no nudge text in the transcript;
+- [ ] T030 Re-attach (FR-017, plan D5). `run()` re-attaches to an open handoff on its
+  session, whatever the prompt. Nothing new is enqueued at boot, and restart-resume is not
+  changed. Tests (SC-003), run through the real boot sequence (`recoverStaleSessions`,
+  `recoverStaleQueueItems` and the queue replay):
+  - exactly one fire in total across a restart;
+  - exactly one parent callback, from `settleTurn`, with the completion contract applied;
+  - the Todo derives `executing` while the replay waits, then follows the real result;
+  - a session with no queue item, re-attached by a nudge turn, also fires nothing;
+  - an open handoff with no turn closes `timed-out` at `timeoutMinutes` without a delivery;
   - a deleted session's handoff becomes `abandoned`.
 - [ ] T031 Continuation (FR-018). A turn after a closed handoff opens a new row with
   `continues_handoff_id`, and the brief names the earlier branch and PR. Test: the second
@@ -131,9 +139,6 @@ every run.
   - a scoped-department session naming `claude-cloud` is refused by `refuseScopedTurn` and
     by the dispatch override check (FR-009, SC-005);
   - a `claude-cloud` session's fallback mode is `auto-resume` (FR-010).
-- [ ] T034 Pin K11: a Todo whose session waits five hours of fake time in a handoff turn,
-  with the heartbeat running, is flagged by neither `classifyStalledExecution` nor
-  `executionTimeout`.
 - [ ] T033 Visibility (FR-019):
   - the doctor section reports off, misconfigured or ready, with per-target problems. It
     names missing variables but never prints values, and it always carries the reminder
@@ -141,6 +146,9 @@ every run.
   - `/api/engines` lists `claude-cloud` only when it is registered;
   - the session view shows the cloud session link and the handoff state, from a small
     read-only route.
+- [ ] T034 Pin K11: a Todo whose session waits five hours of fake time in a handoff turn,
+  with the heartbeat running, is flagged by neither `classifyStalledExecution` nor
+  `executionTimeout`.
 
 ### Docs and verification
 

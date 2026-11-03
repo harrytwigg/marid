@@ -42,16 +42,20 @@ opened ──fire 200──▶ fired ──block "done"────▶ done
    │                   │──block "failed"──▶ failed
    │                   │──timeout─────────▶ timed-out
    │                   └──stop────────────▶ abandoned
-   ├──fire non-2xx (not 429)──▶ failed
+   ├──fire 4xx (not 429)──────▶ failed
    ├──fire 429────────────────▶ failed (error: rate-limited; the turn waits and opens a new row)
-   └──fire, no response───────▶ fired-unconfirmed ──stop / timeout──▶ abandoned / timed-out
+   └──fire 5xx or no response─▶ fired-unconfirmed ──block / stop / timeout──▶ done… / abandoned / timed-out
 ```
 
 - `opened` exists only between the cap check and the fire. It is written in the same
   transaction as the cap check, so two turns cannot both pass a cap of one.
 - `fired-unconfirmed` is never retried automatically (FR-015). It is open, so it counts
   toward `maxConcurrent` until it times out or is stopped. The watcher still polls its
-  branch, because the fire may have landed.
+  branch, because the fire may have landed. A valid block on that branch closes it like
+  `fired`.
+- At most one open row exists per session. A turn that finds one re-attaches instead of
+  opening another (FR-017). A partial unique index on `(session_id) WHERE closed_at IS NULL`
+  enforces this.
 - A row is closed exactly once. A result seen after `abandoned` is not written.
 
 ## The handoff on the session
