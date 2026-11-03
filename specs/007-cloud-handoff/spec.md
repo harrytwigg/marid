@@ -192,10 +192,14 @@ queue item, as it does for every engine. The replayed turn finds the open handof
 re-attaches to it, with no new fire. The result is delivered once, through the normal
 settle.
 
-**Independent Test**: open a handoff, restart the gateway with the queue replay in place,
-then serve the `done` PR. Exactly one fire in total, and exactly one parent callback with the
-delegation completion contract applied. The Todo's derived state follows the real result:
-`executing` while it waits, then whatever `done` derives.
+**Independent Test**: open a handoff on a child Todo whose parent is `executing`. Restart the
+gateway with the queue replay in place, then serve the `done` PR. The test checks:
+
+- exactly one fire in total;
+- exactly one parent callback, with the delegation completion contract applied;
+- the child Todo never leaves `executing` before the result: no child-settle row is written,
+  and no tree wake reaches the parent's owner;
+- its open run is closed only by the real settle.
 
 ### User Story 5: Rework on the same branch (Priority: P3)
 
@@ -298,7 +302,8 @@ result block on the same PR, matched to the new nonce.
   defaults are 1 and 4.
 - **FR-015**: Fire answers are handled as follows:
   - A `429` settles the turn as rate-limited, with `Retry-After` as the reset, so the
-    existing wait path retries it. The endpoint creates no session on a `429`.
+    existing wait path retries it. This assumes the endpoint creates no session on a `429`.
+    The docs do not say so, so it is inferred, and Phase 0 confirms it (S8).
   - A 4xx other than `429` settles the turn `failed` with the status and error type.
   - A 5xx, or no response at all, is recorded `fired-unconfirmed`. It is never retried
     automatically, and the branch is polled until the timeout.
@@ -310,6 +315,10 @@ result block on the same PR, matched to the new nonce.
   that turn. No extra turn is enqueued. A result is delivered only through `settleTurn`.
   An open handoff that no turn re-attaches is closed `timed-out` at `timeoutMinutes`, with no
   delivery.
+- **FR-017a**: When the gateway derives a Todo's status and closes its runs, a session with an
+  open handoff counts as in flight. So a restart neither moves the Todo to `blocked`, nor
+  wakes a parent's owner, nor closes its run. Each Todo has at most one open handoff. A
+  further cloud delegation on that Todo re-attaches to it rather than firing.
 - **FR-018**: A later turn on a session whose last handoff reached `done`, `blocked` or
   `failed` opens a new handoff. Its brief names the earlier branch and PR to continue on.
 

@@ -29,7 +29,7 @@ the repository.
   - S1: whether each run obeyed the branch name and the block;
   - S3: whether the PR was opened through REST or only the trailer was written;
   - S6: how long each took, and what the `blocked` run left visible on GitHub.
-- [ ] T003 Record S4: does the token's page show an expiry? Record S5: before and after the
+- [ ] T003 Record S8 if any fire gets a `429`: did it create a session? Record S4: does the token's page show an expiry? Record S5: before and after the
   runs, compare the account's usage on claude.ai with the gateway's own Limits reading for
   that account. Record S7 from the plan's documentation or the account's limits page.
 - [ ] T004 Optional, for Q2 = B: from a logged-in CLI, try
@@ -132,6 +132,16 @@ every run.
   - a session with no queue item, re-attached by a nudge turn, also fires nothing;
   - an open handoff with no turn closes `timed-out` at `timeoutMinutes` without a delivery;
   - a deleted session's handoff becomes `abandoned`.
+- [ ] T030a In flight during a handoff (FR-017a, plan D5). `collectAttemptEvidence`
+  (`src/work-items/attempt-evidence.ts:93`) reads a session with an open handoff as
+  `running`, and leaves it out of `closeRunsForSettledAttempts`. Add the two partial unique
+  indexes, and make a second cloud delegation on the same Todo re-attach. Tests:
+  - **Red first** (Principle III): on an ephemeral gateway, a child Todo under an
+    `executing` parent and a long turn on any engine, then a restart. Record the
+    `blocked` flap and the tree wake to the parent's owner. That proves the premise.
+  - Then with an open handoff: no flap, no child-settle row, no wake, and the run stays open.
+  - With the feature off, the derivation is unchanged: the existing reconcile tests pass
+    untouched.
 - [ ] T031 Continuation (FR-018). A turn after a closed handoff opens a new row with
   `continues_handoff_id`, and the brief names the earlier branch and PR. Test: the second
   fire's text contains the first branch.

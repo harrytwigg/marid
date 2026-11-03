@@ -139,16 +139,40 @@ reconciler checks liveness only once `lastActivity` is 45 s stale
 (`src/gateway/status-reconciler.ts:50`). `isAlive(sessionId)` is true for an awaited
 handoff, which covers the case where the heartbeat lags.
 
-**Restart.** This is what the gateway already does at boot for a session mid-turn on any
-engine. The feature changes none of it:
+**Restart.** For a session mid-turn on any engine, the gateway does this at boot today:
 
 1. `recoverStaleSessions` (`src/sessions/registry.ts:1662`) marks the session `interrupted`.
-2. The startup work-item reconcile derives the Todo from that receipt and closes its open
-   run as `abandoned` (`src/work-items/attempt-evidence.ts:55`). No parent is woken, because
-   this is a database update, not a settle.
+2. The startup work-item reconcile, queued at `src/gateway/server.ts:1227`, reads the
+   Todo's attempts through `collectAttemptEvidence`
+   (`src/work-items/attempt-evidence.ts:93`). Two things follow:
+   - That call closes the open run as `abandoned` (`:98`, via `:55`).
+   - With nothing in flight, the Todo derives `blocked` (`src/work-items/reconcile.ts:116`).
+     For a child Todo, that move writes a child-settle row
+     (`src/work-items/child-settles.ts:43`). About 10 s later, the tree wake tells the
+     parent's owner that the child is blocked (started at `src/gateway/server.ts:1240`).
 3. `recoverStaleQueueItems` (`src/sessions/queue-item-registry.ts:216`) resets the turn's
-   queue item to `pending`, and the queue replays it. A replaying session gets no
-   restart-resume nudge (`src/sessions/restart-resume.ts:439`).
+   queue item to `pending`. The replay starts later, after the attach gate
+   (`src/gateway/server.ts:1269`), so the reconcile usually runs first. When the replay is
+   in flight, the Todo derives `executing` again (`src/work-items/reconcile.ts:107`). A
+   replaying session gets no restart-resume nudge (`src/sessions/restart-resume.ts:439`).
+
+Step 2 is a flap: executing, then blocked, then executing. For a local turn it costs one
+misleading wake. For a handoff it is dangerous, because a manager told "blocked" may
+re-delegate, and that would fire a second cloud session (SC-003). So the feature changes
+step 2 for handoffs only.
+
+`collectAttemptEvidence` treats a session that has an **open** `cloud_handoffs` row as in
+flight:
+
+- its status reads `running` where the evidence is built (`attempt-evidence.ts:103`);
+- it is left out of `closeRunsForSettledAttempts` (`:98`).
+
+The Todo then stays `executing` across the restart, no child-settle row is written, and the
+Todo run stays open until the real settle closes it. The check is a single indexed lookup by
+session id, exported by the handoff store. When the feature is off, the table is empty, so
+it is a no-op. A second guard bounds the damage if anything else re-delegates: at most one
+open handoff per Todo (`data-model.md`). A second delegation to the cloud on a Todo with an
+open handoff re-attaches to it rather than firing.
 
 The replayed turn is the re-attach. Its `run()` finds the open handoff and awaits it. When
 the result lands, the turn settles through `settleTurn` like any other:
@@ -163,9 +187,9 @@ separate re-attach turn is enqueued and no skip list is kept. Either would let a
 run after the first closes the handoff, and under FR-018 that turn would fire a
 continuation.
 
-**Known limit.** The Todo run closed `abandoned` at boot stays closed, and the re-attached
-turn does not open another. The same is true today for every engine's session interrupted
-by a restart. This feature does not fix that.
+**Not changed for other engines.** The flap and the run closed `abandoned` at boot remain as
+they are today for every other engine's session interrupted by a restart. Fixing those in
+general is outside this feature.
 
 **Orphans.** The watcher polls only handoffs that a turn is awaiting. An open handoff that
 no turn re-attaches is closed `timed-out` once it passes `timeoutMinutes`, with no delivery
@@ -287,3 +311,4 @@ row naming `claude-cloud` does not throw anywhere.
 | A persistent handoff table | Restart must not fire twice (FR-017, SC-003) | In-memory state loses the handoff at restart |
 | A watcher with one timer | Many open handoffs must not mean many timers, and boot re-attach needs one owner | Per-turn polling cannot survive a restart |
 | "Open handoff on this session means re-attach" in `run()` | A replay, a nudge and a queued message must never fire twice (FR-017) | A separate re-attach turn fires a continuation after the replay settles (D5) |
+| An open handoff counts as in flight in `collectAttemptEvidence` | Without it, boot flaps the Todo to `blocked` and wakes the parent's owner mid-handoff, which invites a duplicate fire (D5) | Documenting the flap as a limit leaves a path to double spend, which SC-003 forbids |

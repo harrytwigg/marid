@@ -53,9 +53,12 @@ opened ──fire 200──▶ fired ──block "done"────▶ done
   toward `maxConcurrent` until it times out or is stopped. The watcher still polls its
   branch, because the fire may have landed. A valid block on that branch closes it like
   `fired`.
-- At most one open row exists per session. A turn that finds one re-attaches instead of
-  opening another (FR-017). A partial unique index on `(session_id) WHERE closed_at IS NULL`
-  enforces this.
+- At most one open row exists per session, and at most one per Todo. A turn or a delegation
+  that finds one re-attaches instead of opening another (FR-017, FR-017a). Two partial unique
+  indexes enforce this: `(session_id) WHERE closed_at IS NULL`, and
+  `(work_item_id) WHERE closed_at IS NULL AND work_item_id IS NOT NULL`.
+- An open row makes its session count as in flight for the Todo's status derivation and run
+  closing (FR-017a, plan D5).
 - A row is closed exactly once. A result seen after `abandoned` is not written.
 
 ## The handoff on the session

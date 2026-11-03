@@ -234,6 +234,9 @@ Verified against `origin/main` at `53e47059`. `src/` is `packages/jinn/src/`.
 | `src/gateway/status-reconciler.ts:50` | The reconciler looks at liveness only once `lastActivity` is 45 s stale (`DEFAULT_STALE_MS`, `:21`) | `isAlive` is a backstop. The heartbeat is the main mechanism |
 | `src/sessions/registry.ts:1662` | `recoverStaleSessions`: at boot, every `running` session is marked `interrupted` | A handoff's session goes through this like any other (plan D5) |
 | `src/sessions/queue-item-registry.ts:216` | `recoverStaleQueueItems`: a `running` queue item is reset to `pending` and replayed | The replayed turn calls `run()` again with the original prompt. That replay is the re-attach (plan D5) |
+| `src/work-items/attempt-evidence.ts:93` | `collectAttemptEvidence`: closes runs for settled attempts (`:98`), then builds the evidence the status derivation reads (`:103`) | Treats a session with an open handoff as in flight (plan D5, FR-017a) |
+| `src/work-items/reconcile.ts:116` | With nothing in flight, an `interrupted` newest attempt derives `blocked` | Why boot would flap a handoff's Todo without FR-017a |
+| `src/work-items/child-settles.ts:43` | A child Todo moving to `blocked` is a child settle, and wakes the parent's owner | The wake FR-017a prevents during a handoff |
 | `src/sessions/restart-resume.ts:439` | Replaying sessions get no resume nudge, and others get one unless nudges are off (`:451`) | No skip list is needed: any turn on a session with an open handoff re-attaches |
 | `src/work-items/runs.ts:171` | `closeWorkItemRun`, which carries `summary` and `handoff` | Production callers pass `outcome` only (`src/work-items/attempt-evidence.ts:55`). Phase 2 fills them |
 | `src/gateway/budgets.ts:6` | `isBudgetExhausted`: per-employee monthly USD, checked before a turn | Cannot bound a handoff, whose cost reads $0. The feature carries count caps (FR-012) |
@@ -262,3 +265,4 @@ everywhere else means an ssh build host (`docs/remote-execution.md`).
 | S5 | Does the existing OAuth usage reading include cloud-session usage? | Decides whether the Limits page and the rate-limit guard see handoffs |
 | S6 | What happens when a run asks a question, or stops at a permission prompt (R5), and nobody answers: how long until the environment expires, and does the session ever reach a state GitHub can see? | Sets the default timeout |
 | S7 | Maximum session length and concurrency on the target plan | Sets `maxConcurrent` and `timeoutMinutes` defaults |
+| S8 | Does a fire answered `429` ever create a session? FIRE does not say | FR-015 waits and fires again after a `429`. That is safe only if a `429` creates nothing |
