@@ -11,6 +11,9 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { createRequire } from "node:module";
+
+const ts = createRequire(import.meta.url)("typescript");
 
 /** Errors worth another attempt: the directory changed or was held while it was removed. */
 const TRANSIENT = new Set(["ENOTEMPTY", "EBUSY", "EPERM", "EMFILE", "ENFILE"]);
@@ -76,11 +79,31 @@ export function assertFilesExist(expected, { exists = fs.existsSync } = {}) {
   }
 }
 
-const RELATIVE_IMPORT = /(?:\bfrom\s*|\bimport\s*\(?\s*|\bexport\s*\*\s*from\s*)["'](\.{1,2}\/[^"']+)["']/g;
-
-/** Relative module specifiers a compiled JavaScript file imports or re-exports. */
+/**
+ * Relative module specifiers a compiled JavaScript file imports or re-exports,
+ * read from its syntax tree so comments, strings and templates that merely look
+ * like an import are not counted. Static `import`/`export … from` and
+ * `import("…")` with a literal are covered; computed specifiers,
+ * `new URL(…, import.meta.url)` and `import.meta.resolve` are not. A `?query`
+ * or `#hash` is not part of the file's name and is dropped.
+ */
 export function relativeImports(source) {
-  return [...source.matchAll(RELATIVE_IMPORT)].map((match) => match[1]);
+  const file = ts.createSourceFile("module.js", source, ts.ScriptTarget.Latest, false, ts.ScriptKind.JS);
+  const specifiers = [];
+  const visit = (node) => {
+    const literal = moduleSpecifierOf(node);
+    if (literal && /^\.{1,2}\//.test(literal.text)) specifiers.push(literal.text.replace(/[?#].*$/, ""));
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return specifiers;
+}
+
+function moduleSpecifierOf(node) {
+  const named = ts.isImportDeclaration(node) || ts.isExportDeclaration(node) ? node.moduleSpecifier : undefined;
+  const dynamic = ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword ? node.arguments[0] : undefined;
+  const literal = named ?? dynamic;
+  return literal && ts.isStringLiteralLike(literal) ? literal : undefined;
 }
 
 /**

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   assertFilesExist,
   assertRelativeImportsResolve,
@@ -147,6 +147,21 @@ test("relativeImports finds static, dynamic and re-export specifiers but not pac
   assert.deepEqual(relativeImports(source), ["./a.js", "../b.js", "./c.js", "./d.js", "./e.js"]);
 });
 
+test("relativeImports ignores import-looking text in comments, strings and templates", () => {
+  const source = [
+    '// import x from "./gone.js"',
+    '/* export * from "./gone.js" */',
+    'const prompt = `use import x from "./nonexistent.js"`;',
+    'const quoted = \'import y from "./also-gone.js"\';',
+    'import real from "./real.js";',
+  ].join("\n");
+  assert.deepEqual(relativeImports(source), ["./real.js"]);
+});
+
+test("relativeImports drops a query or hash, which is not part of the file name", () => {
+  assert.deepEqual(relativeImports('import a from "./a.js?raw";\nimport b from "./b.js#frag";'), ["./a.js", "./b.js"]);
+});
+
 test("assertRelativeImportsResolve catches an importer whose dependency was never emitted", (t) => {
   const root = tempDir(t);
   fs.mkdirSync(path.join(root, "work-items"), { recursive: true });
@@ -193,8 +208,14 @@ function scratchPackage(t) {
   return pkg;
 }
 
-function runBuild(pkg) {
-  return spawnSync(process.execPath, ["scripts/build.mjs"], { cwd: pkg, encoding: "utf8" });
+function runBuild(pkg, fault) {
+  const env = { ...process.env };
+  if (fault) {
+    // dist-integrity-faults.mjs injects the failure inside build.mjs only.
+    env.BUILD_FAULT = fault;
+    env.NODE_OPTIONS = `--import ${pathToFileURL(path.join(packageRoot, "scripts", "dist-integrity-faults.mjs")).href}`;
+  }
+  return spawnSync(process.execPath, ["scripts/build.mjs"], { cwd: pkg, encoding: "utf8", env });
 }
 
 test("a real build over a dist/ left half-removed by an earlier run is complete", (t) => {
@@ -230,4 +251,47 @@ test("a real build exits nonzero, and does not compile, when dist/src cannot be 
   } finally {
     fs.chmodSync(shared, 0o755);
   }
+});
+
+// These go through scripts/build.mjs itself, so they fail if its wiring to the
+// guards is removed: the helpers above passing is not enough.
+test("build.mjs retries a transient ENOTEMPTY on dist/src and still produces a complete dist/", (t) => {
+  const pkg = scratchPackage(t);
+  assert.equal(runBuild(pkg).status, 0);
+  const result = runBuild(pkg, "rm-transient");
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.ok(fs.existsSync(path.join(pkg, "dist", "src", "shared", "local-db-guard.js")));
+  assert.ok(fs.existsSync(path.join(pkg, "dist", "src", "work-items", "migrate.js")));
+});
+
+test("build.mjs exits nonzero, without compiling, when dist/src will not clean", (t) => {
+  const pkg = scratchPackage(t);
+  assert.equal(runBuild(pkg).status, 0);
+  const result = runBuild(pkg, "rm-always");
+  assert.notEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /refusing to compile over a partial tree/);
+  assert.doesNotMatch(result.stdout, /build: compiled to dist/);
+});
+
+test("build.mjs does not trust a clean that left dist/src in place", (t) => {
+  const pkg = scratchPackage(t);
+  assert.equal(runBuild(pkg).status, 0);
+  const result = runBuild(pkg, "rm-noop");
+  assert.notEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /still exists after removal/);
+});
+
+test("build.mjs exits nonzero when a compiled file is gone by the time the build finishes", (t) => {
+  const pkg = scratchPackage(t);
+  const result = runBuild(pkg, "emitted-gone");
+  assert.notEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /compiled file\(s\) missing from dist\/[\s\S]*local-db-guard\.js/);
+  assert.doesNotMatch(result.stdout, /build: compiled to dist/);
+});
+
+test("build.mjs exits nonzero when dist/ holds a module that imports one that is missing", (t) => {
+  const pkg = scratchPackage(t);
+  const result = runBuild(pkg, "import-dangles");
+  assert.notEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /unresolved relative import[\s\S]*stray\.js imports \.\/ghost\.js/);
 });
