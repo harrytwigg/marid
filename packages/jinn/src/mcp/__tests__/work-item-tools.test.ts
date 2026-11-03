@@ -531,7 +531,8 @@ describe("work-item tools — integration against the real API + store", () => {
     );
     expect(store.getWorkItem(item.id)?.status).toBe("in_review");
 
-    // The operator's coordinator chat may close for the operator, with the reason on the record.
+    // The operator's coordinator chat may close for the operator, on a turn the operator's own message started, with the reason on the record.
+    registry.beginSessionAttempt(operatorSource.id, { attemptOperatorTurn: true });
     const closed = (await tool("update_work_item").handler(
       { id: item.id, status: "done", asOperator: true, note: "verified by the operator in chat" },
       ctxFor(operatorSource.id),

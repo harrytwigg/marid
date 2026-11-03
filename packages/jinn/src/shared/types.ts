@@ -405,8 +405,9 @@ export interface Session {
   attemptInterruptionTurn?: number | null;
   /** The attempt now running (or last run) was started by a message the
    * operator sent: a web chat message or first prompt from an
-   * operator-authenticated caller. Set when the attempt begins and false for
-   * every other turn, so it fails closed on a path that does not stamp it. */
+   * operator-authenticated caller, or a message arriving in a chat connector's
+   * own conversation. Set when the attempt begins and false for every other
+   * turn, so it fails closed on a path that does not stamp it. */
   attemptOperatorTurn?: boolean;
   effortLevel: string | null;
   /** Usage-limit behaviour chosen for this session; null follows `sessions.fallbackMode`. */

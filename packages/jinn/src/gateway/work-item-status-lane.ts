@@ -1,4 +1,4 @@
-import { getSession, isCoordinatorSession, isOperatorEmployeeTurn } from "../sessions/registry.js";
+import { getSession, isCoordinatorSession, isOperatorCoordinatorTurn, isOperatorEmployeeTurn } from "../sessions/registry.js";
 import { listWorkItemEvents } from "../work-items/event-log.js";
 import { toWorkItemLinkRole } from "../work-items/link-role.js";
 import { STICKY_STATUSES, type WorkItem, type WorkItemEvent, type WorkItemStatus } from "../work-items/store.js";
@@ -20,7 +20,11 @@ import { workItemActor, type WorkItemCaller } from "./work-item-arming.js";
  *   cancels or reopens; a move into `in_review` carries a summary.
  * - The **coordinator lane** is the one exception: the operator's coordinator
  *   chat may close a Todo as `done` on the operator's behalf, with a reason
- *   the gateway posts on the Todo. Nothing else rides on it. The same holds, from
+ *   the gateway posts on the Todo, on a turn the operator's own message started
+ *   ({@link isOperatorCoordinatorTurn}): a send from another session, a delegation
+ *   brief or a sub-task's report landing in the chat is not the operator talking, so
+ *   after a callback the coordinator asks the operator to close. Nothing else
+ *   rides on it. The same holds, from
  *   `in_review` only, for an employee holding `closeTodos` in a web chat the
  *   operator opened with it, on a turn the operator's own message started: the
  *   grant is what opts that employee in, and a mention, delegation, cron run,
@@ -60,17 +64,18 @@ const AGENT_LANE_SHAPE =
   "agents pick work up and put it down (backlog ↔ executing), hand it to review and take it back (executing ↔ in_review), "
   + "and stop or resume it (↔ blocked)";
 
-/** `asOperator` from a session: the coordinator, or an employee holding
- *  `closeTodos` while the operator is talking to it ({@link isOperatorEmployeeTurn}),
- *  closing a Todo as `done` for the operator, with the reason it will post.
- *  Nothing else rides on it. */
+/** `asOperator` from a session: the coordinator while the operator is talking to
+ *  it ({@link isOperatorCoordinatorTurn}), or an employee holding `closeTodos`
+ *  while the operator is talking to it ({@link isOperatorEmployeeTurn}), closing
+ *  a Todo as `done` for the operator, with the reason it will post. Nothing else
+ *  rides on it. */
 function resolveCoordinatorLane(
   caller: Extract<WorkItemCaller, { kind: "session" }>,
   item: WorkItem,
   target: WorkItemStatus,
   note: string,
 ): StatusLaneResult {
-  const coordinator = isCoordinatorSession(caller.session);
+  const coordinator = isOperatorCoordinatorTurn(caller.session);
   const closer = closerOf(caller);
   if (!coordinator && !(closer && isOperatorEmployeeTurn(caller.session))) return notTheOperatorTalking(caller, item, closer);
   if (target !== "done") {
@@ -98,8 +103,12 @@ function notTheOperatorTalking(
     return refuse(403, `asOperator is for a web chat the operator opened with employee "${closer}", on a turn the operator's own message started; `
       + `without asOperator, closeTodos closes a Todo that is in review as "${closer}", unless "${closer}" had a hand in it`);
   }
+  if (isCoordinatorSession(caller.session)) {
+    return refuse(403, `asOperator is reserved for the operator's coordinator session, on a turn the operator's own message started: this turn was started by something else `
+      + `(a message from another session, a delegation brief or a sub-task's report), so ask the operator to close Todo ${item.id}; it can stay in review until they do`);
+  }
   const who = caller.session.employee ? `employee "${caller.session.employee}"` : `session ${caller.callerId}`;
-  return refuse(403, `asOperator is reserved for the operator's coordinator session and for a closeTodos employee in a chat the operator opened with it; ${who} moves Todo ${item.id} as itself`);
+  return refuse(403, `asOperator is reserved for the operator's coordinator session, on a turn the operator's own message started, and for a closeTodos employee in a chat the operator opened with it; ${who} moves Todo ${item.id} as itself`);
 }
 
 /** The employee a session acts as when the operator has granted it `closeTodos`.

@@ -237,6 +237,8 @@ closeTodos: true
 
 The employee panel on the org page shows a **Can close Todos** badge for an employee that has the grant.
 
+The operator's own coordinator chat (the top-level session with no employee, opened from the web console, Talk or a chat connector) has the same `asOperator` close with the same rule about whose turn it is. It closes a Todo for the operator only on a turn the operator's own message started: a message the operator typed, or a first prompt the operator sent, in the web console, or a message that arrived in the chat connector's own conversation. A send from another session, a delegation brief and a sub-task's report landing in the chat run there too, as notifications, and are not the operator talking, so `asOperator` is refused on those turns. After a callback the coordinator asks the operator to close the Todo (it can stay in review until they do) rather than closing it itself. A session the gateway started (a cron run, a delegation, a Todo mention, a hook) never counts.
+
 ### Todo departments
 
 By default a Todo's department is open: any slug a writer names becomes one (and mints its ID prefix), and assigning a Todo moves it into the assignee's org department. To classify Todos by the work instead, close the set in `config.yaml`:

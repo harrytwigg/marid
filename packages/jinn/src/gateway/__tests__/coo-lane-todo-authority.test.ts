@@ -191,6 +191,7 @@ describe("the decision the COO lane still does not reach", () => {
   it("refuses it its own produced work, claim or no claim", async () => {
     const item = store.createWorkItem({ title: "The COO's own work", status: "in_review" });
     const coo = portalSession("web:coo-self-closes");
+    reg.beginSessionAttempt(coo, { attemptOperatorTurn: true });
     store.linkSession(item.id, coo);
 
     const cap = await post(
