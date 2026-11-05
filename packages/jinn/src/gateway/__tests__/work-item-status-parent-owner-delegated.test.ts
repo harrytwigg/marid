@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { sessionOf, startParentReviewHarness, statusPost } from "./review-addressee-harness.js";
+import { call, sessionOf, startParentReviewHarness, statusPost } from "./review-addressee-harness.js";
 
 /**
  * The parent-owner lane for a child the owner delegated, through the real
@@ -111,7 +111,7 @@ describe("the parent's owner accepting a delegated child", () => {
     },
   );
 
-  it.each(["running", "waiting", "interrupted"] as const)("waits while the producer's session is %s, then closes once it has stopped", async (live) => {
+  it.each(["running", "waiting"] as const)("waits while the producer's session is %s, then closes once it has stopped", async (live) => {
     const { child, producer } = await delegatedChild(`Producer ${live}`);
     const { updateSession } = await import("../../sessions/registry.js");
     const owner = await sessionOf("owner-dev");
@@ -122,6 +122,48 @@ describe("the parent's owner accepting a delegated child", () => {
     expect(statusOf(child.id)).toBe("executing");
 
     updateSession(producer.id, { status: "error" });
+    const late = await statusPost(owner.id, child.id, accept);
+    expect([late.status, statusOf(child.id)]).toEqual([200, "done"]);
+  });
+
+  it("cannot get round a running producer by relaying the child to review first", async () => {
+    const { child, producer } = await delegatedChild("Relay while running");
+    const { updateSession } = await import("../../sessions/registry.js");
+    const owner = await sessionOf("owner-dev");
+    updateSession(producer.id, { status: "running" });
+
+    expect((await statusPost(owner.id, child.id, { status: "in_review", note: "Child-dev reported back" })).status).toBe(200);
+    const early = await statusPost(owner.id, child.id, accept);
+    expect([early.status, early.body.error]).toEqual([403, expect.stringMatching(/still being worked on: a session of child-dev is running/)]);
+    expect(statusOf(child.id)).toBe("in_review");
+
+    updateSession(producer.id, { status: "idle" });
+    const late = await statusPost(owner.id, child.id, accept);
+    expect([late.status, statusOf(child.id)]).toEqual([200, "done"]);
+  });
+
+  it("closes a child whose producer's turn the operator stopped", async () => {
+    const { child, producer } = await delegatedChild("Producer stopped");
+    const { getSession, updateSession } = await import("../../sessions/registry.js");
+    updateSession(producer.id, { status: "running" });
+    expect((await call("POST", `/api/sessions/${producer.id}/stop`)).status).toBe(200);
+    expect(getSession(producer.id)?.status).toBe("interrupted");
+
+    const res = await statusPost((await sessionOf("owner-dev")).id, child.id, accept);
+    expect([res.status, statusOf(child.id)]).toEqual([200, "done"]);
+  });
+
+  it.each(["executing", "in_review"] as const)("waits, from %s, while the producer's interrupted turn is due to resume after a restart", async (status) => {
+    const { child, producer } = await delegatedChild(`Producer resuming ${status}`, status);
+    const { updateSession, RESTART_RESUME_META_KEY } = await import("../../sessions/registry.js");
+    updateSession(producer.id, { status: "interrupted", attemptOutcome: "interrupted", transportMeta: { [RESTART_RESUME_META_KEY]: new Date().toISOString() } });
+    const owner = await sessionOf("owner-dev");
+
+    const early = await statusPost(owner.id, child.id, accept);
+    expect([early.status, early.body.error]).toEqual([403, expect.stringMatching(/a session of child-dev is interrupted and due to resume after a restart/)]);
+    expect(statusOf(child.id)).toBe(status);
+
+    updateSession(producer.id, { status: "idle", attemptOutcome: "succeeded", transportMeta: {} });
     const late = await statusPost(owner.id, child.id, accept);
     expect([late.status, statusOf(child.id)]).toEqual([200, "done"]);
   });
@@ -173,7 +215,7 @@ describe("the parent's owner accepting a delegated child", () => {
     workItems.linkSession(child.id, (await sessionOf("child-dev")).id, "delegation", "execute", { via: "delegation" });
 
     const res = await statusPost((await sessionOf("owner-dev")).id, child.id, accept);
-    expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/owner-dev (moved it to executing|was linked to work on it|cannot accept).*self-review ban/)]);
+    expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/owner-dev cannot accept Todo \S+: a session of owner-dev was linked to work on it, .*self-review ban/)]);
     expect(statusOf(child.id)).toBe("executing");
   });
 });

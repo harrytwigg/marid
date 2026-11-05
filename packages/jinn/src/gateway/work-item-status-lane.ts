@@ -1,4 +1,5 @@
 import { getSession, isCoordinatorSession, isOperatorCoordinatorTurn, isOperatorEmployeeTurn, listSessionsByWorkItem } from "../sessions/registry.js";
+import { awaitsRestartResume } from "../sessions/restart-resume-window.js";
 import { listWorkItemEvents } from "../work-items/event-log.js";
 import { isExecutionAttempt, toWorkItemLinkRole } from "../work-items/link-role.js";
 import { STICKY_STATUSES, type WorkItem, type WorkItemEvent, type WorkItemStatus } from "../work-items/store.js";
@@ -202,12 +203,17 @@ function parentOwnerOf(
   return employee && reviewAddresseeEmployee(item) === employee ? employee : undefined;
 }
 
-/** A turn in flight or one a restart resumes; `idle` and `error` are stopped:
- *  the producer reported back or failed, and the owner reviews. */
-const LIVE_SESSION_STATUSES: ReadonlySet<string> = new Set(["running", "waiting", "interrupted"]);
+/** A session still working on `item`: a turn in flight, or one a restart resumes; not one that ended or was stopped. */
+function liveWorkRefusal(item: WorkItem): StatusLaneResult | undefined {
+  const live = listSessionsByWorkItem(item.id).find((session) => isExecutionAttempt(session)
+    && (session.status === "running" || session.status === "waiting" || awaitsRestartResume(session)));
+  if (!live) return undefined;
+  const who = live.employee ? `a session of ${live.employee}` : `session ${live.id}`;
+  const state = live.status === "running" || live.status === "waiting" ? live.status : "interrupted and due to resume after a restart";
+  return refuse(403, `Todo ${item.id} is still being worked on: ${who} is ${state} on it; accept it once that session has stopped`);
+}
 
-/** The child's assignee, when it is an employee other than `employee` and a
- *  session of it was linked to work on the child: the one who produced it. */
+/** The child's assignee, when another employee and a session of it was linked to work it: its producer. */
 function otherProducer(employee: string, item: WorkItem): string | undefined {
   const producer = item.assignee;
   if (!producer || producer === employee || !orgRegistry().has(producer)) return undefined;
@@ -219,21 +225,17 @@ function selfReviewRefusal(employee: string, item: WorkItem, handIn: string): St
 }
 
 /** The owner accepting a child that is still `executing`: only one another
- *  employee is assigned and was linked to work, the owner had no hand in, and
- *  no session is still working. Anything else is left to the ordinary agent
- *  lane, which refuses the close. */
+ *  employee is assigned and was linked to work, and the owner had no hand in.
+ *  Anything else is left to the ordinary agent lane, which refuses the close. */
 function resolveExecutingAccept(employee: string, item: WorkItem, note: string): StatusLaneResult | undefined {
-  const producer = otherProducer(employee, item);
-  if (!producer) return undefined;
+  if (!otherProducer(employee, item)) return undefined;
   const handIn = closerHandIn(employee, item, { producedElsewhere: true });
   if (handIn) return selfReviewRefusal(employee, item, handIn);
-  const live = listSessionsByWorkItem(item.id).find((session) => isExecutionAttempt(session) && LIVE_SESSION_STATUSES.has(session.status));
-  if (live) {
-    const who = live.employee ? `a session of ${live.employee}` : `session ${live.id}`;
-    return refuse(403, `Todo ${item.id} is still being worked on: ${who} is ${live.status} on it; accept it once that session has stopped`);
-  }
-  if (!note) return refuse(400, `accepting Todo ${item.id} needs the reason in note: it is posted on the Todo as a comment`);
-  return { ok: true, lane: { kind: "parent-owner", employee } };
+  return liveWorkRefusal(item) ?? acceptNoteRefusal(item, note) ?? { ok: true, lane: { kind: "parent-owner", employee } };
+}
+
+function acceptNoteRefusal(item: WorkItem, note: string): StatusLaneResult | undefined {
+  return note ? undefined : refuse(400, `accepting Todo ${item.id} needs the reason in note: it is posted on the Todo as a comment`);
 }
 
 /** The parent's owner accepting a child or sending one back from review. The
@@ -246,12 +248,10 @@ function resolveParentOwnerLane(employee: string, item: WorkItem, target: WorkIt
     ? `${employee} is assigned to it`
     : closerHandIn(employee, item, { producedElsewhere: otherProducer(employee, item) !== undefined });
   if (handIn) return target === "done" ? selfReviewRefusal(employee, item, handIn) : undefined;
-  if (!note) {
-    return refuse(400, target === "done"
-      ? `accepting Todo ${item.id} needs the reason in note: it is posted on the Todo as a comment`
-      : `sending Todo ${item.id} back needs the feedback in note: it is posted on the Todo as a comment`);
-  }
-  return { ok: true, lane: { kind: "parent-owner", employee } };
+  const refusal = target === "done"
+    ? liveWorkRefusal(item) ?? acceptNoteRefusal(item, note)
+    : note ? undefined : refuse(400, `sending Todo ${item.id} back needs the feedback in note: it is posted on the Todo as a comment`);
+  return refusal ?? { ok: true, lane: { kind: "parent-owner", employee } };
 }
 
 /** The comment the gateway posts when an employee's lane closes a Todo as `done`. */
