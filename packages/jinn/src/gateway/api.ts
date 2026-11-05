@@ -150,7 +150,7 @@ import { handlePluginsApi } from "./plugins-api.js";
 import QRCode from "qrcode";
 import { WhatsAppConnector } from "../connectors/whatsapp/index.js";
 import { handleFilesRequest, fileIdsToMedia, rehomeAttachmentsToSession, mimeFromFilename, MultipartUploadError, readLocalFileForIngestion, readMultipartFile, sanitizeUploadFilename, isFileNotModified } from "./files.js";
-import { streamFile } from "./byte-range.js";
+import { isClientAbort, streamFile } from "./byte-range.js";
 import { handleSessionFileRoutes } from "./session-file-read.js";
 import { selectAttachmentVariant } from "./attachment-variants.js";
 import { readJsonBody, readBodyRaw } from "./http-helpers.js";
@@ -4813,9 +4813,19 @@ export async function handleApiRequest(
 
     return notFound(res);
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // A route that failed after its status line went out (a stream that broke
+    // mid-body) cannot be answered with an error status: a second writeHead
+    // throws and nothing would catch it. Cut an unfinished response so the
+    // client sees it truncated, never one that looks complete; a reply that
+    // already ended is left to flush.
+    if (res.headersSent) {
+      if (!isClientAbort(err)) logger.error(`API error after the response started: ${msg}`);
+      if (!res.writableEnded && !res.destroyed) res.destroy();
+      return;
+    }
     // FR-015: a write a department's boundary refuses, from whichever store writer the route reached.
     if (err instanceof DepartmentBoundaryError) return json(res, { error: err.message, code: err.code, holders: err.holders }, 409);
-    const msg = err instanceof Error ? err.message : String(err);
     logger.error(`API error: ${msg}`);
     return serverError(res, msg);
   }
