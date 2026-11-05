@@ -214,3 +214,31 @@ export function withReadableLocations(ctx: JinnMcpContext, workItemId: string, b
     hint: "Read localPath on this host. If null, GET downloadUrl with header 'Authorization: Bearer $JINN_GATEWAY_TOKEN'. storagePath is the gateway's own path.",
   };
 }
+
+/**
+ * Fold a full attachment listing (every version, each row marked
+ * `supersededBy`) into what an agent reads: one row per current file, with the
+ * versions it replaced nested in `earlierVersions` as full rows (so their
+ * `localPath` / `downloadUrl` still work). Comment rows and current rows keep
+ * their order; a body that is not a listing is returned unchanged.
+ */
+export function nestSupersededAttachments(body: unknown): unknown {
+  if (!body || typeof body !== "object" || !Array.isArray((body as { attachments?: unknown }).attachments)) return body;
+  const rows = (body as { attachments: unknown[] }).attachments;
+  const byId = new Map<string, Record<string, unknown>>();
+  for (const entry of rows) {
+    if (entry && typeof entry === "object" && typeof (entry as { id?: unknown }).id === "string") {
+      byId.set((entry as { id: string }).id, entry as Record<string, unknown>);
+    }
+  }
+  const attachments = rows
+    .filter((entry) => !(entry && typeof entry === "object" && (entry as { supersededBy?: unknown }).supersededBy))
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return entry;
+      const row = entry as Record<string, unknown>;
+      if (!Array.isArray(row.earlierVersions)) return row;
+      const earlier = row.earlierVersions.flatMap((id) => (typeof id === "string" && byId.has(id) ? [byId.get(id)!] : []));
+      return { ...row, earlierVersions: earlier };
+    });
+  return { ...(body as Record<string, unknown>), attachments };
+}

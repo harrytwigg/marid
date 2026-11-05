@@ -245,4 +245,23 @@ describe("work-item attachments from a session on another host", () => {
       process.env.JINN_HOME = gatewayHome;
     }
   });
+  it("re-attaching a revised file through the tools leaves one current row, with the earlier version nested and readable", async () => {
+    const dev = registry.createSession({ engine: "claude", source: "web", sourceRef: "reattach-list", title: "reattach", employee: "platform-dev" });
+    const item = store.createWorkItem({ title: "reattach list", assignee: "platform-dev" });
+    const ctx = ctxFor(dev.id);
+    const source = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "reattach-")), "notes.md");
+    fs.writeFileSync(source, "first draft\n");
+    const first = (await tool("attach_to_work_item").handler({ id: item.id, path: source }, ctx)) as { attachment: { id: string } };
+    fs.writeFileSync(source, "second draft, revised\n");
+    const second = (await tool("attach_to_work_item").handler({ id: item.id, path: source }, ctx)) as { attachment: { id: string } };
+    expect(second.attachment.id).not.toBe(first.attachment.id);
+
+    type Row = { id: string; localPath: string | null; earlierVersions?: Row[] };
+    const listed = (await tool("list_work_item_attachments").handler({ id: item.id }, ctx)) as { attachments: Row[] };
+    expect(listed.attachments.map((a) => a.id)).toEqual([second.attachment.id]);
+    expect(fs.readFileSync(listed.attachments[0].localPath!, "utf8")).toBe("second draft, revised\n");
+    const earlier = listed.attachments[0].earlierVersions!;
+    expect(earlier.map((a) => a.id)).toEqual([first.attachment.id]);
+    expect(fs.readFileSync(earlier[0].localPath!, "utf8")).toBe("first draft\n");
+  });
 });
