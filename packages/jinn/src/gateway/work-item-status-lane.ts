@@ -1,7 +1,6 @@
 import { getSession, isCoordinatorSession, isOperatorCoordinatorTurn, isOperatorEmployeeTurn, listSessionsByWorkItem } from "../sessions/registry.js";
 import { listWorkItemEvents } from "../work-items/event-log.js";
-import { isExecutionAttempt } from "../work-items/link-role.js";
-import { toWorkItemLinkRole } from "../work-items/link-role.js";
+import { isExecutionAttempt, toWorkItemLinkRole } from "../work-items/link-role.js";
 import { STICKY_STATUSES, type WorkItem, type WorkItemEvent, type WorkItemStatus } from "../work-items/store.js";
 import { reviewAddresseeEmployee } from "../work-items/review-addressee.js";
 import { isAgentLaneMove } from "../work-items/transition-edges.js";
@@ -145,8 +144,8 @@ function closerHandIn(employee: string, item: WorkItem, { producedElsewhere = fa
   const events = listWorkItemEvents(item.id);
   if (events.some((event) => workedBy(event, employee))) return `a session of ${employee} was linked to work on it`;
   if (events.some((event) => startedBy(event, employee))) return `${employee} moved it to executing`;
-  // A handoff is a hand in only when the mover produced the work. The parent's
-  // owner relaying a delegated child's report into review did not produce it.
+  // A handoff is a hand in only when the mover produced the work. When another
+  // employee worked it, the mover relaying that employee's report did not.
   if (producedElsewhere) return undefined;
   const handoff = events.filter((event) => event.toStatus === "in_review" && event.fromStatus !== "in_review").at(-1);
   return handoff && moveEmployee(handoff) === employee ? `${employee} handed it to review` : undefined;
@@ -203,37 +202,50 @@ function parentOwnerOf(
   return employee && reviewAddresseeEmployee(item) === employee ? employee : undefined;
 }
 
-const LIVE_SESSION_STATUSES: ReadonlySet<string> = new Set(["running", "waiting"]);
+/** A turn in flight or one a restart resumes; `idle` and `error` are stopped:
+ *  the producer reported back or failed, and the owner reviews. */
+const LIVE_SESSION_STATUSES: ReadonlySet<string> = new Set(["running", "waiting", "interrupted"]);
 
-/** The owner accepting a child that is still `executing`: only one an employee is
- *  producing, and only once that employee's session has stopped. Anything else
- *  is left to the ordinary agent lane, which refuses the close. */
-function resolveExecutingAccept(employee: string, item: WorkItem, note: string): StatusLaneResult | undefined {
+/** The child's assignee, when it is an employee other than `employee` and a
+ *  session of it was linked to work on the child: the one who produced it. */
+function otherProducer(employee: string, item: WorkItem): string | undefined {
   const producer = item.assignee;
   if (!producer || producer === employee || !orgRegistry().has(producer)) return undefined;
-  if (listSessionsByWorkItem(item.id).some((session) => isExecutionAttempt(session) && LIVE_SESSION_STATUSES.has(session.status))) {
-    return refuse(403, `Todo ${item.id} is still being worked on: a session of ${producer} is running on it; accept it once that session has stopped`);
+  return listWorkItemEvents(item.id).some((event) => workedBy(event, producer)) ? producer : undefined;
+}
+
+function selfReviewRefusal(employee: string, item: WorkItem, handIn: string): StatusLaneResult {
+  return refuse(403, `${employee} cannot accept Todo ${item.id}: ${handIn}, and an employee never closes its own work (self-review ban); another reviewer or the operator closes it`);
+}
+
+/** The owner accepting a child that is still `executing`: only one another
+ *  employee is assigned and was linked to work, the owner had no hand in, and
+ *  no session is still working. Anything else is left to the ordinary agent
+ *  lane, which refuses the close. */
+function resolveExecutingAccept(employee: string, item: WorkItem, note: string): StatusLaneResult | undefined {
+  const producer = otherProducer(employee, item);
+  if (!producer) return undefined;
+  const handIn = closerHandIn(employee, item, { producedElsewhere: true });
+  if (handIn) return selfReviewRefusal(employee, item, handIn);
+  const live = listSessionsByWorkItem(item.id).find((session) => isExecutionAttempt(session) && LIVE_SESSION_STATUSES.has(session.status));
+  if (live) {
+    const who = live.employee ? `a session of ${live.employee}` : `session ${live.id}`;
+    return refuse(403, `Todo ${item.id} is still being worked on: ${who} is ${live.status} on it; accept it once that session has stopped`);
   }
   if (!note) return refuse(400, `accepting Todo ${item.id} needs the reason in note: it is posted on the Todo as a comment`);
   return { ok: true, lane: { kind: "parent-owner", employee } };
 }
 
 /** The parent's owner accepting a child or sending one back from review. The
- *  ban keys on who produced the work: the child's assignee, or an employee with
- *  a session or start on it. A hand in the child's work leaves the move to the
- *  ordinary agent lane: accepting it is refused as self-review, and moving it
- *  back to executing is the producer's own take-back, not a review bounce. */
+ *  ban keys on who produced it: the assignee, a hand in ({@link closerHandIn}),
+ *  or the handoff unless another employee worked it. With a hand in, a send-back
+ *  is the producer's own take-back (agent lane), not a review bounce. */
 function resolveParentOwnerLane(employee: string, item: WorkItem, target: WorkItemStatus, note: string): StatusLaneResult | undefined {
-  const producedElsewhere = Boolean(item.assignee) && item.assignee !== employee;
   if (item.status === "executing") return resolveExecutingAccept(employee, item, note);
   const handIn = item.assignee === employee
     ? `${employee} is assigned to it`
-    : closerHandIn(employee, item, { producedElsewhere });
-  if (handIn) {
-    return target === "done"
-      ? refuse(403, `${employee} cannot accept Todo ${item.id}: ${handIn}, and an employee never closes its own work (self-review ban); another reviewer or the operator closes it`)
-      : undefined;
-  }
+    : closerHandIn(employee, item, { producedElsewhere: otherProducer(employee, item) !== undefined });
+  if (handIn) return target === "done" ? selfReviewRefusal(employee, item, handIn) : undefined;
   if (!note) {
     return refuse(400, target === "done"
       ? `accepting Todo ${item.id} needs the reason in note: it is posted on the Todo as a comment`

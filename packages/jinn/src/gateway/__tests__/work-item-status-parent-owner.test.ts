@@ -5,7 +5,8 @@ import { call, sessionOf, startParentReviewHarness, statusPost, treeInReview } f
  * The parent-owner lane, through the real `handleApiRequest`: the employee that
  * owns a child Todo's parent accepts it (`done`, with a reason) while the child is
  * executing or in review, or sends it back (`executing`, a review bounce) while it
- * is in review, and nothing else.
+ * is in review, and nothing else. A delegated child accepted from `executing`
+ * is covered in `work-item-status-parent-owner-delegated.test.ts`.
  */
 
 let workItems: Awaited<ReturnType<typeof startParentReviewHarness>>["workItems"];
@@ -67,122 +68,6 @@ describe("the parent's owner accepting a child in review", () => {
     const res = await statusPost((await sessionOf("owner-dev")).id, child.id, accept);
     expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/still has open children/)]);
     expect(statusOf(child.id)).toBe("in_review");
-  });
-});
-
-describe("the parent's owner accepting a delegated child", () => {
-  /** A child the owner created and delegated: assigned to child-dev, executing, started by the reconciler. */
-  function delegatedChild(title: string, status: "executing" | "in_review" = "executing") {
-    const parent = workItems.createWorkItem({ title: `${title} parent`, status: "executing", assignee: "owner-dev" });
-    const child = workItems.createWorkItem({ title: `${title} child`, status: "executing", parentId: parent.id, assignee: "child-dev" });
-    if (status === "in_review") transition(child.id, "in_review", "reconciler", { manual: true, agent: true });
-    return { parent, child };
-  }
-
-  it("closes it straight from executing, as itself", async () => {
-    const { child } = delegatedChild("From executing");
-    const owner = await sessionOf("owner-dev");
-
-    const res = await statusPost(owner.id, child.id, accept);
-
-    expect([res.status, res.body.workItem.status]).toEqual([200, "done"]);
-    expect(listComments(child.id).comments.map((comment) => [comment.body, comment.author])).toEqual([
-      ["Accepted as done by owner-dev, who owns the parent Todo. Reason: Integrated into the parent branch", "owner-dev"],
-    ]);
-    expect(lastMove(child.id).detail).toMatchObject({ parentOwner: true, actorEmployee: "owner-dev" });
-  });
-
-  it("closes it after the owner itself moved it to review, since the assignee produced it", async () => {
-    const { child } = delegatedChild("Owner relays to review");
-    const owner = await sessionOf("owner-dev");
-
-    const handoff = await statusPost(owner.id, child.id, { status: "in_review", note: "Child-dev reported back" });
-    expect([handoff.status, handoff.body.workItem.status]).toEqual([200, "in_review"]);
-
-    const res = await statusPost(owner.id, child.id, accept);
-    expect([res.status, statusOf(child.id)]).toEqual([200, "done"]);
-  });
-
-  it("needs the reason when closing from executing", async () => {
-    const { child } = delegatedChild("Executing without a note");
-    const res = await statusPost((await sessionOf("owner-dev")).id, child.id, { status: "done" });
-    expect([res.status, res.body.error]).toEqual([400, expect.stringMatching(/needs the reason in note/)]);
-    expect(statusOf(child.id)).toBe("executing");
-  });
-
-  it("is still held by the open-children gate from executing", async () => {
-    const { child } = delegatedChild("Executing with open work");
-    workItems.createWorkItem({ title: "Grandchild", parentId: child.id, status: "executing" });
-    const res = await statusPost((await sessionOf("owner-dev")).id, child.id, accept);
-    expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/still has open children/)]);
-    expect(statusOf(child.id)).toBe("executing");
-  });
-
-  it("does not let another employee, nor the child's own assignee, close it from executing", async () => {
-    const { child } = delegatedChild("Not the owner");
-    for (const name of ["third-dev", "child-dev"]) {
-      const res = await statusPost((await sessionOf(name)).id, child.id, accept);
-      expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/operator's decision/)]);
-    }
-    expect(statusOf(child.id)).toBe("executing");
-  });
-
-  it("refuses an owner that is the child's own assignee, from executing and from review", async () => {
-    const parent = workItems.createWorkItem({ title: "Self parent", status: "executing", assignee: "owner-dev" });
-    const child = workItems.createWorkItem({ title: "Self child", status: "executing", parentId: parent.id, assignee: "owner-dev" });
-    const owner = await sessionOf("owner-dev");
-
-    const fromExecuting = await statusPost(owner.id, child.id, accept);
-    expect([fromExecuting.status, fromExecuting.body.error]).toEqual([403, expect.stringMatching(/operator's decision/)]);
-
-    expect((await statusPost(owner.id, child.id, { status: "in_review", note: "Done myself" })).status).toBe(200);
-    const fromReview = await statusPost(owner.id, child.id, accept);
-    expect([fromReview.status, fromReview.body.error]).toEqual([403, expect.stringMatching(/owner-dev cannot accept .*owner-dev is assigned to it.*self-review ban/)]);
-    expect([statusOf(child.id), listComments(child.id).comments.filter((comment) => comment.body.startsWith("Accepted")).length]).toEqual(["in_review", 0]);
-  });
-
-  it.each([["unassigned", null], ["the operator's", "@operator"], ["not an employee's", "nobody-dev"]] as const)(
-    "does not close an executing child that is %s: nobody is producing it",
-    async (_label, assignee) => {
-      const parent = workItems.createWorkItem({ title: "Parent", status: "executing", assignee: "owner-dev" });
-      const child = workItems.createWorkItem({ title: "Nobody's child", status: "executing", parentId: parent.id, ...(assignee ? { assignee } : {}) });
-      const res = await statusPost((await sessionOf("owner-dev")).id, child.id, accept);
-      expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/operator's decision/)]);
-      expect([statusOf(child.id), listComments(child.id).total]).toEqual(["executing", 0]);
-    },
-  );
-
-  it("waits for the producer's running session to stop, then closes", async () => {
-    const { child } = delegatedChild("Producer still running");
-    const producer = await sessionOf("child-dev");
-    workItems.linkSession(child.id, producer.id);
-    const { updateSession } = await import("../../sessions/registry.js");
-    const owner = await sessionOf("owner-dev");
-
-    updateSession(producer.id, { status: "running" });
-    const early = await statusPost(owner.id, child.id, accept);
-    expect([early.status, early.body.error]).toEqual([403, expect.stringMatching(/still being worked on.*child-dev/)]);
-    expect(statusOf(child.id)).toBe("executing");
-
-    updateSession(producer.id, { status: "idle" });
-    const late = await statusPost(owner.id, child.id, accept);
-    expect([late.status, statusOf(child.id)]).toEqual([200, "done"]);
-  });
-
-  it("refuses an owner the child was reassigned to after the producer moved it to review", async () => {
-    const { child } = delegatedChild("Reassigned to the owner", "in_review");
-    assignWorkItem(child.id, "owner-dev", "engineering", "operator");
-    const res = await statusPost((await sessionOf("owner-dev")).id, child.id, accept);
-    expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/owner-dev is assigned to it.*self-review ban/)]);
-    expect(statusOf(child.id)).toBe("in_review");
-  });
-
-  it("refuses an owner that worked the child even though another employee is now its assignee", async () => {
-    const { child } = delegatedChild("Owner worked it");
-    const owner = await sessionOf("owner-dev");
-    workItems.linkSession(child.id, owner.id);
-    const res = await statusPost(owner.id, child.id, accept);
-    expect([res.status, statusOf(child.id)]).toEqual([403, "executing"]);
   });
 });
 
