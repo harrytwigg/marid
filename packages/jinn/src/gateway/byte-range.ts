@@ -39,6 +39,17 @@ function contentDisposition(disposition: StreamFileOptions["disposition"], filen
   return `${disposition}; filename="${safeFilename}"`;
 }
 
+/**
+ * True when a stream failed because the client went away: the response closed
+ * before it finished, or the socket under it reset. A download the reader
+ * abandons is routine (a cancelled save, a closed tab, a media element that
+ * seeks), not a server fault.
+ */
+export function isClientAbort(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code;
+  return code === "ERR_STREAM_PREMATURE_CLOSE" || code === "ECONNRESET" || code === "EPIPE";
+}
+
 export async function streamFile(
   req: IncomingMessage,
   res: ServerResponse,
