@@ -4816,11 +4816,12 @@ export async function handleApiRequest(
     const msg = err instanceof Error ? err.message : String(err);
     // A route that failed after its status line went out (a stream that broke
     // mid-body) cannot be answered with an error status: a second writeHead
-    // throws and nothing would catch it. Cut the connection so the client sees
-    // a truncated response, never one that looks complete.
+    // throws and nothing would catch it. Cut an unfinished response so the
+    // client sees it truncated, never one that looks complete; a reply that
+    // already ended is left to flush.
     if (res.headersSent) {
       if (!isClientAbort(err)) logger.error(`API error after the response started: ${msg}`);
-      if (!res.destroyed) res.destroy();
+      if (!res.writableEnded && !res.destroyed) res.destroy();
       return;
     }
     // FR-015: a write a department's boundary refuses, from whichever store writer the route reached.

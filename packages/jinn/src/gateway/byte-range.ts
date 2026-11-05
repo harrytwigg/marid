@@ -56,6 +56,12 @@ export async function streamFile(
   filePath: string,
   options: StreamFileOptions,
 ): Promise<void> {
+  // The client can leave while the route prepares the body (a thumbnail or a
+  // poster being generated). Nothing is listening any more, and a source
+  // opened now would be piped into a destroyed response: pipeline() refuses
+  // at once and never closes the file, so each such abort would leak a
+  // descriptor.
+  if (res.destroyed) return;
   const size = fs.statSync(filePath).size;
   const header = Array.isArray(req.headers.range) ? req.headers.range[0] : req.headers.range;
   const range = parseRangeHeader(header, size);
