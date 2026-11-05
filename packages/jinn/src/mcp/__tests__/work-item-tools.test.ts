@@ -924,6 +924,35 @@ describe("work-item attachment + department tools (Todos v2 slice 5)", () => {
     expect(out.attachments[0].id).toBe("wia_0a1b2c3d4e5f");
   });
 
+  it("list_work_item_attachments asks for every version and nests superseded ones under the current row", async () => {
+    const row = (id: string, extra: Record<string, unknown> = {}) => ({
+      id,
+      filename: "notes.md",
+      commentId: null,
+      storagePath: `/inst/attachments/ab/${id}`,
+      supersededBy: null,
+      ...extra,
+    });
+    const { calls, ctx } = stub(() => ({
+      status: 200,
+      body: {
+        attachments: [
+          row("wia_000000000001", { supersededBy: "wia_000000000002" }),
+          row("wia_000000000002", { earlierVersions: ["wia_000000000001"] }),
+          row("wia_000000000003", { filename: "other.md" }),
+        ],
+      },
+    }));
+    const out = (await tool("list_work_item_attachments").handler({ id: "JIN-7" }, ctx)) as {
+      attachments: Array<{ id: string; earlierVersions?: Array<{ id: string; downloadUrl: string | null }> }>;
+    };
+    expect(calls[0].url).toMatch(/\/api\/work-items\/JIN-7\/attachments\?includeSuperseded=1$/);
+    expect(out.attachments.map((a) => a.id)).toEqual(["wia_000000000002", "wia_000000000003"]);
+    expect(out.attachments[0].earlierVersions?.map((a) => a.id)).toEqual(["wia_000000000001"]);
+    expect(out.attachments[0].earlierVersions?.[0].downloadUrl).toMatch(/\/attachments\/wia_000000000001\?download=1$/);
+    expect(out.attachments[1].earlierVersions).toBeUndefined();
+  });
+
   it("list_departments proxies the departments surface", async () => {
     const { calls, ctx } = stub(() => ({ status: 200, body: { departments: [{ slug: "platform", prefix: "TSK", todoCount: 3 }] } }));
     const out = (await tool("list_departments").handler({}, ctx)) as { departments: Array<{ slug: string }> };

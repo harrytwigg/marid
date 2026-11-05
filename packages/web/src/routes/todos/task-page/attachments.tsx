@@ -58,7 +58,13 @@ export function AttachmentsSection({
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const preview = useAttachmentPreview()
-  const itemLevel = attachments.filter((attachment) => attachment.commentId === null)
+  // A same-name re-attach supersedes the earlier row: the strip shows the
+  // current files, and the replaced versions wait in a collapsed list below
+  // (still downloadable, removable — removing the current one brings the
+  // previous version back).
+  const itemRows = attachments.filter((attachment) => attachment.commentId === null)
+  const itemLevel = itemRows.filter((attachment) => !attachment.supersededBy)
+  const earlierVersions = itemRows.filter((attachment) => attachment.supersededBy)
   const previewable = itemLevel.filter((attachment) => preview.canPreview(attachment))
 
   const removeButton = (attachment: WorkItemAttachmentWire, className: string) => (
@@ -122,6 +128,29 @@ export function AttachmentsSection({
             ),
           )}
         </div>
+      )}
+      {earlierVersions.length > 0 && (
+        <details data-testid="attachment-earlier-versions" className="basis-full text-[12.5px] text-[var(--text-tertiary)]">
+          <summary className="focus-outline cursor-pointer rounded-md outline-none">Earlier versions ({earlierVersions.length})</summary>
+          <ul className="mt-1 flex flex-col gap-1">
+            {earlierVersions.map((attachment) => (
+              <li key={attachment.id} className="group/att flex items-center gap-2" data-testid={`attachment-earlier-${attachment.id}`}>
+                <a
+                  href={api.workItemAttachmentUrl(attachment.workItemId, attachment.id)}
+                  download={attachment.filename}
+                  aria-label={`Download earlier version of ${attachment.filename}`}
+                  className="focus-outline min-w-0 truncate rounded-md text-[var(--text-secondary)] outline-none hover:text-[var(--text-primary)]"
+                >
+                  {attachment.filename}
+                </a>
+                <span className="flex-none">
+                  {formatBytes(attachment.bytes)} · {new Date(attachment.createdAt).toLocaleString()}
+                </span>
+                {removeButton(attachment, "size-[34px] flex-none rounded-md text-[var(--text-quaternary)] hover:text-[var(--text-secondary)] group-hover/att:opacity-100")}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
       <input
         ref={inputRef}

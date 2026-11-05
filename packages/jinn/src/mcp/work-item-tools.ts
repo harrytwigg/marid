@@ -6,6 +6,7 @@ import {
   uploadCommentAttachments,
   uploadWorkItemAttachment,
   vetCommentAttachments,
+  nestSupersededAttachments,
   withReadableLocations,
   type AttachmentUploadTarget,
 } from "./work-item-attachments.js";
@@ -531,7 +532,14 @@ export function buildWorkItemTools(): JinnMcpTool[] {
       if (filename !== undefined) target.filename = filename;
       const { status, body } = await uploadWorkItemAttachment(ctx, id, filePath, target);
       if (status >= 400) throw gatewayFailure(`attaching to work item "${id}"`, status, body);
-      return { ...(body as Record<string, unknown>), hint: "Next: list_work_item_attachments { id }." };
+      const replaced = (body as { attachment?: { supersedes?: unknown } })?.attachment?.supersedes;
+      return {
+        ...(body as Record<string, unknown>),
+        hint:
+          typeof replaced === "string"
+            ? `Replaced the earlier same-name attachment ${replaced} as the current one (it stays reachable under earlierVersions). If this is a different file, attach it under another filename. Next: list_work_item_attachments { id }.`
+            : "Next: list_work_item_attachments { id }.",
+      };
     },
   };
 
@@ -546,9 +554,12 @@ export function buildWorkItemTools(): JinnMcpTool[] {
     handler: async (args, ctx) => {
       assertIdentity(ctx);
       const id = requireTodoId(args);
-      const { status, body } = await gatewayRequest(ctx, "GET", `/api/work-items/${encodeURIComponent(id)}/attachments`);
+      // Ask for every version, then nest the superseded ones under the current
+      // row (`earlierVersions`, each with its own localPath/downloadUrl): the
+      // list shows one current file per name and the earlier ones stay readable.
+      const { status, body } = await gatewayRequest(ctx, "GET", `/api/work-items/${encodeURIComponent(id)}/attachments?includeSuperseded=1`);
       if (status >= 400) throw gatewayFailure(`listing attachments on work item "${id}"`, status, body);
-      return withReadableLocations(ctx, id, body);
+      return nestSupersededAttachments(withReadableLocations(ctx, id, body));
     },
   };
 
