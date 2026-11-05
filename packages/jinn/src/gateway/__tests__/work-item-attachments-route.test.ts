@@ -327,3 +327,39 @@ describe("attachment writes emit company:changed for the parent Todo", () => {
     expect(emittedEvents).toEqual([]);
   });
 });
+
+describe("same-filename re-attach over the routes", () => {
+  it("lists one current row per filename by default and every version with includeSuperseded=1", async () => {
+    const item = store.createWorkItem({ title: "reattach host" });
+    const url = `/api/work-items/${item.id}/attachments`;
+    const first = await upload(url, { file: { name: "notes.md", content: Buffer.from("first") } }, operatorHeaders);
+    const second = await upload(url, { file: { name: "notes.md", content: Buffer.from("second, longer") } }, operatorHeaders);
+    const other = await upload(url, { file: { name: "other.md", content: Buffer.from("other") } }, operatorHeaders);
+    expect([first.status, second.status, other.status]).toEqual([201, 201, 201]);
+
+    const listed = await call("GET", url, undefined, operatorHeaders);
+    expect(listed.body.attachments.map((a: { id: string }) => a.id)).toEqual([second.body.attachment.id, other.body.attachment.id]);
+    expect(listed.body.attachments[0].earlierVersions).toEqual([first.body.attachment.id]);
+
+    const everything = await call("GET", `${url}?includeSuperseded=1`, undefined, operatorHeaders);
+    expect(everything.body.attachments.map((a: { id: string; supersededBy: string | null }) => [a.id, a.supersededBy])).toEqual([
+      [first.body.attachment.id, second.body.attachment.id],
+      [second.body.attachment.id, null],
+      [other.body.attachment.id, null],
+    ]);
+
+    // The superseded version is still downloadable by id.
+    const download = await call("GET", `${url}/${first.body.attachment.id}?download=1`, undefined, operatorHeaders);
+    expect(download.status).toBe(200);
+  });
+
+  it("a comment-scoped upload of an already-attached name stays alongside it", async () => {
+    const item = store.createWorkItem({ title: "reattach comment" });
+    const url = `/api/work-items/${item.id}/attachments`;
+    const comment = comments.addComment({ workItemId: item.id, body: "c", author: "operator", authorKind: "operator" });
+    const onItem = await upload(url, { file: { name: "shot.png", content: Buffer.from("item") } }, operatorHeaders);
+    const onComment = await upload(url, { file: { name: "shot.png", content: Buffer.from("comment") }, fields: { commentId: comment.id } }, operatorHeaders);
+    const listed = await call("GET", url, undefined, operatorHeaders);
+    expect(listed.body.attachments.map((a: { id: string }) => a.id)).toEqual([onItem.body.attachment.id, onComment.body.attachment.id]);
+  });
+});

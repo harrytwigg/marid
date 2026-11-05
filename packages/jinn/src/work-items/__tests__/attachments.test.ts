@@ -278,6 +278,117 @@ describe("listAttachments", () => {
   });
 });
 
+describe("same-filename re-attach supersedes", () => {
+  const add = (itemId: string, filename: string, content: string, extra: { commentId?: string; uploader?: typeof OPERATOR | typeof LEAD | typeof DEV } = {}) =>
+    attachments.addAttachment({
+      workItemId: itemId,
+      filename,
+      commentId: extra.commentId,
+      stagedPath: stage(content),
+      uploader: extra.uploader ?? OPERATOR,
+    });
+
+  it("lists exactly one current row per filename holding the newest content, and keeps the earlier version reachable", () => {
+    const item = store.createWorkItem({ title: "supersede host" });
+    const v1 = add(item.id, "notes.md", "first draft");
+    const v2 = add(item.id, "notes.md", "second draft, longer");
+
+    const current = attachments.listAttachments(item.id);
+    expect(current.map((a) => a.id)).toEqual([v2.id]);
+    expect(current[0].sha256).toBe(sha("second draft, longer"));
+    expect(current[0].supersededBy).toBeNull();
+    expect(current[0].earlierVersions).toEqual([v1.id]);
+
+    const all = attachments.listAttachments(item.id, { includeSuperseded: true });
+    expect(all.map((a) => a.id)).toEqual([v1.id, v2.id]);
+    expect(all[0].supersededBy).toBe(v2.id);
+
+    // The earlier row and its bytes are untouched.
+    const earlier = attachments.getAttachment(v1.id)!;
+    expect(fs.readFileSync(earlier.storagePath, "utf8")).toBe("first draft");
+    expect(fs.readFileSync(attachments.getAttachment(v2.id)!.storagePath, "utf8")).toBe("second draft, longer");
+  });
+
+  it("chains three revisions: only the newest is current and all earlier ones are listed on it", () => {
+    const item = store.createWorkItem({ title: "supersede chain" });
+    const v1 = add(item.id, "report.md", "r1");
+    const v2 = add(item.id, "report.md", "r2");
+    const v3 = add(item.id, "report.md", "r3");
+    const current = attachments.listAttachments(item.id);
+    expect(current.map((a) => a.id)).toEqual([v3.id]);
+    expect(current[0].earlierVersions).toEqual([v1.id, v2.id]);
+    expect(attachments.listAttachments(item.id, { includeSuperseded: true }).map((a) => a.supersededBy)).toEqual([v3.id, v3.id, null]);
+  });
+
+  it("records which attachment a re-attach replaced on the audit event", () => {
+    const item = store.createWorkItem({ title: "supersede audit" });
+    const v1 = add(item.id, "a.md", "one");
+    const v2 = add(item.id, "a.md", "two");
+    const events = db
+      .prepare("SELECT detail FROM work_item_events WHERE work_item_id = ? AND kind = 'attachment_added' ORDER BY rowid")
+      .all(item.id) as Array<{ detail: string }>;
+    expect(JSON.parse(events[0].detail).supersedes).toBeUndefined();
+    expect(JSON.parse(events[1].detail)).toMatchObject({ attachmentId: v2.id, supersedes: v1.id });
+  });
+
+  it("a different filename still adds a second current row", () => {
+    const item = store.createWorkItem({ title: "supersede distinct" });
+    const a = add(item.id, "a.md", "same bytes");
+    const b = add(item.id, "b.md", "same bytes");
+    expect(attachments.listAttachments(item.id).map((x) => x.id)).toEqual([a.id, b.id]);
+    expect(attachments.listAttachments(item.id)[0].earlierVersions).toBeUndefined();
+  });
+
+  it("a comment-scoped attach is never superseded, nor does it supersede the Todo's file", () => {
+    const item = store.createWorkItem({ title: "supersede comments" });
+    const c1 = comments.addComment({ workItemId: item.id, body: "one", author: "operator", authorKind: "operator" });
+    const c2 = comments.addComment({ workItemId: item.id, body: "two", author: "operator", authorKind: "operator" });
+    const onItem = add(item.id, "shot.png", "item bytes");
+    const on1 = add(item.id, "shot.png", "comment one bytes", { commentId: c1.id });
+    const on2 = add(item.id, "shot.png", "comment two bytes", { commentId: c2.id });
+    const on2Again = add(item.id, "shot.png", "comment two bytes v2", { commentId: c2.id });
+    const listed = attachments.listAttachments(item.id);
+    expect(listed.map((x) => x.id)).toEqual([onItem.id, on1.id, on2.id, on2Again.id]);
+    expect(listed.every((x) => x.supersededBy === null)).toBe(true);
+  });
+
+  it("is scoped to one Todo: the same filename on another Todo is unaffected", () => {
+    const one = store.createWorkItem({ title: "scope one" });
+    const two = store.createWorkItem({ title: "scope two" });
+    const a = add(one.id, "n.md", "x1");
+    const b = add(two.id, "n.md", "x2");
+    expect(attachments.listAttachments(one.id).map((x) => x.id)).toEqual([a.id]);
+    expect(attachments.listAttachments(two.id).map((x) => x.id)).toEqual([b.id]);
+  });
+
+  it("re-attaching never lets a non-uploader destroy the earlier version: its bytes survive and only its uploader may remove it", () => {
+    const item = store.createWorkItem({ title: "supersede authority" });
+    const mine = add(item.id, "n.md", "lead's version", { uploader: LEAD });
+    const theirs = add(item.id, "n.md", "dev's version", { uploader: DEV });
+    expect(attachments.listAttachments(item.id).map((x) => x.id)).toEqual([theirs.id]);
+    expect(() => attachments.removeAttachment(mine.id, DEV)).toThrow(/only the uploader/);
+    expect(fs.readFileSync(attachments.getAttachment(mine.id)!.storagePath, "utf8")).toBe("lead's version");
+  });
+
+  it("removing the current row makes the previous version current again", () => {
+    const item = store.createWorkItem({ title: "supersede undo" });
+    const v1 = add(item.id, "n.md", "keep me");
+    const v2 = add(item.id, "n.md", "oops");
+    attachments.removeAttachment(v2.id, OPERATOR);
+    const listed = attachments.listAttachments(item.id);
+    expect(listed.map((x) => x.id)).toEqual([v1.id]);
+    expect(listed[0].supersededBy).toBeNull();
+    expect(listed[0].earlierVersions).toBeUndefined();
+  });
+
+  it("an identical re-attach of the same name is still one current row (older duplicate is superseded)", () => {
+    const item = store.createWorkItem({ title: "supersede identical" });
+    add(item.id, "n.md", "same");
+    const again = add(item.id, "n.md", "same");
+    expect(attachments.listAttachments(item.id).map((x) => x.id)).toEqual([again.id]);
+  });
+});
+
 describe("additive self-heal (6th entry)", () => {
   function freshV2(file: string): Database.Database {
     const fresh = new Database(file);

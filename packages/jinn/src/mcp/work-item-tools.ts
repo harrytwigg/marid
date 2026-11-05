@@ -505,7 +505,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
 
   const attach: JinnMcpTool = {
     name: "attach_to_work_item",
-    description: "Attach a local file to a Todo or comment.",
+    description: "Attach a local file to a Todo or comment. A same-name file on the Todo supersedes the earlier one.",
     inputSchema: {
       type: "object",
       properties: {
@@ -537,16 +537,20 @@ export function buildWorkItemTools(): JinnMcpTool[] {
 
   const listAttachments: JinnMcpTool = {
     name: "list_work_item_attachments",
-    description: "List Todo attachments and storage paths.",
+    description: "List Todo attachments and storage paths; includeSuperseded adds replaced same-name versions.",
     inputSchema: {
       type: "object",
-      properties: { id: TODO_ID_SCHEMA },
+      properties: { id: TODO_ID_SCHEMA, includeSuperseded: { type: "boolean" } },
       required: ["id"],
     },
     handler: async (args, ctx) => {
       assertIdentity(ctx);
       const id = requireTodoId(args);
-      const { status, body } = await gatewayRequest(ctx, "GET", `/api/work-items/${encodeURIComponent(id)}/attachments`);
+      if (args.includeSuperseded !== undefined && typeof args.includeSuperseded !== "boolean") {
+        throw new JinnMcpToolError("includeSuperseded must be a boolean");
+      }
+      const params = args.includeSuperseded ? "?includeSuperseded=1" : "";
+      const { status, body } = await gatewayRequest(ctx, "GET", `/api/work-items/${encodeURIComponent(id)}/attachments${params}`);
       if (status >= 400) throw gatewayFailure(`listing attachments on work item "${id}"`, status, body);
       return withReadableLocations(ctx, id, body);
     },

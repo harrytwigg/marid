@@ -3087,12 +3087,16 @@ export async function handleApiRequest(
 
     // GET /api/work-items/:id/attachments — list rows (item-level and per-comment)
     // with the gateway's ABSOLUTE storagePath; the MCP tool maps each row to the
-    // caller host's path and the byte route below.
+    // caller host's path and the byte route below. A Todo lists one CURRENT row
+    // per filename; `?includeSuperseded=1` also lists the replaced earlier
+    // versions (each marked `supersededBy`).
     params = matchRoute("/api/work-items/:id/attachments", pathname);
     if (method === "GET" && params) {
       if (!requireTodoRouteId(res, params.id)) return;
       if (!getWorkItem(params.id)) return notFound(res);
-      return json(res, { attachments: listAttachments(params.id) });
+      const listUrl = new URL(req.url || pathname, `http://${req.headers.host || "localhost"}`);
+      const includeSuperseded = ["1", "true"].includes(listUrl.searchParams.get("includeSuperseded") ?? "");
+      return json(res, { attachments: listAttachments(params.id, { includeSuperseded }) });
     }
 
     // GET /api/work-items/:id/attachments/:aid — stream or download. Uploads are

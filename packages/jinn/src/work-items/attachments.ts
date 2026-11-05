@@ -29,6 +29,15 @@ import { appendWorkItemEvent } from './store.js';
  *   removal is uploader-or-operator.
  * - Caps: 25 MB per file, 200 MB per item (sum of its rows' bytes, comment
  *   rows included — dedup does not discount the budget).
+ * - One CURRENT file per name: among a Todo's item-level rows (`comment_id`
+ *   NULL) the newest row of a filename is current; the older rows of that name
+ *   are superseded by it. Nothing is stored for this — it is derived on read, so
+ *   re-attaching a revised file needs no migration, never deletes the earlier
+ *   bytes (removal stays uploader-or-operator) and also tidies lists that
+ *   already carry same-name duplicates. Superseded rows stay downloadable by id
+ *   and are listed on request (`includeSuperseded`). Removing the current row
+ *   makes the previous version current again. Comment rows are never
+ *   superseded: each comment is its own record. Filenames compare exactly.
  * - `attachment_added` bumps the Todo version (new material resorts lists);
  *   `attachment_removed` is audit-only.
  */
@@ -48,6 +57,13 @@ export interface WorkItemAttachment {
   storagePath: string;
   uploadedBy: string;
   createdAt: string;
+  /** Id of the newer same-name attachment that replaced this one on the Todo;
+   *  null for a current row (and always null for a comment row). Set by
+   *  `listAttachments`. */
+  supersededBy: string | null;
+  /** On a current row: ids of the earlier same-name versions, oldest first.
+   *  Absent when there are none. Set by `listAttachments`. */
+  earlierVersions?: string[];
 }
 
 /** Who is uploading/removing: the comments identity model — the author string
@@ -120,6 +136,7 @@ function rowToAttachment(row: Record<string, unknown>): WorkItemAttachment {
     storagePath: path.join(ATTACHMENTS_DIR, row.storage_path as string),
     uploadedBy: row.uploaded_by as string,
     createdAt: row.created_at as string,
+    supersededBy: null,
   };
 }
 
@@ -130,14 +147,32 @@ export function getAttachment(id: string): WorkItemAttachment | undefined {
   return row ? rowToAttachment(row) : undefined;
 }
 
-/** All of a Todo's attachment rows — item-level and per-comment — oldest first. */
-export function listAttachments(workItemId: string): WorkItemAttachment[] {
+/** A Todo's attachment rows — item-level and per-comment — oldest first. By
+ *  default only CURRENT rows: an item-level row replaced by a newer attachment of
+ *  the same filename is left out (see the module header). `includeSuperseded`
+ *  lists every row, each marked with `supersededBy`. A current row that
+ *  replaced earlier ones names them in `earlierVersions`. */
+export function listAttachments(workItemId: string, options: { includeSuperseded?: boolean } = {}): WorkItemAttachment[] {
   const id = parseTodoId(workItemId);
-  return (
+  const rows = (
     initDb()
       .prepare('SELECT * FROM work_item_attachments WHERE work_item_id = ? ORDER BY created_at, rowid')
       .all(id) as Record<string, unknown>[]
   ).map(rowToAttachment);
+  const current = new Map<string, WorkItemAttachment>(); // filename → newest item-level row
+  const earlier = new Map<string, WorkItemAttachment[]>();
+  for (const row of rows) {
+    if (row.commentId !== null) continue;
+    const previous = current.get(row.filename);
+    if (previous) earlier.set(row.filename, [...(earlier.get(row.filename) ?? []), previous]);
+    current.set(row.filename, row);
+  }
+  for (const [filename, versions] of earlier) {
+    const newest = current.get(filename)!;
+    for (const version of versions) version.supersededBy = newest.id;
+    newest.earlierVersions = versions.map((version) => version.id);
+  }
+  return options.includeSuperseded ? rows : rows.filter((row) => row.supersededBy === null);
 }
 
 /** Sum of every attachment row's bytes on the item — comment rows included,
@@ -279,6 +314,7 @@ export function addAttachment(input: AddAttachmentInput): WorkItemAttachment {
     storagePath: attachmentPath(sha256),
     uploadedBy: input.uploader.author,
     createdAt: now,
+    supersededBy: null,
   };
   const txn = db.transaction((): WorkItemAttachment => {
     // The caps + comment target were validated above, but re-run under THIS
@@ -299,6 +335,16 @@ export function addAttachment(input: AddAttachmentInput): WorkItemAttachment {
       attachment.uploadedBy,
       attachment.createdAt,
     );
+    // The row this one replaces, if any: the newest earlier item-level row of
+    // the same filename (inside the write lock, so concurrent uploads chain).
+    const supersedes = attachment.commentId
+      ? undefined
+      : (db
+          .prepare(
+            'SELECT id FROM work_item_attachments WHERE work_item_id = ? AND comment_id IS NULL AND filename = ? AND id <> ? ORDER BY created_at DESC, rowid DESC LIMIT 1',
+          )
+          .pluck()
+          .get(workItemId, attachment.filename, attachment.id) as string | undefined);
     appendWorkItemEvent({
       workItemId,
       kind: 'attachment_added',
@@ -309,6 +355,7 @@ export function addAttachment(input: AddAttachmentInput): WorkItemAttachment {
         bytes: attachment.bytes,
         sha256: attachment.sha256,
         ...(attachment.commentId ? { commentId: attachment.commentId } : {}),
+        ...(supersedes ? { supersedes } : {}),
       },
       versionEffect: 'state', // new material resorts activity-ordered lists
     });

@@ -924,6 +924,15 @@ describe("work-item attachment + department tools (Todos v2 slice 5)", () => {
     expect(out.attachments[0].id).toBe("wia_0a1b2c3d4e5f");
   });
 
+  it("list_work_item_attachments passes includeSuperseded to the route, and rejects a non-boolean", async () => {
+    const { calls, ctx } = stub(() => ({ status: 200, body: { attachments: [] } }));
+    await tool("list_work_item_attachments").handler({ id: "JIN-7", includeSuperseded: true }, ctx);
+    expect(calls[0].url).toMatch(/\/api\/work-items\/JIN-7\/attachments\?includeSuperseded=1$/);
+    await tool("list_work_item_attachments").handler({ id: "JIN-7", includeSuperseded: false }, ctx);
+    expect(calls[1].url).toMatch(/\/attachments$/);
+    await expect(tool("list_work_item_attachments").handler({ id: "JIN-7", includeSuperseded: "yes" }, ctx)).rejects.toThrow(/includeSuperseded/);
+  });
+
   it("list_departments proxies the departments surface", async () => {
     const { calls, ctx } = stub(() => ({ status: 200, body: { departments: [{ slug: "platform", prefix: "TSK", todoCount: 3 }] } }));
     const out = (await tool("list_departments").handler({}, ctx)) as { departments: Array<{ slug: string }> };

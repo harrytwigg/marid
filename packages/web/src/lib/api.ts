@@ -514,6 +514,10 @@ export interface WorkItemAttachmentWire {
   storagePath: string
   uploadedBy: string
   createdAt: string
+  /** Newer same-name attachment that replaced this row (listed only on request). */
+  supersededBy?: string | null
+  /** On a current row: ids of the earlier same-name versions it replaced. */
+  earlierVersions?: string[]
 }
 
 /** One department row from GET /api/departments (Todos v2 slice 5). `selectable`
