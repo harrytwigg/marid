@@ -877,9 +877,11 @@ export const api = {
     ),
   /** Todos v2 slice 3: the shared label registry (existing labels only). */
   listLabels: () => get<{ labels: WorkItemLabelWire[] }>("/api/labels"),
-  /** Todos v2 slice 5: attachment rows (item-level and per-comment). */
+  /** Todos v2 slice 5: attachment rows (item-level and per-comment). Asks for
+   *  every version: a same-name re-attach supersedes the earlier row, and the
+   *  task page lists those under the current one (`supersededBy` names it). */
   listWorkItemAttachments: (id: string) =>
-    get<{ attachments: WorkItemAttachmentWire[] }>(`/api/work-items/${encodeURIComponent(id)}/attachments`),
+    get<{ attachments: WorkItemAttachmentWire[] }>(`/api/work-items/${encodeURIComponent(id)}/attachments?includeSuperseded=1`),
   /** Multipart upload; `commentId` attaches to that comment instead of the item. */
   uploadWorkItemAttachment: async (id: string, file: File, commentId?: string): Promise<WorkItemAttachmentWire> => {
     const form = new FormData()

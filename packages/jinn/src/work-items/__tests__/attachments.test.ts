@@ -331,6 +331,45 @@ describe("same-filename re-attach supersedes", () => {
     expect(JSON.parse(events[1].detail)).toMatchObject({ attachmentId: v2.id, supersedes: v1.id });
   });
 
+  it("reports the row it replaced on the upload result, and nothing on a first, different-name or comment-scoped attach", () => {
+    const item = store.createWorkItem({ title: "supersede result" });
+    const comment = comments.addComment({ workItemId: item.id, body: "c", author: "operator", authorKind: "operator" });
+    const first = add(item.id, "image.png", "one");
+    const second = add(item.id, "image.png", "two");
+    expect(first.supersedes).toBeUndefined();
+    expect(second.supersedes).toBe(first.id);
+    expect(add(item.id, "other.png", "three").supersedes).toBeUndefined();
+    expect(add(item.id, "image.png", "four", { commentId: comment.id }).supersedes).toBeUndefined();
+    // A row read by id does not claim to know whether it was superseded.
+    expect(attachments.getAttachment(first.id)!.supersededBy).toBeUndefined();
+  });
+
+  it("the last COMMITTED row is current even when its timestamp is older (concurrent uploads commit out of stamp order)", () => {
+    const item = store.createWorkItem({ title: "supersede commit order" });
+    const insert = (id: string, createdAt: string, content: string): void => {
+      const stored = attachments.attachmentPath(sha(content));
+      fs.mkdirSync(path.dirname(stored), { recursive: true });
+      fs.writeFileSync(stored, content);
+      db.prepare(
+        `INSERT INTO work_item_attachments (id, work_item_id, comment_id, filename, mime, bytes, sha256, storage_path, uploaded_by, created_at)
+         VALUES (?, ?, NULL, 'race.md', 'text/markdown', ?, ?, ?, 'operator', ?)`,
+      ).run(id, item.id, content.length, sha(content), path.relative(path.join(process.env.JINN_HOME!, "attachments"), stored), createdAt);
+    };
+    // B stamped t2 and committed first; A stamped t1 earlier but committed last.
+    insert("wia_bbbbbbbbbbbb", "2026-01-01T00:00:02.000Z", "b committed first");
+    insert("wia_aaaaaaaaaaaa", "2026-01-01T00:00:01.000Z", "a committed last");
+    const current = attachments.listAttachments(item.id);
+    expect(current.map((x) => x.id)).toEqual(["wia_aaaaaaaaaaaa"]);
+    expect(current[0].earlierVersions).toEqual(["wia_bbbbbbbbbbbb"]);
+    expect(attachments.listAttachments(item.id, { includeSuperseded: true }).map((x) => [x.id, x.supersededBy])).toEqual([
+      ["wia_aaaaaaaaaaaa", null],
+      ["wia_bbbbbbbbbbbb", "wia_aaaaaaaaaaaa"],
+    ]);
+    // The next upload chains off the last committed row, matching the list.
+    const next = add(item.id, "race.md", "c");
+    expect(next.supersedes).toBe("wia_aaaaaaaaaaaa");
+  });
+
   it("a different filename still adds a second current row", () => {
     const item = store.createWorkItem({ title: "supersede distinct" });
     const a = add(item.id, "a.md", "same bytes");

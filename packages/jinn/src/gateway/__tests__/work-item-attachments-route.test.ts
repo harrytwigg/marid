@@ -336,6 +336,9 @@ describe("same-filename re-attach over the routes", () => {
     const second = await upload(url, { file: { name: "notes.md", content: Buffer.from("second, longer") } }, operatorHeaders);
     const other = await upload(url, { file: { name: "other.md", content: Buffer.from("other") } }, operatorHeaders);
     expect([first.status, second.status, other.status]).toEqual([201, 201, 201]);
+    expect(first.body.attachment.supersedes).toBeUndefined();
+    expect(second.body.attachment.supersedes).toBe(first.body.attachment.id);
+    expect(other.body.attachment.supersedes).toBeUndefined();
 
     const listed = await call("GET", url, undefined, operatorHeaders);
     expect(listed.body.attachments.map((a: { id: string }) => a.id)).toEqual([second.body.attachment.id, other.body.attachment.id]);

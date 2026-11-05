@@ -532,7 +532,14 @@ export function buildWorkItemTools(): JinnMcpTool[] {
       if (filename !== undefined) target.filename = filename;
       const { status, body } = await uploadWorkItemAttachment(ctx, id, filePath, target);
       if (status >= 400) throw gatewayFailure(`attaching to work item "${id}"`, status, body);
-      return { ...(body as Record<string, unknown>), hint: "Next: list_work_item_attachments { id }." };
+      const replaced = (body as { attachment?: { supersedes?: unknown } })?.attachment?.supersedes;
+      return {
+        ...(body as Record<string, unknown>),
+        hint:
+          typeof replaced === "string"
+            ? `Replaced the earlier same-name attachment ${replaced} as the current one (it stays reachable under earlierVersions). If this is a different file, attach it under another filename. Next: list_work_item_attachments { id }.`
+            : "Next: list_work_item_attachments { id }.",
+      };
     },
   };
 

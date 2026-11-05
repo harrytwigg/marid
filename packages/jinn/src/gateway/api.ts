@@ -3094,8 +3094,7 @@ export async function handleApiRequest(
     if (method === "GET" && params) {
       if (!requireTodoRouteId(res, params.id)) return;
       if (!getWorkItem(params.id)) return notFound(res);
-      const listUrl = new URL(req.url || pathname, `http://${req.headers.host || "localhost"}`);
-      const includeSuperseded = ["1", "true"].includes(listUrl.searchParams.get("includeSuperseded") ?? "");
+      const includeSuperseded = ["1", "true"].includes(url.searchParams.get("includeSuperseded") ?? "");
       return json(res, { attachments: listAttachments(params.id, { includeSuperseded }) });
     }
 

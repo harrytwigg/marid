@@ -251,10 +251,16 @@ describe("work-item attachments from a session on another host", () => {
     const ctx = ctxFor(dev.id);
     const source = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "reattach-")), "notes.md");
     fs.writeFileSync(source, "first draft\n");
-    const first = (await tool("attach_to_work_item").handler({ id: item.id, path: source }, ctx)) as { attachment: { id: string } };
+    const first = (await tool("attach_to_work_item").handler({ id: item.id, path: source }, ctx)) as { attachment: { id: string }; hint: string };
+    expect(first.hint).not.toMatch(/Replaced/);
     fs.writeFileSync(source, "second draft, revised\n");
-    const second = (await tool("attach_to_work_item").handler({ id: item.id, path: source }, ctx)) as { attachment: { id: string } };
+    const second = (await tool("attach_to_work_item").handler({ id: item.id, path: source }, ctx)) as {
+      attachment: { id: string; supersedes?: string };
+      hint: string;
+    };
     expect(second.attachment.id).not.toBe(first.attachment.id);
+    expect(second.attachment.supersedes).toBe(first.attachment.id);
+    expect(second.hint).toContain(`Replaced the earlier same-name attachment ${first.attachment.id}`);
 
     type Row = { id: string; localPath: string | null; earlierVersions?: Row[] };
     const listed = (await tool("list_work_item_attachments").handler({ id: item.id }, ctx)) as { attachments: Row[] };
