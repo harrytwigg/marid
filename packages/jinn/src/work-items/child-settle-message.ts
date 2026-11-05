@@ -72,7 +72,7 @@ function childLine(child: SettledChild): string {
 const ACTIONS = [
   "What to do:",
   "- Run get_work_item on each child above and read its note and comments.",
-  "- A child in in_review is addressed to you as the parent's owner: accept it (move it to done with a note) or send it back (move it to executing with what must change).",
+  "- A child in in_review is addressed to you as the parent's owner: accept it (move it to done with a note) or send it back (move it to executing with what must change). A child you delegated that is still executing, with its session stopped, can be accepted the same way.",
   "- Unblock or re-plan a child that is blocked.",
   "- When no child is left open (backlog or executing), carry the parent on: integrate what landed and move it forward.",
 ].join("\n");

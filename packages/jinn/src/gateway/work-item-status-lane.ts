@@ -1,5 +1,6 @@
-import { getSession, isCoordinatorSession, isOperatorCoordinatorTurn, isOperatorEmployeeTurn } from "../sessions/registry.js";
+import { getSession, isCoordinatorSession, isOperatorCoordinatorTurn, isOperatorEmployeeTurn, listSessionsByWorkItem } from "../sessions/registry.js";
 import { listWorkItemEvents } from "../work-items/event-log.js";
+import { isExecutionAttempt } from "../work-items/link-role.js";
 import { toWorkItemLinkRole } from "../work-items/link-role.js";
 import { STICKY_STATUSES, type WorkItem, type WorkItemEvent, type WorkItemStatus } from "../work-items/store.js";
 import { reviewAddresseeEmployee } from "../work-items/review-addressee.js";
@@ -202,6 +203,21 @@ function parentOwnerOf(
   return employee && reviewAddresseeEmployee(item) === employee ? employee : undefined;
 }
 
+const LIVE_SESSION_STATUSES: ReadonlySet<string> = new Set(["running", "waiting"]);
+
+/** The owner accepting a child that is still `executing`: only one an employee is
+ *  producing, and only once that employee's session has stopped. Anything else
+ *  is left to the ordinary agent lane, which refuses the close. */
+function resolveExecutingAccept(employee: string, item: WorkItem, note: string): StatusLaneResult | undefined {
+  const producer = item.assignee;
+  if (!producer || producer === employee || !orgRegistry().has(producer)) return undefined;
+  if (listSessionsByWorkItem(item.id).some((session) => isExecutionAttempt(session) && LIVE_SESSION_STATUSES.has(session.status))) {
+    return refuse(403, `Todo ${item.id} is still being worked on: a session of ${producer} is running on it; accept it once that session has stopped`);
+  }
+  if (!note) return refuse(400, `accepting Todo ${item.id} needs the reason in note: it is posted on the Todo as a comment`);
+  return { ok: true, lane: { kind: "parent-owner", employee } };
+}
+
 /** The parent's owner accepting a child or sending one back from review. The
  *  ban keys on who produced the work: the child's assignee, or an employee with
  *  a session or start on it. A hand in the child's work leaves the move to the
@@ -209,6 +225,7 @@ function parentOwnerOf(
  *  back to executing is the producer's own take-back, not a review bounce. */
 function resolveParentOwnerLane(employee: string, item: WorkItem, target: WorkItemStatus, note: string): StatusLaneResult | undefined {
   const producedElsewhere = Boolean(item.assignee) && item.assignee !== employee;
+  if (item.status === "executing") return resolveExecutingAccept(employee, item, note);
   const handIn = item.assignee === employee
     ? `${employee} is assigned to it`
     : closerHandIn(employee, item, { producedElsewhere });
