@@ -140,10 +140,13 @@ function moveEmployee(event: WorkItemEvent): string | undefined {
  * employee making the latest handoff into `in_review`. A session linked to
  * review it, or bouncing it back, is reviewing and leaves the close open.
  */
-function closerHandIn(employee: string, item: WorkItem): string | undefined {
+function closerHandIn(employee: string, item: WorkItem, { producedElsewhere = false } = {}): string | undefined {
   const events = listWorkItemEvents(item.id);
   if (events.some((event) => workedBy(event, employee))) return `a session of ${employee} was linked to work on it`;
   if (events.some((event) => startedBy(event, employee))) return `${employee} moved it to executing`;
+  // A handoff is a hand in only when the mover produced the work. The parent's
+  // owner relaying a delegated child's report into review did not produce it.
+  if (producedElsewhere) return undefined;
   const handoff = events.filter((event) => event.toStatus === "in_review" && event.fromStatus !== "in_review").at(-1);
   return handoff && moveEmployee(handoff) === employee ? `${employee} handed it to review` : undefined;
 }
@@ -181,26 +184,34 @@ function resolveCloserLane(employee: string, item: WorkItem, note: string): Stat
   return { ok: true, lane: { kind: "closer", employee } };
 }
 
-/** The employee a session acts as when it owns the parent of a child Todo in
- *  review and the move is the accept or the send-back. Read live from the
- *  parent and the roster, so a reassigned parent hands the review elsewhere at
- *  once. `undefined` leaves the move to the other lanes. */
+/** The employee a session acts as when it owns the parent of a child Todo and
+ *  the move is the accept (from `executing` or `in_review`: a delegated child's
+ *  report lands with the owner whether or not the producer moved it to review)
+ *  or the send-back (from `in_review`). Read live from the parent and the
+ *  roster, so a reassigned parent hands the review elsewhere at once.
+ *  `undefined` leaves the move to the other lanes. */
 function parentOwnerOf(
   caller: Extract<WorkItemCaller, { kind: "session" }>,
   item: WorkItem,
   target: WorkItemStatus,
 ): string | undefined {
-  if (item.status !== "in_review" || (target !== "done" && target !== "executing")) return undefined;
+  const accepts = target === "done" && (item.status === "executing" || item.status === "in_review");
+  const sendsBack = target === "executing" && item.status === "in_review";
+  if (!accepts && !sendsBack) return undefined;
   const employee = caller.session.employee;
   return employee && reviewAddresseeEmployee(item) === employee ? employee : undefined;
 }
 
-/** The parent's owner accepting or sending back a child in review. A hand in
- *  the child's work leaves the move to the ordinary agent lane: accepting it is
- *  refused as self-review, and moving it back to executing is the producer's
- *  own take-back, not a review bounce. */
+/** The parent's owner accepting a child or sending one back from review. The
+ *  ban keys on who produced the work: the child's assignee, or an employee with
+ *  a session or start on it. A hand in the child's work leaves the move to the
+ *  ordinary agent lane: accepting it is refused as self-review, and moving it
+ *  back to executing is the producer's own take-back, not a review bounce. */
 function resolveParentOwnerLane(employee: string, item: WorkItem, target: WorkItemStatus, note: string): StatusLaneResult | undefined {
-  const handIn = closerHandIn(employee, item);
+  const producedElsewhere = Boolean(item.assignee) && item.assignee !== employee;
+  const handIn = item.assignee === employee
+    ? `${employee} is assigned to it`
+    : closerHandIn(employee, item, { producedElsewhere });
   if (handIn) {
     return target === "done"
       ? refuse(403, `${employee} cannot accept Todo ${item.id}: ${handIn}, and an employee never closes its own work (self-review ban); another reviewer or the operator closes it`)
