@@ -133,7 +133,7 @@ export {
   shouldPersistFinalAssistantMessage,
 } from "../sessions/turn/text.js";
 import { getPackageVersion } from "../shared/version.js";
-import { badRequest, json, matchRoute, notFound, serverError, type ResWithEncoding } from "./route-helpers.js";
+import { badRequest, clientGone, isClientAbort, json, matchRoute, notFound, serverError, type ResWithEncoding } from "./route-helpers.js";
 import { handleSessionQueueRoute } from "./queue-routes.js";
 export { matchRoute } from "./route-helpers.js";
 import { handleCronApi } from "./cron-api.js";
@@ -150,7 +150,7 @@ import { handlePluginsApi } from "./plugins-api.js";
 import QRCode from "qrcode";
 import { WhatsAppConnector } from "../connectors/whatsapp/index.js";
 import { handleFilesRequest, fileIdsToMedia, rehomeAttachmentsToSession, mimeFromFilename, MultipartUploadError, readLocalFileForIngestion, readMultipartFile, sanitizeUploadFilename, isFileNotModified } from "./files.js";
-import { isClientAbort, streamFile } from "./byte-range.js";
+import { streamFile } from "./byte-range.js";
 import { handleSessionFileRoutes } from "./session-file-read.js";
 import { selectAttachmentVariant } from "./attachment-variants.js";
 import { readJsonBody, readBodyRaw } from "./http-helpers.js";
@@ -3121,6 +3121,9 @@ export async function handleApiRequest(
       }
       const reqUrl = new URL(req.url || pathname, `http://${req.headers.host || "localhost"}`);
       const download = reqUrl.searchParams.get("download") === "1";
+      // A reader who already left (a thumbnail it scrolled past) gets no
+      // sharp/ffmpeg work done on its behalf.
+      if (clientGone(res)) return;
       const selected = await selectAttachmentVariant(attachment, reqUrl.searchParams, download);
       if (!selected) return notFound(res);
       const etag = `"${attachment.sha256}-${selected.variant}-${selected.size}"`;
@@ -4820,7 +4823,7 @@ export async function handleApiRequest(
     // client sees it truncated, never one that looks complete; a reply that
     // already ended is left to flush.
     if (res.headersSent) {
-      if (!isClientAbort(err)) logger.error(`API error after the response started: ${msg}`);
+      if (!isClientAbort(err)) logger.error(`API error after the response started (${method} ${pathname}): ${msg}`);
       if (!res.writableEnded && !res.destroyed) res.destroy();
       return;
     }

@@ -21,7 +21,7 @@ import type { ApiContext } from "./api.js";
 import { CALLER_SESSION_HEADER, TOOL_CALL_HEADER, UNIDENTIFIED_TOOL_CALL_ERROR, verifySessionCapability } from "../mcp/identity.js";
 import { resolveCallerIdentity } from "./session-comm-guards.js";
 import { verifyGatewayAuth } from "./auth.js";
-import { badRequest, json, notFound, serverError, type ParsedRoute } from "./route-helpers.js";
+import { badRequest, clientGone, json, notFound, serverError, type ParsedRoute } from "./route-helpers.js";
 import { streamFile } from "./byte-range.js";
 import { ensureLowVariant, ensurePoster } from "./video-variants.js";
 import { readImageDimensions } from "./image-dimensions.js";
@@ -1211,6 +1211,8 @@ export async function handleFilesRequest(
     let variant = "original";
     if (!download && originalMime.startsWith("video/")) {
       const key = `file:${meta.id}:${originalStat.size}`;
+      // No poster or low-variant generation for a client that already left.
+      if (clientGone(res)) return true;
       if (query.get("poster") === "1") {
         const poster = await ensurePoster(filePath, key);
         if (!poster) { notFound(res); return true; }
