@@ -31,9 +31,9 @@ export function MemberSessionsDialog({ onClose }: { onClose: () => void }) {
   const sessions = useQuery({ queryKey: KEY, queryFn: accountsApi.listMemberSessions })
   const revoke = useMutation({
     mutationFn: (session: UserSessionWire) => accountsApi.revokeMemberSession(session.id),
-    // Ending the session this browser holds ends this page's access too. The gateway may not say which row is ours
-    // (`current` is optional), so unless a row is known to be another browser's, ask who we are now and take the full
-    // refresh only if we are no longer signed in: it blanks the app behind this dialog, so it is not for every revoke.
+    // Ending the session this browser holds ends this page's access too, and `current` says which row that is. If a
+    // gateway leaves it out, a row not known to be another browser's is checked: ask who we are now and take the full
+    // refresh only if we are no longer signed in, since it blanks the app behind this dialog.
     onSuccess: async (_data, session) => {
       if (session.current === true || (session.current === undefined && (await signedOut()))) {
         return void (await refresh({ bootstrapLocal: false }))

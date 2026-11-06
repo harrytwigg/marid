@@ -64,6 +64,7 @@ export interface UserSessionWire {
   lastSeenAt: string | null
   userAgent?: string | null
   ip?: string | null
+  /** True for the session the request rides on. The contract carries it; it stays optional here so a gateway that omits it degrades to the fallback in the sessions dialog. */
   current?: boolean
 }
 
