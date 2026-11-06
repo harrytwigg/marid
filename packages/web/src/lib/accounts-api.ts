@@ -278,12 +278,23 @@ export function memberIdOf(identity: string | null | undefined): string | null {
   return identity?.startsWith(USER_PREFIX) ? identity.slice(USER_PREFIX.length) : null
 }
 
-/** Reads the fragment token once and clears it from the address bar before anything renders. */
+let fragmentToken: { path: string; token: string | null } | null = null
+
+/** Reads the link's token out of the address bar and clears it from there. A page's state initializer can run more
+ *  than once for one mount (a render that suspends is replayed, and StrictMode runs it twice), and the second run
+ *  finds the address already clear, so the first read is kept for this page load. `forgetFragmentToken` drops it. */
 export function takeFragmentToken(): string | null {
   if (typeof window === "undefined") return null
   const raw = window.location.hash.replace(/^#/, "").trim()
+  if (!raw) return fragmentToken?.path === window.location.pathname ? fragmentToken.token : null
   window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}`)
-  if (!raw) return null
   const params = new URLSearchParams(raw)
-  return (params.get("token") ?? (raw.includes("=") ? "" : raw)).trim() || null
+  const token = (params.get("token") ?? (raw.includes("=") ? "" : raw)).trim() || null
+  fragmentToken = { path: window.location.pathname, token }
+  return token
+}
+
+/** Called when the page that took the token goes away, so a later visit to the same path without a link starts empty. */
+export function forgetFragmentToken(): void {
+  fragmentToken = null
 }

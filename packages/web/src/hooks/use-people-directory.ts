@@ -44,10 +44,11 @@ async function loadDirectory(member: boolean): Promise<DirectoryData> {
   return { people: people.map((p) => ({ id: p.id, displayName: p.displayName, initials: p.initials })), employees: [] }
 }
 
-function resolveIdentity(people: DirectoryData["people"] | undefined, identity: string | null | undefined): ResolvedIdentity | null {
+/** `settled` means no answer is coming (the directory is off, or its read failed): an id not in it is then a former member, not a name still on its way. */
+function resolveIdentity(people: DirectoryData["people"] | undefined, identity: string | null | undefined, settled: boolean): ResolvedIdentity | null {
   const id = memberIdOf(identity)
   if (id === null) return null
-  if (!people) return { kind: "pending" }
+  if (!people) return settled ? { kind: "former" } : { kind: "pending" }
   const person = people.find((p) => p.id === id)
   if (!person) return { kind: "former" }
   return { kind: "member", id, displayName: person.displayName, initials: person.initials || initialsOf(person.displayName) }
@@ -62,6 +63,7 @@ export function usePeopleDirectory(): PeopleDirectory {
     queryFn: () => loadDirectory(member),
   })
   const people = query.data?.people
-  const resolve = useCallback((identity: string | null | undefined) => resolveIdentity(people, identity), [people])
+  const settled = !accounts || query.isError
+  const resolve = useCallback((identity: string | null | undefined) => resolveIdentity(people, identity, settled), [people, settled])
   return { resolve, employees: query.data?.employees ?? [], ready: !accounts || query.isSuccess }
 }

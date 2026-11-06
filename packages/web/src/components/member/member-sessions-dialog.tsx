@@ -4,6 +4,7 @@ import { DIALOG_CANCEL_CLASS } from "@/components/ui/dialog-actions"
 import { Button } from "@/components/ui/button"
 import { accountsApi, type UserSessionWire } from "@/lib/accounts-api"
 import { useAuth } from "@/routes/auth-provider"
+import { accountsErrorText } from "@/components/people/errors"
 import { formatRelativeTime } from "@/routes/todos/util"
 
 const KEY = ["member", "sessions"] as const
@@ -50,6 +51,7 @@ export function MemberSessionsDialog({ onClose }: { onClose: () => void }) {
             </li>
           ))}
         </ul>
+        {revoke.isError && <div role="alert" data-testid="revoke-error" className="mt-3 text-[length:var(--text-footnote)] text-[var(--system-red)]">{accountsErrorText(revoke.error, "Couldn't end that session. Try again.")}</div>}
         <div className="mt-4 flex justify-end"><button type="button" onClick={onClose} className={DIALOG_CANCEL_CLASS}>Close</button></div>
       </DialogContent>
     </Dialog>

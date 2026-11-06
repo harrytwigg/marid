@@ -71,6 +71,19 @@ describe("the member app's routes", () => {
     }
   })
 
+  it("follows a grant made after sign-in: the boards query, not the principal read at load", async () => {
+    // The principal still says platform only; the gateway now says design too.
+    listMemberBoards.mockResolvedValue([{ ...grant("platform"), prefix: "PLT" }, { ...grant("design"), prefix: "DES" }])
+    renderAt("/todos/b/design")
+    expect(await screen.findByTestId("board-probe")).toBeTruthy()
+  })
+
+  it("follows a revoked grant: a board the principal still lists is not shared once the query drops it", async () => {
+    listMemberBoards.mockResolvedValue([{ ...grant("design"), prefix: "DES" }])
+    renderAt("/todos/b/platform")
+    expect(await screen.findByTestId("board-not-shared")).toBeTruthy()
+  })
+
   it("opens a Todo page", async () => {
     renderAt("/todos/PLT-1")
     expect(await screen.findByTestId("todo-probe")).toBeTruthy()

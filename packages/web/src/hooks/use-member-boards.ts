@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query"
 import { accountsApi } from "@/lib/accounts-api"
-import { useMember } from "@/hooks/use-principal"
+import { MEMBER_BOARDS_KEY, useMember } from "@/hooks/use-principal"
 
-export const MEMBER_BOARDS_KEY = ["member", "boards"] as const
+export { MEMBER_BOARDS_KEY }
 
 /** The member's boards as the gateway has them now (the principal in auth state is only as fresh as the page load). */
 export function useMemberBoards() {

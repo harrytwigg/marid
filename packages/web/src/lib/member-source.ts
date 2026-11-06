@@ -175,7 +175,7 @@ async function createTodo(init: RequestInit): Promise<Response> {
 
 const RULES: Rule[] = [
   { pattern: TREES, verbs: ["GET"], handle: (_m, path) => readTrees(path) },
-  { pattern: TREE, verbs: ["GET"], handle: (m, _p, init) => forward(mine(m[1], "/tree"), init) },
+  { pattern: TREE, verbs: ["GET"], handle: (m, path, init) => forward(mine(m[1], `/tree${withQuery(path)}`), init) },
   {
     pattern: STATUS,
     verbs: ["PUT", "POST"],
@@ -196,7 +196,7 @@ const RULES: Rule[] = [
   },
   // The Todo page asks for the session list, and for the session tree with `?tree=1`: a member has no sessions in either.
   { pattern: SESSIONS, verbs: ["GET"], handle: (_m, path) => json(query(path).has("tree") ? EMPTY_SESSION_TREE : []) },
-  { pattern: ONE, verbs: ["GET", "PATCH"], handle: (m, _p, init) => forward(mine(m[1]), init) },
+  { pattern: ONE, verbs: ["GET", "PATCH"], handle: (m, path, init) => forward(mine(m[1], method(init) === "GET" ? withQuery(path) : ""), init) },
 ]
 
 async function route(path: string, init: RequestInit): Promise<Response> {

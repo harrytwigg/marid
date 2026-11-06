@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react"
+import { useEffect, useState, type FormEvent } from "react"
 import { AccountPageFrame, passwordProblem, PasswordFields } from "@/components/auth/account-page-parts"
 import { ErrorBanner, LINK_UNUSABLE, submitClass } from "@/components/auth/account-form-parts"
 import { AuthStateIcon, AuthStateLabel } from "@/components/auth/auth-motion"
@@ -6,11 +6,12 @@ import { useLinkFlow } from "@/components/auth/use-link-flow"
 import { SignedInGate } from "@/components/auth/signed-in-notice"
 import { Check } from "@/components/ui/icon"
 import { gatewayTransport } from "@/lib/gateway-transport"
-import { accountsApi, takeFragmentToken, type ResetInspectWire } from "@/lib/accounts-api"
+import { accountsApi, forgetFragmentToken, takeFragmentToken, type ResetInspectWire } from "@/lib/accounts-api"
 
 export default function ResetPage() {
   // Read and cleared from the address bar at once, before the gate asks who is signed in; kept for the flow.
   const [token] = useState(takeFragmentToken)
+  useEffect(() => forgetFragmentToken, [])
   return <SignedInGate><ResetFlow token={token} /></SignedInGate>
 }
 

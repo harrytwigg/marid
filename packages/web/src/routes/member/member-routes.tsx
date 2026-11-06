@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes, useParams } from "react-router-dom"
 import { lazyRoute } from "@/lib/lazy-route"
 import { parseBoardParam } from "@/routes/todos/board/board-route"
-import { useMember } from "@/hooks/use-principal"
+import { useMemberGrants } from "@/hooks/use-principal"
 import { MemberHome } from "./member-home"
 import { BoardNotShared } from "./board-not-shared"
 
@@ -10,10 +10,10 @@ const TaskPage = lazyRoute(() => import("@/routes/todos/task-page/task-page"), "
 
 function MemberBoardRoute() {
   const { board } = useParams()
-  const member = useMember()
+  const grants = useMemberGrants()
   const parsed = parseBoardParam(board)
   // The Attention and Everything boards are the operator's: a member's boards are departments they were granted.
-  if (parsed.kind !== "department" || !member?.boards.some((grant) => grant.department === parsed.slug)) {
+  if (parsed.kind !== "department" || !grants?.some((grant) => grant.department === parsed.slug)) {
     return <BoardNotShared />
   }
   return <BoardPage />

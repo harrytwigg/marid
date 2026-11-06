@@ -33,7 +33,7 @@ function Chip({
   const Tag = onOpen ? "button" : "span"
   return (
     <Tag
-      {...(onOpen ? { type: "button" as const, "aria-label": label, onClick: onOpen } : {})}
+      {...(onOpen ? { type: "button" as const, "aria-label": label, onClick: onOpen } : { title: label })}
       data-testid={testId}
       className={`focus-outline flex flex-none items-center gap-[7px] bg-[var(--fill-tertiary)] font-medium text-[var(--text-secondary)] outline-none ${onOpen ? "hover:bg-[var(--fill-secondary)]" : ""} ${
         mobile
