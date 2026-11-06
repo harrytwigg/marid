@@ -16,6 +16,9 @@ import type { WorkItemCaller } from "./work-item-arming.js";
  * nothing for Dispatch or recovery to see as its live attempt. This gives that
  * path the same link and run.
  *
+ * A session the assignee was consulted through (a mention's `consult` link) that
+ * starts the Todo is relinked as its executor; a review link is never changed.
+ *
  * Only the assignee's own session is linked; moving or assigning a Todo that
  * belongs to somebody else links nobody. A session already executing another
  * Todo that is still open keeps that link — a session carries one Todo, and
@@ -49,9 +52,13 @@ export function linkSelfStartedTodo(caller: WorkItemCaller, item: WorkItem, acto
 }
 
 function mayLinkAsExecutor(session: Session, item: WorkItem): boolean {
-  // Already on this Todo for another reason (a review, a mention): the role
-  // is what the self-review ban reads, so it is left as it is.
-  if (session.workItemId === item.id) return toWorkItemLinkRole(session.workItemRole) === "execute";
+  // Already on this Todo for another reason: the role is what the self-review
+  // ban reads, so a review link is left as it is. A mention's consult link is
+  // different: it was a consultation only until the assignee's own session
+  // started the Todo, and from then on that session is the one working it, so
+  // it becomes the execution attempt. Left as a consultation it would not count
+  // as running, and the quiet watch would report the Todo as stalled.
+  if (session.workItemId === item.id) return toWorkItemLinkRole(session.workItemRole) !== "review";
   if (!session.workItemId) return true;
   const current = getWorkItem(session.workItemId);
   if (!current || current.status === "in_review" || STICKY_STATUSES.has(current.status)) return true;
