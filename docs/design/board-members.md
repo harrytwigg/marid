@@ -402,8 +402,9 @@ Settled while building the web against this contract; the gateway answers exactl
   displayName, email, initials, role }], invites: [<invite row as above>] }`.
 - `GET /api/member/people` → `{ people: [{ id, displayName, initials }], employees: [{ name,
   displayName, emoji }] }`.
-- Invite and reset-link POSTs → `{ link, expiresAt }`; an invite to an existing active
-  account → `{ granted: true }`.
+- Invite and reset-link POSTs → `{ link, expiresAt }` (`link` is `null` when the gateway cannot
+  determine the request's origin; the UI then says so instead of offering a copy box); an invite
+  to an existing active account → `{ granted: true }`.
 - `POST /api/auth/invites/inspect` → `{ email, boardName, role, instanceRole, invitedBy }`
   (`boardName` and `role` are null for an instance invite, `instanceRole` null for a board
   invite); `POST /api/auth/resets/inspect` → `{ email, displayName }`. Both answer `410` for a
