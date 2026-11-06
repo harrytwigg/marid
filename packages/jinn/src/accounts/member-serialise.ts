@@ -193,9 +193,20 @@ const INTERNAL_EVENT_KINDS: ReadonlySet<string> = new Set([
 
 /** Detail keys that name a session, a run or the surface a write came from. */
 const SESSION_DETAIL_KEYS: ReadonlySet<string> = new Set([
-  "sessionId", "sessionIds", "session", "sessions", "releasedSessions", "parentSessionId", "runId", "deliveryId",
-  "sourceRef", "origin", "todoProvenance", "callerSessionId",
+  "runId", "runIds", "deliveryId", "sourceRef", "origin", "todoProvenance",
 ]);
+
+/** Any key that names a session, at any depth (sessionId, childSessionId, releasedSessions, callerSessionId...). */
+const SESSION_KEY = /session/i;
+
+/** A key a member's event detail never carries, wherever it sits. */
+function isSessionKey(key: string): boolean {
+  return SESSION_DETAIL_KEYS.has(key) || SESSION_KEY.test(key);
+}
+
+/** A bare session id, or an internal identity a member never reads (a session, plugin, cron job or workflow). */
+const SESSION_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const INTERNAL_IDENTITY = /^(session|plugin|cron|workflow):/;
 
 function memberEventActor(event: WorkItemEvent, createdBy: string, viewer: Viewer): string | null {
   // A created event records the write's source (connector, human, cron...) as its actor: the creator is the Todo's `created_by`.
@@ -211,6 +222,8 @@ const DROPPED = Symbol("dropped");
 /** One string in an event detail: a department under a department key, or a Todo id anywhere, the reader may not be told of is dropped. */
 function memberDetailString(value: string, viewer: Viewer, key: string | undefined): string | typeof DROPPED {
   if (key !== undefined && DEPARTMENT_KEY.test(key)) return viewer.holdsBoard(value) ? value : DROPPED;
+  if (SESSION_UUID.test(value) || INTERNAL_IDENTITY.test(value)) return DROPPED;
+  if (isMemberIdentity(value)) return memberWho(value, viewer);
   return TODO_ID_PATTERN.test(value) && !viewer.holdsTodo(value) ? DROPPED : value;
 }
 
@@ -218,10 +231,11 @@ function memberDetailString(value: string, viewer: Viewer, key: string | undefin
 const DEPARTMENT_KEY = /^(department|movedTo)$|Department$/;
 
 /**
- * An event detail value with everything the reader may not be told taken out, at any depth: a string that is a Todo id is
- * kept only when that Todo is on a board the reader holds (the rule relations follow), and a department under a department
- * key only when it is one of the reader's boards. An array loses such entries and an object such keys. A Todo id is judged
- * by what it names, whatever key carries it (srcId, dstId, childId, reparented.from, movedWithRoot...).
+ * An event detail value with everything the reader may not be told taken out, at any depth, judged by value as well as
+ * by key: a session key goes wherever it sits; a bare session id, or a session, plugin, cron or workflow identity, goes
+ * whatever key carries it; a person reads as the actor rule says; a Todo id is kept only when that Todo is on a board the
+ * reader holds (the rule relations follow); a department under a department key only when it is one of the reader's
+ * boards. An array loses such entries and an object such keys.
  */
 function memberDetailValue(value: unknown, viewer: Viewer, key?: string): unknown {
   if (typeof value === "string") return memberDetailString(value, viewer, key);
@@ -229,6 +243,7 @@ function memberDetailValue(value: unknown, viewer: Viewer, key?: string): unknow
   if (!value || typeof value !== "object") return value;
   const kept: Record<string, unknown> = {};
   for (const [name, entry] of Object.entries(value)) {
+    if (isSessionKey(name)) continue;
     const scrubbed = memberDetailValue(entry, viewer, name);
     if (scrubbed !== DROPPED) kept[name] = scrubbed;
   }
@@ -237,7 +252,7 @@ function memberDetailValue(value: unknown, viewer: Viewer, key?: string): unknow
 
 function memberEvent(event: WorkItemEvent, createdBy: string, viewer: Viewer): WorkItemEvent {
   const detail = event.detail
-    ? memberDetailValue(Object.fromEntries(Object.entries(event.detail).filter(([key]) => !SESSION_DETAIL_KEYS.has(key))), viewer) as WorkItemEvent["detail"]
+    ? memberDetailValue(event.detail, viewer) as WorkItemEvent["detail"]
     : event.detail;
   return { ...event, actor: memberEventActor(event, createdBy, viewer), detail };
 }

@@ -134,3 +134,37 @@ describe("members read an agent's work without its session id", () => {
     expect(frames[0].payload.value.createdBy).toBe("agent");
   });
 });
+
+describe("event details are judged by value at any depth, not only by top-level key", () => {
+  it("a skip-level delegation's manager-visibility note reaches a member without the child session's id", async () => {
+    const { surfaceManagerVisibility } = await import("../../gateway/manager-visibility.js");
+    const { createSession } = await import("../../sessions/registry.js");
+    const person = (name: string, rank: string, reportsTo?: string) =>
+      [name, { name, displayName: name, department: "ops", rank, engine: "claude", model: "sonnet", persona: "test", ...(reportsTo ? { reportsTo } : {}) }] as const;
+    const roster = new Map([person("boss", "executive"), person("mgr", "manager", "boss"), person("ic", "employee", "mgr")]) as never;
+    const todo = store.createWorkItem({ title: "Delegated past a manager", department: "ops" });
+    const child = createSession({ engine: "claude", source: "web", sourceRef: "t-child", employee: "ic" } as never);
+    // The real path, with its own dependencies: the manager has no live session, so the note is written on the Todo.
+    surfaceManagerVisibility({ roster, employee: "ic", childSession: child, workItemId: todo.id, title: todo.title });
+    const stored = store.listWorkItemEvents(todo.id).find((event) => (event.detail as any)?.managerVisibility);
+    expect(JSON.stringify(stored)).toContain(child.id);
+    const detail = (await h.as(viewer, "GET", `/api/member/todos/${todo.id}`)).body;
+    const note = detail.events.find((event: any) => event.detail?.managerVisibility);
+    expect(note.detail.managerVisibility).toMatchObject({ manager: "mgr", employee: "ic" });
+    expect(note.detail.managerVisibility).not.toHaveProperty("childSessionId");
+    expect(JSON.stringify(detail)).not.toContain(child.id);
+  });
+
+  it("a nested session id, internal identity or unshared person is dropped or generic, whatever key carries it", async () => {
+    const todo = store.createWorkItem({ title: "Nested", department: "ops" });
+    store.appendWorkItemEvent({
+      workItemId: todo.id, kind: "note", actor: "operator",
+      detail: { handoff: { to: BARE, via: `session:${BARE}:x`, trigger: "plugin:calendar", by: "cron:nightly", who: "user:usr_nobody0000", steps: [{ run: BARE, ok: true }], sessionCount: 2, kept: "fine" } },
+    });
+    const detail = (await h.as(viewer, "GET", `/api/member/todos/${todo.id}`)).body;
+    const note = detail.events.find((event: any) => event.detail?.handoff);
+    expect(note.detail.handoff).toEqual({ who: "member", steps: [{ ok: true }], kept: "fine" });
+    noSessionIds(detail);
+    expect(JSON.stringify(detail)).not.toMatch(/plugin:|cron:|usr_nobody/);
+  });
+});
