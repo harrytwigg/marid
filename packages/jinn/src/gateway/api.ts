@@ -3925,11 +3925,14 @@ export async function handleApiRequest(
           res.end(JSON.stringify({ error: SPENT_DISPATCHER_MESSAGE_REFUSAL }));
           return;
         }
+        const callerParentId = reportingParentSessionId(caller);
         const plan = prepareLateralSend({
           caller,
           targetSessionId: params.id,
           message: String(rawMessage),
           guards: sessionCommGuards,
+          callerParentSessionId: callerParentId,
+          parentLink: callerParentId === session.id || reportingParentSessionId(session) === caller.id,
         });
         if (!plan.ok) {
           res.writeHead(plan.status, { "Content-Type": "application/json" });
@@ -3951,10 +3954,12 @@ export async function handleApiRequest(
           // notifyParentSession suppresses that redundant callback.
           recordChildReportedToParent(caller.id, caller.attemptToken);
         }
-        // Conservative on later failure (e.g. engine unavailable): the hop tag
+        // A parent/child message is not a relay hop: it leaves the receiver's
+        // chain untouched, so a spawned session starts at hop 1. Otherwise,
+        // conservative on later failure (e.g. engine unavailable): the hop tag
         // may be recorded for an undelivered message, which only ever tightens
         // the budget, never loosens it.
-        sessionCommGuards.recordDelivery(params.id, plan.hops);
+        if (!plan.parentLink) sessionCommGuards.recordDelivery(params.id, plan.hops);
       } else if (
         msgCaller.kind === "operator" &&
         body.role === "notification" &&

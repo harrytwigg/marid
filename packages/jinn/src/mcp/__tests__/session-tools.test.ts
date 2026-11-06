@@ -785,6 +785,43 @@ describe("session tools — integration against the real routes/registry", () =>
     expect(again.status).toBe("queued");
   });
 
+  it("a spawned session starts a fresh chain: its first send is hop 1 even when the spawner is at the cap, and its reply to the spawner is never refused", async () => {
+    sessionCommGuards.setMaxHops(4);
+    const a = await createOperatorSession("producer");
+    const b = await createOperatorSession("peer");
+    const ctxA = ctxFor(a);
+    const ctxB = ctxFor(b);
+    // Ping-pong A <-> B until A has no budget left.
+    await tool("send_to_session").handler({ sessionId: b, message: "hop1" }, ctxA);
+    await tool("send_to_session").handler({ sessionId: a, message: "hop2" }, ctxB);
+    await tool("send_to_session").handler({ sessionId: b, message: "hop3" }, ctxA);
+    await tool("send_to_session").handler({ sessionId: a, message: "hop4" }, ctxB);
+    await expect(tool("send_to_session").handler({ sessionId: b, message: "hop5" }, ctxA)).rejects.toThrow(/hop budget/);
+
+    // A spawns a reviewer and briefs it by message: the brief is not a relay hop.
+    const child = (await tool("spawn_session").handler({ prompt: "review", engine: "codex" }, ctxA)) as { sessionId: string };
+    await tool("send_to_session").handler({ sessionId: child.sessionId, message: "round 2 please" }, ctxA);
+    const ctxC = ctxFor(child.sessionId);
+
+    // The reviewer replies to the requester at the cap: delivered, as hop 1.
+    await tool("send_to_session").handler({ sessionId: a, message: "verdict" }, ctxC);
+    const reply = registry.getMessages(a).at(-1)!;
+    expect(reply.content).toContain("verdict");
+    const replyMeta = typeof reply.meta === "string" ? JSON.parse(reply.meta) : reply.meta;
+    expect(replyMeta).toMatchObject({ kind: "agent-relay", hops: 1 });
+
+    // The reviewer's own first send to a non-parent is hop 1, not the spawner's chain.
+    await tool("send_to_session").handler({ sessionId: b, message: "fyi" }, ctxC);
+    const fyi = registry.getMessages(b).at(-1)!;
+    const fyiMeta = typeof fyi.meta === "string" ? JSON.parse(fyi.meta) : fyi.meta;
+    expect(fyiMeta).toMatchObject({ kind: "agent-relay", hops: 1 });
+
+    // A non-parent at the cap is still refused, and the refusal names the way out.
+    await expect(tool("send_to_session").handler({ sessionId: b, message: "hop5" }, ctxA)).rejects.toThrow(
+      /comment on the Todo/i,
+    );
+  });
+
   it("stop is scoped to descendants for agents: grandchild ok, peer 403, bearer operator unrestricted", async () => {
     const root = await createOperatorSession("root");
     const rootCtx = ctxFor(root);

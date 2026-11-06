@@ -35,6 +35,10 @@ import { CALLER_SESSION_CAPABILITY_HEADER, CALLER_SESSION_HEADER, TOOL_CALL_HEAD
  *      LATERAL_MAX_HOPS the route refuses ("escalate instead of forwarding").
  *      Hop state expires (TTL) and is cleared when a genuine user/operator
  *      message reaches the session — an operator instruction resets the chain.
+ *      Messages between a session and its reporting parent (either direction,
+ *      e.g. a spawned reviewer replying to the session that asked for the
+ *      review) are NOT relay hops: they neither consume the budget nor tag the
+ *      receiver, so a session spawned by another always starts a fresh chain.
  *
  * There is deliberately NO per-sender send-rate cap: a coordinator may fan a
  * message out to as many distinct sessions as its task needs, and loop
@@ -77,7 +81,7 @@ export type SendVerdict =
 export interface SessionCommGuards {
   /** Check the hop budget for a sender and return the outbound hop count to
    *  stamp. There is no send-rate limit: any number of sends may pass. */
-  checkSendAllowed(callerId: string): SendVerdict;
+  checkSendAllowed(callerId: string, opts?: { parentSessionId?: string | null }): SendVerdict;
   /** Record that a lateral message with the given hop count reached a target. */
   recordDelivery(targetId: string, hops: number): void;
   /** Reset a session's relay chain (a genuine user/operator message arrived). */
@@ -123,16 +127,21 @@ export function createSessionCommGuards(
   }
 
   return {
-    checkSendAllowed(callerId: string): SendVerdict {
+    checkSendAllowed(callerId: string, opts?: { parentSessionId?: string | null }): SendVerdict {
       maybePrune();
       const hops = inboundHopOf(callerId) + 1;
       if (hops > maxHops) {
+        const parentRoute = opts?.parentSessionId
+          ? `send_to_session to your parent session ${opts.parentSessionId} (messages to or from a parent session do not count against the budget)`
+          : `send_to_session to your parent session, if you have one (messages to or from a parent session do not count against the budget)`;
         return {
           ok: false,
           status: 400,
           error:
             `hop budget exhausted: this message would be relay hop ${hops} of a lateral chain (max ${maxHops}). ` +
-            `Stop forwarding — escalate to your parent session or the operator with a summary instead.`,
+            `Stop forwarding — escalate instead. Routes that still work: ${parentRoute}; ` +
+            `a comment on the Todo you are working (comment_work_item), which does not use session messaging; ` +
+            `or report to the operator with a summary.`,
         };
       }
       return { ok: true, hops };
@@ -170,7 +179,7 @@ export function createSessionCommGuards(
 export const sessionCommGuards: SessionCommGuards = createSessionCommGuards();
 
 export type LateralSendPlan =
-  | { ok: true; prompt: string; displayMessage: string; hops: number; meta: AgentRelayMeta }
+  | { ok: true; prompt: string; displayMessage: string; hops: number; meta: AgentRelayMeta; parentLink: boolean }
   | { ok: false; status: 400; error: string };
 
 export interface AgentRelayMeta {
@@ -206,6 +215,12 @@ export function prepareLateralSend(opts: {
   targetSessionId: string;
   message: string;
   guards: SessionCommGuards;
+  /** The caller's reporting parent session, if any (named in a budget refusal). */
+  callerParentSessionId?: string | null;
+  /** The send runs between a session and its reporting parent (either way): it
+   *  is a reply or follow-up inside one request, not a relay, so it is exempt
+   *  from the hop budget and does not tag the receiver. */
+  parentLink?: boolean;
 }): LateralSendPlan {
   const { caller, targetSessionId, message, guards } = opts;
   if (caller.id === targetSessionId) {
@@ -215,7 +230,9 @@ export function prepareLateralSend(opts: {
       error: "cannot message your own session — write your conclusion in your reply instead.",
     };
   }
-  const verdict = guards.checkSendAllowed(caller.id);
+  const verdict: SendVerdict = opts.parentLink
+    ? { ok: true, hops: 1 }
+    : guards.checkSendAllowed(caller.id, { parentSessionId: opts.callerParentSessionId });
   if (!verdict.ok) return verdict;
 
   const senderLabel = caller.employee || caller.source || "session";
@@ -237,7 +254,7 @@ export function prepareLateralSend(opts: {
     maxHops: guards.maxHops(),
     fullMessage: message.slice(0, STRUCTURED_MESSAGE_BODY_MAX_CHARS),
   };
-  return { ok: true, prompt, displayMessage, hops: verdict.hops, meta };
+  return { ok: true, prompt, displayMessage, hops: verdict.hops, meta, parentLink: opts.parentLink === true };
 }
 
 /**

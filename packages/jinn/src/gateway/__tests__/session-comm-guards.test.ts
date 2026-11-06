@@ -205,6 +205,36 @@ describe("prepareLateralSend — the route-side transform", () => {
     expect(!out.ok && out.status === 400 && /hop budget/i.test(out.error)).toBe(true);
   });
 
+  it("a refusal at the cap names the routes that still work, including the parent session", () => {
+    const g = createSessionCommGuards(() => 0);
+    g.recordDelivery("s1", LATERAL_MAX_HOPS);
+    const out = prepareLateralSend({
+      caller: sess("s1"),
+      targetSessionId: "s2",
+      message: "m",
+      guards: g,
+      callerParentSessionId: "parent-9",
+    });
+    expect(!out.ok && out.error).toMatch(/comment on the Todo/i);
+    expect(!out.ok && out.error).toContain("parent-9");
+    expect(!out.ok && out.error).toMatch(/do not count against the budget/i);
+  });
+
+  it("a parent/child send ignores the cap and reports hop 1", () => {
+    const g = createSessionCommGuards(() => 0);
+    g.recordDelivery("s1", LATERAL_MAX_HOPS);
+    const out = prepareLateralSend({
+      caller: sess("s1"),
+      targetSessionId: "s2",
+      message: "verdict",
+      guards: g,
+      parentLink: true,
+    });
+    expect(out.ok && out.hops === 1 && out.parentLink).toBe(true);
+    // Not a relay: the plan carries no budget refusal and the banner stays clean.
+    expect(out.ok && out.displayMessage).not.toContain("[hop");
+  });
+
   it("a large fan-out from one sender to distinct targets is never refused", () => {
     const g = createSessionCommGuards(() => 0);
     for (let i = 0; i < 40; i++) {
