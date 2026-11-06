@@ -78,7 +78,7 @@ describe("the Todo page for a member", () => {
       const el = screen.queryByTestId(id)
       expect(el === null || el.closest("button") === null, id).toBe(true)
     }
-    for (const id of ["rail-dispatch", "rail-spend", "rail-labels-add", "rail-assignee-clear"]) expect(screen.queryByTestId(id), id).toBeNull()
+    for (const id of ["rail-dispatch", "rail-spend", "rail-labels", "rail-labels-add", "rail-assignee-clear"]) expect(screen.queryByTestId(id), id).toBeNull()
   })
 
   it("keeps a viewer read-only: no composer, no attach, no close, no sub-task add", async () => {
@@ -120,7 +120,7 @@ describe("the Todo page for a member", () => {
     principal = { kind: "operator" }
     setup(full("PLT-1", { createdBy: "operator" }))
     await screen.findByTestId("task-title")
-    for (const id of ["rail-status", "rail-assignee", "rail-dispatch", "rail-spend", "task-composer", "chip-status"]) {
+    for (const id of ["rail-status", "rail-assignee", "rail-dispatch", "rail-spend", "rail-labels", "task-composer", "chip-status"]) {
       await waitFor(() => expect(screen.getByTestId(id), id).toBeTruthy())
     }
     expect(screen.queryByTestId("task-mark-done")).toBeNull()

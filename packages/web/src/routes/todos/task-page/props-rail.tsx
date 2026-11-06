@@ -179,8 +179,8 @@ export function PropsRail({
         </div>
       )}
 
-      <RailKicker later>Labels</RailKicker>
-      <div className="relative">
+      {(operatorControls || labels.length > 0) && <RailKicker later>Labels</RailKicker>}
+      {(operatorControls || labels.length > 0) && <div className="relative">
         <div className="flex flex-wrap gap-1.5 pt-1" data-testid="rail-labels">
           {labels.map((label) => (
             <LabelChip key={label.id} label={label} />
@@ -198,7 +198,7 @@ export function PropsRail({
           )}
         </div>
         {labelsPick?.picker}
-      </div>
+      </div>}
 
       <RailKicker later>Details</RailKicker>
       <div className="relative">

@@ -166,13 +166,22 @@ function assertGatewayProfile(profileId: string): void {
  *  the operator's components run unchanged and nothing a member does reaches a general route. */
 export type RequestSource = (input: string, init: RequestInit) => Promise<Response>
 let requestSource: RequestSource | null = null
+let principalResolved = false
 export function setRequestSource(source: RequestSource | null): void {
   requestSource = source
+  // Installing a source, or clearing it, is how the app records who the gateway said this browser is.
+  principalResolved = true
 }
 /** True while a member's session is signed in: the one fact the few URL builders (an `<img src>`
  *  never goes through `authFetch`) need to pick the member route. */
 export function isMemberSession(): boolean {
   return requestSource !== null
+}
+
+/** Whether the gateway has said who this browser is yet. Router loaders run before the auth gate has
+ *  asked, so a loader that must treat a member differently from the operator reads this first. */
+export function isPrincipalResolved(): boolean {
+  return principalResolved
 }
 
 export async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {

@@ -1,6 +1,20 @@
 import { Navigate, redirect, useLocation, type LoaderFunctionArgs } from "react-router-dom"
 import { TODOS_TAB_HREF } from "@/lib/todos-tab-entry"
+import { getAuthState, isMemberSession, isPrincipalResolved } from "@/lib/auth"
 import { boardPath, parseBoardParam, type BoardId } from "./board-route"
+
+/** Whether the person arriving is a board member. Their boards are not a tab of the chat page (they have no
+ *  chat), so these loaders leave them where they are. Known at once after sign-in; on a cold load the gateway is
+ *  asked, which the auth gate does next anyway. Any failure counts as the operator's path, as before. */
+async function arrivingAsMember(): Promise<boolean> {
+  if (isMemberSession()) return true
+  if (isPrincipalResolved()) return false
+  try {
+    return (await getAuthState()).principal?.kind === "member"
+  } catch {
+    return false
+  }
+}
 
 /** The board a legacy /todos URL means, and the query string its filters ride on.
  *  Old deep links keep meaning what they meant: the needs-you lens maps to the
@@ -41,7 +55,8 @@ async function intoTodosTab(seed: { board: BoardId; search: string } | null) {
  *  every chat → todos tap (and a view transition animates to that empty frame,
  *  stretching the flash to its full duration). A loader redirect produces one
  *  commit: old page → the chat route with the Todos tab open. */
-export function todosIndexLoader({ request }: LoaderFunctionArgs) {
+export async function todosIndexLoader({ request }: LoaderFunctionArgs) {
+  if (await arrivingAsMember()) return null
   const query = new URL(request.url).search
   // A bare address names no board and no filter, so it must not undo the board the tab was last left on.
   return intoTodosTab(query.replace(/^\?/, "") ? legacyTodosBoard(query) : null)
@@ -49,7 +64,8 @@ export function todosIndexLoader({ request }: LoaderFunctionArgs) {
 
 /** Router-level redirect for /todos/b/:board: the board is the Todos tab now, so a link to one (a bookmark,
  *  a department's board address) opens the tab on that board with the link's filters. A bare /todos or /kanban opens the tab where it was left. */
-export function todosBoardLoader({ params, request }: LoaderFunctionArgs) {
+export async function todosBoardLoader({ params, request }: LoaderFunctionArgs) {
+  if (await arrivingAsMember()) return null
   return intoTodosTab({ board: parseBoardParam(params.board), search: new URL(request.url).search })
 }
 

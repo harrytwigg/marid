@@ -54,6 +54,13 @@ describe("member request source", () => {
     ])
   })
 
+  it("answers the session list with none, and the session tree with an empty tree the page can read", async () => {
+    expect(await (await source("/api/work-items/A-1/sessions", { method: "GET" })).json()).toEqual([])
+    const tree = (await (await source("/api/work-items/A-1/sessions?tree=1", { method: "GET" })).json()) as { roots: unknown[]; directory: object; totals: { nodes: number } }
+    expect(tree).toMatchObject({ roots: [], directory: {}, totals: { nodes: 0 } })
+    expect(request).not.toHaveBeenCalled()
+  })
+
   it("fetches each tree of a batch from the member tree route", async () => {
     request.mockImplementation(async (path: string) => ok({ tree: { root: { id: path } } }))
     const res = await source("/api/work-items/trees?ids=A-1,A-2", { method: "GET" })

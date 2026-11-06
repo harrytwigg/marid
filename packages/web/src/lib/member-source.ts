@@ -59,6 +59,8 @@ function query(path: string): URLSearchParams {
   return new URLSearchParams(at < 0 ? "" : path.slice(at + 1))
 }
 
+const EMPTY_SESSION_TREE = { roots: [], directory: {}, truncated: { depth: false, count: false }, totals: { nodes: 0, live: 0 } }
+
 const EMPTY_LIST = { workItems: [], total: 0, nextOffset: null, totals: {} }
 
 interface BoardRow { department: string; role?: string; prefix?: string; displayName?: string }
@@ -113,7 +115,6 @@ const STUBS: Record<string, Stub> = {
 
 async function stubFor(path: string): Promise<Response | null> {
   const bare = path.split("?")[0]
-  if (SESSIONS.test(path)) return json([])
   const stub = bare.startsWith("/api/sprints/") ? STUBS["/api/sprints"] : STUBS[bare]
   return stub ? stub(path) : null
 }
@@ -193,7 +194,8 @@ const RULES: Rule[] = [
     verbs: ["PUT"],
     handle: (m, _p, init) => forward(mine(m[1]), init, { method: "PATCH", body: { labels: readBody(init).labels } }),
   },
-  { pattern: SESSIONS, verbs: ["GET"], handle: () => json([]) },
+  // The Todo page asks for the session list, and for the session tree with `?tree=1`: a member has no sessions in either.
+  { pattern: SESSIONS, verbs: ["GET"], handle: (_m, path) => json(query(path).has("tree") ? EMPTY_SESSION_TREE : []) },
   { pattern: ONE, verbs: ["GET", "PATCH"], handle: (m, _p, init) => forward(mine(m[1]), init) },
 ]
 

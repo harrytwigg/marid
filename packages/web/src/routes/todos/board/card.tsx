@@ -10,6 +10,7 @@ import { CardTree } from "./card-tree"
 import { hasStopLead, StopCauseLead, stopLeadKey } from "./stop-cause"
 import { KeepToggle } from "./keep-control"
 import { MoveToMenu } from "./move-menu"
+import { useMember } from "@/hooks/use-principal"
 
 /* The board card, Variant A: four rows, the same four on every card.
  * ID + assignee, status glyph + title, priority + labels + roll-up, cost + due.
@@ -132,6 +133,7 @@ export const BoardCard = memo(function BoardCard({
   const rollup = useMemo(() => rollupOf(tree, item.status), [tree, item.status])
   const priority = tree?.root.priority ?? detail?.workItem.priority ?? 2
   const spendUsd = tree?.spendUsd ?? 0
+  const member = useMember() !== null
   const employee = item.assignee ? byName.get(item.assignee) : undefined
   const assigneeName = employee?.displayName ?? item.assignee
   const overdue = !!item.dueAt && Date.parse(item.dueAt) < Date.now()
@@ -252,10 +254,11 @@ export const BoardCard = memo(function BoardCard({
 
       {/* Row 4 — what it has cost, and when it is due. The cost renders at $0.00
        *  too: a row that only some cards have is a row that changes heights. */}
-      <div className="flex items-center gap-2 text-[calc(11px*var(--text-scale))]">
-        <span className="tabular-nums text-[var(--text-quaternary)]" style={{ fontFamily: "var(--font-code)" }}>
+      {/* A member does not see what a Todo has cost, so for them the row exists only when it has a date to show. */}
+      {(!member || startsLater || item.dueAt) && <div className="flex items-center gap-2 text-[calc(11px*var(--text-scale))]">
+        {!member && <span className="tabular-nums text-[var(--text-quaternary)]" style={{ fontFamily: "var(--font-code)" }}>
           ${spendUsd.toFixed(2)}
-        </span>
+        </span>}
         {startsLater && (
           <span data-testid="card-starts" className="ml-auto text-[var(--text-tertiary)]" title="Not started before this date">
             Starts {formatDue(item.startAt!)}
@@ -266,7 +269,7 @@ export const BoardCard = memo(function BoardCard({
             {startsLater ? "· due " : ""}{formatDue(item.dueAt)}
           </span>
         )}
-      </div>
+      </div>}
 
       {/* In-place tree tray. */}
       {expanded && tree && (

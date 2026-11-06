@@ -78,6 +78,8 @@ describe("the board for a member", () => {
     expect(screen.queryByTestId("department-board-menu")).toBeNull()
     expect(screen.queryByTestId("tree-add-subtask")).toBeNull()
     expect(screen.queryByTestId("keep-toggle-PLT-1")).toBeNull()
+    // What a Todo has cost is the operator's to see.
+    expect(screen.getByTestId("board-card-PLT-1").textContent).not.toMatch(/\$\d/)
     // The backlog column's own add affordance and the filter row are the operator's too.
     expect(screen.queryByTestId("board-quick-add-backlog")).toBeNull()
     expect(screen.queryByTestId("todos-filters")).toBeNull()
@@ -114,6 +116,7 @@ describe("the board for a member", () => {
     expect(screen.getByTestId("board-share").textContent).toBe("operator:")
     // The control the viewer test asserts absent is really there for the operator, so that absence is not a stale test id.
     expect(screen.getByTestId("todos-filters")).toBeTruthy()
+    expect(screen.getByTestId("board-card-PLT-1").textContent).toMatch(/\$0\.00/)
     expect(screen.getByTestId("board-quick-add-backlog")).toBeTruthy()
   })
 })
