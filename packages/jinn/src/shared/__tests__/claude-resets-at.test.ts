@@ -50,6 +50,8 @@ afterAll(() => {
 
 beforeEach(() => {
   for (const file of fs.readdirSync(CLAUDE_DIR)) fs.rmSync(path.join(CLAUDE_DIR, file));
+  const limitsDir = path.dirname(CLAUDE_DIR);
+  for (const file of fs.readdirSync(limitsDir)) if (file.startsWith("claude-five-hour-absent.")) fs.rmSync(path.join(limitsDir, file));
   delete process.env.JINN_CLAUDE_USAGE_API;
   readClaudeOAuthToken.mockReset();
   readClaudeOAuthToken.mockResolvedValue("oauth-token");
@@ -139,7 +141,15 @@ describe("claudeResetsAtSeconds", () => {
       expect(await claudeResetsAtSeconds(NOW_MS)).toBe(FUTURE);
     });
 
-    it("keeps the reset when the weekly-only snapshot is older than five hours", async () => {
+    it("gives no reset once the account is known to have no five-hour limit, however long it has been idle", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => zeroSessionResponse()));
+      writeAccountSnapshot(weeklyOnly, 10 * 60_000);
+      expect(await claudeResetsAtSeconds(NOW_MS)).toBeUndefined();
+      writeAccountSnapshot(weeklyOnly, 30 * 60 * 60_000);
+      expect(await claudeResetsAtSeconds(NOW_MS)).toBeUndefined();
+    });
+
+    it("keeps the reset when the weekly-only snapshot is older than five hours and nothing was established", async () => {
       vi.stubGlobal("fetch", vi.fn(async () => zeroSessionResponse()));
       writeAccountSnapshot(weeklyOnly, 6 * 60 * 60_000);
       expect(await claudeResetsAtSeconds(NOW_MS)).toBe(FUTURE);

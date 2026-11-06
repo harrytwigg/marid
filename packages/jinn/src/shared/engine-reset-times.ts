@@ -16,7 +16,7 @@ import { windowFromCodexRollout } from "./engine-limits.js";
 import { claudeAccountKey } from "./engine-account.js";
 import type { ClaudeProfile } from "./claude-profile.js";
 import { lastAccountReading } from "./account-readings.js";
-import { withoutAbsentFiveHour } from "./engine-limits-claude-usage.js";
+import { settleFiveHourAbsence, withoutZeroFiveHour } from "./claude-five-hour-absence.js";
 import {
   claudeSnapshotFile,
   claudeStatuslineEvidence,
@@ -80,13 +80,15 @@ export async function claudeResetsAtSeconds(nowMs: number = Date.now(), source: 
 
 /** The live usage API's five-hour reset for the profile's account, if it answers.
  *  A five-hour bucket the account does not have is no reset: the Limits page
- *  leaves it out, and so does the backoff (`withoutAbsentFiveHour`). */
+ *  leaves it out, and so does the backoff (`settleFiveHourAbsence`). */
 async function liveSessionResetsAt(profile: ClaudeProfile, nowMs: number): Promise<number | undefined> {
   try {
     const usage = await fetchClaudeOAuthUsage(process.env, profile);
-    const windows = usage ? windowsFromClaudeUsage(usage) : [];
-    const evidence = claudeStatuslineEvidence(claudeAccountKey(profile));
-    return withoutAbsentFiveHour(windows, evidence, nowMs).find((window) => window.name === "5h")?.resetsAt;
+    const usageWindows = usage ? windowsFromClaudeUsage(usage) : [];
+    const account = claudeAccountKey(profile);
+    const statusline = claudeStatuslineEvidence(account);
+    const windows = settleFiveHourAbsence(account, { statusline, usageWindows, nowMs }) ? withoutZeroFiveHour(usageWindows) : usageWindows;
+    return windows.find((window) => window.name === "5h")?.resetsAt;
   } catch {
     // The usage API is one of two sources; the on-disk snapshot is the other.
     return undefined;

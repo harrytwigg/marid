@@ -117,6 +117,9 @@ afterAll(() => {
 
 beforeEach(() => {
   for (const f of fs.readdirSync(CLAUDE_DIR)) fs.rmSync(path.join(CLAUDE_DIR, f));
+  // The stored "no five-hour limit" finding is per account and outlives a test.
+  const limitsDir = path.dirname(CLAUDE_DIR);
+  for (const f of fs.readdirSync(limitsDir)) if (f.startsWith("claude-five-hour-absent.")) fs.rmSync(path.join(limitsDir, f));
   invalidateModelRegistry();
 });
 
@@ -192,6 +195,32 @@ describe("collectEngineLimits — claude five-hour window the plan does not have
     const claude = await claudeSnapshot();
     expect(claude.source).toBe("claude oauth usage api");
     expect(claude.windows?.map((w) => [w.name, w.usedPercent])).toEqual([["5h", 0], ["7d", 37]]);
+  });
+
+  it("keeps the 5h window off after the account sits idle for more than five hours", async () => {
+    stubUsageApi(sessionAtUsagePayload(0));
+    writeWeeklyOnlyStatusline(37);
+    expect((await claudeSnapshot()).windows?.map((w) => w.name)).toEqual(["7d"]);
+
+    // No snapshot written since: the one that proved it is now hours old, then gone.
+    writeWeeklyOnlyStatusline(37, undefined, 9 * 60 * 60_000);
+    expect((await claudeSnapshot()).windows?.map((w) => w.name)).toEqual(["7d"]);
+    fs.rmSync(path.join(CLAUDE_DIR, "session.json"));
+    const claude = await claudeSnapshot();
+    expect(claude.source).toBe("claude oauth usage api");
+    expect(claude.windows?.map((w) => w.name)).toEqual(["7d"]);
+  });
+
+  it("brings the 5h window back once a snapshot carries five_hour", async () => {
+    stubUsageApi(sessionAtUsagePayload(0));
+    writeWeeklyOnlyStatusline(37);
+    expect((await claudeSnapshot()).windows?.map((w) => w.name)).toEqual(["7d"]);
+
+    writeStatusline(0, 37);
+    expect((await claudeSnapshot()).windows?.map((w) => [w.name, w.usedPercent])).toEqual([["5h", 0], ["7d", 37]]);
+    // And it stays back with no snapshot at all: the finding was cleared, not hidden.
+    fs.rmSync(path.join(CLAUDE_DIR, "session.json"));
+    expect((await claudeSnapshot()).windows?.map((w) => w.name)).toEqual(["5h", "7d"]);
   });
 
   it("does not trust a weekly-only snapshot older than five hours to hide a 0% five-hour window", async () => {

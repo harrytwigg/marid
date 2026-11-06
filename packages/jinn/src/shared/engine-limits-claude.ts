@@ -20,11 +20,12 @@ import { claudeProfileDirExists, type ClaudeProfile } from "./claude-profile.js"
 import { buildEngineChildEnv } from "./child-env.js";
 import { readClaudeOAuthToken } from "./claude-models.js";
 import { resolveBin } from "./resolve-bin.js";
+import { windowsFromClaudeUsage } from "./engine-limits-claude-usage.js";
 import {
-  windowsFromClaudeUsage,
-  withoutAbsentFiveHour,
+  settleFiveHourAbsence,
+  withoutZeroFiveHour,
   type ClaudeStatuslineEvidence,
-} from "./engine-limits-claude-usage.js";
+} from "./claude-five-hour-absence.js";
 export { windowsFromClaudeUsage } from "./engine-limits-claude-usage.js";
 import {
   baseSnapshot,
@@ -255,7 +256,7 @@ function claudeFromStatusline(
 }
 
 /** The account's latest statusline reading, for callers that check the usage
- *  API's windows against it (`withoutAbsentFiveHour`). */
+ *  API's windows against it (`settleFiveHourAbsence`). */
 export function claudeStatuslineEvidence(account: string): ClaudeStatuslineEvidence | null {
   const file = claudeSnapshotFile(CLAUDE_LIMITS_DIR, account);
   return file ? readClaudeStatusline(file) : null;
@@ -276,7 +277,9 @@ export async function collectClaudeLimits(config: JinnConfig, profile: ClaudePro
     fetchClaudeOAuthUsage(process.env, profile),
   ]);
   const statusline = latest ? readClaudeStatusline(latest) : null;
-  const liveWindows = withoutAbsentFiveHour(oauthUsage ? windowsFromClaudeUsage(oauthUsage) : [], statusline, Date.now());
+  const usageWindows = oauthUsage ? windowsFromClaudeUsage(oauthUsage) : [];
+  const noFiveHour = settleFiveHourAbsence(account, { statusline, usageWindows, accountPlan, nowMs: Date.now() });
+  const liveWindows = noFiveHour ? withoutZeroFiveHour(usageWindows) : usageWindows;
 
   // Live path: the OAuth usage API carries every bucket (including per-model
   // ones like the Fable weekly bucket) that the statusline payload never sees.
