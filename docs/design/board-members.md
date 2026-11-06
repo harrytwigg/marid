@@ -416,6 +416,8 @@ Settled while building the web against this contract; the gateway answers exactl
   each level, `workItem.budgetUsd`) and every session or run field is removed.
   Members never see spend.
 - Actors on member reads and member socket frames are only ever an employee name, a
-  `user:<id>` on the member's boards, `operator`, or a generic `agent` / `system` with no
-  identifier. `session:<uuid>`, `plugin:<id>`, cron and other internal ids are never sent to a
+  `user:<id>` of someone currently on one of the member's boards, `operator`, or a generic
+  `agent` / `system` / `member` with no identifier (`member` stands for any other person; the
+  web renders it "Former member"). A Todo's `created` event actor is its creator from
+  `created_by` (through the same mapping), never the event's raw source token. `session:<uuid>`, `plugin:<id>`, cron and other internal ids are never sent to a
   member. Error messages to members never enumerate company data (labels, boards, people).
