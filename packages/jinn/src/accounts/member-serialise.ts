@@ -63,6 +63,20 @@ export class Viewer {
     return answer;
   }
 
+  /** Whether the reader had creator access to a root as it stood before a reparent took `itemId` out from under it (`itemId` itself when it was the root). */
+  hadCreatorAccess(oldRootId: string, itemId: string): boolean {
+    return creatorAccess(this.db, this.userId, oldRootId, { asRoot: oldRootId === itemId }) !== undefined;
+  }
+
+  /** Whether the Todo's latest status move is the one that closed it (open to done or cancelled): the write that ended a creator's access to it. */
+  justClosed(todoId: string): boolean {
+    const last = this.db.prepare(
+      "SELECT from_status AS fromStatus, to_status AS toStatus FROM work_item_events WHERE work_item_id = ? AND kind = 'status_change' ORDER BY rowid DESC LIMIT 1",
+    ).get(todoId) as { fromStatus: string | null; toStatus: string | null } | undefined;
+    const closed = (status: string | null | undefined) => status === "done" || status === "cancelled";
+    return !!last && closed(last.toStatus) && !closed(last.fromStatus);
+  }
+
   /** Whether a root is open and was created by the reader on a board they still hold, so its tree stays readable to them after it leaves that board. */
   readsAsCreator(rootId: string): boolean {
     return this.creatorAccessOf(rootId) !== null;

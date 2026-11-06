@@ -384,6 +384,62 @@ describe("live frames", () => {
     }
   });
 
+  it("a later board change on a Todo they have lost sends nothing: not after a removal from the board, not after a close, not after a second reparent", async () => {
+    const framesFor = (socket: FakeSocket, id: string) => socket.frames.filter((f) => f.payload.id === id).map((f) => f.payload);
+    const movePatch = async (id: string, department: string) =>
+      (await h.operator("PATCH", `/api/work-items/${id}`, { department, expectedVersion: store.getWorkItem(id)!.version })).status;
+
+    // (a) removed from the creation board while holding another; the root is still on the board they lost.
+    const a = await patRoot();
+    h.db.prepare("INSERT INTO board_members (user_id, department, role, granted_by, granted_at) VALUES (?, 'platform', 'viewer', 'operator', ?)")
+      .run(pat.userId, new Date().toISOString());
+    h.db.prepare("DELETE FROM board_members WHERE user_id = ? AND department = 'design'").run(pat.userId);
+    const socket = connect(pat);
+    try {
+      socket.frames.length = 0;
+      await assign(a.root, "alice");
+      expect(await movePatch(a.root, "design")).toBe(200);
+      await movePatch(a.root, "ops");
+      expect(framesFor(socket, a.root)).toEqual([]);
+    } finally {
+      h.db.prepare("DELETE FROM board_members WHERE user_id = ? AND department = 'platform'").run(pat.userId);
+      h.db.prepare("INSERT OR IGNORE INTO board_members (user_id, department, role, granted_by, granted_at) VALUES (?, 'design', 'collaborator', 'operator', ?)")
+        .run(pat.userId, new Date().toISOString());
+    }
+
+    // (b) closed: one removal for the close, none for a department change afterwards.
+    const b = await patRoot();
+    await assign(b.root, "@operator");
+    for (const id of [b.theirs, b.mine]) transition(id, "done", "operator", { cascade: true, manual: true } as never);
+    socket.frames.length = 0;
+    transition(b.root, "done", "operator", { cascade: true, manual: true } as never);
+    expect(framesFor(socket, b.root)).toEqual([{ entity: "todo", action: "removed", id: b.root }]);
+    socket.frames.length = 0;
+    expect(await movePatch(b.root, "ops")).toBe(200);
+    expect(await movePatch(b.root, "platform")).toBe(200);
+    expect(framesFor(socket, b.root)).toEqual([]);
+
+    // (c) a sub-task of theirs reparented out from under a tree they could read: one removal; reparenting it again, none.
+    const c = await patRoot();
+    await assign(c.root, "alice");
+    const x = store.createWorkItem({ title: "operator tree X", department: "platform" }).id;
+    const y = store.createWorkItem({ title: "operator tree Y", department: "platform" }).id;
+    socket.frames.length = 0;
+    expect((await h.operator("PUT", `/api/work-items/${c.mine}/parent`, { parentId: x })).status).toBe(200);
+    expect(framesFor(socket, c.mine)).toEqual([{ entity: "todo", action: "removed", id: c.mine }]);
+    socket.frames.length = 0;
+    expect((await h.operator("PUT", `/api/work-items/${c.mine}/parent`, { parentId: y })).status).toBe(200);
+    expect(framesFor(socket, c.mine)).toEqual([]);
+
+    // (d) a root of theirs put under another tree is one removal too, as it stood when it was a root.
+    const d = await patRoot();
+    await assign(d.root, "alice");
+    socket.frames.length = 0;
+    expect((await h.operator("PUT", `/api/work-items/${d.root}/parent`, { parentId: x })).status).toBe(200);
+    expect(framesFor(socket, d.root)).toEqual([{ entity: "todo", action: "removed", id: d.root }]);
+    h.rt.memberSockets.remove(socket);
+  });
+
   it("a member removed from the board they filed it on hears nothing of the work done on it afterwards", async () => {
     const t = await patRoot();
     await assign(t.root, "alice");

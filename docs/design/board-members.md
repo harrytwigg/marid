@@ -308,7 +308,7 @@ its user session id, and the broadcast sends it a **re-serialised** frame, never
   their boards and they keep reading it; sub-tasks included). When it was on a granted board
   before and is not readable after (moved or deleted), the member gets `{ entity: "todo",
   action: "removed", id }` so the card disappears; so does a Todo they created on the write that closes it
-  or moves it off their boards (a department change, an assignment that derives one, a reparent); later writes on it send nothing. The emitter supplies the before-department where a write changes it. A move of the
+  or reparents it out from under a tree they could read; a department change or assignment never ends creator access, and later writes on it send nothing. The emitter supplies the before-department where a write changes it. A move of the
   root is sent to its creator as an ordinary change (the value is marked `movedToAnotherBoard`);
   a sub-task gets no frame of its own for that move, so the web refetches the tree on the
   root's frame.
@@ -479,7 +479,7 @@ Where the build had to pick a reading, or the contract was silent, it did this:
   holds a grant there, in which case it is an ordinary Todo on that board. Edits, status changes and sub-tasks under it
   answer `403 todo_not_member_editable` where the route reaches it (a sub-task route for another board answers `404`).
   `GET /api/member/boards/:department/moved` lists the roots filed on that board (compact rows, newest first, at most 200, `404`
-  for a board they do not hold). The employee list covers their trees too. Frames: a Todo they made sends `removed` (id only) on the write that closes it or moves it off their boards, and nothing after.
+  for a board they do not hold). The employee list covers their trees too. Frames: a Todo they made sends `removed` (id only) only on the write that took it out of their reach: the one that closed it, or a reparent out from under a tree they could read (the reparent event carries `fromRootId`). A department change or an assignment never ends creator access, and every later write on a lost Todo is silent.
 - **The outward `member` kind** is derived for comments (web wire, MCP tools, board walk, Talk, reply prompts). A Todo,
   event or attachment names its member by the raw `user:<id>` on `createdBy`, `actor` or `uploadedBy`, which no reader
   mistakes for the operator; `get_work_item` adds a `members` map from those identities to names.

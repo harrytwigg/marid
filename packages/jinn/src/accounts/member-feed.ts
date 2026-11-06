@@ -27,6 +27,8 @@ export interface TodoChange {
   id: string;
   hadValue: boolean;
   before: string | null | undefined;
+  /** For a reparent: the root the Todo was under before it. */
+  fromRootId: string | undefined;
   item: WorkItem | undefined;
   after: string | null;
 }
@@ -39,7 +41,8 @@ export function readTodoChange(event: string, payload: unknown): TodoChange | un
   const item = getWorkItem(record.id);
   return {
     action: record.action, id: record.id, hadValue: record.value !== undefined && record.value !== null,
-    before: departmentLeft(record.fromDepartment), item, after: item ? boardOfTodo(item) : null,
+    before: departmentLeft(record.fromDepartment), fromRootId: typeof record.fromRootId === "string" ? record.fromRootId : undefined,
+    item, after: item ? boardOfTodo(item) : null,
   };
 }
 
@@ -53,7 +56,7 @@ function departmentLeft(value: unknown): string | null | undefined {
  *
  * It passes when the Todo is on one of their boards now, or sits in an open tree whose root they created (it left their
  * boards but they keep reading it), sub-tasks included. A Todo that was on one of their boards and is not readable now gets
- * `removed`; so does a Todo they created on the write that closes it or moves it off their boards, which names only an id they made.
+ * `removed`; so does a Todo they created on the one write that closes it or reparents it out from under a tree they could read, which names only an id they made.
  */
 export function memberFrameFor(change: TodoChange, boards: ReadonlySet<string>, viewer: Viewer): MemberFrame | undefined {
   const onAfter = change.after !== null && boards.has(change.after);
@@ -73,15 +76,16 @@ function changeFrame(change: TodoChange, item: WorkItem, viewer: Viewer): Member
 }
 
 /**
- * Whether a Todo the member can no longer read is one their card must be dropped for: it was on their board, or they created it and
- * this is the write that took it out of their reach (it closed, or it changed board: a department change, an assignment that
- * derives one, a reparent). The id is one they made, so naming it tells them nothing; every later change to it stays silent, so a
- * member who lost a Todo learns nothing of the work done on it afterwards.
+ * Whether a Todo the member can no longer read is one their card must be dropped for: it was on their board, or they created it
+ * and could read it immediately before this write, which this write took away. Two writes do that: one that closed it (the
+ * status it last moved through went from open to done or cancelled), and a reparent out from under a root that gave them creator
+ * access. A department change or an assignment never ends creator access, so it never sends one; and once access has ended every
+ * later write on the Todo is silent. The id is one they made, so naming it tells them nothing.
  */
 function mustRemove(change: TodoChange, boards: ReadonlySet<string>, viewer: Viewer): boolean {
   if (typeof change.before === "string" && boards.has(change.before)) return true;
   const { item } = change;
   if (!item || item.createdBy !== memberIdentity(viewer.userId)) return false;
-  const closed = (item.status === "done" || item.status === "cancelled") && /status/.test(change.action);
-  return closed || change.before !== undefined;
+  if (change.action === "reparented") return change.fromRootId !== undefined && viewer.hadCreatorAccess(change.fromRootId, item.id);
+  return /status/.test(change.action) && viewer.justClosed(item.id);
 }

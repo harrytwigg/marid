@@ -786,12 +786,12 @@ function unarchivedDepartment(department: string | null | undefined): string | n
  * always rewrite the Todo row itself, but the web surfaces still need a change
  * signal to refetch live. One valueless event per affected item; the client
  * responds by invalidating that item's cached projections. */
-export function emitTodoProjectionEvent(context: ApiContext, id: string, action: string, fromDepartment?: string | null): void {
+export function emitTodoProjectionEvent(context: ApiContext, id: string, action: string, fromDepartment?: string | null, fromRootId?: string): void {
   const item = getWorkItem(id);
   if (!item) return;
   persistAndEmitActivityBlock({
     context: chatActivityContext(context),
-    companyEvent: { entity: "todo", action, id, version: item.version, ...(fromDepartment !== undefined ? { fromDepartment } : {}) },
+    companyEvent: { entity: "todo", action, id, version: item.version, ...(fromDepartment !== undefined ? { fromDepartment } : {}), ...(fromRootId !== undefined ? { fromRootId } : {}) },
   });
 }
 
@@ -3285,7 +3285,7 @@ export async function handleApiRequest(
     // PUT /api/work-items/:id/parent — make a Todo a sub-task of another, or detach it to a root.
     if (await handleReparentApi(req, res, { method, pathname, url }, {
       resolveCaller: () => resolveWorkItemCaller(req, res, context),
-      emitProjection: (id, fromDepartment) => emitTodoProjectionEvent(context, id, "reparented", fromDepartment),
+      emitProjection: (id, fromDepartment, fromRootId) => emitTodoProjectionEvent(context, id, "reparented", fromDepartment, fromRootId),
     })) return;
 
     // PUT /api/work-items/:id/labels — `labels` replaces the whole set, `add`/`remove`

@@ -177,7 +177,7 @@ export const BoardCard = memo(function BoardCard({
        *  left. */}
       <div className="flex h-3.5 items-center gap-2">
         <span
-          className="leading-none tracking-[.04em] text-[calc(11px*var(--text-scale))] text-[var(--text-tertiary)]"
+          className="flex-none whitespace-nowrap leading-none tracking-[.04em] text-[calc(11px*var(--text-scale))] text-[var(--text-tertiary)]"
           style={{ fontFamily: "var(--font-code)" }}
         >
           {item.id}
@@ -194,7 +194,7 @@ export const BoardCard = memo(function BoardCard({
               className="opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
             />
           )}
-          {item.movedToAnotherBoard && <MovedLabel testId={`board-moved-${item.id}`} />}
+          {item.movedToAnotherBoard && <MovedLabel testId={`board-moved-${item.id}`} className="min-w-0 truncate" />}
           {/* A member's Todo is unassigned, so the slot is free for who made it. */}
           {!item.assignee && item.createdBy && isMemberIdentity(item.createdBy, viewer) && (
             <MemberChip identity={item.createdBy} size={20} className="max-w-[140px] text-[calc(11px*var(--text-scale))] text-[var(--text-tertiary)]" />

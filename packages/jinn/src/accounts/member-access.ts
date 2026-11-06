@@ -41,16 +41,23 @@ function createdOnBoard(db: DatabaseType, rootId: string): string | undefined {
  * active, the root is theirs (`created_by = user:<id>`) and not done or cancelled, and they STILL hold the board it was
  * created on. Removing them from that board therefore ends it, and the role they keep there (collaborator or owner) is the one
  * that lets them comment: taking a board away never widens what they may do. A root with no recorded board grants nothing.
+ * `asRoot` asks it of a Todo that has since been moved under another tree, as it stood when it was still a root.
  */
-export function creatorAccess(db: DatabaseType, userId: string, rootId: string): { canComment: boolean; board: string } | undefined {
-  const root = db.prepare("SELECT parent_id, created_by, status FROM work_items WHERE id = ?").get(rootId) as
-    { parent_id: string | null; created_by: string; status: string } | undefined;
-  if (!root || root.parent_id !== null || root.created_by !== memberIdentity(userId) || CLOSED_ROOT.has(root.status)) return undefined;
+export function creatorAccess(db: DatabaseType, userId: string, rootId: string, opts: { asRoot?: boolean } = {}): { canComment: boolean; board: string } | undefined {
+  if (!isOpenRootOf(db, userId, rootId, opts.asRoot === true)) return undefined;
   if (getUserById(db, userId)?.status !== "active") return undefined;
   const board = createdOnBoard(db, rootId);
   const grant = board ? getGrant(db, userId, board) : undefined;
   if (!board || !grant) return undefined;
   return { canComment: roleAtLeast(grant.role, "collaborator"), board };
+}
+
+/** Whether the Todo is open and was created by this user, and is a root (or, `asRoot`, was one before it was moved under another tree). */
+function isOpenRootOf(db: DatabaseType, userId: string, rootId: string, asRoot: boolean): boolean {
+  const root = db.prepare("SELECT parent_id, created_by, status FROM work_items WHERE id = ?").get(rootId) as
+    { parent_id: string | null; created_by: string; status: string } | undefined;
+  if (!root || root.created_by !== memberIdentity(userId) || CLOSED_ROOT.has(root.status)) return false;
+  return root.parent_id === null || asRoot;
 }
 
 /**
