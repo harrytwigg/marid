@@ -5,7 +5,7 @@
 
 import type { WorkItemTreeNodeWire } from "./api"
 import type { BoardRole } from "./accounts-api"
-import { memberIdOf } from "./accounts-api"
+import { GENERIC_MEMBER, memberIdOf } from "./accounts-api"
 
 export interface TodoCapabilities {
   /** True when this is a board member's session; every flag below is then the member's own. */
@@ -40,7 +40,7 @@ export const OPERATOR_CAPABILITIES: TodoCapabilities = {
 export function isMemberOnlyTree(root: WorkItemTreeNodeWire | undefined): boolean {
   if (!root) return false
   const only = (node: WorkItemTreeNodeWire): boolean =>
-    memberIdOf(node.createdBy) !== null
+    (memberIdOf(node.createdBy) !== null || node.createdBy === GENERIC_MEMBER)
     && !node.assignee
     && (node.status === "backlog" || node.status === "done")
     && (node.children ?? []).every(only)

@@ -282,6 +282,10 @@ export function describeWait(seconds: number): string {
 const USER_PREFIX = "user:"
 
 /** `user:<id>` is how a member is stamped on a Todo, comment or event. */
+/** The generic actor a member's reads carry for a person who is no longer on any of their boards; the web reads it as
+ *  "Former member". It names nobody, so nothing looks it up. */
+export const GENERIC_MEMBER = "member"
+
 export function memberIdOf(identity: string | null | undefined): string | null {
   return identity?.startsWith(USER_PREFIX) ? identity.slice(USER_PREFIX.length) : null
 }

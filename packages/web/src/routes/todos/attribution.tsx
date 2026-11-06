@@ -1,11 +1,11 @@
 import type { ReactNode } from "react"
 import type { Employee, WorkItemCommentWire, WorkItemEventWire } from "@/lib/api"
-import { memberIdOf } from "@/lib/accounts-api"
+import { GENERIC_MEMBER, memberIdOf } from "@/lib/accounts-api"
 import { commentAuthorLabel } from "@/lib/todos"
 import { useMember } from "@/hooks/use-principal"
 import { EmployeeAvatar, OPERATOR_DEFAULT_EMOJI } from "@/components/ui/employee-avatar"
 import { HumanAvatar } from "@/components/ui/human-avatar"
-import { identityLabel, useResolvedIdentity } from "@/hooks/use-people-directory"
+import { FORMER_MEMBER, identityLabel, useResolvedIdentity } from "@/hooks/use-people-directory"
 import { displayNameOf, memberActorWord, type Viewer } from "./util"
 import { SessionActor } from "./task-page/session-ref"
 
@@ -20,8 +20,9 @@ export function useViewer(): Viewer {
   return useMember() ? "member" : "operator"
 }
 
+/** A person: `user:<id>`, or the generic `member` that stands for one no longer on the reader's boards. */
 export function isMemberIdentity(identity: string | null | undefined): boolean {
-  return memberIdOf(identity) !== null
+  return memberIdOf(identity) !== null || identity === GENERIC_MEMBER
 }
 
 export function isMemberComment(comment: Pick<WorkItemCommentWire, "authorKind" | "author">): boolean {
@@ -31,6 +32,12 @@ export function isMemberComment(comment: Pick<WorkItemCommentWire, "authorKind" 
 /** The person's badge. While the directory has not answered it is an empty badge of the same size:
  *  a guess would flash a wrong name, and the layout should not move when the answer lands. */
 export function MemberAvatar({ identity, size = 18 }: { identity: string; size?: number }) {
+  // The generic `member` names nobody: it is a former member outright, and the directory is never asked about it.
+  if (identity === GENERIC_MEMBER) return <HumanAvatar name={FORMER_MEMBER} initials="?" size={size} />
+  return <ResolvedMemberAvatar identity={identity} size={size} />
+}
+
+function ResolvedMemberAvatar({ identity, size }: { identity: string; size: number }) {
   const resolved = useResolvedIdentity(identity)
   if (resolved.kind === "pending") {
     return (
@@ -48,6 +55,10 @@ export function MemberAvatar({ identity, size = 18 }: { identity: string; size?:
 }
 
 export function MemberName({ identity }: { identity: string }) {
+  return identity === GENERIC_MEMBER ? <>{FORMER_MEMBER}</> : <ResolvedMemberName identity={identity} />
+}
+
+function ResolvedMemberName({ identity }: { identity: string }) {
   return <>{identityLabel(useResolvedIdentity(identity))}</>
 }
 

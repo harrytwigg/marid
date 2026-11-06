@@ -310,6 +310,47 @@ describe("generic actors in a board member's view", () => {
   })
 })
 
+describe("the generic member actor", () => {
+  beforeEach(() => {
+    auth.value = {
+      principal: { kind: "member", user: { id: "mia1", email: "m@example.test", displayName: "Mia Member" }, boards: [{ department: "platform", role: "viewer" }] },
+      authState: { accountsEnabled: true, hasAccounts: true },
+    }
+  })
+
+  it("reads as Former member with the unknown-person badge on comments and audit lines, and asks the directory nothing", () => {
+    renderActivity(detailOf({
+      events: [event("wie_m", "status_change", "2026-07-20T08:10:00.000Z", { actor: "member", fromStatus: "backlog", toStatus: "in_review" })],
+      comments: {
+        comments: [
+          comment("wic_k", "from someone gone", "2026-07-20T08:15:00.000Z", { authorKind: "member", author: "member" }),
+          comment("wic_e", "however it is stamped", "2026-07-20T08:20:00.000Z", { authorKind: "employee", author: "member" }),
+        ],
+        total: 2,
+      },
+    }))
+    for (const id of ["activity-comment-wic_k", "activity-comment-wic_e", "whisper-wie_m"]) {
+      const block = screen.getByTestId(id)
+      expect(block.textContent, id).toContain("Former member")
+      expect(block.textContent, id).not.toMatch(/(?<!Former )member moved|^\??member/)
+      expect(block.querySelector('[data-testid="human-avatar"]')?.textContent, id).toBe("?")
+    }
+    expect(directory.getMemberPeople).not.toHaveBeenCalled()
+  })
+
+  it("reads as Former member as a Todo's creator and on its blocked banner", () => {
+    const { unmount } = wrap(<PropsRail detail={detailOf({ item: { createdBy: "member", source: "connector" } })} byName={new Map()} departments={[]} />)
+    expect(screen.getByTestId("rail-created-by").textContent).toContain("Former member")
+    unmount()
+    wrap(<TaskBanner
+      detail={detailOf({ item: { status: "blocked" }, events: [event("wie_b", "status_change", "2026-07-20T09:00:00.000Z", { actor: "member", fromStatus: "backlog", toStatus: "blocked" })] })}
+      byName={new Map()} focusReason={false} busy={false} onCommitReason={() => {}}
+    />)
+    expect(document.body.textContent).toContain("Former member")
+    expect(directory.getMemberPeople).not.toHaveBeenCalled()
+  })
+})
+
 describe("a person who joined after the operator's page loaded", () => {
   const NIA = { id: "nia1", displayName: "Nia New", initials: "NN", email: "n@example.test", instanceRole: "member", status: "active", boards: [] }
   const withComment = (author: string) =>

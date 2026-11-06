@@ -15,6 +15,11 @@ describe("member-only trees", () => {
     expect(isMemberOnlyTree(node({ id: "A-1" }, [node({ id: "A-2", status: "done" }), node({ id: "A-3" })]))).toBe(true)
   })
 
+  it("counts a Todo by someone no longer on the board (the generic member) as person-made, but not an agent's", () => {
+    expect(isMemberOnlyTree(node({ id: "A-1" }, [node({ id: "A-2", createdBy: "member" })]))).toBe(true)
+    expect(isMemberOnlyTree(node({ id: "A-1" }, [node({ id: "A-2", createdBy: "agent" })]))).toBe(false)
+  })
+
   it("fails on one Todo the operator or an employee made, however deep", () => {
     expect(isMemberOnlyTree(node({ id: "A-1" }, [node({ id: "A-2" }, [node({ id: "A-3", createdBy: "operator" })])]))).toBe(false)
     expect(isMemberOnlyTree(node({ id: "A-1", createdBy: "marid-dev" }))).toBe(false)

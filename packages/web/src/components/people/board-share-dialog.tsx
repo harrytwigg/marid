@@ -11,6 +11,7 @@ import {
   type BoardMemberWire,
   type BoardRole,
   type BoardRosterWire,
+  type MemberBoardWire,
   type PendingInviteWire,
 } from "@/lib/accounts-api"
 import { accountsErrorText, formatWhen } from "./errors"
@@ -55,10 +56,18 @@ function useRosterWrites(mode: ShareMode, department: string, selfUserId: string
       mode === "member" ? queryClient.invalidateQueries({ queryKey: MEMBER_BOARDS_KEY }) : undefined,
     ])
   }
-  /** Leaving, or stepping down from owner, ends what the dialog may show: close it before anything re-reads the roster. */
-  const afterWrite = (userId: string, left: boolean) => {
+  /** Leaving, or stepping down from owner, ends what the dialog may show: close it before anything re-reads the roster.
+   *  The member's own board list is corrected at once, before the page moves: their home sends someone with one board
+   *  straight to it, so a list that still held the board they left would send them back there. */
+  const afterWrite = (userId: string, change: { left: true } | { role: BoardRole }) => {
     const self = mode === "member" && userId === selfUserId
-    if (self) hooks.onSelfChanged(left)
+    if (self) {
+      queryClient.setQueryData<MemberBoardWire[]>(MEMBER_BOARDS_KEY, (boards) =>
+        boards && ("left" in change
+          ? boards.filter((board) => board.department !== department)
+          : boards.map((board) => (board.department === department ? { ...board, role: change.role } : board))))
+      hooks.onSelfChanged("left" in change)
+    }
     return refresh(self)
   }
   const fail = (e: unknown) => hooks.onError(accountsErrorText(e))
@@ -66,10 +75,10 @@ function useRosterWrites(mode: ShareMode, department: string, selfUserId: string
     refresh,
     setRole: useMutation({
       mutationFn: ({ userId, role }: { userId: string; role: BoardRole }) => api.setRole(department, userId, role),
-      onSuccess: (_data, { userId }) => afterWrite(userId, false),
+      onSuccess: (_data, { userId, role }) => afterWrite(userId, { role }),
       onError: fail,
     }),
-    remove: useMutation({ mutationFn: (userId: string) => api.remove(department, userId), onSuccess: (_data, userId) => afterWrite(userId, true), onError: fail }),
+    remove: useMutation({ mutationFn: (userId: string) => api.remove(department, userId), onSuccess: (_data, userId) => afterWrite(userId, { left: true }), onError: fail }),
     revoke: useMutation({ mutationFn: (id: string) => api.revoke(department, id), onSuccess: () => refresh(), onError: fail }),
   }
 }

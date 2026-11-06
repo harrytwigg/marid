@@ -89,7 +89,9 @@ export function useResolvedIdentity(identity: string): ResolvedIdentity {
   const queryClient = useQueryClient()
   const [shownAt] = useState(() => Date.now())
   const resolved = directory.resolve(identity) ?? { kind: "former" as const }
-  const recheck = accounts && resolved.kind === "former" && directory.answeredAt > 0 && directory.answeredAt < shownAt
+  // Only a `user:<id>` can be someone the directory has not caught up with; anything else is never worth a re-read.
+  const recheck = accounts && memberIdOf(identity) !== null && resolved.kind === "former"
+    && directory.answeredAt > 0 && directory.answeredAt < shownAt
   useEffect(() => {
     if (recheck) void queryClient.refetchQueries({ queryKey: directoryKey(member), exact: true }, { cancelRefetch: false })
   }, [recheck, queryClient, member])

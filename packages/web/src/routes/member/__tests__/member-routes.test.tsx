@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen } from "@testing-library/react"
-import { MemoryRouter, useLocation } from "react-router-dom"
+import { fireEvent, render, screen } from "@testing-library/react"
+import { MemoryRouter, useLocation, useNavigate } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { BoardRole } from "@/lib/accounts-api"
 
@@ -8,16 +8,30 @@ type Principal = { kind: "member"; user: { id: string; email: string; displayNam
 let principal: Principal
 vi.mock("@/routes/auth-provider", () => ({ useAuthOptional: () => ({ principal, authState: { accountsEnabled: true, principal } }), useAuth: () => ({ principal, logout: vi.fn() }) }))
 vi.mock("@/components/page-layout", () => ({ PageLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }))
-vi.mock("@/routes/todos/board/board-page", () => ({ default: () => <div data-testid="board-probe" /> }))
+// The board page is a probe; a test can put something on it (the Share dialog, wired as the board header wires it).
+const boardSlot = vi.hoisted(() => ({ content: null as null | (() => React.ReactNode) }))
+vi.mock("@/routes/todos/board/board-page", () => ({ default: () => <div data-testid="board-probe">{boardSlot.content?.()}</div> }))
 vi.mock("@/routes/todos/task-page/task-page", () => ({ default: () => <div data-testid="todo-probe" /> }))
 
 const listMemberBoards = vi.fn()
+const getMemberBoardRoster = vi.fn()
+const memberRemoveBoardMember = vi.fn()
 vi.mock("@/lib/accounts-api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/accounts-api")>()
-  return { ...actual, accountsApi: { ...actual.accountsApi, listMemberBoards: (...a: unknown[]) => listMemberBoards(...a) } }
+  return {
+    ...actual,
+    accountsApi: {
+      ...actual.accountsApi,
+      listMemberBoards: (...a: unknown[]) => listMemberBoards(...a),
+      getMemberBoardRoster: (...a: unknown[]) => getMemberBoardRoster(...a),
+      memberRemoveBoardMember: (...a: unknown[]) => memberRemoveBoardMember(...a),
+    },
+  }
 })
 
+import "@/test/preload-dialogs"
 import { MemberRoutes } from "../member-routes"
+import { BoardShareDialog } from "@/components/people/board-share-dialog"
 
 function Where() {
   return <span data-testid="where">{useLocation().pathname}</span>
@@ -34,6 +48,7 @@ function renderAt(path: string) {
 const grant = (department: string, role: BoardRole = "viewer") => ({ department, role })
 
 beforeEach(() => {
+  boardSlot.content = null
   principal = { kind: "member", user: { id: "me", email: "me@example.test", displayName: "Mia" }, boards: [grant("platform")] }
   listMemberBoards.mockResolvedValue([{ ...grant("platform"), prefix: "PLT" }, { ...grant("design"), prefix: "DES" }])
 })
@@ -99,5 +114,30 @@ describe("the member app's routes", () => {
       expect(screen.getByTestId("where").textContent).toBe("/")
       unmount()
     }
+  })
+
+  it("takes a member who leaves their only board home, to say they have none, not back to the board", async () => {
+    principal = { kind: "member", user: { id: "me", email: "me@example.test", displayName: "Mia" }, boards: [grant("design", "owner")] }
+    let boards = [{ ...grant("design", "owner"), prefix: "DES" }]
+    listMemberBoards.mockImplementation(async () => boards)
+    getMemberBoardRoster.mockResolvedValue({
+      members: [{ userId: "me", displayName: "Mia", email: "me@example.test", initials: "M", role: "owner" }],
+      invites: [],
+    })
+    // The gateway has taken them off by the time the boards are read again.
+    memberRemoveBoardMember.mockImplementation(async () => { boards = [] })
+    function ShareOnBoard() {
+      const navigate = useNavigate()
+      return <BoardShareDialog department="design" mode="member" ownRole="owner" selfUserId="me" open onClose={() => {}} onLeft={() => navigate("/", { replace: true })} />
+    }
+    boardSlot.content = () => <ShareOnBoard />
+
+    renderAt("/todos/b/design")
+    fireEvent.click(await screen.findByRole("button", { name: "Leave Mia" }))
+    fireEvent.click(screen.getByRole("button", { name: "Leave" }))
+
+    expect(await screen.findByTestId("member-no-boards")).toBeTruthy()
+    expect(screen.getByTestId("where").textContent).toBe("/")
+    expect(screen.queryByTestId("board-not-shared")).toBeNull()
   })
 })
