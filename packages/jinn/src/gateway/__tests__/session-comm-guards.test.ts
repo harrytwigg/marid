@@ -40,7 +40,7 @@ describe("no send-rate cap", () => {
   it("sends do not accumulate guard state — only delivered hop tags are tracked", () => {
     const g = createSessionCommGuards(() => 0);
     for (let i = 0; i < 100; i++) g.checkSendAllowed(`s-${i}`);
-    expect(g.stats()).toEqual({ hopEntries: 0 });
+    expect(g.stats()).toEqual({ hopEntries: 0, pairEntries: 0 });
   });
 });
 
@@ -217,10 +217,10 @@ describe("prepareLateralSend — the route-side transform", () => {
     });
     expect(!out.ok && out.error).toMatch(/comment on the Todo/i);
     expect(!out.ok && out.error).toContain("parent-9");
-    expect(!out.ok && out.error).toMatch(/do not count against the budget/i);
+    expect(!out.ok && out.error).toMatch(/parent\/child messages do not use this budget/i);
   });
 
-  it("a parent/child send ignores the cap and reports hop 1", () => {
+  it("a parent/child send ignores the lateral cap, starts the pair count at 1 and does not tag the receiver", () => {
     const g = createSessionCommGuards(() => 0);
     g.recordDelivery("s1", LATERAL_MAX_HOPS);
     const out = prepareLateralSend({
@@ -231,8 +231,32 @@ describe("prepareLateralSend — the route-side transform", () => {
       parentLink: true,
     });
     expect(out.ok && out.hops === 1 && out.parentLink).toBe(true);
-    // Not a relay: the plan carries no budget refusal and the banner stays clean.
     expect(out.ok && out.displayMessage).not.toContain("[hop");
+    expect(g.stats().hopEntries).toBe(1); // only s1's own earlier tag
+  });
+
+  it("a parent/child exchange is bounded by its own pair budget, in either direction, and an operator message resets it", () => {
+    const g = createSessionCommGuards(() => 0, 2);
+    const cap = g.pairMaxMessages();
+    expect(cap).toBe(8);
+    for (let i = 1; i <= cap; i++) {
+      const [from, to] = i % 2 ? ["p", "c"] : ["c", "p"];
+      const out = prepareLateralSend({ caller: sess(from), targetSessionId: to, message: "m", guards: g, parentLink: true });
+      expect(out.ok && out.hops === i).toBe(true);
+      g.recordPairDelivery(from, to, i);
+    }
+    const denied = prepareLateralSend({ caller: sess("c"), targetSessionId: "p", message: "m", guards: g, parentLink: true });
+    expect(!denied.ok && denied.error).toMatch(/hop budget exhausted.*parent\/child.*max 8/i);
+    g.clearInboundHop("p");
+    expect(g.checkPairSend("c", "p")).toEqual({ ok: true, hops: 1 });
+  });
+
+  it("a refusal for a root session does not advertise a parent route", () => {
+    const g = createSessionCommGuards(() => 0);
+    g.recordDelivery("s1", LATERAL_MAX_HOPS);
+    const out = prepareLateralSend({ caller: sess("s1"), targetSessionId: "s2", message: "m", guards: g });
+    expect(!out.ok && out.error).not.toMatch(/parent session/i);
+    expect(!out.ok && out.error).toMatch(/comment on the Todo/i);
   });
 
   it("a large fan-out from one sender to distinct targets is never refused", () => {
