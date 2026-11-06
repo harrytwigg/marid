@@ -1,6 +1,7 @@
 import { lazy, Suspense, type ComponentProps } from "react"
 import { LoadBoundary, LoadingScrim, useIdlePreload } from "@/components/ui/lazy-overlay"
 import type { NewTodoDialog as NewTodoDialogComponent } from "./new-todo-dialog"
+import { useMember } from "@/hooks/use-principal"
 
 /* The board opens the new-Todo dialog on a press, so the dialog (its pickers, the modal it is drawn in and their
  * code) is not in the board's chunk: it loads when the page is idle, and when a button that opens it is hovered,
@@ -9,6 +10,8 @@ import type { NewTodoDialog as NewTodoDialogComponent } from "./new-todo-dialog"
 
 const load = () => import("./new-todo-dialog")
 const NewTodoDialog = lazy(() => load().then((module) => ({ default: module.NewTodoDialog })))
+// A board member files a Todo through a smaller dialog: no assignee, department, date or labels to choose.
+const MemberNewTodoDialog = lazy(() => import("@/components/member/member-new-todo-dialog").then((module) => ({ default: module.MemberNewTodoDialog })))
 
 /** Starts the fetch; a failed one is reported to whoever opens the dialog, not here. */
 export function preloadNewTodoDialog(): void {
@@ -28,10 +31,14 @@ export function usePreloadNewTodoDialog(): void {
 }
 
 export function LazyNewTodoDialog({ onFailed, ...props }: ComponentProps<typeof NewTodoDialogComponent> & { onFailed: () => void }) {
+  const member = useMember()
+  const department = props.defaults?.department
   return (
     <LoadBoundary what="The new Todo dialog" onFailed={onFailed}>
       <Suspense fallback={<LoadingScrim testId="todo-new-loading" />}>
-        <NewTodoDialog {...props} />
+        {member && department
+          ? <MemberNewTodoDialog department={department} onClose={props.onClose} onCreated={props.onCreated} />
+          : <NewTodoDialog {...props} />}
       </Suspense>
     </LoadBoundary>
   )

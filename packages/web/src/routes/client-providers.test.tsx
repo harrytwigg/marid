@@ -26,7 +26,7 @@ vi.mock("@/components/talk/talk-orb-overlay", () => ({
 const passThrough = vi.hoisted(() => ({ children }: { children: ReactNode }) => children)
 
 vi.mock("@/routes/providers", () => ({ ThemeProvider: passThrough }))
-vi.mock("@/routes/auth-provider", () => ({ AuthProvider: passThrough, AuthGate: passThrough }))
+vi.mock("@/routes/auth-provider", () => ({ AuthProvider: passThrough, AuthGate: passThrough, useAuth: () => ({ principal: null }) }))
 vi.mock("@/routes/settings-provider", () => ({
   SettingsProvider: passThrough,
   DocumentTitle: () => null,

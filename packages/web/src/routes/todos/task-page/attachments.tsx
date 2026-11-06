@@ -4,6 +4,7 @@ import { api, type WorkItemAttachmentWire } from "@/lib/api"
 import { useFileDrop } from "@/hooks/use-file-drop"
 import { Button } from "@/components/ui/button"
 import { FileDropOverlay } from "@/components/ui/file-drop-overlay"
+import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
 import { AttachmentTile, isImageMime, useAttachmentPreview } from "./attachment-preview"
 
 /* Todos v2 — attachments are one quiet action under the description, not a
@@ -58,6 +59,7 @@ export function AttachmentsSection({
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const preview = useAttachmentPreview()
+  const { attach, operatorControls } = useTodoCapabilities()
   // A same-name re-attach supersedes the earlier row: the strip shows the
   // current files, and the replaced versions wait in a collapsed list below
   // (still downloadable, removable — removing the current one brings the
@@ -67,7 +69,8 @@ export function AttachmentsSection({
   const earlierVersions = itemRows.filter((attachment) => attachment.supersededBy)
   const previewable = itemLevel.filter((attachment) => preview.canPreview(attachment))
 
-  const removeButton = (attachment: WorkItemAttachmentWire, className: string) => (
+  // A member can add to a Todo they can comment on, but the gateway has no member route that removes a file.
+  const removeButton = (attachment: WorkItemAttachmentWire, className: string) => !operatorControls ? null : (
     <button
       type="button"
       aria-label={`Remove ${attachment.filename}`}
@@ -81,7 +84,7 @@ export function AttachmentsSection({
 
   return (
     <section data-testid="task-attachments" className="mt-2 flex flex-wrap items-center gap-2">
-      <Button
+      {attach && <Button
         variant="ghost"
         size="icon-sm"
         aria-label="Attach a file"
@@ -90,7 +93,7 @@ export function AttachmentsSection({
         className="-ml-2 flex-none text-[var(--text-quaternary)]"
       >
         <Paperclip size={15} aria-hidden />
-      </Button>
+      </Button>}
       {itemLevel.length > 0 && (
         <div data-testid="attachment-strip" className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           {itemLevel.map((attachment) =>

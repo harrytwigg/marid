@@ -5,6 +5,7 @@ import type { Employee, WorkItemStatusWire, WorkItemTreeNodeWire } from "@/lib/a
 import { PendingSubTaskRow, SubTaskRow } from "./subtask-row"
 import { PENDING_SUBTASK_PREFIX } from "./use-subtask-mutations"
 import type { OpenTodoFromClick } from "./task-frame"
+import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
 
 /* Todos v2 slice 6 — the task page's sub-tasks section (design-doc §7.2.8,
  * mock task-detail.html). The group takes Linear's shape: the header
@@ -55,6 +56,7 @@ export function SubTasksSection({
   // too); the rows list direct children — deeper levels wear "N sub" badges.
   const { total, done } = subtreeCounts(node)
   const atCap = parentDepth >= DEPTH_CAP
+  const { create: canCreate } = useTodoCapabilities()
   const [expanded, setExpanded] = useState(true)
   const [adding, setAdding] = useState(false)
   const [title, setTitle] = useState("")
@@ -62,7 +64,7 @@ export function SubTasksSection({
 
   // At the cap an empty group can offer nothing at all, so it stays out of the
   // document entirely rather than heading a list nobody can add to.
-  if (children.length === 0 && atCap) return null
+  if (children.length === 0 && (atCap || !canCreate)) return null
 
   const closeField = () => {
     setTitle("")
@@ -113,7 +115,7 @@ export function SubTasksSection({
             </span>
           )}
         </button>
-        {!atCap && (
+        {!atCap && canCreate && (
           <Button
             variant="ghost"
             size="icon-sm"

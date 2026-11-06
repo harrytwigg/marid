@@ -7,7 +7,8 @@
  * no caller had to move with it.
  */
 
-export type WorkItemCommentAuthorKindWire = "operator" | "employee" | "system"
+/** `member` is a board member (author `user:<id>`); older gateways wrote them as `system`. */
+export type WorkItemCommentAuthorKindWire = "operator" | "employee" | "system" | "member"
 
 /** One comment row (Todos v2 slice 2). A tombstoned comment keeps its row with
  *  an empty body and a `deletedAt` stamp so the thread shape survives. */

@@ -13,6 +13,8 @@ import { RailKicker, RailRow, RailPriorityBars, formatDueLong } from "./rail-row
 import { AutoStartRow } from "./auto-start-row"
 import { SprintRailRow } from "../sprints/sprint-rail-row"
 import { displayNameOf, formatRelativeTime } from "../util"
+import { isMemberIdentity, LastTouchedBy, MemberChip, useViewer } from "../attribution"
+import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
 
 /* Todos v2 slice 6 — the chrome-free properties rail (design-doc §7.2/§7.3,
  * mock task-detail.html). No inset boxes: quiet rows on the page surface, the
@@ -59,12 +61,16 @@ export function PropsRail({
   sessionTree?: SessionTreeWire
 }) {
   const openSession = useOpenSession()
+  const { operatorControls } = useTodoCapabilities()
   const item = detail.workItem
   const labels = detail.labels ?? []
   const dept = item.department ? departments?.find((d) => d.slug === item.department) : undefined
   const deptTitle = item.department ? item.department.charAt(0).toUpperCase() + item.department.slice(1) : "No department"
   const createdBySession = sessionIdFromActor(item.createdBy)
-  const createdByLabel = !item.createdBy || item.createdBy === "operator" ? "You" : displayNameOf(item.createdBy, byName)
+  const viewer = useViewer()
+  const createdByLabel = !item.createdBy || item.createdBy === "operator"
+    ? (viewer === "member" ? "Operator" : "You")
+    : displayNameOf(item.createdBy, byName, viewer)
   const overdue = !!item.dueAt && Date.parse(item.dueAt) < Date.now()
   const railSessionLive = LIVE_RAIL_STATES.has(railSession?.status ?? "")
   const railSessionWaiting = isSessionWaiting(railSession?.status)
@@ -101,7 +107,7 @@ export function PropsRail({
           {item.assignee ? (
             <>
               <EmployeeAvatar name={item.assignee} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
-              {displayNameOf(item.assignee, byName)}
+              {displayNameOf(item.assignee, byName, viewer)}
             </>
           ) : (
             <>
@@ -155,7 +161,7 @@ export function PropsRail({
           <ArrowUpRight size={12} aria-hidden className="ml-auto text-[var(--text-quaternary)] opacity-0 transition-opacity group-hover/dispatch:opacity-100" />
         </button>
       )}
-      {!railSessionLive && (
+      {!railSessionLive && onDispatch && (
         <button
           type="button"
           data-testid="rail-dispatch"
@@ -168,7 +174,7 @@ export function PropsRail({
         </button>
       )}
 
-      <AutoStartRow detail={detail} />
+      {operatorControls && <AutoStartRow detail={detail} />}
 
       {sessionTree && sessionTree.roots.length > 0 && (
         <div className="mt-2">
@@ -176,8 +182,8 @@ export function PropsRail({
         </div>
       )}
 
-      <RailKicker later>Labels</RailKicker>
-      <div className="relative">
+      {(operatorControls || labels.length > 0) && <RailKicker later>Labels</RailKicker>}
+      {(operatorControls || labels.length > 0) && <div className="relative">
         <div className="flex flex-wrap gap-1.5 pt-1" data-testid="rail-labels">
           {labels.map((label) => (
             <LabelChip key={label.id} label={label} />
@@ -195,7 +201,7 @@ export function PropsRail({
           )}
         </div>
         {labelsPick?.picker}
-      </div>
+      </div>}
 
       <RailKicker later>Details</RailKicker>
       <div className="relative">
@@ -210,7 +216,7 @@ export function PropsRail({
         </RailRow>
         {deptPick?.picker}
       </div>
-      <SprintRailRow detail={detail} editable={!!rowFor} />
+      {operatorControls && <SprintRailRow detail={detail} editable={!!rowFor} />}
       <div className="relative">
         <RailRow quiet testId="rail-start" label="Start date" onOpen={startPick?.onOpen} open={startPick?.open}>
           <CalendarClock size={14} aria-hidden className="flex-none text-[var(--text-quaternary)]" />
@@ -235,10 +241,12 @@ export function PropsRail({
       </div>
       <RailRow quiet testId="rail-created-by">
         <UserRound size={14} aria-hidden className="flex-none text-[var(--text-quaternary)]" />
-        {createdBySession ? <SessionRef sessionId={createdBySession} byName={byName} /> : createdByLabel}
+        {createdBySession ? <SessionRef sessionId={createdBySession} byName={byName} />
+          : isMemberIdentity(item.createdBy, viewer) ? <MemberChip identity={item.createdBy!} size={16} /> : createdByLabel}
         <span className="text-[12px] font-normal text-[var(--text-quaternary)]">· created {formatRelativeTime(item.createdAt)}</span>
+        <LastTouchedBy events={detail.events} />
       </RailRow>
-      <RailRow quiet testId="rail-spend">
+      {operatorControls && detail.spendUsd !== null && <RailRow quiet testId="rail-spend">
         <span className="text-[11px] font-normal text-[var(--text-quaternary)]" style={{ fontFamily: "var(--font-code)" }}>
           ${detail.spendUsd.toFixed(2)}
         </span>
@@ -255,7 +263,7 @@ export function PropsRail({
             </span>
           </>
         )}
-      </RailRow>
+      </RailRow>}
     </aside>
   )
 }

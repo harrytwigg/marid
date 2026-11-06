@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
 
 /** Inline title edit — borderless, Notes pattern: tap to edit, Enter commits,
  *  Esc reverts. An emptied title reverts rather than committing. */
@@ -8,12 +9,14 @@ export function TaskTitle({ title, mobile, onCommit }: {
   onCommit: (title: string) => void
 }) {
   const [editing, setEditing] = useState(false)
+  const { edit } = useTodoCapabilities()
   const [draft, setDraft] = useState("")
   const sizing = mobile
     ? "text-[26px] font-bold leading-[1.2] tracking-[-0.41px]"
     : "text-[28px] font-bold leading-[1.2] tracking-[-0.41px]"
   const bleed = mobile ? "" : "-mx-2 rounded-[10px] px-2 py-0.5"
 
+  if (!edit) return <h1 data-testid="task-title" className={`${sizing} min-w-0 text-[var(--text-primary)]`}>{title ?? "…"}</h1>
   if (editing) {
     return (
       <TitleInput

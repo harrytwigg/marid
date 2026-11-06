@@ -1,4 +1,5 @@
-import { authFetch, authUrl } from "@/lib/auth"
+import { authFetch, authUrl, isMemberSession } from "@/lib/auth"
+import { memberAttachmentPath } from "@/lib/member-source"
 import type { TodoStopCauseWire } from "@/lib/parked"
 import type {
   CreateNoteInput,
@@ -494,11 +495,12 @@ export interface WorkItemTreeNodeWire extends WorkItemFullWire {
   children: WorkItemTreeNodeWire[]
 }
 
-/** The tree payload: subtree + per-status totals + derived subtree spend. */
+/** The tree payload: subtree + per-status counts + derived subtree spend. The counts are numbers for everyone; for a
+ *  board member every cost figure is null, so readers treat a null spend as "nothing to show", not as zero spent. */
 export interface WorkItemTreeWire {
   root: WorkItemTreeNodeWire
   totals: Partial<Record<WorkItemStatusWire, number>>
-  spendUsd: number
+  spendUsd: number | null
 }
 
 /** One attachment row (Todos v2 slice 5) — content-addressed; `commentId`
@@ -542,7 +544,8 @@ export interface WorkItemDetailWire extends TodoStopCauseWire {
   kept?: boolean
   /** Who this Todo's review is addressed to (optional: older gateways omit it). */
   reviewAddressee?: ReviewAddresseeWire
-  spendUsd: number
+  /** Null for a board member: cost is not theirs to see. */
+  spendUsd: number | null
   events: WorkItemEventWire[]
   /** Last-10 comments tail + total (optional: older gateways omit it). */
   comments?: WorkItemCommentPageWire
@@ -895,7 +898,9 @@ export const api = {
     del<{ removed: boolean }>(`/api/work-items/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}`),
   /** Integrity-checked download path (cookie-authenticated, usable as img src). */
   workItemAttachmentUrl: (id: string, attachmentId: string): string =>
-    authUrl(`/api/work-items/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}`),
+    authUrl(isMemberSession()
+      ? memberAttachmentPath(id, attachmentId)
+      : `/api/work-items/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}`),
   /** Todos v2 slice 3: relations (blocks is cycle-checked server-side). */
   addWorkItemRelation: (id: string, kind: WorkItemRelationKindWire, dstId: string) =>
     post<{ relation: unknown }>(`/api/work-items/${encodeURIComponent(id)}/relations`, { kind, dstId }),
