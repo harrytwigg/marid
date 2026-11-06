@@ -161,26 +161,43 @@ are closed (4401) and the cookie stops being honoured from the next request.
 |---|---|---|---|---|
 | See the board: Todos (whole trees), comments, attachments, labels, sprint names, activity, people and employees on the board | yes | yes | yes | yes |
 | Comment, reply, attach; edit or delete own comments | | yes | yes | yes |
-| Create root Todos on the board, or sub-tasks under a **member-created** Todo | | yes | yes | yes |
-| On a **member-created, unassigned** Todo: edit title, body, priority, labels; mark it done or reopen it to backlog | | yes | yes | yes |
+| Create root Todos on the board | | yes | yes | yes |
+| In a **member-only tree**: create sub-tasks, edit title, body, priority, labels; mark done or reopen to backlog | | yes | yes | yes |
 | Invite to, change roles on, and remove people from this board | | | yes | yes |
-| Edit any agent- or operator-created Todo, sub-tasks under one, assignment, dispatch, delete, anything that starts or wakes an agent | | | | yes |
+| Anything in a tree that is not member-only, assignment, dispatch, delete, anything that starts or wakes an agent | | | | yes |
 | Session transcripts, chat, org, settings, other boards | | | | yes |
 
-Why the member-created restriction: an agent executes its Todo's title and body, and a parent
-cannot close over an open child. Letting a collaborator rewrite an agent's Todo would be
-operator-level steering, and a stray member sub-task would pin an agent's parent open.
+A **member-only tree** is a root Todo whose every Todo (root included) has a `user:`
+`created_by`, no assignee, and no linked session. It is checked over the root's whole tree at
+each member write, inside the write's transaction. The moment the operator assigns or
+dispatches anything in the tree it stops being member-only and members can only comment on
+any of it.
+
+Why: an agent executes its Todo's title and body, a parent cannot close over an open child, and
+closing a child can wake its parent's owner. A per-Todo rule leaks: a member's sub-task under a
+parent the operator later assigned could be rewritten, or closed to restart the parent's agent.
+The whole-tree rule leaves no agent anywhere in a tree members can write.
+
+**Member status changes.** The member status route allows exactly two edges in a member-only
+tree: `backlog → done` (refused while the Todo has open children; members get no cascade) and
+`done → backlog`, which passes `human: true` (the reopen edge requires it) and never
+`cascade`, `manual` or `bounce`. `transition()` writes no child-settle row when the actor is
+`user:`, so a member's close never queues a parent wake, whatever the tree.
 
 **Members never start, wake or steer an agent in v1:**
 
 - A member-created Todo is unassigned, and its dispatch row is written with
   `autoStart: false` in the same transaction as the create, so the board walk never starts
-  it. Members cannot change it. The operator turns it into agent work by assigning it; from
-  then on it is no longer "unassigned" and members can only comment on it.
+  it. Members cannot change it. The operator turns it into agent work by assigning it, which
+  ends the tree's member-only state; the flag stays, so the operator dispatches it explicitly
+  (or clears auto-start), and the walk never starts it unasked.
 - Member comments are stored with `author_kind = 'system'` (below), which comment routing
   already skips: no `@mention` wakes, no reply delivery.
-- Board hooks do not fire for member-originated events (create, comment, label, status) in v1;
-  the hook dispatcher skips events whose actor is `user:<id>`.
+- Board hooks do not fire for member-originated events (create, comment, label, status) in v1.
+  Suppression keys on the **resolved** actor (`creatorOf` for `todo.created`, `actorOf` for the
+  rest), never on the raw `event.actor`: the created event records the source there, not the
+  user. A test registers a match-all `todo.created` hook and asserts a member create fires
+  nothing.
 
 A board owner cannot grant a role above their own, cannot remove an owner other than
 themselves, and cannot touch instance owners. Password resets, disabling and deleting users
@@ -194,11 +211,15 @@ that does not know about members **grants nothing** (fail closed), including old
 - **Comments**: `author_kind = 'system'`, `author = 'user:<id>'`. Comment routing returns early
   for `system`; respawn guards, board-hook actors and the board walk grant system comments no
   operator standing. Edit authority is the existing (author, author_kind) pair match.
-- **Todos**: `source = 'connector'` (no writer uses it today and no reader grants it standing),
+- **Todos**: `source = 'connector'` (no reader grants it standing; plugins also write it, with
+  `created_by = 'plugin:<id>'`),
   `source_ref = 'user:<id>:<nonce>'` (the `(source, source_ref)` unique index needs it unique
   per Todo), `created_by = 'user:<id>'`. `board-hooks/actor.ts` `creatorOf` reads a `user:`
   `created_by` first and returns a member actor (never `operator`).
-- **Events**: `actor = 'user:<id>'`.
+- **Events**: `actor = 'user:<id>'` for every member write except the created event, whose
+  `actor` the store sets to the source (`connector`); the member is read from `created_by`.
+- **Every member check keys on the `user:` prefix** of `created_by`, `author` or `actor`, never
+  on `source` or `author_kind` alone, which plugins share.
 - **Every outward serialiser** derives a distinct **`member`** kind from `author` /
   `created_by` / `actor` starting with `user:` and never presents it as `system` or
   `operator`: the web wire, MCP tool output (`get_work_item`, `list_work_item_comments`), the
@@ -223,7 +244,9 @@ Re-inviting the same email to the same board revokes the previous unused invite.
 
 **Invite to the instance.** Operator only: `POST /api/people/invites { email, instanceRole }`
 creates an invite with no board (`department` NULL). With `instanceRole: 'owner'` the person
-becomes a co-operator; the UI says so plainly before sending.
+becomes a co-operator; the UI says so plainly before sending, and the link lasts 24 hours, not
+7 days. `GET /api/people/invites` lists every pending invite (instance and board) and
+`DELETE /api/people/invites/:id` revokes one; People shows pending owner invites prominently.
 
 **Set up my sign-in.** The signed-in operator, from People, creates their own owner account:
 `POST /api/account/setup { email, displayName, password }`, allowed for an operator
@@ -299,7 +322,7 @@ member cookies stop working, member comments read as `system` comments and membe
 - **Member shell**: a minimal layout with the member's boards, the board view and the Todo
   page backed by the member API, and an account menu (name, change password, sessions, sign
   out). Composer and new-Todo controls only for collaborators and owners; edit controls only
-  on member-created, unassigned Todos.
+  in member-only trees.
 - **Operator**: Settings → People (users, their boards and roles, status, reset link, sessions,
   disable, instance invite, "Set up my sign-in") and a **Share** button on a department board
   (members of that board, invite with role, change role, remove). A pending invite's link is
@@ -331,7 +354,8 @@ Unauthenticated: `GET /api/auth/state` (adds `accountsEnabled`, `principal: { ki
 
 Operator: `GET /api/people`, `GET/PATCH/DELETE /api/people/:id` (display name, status,
 instance role), `POST /api/people/:id/reset-link`, `GET /api/people/:id/sessions`,
-`DELETE /api/people/:id/sessions[/:sid]`, `POST /api/people/invites`,
+`DELETE /api/people/:id/sessions[/:sid]`, `GET/POST /api/people/invites`,
+`DELETE /api/people/invites/:id`,
 `POST /api/account/setup`, `GET /api/boards/:department/members`,
 `POST /api/boards/:department/invites`, `DELETE /api/boards/:department/invites/:id`,
 `PATCH/DELETE /api/boards/:department/members/:userId`, `POST /api/account/password` (owner
@@ -342,9 +366,9 @@ Member: `GET /api/member/me`, `POST /api/member/password`, `GET /api/member/sess
 `GET /api/member/boards/:department/todos` (same query shape and item serialisation as the
 board's existing list), `GET /api/member/todos/:id`, `GET /api/member/todos/:id/tree`,
 `GET /api/member/todos/:id/comments`, `GET /api/member/todos/:id/attachments[/:aid]`,
-`POST /api/member/boards/:department/todos` (root, or `parentId` naming a member-created Todo), `PATCH /api/member/todos/:id` (title, body,
-priority, labels; member-created, unassigned Todos only), `POST /api/member/todos/:id/status`
-(`done` or `backlog`, same restriction), `POST /api/member/todos/:id/comments`, `PATCH/DELETE
+`POST /api/member/boards/:department/todos` (root, or `parentId` in a member-only tree), `PATCH /api/member/todos/:id` (title, body,
+priority, labels; member-only trees only), `POST /api/member/todos/:id/status`
+(`done` or `backlog`, member-only trees, edges as in Roles), `POST /api/member/todos/:id/comments`, `PATCH/DELETE
 /api/member/todos/:id/comments/:cid`, `POST /api/member/todos/:id/attachments`, and the owner
 board-share routes under `/api/member/boards/:department/…` mirroring the operator's.
 
