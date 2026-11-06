@@ -20,7 +20,11 @@ import { claudeProfileDirExists, type ClaudeProfile } from "./claude-profile.js"
 import { buildEngineChildEnv } from "./child-env.js";
 import { readClaudeOAuthToken } from "./claude-models.js";
 import { resolveBin } from "./resolve-bin.js";
-import { windowsFromClaudeUsage, withoutAbsentFiveHour } from "./engine-limits-claude-usage.js";
+import {
+  windowsFromClaudeUsage,
+  withoutAbsentFiveHour,
+  type ClaudeStatuslineEvidence,
+} from "./engine-limits-claude-usage.js";
 export { windowsFromClaudeUsage } from "./engine-limits-claude-usage.js";
 import {
   baseSnapshot,
@@ -140,6 +144,8 @@ async function claudeAuthPlan(config: JinnConfig, profile: ClaudeProfile): Promi
 
 interface ClaudeStatuslineSnapshot {
   windows: EngineLimitWindow[];
+  /** The file's write time: how recent the CLI's reading is. */
+  capturedAtMs: number;
   context?: EngineLimitEngineSnapshot["context"];
   costUsd?: number;
   refreshedAt: string;
@@ -165,6 +171,7 @@ function readClaudeStatusline(file: string): ClaudeStatuslineSnapshot | null {
     const stat = fs.statSync(file);
     return {
       windows,
+      capturedAtMs: stat.mtimeMs,
       context: ctx
         ? {
             usedPercent: num(ctx.used_percentage),
@@ -247,6 +254,13 @@ function claudeFromStatusline(
   };
 }
 
+/** The account's latest statusline reading, for callers that check the usage
+ *  API's windows against it (`withoutAbsentFiveHour`). */
+export function claudeStatuslineEvidence(account: string): ClaudeStatuslineEvidence | null {
+  const file = claudeSnapshotFile(CLAUDE_LIMITS_DIR, account);
+  return file ? readClaudeStatusline(file) : null;
+}
+
 /** One local Claude account's reading: the default profile when `profile` is
  *  null (exactly as before accounts), or a named one (FR-071). */
 export async function collectClaudeLimits(config: JinnConfig, profile: ClaudeProfile = null): Promise<EngineLimitEngineSnapshot> {
@@ -262,7 +276,7 @@ export async function collectClaudeLimits(config: JinnConfig, profile: ClaudePro
     fetchClaudeOAuthUsage(process.env, profile),
   ]);
   const statusline = latest ? readClaudeStatusline(latest) : null;
-  const liveWindows = withoutAbsentFiveHour(oauthUsage ? windowsFromClaudeUsage(oauthUsage) : [], statusline?.windows);
+  const liveWindows = withoutAbsentFiveHour(oauthUsage ? windowsFromClaudeUsage(oauthUsage) : [], statusline, Date.now());
 
   // Live path: the OAuth usage API carries every bucket (including per-model
   // ones like the Fable weekly bucket) that the statusline payload never sees.

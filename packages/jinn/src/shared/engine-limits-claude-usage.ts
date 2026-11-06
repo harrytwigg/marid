@@ -62,7 +62,7 @@ function windowFromNamedBucket([key, value]: [string, unknown]): EngineLimitWind
  * array yields none. Repeated display names retain their first reading. A
  * `session` entry the payload marks as not applying to the plan is left out
  * (`sessionIsInapplicable`); the collector also drops a zero five-hour window
- * the CLI's own snapshot says the account does not have.
+ * the CLI's own recent snapshot says the account does not have.
  */
 export function windowsFromClaudeUsage(usage: JsonRecord): EngineLimitWindow[] {
   const limits = Array.isArray(usage.limits) ? usage.limits : [];
@@ -78,18 +78,31 @@ export function windowsFromClaudeUsage(usage: JsonRecord): EngineLimitWindow[] {
   });
 }
 
+/** The CLI's statusline reading for one account, and when it was written. */
+export interface ClaudeStatuslineEvidence {
+  windows: EngineLimitWindow[];
+  capturedAtMs: number;
+}
+
+/** How recent a statusline snapshot must be to say what the plan has: one
+ *  five-hour span, so any request inside the current window is covered. */
+export const STATUSLINE_EVIDENCE_MAX_AGE_MS = 5 * 60 * 60_000;
+
 /**
  * Leave out a five-hour window the account does not have. The CLI's statusline
- * snapshot is taken from the rate-limit headers of real requests: when it
- * carries a weekly reading and no five-hour one, the account's plan has no
+ * snapshot is taken from the rate-limit headers of real requests: when a recent
+ * one carries a weekly reading and no five-hour one, the account's plan has no
  * five-hour limit, so a five-hour bucket the usage API reports at zero is not
- * a limit sitting idle. A reading above zero always stands.
+ * a limit sitting idle. An older snapshot proves nothing about the current
+ * plan, and a reading above zero always stands.
  */
 export function withoutAbsentFiveHour(
   windows: EngineLimitWindow[],
-  statuslineWindows: EngineLimitWindow[] | undefined,
+  statusline: ClaudeStatuslineEvidence | null | undefined,
+  nowMs: number,
 ): EngineLimitWindow[] {
-  const names = new Set((statuslineWindows ?? []).map((window) => window.name));
+  if (!statusline || nowMs - statusline.capturedAtMs > STATUSLINE_EVIDENCE_MAX_AGE_MS) return windows;
+  const names = new Set(statusline.windows.map((window) => window.name));
   if (!names.has("7d") || names.has("5h")) return windows;
   return windows.filter((window) => window.name !== "5h" || !!window.usedPercent);
 }
