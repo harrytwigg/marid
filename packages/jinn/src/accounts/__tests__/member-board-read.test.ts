@@ -128,7 +128,8 @@ describe("reads are scoped to the member's boards, and an unheld board is a 404,
     expect(body.events.map((e: any) => e.kind)).not.toContain("session_linked");
     const note = body.events.find((e: any) => e.kind === "note" && e.detail?.note === "agent says hi");
     expect(note.actor).toBe("alice");
-    expect(note.detail).toEqual({ note: "agent says hi", actorEmployee: "alice" });
+    // The employee is the actor; the detail keeps only what a note renders.
+    expect(note.detail).toEqual({ note: "agent says hi" });
     expect(JSON.stringify(body)).not.toContain(session.id);
   });
 

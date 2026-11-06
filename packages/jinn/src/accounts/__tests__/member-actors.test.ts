@@ -122,9 +122,10 @@ describe("event details name only Todos on the reader's boards", () => {
       const read = (await h.as(pat, "GET", `/api/member/todos/${id}`)).body;
       expect(JSON.stringify(read.events)).not.toContain(designRoot);
     }
-    // The ids that are on the reader's boards stay: the new parent is named on the moved Todo, the child on its new parent.
-    expect(JSON.stringify(detail.events)).toContain(opsRoot);
-    expect(JSON.stringify((await h.as(pat, "GET", `/api/member/todos/${opsRoot}`)).body.events)).toContain(moving);
+    // A sub-task the reader can open is still named where the timeline names one.
+    const added = store.createWorkItem({ title: "Added", parentId: opsRoot }).id;
+    const rootEvents = (await h.as(pat, "GET", `/api/member/todos/${opsRoot}`)).body.events;
+    expect(rootEvents.find((event: any) => event.kind === "child_created" && event.detail.childId === added)).toBeDefined();
   });
 });
 

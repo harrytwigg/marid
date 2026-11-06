@@ -135,7 +135,7 @@ describe("members read an agent's work without its session id", () => {
   });
 });
 
-describe("event details are judged by value at any depth, not only by top-level key", () => {
+describe("a member's event carries only the detail keys its kind allows, each judged by value", () => {
   it("a skip-level delegation's manager-visibility note reaches a member without the child session's id", async () => {
     const { surfaceManagerVisibility } = await import("../../gateway/manager-visibility.js");
     const { createSession } = await import("../../sessions/registry.js");
@@ -149,21 +149,50 @@ describe("event details are judged by value at any depth, not only by top-level 
     const stored = store.listWorkItemEvents(todo.id).find((event) => (event.detail as any)?.managerVisibility);
     expect(JSON.stringify(stored)).toContain(child.id);
     const detail = (await h.as(viewer, "GET", `/api/member/todos/${todo.id}`)).body;
-    const note = detail.events.find((event: any) => event.detail?.managerVisibility);
-    expect(note.detail.managerVisibility).toMatchObject({ manager: "mgr", employee: "ic" });
-    expect(note.detail.managerVisibility).not.toHaveProperty("childSessionId");
+    const note = detail.events.find((event: any) => event.id === stored!.id);
+    expect(note).toMatchObject({ kind: "note", detail: {} });
     expect(JSON.stringify(detail)).not.toContain(child.id);
   });
 
-  it("a nested session id, internal identity or unshared person is dropped or generic, whatever key carries it", async () => {
-    const todo = store.createWorkItem({ title: "Nested", department: "ops" });
-    store.appendWorkItemEvent({
-      workItemId: todo.id, kind: "note", actor: "operator",
-      detail: { handoff: { to: BARE, via: `session:${BARE}:x`, trigger: "plugin:calendar", by: "cron:nightly", who: "user:usr_nobody0000", steps: [{ run: BARE, ok: true }], sessionCount: 2, kept: "fine" } },
-    });
+  it("a detail key no kind allows never reaches a member, whatever it holds, in a read or a frame", async () => {
+    const todo = store.createWorkItem({ title: "Unknown keys", department: "ops" });
+    const secrets = { path: "/srv/private/instance/config.yaml", host: "build-box.internal", model: "secret-model-x", costUsd: 12.5, prompt: "SYSTEM: do the hidden thing" };
+    store.appendWorkItemEvent({ workItemId: todo.id, kind: "note", actor: "operator", detail: { assignee: "alice", ...secrets, nested: { ...secrets } } });
+    store.appendWorkItemEvent({ workItemId: todo.id, kind: "status_change", fromStatus: "backlog", toStatus: "executing", actor: "operator", detail: { note: "started", ...secrets } });
+    store.appendWorkItemEvent({ workItemId: todo.id, kind: "verify_result" as never, actor: "operator", detail: { ...secrets } });
+    store.appendWorkItemEvent({ workItemId: todo.id, kind: "some_future_kind" as never, actor: "operator", detail: { ...secrets } });
+    const frames: any[] = [];
+    const socket = { readyState: 1, close() {}, send: (data: string) => frames.push(JSON.parse(data)) };
+    h.rt.memberSockets.add(socket, viewer.sessionId);
+    const live = store.getWorkItem(todo.id)!;
+    h.rt.memberSockets.publish("company:changed", { entity: "todo", action: "updated", id: todo.id, version: live.version, value: live, detail: secrets });
+    h.rt.memberSockets.remove(socket);
     const detail = (await h.as(viewer, "GET", `/api/member/todos/${todo.id}`)).body;
-    const note = detail.events.find((event: any) => event.detail?.handoff);
-    expect(note.detail.handoff).toEqual({ who: "member", steps: [{ ok: true }], kept: "fine" });
+    const tree = (await h.as(viewer, "GET", `/api/member/todos/${todo.id}/tree`)).body;
+    const list = (await h.as(viewer, "GET", "/api/member/boards/ops/todos?limit=200")).body;
+    const text = JSON.stringify([detail, tree, list, frames]);
+    for (const value of ["/srv/private", "build-box.internal", "secret-model-x", "12.5", "hidden thing"]) expect(text).not.toContain(value);
+    // What the web renders still arrives: the assignee on a note, the note on a move.
+    expect(detail.events.find((event: any) => event.kind === "note").detail).toEqual({ assignee: "alice" });
+    expect(detail.events.find((event: any) => event.kind === "status_change").detail).toEqual({ note: "started" });
+    expect(detail.events.find((event: any) => event.kind === "some_future_kind").detail).toEqual({});
+    // An event is the wire's fields and no others.
+    for (const event of detail.events) expect(Object.keys(event).sort()).toEqual(["actor", "createdAt", "detail", "fromStatus", "id", "kind", "toStatus", "workItemId"]);
+  });
+
+  it("an allowed key holding a session id, internal identity or unshared person is still dropped or generic", async () => {
+    const todo = store.createWorkItem({ title: "Allowed but odd", department: "ops" });
+    store.appendWorkItemEvent({
+      workItemId: todo.id, kind: "status_change", fromStatus: "backlog", toStatus: "blocked", actor: "operator",
+      detail: { reason: BARE, note: `session:${BARE}:x` },
+    });
+    store.appendWorkItemEvent({ workItemId: todo.id, kind: "label_changed", actor: "operator", detail: { labels: ["plugin:calendar", "ok-label", "cron:nightly"] } });
+    store.appendWorkItemEvent({ workItemId: todo.id, kind: "note", actor: "operator", detail: { assignee: "user:usr_nobody0000" } });
+    const detail = (await h.as(viewer, "GET", `/api/member/todos/${todo.id}`)).body;
+    const byKind = (kind: string) => detail.events.find((event: any) => event.kind === kind).detail;
+    expect(byKind("status_change")).toEqual({});
+    expect(byKind("label_changed")).toEqual({ labels: ["ok-label"] });
+    expect(byKind("note")).toEqual({ assignee: "member" });
     noSessionIds(detail);
     expect(JSON.stringify(detail)).not.toMatch(/plugin:|cron:|usr_nobody/);
   });

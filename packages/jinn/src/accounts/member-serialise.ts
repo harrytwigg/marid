@@ -14,6 +14,7 @@ import { listWorkItemEvents, type WorkItem, type WorkItemEvent, type queryWorkIt
 import { readStopCause } from "../work-items/stop-cause.js";
 import { initDb } from "../shared/db.js";
 import { TODO_ID_PATTERN } from "../work-items/id.js";
+import { OPERATOR_ASSIGNEE } from "../work-items/operator-assignee.js";
 import { boardOfTodo } from "./member-access.js";
 import type { MemberRouteContext } from "./member-context.js";
 import { getGrant } from "./board-members.js";
@@ -250,11 +251,49 @@ function memberDetailValue(value: unknown, viewer: Viewer, key?: string): unknow
   return kept;
 }
 
+/**
+ * The detail keys a member's timeline carries, per event kind: what the member web renders, and nothing else. Every other
+ * key, and every key of a kind not listed, is dropped, whatever it holds. What is kept is then judged by value as well
+ * (a Todo id the member cannot read, another board's name, a session or internal identity are dropped; a person reads
+ * as the actor rule says), so an allowed key carrying something unexpected still leaks nothing.
+ */
+const MEMBER_DETAIL_KEYS: Readonly<Record<string, readonly string[]>> = {
+  child_created: ["childId"],
+  comment_added: ["commentId"],
+  comment_edited: ["commentId"],
+  comment_deleted: ["commentId"],
+  relation_added: ["srcId", "dstId", "kind"],
+  relation_removed: ["srcId", "dstId", "kind"],
+  label_changed: ["labels"],
+  sprint_changed: ["sprint", "from", "reason"],
+  attachment_added: ["attachmentId", "filename", "commentId", "supersedes"],
+  attachment_removed: ["attachmentId", "filename"],
+  metadata_edited: ["updatedFields"],
+  status_change: ["bounce", "rounds", "note", "reason"],
+  escalated: ["reason", "note"],
+  note: ["assignee", "note", "updatedFields", "department"],
+};
+
+/** An assignee named on a member's timeline: the operator's reserved value, or an employee through the actor rule. */
+function memberAssignee(value: unknown, viewer: Viewer): unknown {
+  return value === OPERATOR_ASSIGNEE || typeof value !== "string" ? value : memberWho(value, viewer);
+}
+
+function memberEventDetail(event: WorkItemEvent, viewer: Viewer): WorkItemEvent["detail"] {
+  if (!event.detail) return event.detail;
+  const picked: Record<string, unknown> = {};
+  for (const key of MEMBER_DETAIL_KEYS[event.kind] ?? []) {
+    if (key in event.detail) picked[key] = key === "assignee" ? memberAssignee(event.detail[key], viewer) : event.detail[key];
+  }
+  return memberDetailValue(picked, viewer) as WorkItemEvent["detail"];
+}
+
+/** An event as a member reads it, built field by field: nothing the operator's row carries passes unless it is named here. */
 function memberEvent(event: WorkItemEvent, createdBy: string, viewer: Viewer): WorkItemEvent {
-  const detail = event.detail
-    ? memberDetailValue(event.detail, viewer) as WorkItemEvent["detail"]
-    : event.detail;
-  return { ...event, actor: memberEventActor(event, createdBy, viewer), detail };
+  return {
+    id: event.id, workItemId: event.workItemId, kind: event.kind, fromStatus: event.fromStatus, toStatus: event.toStatus,
+    actor: memberEventActor(event, createdBy, viewer), detail: memberEventDetail(event, viewer), createdAt: event.createdAt,
+  };
 }
 
 export function memberEvents(events: WorkItemEvent[], createdBy: string, viewer: Viewer): WorkItemEvent[] {
