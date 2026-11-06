@@ -1,6 +1,7 @@
 import { clearAuthCookieHeaders, currentAuthDeviceId, listAuthSessionsForUser, revokeAuthSession, revokeAuthSessionsForUser } from "../gateway/auth.js";
 import { json, notFound } from "../gateway/route-helpers.js";
 import { listGrantsForUser } from "./board-members.js";
+import { initialsOf } from "./initials.js";
 import {
   INVITE_TTL_MS, OWNER_INVITE_TTL_MS, RESET_TTL_MS, getTokenById, issueToken, listPendingInvites, revokeOpenInvites,
   revokeOpenResets, revokeToken, tokenState,
@@ -16,9 +17,21 @@ import {
 import { inviteView, readObjectBody, type AccountRouteContext } from "./routes-common.js";
 import { runOperatorRoutes, type OperatorRoute } from "./routes-table.js";
 
+/** The latest time this person was seen on any session: a member session or an operator device their password minted. */
+function lastSeenAt(ctx: AccountRouteContext, userId: string): string | null {
+  const seen = [
+    ...listUserSessions(ctx.rt.getDb(), userId, ctx.rt.now()).map((session) => session.lastSeenAt),
+    ...listAuthSessionsForUser(ctx.rt.home, userId).map((device) => device.lastSeenAt),
+  ].filter((at): at is string => typeof at === "string" && at.length > 0);
+  return seen.length > 0 ? seen.reduce((latest, at) => (at > latest ? at : latest)) : null;
+}
+
 function personView(ctx: AccountRouteContext, user: UserRecord) {
   return {
     ...publicUser(user),
+    initials: initialsOf(user.displayName),
+    passwordSet: user.passwordHash !== null,
+    lastSeenAt: lastSeenAt(ctx, user.id),
     boards: listGrantsForUser(ctx.rt.getDb(), user.id).map((grant) => ({ department: grant.department, role: grant.role })),
   };
 }
@@ -90,14 +103,16 @@ function issueResetLink(ctx: AccountRouteContext, id: string): void {
   json(ctx.res, { link: origin ? `${origin}/reset#${token}` : null, expiresAt: record.expiresAt });
 }
 
+/** A person's sessions; `current` is true for the one this request rides on (an operator device), never for a member session: an operator request does not ride on one. */
 function sessionViews(ctx: AccountRouteContext, userId: string): unknown[] {
+  const currentDevice = currentAuthDeviceId(ctx.req.headers, ctx.rt.home);
   const members = listUserSessions(ctx.rt.getDb(), userId, ctx.rt.now()).map((session) => ({
     id: session.id, kind: "member", createdAt: session.createdAt, lastSeenAt: session.lastSeenAt, expiresAt: session.expiresAt,
-    userAgent: session.userAgent, ip: session.ip,
+    userAgent: session.userAgent, ip: session.ip, current: false,
   }));
   const devices = listAuthSessionsForUser(ctx.rt.home, userId).map((device) => ({
     id: device.id, kind: "device", name: device.name, createdAt: device.createdAt, lastSeenAt: device.lastSeenAt,
-    userAgent: device.userAgent ?? null, ip: device.lastIp ?? null,
+    userAgent: device.userAgent ?? null, ip: device.lastIp ?? null, current: device.id === currentDevice,
   }));
   return [...members, ...devices];
 }
@@ -133,7 +148,7 @@ async function createInstanceInvite(ctx: AccountRouteContext): Promise<void> {
     ttlMs: instanceRole === "owner" ? OWNER_INVITE_TTL_MS : INVITE_TTL_MS,
   });
   const origin = requestOrigin(ctx.req);
-  json(ctx.res, { invite: inviteView(record), link: origin ? `${origin}/invite#${token}` : null });
+  json(ctx.res, { invite: inviteView(record), link: origin ? `${origin}/invite#${token}` : null, expiresAt: record.expiresAt });
 }
 
 function revokeInvite(ctx: AccountRouteContext, id: string): void {

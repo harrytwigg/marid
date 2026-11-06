@@ -87,6 +87,7 @@ function isTodoChange(value: WireRecord): boolean {
     && isOptionalString(value.sessionId)
     && isNumber(value.version)
     && isOptionalJsonObject(value.value)
+    && (value.fromDepartment === undefined || isNullableString(value.fromDepartment))
 }
 
 function isCompanyChangedEvent(value: unknown): value is CompanyChangedEvent {

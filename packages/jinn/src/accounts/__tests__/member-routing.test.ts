@@ -39,12 +39,12 @@ describe("a member's cookie is default-deny", () => {
     const me = await h.request("GET", "/api/member/me", { cookie: pat.cookie });
     expect(me.status).toBe(200);
     expect(me.body.user.email).toBe("pat@example.test");
-    for (const url of ["/api/member/todos/OPS-1", "/api/member/boards", "/api/member/nothing-here"]) {
+    for (const url of ["/api/member/nothing-here", "/api/member/todos/OPS-1/nothing"]) {
       expect((await h.request("GET", url, { cookie: pat.cookie })).status).toBe(404);
     }
     const state = await h.request("GET", "/api/auth/state", { cookie: pat.cookie });
     expect(state.status).toBe(200);
-    expect(state.body).toMatchObject({ authRequired: true, authenticated: false, accountsEnabled: true, principal: { kind: "member", boards: [{ department: "ops", role: "collaborator" }] } });
+    expect(state.body).toMatchObject({ authRequired: true, authenticated: false, accountsEnabled: true, hasAccounts: true, principal: { kind: "member", boards: [{ department: "ops", role: "collaborator" }] } });
     expect(JSON.stringify(state.body)).not.toMatch(/token|hash/i);
   });
 
@@ -141,16 +141,16 @@ describe("GET /api/auth/state", () => {
     const empty = await startHarness();
     try {
       const anon = await empty.request("GET", "/api/auth/state");
-      expect(anon.body).toEqual({ authRequired: true, authenticated: false, canBootstrapLocal: false, networkExposed: true, instance: expect.any(String), accountsEnabled: false, principal: null });
+      expect(anon.body).toEqual({ authRequired: true, authenticated: false, canBootstrapLocal: false, networkExposed: true, instance: expect.any(String), accountsEnabled: true, hasAccounts: false, principal: null });
       const op = await empty.asOperator("GET", "/api/auth/state");
-      expect(op.body).toMatchObject({ authenticated: true, accountsEnabled: false, principal: { kind: "operator" } });
-      const { accountsEnabled: _a, principal: _p, ...before } = anon.body;
+      expect(op.body).toMatchObject({ authenticated: true, accountsEnabled: true, hasAccounts: false, principal: { kind: "operator" } });
+      const { accountsEnabled: _a, hasAccounts: _h, principal: _p, ...before } = anon.body;
       expect(Object.keys(before).sort()).toEqual(["authRequired", "authenticated", "canBootstrapLocal", "instance", "networkExposed"]);
     } finally { empty.close(); }
   });
 
   it("with an account, offers the sign-in form to anonymous callers and still shows no principal", async () => {
     const anon = await h.request("GET", "/api/auth/state");
-    expect(anon.body).toMatchObject({ authenticated: false, accountsEnabled: true, principal: null });
+    expect(anon.body).toMatchObject({ authenticated: false, accountsEnabled: true, hasAccounts: true, principal: null });
   });
 });

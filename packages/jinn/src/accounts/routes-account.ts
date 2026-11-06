@@ -56,7 +56,7 @@ function signedInOwner(ctx: AccountRouteContext, deviceId: string | undefined): 
 }
 
 /** True when the current password is right; otherwise the attempt stays counted and the answer is written. */
-async function currentPasswordRight(ctx: AccountRouteContext, user: UserRecord, given: unknown): Promise<boolean> {
+export async function currentPasswordRight(ctx: AccountRouteContext, user: UserRecord, given: unknown): Promise<boolean> {
   const { res, rt } = ctx;
   const db = rt.getDb();
   const keys = { email: user.email, ip: limitIp(ctx.req) };

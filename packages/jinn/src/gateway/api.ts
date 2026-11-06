@@ -133,7 +133,7 @@ export {
   shouldPersistFinalAssistantMessage,
 } from "../sessions/turn/text.js";
 import { getPackageVersion } from "../shared/version.js";
-import { badRequest, clientGone, isClientAbort, json, matchRoute, notFound, serverError, type ResWithEncoding } from "./route-helpers.js";
+import { badRequest, isClientAbort, json, matchRoute, notFound, serverError, type ResWithEncoding } from "./route-helpers.js";
 import { handleSessionQueueRoute } from "./queue-routes.js";
 export { matchRoute } from "./route-helpers.js";
 import { handleCronApi } from "./cron-api.js";
@@ -149,10 +149,9 @@ import { handleScopedCaller, type ScopedGateDeps } from "./department-scope/gate
 import { handlePluginsApi } from "./plugins-api.js";
 import QRCode from "qrcode";
 import { WhatsAppConnector } from "../connectors/whatsapp/index.js";
-import { handleFilesRequest, fileIdsToMedia, rehomeAttachmentsToSession, mimeFromFilename, MultipartUploadError, readLocalFileForIngestion, readMultipartFile, sanitizeUploadFilename, isFileNotModified } from "./files.js";
-import { streamFile } from "./byte-range.js";
+import { handleFilesRequest, fileIdsToMedia, rehomeAttachmentsToSession, mimeFromFilename, MultipartUploadError, readLocalFileForIngestion, readMultipartFile, sanitizeUploadFilename } from "./files.js";
 import { handleSessionFileRoutes } from "./session-file-read.js";
-import { selectAttachmentVariant } from "./attachment-variants.js";
+import { serveAttachmentBytes } from "./attachment-serve.js";
 import { readJsonBody, readBodyRaw } from "./http-helpers.js";
 import { applyLabelChange, parseLabelChange } from "./work-item-label-change.js";
 import { resolveMessageAudiences, speechContextApplies } from "./speech-context.js";
@@ -245,7 +244,9 @@ import { isToolCallMarker, readHookSessionId, wireHeader } from "../shared/wire-
 import { readWriteOrigin, writeDetail, WRITE_ORIGIN_HEADER } from "../work-items/origin.js";
 import { workItemActor, workItemActorEmployee, type WorkItemCaller } from "./work-item-arming.js";
 import { DISPATCH_PRESSED_BY_META_KEY, authorizeAssignOverSubTasks, authorizeWorkItemDelegation, authorizeWorkItemOwnerManagerOrRoot, isSpentDispatcher, SPENT_DISPATCHER_MESSAGE_REFUSAL } from "./work-item-authority.js";
-import { fullWorkItemPayload, openWorkItemPayload, workItemPagePayload, workItemTreePayload, workItemTreesPayload } from "./work-item-payload.js";
+import { fullWorkItemPayload, openWorkItemPayload, outwardCommentPage, workItemPagePayload, workItemTreePayload, workItemTreesPayload } from "./work-item-payload.js";
+import { outwardComment } from "../work-items/member-identity.js";
+import { departmentBefore } from "../work-items/board-of.js";
 import { TodoDepartmentNotAllowedError } from "../shared/todo-departments-config.js";
 import { DepartmentArchivedError, isDepartmentArchived } from "../work-items/department-archive.js";
 import { DepartmentBoundaryError, scopedDepartmentOf } from "../work-items/department-scope.js";
@@ -746,6 +747,8 @@ function persistTodoMutationActivity(
    *  again here would double it. Assignment writes its own status change outside
    *  `transition()`, so that lane still announces itself here. */
   previousStatus?: WorkItemStatus,
+  /** The department the Todo's board was before this write moved it, when it did. */
+  fromDepartment?: string | null,
 ): string | undefined {
   const target = verifiedActivityTarget(req.headers, context, TODO_ACTIVITY_TOOLS[action] ?? []);
   const announced = previousStatus !== undefined && previousStatus !== item.status;
@@ -761,6 +764,7 @@ function persistTodoMutationActivity(
         id: item.id,
         version: item.version,
         value: item as unknown as JsonObject,
+        ...(fromDepartment !== undefined ? { fromDepartment } : {}),
         ...(target.sessionId ? { sessionId: target.sessionId } : {}),
       },
     } : {}),
@@ -782,12 +786,12 @@ function unarchivedDepartment(department: string | null | undefined): string | n
  * always rewrite the Todo row itself, but the web surfaces still need a change
  * signal to refetch live. One valueless event per affected item; the client
  * responds by invalidating that item's cached projections. */
-export function emitTodoProjectionEvent(context: ApiContext, id: string, action: string): void {
+export function emitTodoProjectionEvent(context: ApiContext, id: string, action: string, fromDepartment?: string | null): void {
   const item = getWorkItem(id);
   if (!item) return;
   persistAndEmitActivityBlock({
     context: chatActivityContext(context),
-    companyEvent: { entity: "todo", action, id, version: item.version },
+    companyEvent: { entity: "todo", action, id, version: item.version, ...(fromDepartment !== undefined ? { fromDepartment } : {}) },
   });
 }
 
@@ -2586,7 +2590,10 @@ export async function handleApiRequest(
           actor: authority.actor,
         });
         if (!result) return notFound(res);
-        const activityReceiptId = persistTodoMutationActivity(req, context, result.item, "metadata-updated", !result.replayed);
+        const activityReceiptId = persistTodoMutationActivity(
+          req, context, result.item, "metadata-updated", !result.replayed, undefined,
+          patch.department !== undefined ? departmentBefore(item) : undefined,
+        );
         return json(res, withActivityReceipt({ workItem: result.item, replayed: result.replayed }, activityReceiptId));
       } catch (err) {
         if (err instanceof WorkItemVersionConflictError) {
@@ -2777,10 +2784,10 @@ export async function handleApiRequest(
       }
       try {
         const assigned = assignWorkItem(params.id, assignee, employee?.department ?? null, workItemActor(caller),
-          { origin: caller.origin, actorEmployee: workItemActorEmployee(caller) });
+          { origin: caller.origin, actorEmployee: workItemActorEmployee(caller), announcesMove: true });
         if (!assigned) return notFound(res);
         const item = assigned.assignee !== current.assignee ? linkSelfStartedTodo(caller, assigned, workItemActor(caller)) : assigned;
-        const activityReceiptId = persistTodoMutationActivity(req, context, item, "assigned", item.version !== current.version);
+        const activityReceiptId = persistTodoMutationActivity(req, context, item, "assigned", item.version !== current.version, undefined, departmentBefore(current));
         return json(res, withActivityReceipt({ workItem: item }, activityReceiptId));
       } catch (err) {
         if (err instanceof TransitionError) {
@@ -2905,7 +2912,7 @@ export async function handleApiRequest(
         else offset = value;
       }
       const page = listComments(params.id, { limit, offset });
-      return json(res, { ...page, limit, offset });
+      return json(res, { ...outwardCommentPage(page), limit, offset });
     }
 
     // POST /api/work-items/:id/comments — add a comment (single-level threading).
@@ -2951,7 +2958,7 @@ export async function handleApiRequest(
           origin: caller.origin,
         });
         emitTodoProjectionEvent(context, params.id, "commented");
-        return json(res, { comment }, 201);
+        return json(res, { comment: outwardComment(comment) }, 201);
       } catch (err) {
         return workItemCommentFailure(res, err);
       }
@@ -2982,7 +2989,7 @@ export async function handleApiRequest(
           operator: caller.kind === "operator",
         });
         emitTodoProjectionEvent(context, params.id, "comment-edited");
-        return json(res, { comment });
+        return json(res, { comment: outwardComment(comment) });
       } catch (err) {
         return workItemCommentFailure(res, err);
       }
@@ -3003,7 +3010,7 @@ export async function handleApiRequest(
           operator: caller.kind === "operator",
         }, caller.origin);
         emitTodoProjectionEvent(context, params.id, "comment-deleted");
-        return json(res, { comment });
+        return json(res, { comment: outwardComment(comment) });
       } catch (err) {
         return workItemCommentFailure(res, err);
       }
@@ -3120,37 +3127,7 @@ export async function handleApiRequest(
       if (!requireTodoRouteId(res, params.id)) return;
       const attachment = getAttachment(params.aid);
       if (!attachment || attachment.workItemId !== params.id) return notFound(res);
-      let stat: fs.Stats;
-      try {
-        stat = fs.statSync(attachment.storagePath);
-      } catch {
-        logger.error(`Attachment ${attachment.id} content missing on disk: ${attachment.storagePath}`);
-        return serverError(res, "attachment content is missing from storage");
-      }
-      if (!stat.isFile() || stat.size !== attachment.bytes) {
-        logger.error(
-          `Attachment ${attachment.id} failed size verification: stored ${attachment.storagePath} is ${stat.size} bytes, row says ${attachment.bytes}`,
-        );
-        return serverError(res, "attachment content failed size verification — the stored file does not match its recorded size");
-      }
-      const reqUrl = new URL(req.url || pathname, `http://${req.headers.host || "localhost"}`);
-      const download = reqUrl.searchParams.get("download") === "1";
-      // A reader who already left (a thumbnail it scrolled past) gets no
-      // sharp/ffmpeg work done on its behalf.
-      if (clientGone(res)) return;
-      const selected = await selectAttachmentVariant(attachment, reqUrl.searchParams, download, () => !clientGone(res));
-      if (!selected) return notFound(res);
-      const etag = `"${attachment.sha256}-${selected.variant}-${selected.size}"`;
-      if (!selected.isFallback && isFileNotModified(req.headers, etag, Number.NaN))
-        return void res.writeHead(304, { "Cache-Control": "public, max-age=31536000, immutable", ETag: etag }).end();
-      await streamFile(req, res, selected.path, {
-        mime: selected.mime,
-        filename: selected.filename,
-        disposition: download || !attachment.mime.startsWith("video/") ? "attachment" : "inline",
-        cacheHeaders: selected.isFallback
-          ? { "Cache-Control": "no-store" }
-          : { "Cache-Control": "public, max-age=31536000, immutable", ETag: etag },
-      });
+      await serveAttachmentBytes(req, res, attachment, pathname);
       return;
     }
 
@@ -3308,7 +3285,7 @@ export async function handleApiRequest(
     // PUT /api/work-items/:id/parent — make a Todo a sub-task of another, or detach it to a root.
     if (await handleReparentApi(req, res, { method, pathname, url }, {
       resolveCaller: () => resolveWorkItemCaller(req, res, context),
-      emitProjection: (id) => emitTodoProjectionEvent(context, id, "reparented"),
+      emitProjection: (id, fromDepartment) => emitTodoProjectionEvent(context, id, "reparented", fromDepartment),
     })) return;
 
     // PUT /api/work-items/:id/labels — `labels` replaces the whole set, `add`/`remove`
