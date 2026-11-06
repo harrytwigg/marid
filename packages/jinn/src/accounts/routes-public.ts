@@ -2,10 +2,10 @@ import { authCookieHeaders, createAuthSession, requestArrivedOverHttps, revokeAu
 import { json } from "../gateway/route-helpers.js";
 import { userCookieHeader } from "./cookie.js";
 import { upsertGrant } from "./board-members.js";
-import { checkAttemptLimits, recordFailure } from "./login-attempts.js";
+import { checkAttemptLimits, recordFailure, releaseAttempt, reserveAttempt } from "./login-attempts.js";
 import { PASSWORD_MAX_LENGTH, passwordProblem, verifyAgainstDummy, verifyPassword } from "./passwords.js";
 import {
-  findToken, markTokenUsed, revokeOpenResets, tokenState, type TokenPurpose, type TokenRecord,
+  findToken, linkTokenToUser, listOpenBoardInvitesFor, markTokenUsed, revokeOpenResets, tokenState, type TokenPurpose, type TokenRecord,
 } from "./tokens.js";
 import {
   createUserSession, pruneUserSessions, revokeUserSessionsForUser,
@@ -15,7 +15,7 @@ import {
   setUserPasswordHash, type UserRecord,
 } from "./users.js";
 import {
-  answerHashBusy, clientIp, describeActor, hashOrBusy, readObjectBody, refuseWithoutGatewayAuth, tooManyRequests,
+  answerHashBusy, clientIp, describeActor, hashOrBusy, limitIp, readObjectBody, refuseWithoutGatewayAuth, tooManyRequests,
   type AccountRouteContext,
 } from "./routes-common.js";
 
@@ -59,6 +59,15 @@ async function checkCredentials(ctx: AccountRouteContext, rawEmail: string, pass
   return ok ? user : undefined;
 }
 
+/**
+ * True when `user` is still exactly who the password was checked against. Hashing takes ~100 ms, during
+ * which the operator may have disabled, demoted or reset them; a session must not outlive that.
+ */
+function unchangedSince(ctx: AccountRouteContext, user: UserRecord): boolean {
+  const now = getUserById(ctx.rt.getDb(), user.id);
+  return !!now && now.status === "active" && now.instanceRole === user.instanceRole && now.passwordHash === user.passwordHash;
+}
+
 async function login(ctx: AccountRouteContext): Promise<void> {
   const { req, res, rt } = ctx;
   const body = await readObjectBody(ctx);
@@ -66,21 +75,23 @@ async function login(ctx: AccountRouteContext): Promise<void> {
   const rawEmail = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 254) : "";
   const password = typeof body.password === "string" ? body.password : "";
   const db = rt.getDb();
-  const keys = { email: rawEmail, ip: clientIp(req) };
-  // Limits come before any hashing, so a locked address or IP costs the gateway one indexed read.
+  const keys = { email: rawEmail, ip: limitIp(req) };
+  // Limits come before any hashing, so a locked address or IP costs the gateway one indexed read; the attempt
+  // is counted before the hash too, so a burst of concurrent guesses cannot all slip under the limit.
   const limit = checkAttemptLimits(db, keys, rt.now());
   if (!limit.allowed) return tooManyRequests(res, limit.retryAfterSeconds);
+  const reservation = reserveAttempt(db, keys, rt.now());
   let user: UserRecord | undefined;
   try {
     user = await checkCredentials(ctx, rawEmail, password);
   } catch (err) {
+    releaseAttempt(db, reservation); // no hash ran to a verdict: not a guess
     if (answerHashBusy(res, err)) return;
     throw err;
   }
-  if (!user) {
-    recordFailure(db, keys, rt.now());
-    return json(res, { error: LOGIN_FAILED }, 401);
-  }
+  // No await from this check to the session below: nothing can change the user in between.
+  if (!user || !unchangedSince(ctx, user)) return json(res, { error: LOGIN_FAILED }, 401);
+  releaseAttempt(db, reservation);
   json(res, { status: "ok", ...startSession(ctx, user) });
 }
 
@@ -88,11 +99,11 @@ async function login(ctx: AccountRouteContext): Promise<void> {
 function usableToken(ctx: AccountRouteContext, raw: unknown, purpose: TokenPurpose): TokenRecord | undefined {
   const { req, res, rt } = ctx;
   const db = rt.getDb();
-  const limit = checkAttemptLimits(db, { ip: clientIp(req) }, rt.now());
+  const limit = checkAttemptLimits(db, { ip: limitIp(req) }, rt.now());
   if (!limit.allowed) { tooManyRequests(res, limit.retryAfterSeconds); return undefined; }
   const token = findToken(db, raw, purpose);
   if (token && tokenState(token, rt.now()) === "valid") return token;
-  recordFailure(db, { ip: clientIp(req) }, rt.now());
+  recordFailure(db, { ip: limitIp(req) }, rt.now());
   json(res, { error: LINK_DEAD }, 410);
   return undefined;
 }
@@ -108,19 +119,28 @@ async function inspectInvite(ctx: AccountRouteContext): Promise<void> {
   });
 }
 
-/** The user, grant and session an invite creates, in one transaction with marking the token used. */
+/**
+ * The user, grants and token bookkeeping an invite creates, in one transaction. Other board invites still
+ * open for the same address are honoured too: the first acceptance creates the account, and a second
+ * "accept" would otherwise answer "sign in instead" and never grant that board.
+ */
 function acceptInTransaction(ctx: AccountRouteContext, token: TokenRecord, input: { displayName: string; passwordHash: string }): UserRecord | "gone" | "taken" {
   const db = ctx.rt.getDb();
+  const now = ctx.rt.now();
   try {
     return db.transaction((): UserRecord | "gone" => {
-      if (!markTokenUsed(db, token.id, ctx.rt.now())) return "gone";
+      if (!markTokenUsed(db, token.id, now)) return "gone";
       const user = createUser(db, {
         email: token.email, displayName: input.displayName, passwordHash: input.passwordHash,
         instanceRole: token.department === null ? (token.instanceRole ?? "member") : "member",
-        createdBy: token.createdBy, now: ctx.rt.now(),
+        createdBy: token.createdBy, now,
       });
-      if (token.department !== null && token.role !== null) {
-        upsertGrant(db, { userId: user.id, department: token.department, role: token.role, grantedBy: token.createdBy, now: ctx.rt.now() });
+      linkTokenToUser(db, token.id, user.id);
+      const grants = [token, ...listOpenBoardInvitesFor(db, token.email, now).filter((other) => other.id !== token.id)];
+      for (const invite of grants) {
+        if (invite.department === null || invite.role === null) continue;
+        if (invite.id !== token.id) { markTokenUsed(db, invite.id, now); linkTokenToUser(db, invite.id, user.id); }
+        upsertGrant(db, { userId: user.id, department: invite.department, role: invite.role, grantedBy: invite.createdBy, now });
       }
       return user;
     })();
@@ -155,7 +175,7 @@ function usableReset(ctx: AccountRouteContext, raw: unknown): { token: TokenReco
   if (!token) return undefined;
   const user = token.userId ? getUserById(ctx.rt.getDb(), token.userId) : undefined;
   if (user && user.status === "active") return { token, user };
-  recordFailure(ctx.rt.getDb(), { ip: clientIp(ctx.req) }, ctx.rt.now());
+  recordFailure(ctx.rt.getDb(), { ip: limitIp(ctx.req) }, ctx.rt.now());
   json(ctx.res, { error: LINK_DEAD }, 410);
   return undefined;
 }

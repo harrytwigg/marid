@@ -41,19 +41,22 @@ export interface HashLimiter {
 export function createHashLimiter(maxRunning = HASH_MAX_RUNNING, maxQueued = HASH_MAX_QUEUED): HashLimiter {
   let running = 0;
   const waiting: Array<() => void> = [];
+  // A finished task hands its slot straight to the next waiter, so `running` never dips below the work in
+  // flight and a caller arriving in the gap cannot start a third.
   const release = (): void => {
-    running -= 1;
     const next = waiting.shift();
     if (next) next();
+    else running -= 1;
   };
   return {
     stats: () => ({ running, queued: waiting.length }),
     async run<T>(task: () => Promise<T>): Promise<T> {
-      if (running >= maxRunning) {
+      if (running < maxRunning) {
+        running += 1;
+      } else {
         if (waiting.length >= maxQueued) throw new HashBusyError();
-        await new Promise<void>((resolve) => waiting.push(resolve));
+        await new Promise<void>((resolve) => waiting.push(resolve)); // woken holding a slot
       }
-      running += 1;
       try {
         return await task();
       } finally {

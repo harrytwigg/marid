@@ -86,7 +86,7 @@ describe("a member's WebSocket upgrade", () => {
     const { ws } = (await connect("/ws", pat.cookie)) as { ws: WebSocket };
     const closed = new Promise<number>((resolve) => ws.on("close", (code) => resolve(code)));
     h.config.gateway = { host: "127.0.0.1", authRequired: false };
-    expect(h.rt.memberSockets.closeAll()).toBe(1); // what the config reload does
+    h.rt.onConfigReload(); // what the server calls after re-reading the config
     expect(await closed).toBe(MEMBER_SOCKET_CLOSE_UNAUTHORIZED);
     const again = await connect("/ws", pat.cookie);
     expect(operatorSawUpgrade).toEqual(["/ws"]); // no longer a member: falls to the operator gate

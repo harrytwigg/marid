@@ -61,9 +61,12 @@ async function patchPerson(ctx: AccountRouteContext, id: string): Promise<void> 
   const updated = updateUser(ctx.rt.getDb(), id, patch, ctx.rt.now())!;
   const disabled = patch.status === "disabled" && existing.status !== "disabled";
   const demoted = patch.instanceRole === "member" && existing.instanceRole === "owner";
-  // Disabling ends every session; demoting an owner ends the operator devices their password minted.
+  const promoted = patch.instanceRole === "owner" && existing.instanceRole !== "owner";
+  // Disabling ends every session; demoting an owner ends the operator devices their password minted, and
+  // promoting a member ends their member sessions so the next sign-in is the operator one.
   if (disabled) revokeEverything(ctx, id);
   else if (demoted) revokeAuthSessionsForUser(ctx.rt.home, id);
+  else if (promoted) revokeUserSessionsForUser(ctx.rt.getDb(), id, { now: ctx.rt.now() });
   json(ctx.res, { person: personView(ctx, updated) });
 }
 

@@ -2,7 +2,7 @@ import {
   authSessionUserId, currentAuthDeviceId, linkAuthSessionToUser, revokeAuthSessionsForUser,
 } from "../gateway/auth.js";
 import { json } from "../gateway/route-helpers.js";
-import { checkAttemptLimits, recordFailure } from "./login-attempts.js";
+import { checkAttemptLimits, releaseAttempt, reserveAttempt } from "./login-attempts.js";
 import { PASSWORD_MAX_LENGTH, passwordProblem, verifyPassword } from "./passwords.js";
 import { revokeUserSessionsForUser } from "./user-sessions.js";
 import {
@@ -10,7 +10,7 @@ import {
   type UserRecord,
 } from "./users.js";
 import {
-  answerHashBusy, clientIp, hashOrBusy, readObjectBody, tooManyRequests, type AccountRouteContext,
+  answerHashBusy, hashOrBusy, limitIp, readObjectBody, tooManyRequests, type AccountRouteContext,
 } from "./routes-common.js";
 import { runOperatorRoutes, type OperatorRoute } from "./routes-table.js";
 
@@ -55,20 +55,25 @@ function signedInOwner(ctx: AccountRouteContext, deviceId: string | undefined): 
   return undefined;
 }
 
-/** True when the current password is right; otherwise counts a failure and writes the answer. */
+/** True when the current password is right; otherwise the attempt stays counted and the answer is written. */
 async function currentPasswordRight(ctx: AccountRouteContext, user: UserRecord, given: unknown): Promise<boolean> {
   const { res, rt } = ctx;
-  const keys = { email: user.email, ip: clientIp(ctx.req) };
-  const limit = checkAttemptLimits(rt.getDb(), keys, rt.now());
+  const db = rt.getDb();
+  const keys = { email: user.email, ip: limitIp(ctx.req) };
+  const limit = checkAttemptLimits(db, keys, rt.now());
   if (!limit.allowed) { tooManyRequests(res, limit.retryAfterSeconds); return false; }
+  const reservation = reserveAttempt(db, keys, rt.now());
   const current = typeof given === "string" ? given : "";
   try {
-    if (current.length <= PASSWORD_MAX_LENGTH && await verifyPassword(current, user.passwordHash!, rt.limiter)) return true;
+    if (current.length <= PASSWORD_MAX_LENGTH && await verifyPassword(current, user.passwordHash!, rt.limiter)) {
+      releaseAttempt(db, reservation);
+      return true;
+    }
   } catch (err) {
+    releaseAttempt(db, reservation);
     if (answerHashBusy(res, err)) return false;
     throw err;
   }
-  recordFailure(rt.getDb(), keys, rt.now());
   json(res, { error: "Current password is incorrect" }, 403);
   return false;
 }

@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { isLoopback } from "../gateway/hook-endpoint.js";
 import { json } from "../gateway/route-helpers.js";
 import { readJsonBody } from "../gateway/http-helpers.js";
 import type { ParsedRoute } from "../gateway/route-helpers.js";
@@ -56,6 +57,15 @@ export async function readObjectBody(ctx: AccountRouteContext): Promise<Record<s
 
 export function clientIp(req: IncomingMessage): string | undefined {
   return req.socket.remoteAddress;
+}
+
+/**
+ * The peer a rate-limit bucket counts, or undefined for none. A loopback peer is a local tunnel or proxy
+ * standing in for many clients, so it gets no shared IP bucket: it is limited per address and by the hash cap.
+ */
+export function limitIp(req: IncomingMessage): string | undefined {
+  const ip = clientIp(req);
+  return ip === undefined || isLoopback(ip) ? undefined : ip;
 }
 
 export function tooManyRequests(res: ServerResponse, retryAfterSeconds: number, message = "Too many attempts, try again later"): void {

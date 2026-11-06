@@ -984,8 +984,7 @@ export async function startGateway(
     try {
       currentConfig = loadConfig();
       apiContext.config = currentConfig;
-      // Where auth is no longer required a member means nothing: close their sockets (4401) now; the cookie is ignored from the next request.
-      if (!shouldRequireGatewayAuth(currentConfig)) accounts.memberSockets.closeAll();
+      accounts.onConfigReload(); // closes member sockets (4401) if auth is no longer required
       sessionManager.setConfig(currentConfig);
       applyLateralHopConfig(currentConfig);
       invalidateModelRegistry(); // rebuild the model/capability registry from the new config

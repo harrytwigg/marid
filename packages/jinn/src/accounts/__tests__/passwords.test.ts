@@ -60,6 +60,31 @@ describe("the global hashing cap", () => {
     expect(limiter.stats()).toEqual({ running: 0, queued: 0 });
   });
 
+  it("never has more than 2 running, even when a caller arrives as a slot is handed on", async () => {
+    const limiter = createHashLimiter(2, 16);
+    let running = 0;
+    let peak = 0;
+    const gates: Array<() => void> = [];
+    const task = async () => {
+      running += 1;
+      peak = Math.max(peak, running);
+      await new Promise<void>((resolve) => gates.push(resolve));
+      running -= 1;
+    };
+    const calls = [limiter.run(task), limiter.run(task), limiter.run(task)];
+    await new Promise((r) => setImmediate(r));
+    gates.shift()!(); // the first finishes: its slot goes to the waiting third
+    calls.push(limiter.run(task)); // arrives in the gap a decrement-then-wake release left open
+    calls.push(limiter.run(task));
+    await new Promise((r) => setImmediate(r));
+    expect(peak).toBeLessThanOrEqual(2);
+    let settled = 0;
+    calls.forEach((p) => void p.then(() => { settled += 1; }));
+    while (settled < calls.length) { gates.splice(0).forEach((open) => open()); await new Promise((r) => setImmediate(r)); }
+    expect(peak).toBe(2);
+    expect(limiter.stats()).toEqual({ running: 0, queued: 0 });
+  });
+
   it("releases its slot when a task throws", async () => {
     const limiter = createHashLimiter(1, 0);
     await expect(limiter.run(async () => { throw new Error("boom"); })).rejects.toThrow("boom");

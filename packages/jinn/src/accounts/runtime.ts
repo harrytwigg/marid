@@ -30,6 +30,8 @@ export interface AccountsRuntime {
   /** The one function HTTP and the upgrade handler both ask who is calling. */
   resolvePrincipal(req: RequestLike): Principal;
   boardsOf(userId: string): BoardGrant[];
+  /** Call after the config is re-read: where gateway auth is no longer required a member means nothing, so their sockets close (4401). */
+  onConfigReload(): void;
   dispose(): void;
 }
 
@@ -80,6 +82,7 @@ export function createAccountsRuntime(opts: AccountsRuntimeOptions): AccountsRun
     },
     resolvePrincipal,
     boardsOf: (userId) => listGrantsForUser(opts.getDb(), userId),
+    onConfigReload() { if (!opts.authRequired()) memberSockets.closeAll(); },
     dispose: stopListening,
   };
 }

@@ -90,6 +90,18 @@ export function markTokenUsed(db: DatabaseType, id: string, now = Date.now()): b
     .run(isoNow(now), id, isoNow(now)).changes > 0;
 }
 
+/** Record which account a token ended up creating or resetting. */
+export function linkTokenToUser(db: DatabaseType, id: string, userId: string): void {
+  db.prepare("UPDATE user_tokens SET user_id = ? WHERE id = ?").run(userId, id);
+}
+
+/** Every board invite for this address that can still be accepted. */
+export function listOpenBoardInvitesFor(db: DatabaseType, email: string, now = Date.now()): TokenRecord[] {
+  const rows = db.prepare(`SELECT ${COLUMNS} FROM user_tokens WHERE purpose = 'invite' AND email = ? AND department IS NOT NULL AND used_at IS NULL AND revoked_at IS NULL AND expires_at > ? ORDER BY created_at, id`)
+    .all(email, isoNow(now));
+  return (rows as TokenRow[]).map(toRecord);
+}
+
 export function revokeToken(db: DatabaseType, id: string, now = Date.now()): boolean {
   return db.prepare("UPDATE user_tokens SET revoked_at = ? WHERE id = ? AND used_at IS NULL AND revoked_at IS NULL")
     .run(isoNow(now), id).changes > 0;
