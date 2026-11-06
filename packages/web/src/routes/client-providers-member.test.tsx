@@ -10,7 +10,7 @@ let principal: { kind: string } | null = null
 const passThrough = vi.hoisted(() => ({ children }: { children: ReactNode }) => children)
 
 vi.mock("@/routes/providers", () => ({ ThemeProvider: passThrough }))
-vi.mock("@/routes/auth-provider", () => ({ AuthProvider: passThrough, AuthGate: passThrough, useAuth: () => ({ principal }) }))
+vi.mock("@/routes/auth-provider", () => ({ AuthProvider: passThrough, AuthGate: passThrough, useAuth: () => ({ principal }), useAuthOptional: () => ({ principal }) }))
 vi.mock("@/routes/settings-provider", () => ({ SettingsProvider: passThrough, DocumentTitle: () => null, useSettings: () => ({ settings: { talkOrb: false } }) }))
 vi.mock("@/hooks/use-gateway", () => ({ GatewayProvider: passThrough, useGateway: () => ({ connected: false, subscribe: () => () => {} }) }))
 vi.mock("@/hooks/use-query-invalidation", () => ({ useQueryInvalidation: () => {} }))

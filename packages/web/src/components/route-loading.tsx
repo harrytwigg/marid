@@ -1,6 +1,7 @@
 import { useRouteLoadingPresence } from '@/components/chat/chat-hydration'
 import { MobileTabBar } from '@/components/chat/mobile-tab-bar'
 import { BrandMark } from '@/components/brand-mark-image'
+import { useMember } from '@/hooks/use-principal'
 
 /**
  * The route-level Suspense fallback. It MUST carry the mobile tab bar: routes
@@ -18,11 +19,13 @@ import { BrandMark } from '@/components/brand-mark-image'
  */
 export function RouteLoading({ label = 'Loading page' }: { label?: string }) {
   useRouteLoadingPresence()
+  // The bar leads to the operator's pages, so a board member's loading frame has none.
+  const member = useMember()
   return (
     <div className="flex h-dvh flex-col items-center justify-center gap-[var(--space-4)] bg-[var(--bg)]" role="status" aria-label={label}>
       <BrandMark size={56} className="motion-safe:animate-pulse" />
       <div className="size-5 animate-spin rounded-full border-2 border-[var(--fill-tertiary)] border-t-[var(--accent)]" />
-      <MobileTabBar />
+      {!member && <MobileTabBar />}
     </div>
   )
 }
