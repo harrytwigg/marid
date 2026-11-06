@@ -28,6 +28,8 @@ export interface BoardRequestOptions {
 export interface BoardHarness {
   db: import("better-sqlite3").Database;
   home: string;
+  /** Where the gateway is listening, for a client (the MCP tools) that makes its own requests. */
+  baseUrl: string;
   rt: import("../runtime.js").AccountsRuntime;
   /** Every `emit(event, payload)` the gateway made, in order. */
   broadcasts: Array<{ event: string; payload: any }>;
@@ -113,7 +115,7 @@ export async function startBoardHarness(): Promise<BoardHarness> {
     return memberFrom(db, email, accept);
   };
   return {
-    db, home, rt, broadcasts, request, operator, as, join,
+    db, home, baseUrl: base, rt, broadcasts, request, operator, as, join,
     async close() {
       setTodoLiveEmitter(null);
       rt.dispose();

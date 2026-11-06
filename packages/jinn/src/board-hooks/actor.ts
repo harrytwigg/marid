@@ -82,7 +82,13 @@ export function creatorOf(event: WorkItemEvent, item: WorkItem): HookActor {
   const member = memberIdOf(item.createdBy);
   if (member) return { ...base, kind: "member", member };
   if (item.createdBy === HUMAN_CREATOR || item.source === "human") return { ...base, kind: "operator" };
-  const employee = (sessionId ? getSession(sessionId)?.employee : undefined)
-    ?? (EMPLOYEE_CREATED_SOURCES.has(item.source) && !item.createdBy.startsWith(SESSION_ACTOR) ? item.createdBy : undefined);
+  const employee = creatingEmployee(item, sessionId);
   return employee ? { ...base, kind: "employee", employee } : { ...base, kind: "system" };
+}
+
+/** The employee a non-human Todo was created by: the creating session's, else the slug a session or delegation recorded. */
+function creatingEmployee(item: WorkItem, sessionId: string | undefined): string | undefined {
+  const fromSession = sessionId ? getSession(sessionId)?.employee : undefined;
+  if (fromSession) return fromSession;
+  return EMPLOYEE_CREATED_SOURCES.has(item.source) && !item.createdBy.startsWith(SESSION_ACTOR) ? item.createdBy : undefined;
 }

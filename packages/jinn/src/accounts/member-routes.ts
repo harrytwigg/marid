@@ -7,9 +7,8 @@ import { passwordProblem } from "./passwords.js";
 import {
   boardTodos, listBoards, listMemberPeople, listTodoAttachments, listTodoComments, readAttachment, showTodo, showTree,
 } from "./member-reads.js";
-import {
-  addTodoComment, createTodo, deleteTodoComment, editTodoComment, patchTodo, setStatus, uploadAttachment,
-} from "./member-writes.js";
+import { addTodoComment, deleteTodoComment, editTodoComment, uploadAttachment } from "./member-comments.js";
+import { createTodo, patchTodo, setStatus } from "./member-writes.js";
 import { shareRoutes } from "./member-share.js";
 import { currentPasswordRight } from "./routes-account.js";
 import { hashOrBusy, readObjectBody } from "./routes-common.js";

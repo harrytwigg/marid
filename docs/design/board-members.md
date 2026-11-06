@@ -403,3 +403,36 @@ Settled while building the web against this contract; the gateway answers exactl
   displayName, emoji }] }`.
 - Invite and reset-link POSTs → `{ link, expiresAt }`; an invite to an existing active
   account → `{ granted: true }`.
+
+### Phase 2 build notes
+
+Where the build had to pick a reading, or the contract was silent, it did this:
+
+- **Member PATCH needs a version, except for labels.** A change to title, body or priority carries `expectedVersion`
+  (or `If-Match`) as the operator's edit does. A labels-only call replaces a set, like the operator's labels route,
+  and needs none. Labels fold into the idempotency key, because the store's fingerprint does not cover them.
+- **Fields only the operator sets** (`assignee`, `department`, `rank`, `dueAt`, `startAt`, `status` on PATCH,
+  `autoStart`, `sprint`, source fields) answer 403 on create and PATCH; any other unknown field answers 400.
+- **Idempotency keys are scoped to the member** (`user:<id>:<key>`), so two people's identical keys never replay one another.
+- **Attachments upload as multipart only.** The operator's JSON form names a path on the gateway's disk; a member never gets it.
+  Member attachment rows omit `storagePath`. There is no member route to delete an attachment.
+- **Status moves by a member reach no automation.** Besides the child-settle row, a member's move is not handed to the
+  workflow status trigger, which can start agents.
+- **Member reads omit** `sourceRef`, `budgetUsd`, session refs, the operator's Home flag and attention lane, runs and
+  dispatch config; spend reads as zero; events leave out the operator's machinery (session links, recovery, quiet-watch,
+  claims) and never name a session; relations are shown only to a Todo on a board the member also holds.
+  Comments carry no `sessionId`.
+- **`GET /api/member/people` employees** are the employees that hold, created or commented on a Todo on one of the member's boards.
+- **Member frames** are `{ event: "company:changed", payload: { entity: "todo", action, id, version?, value? }, ts }`;
+  `removed` carries only `{ entity, action, id }`. A write that moves a board sends `fromDepartment` on the operator's event
+  (a department change, an assignment that derives one, a reparent), and the member feed reads it.
+- **Assignment can move a card off a shared board.** Where departments are open, assigning a Todo derives its department
+  from the assignee's, so a member loses a Todo the operator assigns to an employee elsewhere (the member sees `removed`).
+  Dedicated departments keep it.
+- **The outward `member` kind** is derived for comments (web wire, MCP tools, board walk, Talk, reply prompts). A Todo,
+  event or attachment names its member by the raw `user:<id>` on `createdBy`, `actor` or `uploadedBy`, which no reader
+  mistakes for the operator; `get_work_item` adds a `members` map from those identities to names.
+- **Phase 1 corrections made here to match "Response shapes":** `accountsEnabled` / `hasAccounts` on `GET /api/auth/state`;
+  `initials`, `passwordSet`, `lastSeenAt` on People rows; the board members list shape; `expiresAt` on invite responses.
+  `POST /api/member/password` and `GET`/`DELETE /api/member/sessions` (own sessions only) are mounted.
+
