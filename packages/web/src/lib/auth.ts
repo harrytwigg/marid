@@ -1,5 +1,6 @@
 import { gatewayTransport } from "./gateway-transport"
 import { hashKeyNames, requestHeaderName } from "./codename"
+import type { PrincipalWire } from "./accounts-api"
 
 export interface AuthState {
   authRequired: boolean
@@ -8,6 +9,12 @@ export interface AuthState {
   networkExposed: boolean
   /** Instance name serving this page, so pairing hints can name `jinn -i <instance> pair`. */
   instance?: string
+  /** Gateway auth is on, so accounts can exist. Absent from an older gateway. */
+  accountsEnabled?: boolean
+  /** At least one account exists: only then does the gate offer the email form, so first-time setup is unchanged. */
+  hasAccounts?: boolean
+  /** Who this request is. A member never sees `authenticated` as the operator's pairing. */
+  principal?: PrincipalWire
 }
 
 export interface PairingCode {
@@ -154,7 +161,22 @@ function assertGatewayProfile(profileId: string): void {
   }
 }
 
+/** The seam a member's session reads and writes through. While one is installed, every request the
+ *  shared Todo surfaces make is answered by it (mapped onto `/api/member/*`, or refused locally), so
+ *  the operator's components run unchanged and nothing a member does reaches a general route. */
+export type RequestSource = (input: string, init: RequestInit) => Promise<Response>
+let requestSource: RequestSource | null = null
+export function setRequestSource(source: RequestSource | null): void {
+  requestSource = source
+}
+/** True while a member's session is signed in: the one fact the few URL builders (an `<img src>`
+ *  never goes through `authFetch`) need to pick the member route. */
+export function isMemberSession(): boolean {
+  return requestSource !== null
+}
+
 export async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  if (requestSource) return requestSource(input, init)
   const transport = gatewayTransport()
   const profileId = transport.profile.id
   const first = await transport.request(input, init)

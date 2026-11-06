@@ -1,4 +1,5 @@
-import { authFetch, authUrl } from "@/lib/auth"
+import { authFetch, authUrl, isMemberSession } from "@/lib/auth"
+import { memberAttachmentPath } from "@/lib/member-source"
 import type { TodoStopCauseWire } from "@/lib/parked"
 import type {
   CreateNoteInput,
@@ -895,7 +896,9 @@ export const api = {
     del<{ removed: boolean }>(`/api/work-items/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}`),
   /** Integrity-checked download path (cookie-authenticated, usable as img src). */
   workItemAttachmentUrl: (id: string, attachmentId: string): string =>
-    authUrl(`/api/work-items/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}`),
+    authUrl(isMemberSession()
+      ? memberAttachmentPath(id, attachmentId)
+      : `/api/work-items/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}`),
   /** Todos v2 slice 3: relations (blocks is cycle-checked server-side). */
   addWorkItemRelation: (id: string, kind: WorkItemRelationKindWire, dstId: string) =>
     post<{ relation: unknown }>(`/api/work-items/${encodeURIComponent(id)}/relations`, { kind, dstId }),

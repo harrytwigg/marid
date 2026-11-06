@@ -13,9 +13,11 @@ interface PairingScreenProps {
   pairing: boolean
   error?: string | null
   onPair: (secret: string, mode: PairingMode) => void
+  /** Present only when the instance has accounts: the email-and-password form is offered beside pairing. */
+  onSignIn?: (email: string, password: string) => Promise<void>
 }
 
-export function PairingScreen({ authState, pairing, error, onPair }: PairingScreenProps) {
+export function PairingScreen({ authState, pairing, error, onPair, onSignIn: _onSignIn }: PairingScreenProps) {
   const [code, setCode] = useState("")
   const [mode, setMode] = useState<PairingMode>("code")
   const [flow, setFlow] = useState<PairingFlow>("cli")
