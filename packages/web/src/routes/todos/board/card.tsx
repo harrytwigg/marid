@@ -132,8 +132,11 @@ export const BoardCard = memo(function BoardCard({
   const detail = enrichment?.detail
   const rollup = useMemo(() => rollupOf(tree, item.status), [tree, item.status])
   const priority = tree?.root.priority ?? detail?.workItem.priority ?? 2
+  // Cost shows for the operator whenever the gateway reports one (the Todo's tree not yet loaded reads as $0.00, so a
+  // card keeps its height). A member is never shown cost, and the gateway sends null for them.
   const spendUsd = tree?.spendUsd ?? 0
   const member = useMember() !== null
+  const showCost = !member && tree?.spendUsd !== null
   const employee = item.assignee ? byName.get(item.assignee) : undefined
   const assigneeName = employee?.displayName ?? item.assignee
   const overdue = !!item.dueAt && Date.parse(item.dueAt) < Date.now()
@@ -255,8 +258,8 @@ export const BoardCard = memo(function BoardCard({
       {/* Row 4 — what it has cost, and when it is due. The cost renders at $0.00
        *  too: a row that only some cards have is a row that changes heights. */}
       {/* A member does not see what a Todo has cost, so for them the row exists only when it has a date to show. */}
-      {(!member || startsLater || item.dueAt) && <div className="flex items-center gap-2 text-[calc(11px*var(--text-scale))]">
-        {!member && <span className="tabular-nums text-[var(--text-quaternary)]" style={{ fontFamily: "var(--font-code)" }}>
+      {(showCost || startsLater || item.dueAt) && <div className="flex items-center gap-2 text-[calc(11px*var(--text-scale))]">
+        {showCost && <span className="tabular-nums text-[var(--text-quaternary)]" style={{ fontFamily: "var(--font-code)" }}>
           ${spendUsd.toFixed(2)}
         </span>}
         {startsLater && (

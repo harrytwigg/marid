@@ -428,7 +428,7 @@ export interface WorkItemCompactWire extends TodoStopCauseWire {
 export interface WorkItemListWire {
   workItems: WorkItemCompactWire[]
   total?: number
-  totals?: Partial<Record<WorkItemStatusWire, number>>
+  totals?: Partial<Record<WorkItemStatusWire, number | null>>
   limit?: number
   offset?: number
   nextOffset?: number | null
@@ -495,11 +495,12 @@ export interface WorkItemTreeNodeWire extends WorkItemFullWire {
   children: WorkItemTreeNodeWire[]
 }
 
-/** The tree payload: subtree + per-status totals + derived subtree spend. */
+/** The tree payload: subtree + per-status totals + derived subtree spend. For a board member every cost figure is
+ *  null (and a total may be), so readers treat null as "nothing to show", not as zero spent. */
 export interface WorkItemTreeWire {
   root: WorkItemTreeNodeWire
-  totals: Partial<Record<WorkItemStatusWire, number>>
-  spendUsd: number
+  totals: Partial<Record<WorkItemStatusWire, number | null>>
+  spendUsd: number | null
 }
 
 /** One attachment row (Todos v2 slice 5) — content-addressed; `commentId`
@@ -543,7 +544,8 @@ export interface WorkItemDetailWire extends TodoStopCauseWire {
   kept?: boolean
   /** Who this Todo's review is addressed to (optional: older gateways omit it). */
   reviewAddressee?: ReviewAddresseeWire
-  spendUsd: number
+  /** Null for a board member: cost is not theirs to see. */
+  spendUsd: number | null
   events: WorkItemEventWire[]
   /** Last-10 comments tail + total (optional: older gateways omit it). */
   comments?: WorkItemCommentPageWire

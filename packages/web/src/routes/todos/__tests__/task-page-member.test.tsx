@@ -48,8 +48,9 @@ function member(role: BoardRole): Principal {
 }
 
 function setup(root: WorkItemFullWire, children: WorkItemFullWire[] = []) {
-  getWorkItem.mockResolvedValue({ workItem: root, spendUsd: 0, events: [] })
-  getWorkItemTree.mockResolvedValue({ tree: { root: node(root, children.map((c) => node(c))), totals: {}, spendUsd: 0 } })
+  // A member's detail as the contract pins it: cost is null.
+  getWorkItem.mockResolvedValue({ workItem: root, spendUsd: principal.kind === "member" ? null : 0, events: [] })
+  getWorkItemTree.mockResolvedValue({ tree: { root: node(root, children.map((c) => node(c))), totals: principal.kind === "member" ? { backlog: null } : {}, spendUsd: principal.kind === "member" ? null : 0 } })
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>

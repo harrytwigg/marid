@@ -243,7 +243,7 @@ export function PropsRail({
         <span className="text-[12px] font-normal text-[var(--text-quaternary)]">· created {formatRelativeTime(item.createdAt)}</span>
         <LastTouchedBy events={detail.events} />
       </RailRow>
-      {operatorControls && <RailRow quiet testId="rail-spend">
+      {operatorControls && detail.spendUsd !== null && <RailRow quiet testId="rail-spend">
         <span className="text-[11px] font-normal text-[var(--text-quaternary)]" style={{ fontFamily: "var(--font-code)" }}>
           ${detail.spendUsd.toFixed(2)}
         </span>

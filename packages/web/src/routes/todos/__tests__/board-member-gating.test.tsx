@@ -10,6 +10,7 @@ import { clearBoardScrollCache } from "../board/board-route"
 
 type Principal = { kind: "operator" } | { kind: "member"; user: { id: string; email: string; displayName: string }; boards: { department: string; role: BoardRole }[] }
 let principal: Principal = { kind: "operator" }
+let nullCost = false
 vi.mock("@/routes/auth-provider", () => ({
   useAuthOptional: () => ({ principal, authState: { accountsEnabled: true, hasAccounts: true, principal } }),
 }))
@@ -20,6 +21,12 @@ vi.mock("@/components/people/share-board-button", () => ({
   ShareBoardButton: ({ mode, ownRole }: { mode: string; ownRole?: string }) => <button data-testid="board-share">{mode}:{ownRole ?? ""}</button>,
 }))
 
+// A tree as the contract pins it for a member: every cost figure is null, and so may a total be.
+function treeFor(id: string) {
+  const none = principal.kind === "member" || nullCost
+  return { root: { id, children: [], status: "backlog" }, totals: none ? { backlog: null } : {}, spendUsd: none ? null : 0 }
+}
+
 const createWorkItem = vi.fn()
 const listWorkItems = vi.fn()
 vi.mock("@/lib/api", async (importOriginal) => {
@@ -28,8 +35,8 @@ vi.mock("@/lib/api", async (importOriginal) => {
     ...actual,
     api: {
       listWorkItems: (...args: unknown[]) => listWorkItems(...args),
-      getWorkItemTree: async (id: string) => ({ tree: { root: { id, children: [], status: "backlog" }, totals: {}, spendUsd: 0 } }),
-      getWorkItemTrees: async () => ({ trees: {} }),
+      getWorkItemTree: async (id: string) => ({ tree: treeFor(id) }),
+      getWorkItemTrees: async (ids: string[]) => ({ trees: Object.fromEntries(ids.map((id) => [id, treeFor(id)])) }),
       getWorkItems: async () => ({ workItems: [] }),
       getDepartments: async () => ({ departments: [{ slug: "platform", prefix: "PLT", createdAt: "", todoCount: 1 }] }),
       getOrg: async () => ({ departments: ["platform"], employees: [] }),
@@ -59,6 +66,7 @@ function renderBoard() {
 }
 
 beforeEach(() => {
+  nullCost = false
   vi.clearAllMocks()
   clearBoardScrollCache()
   sessionStorage.clear()
@@ -118,5 +126,14 @@ describe("the board for a member", () => {
     expect(screen.getByTestId("todos-filters")).toBeTruthy()
     expect(screen.getByTestId("board-card-PLT-1").textContent).toMatch(/\$0\.00/)
     expect(screen.getByTestId("board-quick-add-backlog")).toBeTruthy()
+  })
+
+  it("shows no cost, and does not fall over, when a tree reports none (null spend and a null total)", async () => {
+    principal = { kind: "operator" }
+    nullCost = true
+    renderBoard()
+    await screen.findByTestId("board-card-PLT-1")
+    // Until the tree lands the card holds its height with $0.00; once it says null there is no cost to show.
+    await waitFor(() => expect(screen.getByTestId("board-card-PLT-1").textContent).not.toMatch(/\$\d/))
   })
 })
