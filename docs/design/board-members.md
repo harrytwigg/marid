@@ -173,6 +173,16 @@ each member write, inside the write's transaction. The moment the operator assig
 dispatches anything in the tree it stops being member-only and members can only comment on
 any of it.
 
+**A tree the member created that left their boards.** Where departments are open, an assignment can move a member-created
+root to another department, or (assigned to `@operator`) to the company board. The member keeps **read** access (detail,
+tree, comments, attachments, events, live frames) to the whole open tree whose root they created (`created_by =
+user:<self>`), wherever it now sits, and **comment** access (comment, reply, attach, edit or delete their own comments)
+when they still hold a collaborator or owner role on some board (the board a Todo was created on is not recorded, and
+creating one took a collaborator there). They never edit it or change its status, never add a sub-task to it, and reach
+no other Todo in the destination. The access ends, like any out-of-grant Todo (404), when the root is done or cancelled,
+when the member is disabled, or when they hold no board at all. Assigning within the board's department changes none of
+this: the Todo stays on the board, readable and commentable, and is no longer member-editable.
+
 Why: an agent executes its Todo's title and body, a parent cannot close over an open child, and
 closing a child can wake its parent's owner. A per-Todo rule leaks: a member's sub-task under a
 parent the operator later assigned could be rewritten, or closed to restart the parent's agent.
@@ -292,16 +302,24 @@ its user session id, and the broadcast sends it a **re-serialised** frame, never
   serialisation when the original carried a value). The original's `value` (a full Todo with
   session-bearing `sourceRef`), `sessionId` and anything else are never forwarded.
 - An event passes when the Todo's root department **before or after** the write is one of the
-  member's boards. When it was on a granted board before and is not after (moved or deleted),
-  the member gets `{ entity: "todo", action: "removed", id }` so the card disappears. The
-  emitter supplies the before-department where a write changes it.
+  member's boards, or when the Todo is in an open tree whose root the member created (it left
+  their boards and they keep reading it; sub-tasks included). When it was on a granted board
+  before and is not readable after (moved or deleted), the member gets `{ entity: "todo",
+  action: "removed", id }` so the card disappears; so does their own created root when it
+  closes. The emitter supplies the before-department where a write changes it. A move of the
+  root is sent to its creator as an ordinary change (the value is marked `movedToAnotherBoard`);
+  a sub-task gets no frame of its own for that move, so the web refetches the tree on the
+  root's frame.
 
 The member's web client refetches through the member API, never the general one.
 
 ## Unauthorised board by URL
 
 Member API reads of a Todo, board or attachment outside the member's grants answer `404`, not
-`403`, so a member cannot probe which ids exist. An attachment route checks that the
+`403`, so a member cannot probe which ids exist. The one exception to "outside the grants" is
+the creator rule under Roles: an open tree whose root the member created stays readable after it
+leaves their boards, and the same `404` returns once the root is done or cancelled, the member is
+disabled, or they hold no board. Every other Todo in the destination still answers `404`. An attachment route checks that the
 attachment belongs to that Todo, not only that the Todo is granted. The web shows "This board
 isn't shared with you" with a link back to their boards. A member opening an operator-only
 route (chat, org, settings) is redirected to their boards.
@@ -364,7 +382,8 @@ users changing their own password).
 Member: `GET /api/member/me`, `POST /api/member/password`, `GET /api/member/sessions`,
 `DELETE /api/member/sessions/:id`, `GET /api/member/boards`, `GET /api/member/people`,
 `GET /api/member/boards/:department/todos` (same query shape and item serialisation as the
-board's existing list), `GET /api/member/todos/:id`, `GET /api/member/todos/:id/tree`,
+board's existing list), `GET /api/member/moved` (the open root Todos the member created that are now on none of their
+boards), `GET /api/member/todos/:id`, `GET /api/member/todos/:id/tree`,
 `GET /api/member/todos/:id/comments`, `GET /api/member/todos/:id/attachments[/:aid]`,
 `POST /api/member/boards/:department/todos` (root, or `parentId` in a member-only tree), `PATCH /api/member/todos/:id` (title, body,
 priority, labels; member-only trees only), `POST /api/member/todos/:id/status`
@@ -446,8 +465,16 @@ Where the build had to pick a reading, or the contract was silent, it did this:
   `removed` carries only `{ entity, action, id }`. A write that moves a board sends `fromDepartment` on the operator's event
   (a department change, an assignment that derives one, a reparent), and the member feed reads it.
 - **Assignment can move a card off a shared board.** Where departments are open, assigning a Todo derives its department
-  from the assignee's, so a member loses a Todo the operator assigns to an employee elsewhere (the member sees `removed`).
-  Dedicated departments keep it.
+  from the assignee's, so a member's card leaves their board when the operator assigns a Todo to an employee elsewhere (other members
+  of the board see `removed`). A root the member created stays readable to them (next bullet). Dedicated departments keep it.
+- **Creator access to a tree that left the boards.** One function (`todoAccess`) answers how a member reads a Todo: through a
+  board they hold, else as the creator of its open root, else not at all. Reads, comment and attachment writes, the replay of
+  an idempotent create and live frames all use it. A Todo read only as its creator carries `movedToAnotherBoard: true` (on the
+  detail, tree nodes, list rows and frame values); its root's `department` reads `null` and nothing names where it went, unless
+  the member holds a grant there, in which case it is an ordinary Todo on that board. Edits, status changes and sub-tasks
+  under it answer `403 todo_not_member_editable` (a sub-task route for another board answers `404`). `GET /api/member/moved`
+  lists the roots (compact rows, newest first, empty with no board); the board the Todo left is not recorded, so every board
+  of the member offers the same group. The employee list covers their trees too.
 - **The outward `member` kind** is derived for comments (web wire, MCP tools, board walk, Talk, reply prompts). A Todo,
   event or attachment names its member by the raw `user:<id>` on `createdBy`, `actor` or `uploadedBy`, which no reader
   mistakes for the operator; `get_work_item` adds a `members` map from those identities to names.
@@ -465,6 +492,8 @@ Where the build had to pick a reading, or the contract was silent, it did this:
 - **Todo id prefixes are not secrets.** A member sees ids of Todos they may read. A sub-task
   that sits in another open department can carry that department's prefix. A prefix is a
   short code, not the board's name, and it gives no access: every other Todo still answers 404.
+- **A moved tree says only that it moved.** The creator of a tree that left their boards reads "moved to another board", never
+  the destination's name, unless they hold a grant there. A sub-task made on the board they held keeps naming that board.
 - **Structured data hides other boards.** Board names (departments) and references to Todos
   the member cannot read are removed from every structured field of member reads and frames:
   event details, relations, moved-from and moved-to. A moved Todo reads "moved to another

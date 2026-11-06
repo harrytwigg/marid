@@ -1,5 +1,6 @@
 import { getWorkItem, type WorkItem } from "../work-items/store.js";
 import { boardOfTodo } from "../work-items/board-of.js";
+import { memberIdentity } from "../work-items/member-identity.js";
 import { memberWorkItem, type Viewer } from "./member-serialise.js";
 
 /**
@@ -11,8 +12,9 @@ import { memberWorkItem, type Viewer } from "./member-serialise.js";
  * plus the Todo's version and, when the original carried a value, the member-safe Todo; the original's
  * `value` (a full Todo with a session-bearing `sourceRef`), `sessionId` and anything else are never forwarded.
  *
- * It passes when the Todo's root department, before or after the write, is one of the member's boards. When
- * it was on a held board before and is not after (moved off it), the member gets `removed` so the card goes.
+ * It passes when the Todo's root department, before or after the write, is one of the member's boards, or the Todo is in an
+ * open tree whose root the member created (it left their boards and they keep reading it). When it was on a held board
+ * before and is not readable after (moved off it), the member gets `removed` so the card goes.
  */
 export interface MemberFrame {
   event: "company:changed";
@@ -46,17 +48,33 @@ function departmentLeft(value: unknown): string | null | undefined {
   return value === null || typeof value === "string" ? value : undefined;
 }
 
-/** The frame for a change, for a member who holds these boards; undefined when it is not on one of them (before or after). */
+/**
+ * The frame for a change, for a member who holds these boards; undefined when it is nothing they may hear of.
+ *
+ * It passes when the Todo is on one of their boards now, or sits in an open tree whose root they created (it left their
+ * boards but they keep reading it), sub-tasks included. A Todo that was on one of their boards and is not readable now gets
+ * `removed`; so does their own created root once it is closed or has lost its access, which names only an id they made.
+ */
 export function memberFrameFor(change: TodoChange, boards: ReadonlySet<string>, viewer: Viewer): MemberFrame | undefined {
   const onAfter = change.after !== null && boards.has(change.after);
-  const onBefore = typeof change.before === "string" && boards.has(change.before);
-  if (!onAfter && !onBefore) return undefined;
-  if (!onAfter || !change.item) return { event: "company:changed", payload: { entity: "todo", action: "removed", id: change.id } };
+  const { item } = change;
+  if (item && (onAfter || viewer.readsAsCreator(item.rootId))) return changeFrame(change, item, viewer);
+  return mustRemove(change, boards, viewer) ? { event: "company:changed", payload: { entity: "todo", action: "removed", id: change.id } } : undefined;
+}
+
+function changeFrame(change: TodoChange, item: WorkItem, viewer: Viewer): MemberFrame {
   return {
     event: "company:changed",
     payload: {
-      entity: "todo", action: change.action, id: change.id, version: change.item.version,
-      ...(change.hadValue ? { value: memberWorkItem(change.item, viewer) } : {}),
+      entity: "todo", action: change.action, id: change.id, version: item.version,
+      ...(change.hadValue ? { value: memberWorkItem(item, viewer) } : {}),
     },
   };
+}
+
+/** Whether a Todo the member can no longer read is one their card must be dropped for: it was on their board, or it is their own created root. */
+function mustRemove(change: TodoChange, boards: ReadonlySet<string>, viewer: Viewer): boolean {
+  if (typeof change.before === "string" && boards.has(change.before)) return true;
+  const { item } = change;
+  return item !== undefined && item.id === item.rootId && item.createdBy === memberIdentity(viewer.userId);
 }

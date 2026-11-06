@@ -15,7 +15,7 @@ import { readStopCause } from "../work-items/stop-cause.js";
 import { initDb } from "../shared/db.js";
 import { TODO_ID_PATTERN } from "../work-items/id.js";
 import { OPERATOR_ASSIGNEE } from "../work-items/operator-assignee.js";
-import { boardOfTodo } from "./member-access.js";
+import { boardOfTodo, creatorAccess } from "./member-access.js";
 import type { MemberRouteContext } from "./member-context.js";
 import { getGrant } from "./board-members.js";
 
@@ -39,6 +39,7 @@ export class Viewer {
   private readonly known = new Map<string, boolean>();
   private readonly held = new Map<string, boolean>();
   private readonly boards = new Map<string, boolean>();
+  private readonly creatorRoots = new Map<string, boolean>();
   constructor(readonly db: DatabaseType, readonly userId: string) {}
 
   /** Whether a department is one of the reader's boards. */
@@ -51,17 +52,33 @@ export class Viewer {
     return answer;
   }
 
-  /** Whether a Todo (by id) is on a board the reader holds; a Todo that is gone or on no board is not. */
+  /** Whether a root is open and was created by the reader, so its tree stays readable to them after it leaves their boards. */
+  readsAsCreator(rootId: string): boolean {
+    let answer = this.creatorRoots.get(rootId);
+    if (answer === undefined) {
+      answer = creatorAccess(this.db, this.userId, rootId) !== undefined;
+      this.creatorRoots.set(rootId, answer);
+    }
+    return answer;
+  }
+
+  /** Whether a Todo (by id) is one the reader may read: on a board they hold, or in an open tree whose root they created; a Todo that is gone is not. */
   holdsTodo(todoId: string): boolean {
     let answer = this.held.get(todoId);
     if (answer === undefined) {
       const row = initDb().prepare("SELECT id, root_id, department FROM work_items WHERE id = ?").get(todoId) as
         { id: string; root_id: string; department: string | null } | undefined;
       const board = row ? boardOfTodo({ id: row.id, rootId: row.root_id, department: row.department }) : null;
-      answer = !!board && this.holdsBoard(board);
+      answer = !!row && ((!!board && this.holdsBoard(board)) || this.readsAsCreator(row.root_id));
       this.held.set(todoId, answer);
     }
     return answer;
+  }
+
+  /** Whether a Todo has left the reader's boards: it is on another board, or on the company board, and they read it as its creator. */
+  movedOff(item: Pick<WorkItem, "id" | "rootId" | "department">): boolean {
+    const board = boardOfTodo(item);
+    return board === null || !this.holdsBoard(board);
   }
 
   knows(otherId: string): boolean {
@@ -124,7 +141,16 @@ function memberLabels(labels: Label[], viewer: Viewer): Label[] {
 export function memberWorkItem(item: WorkItem, viewer: Viewer): WorkItem {
   return {
     ...item, sourceRef: null, budgetUsd: null, createdBy: memberWho(item.createdBy, viewer), department: memberDepartment(item.department, viewer),
+    ...movedMarker(item, viewer),
   };
+}
+
+/**
+ * `movedToAnotherBoard: true` on a Todo the reader reads only as its creator, after it left their boards. The destination is
+ * never named: the Todo's own department reads `null`, and nothing here says where it went.
+ */
+function movedMarker(item: Pick<WorkItem, "id" | "rootId" | "department">, viewer: Viewer): { movedToAnotherBoard?: true } {
+  return viewer.movedOff(item) ? { movedToAnotherBoard: true } : {};
 }
 
 type CompactExtras = Parameters<typeof compactWorkItem>[1];
@@ -141,6 +167,7 @@ function memberCompact(item: WorkItem, extras: CompactExtras, viewer: Viewer): R
     sourceRef: null,
     kept: false,
     attentionLane: null,
+    ...movedMarker(item, viewer),
   };
 }
 

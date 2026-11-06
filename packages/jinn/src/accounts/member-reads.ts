@@ -7,9 +7,10 @@ import { orgRegistry } from "../gateway/org-registry.js";
 import { initDb } from "../shared/db.js";
 import { getAttachment } from "../work-items/attachments.js";
 import { COMMENT_PAGE_DEFAULT_LIMIT, COMMENT_PAGE_MAX_LIMIT, listComments } from "../work-items/comments.js";
-import { ensureDepartmentRegistered, getWorkItemTree, queryWorkItems } from "../work-items/store.js";
+import { memberIdentity } from "../work-items/member-identity.js";
+import { WORK_ITEM_STATUS_VALUES, ensureDepartmentRegistered, getWorkItem, getWorkItemTree, queryWorkItems, type WorkItem } from "../work-items/store.js";
 import { listGrantsForBoard, listGrantsForUser } from "./board-members.js";
-import { grantedBoard, grantedTodo } from "./member-access.js";
+import { creatorAccess, grantedBoard, grantedTodo } from "./member-access.js";
 import type { MemberRouteContext } from "./member-context.js";
 import {
   memberAttachments, memberCommentPage, memberDetailPayload, memberPagePayload, memberTreePayload, viewerOf,
@@ -43,6 +44,35 @@ export function boardTodos(ctx: MemberRouteContext): void {
   // The operator's desk (Home, the attention queue) is not a board: only the board's own Todos, whatever else was asked for.
   const { kept: _kept, home: _home, needsAttentionFor: _attention, needsAttentionOperator: _operator, ...scoped } = filter;
   json(ctx.res, memberPagePayload(queryWorkItems({ ...scoped, rootDepartment: department, limit, offset }), viewerOf(ctx)));
+}
+
+/** The open root Todos the member created that are now on no board of theirs: another department, or the company board. Newest first. */
+function movedRootIds(ctx: MemberRouteContext): string[] {
+  const db = ctx.deps.accounts.getDb();
+  const userId = ctx.principal.userId;
+  const boards = listGrantsForUser(db, userId).map((grant) => grant.department);
+  if (boards.length === 0) return [];
+  const marks = boards.map(() => "?").join(", ");
+  const ids = initDb().prepare(
+    `SELECT id FROM work_items
+     WHERE parent_id IS NULL AND created_by = ? AND status NOT IN ('done', 'cancelled')
+       AND (department IS NULL OR department NOT IN (${marks}))
+     ORDER BY updated_at DESC, id ASC`,
+  ).pluck().all(memberIdentity(userId), ...boards) as string[];
+  // The access rule is the one reads and frames use, applied again to each row.
+  return ids.filter((id) => creatorAccess(db, userId, id) !== undefined);
+}
+
+/**
+ * `GET /api/member/moved`: the open Todos the member created that have left their boards, as compact rows marked
+ * `movedToAnotherBoard`. The destination is never named. Empty once they hold no board.
+ */
+export function movedTodos(ctx: MemberRouteContext): void {
+  const items = movedRootIds(ctx).map((id) => getWorkItem(id)).filter((item): item is WorkItem => item !== undefined);
+  const totals = Object.fromEntries(WORK_ITEM_STATUS_VALUES.map((status) => [status, 0])) as Record<string, number>;
+  for (const item of items) totals[item.status] = (totals[item.status] ?? 0) + 1;
+  const page = { workItems: items, total: items.length, totals, limit: items.length, offset: 0, nextOffset: null };
+  json(ctx.res, memberPagePayload(page as unknown as Parameters<typeof memberPagePayload>[0], viewerOf(ctx)));
 }
 
 export function showTodo(ctx: MemberRouteContext): void {
@@ -109,19 +139,21 @@ export function listMemberPeople(ctx: MemberRouteContext): void {
       people.push({ id: user.id, displayName: user.displayName, initials: initialsOf(user.displayName) });
     }
   }
-  const employees = employeesOnBoards(ctx, boards);
+  const employees = employeesOnTrees(ctx, boards, movedRootIds(ctx));
   json(ctx.res, { people, employees });
 }
 
-function employeesOnBoards(ctx: MemberRouteContext, boards: string[]): Array<{ name: string; displayName: string; emoji?: string }> {
+/** The employees on the member's boards, and on the open trees they created that have left them. */
+function employeesOnTrees(ctx: MemberRouteContext, boards: string[], movedRoots: string[]): Array<{ name: string; displayName: string; emoji?: string }> {
   if (boards.length === 0) return [];
   const marks = boards.map(() => "?").join(", ");
+  const rootMarks = movedRoots.map(() => "?").join(", ");
   const names = initDb().prepare(
-    `WITH tree AS (SELECT id FROM work_items WHERE root_id IN (SELECT id FROM work_items WHERE parent_id IS NULL AND department IN (${marks})))
+    `WITH tree AS (SELECT id FROM work_items WHERE root_id IN (SELECT id FROM work_items WHERE parent_id IS NULL AND (department IN (${marks})${movedRoots.length ? ` OR id IN (${rootMarks})` : ""})))
      SELECT assignee AS name FROM work_items WHERE id IN tree AND assignee IS NOT NULL
      UNION SELECT created_by FROM work_items WHERE id IN tree
      UNION SELECT author FROM work_item_comments WHERE author_kind = 'employee' AND work_item_id IN tree`,
-  ).pluck().all(...boards) as string[];
+  ).pluck().all(...boards, ...movedRoots) as string[];
   const roster = orgRegistry(ctx.deps.getConfig() as Parameters<typeof orgRegistry>[0]);
   const out: Array<{ name: string; displayName: string; emoji?: string }> = [];
   for (const name of [...new Set(names)].sort()) {

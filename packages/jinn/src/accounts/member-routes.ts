@@ -5,7 +5,7 @@ import { accountContext, type MemberRoute, type MemberRouteContext } from "./mem
 import { clearUserCookieHeader } from "./cookie.js";
 import { passwordProblem } from "./passwords.js";
 import {
-  boardTodos, listBoards, listMemberPeople, listTodoAttachments, listTodoComments, readAttachment, showTodo, showTree,
+  boardTodos, listBoards, listMemberPeople, movedTodos, listTodoAttachments, listTodoComments, readAttachment, showTodo, showTree,
 } from "./member-reads.js";
 import { addTodoComment, deleteTodoComment, editTodoComment, uploadAttachment } from "./member-comments.js";
 import { createTodo, patchTodo, setStatus } from "./member-writes.js";
@@ -75,6 +75,7 @@ export const MEMBER_ROUTES: readonly MemberRoute[] = [
   { method: "DELETE", pattern: "/api/member/sessions/:id", run: revokeSession },
   { method: "GET", pattern: "/api/member/boards", run: listBoards },
   { method: "GET", pattern: "/api/member/people", run: listMemberPeople },
+  { method: "GET", pattern: "/api/member/moved", run: movedTodos },
   { method: "GET", pattern: "/api/member/boards/:department/todos", run: boardTodos },
   { method: "POST", pattern: "/api/member/boards/:department/todos", run: createTodo },
   ...shareRoutes(ownerOnBoard),

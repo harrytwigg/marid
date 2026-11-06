@@ -131,11 +131,14 @@ describe("other write answers", () => {
     } finally { spy.mockRestore(); }
   });
 
-  it("an idempotent create replay does not hand back a Todo that has left the member's boards", async () => {
+  it("an idempotent create replay hands back the member's own open Todo that left their boards, marked moved, and never one they can no longer read", async () => {
     const first = await h.as(pat, "POST", "/api/member/boards/ops/todos", { title: "once", idempotencyKey: "replay-1" });
     expect(first.status).toBe(201);
     h.db.prepare("UPDATE work_items SET department = 'design' WHERE id = ?").run(first.body.workItem.id);
     const again = await h.as(pat, "POST", "/api/member/boards/ops/todos", { title: "once", idempotencyKey: "replay-1" });
-    expect(again.status).toBe(404);
+    expect(again.status).toBe(200);
+    expect(again.body).toMatchObject({ replayed: true, workItem: { id: first.body.workItem.id, department: null, movedToAnotherBoard: true } });
+    h.db.prepare("UPDATE work_items SET status = 'cancelled' WHERE id = ?").run(first.body.workItem.id);
+    expect((await h.as(pat, "POST", "/api/member/boards/ops/todos", { title: "once", idempotencyKey: "replay-1" })).status).toBe(404);
   });
 });
