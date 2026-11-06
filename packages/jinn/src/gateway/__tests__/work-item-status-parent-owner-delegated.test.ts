@@ -206,6 +206,75 @@ describe("the parent's owner accepting a delegated child", () => {
     },
   );
 
+  describe("a status move is not authorship", () => {
+    /** The owner pauses the delegated child and resumes it: both moves are the owner's. */
+    async function pauseAndResume(childId: string) {
+      const owner = await sessionOf("owner-dev");
+      expect((await statusPost(owner.id, childId, { status: "blocked", note: "Pausing while the parent re-plans" })).status).toBe(200);
+      expect((await statusPost(owner.id, childId, { status: "executing" })).status).toBe(200);
+      expect(lastMove(childId).detail).toMatchObject({ actorEmployee: "owner-dev" });
+      return owner;
+    }
+
+    it("closes from review a child the owner only paused and resumed, and the event names the owner", async () => {
+      const { child } = await delegatedChild("Paused and resumed");
+      const owner = await pauseAndResume(child.id);
+      transition(child.id, "in_review", "reconciler", { manual: true, agent: true });
+
+      const res = await statusPost(owner.id, child.id, accept);
+
+      expect([res.status, statusOf(child.id)]).toEqual([200, "done"]);
+      expect(lastMove(child.id).detail).toMatchObject({ parentOwner: true, actorEmployee: "owner-dev" });
+      expect(listComments(child.id).comments.map((comment) => comment.body)).toEqual([
+        "Accepted as done by owner-dev, who owns the parent Todo. Reason: Integrated into the parent branch",
+      ]);
+    });
+
+    it("closes from executing a child the owner only paused and resumed", async () => {
+      const { child } = await delegatedChild("Paused and resumed, executing");
+      const owner = await pauseAndResume(child.id);
+      const res = await statusPost(owner.id, child.id, accept);
+      expect([res.status, statusOf(child.id)]).toEqual([200, "done"]);
+    });
+
+    it("closes a child the owner started from the backlog before the assignee worked it", async () => {
+      const parent = workItems.createWorkItem({ title: "Started-for parent", status: "executing", assignee: "owner-dev" });
+      const child = workItems.createWorkItem({ title: "Started-for child", status: "backlog", parentId: parent.id, assignee: "child-dev" });
+      const owner = await sessionOf("owner-dev");
+      expect((await statusPost(owner.id, child.id, { status: "executing" })).status).toBe(200);
+      workItems.linkSession(child.id, (await sessionOf("child-dev")).id, "delegation", "execute", { via: "delegation" });
+      transition(child.id, "in_review", "reconciler", { manual: true, agent: true });
+
+      const res = await statusPost(owner.id, child.id, accept);
+      expect([res.status, statusOf(child.id)]).toEqual([200, "done"]);
+    });
+
+    it.each(["executing", "in_review"] as const)(
+      "still refuses, from %s, an owner that paused and resumed the child and then took the work over as producer",
+      async (status) => {
+        const { child } = await delegatedChild(`Paused then taken over ${status}`);
+        const owner = await pauseAndResume(child.id);
+        workItems.linkSession(child.id, owner.id, "delegation", "execute", { via: "delegation" });
+        if (status === "in_review") transition(child.id, "in_review", "reconciler", { manual: true, agent: true });
+
+        const res = await statusPost(owner.id, child.id, accept);
+        expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/a session of owner-dev was linked to work on it.*self-review ban/)]);
+        expect(statusOf(child.id)).toBe(status);
+      },
+    );
+
+    it("still refuses an owner that paused and resumed the child and then took the assignment", async () => {
+      const { child } = await delegatedChild("Paused then reassigned");
+      const owner = await pauseAndResume(child.id);
+      transition(child.id, "in_review", "reconciler", { manual: true, agent: true });
+      assignWorkItem(child.id, "owner-dev", "engineering", "operator");
+
+      const res = await statusPost(owner.id, child.id, accept);
+      expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/owner-dev is assigned to it.*self-review ban/)]);
+      expect(statusOf(child.id)).toBe("in_review");
+    });
+  });
+
   it("refuses an owner that started the child itself and then reassigned it", async () => {
     const parent = workItems.createWorkItem({ title: "Started parent", status: "executing", assignee: "owner-dev" });
     const child = workItems.createWorkItem({ title: "Started child", status: "backlog", parentId: parent.id, assignee: "owner-dev" });

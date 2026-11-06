@@ -140,14 +140,20 @@ function moveEmployee(event: WorkItemEvent): string | undefined {
  * resuming it (any move into `executing` except a review bounce); or the
  * employee making the latest handoff into `in_review`. A session linked to
  * review it, or bouncing it back, is reviewing and leaves the close open.
+ * Once another employee produced the work (`producedElsewhere`), only a link
+ * to execute it counts: the status moves are the mover's bookkeeping.
  */
 function closerHandIn(employee: string, item: WorkItem, { producedElsewhere = false } = {}): string | undefined {
   const events = listWorkItemEvents(item.id);
   if (events.some((event) => workedBy(event, employee))) return `a session of ${employee} was linked to work on it`;
+  // Moving a Todo into `executing` is a hand in only when nobody else produced
+  // it. When another employee worked it, a pause and resume by the mover is
+  // bookkeeping, not authorship; taking the work over shows as a link above or
+  // as the assignee.
+  if (producedElsewhere) return undefined;
   if (events.some((event) => startedBy(event, employee))) return `${employee} moved it to executing`;
   // A handoff is a hand in only when the mover produced the work. When another
   // employee worked it, the mover relaying that employee's report did not.
-  if (producedElsewhere) return undefined;
   const handoff = events.filter((event) => event.toStatus === "in_review" && event.fromStatus !== "in_review").at(-1);
   return handoff && moveEmployee(handoff) === employee ? `${employee} handed it to review` : undefined;
 }
