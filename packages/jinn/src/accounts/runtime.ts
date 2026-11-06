@@ -40,8 +40,8 @@ export interface AccountsRuntimeOptions {
   gatewayAuthToken: string | undefined;
   now?: () => number;
   limiter?: HashLimiter;
-  /** Extra boards that exist without a Todo row yet (a department with a definition file). */
-  extraDepartmentExists?: (slug: string) => boolean;
+  /** Whether a slug names a department the gateway knows. When given it is the whole rule; otherwise only a `departments` row counts. */
+  knownDepartment?: (slug: string) => boolean;
 }
 
 export function createAccountsRuntime(opts: AccountsRuntimeOptions): AccountsRuntime {
@@ -75,7 +75,7 @@ export function createAccountsRuntime(opts: AccountsRuntimeOptions): AccountsRun
     limiter: opts.limiter ?? globalHashLimiter,
     memberSockets,
     departmentExists(slug) {
-      if (opts.extraDepartmentExists?.(slug)) return true;
+      if (opts.knownDepartment) return opts.knownDepartment(slug);
       return !!opts.getDb().prepare("SELECT 1 FROM departments WHERE slug = ?").get(slug);
     },
     resolvePrincipal,

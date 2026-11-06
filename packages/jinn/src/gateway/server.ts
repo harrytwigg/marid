@@ -93,7 +93,7 @@ import { startWatchers, stopWatchers, syncSkillSymlinks } from "./watcher.js";
 import { gatewayWatchCallbacks } from "./watch-callbacks.js";
 import { createPluginEventsChannel, matchPluginEventsPath } from "./plugin-events-ws.js";
 import { createAccountsRuntime } from "../accounts/runtime.js";
-import { departmentSlugsWithFiles } from "./department-registry.js";
+import { isKnownDepartmentSlug } from "./departments-api.js";
 import { routeMemberUpgrade, startMemberSocketSweep } from "../accounts/member-upgrade.js";
 import { startPluginRuntime, stopPluginRuntime } from "../plugins/runtime.js";
 import { SlackConnector } from "../connectors/slack/index.js";
@@ -917,7 +917,8 @@ export async function startGateway(
     home: JINN_HOME,
     authRequired: () => shouldRequireGatewayAuth(currentConfig),
     gatewayAuthToken,
-    extraDepartmentExists: (slug) => departmentSlugsWithFiles().includes(slug),
+    // The same rule as the departments API, so a board is whatever that API calls a department.
+    knownDepartment: (slug) => isKnownDepartmentSlug(slug, apiContext),
   });
 
   // API context

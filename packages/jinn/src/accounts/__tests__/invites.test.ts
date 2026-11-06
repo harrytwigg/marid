@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { GOOD_PASSWORD, startHarness, type Harness } from "./accounts-harness.js";
+import fs from "node:fs";
+import path from "node:path";
+import { GOOD_PASSWORD, ORG_HOME, startHarness, type Harness } from "./accounts-harness.js";
 import { inviteAndAccept, tokenFromLink } from "./flows-helpers.js";
 import { userCookieName } from "../cookie.js";
 
@@ -72,6 +74,16 @@ describe("invite to a board", () => {
     expect((await h.asOperator("DELETE", `/api/boards/design/invites/${id}`)).status).toBe(404); // wrong board
     expect((await h.asOperator("DELETE", `/api/boards/ops/invites/${id}`)).status).toBe(200);
     expect((await h.request("POST", "/api/auth/invites/inspect", { body: { token: tokenFromLink(invite.body.link) } })).status).toBe(410);
+  });
+
+  it("a board is whatever the departments API calls a department: an org folder alone can be shared, an unknown or malformed slug is 404", async () => {
+    fs.mkdirSync(path.join(ORG_HOME, "org", "fresh-board"), { recursive: true }); // no definition file, no registry row
+    const send = (slug: string) => h.asOperator("POST", `/api/boards/${slug}/invites`, { email: "pat@example.test", role: "viewer" });
+    expect((await send("fresh-board")).status).toBe(200);
+    expect((await h.asOperator("GET", "/api/boards/fresh-board/members")).status).toBe(200);
+    for (const slug of ["never-heard-of-it", "%2e%2e", "..%2f", "a%2f..%2f..", "%2e", ".hidden"]) {
+      expect((await send(slug)).status, slug).toBe(404);
+    }
   });
 
   it("refuses an unknown board, a bad role and a bad email", async () => {

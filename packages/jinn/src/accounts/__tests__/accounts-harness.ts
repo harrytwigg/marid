@@ -17,6 +17,9 @@ const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-accounts-"));
 process.env.JINN_HOME = path.join(tmpRoot, "default-home");
 fs.mkdirSync(process.env.JINN_HOME, { recursive: true });
 
+/** The JINN_HOME the gateway modules resolve `org/` against in these tests. */
+export const ORG_HOME = process.env.JINN_HOME!;
+
 export const GATEWAY_TOKEN = "gateway-token-for-account-tests-0123456789";
 export const GOOD_PASSWORD = "correct horse battery staple";
 
@@ -104,12 +107,17 @@ export async function startHarness(opts: { authRequired?: boolean; limiter?: imp
   const { createAccountsRuntime } = await import("../runtime.js");
   const { shouldRequireGatewayAuth } = await import("../../gateway/auth.js");
   const { createGatewayRequestHandler } = await import("../../gateway/request-handler.js");
+  const { isKnownDepartmentSlug } = await import("../../gateway/departments-api.js");
   const config = { gateway: { host: "0.0.0.0", ...(opts.authRequired === false ? { host: "127.0.0.1", authRequired: false } : {}) } as Record<string, unknown> };
   const clock = { now: Date.now() };
   const rt = createAccountsRuntime({
     getDb: () => db, home, gatewayAuthToken: GATEWAY_TOKEN,
     authRequired: () => shouldRequireGatewayAuth(config as any),
     now: () => clock.now,
+    // The rule server.ts wires: a `departments` row, a definition file, an `org/<slug>` folder or an employee's `department:`.
+    // The harness's own database stands in for the registry rows; everything else goes through the real rule.
+    knownDepartment: (slug) => !!db.prepare("SELECT 1 FROM departments WHERE slug = ?").get(slug)
+      || isKnownDepartmentSlug(slug, { getConfig: () => config } as any),
     ...(opts.limiter ? { limiter: opts.limiter } : {}),
   });
   const handler = createGatewayRequestHandler({
