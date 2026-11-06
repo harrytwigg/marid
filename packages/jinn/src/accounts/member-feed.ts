@@ -53,7 +53,7 @@ function departmentLeft(value: unknown): string | null | undefined {
  *
  * It passes when the Todo is on one of their boards now, or sits in an open tree whose root they created (it left their
  * boards but they keep reading it), sub-tasks included. A Todo that was on one of their boards and is not readable now gets
- * `removed`; so does their own created root once it is closed or has lost its access, which names only an id they made.
+ * `removed`; so does any Todo they created once it is closed, reparented away or has lost its access, which names only an id they made.
  */
 export function memberFrameFor(change: TodoChange, boards: ReadonlySet<string>, viewer: Viewer): MemberFrame | undefined {
   const onAfter = change.after !== null && boards.has(change.after);
@@ -72,9 +72,8 @@ function changeFrame(change: TodoChange, item: WorkItem, viewer: Viewer): Member
   };
 }
 
-/** Whether a Todo the member can no longer read is one their card must be dropped for: it was on their board, or it is their own created root. */
+/** Whether a Todo the member can no longer read is one their card must be dropped for: it was on their board, or they created it (an id they made, so naming it tells them nothing). */
 function mustRemove(change: TodoChange, boards: ReadonlySet<string>, viewer: Viewer): boolean {
   if (typeof change.before === "string" && boards.has(change.before)) return true;
-  const { item } = change;
-  return item !== undefined && item.id === item.rootId && item.createdBy === memberIdentity(viewer.userId);
+  return change.item !== undefined && change.item.createdBy === memberIdentity(viewer.userId);
 }

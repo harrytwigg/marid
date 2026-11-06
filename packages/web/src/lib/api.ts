@@ -417,8 +417,10 @@ export interface WorkItemCompactWire extends TodoStopCauseWire {
   kept?: boolean
   /** Optional: older gateways omit it, which reads as the operator. */
   reviewAddressee?: ReviewAddresseeWire
-  /** A board member's read only: the Todo left their boards and they read it as its creator. Never says where it went. */
+  /** A board member's read only: the Todo left the board they filed it on and they read it as its creator. Never says where it went. */
   movedToAnotherBoard?: boolean
+  /** With `movedToAnotherBoard`: whether their role on the board they filed it on lets them comment. */
+  memberCanComment?: boolean
   updatedAt: string
   /** Manual sort rank (design-todos §7.3). Null until the operator reorders. */
   rank?: number | null
@@ -462,8 +464,10 @@ export interface WorkItemFullWire {
   startAt?: string | null
   /** On tree nodes and the detail payload; optional: older gateways omit it. */
   reviewAddressee?: ReviewAddresseeWire
-  /** A board member's read only: the Todo left their boards and they read it as its creator. Never says where it went. */
+  /** A board member's read only: the Todo left the board they filed it on and they read it as its creator. Never says where it went. */
   movedToAnotherBoard?: boolean
+  /** With `movedToAnotherBoard`: whether their role on the board they filed it on lets them comment. */
+  memberCanComment?: boolean
   createdAt: string
   updatedAt: string
   closedAt: string | null
@@ -745,9 +749,9 @@ export const api = {
     q.set("limit", String(params?.limit ?? 20))
     return get<WorkItemListWire>(`/api/work-items?${q.toString()}`, signal ? { signal } : undefined)
   },
-  /** A board member's own open Todos that have left their boards (`movedToAnotherBoard` rows); the operator's list never sends this. */
-  listMovedOffBoard: (signal?: AbortSignal) =>
-    get<WorkItemListWire>("/api/work-items?movedOff=true", signal ? { signal } : undefined),
+  /** The open Todos a board member filed on this board that have since left their boards (`movedToAnotherBoard` rows); the operator's list never sends this. */
+  listMovedOffBoard: (department: string, signal?: AbortSignal) =>
+    get<WorkItemListWire>(`/api/work-items?movedOff=true&department=${encodeURIComponent(department)}`, signal ? { signal } : undefined),
   /** GRS-021c: deterministic AND-composed Todo search (escaped-LIKE text over
    *  title + body). Same page params/payload as the list endpoint — the filter
    *  bar's search must carry the date window and page like any other query. */

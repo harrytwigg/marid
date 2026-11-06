@@ -99,7 +99,7 @@ beforeEach(() => {
 })
 
 describe("a member's Todo that left their boards", () => {
-  const moved = (o: Partial<WorkItemFullWire> = {}) => full("PLT-1", { department: null, movedToAnotherBoard: true, ...o })
+  const moved = (o: Partial<WorkItemFullWire> = {}) => full("PLT-1", { department: null, movedToAnotherBoard: true, memberCanComment: true, ...o })
 
   it("says it moved, names no board, and offers comments but no edit, close or sub-task", async () => {
     principal = member({ department: "design", role: "collaborator" })
@@ -125,17 +125,17 @@ describe("a member's Todo that left their boards", () => {
 
   it("keeps a viewer read-only: the label, and no composer", async () => {
     principal = member({ department: "design", role: "viewer" })
-    setup(moved())
+    setup(moved({ memberCanComment: false }))
     expect((await screen.findByTestId("task-moved-label")).textContent).toBe(MOVED)
     expect(screen.queryByTestId("task-composer")).toBeNull()
     expect(screen.queryByTestId("task-mark-done")).toBeNull()
   })
 
-  it("comments where any of their boards gives them a collaborator role", async () => {
+  it("comments by what the gateway says their role on the board they filed it on allows, whatever else they hold", async () => {
     principal = member({ department: "design", role: "viewer" }, { department: "platform", role: "owner" })
-    setup(moved())
+    setup(moved({ memberCanComment: false }))
     await screen.findByTestId("task-moved-label")
-    expect(await screen.findByTestId("task-composer")).toBeTruthy()
+    expect(screen.queryByTestId("task-composer")).toBeNull()
   })
 
   it("does not mark a Todo that is still on their board", async () => {
@@ -222,6 +222,19 @@ describe("the operator assigning or moving a Todo a member created", () => {
     fireEvent.click(within(row).getByLabelText(/assign/i))
     const picker = await screen.findByTestId("subtask-assign-picker-PLT-2")
     await waitFor(() => expect(within(picker).getByTestId("picker-member-creator-note").textContent).toBe(WARNING))
+  })
+
+  it("tells the operator who reads an open Todo a member created, wherever it sits, and not once it is closed", async () => {
+    principal = { kind: "operator" }
+    const first = setup(full("PLT-1", { department: null }))
+    await waitFor(() => expect(screen.getByTestId("task-creator-hint").textContent).toBe("Visible to Mia Member, who created it"))
+    expect(screen.getByTestId("composer-creator-hint").textContent).toBe("Visible to Mia Member, who created it")
+    expect(screen.queryByTestId("task-visibility-hint")).toBeNull() // the company board has no members of its own
+    first.unmount()
+    setup(full("PLT-1", { department: null, status: "done", closedAt: "2026-07-24T08:00:00.000Z" }))
+    await screen.findByTestId("task-title")
+    await waitFor(() => expect(getWorkItemTree).toHaveBeenCalledTimes(2))
+    expect(screen.queryByTestId("task-creator-hint")).toBeNull()
   })
 
   it("says nothing about a Todo the operator or an employee made", async () => {

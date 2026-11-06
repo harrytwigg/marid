@@ -96,7 +96,7 @@ function createInput(ctx: MemberRouteContext, department: string, input: CreateI
   return {
     title: input.title,
     body: input.body,
-    ...(input.parentId ? {} : { department }),
+    ...(input.parentId ? {} : { department, createdOnBoard: department }),
     // `connector` is a source no reader grants standing; the member is on `created_by` and the `user:` ref.
     source: "connector",
     sourceRef: memberSourceRef(ctx.principal.userId, input.key ? keyDigest(input.key) : undefined),

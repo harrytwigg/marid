@@ -39,7 +39,7 @@ export class Viewer {
   private readonly known = new Map<string, boolean>();
   private readonly held = new Map<string, boolean>();
   private readonly boards = new Map<string, boolean>();
-  private readonly creatorRoots = new Map<string, boolean>();
+  private readonly creatorRoots = new Map<string, { canComment: boolean } | null>();
   constructor(readonly db: DatabaseType, readonly userId: string) {}
 
   /** Whether a department is one of the reader's boards. */
@@ -52,14 +52,20 @@ export class Viewer {
     return answer;
   }
 
-  /** Whether a root is open and was created by the reader, so its tree stays readable to them after it leaves their boards. */
-  readsAsCreator(rootId: string): boolean {
+  /** What the reader's creator access to a root is (see `creatorAccess`), or null when it gives them none. Asked once per root. */
+  creatorAccessOf(rootId: string): { canComment: boolean } | null {
     let answer = this.creatorRoots.get(rootId);
     if (answer === undefined) {
-      answer = creatorAccess(this.db, this.userId, rootId) !== undefined;
+      const access = creatorAccess(this.db, this.userId, rootId);
+      answer = access ? { canComment: access.canComment } : null;
       this.creatorRoots.set(rootId, answer);
     }
     return answer;
+  }
+
+  /** Whether a root is open and was created by the reader on a board they still hold, so its tree stays readable to them after it leaves that board. */
+  readsAsCreator(rootId: string): boolean {
+    return this.creatorAccessOf(rootId) !== null;
   }
 
   /** Whether a Todo (by id) is one the reader may read: on a board they hold, or in an open tree whose root they created; a Todo that is gone is not. */
@@ -146,11 +152,14 @@ export function memberWorkItem(item: WorkItem, viewer: Viewer): WorkItem {
 }
 
 /**
- * `movedToAnotherBoard: true` on a Todo the reader reads only as its creator, after it left their boards. The destination is
- * never named: the Todo's own department reads `null`, and nothing here says where it went.
+ * `movedToAnotherBoard: true` on a Todo the reader reads only as its creator, after it left the board they filed it on, with
+ * `memberCanComment` saying whether their role there lets them comment. The destination is never named: the Todo's own
+ * department reads `null`, and nothing here says where it went.
  */
-function movedMarker(item: Pick<WorkItem, "id" | "rootId" | "department">, viewer: Viewer): { movedToAnotherBoard?: true } {
-  return viewer.movedOff(item) ? { movedToAnotherBoard: true } : {};
+function movedMarker(item: Pick<WorkItem, "id" | "rootId" | "department">, viewer: Viewer): { movedToAnotherBoard?: true; memberCanComment?: boolean } {
+  if (!viewer.movedOff(item)) return {};
+  const access = viewer.creatorAccessOf(item.rootId);
+  return access ? { movedToAnotherBoard: true, memberCanComment: access.canComment } : {};
 }
 
 type CompactExtras = Parameters<typeof compactWorkItem>[1];

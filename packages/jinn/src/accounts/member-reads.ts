@@ -8,7 +8,7 @@ import { initDb } from "../shared/db.js";
 import { getAttachment } from "../work-items/attachments.js";
 import { COMMENT_PAGE_DEFAULT_LIMIT, COMMENT_PAGE_MAX_LIMIT, listComments } from "../work-items/comments.js";
 import { memberIdentity } from "../work-items/member-identity.js";
-import { WORK_ITEM_STATUS_VALUES, ensureDepartmentRegistered, getWorkItem, getWorkItemTree, queryWorkItems, type WorkItem } from "../work-items/store.js";
+import { WORK_ITEM_STATUS_VALUES, ensureDepartmentRegistered, getWorkItem, getWorkItemTree, queryWorkItems, type WorkItem, type WorkItemPage, type WorkItemTotals } from "../work-items/store.js";
 import { listGrantsForBoard, listGrantsForUser } from "./board-members.js";
 import { creatorAccess, grantedBoard, grantedTodo } from "./member-access.js";
 import type { MemberRouteContext } from "./member-context.js";
@@ -46,33 +46,41 @@ export function boardTodos(ctx: MemberRouteContext): void {
   json(ctx.res, memberPagePayload(queryWorkItems({ ...scoped, rootDepartment: department, limit, offset }), viewerOf(ctx)));
 }
 
-/** The open root Todos the member created that are now on no board of theirs: another department, or the company board. Newest first. */
-function movedRootIds(ctx: MemberRouteContext): string[] {
+/**
+ * The open root Todos the member filed on a board (or, with none named, on any board they hold) that are now on none of
+ * their boards: another department, or the company board. Newest first, at most 200. The access rule used by reads and
+ * frames is applied again to each row.
+ */
+function movedRootIds(ctx: MemberRouteContext, board?: string): string[] {
   const db = ctx.deps.accounts.getDb();
   const userId = ctx.principal.userId;
-  const boards = listGrantsForUser(db, userId).map((grant) => grant.department);
-  if (boards.length === 0) return [];
-  const marks = boards.map(() => "?").join(", ");
+  const held = listGrantsForUser(db, userId).map((grant) => grant.department);
+  if (held.length === 0 || (board !== undefined && !held.includes(board))) return [];
+  const marks = held.map(() => "?").join(", ");
   const ids = initDb().prepare(
-    `SELECT id FROM work_items
-     WHERE parent_id IS NULL AND created_by = ? AND status NOT IN ('done', 'cancelled')
-       AND (department IS NULL OR department NOT IN (${marks}))
-     ORDER BY updated_at DESC, id ASC`,
-  ).pluck().all(memberIdentity(userId), ...boards) as string[];
-  // The access rule is the one reads and frames use, applied again to each row.
-  return ids.filter((id) => creatorAccess(db, userId, id) !== undefined);
+    `SELECT w.id FROM work_items w
+     WHERE w.parent_id IS NULL AND w.created_by = ? AND w.status NOT IN ('done', 'cancelled')
+       AND (w.department IS NULL OR w.department NOT IN (${marks}))
+     ORDER BY w.updated_at DESC, w.id ASC LIMIT 200`,
+  ).pluck().all(memberIdentity(userId), ...held) as string[];
+  return ids.filter((id) => {
+    const access = creatorAccess(db, userId, id);
+    return access !== undefined && (board === undefined || access.board === board);
+  });
 }
 
 /**
- * `GET /api/member/moved`: the open Todos the member created that have left their boards, as compact rows marked
- * `movedToAnotherBoard`. The destination is never named. Empty once they hold no board.
+ * `GET /api/member/boards/:department/moved`: the open Todos the member filed on this board that have left their boards,
+ * as compact rows marked `movedToAnotherBoard`. The destination is never named.
  */
 export function movedTodos(ctx: MemberRouteContext): void {
-  const items = movedRootIds(ctx).map((id) => getWorkItem(id)).filter((item): item is WorkItem => item !== undefined);
-  const totals = Object.fromEntries(WORK_ITEM_STATUS_VALUES.map((status) => [status, 0])) as Record<string, number>;
-  for (const item of items) totals[item.status] = (totals[item.status] ?? 0) + 1;
-  const page = { workItems: items, total: items.length, totals, limit: items.length, offset: 0, nextOffset: null };
-  json(ctx.res, memberPagePayload(page as unknown as Parameters<typeof memberPagePayload>[0], viewerOf(ctx)));
+  const department = ctx.params.department;
+  if (!grantedBoard(ctx, department)) return;
+  const items = movedRootIds(ctx, department).map((id) => getWorkItem(id)).filter((item): item is WorkItem => item !== undefined);
+  const totals = Object.fromEntries(WORK_ITEM_STATUS_VALUES.map((status) => [status, 0])) as WorkItemTotals;
+  for (const item of items) totals[item.status] += 1;
+  const page: WorkItemPage = { workItems: items, total: items.length, totals, limit: items.length, offset: 0, nextOffset: null };
+  json(ctx.res, memberPagePayload(page, viewerOf(ctx)));
 }
 
 export function showTodo(ctx: MemberRouteContext): void {

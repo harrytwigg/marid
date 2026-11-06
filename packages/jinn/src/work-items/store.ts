@@ -127,6 +127,8 @@ export interface CreateWorkItemInput {
   sourceRef?: string | null;
   budgetUsd?: number | null;
   origin?: WriteOrigin;
+  /** The board a board member filed a root Todo on, kept on its `created` event: where a board member's creator access is anchored. */
+  createdOnBoard?: string;
 }
 
 export interface ListWorkItemsFilter {
@@ -416,7 +418,7 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
       throw err;
     }
     if (startAt) writeWorkItemStartAt(db, id, startAt);
-    appendWorkItemEvent({ workItemId: id, kind: 'created', toStatus: status, actor: source, detail: createdEventDetail(sourceRef, input.origin) });
+    appendWorkItemEvent({ workItemId: id, kind: 'created', toStatus: status, actor: source, detail: createdEventDetail(sourceRef, input.origin, input.createdOnBoard) });
     if (parent) {
       // Re-verify the parent under the write lock before auditing the link.
       const liveParent = db.prepare('SELECT depth FROM work_items WHERE id = ?').get(parent.id) as { depth: number } | undefined;

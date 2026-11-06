@@ -153,6 +153,8 @@ describe("the board for a member", () => {
     // The board's own card is not marked, and the moved one is not among the board's columns.
     expect(screen.queryByTestId("board-moved-PLT-1")).toBeNull()
     expect(group.contains(screen.getByTestId("board-card-PLT-1"))).toBe(false)
+    // Asked for this board's own list, not a list for every board.
+    expect(listMovedOffBoard).toHaveBeenCalledWith("platform", expect.anything())
   })
 
   it("has no group while nothing has moved, and the operator never asks for one", async () => {

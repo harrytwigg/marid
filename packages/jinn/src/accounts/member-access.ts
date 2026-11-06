@@ -4,7 +4,7 @@ import { isTodoId } from "../work-items/id.js";
 import { boardOfTodo } from "../work-items/board-of.js";
 import { getWorkItem, type WorkItem } from "../work-items/store.js";
 import { memberIdentity } from "../work-items/member-identity.js";
-import { getGrant, listGrantsForUser, type BoardGrant, type BoardRole } from "./board-members.js";
+import { getGrant, type BoardGrant, type BoardRole } from "./board-members.js";
 import type { MemberRouteContext } from "./member-context.js";
 import { getUserById } from "./users.js";
 
@@ -17,9 +17,9 @@ export function roleAtLeast(role: BoardRole, minimum: BoardRole): boolean {
 export { boardOfTodo };
 
 /**
- * How a member comes to read a Todo. `board`: it is on a board they hold, with their role there. `creator`: it is in an
- * open tree whose root they created and that has since left their boards (to another department, or to the company
- * board); they read it, and comment when their role allows comments, but never edit it.
+ * How a member comes to read a Todo. `board`: it is on a board they hold, with their role there. `creator`: it is in an open
+ * tree whose root they created and that has since left the board it was created on (to another department, or to the
+ * company board); they read it, and comment when their role on that board allows comments, but never edit it.
  */
 export type TodoAccess =
   | { via: "board"; board: string; grant: BoardGrant }
@@ -28,20 +28,29 @@ export type TodoAccess =
 /** Statuses that end a creator's access to a tree that left their boards. */
 const CLOSED_ROOT = new Set(["done", "cancelled"]);
 
+/** The board a member filed a root Todo on, as its `created` event recorded it; undefined for any root not filed through the member API. */
+function createdOnBoard(db: DatabaseType, rootId: string): string | undefined {
+  const board = db.prepare(
+    "SELECT json_extract(detail, '$.createdOnBoard') FROM work_item_events WHERE work_item_id = ? AND kind = 'created' ORDER BY rowid LIMIT 1",
+  ).pluck().get(rootId);
+  return typeof board === "string" && board !== "" ? board : undefined;
+}
+
 /**
- * The access an open, member-created root gives its creator once it is off their boards: none unless they are active,
- * still hold at least one board, and the root is theirs (`created_by = user:<id>`) and not done or cancelled.
- * Comment access follows the role they hold: a collaborator or owner on any board they still hold (the board a Todo
- * was created on is not recorded, and creating one took at least a collaborator there).
+ * The access an open, member-created root gives its creator once it is off the board they filed it on: none unless they are
+ * active, the root is theirs (`created_by = user:<id>`) and not done or cancelled, and they STILL hold the board it was
+ * created on. Removing them from that board therefore ends it, and the role they keep there (collaborator or owner) is the one
+ * that lets them comment: taking a board away never widens what they may do. A root with no recorded board grants nothing.
  */
-export function creatorAccess(db: DatabaseType, userId: string, rootId: string): { canComment: boolean } | undefined {
+export function creatorAccess(db: DatabaseType, userId: string, rootId: string): { canComment: boolean; board: string } | undefined {
   const root = db.prepare("SELECT parent_id, created_by, status FROM work_items WHERE id = ?").get(rootId) as
     { parent_id: string | null; created_by: string; status: string } | undefined;
   if (!root || root.parent_id !== null || root.created_by !== memberIdentity(userId) || CLOSED_ROOT.has(root.status)) return undefined;
   if (getUserById(db, userId)?.status !== "active") return undefined;
-  const grants = listGrantsForUser(db, userId);
-  if (grants.length === 0) return undefined;
-  return { canComment: grants.some((grant) => roleAtLeast(grant.role, "collaborator")) };
+  const board = createdOnBoard(db, rootId);
+  const grant = board ? getGrant(db, userId, board) : undefined;
+  if (!board || !grant) return undefined;
+  return { canComment: roleAtLeast(grant.role, "collaborator"), board };
 }
 
 /**
@@ -53,7 +62,7 @@ export function todoAccess(db: DatabaseType, userId: string, item: Pick<WorkItem
   const grant = board ? getGrant(db, userId, board) : undefined;
   if (board && grant) return { via: "board", board, grant };
   const creator = creatorAccess(db, userId, item.rootId);
-  return creator ? { via: "creator", ...creator } : undefined;
+  return creator ? { via: "creator", canComment: creator.canComment } : undefined;
 }
 
 export interface GrantedTodo {

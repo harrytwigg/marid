@@ -22,7 +22,7 @@ import { buildFeed, stripCommentMarkers } from "./activity-feed"
 import { RunEndLine, RunStartLine } from "./runs"
 import { commentPowers } from "@/lib/todo-capabilities"
 import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
-import { VisibleToMembersHint } from "../visibility-hint"
+import { VisibleToCreatorHint, VisibleToMembersHint } from "../visibility-hint"
 import { useMember } from "@/hooks/use-principal"
 
 /* The merged activity feed keeps audit events quiet and comment voices
@@ -204,6 +204,7 @@ export function ActivitySection({
   isDark = true,
   announce,
   visibleToMembers = false,
+  creatorReader = null,
 }: {
   detail: WorkItemDetailWire
   byName: Map<string, Employee>
@@ -212,6 +213,8 @@ export function ActivitySection({
   announce: (message: string) => void
   /** The board has members: what is written here is read by them. */
   visibleToMembers?: boolean
+  /** An open Todo a board member created: they read what is written here, wherever the Todo now sits. */
+  creatorReader?: string | null
 }) {
   const qc = useQueryClient()
   const id = detail.workItem.id
@@ -388,7 +391,12 @@ export function ActivitySection({
           className="max-h-36 min-h-12 w-full resize-none overflow-y-auto bg-transparent px-1 text-[15px] leading-[1.5] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-quaternary)]"
         />
       </div>
-      {visibleToMembers && <div className="px-1 pb-0.5"><VisibleToMembersHint testId="composer-visibility-hint" /></div>}
+      {(visibleToMembers || creatorReader) && (
+        <div className="flex flex-col gap-0.5 px-1 pb-0.5">
+          {visibleToMembers && <VisibleToMembersHint testId="composer-visibility-hint" />}
+          {creatorReader && <VisibleToCreatorHint identity={creatorReader} testId="composer-creator-hint" />}
+        </div>
+      )}
       <div className="mt-1 flex min-h-[34px] items-center gap-2">
         <button
           type="button"

@@ -593,7 +593,7 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
           </div>
         )}
 
-        {gate.member && board.kind === "department" && <MovedOffBoard byName={byName} onOpen={onOpen} />}
+        {gate.member && board.kind === "department" && <MovedOffBoard board={board.slug} byName={byName} onOpen={onOpen} />}
 
         {!isAttention && mobile && (
           <div className="flex-none px-[var(--space-3)] md:px-[var(--space-10)]">

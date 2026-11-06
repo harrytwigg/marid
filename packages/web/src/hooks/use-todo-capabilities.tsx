@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react"
 import type { WorkItemTreeNodeWire } from "@/lib/api"
 import { OPERATOR_CAPABILITIES, isMemberOnlyTree, memberCapabilities, movedCapabilities, type TodoCapabilities } from "@/lib/todo-capabilities"
-import { useBoardAbilities, useMember, useMemberGrants } from "./use-principal"
+import { useBoardAbilities, useMember } from "./use-principal"
 
 const TodoCapabilitiesContext = createContext<TodoCapabilities>(OPERATOR_CAPABILITIES)
 
@@ -12,23 +12,22 @@ export function useTodoCapabilities(): TodoCapabilities {
 
 /**
  * The capabilities for one Todo: the operator's, or a member's role on the Todo's board applied to its tree. A Todo the
- * member reads only as its creator, after it left their boards (`moved`), is read-only and commentable where any role of
- * theirs allows comments, which is the rule the gateway applies.
+ * member reads only as its creator, after it left the board they filed it on (`moved`), is read-only, and commentable where
+ * the gateway says their role on that board allows comments.
  */
 export function useTodoCapabilitiesFor(
   department: string | null | undefined,
   root: WorkItemTreeNodeWire | undefined,
-  moved = false,
+  moved: { canComment: boolean } | null = null,
 ): TodoCapabilities {
   const member = useMember()
   const abilities = useBoardAbilities(department)
-  const grants = useMemberGrants()
   const memberOnly = isMemberOnlyTree(root)
-  const canComment = !!grants?.some((grant) => grant.role === "collaborator" || grant.role === "owner")
+  const movedComment = moved?.canComment
   return useMemo(() => {
     if (!member) return OPERATOR_CAPABILITIES
-    return moved ? movedCapabilities(canComment) : memberCapabilities(abilities?.role, memberOnly)
-  }, [member, abilities?.role, memberOnly, moved, canComment])
+    return movedComment !== undefined ? movedCapabilities(movedComment) : memberCapabilities(abilities?.role, memberOnly)
+  }, [member, abilities?.role, memberOnly, movedComment])
 }
 
 export function TodoCapabilitiesProvider({ value, children }: { value: TodoCapabilities; children: ReactNode }) {

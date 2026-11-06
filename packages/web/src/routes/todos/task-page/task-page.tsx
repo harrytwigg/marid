@@ -29,7 +29,7 @@ import { ChipCluster } from "./chip-cluster"
 import { MemberCloseControl } from "./member-close-control"
 import { MovedLabel } from "../moved-label"
 import { MemberCreatorProvider } from "../pickers/picker-contents"
-import { VisibleToMembersHint } from "../visibility-hint"
+import { VisibleToCreatorHint, VisibleToMembersHint } from "../visibility-hint"
 import { isMemberIdentity } from "../attribution"
 import { useVisibleToMembers } from "@/hooks/use-visible-to-members"
 import { useTaskPickers } from "./use-task-pickers"
@@ -97,11 +97,13 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
   const ancestors = useMemo(() => (id ? ancestorsOf(rootNode, id) : []), [rootNode, id])
   const member = useMember()
   const moved = item?.movedToAnotherBoard === true
-  const caps = useTodoCapabilitiesFor(item?.department, rootNode, moved)
+  const caps = useTodoCapabilitiesFor(item?.department, rootNode, moved ? { canComment: item?.memberCanComment === true } : null)
   const memberGrants = useMemberGrants()
   const visibleToMembers = useVisibleToMembers(rootNode?.department ?? item?.department, moved)
   // The operator changing who holds a Todo a board member made is told what that does to the member's access.
   const memberCreator = !member && rootNode && isMemberIdentity(rootNode.createdBy) ? rootNode.createdBy ?? null : null
+  // While that root is open its creator reads everything written on it, wherever it now sits.
+  const creatorReader = memberCreator && rootNode && rootNode.status !== "done" && rootNode.status !== "cancelled" ? memberCreator : null
 
   const org = useOrg()
   const byName = useEmployeesByName(org.data?.employees)
@@ -356,7 +358,12 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
               />
 
               {moved && <MovedLabel testId="task-moved-label" className="mt-2" />}
-              {visibleToMembers && <div className="mt-2"><VisibleToMembersHint testId="task-visibility-hint" /></div>}
+              {(visibleToMembers || creatorReader) && (
+                <div className="mt-2 flex flex-col gap-0.5">
+                  {visibleToMembers && <VisibleToMembersHint testId="task-visibility-hint" />}
+                  {creatorReader && <VisibleToCreatorHint identity={creatorReader} testId="task-creator-hint" />}
+                </div>
+              )}
 
               {detail && (
                 <ChipCluster
@@ -435,6 +442,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
                   isDark={isDark}
                   announce={announce}
                   visibleToMembers={visibleToMembers}
+                  creatorReader={creatorReader}
                 />
               )}
             </main>

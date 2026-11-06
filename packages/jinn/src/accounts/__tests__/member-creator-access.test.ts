@@ -4,7 +4,7 @@ import { startBoardHarness, type BoardHarness, type Member } from "./board-harne
 /**
  * A member keeps read access, and comment access if their role allowed comments, to an open tree whose root they created
  * after it leaves their boards (another department, or the company board). No edits, no status changes, nothing else in
- * the destination, and the access ends when the root closes, the member is disabled or they lose their last grant.
+ * the destination, and the access ends when the root closes, the member is disabled or they no longer hold the board it was filed on.
  */
 let h: BoardHarness;
 let store: typeof import("../../work-items/store.js");
@@ -81,14 +81,14 @@ describe("an assignment that moves the root to another department", () => {
   it("lists it under the moved group and on no board", async () => {
     const t = await patRoot();
     await assign(t.root, "alice");
-    const moved = await h.as(pat, "GET", "/api/member/moved");
+    const moved = await h.as(pat, "GET", "/api/member/boards/design/moved");
     expect(moved.status).toBe(200);
     expect(moved.body.workItems.map((w: any) => w.id)).toContain(t.root);
     expect(moved.body.workItems.find((w: any) => w.id === t.root)).toMatchObject({ movedToAnotherBoard: true, department: null });
     expect(moved.body.workItems.find((w: any) => w.id === t.root).sessionRef).toBeUndefined();
     const board = await h.as(pat, "GET", "/api/member/boards/design/todos?rootsOnly=true&limit=100");
     expect(board.body.workItems.map((w: any) => w.id)).not.toContain(t.root);
-    expect((await h.as(dee, "GET", "/api/member/moved")).body.workItems).toEqual([]);
+    expect((await h.as(dee, "GET", "/api/member/boards/design/moved")).body.workItems).toEqual([]);
   });
 
   it("answers 404 for every other Todo in the destination, and for another member", async () => {
@@ -147,7 +147,7 @@ describe("an assignment to @operator, which leaves the company board", () => {
     expect((await detail(pat, t.theirs)).status).toBe(200);
     expect((await h.as(pat, "POST", `/api/member/todos/${t.root}/comments`, { body: "ok" })).status).toBe(201);
     expect((await h.as(pat, "POST", `/api/member/todos/${t.mine}/status`, { status: "done" })).status).toBe(403);
-    expect((await h.as(pat, "GET", "/api/member/moved")).body.workItems.map((w: any) => w.id)).toContain(t.root);
+    expect((await h.as(pat, "GET", "/api/member/boards/design/moved")).body.workItems.map((w: any) => w.id)).toContain(t.root);
     // Other company-board Todos are not theirs.
     const company = store.createWorkItem({ title: "company" });
     expect((await detail(pat, company.id)).status).toBe(404);
@@ -166,7 +166,7 @@ describe("an assignment within the board's department", () => {
     expect((await h.as(ola, "POST", `/api/member/todos/${root}/comments`, { body: "ok" })).status).toBe(201);
     const edit = await h.as(ola, "PATCH", `/api/member/todos/${root}`, { title: "x", expectedVersion: store.getWorkItem(root)!.version });
     expect(edit.status).toBe(403);
-    expect((await h.as(ola, "GET", "/api/member/moved")).body.workItems.map((w: any) => w.id)).not.toContain(root);
+    expect((await h.as(ola, "GET", "/api/member/boards/ops/moved")).body.workItems.map((w: any) => w.id)).not.toContain(root);
   });
 });
 
@@ -180,7 +180,7 @@ describe("a member who also holds the destination board reads it there, as on an
       const read = await detail(pat, t.root);
       expect(read.body.workItem.movedToAnotherBoard).toBeUndefined();
       expect(read.body.workItem.department).toBe("ops");
-      expect((await h.as(pat, "GET", "/api/member/moved")).body.workItems.map((w: any) => w.id)).not.toContain(t.root);
+      expect((await h.as(pat, "GET", "/api/member/boards/design/moved")).body.workItems.map((w: any) => w.id)).not.toContain(t.root);
     } finally {
       h.db.prepare("DELETE FROM board_members WHERE user_id = ? AND department = 'ops'").run(pat.userId);
     }
@@ -200,7 +200,7 @@ describe("access ends", () => {
       for (const id of [t.root, t.mine, t.theirs]) expect((await detail(pat, id)).status).toBe(404);
       expect((await h.as(pat, "GET", `/api/member/todos/${t.root}/tree`)).status).toBe(404);
       expect((await h.as(pat, "POST", `/api/member/todos/${t.root}/comments`, { body: "late" })).status).toBe(404);
-      expect((await h.as(pat, "GET", "/api/member/moved")).body.workItems.map((w: any) => w.id)).not.toContain(t.root);
+      expect((await h.as(pat, "GET", "/api/member/boards/design/moved")).body.workItems.map((w: any) => w.id)).not.toContain(t.root);
     }
   });
 
@@ -216,25 +216,80 @@ describe("access ends", () => {
     await assign(t.root, "alice");
     h.db.prepare("DELETE FROM board_members WHERE user_id = ?").run(pat.userId);
     expect((await detail(pat, t.root)).status).toBe(404);
-    expect((await h.as(pat, "GET", "/api/member/moved")).body.workItems).toEqual([]);
+    expect((await h.as(pat, "GET", "/api/member/boards/design/moved")).status).toBe(404);
   });
 
-  it("not while they hold another board, even if the one it left was removed", async () => {
+  it("when they are removed from the board it was filed on, even while they hold another board, moved or not", async () => {
     const t = await patRoot();
+    const stayed = await patRoot();
     await assign(t.root, "alice");
-    h.db.prepare("INSERT INTO board_members (user_id, department, role, granted_by, granted_at) VALUES (?, 'ops', 'viewer', 'operator', ?)")
+    h.db.prepare("INSERT INTO board_members (user_id, department, role, granted_by, granted_at) VALUES (?, 'ops', 'collaborator', 'operator', ?)")
       .run(pat.userId, new Date().toISOString());
-    h.db.prepare("DELETE FROM board_members WHERE user_id = ? AND department = 'design'").run(pat.userId);
     try {
       expect((await detail(pat, t.root)).status).toBe(200); // read through the board it went to
-      store.updateWorkItem(t.root, { department: "design" });
-      const read = await detail(pat, t.root);
-      expect(read.status).toBe(200); // not on a board they hold, still theirs and open
-      expect(read.body.workItem.movedToAnotherBoard).toBe(true);
-      expect((await h.as(pat, "POST", `/api/member/todos/${t.root}/comments`, { body: "x" })).status).toBe(403); // viewer now
+      h.db.prepare("DELETE FROM board_members WHERE user_id = ? AND department = 'design'").run(pat.userId);
+      store.updateWorkItem(t.root, { department: "platform" });
+      for (const id of [t.root, t.mine, stayed.root, stayed.mine]) expect((await detail(pat, id)).status, id).toBe(404);
+      expect((await h.as(pat, "POST", `/api/member/todos/${stayed.root}/comments`, { body: "still here?" })).status).toBe(404);
+      expect((await h.as(pat, "GET", "/api/member/boards/ops/moved")).body.workItems).toEqual([]);
+      expect((await h.as(pat, "GET", "/api/member/boards/design/moved")).status).toBe(404);
     } finally {
       h.db.prepare("DELETE FROM board_members WHERE user_id = ?").run(pat.userId);
     }
+  });
+
+  it("comments by the role they hold on the board it was filed on, never by a better role elsewhere", async () => {
+    const t = await patRoot();
+    await assign(t.root, "alice");
+    h.db.prepare("UPDATE board_members SET role = 'viewer' WHERE user_id = ? AND department = 'design'").run(pat.userId);
+    h.db.prepare("INSERT INTO board_members (user_id, department, role, granted_by, granted_at) VALUES (?, 'platform', 'owner', 'operator', ?)")
+      .run(pat.userId, new Date().toISOString());
+    try {
+      const read = await detail(pat, t.root);
+      expect(read.body.workItem).toMatchObject({ movedToAnotherBoard: true, memberCanComment: false });
+      expect((await h.as(pat, "POST", `/api/member/todos/${t.root}/comments`, { body: "hello" })).status).toBe(403);
+      h.db.prepare("UPDATE board_members SET role = 'collaborator' WHERE user_id = ? AND department = 'design'").run(pat.userId);
+      expect((await detail(pat, t.root)).body.workItem.memberCanComment).toBe(true);
+    } finally {
+      h.db.prepare("DELETE FROM board_members WHERE user_id = ? AND department = 'platform'").run(pat.userId);
+    }
+  });
+
+  it("is listed only under the board it was filed on", async () => {
+    const t = await patRoot();
+    await assign(t.root, "@operator");
+    h.db.prepare("INSERT INTO board_members (user_id, department, role, granted_by, granted_at) VALUES (?, 'ops', 'viewer', 'operator', ?)")
+      .run(pat.userId, new Date().toISOString());
+    try {
+      expect((await h.as(pat, "GET", "/api/member/boards/design/moved")).body.workItems.map((w: any) => w.id)).toContain(t.root);
+      expect((await h.as(pat, "GET", "/api/member/boards/ops/moved")).body.workItems).toEqual([]);
+    } finally {
+      h.db.prepare("DELETE FROM board_members WHERE user_id = ? AND department = 'ops'").run(pat.userId);
+    }
+  });
+
+  it("is not granted for a root with no recorded board, or to a disabled user, by the one access function", async () => {
+    const { creatorAccess } = await import("../member-access.js");
+    const t = await patRoot();
+    await assign(t.root, "alice");
+    expect(creatorAccess(h.db, pat.userId, t.root)).toEqual({ canComment: true, board: "design" });
+    const unrecorded = store.createWorkItem({ title: "filed some other way", department: "platform", createdBy: `user:${pat.userId}` }).id;
+    expect(creatorAccess(h.db, pat.userId, unrecorded)).toBeUndefined();
+    h.db.prepare("UPDATE users SET status = 'disabled' WHERE id = ?").run(pat.userId);
+    expect(creatorAccess(h.db, pat.userId, t.root)).toBeUndefined();
+  });
+
+  it("names the Todos in a moved tree its events refer to, and drops the ones it cannot read", async () => {
+    const t = await patRoot();
+    await assign(t.root, "alice");
+    const added = store.createWorkItem({ title: "added after the move", parentId: t.root }).id;
+    const foreign = store.createWorkItem({ title: "elsewhere", department: "ops" }).id;
+    store.appendWorkItemEvent({ workItemId: t.root, kind: "child_created", actor: "operator", detail: { childId: foreign } });
+    const events = (await detail(pat, t.root)).body.events.filter((event: any) => event.kind === "child_created");
+    const ids = events.map((event: any) => event.detail.childId);
+    expect(ids).toContain(added);
+    expect(ids).toContain(t.mine);
+    expect(ids).not.toContain(foreign);
   });
 });
 
@@ -290,7 +345,7 @@ describe("live frames", () => {
     }
   });
 
-  it("closing the root sends its creator `removed` for the root only, then nothing", async () => {
+  it("closing the root sends its creator `removed` for the root, then only for what they made", async () => {
     const t = await patRoot();
     await assign(t.root, "@operator");
     const patSocket = connect(pat);
@@ -302,7 +357,9 @@ describe("live frames", () => {
       expect(patSocket.frames.map((f) => f.payload)).toEqual([{ entity: "todo", action: "removed", id: t.root }]);
       patSocket.frames.length = 0;
       await h.operator("POST", `/api/work-items/${t.theirs}/comments`, { body: "after the close" });
-      expect(patSocket.frames).toEqual([]); // a sub-task of a closed tree is no longer theirs
+      expect(patSocket.frames).toEqual([]); // an operator's sub-task of a closed tree is no longer theirs
+      await h.operator("POST", `/api/work-items/${t.mine}/comments`, { body: "on their own, closed" });
+      expect(patSocket.frames.map((f) => f.payload)).toEqual([{ entity: "todo", action: "removed", id: t.mine }]); // an id they made: their card goes
     } finally {
       h.rt.memberSockets.remove(patSocket);
     }
