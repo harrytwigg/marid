@@ -3,7 +3,7 @@ import { compactWorkItem, workItemTreePayload, type WorkItemTreeNodePayload } fr
 import { listAttachments, type WorkItemAttachment } from "../work-items/attachments.js";
 import { commentsTail, type WorkItemComment } from "../work-items/comments.js";
 import { recoveryByItem } from "../work-items/recovery-rows.js";
-import { getWorkItemLabels, labelSets } from "../work-items/labels.js";
+import { getWorkItemLabels, labelSets, type Label } from "../work-items/labels.js";
 import { memberDisplayName, memberIdOf, outwardComment, isMemberIdentity } from "../work-items/member-identity.js";
 import { listRelations, blockedSet } from "../work-items/relations.js";
 import { reviewAddressee } from "../work-items/review-addressee.js";
@@ -37,7 +37,18 @@ function isEmployee(name: string): boolean {
 export class Viewer {
   private readonly known = new Map<string, boolean>();
   private readonly held = new Map<string, boolean>();
+  private readonly boards = new Map<string, boolean>();
   constructor(readonly db: DatabaseType, readonly userId: string) {}
+
+  /** Whether a department is one of the reader's boards. */
+  holdsBoard(department: string): boolean {
+    let answer = this.boards.get(department);
+    if (answer === undefined) {
+      answer = !!getGrant(this.db, this.userId, department);
+      this.boards.set(department, answer);
+    }
+    return answer;
+  }
 
   /** Whether a Todo (by id) is on a board the reader holds; a Todo that is gone or on no board is not. */
   holdsTodo(todoId: string): boolean {
@@ -46,7 +57,7 @@ export class Viewer {
       const row = initDb().prepare("SELECT id, root_id, department FROM work_items WHERE id = ?").get(todoId) as
         { id: string; root_id: string; department: string | null } | undefined;
       const board = row ? boardOfTodo({ id: row.id, rootId: row.root_id, department: row.department }) : null;
-      answer = !!board && !!getGrant(this.db, this.userId, board);
+      answer = !!board && this.holdsBoard(board);
       this.held.set(todoId, answer);
     }
     return answer;
@@ -95,9 +106,24 @@ export function memberWho(identity: string, viewer: Viewer): string {
   return identity.includes(":") ? "system" : "agent";
 }
 
-/** A Todo as a member reads it: the operator's row without the session-bearing `sourceRef`, budget or session creator. */
+/**
+ * A Todo's own department as a member reads it: a department that is not one of the reader's boards is never named, so a
+ * sub-task that sits in another department reads as having none of its own (it is on its root's board, which is theirs).
+ */
+function memberDepartment(department: string | null, viewer: Viewer): string | null {
+  return department !== null && !viewer.holdsBoard(department) ? null : department;
+}
+
+/** Labels as a member reads them: a label scoped to a department that is not one of their boards reads as unscoped. */
+function memberLabels(labels: Label[], viewer: Viewer): Label[] {
+  return labels.map((label) => ({ ...label, department: memberDepartment(label.department, viewer) }));
+}
+
+/** A Todo as a member reads it: the operator's row without the session-bearing `sourceRef`, budget, session creator or another board's name. */
 export function memberWorkItem(item: WorkItem, viewer: Viewer): WorkItem {
-  return { ...item, sourceRef: null, budgetUsd: null, createdBy: memberWho(item.createdBy, viewer) };
+  return {
+    ...item, sourceRef: null, budgetUsd: null, createdBy: memberWho(item.createdBy, viewer), department: memberDepartment(item.department, viewer),
+  };
 }
 
 type CompactExtras = Parameters<typeof compactWorkItem>[1];
@@ -108,7 +134,9 @@ function memberCompact(item: WorkItem, extras: CompactExtras, viewer: Viewer): R
   const { sessionRef: _sessionRef, ...row } = compactWorkItem(item, extras);
   return {
     ...row,
+    labels: memberLabels(row.labels as Label[], viewer),
     createdBy: memberWho(item.createdBy, viewer),
+    department: memberDepartment(item.department, viewer),
     sourceRef: null,
     kept: false,
     attentionLane: null,
@@ -180,27 +208,36 @@ function memberEventActor(event: WorkItemEvent, createdBy: string, viewer: Viewe
 
 const DROPPED = Symbol("dropped");
 
+/** One string in an event detail: a department under a department key, or a Todo id anywhere, the reader may not be told of is dropped. */
+function memberDetailString(value: string, viewer: Viewer, key: string | undefined): string | typeof DROPPED {
+  if (key !== undefined && DEPARTMENT_KEY.test(key)) return viewer.holdsBoard(value) ? value : DROPPED;
+  return TODO_ID_PATTERN.test(value) && !viewer.holdsTodo(value) ? DROPPED : value;
+}
+
+/** Event detail keys whose value is a department: `department`, `movedTo`, and any `...Department`. */
+const DEPARTMENT_KEY = /^(department|movedTo)$|Department$/;
+
 /**
- * An event detail value with every Todo id the reader may not open taken out, at any depth: a string that is a Todo id is
- * kept only when that Todo is on a board the reader holds (the rule relations follow), an array loses such entries and an
- * object such keys. Whatever key carries it (srcId, dstId, childId, reparented.from, movedWithRoot...), the id is judged
- * by what it names, not by where it sits.
+ * An event detail value with everything the reader may not be told taken out, at any depth: a string that is a Todo id is
+ * kept only when that Todo is on a board the reader holds (the rule relations follow), and a department under a department
+ * key only when it is one of the reader's boards. An array loses such entries and an object such keys. A Todo id is judged
+ * by what it names, whatever key carries it (srcId, dstId, childId, reparented.from, movedWithRoot...).
  */
-function heldTodoIdsOnly(value: unknown, viewer: Viewer): unknown {
-  if (typeof value === "string") return TODO_ID_PATTERN.test(value) && !viewer.holdsTodo(value) ? DROPPED : value;
-  if (Array.isArray(value)) return value.map((entry) => heldTodoIdsOnly(entry, viewer)).filter((entry) => entry !== DROPPED);
+function memberDetailValue(value: unknown, viewer: Viewer, key?: string): unknown {
+  if (typeof value === "string") return memberDetailString(value, viewer, key);
+  if (Array.isArray(value)) return value.map((entry) => memberDetailValue(entry, viewer, key)).filter((entry) => entry !== DROPPED);
   if (!value || typeof value !== "object") return value;
   const kept: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value)) {
-    const scrubbed = heldTodoIdsOnly(entry, viewer);
-    if (scrubbed !== DROPPED) kept[key] = scrubbed;
+  for (const [name, entry] of Object.entries(value)) {
+    const scrubbed = memberDetailValue(entry, viewer, name);
+    if (scrubbed !== DROPPED) kept[name] = scrubbed;
   }
   return kept;
 }
 
 function memberEvent(event: WorkItemEvent, createdBy: string, viewer: Viewer): WorkItemEvent {
   const detail = event.detail
-    ? heldTodoIdsOnly(Object.fromEntries(Object.entries(event.detail).filter(([key]) => !SESSION_DETAIL_KEYS.has(key))), viewer) as WorkItemEvent["detail"]
+    ? memberDetailValue(Object.fromEntries(Object.entries(event.detail).filter(([key]) => !SESSION_DETAIL_KEYS.has(key))), viewer) as WorkItemEvent["detail"]
     : event.detail;
   return { ...event, actor: memberEventActor(event, createdBy, viewer), detail };
 }
@@ -244,7 +281,7 @@ export function memberDetailPayload(viewer: Viewer, item: WorkItem): Record<stri
     comments,
     ...(Object.keys(members).length > 0 ? { members } : {}),
     relations: visibleRelations(viewer, item),
-    labels: getWorkItemLabels(item.id),
+    labels: memberLabels(getWorkItemLabels(item.id), viewer),
     sprint: getWorkItemSprint(item.id),
     kept: false,
     attentionLane: null,

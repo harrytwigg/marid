@@ -144,3 +144,54 @@ describe("a disabled account is no longer named", () => {
     expect(JSON.stringify([detail, row])).not.toContain(ray.userId);
   });
 });
+
+describe("a department that is not one of the reader's boards is never named to them", () => {
+  it("a Todo moved in from another board, its labels, a sub-task in that department and the events that name it read without it", async () => {
+    const SECRET = "skunkworks";
+    fs.mkdirSync(path.join(h.home, "org", SECRET), { recursive: true });
+    store.ensureDepartmentRegistered(SECRET);
+    // Made on the other board, then moved by the operator onto ops, with a sub-task that still names the other department.
+    const moved = store.createWorkItem({ title: "Moved in", department: SECRET });
+    const kid = store.createWorkItem({ title: "Kid", parentId: moved.id });
+    const opsRoot = store.createWorkItem({ title: "Ops root", department: "ops" });
+    const straggler = store.createWorkItem({ title: "Straggler", parentId: opsRoot.id, department: SECRET });
+    const patched = await h.operator("PATCH", `/api/work-items/${moved.id}`, { department: "ops", expectedVersion: store.getWorkItem(moved.id)!.version });
+    expect(patched.status).toBe(200);
+    // A label scoped to the other department, still on the Todo after it moved.
+    const labels = await import("../../work-items/labels.js");
+    labels.createLabel({ name: "skunk-only", department: SECRET });
+    labels.setWorkItemLabels(moved.id, ["skunk-only"], "operator");
+    expect(JSON.stringify(labels.getWorkItemLabels(moved.id))).toContain(SECRET);
+    // The event shapes that name a department: an assignment's note, a sub-task moved with its root, an escalation on leaving one.
+    store.appendWorkItemEvent({ workItemId: moved.id, kind: "note", actor: "operator", detail: { assignee: "alice", department: SECRET } });
+    store.appendWorkItemEvent({ workItemId: kid.id, kind: "note", actor: "operator", detail: { updatedFields: ["department"], department: SECRET, movedWithRoot: moved.id } });
+    store.appendWorkItemEvent({ workItemId: opsRoot.id, kind: "escalated", actor: "operator", detail: { reason: "left-department", department: SECRET, movedTo: "ops" } });
+    expect(JSON.stringify(store.listWorkItemEvents(moved.id).concat(store.listWorkItemEvents(opsRoot.id)))).toContain(SECRET);
+
+    const frames: any[] = [];
+    const socket = { readyState: 1, close() {}, send: (data: string) => frames.push(JSON.parse(data)) };
+    h.rt.memberSockets.add(socket, pat.sessionId);
+    for (const id of [moved.id, kid.id, opsRoot.id, straggler.id]) {
+      const live = store.getWorkItem(id)!;
+      h.rt.memberSockets.publish("company:changed", { entity: "todo", action: "updated", id, version: live.version, value: live });
+    }
+    h.rt.memberSockets.remove(socket);
+    expect(frames).toHaveLength(4);
+
+    const reads: unknown[] = [frames];
+    for (const id of [moved.id, kid.id, opsRoot.id, straggler.id]) {
+      for (const suffix of ["", "/tree", "/comments", "/attachments"]) {
+        const reply = await h.as(pat, "GET", `/api/member/todos/${id}${suffix}`);
+        expect(reply.status).toBe(200);
+        reads.push(reply.body);
+      }
+    }
+    reads.push((await h.as(pat, "GET", "/api/member/boards/ops/todos?limit=200")).body);
+    reads.push((await h.as(pat, "GET", "/api/member/boards")).body);
+    reads.push((await h.as(pat, "GET", "/api/member/people")).body);
+    expect(JSON.stringify(reads)).not.toContain(SECRET);
+    // The moved Todo's own timeline still says it moved, and its board is the reader's.
+    const detail = (await h.as(pat, "GET", `/api/member/todos/${moved.id}`)).body;
+    expect(detail.workItem.department).toBe("ops");
+  });
+});
