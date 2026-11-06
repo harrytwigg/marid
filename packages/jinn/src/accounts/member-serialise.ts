@@ -8,6 +8,7 @@ import { memberDisplayName, memberIdOf, outwardComment, isMemberIdentity } from 
 import { listRelations, blockedSet } from "../work-items/relations.js";
 import { reviewAddressee } from "../work-items/review-addressee.js";
 import { getWorkItemSprint, sprintRefs } from "../work-items/sprints.js";
+import { orgRegistry } from "../gateway/org-registry.js";
 import { getSession } from "../sessions/registry.js";
 import { listWorkItemEvents, type WorkItem, type WorkItemEvent, type queryWorkItems } from "../work-items/store.js";
 import { readStopCause } from "../work-items/stop-cause.js";
@@ -21,18 +22,31 @@ import { getGrant } from "./board-members.js";
  * drop, applied in one place so no member route serialises a Todo, comment, event or attachment itself.
  */
 
-/** Actors that are the gateway's own machinery rather than a person or an employee. */
-const INTERNAL_ACTORS: ReadonlySet<string> = new Set(["reconciler", "park-expiry", "board-walk", "jinn", "system"]);
+/** Whether a name is an employee on the roster, as this instance is configured. */
+function isEmployee(name: string): boolean {
+  return orgRegistry().has(name);
+}
 
 /**
- * An actor (creator, author, uploader, event actor) as a member reads it: only ever an employee name, `operator`, a
- * `user:<id>`, or a generic `agent` / `system` with no identifier. A session reads as its employee, or "agent"; a plugin,
- * a cron job, a workflow or the gateway's own machinery reads as "system". No internal id is sent to a member.
+ * An actor (creator, author, uploader, event actor) as a member reads it, built from an allowed set and nothing else:
+ * an employee on the roster, `operator`, a board member's `user:<id>`, or a generic `agent` / `system`. A session reads as
+ * its employee when it has one, else "agent". Anything outside the set (a plugin, a cron job, a workflow, the gateway's
+ * own machinery, a name no longer on the roster) becomes "system" or "agent", with no identifier. Known-bad values are
+ * not filtered: only what is allowed passes.
  */
 export function memberWho(identity: string): string {
-  if (identity === "operator" || memberIdOf(identity) !== undefined) return identity;
-  if (identity.startsWith("session:")) return getSession(identity.slice("session:".length))?.employee || "agent";
-  return identity.includes(":") || INTERNAL_ACTORS.has(identity) ? "system" : identity;
+  if (ALLOWED_ACTORS.has(identity) || memberIdOf(identity) !== undefined) return identity;
+  if (identity.startsWith("session:")) return sessionEmployee(identity) ?? "agent";
+  if (isEmployee(identity)) return identity;
+  return identity.includes(":") ? "system" : "agent";
+}
+
+const ALLOWED_ACTORS: ReadonlySet<string> = new Set(["operator", "agent", "system"]);
+
+/** The roster employee a `session:<id>` actor was working as, when there is one. */
+function sessionEmployee(identity: string): string | undefined {
+  const employee = getSession(identity.slice("session:".length))?.employee;
+  return employee && isEmployee(employee) ? employee : undefined;
 }
 
 /** A Todo as a member reads it: the operator's row without the session-bearing `sourceRef`, budget or session creator. */
@@ -110,9 +124,9 @@ const SESSION_DETAIL_KEYS: ReadonlySet<string> = new Set([
 
 function memberEventActor(event: WorkItemEvent): string | null {
   if (!event.actor) return null;
-  if (!event.actor.startsWith("session:")) return memberWho(event.actor);
   const employee = event.detail?.actorEmployee;
-  return typeof employee === "string" && employee ? employee : memberWho(event.actor);
+  if (event.actor.startsWith("session:") && typeof employee === "string" && isEmployee(employee)) return employee;
+  return memberWho(event.actor);
 }
 
 function memberEvent(event: WorkItemEvent): WorkItemEvent {

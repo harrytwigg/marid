@@ -5,11 +5,14 @@ import {
   ATTACHMENT_MAX_BYTES, WorkItemAttachmentError, addAttachment, stageAttachmentBuffer,
 } from "../work-items/attachments.js";
 import { WorkItemCommentError, addComment, editComment, getComment, tombstoneComment, type WorkItemComment } from "../work-items/comments.js";
-import { grantedTodo, requireRole, type GrantedTodo } from "./member-access.js";
+import { initDb } from "../shared/db.js";
+import { holdLiveSignalsUntilCommit } from "../work-items/live-events.js";
+import { getWorkItem } from "../work-items/store.js";
+import { NotVisibleError, assertCollaborator, boardOfTodo, grantedTodo, requireRole, type GrantedTodo } from "./member-access.js";
 import type { MemberRouteContext } from "./member-context.js";
 import { readObject } from "./member-input.js";
 import { memberAttachment, memberComment } from "./member-serialise.js";
-import { actorOf, announce } from "./member-writes.js";
+import { actorOf, announce, answerWriteError } from "./member-writes.js";
 
 const COMMENT_ID = /^wic_[0-9a-f]{12}$/;
 
@@ -19,7 +22,22 @@ function writableTodo(ctx: MemberRouteContext): GrantedTodo | undefined {
   return granted && requireRole(ctx, granted.grant, "collaborator") ? granted : undefined;
 }
 
+/**
+ * Run a comment or file write inside one immediate transaction that first reads the Todo's board and the member's role as they
+ * are now: a grant removed or a role lowered while the body arrived is refused, never written.
+ */
+function inGrantedTransaction<T>(ctx: MemberRouteContext, todoId: string, write: () => T): T {
+  const db = initDb();
+  return holdLiveSignalsUntilCommit(() => db.transaction((): T => {
+    const current = getWorkItem(todoId);
+    if (!current) throw new NotVisibleError();
+    assertCollaborator(db, ctx.principal.userId, boardOfTodo(current));
+    return write();
+  }).immediate());
+}
+
 function commentFailure(ctx: MemberRouteContext, err: unknown): void {
+  if (answerWriteError(ctx, err)) return;
   if (err instanceof WorkItemCommentError) {
     if (err.code === "comment-not-found") return notFound(ctx.res);
     return json(ctx.res, { error: err.message }, err.code === "comment-forbidden" ? 403 : 409);
@@ -47,8 +65,7 @@ function parentCommentOf(ctx: MemberRouteContext, body: Record<string, unknown>)
 export async function addTodoComment(ctx: MemberRouteContext): Promise<void> {
   const granted = writableTodo(ctx);
   const body = granted && (await readObject(ctx));
-  // The grant is read again once the body is in: it may have changed while the body was arriving.
-  if (!granted || !body || !writableTodo(ctx)) return;
+  if (!granted || !body) return;
   if (body.author !== undefined || body.authorKind !== undefined) {
     return badRequest(ctx.res, "author fields cannot be supplied — comment identity is stamped from the signed-in member");
   }
@@ -56,7 +73,8 @@ export async function addTodoComment(ctx: MemberRouteContext): Promise<void> {
   const parentCommentId = parentCommentOf(ctx, body);
   if (text === undefined || parentCommentId === undefined) return;
   try {
-    const comment = addComment({ workItemId: granted.item.id, body: text, author: actorOf(ctx), authorKind: "system", parentCommentId });
+    const comment = inGrantedTransaction(ctx, granted.item.id, () =>
+      addComment({ workItemId: granted.item.id, body: text, author: actorOf(ctx), authorKind: "system", parentCommentId }));
     announce(ctx, granted.item.id, "commented");
     json(ctx.res, { comment: memberComment(comment) }, 201);
   } catch (err) {
@@ -76,11 +94,12 @@ function commentOnTodo(ctx: MemberRouteContext, todoId: string): WorkItemComment
 export async function editTodoComment(ctx: MemberRouteContext): Promise<void> {
   const granted = writableTodo(ctx);
   const body = granted && (await readObject(ctx));
-  if (!granted || !body || !writableTodo(ctx)) return;
+  if (!granted || !body) return;
   const text = commentText(ctx, body);
   if (text === undefined || !commentOnTodo(ctx, granted.item.id)) return;
   try {
-    const comment = editComment(ctx.params.cid!, text, { author: actorOf(ctx), authorKind: "system", operator: false });
+    const comment = inGrantedTransaction(ctx, granted.item.id, () =>
+      editComment(ctx.params.cid!, text, { author: actorOf(ctx), authorKind: "system", operator: false }));
     announce(ctx, granted.item.id, "comment-edited");
     json(ctx.res, { comment: memberComment(comment) });
   } catch (err) {
@@ -92,7 +111,8 @@ export function deleteTodoComment(ctx: MemberRouteContext): void {
   const granted = writableTodo(ctx);
   if (!granted || !commentOnTodo(ctx, granted.item.id)) return;
   try {
-    const comment = tombstoneComment(ctx.params.cid!, { author: actorOf(ctx), authorKind: "system", operator: false });
+    const comment = inGrantedTransaction(ctx, granted.item.id, () =>
+      tombstoneComment(ctx.params.cid!, { author: actorOf(ctx), authorKind: "system", operator: false }));
     announce(ctx, granted.item.id, "comment-deleted");
     json(ctx.res, { comment: memberComment(comment) });
   } catch (err) {
@@ -158,18 +178,17 @@ export async function uploadAttachment(ctx: MemberRouteContext): Promise<void> {
   const granted = writableTodo(ctx);
   const upload = granted && (await readUpload(ctx));
   if (!granted || !upload) return;
-  if (!writableTodo(ctx)) return fs.rmSync(upload.stagedPath, { force: true });
   try {
-    const attachment = addAttachment({
+    const attachment = inGrantedTransaction(ctx, granted.item.id, () => addAttachment({
       workItemId: granted.item.id, commentId: upload.commentId, filename: upload.filename, mime: mimeFromFilename(upload.filename),
       stagedPath: upload.stagedPath,
       // Attached to a comment only when it is the member's own: the same (author, kind) pair match as an edit.
       uploader: { author: actorOf(ctx), authorKind: "system", operator: false },
-    });
+    }));
     announce(ctx, granted.item.id, "attachment-added");
     json(ctx.res, { attachment: memberAttachment(attachment) }, 201);
   } catch (err) {
     fs.rmSync(upload.stagedPath, { force: true });
-    attachmentFailure(ctx, err);
+    if (!answerWriteError(ctx, err)) attachmentFailure(ctx, err);
   }
 }

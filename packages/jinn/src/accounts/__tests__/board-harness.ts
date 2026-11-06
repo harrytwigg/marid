@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
@@ -48,6 +49,10 @@ export interface Member { cookie: string; userId: string; email: string; session
 export async function startBoardHarness(): Promise<BoardHarness> {
   const { initDb } = await import("../../shared/db.js");
   const db = initDb();
+  // One employee on the roster, so a name can be told from an identifier a member must not see.
+  const org = path.join(process.env.JINN_HOME!, "org", "ops");
+  fs.mkdirSync(org, { recursive: true });
+  fs.writeFileSync(path.join(org, "alice.yaml"), "name: alice\ndisplayName: Alice\ndepartment: ops\nrank: employee\nengine: claude\nmodel: sonnet\npersona: test employee\nemoji: A\n");
   const { ensureDepartmentRegistered } = await import("../../work-items/store.js");
   for (const slug of ["ops", "design"]) ensureDepartmentRegistered(slug);
   const { createAccountsRuntime } = await import("../runtime.js");

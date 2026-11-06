@@ -40,6 +40,18 @@ const noSessionIds = (value: unknown) => {
   expect(text).not.toMatch(/session:/);
 };
 
+describe("a roster employee shows by name; a name that is not on the roster is only ever 'agent'", () => {
+  it("an author or creator no longer on the roster reads as agent", async () => {
+    const comments = await import("../../work-items/comments.js");
+    const gone = store.createWorkItem({ title: "By a departed employee", department: "ops", source: "delegation", createdBy: "departed-employee" });
+    comments.addComment({ workItemId: gone.id, body: "bye", author: "departed-employee", authorKind: "employee" });
+    const detail = (await h.as(viewer, "GET", `/api/member/todos/${gone.id}`)).body;
+    expect(detail.workItem.createdBy).toBe("agent");
+    expect(detail.comments.comments[0].author).toBe("agent");
+    expect(JSON.stringify(detail)).not.toContain("departed-employee");
+  });
+});
+
 describe("members read only an employee, operator, a user or a generic agent/system: never a plugin, cron or machinery id", () => {
   it("a plugin's and a cron job's Todo and comments, and the gateway's own events", async () => {
     const comments = await import("../../work-items/comments.js");
@@ -53,9 +65,11 @@ describe("members read only an employee, operator, a user or a generic agent/sys
       const detail = (await h.as(viewer, "GET", `/api/member/todos/${id}`)).body;
       expect(JSON.stringify(detail)).not.toMatch(/plugin:|cron:|calendar|nightly-sweep|reconciler|board-walk/);
       expect(detail.workItem.createdBy).toBe("system");
+      for (const event of detail.events) expect(["operator", "agent", "system", "connector", "cron"]).toContain(event.actor);
     }
     const page = (await h.as(viewer, "GET", `/api/member/todos/${plugin.id}/comments`)).body;
-    expect(page.comments.map((c: any) => c.author)).toEqual(["system", "system"]);
+    // Whitelist, not a filter: whatever is not an employee, operator or user comes out as a generic agent or system.
+    expect(page.comments.map((c: any) => c.author).sort()).toEqual(["agent", "system"]);
     const list = (await h.as(viewer, "GET", "/api/member/boards/ops/todos?limit=100")).body;
     expect(JSON.stringify(list)).not.toMatch(/plugin:|cron:|nightly-sweep/);
   });

@@ -13,12 +13,12 @@ let labels: typeof import("../../work-items/labels.js");
 let operatorRoot: string;
 
 /** A request whose body arrives in two parts, with `between` run once the first part is in and the request is being served. */
-async function slowRequest(member: Member, method: string, path: string, body: { first: string; second: string }, between: () => Promise<void>): Promise<{ status: number; body: any }> {
+async function slowRequest(member: Member, method: string, path: string, body: { first: string; second: string; contentType?: string }, between: () => Promise<void>): Promise<{ status: number; body: any }> {
   const url = new URL(h.baseUrl);
   return new Promise((resolve, reject) => {
     const req = http.request({
       host: url.hostname, port: url.port, path, method,
-      headers: { cookie: member.cookie, "content-type": "application/json", "transfer-encoding": "chunked" },
+      headers: { cookie: member.cookie, "content-type": body.contentType ?? "application/json", "transfer-encoding": "chunked" },
     }, (res) => {
       const chunks: Buffer[] = [];
       res.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -83,6 +83,18 @@ describe("a grant that goes while the body arrives", () => {
     });
     expect(reply.status).toBe(404);
     expect(h.db.prepare("SELECT COUNT(*) AS n FROM work_item_comments WHERE body = 'too late'").get()).toEqual({ n: 0 });
+  });
+
+  it("a file upload is refused and stores nothing", async () => {
+    const sam = await h.join("sam@example.test", "collaborator", "ops", "Sam Member");
+    const todo = (await h.as(sam, "POST", "/api/member/boards/ops/todos", { title: "sam's" })).body.workItem;
+    const boundary = "----race";
+    const head = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="late.txt"\r\nContent-Type: text/plain\r\n\r\nlate`;
+    const reply = await slowRequest(sam, "POST", `/api/member/todos/${todo.id}/attachments`,
+      { first: head, second: `\r\n--${boundary}--\r\n`, contentType: `multipart/form-data; boundary=${boundary}` },
+      async () => { expect((await h.operator("DELETE", `/api/boards/ops/members/${sam.userId}`)).status).toBe(200); });
+    expect(reply.status).toBe(404);
+    expect(h.db.prepare("SELECT COUNT(*) AS n FROM work_item_attachments WHERE work_item_id = ?").get(todo.id)).toEqual({ n: 0 });
   });
 
   it("a role lowered to viewer turns a write into a 403", async () => {
