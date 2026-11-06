@@ -100,12 +100,12 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
   const moved = item?.movedToAnotherBoard === true
   const caps = useTodoCapabilitiesFor(item?.department, rootNode, moved ? { canComment: item?.memberCanComment === true } : null)
   const memberGrants = useMemberGrants()
-  const visibleToMembers = useVisibleToMembers(rootNode?.department ?? item?.department, moved)
+  const visibleToMembers = useVisibleToMembers(rootNode ? rootNode.department : item?.department, moved)
   // The operator changing who holds a Todo a board member made is told what that does to the member's access.
   const creatorIdentity = !member && rootNode && isMemberIdentity(rootNode.createdBy) ? rootNode.createdBy ?? null : null
   const memberCreator = useMemberCreator(creatorIdentity, rootNode?.id)
   // While that root is open its creator reads everything written on it, wherever it now sits.
-  const creatorReader = creatorIdentity && rootNode && rootNode.status !== "done" && rootNode.status !== "cancelled" ? creatorIdentity : null
+  const creatorReader = memberCreator && memberCreator.keeps !== "none" && rootNode && rootNode.status !== "done" && rootNode.status !== "cancelled" ? memberCreator.identity : null
 
   const org = useOrg()
   const byName = useEmployeesByName(org.data?.employees)

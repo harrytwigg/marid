@@ -79,6 +79,30 @@ describe("a Todo that stops being member-only while the body arrives", () => {
   });
 });
 
+describe("a Todo that leaves the board while the body arrives, still member-only", () => {
+  // A department change assigns nothing, so the tree is still member-only: only the creator rule refuses the write.
+  const moveToAnotherDepartment = async (id: string) => {
+    const moved = await h.operator("PATCH", `/api/work-items/${id}`, { department: "design", expectedVersion: store.getWorkItem(id)!.version });
+    expect(moved.status).toBe(200);
+    expect(store.getWorkItem(id)!.assignee).toBeNull();
+  };
+
+  it("an edit is refused and writes nothing", async () => {
+    const todo = await own("keep this title");
+    const version = store.getWorkItem(todo.id)!.version;
+    const reply = await slowRequest(pat, "PATCH", `/api/member/todos/${todo.id}`, { first: '{"title":"renamed","expectedVersion":', second: `${version}}` }, () => moveToAnotherDepartment(todo.id));
+    expect([reply.status, reply.body.code]).toEqual([403, "todo_not_member_editable"]);
+    expect(store.getWorkItem(todo.id)!.title).toBe("keep this title");
+  });
+
+  it("a status move is refused and writes nothing", async () => {
+    const todo = await own("keep this open");
+    const reply = await slowRequest(pat, "POST", `/api/member/todos/${todo.id}/status`, { first: '{"status":', second: '"done"}' }, () => moveToAnotherDepartment(todo.id));
+    expect([reply.status, reply.body.code]).toEqual([403, "todo_not_member_editable"]);
+    expect(store.getWorkItem(todo.id)!.status).toBe("backlog");
+  });
+});
+
 describe("a grant that goes while the body arrives", () => {
   it("a comment is refused with the 404 an unheld Todo answers", async () => {
     const lee = await h.join("lee@example.test", "collaborator", "ops", "Lee Member");

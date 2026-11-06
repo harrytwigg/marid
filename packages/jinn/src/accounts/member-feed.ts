@@ -53,7 +53,7 @@ function departmentLeft(value: unknown): string | null | undefined {
  *
  * It passes when the Todo is on one of their boards now, or sits in an open tree whose root they created (it left their
  * boards but they keep reading it), sub-tasks included. A Todo that was on one of their boards and is not readable now gets
- * `removed`; so does any Todo they created once it is closed, reparented away or has lost its access, which names only an id they made.
+ * `removed`; so does a Todo they created on the write that closes it or moves it off their boards, which names only an id they made.
  */
 export function memberFrameFor(change: TodoChange, boards: ReadonlySet<string>, viewer: Viewer): MemberFrame | undefined {
   const onAfter = change.after !== null && boards.has(change.after);
@@ -72,8 +72,16 @@ function changeFrame(change: TodoChange, item: WorkItem, viewer: Viewer): Member
   };
 }
 
-/** Whether a Todo the member can no longer read is one their card must be dropped for: it was on their board, or they created it (an id they made, so naming it tells them nothing). */
+/**
+ * Whether a Todo the member can no longer read is one their card must be dropped for: it was on their board, or they created it and
+ * this is the write that took it out of their reach (it closed, or it changed board: a department change, an assignment that
+ * derives one, a reparent). The id is one they made, so naming it tells them nothing; every later change to it stays silent, so a
+ * member who lost a Todo learns nothing of the work done on it afterwards.
+ */
 function mustRemove(change: TodoChange, boards: ReadonlySet<string>, viewer: Viewer): boolean {
   if (typeof change.before === "string" && boards.has(change.before)) return true;
-  return change.item !== undefined && change.item.createdBy === memberIdentity(viewer.userId);
+  const { item } = change;
+  if (!item || item.createdBy !== memberIdentity(viewer.userId)) return false;
+  const closed = (item.status === "done" || item.status === "cancelled") && /status/.test(change.action);
+  return closed || change.before !== undefined;
 }

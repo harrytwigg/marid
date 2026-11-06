@@ -18,6 +18,7 @@ const getWorkItem = vi.fn()
 const getWorkItemTree = vi.fn()
 const assignWorkItem = vi.fn()
 const getBoardRoster = vi.fn()
+const listPeople = vi.fn()
 const employees = [
   { name: "alice", displayName: "Alice", department: "platform", rank: "employee", engine: "claude", model: "sonnet", persona: "" },
   { name: "bob", displayName: "Bob", department: "design", rank: "employee", engine: "claude", model: "sonnet", persona: "" },
@@ -51,7 +52,7 @@ vi.mock("@/lib/accounts-api", async (importOriginal) => {
     ...actual,
     accountsApi: {
       ...actual.accountsApi,
-      listPeople: async () => [{ id: "me", email: "mia@example.test", displayName: "Mia Member", initials: "MM" }],
+      listPeople: (...a: unknown[]) => listPeople(...a),
       getMemberPeople: async () => ({ people: [{ id: "me", displayName: "Mia Member", initials: "MM" }], employees: [] }),
       getBoardRoster: (...a: unknown[]) => getBoardRoster(...a),
       listMemberBoards: async () => (principal.kind === "member" ? principal.boards.map((board) => ({ ...board, prefix: "X" })) : []),
@@ -107,6 +108,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   assignWorkItem.mockResolvedValue({ workItem: full("PLT-1") })
   getBoardRoster.mockResolvedValue(roster("collaborator"))
+  listPeople.mockResolvedValue([{ id: "me", email: "mia@example.test", displayName: "Mia Member", initials: "MM", status: "active" }])
 })
 
 describe("a member's Todo that left their boards", () => {
@@ -239,6 +241,14 @@ describe("the operator assigning or moving a Todo a member created", () => {
     await waitFor(() => expect(within(again).getByTestId("picker-member-creator-note").textContent).toBe(WARNING_NONE))
   })
 
+  it("is told they will lose access when their account is disabled, though the roster still lists them", async () => {
+    principal = { kind: "operator" }
+    listPeople.mockResolvedValue([{ id: "me", email: "mia@example.test", displayName: "Mia Member", initials: "MM", status: "disabled" }])
+    setup(full("PLT-1"))
+    const picker = await openAssignee()
+    await waitFor(() => expect(within(picker).getByTestId("picker-member-creator-note").textContent).toBe(WARNING_NONE))
+  })
+
   it("says nothing until it knows what they keep", async () => {
     principal = { kind: "operator" }
     getBoardRoster.mockReturnValue(new Promise(() => {}))
@@ -277,6 +287,46 @@ describe("the operator assigning or moving a Todo a member created", () => {
     await screen.findByTestId("task-title")
     await waitFor(() => expect(getWorkItemTree).toHaveBeenCalledTimes(2))
     expect(screen.queryByTestId("task-creator-hint")).toBeNull()
+  })
+
+  it("names no reader once the creator has lost access: removed from the board it was filed on, or disabled", async () => {
+    principal = { kind: "operator" }
+    getBoardRoster.mockResolvedValue(roster())
+    const first = setup(full("PLT-1", { department: null }))
+    await waitFor(() => expect(getBoardRoster).toHaveBeenCalled())
+    await waitFor(() => expect(listPeople).toHaveBeenCalled())
+    await screen.findByTestId("task-title")
+    expect(screen.queryByTestId("task-creator-hint")).toBeNull()
+    expect(screen.queryByTestId("composer-creator-hint")).toBeNull()
+    first.unmount()
+    getBoardRoster.mockResolvedValue(roster("collaborator"))
+    listPeople.mockClear()
+    listPeople.mockResolvedValue([{ id: "me", email: "mia@example.test", displayName: "Mia Member", initials: "MM", status: "disabled" }])
+    setup(full("PLT-1", { department: null }))
+    await screen.findByTestId("task-title")
+    await waitFor(() => expect(listPeople).toHaveBeenCalled())
+    expect(screen.queryByTestId("task-creator-hint")).toBeNull()
+  })
+
+  it("does not call a root on the company board the board of its sub-task", async () => {
+    principal = { kind: "operator" }
+    getBoardRoster.mockResolvedValue(roster("collaborator"))
+    // The sub-task was made on a board; its root has since gone to the company board.
+    getWorkItem.mockImplementation(async (id: string) => ({
+      workItem: id === "PLT-2" ? full("PLT-2", { parentId: "PLT-1", rootId: "PLT-1", createdBy: "operator", department: "platform", depth: 1 }) : full("PLT-1", { department: null }),
+      spendUsd: 0,
+      events: [{ id: "e1", workItemId: id, kind: "created", fromStatus: null, toStatus: "backlog", actor: "connector", detail: { createdOnBoard: "platform" }, createdAt: "2026-07-20T08:00:00.000Z" }],
+    }))
+    getWorkItemTree.mockResolvedValue({ tree: { root: node(full("PLT-1", { department: null }), [node(full("PLT-2", { parentId: "PLT-1", rootId: "PLT-1", createdBy: "operator", department: "platform", depth: 1 }))]), totals: { backlog: 2 }, spendUsd: 0 } })
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/todos/PLT-2"]}><Routes><Route path="/todos/:todoId" element={<TaskPage />} /></Routes></MemoryRouter>
+      </QueryClientProvider>,
+    )
+    await screen.findByTestId("task-title")
+    await waitFor(() => expect(screen.getByTestId("task-creator-hint")).toBeTruthy())
+    expect(screen.queryByTestId("task-visibility-hint")).toBeNull()
   })
 
   it("says nothing about a Todo the operator or an employee made", async () => {

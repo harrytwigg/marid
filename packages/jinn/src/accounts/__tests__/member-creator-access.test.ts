@@ -345,7 +345,7 @@ describe("live frames", () => {
     }
   });
 
-  it("closing the root sends its creator `removed` for the root, then only for what they made", async () => {
+  it("closing the root sends its creator `removed` for the root, then nothing", async () => {
     const t = await patRoot();
     await assign(t.root, "@operator");
     const patSocket = connect(pat);
@@ -359,8 +359,45 @@ describe("live frames", () => {
       await h.operator("POST", `/api/work-items/${t.theirs}/comments`, { body: "after the close" });
       expect(patSocket.frames).toEqual([]); // an operator's sub-task of a closed tree is no longer theirs
       await h.operator("POST", `/api/work-items/${t.mine}/comments`, { body: "on their own, closed" });
-      expect(patSocket.frames.map((f) => f.payload)).toEqual([{ entity: "todo", action: "removed", id: t.mine }]); // an id they made: their card goes
+      expect(patSocket.frames).toEqual([]); // later work on a Todo they have lost is not theirs to hear of
     } finally {
+      h.rt.memberSockets.remove(patSocket);
+    }
+  });
+
+  it("the write that takes a Todo they made out of reach sends one `removed`, and later writes on it send nothing", async () => {
+    const t = await patRoot();
+    await assign(t.root, "alice");
+    const elsewhere = store.createWorkItem({ title: "operator's tree", department: "platform" }).id;
+    const patSocket = connect(pat);
+    try {
+      patSocket.frames.length = 0;
+      expect((await h.operator("PUT", `/api/work-items/${t.mine}/parent`, { parentId: elsewhere })).status).toBe(200);
+      // (the root they still read changes too, as a child left it: an ordinary frame, not part of this check)
+      expect(patSocket.frames.filter((f) => f.payload.id === t.mine).map((f) => f.payload)).toEqual([{ entity: "todo", action: "removed", id: t.mine }]);
+      patSocket.frames.length = 0;
+      await h.operator("POST", `/api/work-items/${t.mine}/comments`, { body: "after it left" });
+      await h.operator("PATCH", `/api/work-items/${t.mine}`, { title: "renamed", expectedVersion: store.getWorkItem(t.mine)!.version });
+      expect(patSocket.frames.filter((f) => f.payload.id === t.mine)).toEqual([]);
+    } finally {
+      h.rt.memberSockets.remove(patSocket);
+    }
+  });
+
+  it("a member removed from the board they filed it on hears nothing of the work done on it afterwards", async () => {
+    const t = await patRoot();
+    await assign(t.root, "alice");
+    const patSocket = connect(pat);
+    try {
+      h.db.prepare("DELETE FROM board_members WHERE user_id = ? AND department = 'design'").run(pat.userId);
+      h.db.prepare("INSERT INTO board_members (user_id, department, role, granted_by, granted_at) VALUES (?, 'platform', 'viewer', 'operator', ?)")
+        .run(pat.userId, new Date().toISOString());
+      patSocket.frames.length = 0;
+      await h.operator("POST", `/api/work-items/${t.root}/comments`, { body: "internal note" });
+      await h.operator("PATCH", `/api/work-items/${t.root}`, { title: "retitled", expectedVersion: store.getWorkItem(t.root)!.version });
+      expect(patSocket.frames.filter((f) => f.payload.id === t.root)).toEqual([]);
+    } finally {
+      h.db.prepare("DELETE FROM board_members WHERE user_id = ? AND department = 'platform'").run(pat.userId);
       h.rt.memberSockets.remove(patSocket);
     }
   });

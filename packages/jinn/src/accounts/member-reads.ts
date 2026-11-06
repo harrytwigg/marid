@@ -61,8 +61,9 @@ function movedRootIds(ctx: MemberRouteContext, board?: string): string[] {
     `SELECT w.id FROM work_items w
      WHERE w.parent_id IS NULL AND w.created_by = ? AND w.status NOT IN ('done', 'cancelled')
        AND (w.department IS NULL OR w.department NOT IN (${marks}))
+       AND (? IS NULL OR json_extract((SELECT e.detail FROM work_item_events e WHERE e.work_item_id = w.id AND e.kind = 'created' ORDER BY e.rowid LIMIT 1), '$.createdOnBoard') = ?)
      ORDER BY w.updated_at DESC, w.id ASC LIMIT 200`,
-  ).pluck().all(memberIdentity(userId), ...held) as string[];
+  ).pluck().all(memberIdentity(userId), ...held, board ?? null, board ?? null) as string[];
   return ids.filter((id) => {
     const access = creatorAccess(db, userId, id);
     return access !== undefined && (board === undefined || access.board === board);
