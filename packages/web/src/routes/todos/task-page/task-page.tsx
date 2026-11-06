@@ -9,7 +9,7 @@ import { withMentionRootByName } from "@/lib/mentions"
 import { copyText } from "@/platform"
 import { useDepartments } from "@/hooks/use-departments"
 import { restrictRows, TodoCapabilitiesProvider, useTodoCapabilitiesFor } from "@/hooks/use-todo-capabilities"
-import { useMember } from "@/hooks/use-principal"
+import { useMember, useMemberGrants } from "@/hooks/use-principal"
 import { NOT_SHARED } from "@/routes/member/board-not-shared"
 import { useTheme } from "@/routes/providers"
 import { useEmployeesByName, useOrg, useSetWorkItemStatus, useTodoById } from "../use-todos"
@@ -98,6 +98,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
   const member = useMember()
   const moved = item?.movedToAnotherBoard === true
   const caps = useTodoCapabilitiesFor(item?.department, rootNode, moved)
+  const memberGrants = useMemberGrants()
   const visibleToMembers = useVisibleToMembers(rootNode?.department ?? item?.department, moved)
   // The operator changing who holds a Todo a board member made is told what that does to the member's access.
   const memberCreator = !member && rootNode && isMemberIdentity(rootNode.createdBy) ? rootNode.createdBy ?? null : null
@@ -180,7 +181,9 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
   )
   // ── Board context (the crumb's back affordance) ───────────────────────────
   const keep = useKeepWorkItem(announce)
-  const boardKeyRaw = routeState.fromBoard ?? item?.department ?? "everything"
+  // A member's Todo that left their boards has no board of theirs to name: its crumb leads back to one they hold, not to "Everything".
+  const memberBoard = member ? memberGrants?.[0]?.department : undefined
+  const boardKeyRaw = routeState.fromBoard ?? item?.department ?? memberBoard ?? "everything"
   const board = parseBoardParam(boardKeyRaw)
   const boardLabel = board.kind === "department" ? departmentTitle(board.slug)
     : board.kind === "attention" ? "Attention"

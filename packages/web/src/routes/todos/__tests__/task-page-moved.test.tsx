@@ -115,6 +115,14 @@ describe("a member's Todo that left their boards", () => {
     expect(document.body.textContent).not.toMatch(/Platform board|moved to platform/i)
   })
 
+  it("leads its crumb back to a board they hold, not to Everything", async () => {
+    principal = member({ department: "design", role: "collaborator" })
+    setup(moved())
+    await screen.findByTestId("task-moved-label")
+    await waitFor(() => expect(document.body.textContent).toMatch(/Design/))
+    expect(screen.queryByText("Everything")).toBeNull()
+  })
+
   it("keeps a viewer read-only: the label, and no composer", async () => {
     principal = member({ department: "design", role: "viewer" })
     setup(moved())
