@@ -170,6 +170,25 @@ describe("member", () => {
     expect(keys(member.body.workItems[0])).toEqual(keys(operator.body.workItems[0]));
   });
 
+  it("member reads keep the pinned wrappers, with every cost figure null and no session or run field", async () => {
+    const list = (await h.as(collab, "GET", "/api/member/boards/ops/todos")).body;
+    for (const key of ["workItems", "total", "nextOffset", "totals"]) expect(list).toHaveProperty(key);
+    const tree = (await h.as(collab, "GET", `/api/member/todos/${todoId}/tree`)).body;
+    expect(keys(tree)).toEqual(["tree"]);
+    expect(keys(tree.tree)).toEqual(["root", "spendUsd", "totals"]);
+    expect(tree.tree.spendUsd).toBeNull();
+    const detail = (await h.as(collab, "GET", `/api/member/todos/${todoId}`)).body;
+    for (const key of ["workItem", "spendUsd", "events", "comments"]) expect(detail).toHaveProperty(key);
+    expect(detail.spendUsd).toBeNull();
+    expect(detail.workItem.budgetUsd).toBeNull();
+    // No cost figure anywhere is a number: spend and budget fields are null wherever they appear.
+    const costs: unknown[] = [];
+    JSON.stringify([list, tree, detail], (key, value) => { if (/usd$/i.test(key)) costs.push(value); return value; });
+    expect(costs.length).toBeGreaterThan(0);
+    expect(costs.every((value) => value === null)).toBe(true);
+    expect(JSON.stringify([list, tree, detail])).not.toMatch(/"(runs|dispatchConfig|sessionId|sessionRef)":(?!null)/);
+  });
+
   it("the Todo's tree, comments and attachments answer the operator's shapes", async () => {
     const tree = await h.as(collab, "GET", `/api/member/todos/${todoId}/tree`);
     expect(keys(tree.body.tree)).toEqual(keys((await h.operator("GET", `/api/work-items/${todoId}/tree`)).body.tree));
