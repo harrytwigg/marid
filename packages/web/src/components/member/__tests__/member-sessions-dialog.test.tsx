@@ -10,7 +10,10 @@ vi.mock("@/lib/accounts-api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/accounts-api")>("@/lib/accounts-api")
   return { ...actual, accountsApi: { ...actual.accountsApi, listMemberSessions: (...a: unknown[]) => listMemberSessions(...a), revokeMemberSession: (...a: unknown[]) => revokeMemberSession(...a) } }
 })
-vi.mock("@/routes/auth-provider", () => ({ useAuth: () => ({ refresh: vi.fn() }) }))
+const refresh = vi.fn()
+const getAuthState = vi.fn()
+vi.mock("@/routes/auth-provider", () => ({ useAuth: () => ({ refresh }) }))
+vi.mock("@/lib/auth", () => ({ getAuthState: (...a: unknown[]) => getAuthState(...a) }))
 
 import { MemberSessionsDialog } from "../member-sessions-dialog"
 
@@ -20,6 +23,8 @@ beforeEach(() => {
     { id: "s2", kind: "member", createdAt: "2026-11-01T00:00:00Z", lastSeenAt: null, userAgent: "Phone", ip: null, current: false },
   ])
   revokeMemberSession.mockReset()
+  refresh.mockReset()
+  getAuthState.mockReset().mockResolvedValue({ principal: { kind: "member" } })
 })
 
 function open() {
@@ -45,5 +50,31 @@ describe("the member's sessions dialog", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Revoke" }))
     await waitFor(() => expect(revokeMemberSession).toHaveBeenCalledWith("s2"))
     expect(screen.queryByTestId("revoke-error")).toBeNull()
+  })
+
+  describe("when the gateway does not say which session is this browser's", () => {
+    const noCurrent = [
+      { id: "s1", kind: "member", createdAt: "2026-11-01T00:00:00Z", lastSeenAt: null, userAgent: "Firefox", ip: null },
+      { id: "s2", kind: "member", createdAt: "2026-11-01T00:00:00Z", lastSeenAt: null, userAgent: "Phone", ip: null },
+    ]
+
+    it("signs this page out when revoking a session ended our own", async () => {
+      listMemberSessions.mockResolvedValue(noCurrent)
+      revokeMemberSession.mockResolvedValue(undefined)
+      getAuthState.mockResolvedValue({ principal: null })
+      open()
+      fireEvent.click((await screen.findAllByRole("button", { name: "Revoke" }))[0])
+      await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1))
+    })
+
+    it("leaves the page alone when we are still signed in afterwards", async () => {
+      listMemberSessions.mockResolvedValue(noCurrent)
+      revokeMemberSession.mockResolvedValue(undefined)
+      open()
+      fireEvent.click((await screen.findAllByRole("button", { name: "Revoke" }))[1])
+      await waitFor(() => expect(getAuthState).toHaveBeenCalled())
+      await waitFor(() => expect(listMemberSessions).toHaveBeenCalledTimes(2))
+      expect(refresh).not.toHaveBeenCalled()
+    })
   })
 })

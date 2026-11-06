@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { DIALOG_CANCEL_CLASS } from "@/components/ui/dialog-actions"
 import { Button } from "@/components/ui/button"
 import { accountsApi, type UserSessionWire } from "@/lib/accounts-api"
+import { getAuthState } from "@/lib/auth"
 import { useAuth } from "@/routes/auth-provider"
 import { accountsErrorText } from "@/components/people/errors"
 import { formatRelativeTime } from "@/routes/todos/util"
@@ -14,6 +15,15 @@ function label(session: UserSessionWire): string {
   return agent ? agent.slice(0, 80) : "Browser"
 }
 
+/** Whether the gateway no longer knows this browser as a member (or cannot be asked, which counts as still in). */
+async function signedOut(): Promise<boolean> {
+  try {
+    return (await getAuthState()).principal?.kind !== "member"
+  } catch {
+    return false
+  }
+}
+
 /** The member's own sessions: where they are signed in, and a way to end the ones they don't recognise. */
 export function MemberSessionsDialog({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient()
@@ -21,9 +31,13 @@ export function MemberSessionsDialog({ onClose }: { onClose: () => void }) {
   const sessions = useQuery({ queryKey: KEY, queryFn: accountsApi.listMemberSessions })
   const revoke = useMutation({
     mutationFn: (session: UserSessionWire) => accountsApi.revokeMemberSession(session.id),
-    // Ending the session this browser holds ends this page's access too: re-read who we are.
+    // Ending the session this browser holds ends this page's access too. The gateway may not say which row is ours
+    // (`current` is optional), so unless a row is known to be another browser's, ask who we are now and take the full
+    // refresh only if we are no longer signed in: it blanks the app behind this dialog, so it is not for every revoke.
     onSuccess: async (_data, session) => {
-      if (session.current) return void (await refresh({ bootstrapLocal: false }))
+      if (session.current === true || (session.current === undefined && (await signedOut()))) {
+        return void (await refresh({ bootstrapLocal: false }))
+      }
       await qc.invalidateQueries({ queryKey: KEY })
     },
   })
