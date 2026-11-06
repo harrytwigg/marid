@@ -8,6 +8,9 @@ import { cn } from "@/lib/utils"
 import { useOnboarding } from "@/hooks/use-onboarding"
 import { runAfterLoad, useLoadDeferredMount } from "@/hooks/use-idle-mount"
 import { SearchOverlayProvider, useSearchOverlay } from "./search-overlay-context"
+import { useMember } from "@/hooks/use-principal"
+// A board member's frame is its own chunk: the operator never loads it.
+const MemberFrame = lazy(() => import("./member/member-frame").then((m) => ({ default: m.MemberFrame })))
 
 const loadGlobalSearch = () => import("./global-search")
 const loadLiveStreamWidget = () => import("./live-stream-widget")
@@ -139,7 +142,14 @@ export function ToolbarActions({ children }: { children?: React.ReactNode }) {
  * `chromeless` chat gets it too. It arms on a coarse pointer only: a mouse keeps
  * the browser's own back, and the existing chevrons are untouched either way.
  */
-export function PageLayout({ children, chromeless, hideMobileTabBar }: { children: React.ReactNode; chromeless?: boolean; hideMobileTabBar?: boolean }) {
+export function PageLayout(props: { children: React.ReactNode; chromeless?: boolean; hideMobileTabBar?: boolean }) {
+  // A board member never sees the operator's rail, tab bar or status bar: those lead to routes
+  // the gateway refuses them. Their own frame carries their boards and their account.
+  const member = useMember()
+  return member ? <Suspense fallback={null}><MemberFrame>{props.children}</MemberFrame></Suspense> : <OperatorPageLayout {...props} />
+}
+
+function OperatorPageLayout({ children, chromeless, hideMobileTabBar }: { children: React.ReactNode; chromeless?: boolean; hideMobileTabBar?: boolean }) {
   const content = useRef<HTMLDivElement>(null)
   const coarsePointer = useCoarsePointer()
   return (

@@ -8,6 +8,9 @@ import { closeGateCounts } from "@/lib/legal-targets"
 import { withMentionRootByName } from "@/lib/mentions"
 import { copyText } from "@/platform"
 import { useDepartments } from "@/hooks/use-departments"
+import { restrictRows, TodoCapabilitiesProvider, useTodoCapabilitiesFor } from "@/hooks/use-todo-capabilities"
+import { useMember } from "@/hooks/use-principal"
+import { NOT_SHARED } from "@/routes/member/board-not-shared"
 import { useTheme } from "@/routes/providers"
 import { useEmployeesByName, useOrg, useSetWorkItemStatus, useTodoById } from "../use-todos"
 import { useKeepWorkItem } from "../board/use-board"
@@ -15,6 +18,7 @@ import { parseBoardParam, boardPath, boardKey } from "../board/board-route"
 import { departmentTitle } from "../board/board-switcher"
 import { CrumbBar } from "./crumb-bar"
 import { ancestorsOf, nodeOf, workingElapsed } from "./task-tree"
+import { useIsTaskMobile } from "./use-task-mobile"
 import { TaskTitle } from "./task-title"
 import { TaskFrame, useOpenTodoInPlace } from "./task-frame"
 import { TaskBanner } from "./banner"
@@ -22,6 +26,7 @@ import { PropsRail } from "./props-rail"
 import { SessionDirectoryProvider } from "./session-ref"
 import { useTodoSessions, hasOnlyWaitingWorkers } from "./use-todo-sessions"
 import { ChipCluster } from "./chip-cluster"
+import { MemberCloseControl } from "./member-close-control"
 import { useTaskPickers } from "./use-task-pickers"
 import { BodyEditor } from "./body-editor"
 import { SubTasksSection } from "./subtasks"
@@ -38,22 +43,6 @@ import { AREAS } from "@/contrib/types"
  * with a persistent property rail on wide screens and the same properties
  * following the document on mobile. The URL is still the Todo, and back
  * restores the list/board scroll position. */
-
-const MOBILE_QUERY = "(max-width: 700px)"
-
-function useIsTaskMobile(): boolean {
-  const [mobile, setMobile] = useState(
-    () => typeof window !== "undefined" && (window.matchMedia?.(MOBILE_QUERY).matches ?? false),
-  )
-  useEffect(() => {
-    const query = window.matchMedia?.(MOBILE_QUERY)
-    if (!query) return
-    const onChange = (event: MediaQueryListEvent) => setMobile(event.matches)
-    query.addEventListener("change", onChange)
-    return () => query.removeEventListener("change", onChange)
-  }, [])
-  return mobile
-}
 
 interface TaskRouteState {
   fromBoard?: string
@@ -101,6 +90,8 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
   })
   const rootNode = treeQuery.data?.tree.root
   const ancestors = useMemo(() => (id ? ancestorsOf(rootNode, id) : []), [rootNode, id])
+  const member = useMember()
+  const caps = useTodoCapabilitiesFor(item?.department, rootNode)
 
   const org = useOrg()
   const byName = useEmployeesByName(org.data?.employees)
@@ -143,6 +134,8 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
     announce,
     root: scrollRef,
   })
+
+  const rowFor = useMemo(() => restrictRows(pickers.rowFor, caps), [pickers.rowFor, caps])
 
   // ── Section mutations (sub-tasks; attachments have their own hook) ──
   const qc = useQueryClient()
@@ -213,7 +206,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
   if (detailQuery.isSuccess && detailQuery.data === null) {
     return (
       <TaskFrame embedded={embedded}>
-        <TaskEmpty message={`${id} doesn't exist (anymore).`} onBack={backToTodos} />
+        <TaskEmpty message={member ? NOT_SHARED : `${id} doesn't exist (anymore).`} onBack={member ? () => navigate("/") : backToTodos} />
       </TaskFrame>
     )
   }
@@ -276,15 +269,16 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
     // the fixed comment bar; back is the condensed crumb's chevron.
     // The directory rides a context because the surfaces that resolve a session
     // id — rail, audit whisper, comment author — sit at unrelated depths.
+    <TodoCapabilitiesProvider value={caps}>
     <SessionDirectoryProvider directory={sessionTree?.directory}>
     <TaskFrame embedded={embedded} hideMobileTabBar={mobile}>
-      <AttachmentDropSurface className="flex h-full min-h-0 flex-col" onUpload={(files) => attachments.upload.mutate(files)}>
+      <AttachmentDropSurface className="flex h-full min-h-0 flex-col" onUpload={(files) => caps.attach && attachments.upload.mutate(files)}>
         <div ref={scrollRef} className={scrollClass} data-scrollable data-testid="task-page-scroll">
           <CrumbBar
             boardLabel={boardLabel}
             onBack={goBack}
-            kept={detail?.kept}
-            onKeep={keep.mutate}
+            kept={caps.operatorControls ? detail?.kept : undefined}
+            onKeep={caps.operatorControls ? keep.mutate : undefined}
             ancestors={ancestors}
             id={id}
             title={item?.title ?? ""}
@@ -311,7 +305,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
                     busy={setStatus.isPending}
                     onCommitReason={commitBannerReason}
                     actions={
-                      detail.workItem.status === "blocked" ? (
+                      caps.operatorControls && detail.workItem.status === "blocked" ? (
                         <Button
                           variant="secondary"
                           size="sm"
@@ -354,8 +348,11 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
                   mobile={mobile}
                   working={hasLiveSession ? working : null}
                   waiting={onlyWaiting}
-                  rowFor={pickers.rowFor}
+                  rowFor={rowFor}
                 />
+              )}
+              {detail && caps.memberMode && caps.close && (
+                <MemberCloseControl status={detail.workItem.status} openChildren={closeGate.openChildren} onSet={pickers.transitionTo} />
               )}
 
               <div
@@ -365,7 +362,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
                 {item && (
                   <BodyEditor
                     body={item.body}
-                    editable
+                    editable={caps.edit}
                     isDark={isDark}
                     onCommit={(markdown) => pickers.patchField({ body: markdown })}
                   />
@@ -404,11 +401,11 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
                     detail={detail}
                     byName={byName}
                     departments={departments.data}
-                    rowFor={pickers.rowFor}
+                    rowFor={rowFor}
                     railSession={railSession}
                     sessionTree={sessionTree}
                     dispatchPending={dispatchTodo.isPending}
-                    onDispatch={() => dispatchTodo.mutate()}
+                    onDispatch={caps.operatorControls ? () => dispatchTodo.mutate() : undefined}
                   />
                 </div>
               )}
@@ -430,11 +427,11 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
                   detail={detail}
                   byName={byName}
                   departments={departments.data}
-                  rowFor={pickers.rowFor}
+                  rowFor={rowFor}
                   railSession={railSession}
                   sessionTree={sessionTree}
                   dispatchPending={dispatchTodo.isPending}
-                  onDispatch={() => dispatchTodo.mutate()}
+                  onDispatch={caps.operatorControls ? () => dispatchTodo.mutate() : undefined}
                 />
               </aside>
             )}
@@ -455,5 +452,6 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
       )}
     </TaskFrame>
     </SessionDirectoryProvider>
+    </TodoCapabilitiesProvider>
   )
 }

@@ -19,7 +19,8 @@ export function TodoListGroupHeader({
   group: TodoListGroupValue
   open: boolean
   onToggle?: () => void
-  onQuickAdd: () => void
+  /** Absent where the person may not file a Todo: the header then has no add button. */
+  onQuickAdd?: () => void
 }) {
   const headerGlyph = group.key === "recovering"
     ? <StatusCircle status="blocked" size={16} />
@@ -50,7 +51,7 @@ export function TodoListGroupHeader({
           <GroupLabel group={group} />
         </div>
       )}
-      <button
+      {onQuickAdd && <button
         type="button"
         data-testid={`todo-list-add-${group.key}`}
         aria-label={`Add Todo from ${group.label}`}
@@ -59,7 +60,7 @@ export function TodoListGroupHeader({
         className="focus-outline -mr-1 grid size-9 flex-none place-items-center rounded-full text-[var(--text-quaternary)] outline-none transition-[background-color,color,scale] duration-150 hover:bg-[var(--fill-secondary)] hover:text-[var(--text-secondary)] active:scale-[0.96]"
       >
         <Plus size={15} aria-hidden />
-      </button>
+      </button>}
     </div>
   )
 }
@@ -110,7 +111,7 @@ export function TodoListGroup({
   now: number
   open: boolean
   onToggle?: () => void
-  onQuickAdd: () => void
+  onQuickAdd?: () => void
   onOpen: (id: string, item: WorkItemCompactWire) => void
   onKeep?: (vars: { id: string; kept: boolean }) => void
   hasMore: boolean

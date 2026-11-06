@@ -46,6 +46,7 @@ import { useBoardScroll } from "./use-board-scroll"
 import { BoardViewSwitch, ColumnDots } from "./board-view-switch"
 import { loadBoardView, PHONE_CARD_MOVE, saveBoardView, useColumnPosition, useIsBoardMobile, type BoardView } from "./phone-board"
 import { useBoardFilters } from "./use-board-filters"
+import { useBoardMemberView } from "./use-board-member-view"
 import { useBoardSprints } from "../sprints/use-board-sprints"
 import { GroupSkeleton } from "./group-skeleton"
 
@@ -97,6 +98,7 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
   const key = boardKey(board)
   const Frame = embedded ? TAB_FRAME : ROUTE_FRAME
   const isAttention = board.kind === "attention"
+  const gate = useBoardMemberView(board)
   // Columns are the status dimension, so `status` narrows WHICH columns exist
   // rather than filtering within one (useBoardData gates the queries).
   // The filter set rides the URL, but is reconciled with localStorage so a
@@ -119,7 +121,6 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
   const byName = useEmployeesByName(org.data?.employees)
   const needs = useNeedsAttentionItems()
   const needsYou = useMemo(() => deriveNeedsYou(needs.data ?? []), [needs.data])
-
   // ── Optimistic overlays ───────────────────────────────────────────────────
   /** An optimistic status move: the card itself, and the board it was made on —
    *  the board that made it is the only one that may draw it. */
@@ -384,7 +385,7 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
   const liveRef = useRef<HTMLSpanElement>(null)
   const onCardKeyDown = useCallback(
     (event: React.KeyboardEvent, item: WorkItemCompactWire) => {
-      if (!(event.metaKey || event.ctrlKey) || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return
+      if (gate.member || !(event.metaKey || event.ctrlKey) || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return
       event.preventDefault()
       if (isClosedStatus(item.status)) return
       const list = itemsByStatus[item.status] ?? []
@@ -400,9 +401,8 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
         liveRef.current.textContent = `${item.id} moved to position ${target + 1} of ${list.length}`
       }
     },
-    [itemsByStatus, commitRank],
+    [itemsByStatus, commitRank, gate.member],
   )
-
   // ── Scroll position (per board on POP, anchored across every reflow) ────────
   const { boardScrollRef, listScrollRef, onBoardScroll, onListScroll } =
     useBoardScroll(key, navigationType, { dragging: drag !== null, attention: isAttention })
@@ -502,10 +502,10 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
             onToggleTree={toggleTree}
             onOpen={onOpen}
             onOpenChild={onOpen}
-            onAddSubTask={addSubTask}
-            onKeep={keep.mutate}
-            onLiftPointerDown={phoneMoves ? undefined : liftPointerDown}
-            onMove={phoneMoves ? moveCard : undefined}
+            onAddSubTask={gate.member ? undefined : addSubTask}
+            onKeep={gate.member ? undefined : keep.mutate}
+            onLiftPointerDown={phoneMoves || gate.member ? undefined : liftPointerDown}
+            onMove={phoneMoves && !gate.member ? moveCard : undefined}
           />
         </div>,
       )
@@ -521,7 +521,7 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
     // what's visible — the header count follows the filtered list.
     const count = filters.due ? items.length : countByStatus[status] ?? 0
     const quickAdd =
-      status === "backlog"
+      status === "backlog" && gate.canCreate
         ? () => setCreating({ department: board.kind === "department" ? board.slug : undefined })
         : undefined
     return (
@@ -564,7 +564,7 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
             onQuickCapture={() => setCapturing(true)}
           />
         }
-        primaryAction={
+        primaryAction={gate.canCreate &&
           <PrimaryAction
             aria-label="New todo"
             label="New Todo"
@@ -575,7 +575,7 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
           />
         }
       >
-        {!isAttention && !mobile && (
+        {!isAttention && !mobile && !gate.member && (
           <div className="flex-none px-[var(--space-3)] md:px-[var(--space-10)]">
             <FilterBar
               filters={filters}
@@ -595,7 +595,7 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
         {!isAttention && mobile && (
           <div className="flex-none px-[var(--space-3)] md:px-[var(--space-10)]">
             <div className="flex items-center gap-2">
-              <Button
+              {!gate.member && <Button
                 variant="secondary"
                 data-testid="todo-mobile-filters"
                 onClick={() => setMobileFilterOpen(true)}
@@ -610,7 +610,7 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
                 {filterCount > 0 && (
                   <span className="text-[12px] font-medium tabular-nums text-[var(--text-quaternary)]">{filterCount}</span>
                 )}
-              </Button>
+              </Button>}
               <BoardViewSwitch value={mobileView} onChange={chooseView} />
             </div>
             {sprintTools.strip}
@@ -677,15 +677,15 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
                 trees={trees.data}
                 now={now}
                 onOpen={onOpen}
-                onKeep={keep.mutate}
-                onQuickAdd={() => setCreating({ department: board.kind === "department" ? board.slug : undefined })}
+                onKeep={gate.member ? undefined : keep.mutate}
+                onQuickAdd={!gate.canCreate ? undefined : () => setCreating({ department: board.kind === "department" ? board.slug : undefined })}
               />
             )}
           </div>
           <div
             ref={boardScrollRef}
             onScroll={onBoardScroll}
-            onContextMenu={sprintTools.onContextMenu}
+            onContextMenu={gate.member ? undefined : sprintTools.onContextMenu}
             hidden={mobile && mobileView !== "board"}
             data-testid="todo-board-scroll"
             data-board-glass={embedded ? "tab" : ""}

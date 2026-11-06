@@ -436,9 +436,10 @@ Where the build had to pick a reading, or the contract was silent, it did this:
   Member attachment rows omit `storagePath`. There is no member route to delete an attachment.
 - **Status moves by a member reach no automation.** Besides the child-settle row, a member's move is not handed to the
   workflow status trigger, which can start agents.
-- **Member reads omit** `sourceRef` (null), `budgetUsd` (null), session refs, the operator's Home flag and attention lane,
-  `runs` and `dispatchConfig` (removed); every spend figure is `null`; events leave out the operator's machinery (session links, recovery, quiet-watch,
-  claims) and name only an employee, `operator`, a `user:<id>` or a generic `agent` / `system` (a session, plugin, cron job or the gateway's own machinery never shows an identifier); relations are shown only to a Todo on a board the member also holds.
+- **Member reads omit** `sourceRef` (null), `budgetUsd` (null), the operator's Home flag and attention lane,
+  `runs`, `dispatchConfig` and a list row's `sessionRef` (removed); every spend figure is `null`; events leave out the operator's machinery (session links, recovery, quiet-watch,
+  claims) and name only an employee, `operator`, the `user:<id>` of someone on one of the member's boards (an active account), or a generic `agent` / `system` / `member` (a session, plugin, cron job or the gateway's own machinery never shows an identifier); relations are shown only to a Todo on a board the member also holds.
+  Event details drop any Todo id the member cannot read and any department (under `department`, `movedTo` or a `...Department` key) that is not one of their boards; a Todo's own `department`, and a label's, read `null` when they name another department.
   Comments carry no `sessionId`.
 - **`GET /api/member/people` employees** are the employees that hold, created or commented on a Todo on one of the member's boards.
 - **Member frames** are `{ event: "company:changed", payload: { entity: "todo", action, id, version?, value? }, ts }`;
@@ -454,3 +455,17 @@ Where the build had to pick a reading, or the contract was silent, it did this:
   `initials`, `passwordSet`, `lastSeenAt` on People rows; the board members list shape; `expiresAt` on invite responses.
   `POST /api/member/password` and `GET`/`DELETE /api/member/sessions` (own sessions only) are mounted.
 
+### What members can and cannot infer
+
+- **Free text is not redacted.** Titles, bodies, notes and comments on a Todo a member can
+  see reach them as written, including any Todo ids or board names in them. Anything the
+  operator or an agent writes on a shared Todo is visible to that board's members. This is the
+  same expectation as writing in any shared document; redacting prose would mangle it and
+  could never be complete.
+- **Todo id prefixes are not secrets.** A member sees ids of Todos they may read. A sub-task
+  that sits in another open department can carry that department's prefix. A prefix is a
+  short code, not the board's name, and it gives no access: every other Todo still answers 404.
+- **Structured data hides other boards.** Board names (departments) and references to Todos
+  the member cannot read are removed from every structured field of member reads and frames:
+  event details, relations, moved-from and moved-to. A moved Todo reads "moved to another
+  board".

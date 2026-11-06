@@ -409,5 +409,6 @@ export function groupHistory(items: WorkItemCompactWire[], now: number): History
 export function commentAuthorLabel(author: string, authorKind: string): string {
   if (authorKind === "operator") return "Operator"
   if (authorKind === "system") return "System"
+  if (authorKind === "member") return "Board member"
   return author
 }

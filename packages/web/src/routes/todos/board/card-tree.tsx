@@ -39,7 +39,7 @@ export const CardTree = memo(function CardTree({
   cardDepth: number
   byName: Map<string, Employee>
   onOpenChild: (id: string) => void
-  onAddSubTask: (title: string) => void
+  onAddSubTask?: (title: string) => void
 }) {
   const rows = flatten(tree.root.children ?? [], 0, [])
   const atCap = cardDepth >= DEPTH_CAP
@@ -52,7 +52,7 @@ export const CardTree = memo(function CardTree({
       setAdding(false)
       return
     }
-    onAddSubTask(t)
+    onAddSubTask?.(t)
     setTitle("")
     setAdding(false)
   }
@@ -103,7 +103,7 @@ export const CardTree = memo(function CardTree({
       })}
 
       {/* The add row simply doesn't exist at the cap (design §7.2). */}
-      {!atCap && (
+      {!atCap && onAddSubTask && (
         adding ? (
           <div className="flex min-h-8 items-center gap-[7px] rounded-lg px-2 py-1">
             <Plus size={12} aria-hidden className="flex-none text-[var(--text-quaternary)]" />
