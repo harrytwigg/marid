@@ -160,6 +160,11 @@ import { isJsonMediaType } from "./media-type.js";
 import { recoverPendingSessionDeliveries } from "../sessions/callbacks.js";
 import { clearDelegationCompletionContract, DELEGATION_COMPLETION_TRACKED_META_KEY } from "../sessions/delegation-completion-contract.js";
 import { callerMayActOnSession } from "./session-reach-guard.js";
+import { handleAccountsApi } from "../accounts/routes.js";
+import { buildAuthState } from "../accounts/state.js";
+import { PUBLIC_ACCOUNT_POST_PATHS } from "../accounts/public-paths.js";
+import { signOutUserSession } from "../accounts/logout.js";
+import type { AccountsRuntime } from "../accounts/runtime.js";
 import { clipSessionMessage, sessionCommGuards, prepareLateralSend, resolveCallerIdentity, describeUnidentifiedTool, headerString, type CallerIdentity } from "./session-comm-guards.js";
 import { originMatchesAuthority, parseRequestAuthority, requestHeaderValues, singleRequestHeader, type RequestAuthority } from "./request-authority.js";
 import {
@@ -298,7 +303,6 @@ import {
   consumeLocalBootstrapGrant,
   consumePairingCode,
   createAuthSession,
-  createAuthState,
   createFilePairingCodeStore,
   currentAuthDeviceId,
   hasGatewayBearerAuth,
@@ -374,6 +378,8 @@ function parseMessageLimit(value: string | null, fallback: number): number {
 }
 
 export interface ApiContext {
+  /** User accounts and board members; absent in a bare context, where none of those routes exist. */
+  accounts?: AccountsRuntime;
   config: JinnConfig;
   sessionManager: SessionManager;
   startTime: number;
@@ -887,7 +893,8 @@ function allowsUnauthenticatedMutation(method: string, pathname: string): boolea
     || pathname === "/api/auth/pairing-codes"
     || pathname === "/api/auth/pair"
     || pathname === "/api/auth/logout"
-    || pathname === "/api/internal/hook";
+    || pathname === "/api/internal/hook"
+    || PUBLIC_ACCOUNT_POST_PATHS.includes(pathname);
 }
 
 function rejectUnverifiedIdentifiedApiCaller(req: HttpRequest, res: ServerResponse, method: string, pathname: string, context: ApiContext): boolean {
@@ -1330,9 +1337,16 @@ export async function handleApiRequest(
       }
     }
 
+    // Accounts: sign-in, invites and resets (no credential), then People, account setup and board sharing (operator).
+    if (await handleAccountsApi(req, res, { method, pathname, url }, {
+      accounts: context.accounts,
+      isOperator: (r) => scopedOperatorAuthenticated(r as HttpRequest, context),
+      rejectIdentityGrant: (r, response, action) => rejectScopedIdentityGrant(r as HttpRequest, response, action, context),
+    })) return;
+
     // GET /api/auth/state — safe browser boot metadata. Never includes the token.
     if (method === "GET" && pathname === "/api/auth/state") {
-      const state = createAuthState(context.getConfig(), req, context.gatewayAuthToken, jinnHome);
+      const state = buildAuthState(context.getConfig(), req, context.gatewayAuthToken, jinnHome, context.accounts);
       if (state.authenticated) {
         touchAuthSession(jinnHome, req);
         // A browser paired before a codename change holds the old cookie names: re-issue the same session under the new.
@@ -1471,7 +1485,7 @@ export async function handleApiRequest(
       if (!parsed.ok) return;
       const currentDevice = currentAuthDeviceId(req.headers, jinnHome);
       if (currentDevice) revokeAuthSession(jinnHome, currentDevice);
-      res.setHeader("Set-Cookie", clearAuthCookieHeaders(jinnHome));
+      res.setHeader("Set-Cookie", [...clearAuthCookieHeaders(jinnHome), ...signOutUserSession(req, context.accounts)]);
       return json(res, { status: "ok" });
     }
 

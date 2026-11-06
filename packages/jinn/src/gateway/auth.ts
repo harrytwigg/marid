@@ -7,6 +7,7 @@ import type { JinnConfig } from "../shared/types.js";
 import { resolveJinnInstance } from "../shared/home.js";
 import { wireHeader } from "../shared/wire-names.js";
 import { parseCookieHeader, requestAuthCookies } from "./auth-cookies.js";
+import { isPublicAccountRoute } from "../accounts/public-paths.js";
 
 // The cookie names and headers moved to auth-cookies.ts; they are still exported from here.
 export {
@@ -91,7 +92,8 @@ export type LocalBootstrapGrantStore = Map<string, LocalBootstrapGrantEntry>;
 
 const localBootstrapGrants: LocalBootstrapGrantStore = new Map();
 
-export type AuthSessionKind = "local" | "remote" | "token";
+/** `password` is an instance owner who signed in with email and password; its device carries their `userId`. */
+export type AuthSessionKind = "local" | "remote" | "token" | "password";
 
 export interface AuthSessionDevice {
   id: string;
@@ -101,6 +103,8 @@ export interface AuthSessionDevice {
   lastSeenAt: string;
   lastIp?: string;
   userAgent?: string;
+  /** The account an owner sign-in belongs to. Absent on every paired device. */
+  userId?: string;
 }
 
 interface StoredAuthSessionDevice extends AuthSessionDevice {
@@ -253,6 +257,7 @@ export function authRequiredForRequest(method: string | undefined, pathname: str
   if (pathname === "/api/auth/pair" && (method || "GET").toUpperCase() === "POST") return false;
   if (pathname === "/api/auth/logout" && (method || "GET").toUpperCase() === "POST") return false;
   if (pathname === "/api/internal/hook" && (method || "GET").toUpperCase() === "POST") return false;
+  if (isPublicAccountRoute(method, pathname)) return false;
   if (pathname.startsWith("/api/")) return true;
   if (pathname === "/ws" || pathname.startsWith("/ws/pty/")) return true;
   return false;
@@ -412,7 +417,7 @@ function inferAuthSessionName(req: Pick<IncomingMessage, "headers" | "socket">, 
 export function createAuthSession(
   jinnHome: string,
   req: Pick<IncomingMessage, "headers" | "socket">,
-  opts: { name?: string; kind?: AuthSessionKind; now?: number } = {},
+  opts: { name?: string; kind?: AuthSessionKind; now?: number; userId?: string } = {},
 ): { secret: string; device: AuthSessionDevice } {
   const now = opts.now ?? Date.now();
   const kind = opts.kind ?? (isLoopbackAddress(req.socket.remoteAddress) ? "local" : "remote");
@@ -427,6 +432,7 @@ export function createAuthSession(
     lastSeenAt: new Date(now).toISOString(),
     ...(req.socket.remoteAddress ? { lastIp: req.socket.remoteAddress } : {}),
     ...(userAgent ? { userAgent } : {}),
+    ...(opts.userId ? { userId: opts.userId } : {}),
   };
   const stored: StoredAuthSessionDevice = { ...device, tokenHash: authSessionHash(secret) };
   saveStoredAuthSessions(jinnHome, [...devices.filter((existing) => existing.id !== stored.id), stored]);
@@ -503,6 +509,39 @@ export function revokeAuthSession(jinnHome: string, deviceId: string): boolean {
   if (next.length === devices.length) return false;
   saveStoredAuthSessions(jinnHome, next);
   return true;
+}
+
+/** Every operator device an account's password sign-in minted; paired devices carry no `userId` and never match. */
+export function listAuthSessionsForUser(jinnHome: string, userId: string): AuthSessionDevice[] {
+  return loadStoredAuthSessions(jinnHome)
+    .filter((device) => device.userId === userId)
+    .map(({ tokenHash: _tokenHash, ...device }) => device)
+    .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt));
+}
+
+/** Revoke an account's device sessions, all of them or all but `exceptDeviceId`. Returns how many went. */
+export function revokeAuthSessionsForUser(jinnHome: string, userId: string, exceptDeviceId?: string): number {
+  const devices = loadStoredAuthSessions(jinnHome);
+  const next = devices.filter((device) => device.userId !== userId || device.id === exceptDeviceId);
+  if (next.length === devices.length) return 0;
+  saveStoredAuthSessions(jinnHome, next);
+  return devices.length - next.length;
+}
+
+/** Mark an existing device as an account's (the operator's "set up my sign-in"). False when no such device. */
+export function linkAuthSessionToUser(jinnHome: string, deviceId: string, userId: string): boolean {
+  const devices = loadStoredAuthSessions(jinnHome);
+  const idx = devices.findIndex((device) => device.id === deviceId);
+  if (idx < 0) return false;
+  devices[idx] = { ...devices[idx]!, userId };
+  saveStoredAuthSessions(jinnHome, devices);
+  return true;
+}
+
+/** The account the request's device belongs to, if its device was signed in by one. */
+export function authSessionUserId(jinnHome: string, deviceId: string | undefined): string | undefined {
+  if (!deviceId) return undefined;
+  return loadStoredAuthSessions(jinnHome).find((device) => device.id === deviceId)?.userId;
 }
 
 function hashPairingCode(raw: string): string {
