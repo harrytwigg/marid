@@ -23,7 +23,7 @@ import type { MemberRouteContext } from "./member-context.js";
 import {
   keyDigest, parseCreate, parsePatch, patchKey, readObject, refuseUnsupported, scopedKey, type CreateInput, type PatchInput,
 } from "./member-input.js";
-import { memberWorkItem } from "./member-serialise.js";
+import { memberWorkItem, viewerOf } from "./member-serialise.js";
 
 export const actorOf = (ctx: MemberRouteContext): string => memberIdentity(ctx.principal.userId);
 
@@ -144,9 +144,9 @@ export async function createTodo(ctx: MemberRouteContext): Promise<void> {
   if (!resolved) return;
   try {
     const created = writeCreate(ctx, initDb(), createInput(ctx, grant.department, input.value), input.value, resolved.parent);
-    if (created.replayed) return json(ctx.res, { workItem: memberWorkItem(created.item), replayed: true });
+    if (created.replayed) return json(ctx.res, { workItem: memberWorkItem(created.item, viewerOf(ctx)), replayed: true });
     announce(ctx, created.item.id, "created", true);
-    json(ctx.res, { workItem: memberWorkItem(getWorkItem(created.item.id)!) }, 201);
+    json(ctx.res, { workItem: memberWorkItem(getWorkItem(created.item.id)!, viewerOf(ctx)) }, 201);
   } catch (err) {
     answerOrBadRequest(ctx, err);
   }
@@ -198,7 +198,7 @@ export async function patchTodo(ctx: MemberRouteContext): Promise<void> {
   try {
     const result = writePatch(ctx, granted, input.value, version.expected);
     if (!result.replayed) announce(ctx, granted.item.id, "metadata-updated", true);
-    json(ctx.res, { workItem: memberWorkItem(result.item), replayed: result.replayed });
+    json(ctx.res, { workItem: memberWorkItem(result.item, viewerOf(ctx)), replayed: result.replayed });
   } catch (err) {
     answerOrBadRequest(ctx, err);
   }
@@ -229,7 +229,7 @@ export async function setStatus(ctx: MemberRouteContext): Promise<void> {
       const current = assertWritableTodo(db, ctx.principal.userId, granted.item.id);
       return moveStatus(current, body.status as string, actorOf(ctx));
     }).immediate());
-    json(ctx.res, { workItem: memberWorkItem(item), escalated: false });
+    json(ctx.res, { workItem: memberWorkItem(item, viewerOf(ctx)), escalated: false });
   } catch (err) {
     if (!answerWriteError(ctx, err)) throw err;
   }

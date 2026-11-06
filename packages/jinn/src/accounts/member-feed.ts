@@ -1,6 +1,6 @@
 import { getWorkItem, type WorkItem } from "../work-items/store.js";
 import { boardOfTodo } from "../work-items/board-of.js";
-import { memberWorkItem } from "./member-serialise.js";
+import { memberWorkItem, type Viewer } from "./member-serialise.js";
 
 /**
  * What a board member's socket is told about a gateway event, or nothing.
@@ -47,7 +47,7 @@ function departmentLeft(value: unknown): string | null | undefined {
 }
 
 /** The frame for a change, for a member who holds these boards; undefined when it is not on one of them (before or after). */
-export function memberFrameFor(change: TodoChange, boards: ReadonlySet<string>): MemberFrame | undefined {
+export function memberFrameFor(change: TodoChange, boards: ReadonlySet<string>, viewer: Viewer): MemberFrame | undefined {
   const onAfter = change.after !== null && boards.has(change.after);
   const onBefore = typeof change.before === "string" && boards.has(change.before);
   if (!onAfter && !onBefore) return undefined;
@@ -56,12 +56,7 @@ export function memberFrameFor(change: TodoChange, boards: ReadonlySet<string>):
     event: "company:changed",
     payload: {
       entity: "todo", action: change.action, id: change.id, version: change.item.version,
-      ...(change.hadValue ? { value: memberWorkItem(change.item) } : {}),
+      ...(change.hadValue ? { value: memberWorkItem(change.item, viewer) } : {}),
     },
   };
-}
-
-export function buildMemberFrame(event: string, payload: unknown, boards: ReadonlySet<string>): MemberFrame | undefined {
-  const change = readTodoChange(event, payload);
-  return change ? memberFrameFor(change, boards) : undefined;
 }

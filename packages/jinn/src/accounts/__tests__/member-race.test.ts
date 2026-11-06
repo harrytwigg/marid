@@ -12,9 +12,13 @@ let store: typeof import("../../work-items/store.js");
 let labels: typeof import("../../work-items/labels.js");
 let operatorRoot: string;
 
-/** A request whose body arrives in two parts, with `between` run once the first part is in and the request is being served. */
+/**
+ * A request whose body arrives in two parts, with `between` run once the gateway has routed it, made every check it makes
+ * before reading the body, and started reading it: `between` lands after those checks and before the write.
+ */
 async function slowRequest(member: Member, method: string, path: string, body: { first: string; second: string; contentType?: string }, between: () => Promise<void>): Promise<{ status: number; body: any }> {
   const url = new URL(h.baseUrl);
+  const reading = h.bodyReadStarted(path);
   return new Promise((resolve, reject) => {
     const req = http.request({
       host: url.hostname, port: url.port, path, method,
@@ -29,7 +33,7 @@ async function slowRequest(member: Member, method: string, path: string, body: {
     });
     req.on("error", reject);
     req.write(body.first);
-    void between().then(() => req.end(body.second), reject);
+    void reading.then(between).then(() => req.end(body.second), reject);
   });
 }
 

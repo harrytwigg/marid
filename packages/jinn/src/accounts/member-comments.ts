@@ -11,7 +11,7 @@ import { getWorkItem } from "../work-items/store.js";
 import { NotVisibleError, assertCollaborator, boardOfTodo, grantedTodo, requireRole, type GrantedTodo } from "./member-access.js";
 import type { MemberRouteContext } from "./member-context.js";
 import { readObject } from "./member-input.js";
-import { memberAttachment, memberComment } from "./member-serialise.js";
+import { memberAttachment, memberComment, viewerOf } from "./member-serialise.js";
 import { actorOf, announce, answerWriteError } from "./member-writes.js";
 
 const COMMENT_ID = /^wic_[0-9a-f]{12}$/;
@@ -76,7 +76,7 @@ export async function addTodoComment(ctx: MemberRouteContext): Promise<void> {
     const comment = inGrantedTransaction(ctx, granted.item.id, () =>
       addComment({ workItemId: granted.item.id, body: text, author: actorOf(ctx), authorKind: "system", parentCommentId }));
     announce(ctx, granted.item.id, "commented");
-    json(ctx.res, { comment: memberComment(comment) }, 201);
+    json(ctx.res, { comment: memberComment(comment, viewerOf(ctx)) }, 201);
   } catch (err) {
     commentFailure(ctx, err);
   }
@@ -101,7 +101,7 @@ export async function editTodoComment(ctx: MemberRouteContext): Promise<void> {
     const comment = inGrantedTransaction(ctx, granted.item.id, () =>
       editComment(ctx.params.cid!, text, { author: actorOf(ctx), authorKind: "system", operator: false }));
     announce(ctx, granted.item.id, "comment-edited");
-    json(ctx.res, { comment: memberComment(comment) });
+    json(ctx.res, { comment: memberComment(comment, viewerOf(ctx)) });
   } catch (err) {
     commentFailure(ctx, err);
   }
@@ -114,7 +114,7 @@ export function deleteTodoComment(ctx: MemberRouteContext): void {
     const comment = inGrantedTransaction(ctx, granted.item.id, () =>
       tombstoneComment(ctx.params.cid!, { author: actorOf(ctx), authorKind: "system", operator: false }));
     announce(ctx, granted.item.id, "comment-deleted");
-    json(ctx.res, { comment: memberComment(comment) });
+    json(ctx.res, { comment: memberComment(comment, viewerOf(ctx)) });
   } catch (err) {
     commentFailure(ctx, err);
   }
@@ -186,7 +186,7 @@ export async function uploadAttachment(ctx: MemberRouteContext): Promise<void> {
       uploader: { author: actorOf(ctx), authorKind: "system", operator: false },
     }));
     announce(ctx, granted.item.id, "attachment-added");
-    json(ctx.res, { attachment: memberAttachment(attachment) }, 201);
+    json(ctx.res, { attachment: memberAttachment(attachment, viewerOf(ctx)) }, 201);
   } catch (err) {
     fs.rmSync(upload.stagedPath, { force: true });
     if (!answerWriteError(ctx, err)) attachmentFailure(ctx, err);

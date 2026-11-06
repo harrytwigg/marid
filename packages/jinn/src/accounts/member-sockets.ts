@@ -1,6 +1,7 @@
 import type { Database as DatabaseType } from "better-sqlite3";
 import { listGrantsForUser } from "./board-members.js";
 import { memberFrameFor, readTodoChange, type TodoChange } from "./member-feed.js";
+import { Viewer } from "./member-serialise.js";
 import { getUserSession } from "./user-sessions.js";
 import { getUserById } from "./users.js";
 
@@ -52,6 +53,7 @@ function validUser(deps: RegistryDeps, sessionId: string): string | undefined {
 interface Offer {
   change: TodoChange;
   boardsOf: Map<string, Set<string>>;
+  viewers: Map<string, Viewer>;
 }
 
 /** The frame a member's socket is sent for a broadcast event, serialised, or undefined when it hears nothing of it. */
@@ -61,7 +63,12 @@ function frameFor(deps: RegistryDeps, userId: string, offer: Offer): string | un
     boards = new Set(listGrantsForUser(deps.getDb(), userId).map((grant) => grant.department));
     offer.boardsOf.set(userId, boards);
   }
-  const frame = memberFrameFor(offer.change, boards);
+  let viewer = offer.viewers.get(userId);
+  if (!viewer) {
+    viewer = new Viewer(deps.getDb(), userId);
+    offer.viewers.set(userId, viewer);
+  }
+  const frame = memberFrameFor(offer.change, boards, viewer);
   return frame ? JSON.stringify({ ...frame, ts: (deps.now ?? Date.now)() }) : undefined;
 }
 
@@ -103,7 +110,7 @@ export function createMemberSocketRegistry(deps: RegistryDeps): MemberSocketRegi
       if (sockets.size === 0) return;
       const change = readTodoChange(event, payload);
       if (!change) return;
-      const offer: Offer = { change, boardsOf: new Map() };
+      const offer: Offer = { change, boardsOf: new Map(), viewers: new Map() };
       for (const [socket, sessionId] of [...sockets]) deliver(socket, sessionId, offer);
     },
     closeAll() {

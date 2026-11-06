@@ -7,12 +7,12 @@ import { orgRegistry } from "../gateway/org-registry.js";
 import { initDb } from "../shared/db.js";
 import { getAttachment } from "../work-items/attachments.js";
 import { COMMENT_PAGE_DEFAULT_LIMIT, COMMENT_PAGE_MAX_LIMIT, listComments } from "../work-items/comments.js";
-import { getWorkItemTree, queryWorkItems } from "../work-items/store.js";
+import { ensureDepartmentRegistered, getWorkItemTree, queryWorkItems } from "../work-items/store.js";
 import { listGrantsForBoard, listGrantsForUser } from "./board-members.js";
 import { grantedBoard, grantedTodo } from "./member-access.js";
 import type { MemberRouteContext } from "./member-context.js";
 import {
-  memberAttachments, memberCommentPage, memberDetailPayload, memberPagePayload, memberTreePayload,
+  memberAttachments, memberCommentPage, memberDetailPayload, memberPagePayload, memberTreePayload, viewerOf,
 } from "./member-serialise.js";
 import { getUserById } from "./users.js";
 import { initialsOf } from "./initials.js";
@@ -21,8 +21,12 @@ import { initialsOf } from "./initials.js";
 export function listBoards(ctx: MemberRouteContext): void {
   const db = ctx.deps.accounts.getDb();
   const boards = listGrantsForUser(db, ctx.principal.userId).map((grant) => {
-    const prefix = db.prepare("SELECT prefix FROM departments WHERE slug = ?").pluck().get(grant.department) as string | undefined;
-    const displayName = departmentRecord(grant.department).definition?.displayName;
+    const record = departmentRecord(grant.department);
+    // A board with no Todos yet has no registry row. As the departments API does, it is registered on read (unless its
+    // definition file was refused), so its prefix is the one its first Todo will carry.
+    if (!record.definitionError) ensureDepartmentRegistered(grant.department);
+    const prefix = initDb().prepare("SELECT prefix FROM departments WHERE slug = ?").pluck().get(grant.department) as string | undefined;
+    const displayName = record.definition?.displayName;
     return { department: grant.department, role: grant.role, ...(prefix ? { prefix } : {}), ...(displayName ? { displayName } : {}) };
   });
   json(ctx.res, { boards });
@@ -37,13 +41,13 @@ export function boardTodos(ctx: MemberRouteContext): void {
   const { filter, limit, offset } = parsed.value;
   // The operator's desk (Home, the attention queue) is not a board: only the board's own Todos, whatever else was asked for.
   const { kept: _kept, home: _home, needsAttentionFor: _attention, needsAttentionOperator: _operator, ...scoped } = filter;
-  json(ctx.res, memberPagePayload(queryWorkItems({ ...scoped, rootDepartment: department, limit, offset })));
+  json(ctx.res, memberPagePayload(queryWorkItems({ ...scoped, rootDepartment: department, limit, offset }), viewerOf(ctx)));
 }
 
 export function showTodo(ctx: MemberRouteContext): void {
   const granted = grantedTodo(ctx, ctx.params.id);
   if (!granted) return;
-  json(ctx.res, memberDetailPayload(ctx.deps.accounts.getDb(), ctx.principal.userId, granted.item));
+  json(ctx.res, memberDetailPayload(viewerOf(ctx), granted.item));
 }
 
 export function showTree(ctx: MemberRouteContext): void {
@@ -51,7 +55,7 @@ export function showTree(ctx: MemberRouteContext): void {
   if (!granted) return;
   const tree = getWorkItemTree(granted.item.id);
   if (!tree) return notFound(ctx.res);
-  json(ctx.res, { tree: memberTreePayload(workItemTreePayload(tree)) });
+  json(ctx.res, { tree: memberTreePayload(workItemTreePayload(tree), viewerOf(ctx)) });
 }
 
 export function listTodoComments(ctx: MemberRouteContext): void {
@@ -67,14 +71,14 @@ export function listTodoComments(ctx: MemberRouteContext): void {
     if (name === "limit") limit = Math.min(Math.max(value, 1), COMMENT_PAGE_MAX_LIMIT);
     else offset = value;
   }
-  json(ctx.res, { ...memberCommentPage(listComments(granted.item.id, { limit, offset })), limit, offset });
+  json(ctx.res, { ...memberCommentPage(listComments(granted.item.id, { limit, offset }), viewerOf(ctx)), limit, offset });
 }
 
 export function listTodoAttachments(ctx: MemberRouteContext): void {
   const granted = grantedTodo(ctx, ctx.params.id);
   if (!granted) return;
   const includeSuperseded = ["1", "true"].includes(ctx.route.url.searchParams.get("includeSuperseded") ?? "");
-  json(ctx.res, { attachments: memberAttachments(granted.item.id, includeSuperseded) });
+  json(ctx.res, { attachments: memberAttachments(granted.item.id, includeSuperseded, viewerOf(ctx)) });
 }
 
 /** The bytes of one attachment, only when it belongs to the Todo named in the path and that Todo is on a held board. */

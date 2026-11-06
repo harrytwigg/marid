@@ -94,8 +94,10 @@ describe("reads are scoped to the member's boards, and an unheld board is a 404,
     const memberRow = member.workItems.find((item: any) => item.id === rootId);
     const operatorRow = operator.workItems.find((item: any) => item.id === rootId);
     expect(operatorRow.sourceRef).toMatch(/^session:/);
-    expect(Object.keys(memberRow).sort()).toEqual(Object.keys(operatorRow).sort());
-    expect(memberRow).toMatchObject({ sourceRef: null, sessionRef: null, kept: false, attentionLane: null });
+    expect(operatorRow).toHaveProperty("sessionRef");
+    expect(Object.keys(memberRow).sort()).toEqual(Object.keys(operatorRow).filter((key) => key !== "sessionRef").sort());
+    expect(memberRow).not.toHaveProperty("sessionRef");
+    expect(memberRow).toMatchObject({ sourceRef: null, kept: false, attentionLane: null });
     expect(JSON.stringify(member)).not.toContain("11111111-aaaa-4bbb-8ccc-222222222222");
   });
 

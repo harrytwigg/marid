@@ -177,7 +177,9 @@ describe("member", () => {
     const member = await h.as(collab, "GET", "/api/member/boards/ops/todos?limit=5&status=backlog");
     const operator = await h.operator("GET", "/api/work-items?department=ops&limit=5&status=backlog");
     expect(keys(member.body)).toEqual(keys(operator.body));
-    expect(keys(member.body.workItems[0])).toEqual(keys(operator.body.workItems[0]));
+    // A row's session reference is removed for members, not sent as null.
+    expect(keys(member.body.workItems[0])).toEqual(keys(operator.body.workItems[0]).filter((key) => key !== "sessionRef"));
+    expect(member.body.workItems[0]).not.toHaveProperty("sessionRef");
   });
 
   it("member reads keep the pinned wrappers, with every cost figure null and no session or run field", async () => {

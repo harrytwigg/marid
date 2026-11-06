@@ -14,6 +14,7 @@ import { listWorkItemEvents, type WorkItem, type WorkItemEvent, type queryWorkIt
 import { readStopCause } from "../work-items/stop-cause.js";
 import { initDb } from "../shared/db.js";
 import { boardOfTodo } from "./member-access.js";
+import type { MemberRouteContext } from "./member-context.js";
 import { getGrant } from "./board-members.js";
 
 /**
@@ -28,20 +29,33 @@ function isEmployee(name: string): boolean {
 }
 
 /**
- * An actor (creator, author, uploader, event actor) as a member reads it, built from an allowed set and nothing else:
- * an employee on the roster, `operator`, a board member's `user:<id>`, or a generic `agent` / `system`. A session reads as
- * its employee when it has one, else "agent". Anything outside the set (a plugin, a cron job, a workflow, the gateway's
- * own machinery, a name no longer on the roster) becomes "system" or "agent", with no identifier. Known-bad values are
- * not filtered: only what is allowed passes.
+ * Who is reading: a member, and the people they may be shown. A `user:<id>` reads as itself only when that person is the
+ * reader or is an active user who currently holds one of the reader's boards. Remembered per reader, so a page asks the
+ * database once per person.
  */
-export function memberWho(identity: string): string {
-  if (ALLOWED_ACTORS.has(identity) || memberIdOf(identity) !== undefined) return identity;
-  if (identity.startsWith("session:")) return sessionEmployee(identity) ?? "agent";
-  if (isEmployee(identity)) return identity;
-  return identity.includes(":") ? "system" : "agent";
+export class Viewer {
+  private readonly known = new Map<string, boolean>();
+  constructor(readonly db: DatabaseType, readonly userId: string) {}
+
+  knows(otherId: string): boolean {
+    if (otherId === this.userId) return true;
+    let answer = this.known.get(otherId);
+    if (answer === undefined) {
+      answer = this.db.prepare(
+        `SELECT 1 FROM board_members a JOIN board_members b ON a.department = b.department JOIN users u ON u.id = b.user_id
+         WHERE a.user_id = ? AND b.user_id = ? AND u.status = 'active' LIMIT 1`,
+      ).get(this.userId, otherId) !== undefined;
+      this.known.set(otherId, answer);
+    }
+    return answer;
+  }
 }
 
-const ALLOWED_ACTORS: ReadonlySet<string> = new Set(["operator", "agent", "system"]);
+/** The reader a member route serves. */
+export const viewerOf = (ctx: MemberRouteContext): Viewer => new Viewer(ctx.deps.accounts.getDb(), ctx.principal.userId);
+
+/** The generic actors: `member` stands for a person the reader may not be told about (the web shows "Former member"). */
+const ALLOWED_ACTORS: ReadonlySet<string> = new Set(["operator", "agent", "system", "member"]);
 
 /** The roster employee a `session:<id>` actor was working as, when there is one. */
 function sessionEmployee(identity: string): string | undefined {
@@ -49,27 +63,45 @@ function sessionEmployee(identity: string): string | undefined {
   return employee && isEmployee(employee) ? employee : undefined;
 }
 
+/**
+ * The ONE place the actors a member may see are decided, for REST reads and live frames alike. An actor
+ * (creator, author, uploader, event actor) is built from an allowed set and nothing else: an employee on the roster,
+ * `operator`, a `user:<id>` on the reader's boards (or the reader), or a generic `agent` / `system` / `member`. Any other
+ * person reads as "member". A session reads as its employee when it has one, else "agent". Anything else (a plugin, a
+ * cron job, a workflow, the gateway's own machinery, a name no longer on the roster) becomes "system" or "agent", with
+ * no identifier. Known-bad values are not filtered: only what is allowed passes.
+ */
+export function memberWho(identity: string, viewer: Viewer): string {
+  const person = memberIdOf(identity);
+  if (person !== undefined) return viewer.knows(person) ? identity : "member";
+  if (ALLOWED_ACTORS.has(identity)) return identity;
+  if (identity.startsWith("session:")) return sessionEmployee(identity) ?? "agent";
+  if (isEmployee(identity)) return identity;
+  return identity.includes(":") ? "system" : "agent";
+}
+
 /** A Todo as a member reads it: the operator's row without the session-bearing `sourceRef`, budget or session creator. */
-export function memberWorkItem(item: WorkItem): WorkItem {
-  return { ...item, sourceRef: null, budgetUsd: null, createdBy: memberWho(item.createdBy) };
+export function memberWorkItem(item: WorkItem, viewer: Viewer): WorkItem {
+  return { ...item, sourceRef: null, budgetUsd: null, createdBy: memberWho(item.createdBy, viewer) };
 }
 
 type CompactExtras = Parameters<typeof compactWorkItem>[1];
 
 /** One compact board row for a member. */
-function memberCompact(item: WorkItem, extras: CompactExtras): Record<string, unknown> {
+function memberCompact(item: WorkItem, extras: CompactExtras, viewer: Viewer): Record<string, unknown> {
+  // `sessionRef` is a session field: removed, not nulled.
+  const { sessionRef: _sessionRef, ...row } = compactWorkItem(item, extras);
   return {
-    ...compactWorkItem(item, extras),
-    createdBy: memberWho(item.createdBy),
+    ...row,
+    createdBy: memberWho(item.createdBy, viewer),
     sourceRef: null,
-    sessionRef: null,
     kept: false,
     attentionLane: null,
   };
 }
 
 /** One page of compact rows, with every batched projection read in one query each, as the operator's list does. */
-export function memberPagePayload(page: ReturnType<typeof queryWorkItems>): Record<string, unknown> {
+export function memberPagePayload(page: ReturnType<typeof queryWorkItems>, viewer: Viewer): Record<string, unknown> {
   const ids = page.workItems.map((item) => item.id);
   const extras: NonNullable<CompactExtras> = {
     blocked: blockedSet(ids),
@@ -80,7 +112,7 @@ export function memberPagePayload(page: ReturnType<typeof queryWorkItems>): Reco
     recovery: recoveryByItem(ids),
   };
   return {
-    workItems: page.workItems.map((item) => memberCompact(item, extras)),
+    workItems: page.workItems.map((item) => memberCompact(item, extras, viewer)),
     total: page.total,
     totals: page.totals,
     limit: page.limit,
@@ -90,23 +122,23 @@ export function memberPagePayload(page: ReturnType<typeof queryWorkItems>): Reco
   };
 }
 
-function memberTreeNode(node: WorkItemTreeNodePayload): WorkItemTreeNodePayload {
-  return { ...node, ...memberWorkItem(node), children: node.children.map(memberTreeNode) };
+function memberTreeNode(node: WorkItemTreeNodePayload, viewer: Viewer): WorkItemTreeNodePayload {
+  return { ...node, ...memberWorkItem(node, viewer), children: node.children.map((child) => memberTreeNode(child, viewer)) };
 }
 
 /** A subtree for a member. Spend is money the operator spent on sessions: a member reads null. */
-export function memberTreePayload(payload: ReturnType<typeof workItemTreePayload>): ReturnType<typeof workItemTreePayload> {
-  return { ...payload, spendUsd: null as unknown as number, root: memberTreeNode(payload.root) };
+export function memberTreePayload(payload: ReturnType<typeof workItemTreePayload>, viewer: Viewer): ReturnType<typeof workItemTreePayload> {
+  return { ...payload, spendUsd: null as unknown as number, root: memberTreeNode(payload.root, viewer) };
 }
 
-/** A comment as a member reads it: the member kind derived, and no session behind it. */
-export function memberComment(comment: WorkItemComment): ReturnType<typeof outwardComment<WorkItemComment>> {
+/** A comment as a member reads it: the member kind derived from the stored author (before it is mapped), and no session behind it. */
+export function memberComment(comment: WorkItemComment, viewer: Viewer): ReturnType<typeof outwardComment<WorkItemComment>> {
   const { sessionId: _sessionId, ...rest } = comment;
-  return outwardComment({ ...rest, author: memberWho(comment.author) } as WorkItemComment);
+  return { ...outwardComment(rest as WorkItemComment), author: memberWho(comment.author, viewer) };
 }
 
-export function memberCommentPage(page: { comments: WorkItemComment[]; total: number }): { comments: Array<ReturnType<typeof memberComment>>; total: number } {
-  return { ...page, comments: page.comments.map(memberComment) };
+export function memberCommentPage(page: { comments: WorkItemComment[]; total: number }, viewer: Viewer): { comments: Array<ReturnType<typeof memberComment>>; total: number } {
+  return { ...page, comments: page.comments.map((comment) => memberComment(comment, viewer)) };
 }
 
 /** Event kinds that are the operator's own machinery: a member's timeline does not show them. */
@@ -122,40 +154,42 @@ const SESSION_DETAIL_KEYS: ReadonlySet<string> = new Set([
   "sourceRef", "origin", "todoProvenance", "callerSessionId",
 ]);
 
-function memberEventActor(event: WorkItemEvent): string | null {
+function memberEventActor(event: WorkItemEvent, createdBy: string, viewer: Viewer): string | null {
+  // A created event records the write's source (connector, human, cron...) as its actor: the creator is the Todo's `created_by`.
+  if (event.kind === "created") return memberWho(createdBy, viewer);
   if (!event.actor) return null;
   const employee = event.detail?.actorEmployee;
   if (event.actor.startsWith("session:") && typeof employee === "string" && isEmployee(employee)) return employee;
-  return memberWho(event.actor);
+  return memberWho(event.actor, viewer);
 }
 
-function memberEvent(event: WorkItemEvent): WorkItemEvent {
+function memberEvent(event: WorkItemEvent, createdBy: string, viewer: Viewer): WorkItemEvent {
   const detail = event.detail
     ? Object.fromEntries(Object.entries(event.detail).filter(([key]) => !SESSION_DETAIL_KEYS.has(key)))
     : event.detail;
-  return { ...event, actor: memberEventActor(event), detail };
+  return { ...event, actor: memberEventActor(event, createdBy, viewer), detail };
 }
 
-export function memberEvents(events: WorkItemEvent[]): WorkItemEvent[] {
-  return events.filter((event) => !INTERNAL_EVENT_KINDS.has(event.kind)).map(memberEvent);
+export function memberEvents(events: WorkItemEvent[], createdBy: string, viewer: Viewer): WorkItemEvent[] {
+  return events.filter((event) => !INTERNAL_EVENT_KINDS.has(event.kind)).map((event) => memberEvent(event, createdBy, viewer));
 }
 
 /** An attachment as a member reads it: where it sits on the gateway's disk is not theirs to know. */
-export function memberAttachment(attachment: WorkItemAttachment): Omit<WorkItemAttachment, "storagePath"> {
+export function memberAttachment(attachment: WorkItemAttachment, viewer: Viewer): Omit<WorkItemAttachment, "storagePath"> {
   const { storagePath: _storagePath, ...rest } = attachment;
-  return { ...rest, uploadedBy: memberWho(attachment.uploadedBy) };
+  return { ...rest, uploadedBy: memberWho(attachment.uploadedBy, viewer) };
 }
 
 /** Relations to Todos on a board the member also holds: a relation must not tell them the title of a Todo they cannot open. */
-function visibleRelations(db: DatabaseType, userId: string, item: WorkItem): ReturnType<typeof listRelations> {
+function visibleRelations(viewer: Viewer, item: WorkItem): ReturnType<typeof listRelations> {
   const find = initDb().prepare("SELECT id, root_id, department FROM work_items WHERE id = ?");
   return listRelations(item.id)
     .filter((relation) => {
       const row = find.get(relation.other.id) as { id: string; root_id: string; department: string | null } | undefined;
       const board = row ? boardOfTodo({ id: row.id, rootId: row.root_id, department: row.department }) : null;
-      return !!board && !!getGrant(db, userId, board);
+      return !!board && !!getGrant(viewer.db, viewer.userId, board);
     })
-    .map((relation) => ({ ...relation, createdBy: memberWho(relation.createdBy) }));
+    .map((relation) => ({ ...relation, createdBy: memberWho(relation.createdBy, viewer) }));
 }
 
 function membersNamed(identities: ReadonlyArray<string | null | undefined>): Record<string, { kind: "member"; displayName: string }> {
@@ -167,18 +201,19 @@ function membersNamed(identities: ReadonlyArray<string | null | undefined>): Rec
 }
 
 /** `GET /api/member/todos/:id`: the operator's detail shape (comments and events included) minus the session fields. */
-export function memberDetailPayload(db: DatabaseType, userId: string, item: WorkItem): Record<string, unknown> {
-  const events = memberEvents(listWorkItemEvents(item.id));
-  const comments = memberCommentPage(commentsTail(item.id));
-  const members = membersNamed([item.createdBy, ...events.map((event) => event.actor), ...comments.comments.map((comment) => comment.author)]);
+export function memberDetailPayload(viewer: Viewer, item: WorkItem): Record<string, unknown> {
+  const events = memberEvents(listWorkItemEvents(item.id), item.createdBy, viewer);
+  const comments = memberCommentPage(commentsTail(item.id), viewer);
+  const workItem = memberWorkItem(item, viewer);
+  const members = membersNamed([workItem.createdBy, ...events.map((event) => event.actor), ...comments.comments.map((comment) => comment.author)]);
   const stop = item.status === "blocked" ? readStopCause(initDb(), item.id) ?? {} : {};
   return {
-    workItem: memberWorkItem(item),
+    workItem,
     spendUsd: null,
     events,
     comments,
     ...(Object.keys(members).length > 0 ? { members } : {}),
-    relations: visibleRelations(db, userId, item),
+    relations: visibleRelations(viewer, item),
     labels: getWorkItemLabels(item.id),
     sprint: getWorkItemSprint(item.id),
     kept: false,
@@ -188,6 +223,6 @@ export function memberDetailPayload(db: DatabaseType, userId: string, item: Work
   };
 }
 
-export function memberAttachments(workItemId: string, includeSuperseded: boolean): Array<Omit<WorkItemAttachment, "storagePath">> {
-  return listAttachments(workItemId, { includeSuperseded }).map(memberAttachment);
+export function memberAttachments(workItemId: string, includeSuperseded: boolean, viewer: Viewer): Array<Omit<WorkItemAttachment, "storagePath">> {
+  return listAttachments(workItemId, { includeSuperseded }).map((attachment) => memberAttachment(attachment, viewer));
 }

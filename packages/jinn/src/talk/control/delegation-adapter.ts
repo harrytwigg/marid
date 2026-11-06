@@ -13,6 +13,7 @@ import { childFallbackTarget } from "../../sessions/fallback-target.js";
 import { initDb } from "../../shared/db.js";
 import type { Session } from "../../shared/types.js";
 import { assignWorkItem } from "../../work-items/assignment.js";
+import { holdLiveSignalsUntilCommit } from "../../work-items/live-events.js";
 import { reconcileWorkItem } from "../../work-items/reconcile.js";
 import { getWorkItem, linkSession } from "../../work-items/store.js";
 import { resolveDelegationLinkRole } from "../../work-items/link-role.js";
@@ -109,7 +110,8 @@ function recordReusedBrief(input: TalkDelegationInput, key: string, session: Ses
  */
 export function claimTalkDelegation(input: TalkDelegationInput): ClaimedDelegation {
   const key = sessionKey(input.call);
-  return initDb().transaction((): ClaimedDelegation => {
+  // The assignment inside announces a board move; held until this transaction commits, dropped if it rolls back.
+  return holdLiveSignalsUntilCommit(() => initDb().transaction((): ClaimedDelegation => {
     const existing = getSessionBySessionKey(key);
     if (existing) validateReplay(existing, input);
     const assigned = assignWorkItem(
@@ -141,7 +143,7 @@ export function claimTalkDelegation(input: TalkDelegationInput): ClaimedDelegati
     if (!turn.queueItemId) throw new Error("delegation turn lost its durable queue anchor");
     if (!existing) recordReusedBrief(input, key, session, turn.queueItemId);
     return { session: current, queueItemId: turn.queueItemId, replayed: turn.deduplicated };
-  }).immediate();
+  }).immediate());
 }
 
 export function delegateTodoWithTalk(input: TalkDelegationInput): TalkControlExecution {
