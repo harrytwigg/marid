@@ -393,8 +393,9 @@ Settled while building the web against this contract; the gateway answers exactl
   the operator detail shape (comments and events included) minus session fields.
 - `GET /api/people` → `{ people: [{ id, email, displayName, initials, instanceRole, status,
   boards: [{ department, role }], passwordSet, createdAt, lastSeenAt }] }`.
-- `GET /api/people/:id/sessions` → `{ sessions: [{ id, kind: "member" | "device", createdAt,
-  lastSeenAt, userAgent, ip }] }`.
+- `GET /api/people/:id/sessions` and `GET /api/member/sessions` → `{ sessions: [{ id,
+  kind: "member" | "device", createdAt, lastSeenAt, userAgent, ip, current }] }`, where
+  `current` is true for the session the request itself rides on.
 - `GET /api/people/invites` → `{ invites: [{ id, email, department | null, role | null,
   instanceRole | null, createdBy, createdAt, expiresAt }] }`.
 - `GET /api/boards/:department/members` and its member mirror → `{ members: [{ userId,
