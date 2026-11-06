@@ -14,7 +14,7 @@ import { useMentionPicker } from "@/components/mention-picker"
 import { invalidateTodoComments, useAddTodoComment } from "../use-todo-comment"
 import { commentHeadRequest, mergeCommentPages } from "./comment-window"
 import { formatRelativeTime } from "../util"
-import { CommentAuthor, CommentAvatar, withCreatorActor } from "../attribution"
+import { CommentAuthor, CommentAvatar, useViewer, withCreatorActor } from "../attribution"
 import { AttachmentChips } from "./comment-attachments"
 import { CommentSessionLink } from "./session-ref"
 import { WhisperLine } from "./whisper"
@@ -240,9 +240,10 @@ export function ActivitySection({
     comment.repliedToId && comment.repliedToId !== comment.parentCommentId
       ? commentsById.get(comment.repliedToId)
       : undefined
+  const viewer = useViewer()
   const blocks = useMemo(
-    () => buildFeed(withCreatorActor(detail.events, detail.workItem.createdBy), comments, detail.runs ?? []).reverse(),
-    [detail.events, detail.workItem.createdBy, comments, detail.runs],
+    () => buildFeed(withCreatorActor(detail.events, detail.workItem.createdBy, viewer), comments, detail.runs ?? []).reverse(),
+    [detail.events, detail.workItem.createdBy, comments, detail.runs, viewer],
   )
 
   const [openFolds, setOpenFolds] = useState<Set<string>>(new Set())

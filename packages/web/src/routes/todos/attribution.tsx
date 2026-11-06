@@ -20,13 +20,14 @@ export function useViewer(): Viewer {
   return useMember() ? "member" : "operator"
 }
 
-/** A person: `user:<id>`, or the generic `member` that stands for one no longer on the reader's boards. */
-export function isMemberIdentity(identity: string | null | undefined): boolean {
-  return memberIdOf(identity) !== null || identity === GENERIC_MEMBER
+/** A person: `user:<id>`, or, on a member's reads only, the generic `member` that stands for one no longer on their
+ *  boards. For the operator `member` is an ordinary name (an employee may be called that). */
+export function isMemberIdentity(identity: string | null | undefined, viewer: Viewer = "operator"): boolean {
+  return memberIdOf(identity) !== null || (viewer === "member" && identity === GENERIC_MEMBER)
 }
 
-export function isMemberComment(comment: Pick<WorkItemCommentWire, "authorKind" | "author">): boolean {
-  return comment.authorKind === "member" || isMemberIdentity(comment.author)
+export function isMemberComment(comment: Pick<WorkItemCommentWire, "authorKind" | "author">, viewer: Viewer = "operator"): boolean {
+  return comment.authorKind === "member" || isMemberIdentity(comment.author, viewer)
 }
 
 /** The person's badge. While the directory has not answered it is an empty badge of the same size:
@@ -74,7 +75,8 @@ export function MemberChip({ identity, size = 14, className }: { identity: strin
 
 /** Operator comments avatar as the reserved "operator" actor, not an employee. */
 export function CommentAvatar({ comment }: { comment: WorkItemCommentWire }) {
-  if (isMemberComment(comment)) return <MemberAvatar identity={comment.author} size={18} />
+  const viewer = useViewer()
+  if (isMemberComment(comment, viewer)) return <MemberAvatar identity={comment.author} size={18} />
   const operator = comment.authorKind === "operator"
   return (
     <EmployeeAvatar
@@ -90,7 +92,7 @@ export function CommentAvatar({ comment }: { comment: WorkItemCommentWire }) {
 export function CommentAuthor({ comment, byName }: { comment: WorkItemCommentWire; byName: Map<string, Employee> }) {
   const viewer = useViewer()
   if (comment.authorKind === "operator") return <>{viewer === "member" ? "Operator" : "You"}</>
-  if (isMemberComment(comment)) return <MemberName identity={comment.author} />
+  if (isMemberComment(comment, viewer)) return <MemberName identity={comment.author} />
   const word = memberActorWord(comment.author, viewer)
   if (word) return <>{word}</>
   const label = comment.authorKind === "employee" ? displayNameOf(comment.author, byName) : commentAuthorLabel(comment.author, comment.authorKind)
@@ -99,27 +101,28 @@ export function CommentAuthor({ comment, byName }: { comment: WorkItemCommentWir
 
 /** The actor of an audit line. `children` is what a non-member actor reads as. */
 export function EventActor({ actor, byName, children }: { actor: string | null; byName: Map<string, Employee>; children: ReactNode }) {
-  if (!actor || !isMemberIdentity(actor)) return <SessionActor actor={actor} byName={byName}>{children}</SessionActor>
+  const viewer = useViewer()
+  if (!actor || !isMemberIdentity(actor, viewer)) return <SessionActor actor={actor} byName={byName}>{children}</SessionActor>
   return <MemberChip identity={actor} />
 }
 
 /** A member-created Todo's birth event names `connector` as its actor (the store records the source);
  *  the person is `createdBy`. Read it as the person, so the first line of the trail is theirs. */
-export function withCreatorActor(events: WorkItemEventWire[], createdBy: string | undefined): WorkItemEventWire[] {
-  if (!createdBy || !isMemberIdentity(createdBy)) return events
+export function withCreatorActor(events: WorkItemEventWire[], createdBy: string | undefined, viewer: Viewer = "operator"): WorkItemEventWire[] {
+  if (!createdBy || !isMemberIdentity(createdBy, viewer)) return events
   return events.map((event) =>
-    event.kind === "created" && !isMemberIdentity(event.actor) ? { ...event, actor: createdBy } : event)
+    event.kind === "created" && !isMemberIdentity(event.actor, viewer) ? { ...event, actor: createdBy } : event)
 }
 
 /** The most recent member to write on a Todo, from its audit trail; null when the last hand was not a member's. */
-export function lastMemberToucher(events: WorkItemEventWire[]): string | null {
+export function lastMemberToucher(events: WorkItemEventWire[], viewer: Viewer = "operator"): string | null {
   const last = [...events].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
-  return last?.actor && isMemberIdentity(last.actor) ? last.actor : null
+  return last?.actor && isMemberIdentity(last.actor, viewer) ? last.actor : null
 }
 
 /** "· last touched by <name>" on the Todo page, only when the newest audit line is a member's. */
 export function LastTouchedBy({ events }: { events: WorkItemEventWire[] }) {
-  const toucher = lastMemberToucher(events)
+  const toucher = lastMemberToucher(events, useViewer())
   if (!toucher) return null
   return (
     <span data-testid="last-touched-by" className="text-[12px] font-normal text-[var(--text-quaternary)]">

@@ -4,7 +4,7 @@ import type { Employee, WorkItemCompactWire, WorkItemOpenDetailWire, WorkItemSta
 import { stateKeyOf } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { StateCircle } from "../state-glyph"
-import { isMemberIdentity, MemberChip } from "../attribution"
+import { isMemberIdentity, MemberChip, useViewer } from "../attribution"
 import { stopReasonOf } from "../util"
 import { CardTree } from "./card-tree"
 import { hasStopLead, StopCauseLead, stopLeadKey } from "./stop-cause"
@@ -136,6 +136,7 @@ export const BoardCard = memo(function BoardCard({
   // card keeps its height). A member is never shown cost, and the gateway sends null for them.
   const spendUsd = tree?.spendUsd ?? 0
   const member = useMember() !== null
+  const viewer = useViewer()
   const showCost = !member && tree?.spendUsd !== null
   const employee = item.assignee ? byName.get(item.assignee) : undefined
   const assigneeName = employee?.displayName ?? item.assignee
@@ -193,7 +194,7 @@ export const BoardCard = memo(function BoardCard({
             />
           )}
           {/* A member's Todo is unassigned, so the slot is free for who made it. */}
-          {!item.assignee && item.createdBy && isMemberIdentity(item.createdBy) && (
+          {!item.assignee && item.createdBy && isMemberIdentity(item.createdBy, viewer) && (
             <MemberChip identity={item.createdBy} size={20} className="max-w-[140px] text-[calc(11px*var(--text-scale))] text-[var(--text-tertiary)]" />
           )}
           {item.assignee && (

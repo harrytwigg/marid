@@ -242,7 +242,7 @@ export function PropsRail({
       <RailRow quiet testId="rail-created-by">
         <UserRound size={14} aria-hidden className="flex-none text-[var(--text-quaternary)]" />
         {createdBySession ? <SessionRef sessionId={createdBySession} byName={byName} />
-          : isMemberIdentity(item.createdBy) ? <MemberChip identity={item.createdBy!} size={16} /> : createdByLabel}
+          : isMemberIdentity(item.createdBy, viewer) ? <MemberChip identity={item.createdBy!} size={16} /> : createdByLabel}
         <span className="text-[12px] font-normal text-[var(--text-quaternary)]">· created {formatRelativeTime(item.createdAt)}</span>
         <LastTouchedBy events={detail.events} />
       </RailRow>

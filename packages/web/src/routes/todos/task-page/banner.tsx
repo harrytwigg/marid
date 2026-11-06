@@ -70,7 +70,7 @@ export function TaskBanner({
   const style = KIND_STYLE[kind]
   const at = event ? formatRelativeTime(event.createdAt) : null
   const actor = event?.actor
-    ? isMemberIdentity(event.actor) ? <MemberName identity={event.actor} /> : displayNameOf(event.actor, byName, viewer)
+    ? isMemberIdentity(event.actor, viewer) ? <MemberName identity={event.actor} /> : displayNameOf(event.actor, byName, viewer)
     : null
   const when = at || actor ? <>{at}{at && actor ? " · " : null}{actor}</> : null
 

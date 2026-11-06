@@ -351,6 +351,33 @@ describe("the generic member actor", () => {
   })
 })
 
+describe("an employee called member, in the operator's view", () => {
+  const bot = new Map([["member", { name: "member", displayName: "Membership Bot" } as never]])
+
+  it("is that employee, not a former member, on comments, audit lines and the creator row", () => {
+    wrap(<ActivitySection
+      detail={detailOf({
+        events: [event("wie_m", "metadata_edited", "2026-07-20T08:10:00.000Z", { actor: "member" })],
+        comments: { comments: [comment("wic_m", "beep", "2026-07-20T08:15:00.000Z", { authorKind: "employee", author: "member" })], total: 1 },
+      })}
+      byName={bot} mobile={false} announce={vi.fn()}
+    />)
+    expect(screen.getByTestId("activity-comment-wic_m").textContent).toContain("Membership Bot")
+    expect(screen.getByTestId("whisper-wie_m").textContent).toContain("Membership Bot")
+    expect(document.body.textContent).not.toContain("Former member")
+    expect(screen.queryByTestId("human-avatar")).toBeNull()
+  })
+
+  it("names them as a Todo's creator, with no last-touched line", () => {
+    wrap(<PropsRail
+      detail={detailOf({ item: { createdBy: "member" }, events: [event("wie_m", "metadata_edited", "2026-07-20T08:10:00.000Z", { actor: "member" })] })}
+      byName={bot} departments={[]}
+    />)
+    expect(screen.getByTestId("rail-created-by").textContent).toContain("Membership Bot")
+    expect(screen.queryByTestId("last-touched-by")).toBeNull()
+  })
+})
+
 describe("a person who joined after the operator's page loaded", () => {
   const NIA = { id: "nia1", displayName: "Nia New", initials: "NN", email: "n@example.test", instanceRole: "member", status: "active", boards: [] }
   const withComment = (author: string) =>

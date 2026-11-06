@@ -119,7 +119,11 @@ describe("the member app's routes", () => {
   it("takes a member who leaves their only board home, to say they have none, not back to the board", async () => {
     principal = { kind: "member", user: { id: "me", email: "me@example.test", displayName: "Mia" }, boards: [grant("design", "owner")] }
     let boards = [{ ...grant("design", "owner"), prefix: "DES" }]
-    listMemberBoards.mockImplementation(async () => boards)
+    // A real read takes a moment: long enough for the home page to render whatever list the cache holds first.
+    listMemberBoards.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      return boards
+    })
     getMemberBoardRoster.mockResolvedValue({
       members: [{ userId: "me", displayName: "Mia", email: "me@example.test", initials: "M", role: "owner" }],
       invites: [],
