@@ -411,8 +411,9 @@ Settled while building the web against this contract; the gateway answers exactl
   used, revoked or expired token.
 - Member Todo reads keep the operator wrappers the shared board code reads: board list
   `{ workItems, total, nextOffset, totals }`, tree `{ tree: { root, totals, spendUsd } }`,
-  detail `{ workItem, spendUsd, events, comments }`. For members every cost figure is `null`
-  (`spendUsd` at each level, spend inside `totals`) and every session or run field is removed.
+  detail `{ workItem, spendUsd, events, comments }`. `totals` is a status-to-count record and
+  its counts are numbers for everyone. For members every cost figure is `null` (`spendUsd` at
+  each level, `workItem.budgetUsd`) and every session or run field is removed.
   Members never see spend.
 - Actors on member reads and member socket frames are only ever an employee name, a
   `user:<id>` on the member's boards, `operator`, or a generic `agent` / `system` with no
