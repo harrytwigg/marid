@@ -21,10 +21,24 @@ function limitLabel(kind: string, modelName: string | undefined): { name: string
   return { name: modelName ? `${kind} ${modelName}` : kind };
 }
 
-function windowFromLimit(item: unknown): EngineLimitWindow | undefined {
+/**
+ * True when the payload itself says a `session` entry is a bucket the plan
+ * does not have: the entry is marked inactive, or the same response's named
+ * buckets carry a weekly reading and no five-hour one. Only a zero can be
+ * inapplicable; any reading above zero proves the limit exists, so a used or
+ * exhausted session window always stands.
+ */
+function sessionIsInapplicable(item: JsonRecord, usage: JsonRecord): boolean {
+  if (num(item.percent) !== 0) return false;
+  if (item.is_active === false) return true;
+  return isRecord(usage.seven_day) && !isRecord(usage.five_hour);
+}
+
+function windowFromLimit(item: unknown, usage: JsonRecord): EngineLimitWindow | undefined {
   if (!isRecord(item)) return undefined;
   const percent = num(item.percent);
   if (percent === undefined) return undefined;
+  if (item.kind === "session" && sessionIsInapplicable(item, usage)) return undefined;
   const scope = isRecord(item.scope) ? item.scope : undefined;
   const model = scope && isRecord(scope.model) ? scope.model : undefined;
   const modelName = model ? str(model.display_name) : undefined;
@@ -45,11 +59,14 @@ function windowFromNamedBucket([key, value]: [string, unknown]): EngineLimitWind
 /**
  * Every numeric limits[] bucket is displayed, including future server-side
  * kinds. Older responses fall back to named utilization buckets when the
- * array yields none. Repeated display names retain their first reading.
+ * array yields none. Repeated display names retain their first reading. A
+ * `session` entry the payload marks as not applying to the plan is left out
+ * (`sessionIsInapplicable`); the collector also drops a zero five-hour window
+ * the CLI's own snapshot says the account does not have.
  */
 export function windowsFromClaudeUsage(usage: JsonRecord): EngineLimitWindow[] {
   const limits = Array.isArray(usage.limits) ? usage.limits : [];
-  const liveWindows = limits.map(windowFromLimit).filter((window) => window !== undefined);
+  const liveWindows = limits.map((item) => windowFromLimit(item, usage)).filter((window) => window !== undefined);
   const windows = liveWindows.length > 0
     ? liveWindows
     : Object.entries(usage).map(windowFromNamedBucket).filter((window) => window !== undefined);
@@ -59,4 +76,20 @@ export function windowsFromClaudeUsage(usage: JsonRecord): EngineLimitWindow[] {
     seen.add(window.name);
     return true;
   });
+}
+
+/**
+ * Leave out a five-hour window the account does not have. The CLI's statusline
+ * snapshot is taken from the rate-limit headers of real requests: when it
+ * carries a weekly reading and no five-hour one, the account's plan has no
+ * five-hour limit, so a five-hour bucket the usage API reports at zero is not
+ * a limit sitting idle. A reading above zero always stands.
+ */
+export function withoutAbsentFiveHour(
+  windows: EngineLimitWindow[],
+  statuslineWindows: EngineLimitWindow[] | undefined,
+): EngineLimitWindow[] {
+  const names = new Set((statuslineWindows ?? []).map((window) => window.name));
+  if (!names.has("7d") || names.has("5h")) return windows;
+  return windows.filter((window) => window.name !== "5h" || !!window.usedPercent);
 }

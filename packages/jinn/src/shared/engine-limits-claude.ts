@@ -20,7 +20,7 @@ import { claudeProfileDirExists, type ClaudeProfile } from "./claude-profile.js"
 import { buildEngineChildEnv } from "./child-env.js";
 import { readClaudeOAuthToken } from "./claude-models.js";
 import { resolveBin } from "./resolve-bin.js";
-import { windowsFromClaudeUsage } from "./engine-limits-claude-usage.js";
+import { windowsFromClaudeUsage, withoutAbsentFiveHour } from "./engine-limits-claude-usage.js";
 export { windowsFromClaudeUsage } from "./engine-limits-claude-usage.js";
 import {
   baseSnapshot,
@@ -35,6 +35,8 @@ import {
 export function windowFromClaude(name: string, value: unknown, durationMins: number): EngineLimitWindow | undefined {
   if (!isRecord(value)) return undefined;
   const resetsAt = num(value.resets_at);
+  // A bucket with neither a percentage nor a reset carries no limit to show.
+  if (resetsAt === undefined && num(value.used_percentage) === undefined) return undefined;
   return {
     name,
     usedPercent: num(value.used_percentage),
@@ -259,8 +261,8 @@ export async function collectClaudeLimits(config: JinnConfig, profile: ClaudePro
     claudeAuthPlan(config, profile),
     fetchClaudeOAuthUsage(process.env, profile),
   ]);
-  const liveWindows = oauthUsage ? windowsFromClaudeUsage(oauthUsage) : [];
   const statusline = latest ? readClaudeStatusline(latest) : null;
+  const liveWindows = withoutAbsentFiveHour(oauthUsage ? windowsFromClaudeUsage(oauthUsage) : [], statusline?.windows);
 
   // Live path: the OAuth usage API carries every bucket (including per-model
   // ones like the Fable weekly bucket) that the statusline payload never sees.

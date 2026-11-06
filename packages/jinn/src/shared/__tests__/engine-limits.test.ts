@@ -338,6 +338,51 @@ describe("windowsFromClaudeUsage — OAuth usage-API bucket mapping", () => {
     expect(windows[0].usedPercent).toBe(12); // rounded
   });
 
+  describe("a five-hour bucket the plan does not have", () => {
+    const weekly = { kind: "weekly_all", group: "weekly", percent: 37, resets_at: "2026-11-12T09:00:00Z", scope: null };
+    const session = (percent: number, extra: Record<string, unknown> = {}) =>
+      ({ kind: "session", group: "session", percent, resets_at: "2026-11-06T16:59:59Z", scope: null, ...extra });
+    const names = (usage: Record<string, unknown>) => windowsFromClaudeUsage(usage).map((w) => w.name);
+
+    it("leaves out a zeroed session entry the payload marks inactive", () => {
+      expect(names({ limits: [session(0, { is_active: false }), weekly] })).toEqual(["7d"]);
+    });
+
+    it("leaves out a zeroed session entry when the named buckets have a weekly reading and no five-hour one", () => {
+      const usage = { five_hour: null, seven_day: { utilization: 37, resets_at: "2026-11-12T09:00:00Z" }, limits: [session(0), weekly] };
+      expect(names(usage)).toEqual(["7d"]);
+    });
+
+    it("shows no five-hour window when limits[] has no session entry", () => {
+      expect(names({ limits: [weekly] })).toEqual(["7d"]);
+    });
+
+    it("keeps a real session entry at 0% straight after a reset", () => {
+      const fresh = windowsFromClaudeUsage({
+        five_hour: { utilization: 0, resets_at: null },
+        seven_day: { utilization: 37, resets_at: "2026-11-12T09:00:00Z" },
+        limits: [session(0, { is_active: true, resets_at: null }), weekly],
+      });
+      expect(fresh[0]).toMatchObject({ name: "5h", usedPercent: 0, windowDurationMins: 300 });
+      // limits[] alone, with nothing saying the bucket is absent: a zero is a zero.
+      expect(names({ limits: [session(0), weekly] })).toEqual(["5h", "7d"]);
+    });
+
+    it("keeps an exhausted session limit at 100% with its reset whatever else the payload says", () => {
+      const usage = { five_hour: null, seven_day: { utilization: 37 }, limits: [session(100, { is_active: false }), weekly] };
+      expect(windowsFromClaudeUsage(usage)[0]).toMatchObject({
+        name: "5h",
+        usedPercent: 100,
+        resetsAt: Math.floor(Date.parse("2026-11-06T16:59:59Z") / 1000),
+      });
+    });
+
+    it("shows no five-hour window from the named-bucket fallback when five_hour is absent", () => {
+      expect(names({ seven_day: { utilization: 37, resets_at: "2026-11-12T09:00:00Z" } })).toEqual(["7d"]);
+      expect(names({ five_hour: null, seven_day: { utilization: 37, resets_at: "2026-11-12T09:00:00Z" } })).toEqual(["7d"]);
+    });
+  });
+
   it("tolerates malformed entries and bad reset timestamps", () => {
     const windows = windowsFromClaudeUsage({
       limits: [
