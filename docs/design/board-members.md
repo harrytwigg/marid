@@ -408,7 +408,8 @@ Settled while building the web against this contract; the gateway answers exactl
   (`boardName` and `role` are null for an instance invite, `instanceRole` null for a board
   invite); `POST /api/auth/resets/inspect` → `{ email, displayName }`. Both answer `410` for a
   used, revoked or expired token.
-- Member Todo reads keep the operator wrappers the shared board code reads (detail:
-  `{ workItem, comments, events, … }`; tree: the operator tree shape with its per-status
-  `totals`), with every cost figure (`spendUsd`, derived spend in `totals`) and every session or
-  run field removed or null. Members never see spend.
+- Member Todo reads keep the operator wrappers the shared board code reads: board list
+  `{ workItems, total, nextOffset, totals }`, tree `{ tree: { root, totals, spendUsd } }`,
+  detail `{ workItem, spendUsd, events, comments }`. For members every cost figure is `null`
+  (`spendUsd` at each level, spend inside `totals`) and every session or run field is removed.
+  Members never see spend.
