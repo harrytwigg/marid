@@ -196,3 +196,15 @@ describe("a department that is not one of the reader's boards is never named to 
     expect(detail.workItem.department).toBe("ops");
   });
 });
+
+describe("an assignee named on a note", () => {
+  it("reads as the employee only while they are on the roster; one who has left, or an internal identity, reads as a generic actor", async () => {
+    const todo = store.createWorkItem({ title: "Assigned over time", department: "ops" });
+    for (const assignee of ["alice", "@operator", "former-employee", "plugin:calendar", `user:usr_nobody0000`]) {
+      store.appendWorkItemEvent({ workItemId: todo.id, kind: "note", actor: "operator", detail: { assignee } });
+    }
+    const notes = (await h.as(pat, "GET", `/api/member/todos/${todo.id}`)).body.events.filter((event: any) => event.kind === "note");
+    expect(notes.map((event: any) => event.detail.assignee)).toEqual(["alice", "@operator", "agent", "system", "member"]);
+    expect(JSON.stringify(notes)).not.toMatch(/former-employee|calendar|usr_nobody/);
+  });
+});
