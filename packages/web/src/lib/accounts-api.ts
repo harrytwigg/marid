@@ -109,8 +109,11 @@ export interface BoardRosterWire {
 
 export interface InviteInspectWire {
   email: string
+  /** The board and role of a board invite; null for an instance invite. */
   boardName?: string | null
   role?: BoardRole | null
+  /** The instance role of an instance invite; null for a board invite. */
+  instanceRole?: InstanceRole | null
   invitedBy?: string | null
 }
 
