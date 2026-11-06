@@ -49,13 +49,23 @@ describe("operator", () => {
   it("GET /api/people/:id/sessions and GET /api/member/sessions → { sessions: [{ id, kind, createdAt, lastSeenAt, userAgent, ip, current }] }", async () => {
     const reply = await h.operator("GET", `/api/people/${collab.userId}/sessions`);
     expect(keys(reply.body)).toEqual(["sessions"]);
-    for (const key of ["id", "kind", "createdAt", "lastSeenAt", "userAgent", "ip", "current"]) expect(reply.body.sessions[0]).toHaveProperty(key);
+    const required = ["id", "kind", "createdAt", "lastSeenAt", "userAgent", "ip", "current"];
+    const additive = ["expiresAt", "name"]; // phase 1 extras, kept
+    for (const row of reply.body.sessions) {
+      for (const key of required) expect(row).toHaveProperty(key);
+      expect(keys(row).filter((key) => !required.includes(key) && !additive.includes(key))).toEqual([]);
+      expect(typeof row.current).toBe("boolean");
+    }
     expect(reply.body.sessions[0].kind).toBe("member");
     // An operator request does not ride on a member session.
     expect(reply.body.sessions.map((s: any) => s.current)).toEqual([false]);
     const second = await h.request("POST", "/api/auth/login", { body: { email: "collab@example.test", password: "correct horse battery staple" } });
     const own = await h.as(collab, "GET", "/api/member/sessions");
-    for (const key of ["id", "kind", "createdAt", "lastSeenAt", "userAgent", "ip", "current"]) expect(own.body.sessions[0]).toHaveProperty(key);
+    for (const row of own.body.sessions) {
+      for (const key of required) expect(row).toHaveProperty(key);
+      expect(keys(row).filter((key) => !required.includes(key) && !additive.includes(key))).toEqual([]);
+      expect(typeof row.current).toBe("boolean");
+    }
     expect(own.body.sessions.filter((s: any) => s.current).map((s: any) => s.id)).toEqual([collab.sessionId]);
     expect(own.body.sessions).toHaveLength(2);
     void second;

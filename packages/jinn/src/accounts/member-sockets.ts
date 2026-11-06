@@ -1,6 +1,6 @@
 import type { Database as DatabaseType } from "better-sqlite3";
 import { listGrantsForUser } from "./board-members.js";
-import { buildMemberFrame } from "./member-feed.js";
+import { memberFrameFor, readTodoChange, type TodoChange } from "./member-feed.js";
 import { getUserSession } from "./user-sessions.js";
 import { getUserById } from "./users.js";
 
@@ -48,10 +48,20 @@ function validUser(deps: RegistryDeps, sessionId: string): string | undefined {
   }
 }
 
+/** What one broadcast event is to every socket: read once, with each member's boards read once however many sockets they hold. */
+interface Offer {
+  change: TodoChange;
+  boardsOf: Map<string, Set<string>>;
+}
+
 /** The frame a member's socket is sent for a broadcast event, serialised, or undefined when it hears nothing of it. */
-function frameFor(deps: RegistryDeps, userId: string, event: string, payload: unknown): string | undefined {
-  const boards = new Set(listGrantsForUser(deps.getDb(), userId).map((grant) => grant.department));
-  const frame = buildMemberFrame(event, payload, boards);
+function frameFor(deps: RegistryDeps, userId: string, offer: Offer): string | undefined {
+  let boards = offer.boardsOf.get(userId);
+  if (!boards) {
+    boards = new Set(listGrantsForUser(deps.getDb(), userId).map((grant) => grant.department));
+    offer.boardsOf.set(userId, boards);
+  }
+  const frame = memberFrameFor(offer.change, boards);
   return frame ? JSON.stringify({ ...frame, ts: (deps.now ?? Date.now)() }) : undefined;
 }
 
@@ -67,12 +77,12 @@ export function createMemberSocketRegistry(deps: RegistryDeps): MemberSocketRegi
     try { socket.close(MEMBER_SOCKET_CLOSE_UNAUTHORIZED, "unauthorized"); } catch { /* already closing */ }
   };
   /** Re-check one socket's session, then send it what it may hear of this event; a socket that cannot be checked or filtered is closed. */
-  const deliver = (socket: MemberSocketLike, sessionId: string, event: string, payload: unknown): void => {
+  const deliver = (socket: MemberSocketLike, sessionId: string, offer: Offer): void => {
     const userId = validUser(deps, sessionId);
     if (userId === undefined) return closeSocket(socket);
     if (socket.readyState !== 1) return;
     try {
-      const frame = frameFor(deps, userId, event, payload);
+      const frame = frameFor(deps, userId, offer);
       if (frame) socket.send(frame);
     } catch {
       closeSocket(socket);
@@ -90,8 +100,11 @@ export function createMemberSocketRegistry(deps: RegistryDeps): MemberSocketRegi
       return closed;
     },
     publish(event, payload) {
-      if (sockets.size === 0 || event !== "company:changed") return;
-      for (const [socket, sessionId] of [...sockets]) deliver(socket, sessionId, event, payload);
+      if (sockets.size === 0) return;
+      const change = readTodoChange(event, payload);
+      if (!change) return;
+      const offer: Offer = { change, boardsOf: new Map() };
+      for (const [socket, sessionId] of [...sockets]) deliver(socket, sessionId, offer);
     },
     closeAll() {
       const all = [...sockets.keys()];

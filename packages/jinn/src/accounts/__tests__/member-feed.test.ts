@@ -92,7 +92,18 @@ describe("a member's socket hears only re-serialised Todo changes on its own boa
     const assigned = await h.operator("POST", `/api/work-items/${todo.id}/assign`, { assignee: "@operator" });
     expect(assigned.status).toBe(200);
     expect(store.getWorkItem(todo.id)!.department).toBeNull();
+    // The assignment announces the move itself and the route announces the assignment: two `removed` frames, both true.
+    expect(opsSocket.frames.length).toBeGreaterThanOrEqual(1);
+    for (const frame of opsSocket.frames) expect(frame.payload).toEqual({ entity: "todo", action: "removed", id: todo.id });
+  });
+
+  it("an assignment by any writer (delegation, Talk, the route) that moves a root off the board removes the card", async () => {
+    const { assignWorkItem } = await import("../../work-items/assignment.js");
+    const todo = store.createWorkItem({ title: "Assigned in code", department: "ops" });
+    opsSocket.frames.length = 0; designSocket.frames.length = 0;
+    assignWorkItem(todo.id, "@operator", "design", "operator");
     expect(opsSocket.frames.map((f) => f.payload)).toEqual([{ entity: "todo", action: "removed", id: todo.id }]);
+    expect(designSocket.frames.map((f) => f.payload.id)).toEqual([todo.id]);
   });
 
   it("a reparent across boards removes the moved Todo from the board it left", async () => {

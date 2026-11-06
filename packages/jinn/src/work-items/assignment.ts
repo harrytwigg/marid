@@ -2,6 +2,8 @@ import { initDb } from '../shared/db.js';
 import { isNonOpenDepartment, scopeDepartmentOfItem } from './department-scope.js';
 import { assertMayHold } from './department-guard.js';
 import { isDepartmentArchived, usableDefaultDepartment } from './department-archive.js';
+import { departmentBefore } from './board-of.js';
+import { notifyTodoChanged } from './live-events.js';
 import type { WriteOrigin } from './origin.js';
 import {
   appendWorkItemEvent,
@@ -99,6 +101,8 @@ export function assignWorkItem(
   { origin, actorEmployee }: AssignWorkItemOptions = {},
 ): WorkItem | undefined {
   const db = initDb();
+  /** The department a root's board was in before this assignment moved it, for a board member's feed. */
+  let leftBoard: string | null | undefined;
   const txn = db.transaction((): TransitionResult | undefined => {
     const item = getWorkItem(id);
     if (!item) return undefined;
@@ -124,7 +128,12 @@ export function assignWorkItem(
     // keep the new owner's dispatch refused and keep deriving the Todo's status.
     const releasedSessions = releaseSelfStartedLinks(db, id, { exceptEmployee: assignee });
     const event = appendWorkItemEvent(assignmentEvent(item, { assignee, department, actor, actorEmployee, origin, releasedSessions }));
+    leftBoard = departmentBefore(item) !== department ? departmentBefore(item) : undefined;
     return { item: getWorkItem(id)!, escalated: false, event };
   });
-  return txn()?.item;
+  const result = txn()?.item;
+  // Whichever writer reached the assignment (the route, delegation, Talk), a card that left its board is announced
+  // as having done so: the route's own event carries the same fact for the operator's browsers.
+  if (result && leftBoard !== undefined) notifyTodoChanged(result, 'board-moved', undefined, leftBoard);
+  return result;
 }

@@ -47,7 +47,8 @@ function parentCommentOf(ctx: MemberRouteContext, body: Record<string, unknown>)
 export async function addTodoComment(ctx: MemberRouteContext): Promise<void> {
   const granted = writableTodo(ctx);
   const body = granted && (await readObject(ctx));
-  if (!granted || !body) return;
+  // The grant is read again once the body is in: it may have changed while the body was arriving.
+  if (!granted || !body || !writableTodo(ctx)) return;
   if (body.author !== undefined || body.authorKind !== undefined) {
     return badRequest(ctx.res, "author fields cannot be supplied — comment identity is stamped from the signed-in member");
   }
@@ -75,7 +76,7 @@ function commentOnTodo(ctx: MemberRouteContext, todoId: string): WorkItemComment
 export async function editTodoComment(ctx: MemberRouteContext): Promise<void> {
   const granted = writableTodo(ctx);
   const body = granted && (await readObject(ctx));
-  if (!granted || !body) return;
+  if (!granted || !body || !writableTodo(ctx)) return;
   const text = commentText(ctx, body);
   if (text === undefined || !commentOnTodo(ctx, granted.item.id)) return;
   try {
@@ -157,6 +158,7 @@ export async function uploadAttachment(ctx: MemberRouteContext): Promise<void> {
   const granted = writableTodo(ctx);
   const upload = granted && (await readUpload(ctx));
   if (!granted || !upload) return;
+  if (!writableTodo(ctx)) return fs.rmSync(upload.stagedPath, { force: true });
   try {
     const attachment = addAttachment({
       workItemId: granted.item.id, commentId: upload.commentId, filename: upload.filename, mime: mimeFromFilename(upload.filename),

@@ -9,13 +9,15 @@ import { setWorkItemLabels } from "../work-items/labels.js";
 import { holdLiveSignalsUntilCommit } from "../work-items/live-events.js";
 import { memberIdentity, memberSourceRef } from "../work-items/member-identity.js";
 import { TodoDateOrderError } from "../work-items/start-date.js";
+import { TodoDepartmentNotAllowedError } from "../shared/todo-departments-config.js";
 import {
   WorkItemIdempotencyConflictError, WorkItemVersionConflictError, createWorkItem, getWorkItem, updateWorkItemConditional,
   type CreateWorkItemInput, type WorkItem,
 } from "../work-items/store.js";
 import { TransitionError, transition } from "../work-items/transitions.js";
 import {
-  NotMemberEditableError, assertMemberOnlyTree, grantedBoard, grantedTodo, requireRole, type GrantedTodo,
+  NotMemberEditableError, NotVisibleError, RoleRefusedError, assertCollaborator, assertVisibleTodo, assertWritableTodo,
+  boardOfTodo, grantedBoard, grantedTodo, requireRole, ROLE_REFUSAL, type GrantedTodo,
 } from "./member-access.js";
 import type { MemberRouteContext } from "./member-context.js";
 import {
@@ -35,14 +37,12 @@ export function announce(ctx: MemberRouteContext, id: string, action: string, wi
   } as never);
 }
 
-/** Thrown inside a write transaction when the Todo vanished under it. */
-class TodoGone extends Error {}
-
 type Answer = [new (...args: never[]) => Error, (ctx: MemberRouteContext, err: never) => void];
 
 const WRITE_ANSWERS: readonly Answer[] = [
   [NotMemberEditableError, (ctx, err: NotMemberEditableError) => void json(ctx.res, { error: err.message, code: "todo_not_member_editable" }, 403)],
-  [TodoGone, (ctx) => notFound(ctx.res)],
+  [NotVisibleError, (ctx) => notFound(ctx.res)],
+  [RoleRefusedError, (ctx) => void json(ctx.res, { error: ROLE_REFUSAL }, 403)],
   [WorkItemVersionConflictError, (ctx, err: WorkItemVersionConflictError) => void json(ctx.res, { error: "Todo changed since it was loaded.", code: "todo_version_conflict", currentVersion: err.currentVersion }, 409)],
   [WorkItemIdempotencyConflictError, (ctx, err: WorkItemIdempotencyConflictError) => void json(ctx.res, { error: "This Todo edit key was already used for a different request.", code: "todo_idempotency_conflict", currentVersion: err.currentVersion }, 409)],
   [WorkItemCreateIdempotencyConflictError, (ctx, err: WorkItemCreateIdempotencyConflictError) => void json(ctx.res, { error: err.message, code: "todo_create_idempotency_conflict" }, 409)],
@@ -53,7 +53,7 @@ const WRITE_ANSWERS: readonly Answer[] = [
 
 function answerTransition(ctx: MemberRouteContext, err: TransitionError): void {
   if (err.code === "not-found") return notFound(ctx.res);
-  json(ctx.res, { error: err.message }, err.code === "illegal-edge" || err.code === "children-open" ? 409 : 403);
+  json(ctx.res, { error: err.message }, err.code === "human-required" || err.code === "self-review-banned" ? 403 : 409);
 }
 
 /** Answer a failure the write paths know how to answer; false for anything else, which the caller handles. */
@@ -64,10 +64,20 @@ export function answerWriteError(ctx: MemberRouteContext, err: unknown): boolean
   return true;
 }
 
-/** A failure that is the caller's to fix (a refused label, a closed parent) answers 400; a bug is thrown. */
+/** What a refused write says about the one thing the store's message would over-share: which labels exist, company-wide. */
+const LABEL_REFUSAL = "One or more labels do not exist on this board";
+
+/**
+ * A failure that is the caller's to fix answers 400: a label that does not exist (without the list of those that do),
+ * a department that takes no new Todos, a parent that is closed or too deep. Anything else is not the member's to read:
+ * it is thrown to the router, which logs it and answers a plain 500.
+ */
 function answerOrBadRequest(ctx: MemberRouteContext, err: unknown): void {
   if (answerWriteError(ctx, err)) return;
-  if (err instanceof Error) return badRequest(ctx.res, err.message);
+  if (!(err instanceof Error)) throw err;
+  if (/\blabel/i.test(err.message)) return badRequest(ctx.res, LABEL_REFUSAL);
+  if (err instanceof TodoDepartmentNotAllowedError) return badRequest(ctx.res, "This board does not take new Todos");
+  if (/^parent Todo /.test(err.message)) return badRequest(ctx.res, err.message);
   throw err;
 }
 
@@ -98,12 +108,21 @@ function createInput(ctx: MemberRouteContext, department: string, input: CreateI
 
 /** The create, its labels and its dispatch row, in one transaction with the tree check. */
 function writeCreate(ctx: MemberRouteContext, db: DatabaseType, row: CreateWorkItemInput, input: CreateInput, parent: WorkItem | null) {
+  const userId = ctx.principal.userId;
   return holdLiveSignalsUntilCommit(() => db.transaction(() => {
-    // The whole tree is checked in the same transaction as the write: it may not stop being member-only in between.
-    if (parent) assertMemberOnlyTree(db, parent.rootId);
+    // The grant, the parent and its whole tree are read again here, in the write's own transaction: the operator may
+    // have moved, assigned or dispatched them since the request was routed.
+    if (parent) {
+      const live = assertWritableTodo(db, userId, parent.id);
+      if (boardOfTodo(live) !== ctx.params.department) throw new NotVisibleError();
+    } else {
+      assertCollaborator(db, userId, ctx.params.department ?? null);
+    }
     const result = input.key
       ? createWorkItemIdempotent(row, scopedKey(actorOf(ctx), input.key), { ...(input.labels ? { labels: input.labels } : {}), autoStart: false })
       : { item: createWorkItem(row), replayed: false };
+    // A replay hands back the stored Todo, which must still be on one of the member's boards.
+    if (result.replayed) assertVisibleTodo(db, userId, result.item);
     if (!result.replayed) {
       if (input.labels) setWorkItemLabels(result.item.id, input.labels, actorOf(ctx));
       // Written with the create, so the board walk can never start it, whatever happens next.
@@ -149,13 +168,13 @@ function writePatch(ctx: MemberRouteContext, granted: GrantedTodo, input: PatchI
   const actor = actorOf(ctx);
   const id = granted.item.id;
   return holdLiveSignalsUntilCommit(() => db.transaction((): { item: WorkItem; replayed: boolean } => {
-    assertMemberOnlyTree(db, granted.item.rootId);
+    assertWritableTodo(db, ctx.principal.userId, id);
     let outcome = { item: getWorkItem(id)!, replayed: false };
     if (expected !== undefined) {
       const updated = updateWorkItemConditional(id, input.fields, {
         expectedVersion: expected, ...(input.key ? { idempotencyKey: patchKey(actor, input.key, input.labels) } : {}), actor,
       });
-      if (!updated) throw new TodoGone();
+      if (!updated) throw new NotVisibleError();
       outcome = updated;
     }
     if (input.labels && !outcome.replayed) {
@@ -207,9 +226,7 @@ export async function setStatus(ctx: MemberRouteContext): Promise<void> {
   const db = initDb();
   try {
     const item = holdLiveSignalsUntilCommit(() => db.transaction((): WorkItem => {
-      assertMemberOnlyTree(db, granted.item.rootId);
-      const current = getWorkItem(granted.item.id);
-      if (!current) throw new TodoGone();
+      const current = assertWritableTodo(db, ctx.principal.userId, granted.item.id);
       return moveStatus(current, body.status as string, actorOf(ctx));
     }).immediate());
     json(ctx.res, { workItem: memberWorkItem(item), escalated: false });

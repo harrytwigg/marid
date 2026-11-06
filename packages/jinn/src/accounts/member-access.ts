@@ -91,3 +91,45 @@ export function answerNotMemberEditable(ctx: MemberRouteContext, err: unknown): 
   json(ctx.res, { error: err.message, code: "todo_not_member_editable" }, 403);
   return true;
 }
+
+/** Thrown inside a write transaction when the Todo (or its board) is no longer one the member holds: the same 404 an unheld Todo always answers. */
+export class NotVisibleError extends Error {
+  constructor() {
+    super("Not found");
+    this.name = "NotVisibleError";
+  }
+}
+
+export class RoleRefusedError extends Error {
+  constructor() {
+    super(ROLE_REFUSAL);
+    this.name = "RoleRefusedError";
+  }
+}
+
+/** The member's grant on a board, read now, at least `collaborator`; throws the 404 or 403 the routes answer. */
+export function assertCollaborator(db: DatabaseType, userId: string, board: string | null): void {
+  const grant = board ? getGrant(db, userId, board) : undefined;
+  if (!grant) throw new NotVisibleError();
+  if (!roleAtLeast(grant.role, "collaborator")) throw new RoleRefusedError();
+}
+
+/**
+ * Everything a member write rests on, read again inside the write's own transaction: the Todo as it is now, the
+ * grant and role on the board it is on now, and that its whole tree is member-only now. Whatever was checked before
+ * the request body was read (the operator may have moved, assigned or dispatched the Todo, or removed the grant, in
+ * the meantime) is not relied on.
+ */
+export function assertWritableTodo(db: DatabaseType, userId: string, id: string): WorkItem {
+  const current = getWorkItem(id);
+  if (!current) throw new NotVisibleError();
+  assertCollaborator(db, userId, boardOfTodo(current));
+  assertMemberOnlyTree(db, current.rootId);
+  return current;
+}
+
+/** A Todo a member may still see, whatever their role: for a replayed create, which must not hand back a Todo that left their boards. */
+export function assertVisibleTodo(db: DatabaseType, userId: string, item: WorkItem): void {
+  const board = boardOfTodo(item);
+  if (!board || !getGrant(db, userId, board)) throw new NotVisibleError();
+}

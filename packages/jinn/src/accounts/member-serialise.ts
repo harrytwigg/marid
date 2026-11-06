@@ -2,11 +2,13 @@ import type { Database as DatabaseType } from "better-sqlite3";
 import { compactWorkItem, workItemTreePayload, type WorkItemTreeNodePayload } from "../gateway/work-item-payload.js";
 import { listAttachments, type WorkItemAttachment } from "../work-items/attachments.js";
 import { commentsTail, type WorkItemComment } from "../work-items/comments.js";
+import { recoveryByItem } from "../work-items/recovery-rows.js";
 import { getWorkItemLabels, labelSets } from "../work-items/labels.js";
 import { memberDisplayName, outwardComment, isMemberIdentity } from "../work-items/member-identity.js";
 import { listRelations, blockedSet } from "../work-items/relations.js";
 import { reviewAddressee } from "../work-items/review-addressee.js";
 import { getWorkItemSprint, sprintRefs } from "../work-items/sprints.js";
+import { getSession } from "../sessions/registry.js";
 import { listWorkItemEvents, type WorkItem, type WorkItemEvent, type queryWorkItems } from "../work-items/store.js";
 import { readStopCause } from "../work-items/stop-cause.js";
 import { initDb } from "../shared/db.js";
@@ -19,9 +21,18 @@ import { getGrant } from "./board-members.js";
  * drop, applied in one place so no member route serialises a Todo, comment, event or attachment itself.
  */
 
-/** A Todo as a member reads it: the operator's row without the session-bearing `sourceRef` or budget. */
+/**
+ * A creator, author or uploader as a member reads it. A session that has no employee is stored as `session:<id>`,
+ * and a session id is not a member's to hold: it reads as the session's employee, or "agent".
+ */
+export function memberWho(identity: string): string {
+  if (!identity.startsWith("session:")) return identity;
+  return getSession(identity.slice("session:".length))?.employee || "agent";
+}
+
+/** A Todo as a member reads it: the operator's row without the session-bearing `sourceRef`, budget or session creator. */
 export function memberWorkItem(item: WorkItem): WorkItem {
-  return { ...item, sourceRef: null, budgetUsd: null };
+  return { ...item, sourceRef: null, budgetUsd: null, createdBy: memberWho(item.createdBy) };
 }
 
 type CompactExtras = Parameters<typeof compactWorkItem>[1];
@@ -30,6 +41,7 @@ type CompactExtras = Parameters<typeof compactWorkItem>[1];
 function memberCompact(item: WorkItem, extras: CompactExtras): Record<string, unknown> {
   return {
     ...compactWorkItem(item, extras),
+    createdBy: memberWho(item.createdBy),
     sourceRef: null,
     sessionRef: null,
     kept: false,
@@ -45,6 +57,8 @@ export function memberPagePayload(page: ReturnType<typeof queryWorkItems>): Reco
     labels: labelSets(ids),
     sprints: sprintRefs(ids),
     kept: new Set<string>(),
+    // One query for the page, as the operator's list reads it, rather than one per row (the lane itself is not shown to members).
+    recovery: recoveryByItem(ids),
   };
   return {
     workItems: page.workItems.map((item) => memberCompact(item, extras)),
@@ -69,7 +83,7 @@ export function memberTreePayload(payload: ReturnType<typeof workItemTreePayload
 /** A comment as a member reads it: the member kind derived, and no session behind it. */
 export function memberComment(comment: WorkItemComment): ReturnType<typeof outwardComment<WorkItemComment>> {
   const { sessionId: _sessionId, ...rest } = comment;
-  return outwardComment(rest as WorkItemComment);
+  return outwardComment({ ...rest, author: memberWho(comment.author) } as WorkItemComment);
 }
 
 export function memberCommentPage(page: { comments: WorkItemComment[]; total: number }): { comments: Array<ReturnType<typeof memberComment>>; total: number } {
@@ -109,17 +123,19 @@ export function memberEvents(events: WorkItemEvent[]): WorkItemEvent[] {
 /** An attachment as a member reads it: where it sits on the gateway's disk is not theirs to know. */
 export function memberAttachment(attachment: WorkItemAttachment): Omit<WorkItemAttachment, "storagePath"> {
   const { storagePath: _storagePath, ...rest } = attachment;
-  return rest;
+  return { ...rest, uploadedBy: memberWho(attachment.uploadedBy) };
 }
 
 /** Relations to Todos on a board the member also holds: a relation must not tell them the title of a Todo they cannot open. */
 function visibleRelations(db: DatabaseType, userId: string, item: WorkItem): ReturnType<typeof listRelations> {
-  return listRelations(item.id).filter((relation) => {
-    const other = relation.other.id;
-    const row = initDb().prepare("SELECT id, root_id, department FROM work_items WHERE id = ?").get(other) as { id: string; root_id: string; department: string | null } | undefined;
-    const board = row ? boardOfTodo({ id: row.id, rootId: row.root_id, department: row.department }) : null;
-    return !!board && !!getGrant(db, userId, board);
-  });
+  const find = initDb().prepare("SELECT id, root_id, department FROM work_items WHERE id = ?");
+  return listRelations(item.id)
+    .filter((relation) => {
+      const row = find.get(relation.other.id) as { id: string; root_id: string; department: string | null } | undefined;
+      const board = row ? boardOfTodo({ id: row.id, rootId: row.root_id, department: row.department }) : null;
+      return !!board && !!getGrant(db, userId, board);
+    })
+    .map((relation) => ({ ...relation, createdBy: memberWho(relation.createdBy) }));
 }
 
 function membersNamed(identities: ReadonlyArray<string | null | undefined>): Record<string, { kind: "member"; displayName: string }> {
