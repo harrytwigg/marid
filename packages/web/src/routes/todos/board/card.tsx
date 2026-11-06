@@ -11,6 +11,7 @@ import { hasStopLead, StopCauseLead, stopLeadKey } from "./stop-cause"
 import { KeepToggle } from "./keep-control"
 import { MoveToMenu } from "./move-menu"
 import { useMember } from "@/hooks/use-principal"
+import { MovedLabel } from "../moved-label"
 
 /* The board card, Variant A: four rows, the same four on every card.
  * ID + assignee, status glyph + title, priority + labels + roll-up, cost + due.
@@ -193,6 +194,7 @@ export const BoardCard = memo(function BoardCard({
               className="opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
             />
           )}
+          {item.movedToAnotherBoard && <MovedLabel testId={`board-moved-${item.id}`} />}
           {/* A member's Todo is unassigned, so the slot is free for who made it. */}
           {!item.assignee && item.createdBy && isMemberIdentity(item.createdBy, viewer) && (
             <MemberChip identity={item.createdBy} size={20} className="max-w-[140px] text-[calc(11px*var(--text-scale))] text-[var(--text-tertiary)]" />

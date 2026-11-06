@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { WorkItemStatusWire, WorkItemTreeNodeWire } from "../api"
-import { OPERATOR_CAPABILITIES, commentPowers, isMemberOnlyTree, memberCapabilities } from "../todo-capabilities"
+import { OPERATOR_CAPABILITIES, commentPowers, isMemberOnlyTree, memberCapabilities, movedCapabilities } from "../todo-capabilities"
 
 function node(partial: Partial<WorkItemTreeNodeWire> & { id: string }, children: WorkItemTreeNodeWire[] = []): WorkItemTreeNodeWire {
   return {
@@ -73,5 +73,18 @@ describe("capabilities", () => {
   it("keeps the operator's comment powers as they were", () => {
     expect(commentPowers(OPERATOR_CAPABILITIES, { author: "operator", authorKind: "operator" }, null)).toEqual({ reply: true, edit: true, remove: true })
     expect(commentPowers(OPERATOR_CAPABILITIES, { author: "marid-dev", authorKind: "employee" }, null)).toEqual({ reply: true, edit: false, remove: true })
+  })
+})
+
+describe("a tree the member created that left their boards", () => {
+  it("reads, and comments only where a role of theirs allows it, and never edits, closes or adds a sub-task", () => {
+    expect(movedCapabilities(true)).toEqual({ memberMode: true, comment: true, attach: true, create: false, edit: false, close: false, operatorControls: false })
+    expect(movedCapabilities(false)).toEqual({ memberMode: true, comment: false, attach: false, create: false, edit: false, close: false, operatorControls: false })
+  })
+
+  it("lets them edit and delete only their own comments", () => {
+    const caps = movedCapabilities(true)
+    expect(commentPowers(caps, { author: "user:me", authorKind: "member" }, "me")).toEqual({ reply: true, edit: true, remove: true })
+    expect(commentPowers(caps, { author: "alice", authorKind: "employee" }, "me")).toEqual({ reply: true, edit: false, remove: false })
   })
 })

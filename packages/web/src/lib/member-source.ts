@@ -158,6 +158,8 @@ function readBoard(path: string, init: RequestInit): Promise<Response> | Respons
   const params = query(path)
   const department = params.get("department")
   // A list that names ids, or no board, has nothing to read from: members read a board at a time.
+  // The member's own Todos that left their boards are their own list, not a board's.
+  if (params.has("movedOff")) return forward("/api/member/moved", init)
   if (!department || params.has("ids") || params.has("needsAttentionFor")) return json(EMPTY_LIST)
   params.delete("department")
   const rest = params.toString()

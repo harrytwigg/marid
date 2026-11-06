@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { createContext, useContext, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { ChevronLeft, ChevronRight } from "@/components/ui/icon"
 import {
@@ -12,6 +12,7 @@ import { priorityLabel } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { RailPriorityBars } from "../task-page/rail-rows"
 import { OPERATOR_ROW } from "../util"
+import { MemberName } from "../attribution"
 import { PickerNote, PickerRow } from "./picker-shell"
 
 /* Todos v2 slice 6 — the picker CONTENTS (design-doc §7.3): one component per
@@ -24,6 +25,25 @@ export interface PickerContentProps {
   detail: WorkItemDetailWire
   sheet?: boolean
   onDone: () => void
+  /** The board member who created this Todo's root. Set, a picker that hands the Todo to someone, or to another board, says what that does to their access before anything is chosen. */
+  memberCreator?: string
+}
+
+/** The board member who created the root of the Todo page being shown, for a picker (a sub-task's assign picker) that is not handed one. */
+const MemberCreatorContext = createContext<string | null>(null)
+export const MemberCreatorProvider = MemberCreatorContext.Provider
+
+/** What the gateway does for a member who created a Todo the operator then assigns or moves: they keep reading it and commenting, and stop editing it. */
+export function MemberCreatorNote({ identity, sheet }: { identity: string; sheet?: boolean }) {
+  return (
+    <div
+      role="note"
+      data-testid="picker-member-creator-note"
+      className={`mx-1 mb-1.5 rounded-[var(--radius-md)] bg-[var(--fill-tertiary)] px-2.5 py-1.5 text-[calc(12px*var(--text-scale))] leading-snug text-[var(--text-secondary)] ${sheet ? "mt-1" : ""}`}
+    >
+      <MemberName identity={identity} /> created this. After this change they can still read it and comment, but not edit it.
+    </div>
+  )
 }
 
 const PRIORITIES = [3, 2, 1, 0] as const
@@ -61,7 +81,10 @@ export function AssigneePickerContent({
   commit,
   sheet,
   onDone,
+  memberCreator: given,
 }: PickerContentProps & { employees: Employee[]; commit: (assignee: string | null) => void }) {
+  const inherited = useContext(MemberCreatorContext)
+  const memberCreator = given ?? inherited ?? undefined
   const [query, setQuery] = useState("")
   const current = detail.workItem.assignee
   const filtered = useMemo(() => {
@@ -72,6 +95,7 @@ export function AssigneePickerContent({
   }, [employees, query])
   return (
     <>
+      {memberCreator && <MemberCreatorNote identity={memberCreator} sheet={sheet} />}
       <div className="px-1 pb-1.5 pt-0.5">
         <input
           autoFocus
@@ -267,10 +291,12 @@ export function DepartmentPickerContent({
   commit,
   sheet,
   onDone,
+  memberCreator,
 }: PickerContentProps & { departments: DepartmentSummaryWire[]; commit: (department: string | null) => void }) {
   const current = detail.workItem.department
   return (
     <>
+      {memberCreator && <MemberCreatorNote identity={memberCreator} sheet={sheet} />}
       {departments.map((dept) => (
         <PickerRow
           key={dept.slug}

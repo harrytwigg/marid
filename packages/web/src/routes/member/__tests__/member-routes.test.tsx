@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { BoardRole } from "@/lib/accounts-api"
@@ -119,9 +119,16 @@ describe("the member app's routes", () => {
   it("takes a member who leaves their only board home, to say they have none, not back to the board", async () => {
     principal = { kind: "member", user: { id: "me", email: "me@example.test", displayName: "Mia" }, boards: [grant("design", "owner")] }
     let boards = [{ ...grant("design", "owner"), prefix: "DES" }]
-    // A real read takes a moment: long enough for the home page to render whatever list the cache holds first.
+    // The boards read made after they leave is held open until the test lets it finish, so the home page is shown while the
+    // cache is all it has: the order is fixed by the test, not by how long a timer happens to run.
+    let held: Promise<void> | null = null
+    let release: () => void = () => {}
+    let finishedWhileHeld = 0
     listMemberBoards.mockImplementation(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50))
+      if (held) {
+        await held
+        finishedWhileHeld += 1
+      }
       return boards
     })
     getMemberBoardRoster.mockResolvedValue({
@@ -138,8 +145,15 @@ describe("the member app's routes", () => {
 
     renderAt("/todos/b/design")
     fireEvent.click(await screen.findByRole("button", { name: "Leave Mia" }))
+    held = new Promise<void>((resolve) => { release = resolve })
     fireEvent.click(screen.getByRole("button", { name: "Leave" }))
 
+    // Home, with the boards read still outstanding: what the cache says is already that they hold none.
+    await waitFor(() => expect(screen.getByTestId("where").textContent).toBe("/"))
+    expect(await screen.findByTestId("member-no-boards")).toBeTruthy()
+    expect(screen.queryByTestId("board-not-shared")).toBeNull()
+    release()
+    await waitFor(() => expect(finishedWhileHeld).toBeGreaterThan(0))
     expect(await screen.findByTestId("member-no-boards")).toBeTruthy()
     expect(screen.getByTestId("where").textContent).toBe("/")
     expect(screen.queryByTestId("board-not-shared")).toBeNull()

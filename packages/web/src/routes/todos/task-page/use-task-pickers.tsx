@@ -53,6 +53,7 @@ export function useTaskPickers({
   departments,
   openChildren,
   openDescendants,
+  memberCreator = null,
   mobile,
   announce,
   root,
@@ -60,6 +61,8 @@ export function useTaskPickers({
   detail: WorkItemDetailWire | undefined
   employees: Employee[]
   departments: DepartmentSummaryWire[]
+  /** The board member (`user:<id>`) who created this Todo's root, when it was one: assigning or moving it tells the operator what that does to their access. */
+  memberCreator?: string | null
   mobile: boolean
   announce: (message: string) => void
   /** This view's own subtree: two Todos can be open side by side, each with its own rail. */
@@ -156,7 +159,7 @@ export function useTaskPickers({
   const contentFor = useCallback(
     (key: PickerKey, sheet: boolean): React.ReactNode => {
       if (!detail) return null
-      const shared = { detail, sheet, onDone: close }
+      const shared = { detail, sheet, onDone: close, ...(memberCreator ? { memberCreator } : {}) }
       switch (key) {
         case "status":
           return (
@@ -181,7 +184,7 @@ export function useTaskPickers({
           return <DepartmentPickerContent {...shared} departments={offeredDepartments(departments, detail.workItem.department)} commit={(department) => patchField({ department })} />
       }
     },
-    [detail, close, openChildren, openDescendants, transitionTo, patchField, commitAssignee, employees, departments, commitLabels],
+    [detail, close, memberCreator, openChildren, openDescendants, transitionTo, patchField, commitAssignee, employees, departments, commitLabels],
   )
 
   /** The superimposed row index (law 1): the current value's option row sits

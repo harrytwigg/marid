@@ -61,6 +61,12 @@ export function memberCapabilities(role: BoardRole | null | undefined, memberOnl
   }
 }
 
+/** A tree the member created that has left their boards: they read it, and comment where a role of theirs allows comments, and
+ *  that is all. Never an edit, a status change or a sub-task. */
+export function movedCapabilities(canComment: boolean): TodoCapabilities {
+  return { memberMode: true, comment: canComment, attach: canComment, create: false, edit: false, close: false, operatorControls: false }
+}
+
 export interface CommentPowers {
   reply: boolean
   edit: boolean

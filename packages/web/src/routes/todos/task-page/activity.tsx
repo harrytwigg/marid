@@ -22,6 +22,7 @@ import { buildFeed, stripCommentMarkers } from "./activity-feed"
 import { RunEndLine, RunStartLine } from "./runs"
 import { commentPowers } from "@/lib/todo-capabilities"
 import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
+import { VisibleToMembersHint } from "../visibility-hint"
 import { useMember } from "@/hooks/use-principal"
 
 /* The merged activity feed keeps audit events quiet and comment voices
@@ -202,12 +203,15 @@ export function ActivitySection({
   mobile,
   isDark = true,
   announce,
+  visibleToMembers = false,
 }: {
   detail: WorkItemDetailWire
   byName: Map<string, Employee>
   mobile: boolean
   isDark?: boolean
   announce: (message: string) => void
+  /** The board has members: what is written here is read by them. */
+  visibleToMembers?: boolean
 }) {
   const qc = useQueryClient()
   const id = detail.workItem.id
@@ -384,6 +388,7 @@ export function ActivitySection({
           className="max-h-36 min-h-12 w-full resize-none overflow-y-auto bg-transparent px-1 text-[15px] leading-[1.5] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-quaternary)]"
         />
       </div>
+      {visibleToMembers && <div className="px-1 pb-0.5"><VisibleToMembersHint testId="composer-visibility-hint" /></div>}
       <div className="mt-1 flex min-h-[34px] items-center gap-2">
         <button
           type="button"
