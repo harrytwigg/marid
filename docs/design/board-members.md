@@ -402,17 +402,23 @@ Settled while building the web against this contract; the gateway answers exactl
   displayName, email, initials, role }], invites: [<invite row as above>] }`.
 - `GET /api/member/people` → `{ people: [{ id, displayName, initials }], employees: [{ name,
   displayName, emoji }] }`.
-- Invite and reset-link POSTs → `{ link, expiresAt }`; an invite to an existing active
-  account → `{ granted: true }`.
+- Invite and reset-link POSTs → `{ link, expiresAt }` (`link` is `null` when the gateway cannot
+  determine the request's origin; the UI then says so instead of offering a copy box); an invite
+  to an existing active account → `{ granted: true }`.
 - `POST /api/auth/invites/inspect` → `{ email, boardName, role, instanceRole, invitedBy }`
   (`boardName` and `role` are null for an instance invite, `instanceRole` null for a board
   invite); `POST /api/auth/resets/inspect` → `{ email, displayName }`. Both answer `410` for a
   used, revoked or expired token.
 - Member Todo reads keep the operator wrappers the shared board code reads: board list
   `{ workItems, total, nextOffset, totals }`, tree `{ tree: { root, totals, spendUsd } }`,
-  detail `{ workItem, spendUsd, events, comments }`. For members every cost figure is `null`
-  (`spendUsd` at each level, spend inside `totals`) and every session or run field is removed.
+  detail `{ workItem, spendUsd, events, comments }`. `totals` is a status-to-count record and
+  its counts are numbers for everyone. For members every cost figure is `null` (`spendUsd` at
+  each level, `workItem.budgetUsd`) and every session or run field is removed.
   Members never see spend.
+- Actors on member reads and member socket frames are only ever an employee name, a
+  `user:<id>` on the member's boards, `operator`, or a generic `agent` / `system` with no
+  identifier. `session:<uuid>`, `plugin:<id>`, cron and other internal ids are never sent to a
+  member. Error messages to members never enumerate company data (labels, boards, people).
 
 ### Phase 2 build notes
 
@@ -430,7 +436,7 @@ Where the build had to pick a reading, or the contract was silent, it did this:
   workflow status trigger, which can start agents.
 - **Member reads omit** `sourceRef` (null), `budgetUsd` (null), session refs, the operator's Home flag and attention lane,
   `runs` and `dispatchConfig` (removed); every spend figure is `null`; events leave out the operator's machinery (session links, recovery, quiet-watch,
-  claims) and never name a session; relations are shown only to a Todo on a board the member also holds.
+  claims) and name only an employee, `operator`, a `user:<id>` or a generic `agent` / `system` (a session, plugin, cron job or the gateway's own machinery never shows an identifier); relations are shown only to a Todo on a board the member also holds.
   Comments carry no `sessionId`.
 - **`GET /api/member/people` employees** are the employees that hold, created or commented on a Todo on one of the member's boards.
 - **Member frames** are `{ event: "company:changed", payload: { entity: "todo", action, id, version?, value? }, ts }`;
