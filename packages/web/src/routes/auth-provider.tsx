@@ -6,6 +6,8 @@ import { queryClient } from "@/lib/query-client"
 import { createMemberSource } from "@/lib/member-source"
 import {
   setRequestSource,
+  reportMemberSessionLost,
+  setMemberSessionLostHandler,
   bootstrapLocalAuth,
   createPairingCode,
   getAuthState,
@@ -50,14 +52,13 @@ export function useAuthOptional(): AuthContextValue | null {
 }
 
 let appliedPrincipalKey: string | null = null
-let sessionLost: (() => void) | null = null
 
 /** A member's requests go through the member source; anyone else's go straight to the gateway.
  *  Whatever the cache held for the previous identity is dropped, so a sign-out and a sign-in as
  *  someone else in the same tab can never show the first person's boards. */
 function applyPrincipal(principal: PrincipalWire): void {
   const key = principal?.kind === "member" ? `member:${principal.user.id}` : principal?.kind ?? "none"
-  setRequestSource(principal?.kind === "member" ? createMemberSource(() => sessionLost?.()) : null)
+  setRequestSource(principal?.kind === "member" ? createMemberSource(reportMemberSessionLost) : null)
   if (appliedPrincipalKey !== null && appliedPrincipalKey !== key) queryClient.clear()
   appliedPrincipalKey = key
 }
@@ -114,8 +115,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshDevices])
 
   useEffect(() => {
-    sessionLost = () => { void refresh({ bootstrapLocal: false }) }
-    return () => { sessionLost = null }
+    setMemberSessionLostHandler(() => { void refresh({ bootstrapLocal: false }) })
+    return () => setMemberSessionLostHandler(null)
   }, [refresh])
 
   useEffect(() => {

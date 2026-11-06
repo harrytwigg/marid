@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { HumanAvatar } from "@/components/ui/human-avatar"
 import { SettingsSelect } from "@/routes/settings/shared"
 import { PEOPLE_DIRECTORY_KEY } from "@/hooks/use-people-directory"
+import { MEMBER_BOARDS_KEY } from "@/hooks/use-principal"
 import {
   BOARD_ROLE_LABEL,
   type BoardMemberWire,
@@ -27,26 +28,49 @@ export interface BoardShareDialogProps {
   selfUserId?: string
   open: boolean
   onClose: () => void
+  /** The caller took themselves off the board: the dialog has closed, and the page should leave the board too. */
+  onLeft?: () => void
 }
 
 
-function useRosterWrites(mode: ShareMode, department: string, onError: (error: string | null) => void) {
+interface WriteHooks {
+  onError: (error: string | null) => void
+  /** A write changed the caller's own place on the board (left it, or changed their own role). */
+  onSelfChanged: (left: boolean) => void
+}
+
+function useRosterWrites(mode: ShareMode, department: string, selfUserId: string | undefined, hooks: WriteHooks) {
   const queryClient = useQueryClient()
   const api = endpoints(mode)
-  const refresh = async () => {
+  const refresh = async (selfChanged = false) => {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: rosterKey(mode, department) }),
+      // After the caller's own place changed the roster may be closed to them: drop it rather than re-read it.
+      selfChanged
+        ? queryClient.removeQueries({ queryKey: rosterKey(mode, department) })
+        : queryClient.invalidateQueries({ queryKey: rosterKey(mode, department) }),
       // The People page lists each person's boards, and names on Todos come from the directory.
       queryClient.invalidateQueries({ queryKey: ["people"] }),
       queryClient.invalidateQueries({ queryKey: PEOPLE_DIRECTORY_KEY }),
+      // A member's boards, tabs and Share button read their grants from this list.
+      mode === "member" ? queryClient.invalidateQueries({ queryKey: MEMBER_BOARDS_KEY }) : undefined,
     ])
   }
-  const fail = (e: unknown) => onError(accountsErrorText(e))
+  /** Leaving, or stepping down from owner, ends what the dialog may show: close it before anything re-reads the roster. */
+  const afterWrite = (userId: string, left: boolean) => {
+    const self = mode === "member" && userId === selfUserId
+    if (self) hooks.onSelfChanged(left)
+    return refresh(self)
+  }
+  const fail = (e: unknown) => hooks.onError(accountsErrorText(e))
   return {
     refresh,
-    setRole: useMutation({ mutationFn: ({ userId, role }: { userId: string; role: BoardRole }) => api.setRole(department, userId, role), onSuccess: refresh, onError: fail }),
-    remove: useMutation({ mutationFn: (userId: string) => api.remove(department, userId), onSuccess: refresh, onError: fail }),
-    revoke: useMutation({ mutationFn: (id: string) => api.revoke(department, id), onSuccess: refresh, onError: fail }),
+    setRole: useMutation({
+      mutationFn: ({ userId, role }: { userId: string; role: BoardRole }) => api.setRole(department, userId, role),
+      onSuccess: (_data, { userId }) => afterWrite(userId, false),
+      onError: fail,
+    }),
+    remove: useMutation({ mutationFn: (userId: string) => api.remove(department, userId), onSuccess: (_data, userId) => afterWrite(userId, true), onError: fail }),
+    revoke: useMutation({ mutationFn: (id: string) => api.revoke(department, id), onSuccess: () => refresh(), onError: fail }),
   }
 }
 
@@ -62,11 +86,17 @@ function ErrorBanner({ message }: { message: string }) {
   )
 }
 
-export function BoardShareDialog({ department, mode, ownRole, selfUserId, open, onClose }: BoardShareDialogProps) {
+export function BoardShareDialog({ department, mode, ownRole, selfUserId, open, onClose, onLeft }: BoardShareDialogProps) {
   const ceiling = ceilingOf(mode, ownRole)
   const roster = useQuery<BoardRosterWire>({ queryKey: rosterKey(mode, department), queryFn: () => endpoints(mode).roster(department), enabled: open })
   const [error, setError] = useState<string | null>(null)
-  const writes = useRosterWrites(mode, department, setError)
+  const writes = useRosterWrites(mode, department, selfUserId, {
+    onError: setError,
+    onSelfChanged: (left) => {
+      onClose()
+      if (left) onLeft?.()
+    },
+  })
   const invites = roster.data?.invites ?? []
   const busy = writes.setRole.isPending || writes.remove.isPending
 

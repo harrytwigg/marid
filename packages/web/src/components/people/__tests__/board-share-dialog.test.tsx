@@ -24,6 +24,8 @@ vi.mock("@/routes/auth-provider", () => ({ useAuthOptional: () => null }))
 
 import "@/test/preload-dialogs"
 import { BoardShareDialog, type BoardShareDialogProps } from "../board-share-dialog"
+import { MEMBER_BOARDS_KEY } from "@/hooks/use-principal"
+import { useState } from "react"
 
 const roster: BoardRosterWire = {
   members: [
@@ -143,5 +145,62 @@ describe("BoardShareDialog as a board owner", () => {
     // An owner is above a collaborator's reach entirely.
     expect(screen.queryByLabelText("Role for Me Owner")).toBeNull()
     expect(screen.queryByRole("button", { name: "Remove Me Owner" })).toBeNull()
+  })
+})
+
+describe("BoardShareDialog when the owner changes their own place", () => {
+  /** Mounted the way the Share button mounts it: closing unmounts it. */
+  function Harness({ client, ...props }: Partial<BoardShareDialogProps> & { client: QueryClient }) {
+    const [open, setOpen] = useState(true)
+    return (
+      <QueryClientProvider client={client}>
+        {open && <BoardShareDialog department="design" mode="member" ownRole="owner" selfUserId="usr_me" open {...props} onClose={() => { setOpen(false); props.onClose?.() }} />}
+      </QueryClientProvider>
+    )
+  }
+  function setup(props: Partial<BoardShareDialogProps> = {}) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const invalidate = vi.spyOn(client, "invalidateQueries")
+    const onClose = vi.fn()
+    const onLeft = vi.fn()
+    render(<Harness client={client} onClose={onClose} onLeft={onLeft} {...props} />)
+    const boardsInvalidated = () => invalidate.mock.calls.some(([filters]) => JSON.stringify(filters?.queryKey) === JSON.stringify(MEMBER_BOARDS_KEY))
+    return { onClose, onLeft, boardsInvalidated }
+  }
+
+  it("leaving closes the dialog, re-reads the member's boards and hands the page off, without re-reading the roster it lost", async () => {
+    api.memberRemoveBoardMember.mockResolvedValue(undefined)
+    const { onClose, onLeft, boardsInvalidated } = setup()
+    await screen.findByTestId("share-member-usr_me")
+    fireEvent.click(screen.getByRole("button", { name: "Leave Me Owner" }))
+    fireEvent.click(screen.getByRole("button", { name: "Leave" }))
+    await waitFor(() => expect(onLeft).toHaveBeenCalledTimes(1))
+    expect(onClose).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(boardsInvalidated()).toBe(true))
+    expect(screen.queryByTestId("share-member-usr_me")).toBeNull()
+    expect(api.getMemberBoardRoster).toHaveBeenCalledTimes(1)
+  })
+
+  it("stepping down from owner closes the dialog and re-reads their boards, but does not leave the board", async () => {
+    api.memberSetBoardRole.mockResolvedValue(undefined)
+    const { onClose, onLeft, boardsInvalidated } = setup()
+    await screen.findByTestId("share-member-usr_me")
+    fireEvent.change(screen.getByLabelText("Role for Me Owner"), { target: { value: "collaborator" } })
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+    expect(api.memberSetBoardRole).toHaveBeenCalledWith("design", "usr_me", "collaborator")
+    expect(onLeft).not.toHaveBeenCalled()
+    await waitFor(() => expect(boardsInvalidated()).toBe(true))
+  })
+
+  it("removing someone else keeps the dialog open", async () => {
+    api.memberRemoveBoardMember.mockResolvedValue(undefined)
+    const { onClose, onLeft } = setup()
+    await screen.findByTestId("share-member-usr_c")
+    fireEvent.click(screen.getByRole("button", { name: "Remove Cass Collab" }))
+    fireEvent.click(within(screen.getByTestId("share-member-usr_c")).getByRole("button", { name: "Remove" }))
+    await waitFor(() => expect(api.memberRemoveBoardMember).toHaveBeenCalledWith("design", "usr_c"))
+    await waitFor(() => expect(api.getMemberBoardRoster).toHaveBeenCalledTimes(2))
+    expect(onClose).not.toHaveBeenCalled()
+    expect(onLeft).not.toHaveBeenCalled()
   })
 })

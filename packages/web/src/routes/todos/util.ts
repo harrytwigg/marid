@@ -88,10 +88,11 @@ export const UNASSIGNED_FILTER = "@unassigned"
  *  system employee is never offered: it routes Todos but owns none. */
 export const OPERATOR_ROW: Pick<Employee, "name" | "displayName" | "department"> = { name: OPERATOR_ASSIGNEE, displayName: "You (operator)", department: "" }
 
-/** Resolve a display name for an assignee employee key, falling back to the key. */
-export function displayNameOf(assignee: string | null, byName: Map<string, Employee>): string {
+/** Resolve a display name for an assignee employee key, falling back to the key. `operatorWord` is how the operator
+ *  reads: "You" to the operator, "Operator" to a board member (see `useOperatorWord`). */
+export function displayNameOf(assignee: string | null, byName: Map<string, Employee>, operatorWord = "You"): string {
   if (!assignee) return ""
-  if (assignee === OPERATOR_ASSIGNEE) return "You"
+  if (assignee === OPERATOR_ASSIGNEE) return operatorWord
   return byName.get(assignee)?.displayName ?? assignee
 }
 

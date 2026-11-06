@@ -5,6 +5,7 @@ import { LargeTitleHeader } from "@/components/shell/large-title-header"
 import type { DepartmentSummaryWire } from "@/lib/api"
 import type { BoardId } from "./board-route"
 import { ShareBoardButton } from "@/components/people/share-board-button"
+import { useNavigate } from "react-router-dom"
 import { useAuthOptional } from "@/routes/auth-provider"
 import { useBoardAbilities, useMember } from "@/hooks/use-principal"
 import { ArchivedTag, BoardSwitcher } from "./board-switcher"
@@ -104,9 +105,10 @@ function BoardShare({ department }: { department: DepartmentSummaryWire }) {
   const auth = useAuthOptional()
   const member = useMember()
   const abilities = useBoardAbilities(department.slug)
+  const navigate = useNavigate()
   if (member) {
     return abilities?.canShare
-      ? <ShareBoardButton department={department.slug} mode="member" ownRole={abilities.role ?? undefined} selfUserId={member.user.id} />
+      ? <ShareBoardButton department={department.slug} mode="member" ownRole={abilities.role ?? undefined} selfUserId={member.user.id} onLeft={() => navigate("/", { replace: true })} />
       : null
   }
   return auth?.authState?.accountsEnabled === true ? <ShareBoardButton department={department.slug} mode="operator" /> : null

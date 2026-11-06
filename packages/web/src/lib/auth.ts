@@ -184,6 +184,17 @@ export function isPrincipalResolved(): boolean {
   return principalResolved
 }
 
+/** Who hears that a member's session is over. The auth provider registers itself, so every member read — the shared
+ *  surfaces through the member source and the account calls alike — signs the page out the same way. */
+let memberSessionLost: (() => void) | null = null
+export function setMemberSessionLostHandler(handler: (() => void) | null): void {
+  memberSessionLost = handler
+}
+/** A member route answered 401: the gateway says this session is over (revoked, disabled, expired). */
+export function reportMemberSessionLost(): void {
+  memberSessionLost?.()
+}
+
 export async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
   if (requestSource) return requestSource(input, init)
   const transport = gatewayTransport()

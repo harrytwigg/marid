@@ -24,11 +24,19 @@ beforeEach(() => {
 })
 
 describe("a user: id the directory cannot name", () => {
-  it("is a former member, not a name still on its way, when accounts are off or none exist", () => {
-    auth = { principal: { kind: "operator" }, authState: { accountsEnabled: true, hasAccounts: false } }
+  it("is a former member, not a name still on its way, when accounts are off", () => {
+    auth = { principal: { kind: "operator" }, authState: { accountsEnabled: false } }
     const { result } = renderHook(() => usePeopleDirectory(), { wrapper })
     expect(result.current.resolve("user:gone")).toEqual({ kind: "former" })
     expect(listPeople).not.toHaveBeenCalled()
+  })
+
+  it("is still asked about while accounts are enabled but none existed when the page loaded", async () => {
+    auth = { principal: { kind: "operator" }, authState: { accountsEnabled: true, hasAccounts: false } }
+    listPeople.mockResolvedValue([{ id: "u2", displayName: "Una Two", initials: "UT" }])
+    const { result } = renderHook(() => usePeopleDirectory(), { wrapper })
+    expect(result.current.resolve("user:u2")).toEqual({ kind: "pending" })
+    await waitFor(() => expect(result.current.resolve("user:u2")).toMatchObject({ kind: "member", displayName: "Una Two" }))
   })
 
   it("is a former member once the directory read has failed", async () => {

@@ -1,5 +1,5 @@
-import { useCallback } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useCallback, useEffect, useState } from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { accountsApi, initialsOf, memberIdOf, type MemberEmployeeRefWire, type PersonRefWire } from "@/lib/accounts-api"
 import { useAuthOptional } from "@/routes/auth-provider"
 
@@ -22,6 +22,8 @@ export interface PeopleDirectory {
   resolve: (identity: string | null | undefined) => ResolvedIdentity | null
   employees: MemberEmployeeRefWire[]
   ready: boolean
+  /** When the directory last answered (data or error), 0 before it has. */
+  answeredAt: number
 }
 
 interface DirectoryData {
@@ -29,13 +31,14 @@ interface DirectoryData {
   employees: MemberEmployeeRefWire[]
 }
 
-/** Who a `user:<id>` is. Read only where accounts exist, so an instance without any asks nothing new. */
-/** Whether this session can ask for people at all, and as whom: a member always can, the operator only where accounts exist. */
+/** Whether this session can ask for people at all, and as whom: a member always can, the operator wherever accounts are
+ *  enabled. Not only where some exist: a page opened before the first account would otherwise never ask, and every
+ *  `user:` id that appears after the first invite is accepted would read as a former member until a reload. A surface
+ *  only asks when it shows a `user:` id, so an instance without accounts still asks nothing new. */
 function useDirectoryAccess(): { member: boolean; accounts: boolean } {
   const auth = useAuthOptional()
   const member = auth?.principal?.kind === "member"
-  const state = auth?.authState
-  return { member, accounts: member || (state?.accountsEnabled === true && state.hasAccounts === true) }
+  return { member, accounts: member || auth?.authState?.accountsEnabled === true }
 }
 
 async function loadDirectory(member: boolean): Promise<DirectoryData> {
@@ -54,10 +57,14 @@ function resolveIdentity(people: DirectoryData["people"] | undefined, identity: 
   return { kind: "member", id, displayName: person.displayName, initials: person.initials || initialsOf(person.displayName) }
 }
 
+function directoryKey(member: boolean) {
+  return [...PEOPLE_DIRECTORY_KEY, member ? "member" : "operator"] as const
+}
+
 export function usePeopleDirectory(): PeopleDirectory {
   const { member, accounts } = useDirectoryAccess()
   const query = useQuery<DirectoryData>({
-    queryKey: [...PEOPLE_DIRECTORY_KEY, member ? "member" : "operator"],
+    queryKey: directoryKey(member),
     enabled: accounts,
     staleTime: 60_000,
     queryFn: () => loadDirectory(member),
@@ -65,5 +72,26 @@ export function usePeopleDirectory(): PeopleDirectory {
   const people = query.data?.people
   const settled = !accounts || query.isError
   const resolve = useCallback((identity: string | null | undefined) => resolveIdentity(people, identity, settled), [people, settled])
-  return { resolve, employees: query.data?.employees ?? [], ready: !accounts || query.isSuccess }
+  return {
+    resolve,
+    employees: query.data?.employees ?? [],
+    ready: !accounts || query.isSuccess,
+    answeredAt: Math.max(query.dataUpdatedAt, query.errorUpdatedAt),
+  }
+}
+
+/** Resolve one `user:` id for a surface that shows it. A directory read before this surface appeared may predate the person
+ *  (someone accepted an invite since), so an id it lacks is asked about once more before it is called a former member; the
+ *  answer is pending meanwhile, and every surface asking at once shares the one read. */
+export function useResolvedIdentity(identity: string): ResolvedIdentity {
+  const { member, accounts } = useDirectoryAccess()
+  const directory = usePeopleDirectory()
+  const queryClient = useQueryClient()
+  const [shownAt] = useState(() => Date.now())
+  const resolved = directory.resolve(identity) ?? { kind: "former" as const }
+  const recheck = accounts && resolved.kind === "former" && directory.answeredAt > 0 && directory.answeredAt < shownAt
+  useEffect(() => {
+    if (recheck) void queryClient.refetchQueries({ queryKey: directoryKey(member), exact: true }, { cancelRefetch: false })
+  }, [recheck, queryClient, member])
+  return recheck ? { kind: "pending" } : resolved
 }

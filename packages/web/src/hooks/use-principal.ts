@@ -1,3 +1,4 @@
+import { useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useAuthOptional } from "@/routes/auth-provider"
 import { accountsApi, type BoardRole, type MemberUserWire, type PrincipalWire } from "@/lib/accounts-api"
@@ -16,7 +17,8 @@ export function usePrincipal(): PrincipalWire {
 /** The signed-in board member, or null for the operator and for everything outside a sign-in. */
 export function useMember(): MemberPrincipal | null {
   const principal = usePrincipal()
-  return principal?.kind === "member" ? { user: principal.user, boards: principal.boards } : null
+  // One object per principal, so hooks that depend on it do not recompute every render.
+  return useMemo(() => (principal?.kind === "member" ? { user: principal.user, boards: principal.boards } : null), [principal])
 }
 
 /** What a member may do on one board. The operator has no member role: callers branch on `useMember()` first. */

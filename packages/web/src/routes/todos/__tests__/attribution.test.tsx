@@ -61,8 +61,7 @@ function detailOf(over: Partial<WorkItemDetailWire> & { item?: Partial<WorkItemF
   return { workItem: fullItem(item), spendUsd: 0, events: [], comments: { comments: [], total: 0 }, ...rest } as unknown as WorkItemDetailWire
 }
 
-function wrap(node: React.ReactNode) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+function wrap(node: React.ReactNode, client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return render(<QueryClientProvider client={client}><MemoryRouter>{node}</MemoryRouter></QueryClientProvider>)
 }
 
@@ -209,5 +208,85 @@ describe("an instance without accounts", () => {
     wrap(<BoardCard item={{ id: "TSK-2", title: "t", status: "backlog", assignee: null, department: "platform", source: "human", sourceRef: null, createdBy: "operator", updatedAt: "2026-07-20T08:00:00.000Z" } as WorkItemCompactWire} byName={new Map()} expanded={false} onToggleTree={() => {}} onOpen={() => {}} onOpenChild={() => {}} onAddSubTask={() => {}} />)
     expect(directory.listPeople).not.toHaveBeenCalled()
     expect(directory.getMemberPeople).not.toHaveBeenCalled()
+  })
+})
+
+describe("in a board member's view", () => {
+  const MIA = { id: "mia1", displayName: "Mia Member", initials: "MM" }
+  beforeEach(() => {
+    auth.value = {
+      principal: { kind: "member", user: { id: "mia1", email: "m@example.test", displayName: "Mia Member" }, boards: [{ department: "platform", role: "collaborator" }] },
+      authState: { accountsEnabled: true, hasAccounts: true },
+    }
+    directory.getMemberPeople.mockResolvedValue({ people: [ADA, MIA], employees: [] })
+  })
+
+  it("names the operator's comments and audit lines Operator, never You, beside the member's own name", async () => {
+    renderActivity(detailOf({
+      events: [event("wie_s", "status_change", "2026-07-20T08:30:00.000Z", { actor: "operator", fromStatus: "backlog", toStatus: "executing" })],
+      comments: {
+        comments: [
+          comment("wic_o", "Operator says hi", "2026-07-20T09:00:00.000Z", { authorKind: "operator", author: "operator" }),
+          comment("wic_m", "mine", "2026-07-20T09:01:00.000Z", { authorKind: "member", author: "user:mia1" }),
+        ],
+        total: 2,
+      },
+    }))
+    await waitFor(() => expect(screen.getByTestId("activity-comment-wic_m").textContent).toContain("Mia Member"))
+    expect(screen.getByTestId("activity-comment-wic_o").textContent).toContain("Operator")
+    expect(screen.getByTestId("activity-comment-wic_o").textContent).not.toContain("You")
+    expect(screen.getByTestId("whisper-wie_s").textContent).toContain("Operator")
+    expect(screen.getByTestId("whisper-wie_s").textContent).not.toContain("You")
+  })
+
+  it("names the operator as the Todo's creator and assignee Operator", () => {
+    wrap(<PropsRail detail={detailOf({ item: { assignee: "@operator" } })} byName={new Map()} departments={[]} />)
+    expect(screen.getByTestId("rail-created-by").textContent).toContain("Operator")
+    expect(screen.getByTestId("rail-created-by").textContent).not.toContain("You")
+    expect(screen.getByTestId("rail-assignee").textContent).toContain("Operator")
+    expect(screen.getByTestId("rail-assignee").textContent).not.toContain("You")
+  })
+})
+
+describe("a person who joined after the operator's page loaded", () => {
+  const NIA = { id: "nia1", displayName: "Nia New", initials: "NN", email: "n@example.test", instanceRole: "member", status: "active", boards: [] }
+  const withComment = (author: string) =>
+    detailOf({ comments: { comments: [comment("wic_n", "hello", "2026-07-20T09:00:00.000Z", { authorKind: "member", author })], total: 1 } })
+  const byName = new Map([["mason", { name: "mason", displayName: "Mason" } as never]])
+
+  it("is named once an account exists, even though the page loaded when there were none", async () => {
+    auth.value = { principal: { kind: "operator" }, authState: { accountsEnabled: true, hasAccounts: false } }
+    directory.listPeople.mockResolvedValue([NIA])
+    renderActivity(withComment("user:nia1"))
+    await waitFor(() => expect(screen.getByTestId("activity-comment-wic_n").textContent).toContain("Nia New"))
+  })
+
+  it("asks the directory again rather than calling a newcomer a former member", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    // Read before the invite was accepted: nobody yet.
+    client.setQueryData(["people-directory", "operator"], { people: [], employees: [] }, { updatedAt: Date.now() - 5_000 })
+    directory.listPeople.mockResolvedValue([NIA])
+    wrap(<ActivitySection detail={withComment("user:nia1")} byName={byName} mobile={false} announce={vi.fn()} />, client)
+    const block = screen.getByTestId("activity-comment-wic_n")
+    expect(block.textContent).not.toContain("Former member")
+    await waitFor(() => expect(block.textContent).toContain("Nia New"))
+    expect(directory.listPeople).toHaveBeenCalledTimes(1)
+  })
+
+  it("is a former member when the fresh read does not know them either", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client.setQueryData(["people-directory", "operator"], { people: [], employees: [] }, { updatedAt: Date.now() - 5_000 })
+    directory.listPeople.mockResolvedValue([])
+    wrap(<ActivitySection detail={withComment("user:gone9")} byName={byName} mobile={false} announce={vi.fn()} />, client)
+    await waitFor(() => expect(screen.getByTestId("activity-comment-wic_n").textContent).toContain("Former member"))
+    expect(directory.listPeople).toHaveBeenCalledTimes(1)
+  })
+
+  it("is a former member when the fresh read fails", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client.setQueryData(["people-directory", "operator"], { people: [], employees: [] }, { updatedAt: Date.now() - 5_000 })
+    directory.listPeople.mockRejectedValue(new Error("down"))
+    wrap(<ActivitySection detail={withComment("user:nia1")} byName={byName} mobile={false} announce={vi.fn()} />, client)
+    await waitFor(() => expect(screen.getByTestId("activity-comment-wic_n").textContent).toContain("Former member"))
   })
 })

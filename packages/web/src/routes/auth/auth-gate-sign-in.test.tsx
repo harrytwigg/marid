@@ -13,6 +13,8 @@ vi.mock("@/lib/auth", () => ({
   unpairDevice: vi.fn(),
   takeWorkspacePairingCode: vi.fn(),
   setRequestSource: vi.fn(),
+  setMemberSessionLostHandler: vi.fn(),
+  reportMemberSessionLost: vi.fn(),
 }))
 
 import { AuthGate, AuthProvider } from "../auth-provider"

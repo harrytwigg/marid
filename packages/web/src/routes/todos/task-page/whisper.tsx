@@ -2,7 +2,7 @@ import { ChevronRight, CornerDownRight, Flag, Link2, Paperclip, Pencil, Plus, Ro
 import type { Employee, WorkItemEventWire } from "@/lib/api"
 import { STATUS_LABEL } from "@/lib/todos"
 import { displayNameOf, formatRelativeTime, OPERATOR_ASSIGNEE } from "../util"
-import { EventActor } from "../attribution"
+import { EventActor, useOperatorWord } from "../attribution"
 
 /* One audit event read back as a sentence: who did it, and what it was. The
  * feed that orders these lines lives in activity.tsx. */
@@ -90,16 +90,15 @@ export function whisperOf(event: WorkItemEventWire): Whisper {
   return typeof rule === "function" ? rule(event.detail ?? {}, event) : rule
 }
 
-function actorLabel(actor: string | null, byName: Map<string, Employee>): string {
+function actorLabel(actor: string | null, byName: Map<string, Employee>, operatorWord: string): string {
   if (!actor || actor === "system") return "The gateway"
-  if (actor === "operator") return "You"
-  return displayNameOf(actor, byName)
+  if (actor === "operator") return operatorWord
+  return displayNameOf(actor, byName, operatorWord)
 }
-
-
 
 export function WhisperLine({ event, byName }: { event: WorkItemEventWire; byName: Map<string, Employee> }) {
   const whisper = whisperOf(event)
+  const operatorWord = useOperatorWord()
   return (
     <div className="flex items-center gap-2 py-[7px] text-[12.5px] text-[var(--text-tertiary)]" data-testid={`whisper-${event.id}`}>
       <span className="mr-1.5 grid w-4 flex-none place-items-center text-[var(--text-quaternary)]">
@@ -107,7 +106,7 @@ export function WhisperLine({ event, byName }: { event: WorkItemEventWire; byNam
       </span>
       <span className="min-w-0 truncate">
         <span className={`font-semibold ${whisper.tinted ? "text-[var(--system-red)]" : "text-[var(--text-secondary)]"}`}>
-          <EventActor actor={event.actor} byName={byName}>{actorLabel(event.actor, byName)}</EventActor>
+          <EventActor actor={event.actor} byName={byName}>{actorLabel(event.actor, byName, operatorWord)}</EventActor>
         </span>{" "}
         {whisper.text}
       </span>

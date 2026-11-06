@@ -2,9 +2,10 @@ import type { ReactNode } from "react"
 import type { Employee, WorkItemCommentWire, WorkItemEventWire } from "@/lib/api"
 import { memberIdOf } from "@/lib/accounts-api"
 import { commentAuthorLabel } from "@/lib/todos"
+import { useMember } from "@/hooks/use-principal"
 import { EmployeeAvatar, OPERATOR_DEFAULT_EMOJI } from "@/components/ui/employee-avatar"
 import { HumanAvatar } from "@/components/ui/human-avatar"
-import { identityLabel, usePeopleDirectory, type ResolvedIdentity } from "@/hooks/use-people-directory"
+import { identityLabel, useResolvedIdentity } from "@/hooks/use-people-directory"
 import { displayNameOf } from "./util"
 import { SessionActor } from "./task-page/session-ref"
 
@@ -12,6 +13,12 @@ import { SessionActor } from "./task-page/session-ref"
  * comments, events and `createdBy`; they render as a HumanAvatar and their display name, never as
  * the operator or a system actor. The directory is read only inside the member components below,
  * so a surface with no member on it (every surface of an instance without accounts) never asks. */
+
+/** How the operator is named on a Todo. The operator reads their own hand as "You"; a board member reading the same
+ *  comment, audit line or creator reads "Operator", never "You". */
+export function useOperatorWord(): string {
+  return useMember() ? commentAuthorLabel("operator", "operator") : "You"
+}
 
 export function isMemberIdentity(identity: string | null | undefined): boolean {
   return memberIdOf(identity) !== null
@@ -21,14 +28,10 @@ export function isMemberComment(comment: Pick<WorkItemCommentWire, "authorKind" 
   return comment.authorKind === "member" || isMemberIdentity(comment.author)
 }
 
-function useResolved(identity: string): ResolvedIdentity {
-  return usePeopleDirectory().resolve(identity) ?? { kind: "former" }
-}
-
 /** The person's badge. While the directory has not answered it is an empty badge of the same size:
  *  a guess would flash a wrong name, and the layout should not move when the answer lands. */
 export function MemberAvatar({ identity, size = 18 }: { identity: string; size?: number }) {
-  const resolved = useResolved(identity)
+  const resolved = useResolvedIdentity(identity)
   if (resolved.kind === "pending") {
     return (
       <span
@@ -45,7 +48,7 @@ export function MemberAvatar({ identity, size = 18 }: { identity: string; size?:
 }
 
 export function MemberName({ identity }: { identity: string }) {
-  return <>{identityLabel(useResolved(identity))}</>
+  return <>{identityLabel(useResolvedIdentity(identity))}</>
 }
 
 /** Avatar then name, the one-line form for a creator or a toucher. */
@@ -74,7 +77,8 @@ export function CommentAvatar({ comment }: { comment: WorkItemCommentWire }) {
 }
 
 export function CommentAuthor({ comment, byName }: { comment: WorkItemCommentWire; byName: Map<string, Employee> }) {
-  if (comment.authorKind === "operator") return <>You</>
+  const operatorWord = useOperatorWord()
+  if (comment.authorKind === "operator") return <>{operatorWord}</>
   if (isMemberComment(comment)) return <MemberName identity={comment.author} />
   const label = comment.authorKind === "employee" ? displayNameOf(comment.author, byName) : commentAuthorLabel(comment.author, comment.authorKind)
   return <SessionActor actor={comment.author} byName={byName}>{label}</SessionActor>

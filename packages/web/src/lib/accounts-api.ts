@@ -4,6 +4,7 @@
 // here is named on the type, so the gateway side can match it or say where it differs.
 
 import { gatewayTransport } from "./gateway-transport"
+import { isMemberSession, reportMemberSessionLost } from "./auth"
 
 export type BoardRole = "viewer" | "collaborator" | "owner"
 export type InstanceRole = "member" | "owner"
@@ -181,6 +182,9 @@ async function send<T>(method: string, path: string, body?: unknown): Promise<T>
     method,
     ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   })
+  // A member's account calls go to the gateway directly, not through the member source; a 401 here ends the session
+  // the same way. Sign-in, invite and reset pages answer 401 for a wrong password or token, so only member routes count.
+  if (res.status === 401 && isMemberSession() && path.startsWith("/api/member/")) reportMemberSessionLost()
   if (!res.ok) throw await failure(res)
   if (res.status === 204) return undefined as T
   const text = await res.text()
