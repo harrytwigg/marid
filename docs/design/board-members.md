@@ -413,3 +413,7 @@ Settled while building the web against this contract; the gateway answers exactl
   detail `{ workItem, spendUsd, events, comments }`. For members every cost figure is `null`
   (`spendUsd` at each level, spend inside `totals`) and every session or run field is removed.
   Members never see spend.
+- Actors on member reads and member socket frames are only ever an employee name, a
+  `user:<id>` on the member's boards, `operator`, or a generic `agent` / `system` with no
+  identifier. `session:<uuid>`, `plugin:<id>`, cron and other internal ids are never sent to a
+  member. Error messages to members never enumerate company data (labels, boards, people).
