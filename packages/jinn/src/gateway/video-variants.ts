@@ -8,7 +8,13 @@ import { logger } from "../shared/logger.js";
 type VariantKind = "low" | "poster";
 type ProcessResult = "ok" | "unavailable" | "failed";
 
-const inFlight = new Map<string, Promise<string | null>>();
+/** One variant being made, with every request that is still waiting on it. */
+interface InFlight {
+  promise: Promise<string | null>;
+  wants: Array<() => boolean>;
+}
+
+const inFlight = new Map<string, InFlight>();
 const failed = new Set<string>();
 const pending: Array<() => void> = [];
 let active = 0;
@@ -43,9 +49,19 @@ async function ffmpegAvailable(): Promise<boolean> {
   return availability;
 }
 
-function runLimited<T>(task: () => Promise<T>): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
+/**
+ * Run `task` when a slot is free. `wanted` is asked again at that moment: a
+ * task that sat in the queue while every client waiting on it left is not run
+ * and resolves to "skipped".
+ */
+function runLimited(task: () => Promise<ProcessResult>, wanted: () => boolean): Promise<ProcessResult | "skipped"> {
+  return new Promise<ProcessResult | "skipped">((resolve, reject) => {
     const start = () => {
+      if (!wanted()) {
+        resolve("skipped");
+        pending.shift()?.();
+        return;
+      }
       active += 1;
       void task().then(resolve, reject).finally(() => {
         active -= 1;
@@ -77,7 +93,12 @@ function ffmpegArgs(kind: VariantKind, source: string, destination: string): str
   ];
 }
 
-async function generateVariant(source: string, key: string, kind: VariantKind): Promise<string | null> {
+async function generateVariant(
+  source: string,
+  key: string,
+  kind: VariantKind,
+  wanted: () => boolean,
+): Promise<string | null> {
   const destination = variantPath(key, kind);
   if (fs.existsSync(destination)) return destination;
   if (failed.has(destination)) return null;
@@ -86,7 +107,12 @@ async function generateVariant(source: string, key: string, kind: VariantKind): 
   fs.mkdirSync(path.dirname(destination), { recursive: true });
   const extension = kind === "low" ? ".mp4" : ".jpg";
   const temporary = path.join(path.dirname(destination), `${crypto.randomUUID()}.tmp${extension}`);
-  const result = await runLimited(() => runProcess(ffmpegArgs(kind, source, temporary)));
+  const result = await runLimited(() => runProcess(ffmpegArgs(kind, source, temporary)), wanted);
+  if (result === "skipped") {
+    // Nobody is waiting any more; not a failure, so a later request may try.
+    fs.rmSync(temporary, { force: true });
+    return null;
+  }
   if (result === "ok" && fs.existsSync(temporary)) {
     fs.renameSync(temporary, destination);
     return destination;
@@ -98,30 +124,55 @@ async function generateVariant(source: string, key: string, kind: VariantKind): 
   return null;
 }
 
-function requestVariant(source: string, key: string, kind: VariantKind): Promise<string | null> {
+function requestVariant(
+  source: string,
+  key: string,
+  kind: VariantKind,
+  wanted: () => boolean,
+): Promise<string | null> {
   const destination = variantPath(key, kind);
   if (fs.existsSync(destination)) return Promise.resolve(destination);
   if (failed.has(destination)) return Promise.resolve(null);
   const existing = inFlight.get(destination);
-  if (existing) return existing;
-  const task = generateVariant(source, key, kind)
+  if (existing) {
+    existing.wants.push(wanted);
+    return existing.promise;
+  }
+  const wants = [wanted];
+  const entry: InFlight = { wants, promise: Promise.resolve(null) };
+  const stillWanted = () => {
+    if (wants.some((want) => want())) return true;
+    // Drop the entry now, so a request arriving next starts its own task
+    // instead of sharing one that is not going to run.
+    if (inFlight.get(destination) === entry) inFlight.delete(destination);
+    return false;
+  };
+  entry.promise = generateVariant(source, key, kind, stillWanted)
     .catch((error) => {
       failed.add(destination);
       logger.warn(`Could not generate a video ${kind}: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     })
-    .finally(() => inFlight.delete(destination));
-  inFlight.set(destination, task);
-  return task;
+    .finally(() => {
+      if (inFlight.get(destination) === entry) inFlight.delete(destination);
+    });
+  inFlight.set(destination, entry);
+  return entry.promise;
 }
 
 export function ensureLowVariant(source: string, key: string): string | null {
   const destination = variantPath(key, "low");
   if (fs.existsSync(destination)) return destination;
-  if (!failed.has(destination)) void requestVariant(source, key, "low");
+  // Background warm-up for a later request: no client waits on this one, so it is always wanted.
+  if (!failed.has(destination)) void requestVariant(source, key, "low", () => true);
   return null;
 }
 
-export async function ensurePoster(source: string, key: string): Promise<string | null> {
-  return requestVariant(source, key, "poster");
+export async function ensurePoster(
+  source: string,
+  key: string,
+  /** False once the caller no longer needs the result (its client left). */
+  wanted: () => boolean = () => true,
+): Promise<string | null> {
+  return requestVariant(source, key, "poster", wanted);
 }

@@ -66,6 +66,52 @@ describe("video variants", () => {
     expect(invocations).toHaveLength(2); // one availability probe, one transcode
   });
 
+  it("skips a queued poster whose client left, keeps one another client still wants, and does not mark it failed", async () => {
+    const { source } = sourceFixture();
+    const transcodes: string[] = [];
+    const held: Array<() => void> = [];
+    let hold = true;
+    spawnMock.mockImplementation((_command: string, args: string[]) => {
+      const child = new EventEmitter();
+      queueMicrotask(() => {
+        if (args[0] === "-version") return void child.emit("exit", 0);
+        transcodes.push(args.at(-1)!);
+        const finish = () => {
+          fs.writeFileSync(args.at(-1)!, "variant");
+          child.emit("exit", 0);
+        };
+        if (hold) held.push(finish);
+        else finish();
+      });
+      return child;
+    });
+    const variants = await loadVariants();
+
+    // Two transcodes fill both slots; the next two wait in the queue.
+    let gone = false;
+    const requests = [
+      variants.ensureLowVariant(source, "slot-one"),
+      variants.ensureLowVariant(source, "slot-two"),
+      variants.ensurePoster(source, "left-while-queued", () => !gone),
+      variants.ensurePoster(source, "shared", () => !gone),
+      variants.ensurePoster(source, "shared"),
+    ];
+    await vi.waitFor(() => expect(held).toHaveLength(2));
+    gone = true;
+    hold = false;
+    for (const finish of held) finish();
+    const posters = await Promise.all(requests.slice(2));
+
+    expect(posters[0]).toBeNull();
+    expect(posters[1]).toMatch(/poster\.jpg$/);
+    expect(posters[2]).toBe(posters[1]);
+    // Two slots plus the shared poster; the abandoned one never reached ffmpeg.
+    expect(transcodes).toHaveLength(3);
+
+    await expect(variants.ensurePoster(source, "left-while-queued")).resolves.toMatch(/poster\.jpg$/);
+    expect(transcodes).toHaveLength(4);
+  });
+
   it("memoises a failed transcode instead of retry-looping", async () => {
     const { source, root } = sourceFixture();
     const log = installFakeFfmpeg(root, "fail");

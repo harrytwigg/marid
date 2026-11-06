@@ -3124,7 +3124,7 @@ export async function handleApiRequest(
       // A reader who already left (a thumbnail it scrolled past) gets no
       // sharp/ffmpeg work done on its behalf.
       if (clientGone(res)) return;
-      const selected = await selectAttachmentVariant(attachment, reqUrl.searchParams, download);
+      const selected = await selectAttachmentVariant(attachment, reqUrl.searchParams, download, () => !clientGone(res));
       if (!selected) return notFound(res);
       const etag = `"${attachment.sha256}-${selected.variant}-${selected.size}"`;
       if (!selected.isFallback && isFileNotModified(req.headers, etag, Number.NaN))

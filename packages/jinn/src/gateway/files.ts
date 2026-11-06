@@ -1214,7 +1214,7 @@ export async function handleFilesRequest(
       // No poster or low-variant generation for a client that already left.
       if (clientGone(res)) return true;
       if (query.get("poster") === "1") {
-        const poster = await ensurePoster(filePath, key);
+        const poster = await ensurePoster(filePath, key, () => !clientGone(res));
         if (!poster) { notFound(res); return true; }
         selectedPath = poster;
         selectedMime = "image/jpeg";
