@@ -191,7 +191,7 @@ export function useBoardMenuCounts(departments: DepartmentSummaryWire[] | undefi
     enabled: enabled && departments !== undefined,
     ...TODO_QUERY_FRESHNESS,
     queryFn: async (): Promise<{ everything: number; byDepartment: Record<string, number> }> => {
-      const openOf = (totals: Partial<Record<WorkItemStatusWire, number | null>> | undefined): number =>
+      const openOf = (totals: Partial<Record<WorkItemStatusWire, number>> | undefined): number =>
         OPEN_STATUSES.reduce((sum, s) => sum + (totals?.[s] ?? 0), 0)
       const [everything, ...perDept] = await Promise.all([
         api.listWorkItems({ rootsOnly: true, limit: 1 }),

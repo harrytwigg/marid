@@ -97,16 +97,29 @@ function useAcceptForm(submit: Submit) {
   return { displayName, setDisplayName, password, setPassword, confirm, setConfirm, busy, accept, message: failure ?? (attempted ? problem : null) }
 }
 
+const NOTE = "mb-[var(--space-3)] px-[var(--space-4)] text-pretty text-[length:var(--text-footnote)] text-[var(--text-secondary)]"
+
+/** What accepting makes them: a role on the board, or, for an instance owner invite, a co-operator (said before they accept). */
+function InviteRoleNote({ info }: { info: InviteInspectWire }) {
+  if (info.boardName && info.role) {
+    return <p className={NOTE}>You'll join as <strong>{BOARD_ROLE_LABEL[info.role]}</strong>. {BOARD_ROLE_HINT[info.role]}</p>
+  }
+  if (!info.boardName && info.instanceRole === "owner") {
+    return (
+      <p data-testid="invite-co-operator" className={NOTE}>
+        You'll join as a <strong>co-operator</strong>. You can see and run everything here, as the operator does.
+      </p>
+    )
+  }
+  return null
+}
+
 function InviteForm({ info, submit }: { info: InviteInspectWire; submit: Submit }) {
   const form = useAcceptForm(submit)
   const errorId = "jinn-invite-error"
   return (
     <AccountPageFrame title={headline(info)} subtitle={info.invitedBy ? `Invited by ${info.invitedBy}` : undefined}>
-      {info.boardName && info.role && (
-        <p className="mb-[var(--space-3)] px-[var(--space-4)] text-pretty text-[length:var(--text-footnote)] text-[var(--text-secondary)]">
-          You'll join as <strong>{BOARD_ROLE_LABEL[info.role]}</strong>. {BOARD_ROLE_HINT[info.role]}
-        </p>
-      )}
+      <InviteRoleNote info={info} />
       <form onSubmit={form.accept} aria-label="Accept invite" noValidate className="flex flex-col gap-[var(--space-3)] rounded-[var(--radius-lg)] bg-[var(--fill-quaternary)] p-[var(--space-4)]">
         <AccountField id="jinn-invite-email" label="Email" type="email" value={info.email} readOnly autoComplete="username" />
         <AccountField

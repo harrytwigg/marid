@@ -21,10 +21,10 @@ vi.mock("@/components/people/share-board-button", () => ({
   ShareBoardButton: ({ mode, ownRole }: { mode: string; ownRole?: string }) => <button data-testid="board-share">{mode}:{ownRole ?? ""}</button>,
 }))
 
-// A tree as the contract pins it for a member: every cost figure is null, and so may a total be.
+// A tree as the contract pins it for a member: every cost figure is null; the status counts are numbers for everyone.
 function treeFor(id: string) {
   const none = principal.kind === "member" || nullCost
-  return { root: { id, children: [], status: "backlog" }, totals: none ? { backlog: null } : {}, spendUsd: none ? null : 0 }
+  return { root: { id, children: [], status: "backlog" }, totals: { backlog: 1 }, spendUsd: none ? null : 0 }
 }
 
 const createWorkItem = vi.fn()
@@ -128,7 +128,7 @@ describe("the board for a member", () => {
     expect(screen.getByTestId("board-quick-add-backlog")).toBeTruthy()
   })
 
-  it("shows no cost, and does not fall over, when a tree reports none (null spend and a null total)", async () => {
+  it("shows no cost, and does not fall over, when a tree reports none (null spend)", async () => {
     principal = { kind: "operator" }
     nullCost = true
     renderBoard()

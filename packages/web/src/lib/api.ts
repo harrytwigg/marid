@@ -428,7 +428,7 @@ export interface WorkItemCompactWire extends TodoStopCauseWire {
 export interface WorkItemListWire {
   workItems: WorkItemCompactWire[]
   total?: number
-  totals?: Partial<Record<WorkItemStatusWire, number | null>>
+  totals?: Partial<Record<WorkItemStatusWire, number>>
   limit?: number
   offset?: number
   nextOffset?: number | null
@@ -495,11 +495,11 @@ export interface WorkItemTreeNodeWire extends WorkItemFullWire {
   children: WorkItemTreeNodeWire[]
 }
 
-/** The tree payload: subtree + per-status totals + derived subtree spend. For a board member every cost figure is
- *  null (and a total may be), so readers treat null as "nothing to show", not as zero spent. */
+/** The tree payload: subtree + per-status counts + derived subtree spend. The counts are numbers for everyone; for a
+ *  board member every cost figure is null, so readers treat a null spend as "nothing to show", not as zero spent. */
 export interface WorkItemTreeWire {
   root: WorkItemTreeNodeWire
-  totals: Partial<Record<WorkItemStatusWire, number | null>>
+  totals: Partial<Record<WorkItemStatusWire, number>>
   spendUsd: number | null
 }
 

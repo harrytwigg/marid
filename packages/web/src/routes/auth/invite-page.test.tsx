@@ -72,6 +72,22 @@ describe("InvitePage", () => {
     replace.mockRestore()
   })
 
+  it("says plainly that an instance owner invite makes them a co-operator", async () => {
+    await renderReady({ email: "new@example.test", boardName: null, role: null, instanceRole: "owner", invitedBy: "Alex" })
+    expect(screen.getByRole("heading", { name: /You're invited to/ })).toBeTruthy()
+    expect(screen.getByTestId("invite-co-operator").textContent).toContain("co-operator")
+  })
+
+  it("says nothing of co-operators for an instance member invite", async () => {
+    await renderReady({ email: "new@example.test", boardName: null, role: null, instanceRole: "member", invitedBy: "Alex" })
+    expect(screen.queryByTestId("invite-co-operator")).toBeNull()
+  })
+
+  it("says nothing of co-operators for a board invite", async () => {
+    await renderReady()
+    expect(screen.queryByTestId("invite-co-operator")).toBeNull()
+  })
+
   it("says who invited them, to which board and as what", async () => {
     await renderReady()
     expect(screen.getByRole("heading", { name: "You're invited to Design" })).toBeTruthy()
