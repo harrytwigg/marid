@@ -83,7 +83,7 @@ function useAcceptForm(submit: Submit) {
       return
     }
     // A full load, so the app reads who it is from the gateway afresh and the member shell takes over.
-    gatewayTransport().navigate(`${window.location.origin}/`)
+    gatewayTransport().navigate(gatewayTransport().httpUrl("/"))
   }
 
   return { displayName, setDisplayName, password, setPassword, confirm, setConfirm, busy, accept, message: failure ?? (attempted ? problem : null) }

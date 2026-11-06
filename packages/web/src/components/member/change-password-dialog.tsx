@@ -11,13 +11,12 @@ function failureText(error: unknown): string {
   return error instanceof Error ? error.message : "The password could not be changed."
 }
 
-export function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
+function PasswordForm({ onDone, onClose }: { onDone: () => void; onClose: () => void }) {
   const [current, setCurrent] = useState("")
   const [next, setNext] = useState("")
   const [again, setAgain] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [done, setDone] = useState(false)
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -27,7 +26,7 @@ export function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
     setError(null)
     try {
       await accountsApi.changeMemberPassword(current, next)
-      setDone(true)
+      onDone()
     } catch (err) {
       setError(failureText(err))
     } finally {
@@ -36,15 +35,6 @@ export function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Dialog open onOpenChange={(value) => { if (!value) onClose() }}>
-      <DialogContent className="max-w-[400px] border-0" overlayClassName="bg-[var(--scrim)]" showCloseButton={false}>
-        <DialogTitle>Change password</DialogTitle>
-        {done ? (
-          <>
-            <DialogDescription data-testid="password-changed">Your password is changed. Your other sessions were signed out.</DialogDescription>
-            <div className="mt-4 flex justify-end"><button type="button" autoFocus onClick={onClose} className={DIALOG_ACTION_CLASS}>Done</button></div>
-          </>
-        ) : (
           <form onSubmit={(event) => void submit(event)} className="mt-2 flex flex-col gap-3">
             <DialogDescription>Changing it signs out every other session of yours.</DialogDescription>
             <label className="flex flex-col gap-1 text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">
@@ -65,6 +55,22 @@ export function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
               <button type="submit" disabled={busy || !current || !next} className={DIALOG_ACTION_CLASS}>{busy ? "Saving…" : "Change password"}</button>
             </div>
           </form>
+  )
+}
+
+export function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
+  const [done, setDone] = useState(false)
+  return (
+    <Dialog open onOpenChange={(value) => { if (!value) onClose() }}>
+      <DialogContent className="max-w-[400px] border-0" overlayClassName="bg-[var(--scrim)]" showCloseButton={false}>
+        <DialogTitle>Change password</DialogTitle>
+        {done ? (
+          <>
+            <DialogDescription data-testid="password-changed">Your password is changed. Your other sessions were signed out.</DialogDescription>
+            <div className="mt-4 flex justify-end"><button type="button" autoFocus onClick={onClose} className={DIALOG_ACTION_CLASS}>Done</button></div>
+          </>
+        ) : (
+          <PasswordForm onDone={() => setDone(true)} onClose={onClose} />
         )}
       </DialogContent>
     </Dialog>

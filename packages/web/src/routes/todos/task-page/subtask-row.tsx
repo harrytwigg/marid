@@ -41,30 +41,14 @@ export function SubTaskRow({ child, employees, mobile, picking, onPick, onOpenCh
   const closed = child.status === "done" || child.status === "cancelled"
   const kids = (child.children ?? []).length
   const picker = { child, onClose: () => onPick(null), ...write }
-  const { operatorControls, close } = useTodoCapabilities()
-  // A member's only moves on a sub-task are done and back to to-do, one tap, with no picker.
-  const memberToggle = !operatorControls && close && (child.status === "backlog" || child.status === "done")
-    ? () => write.onChildStatus(child.id, child.status === "backlog" ? "done" : "backlog")
-    : undefined
-  const onStatus = operatorControls ? () => onPick(picking === "status" ? null : "status") : memberToggle
+  const { operatorControls } = useTodoCapabilities()
+  const onStatus = useStatusAction(child, picking, onPick, write.onChildStatus)
 
   return (
     <div data-testid={`subtask-row-${child.id}`} className={`${ROW} hover:bg-[var(--fill-quaternary)]`}>
       {/* The disc IS a control: halo on hover, opens that child's
           legal-states popover. */}
-      {onStatus ? (
-        <button
-          type="button"
-          aria-label={operatorControls ? `Change status of ${child.id} (${STATUS_LABEL[child.status]})` : `${child.status === "done" ? "Reopen" : "Mark done"} ${child.id}`}
-          data-testid={`subtask-status-${child.id}`}
-          onClick={onStatus}
-          className="focus-outline mr-[5px] flex-none rounded-full outline-none transition-shadow duration-120 group-hover/sub:shadow-[0_0_0_3px_var(--fill-secondary)]"
-        >
-          <StateCircle keyOf={stateKeyOf(child.status)} size={16} />
-        </button>
-      ) : (
-        <span className="mr-[5px] flex-none" title={STATUS_LABEL[child.status]}><StateCircle keyOf={stateKeyOf(child.status)} size={16} /></span>
-      )}
+      <StatusDisc child={child} onStatus={onStatus} />
       <span
         className="flex-none text-[11px] text-[var(--text-quaternary)]"
         style={{ fontFamily: "var(--font-code)", letterSpacing: ".04em" }}
@@ -92,6 +76,39 @@ export function SubTaskRow({ child, employees, mobile, picking, onPick, onOpenCh
       {picking === "status" && <StatusPicker {...picker} employees={employees} />}
       {picking === "assign" && <AssignPicker {...picker} employees={employees} />}
     </div>
+  )
+}
+
+/** What a tap on the status disc does: the operator opens the legal-states picker; a member, who has only
+ *  done and back to to-do, flips between them in one tap; anyone else gets no action at all. */
+function useStatusAction(
+  child: WorkItemTreeNodeWire,
+  picking: PickerKind | null,
+  onPick: (kind: PickerKind | null) => void,
+  onChildStatus: PickerProps["onChildStatus"],
+): { run: () => void; label: string } | undefined {
+  const { operatorControls, close } = useTodoCapabilities()
+  if (operatorControls) {
+    return { run: () => onPick(picking === "status" ? null : "status"), label: `Change status of ${child.id} (${STATUS_LABEL[child.status]})` }
+  }
+  if (!close || (child.status !== "backlog" && child.status !== "done")) return undefined
+  const reopening = child.status === "done"
+  return { run: () => onChildStatus(child.id, reopening ? "backlog" : "done"), label: `${reopening ? "Reopen" : "Mark done"} ${child.id}` }
+}
+
+function StatusDisc({ child, onStatus }: { child: WorkItemTreeNodeWire; onStatus: { run: () => void; label: string } | undefined }) {
+  const disc = <StateCircle keyOf={stateKeyOf(child.status)} size={16} />
+  if (!onStatus) return <span className="mr-[5px] flex-none" title={STATUS_LABEL[child.status]}>{disc}</span>
+  return (
+    <button
+      type="button"
+      aria-label={onStatus.label}
+      data-testid={`subtask-status-${child.id}`}
+      onClick={onStatus.run}
+      className="focus-outline mr-[5px] flex-none rounded-full outline-none transition-shadow duration-120 group-hover/sub:shadow-[0_0_0_3px_var(--fill-secondary)]"
+    >
+      {disc}
+    </button>
   )
 }
 

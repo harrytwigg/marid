@@ -98,23 +98,30 @@ function BoardSubtitle({
   )
 }
 
-export function BoardHeader({ board, title, departments, deptPrefix, onQuickCapture, ...counts }: BoardHeaderProps) {
-  const department = boardDepartment(board, departments)
-  // Sharing needs accounts, which exist only where gateway auth is on. A member who owns the board gets the same button in member mode.
+/** Who may share this board and in which mode. Sharing needs accounts, which exist only where gateway auth is on;
+ *  the operator shares as the operator, and a member who owns the board shares in member mode. */
+function BoardShare({ department }: { department: DepartmentSummaryWire }) {
   const auth = useAuthOptional()
   const member = useMember()
-  const abilities = useBoardAbilities(department?.slug)
-  const canShare = department !== undefined && auth?.authState?.accountsEnabled === true && !member
+  const abilities = useBoardAbilities(department.slug)
+  if (member) {
+    return abilities?.canShare
+      ? <ShareBoardButton department={department.slug} mode="member" ownRole={abilities.role ?? undefined} selfUserId={member.user.id} />
+      : null
+  }
+  return auth?.authState?.accountsEnabled === true ? <ShareBoardButton department={department.slug} mode="operator" /> : null
+}
+
+export function BoardHeader({ board, title, departments, deptPrefix, onQuickCapture, ...counts }: BoardHeaderProps) {
+  const department = boardDepartment(board, departments)
+  const member = useMember()
   return (
     <LargeTitleHeader
       title={<BoardSwitcher board={board} title={title} departments={departments} attentionCount={counts.attentionCount} />}
       subtitle={<BoardSubtitle deptPrefix={deptPrefix} archived={department?.archived === true} {...counts} />}
       trailing={
         <div className="flex items-center gap-2">
-          {department && canShare && <ShareBoardButton department={department.slug} mode="operator" />}
-          {department && member && abilities?.canShare && (
-            <ShareBoardButton department={department.slug} mode="member" ownRole={abilities.role ?? undefined} selfUserId={member.user.id} />
-          )}
+          {department && <BoardShare department={department} />}
           {department && !member && <DepartmentArchiveMenu slug={department.slug} prefix={department.prefix} archived={department.archived === true} />}
           {!member && <QuickCaptureButton onClick={onQuickCapture} />}
         </div>

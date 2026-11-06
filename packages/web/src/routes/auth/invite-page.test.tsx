@@ -107,7 +107,7 @@ describe("InvitePage", () => {
     acceptInvite.mockResolvedValue({ ok: true })
     await create()
     expect(acceptInvite).toHaveBeenCalledWith("tok-123", "New Person", PASSWORD)
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("http://localhost:3000/"))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("http://gateway.test/"))
   })
 
   it("shows the one expired-or-used sentence when the inspect says 410", async () => {

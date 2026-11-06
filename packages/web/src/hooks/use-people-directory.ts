@@ -30,28 +30,38 @@ interface DirectoryData {
 }
 
 /** Who a `user:<id>` is. Read only where accounts exist, so an instance without any asks nothing new. */
-export function usePeopleDirectory(): PeopleDirectory {
+/** Whether this session can ask for people at all, and as whom: a member always can, the operator only where accounts exist. */
+function useDirectoryAccess(): { member: boolean; accounts: boolean } {
   const auth = useAuthOptional()
   const member = auth?.principal?.kind === "member"
-  const accounts = member || (auth?.authState?.accountsEnabled === true && auth.authState.hasAccounts === true)
+  const state = auth?.authState
+  return { member, accounts: member || (state?.accountsEnabled === true && state.hasAccounts === true) }
+}
+
+async function loadDirectory(member: boolean): Promise<DirectoryData> {
+  if (member) return accountsApi.getMemberPeople()
+  const people = await accountsApi.listPeople()
+  return { people: people.map((p) => ({ id: p.id, displayName: p.displayName, initials: p.initials })), employees: [] }
+}
+
+function resolveIdentity(people: DirectoryData["people"] | undefined, identity: string | null | undefined): ResolvedIdentity | null {
+  const id = memberIdOf(identity)
+  if (id === null) return null
+  if (!people) return { kind: "pending" }
+  const person = people.find((p) => p.id === id)
+  if (!person) return { kind: "former" }
+  return { kind: "member", id, displayName: person.displayName, initials: person.initials || initialsOf(person.displayName) }
+}
+
+export function usePeopleDirectory(): PeopleDirectory {
+  const { member, accounts } = useDirectoryAccess()
   const query = useQuery<DirectoryData>({
     queryKey: [...PEOPLE_DIRECTORY_KEY, member ? "member" : "operator"],
     enabled: accounts,
     staleTime: 60_000,
-    queryFn: async () => {
-      if (member) return accountsApi.getMemberPeople()
-      const people = await accountsApi.listPeople()
-      return { people: people.map((p) => ({ id: p.id, displayName: p.displayName, initials: p.initials })), employees: [] }
-    },
+    queryFn: () => loadDirectory(member),
   })
   const people = query.data?.people
-  const resolve = useCallback((identity: string | null | undefined): ResolvedIdentity | null => {
-    const id = memberIdOf(identity)
-    if (id === null) return null
-    if (!people) return { kind: "pending" }
-    const person = people.find((p) => p.id === id)
-    if (!person) return { kind: "former" }
-    return { kind: "member", id, displayName: person.displayName, initials: person.initials || initialsOf(person.displayName) }
-  }, [people])
+  const resolve = useCallback((identity: string | null | undefined) => resolveIdentity(people, identity), [people])
   return { resolve, employees: query.data?.employees ?? [], ready: !accounts || query.isSuccess }
 }

@@ -80,7 +80,7 @@ describe("ResetPage", () => {
     completeReset.mockResolvedValue({ ok: true })
     await save()
     expect(completeReset).toHaveBeenCalledWith("tok-987", PASSWORD)
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("http://localhost:3000/"))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("http://gateway.test/"))
   })
 
   it("shows the expired-or-used sentence on a 410 from inspect, from completion, and for a missing token", async () => {

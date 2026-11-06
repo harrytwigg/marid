@@ -62,7 +62,7 @@ function ResetForm({ info, submit }: { info: ResetInspectWire; submit: (run: (to
       setBusy(false)
       return
     }
-    gatewayTransport().navigate(`${window.location.origin}/`)
+    gatewayTransport().navigate(gatewayTransport().httpUrl("/"))
   }
 
   return (
