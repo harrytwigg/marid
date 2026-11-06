@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { AccountsError, takeFragmentToken } from "@/lib/accounts-api"
+import { AccountsError } from "@/lib/accounts-api"
 import { DEFAULT_WAIT_SECONDS, isRateLimited, LINK_UNUSABLE, useWaitCountdown, waitSentence } from "./account-form-parts"
 
 export type LinkPhase<T> =
@@ -8,12 +8,10 @@ export type LinkPhase<T> =
   | { kind: "ready"; info: T }
   | { kind: "failed"; message: string; limited?: boolean }
 
-/** What the invite and reset pages share: read the fragment token once (clearing it from the address bar
- *  before anything renders), inspect it, and word whatever goes wrong. `submit` runs the accept or complete
+/** What the invite and reset pages share: inspect the link's token and word whatever goes wrong. The page reads
+ *  the token out of the address (clearing it there) before anything renders, and hands it in. `submit` runs the accept or complete
  *  call and reports a failure as text for the form to show. */
-export function useLinkFlow<T>(inspect: (token: string) => Promise<T>) {
-  // The initializer runs once per mount, so the token is read and cleared exactly once.
-  const [token] = useState(takeFragmentToken)
+export function useLinkFlow<T>(inspect: (token: string) => Promise<T>, token: string | null) {
   const [phase, setPhase] = useState<LinkPhase<T>>(token ? { kind: "loading" } : { kind: "unusable" })
   const wait = useWaitCountdown()
 

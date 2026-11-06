@@ -63,7 +63,8 @@ describe("InvitePage", () => {
 
     expect(window.location.hash).toBe("")
     expect(replace).toHaveBeenCalled()
-    expect(inspectInvite).toHaveBeenCalledTimes(1)
+    // The page first asks who is signed in; only then is the link inspected.
+    await waitFor(() => expect(inspectInvite).toHaveBeenCalledTimes(1))
     expect(inspectInvite).toHaveBeenCalledWith("tok-123")
     release({ email: "new@example.test" })
     await screen.findByRole("form", { name: /accept invite/i })

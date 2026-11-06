@@ -3,9 +3,10 @@ import { AccountPageFrame, passwordProblem, PasswordFields } from "@/components/
 import { AccountField, ErrorBanner, LINK_UNUSABLE, submitClass } from "@/components/auth/account-form-parts"
 import { AuthStateIcon, AuthStateLabel } from "@/components/auth/auth-motion"
 import { useLinkFlow } from "@/components/auth/use-link-flow"
+import { SignedInGate } from "@/components/auth/signed-in-notice"
 import { Check, User } from "@/components/ui/icon"
 import { gatewayTransport } from "@/lib/gateway-transport"
-import { accountsApi, BOARD_ROLE_HINT, BOARD_ROLE_LABEL, type InviteInspectWire } from "@/lib/accounts-api"
+import { accountsApi, BOARD_ROLE_HINT, BOARD_ROLE_LABEL, takeFragmentToken, type InviteInspectWire } from "@/lib/accounts-api"
 import { PRODUCT_NAME } from "@/lib/brand"
 
 const NAME_MAX = 80
@@ -15,7 +16,13 @@ function headline(info: InviteInspectWire): string {
 }
 
 export default function InvitePage() {
-  const flow = useLinkFlow(accountsApi.inspectInvite)
+  // Read and cleared from the address bar at once, before the gate asks who is signed in; kept for the flow.
+  const [token] = useState(takeFragmentToken)
+  return <SignedInGate><InviteFlow token={token} /></SignedInGate>
+}
+
+function InviteFlow({ token }: { token: string | null }) {
+  const flow = useLinkFlow(accountsApi.inspectInvite, token)
   const { phase } = flow
 
   if (phase.kind === "loading") {
