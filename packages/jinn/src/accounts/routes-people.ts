@@ -103,14 +103,16 @@ function issueResetLink(ctx: AccountRouteContext, id: string): void {
   json(ctx.res, { link: origin ? `${origin}/reset#${token}` : null, expiresAt: record.expiresAt });
 }
 
+/** A person's sessions; `current` is true for the one this request rides on (an operator device), never for a member session: an operator request does not ride on one. */
 function sessionViews(ctx: AccountRouteContext, userId: string): unknown[] {
+  const currentDevice = currentAuthDeviceId(ctx.req.headers, ctx.rt.home);
   const members = listUserSessions(ctx.rt.getDb(), userId, ctx.rt.now()).map((session) => ({
     id: session.id, kind: "member", createdAt: session.createdAt, lastSeenAt: session.lastSeenAt, expiresAt: session.expiresAt,
-    userAgent: session.userAgent, ip: session.ip,
+    userAgent: session.userAgent, ip: session.ip, current: false,
   }));
   const devices = listAuthSessionsForUser(ctx.rt.home, userId).map((device) => ({
     id: device.id, kind: "device", name: device.name, createdAt: device.createdAt, lastSeenAt: device.lastSeenAt,
-    userAgent: device.userAgent ?? null, ip: device.lastIp ?? null,
+    userAgent: device.userAgent ?? null, ip: device.lastIp ?? null, current: device.id === currentDevice,
   }));
   return [...members, ...devices];
 }

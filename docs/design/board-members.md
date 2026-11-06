@@ -393,8 +393,9 @@ Settled while building the web against this contract; the gateway answers exactl
   the operator detail shape (comments and events included) minus session fields.
 - `GET /api/people` → `{ people: [{ id, email, displayName, initials, instanceRole, status,
   boards: [{ department, role }], passwordSet, createdAt, lastSeenAt }] }`.
-- `GET /api/people/:id/sessions` → `{ sessions: [{ id, kind: "member" | "device", createdAt,
-  lastSeenAt, userAgent, ip }] }`.
+- `GET /api/people/:id/sessions` and `GET /api/member/sessions` → `{ sessions: [{ id,
+  kind: "member" | "device", createdAt, lastSeenAt, userAgent, ip, current }] }`, where
+  `current` is true for the session the request itself rides on.
 - `GET /api/people/invites` → `{ invites: [{ id, email, department | null, role | null,
   instanceRole | null, createdBy, createdAt, expiresAt }] }`.
 - `GET /api/boards/:department/members` and its member mirror → `{ members: [{ userId,
@@ -403,6 +404,15 @@ Settled while building the web against this contract; the gateway answers exactl
   displayName, emoji }] }`.
 - Invite and reset-link POSTs → `{ link, expiresAt }`; an invite to an existing active
   account → `{ granted: true }`.
+- `POST /api/auth/invites/inspect` → `{ email, boardName, role, instanceRole, invitedBy }`
+  (`boardName` and `role` are null for an instance invite, `instanceRole` null for a board
+  invite); `POST /api/auth/resets/inspect` → `{ email, displayName }`. Both answer `410` for a
+  used, revoked or expired token.
+- Member Todo reads keep the operator wrappers the shared board code reads: board list
+  `{ workItems, total, nextOffset, totals }`, tree `{ tree: { root, totals, spendUsd } }`,
+  detail `{ workItem, spendUsd, events, comments }`. For members every cost figure is `null`
+  (`spendUsd` at each level, spend inside `totals`) and every session or run field is removed.
+  Members never see spend.
 
 ### Phase 2 build notes
 
@@ -418,8 +428,8 @@ Where the build had to pick a reading, or the contract was silent, it did this:
   Member attachment rows omit `storagePath`. There is no member route to delete an attachment.
 - **Status moves by a member reach no automation.** Besides the child-settle row, a member's move is not handed to the
   workflow status trigger, which can start agents.
-- **Member reads omit** `sourceRef`, `budgetUsd`, session refs, the operator's Home flag and attention lane, runs and
-  dispatch config; spend reads as zero; events leave out the operator's machinery (session links, recovery, quiet-watch,
+- **Member reads omit** `sourceRef` (null), `budgetUsd` (null), session refs, the operator's Home flag and attention lane,
+  `runs` and `dispatchConfig` (removed); every spend figure is `null`; events leave out the operator's machinery (session links, recovery, quiet-watch,
   claims) and never name a session; relations are shown only to a Todo on a board the member also holds.
   Comments carry no `sessionId`.
 - **`GET /api/member/people` employees** are the employees that hold, created or commented on a Todo on one of the member's boards.

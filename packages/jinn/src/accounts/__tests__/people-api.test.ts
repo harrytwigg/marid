@@ -7,6 +7,17 @@ beforeEach(async () => { h = await startHarness(); }, 60_000);
 afterEach(() => { h.close(); });
 
 describe("People (operator)", () => {
+  it("marks the operator device the request rides on as current, and no other session", async () => {
+    const owner = await joinAsOwner(h, "olive@example.test");
+    await h.request("POST", "/api/auth/login", { body: { email: "olive@example.test", password: GOOD_PASSWORD } });
+    const own = await h.request("GET", `/api/people/${owner.userId}/sessions`, { cookie: owner.cookie });
+    const devices = own.body.sessions.filter((session: any) => session.kind === "device");
+    expect(devices.length).toBeGreaterThanOrEqual(2);
+    expect(devices.filter((session: any) => session.current)).toHaveLength(1);
+    const viaToken = await h.asOperator("GET", `/api/people/${owner.userId}/sessions`);
+    expect(viaToken.body.sessions.every((session: any) => session.current === false)).toBe(true);
+  });
+
   it("lists users with their boards and never a hash", async () => {
     await inviteAndAccept(h, "pat@example.test", { role: "owner" });
     const reply = await h.asOperator("GET", "/api/people");

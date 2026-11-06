@@ -104,13 +104,14 @@ describe("reads are scoped to the member's boards, and an unheld board is a 404,
     const member = await h.as(viewer, "GET", `/api/member/todos/${rootId}`);
     const operator = await h.operator("GET", `/api/work-items/${rootId}`);
     expect(member.status).toBe(200);
-    expect(Object.keys(member.body).sort()).toEqual(Object.keys(operator.body).sort());
+    // The operator's detail minus the session and run fields (`runs`, `dispatchConfig`), with every cost figure null.
+    expect(Object.keys(member.body).sort()).toEqual(Object.keys(operator.body).filter((key) => !["runs", "dispatchConfig"].includes(key)).sort());
     expect(member.body.workItem).toMatchObject({ id: rootId, sourceRef: null, budgetUsd: null });
     expect(member.body.comments.comments.map((c: any) => c.body)).toContain("from an agent");
     expect(member.body.events.length).toBeGreaterThan(0);
-    expect(member.body.runs).toEqual([]);
-    expect(member.body.dispatchConfig).toBeNull();
-    expect(member.body.spendUsd).toBe(0);
+    expect(member.body).not.toHaveProperty("runs");
+    expect(member.body).not.toHaveProperty("dispatchConfig");
+    expect(member.body.spendUsd).toBeNull();
     const text = JSON.stringify(member.body);
     expect(text).not.toContain("11111111-aaaa-4bbb-8ccc-222222222222");
     expect(text).not.toContain("22222222-aaaa-4bbb-8ccc-333333333333");
@@ -129,10 +130,10 @@ describe("reads are scoped to the member's boards, and an unheld board is a 404,
     expect(JSON.stringify(body)).not.toContain(session.id);
   });
 
-  it("the tree is the operator's tree with spend zeroed and no session-bearing refs", async () => {
+  it("the tree is the operator's tree with spend null and no session-bearing refs", async () => {
     const reply = await h.as(viewer, "GET", `/api/member/todos/${rootId}/tree`);
     expect(reply.status).toBe(200);
-    expect(reply.body.tree.spendUsd).toBe(0);
+    expect(reply.body.tree.spendUsd).toBeNull();
     expect(reply.body.tree.root.id).toBe(rootId);
     expect(reply.body.tree.root.sourceRef).toBeNull();
     expect(reply.body.tree.root.children.map((c: any) => c.id)).toEqual([childId]);

@@ -61,9 +61,9 @@ function memberTreeNode(node: WorkItemTreeNodePayload): WorkItemTreeNodePayload 
   return { ...node, ...memberWorkItem(node), children: node.children.map(memberTreeNode) };
 }
 
-/** A subtree for a member. Spend is money the operator spent on sessions: a member reads zero. */
+/** A subtree for a member. Spend is money the operator spent on sessions: a member reads null. */
 export function memberTreePayload(payload: ReturnType<typeof workItemTreePayload>): ReturnType<typeof workItemTreePayload> {
-  return { ...payload, spendUsd: 0, root: memberTreeNode(payload.root) };
+  return { ...payload, spendUsd: null as unknown as number, root: memberTreeNode(payload.root) };
 }
 
 /** A comment as a member reads it: the member kind derived, and no session behind it. */
@@ -138,7 +138,7 @@ export function memberDetailPayload(db: DatabaseType, userId: string, item: Work
   const stop = item.status === "blocked" ? readStopCause(initDb(), item.id) ?? {} : {};
   return {
     workItem: memberWorkItem(item),
-    spendUsd: 0,
+    spendUsd: null,
     events,
     comments,
     ...(Object.keys(members).length > 0 ? { members } : {}),
@@ -149,8 +149,6 @@ export function memberDetailPayload(db: DatabaseType, userId: string, item: Work
     attentionLane: null,
     reviewAddressee: reviewAddressee(item),
     ...stop,
-    runs: [],
-    dispatchConfig: null,
   };
 }
 

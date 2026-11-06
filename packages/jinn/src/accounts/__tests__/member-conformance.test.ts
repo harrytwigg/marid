@@ -46,11 +46,37 @@ describe("operator", () => {
     expect(person.lastSeenAt === null || typeof person.lastSeenAt === "string").toBe(true);
   });
 
-  it("GET /api/people/:id/sessions → { sessions: [{ id, kind, createdAt, lastSeenAt, userAgent, ip }] }", async () => {
+  it("GET /api/people/:id/sessions and GET /api/member/sessions → { sessions: [{ id, kind, createdAt, lastSeenAt, userAgent, ip, current }] }", async () => {
     const reply = await h.operator("GET", `/api/people/${collab.userId}/sessions`);
     expect(keys(reply.body)).toEqual(["sessions"]);
-    for (const key of ["id", "kind", "createdAt", "lastSeenAt", "userAgent", "ip"]) expect(reply.body.sessions[0]).toHaveProperty(key);
+    for (const key of ["id", "kind", "createdAt", "lastSeenAt", "userAgent", "ip", "current"]) expect(reply.body.sessions[0]).toHaveProperty(key);
     expect(reply.body.sessions[0].kind).toBe("member");
+    // An operator request does not ride on a member session.
+    expect(reply.body.sessions.map((s: any) => s.current)).toEqual([false]);
+    const second = await h.request("POST", "/api/auth/login", { body: { email: "collab@example.test", password: "correct horse battery staple" } });
+    const own = await h.as(collab, "GET", "/api/member/sessions");
+    for (const key of ["id", "kind", "createdAt", "lastSeenAt", "userAgent", "ip", "current"]) expect(own.body.sessions[0]).toHaveProperty(key);
+    expect(own.body.sessions.filter((s: any) => s.current).map((s: any) => s.id)).toEqual([collab.sessionId]);
+    expect(own.body.sessions).toHaveLength(2);
+    void second;
+  });
+
+  it("POST /api/auth/invites/inspect → { email, boardName, role, instanceRole, invitedBy }; POST /api/auth/resets/inspect → { email, displayName }; 410 once used", async () => {
+    const board = await h.operator("POST", "/api/boards/ops/invites", { email: "insp1@example.test", role: "viewer" });
+    const inspected = await h.request("POST", "/api/auth/invites/inspect", { body: { token: board.body.link.split("#")[1] } });
+    expect([inspected.status, keys(inspected.body)]).toEqual([200, ["boardName", "email", "instanceRole", "invitedBy", "role"]]);
+    expect(inspected.body).toMatchObject({ boardName: "ops", role: "viewer", instanceRole: null });
+    const instance = await h.operator("POST", "/api/people/invites", { email: "insp2@example.test", instanceRole: "member" });
+    const instanceInspected = await h.request("POST", "/api/auth/invites/inspect", { body: { token: instance.body.link.split("#")[1] } });
+    expect(instanceInspected.body).toMatchObject({ boardName: null, role: null, instanceRole: "member" });
+    const reset = await h.operator("POST", `/api/people/${collab.userId}/reset-link`);
+    const resetToken = reset.body.link.split("#")[1];
+    const resetInspected = await h.request("POST", "/api/auth/resets/inspect", { body: { token: resetToken } });
+    expect([resetInspected.status, keys(resetInspected.body)]).toEqual([200, ["displayName", "email"]]);
+    await h.operator("POST", `/api/people/${collab.userId}/reset-link`); // revokes the first
+    expect((await h.request("POST", "/api/auth/resets/inspect", { body: { token: resetToken } })).status).toBe(410);
+    await h.operator("DELETE", `/api/people/invites/${board.body.invite.id}`);
+    expect((await h.request("POST", "/api/auth/invites/inspect", { body: { token: board.body.link.split("#")[1] } })).status).toBe(410);
   });
 
   it("GET /api/people/invites → { invites: [{ id, email, department, role, instanceRole, createdBy, createdAt, expiresAt }] }", async () => {
@@ -130,7 +156,10 @@ describe("member", () => {
     const operator = await h.operator("GET", `/api/work-items/${todoId}`);
     expect(member.status).toBe(200);
     // `members` is additive and only present when the Todo names a member, which this one does.
-    expect(keys(member.body).filter((key) => key !== "members")).toEqual(keys(operator.body).filter((key) => key !== "members"));
+    // Session and run fields are removed for members, and every cost figure is null.
+    expect(keys(member.body).filter((key) => key !== "members")).toEqual(keys(operator.body).filter((key) => !["members", "runs", "dispatchConfig"].includes(key)));
+    expect(member.body.spendUsd).toBeNull();
+    expect((await h.as(collab, "GET", `/api/member/todos/${todoId}/tree`)).body.tree.spendUsd).toBeNull();
     expect(JSON.stringify(member.body)).not.toMatch(/sessionId|session:/);
   });
 
