@@ -374,3 +374,32 @@ board-share routes under `/api/member/boards/:department/…` mirroring the oper
 
 Serialisations reuse the existing Todo, comment and attachment shapes, minus fields that
 reference sessions (session ids, run ids, transcripts), which are omitted for members.
+
+### Response shapes
+
+Settled while building the web against this contract; the gateway answers exactly these.
+
+- `GET /api/auth/state` adds `accountsEnabled` (gateway auth is on, so accounts are possible),
+  `hasAccounts` (at least one user exists; the sign-in form shows when both are true) and
+  `principal`. A member principal is `{ kind: "member", user: { id, email, displayName },
+  boards: [{ department, role }] }`.
+- `GET /api/member/boards` → `{ boards: [{ department, role, prefix, displayName? }] }`
+  (`prefix` is the board's Todo-id prefix).
+- Member writes answer with the operator routes' shapes and take the same bodies:
+  `PATCH /api/member/todos/:id` takes `expectedVersion` / `idempotencyKey` and returns
+  `{ workItem, replayed }`; `POST /api/member/todos/:id/status` takes `{ status }` and returns
+  `{ workItem, escalated: false }`; `POST /api/member/todos/:id/comments` takes
+  `{ body, parentCommentId? }` and returns `{ comment }`. `GET /api/member/todos/:id` returns
+  the operator detail shape (comments and events included) minus session fields.
+- `GET /api/people` → `{ people: [{ id, email, displayName, initials, instanceRole, status,
+  boards: [{ department, role }], passwordSet, createdAt, lastSeenAt }] }`.
+- `GET /api/people/:id/sessions` → `{ sessions: [{ id, kind: "member" | "device", createdAt,
+  lastSeenAt, userAgent, ip }] }`.
+- `GET /api/people/invites` → `{ invites: [{ id, email, department | null, role | null,
+  instanceRole | null, createdBy, createdAt, expiresAt }] }`.
+- `GET /api/boards/:department/members` and its member mirror → `{ members: [{ userId,
+  displayName, email, initials, role }], invites: [<invite row as above>] }`.
+- `GET /api/member/people` → `{ people: [{ id, displayName, initials }], employees: [{ name,
+  displayName, emoji }] }`.
+- Invite and reset-link POSTs → `{ link, expiresAt }`; an invite to an existing active
+  account → `{ granted: true }`.
