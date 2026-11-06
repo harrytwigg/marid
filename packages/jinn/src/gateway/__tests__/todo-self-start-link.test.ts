@@ -4,6 +4,7 @@ import { listWorkItemEvents } from "../../work-items/event-log.js";
 import { reconcileWorkItem } from "../../work-items/reconcile.js";
 import { setJinnAttachGate } from "../../mcp/attachment.js";
 import { listWorkItemRuns, openWorkItemRun } from "../../work-items/runs.js";
+import { QUIET_AFTER_MS, QUIET_BACKGROUND_TASK_MS, quietTodo } from "../../work-items/quiet-watch.js";
 
 /* A session that creates a Todo, assigns it to its own employee and starts it
  * goes through no dispatch, so the routes themselves link it to the Todo as its
@@ -135,6 +136,55 @@ describe("a Todo its own session starts", () => {
     expect((await move(id, "executing", session.id)).status).toBe(200);
     expect(listWorkItemRuns(id).map((run) => [run.sessionId, run.outcome])).toEqual([[session.id, "completed"], [session.id, null]]);
     expect(linkEvents(id)).toHaveLength(1);
+  });
+});
+
+describe("a session consulted through a mention that takes the Todo over", () => {
+  const windows = { afterMs: QUIET_AFTER_MS, backgroundTaskMs: QUIET_BACKGROUND_TASK_MS };
+
+  /** A blocked Todo with no live session, and the assignee's session a mention linked as a consultation. */
+  function mentioned() {
+    const item = store.createWorkItem({ title: `Mentioned ${++n}`, status: "blocked", assignee: "solo-worker" });
+    const session = workerSession();
+    store.linkSession(item.id, session.id, null, "consult");
+    expect(reg.getSession(session.id)).toMatchObject({ workItemId: item.id, workItemRole: "consult" });
+    return { id: item.id, sessionId: session.id };
+  }
+
+  it("is relinked as the executor and opens its run when it moves the Todo to executing", async () => {
+    const { id, sessionId } = mentioned();
+    expect((await move(id, "executing", sessionId)).status).toBe(200);
+    expect(reg.getSession(sessionId)).toMatchObject({ workItemId: id, workItemRole: "execute" });
+    expect(linkEvents(id).map((event) => event.detail)).toEqual([
+      expect.objectContaining({ sessionId, role: "consult" }),
+      expect.objectContaining({ sessionId, role: "execute", employee: "solo-worker", selfStarted: true }),
+    ]);
+    expect(listWorkItemRuns(id)).toMatchObject([{ sessionId, endedAt: null, outcome: null }]);
+  });
+
+  it("stays a consultation when it moves a Todo that belongs to somebody else", async () => {
+    const item = store.createWorkItem({ title: `Not theirs ${++n}`, status: "blocked", assignee: "platform-worker" });
+    const session = workerSession();
+    store.linkSession(item.id, session.id, null, "consult");
+    await move(item.id, "executing", session.id);
+    expect(reg.getSession(session.id)?.workItemRole).toBe("consult");
+    expect(listWorkItemRuns(item.id)).toEqual([]);
+  });
+
+  it("is not reported quiet through a long turn, and is the session to nudge once the turn ends", async () => {
+    const { id, sessionId } = mentioned();
+    turnStarts(sessionId);
+    expect((await move(id, "executing", sessionId)).status).toBe(200);
+    const item = () => store.getWorkItem(id)!;
+    const entered = Date.parse(item().updatedAt);
+
+    // An hour into one turn that moved the Todo and then only worked: nothing was said on it since.
+    expect(quietTodo(item(), entered + 60 * 60_000, windows)).toBeUndefined();
+
+    // The turn ends; the watch now sees a quiet Todo whose session it can message, not one nobody holds.
+    settleTurn(sessionId);
+    const quiet = quietTodo(item(), Date.now() + QUIET_AFTER_MS + 60_000, windows);
+    expect(quiet?.producer?.id).toBe(sessionId);
   });
 });
 
