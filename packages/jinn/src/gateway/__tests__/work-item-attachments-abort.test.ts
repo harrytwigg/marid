@@ -21,12 +21,19 @@ import { logger } from "../../shared/logger.js";
 
 // Lets a test hold the route where it prepares the body (thumbnail and poster
 // generation wait here), so the client can leave before the first byte.
-const gate = vi.hoisted(() => ({ hold: null as null | { entered: () => void; release: Promise<void> } }));
+type Hold = { entered: () => void; release: Promise<void> };
+const gate = vi.hoisted(() => ({
+  hold: null as null | Hold,
+  // Held ahead of the route itself, so the client can leave before any of it runs.
+  beforeRoute: null as null | Hold,
+  variantCalls: 0,
+}));
 vi.mock("../attachment-variants.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../attachment-variants.js")>();
   return {
     ...actual,
     selectAttachmentVariant: async (...args: Parameters<typeof actual.selectAttachmentVariant>) => {
+      gate.variantCalls += 1;
       const hold = gate.hold;
       if (hold) {
         gate.hold = null;
@@ -51,7 +58,15 @@ const responses: http.ServerResponse[] = [];
 beforeAll(async () => {
   server = http.createServer((req, res) => {
     responses.push(res);
-    handled.push(api.handleApiRequest(req, res, ctx));
+    const hold = gate.beforeRoute;
+    gate.beforeRoute = null;
+    handled.push((async () => {
+      if (hold) {
+        hold.entered();
+        await hold.release;
+      }
+      await api.handleApiRequest(req, res, ctx);
+    })());
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -65,6 +80,8 @@ afterAll(async () => {
 afterEach(() => {
   vi.restoreAllMocks();
   gate.hold = null;
+  gate.beforeRoute = null;
+  gate.variantCalls = 0;
   handled.length = 0;
   responses.length = 0;
 });
@@ -224,6 +241,34 @@ describe("attachment download interrupted mid-stream", () => {
     expect(digest(full.body)).toBe(digest(content));
   });
 
+  it("a client that left before the variant step has no variant generated for it", async () => {
+    const { url } = await attachLarge("leave before variant");
+    const errors = vi.spyOn(logger, "error");
+    let entered!: () => void;
+    const requestArrived = new Promise<void>((resolve) => (entered = resolve));
+    let release!: () => void;
+    gate.beforeRoute = { entered, release: new Promise<void>((resolve) => (release = resolve)) };
+
+    const req = http.get(`${base}${url.replace("download=1", "thumb=1")}`, { headers: operatorHeaders });
+    req.on("error", () => {});
+    await requestArrived;
+    req.destroy();
+    const [res] = responses;
+    if (!res.destroyed) await once(res, "close");
+    release();
+
+    expect((await settledHandlers()).map((o) => o.status)).toEqual(["fulfilled"]);
+    // The generator (sharp or ffmpeg behind it) is never asked.
+    expect(gate.variantCalls).toBe(0);
+    expect(errors.mock.calls.flat().join("\n")).not.toMatch(/API error/);
+    handled.length = 0;
+
+    // A client that stays still gets its variant step.
+    const full = await fetchAll(url);
+    expect(full.complete).toBe(true);
+    expect(gate.variantCalls).toBe(1);
+  });
+
   it("a route that fails after writing its headers, with nothing streaming yet, still has its connection cut", async () => {
     const { url, storagePath } = await attachLarge("open fails after headers");
     const errors = vi.spyOn(logger, "error");
@@ -232,6 +277,7 @@ describe("attachment download interrupted mid-stream", () => {
     });
 
     // Left open, the client would wait forever for the Content-Length it was promised.
+    let giveUp: NodeJS.Timeout | undefined;
     const outcome = await Promise.race([
       new Promise<string>((resolve) => {
         const req = http.get(`${base}${url}`, { headers: operatorHeaders }, (res) => {
@@ -241,10 +287,16 @@ describe("attachment download interrupted mid-stream", () => {
         });
         req.on("error", () => resolve("cut"));
       }),
-      new Promise<string>((resolve) => setTimeout(() => resolve("left hanging"), 3000)),
-    ]);
+      new Promise<string>((resolve) => {
+        giveUp = setTimeout(() => resolve("left hanging"), 3000);
+      }),
+    ]).finally(() => clearTimeout(giveUp));
     expect(outcome).toBe("cut");
     expect((await settledHandlers()).map((o) => o.status)).toEqual(["fulfilled"]);
-    expect(errors.mock.calls.flat().join("\n")).toMatch(/simulated open failure/);
+    const logged = errors.mock.calls.flat().join("\n");
+    expect(logged).toMatch(/simulated open failure/);
+    // The line says which route failed, without the query string (it can carry a token).
+    expect(logged).toMatch(/API error after the response started \(GET \/api\/work-items\/[^/\s]+\/attachments\/[^/\s)]+\)/);
+    expect(logged).not.toContain("download=1");
   });
 });

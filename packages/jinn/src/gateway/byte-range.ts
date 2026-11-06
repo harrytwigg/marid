@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { pipeline } from "node:stream/promises";
+import { clientGone } from "./route-helpers.js";
 
 export interface ByteRange {
   start: number;
@@ -39,17 +40,6 @@ function contentDisposition(disposition: StreamFileOptions["disposition"], filen
   return `${disposition}; filename="${safeFilename}"`;
 }
 
-/**
- * True when a stream failed because the client went away: the response closed
- * before it finished, or the socket under it reset. A download the reader
- * abandons is routine (a cancelled save, a closed tab, a media element that
- * seeks), not a server fault.
- */
-export function isClientAbort(err: unknown): boolean {
-  const code = (err as { code?: unknown } | null)?.code;
-  return code === "ERR_STREAM_PREMATURE_CLOSE" || code === "ECONNRESET" || code === "EPIPE";
-}
-
 export async function streamFile(
   req: IncomingMessage,
   res: ServerResponse,
@@ -61,7 +51,7 @@ export async function streamFile(
   // opened now would be piped into a destroyed response: pipeline() refuses
   // at once and never closes the file, so each such abort would leak a
   // descriptor.
-  if (res.destroyed) return;
+  if (clientGone(res)) return;
   const size = fs.statSync(filePath).size;
   const header = Array.isArray(req.headers.range) ? req.headers.range[0] : req.headers.range;
   const range = parseRangeHeader(header, size);

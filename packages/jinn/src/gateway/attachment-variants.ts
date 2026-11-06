@@ -39,10 +39,14 @@ function original(attachment: WorkItemAttachment): Derivative {
 }
 
 /** null when a poster was asked for and cannot be produced. */
-async function videoDerivative(attachment: WorkItemAttachment, params: URLSearchParams): Promise<Derivative | null> {
+async function videoDerivative(
+  attachment: WorkItemAttachment,
+  params: URLSearchParams,
+  wanted: () => boolean,
+): Promise<Derivative | null> {
   const key = `todo:${attachment.sha256}`;
   if (params.get("poster") === "1") {
-    const poster = await ensurePoster(attachment.storagePath, key);
+    const poster = await ensurePoster(attachment.storagePath, key, wanted);
     if (!poster) return null;
     return {
       path: poster,
@@ -58,8 +62,8 @@ async function videoDerivative(attachment: WorkItemAttachment, params: URLSearch
   return { path: low, mime: "video/mp4", filename: attachment.filename, variant: "low", isFallback: false };
 }
 
-async function imageDerivative(attachment: WorkItemAttachment): Promise<Derivative> {
-  const thumbnail = await ensureThumbnail(attachment.storagePath, `todo:${attachment.sha256}`);
+async function imageDerivative(attachment: WorkItemAttachment, wanted: () => boolean): Promise<Derivative> {
+  const thumbnail = await ensureThumbnail(attachment.storagePath, `todo:${attachment.sha256}`, wanted);
   if (!thumbnail) return { ...original(attachment), isFallback: true };
   return {
     path: thumbnail,
@@ -74,10 +78,11 @@ async function resolveDerivative(
   attachment: WorkItemAttachment,
   params: URLSearchParams,
   download: boolean,
+  wanted: () => boolean,
 ): Promise<Derivative | null> {
   if (download) return original(attachment);
-  if (attachment.mime.startsWith("video/")) return videoDerivative(attachment, params);
-  if (params.get("thumb") === "1" && isThumbnailable(attachment.mime)) return imageDerivative(attachment);
+  if (attachment.mime.startsWith("video/")) return videoDerivative(attachment, params, wanted);
+  if (params.get("thumb") === "1" && isThumbnailable(attachment.mime)) return imageDerivative(attachment, wanted);
   return original(attachment);
 }
 
@@ -90,8 +95,10 @@ export async function selectAttachmentVariant(
   attachment: WorkItemAttachment,
   params: URLSearchParams,
   download: boolean,
+  /** False once the caller no longer needs the result (its client left); queued generation is then skipped. */
+  wanted: () => boolean = () => true,
 ): Promise<AttachmentVariant | null> {
-  const derivative = await resolveDerivative(attachment, params, download);
+  const derivative = await resolveDerivative(attachment, params, download, wanted);
   if (!derivative) return null;
   return { ...derivative, size: fs.statSync(derivative.path).size };
 }

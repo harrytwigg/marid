@@ -111,3 +111,24 @@ export function matchRoute(
   }
   return params;
 }
+
+/**
+ * True when a stream failed because the client went away: the response closed
+ * before it finished, or the socket under it reset. A download the reader
+ * abandons is routine (a cancelled save, a closed tab, a media element that
+ * seeks), not a server fault.
+ */
+export function isClientAbort(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code;
+  return code === "ERR_STREAM_PREMATURE_CLOSE" || code === "ECONNRESET" || code === "EPIPE";
+}
+
+/**
+ * True once the client behind a response has gone away (its socket closed, or
+ * the response was destroyed). A route checks this before work that only
+ * serves the body, such as generating a thumbnail or a video poster, so a
+ * reader who scrolled away costs no CPU.
+ */
+export function clientGone(res: ServerResponse): boolean {
+  return res.destroyed || res.socket?.destroyed === true;
+}

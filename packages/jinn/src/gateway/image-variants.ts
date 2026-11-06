@@ -11,14 +11,32 @@ import { logger } from "../shared/logger.js";
 const THUMBNAIL_WIDTH = 720;
 const THUMBNAIL_QUALITY = 72;
 
-const inFlight = new Map<string, Promise<string | null>>();
+/** One thumbnail being made, with every request that is still waiting on it. */
+interface InFlight {
+  promise: Promise<string | null>;
+  wants: Array<() => boolean>;
+}
+
+/** What a queued task resolves to when nobody waiting on it is left. */
+const SKIPPED = Symbol("skipped");
+
+const inFlight = new Map<string, InFlight>();
 const failed = new Set<string>();
 const pending: Array<() => void> = [];
 let active = 0;
 
-function runLimited<T>(task: () => Promise<T>): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
+/**
+ * Run `task` when a slot is free. `wanted` is asked again at that moment: a
+ * task that sat in the queue while every client waiting on it left is not run.
+ */
+function runLimited<T>(task: () => Promise<T>, wanted: () => boolean): Promise<T | typeof SKIPPED> {
+  return new Promise<T | typeof SKIPPED>((resolve, reject) => {
     const start = () => {
+      if (!wanted()) {
+        resolve(SKIPPED);
+        pending.shift()?.();
+        return;
+      }
       active += 1;
       void task().then(resolve, reject).finally(() => {
         active -= 1;
@@ -67,14 +85,31 @@ export function isThumbnailable(mime: string): boolean {
  * callers serve the original in that case. A file that fails once is not tried
  * again for the life of the process.
  */
-export async function ensureThumbnail(source: string, key: string): Promise<string | null> {
+export async function ensureThumbnail(
+  source: string,
+  key: string,
+  /** False once the caller no longer needs the result (its client left). */
+  wanted: () => boolean = () => true,
+): Promise<string | null> {
   const destination = thumbnailPath(key);
   if (fs.existsSync(destination)) return destination;
   if (failed.has(destination)) return null;
   const existing = inFlight.get(destination);
-  if (existing) return existing;
-  const task = runLimited(() => generateThumbnail(source, destination))
-    .then(() => destination)
+  if (existing) {
+    existing.wants.push(wanted);
+    return existing.promise;
+  }
+  const wants = [wanted];
+  const entry: InFlight = { wants, promise: Promise.resolve(null) };
+  const stillWanted = () => {
+    if (wants.some((want) => want())) return true;
+    // Drop the entry now, so a request arriving next starts its own task
+    // instead of sharing one that is not going to run.
+    if (inFlight.get(destination) === entry) inFlight.delete(destination);
+    return false;
+  };
+  entry.promise = runLimited(() => generateThumbnail(source, destination), stillWanted)
+    .then((ran) => (ran === SKIPPED ? null : destination))
     .catch((error: unknown) => {
       failed.add(destination);
       logger.warn(
@@ -82,7 +117,9 @@ export async function ensureThumbnail(source: string, key: string): Promise<stri
       );
       return null;
     })
-    .finally(() => inFlight.delete(destination));
-  inFlight.set(destination, task);
-  return task;
+    .finally(() => {
+      if (inFlight.get(destination) === entry) inFlight.delete(destination);
+    });
+  inFlight.set(destination, entry);
+  return entry.promise;
 }
