@@ -351,7 +351,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
                   rowFor={rowFor}
                 />
               )}
-              {detail && caps.close && (
+              {detail && caps.memberMode && caps.close && (
                 <MemberCloseControl status={detail.workItem.status} openChildren={closeGate.openChildren} onSet={pickers.transitionTo} />
               )}
 

@@ -142,7 +142,6 @@ async function route(path: string, init: RequestInit): Promise<Response> {
       // A list that names ids, or no board, has nothing to read from: members read a board at a time.
       if (!department || params.has("ids") || params.has("needsAttentionFor")) return json(EMPTY_LIST)
       params.delete("department")
-      params.delete("rootsOnly")
       const rest = params.toString()
       return forward(`/api/member/boards/${enc(department)}/todos${rest ? `?${rest}` : ""}`, init)
     }
