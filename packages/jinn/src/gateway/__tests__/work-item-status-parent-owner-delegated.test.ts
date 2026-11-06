@@ -263,6 +263,29 @@ describe("the parent's owner accepting a delegated child", () => {
       },
     );
 
+    it("still refuses an owner that resumed the child and then handed it to review itself", async () => {
+      const { child } = await delegatedChild("Resumed then relayed", "in_review");
+      const owner = await pauseAndResume(child.id);
+      expect((await statusPost(owner.id, child.id, { status: "in_review", note: "I did the work myself" })).status).toBe(200);
+
+      const res = await statusPost(owner.id, child.id, accept);
+      expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/owner-dev moved it to executing and handed it to review.*self-review ban/)]);
+      expect(statusOf(child.id)).toBe("in_review");
+    });
+
+    it("still refuses an owner that started the child, handed it to review itself, and was joined by the assignee later", async () => {
+      const parent = workItems.createWorkItem({ title: "Late link parent", status: "executing", assignee: "owner-dev" });
+      const child = workItems.createWorkItem({ title: "Late link child", status: "backlog", parentId: parent.id, assignee: "child-dev" });
+      const owner = await sessionOf("owner-dev");
+      expect((await statusPost(owner.id, child.id, { status: "executing" })).status).toBe(200);
+      expect((await statusPost(owner.id, child.id, { status: "in_review", note: "Done by the owner" })).status).toBe(200);
+      workItems.linkSession(child.id, (await sessionOf("child-dev")).id, "delegation", "execute", { via: "delegation" });
+
+      const res = await statusPost(owner.id, child.id, accept);
+      expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/self-review ban/)]);
+      expect(statusOf(child.id)).toBe("in_review");
+    });
+
     it("still refuses an owner that paused and resumed the child and then took the assignment", async () => {
       const { child } = await delegatedChild("Paused then reassigned");
       const owner = await pauseAndResume(child.id);
