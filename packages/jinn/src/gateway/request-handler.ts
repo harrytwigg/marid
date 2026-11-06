@@ -83,6 +83,7 @@ function answerMember(req: http.IncomingMessage, res: http.ServerResponse, deps:
   if (!isApiTarget(req.url || "/")) return serveWebUi(req, res, deps.webDir);
   return handleMemberRequest(req, res, principal, {
     accounts, getConfig: deps.apiContext.getConfig, gatewayAuthToken: deps.gatewayAuthToken, home: deps.home,
+    emit: deps.apiContext.emit,
   });
 }
 

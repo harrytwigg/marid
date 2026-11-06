@@ -16,7 +16,7 @@ function refuse(socket: Duplex, status: string, error: string): void {
  * A member's WebSocket upgrade. Only `/ws` is open to them (not `/ws/pty/*`, not a plugin's event stream),
  * from the gateway's own origin; everything else is refused 403 before any other handler sees the socket.
  * The accepted socket is tied to the member's session and closed 4401 when that session stops being valid.
- * It is not in the general broadcast's client set, so it receives none of its frames.
+ * It is not in the general broadcast's client set: it is sent only the re-serialised Todo frames for its member's boards.
  */
 function handleMemberUpgrade(
   req: IncomingMessage,

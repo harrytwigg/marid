@@ -7,6 +7,7 @@ import { isTodoId } from "../work-items/id.js";
 import { DepartmentBoundaryError } from "../work-items/department-scope.js";
 import { DepartmentArchivedError } from "../work-items/department-archive.js";
 import { ReparentError, reparentWorkItem } from "../work-items/reparent.js";
+import { boardOfTodo } from "../work-items/board-of.js";
 import { getWorkItem, type WorkItem } from "../work-items/store.js";
 
 /**
@@ -23,7 +24,7 @@ export interface ReparentApiOptions {
   /** api.ts's work-item caller resolution; undefined once it has answered. */
   resolveCaller: () => WorkItemCaller | undefined;
   /** Tell the live surfaces these Todos' projections changed. */
-  emitProjection: (id: string) => void;
+  emitProjection: (id: string, fromDepartment?: string | null) => void;
 }
 
 /** The new parent a body names: a Todo id, or null for none. Answers 400 itself. */
@@ -87,8 +88,13 @@ export async function handleReparentApi(
   const target = caller && (await resolveReparent(req, res, caller, params.id));
   if (!caller || !target) return true;
   try {
+    // The board the moved Todos leave, read before the move: a board member's feed says the cards left it.
+    const fromDepartment = boardOfTodo(target.item);
     const result = reparentWorkItem(target.item.id, target.parentId, { actor: workItemActor(caller), origin: caller.origin });
-    if (result.changed) for (const id of [...result.moved, ...result.parents]) options.emitProjection(id);
+    if (result.changed) {
+      for (const id of result.moved) options.emitProjection(id, fromDepartment);
+      for (const id of result.parents) options.emitProjection(id);
+    }
     const { id, parentId, rootId, depth, version } = result.item;
     json(res, { id, parentId, rootId, depth, version, changed: result.changed, moved: result.moved });
   } catch (err) {

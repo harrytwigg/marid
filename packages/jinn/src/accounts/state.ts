@@ -12,11 +12,11 @@ export type AuthStatePrincipal =
 type StateRequest = Pick<IncomingMessage, "headers" | "socket">;
 
 /**
- * `GET /api/auth/state`: the existing browser-boot metadata plus two fields.
+ * `GET /api/auth/state`: the existing browser-boot metadata plus three fields.
  *
- * `accountsEnabled` is true when gateway auth is required and at least one account exists, which is the
- * moment the sign-in form is offered (an instance with no accounts renders as it always did; whether
- * accounts are possible at all is `authRequired`). `principal` says who the request is. A member is not
+ * `accountsEnabled` is true when gateway auth is required, so accounts are possible; `hasAccounts` is true
+ * once at least one exists, and the sign-in form is offered when both are (an instance with no accounts
+ * renders as it always did). `principal` says who the request is. A member is not
  * `authenticated`: that field has always meant "holds operator credentials".
  */
 export function buildAuthState(
@@ -25,19 +25,22 @@ export function buildAuthState(
   gatewayAuthToken: string | undefined,
   jinnHome: string | undefined,
   accounts: AccountsRuntime | undefined,
-): ReturnType<typeof createAuthState> & { accountsEnabled: boolean; principal: AuthStatePrincipal } {
+): ReturnType<typeof createAuthState> & { accountsEnabled: boolean; hasAccounts: boolean; principal: AuthStatePrincipal } {
   const base = createAuthState(config, req, gatewayAuthToken, jinnHome);
-  if (!accounts) return { ...base, accountsEnabled: false, principal: base.authenticated ? { kind: "operator" } : null };
-  let accountsEnabled = false;
+  if (!accounts) return { ...base, accountsEnabled: false, hasAccounts: false, principal: base.authenticated ? { kind: "operator" } : null };
+  // Accounts are possible where gateway auth is on; the sign-in form shows once one exists too.
+  const accountsEnabled = base.authRequired;
+  let hasAccounts = false;
   try {
-    accountsEnabled = base.authRequired && countUsers(accounts.getDb()) > 0;
+    hasAccounts = accountsEnabled && countUsers(accounts.getDb()) > 0;
   } catch { /* an unreadable accounts table reads as no accounts */ }
-  if (base.authenticated) return { ...base, accountsEnabled, principal: { kind: "operator" } };
+  if (base.authenticated) return { ...base, accountsEnabled, hasAccounts, principal: { kind: "operator" } };
   const principal = accounts.resolvePrincipal(req);
-  if (principal.kind !== "member") return { ...base, accountsEnabled, principal: null };
+  if (principal.kind !== "member") return { ...base, accountsEnabled, hasAccounts, principal: null };
   return {
     ...base,
     accountsEnabled,
+    hasAccounts,
     principal: {
       kind: "member",
       user: { id: principal.user.id, email: principal.user.email, displayName: principal.user.displayName },

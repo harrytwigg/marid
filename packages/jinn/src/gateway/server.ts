@@ -820,7 +820,10 @@ export async function startGateway(
 
   const startTime = Date.now();
   const wsClients = new Set<import("ws").WebSocket>();
+  // Board members' sockets hear the same broadcast through their own filter; assigned once accounts exist.
+  let publishToMembers: (event: string, payload: unknown) => void = () => {};
   const broadcast: GatewayEmit = (event, payload): void => {
+    publishToMembers(event, payload);
     const message = JSON.stringify({ event, payload, ts: Date.now() });
     for (const client of wsClients) {
       if (client.readyState === 1) {
@@ -920,6 +923,7 @@ export async function startGateway(
     // The same rule as the departments API, so a board is whatever that API calls a department.
     knownDepartment: (slug) => isKnownDepartmentSlug(slug, apiContext),
   });
+  publishToMembers = (event, payload) => accounts.memberSockets.publish(event, payload);
 
   // API context
   const apiContext: ApiContext = {

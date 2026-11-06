@@ -53,6 +53,9 @@ function processEvent(context: ApiContext, event: WorkItemEvent): void {
     return;
   }
   if (!evaluated) return;
+  // Members start, wake and steer no agent: nothing a member does fires a hook. Keyed on the resolved
+  // actor, never on the raw event actor (the created event records the source there, not the user).
+  if (evaluated.base.actor.kind === "member") return;
   for (const hook of hooks) {
     try {
       fireHook(context, hook, evaluated.base, evaluated.chain);

@@ -1,12 +1,12 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { JinnConfig } from "../shared/types.js";
 import { json, notFound } from "../gateway/route-helpers.js";
 import { readJsonBody } from "../gateway/http-helpers.js";
 import { parseRequestAuthority } from "../gateway/request-authority.js";
 import { clearUserCookieHeader } from "./cookie.js";
-import { publicUser } from "./users.js";
 import { revokeUserSession } from "./user-sessions.js";
-import type { AccountsRuntime, MemberPrincipal } from "./runtime.js";
+import type { MemberPrincipal } from "./runtime.js";
+import type { MemberRouterDeps } from "./member-context.js";
+import { runMemberRoutes } from "./member-routes.js";
 import { buildAuthState } from "./state.js";
 
 export const NOT_AVAILABLE_TO_MEMBERS = "Not available to board members";
@@ -26,12 +26,7 @@ export function isApiTarget(requestUrl: string): boolean {
   return requestUrl.startsWith("/api/");
 }
 
-export interface MemberRouterDeps {
-  accounts: AccountsRuntime;
-  getConfig: () => Pick<JinnConfig, "gateway">;
-  gatewayAuthToken: string | undefined;
-  home: string;
-}
+export type { MemberRouterDeps } from "./member-context.js";
 
 /** The request line, checked as the general dispatcher checks it before it parses anything; undefined once a 400 is written. */
 function parseTarget(req: IncomingMessage, res: ServerResponse): { method: string; pathname: string } | undefined {
@@ -55,23 +50,13 @@ async function logout(req: IncomingMessage, res: ServerResponse, principal: Memb
   json(res, { status: "ok" });
 }
 
-/** `/api/member/*`: only `GET /api/member/me` exists in this phase. */
-function memberApi(res: ServerResponse, method: string, pathname: string, principal: MemberPrincipal, deps: MemberRouterDeps): void {
-  if (method !== "GET" || pathname !== "/api/member/me") return notFound(res);
-  const { email, id, displayName } = publicUser(principal.user);
-  json(res, {
-    user: { id, email, displayName },
-    boards: deps.accounts.boardsOf(principal.userId).map((grant) => ({ department: grant.department, role: grant.role })),
-  });
-}
-
 /**
  * Everything a signed-in member can reach over HTTP. A member request never enters the general API
  * dispatcher, so members are default-deny by construction: a route added there tomorrow is closed to
  * them until it is deliberately added here.
  *
- * The allowlist is exactly `/api/member/*`, `GET /api/auth/state` and `POST /api/auth/logout`. This
- * phase mounts only `GET /api/member/me`; the rest of `/api/member/*` answers 404 until the member API lands.
+ * The allowlist is exactly `/api/member/*`, `GET /api/auth/state` and `POST /api/auth/logout`. Inside
+ * `/api/member/*` only the routes in `member-routes.ts` exist; any other path answers 404.
  */
 export async function handleMemberRequest(
   req: IncomingMessage,
@@ -86,6 +71,10 @@ export async function handleMemberRequest(
     return json(res, buildAuthState(deps.getConfig(), req, deps.gatewayAuthToken, deps.home, deps.accounts));
   }
   if (method === "POST" && pathname === "/api/auth/logout") return logout(req, res, principal, deps);
-  if (pathname.startsWith("/api/member/")) return memberApi(res, method, pathname, principal, deps);
+  if (pathname.startsWith("/api/member/")) {
+    const route = { method, pathname, url: new URL(req.url || "/", "http://localhost") };
+    if (!(await runMemberRoutes({ req, res, principal, deps }, route))) notFound(res);
+    return;
+  }
   json(res, { error: NOT_AVAILABLE_TO_MEMBERS }, 403);
 }

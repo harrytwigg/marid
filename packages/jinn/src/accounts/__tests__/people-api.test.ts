@@ -46,7 +46,7 @@ describe("People (operator)", () => {
     const { userId } = await inviteAndAccept(h, "pat@example.test", { role: "viewer" });
     await h.asOperator("POST", "/api/boards/ops/invites", { email: "later@example.test", role: "collaborator" });
     const listed = await h.asOperator("GET", "/api/boards/ops/members");
-    expect(listed.body.members).toEqual([{ user: { id: userId, email: "pat@example.test", displayName: "Pat Member", status: "active" }, role: "viewer", grantedBy: "operator", grantedAt: expect.any(String) }]);
+    expect(listed.body.members).toEqual([{ userId, email: "pat@example.test", displayName: "Pat Member", initials: "PM", role: "viewer" }]);
     expect(listed.body.invites.map((i: any) => i.email)).toEqual(["later@example.test"]);
     expect((await h.asOperator("PATCH", `/api/boards/ops/members/${userId}`, { role: "boss" })).status).toBe(400);
     expect((await h.asOperator("PATCH", `/api/boards/ops/members/usr_000000000000`, { role: "owner" })).status).toBe(404);
