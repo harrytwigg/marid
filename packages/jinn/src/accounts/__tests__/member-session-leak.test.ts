@@ -75,6 +75,31 @@ describe("members read only an employee, operator, a user or a generic agent/sys
   });
 });
 
+describe("one member serialiser: REST and a live-update frame say the same thing", () => {
+  it("the Todo a frame carries is identical to the REST detail's, with the same actor values", async () => {
+    const comments = await import("../../work-items/comments.js");
+    const item = store.createWorkItem({ title: "Same on both paths", department: "ops", source: "session", sourceRef: `session:${BARE}:z`, createdBy: `session:${BARE}` });
+    comments.addComment({ workItemId: item.id, body: "from a plugin", author: "plugin:acme", authorKind: "system" });
+    const rest = (await h.as(viewer, "GET", `/api/member/todos/${item.id}`)).body;
+    const list = (await h.as(viewer, "GET", "/api/member/boards/ops/todos?limit=100")).body.workItems.find((row: any) => row.id === item.id);
+    const frames: any[] = [];
+    const socket = { readyState: 1, close() {}, send: (data: string) => frames.push(JSON.parse(data)) };
+    h.rt.memberSockets.add(socket, viewer.sessionId);
+    const live = store.getWorkItem(item.id)!;
+    h.rt.memberSockets.publish("company:changed", { entity: "todo", action: "created", id: item.id, version: live.version, value: live });
+    h.rt.memberSockets.remove(socket);
+    expect(frames).toHaveLength(1);
+    // The same Todo, key for key and value for value, through REST detail and through the frame.
+    expect(frames[0].payload.value).toEqual(rest.workItem);
+    expect(Object.keys(frames[0].payload.value).sort()).toEqual(Object.keys(rest.workItem).sort());
+    expect(rest.workItem.createdBy).toBe("agent");
+    expect(list.createdBy).toBe(rest.workItem.createdBy);
+    expect(rest.comments.comments.map((c: any) => c.author)).toEqual(["system"]);
+    noSessionIds([rest, frames, list]);
+    expect(JSON.stringify([rest, frames, list])).not.toMatch(/plugin:|acme/);
+  });
+});
+
 describe("members read an agent's work without its session id", () => {
   it("the board list, detail and tree name the creator as the session's employee, or 'agent'", async () => {
     const list = (await h.as(viewer, "GET", "/api/member/boards/ops/todos?limit=100")).body;
