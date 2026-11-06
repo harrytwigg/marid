@@ -4,6 +4,7 @@ import type { AuthState } from "@/lib/auth"
 import { AuthStateIcon, AuthStateLabel } from "./auth-motion"
 import { BrandMark } from "@/components/brand-mark-image"
 import { PRODUCT_NAME } from "@/lib/brand"
+import { SignInForm } from "./sign-in-form"
 
 type PairingMode = "code" | "token"
 type PairingFlow = "cli" | "web" | null
@@ -17,7 +18,7 @@ interface PairingScreenProps {
   onSignIn?: (email: string, password: string) => Promise<void>
 }
 
-export function PairingScreen({ authState, pairing, error, onPair, onSignIn: _onSignIn }: PairingScreenProps) {
+export function PairingScreen({ authState, pairing, error, onPair, onSignIn }: PairingScreenProps) {
   const [code, setCode] = useState("")
   const [mode, setMode] = useState<PairingMode>("code")
   const [flow, setFlow] = useState<PairingFlow>("cli")
@@ -62,7 +63,7 @@ export function PairingScreen({ authState, pairing, error, onPair, onSignIn: _on
           <div>
             <p className="brand-wordmark text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">{PRODUCT_NAME}</p>
             <h1 className="text-balance text-[length:var(--text-title3)] font-[var(--weight-semibold)] tracking-[var(--tracking-normal)]">
-              Pair This Browser
+              {onSignIn ? "Sign In" : "Pair This Browser"}
             </h1>
             <div className="mt-1 inline-flex items-center gap-1.5 text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">
               <Wifi size={13} />
@@ -70,6 +71,15 @@ export function PairingScreen({ authState, pairing, error, onPair, onSignIn: _on
             </div>
           </div>
         </div>
+
+        {onSignIn && (
+          <div className="mb-[var(--space-5)]">
+            <SignInForm onSignIn={onSignIn} />
+            <p className="mt-[var(--space-5)] px-[var(--space-4)] text-[length:var(--text-footnote)] font-[var(--weight-semibold)] text-[var(--text-tertiary)]">
+              Or pair this browser
+            </p>
+          </div>
+        )}
 
         <div className="mb-[var(--space-5)] rounded-[var(--radius-lg)] bg-[var(--fill-quaternary)] p-[var(--space-4)]">
           <p className="text-pretty text-[length:var(--text-subheadline)] leading-[var(--leading-relaxed)] text-[var(--text-secondary)]">

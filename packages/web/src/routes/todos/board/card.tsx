@@ -4,6 +4,7 @@ import type { Employee, WorkItemCompactWire, WorkItemOpenDetailWire, WorkItemSta
 import { stateKeyOf } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { StateCircle } from "../state-glyph"
+import { isMemberIdentity, MemberChip } from "../attribution"
 import { stopReasonOf } from "../util"
 import { CardTree } from "./card-tree"
 import { hasStopLead, StopCauseLead, stopLeadKey } from "./stop-cause"
@@ -98,7 +99,8 @@ export interface BoardCardProps {
   onToggleTree: (id: string) => void
   onOpen: (id: string, item?: WorkItemCompactWire) => void
   onOpenChild: (id: string) => void
-  onAddSubTask: (parentId: string, title: string) => void
+  /** Absent where the person may not add sub-tasks from the card. */
+  onAddSubTask?: (parentId: string, title: string) => void
   /** Keep this Todo on Home, or take it off. Absent = no keep affordance. */
   onKeep?: (vars: { id: string; kept: boolean }) => void
   /** Drag lift entry point (the drag hook owns pointer capture). */
@@ -135,7 +137,7 @@ export const BoardCard = memo(function BoardCard({
   const overdue = !!item.dueAt && Date.parse(item.dueAt) < Date.now()
   // Shown only while it holds the Todo: a first start from the backlog, before the date.
   const startsLater = item.status === "backlog" && !!item.startAt && Date.parse(item.startAt) > Date.now()
-  const addSubTask = useCallback((title: string) => onAddSubTask(item.id, title), [item.id, onAddSubTask])
+  const addSubTask = useCallback((title: string) => onAddSubTask?.(item.id, title), [item.id, onAddSubTask])
 
   return (
     <article
@@ -184,6 +186,10 @@ export const BoardCard = memo(function BoardCard({
               onToggle={onKeep}
               className="opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
             />
+          )}
+          {/* A member's Todo is unassigned, so the slot is free for who made it. */}
+          {!item.assignee && item.createdBy && isMemberIdentity(item.createdBy) && (
+            <MemberChip identity={item.createdBy} size={20} className="max-w-[140px] text-[calc(11px*var(--text-scale))] text-[var(--text-tertiary)]" />
           )}
           {item.assignee && (
             <span title={assigneeName ?? undefined} className="flex-none">
@@ -269,7 +275,7 @@ export const BoardCard = memo(function BoardCard({
           cardDepth={item.depth ?? 0}
           byName={byName}
           onOpenChild={onOpenChild}
-          onAddSubTask={addSubTask}
+          onAddSubTask={onAddSubTask ? addSubTask : undefined}
         />
       )}
     </article>

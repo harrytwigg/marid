@@ -13,6 +13,8 @@ import { RailKicker, RailRow, RailPriorityBars, formatDueLong } from "./rail-row
 import { AutoStartRow } from "./auto-start-row"
 import { SprintRailRow } from "../sprints/sprint-rail-row"
 import { displayNameOf, formatRelativeTime } from "../util"
+import { isMemberIdentity, LastTouchedBy, MemberChip } from "../attribution"
+import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
 
 /* Todos v2 slice 6 — the chrome-free properties rail (design-doc §7.2/§7.3,
  * mock task-detail.html). No inset boxes: quiet rows on the page surface, the
@@ -59,6 +61,7 @@ export function PropsRail({
   sessionTree?: SessionTreeWire
 }) {
   const openSession = useOpenSession()
+  const { operatorControls } = useTodoCapabilities()
   const item = detail.workItem
   const labels = detail.labels ?? []
   const dept = item.department ? departments?.find((d) => d.slug === item.department) : undefined
@@ -155,7 +158,7 @@ export function PropsRail({
           <ArrowUpRight size={12} aria-hidden className="ml-auto text-[var(--text-quaternary)] opacity-0 transition-opacity group-hover/dispatch:opacity-100" />
         </button>
       )}
-      {!railSessionLive && (
+      {!railSessionLive && onDispatch && (
         <button
           type="button"
           data-testid="rail-dispatch"
@@ -168,7 +171,7 @@ export function PropsRail({
         </button>
       )}
 
-      <AutoStartRow detail={detail} />
+      {operatorControls && <AutoStartRow detail={detail} />}
 
       {sessionTree && sessionTree.roots.length > 0 && (
         <div className="mt-2">
@@ -210,7 +213,7 @@ export function PropsRail({
         </RailRow>
         {deptPick?.picker}
       </div>
-      <SprintRailRow detail={detail} editable={!!rowFor} />
+      {operatorControls && <SprintRailRow detail={detail} editable={!!rowFor} />}
       <div className="relative">
         <RailRow quiet testId="rail-start" label="Start date" onOpen={startPick?.onOpen} open={startPick?.open}>
           <CalendarClock size={14} aria-hidden className="flex-none text-[var(--text-quaternary)]" />
@@ -235,10 +238,12 @@ export function PropsRail({
       </div>
       <RailRow quiet testId="rail-created-by">
         <UserRound size={14} aria-hidden className="flex-none text-[var(--text-quaternary)]" />
-        {createdBySession ? <SessionRef sessionId={createdBySession} byName={byName} /> : createdByLabel}
+        {createdBySession ? <SessionRef sessionId={createdBySession} byName={byName} />
+          : isMemberIdentity(item.createdBy) ? <MemberChip identity={item.createdBy!} size={16} /> : createdByLabel}
         <span className="text-[12px] font-normal text-[var(--text-quaternary)]">· created {formatRelativeTime(item.createdAt)}</span>
+        <LastTouchedBy events={detail.events} />
       </RailRow>
-      <RailRow quiet testId="rail-spend">
+      {operatorControls && <RailRow quiet testId="rail-spend">
         <span className="text-[11px] font-normal text-[var(--text-quaternary)]" style={{ fontFamily: "var(--font-code)" }}>
           ${detail.spendUsd.toFixed(2)}
         </span>
@@ -255,7 +260,7 @@ export function PropsRail({
             </span>
           </>
         )}
-      </RailRow>
+      </RailRow>}
     </aside>
   )
 }

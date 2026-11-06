@@ -8,18 +8,21 @@ import {
   type WorkItemCommentWire,
   type WorkItemDetailWire,
 } from "@/lib/api"
-import { commentAuthorLabel, operatorSafeTodoError } from "@/lib/todos"
+import { operatorSafeTodoError } from "@/lib/todos"
 import { MarkdownView } from "@/components/markdown-view"
-import { EmployeeAvatar, OPERATOR_DEFAULT_EMOJI } from "@/components/ui/employee-avatar"
 import { useMentionPicker } from "@/components/mention-picker"
 import { invalidateTodoComments, useAddTodoComment } from "../use-todo-comment"
 import { commentHeadRequest, mergeCommentPages } from "./comment-window"
-import { displayNameOf, formatRelativeTime } from "../util"
+import { formatRelativeTime } from "../util"
+import { CommentAuthor, CommentAvatar, withCreatorActor } from "../attribution"
 import { AttachmentChips } from "./comment-attachments"
-import { CommentSessionLink, SessionActor } from "./session-ref"
+import { CommentSessionLink } from "./session-ref"
 import { WhisperLine } from "./whisper"
 import { buildFeed, stripCommentMarkers } from "./activity-feed"
 import { RunEndLine, RunStartLine } from "./runs"
+import { commentPowers } from "@/lib/todo-capabilities"
+import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
+import { useMember } from "@/hooks/use-principal"
 
 /* The merged activity feed keeps audit events quiet and comment voices
  * prominent. Long comments collapse independently to a clamped preview; the
@@ -28,17 +31,6 @@ import { RunEndLine, RunStartLine } from "./runs"
  * edge on desktop and mobile. */
 
 export const COMMENT_COLLAPSE_THRESHOLD = 320
-
-/** Operator comments avatar as the reserved "operator" actor, not an employee. */
-function avatarFor(comment: WorkItemCommentWire): string {
-  return comment.authorKind === "operator" ? "operator" : comment.author
-}
-
-function commentAuthor(comment: WorkItemCommentWire, byName: Map<string, Employee>): React.ReactNode {
-  if (comment.authorKind === "operator") return "You"
-  const label = comment.authorKind === "employee" ? displayNameOf(comment.author, byName) : commentAuthorLabel(comment.author, comment.authorKind)
-  return <SessionActor actor={comment.author} byName={byName}>{label}</SessionActor>
-}
 
 function CommentBlock({
   comment,
@@ -77,15 +69,15 @@ function CommentBlock({
   return (
     <div className={`pb-0.5 pt-2 ${reply ? "ml-[30px]" : ""}`} data-testid={`activity-comment-${comment.id}`}>
       <div className="flex items-center gap-2">
-        <EmployeeAvatar name={avatarFor(comment)} fallback={comment.authorKind === "operator" ? OPERATOR_DEFAULT_EMOJI : undefined} size={18} fontSize={10} className="bg-[var(--fill-secondary)]" />
-        <span className="text-[12.5px] font-semibold text-[var(--text-secondary)]">{commentAuthor(comment, byName)}</span>
+        <CommentAvatar comment={comment} />
+        <span className="text-[12.5px] font-semibold text-[var(--text-secondary)]"><CommentAuthor comment={comment} byName={byName} /></span>
         <span className="text-[10.5px] text-[var(--text-quaternary)]">{formatRelativeTime(comment.createdAt)}</span>
         {comment.editedAt && !tombstoned && <span className="text-[10.5px] text-[var(--text-quaternary)]">(edited)</span>}
         <CommentSessionLink sessionId={comment.sessionId} byName={byName} />
       </div>
       {repliedTo && (
         <div data-testid={`activity-replied-to-${comment.id}`} className="ml-[26px] mt-[3px] pl-3 text-[11.5px] text-[var(--text-quaternary)]">
-          ↪ replying to {commentAuthor(repliedTo, byName)}
+          ↪ replying to <CommentAuthor comment={repliedTo} byName={byName} />
         </div>
       )}
       {editing ? (
@@ -249,8 +241,8 @@ export function ActivitySection({
       ? commentsById.get(comment.repliedToId)
       : undefined
   const blocks = useMemo(
-    () => buildFeed(detail.events, comments, detail.runs ?? []).reverse(),
-    [detail.events, comments, detail.runs],
+    () => buildFeed(withCreatorActor(detail.events, detail.workItem.createdBy), comments, detail.runs ?? []).reverse(),
+    [detail.events, detail.workItem.createdBy, comments, detail.runs],
   )
 
   const [openFolds, setOpenFolds] = useState<Set<string>>(new Set())
@@ -263,7 +255,10 @@ export function ActivitySection({
   const invalidate = () => invalidateTodoComments(qc, id)
 
   const send = useAddTodoComment(id)
-  const allEmployees = useMemo(() => [...byName.values()], [byName])
+  const caps = useTodoCapabilities()
+  const memberId = useMember()?.user.id ?? null
+  // A member's comment wakes no one, so the picker offers no one to mention.
+  const allEmployees = useMemo(() => (caps.memberMode ? [] : [...byName.values()]), [byName, caps.memberMode])
   const picker = useMentionPicker({ value: draft, setValue: setDraft, employees: allEmployees, textareaRef: composerRef })
 
   // Comment edit/delete carried over from the retired sheet (stage-B review
@@ -281,14 +276,14 @@ export function ActivitySection({
     onSettled: invalidate,
   })
   const commentBusy = editComment.isPending || removeComment.isPending
-  const commentActions = (comment: WorkItemCommentWire) => ({
-    onEdit:
-      comment.authorKind === "operator"
-        ? (body: string) => editComment.mutate({ commentId: comment.id, body })
-        : undefined,
-    onDelete: () => removeComment.mutate(comment.id),
-    busy: commentBusy,
-  })
+  const commentActions = (comment: WorkItemCommentWire) => {
+    const powers = commentPowers(caps, comment, memberId)
+    return {
+      onEdit: powers.edit ? (body: string) => editComment.mutate({ commentId: comment.id, body }) : undefined,
+      onDelete: powers.remove ? () => removeComment.mutate(comment.id) : undefined,
+      busy: commentBusy,
+    }
+  }
 
   const submit = () => {
     const body = draft.trim()
@@ -341,7 +336,7 @@ export function ActivitySection({
 
   const replyRow = replyTo && (
     <div className="mb-1 flex items-center gap-1.5 text-[12px] text-[var(--text-tertiary)]">
-      Replying to {commentAuthor(replyTo, byName)}
+      Replying to <CommentAuthor comment={replyTo} byName={byName} />
       <button
         type="button"
         onClick={() => setReplyTo(null)}
@@ -450,7 +445,7 @@ export function ActivitySection({
                   attachments={attachmentsByComment.get(block.node.comment.id) ?? []}
                   workItemId={id}
                   repliedTo={repliedToOf(block.node.comment)}
-                  onReply={() => setReplyTo(block.node.comment)}
+                  onReply={caps.comment ? () => setReplyTo(block.node.comment) : undefined}
                   {...commentActions(block.node.comment)}
                 />
                 {block.node.replies.map((replyComment) => (
@@ -464,7 +459,7 @@ export function ActivitySection({
                     reply
                     repliedTo={repliedToOf(replyComment)}
                     // The gateway flattens this to the thread root and records the comment answered.
-                    onReply={() => setReplyTo(replyComment)}
+                    onReply={caps.comment ? () => setReplyTo(replyComment) : undefined}
                     {...commentActions(replyComment)}
                   />
                 ))}
@@ -523,7 +518,7 @@ export function ActivitySection({
 
       {/* Desktop sticks to the inner scroll edge; mobile owns the viewport
           bottom above the safe area. */}
-      {!mobile ? (
+      {!caps.comment ? null : !mobile ? (
         <div
           className="sticky bottom-0 z-10 -mx-2 mt-6 px-2 pb-5 pt-5"
           data-testid="task-composer"

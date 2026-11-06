@@ -120,6 +120,9 @@ export interface ResetInspectWire {
 export interface MemberBoardWire {
   department: string
   role: BoardRole
+  /** The Todo-id prefix and a title; the member cannot read the departments route, so the board row carries them. */
+  prefix?: string
+  displayName?: string | null
 }
 
 /** A person on a member's boards. Reading: `GET /api/member/people` answers `{ people, employees }`. */

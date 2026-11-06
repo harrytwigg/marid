@@ -2,7 +2,7 @@ import { ChevronRight, CornerDownRight, Flag, Link2, Paperclip, Pencil, Plus, Ro
 import type { Employee, WorkItemEventWire } from "@/lib/api"
 import { STATUS_LABEL } from "@/lib/todos"
 import { displayNameOf, formatRelativeTime, OPERATOR_ASSIGNEE } from "../util"
-import { SessionActor } from "./session-ref"
+import { EventActor } from "../attribution"
 
 /* One audit event read back as a sentence: who did it, and what it was. The
  * feed that orders these lines lives in activity.tsx. */
@@ -107,7 +107,7 @@ export function WhisperLine({ event, byName }: { event: WorkItemEventWire; byNam
       </span>
       <span className="min-w-0 truncate">
         <span className={`font-semibold ${whisper.tinted ? "text-[var(--system-red)]" : "text-[var(--text-secondary)]"}`}>
-          <SessionActor actor={event.actor} byName={byName}>{actorLabel(event.actor, byName)}</SessionActor>
+          <EventActor actor={event.actor} byName={byName}>{actorLabel(event.actor, byName)}</EventActor>
         </span>{" "}
         {whisper.text}
       </span>

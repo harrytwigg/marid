@@ -4,6 +4,9 @@ import { preloadQuickCapture } from "../quick-add/capture-bar-lazy"
 import { LargeTitleHeader } from "@/components/shell/large-title-header"
 import type { DepartmentSummaryWire } from "@/lib/api"
 import type { BoardId } from "./board-route"
+import { ShareBoardButton } from "@/components/people/share-board-button"
+import { useAuthOptional } from "@/routes/auth-provider"
+import { useBoardAbilities, useMember } from "@/hooks/use-principal"
 import { ArchivedTag, BoardSwitcher } from "./board-switcher"
 import { DepartmentArchiveMenu } from "./department-archive-menu"
 
@@ -97,14 +100,23 @@ function BoardSubtitle({
 
 export function BoardHeader({ board, title, departments, deptPrefix, onQuickCapture, ...counts }: BoardHeaderProps) {
   const department = boardDepartment(board, departments)
+  // Sharing needs accounts, which exist only where gateway auth is on. A member who owns the board gets the same button in member mode.
+  const auth = useAuthOptional()
+  const member = useMember()
+  const abilities = useBoardAbilities(department?.slug)
+  const canShare = department !== undefined && auth?.authState?.accountsEnabled === true && !member
   return (
     <LargeTitleHeader
       title={<BoardSwitcher board={board} title={title} departments={departments} attentionCount={counts.attentionCount} />}
       subtitle={<BoardSubtitle deptPrefix={deptPrefix} archived={department?.archived === true} {...counts} />}
       trailing={
         <div className="flex items-center gap-2">
-          {department && <DepartmentArchiveMenu slug={department.slug} prefix={department.prefix} archived={department.archived === true} />}
-          <QuickCaptureButton onClick={onQuickCapture} />
+          {department && canShare && <ShareBoardButton department={department.slug} mode="operator" />}
+          {department && member && abilities?.canShare && (
+            <ShareBoardButton department={department.slug} mode="member" ownRole={abilities.role ?? undefined} selfUserId={member.user.id} />
+          )}
+          {department && !member && <DepartmentArchiveMenu slug={department.slug} prefix={department.prefix} archived={department.archived === true} />}
+          {!member && <QuickCaptureButton onClick={onQuickCapture} />}
         </div>
       }
     />

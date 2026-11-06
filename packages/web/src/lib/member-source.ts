@@ -6,10 +6,6 @@
 // therefore only ever name routes the gateway allowlists, and the components stay the operator's own.
 
 import { gatewayTransport } from "./gateway-transport"
-import type { PrincipalWire } from "./accounts-api"
-
-type Member = Extract<PrincipalWire, { kind: "member" }>
-
 export const MEMBER_REFUSAL = "Not available to board members"
 
 function json(body: unknown, status = 200): Response {
@@ -65,9 +61,18 @@ function query(path: string): URLSearchParams {
 
 const EMPTY_LIST = { workItems: [], total: 0, nextOffset: null, totals: {} }
 
+interface BoardRow { department: string; role?: string; prefix?: string; displayName?: string }
+
+async function memberBoards(): Promise<BoardRow[]> {
+  const res = await gatewayTransport().request("/api/member/boards", { method: "GET" })
+  if (!res.ok) return []
+  return ((await res.json()) as { boards?: BoardRow[] }).boards ?? []
+}
+
 /** Reads that the shared surfaces make for things a member has no business with. Each answers what
- *  "nothing here" looks like for that surface, so the surface renders instead of erroring. */
-function stubFor(path: string, member: Member): Response | null {
+ *  "nothing here" looks like for that surface, so the surface renders instead of erroring. The
+ *  department and org lookups are built from the member's own boards and people. */
+async function stubFor(path: string): Promise<Response | null> {
   const bare = path.split("?")[0]
   if (bare === "/api/onboarding") {
     return json({
@@ -80,86 +85,115 @@ function stubFor(path: string, member: Member): Response | null {
   if (bare === "/api/sprints" || bare.startsWith("/api/sprints/")) return json({ sprints: [] })
   if (SESSIONS.test(path)) return json([])
   if (bare === "/api/departments") {
-    return json({ departments: member.boards.map((board) => ({ slug: board.department, prefix: "", createdAt: "", todoCount: 0 })) })
+    const boards = await memberBoards()
+    return json({
+      departments: boards.map((board) => ({
+        slug: board.department, prefix: board.prefix ?? "", displayName: board.displayName ?? null, createdAt: "", todoCount: 0,
+      })),
+    })
+  }
+  if (bare === "/api/org") {
+    const [boards, peopleRes] = await Promise.all([
+      memberBoards(),
+      gatewayTransport().request("/api/member/people", { method: "GET" }),
+    ])
+    const employees = peopleRes.ok
+      ? ((await peopleRes.json()) as { employees?: { name: string; displayName?: string; emoji?: string }[] }).employees ?? []
+      : []
+    return json({
+      departments: boards.map((board) => board.department),
+      employees: employees.map((e) => ({
+        name: e.name, displayName: e.displayName ?? e.name, emoji: e.emoji, department: "", rank: "employee",
+        engine: "", model: "", persona: "",
+      })),
+      hierarchy: { root: null, sorted: employees.map((e) => e.name), warnings: [] },
+    })
   }
   return null
 }
 
 /** The source a member's requests go through. */
-export function createMemberSource(member: Member) {
+export function createMemberSource(onSessionLost?: () => void) {
   return async function memberRequest(path: string, init: RequestInit = {}): Promise<Response> {
-    const verb = method(init)
+    const res = await route(path, init)
+    // A 401 from a member route is the gateway saying this session is over (revoked, disabled, expired).
+    if (res.status === 401) onSessionLost?.()
+    return res
+  }
+}
 
-    if (TREES.test(path) && verb === "GET") {
-      const ids = (query(path).get("ids") ?? "").split(",").filter(Boolean)
-      const trees: Record<string, unknown> = {}
-      await Promise.all(ids.map(async (id) => {
-        const res = await gatewayTransport().request(`/api/member/todos/${enc(id)}/tree`, { method: "GET" })
-        if (res.ok) trees[id] = ((await res.json()) as { tree: unknown }).tree
-      }))
-      return json({ trees })
-    }
+async function route(path: string, init: RequestInit): Promise<Response> {
+  const verb = method(init)
 
-    if (LIST.test(path)) {
-      if (verb === "GET") {
-        const params = query(path)
-        const department = params.get("department")
-        // A list that names ids, or no board, has nothing to read from: members read a board at a time.
-        if (!department || params.has("ids") || params.has("needsAttentionFor")) return json(EMPTY_LIST)
-        params.delete("department")
-        params.delete("rootsOnly")
-        const rest = params.toString()
-        return forward(`/api/member/boards/${enc(department)}/todos${rest ? `?${rest}` : ""}`, init)
-      }
-      if (verb === "POST") {
-        const body = readBody(init)
-        let department = typeof body.department === "string" ? body.department : null
-        if (!department && typeof body.parentId === "string") {
-          const parent = await gatewayTransport().request(`/api/member/todos/${enc(body.parentId)}`, { method: "GET" })
-          if (parent.ok) department = ((await parent.json()) as { workItem?: { department?: string | null } }).workItem?.department ?? null
-        }
-        if (!department) return json({ error: "A board is needed to create a Todo" }, 400)
-        const { department: _department, ...rest } = body
-        return forward(`/api/member/boards/${enc(department)}/todos`, init, { body: rest })
-      }
-      return refuse()
-    }
+  if (TREES.test(path) && verb === "GET") {
+    const ids = (query(path).get("ids") ?? "").split(",").filter(Boolean)
+    const trees: Record<string, unknown> = {}
+    await Promise.all(ids.map(async (id) => {
+      const res = await gatewayTransport().request(`/api/member/todos/${enc(id)}/tree`, { method: "GET" })
+      if (res.ok) trees[id] = ((await res.json()) as { tree: unknown }).tree
+    }))
+    return json({ trees })
+  }
 
-    let m: RegExpMatchArray | null
-    if ((m = TREE.exec(path))) return verb === "GET" ? forward(`/api/member/todos/${m[1]}/tree`, init) : refuse()
-    if ((m = STATUS.exec(path))) {
-      if (verb !== "PUT" && verb !== "POST") return refuse()
-      const { status } = readBody(init)
-      return forward(`/api/member/todos/${m[1]}/status`, init, { method: "POST", body: { status } })
-    }
-    if ((m = COMMENT.exec(path))) {
-      return verb === "PATCH" || verb === "DELETE" ? forward(`/api/member/todos/${m[1]}/comments/${m[2]}`, init) : refuse()
-    }
-    if ((m = COMMENTS.exec(path))) {
-      return verb === "GET" || verb === "POST" ? forward(`/api/member/todos/${m[1]}/comments${path.includes("?") ? `?${query(path)}` : ""}`, init) : refuse()
-    }
-    if ((m = ATTACHMENT.exec(path))) return verb === "GET" ? forward(`/api/member/todos/${m[1]}/attachments/${m[2]}`, init) : refuse()
-    if ((m = ATTACHMENTS.exec(path))) {
-      return verb === "GET" || verb === "POST" ? forward(`/api/member/todos/${m[1]}/attachments${verb === "GET" && path.includes("?") ? `?${query(path)}` : ""}`, init) : refuse()
-    }
-    if ((m = LABELS.exec(path))) {
-      if (verb !== "PUT") return refuse()
-      const { labels } = readBody(init)
-      return forward(`/api/member/todos/${m[1]}`, init, { method: "PATCH", body: { labels } })
-    }
-    if ((m = SESSIONS.exec(path))) return verb === "GET" ? json([]) : refuse()
-    if ((m = ONE.exec(path))) {
-      if (verb === "GET") return forward(`/api/member/todos/${m[1]}`, init)
-      if (verb === "PATCH") return forward(`/api/member/todos/${m[1]}`, init)
-      return refuse()
-    }
-
+  if (LIST.test(path)) {
     if (verb === "GET") {
-      const stub = stubFor(path, member)
-      if (stub) return stub
+      const params = query(path)
+      const department = params.get("department")
+      // A list that names ids, or no board, has nothing to read from: members read a board at a time.
+      if (!department || params.has("ids") || params.has("needsAttentionFor")) return json(EMPTY_LIST)
+      params.delete("department")
+      params.delete("rootsOnly")
+      const rest = params.toString()
+      return forward(`/api/member/boards/${enc(department)}/todos${rest ? `?${rest}` : ""}`, init)
+    }
+    if (verb === "POST") {
+      const body = readBody(init)
+      let department = typeof body.department === "string" ? body.department : null
+      if (!department && typeof body.parentId === "string") {
+        const parent = await gatewayTransport().request(`/api/member/todos/${enc(body.parentId)}`, { method: "GET" })
+        if (parent.ok) department = ((await parent.json()) as { workItem?: { department?: string | null } }).workItem?.department ?? null
+      }
+      if (!department) return json({ error: "A board is needed to create a Todo" }, 400)
+      const { department: _department, ...rest } = body
+      return forward(`/api/member/boards/${enc(department)}/todos`, init, { body: rest })
     }
     return refuse()
   }
+
+  let m: RegExpMatchArray | null
+  if ((m = TREE.exec(path))) return verb === "GET" ? forward(`/api/member/todos/${m[1]}/tree`, init) : refuse()
+  if ((m = STATUS.exec(path))) {
+    if (verb !== "PUT" && verb !== "POST") return refuse()
+    const { status } = readBody(init)
+    return forward(`/api/member/todos/${m[1]}/status`, init, { method: "POST", body: { status } })
+  }
+  if ((m = COMMENT.exec(path))) {
+    return verb === "PATCH" || verb === "DELETE" ? forward(`/api/member/todos/${m[1]}/comments/${m[2]}`, init) : refuse()
+  }
+  if ((m = COMMENTS.exec(path))) {
+    return verb === "GET" || verb === "POST" ? forward(`/api/member/todos/${m[1]}/comments${path.includes("?") ? `?${query(path)}` : ""}`, init) : refuse()
+  }
+  if ((m = ATTACHMENT.exec(path))) return verb === "GET" ? forward(`/api/member/todos/${m[1]}/attachments/${m[2]}`, init) : refuse()
+  if ((m = ATTACHMENTS.exec(path))) {
+    return verb === "GET" || verb === "POST" ? forward(`/api/member/todos/${m[1]}/attachments${verb === "GET" && path.includes("?") ? `?${query(path)}` : ""}`, init) : refuse()
+  }
+  if ((m = LABELS.exec(path))) {
+    if (verb !== "PUT") return refuse()
+    const { labels } = readBody(init)
+    return forward(`/api/member/todos/${m[1]}`, init, { method: "PATCH", body: { labels } })
+  }
+  if ((m = SESSIONS.exec(path))) return verb === "GET" ? json([]) : refuse()
+  if ((m = ONE.exec(path))) {
+    if (verb === "GET") return forward(`/api/member/todos/${m[1]}`, init)
+    if (verb === "PATCH") return forward(`/api/member/todos/${m[1]}`, init)
+    return refuse()
+  }
+
+  if (verb === "GET") {
+    const stub = await stubFor(path)
+    if (stub) return stub
+  }
+  return refuse()
 }
 
 /** The member route for an attachment's bytes, used where the URL goes into an `<img>` or a link. */

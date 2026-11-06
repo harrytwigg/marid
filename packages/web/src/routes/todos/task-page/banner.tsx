@@ -3,6 +3,7 @@ import { Pause } from "@/components/ui/icon"
 import { AttachmentRefText } from "@/components/attachment-ref-preview"
 import type { Employee, WorkItemDetailWire, WorkItemEventWire } from "@/lib/api"
 import { StopCauseLead } from "../board/stop-cause"
+import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
 import { displayNameOf, formatRelativeTime, stopReasonOf } from "../util"
 
 /* Todos v2 slice 6 — the task page's banner zone (design-doc §7.2, states mock
@@ -54,7 +55,8 @@ export function TaskBanner({
 }) {
   const kind = bannerKindOf(detail)
   const { note, event } = exceptionReasonOf(detail)
-  const needsReason = kind !== null && !note
+  const { operatorControls } = useTodoCapabilities()
+  const needsReason = kind !== null && !note && operatorControls
   const [reason, setReason] = useState("")
   const reasonRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
