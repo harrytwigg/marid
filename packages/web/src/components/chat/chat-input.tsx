@@ -218,7 +218,10 @@ export function ChatInput({
   const [sendDelivery, setSendDelivery] = useState<SendDelivery>(() => readSendDelivery(typeof localStorage === 'undefined' ? null : localStorage))
   useEffect(() => { writeSendDelivery(typeof localStorage === 'undefined' ? null : localStorage, sendDelivery) }, [sendDelivery])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const handledFocusTriggerRef = useRef(0)
+  // An input that mounts in a pane that is not active (a split remounts its panes) finds a request
+  // already raised for the input before it: that one is spent, and must not fire when the pane is
+  // next activated, which a click on one of its tabs does.
+  const handledFocusTriggerRef = useRef(isActive ? 0 : focusTrigger ?? 0)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const rafRef = useRef<number | null>(null)
   const previousSkillsVersionRef = useRef(skillsVersion)

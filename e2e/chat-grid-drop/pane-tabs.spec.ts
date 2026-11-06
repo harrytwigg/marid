@@ -40,6 +40,20 @@ async function openWithChat(browser: Browser, options: { video?: boolean; theme?
   return { context, page, ids, dialogs }
 }
 
+/** Renames a chat from its tab's context menu, as an operator does, and waits for the new title to show. */
+async function renameFromTabMenu(page: Page, sessionId: string, title: string, shown: string): Promise<void> {
+  await tab(page, sessionId).click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Rename' }).click()
+  const input = tab(page, sessionId).getByLabel('Rename tab')
+  await expect(input).toBeFocused()
+  await input.fill(title)
+  await page.keyboard.press('Enter')
+  await expect(tab(page, sessionId).locator('[data-pane-tab-title]')).toContainText(shown)
+}
+
+/** The seeded sessions are looked up by title, and the sandbox is shared: put a renamed one back. */
+const restoreTitle = (page: Page, sessionId: string, title: string) => renameFromTabMenu(page, sessionId, title, title.replace(/^#\d+ - /, ''))
+
 async function openFromSidebar(page: Page, sessionId: string): Promise<void> {
   await page.locator(`[data-chat-session-row="${sessionId}"]`).first().click()
   await expect(pane(page, sessionId)).toBeVisible()
@@ -103,6 +117,67 @@ test('sidebar clicks preview, double-click keeps, and the strip re-orders and cl
   await expect(pane(page, d)).toBeVisible()
   // Delete and Backspace on a tab close the tab; they must not also reach the delete-session shortcut.
   expect(dialogs).toEqual([])
+  await context.close()
+})
+
+test('Rename in a tab\'s context menu opens the editor, keeps it open, and the new title survives a reload', async ({ browser }) => {
+  const { context, page, ids: [a, b] } = await openWithChat(browser, { video: true })
+  await openFromSidebar(page, b)
+  await expect.poll(() => tabIds(strip(page))).toEqual([a, b])
+
+  await tab(page, b).click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Rename' }).click()
+  const input = tab(page, b).getByLabel('Rename tab')
+  await expect(input).toBeVisible()
+  // The menu closing must not take focus back from the editor, or the blur cancels the edit at once.
+  await page.waitForTimeout(500)
+  await expect(input).toBeFocused()
+  await page.screenshot({ path: artifactPath('pane-tabs-rename-editing.png') })
+
+  await input.fill('Renamed from the tab menu')
+  await page.keyboard.press('Enter')
+  await expect(tab(page, b).locator('[data-pane-tab-title]')).toContainText('Renamed from the tab menu')
+  await expect(page.locator(`[data-chat-session-row="${b}"]`).first()).toContainText('Renamed from the tab menu')
+
+  await page.reload({ waitUntil: 'networkidle' })
+  await expect(tab(page, b).locator('[data-pane-tab-title]')).toContainText('Renamed from the tab menu')
+  await restoreTitle(page, b, '#2 - Delegation flow')
+  await context.close()
+})
+
+test("Rename in the context menu of a tab in a pane that is not focused keeps the menu and the editor open", async ({ browser }) => {
+  const { context, page, ids: [a, b, c] } = await openWithChat(browser, { video: true })
+  await openFromSidebar(page, b)
+  await tab(page, b).dblclick()
+  await openFromSidebar(page, c)
+  await tab(page, c).dblclick()
+  await expect.poll(() => tabIds(strip(page))).toEqual([a, b, c])
+  // Split: the chat dragged to the edge gets the focused pane, and the other pane remounts without focus.
+  await drag(page, tab(page, c), await pointIn(pane(page, c), 0.94, 0.5))
+  await expect(page.locator('[data-chat-grid-pane]')).toHaveCount(2)
+  await expect.poll(() => tabIds(stripWith(page, a))).toEqual([a, b])
+
+  // Right-clicking a tab there focuses its pane; the pane's composer must not take focus from the menu.
+  await tab(page, b).click({ button: 'right' })
+  const menu = page.getByRole('menu', { name: 'Tab menu' })
+  await expect(menu).toBeVisible()
+  await page.waitForTimeout(800)
+  await expect(menu).toBeVisible()
+  await expect(page.locator(`[data-chat-pane-session="${b}"]`)).toHaveAttribute('data-chat-pane-active', 'true')
+  await page.screenshot({ path: artifactPath('pane-tabs-rename-menu-other-pane.png') })
+
+  await page.getByRole('menuitem', { name: 'Rename' }).click()
+  const input = tab(page, b).getByLabel('Rename tab')
+  await expect(input).toBeVisible()
+  await page.waitForTimeout(800)
+  await expect(input).toBeFocused()
+  await input.fill('Renamed in the other pane')
+  await page.keyboard.press('Enter')
+  await expect(tab(page, b).locator('[data-pane-tab-title]')).toContainText('Renamed in the other pane')
+
+  await page.reload({ waitUntil: 'networkidle' })
+  await expect(tab(page, b).locator('[data-pane-tab-title]')).toContainText('Renamed in the other pane')
+  await restoreTitle(page, b, '#2 - Delegation flow')
   await context.close()
 })
 
