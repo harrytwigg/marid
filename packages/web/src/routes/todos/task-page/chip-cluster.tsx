@@ -3,7 +3,7 @@ import { STATUS_LABEL, priorityLabel, reviewAddresseeEmployee } from "@/lib/todo
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { StatusCircle } from "../state-glyph"
 import { displayNameOf } from "../util"
-import { useOperatorWord } from "../attribution"
+import { useViewer } from "../attribution"
 import { ReviewForChip } from "../review-for-chip"
 import { type RailPickers } from "./props-rail"
 import { SESSION_WAITING_COLOR, SESSION_WAITING_LABEL } from "@/lib/session-waiting"
@@ -87,7 +87,7 @@ export function ChipCluster({
    *  working, so the chip says so in amber rather than pulsing blue. */
   waiting?: boolean
 }) {
-  const operatorWord = useOperatorWord()
+  const viewer = useViewer()
   const item = detail.workItem
   const labels = detail.labels ?? []
   const onClearAssignee = rowFor("assignee")?.onClear
@@ -109,7 +109,7 @@ export function ChipCluster({
           {item.assignee ? (
             <>
               <EmployeeAvatar name={item.assignee} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
-              {displayNameOf(item.assignee, byName, operatorWord)}
+              {displayNameOf(item.assignee, byName, viewer)}
             </>
           ) : (
             <span className="text-[var(--text-tertiary)]">Unassigned</span>

@@ -41,6 +41,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
 
 import { ActivitySection } from "../task-page/activity"
 import { PropsRail } from "../task-page/props-rail"
+import { TaskBanner } from "../task-page/banner"
 import { BoardCard } from "../board/card"
 import { lastMemberToucher, withCreatorActor } from "../attribution"
 
@@ -245,6 +246,67 @@ describe("in a board member's view", () => {
     expect(screen.getByTestId("rail-created-by").textContent).not.toContain("You")
     expect(screen.getByTestId("rail-assignee").textContent).toContain("Operator")
     expect(screen.getByTestId("rail-assignee").textContent).not.toContain("You")
+  })
+})
+
+describe("generic actors in a board member's view", () => {
+  beforeEach(() => {
+    auth.value = {
+      principal: { kind: "member", user: { id: "mia1", email: "m@example.test", displayName: "Mia Member" }, boards: [{ department: "platform", role: "viewer" }] },
+      authState: { accountsEnabled: true, hasAccounts: true },
+    }
+    directory.getMemberPeople.mockResolvedValue({ people: [ADA], employees: [] })
+  })
+
+  it("reads an agent's and the system's comments and audit lines as Agent and System, never the raw word", () => {
+    renderActivity(detailOf({
+      events: [
+        event("wie_a", "metadata_edited", "2026-07-20T08:10:00.000Z", { actor: "agent" }),
+        event("wie_s", "label_changed", "2026-07-20T08:20:00.000Z", { actor: "system" }),
+        event("wie_n", "relation_added", "2026-07-20T08:30:00.000Z", { actor: null }),
+      ],
+      comments: {
+        comments: [
+          // Between the audit lines, so none of them fold together.
+          comment("wic_a", "done it", "2026-07-20T08:15:00.000Z", { authorKind: "employee", author: "agent" }),
+          comment("wic_s", "noted", "2026-07-20T08:25:00.000Z", { authorKind: "system", author: "system" }),
+        ],
+        total: 2,
+      },
+    }))
+    expect(screen.getByTestId("whisper-wie_a").textContent).toMatch(/^Agent /)
+    expect(screen.getByTestId("whisper-wie_s").textContent).toMatch(/^System /)
+    expect(screen.getByTestId("whisper-wie_n").textContent).toMatch(/^System /)
+    expect(screen.getByTestId("activity-comment-wic_a").textContent).toContain("Agent")
+    expect(screen.getByTestId("activity-comment-wic_a").textContent).not.toContain("agent")
+    expect(screen.getByTestId("activity-comment-wic_s").textContent).toContain("System")
+  })
+
+  it("names an agent-made Todo's creator Agent, and a system-made one System", () => {
+    const { unmount } = wrap(<PropsRail detail={detailOf({ item: { createdBy: "agent", source: "session" } })} byName={new Map()} departments={[]} />)
+    expect(screen.getByTestId("rail-created-by").textContent).toContain("Agent")
+    unmount()
+    wrap(<PropsRail detail={detailOf({ item: { createdBy: "system", source: "cron" } })} byName={new Map()} departments={[]} />)
+    expect(screen.getByTestId("rail-created-by").textContent).toContain("System")
+  })
+
+  it("names who blocked a Todo on its banner: a person by name, the operator as Operator", async () => {
+    const blocked = (actor: string) => detailOf({
+      item: { status: "blocked" },
+      events: [event("wie_b", "status_change", "2026-07-20T09:00:00.000Z", { actor, fromStatus: "executing", toStatus: "blocked" })],
+    })
+    const { unmount } = wrap(<TaskBanner detail={blocked("user:ada1")} byName={new Map()} focusReason={false} busy={false} onCommitReason={() => {}} />)
+    await waitFor(() => expect(document.body.textContent).toContain("Ada Lovelace"))
+    expect(document.body.textContent).not.toContain("user:ada1")
+    unmount()
+    wrap(<TaskBanner detail={blocked("operator")} byName={new Map()} focusReason={false} busy={false} onCommitReason={() => {}} />)
+    expect(document.body.textContent).toContain("Operator")
+  })
+
+  it("leaves the operator's own view as it was", () => {
+    auth.value = ACCOUNTS
+    renderActivity(detailOf({ events: [event("wie_s", "metadata_edited", "2026-07-20T08:20:00.000Z", { actor: "system" })] }))
+    expect(screen.getByTestId("whisper-wie_s").textContent).toMatch(/^The gateway /)
   })
 })
 

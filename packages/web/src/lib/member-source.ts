@@ -136,6 +136,13 @@ interface Rule { pattern: RegExp; verbs: string[]; handle: Handler }
 
 const mine = (id: string, tail = "") => `/api/member/todos/${id}${tail}`
 const withQuery = (path: string) => (path.includes("?") ? `?${query(path)}` : "")
+/** A Todo read without `include`: the Todo page asks for its runs that way, and runs are never a member's to read. */
+function detailQuery(path: string): string {
+  const params = query(path)
+  params.delete("include")
+  const rest = params.toString()
+  return rest ? `?${rest}` : ""
+}
 
 async function readTrees(path: string): Promise<Response> {
   const ids = (query(path).get("ids") ?? "").split(",").filter(Boolean)
@@ -196,7 +203,7 @@ const RULES: Rule[] = [
   },
   // The Todo page asks for the session list, and for the session tree with `?tree=1`: a member has no sessions in either.
   { pattern: SESSIONS, verbs: ["GET"], handle: (_m, path) => json(query(path).has("tree") ? EMPTY_SESSION_TREE : []) },
-  { pattern: ONE, verbs: ["GET", "PATCH"], handle: (m, path, init) => forward(mine(m[1], method(init) === "GET" ? withQuery(path) : ""), init) },
+  { pattern: ONE, verbs: ["GET", "PATCH"], handle: (m, path, init) => forward(mine(m[1], method(init) === "GET" ? detailQuery(path) : ""), init) },
 ]
 
 async function route(path: string, init: RequestInit): Promise<Response> {

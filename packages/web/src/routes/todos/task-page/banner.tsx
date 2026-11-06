@@ -5,6 +5,7 @@ import type { Employee, WorkItemDetailWire, WorkItemEventWire } from "@/lib/api"
 import { StopCauseLead } from "../board/stop-cause"
 import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
 import { displayNameOf, formatRelativeTime, stopReasonOf } from "../util"
+import { isMemberIdentity, MemberName, useViewer } from "../attribution"
 
 /* Todos v2 slice 6 — the task page's banner zone (design-doc §7.2, states mock
  * §5). The banner shows a blocked Todo. Neutral --bg-secondary card, tinted
@@ -56,6 +57,7 @@ export function TaskBanner({
   const kind = bannerKindOf(detail)
   const { note, event } = exceptionReasonOf(detail)
   const { operatorControls } = useTodoCapabilities()
+  const viewer = useViewer()
   const needsReason = kind !== null && !note && operatorControls
   const [reason, setReason] = useState("")
   const reasonRef = useRef<HTMLInputElement>(null)
@@ -66,9 +68,11 @@ export function TaskBanner({
 
   if (!kind) return null
   const style = KIND_STYLE[kind]
-  const when = [event ? formatRelativeTime(event.createdAt) : null, event?.actor ? displayNameOf(event.actor, byName) : null]
-    .filter(Boolean)
-    .join(" · ")
+  const at = event ? formatRelativeTime(event.createdAt) : null
+  const actor = event?.actor
+    ? isMemberIdentity(event.actor) ? <MemberName identity={event.actor} /> : displayNameOf(event.actor, byName, viewer)
+    : null
+  const when = at || actor ? <>{at}{at && actor ? " · " : null}{actor}</> : null
 
   const commitReason = (event: React.FormEvent) => {
     event.preventDefault()

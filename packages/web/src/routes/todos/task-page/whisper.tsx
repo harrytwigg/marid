@@ -1,8 +1,8 @@
 import { ChevronRight, CornerDownRight, Flag, Link2, Paperclip, Pencil, Plus, RotateCw, Tags } from "@/components/ui/icon"
 import type { Employee, WorkItemEventWire } from "@/lib/api"
 import { STATUS_LABEL } from "@/lib/todos"
-import { displayNameOf, formatRelativeTime, OPERATOR_ASSIGNEE } from "../util"
-import { EventActor, useOperatorWord } from "../attribution"
+import { displayNameOf, formatRelativeTime, memberActorWord, OPERATOR_ASSIGNEE, type Viewer } from "../util"
+import { EventActor, useViewer } from "../attribution"
 
 /* One audit event read back as a sentence: who did it, and what it was. The
  * feed that orders these lines lives in activity.tsx. */
@@ -90,15 +90,17 @@ export function whisperOf(event: WorkItemEventWire): Whisper {
   return typeof rule === "function" ? rule(event.detail ?? {}, event) : rule
 }
 
-function actorLabel(actor: string | null, byName: Map<string, Employee>, operatorWord: string): string {
-  if (!actor || actor === "system") return "The gateway"
-  if (actor === "operator") return operatorWord
-  return displayNameOf(actor, byName, operatorWord)
+function actorLabel(actor: string | null, byName: Map<string, Employee>, viewer: Viewer): string {
+  const word = memberActorWord(actor, viewer)
+  if (word) return word
+  if (!actor || actor === "system") return viewer === "member" ? "System" : "The gateway"
+  if (actor === "operator") return "You"
+  return displayNameOf(actor, byName, viewer)
 }
 
 export function WhisperLine({ event, byName }: { event: WorkItemEventWire; byName: Map<string, Employee> }) {
   const whisper = whisperOf(event)
-  const operatorWord = useOperatorWord()
+  const viewer = useViewer()
   return (
     <div className="flex items-center gap-2 py-[7px] text-[12.5px] text-[var(--text-tertiary)]" data-testid={`whisper-${event.id}`}>
       <span className="mr-1.5 grid w-4 flex-none place-items-center text-[var(--text-quaternary)]">
@@ -106,7 +108,7 @@ export function WhisperLine({ event, byName }: { event: WorkItemEventWire; byNam
       </span>
       <span className="min-w-0 truncate">
         <span className={`font-semibold ${whisper.tinted ? "text-[var(--system-red)]" : "text-[var(--text-secondary)]"}`}>
-          <EventActor actor={event.actor} byName={byName}>{actorLabel(event.actor, byName, operatorWord)}</EventActor>
+          <EventActor actor={event.actor} byName={byName}>{actorLabel(event.actor, byName, viewer)}</EventActor>
         </span>{" "}
         {whisper.text}
       </span>

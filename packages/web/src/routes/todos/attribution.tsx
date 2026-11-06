@@ -6,7 +6,7 @@ import { useMember } from "@/hooks/use-principal"
 import { EmployeeAvatar, OPERATOR_DEFAULT_EMOJI } from "@/components/ui/employee-avatar"
 import { HumanAvatar } from "@/components/ui/human-avatar"
 import { identityLabel, useResolvedIdentity } from "@/hooks/use-people-directory"
-import { displayNameOf } from "./util"
+import { displayNameOf, memberActorWord, type Viewer } from "./util"
 import { SessionActor } from "./task-page/session-ref"
 
 /* A board member shown where a Todo says who did something. Members are stamped `user:<id>` on
@@ -14,10 +14,10 @@ import { SessionActor } from "./task-page/session-ref"
  * the operator or a system actor. The directory is read only inside the member components below,
  * so a surface with no member on it (every surface of an instance without accounts) never asks. */
 
-/** How the operator is named on a Todo. The operator reads their own hand as "You"; a board member reading the same
- *  comment, audit line or creator reads "Operator", never "You". */
-export function useOperatorWord(): string {
-  return useMember() ? commentAuthorLabel("operator", "operator") : "You"
+/** Who is reading. The operator reads their own hand as "You"; a board member reading the same comment, audit line or
+ *  creator reads "Operator", and the generic `agent` / `system` actors their reads carry as "Agent" / "System". */
+export function useViewer(): Viewer {
+  return useMember() ? "member" : "operator"
 }
 
 export function isMemberIdentity(identity: string | null | undefined): boolean {
@@ -77,9 +77,11 @@ export function CommentAvatar({ comment }: { comment: WorkItemCommentWire }) {
 }
 
 export function CommentAuthor({ comment, byName }: { comment: WorkItemCommentWire; byName: Map<string, Employee> }) {
-  const operatorWord = useOperatorWord()
-  if (comment.authorKind === "operator") return <>{operatorWord}</>
+  const viewer = useViewer()
+  if (comment.authorKind === "operator") return <>{viewer === "member" ? "Operator" : "You"}</>
   if (isMemberComment(comment)) return <MemberName identity={comment.author} />
+  const word = memberActorWord(comment.author, viewer)
+  if (word) return <>{word}</>
   const label = comment.authorKind === "employee" ? displayNameOf(comment.author, byName) : commentAuthorLabel(comment.author, comment.authorKind)
   return <SessionActor actor={comment.author} byName={byName}>{label}</SessionActor>
 }

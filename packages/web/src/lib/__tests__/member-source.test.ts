@@ -61,10 +61,15 @@ describe("member request source", () => {
     expect(request).not.toHaveBeenCalled()
   })
 
-  it("keeps the query on a tree or detail read", async () => {
+  it("keeps the query on a tree read, and drops the runs a detail read asks for", async () => {
     await source("/api/work-items/A-1/tree?depth=2", { method: "GET" })
     await source("/api/work-items/A-1?include=runs", { method: "GET" })
-    expect(calls().map((c) => c.path)).toEqual(["/api/member/todos/A-1/tree?depth=2", "/api/member/todos/A-1?include=runs"])
+    await source("/api/work-items/A-1?include=runs&commentsLimit=5", { method: "GET" })
+    expect(calls().map((c) => c.path)).toEqual([
+      "/api/member/todos/A-1/tree?depth=2",
+      "/api/member/todos/A-1",
+      "/api/member/todos/A-1?commentsLimit=5",
+    ])
   })
 
   it("fetches each tree of a batch from the member tree route", async () => {

@@ -13,7 +13,7 @@ import { RailKicker, RailRow, RailPriorityBars, formatDueLong } from "./rail-row
 import { AutoStartRow } from "./auto-start-row"
 import { SprintRailRow } from "../sprints/sprint-rail-row"
 import { displayNameOf, formatRelativeTime } from "../util"
-import { isMemberIdentity, LastTouchedBy, MemberChip, useOperatorWord } from "../attribution"
+import { isMemberIdentity, LastTouchedBy, MemberChip, useViewer } from "../attribution"
 import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
 
 /* Todos v2 slice 6 — the chrome-free properties rail (design-doc §7.2/§7.3,
@@ -67,8 +67,10 @@ export function PropsRail({
   const dept = item.department ? departments?.find((d) => d.slug === item.department) : undefined
   const deptTitle = item.department ? item.department.charAt(0).toUpperCase() + item.department.slice(1) : "No department"
   const createdBySession = sessionIdFromActor(item.createdBy)
-  const operatorWord = useOperatorWord()
-  const createdByLabel = !item.createdBy || item.createdBy === "operator" ? operatorWord : displayNameOf(item.createdBy, byName, operatorWord)
+  const viewer = useViewer()
+  const createdByLabel = !item.createdBy || item.createdBy === "operator"
+    ? (viewer === "member" ? "Operator" : "You")
+    : displayNameOf(item.createdBy, byName, viewer)
   const overdue = !!item.dueAt && Date.parse(item.dueAt) < Date.now()
   const railSessionLive = LIVE_RAIL_STATES.has(railSession?.status ?? "")
   const railSessionWaiting = isSessionWaiting(railSession?.status)
@@ -105,7 +107,7 @@ export function PropsRail({
           {item.assignee ? (
             <>
               <EmployeeAvatar name={item.assignee} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
-              {displayNameOf(item.assignee, byName, operatorWord)}
+              {displayNameOf(item.assignee, byName, viewer)}
             </>
           ) : (
             <>
