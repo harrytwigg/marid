@@ -16,6 +16,7 @@ import { operatorSafeTodoError } from "@/lib/todos"
 import type { CloseGateCounts } from "@/lib/legal-targets"
 import { newTodoEditRequest, invalidateTodoCaches, saveTodoDetailRemote } from "../todo-edit-request"
 import { useSetWorkItemStatus } from "../use-todos"
+import type { MemberCreator } from "@/hooks/use-member-creator-keeps"
 import { PickerPopover, PickerSheet } from "../pickers/picker-shell"
 import {
   AssigneePickerContent,
@@ -62,7 +63,7 @@ export function useTaskPickers({
   employees: Employee[]
   departments: DepartmentSummaryWire[]
   /** The board member (`user:<id>`) who created this Todo's root, when it was one: assigning or moving it tells the operator what that does to their access. */
-  memberCreator?: string | null
+  memberCreator?: MemberCreator | null
   mobile: boolean
   announce: (message: string) => void
   /** This view's own subtree: two Todos can be open side by side, each with its own rail. */

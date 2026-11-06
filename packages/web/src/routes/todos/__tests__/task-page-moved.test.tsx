@@ -62,6 +62,12 @@ vi.mock("@/lib/accounts-api", async (importOriginal) => {
 const MOVED = "Moved to another board"
 const HINT = "Visible to the members of this board"
 const WARNING = "Mia Member created this. After this change they can still read it and comment, but not edit it."
+const WARNING_READ = "Mia Member created this. After this change they can still read it, but not comment or edit it."
+const WARNING_NONE = "Mia Member created this. After this change they will lose access to it."
+const roster = (role?: "viewer" | "collaborator" | "owner") => ({
+  members: role ? [{ userId: "me", displayName: "Mia Member", email: "m@example.test", initials: "MM", role }] : [],
+  invites: [],
+})
 
 function full(id: string, o: Partial<WorkItemFullWire> = {}): WorkItemFullWire {
   return {
@@ -76,9 +82,14 @@ function member(...boards: { department: string; role: BoardRole }[]): Principal
   return { kind: "member", user: { id: "me", email: "me@example.test", displayName: "Mia Member" }, boards }
 }
 
-function setup(root: WorkItemFullWire, children: WorkItemFullWire[] = []) {
+function setup(root: WorkItemFullWire, children: WorkItemFullWire[] = [], filedOn: string | null = "platform") {
   const isMember = principal.kind === "member"
-  getWorkItem.mockResolvedValue({ workItem: root, spendUsd: isMember ? null : 0, events: [] })
+  // The operator's read carries the board a member filed the root on, which is where their access is anchored.
+  const events = filedOn === null ? [] : [{
+    id: "e1", workItemId: root.id, kind: "created", fromStatus: null, toStatus: "backlog", actor: "connector",
+    detail: { createdOnBoard: filedOn }, createdAt: "2026-07-20T08:00:00.000Z",
+  }]
+  getWorkItem.mockResolvedValue({ workItem: root, spendUsd: isMember ? null : 0, events })
   const totals: Record<string, number> = {}
   for (const item of [root, ...children]) totals[item.status] = (totals[item.status] ?? 0) + 1
   getWorkItemTree.mockResolvedValue({ tree: { root: node(root, children.map((c) => node(c))), totals, spendUsd: isMember ? null : 0 } })
@@ -95,7 +106,7 @@ function setup(root: WorkItemFullWire, children: WorkItemFullWire[] = []) {
 beforeEach(() => {
   vi.clearAllMocks()
   assignWorkItem.mockResolvedValue({ workItem: full("PLT-1") })
-  getBoardRoster.mockResolvedValue({ members: [], invites: [] })
+  getBoardRoster.mockResolvedValue(roster("collaborator"))
 })
 
 describe("a member's Todo that left their boards", () => {
@@ -204,6 +215,37 @@ describe("the operator assigning or moving a Todo a member created", () => {
     await waitFor(() => expect(within(picker).getByTestId("picker-member-creator-note").textContent).toBe(WARNING))
     fireEvent.click(within(picker).getByTestId("assignee-option-alice"))
     expect(assignWorkItem).toHaveBeenCalledWith("PLT-1", "alice")
+  })
+
+  it("is told they keep reading but not commenting when they hold the board it was filed on as a viewer", async () => {
+    principal = { kind: "operator" }
+    getBoardRoster.mockResolvedValue(roster("viewer"))
+    setup(full("PLT-1"))
+    const picker = await openAssignee()
+    await waitFor(() => expect(within(picker).getByTestId("picker-member-creator-note").textContent).toBe(WARNING_READ))
+    expect(getBoardRoster).toHaveBeenCalledWith("platform")
+  })
+
+  it("is told they will lose access when they no longer hold the board it was filed on, or none is recorded", async () => {
+    principal = { kind: "operator" }
+    getBoardRoster.mockResolvedValue(roster())
+    const first = setup(full("PLT-1"))
+    const picker = await openAssignee()
+    await waitFor(() => expect(within(picker).getByTestId("picker-member-creator-note").textContent).toBe(WARNING_NONE))
+    first.unmount()
+    getBoardRoster.mockResolvedValue(roster("owner"))
+    setup(full("PLT-1"), [], null)
+    const again = await openAssignee()
+    await waitFor(() => expect(within(again).getByTestId("picker-member-creator-note").textContent).toBe(WARNING_NONE))
+  })
+
+  it("says nothing until it knows what they keep", async () => {
+    principal = { kind: "operator" }
+    getBoardRoster.mockReturnValue(new Promise(() => {}))
+    setup(full("PLT-1"))
+    const picker = await openAssignee()
+    await waitFor(() => expect(getBoardRoster).toHaveBeenCalled())
+    expect(within(picker).queryByTestId("picker-member-creator-note")).toBeNull()
   })
 
   it("is told when moving it to another department", async () => {

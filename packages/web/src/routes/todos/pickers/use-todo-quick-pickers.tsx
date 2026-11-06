@@ -14,6 +14,7 @@ import { closeGateCounts, type CloseGateCounts } from '@/lib/legal-targets'
 import { PickerInline, PickerNote } from './picker-shell'
 import { AssigneePickerContent } from './picker-contents'
 import { isMemberIdentity } from '../attribution'
+import { useMemberCreator } from '@/hooks/use-member-creator-keeps'
 import { StatusPickerContent } from './status-picker-content'
 import {
   invalidateTodoCaches,
@@ -171,13 +172,13 @@ function usePickerContent({ detail, employees, close, children, transitionTo, co
   transitionTo: (status: WorkItemStatusWire, options?: { cascade?: boolean }) => void
   commitAssignee: (assignee: string | null) => void
 }) {
+  // Only a root says who made it from here; a sub-task's page (and the task page's own picker) knows its root.
+  const root = detail?.workItem
+  const memberCreator = useMemberCreator(root && root.rootId === root.id && isMemberIdentity(root.createdBy) ? root.createdBy ?? null : null, root?.id)
   return useCallback((key: TodoQuickPickerKey): ReactNode => {
     if (!detail) return null
     const shared = { detail, onDone: close }
     if (key === 'assignee') {
-      // Only a root says who made it from here; a sub-task's page (and the task page's own picker) knows its root.
-      const root = detail.workItem
-      const memberCreator = root.rootId === root.id && isMemberIdentity(root.createdBy) ? root.createdBy : undefined
       return <AssigneePickerContent {...shared} {...(memberCreator ? { memberCreator } : {})} employees={employees} commit={commitAssignee} />
     }
     if (children.failed) {
@@ -193,7 +194,7 @@ function usePickerContent({ detail, employees, close, children, transitionTo, co
     return (
       <StatusPickerContent {...shared} {...children.counts} commit={transitionTo} showCurrent={false} />
     )
-  }, [detail, close, employees, commitAssignee, children.pending, children.failed, children.counts, transitionTo])
+  }, [detail, close, employees, commitAssignee, memberCreator, children.pending, children.failed, children.counts, transitionTo])
 }
 
 /** One anchor row's contract: how to open it, whether it is open, and the

@@ -32,6 +32,7 @@ import { MemberCreatorProvider } from "../pickers/picker-contents"
 import { VisibleToCreatorHint, VisibleToMembersHint } from "../visibility-hint"
 import { isMemberIdentity } from "../attribution"
 import { useVisibleToMembers } from "@/hooks/use-visible-to-members"
+import { useMemberCreator } from "@/hooks/use-member-creator-keeps"
 import { useTaskPickers } from "./use-task-pickers"
 import { BodyEditor } from "./body-editor"
 import { SubTasksSection } from "./subtasks"
@@ -101,9 +102,10 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
   const memberGrants = useMemberGrants()
   const visibleToMembers = useVisibleToMembers(rootNode?.department ?? item?.department, moved)
   // The operator changing who holds a Todo a board member made is told what that does to the member's access.
-  const memberCreator = !member && rootNode && isMemberIdentity(rootNode.createdBy) ? rootNode.createdBy ?? null : null
+  const creatorIdentity = !member && rootNode && isMemberIdentity(rootNode.createdBy) ? rootNode.createdBy ?? null : null
+  const memberCreator = useMemberCreator(creatorIdentity, rootNode?.id)
   // While that root is open its creator reads everything written on it, wherever it now sits.
-  const creatorReader = memberCreator && rootNode && rootNode.status !== "done" && rootNode.status !== "cancelled" ? memberCreator : null
+  const creatorReader = creatorIdentity && rootNode && rootNode.status !== "done" && rootNode.status !== "cancelled" ? creatorIdentity : null
 
   const org = useOrg()
   const byName = useEmployeesByName(org.data?.employees)
