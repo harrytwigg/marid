@@ -1,6 +1,7 @@
-import { getSession, isCoordinatorSession, isOperatorCoordinatorTurn, isOperatorEmployeeTurn } from "../sessions/registry.js";
+import { getSession, isCoordinatorSession, isOperatorCoordinatorTurn, isOperatorEmployeeTurn, listSessionsByWorkItem } from "../sessions/registry.js";
+import { awaitsRestartResume } from "../sessions/restart-resume-window.js";
 import { listWorkItemEvents } from "../work-items/event-log.js";
-import { toWorkItemLinkRole } from "../work-items/link-role.js";
+import { isExecutionAttempt, toWorkItemLinkRole } from "../work-items/link-role.js";
 import { STICKY_STATUSES, type WorkItem, type WorkItemEvent, type WorkItemStatus } from "../work-items/store.js";
 import { reviewAddresseeEmployee } from "../work-items/review-addressee.js";
 import { isAgentLaneMove } from "../work-items/transition-edges.js";
@@ -140,10 +141,13 @@ function moveEmployee(event: WorkItemEvent): string | undefined {
  * employee making the latest handoff into `in_review`. A session linked to
  * review it, or bouncing it back, is reviewing and leaves the close open.
  */
-function closerHandIn(employee: string, item: WorkItem): string | undefined {
+function closerHandIn(employee: string, item: WorkItem, { producedElsewhere = false } = {}): string | undefined {
   const events = listWorkItemEvents(item.id);
   if (events.some((event) => workedBy(event, employee))) return `a session of ${employee} was linked to work on it`;
   if (events.some((event) => startedBy(event, employee))) return `${employee} moved it to executing`;
+  // A handoff is a hand in only when the mover produced the work. When another
+  // employee worked it, the mover relaying that employee's report did not.
+  if (producedElsewhere) return undefined;
   const handoff = events.filter((event) => event.toStatus === "in_review" && event.fromStatus !== "in_review").at(-1);
   return handoff && moveEmployee(handoff) === employee ? `${employee} handed it to review` : undefined;
 }
@@ -181,37 +185,73 @@ function resolveCloserLane(employee: string, item: WorkItem, note: string): Stat
   return { ok: true, lane: { kind: "closer", employee } };
 }
 
-/** The employee a session acts as when it owns the parent of a child Todo in
- *  review and the move is the accept or the send-back. Read live from the
- *  parent and the roster, so a reassigned parent hands the review elsewhere at
- *  once. `undefined` leaves the move to the other lanes. */
+/** The employee a session acts as when it owns the parent of a child Todo and
+ *  the move is the accept (from `executing` or `in_review`: a delegated child's
+ *  report lands with the owner whether or not the producer moved it to review)
+ *  or the send-back (from `in_review`). Read live from the parent and the
+ *  roster, so a reassigned parent hands the review elsewhere at once.
+ *  `undefined` leaves the move to the other lanes. */
 function parentOwnerOf(
   caller: Extract<WorkItemCaller, { kind: "session" }>,
   item: WorkItem,
   target: WorkItemStatus,
 ): string | undefined {
-  if (item.status !== "in_review" || (target !== "done" && target !== "executing")) return undefined;
+  const accepts = target === "done" && (item.status === "executing" || item.status === "in_review");
+  const sendsBack = target === "executing" && item.status === "in_review";
+  if (!accepts && !sendsBack) return undefined;
   const employee = caller.session.employee;
   return employee && reviewAddresseeEmployee(item) === employee ? employee : undefined;
 }
 
-/** The parent's owner accepting or sending back a child in review. A hand in
- *  the child's work leaves the move to the ordinary agent lane: accepting it is
- *  refused as self-review, and moving it back to executing is the producer's
- *  own take-back, not a review bounce. */
+/** A session still working on `item`: a turn in flight, or one a restart resumes; not one that ended or was stopped. */
+function liveWorkRefusal(item: WorkItem): StatusLaneResult | undefined {
+  const live = listSessionsByWorkItem(item.id).find((session) => isExecutionAttempt(session)
+    && (session.status === "running" || session.status === "waiting" || awaitsRestartResume(session)));
+  if (!live) return undefined;
+  const who = live.employee ? `a session of ${live.employee}` : `session ${live.id}`;
+  const state = live.status === "running" || live.status === "waiting" ? live.status : "interrupted and due to resume after a restart";
+  return refuse(403, `Todo ${item.id} is still being worked on: ${who} is ${state} on it; accept it once that session has stopped`);
+}
+
+/** The child's assignee, when another employee and a session of it was linked to work it: its producer. */
+function otherProducer(employee: string, item: WorkItem): string | undefined {
+  const producer = item.assignee;
+  if (!producer || producer === employee || !orgRegistry().has(producer)) return undefined;
+  return listWorkItemEvents(item.id).some((event) => workedBy(event, producer)) ? producer : undefined;
+}
+
+function selfReviewRefusal(employee: string, item: WorkItem, handIn: string): StatusLaneResult {
+  return refuse(403, `${employee} cannot accept Todo ${item.id}: ${handIn}, and an employee never closes its own work (self-review ban); another reviewer or the operator closes it`);
+}
+
+/** The owner accepting a child that is still `executing`: only one another
+ *  employee is assigned and was linked to work, and the owner had no hand in.
+ *  Anything else is left to the ordinary agent lane, which refuses the close. */
+function resolveExecutingAccept(employee: string, item: WorkItem, note: string): StatusLaneResult | undefined {
+  if (!otherProducer(employee, item)) return undefined;
+  const handIn = closerHandIn(employee, item, { producedElsewhere: true });
+  if (handIn) return selfReviewRefusal(employee, item, handIn);
+  return liveWorkRefusal(item) ?? acceptNoteRefusal(item, note) ?? { ok: true, lane: { kind: "parent-owner", employee } };
+}
+
+function acceptNoteRefusal(item: WorkItem, note: string): StatusLaneResult | undefined {
+  return note ? undefined : refuse(400, `accepting Todo ${item.id} needs the reason in note: it is posted on the Todo as a comment`);
+}
+
+/** The parent's owner accepting a child or sending one back from review. The
+ *  ban keys on who produced it: the assignee, a hand in ({@link closerHandIn}),
+ *  or the handoff unless another employee worked it. With a hand in, a send-back
+ *  is the producer's own take-back (agent lane), not a review bounce. */
 function resolveParentOwnerLane(employee: string, item: WorkItem, target: WorkItemStatus, note: string): StatusLaneResult | undefined {
-  const handIn = closerHandIn(employee, item);
-  if (handIn) {
-    return target === "done"
-      ? refuse(403, `${employee} cannot accept Todo ${item.id}: ${handIn}, and an employee never closes its own work (self-review ban); another reviewer or the operator closes it`)
-      : undefined;
-  }
-  if (!note) {
-    return refuse(400, target === "done"
-      ? `accepting Todo ${item.id} needs the reason in note: it is posted on the Todo as a comment`
-      : `sending Todo ${item.id} back needs the feedback in note: it is posted on the Todo as a comment`);
-  }
-  return { ok: true, lane: { kind: "parent-owner", employee } };
+  if (item.status === "executing") return resolveExecutingAccept(employee, item, note);
+  const handIn = item.assignee === employee
+    ? `${employee} is assigned to it`
+    : closerHandIn(employee, item, { producedElsewhere: otherProducer(employee, item) !== undefined });
+  if (handIn) return target === "done" ? selfReviewRefusal(employee, item, handIn) : undefined;
+  const refusal = target === "done"
+    ? liveWorkRefusal(item) ?? acceptNoteRefusal(item, note)
+    : note ? undefined : refuse(400, `sending Todo ${item.id} back needs the feedback in note: it is posted on the Todo as a comment`);
+  return refusal ?? { ok: true, lane: { kind: "parent-owner", employee } };
 }
 
 /** The comment the gateway posts when an employee's lane closes a Todo as `done`. */

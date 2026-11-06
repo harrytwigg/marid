@@ -3,8 +3,10 @@ import { call, sessionOf, startParentReviewHarness, statusPost, treeInReview } f
 
 /**
  * The parent-owner lane, through the real `handleApiRequest`: the employee that
- * owns a child Todo's parent accepts it (`done`, with a reason) or sends it back
- * (`executing`, a review bounce) while the child is in review, and nothing else.
+ * owns a child Todo's parent accepts it (`done`, with a reason) while the child is
+ * executing or in review, or sends it back (`executing`, a review bounce) while it
+ * is in review, and nothing else. A delegated child accepted from `executing`
+ * is covered in `work-item-status-parent-owner-delegated.test.ts`.
  */
 
 let workItems: Awaited<ReturnType<typeof startParentReviewHarness>>["workItems"];
@@ -128,7 +130,7 @@ describe("what the parent-owner lane refuses", () => {
     expect([statusOf(child.id), statusOf(grandchild.id)]).toEqual(["in_review", "executing"]);
   });
 
-  it.each(["backlog", "executing", "blocked"] as const)("does not close a child that is %s", async (status) => {
+  it.each(["backlog", "blocked"] as const)("does not close a child that is %s", async (status) => {
     const { child } = treeInReview(workItems, `Child ${status}`);
     transition(child.id, status === "backlog" ? "executing" : status, "operator", { human: true, blockKind: "needs_input" });
     if (status === "backlog") transition(child.id, "backlog", "operator", { human: true });
