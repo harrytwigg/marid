@@ -3925,11 +3925,15 @@ export async function handleApiRequest(
           res.end(JSON.stringify({ error: SPENT_DISPATCHER_MESSAGE_REFUSAL }));
           return;
         }
+        const callerParentId = reportingParentSessionId(caller);
+        const targetParentId = reportingParentSessionId(session);
         const plan = prepareLateralSend({
           caller,
           targetSessionId: params.id,
           message: String(rawMessage),
           guards: sessionCommGuards,
+          callerParentSessionId: callerParentId,
+          parentLink: callerParentId === session.id || targetParentId === caller.id,
         });
         if (!plan.ok) {
           res.writeHead(plan.status, { "Content-Type": "application/json" });
@@ -3941,9 +3945,9 @@ export async function handleApiRequest(
         body.message = plan.prompt;
         body.displayMessage = plan.displayMessage;
         body.meta = plan.meta;
-        if (reportingParentSessionId(session) === caller.id) {
+        if (targetParentId === caller.id) {
           parentFollowUp = { caller, message: String(rawMessage) };
-        } else if (reportingParentSessionId(caller) === session.id && caller.attemptToken) {
+        } else if (callerParentId === session.id && caller.attemptToken) {
           // The child is reporting UP to its parent via send_to_session. The
           // automatic parent-completion callback fired at this child's settle
           // would be a SECOND injection of the same turn (the operator sees a
@@ -3951,10 +3955,13 @@ export async function handleApiRequest(
           // notifyParentSession suppresses that redundant callback.
           recordChildReportedToParent(caller.id, caller.attemptToken);
         }
-        // Conservative on later failure (e.g. engine unavailable): the hop tag
-        // may be recorded for an undelivered message, which only ever tightens
-        // the budget, never loosens it.
-        sessionCommGuards.recordDelivery(params.id, plan.hops);
+        // A parent/child message is not a relay hop: it counts against the pair
+        // budget and leaves the receiver's chain untouched, so a spawned session
+        // starts at hop 1. Conservative on later failure (e.g. engine
+        // unavailable): the tag may be recorded for an undelivered message, which
+        // only ever tightens the budget, never loosens it.
+        if (plan.parentLink) sessionCommGuards.recordPairDelivery(caller.id, params.id, plan.hops);
+        else sessionCommGuards.recordDelivery(params.id, plan.hops);
       } else if (
         msgCaller.kind === "operator" &&
         body.role === "notification" &&
