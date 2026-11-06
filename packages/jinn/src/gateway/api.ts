@@ -3127,7 +3127,8 @@ export async function handleApiRequest(
       if (!requireTodoRouteId(res, params.id)) return;
       const attachment = getAttachment(params.aid);
       if (!attachment || attachment.workItemId !== params.id) return notFound(res);
-      return serveAttachmentBytes(req, res, attachment, pathname);
+      await serveAttachmentBytes(req, res, attachment, pathname);
+      return;
     }
 
     // DELETE /api/work-items/:id/attachments/:aid — remove a row (uploader or

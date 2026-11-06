@@ -54,18 +54,18 @@ describe("a member's socket hears only re-serialised Todo changes on its own boa
     const todo = store.createWorkItem({ title: "Ops work", department: "ops" });
     h.broadcasts.length = 0;
     opsSocket.frames.length = 0; designSocket.frames.length = 0;
-    h.rt.memberSockets.publish("company:changed", { entity: "todo", action: "commented", id: todo.id, version: 7, sessionId: "5d1f0c2e-0000-4000-8000-000000000000" });
+    h.rt.memberSockets.publish("company:changed", { entity: "todo", action: "commented", id: todo.id, version: 7, sessionId: "aaaaaaaa-0000-4000-8000-000000000000" });
     expect(opsSocket.frames).toEqual([{ event: "company:changed", payload: { entity: "todo", action: "commented", id: todo.id, version: todo.version }, ts: expect.any(Number) }]);
     expect(designSocket.frames).toEqual([]);
-    expect(JSON.stringify(opsSocket.frames)).not.toContain("5d1f0c2e");
+    expect(JSON.stringify(opsSocket.frames)).not.toContain("aaaaaaaa");
   });
 
   it("re-serialises a carried value as the member-safe Todo: no session-bearing sourceRef, no budget", () => {
-    const todo = store.createWorkItem({ title: "From a session", department: "ops", source: "session", sourceRef: "session:5d1f0c2e-1111-4000-8000-000000000000:abc", createdBy: "alice", budgetUsd: 12 });
-    h.rt.memberSockets.publish("company:changed", { entity: "todo", action: "created", id: todo.id, version: todo.version, value: todo, sessionId: "5d1f0c2e-1111-4000-8000-000000000000" });
+    const todo = store.createWorkItem({ title: "From a session", department: "ops", source: "session", sourceRef: "session:aaaaaaaa-1111-4000-8000-000000000000:abc", createdBy: "alice", budgetUsd: 12 });
+    h.rt.memberSockets.publish("company:changed", { entity: "todo", action: "created", id: todo.id, version: todo.version, value: todo, sessionId: "aaaaaaaa-1111-4000-8000-000000000000" });
     const frame = opsSocket.frames.at(-1);
     expect(frame.payload.value).toMatchObject({ id: todo.id, title: "From a session", sourceRef: null, budgetUsd: null });
-    expect(JSON.stringify(frame)).not.toContain("5d1f0c2e");
+    expect(JSON.stringify(frame)).not.toContain("aaaaaaaa");
     expect(Object.keys(frame.payload).sort()).toEqual(["action", "entity", "id", "value", "version"]);
   });
 

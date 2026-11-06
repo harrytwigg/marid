@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { json, notFound } from "../gateway/route-helpers.js";
+import { isClientAbort, json, notFound, serverError } from "../gateway/route-helpers.js";
+import { logger } from "../shared/logger.js";
 import { readJsonBody } from "../gateway/http-helpers.js";
 import { parseRequestAuthority } from "../gateway/request-authority.js";
 import { clearUserCookieHeader } from "./cookie.js";
@@ -50,6 +51,35 @@ async function logout(req: IncomingMessage, res: ServerResponse, principal: Memb
   json(res, { status: "ok" });
 }
 
+/** A member route that failed. Nothing catches above this: the server ignores a handler's rejection, so every failure is answered here. */
+function answerFailure(res: ServerResponse, err: unknown, target: { method: string; pathname: string }): void {
+  const msg = err instanceof Error ? err.message : String(err);
+  // A route that failed after its status line went out (a stream that broke mid-body) cannot be answered with an
+  // error status: cut an unfinished response so the client sees it truncated, never one that looks complete.
+  if (res.headersSent) {
+    if (!isClientAbort(err)) logger.error(`Member API error after the response started (${target.method} ${target.pathname}): ${msg}`);
+    if (!res.writableEnded && !res.destroyed) res.destroy();
+    return;
+  }
+  logger.error(`Member API error (${target.method} ${target.pathname}): ${msg}`);
+  serverError(res, "Internal error");
+}
+
+async function memberApi(
+  req: IncomingMessage,
+  res: ServerResponse,
+  principal: MemberPrincipal,
+  deps: MemberRouterDeps,
+  target: { method: string; pathname: string },
+): Promise<void> {
+  const route = { ...target, url: new URL(req.url || "/", "http://localhost") };
+  try {
+    if (!(await runMemberRoutes({ req, res, principal, deps }, route))) notFound(res);
+  } catch (err) {
+    answerFailure(res, err, target);
+  }
+}
+
 /**
  * Everything a signed-in member can reach over HTTP. A member request never enters the general API
  * dispatcher, so members are default-deny by construction: a route added there tomorrow is closed to
@@ -71,10 +101,6 @@ export async function handleMemberRequest(
     return json(res, buildAuthState(deps.getConfig(), req, deps.gatewayAuthToken, deps.home, deps.accounts));
   }
   if (method === "POST" && pathname === "/api/auth/logout") return logout(req, res, principal, deps);
-  if (pathname.startsWith("/api/member/")) {
-    const route = { method, pathname, url: new URL(req.url || "/", "http://localhost") };
-    if (!(await runMemberRoutes({ req, res, principal, deps }, route))) notFound(res);
-    return;
-  }
+  if (pathname.startsWith("/api/member/")) return memberApi(req, res, principal, deps, { method, pathname });
   json(res, { error: NOT_AVAILABLE_TO_MEMBERS }, 403);
 }

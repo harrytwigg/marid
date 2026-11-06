@@ -179,3 +179,16 @@ describe("attachments", () => {
     void fs;
   });
 });
+
+describe("a member route that throws is answered, never an unhandled rejection", () => {
+  it("answers 500 without reflecting the failure", async () => {
+    const { vi } = await import("vitest");
+    const spy = vi.spyOn(comments, "listComments").mockImplementation(() => { throw new Error("db exploded at /secret/path"); });
+    try {
+      const reply = await h.as(viewer, "GET", `/api/member/todos/${rootId}/comments`);
+      expect(reply.status).toBe(500);
+      expect(reply.text).not.toContain("exploded");
+      expect(reply.text).not.toContain("/secret/path");
+    } finally { spy.mockRestore(); }
+  });
+});
