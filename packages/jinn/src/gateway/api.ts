@@ -2784,7 +2784,7 @@ export async function handleApiRequest(
       }
       try {
         const assigned = assignWorkItem(params.id, assignee, employee?.department ?? null, workItemActor(caller),
-          { origin: caller.origin, actorEmployee: workItemActorEmployee(caller) });
+          { origin: caller.origin, actorEmployee: workItemActorEmployee(caller), announcesMove: true });
         if (!assigned) return notFound(res);
         const item = assigned.assignee !== current.assignee ? linkSelfStartedTodo(caller, assigned, workItemActor(caller)) : assigned;
         const activityReceiptId = persistTodoMutationActivity(req, context, item, "assigned", item.version !== current.version, undefined, departmentBefore(current));
