@@ -81,16 +81,16 @@ export interface PendingInviteWire {
   expiresAt: string
 }
 
-/** An invite or reset link, returned once. */
+/** An invite or reset link, returned once. `link` is null when the gateway could not tell which address people reach it by. */
 export interface IssuedLinkWire {
-  link: string
+  link: string | null
   expiresAt?: string
 }
 
 /** Inviting an email that already has an account adds the grant directly and returns no link. */
 export type InviteResultWire =
   | { granted: true; link?: undefined; invite?: undefined }
-  | { granted?: false; link: string; expiresAt?: string; invite?: PendingInviteWire }
+  | { granted?: false; link: string | null; expiresAt?: string; invite?: PendingInviteWire }
 
 /** One board's roster for its Share dialog. Reading: `{ members, invites }`. */
 export interface BoardMemberWire {

@@ -122,7 +122,7 @@ function usePersonWrites(person: PersonWire, onError: (message: string) => void,
 function PersonRow({ person }: { person: PersonWire }) {
   const [panel, setPanel] = useState<Panel>("none")
   const [error, setError] = useState<string | null>(null)
-  const [reset, setReset] = useState<{ link: string; expiresAt?: string } | null>(null)
+  const [reset, setReset] = useState<{ link: string | null; expiresAt?: string } | null>(null)
   const writes = usePersonWrites(person, setError, () => setPanel("none"))
   const toggle = (next: Panel) => setPanel((current) => (current === next ? "none" : next))
   const run = (start: () => void) => { setError(null); start() }
