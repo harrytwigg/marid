@@ -4,7 +4,7 @@ import { listAttachments, type WorkItemAttachment } from "../work-items/attachme
 import { commentsTail, type WorkItemComment } from "../work-items/comments.js";
 import { recoveryByItem } from "../work-items/recovery-rows.js";
 import { getWorkItemLabels, labelSets } from "../work-items/labels.js";
-import { memberDisplayName, outwardComment, isMemberIdentity } from "../work-items/member-identity.js";
+import { memberDisplayName, memberIdOf, outwardComment, isMemberIdentity } from "../work-items/member-identity.js";
 import { listRelations, blockedSet } from "../work-items/relations.js";
 import { reviewAddressee } from "../work-items/review-addressee.js";
 import { getWorkItemSprint, sprintRefs } from "../work-items/sprints.js";
@@ -21,13 +21,18 @@ import { getGrant } from "./board-members.js";
  * drop, applied in one place so no member route serialises a Todo, comment, event or attachment itself.
  */
 
+/** Actors that are the gateway's own machinery rather than a person or an employee. */
+const INTERNAL_ACTORS: ReadonlySet<string> = new Set(["reconciler", "park-expiry", "board-walk", "jinn", "system"]);
+
 /**
- * A creator, author or uploader as a member reads it. A session that has no employee is stored as `session:<id>`,
- * and a session id is not a member's to hold: it reads as the session's employee, or "agent".
+ * An actor (creator, author, uploader, event actor) as a member reads it: only ever an employee name, `operator`, a
+ * `user:<id>`, or a generic `agent` / `system` with no identifier. A session reads as its employee, or "agent"; a plugin,
+ * a cron job, a workflow or the gateway's own machinery reads as "system". No internal id is sent to a member.
  */
 export function memberWho(identity: string): string {
-  if (!identity.startsWith("session:")) return identity;
-  return getSession(identity.slice("session:".length))?.employee || "agent";
+  if (identity === "operator" || memberIdOf(identity) !== undefined) return identity;
+  if (identity.startsWith("session:")) return getSession(identity.slice("session:".length))?.employee || "agent";
+  return identity.includes(":") || INTERNAL_ACTORS.has(identity) ? "system" : identity;
 }
 
 /** A Todo as a member reads it: the operator's row without the session-bearing `sourceRef`, budget or session creator. */
@@ -104,9 +109,10 @@ const SESSION_DETAIL_KEYS: ReadonlySet<string> = new Set([
 ]);
 
 function memberEventActor(event: WorkItemEvent): string | null {
-  if (!event.actor?.startsWith("session:")) return event.actor;
+  if (!event.actor) return null;
+  if (!event.actor.startsWith("session:")) return memberWho(event.actor);
   const employee = event.detail?.actorEmployee;
-  return typeof employee === "string" && employee ? employee : "agent";
+  return typeof employee === "string" && employee ? employee : memberWho(event.actor);
 }
 
 function memberEvent(event: WorkItemEvent): WorkItemEvent {

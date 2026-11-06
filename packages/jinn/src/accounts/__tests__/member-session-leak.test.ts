@@ -40,6 +40,27 @@ const noSessionIds = (value: unknown) => {
   expect(text).not.toMatch(/session:/);
 };
 
+describe("members read only an employee, operator, a user or a generic agent/system: never a plugin, cron or machinery id", () => {
+  it("a plugin's and a cron job's Todo and comments, and the gateway's own events", async () => {
+    const comments = await import("../../work-items/comments.js");
+    const plugin = store.createWorkItem({ title: "From a plugin", department: "ops", source: "connector", sourceRef: "plugin:calendar:1", createdBy: "plugin:calendar" });
+    const cron = store.createWorkItem({ title: "From cron", department: "ops", source: "cron", sourceRef: "cron:nightly-sweep:2026-11-06", createdBy: "cron:nightly-sweep" });
+    comments.addComment({ workItemId: plugin.id, body: "plugin says hi", author: "plugin:calendar", authorKind: "system" });
+    comments.addComment({ workItemId: plugin.id, body: "walk says hi", author: "board-walk", authorKind: "system" });
+    store.appendWorkItemEvent({ workItemId: cron.id, kind: "note", actor: "reconciler", detail: { note: "derived" } });
+    store.appendWorkItemEvent({ workItemId: plugin.id, kind: "note", actor: "plugin:calendar", detail: { note: "plugin note" } });
+    for (const id of [plugin.id, cron.id]) {
+      const detail = (await h.as(viewer, "GET", `/api/member/todos/${id}`)).body;
+      expect(JSON.stringify(detail)).not.toMatch(/plugin:|cron:|calendar|nightly-sweep|reconciler|board-walk/);
+      expect(detail.workItem.createdBy).toBe("system");
+    }
+    const page = (await h.as(viewer, "GET", `/api/member/todos/${plugin.id}/comments`)).body;
+    expect(page.comments.map((c: any) => c.author)).toEqual(["system", "system"]);
+    const list = (await h.as(viewer, "GET", "/api/member/boards/ops/todos?limit=100")).body;
+    expect(JSON.stringify(list)).not.toMatch(/plugin:|cron:|nightly-sweep/);
+  });
+});
+
 describe("members read an agent's work without its session id", () => {
   it("the board list, detail and tree name the creator as the session's employee, or 'agent'", async () => {
     const list = (await h.as(viewer, "GET", "/api/member/boards/ops/todos?limit=100")).body;

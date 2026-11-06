@@ -186,6 +186,8 @@ describe("member", () => {
     const tree = (await h.as(collab, "GET", `/api/member/todos/${todoId}/tree`)).body;
     expect(keys(tree)).toEqual(["tree"]);
     expect(keys(tree.tree)).toEqual(["root", "spendUsd", "totals"]);
+    // `totals` is a status-to-count record: numbers for everyone, never a cost.
+    for (const totals of [tree.tree.totals, list.totals]) expect(Object.values(totals).every((count) => typeof count === "number")).toBe(true);
     expect(tree.tree.spendUsd).toBeNull();
     const detail = (await h.as(collab, "GET", `/api/member/todos/${todoId}`)).body;
     for (const key of ["workItem", "spendUsd", "events", "comments"]) expect(detail).toHaveProperty(key);
