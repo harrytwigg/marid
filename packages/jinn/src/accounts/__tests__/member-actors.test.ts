@@ -93,3 +93,54 @@ describe("GET /api/member/boards", () => {
     expect(first.id.startsWith(`${board.prefix}-`)).toBe(true);
   });
 });
+
+describe("event details name only Todos on the reader's boards", () => {
+  it("a relation to a Todo on an unheld board leaves no trace of its id; one on a held board keeps it", async () => {
+    const onOps = store.createWorkItem({ title: "On ops", department: "ops" }).id;
+    const alsoOps = store.createWorkItem({ title: "Also ops", department: "ops" }).id;
+    const onDesign = store.createWorkItem({ title: "On design", department: "design" }).id;
+    expect((await h.operator("POST", `/api/work-items/${onDesign}/relations`, { kind: "relates", dstId: onOps })).status).toBe(201);
+    expect((await h.operator("POST", `/api/work-items/${alsoOps}/relations`, { kind: "blocks", dstId: onOps })).status).toBe(201);
+    const detail = (await h.as(pat, "GET", `/api/member/todos/${onOps}`)).body;
+    const added = detail.events.filter((event: any) => event.kind === "relation_added");
+    expect(added).toHaveLength(2);
+    expect(detail.relations.map((relation: any) => relation.other.id)).toEqual([alsoOps]);
+    expect(JSON.stringify(detail)).not.toContain(onDesign);
+    expect(JSON.stringify(added)).toContain(alsoOps);
+  });
+
+  it("a Todo moved in from an unheld board's tree names neither its old parent nor its old root", async () => {
+    const designRoot = store.createWorkItem({ title: "Design root", department: "design" }).id;
+    const moving = store.createWorkItem({ title: "Moving", parentId: designRoot }).id;
+    const grandchild = store.createWorkItem({ title: "Grandchild", parentId: moving }).id;
+    const opsRoot = store.createWorkItem({ title: "Ops root", department: "ops" }).id;
+    expect((await h.operator("PUT", `/api/work-items/${moving}/parent`, { parentId: opsRoot })).status).toBe(200);
+    const detail = (await h.as(pat, "GET", `/api/member/todos/${moving}`)).body;
+    expect(store.listWorkItemEvents(moving).some((event) => JSON.stringify(event.detail).includes(designRoot))).toBe(true);
+    expect(JSON.stringify(detail)).not.toContain(designRoot);
+    for (const id of [opsRoot, grandchild]) {
+      const read = (await h.as(pat, "GET", `/api/member/todos/${id}`)).body;
+      expect(JSON.stringify(read.events)).not.toContain(designRoot);
+    }
+    // The ids that are on the reader's boards stay: the new parent is named on the moved Todo, the child on its new parent.
+    expect(JSON.stringify(detail.events)).toContain(opsRoot);
+    expect(JSON.stringify((await h.as(pat, "GET", `/api/member/todos/${opsRoot}`)).body.events)).toContain(moving);
+  });
+});
+
+describe("a disabled account is no longer named", () => {
+  it("their Todo, comment and list row read as member while their grant row remains", async () => {
+    const ray = await h.join("ray@example.test", "collaborator", "ops", "Ray Member");
+    const todo = (await h.as(ray, "POST", "/api/member/boards/ops/todos", { title: "Ray's" })).body.workItem;
+    expect((await h.as(ray, "POST", `/api/member/todos/${todo.id}/comments`, { body: "from ray" })).status).toBe(201);
+    expect((await h.as(pat, "GET", `/api/member/todos/${todo.id}`)).body.workItem.createdBy).toBe(`user:${ray.userId}`);
+    expect((await h.operator("PATCH", `/api/people/${ray.userId}`, { status: "disabled" })).status).toBe(200);
+    expect(h.db.prepare("SELECT 1 FROM board_members WHERE user_id = ?").get(ray.userId)).toBeDefined();
+    const detail = (await h.as(pat, "GET", `/api/member/todos/${todo.id}`)).body;
+    expect(detail.workItem.createdBy).toBe("member");
+    expect(detail.comments.comments[0]).toMatchObject({ author: "member", authorKind: "member" });
+    const row = (await h.as(pat, "GET", "/api/member/boards/ops/todos?limit=200")).body.workItems.find((item: any) => item.id === todo.id);
+    expect(row.createdBy).toBe("member");
+    expect(JSON.stringify([detail, row])).not.toContain(ray.userId);
+  });
+});

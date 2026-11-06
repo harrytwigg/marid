@@ -22,8 +22,9 @@ export function listBoards(ctx: MemberRouteContext): void {
   const db = ctx.deps.accounts.getDb();
   const boards = listGrantsForUser(db, ctx.principal.userId).map((grant) => {
     const record = departmentRecord(grant.department);
-    // A board with no Todos yet has no registry row. As the departments API does, it is registered on read (unless its
-    // definition file was refused), so its prefix is the one its first Todo will carry.
+    // A board with no Todos yet has no registry row, and the contract gives every board a prefix, so it is registered on
+    // read, as the departments API registers a scoped one. Unlike that list, an open department is registered too: here it
+    // is a board the operator has already shared. One whose definition file was refused is not, as there.
     if (!record.definitionError) ensureDepartmentRegistered(grant.department);
     const prefix = initDb().prepare("SELECT prefix FROM departments WHERE slug = ?").pluck().get(grant.department) as string | undefined;
     const displayName = record.definition?.displayName;

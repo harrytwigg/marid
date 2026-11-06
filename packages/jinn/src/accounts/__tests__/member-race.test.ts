@@ -28,7 +28,8 @@ async function slowRequest(member: Member, method: string, path: string, body: {
       res.on("data", (chunk: Buffer) => chunks.push(chunk));
       res.on("end", () => {
         const text = Buffer.concat(chunks).toString("utf-8");
-        resolve({ status: res.statusCode ?? 0, body: text ? JSON.parse(text) : null });
+        // An answer given before the body was read never reached the in-transaction check: the test fails, naming it.
+        reading.then(() => resolve({ status: res.statusCode ?? 0, body: text ? JSON.parse(text) : null }), reject);
       });
     });
     req.on("error", reject);

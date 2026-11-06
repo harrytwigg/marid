@@ -43,7 +43,8 @@ export interface BoardHarness {
   join(email: string, role: "viewer" | "collaborator" | "owner", department?: string, displayName?: string): Promise<Member>;
   /**
    * Resolves when the gateway starts reading the body of the next request to `path`: the request has been routed and
-   * every check made before the body is read has passed. Register it before sending the request.
+   * every check made before the body is read has passed. Register it before sending the request. Rejects, naming the
+   * status, when the gateway answers that request without reading its body.
    */
   bodyReadStarted(path: string): Promise<void>;
   close(): Promise<void>;
@@ -91,18 +92,24 @@ export async function startBoardHarness(): Promise<BoardHarness> {
       config, connectors: new Map(), startTime: Date.now(),
     } as any,
   });
-  const bodyReaders: Array<{ path: string; resolve: () => void }> = [];
+  const bodyReaders: Array<{ path: string; resolve: () => void; reject: (err: Error) => void }> = [];
   const server = http.createServer((req, res) => {
     const index = bodyReaders.findIndex((reader) => reader.path === req.url);
     if (index >= 0) {
       const [reader] = bodyReaders.splice(index, 1);
       // A body reader attaches `data` or `readable` (directly, or through a pipe or async iteration); watching for that consumes nothing.
+      let settled = false;
       const onListener = (event: string | symbol) => {
         if (event !== "data" && event !== "readable") return;
         req.off("newListener", onListener);
+        settled = true;
         reader.resolve();
       };
       req.on("newListener", onListener);
+      // Answered without reading the body (refused before it): say so rather than leave the test waiting for a timeout.
+      res.once("finish", () => {
+        if (!settled) reader.reject(new Error(`${req.method} ${req.url} was answered ${res.statusCode} before its body was read`));
+      });
     }
     void handler(req, res);
   });
@@ -140,7 +147,7 @@ export async function startBoardHarness(): Promise<BoardHarness> {
   };
   return {
     db, home, baseUrl: base, rt, broadcasts, request, operator, as, join,
-    bodyReadStarted: (path) => new Promise<void>((resolve) => { bodyReaders.push({ path, resolve }); }),
+    bodyReadStarted: (path) => new Promise<void>((resolve, reject) => { bodyReaders.push({ path, resolve, reject }); }),
     async close() {
       setTodoLiveEmitter(null);
       rt.dispose();

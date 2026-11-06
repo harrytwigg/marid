@@ -13,6 +13,7 @@ import { getSession } from "../sessions/registry.js";
 import { listWorkItemEvents, type WorkItem, type WorkItemEvent, type queryWorkItems } from "../work-items/store.js";
 import { readStopCause } from "../work-items/stop-cause.js";
 import { initDb } from "../shared/db.js";
+import { TODO_ID_PATTERN } from "../work-items/id.js";
 import { boardOfTodo } from "./member-access.js";
 import type { MemberRouteContext } from "./member-context.js";
 import { getGrant } from "./board-members.js";
@@ -35,7 +36,21 @@ function isEmployee(name: string): boolean {
  */
 export class Viewer {
   private readonly known = new Map<string, boolean>();
+  private readonly held = new Map<string, boolean>();
   constructor(readonly db: DatabaseType, readonly userId: string) {}
+
+  /** Whether a Todo (by id) is on a board the reader holds; a Todo that is gone or on no board is not. */
+  holdsTodo(todoId: string): boolean {
+    let answer = this.held.get(todoId);
+    if (answer === undefined) {
+      const row = initDb().prepare("SELECT id, root_id, department FROM work_items WHERE id = ?").get(todoId) as
+        { id: string; root_id: string; department: string | null } | undefined;
+      const board = row ? boardOfTodo({ id: row.id, rootId: row.root_id, department: row.department }) : null;
+      answer = !!board && !!getGrant(this.db, this.userId, board);
+      this.held.set(todoId, answer);
+    }
+    return answer;
+  }
 
   knows(otherId: string): boolean {
     if (otherId === this.userId) return true;
@@ -163,9 +178,29 @@ function memberEventActor(event: WorkItemEvent, createdBy: string, viewer: Viewe
   return memberWho(event.actor, viewer);
 }
 
+const DROPPED = Symbol("dropped");
+
+/**
+ * An event detail value with every Todo id the reader may not open taken out, at any depth: a string that is a Todo id is
+ * kept only when that Todo is on a board the reader holds (the rule relations follow), an array loses such entries and an
+ * object such keys. Whatever key carries it (srcId, dstId, childId, reparented.from, movedWithRoot...), the id is judged
+ * by what it names, not by where it sits.
+ */
+function heldTodoIdsOnly(value: unknown, viewer: Viewer): unknown {
+  if (typeof value === "string") return TODO_ID_PATTERN.test(value) && !viewer.holdsTodo(value) ? DROPPED : value;
+  if (Array.isArray(value)) return value.map((entry) => heldTodoIdsOnly(entry, viewer)).filter((entry) => entry !== DROPPED);
+  if (!value || typeof value !== "object") return value;
+  const kept: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    const scrubbed = heldTodoIdsOnly(entry, viewer);
+    if (scrubbed !== DROPPED) kept[key] = scrubbed;
+  }
+  return kept;
+}
+
 function memberEvent(event: WorkItemEvent, createdBy: string, viewer: Viewer): WorkItemEvent {
   const detail = event.detail
-    ? Object.fromEntries(Object.entries(event.detail).filter(([key]) => !SESSION_DETAIL_KEYS.has(key)))
+    ? heldTodoIdsOnly(Object.fromEntries(Object.entries(event.detail).filter(([key]) => !SESSION_DETAIL_KEYS.has(key))), viewer) as WorkItemEvent["detail"]
     : event.detail;
   return { ...event, actor: memberEventActor(event, createdBy, viewer), detail };
 }
@@ -182,13 +217,8 @@ export function memberAttachment(attachment: WorkItemAttachment, viewer: Viewer)
 
 /** Relations to Todos on a board the member also holds: a relation must not tell them the title of a Todo they cannot open. */
 function visibleRelations(viewer: Viewer, item: WorkItem): ReturnType<typeof listRelations> {
-  const find = initDb().prepare("SELECT id, root_id, department FROM work_items WHERE id = ?");
   return listRelations(item.id)
-    .filter((relation) => {
-      const row = find.get(relation.other.id) as { id: string; root_id: string; department: string | null } | undefined;
-      const board = row ? boardOfTodo({ id: row.id, rootId: row.root_id, department: row.department }) : null;
-      return !!board && !!getGrant(viewer.db, viewer.userId, board);
-    })
+    .filter((relation) => viewer.holdsTodo(relation.other.id))
     .map((relation) => ({ ...relation, createdBy: memberWho(relation.createdBy, viewer) }));
 }
 
