@@ -162,4 +162,21 @@ describe("ChatInput query-backed menus", () => {
     await new Promise((resolve) => setTimeout(resolve, 30))
     expect(focus).toHaveBeenCalledOnce()
   })
+  it("does not take focus on activation for a request raised before it mounted in an inactive pane", async () => {
+    const focus = vi.spyOn(HTMLTextAreaElement.prototype, "focus")
+    focus.mockClear()
+    const view = renderWithCachedQueries({ isActive: false, focusTrigger: 1 })
+    const active = (props: { isActive: boolean; focusTrigger: number }) => (
+      <QueryClientProvider client={new QueryClient()}>
+        <ChatInput disabled={false} loading={false} onSend={vi.fn()} onNewSession={vi.fn()} onStatusRequest={vi.fn()} events={[]} {...props} />
+      </QueryClientProvider>
+    )
+    view.rerender(active({ isActive: true, focusTrigger: 1 }))
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(focus).not.toHaveBeenCalled()
+
+    // A request raised after it mounted is still its own.
+    view.rerender(active({ isActive: true, focusTrigger: 2 }))
+    await waitFor(() => expect(focus).toHaveBeenCalledOnce())
+  })
 })
