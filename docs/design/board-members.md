@@ -421,3 +421,18 @@ Settled while building the web against this contract; the gateway answers exactl
   web renders it "Former member"). A Todo's `created` event actor is its creator from
   `created_by` (through the same mapping), never the event's raw source token. `session:<uuid>`, `plugin:<id>`, cron and other internal ids are never sent to a
   member. Error messages to members never enumerate company data (labels, boards, people).
+
+### What members can and cannot infer
+
+- **Free text is not redacted.** Titles, bodies, notes and comments on a Todo a member can
+  see reach them as written, including any Todo ids or board names in them. Anything the
+  operator or an agent writes on a shared Todo is visible to that board's members. This is the
+  same expectation as writing in any shared document; redacting prose would mangle it and
+  could never be complete.
+- **Todo id prefixes are not secrets.** A member sees ids of Todos they may read. A sub-task
+  that sits in another open department can carry that department's prefix. A prefix is a
+  short code, not the board's name, and it gives no access: every other Todo still answers 404.
+- **Structured data hides other boards.** Board names (departments) and references to Todos
+  the member cannot read are removed from every structured field of member reads and frames:
+  event details, relations, moved-from and moved-to. A moved Todo reads "moved to another
+  board".
