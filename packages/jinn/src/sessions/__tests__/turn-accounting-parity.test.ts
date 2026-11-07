@@ -34,6 +34,7 @@ let registry: typeof import("../registry.js");
 let api: typeof import("../../gateway/api.js");
 let ManagerClass: typeof import("../manager.js").SessionManager;
 
+// Cold-transforms most of the gateway module graph: give the import room under host load.
 beforeAll(async () => {
   [registry, api, { SessionManager: ManagerClass }] = await Promise.all([
     import("../registry.js"),
@@ -41,7 +42,7 @@ beforeAll(async () => {
     import("../manager.js"),
   ]);
   dbModule.initDb();
-});
+}, 60_000);
 
 beforeEach(() => {
   dbModule.initDb().exec("DELETE FROM messages; DELETE FROM queue_items; DELETE FROM sessions;");

@@ -124,7 +124,7 @@ beforeAll(async () => {
     title: "Skills API worker",
     employee: "platform-worker",
   });
-});
+}, 60_000);
 
 beforeEach(() => {
   fs.rmSync(skillsDir, { recursive: true, force: true });

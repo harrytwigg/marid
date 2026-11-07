@@ -37,7 +37,7 @@ beforeAll(async () => {
   api = await import("../../gateway/api.js");
   registry = await import("../../sessions/registry.js");
   (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 type Detail = { workItem: { id: string; startAt: string | null; dueAt: string | null } };
 

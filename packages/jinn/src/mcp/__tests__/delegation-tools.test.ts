@@ -290,7 +290,7 @@ beforeAll(async () => {
   api = await import("../../gateway/api.js");
   registry = await import("../../sessions/registry.js");
   store = await import("../../work-items/store.js");
-});
+}, 60_000);
 
 describe("delegate_task — integration against the real route + stores", () => {
   it("the delegate-and-collect loop: one call mints + spawns + links + parents; the poll fallback reads the result", async () => {

@@ -244,7 +244,7 @@ beforeAll(async () => {
   // engine, which needs a positive attach decision.
   const { setJinnAttachGate } = await import("../../mcp/attachment.js");
   setJinnAttachGate({ ok: true });
-});
+}, 60_000);
 
 afterAll(async () => {
   await new Promise((resolve) => setImmediate(resolve));

@@ -115,7 +115,7 @@ function handEdit(mutate: (config: Record<string, any>) => void) {
   fs.writeFileSync(configPath, yaml.dump(doc));
 }
 
-beforeAll(async () => { api = await import("../api.js"); });
+beforeAll(async () => { api = await import("../api.js"); }, 60_000);
 
 beforeEach(() => {
   currentConfig = baseConfig();

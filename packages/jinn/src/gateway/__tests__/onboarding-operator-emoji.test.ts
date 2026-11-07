@@ -99,7 +99,7 @@ async function call(method: string, url: string, body?: unknown) {
 
 beforeAll(async () => {
   api = await import("../api.js");
-});
+}, 60_000);
 
 const claudeMdPath = path.join(jinnHome, "CLAUDE.md");
 

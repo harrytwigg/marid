@@ -39,7 +39,7 @@ beforeAll(async () => {
   registry = await import("../../sessions/registry.js");
   store = await import("../../work-items/store.js");
   (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 describe("sprints through the Todo tools", () => {
   it("edit_work_item { sprint } moves a Todo between sprints through the real API, and list_work_items filters by it", async () => {

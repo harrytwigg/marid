@@ -74,7 +74,7 @@ describe("the attachment tools on the host", () => {
     const target: SessionRemoteTarget = { remoteHost: "build-box", remoteCwd: stageDir, remoteDepartment: "side-project", remoteWorkArea: workArea };
     roots = remoteDepartmentFileRoots(target);
     vi.stubEnv(ROOTS_ENV, JSON.stringify(roots));
-  });
+  }, 60_000);
   afterEach(() => vi.stubEnv(ROOTS_ENV, JSON.stringify(roots)));
 
   const pick = (tools: JinnMcpTool[], name: string) => tools.find((tool) => tool.name === name)!;

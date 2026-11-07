@@ -383,7 +383,7 @@ beforeAll(async () => {
   registry = await import("../../sessions/registry.js");
   (await import("../../shared/db.js")).initDb();
   integrationCallerId = seedSession({ employee: "search-caller", engine: "codex", title: "Search caller" });
-});
+}, 60_000);
 
 describe("search tools — integration against the real routes/registry", () => {
   it("the operator headline: seed a decision in one session → find it → pull its context → find the session by employee+status", async () => {

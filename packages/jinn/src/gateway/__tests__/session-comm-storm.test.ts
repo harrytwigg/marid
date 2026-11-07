@@ -167,7 +167,7 @@ async function createOperatorSession(prompt: string): Promise<string> {
 beforeAll(async () => {
   api = await import("../api.js");
   registry = await import("../../sessions/registry.js");
-});
+}, 60_000);
 
 beforeEach(() => {
   sessionCommGuards.reset();

@@ -41,7 +41,7 @@ beforeAll(async () => {
   registry = await import("../../sessions/registry.js");
   store = await import("../../work-items/store.js");
   (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 describe("edit_work_item { parentId }", () => {
   it("detaches a sub-task to a root and makes a root a sub-task again, children moving with it", async () => {

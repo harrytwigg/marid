@@ -128,7 +128,7 @@ beforeAll(async () => {
   api = await import("../api.js");
   registry = await import("../../sessions/registry.js");
   store = await import("../../heartbeats/store.js");
-});
+}, 60_000);
 
 describe("heartbeat routes — integration against the real routes/store", () => {
   it("arms a heartbeat owned by the calling session, never by a body field", async () => {

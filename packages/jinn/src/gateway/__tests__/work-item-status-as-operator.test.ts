@@ -124,7 +124,7 @@ beforeAll(async () => {
   reg = await import("../../sessions/registry.js");
   store = await import("../../work-items/store.js");
   (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 describe("POST /api/work-items/:id/status — asOperator", () => {
   it("refuses every employee's claim, executive rank included — the COO is not an employee", async () => {

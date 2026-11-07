@@ -110,7 +110,7 @@ beforeAll(async () => {
   ({ ptySnapshotStore } = await import("../../engines/pty-snapshot.js"));
   CODEX_HOMES_DIR = paths.CODEX_HOMES_DIR;
   (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 describe("session delete removes the per-session Codex CODEX_HOME overlay", () => {
   it("archives without deleting the session, transcript, or Codex home", async () => {

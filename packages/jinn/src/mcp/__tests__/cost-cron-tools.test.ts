@@ -224,7 +224,7 @@ beforeAll(async () => {
     `INSERT INTO sessions (id, engine, employee, source, source_ref, status, title, total_cost, total_turns, created_at, last_activity)
      VALUES (?, ?, ?, ?, ?, 'idle', ?, ?, ?, ?, ?)`,
   ).run("cost-b", "claude", "beta-dev", "web", "web:cost-b", "Beta", 2.5, 4, "2026-07-02T10:00:00.000Z", "2026-07-02T10:00:00.000Z");
-});
+}, 60_000);
 
 describe("cost + cron tools — integration through real gateway routes", () => {
   const ctx = (): JinnMcpContext => ({

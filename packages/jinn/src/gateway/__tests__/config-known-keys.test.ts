@@ -93,7 +93,7 @@ function savedConfig(): Record<string, any> {
 
 beforeAll(async () => {
   api = await import("../api.js");
-});
+}, 60_000);
 
 beforeEach(() => {
   currentConfig = baseConfig();

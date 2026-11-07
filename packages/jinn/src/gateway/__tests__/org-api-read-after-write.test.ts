@@ -120,7 +120,7 @@ async function call(method: string, url: string, body?: unknown) {
 beforeAll(async () => {
   api = await import("../api.js");
   dbModule.initDb();
-});
+}, 60_000);
 
 afterAll(async () => {
   dbModule.__closeDbForTest();

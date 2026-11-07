@@ -116,7 +116,7 @@ beforeAll(async () => {
   reg = await import("../../sessions/registry.js");
   store = await import("../../work-items/store.js");
   db = (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 describe("POST/DELETE /api/work-items/:id/relations", () => {
   it("links two Todos with server-stamped createdBy and returns 201", async () => {

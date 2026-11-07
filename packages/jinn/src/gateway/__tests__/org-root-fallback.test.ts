@@ -116,7 +116,7 @@ beforeAll(async () => {
   await import("../../sessions/registry.js");
   owner = await import("../work-item-owner.js");
   (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 describe("org root resolution without an executive employee", () => {
   it("falls back to the configured portal as the COO/root", () => {

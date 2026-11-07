@@ -119,7 +119,7 @@ beforeAll(async () => {
   refreshOrg();
   const { setJinnAttachGate } = await import("../../mcp/attachment.js");
   setJinnAttachGate({ ok: true });
-});
+}, 60_000);
 
 afterAll(async () => {
   const { setJinnAttachGate } = await import("../../mcp/attachment.js");

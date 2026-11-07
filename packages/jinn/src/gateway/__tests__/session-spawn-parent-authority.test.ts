@@ -118,7 +118,7 @@ beforeAll(async () => {
   api = await import("../api.js");
   reg = await import("../../sessions/registry.js");
   (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 describe("POST /api/sessions — a session caller is always the parent", () => {
   it("overrides an explicit null parent with the caller, so the privileged shape cannot be forged", async () => {

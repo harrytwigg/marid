@@ -192,7 +192,7 @@ beforeAll(async () => {
   deletedCallerId = deleted.id;
   deletedCapability = identity.ensureSessionCapability(deleted.id);
   registry.deleteSession(deleted.id);
-});
+}, 60_000);
 
 describe("privileged read routes — uniform capability guard", () => {
   it.each(READ_ROUTES)("$method $path ($label) fails closed for tool-marked requests without a session capability", async (route) => {

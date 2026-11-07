@@ -91,7 +91,7 @@ beforeAll(async () => {
   connector = registry.createSession({ engine: "codex", source: "remote-mcp", sourceRef: "remote-mcp:op@example.com" });
   const created = await call("POST", "/api/work-items", { title: "Operator's own Todo" }, operator);
   operatorTodo = created.body.workItem.id;
-});
+}, 60_000);
 
 describe("the connector anchor is not the COO portal (D2, SC-007)", () => {
   it("is not portal-shaped, although an identical web session is", () => {

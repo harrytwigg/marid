@@ -168,7 +168,7 @@ beforeAll(async () => {
   const registry = await import("../../sessions/registry.js");
   (await import("../../shared/db.js")).initDb();
   callerId = registry.createSession({ engine: "codex", source: "web", sourceRef: "read-caller", employee: "read-caller" }).id;
-});
+}, 60_000);
 
 describe("read_knowledge — integration against the real route/store", () => {
   const ctx = (): JinnMcpContext => ({

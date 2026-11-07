@@ -113,7 +113,7 @@ beforeAll(async () => {
   boardHooks = await import("../../board-hooks/index.js");
   db = (await import("../../shared/db.js")).initDb();
   labels.createLabel({ name: "needs-merge" });
-});
+}, 60_000);
 
 beforeEach(() => {
   config = structuredClone(baseConfig);
