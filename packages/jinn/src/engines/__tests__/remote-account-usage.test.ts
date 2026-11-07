@@ -127,6 +127,43 @@ describe("the gateway's side of the reading", () => {
     expect(await claudeResetsAtSeconds(Date.now(), { remoteAccount: ACCOUNT.key })).toBe(Date.parse("2099-01-01T00:00:00Z") / 1000);
     expect(await claudeResetsAtSeconds(Date.now(), { remoteAccount: "claude@nobody" })).toBeUndefined();
   });
+
+  describe("a plan with no five-hour limit", () => {
+    // A live usage response from an account with no five-hour limit, trimmed to
+    // the keys the reader looks at; ids and unrelated fields are left out. It
+    // carries no `session` entry in `limits` at all, and a null `five_hour`
+    // beside a populated `seven_day`.
+    const noFiveHourPayload = {
+      five_hour: null,
+      seven_day: { utilization: 39.0, resets_at: "2099-01-10T14:00:00.720649+00:00" },
+      seven_day_opus: null,
+      seven_day_sonnet: null,
+      limits: [
+        { kind: "weekly_all", group: "weekly", percent: 39, severity: "normal", resets_at: "2099-01-10T14:00:00.720649+00:00", scope: null, is_active: true },
+        { kind: "weekly_scoped", group: "weekly", percent: 0, severity: "normal", resets_at: "2099-01-10T14:00:00+00:00", scope: { model: { id: null, display_name: "Fable" }, surface: null }, is_active: false },
+      ],
+    };
+
+    it("shows no 5h window, and gives the backoff no 5h reset", async () => {
+      const { snapshot } = await readRemoteAccountUsage(ACCOUNT, deps({ fetchUsage: vi.fn(async () => noFiveHourPayload) }));
+      expect(snapshot.windows?.map((window) => window.name)).toEqual(["7d", "7d Fable"]);
+      expect(await claudeResetsAtSeconds(Date.now(), { remoteAccount: ACCOUNT.key })).toBeUndefined();
+    });
+
+    it("still shows a real 0% five-hour window after a reset, and its reset to the backoff", async () => {
+      const afterReset = {
+        five_hour: { utilization: 0, resets_at: "2099-01-01T05:00:00Z" },
+        seven_day: { utilization: 39.0, resets_at: "2099-01-10T14:00:00Z" },
+        limits: [
+          { kind: "session", group: "session", percent: 0, severity: "normal", resets_at: "2099-01-01T05:00:00Z", scope: null, is_active: true },
+          { kind: "weekly_all", group: "weekly", percent: 39, severity: "normal", resets_at: "2099-01-10T14:00:00Z", scope: null, is_active: true },
+        ],
+      };
+      const { snapshot } = await readRemoteAccountUsage(ACCOUNT, deps({ fetchUsage: vi.fn(async () => afterReset) }));
+      expect(snapshot.windows?.map((window) => [window.name, window.usedPercent])).toEqual([["5h", 0], ["7d", 39]]);
+      expect(await claudeResetsAtSeconds(Date.now(), { remoteAccount: ACCOUNT.key })).toBe(Date.parse("2099-01-01T05:00:00Z") / 1000);
+    });
+  });
 });
 
 const { cachedRemoteAccountReader, clearRemoteAccountReaderCache } = await import("../remote-account-usage.js");
