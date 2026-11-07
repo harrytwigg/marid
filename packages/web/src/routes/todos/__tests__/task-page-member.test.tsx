@@ -117,6 +117,9 @@ describe("the Todo page for a member", () => {
       </QueryClientProvider>,
     )
     expect(await screen.findByText(/isn't shared with you/i)).toBeTruthy()
+    // The way out goes to their boards, so it says so rather than offering the operator's Todos.
+    expect(screen.getByRole("button", { name: "Your boards" })).toBeTruthy()
+    expect(screen.queryByRole("button", { name: "Back to Todos" })).toBeNull()
   })
 
   it("leaves the operator's page as it was", async () => {
