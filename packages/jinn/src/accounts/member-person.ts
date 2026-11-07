@@ -1,8 +1,10 @@
 import { json } from "../gateway/route-helpers.js";
 import { initDb } from "../shared/db.js";
 import { holdLiveSignalsUntilCommit } from "../work-items/live-events.js";
-import { changeTodoPerson, personClearBlocked } from "../work-items/person-write.js";
-import { appendWorkItemEvent, getWorkItem, releaseOnOwnerChange, type WorkItem } from "../work-items/store.js";
+import { OPERATOR_ASSIGNEE } from "../work-items/operator-assignee.js";
+import { planOwnership, writeOwnership } from "../work-items/person-write.js";
+import { appendWorkItemEvent, getWorkItem, type WorkItem } from "../work-items/store.js";
+import { storedTodoPerson } from "../work-items/todo-people.js";
 import { NotVisibleError, assertCollaborator, grantedTodo, requireBoardRole, todoAccess } from "./member-access.js";
 import type { MemberRouteContext } from "./member-context.js";
 import { readObject, refuseUnsupported } from "./member-input.js";
@@ -18,12 +20,16 @@ class PersonRefusedError extends Error {
   }
 }
 
-/** The person the body names (`@operator`, `user:<id>`), or null to clear; undefined once a 400 or 403 is written. */
+/** The `user:<id>` the body names, or null to clear; undefined once a 400, 403 or 422 is written. */
 async function readPerson(ctx: MemberRouteContext): Promise<{ next: string | null } | undefined> {
   const body = await readObject(ctx);
   if (!body || refuseUnsupported(ctx, body, new Set(["person"]))) return undefined;
   const { person } = body;
   if (person === null) return { next: null };
+  if (typeof person === "string" && person.trim() === OPERATOR_ASSIGNEE) {
+    json(ctx.res, { error: "Board members cannot name the operator as the person", code: "todo_invalid_person" }, 422);
+    return undefined;
+  }
   if (typeof person === "string" && person.trim()) return { next: person.trim() };
   json(ctx.res, { error: "person must be a non-empty string or null" }, 400);
   return undefined;
@@ -39,16 +45,21 @@ function writePerson(ctx: MemberRouteContext, id: string, next: string | null): 
     if (!current || !access) throw new NotVisibleError();
     if (access.via !== "board") throw new PersonRefusedError("Board members can only change Todos on a board they hold", 403, "todo_not_member_editable");
     assertCollaborator(db, userId, access.board);
-    if (personClearBlocked(current, next)) throw new PersonRefusedError("Only the operator can clear a Todo that is assigned to the operator", 403, "person_operator_only");
+    // The operator as the person is stored as the agent slot's `@operator` (or a row beside an agent): the operator's to
+    // change. A member never moves it, nor takes the operator's place.
+    if (current.humanAssignee === OPERATOR_ASSIGNEE) throw new PersonRefusedError("Only the operator can change a Todo whose person is the operator", 403, "person_operator_only");
     const problem = next === null ? undefined : personChoiceProblem(db, current, next);
     if (problem) throw new PersonRefusedError(problem, 422, "todo_invalid_person");
-    const changed = changeTodoPerson(db, current, next, { actor: actorOf(ctx), effect: "state", append: appendWorkItemEvent, releaseOnOwnerChange });
+    const plan = planOwnership(current, storedTodoPerson(db, id), { humanAssignee: next });
+    // A member's change only ever touches the person's row, never `assignee`.
+    if (plan.assignee !== current.assignee) throw new PersonRefusedError("Only the operator can change this Todo's agent", 403, "person_operator_only");
+    const changed = writeOwnership(db, current, plan, { actor: actorOf(ctx), effect: "state", append: appendWorkItemEvent });
     return { item: getWorkItem(id)!, changed };
   }).immediate());
 }
 
 /**
- * `PUT /api/member/todos/:id/person { person: string | null }`: name (`@operator` or a `user:<id>` with access to the board)
+ * `PUT /api/member/todos/:id/person { person: string | null }`: name (a `user:<id>` with access to the board, never `@operator`)
  * or clear the person responsible for a Todo on a board the member collaborates on or owns, whoever made the Todo. It is a label
  * of responsibility and not steering, so it needs no member-only tree and writes only a `person_changed` event: it never
  * starts, wakes or notifies an agent and fires no board hook. A viewer is refused (403); a Todo outside their boards is a 404.

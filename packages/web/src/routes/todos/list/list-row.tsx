@@ -3,7 +3,7 @@ import type { Employee, WorkItemCompactWire } from "@/lib/api"
 import { StatusCircle } from "../state-glyph"
 import { hasStopLead, StopCauseLead } from "../board/stop-cause"
 import { KeepToggle, KeptCaption } from "../board/keep-control"
-import { AssigneeCircles } from "../assignee-circles"
+import { AssigneeSlots } from "../assignee-circles"
 import { formatRelativeTime } from "../util"
 
 function PriorityBars({ priority }: { priority: number }) {
@@ -84,7 +84,7 @@ export const TodoListRow = memo(function TodoListRow({
         >
           {formatRelativeTime(item.updatedAt, now)}
         </span>
-        <AssigneeCircles assignee={item.assignee} humanAssignee={item.humanAssignee} byName={byName} />
+        <AssigneeSlots item={item} byName={byName} variant="row" />
       </span>
       </span>
       {/* Under the title, as on the card: above it, the line reads as if it

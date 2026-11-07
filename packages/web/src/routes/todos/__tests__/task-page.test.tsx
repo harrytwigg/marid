@@ -218,7 +218,7 @@ describe("the task page", () => {
     const chipsBefore = await screen.findByTestId("task-chip-cluster")
     expect(crumbBefore.className).toContain("min-h-[56px]")
     expect(chipsBefore.className).toContain("max-[700px]:flex-nowrap")
-    expect(chipsBefore.querySelectorAll(":scope > *")).toHaveLength(4)
+    expect(chipsBefore.querySelectorAll(":scope > *")).toHaveLength(3)
 
     await act(async () => {
       resolveTree({
@@ -234,7 +234,7 @@ describe("the task page", () => {
     await waitFor(() => expect(screen.getByTestId("task-crumb-TSK-1")).toBeTruthy())
     expect(screen.getByTestId("task-crumb-bar").className).toBe(crumbBefore.className)
     expect(screen.getByTestId("task-chip-cluster").className).toBe(chipsBefore.className)
-    expect(screen.getByTestId("task-chip-cluster").querySelectorAll(":scope > *")).toHaveLength(4)
+    expect(screen.getByTestId("task-chip-cluster").querySelectorAll(":scope > *")).toHaveLength(3)
     expect(screen.getByTestId("chip-working")).toBeTruthy()
   })
 

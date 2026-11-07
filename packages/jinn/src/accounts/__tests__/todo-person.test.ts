@@ -43,12 +43,11 @@ describe("humanAssignee on the store row", () => {
     expect(storedRow(legacy.id)).toBeUndefined();
   });
 
-  it("a stored person wins over the legacy fallback, and the agent slot stays as it was", async () => {
-    const legacy = opsTodo();
-    store.updateWorkItem(legacy.id, { assignee: "@operator" });
-    expect((await putPerson(collab, legacy.id, `user:${collab.userId}`)).status).toBe(200);
-    const read = store.getWorkItem(legacy.id)!;
-    expect(read).toMatchObject({ humanAssignee: `user:${collab.userId}`, assignee: "@operator" });
+  it("a stored person wins over the fallback, and the agent slot stays as it was", async () => {
+    const todo = opsTodo();
+    store.updateWorkItem(todo.id, { assignee: "alice" });
+    h.db.prepare("INSERT INTO todo_people (todo_id, person, set_by, set_at) VALUES (?, ?, 'operator', 't')").run(todo.id, `user:${collab.userId}`);
+    expect(store.getWorkItem(todo.id)).toMatchObject({ humanAssignee: `user:${collab.userId}`, assignee: "alice" });
   });
 });
 
@@ -89,7 +88,7 @@ describe("the operator sets and clears the person through the edit route", () =>
     store.updateWorkItem(todo.id, { assignee: "@operator" });
     const reply = await operatorSet(todo.id, null);
     expect(reply.body.workItem).toMatchObject({ humanAssignee: null, assignee: null });
-    expect(events(todo.id)[0].detail).toEqual({ from: "@operator", to: null, assigneeCleared: true });
+    expect(events(todo.id).at(-1)!.detail).toEqual({ from: "@operator", to: null, assigneeCleared: true });
   });
 
   it("a patch that also hands the Todo to an agent keeps that agent when it clears the person", async () => {
@@ -143,10 +142,12 @@ describe("PUT /api/member/todos/:id/person", () => {
     expect(frame?.payload.value.humanAssignee).toBe(`user:${collab.userId}`);
   });
 
-  it("a collaborator may name another person on the board, the operator, or clear it", async () => {
+  it("a collaborator may name another person on the board, or clear it, but never the operator", async () => {
     const todo = opsTodo();
     expect((await putPerson(collab, todo.id, `user:${owner.userId}`)).body.workItem.humanAssignee).toBe(`user:${owner.userId}`);
-    expect((await putPerson(collab, todo.id, "@operator")).body.workItem.humanAssignee).toBe("@operator");
+    const operator = await putPerson(collab, todo.id, "@operator");
+    expect([operator.status, operator.body.code]).toEqual([422, "todo_invalid_person"]);
+    expect(store.getWorkItem(todo.id)).toMatchObject({ humanAssignee: `user:${owner.userId}`, assignee: null });
     expect((await putPerson(collab, todo.id, null)).body.workItem.humanAssignee).toBeNull();
   });
 
@@ -189,13 +190,40 @@ describe("PUT /api/member/todos/:id/person", () => {
     expect(storedRow(todo.id)).toBeUndefined();
   });
 
-  it("a member cannot clear the operator out of a Todo assigned to the operator, which would clear that assignee", async () => {
+  it("answers 403 and changes nothing on a Todo whose person is the operator, whether by the assignee or by a row beside an agent", async () => {
+    const needsYou = opsTodo();
+    store.updateWorkItem(needsYou.id, { assignee: "@operator" });
+    const withAgent = opsTodo();
+    store.updateWorkItem(withAgent.id, { assignee: "alice" });
+    await operatorSet(withAgent.id, "@operator");
+    expect(store.getWorkItem(withAgent.id)).toMatchObject({ assignee: "alice", humanAssignee: "@operator" });
+    for (const todo of [needsYou, withAgent]) {
+      const before = JSON.stringify([store.getWorkItem(todo.id), storedRow(todo.id), events(todo.id)]);
+      for (const person of [null, `user:${collab.userId}`]) {
+        const reply = await putPerson(collab, todo.id, person);
+        expect([todo.id, person, reply.status, reply.body.code]).toEqual([todo.id, person, 403, "person_operator_only"]);
+      }
+      expect(JSON.stringify([store.getWorkItem(todo.id), storedRow(todo.id), events(todo.id)])).toBe(before);
+    }
+  });
+
+  it("a member's set or clear leaves assignee, the dispatch and auto-start rows and the board walk's view byte-identical, and wakes nothing", async () => {
+    const walk = await import("../../board-walk/board.js");
     const todo = opsTodo();
-    store.updateWorkItem(todo.id, { assignee: "@operator" });
-    const reply = await putPerson(collab, todo.id, null);
-    expect(reply.status).toBe(403);
-    expect(reply.body.code).toBe("person_operator_only");
-    expect(store.getWorkItem(todo.id)!.assignee).toBe("@operator");
+    store.updateWorkItem(todo.id, { assignee: "alice" });
+    const snapshot = () => JSON.stringify({
+      assignee: (h.db.prepare("SELECT assignee, status FROM work_items WHERE id = ?").get(todo.id)),
+      dispatch: h.db.prepare("SELECT * FROM work_item_dispatch WHERE work_item_id = ?").all(todo.id),
+      autoStart: h.db.prepare("SELECT * FROM work_item_auto_start WHERE work_item_id = ?").all(todo.id),
+      walk: walk.noAutoStartReason(store.getWorkItem(todo.id)!) ?? null,
+      sessions: h.db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE work_item_id = ?").get(todo.id),
+      kinds: store.listWorkItemEvents(todo.id).map((event) => event.kind).filter((kind) => kind !== "person_changed"),
+    });
+    const before = snapshot();
+    expect((await putPerson(collab, todo.id, `user:${collab.userId}`)).status).toBe(200);
+    expect(snapshot()).toBe(before);
+    expect((await putPerson(collab, todo.id, null)).status).toBe(200);
+    expect(snapshot()).toBe(before);
   });
 
   it("never touches the agent slot, status or dispatch", async () => {

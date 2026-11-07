@@ -12,7 +12,7 @@ import "@/test/preload-menus"
 
 type Principal = { kind: "operator" } | { kind: "member"; user: { id: string; email: string; displayName: string }; boards: { department: string; role: BoardRole }[] }
 let principal: Principal = { kind: "operator" }
-vi.mock("@/routes/auth-provider", () => ({ useAuthOptional: () => ({ principal, authState: { accountsEnabled: true, principal } }) }))
+vi.mock("@/routes/auth-provider", () => ({ useAuthOptional: () => ({ principal, authState: { accountsEnabled: true, hasAccounts: true, principal } }) }))
 vi.mock("@/components/page-layout", () => ({ PageLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }))
 vi.mock("@/routes/settings-provider", () => ({ useSettings: () => ({ settings: { employeeOverrides: {} } }) }))
 vi.mock("@/routes/providers", () => ({ useTheme: () => ({ theme: "dark" }) }))
@@ -85,7 +85,8 @@ describe("a collaborator or owner", () => {
     expect(screen.getByTestId("rail-assignee").textContent).toContain("mason")
     fireEvent.click(person)
     const picker = await screen.findByTestId("picker-person")
-    expect(within(picker).getByTestId("person-option-operator").textContent).toContain("Operator")
+    // A member never names the operator: that is the operator's to choose.
+    expect(within(picker).queryByTestId("person-option-operator")).toBeNull()
     fireEvent.click(within(picker).getByTestId("person-option-me"))
     await waitFor(() => expect(setWorkItemPerson).toHaveBeenCalledWith("PLT-1", "user:me"))
     expect(updateWorkItem).not.toHaveBeenCalled()
@@ -109,6 +110,18 @@ describe("a collaborator or owner", () => {
     fireEvent.click(await screen.findByTestId("person-option-kit"))
     await waitFor(() => expect(setWorkItemPerson).toHaveBeenCalled())
     await waitFor(() => expect(screen.getByTestId("rail-person").textContent).toContain("No person"))
+  })
+})
+
+describe("a Todo whose person is the operator", () => {
+  it("is read-only to a collaborator: the operator's to change", async () => {
+    principal = member("collaborator")
+    setup(agentMade({ humanAssignee: "@operator" }))
+    const person = await screen.findByTestId("rail-person")
+    expect(person.textContent).toContain("Operator")
+    expect(person.closest("button")).toBeNull()
+    expect(screen.queryByTestId("rail-person-clear")).toBeNull()
+    expect(screen.queryByTestId("chip-person-clear")).toBeNull()
   })
 })
 

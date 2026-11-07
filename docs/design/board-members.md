@@ -359,41 +359,77 @@ member cookies stop working, member comments read as `system` comments and membe
 ## Person and agent assignees
 
 A Todo has two assignee slots that answer different questions. The **agent** is who does the work; the **person** is who is
-responsible for it. They are set and cleared independently, and the board card, the list row and the Todo page show both
-(a person circle, then an agent circle; the Todo page has a "Person" and an "Agent" row).
+responsible for it. They are set and cleared independently. Once an instance has an account, the board card, the list row and
+the Todo page show both (a person circle, then an agent circle; the Todo page has a "Person" and an "Agent" row).
 
 - **Agent slot = the existing `assignee`**, unchanged in storage, dispatch and semantics. It shows only when `assignee` is an
-  employee; `@operator` there is the legacy "needs the operator" marker and reads as an empty agent slot. The web agent picker
-  lists employees only, with no operator option.
+  employee; `@operator` there is the "needs the operator" marker and reads as an empty agent slot.
 - **Person slot = `todo_people`**, a new additive table registered with the boot shape verifier beside the account tables:
   `todo_id TEXT PRIMARY KEY, person TEXT NOT NULL, set_by TEXT NOT NULL, set_at TEXT NOT NULL`. `person` is `@operator` or
   `user:<id>`; one per Todo. No existing table changes shape and no existing row is rewritten, so an older build ignores it
   and a rollback stays bootable. Deleting a user deletes their rows in the same transaction. Nothing deletes a Todo today;
   whatever does must call `clearTodoPerson`, because the table is keyed by Todo id alone (no foreign key, so a rebuild of
   `work_items` never has to know about it). Removing a board grant keeps the row, and the person still renders by name.
-- **`humanAssignee: string | null`** is read from the row. With no row and `assignee === '@operator'` it is `@operator`, so a
-  legacy "needs the operator" Todo shows the operator in the person circle and an empty agent circle, with nothing written.
-  Clearing the person of a Todo whose `assignee` is `@operator` clears that `assignee` too (the operator's alone). Members see the
-  member serialiser's actor mapping: a `user:` id on one of their boards stays, any other user is the generic `member`, and
-  `@operator` stays. MCP `get_work_item` and the list tools show the person as "<name> (board member)" or "operator", never
-  a user as the operator (the sentinel-reuse rule above), and "Former member" for a user who is gone.
+- **`humanAssignee: string | null`** is on every Todo serialisation (list rows, board rows, detail, tree nodes, live frames):
+  the row, else `@operator` when `assignee` is. List pages and the detail payload add a `members` map from `user:<id>` to
+  `{ kind: "member", displayName }` when a row names a user. Members see the member serialiser's actor mapping: a `user:` id
+  on one of their boards stays, any other user is the generic `member`, and `@operator` stays. MCP `get_work_item` and the
+  list tools show the person as "<name> (board member)" or "operator", never a user as the operator (the sentinel-reuse
+  rule above), and "Former member" for a user who is gone.
 - **Who can be chosen**: `@operator`, or an active user with a grant of any role on the Todo's root board, or an instance
   owner. Anyone else is `422`. The operator can always choose themselves, with zero accounts.
-- **Who can set it**: the operator, on any Todo, through the Todo edit route (`humanAssignee`, version-fenced like the other
-  fields; an agent session that sends it is refused as for `assignee`). Collaborators and board owners, on any Todo on their
-  board (agent-created ones included), through `PUT /api/member/todos/:id/person`: a label of responsibility, not steering,
-  so it needs no member-only tree. Viewers get `403`; a Todo outside the member's grants is `404`. The route is in the member
-  router, so the allowlist and default-deny are unchanged.
 - **A member-created Todo starts with its creator as the person**, written in the create's transaction.
-- **Nothing wakes.** A change writes one `person_changed` event `{ from, to }` (plus `assigneeCleared` when a clear took the
-  operator out of the agent slot), emitted as an ordinary Todo update so cards refresh live. It never starts, wakes or
-  notifies an agent and fires no board hook, whoever sets it (`person_changed` is no board event, and it is never written as
-  `metadata_edited`, which a hook reads). It is on the member event-detail allowlist with its ids mapped like any actor. There
-  is no agent tool to set it.
-- **Web**: two 20px circles on the card and the list row (`HumanAvatar`, or the operator's own avatar, then `EmployeeAvatar`),
-  a dashed outline with "No person" / "No agent" for an empty slot, on every card including an instance with no accounts. The
-  card no longer shows its creator in a free slot. The Todo page has a Person row (operator and the board's people, a clear
-  button) and an Agent row; a member gets the person row where they are a collaborator or owner and the agent row read-only.
+
+### The operator as the person keeps today's meaning, by storage
+
+The operator in the person slot is stored the way "needs the operator" always was, so every reader of `assignee` (the
+attention lane, backlog dispatch, quiet-watch, the review addressee) keeps meaning what it meant. One writer owns the rules
+(`work-items/person-write.ts`), whichever route reaches them (the operator's edit, the assign route, the internal write):
+
+| Edit | Stored |
+|---|---|
+| Person `@operator`, no agent | `assignee = '@operator'`, no `todo_people` row (an `@operator` assignee never has a row) |
+| Person `@operator`, agent X | `assignee = X`, row `@operator` (the agent owns execution) |
+| Set an agent X while `assignee = '@operator'` | `assignee = X`, row `@operator` (the operator stays the person) |
+| Clear the agent while the row is `@operator` | `assignee = '@operator'`, row deleted (it needs the operator again) |
+| Clear the person while `assignee = '@operator'` | `assignee = null` |
+| Name another person while `assignee = '@operator'` | `assignee = null`, row = that person (it no longer waits on the operator) |
+| Assign to the operator over a person's row | `assignee = '@operator'`, row deleted, `person_changed` records it |
+
+Choosing yourself with no agent is therefore an assignment to the operator, written by the pen's `assignee` write (the
+department is left alone, unlike the assign route, which derives it) and it fires what an assignment to the operator has
+always fired. A test drives it end to end through the edit route against a twin Todo given to the operator through the assign
+route, and asserts the same `assignee`, attention lane, review addressee, board-walk refusal, operator desk membership and
+quiet-watch treatment, then sets an agent, clears it, and asserts the "needs you" state returns.
+
+### Who can set it
+
+- **Operator**: any Todo, through the Todo edit route (`humanAssignee`, version-fenced like the other fields; an agent session
+  that sends it is refused as for `assignee`).
+- **Collaborators and board owners**: any Todo on their board (agent-created ones included) through
+  `PUT /api/member/todos/:id/person { person: string | null }`: a label of responsibility, not steering, so it needs no
+  member-only tree. **Members never write `assignee` and never choose `@operator`.** The route accepts only a `user:<id>` with
+  access to the board, or `null`: `@operator` is `422`. On a Todo whose person is the operator (a row, or the `assignee`
+  fallback) it answers `403` (`person_operator_only`) and changes nothing. A member's change only ever touches
+  `todo_people`. Viewers get `403`; a Todo outside the member's grants is `404`. The route is in the member router, so the
+  allowlist and default-deny are unchanged.
+- **Nothing wakes.** A person change writes one `person_changed` event `{ from, to }` (plus `assigneeCleared` when it cleared
+  the operator out of `assignee`), emitted as an ordinary Todo update so cards refresh live. It never starts, wakes or
+  notifies an agent, fires no board hook, and is never written as `metadata_edited`, which a hook reads. The one exception is
+  the operator choosing themselves with no agent, which is an assignment to the operator and fires what that fires. It is on
+  the member event-detail allowlist with its ids mapped like any actor. There is no agent tool to set it.
+
+### Web
+
+- **With no account on the instance the UI is today's, unchanged**: a single assignee circle on the card and the list row, a
+  single "Assignee" row and chip on the Todo page whose picker keeps its operator option and its assign lane. The two-slot
+  surfaces appear once `hasAccounts` (already on `GET /api/auth/state`) is true, so the first account turns them on.
+- With accounts: two 20px circles on the card and the list row (`HumanAvatar`, or the operator's own avatar, then
+  `EmployeeAvatar`), a dashed outline with "No person" / "No agent" for an empty slot. The card no longer shows its creator in
+  a free slot. The Todo page has a Person row and chip (the operator's picker offers "You (operator)" and the board's people,
+  with a clear button) and an Agent row and chip whose picker lists employees only. A member gets the person picker where they
+  are a collaborator or owner, without the operator option, and read-only on a Todo whose person is the operator; the agent
+  row is read-only for members.
 
 ## Phases
 
@@ -435,7 +471,7 @@ boards), `GET /api/member/todos/:id`, `GET /api/member/todos/:id/tree`,
 `GET /api/member/todos/:id/comments`, `GET /api/member/todos/:id/attachments[/:aid]`,
 `POST /api/member/boards/:department/todos` (root, or `parentId` in a member-only tree), `PATCH /api/member/todos/:id` (title, body,
 priority, labels; member-only trees only), `POST /api/member/todos/:id/status`
-(`done` or `backlog`, member-only trees, edges as in Roles), `PUT /api/member/todos/:id/person` (`{ person: string | null }`, collaborators and owners, any Todo on the board),
+(`done` or `backlog`, member-only trees, edges as in Roles), `PUT /api/member/todos/:id/person` (`{ person: string | null }`: a `user:<id>` or null, collaborators and owners, any Todo on the board),
 `POST /api/member/todos/:id/comments`, `PATCH/DELETE
 /api/member/todos/:id/comments/:cid`, `POST /api/member/todos/:id/attachments`, and the owner
 board-share routes under `/api/member/boards/:department/…` mirroring the operator's.
@@ -493,8 +529,8 @@ Settled while building the web against this contract; the gateway answers exactl
   member. Error messages to members never enumerate company data (labels, boards, people).
 
 - `PUT /api/member/todos/:id/person` → `{ workItem }` (the member serialisation, carrying `humanAssignee`). `403` for a viewer,
-  and for clearing a Todo whose agent slot holds the operator (`person_operator_only`); `404` outside the member's grants;
-  `422` (`todo_invalid_person`) for someone who may not be chosen; `400` for a malformed body.
+  and for any change to a Todo whose person is the operator (`person_operator_only`); `404` outside the member's grants;
+  `422` (`todo_invalid_person`) for `@operator` or someone who may not be chosen; `400` for a malformed body.
 - `humanAssignee: string | null` is on every Todo serialisation (list rows, board rows, detail, tree nodes, live frames). List
   pages and the detail payload add a `members` map from `user:<id>` to `{ kind: "member", displayName }` when a row names a user.
 

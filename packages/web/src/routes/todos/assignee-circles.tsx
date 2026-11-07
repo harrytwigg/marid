@@ -1,6 +1,8 @@
 import { memo } from "react"
 import type { Employee } from "@/lib/api"
 import { EmployeeAvatar, OPERATOR_DEFAULT_EMOJI } from "@/components/ui/employee-avatar"
+import { emojiForName } from "@/lib/emoji-pool"
+import { useTwoSlotAssignees } from "@/hooks/use-two-slot-assignees"
 import { MemberAvatar, MemberName, useViewer } from "./attribution"
 import { OPERATOR_ASSIGNEE } from "./util"
 
@@ -87,4 +89,41 @@ export function AssigneeCircles({
 }) {
   const agent = agentOf(assignee)
   return <CirclePair assignee={assignee} humanAssignee={humanAssignee} agentName={agent ? byName.get(agent)?.displayName : undefined} size={size} />
+}
+
+/** The one assignee circle an instance with no accounts has always shown, on the board card and on the list row. */
+function SingleAssignee({ assignee, byName, variant }: { assignee: string | null; byName: Map<string, Employee>; variant: "card" | "row" }) {
+  if (!assignee) return null
+  const title = byName.get(assignee)?.displayName ?? assignee
+  if (variant === "card") {
+    return (
+      <span title={title} className="flex-none">
+        <EmployeeAvatar name={assignee} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
+      </span>
+    )
+  }
+  return (
+    <span title={title} className="grid size-5 place-items-center rounded-full bg-[var(--fill-secondary)] text-[11px]">
+      {emojiForName(assignee)}
+    </span>
+  )
+}
+
+/** What a card or a row shows for who holds a Todo: the person and the agent once an account exists, the one assignee before. */
+export function AssigneeSlots({ item, byName, variant }: {
+  item: { assignee: string | null; humanAssignee?: string | null }
+  byName: Map<string, Employee>
+  variant: "card" | "row"
+}) {
+  const twoSlots = useTwoSlotAssignees()
+  if (!twoSlots) return <SingleAssignee assignee={item.assignee} byName={byName} variant={variant} />
+  return <AssigneeCircles assignee={item.assignee} humanAssignee={item.humanAssignee} byName={byName} />
+}
+
+/**
+ * The person row's picker, or nothing where the person may not change it: a board member never changes a Todo whose
+ * person is the operator (the operator's to change, the gateway answers 403), and has no picker for a viewer's role.
+ */
+export function personRowFor<R>(rowFor: (row: "person") => R | undefined, item: { humanAssignee?: string | null }, viewer: "operator" | "member"): R | undefined {
+  return viewer === "member" && item.humanAssignee === OPERATOR_ASSIGNEE ? undefined : rowFor("person")
 }

@@ -13,8 +13,8 @@ import { allocateWorkItemId, useWorkItemAllocationClaim } from './migrate.js';
 import { createdEventDetail, type WriteOrigin } from './origin.js';
 import { HOME_SCOPE_SQL, KEPT_EXISTS_SQL } from './kept.js';
 import { sprintFilterCondition } from './sprints-schema.js';
-import { HUMAN_ASSIGNEE_COLUMN_SQL } from './todo-people.js';
-import { changeTodoPerson } from './person-write.js';
+import { HUMAN_ASSIGNEE_COLUMN_SQL, storedTodoPerson } from './todo-people.js';
+import { planOwnership, writeOwnership } from './person-write.js';
 import { applyStartAtEdit, assertTodoDateOrder, START_AT_COLUMN_SQL, startAtInstant, writeWorkItemStartAt } from './start-date.js';
 import { toWorkItemLinkRole, type WorkItemLinkRole } from './link-role.js';
 import { searchWorkItemIds, workItemMatchReasons, type WorkItemMatch } from './search.js';
@@ -800,10 +800,14 @@ export function updateWorkItemConditional(
 
     let item = current;
     if (updateChangesItem(current, input)) {
+      // Both slots move by the ownership rules (person-write.ts): an edit of one can move the other, never by a second writer.
+      const plan = planOwnership(current, storedTodoPerson(db, id), input);
+      const assignee = plan.assignee !== current.assignee ? plan.assignee : undefined;
+      const owned: UpdateWorkItemInput = { ...input, assignee };
       const fields = (Object.keys(UPDATE_FIELD_COLUMNS) as Array<keyof typeof UPDATE_FIELD_COLUMNS>)
-        .filter((key) => input[key] !== undefined)
-        .map((key) => ({ column: UPDATE_FIELD_COLUMNS[key], name: key, value: input[key] }));
-      guardWorkItemUpdate(db, current, input, opts.actor, appendWorkItemEvent);
+        .filter((key) => owned[key] !== undefined)
+        .map((key) => ({ column: UPDATE_FIELD_COLUMNS[key], name: key, value: owned[key] }));
+      guardWorkItemUpdate(db, current, owned, opts.actor, appendWorkItemEvent);
       const startDateEdited = applyStartAtEdit(db, current, input);
       if (typeof input.department === 'string') ensureDepartmentRegistered(input.department);
       const now = new Date().toISOString();
@@ -815,13 +819,12 @@ export function updateWorkItemConditional(
         if (!latest) return undefined;
         throw new WorkItemVersionConflictError(latest.version);
       }
-      const releasedSessions = releaseOnOwnerChange(db, current, input.assignee);
-      const updatedFields = [...fields.map((field) => field.name), ...(startDateEdited ? ['startAt'] : [])];
+      const releasedSessions = releaseOnOwnerChange(db, current, owned.assignee);
       // The person is a label beside the agent: its own `person_changed` event, never `metadata_edited`, which a board hook reads.
-      if (input.humanAssignee !== undefined) {
-        const assignee = input.assignee !== undefined ? input.assignee : current.assignee;
-        changeTodoPerson(db, { ...current, assignee }, input.humanAssignee, { actor: opts.actor ?? 'operator', effect: 'companion', append: appendWorkItemEvent, releaseOnOwnerChange });
-      }
+      // An assignee the person slot cleared is not an assignment either; one it set (the operator chosen with no agent) is.
+      const clearedByPerson = input.assignee === undefined && owned.assignee !== undefined && owned.assignee !== OPERATOR_ASSIGNEE;
+      const updatedFields = [...fields.map((field) => field.name).filter((name) => !(name === 'assignee' && clearedByPerson)), ...(startDateEdited ? ['startAt'] : [])];
+      writeOwnership(db, current, plan, { actor: opts.actor ?? 'operator', effect: 'companion', append: appendWorkItemEvent });
       if (updatedFields.length > 0 || input.humanAssignee === undefined) {
         appendWorkItemEvent({
           workItemId: id,
@@ -866,9 +869,13 @@ export function updateWorkItem(id: string, input: UpdateWorkItemInput, actor?: s
   const txn = db.transaction((): WorkItem | undefined => {
     const current = getWorkItem(id);
     if (!current) return undefined;
-    const changedFields = fields.filter((field) => current[field.name] !== field.value);
+    // The agent slot's change settles the person with it (person-write.ts).
+    const plan = planOwnership(current, storedTodoPerson(db, id), { assignee: input.assignee });
+    const changedFields = fields
+      .map((field) => (field.name === 'assignee' ? { ...field, value: plan.assignee } : field))
+      .filter((field) => current[field.name] !== field.value);
     if (changedFields.length === 0) return current;
-    guardWorkItemUpdate(db, current, input, actor, appendWorkItemEvent);
+    guardWorkItemUpdate(db, current, { ...input, ...(input.assignee !== undefined ? { assignee: plan.assignee } : {}) }, actor, appendWorkItemEvent);
     if (changedFields.some((field) => field.name === 'department' && typeof field.value === 'string')) {
       ensureDepartmentRegistered(input.department as string);
     }
@@ -877,7 +884,8 @@ export function updateWorkItem(id: string, input: UpdateWorkItemInput, actor?: s
       .prepare(`UPDATE work_items SET ${changedFields.map((field) => `${field.column} = ?`).join(', ')}, updated_at = ?, version = version + 1 WHERE id = ?`)
       .run(...changedFields.map((field) => field.value), now, id);
     if (result.changes === 0) return undefined;
-    const releasedSessions = releaseOnOwnerChange(db, current, input.assignee);
+    const releasedSessions = releaseOnOwnerChange(db, current, input.assignee !== undefined ? plan.assignee : undefined);
+    writeOwnership(db, current, plan, { actor: actor ?? 'operator', effect: 'companion', append: appendWorkItemEvent });
     appendWorkItemEvent({
       workItemId: id,
       kind: 'note',

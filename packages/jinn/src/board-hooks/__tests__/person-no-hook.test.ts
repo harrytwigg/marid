@@ -43,6 +43,7 @@ const setPerson = (id: string, humanAssignee: string | null, actor: string) =>
 describe("setting or clearing the person responsible wakes nothing", () => {
   it("fires no board hook, whoever sets it, and starts no session or dispatch", async () => {
     const item = store.createWorkItem({ title: "A Todo", department: "ops" });
+    store.updateWorkItem(item.id, { assignee: "merger" });
     await flush();
     spawnMock.mockClear();
     db.prepare("DELETE FROM board_hook_runs").run();
@@ -59,7 +60,22 @@ describe("setting or clearing the person responsible wakes nothing", () => {
     expect(runs.listRuns({ limit: 50 }).runs).toEqual([]);
     expect(count("SELECT COUNT(*) AS n FROM sessions")).toBe(before.sessions);
     expect(count("SELECT COUNT(*) AS n FROM work_item_dispatch")).toBe(before.dispatch);
-    expect(store.getWorkItem(item.id)).toMatchObject({ status: before.status, assignee: null });
+    expect(store.getWorkItem(item.id)).toMatchObject({ status: before.status, assignee: "merger" });
+  });
+
+  it("choosing yourself with no agent IS an assignment to the operator, and fires what that always fired", async () => {
+    const viaPerson = store.createWorkItem({ title: "A Todo", department: "ops" });
+    const twin = store.createWorkItem({ title: "A twin", department: "ops" });
+    await flush();
+    spawnMock.mockClear();
+    setPerson(viaPerson.id, "@operator", "operator");
+    await flush();
+    const viaPersonCalls = spawnMock.mock.calls.length;
+    spawnMock.mockClear();
+    store.updateWorkItemConditional(twin.id, { assignee: "@operator" }, { expectedVersion: store.getWorkItem(twin.id)!.version, actor: "operator" });
+    await flush();
+    expect(viaPersonCalls).toBe(spawnMock.mock.calls.length);
+    expect(viaPersonCalls).toBe(1);
   });
 
   it("clearing the operator out of a Todo assigned to them fires no assignment hook either", async () => {

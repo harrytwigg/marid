@@ -7,8 +7,9 @@ import { OPERATOR_ASSIGNEE } from "../util"
 import { PickerNote, PickerRow } from "./picker-shell"
 import type { PickerContentProps } from "./picker-contents"
 
-/** The person picker: the operator, then the people on this Todo's board, and a row to clear. It names a person
- *  responsible and nothing else: it never starts or notifies an agent, so it carries no creator-access note. */
+/** The person picker: the operator (the operator's own picker only: a board member never names the operator), then the people on
+ *  this Todo's board, and a row to clear. It names a person responsible and nothing else: it never starts or notifies an agent,
+ *  so it carries no creator-access note. */
 export function PersonPickerContent({
   detail,
   commit,
@@ -33,14 +34,16 @@ export function PersonPickerContent({
         />
       )}
       <div className={sheet ? "" : "max-h-[288px] overflow-y-auto"}>
-        <PickerRow
-          sheet={sheet}
-          glyph={<EmployeeAvatar name="operator" fallback={OPERATOR_DEFAULT_EMOJI} size={22} fontSize={12} className="bg-[var(--fill-secondary)]" />}
-          label={viewer === "member" ? "Operator" : "You (operator)"}
-          checked={current === OPERATOR_ASSIGNEE}
-          onSelect={() => pick(OPERATOR_ASSIGNEE)}
-          testId="person-option-operator"
-        />
+        {viewer === "operator" && (
+          <PickerRow
+            sheet={sheet}
+            glyph={<EmployeeAvatar name="operator" fallback={OPERATOR_DEFAULT_EMOJI} size={22} fontSize={12} className="bg-[var(--fill-secondary)]" />}
+            label="You (operator)"
+            checked={current === OPERATOR_ASSIGNEE}
+            onSelect={() => pick(OPERATOR_ASSIGNEE)}
+            testId="person-option-operator"
+          />
+        )}
         {people.map((person) => (
           <PickerRow
             key={person.id}

@@ -30,9 +30,11 @@ const surfaces: Array<[string, (item: WorkItemCompactWire) => void]> = [
   ["list row", (item) => void render(<TodoListRow item={item} priority={2} byName={byName} now={Date.now()} onOpen={() => {}} />)],
 ]
 
+const WITH_ACCOUNTS = { principal: null, authState: { accountsEnabled: true, hasAccounts: true } }
+
 beforeEach(() => {
   vi.clearAllMocks()
-  auth.value = null
+  auth.value = WITH_ACCOUNTS
   directory.listPeople.mockResolvedValue([{ id: "ada1", displayName: "Ada Lovelace", initials: "AL" }])
 })
 
@@ -62,16 +64,39 @@ describe.each(surfaces)("on the %s", (_name, draw) => {
   })
 
   it("draws a board member as a human avatar, named once the directory answers", async () => {
-    auth.value = { principal: null, authState: { accountsEnabled: true, hasAccounts: true } }
     draw(compact({ humanAssignee: "user:ada1" }))
     await waitFor(() => expect(screen.getByTestId("human-avatar").getAttribute("aria-label")).toBe("Ada Lovelace"))
     expect(screen.getByTestId("agent-circle-empty")).toBeTruthy()
   })
 
   it("draws a person no longer on the member's boards as a former member", () => {
-    auth.value = { principal: { kind: "member", user: { id: "me", email: "m@example.test", displayName: "Mia" }, boards: [] }, authState: { accountsEnabled: true } }
+    auth.value = { principal: { kind: "member", user: { id: "me", email: "m@example.test", displayName: "Mia" }, boards: [] }, authState: { accountsEnabled: true, hasAccounts: true } }
     draw(compact({ humanAssignee: "member" }))
     expect(screen.getByTestId("human-avatar").getAttribute("aria-label")).toBe("Former member")
     expect(directory.getMemberPeople).not.toHaveBeenCalled()
+  })
+})
+
+describe.each(surfaces)("on the %s of an instance with no accounts", (_name, draw) => {
+  beforeEach(() => { auth.value = { principal: null, authState: { accountsEnabled: true, hasAccounts: false } } })
+
+  it("is today's: no pair, one circle for the agent, nothing at all for a Todo nobody holds", () => {
+    draw(compact({ assignee: "mason", humanAssignee: "@operator" }))
+    expect(screen.queryByTestId("assignee-circles")).toBeNull()
+    expect(screen.queryByTestId("person-circle")).toBeNull()
+    expect(screen.getByTitle("Mason")).toBeTruthy()
+  })
+
+  it("draws no circle, dashed or otherwise, for an unassigned Todo", () => {
+    draw(compact())
+    expect(screen.queryByTestId("assignee-circles")).toBeNull()
+    expect(screen.queryByTitle("No person")).toBeNull()
+    expect(screen.queryByTitle("No agent")).toBeNull()
+  })
+
+  it("draws a Todo assigned to the operator as the one assignee circle, as it always did", () => {
+    draw(compact({ assignee: "@operator", humanAssignee: "@operator" }))
+    expect(screen.queryByTestId("person-circle")).toBeNull()
+    expect(screen.getByTitle("@operator")).toBeTruthy()
   })
 })

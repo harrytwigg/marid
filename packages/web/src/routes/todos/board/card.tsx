@@ -3,7 +3,7 @@ import { ChevronRight } from "@/components/ui/icon"
 import type { Employee, WorkItemCompactWire, WorkItemOpenDetailWire, WorkItemStatusWire, WorkItemTreeWire } from "@/lib/api"
 import { stateKeyOf } from "@/lib/todos"
 import { StateCircle } from "../state-glyph"
-import { AssigneeCircles } from "../assignee-circles"
+import { AssigneeSlots } from "../assignee-circles"
 import { stopReasonOf } from "../util"
 import { CardTree } from "./card-tree"
 import { hasStopLead, StopCauseLead, stopLeadKey } from "./stop-cause"
@@ -192,7 +192,7 @@ export const BoardCard = memo(function BoardCard({
           )}
           {/* The label gives way before the name: it shortens to an ellipsis, the chip keeps its width. */}
           {item.movedToAnotherBoard && <MovedLabel testId={`board-moved-${item.id}`} className="min-w-0 shrink" />}
-          <AssigneeCircles assignee={item.assignee} humanAssignee={item.humanAssignee} byName={byName} />
+          <AssigneeSlots item={item} byName={byName} variant="card" />
           {onMove && !ghost && <MoveToMenu item={item} openChildren={rollup ? rollup.total - rollup.closed : 0} onMove={onMove} />}
         </span>
       </div>
