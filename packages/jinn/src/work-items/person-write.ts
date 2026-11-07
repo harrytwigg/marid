@@ -21,8 +21,7 @@ export interface PersonWrite {
  *
  * Clearing the person of a Todo whose agent slot holds the operator clears that `assignee` too: the operator in the
  * person slot IS that assignment (see HUMAN_ASSIGNEE_COLUMN_SQL), so a bare row delete would leave them showing. That is
- * the operator's to do, so a caller that is not the operator passes `mayClearOperatorAssignee: false` and is refused
- * before this runs (`personClearBlocked`).
+ * the operator's to do, so a route that is not the operator's asks `personClearBlocked` first and refuses before this runs.
  */
 export function changeTodoPerson(db: DatabaseType, current: WorkItem, next: string | null, write: PersonWrite): boolean {
   const { actor, effect } = write;
