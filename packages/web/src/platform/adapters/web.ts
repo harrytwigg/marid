@@ -25,6 +25,8 @@ export interface WebPlatformEnvironment {
   requestNotificationPermission?: () => Promise<NotificationPermissionValue>
   presentNotification?: (title: string, options?: NotificationOptions) => void
   writeClipboard?: (text: string) => Promise<void>
+  /** Synchronous `execCommand("copy")` path, for pages the async Clipboard API is withheld from. */
+  copyLegacy?: (text: string) => boolean
   setBadge?: (count?: number) => Promise<void>
   openExternal?: (url: string) => void
   visualViewport?: ViewportLike
@@ -67,7 +69,6 @@ const SECURE_CONTEXT_CAPABILITIES = new Set<PlatformCapability>([
   "badges.set",
   "badges.clear",
   "sharing.share",
-  "clipboard.copy",
 ])
 
 type SupportCheck = (environment: WebPlatformEnvironment) => boolean
@@ -81,7 +82,7 @@ const SUPPORT_CHECKS: Partial<Record<PlatformCapability, SupportCheck>> = {
   "badges.clear": (environment) => Boolean(environment.setBadge),
   "sharing.share": (environment) => Boolean(environment.share),
   "navigation.open-external": (environment) => Boolean(environment.openExternal),
-  "clipboard.copy": (environment) => Boolean(environment.writeClipboard),
+  "clipboard.copy": (environment) => Boolean((environment.secureContext && environment.writeClipboard) || environment.copyLegacy),
   "viewport.keyboard-inset": (environment) => Boolean(environment.visualViewport && environment.innerHeight),
 }
 
@@ -126,15 +127,33 @@ async function performShare(intent: PlatformIntent, environment: WebPlatformEnvi
   }
 }
 
+// The async Clipboard API only exists on secure origins, and a gateway is often
+// opened over plain http on a LAN or VPN address. There, and wherever the browser
+// rejects the write, the legacy synchronous copy is the only route left. It runs
+// before the first await so it still sits inside the click that asked for it.
 async function performClipboard(intent: PlatformIntent, environment: WebPlatformEnvironment): Promise<OperationResult> {
-  const write = environment.writeClipboard
-  if (!write) return { status: "unsupported" }
   const input = intent as Extract<PlatformIntent, { kind: "clipboard.copy" }>
+  const legacy = environment.copyLegacy
+  const write = environment.secureContext ? environment.writeClipboard : undefined
+  const legacyResult = (): OperationResult => {
+    if (!legacy) return { status: "unsupported" }
+    try {
+      return legacy(input.text)
+        ? { status: "performed", value: { method: "legacy-copy" } }
+        : failed("clipboard-write", "The browser rejected the copy")
+    } catch (error) {
+      return failed("clipboard-write", error)
+    }
+  }
+  if (!write) return legacyResult()
   try {
     await write(input.text)
     return { status: "performed", value: { method: "clipboard" } }
   } catch (error) {
-    return classifyError("clipboard-write", error)
+    const classified = classifyError("clipboard-write", error)
+    if (classified.status === "cancelled") return classified
+    const fallback = legacyResult()
+    return fallback.status === "performed" ? fallback : classified
   }
 }
 
@@ -249,6 +268,34 @@ export function createWebAdapter(environment: WebPlatformEnvironment): PlatformA
   }
 }
 
+function copyWithExecCommand(text: string): boolean {
+  const active = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  const selection = document.getSelection()
+  const ranges = selection ? Array.from({ length: selection.rangeCount }, (_, i) => selection.getRangeAt(i)) : []
+  // Inside a modal dialog, anything appended outside it is inert, so the
+  // scratch node goes into the open dialog if there is one.
+  const host = active?.closest("dialog, [role='dialog']") ?? document.body
+  const node = document.createElement("textarea")
+  node.value = text
+  node.setAttribute("readonly", "")
+  node.setAttribute("aria-hidden", "true")
+  node.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none"
+  host.appendChild(node)
+  try {
+    node.focus({ preventScroll: true })
+    node.select()
+    node.setSelectionRange(0, text.length)
+    return document.execCommand("copy")
+  } finally {
+    node.remove()
+    if (selection) {
+      selection.removeAllRanges()
+      for (const range of ranges) selection.addRange(range)
+    }
+    active?.focus({ preventScroll: true })
+  }
+}
+
 export function createBrowserEnvironment(): WebPlatformEnvironment {
   if (typeof window === "undefined" || typeof navigator === "undefined") return { secureContext: false }
   return {
@@ -272,6 +319,9 @@ export function createBrowserEnvironment(): WebPlatformEnvironment {
     },
     get writeClipboard() {
       return navigator.clipboard?.writeText ? navigator.clipboard.writeText.bind(navigator.clipboard) : undefined
+    },
+    get copyLegacy() {
+      return typeof document !== "undefined" && typeof document.execCommand === "function" ? copyWithExecCommand : undefined
     },
     get setBadge() {
       const badgeNavigator = navigator as Navigator & {
