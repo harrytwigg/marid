@@ -85,6 +85,7 @@ export function PropsRail({
   const assigneePick = pick("assignee")
   const twoSlots = useTwoSlotAssignees()
   const personPick = personRowFor(pick, item, viewer)
+  const removeLabel = removePersonLabel(item, viewer)
   const agent = agentOf(item.assignee)
   const labelsPick = pick("labels")
   const deptPick = pick("department")
@@ -116,13 +117,8 @@ export function PropsRail({
             {item.humanAssignee ? <PersonName person={item.humanAssignee} viewer={viewer} /> : <span className="text-[var(--text-tertiary)]">No person</span>}
           </RailRow>
           {item.humanAssignee && personPick?.onClear && (
-            <RemoveButton
-              label={removePersonLabel(item, viewer)}
-              title={removePersonLabel(item, viewer)}
-              testId="rail-person-clear"
-              onClick={personPick.onClear}
-              className="absolute right-5 top-1/2 size-6 -translate-y-1/2 max-[700px]:size-[34px]"
-            />
+            <RemoveButton label={removeLabel} title={removeLabel} testId="rail-person-clear" onClick={personPick.onClear}
+              className="absolute right-5 top-1/2 size-6 -translate-y-1/2 max-[700px]:size-[34px]" />
           )}
           {personPick?.picker}
         </div>
