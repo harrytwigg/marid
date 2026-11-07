@@ -74,6 +74,7 @@ import {
   shouldHoldParentCompletionQueueDispatch,
   listReleasableParentCompletionQueuesForSource,
   getSessionDelivery,
+  deadLetterSessionDelivery,
   listDeadLetterSessionDeliveries,
   requeueDeadLetterSessionDelivery,
   acceptSessionDelivery,
@@ -84,7 +85,10 @@ import {
 } from "../sessions/registry.js";
 import { claimIncomingTurn, lateralSendDedupeKey } from "../sessions/incoming-turn.js";
 import { blockFallbackText, validateBlockEnvelope } from "../shared/blocks.js";
-import { USER_MESSAGE_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
+import { USER_MESSAGE_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
+import { isStoppedByUser, refuseStoppedSession, STOPPED_SESSION_NOT_DELIVERED, stopSession } from "./session-stop.js";
+import { interruptSessionTurn, killSessionEngines } from "./session-interrupt.js";
+export { interruptSessionTurn };
 export {
   foldPartialText,
   normalizeBlockDeltaForTurn,
@@ -159,7 +163,7 @@ import { resolveMessageAudiences, speechContextApplies } from "./speech-context.
 import { isJsonMediaType } from "./media-type.js";
 import { recoverPendingSessionDeliveries } from "../sessions/callbacks.js";
 import { clearDelegationCompletionContract, DELEGATION_COMPLETION_TRACKED_META_KEY } from "../sessions/delegation-completion-contract.js";
-import { callerMayActOnSession } from "./session-reach-guard.js";
+import { callerMayActOnSession, sessionIsWithinReach } from "./session-reach-guard.js";
 import { clipSessionMessage, sessionCommGuards, prepareLateralSend, resolveCallerIdentity, describeUnidentifiedTool, headerString, type CallerIdentity } from "./session-comm-guards.js";
 import { originMatchesAuthority, parseRequestAuthority, requestHeaderValues, singleRequestHeader, type RequestAuthority } from "./request-authority.js";
 import {
@@ -425,32 +429,6 @@ export interface ApiContext {
   createWorkspaceInstance?: (input: CreateInstanceInput) => Promise<CreateInstanceResult>;
   startWorkspaceInstance?: (input: StartInstanceInput) => Promise<StartInstanceResult>;
   issueWorkspacePairingCode?: (home: string) => string;
-}
-
-function killSessionEngines(context: ApiContext, session: Session, reason: string): void {
-  const engines = new Set<Engine>();
-  const primary = context.sessionManager.getEngine(session.engine);
-  const pty = context.ptyViewEngines?.[session.engine];
-  if (primary) engines.add(primary);
-  if (pty) engines.add(pty);
-  for (const engine of context.sessionManager.getEngines().values()) engines.add(engine);
-  for (const engine of Object.values(context.ptyViewEngines ?? {})) engines.add(engine);
-
-  for (const engine of engines) {
-    if (isInterruptibleEngine(engine)) engine.kill(session.id, reason);
-  }
-  // Reached for a terminal only on delete: /stop and /reset refuse terminals.
-  context.terminalEngine?.forget(session.id);
-}
-
-/** Stop a session's turn the way `POST /api/sessions/:id/stop` does: kill its
- *  engines, clear its queue, and leave the record interrupted (recoverable).
- *  Shared with the board walk, which stops its own turn when it times out. */
-export function interruptSessionTurn(context: ApiContext, session: Session, reason: string, lastError: string): void {
-  killSessionEngines(context, session, reason);
-  context.sessionManager.getQueue().clearQueue(session.sessionKey || session.sourceRef || session.id);
-  updateSession(session.id, { status: "interrupted", attemptOutcome: "interrupted", lastActivity: new Date().toISOString(), lastError });
-  context.emit("session:stopped", { sessionId: session.id });
 }
 
 /** Preserve a linked execution attempt as durable evidence when deletion is
@@ -1146,7 +1124,7 @@ function serializeSessionList(sessions: readonly Session[], context: ApiContext)
 
 function serializeSessionResponse(session: Session, context: ApiContext): Session {
   const delegatedActivityIndex = buildSessionDelegatedActivityIndex(listSessions(), context);
-  return serializeSession(session, context, delegatedActivityIndex, countPendingQueueItemsByKey());
+  return { ...serializeSession(session, context, delegatedActivityIndex, countPendingQueueItemsByKey()), stopped: isStoppedByUser(session) };
 }
 
 function isSessionLiveRunning(session: Session, context: ApiContext): boolean {
@@ -2066,8 +2044,10 @@ export async function handleApiRequest(
         verb: "stop",
         instead: "Ask the operator or the session's parent instead.",
       })) return;
-      interruptSessionTurn(context, session, USER_STOP_INTERRUPTION_REASON, "Interrupted by user");
-      return json(res, { status: "stopped", sessionId: params.id });
+      const stopped = stopSession(context, session, effectiveSessionStatus(session, currentRuntimeActivity(session, context)));
+      return json(res, {
+        status: "stopped", sessionId: params.id, noop: !stopped.changed, wasRunning: stopped.wasRunning, cancelledMessages: stopped.cancelled,
+      });
     }
 
     // POST /api/sessions/:id/reset — clear stuck session state (stale engine IDs, errors)
@@ -3858,10 +3838,15 @@ export async function handleApiRequest(
       let session = getSession(params.id);
       if (!session) return notFound(res);
       if (isTerminalSession(session)) return json(res, { error: TERMINAL_REFUSES_MESSAGES }, 409);
-      session = maybeRevertEngineOverride(session, undefined, context.getConfig());
       const _parsed = await readJsonBody(req, res);
       if (!_parsed.ok) return;
       const body = _parsed.body as any;
+      // Read it again: a stop (or a delete) can land while the body streams in, and
+      // every guard below, the stop's included, must judge the session as it is now.
+      // Nothing between here and the enqueue awaits.
+      const current = getSession(params.id);
+      if (!current) return notFound(res);
+      session = maybeRevertEngineOverride(current, undefined, context.getConfig());
 
       // Child callbacks claim a durable outbox identity before entering this
       // route. The receipt is the source of truth; request payload fields are
@@ -3884,6 +3869,14 @@ export async function handleApiRequest(
           messageId: callbackDelivery.messageId,
           queueItemId: callbackDelivery.queueItemId,
         });
+      }
+      // A callback, Todo or restart delivery is no deliberate start. One for a
+      // stopped session is given up on, not retried: a retry landing after a later,
+      // deliberate start would replay it into a session that has moved on.
+      if (callbackDelivery && isStoppedByUser(session)) {
+        deadLetterSessionDelivery(callbackDelivery.id, STOPPED_SESSION_NOT_DELIVERED);
+        refuseStoppedSession(res, session);
+        return;
       }
       if (callbackDelivery) {
         body.role = "notification";
@@ -3927,6 +3920,9 @@ export async function handleApiRequest(
         }
         const callerParentId = reportingParentSessionId(caller);
         const targetParentId = reportingParentSessionId(session);
+        // Whoever may stop a session may start it again by messaging it; anyone
+        // else is told it was not delivered, so it never wakes a handed-over folder.
+        if (isStoppedByUser(session) && !sessionIsWithinReach(session, caller.id) && refuseStoppedSession(res, session)) return;
         const plan = prepareLateralSend({
           caller,
           targetSessionId: params.id,
@@ -3977,6 +3973,7 @@ export async function handleApiRequest(
         // would, so it renders as a relay banner instead. Operator origin ⇒ a
         // fresh hop with no lateral cap; `fromSessionId` is optional (pass the
         // real source session to make the relay openable/linked).
+        if (isStoppedByUser(session) && refuseStoppedSession(res, session)) return;
         const fromLabel = stripControlChars(body.from).trim().slice(0, 160);
         const relayFromSessionId = typeof body.fromSessionId === "string" && body.fromSessionId.trim()
           ? stripControlChars(body.fromSessionId).trim().slice(0, 160)

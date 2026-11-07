@@ -191,3 +191,27 @@ describe("heartbeat scheduler", () => {
     expect(after.disarmedReason).toBe("owner-session-deleted");
   });
 });
+
+describe("heartbeat for a stopped owner", () => {
+  it("holds its ticks without spending a fire while the owner is stopped, and fires again once it runs", async () => {
+    const { markSessionStopped } = await import("../../sessions/stopped-marker.js");
+    const sessionId = owner();
+    let clock = 2_000_000;
+    const armed = store.armHeartbeat({ ownerSessionId: sessionId, message: "check in", everySeconds: EVERY, maxFires: 2 }, clock);
+    registry.updateSession(sessionId, { status: "interrupted" });
+    markSessionStopped(sessionId);
+    const { delivered, deliver } = recorder();
+
+    for (let tick = 0; tick < 3; tick++) {
+      clock += INTERVAL_MS;
+      scheduler.sweepOnce({ now: () => clock, deliver });
+    }
+    expect(delivered).toEqual([]);
+    expect(store.getHeartbeat(armed.id)).toMatchObject({ status: "armed", fireCount: 0, nextFireAt: clock + INTERVAL_MS });
+
+    registry.beginSessionAttempt(sessionId); // a deliberate start
+    clock += INTERVAL_MS;
+    scheduler.sweepOnce({ now: () => clock, deliver });
+    expect(delivered).toEqual([{ sessionId, text: "check in", fire: 1 }]);
+  });
+});

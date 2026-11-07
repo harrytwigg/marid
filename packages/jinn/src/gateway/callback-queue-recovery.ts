@@ -8,6 +8,8 @@ import {
   getSessionDeliveryByQueueItemId, shouldHoldParentCompletionQueueDispatch, updateSession,
 } from "../sessions/registry.js";
 import { dispatchWebSessionRun } from "./web-session-dispatch.js";
+import { isStoppedByUser } from "../sessions/stopped-marker.js";
+import { withdrawPendingQueueItemsForStop } from "../sessions/queue-stop.js";
 
 export function resumePendingWebQueueItems(context: ApiContext): void {
   coalescePendingParentCompletionQueueItems();
@@ -24,13 +26,28 @@ export function resumePendingWebQueueItems(context: ApiContext): void {
   }
 }
 
+/** The session a replayed row may run on: not a deleted one, and not one stopped
+ *  on purpose, since a replay is never a deliberate start. */
+function replayableSession(sessionId: string) {
+  const session = getSession(sessionId);
+  return session && !isStoppedByUser(session) ? session : undefined;
+}
+
+/** Drop a row nothing may run: every row a stopped session still holds (one that
+ *  raced the stop), or the row of a deleted session. Then let any parent batch
+ *  held behind it go on. */
+function dropUnreplayableRow(item: QueueItem, context: ApiContext): void {
+  if (getSession(item.sessionId)) withdrawPendingQueueItemsForStop(item.sessionId);
+  else cancelQueueItem(item.id);
+  for (const held of listReleasableParentCompletionQueuesForSource(item.sessionId)) {
+    context.sessionManager.getQueue().releaseCallbackDrain(held.sessionKey, held.queueItemId);
+  }
+}
+
 function resumePendingQueueItem(item: QueueItem, context: ApiContext): boolean {
-  let session = getSession(item.sessionId);
+  let session = replayableSession(item.sessionId);
   if (!session) {
-    cancelQueueItem(item.id);
-    for (const held of listReleasableParentCompletionQueuesForSource(item.sessionId)) {
-      context.sessionManager.getQueue().releaseCallbackDrain(held.sessionKey, held.queueItemId);
-    }
+    dropUnreplayableRow(item, context);
     return false;
   }
   // Ordinary non-web queue ownership remains connector-specific. Callback

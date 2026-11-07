@@ -181,6 +181,17 @@ describe("the parent's owner has no session to wake", () => {
     expect(rowsOf(parent.id).map((row) => row.outcome)).toEqual(["redispatched", "redispatched"]);
   });
 
+  it("an owner session stopped on purpose is not woken: the executing parent is re-dispatched instead", async () => {
+    const { markSessionStopped } = await import("../../sessions/stopped-marker.js");
+    const { parent, ownerSession } = parentWithOwner("executing", "interrupted");
+    markSessionStopped(ownerSession);
+    settle(childOf(parent.id).id);
+    wake.flushChildSettles(parent.id, deps);
+    expect(delivered).toEqual([]);
+    expect(deps.redispatch).toHaveBeenCalledTimes(1);
+    expect(rowsOf(parent.id)).toEqual([expect.objectContaining({ outcome: "redispatched" })]);
+  });
+
   it("a parent with no session at all is re-dispatched too", () => {
     counter += 1;
     const parent = store.createWorkItem({ title: `lonely ${counter}`, status: "executing", source: "session", assignee: OWNER });

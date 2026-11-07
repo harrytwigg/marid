@@ -6,6 +6,11 @@ import { reportingParentSessionId } from "../work-items/employee-session-delegat
 import { json } from "./route-helpers.js";
 import { isDescendantOf, type CallerIdentity } from "./session-comm-guards.js";
 
+/** An agent's reach over a session: one it spawned (directly or transitively) or delegated to. */
+export function sessionIsWithinReach(session: Session, callerId: string): boolean {
+  return isDescendantOf(session.id, callerId, getSession) || reportingParentSessionId(session) === callerId;
+}
+
 /**
  * Whether the caller may act on another session's turns: the operator always,
  * an agent only on a session it spawned (directly or transitively) or delegated
@@ -23,9 +28,7 @@ export function callerMayActOnSession(
     json(res, { error: UNIDENTIFIED_TOOL_CALL_ERROR }, 403);
     return false;
   }
-  if (caller.kind === "session"
-    && !isDescendantOf(session.id, caller.callerId, getSession)
-    && reportingParentSessionId(session) !== caller.callerId) {
+  if (caller.kind === "session" && !sessionIsWithinReach(session, caller.callerId)) {
     json(res, {
       error: `session ${session.id} is not a descendant of your session — agents may only ${refusal.verb} sessions they spawned (directly or transitively) or delegated to. ${refusal.instead}`,
     }, 403);
