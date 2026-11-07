@@ -218,12 +218,14 @@ export function useTaskPickers({
     [detail, departments],
   )
 
-  /** The one-tap clear for the agent and person rows; the other rows have none. */
+  /** The one-tap clear for the agent and person rows; the other rows have none. With no accounts the one assignee row
+   *  clears whoever holds it, the operator included, as it always did; with two slots `@operator` is not an agent. */
   const clearFor = useCallback((key: PickerKey, current: WorkItemDetailWire): (() => void) | undefined => {
-    if (key === "assignee" && agentOf(current.workItem.assignee)) return () => patchField({ assignee: null })
+    const assignee = current.workItem.assignee
+    if (key === "assignee" && (twoSlots ? agentOf(assignee) : assignee)) return () => patchField({ assignee: null })
     if (key === "person" && current.workItem.humanAssignee) return () => commitPerson(null)
     return undefined
-  }, [patchField, commitPerson])
+  }, [patchField, commitPerson, twoSlots])
 
   const rowFor = useCallback(
     (key: PickerKey) => {

@@ -424,8 +424,10 @@ quiet-watch treatment, then sets an agent, clears it, and asserts the "needs you
   Todo that waits on the operator); `personCleared: true` when the agent slot cleared the person, which happens only when
   an `@operator` assignee with no row (the operator as the person, by storage) is cleared; `reason: "person_removed"` on
   each Todo whose person was a user who was removed (`to` is the person as read afterwards; the Todo's version advances and
-  its card refreshes live). Every other agent-slot write leaves the person as read unchanged, which tests prove over every
-  state and through the pen, the assign route and an agent's assign tool. A member's timeline keeps all three keys. The UI
+  its card refreshes live). Assigning to the operator a Todo with no person fills the empty slot (the operator reads as the
+  person, by storage) and records `{ from: null, to: "@operator" }`; it clears nothing. Every other agent-slot write leaves
+  the person as read unchanged, which tests prove over every state and through the pen, the assign route, an agent's
+  assign tool, a delegation and an agent's `delegate_task`. A member's timeline keeps all three keys. The UI
   says it before the choice (see Web), and the remove-person confirmation says Todos naming them lose their person.
 - **Nothing wakes.** A person change writes one `person_changed` event `{ from, to }` (plus the keys above), emitted as an ordinary Todo update so cards refresh live. It never starts, wakes or
   notifies an agent, fires no board hook, and is never written as `metadata_edited`, which a hook reads. The one exception is
@@ -435,7 +437,9 @@ quiet-watch treatment, then sets an agent, clears it, and asserts the "needs you
 ### Web
 
 - **With no account on the instance the UI is today's, unchanged**: a single assignee circle on the card and the list row, a
-  single "Assignee" row and chip on the Todo page whose picker keeps its operator option and its assign lane. The two-slot
+  single "Assignee" row and chip on the Todo page whose picker keeps its operator option and its assign lane, and whose ×
+  clears whoever holds it, the operator included. The activity feed leaves `person_changed` lines out, so it and its folds
+  read as before (the events are still written). The two-slot
   surfaces appear once `hasAccounts` (already on `GET /api/auth/state`) is true, so the first account turns them on.
 - With accounts: two 20px circles on the card and the list row (`HumanAvatar`, or the operator's own avatar, then
   `EmployeeAvatar`), a dashed outline with "No person" / "No agent" for an empty slot. The card no longer shows its creator in

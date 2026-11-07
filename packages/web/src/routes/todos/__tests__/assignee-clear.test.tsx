@@ -195,4 +195,27 @@ describe("the operator as an assignee", () => {
     renderTask()
     expect((await screen.findByTestId("rail-assignee")).textContent).toContain("You")
   })
+
+  it("adds no person line to the feed with no accounts: the operator as the person is a two-slot idea", async () => {
+    const item = full("TSK-12", { assignee: "@operator" })
+    const at = "2026-07-23T08:00:00.000Z"
+    const events = [
+      { id: "e1", workItemId: "TSK-12", kind: "note", fromStatus: null, toStatus: null, actor: "operator", detail: { assignee: "@operator" }, createdAt: at },
+      { id: "e2", workItemId: "TSK-12", kind: "person_changed", fromStatus: null, toStatus: null, actor: "operator", detail: { from: null, to: "@operator" }, createdAt: at },
+    ]
+    getWorkItem.mockResolvedValue({ ...detailOf(item), events })
+    renderTask()
+    await screen.findByText(/assigned it to the operator/)
+    expect(screen.queryByText(/named the operator as the person/)).toBeNull()
+  })
+
+  it("keeps its one-tap clear on the rail and the chip, with no accounts, as it always had", async () => {
+    const item = full("TSK-12", { assignee: "@operator" })
+    getWorkItem.mockResolvedValue(detailOf(item))
+    updateWorkItem.mockResolvedValue({ workItem: { ...item, assignee: null, version: 4 }, replayed: false })
+    renderTask()
+    expect((await screen.findByTestId("chip-assignee-clear")).getAttribute("aria-label")).toBe("Remove assignee")
+    fireEvent.click(await screen.findByTestId("rail-assignee-clear"))
+    await waitFor(() => expect(updateWorkItem).toHaveBeenCalledWith("TSK-12", expect.objectContaining({ patch: { assignee: null } })))
+  })
 })

@@ -7,9 +7,11 @@ import { startBoardHarness, type BoardHarness, type Member } from "./board-harne
 /* No write clears a slot the writer did not name without saying so. Each path that can is driven through its real route
  * and its event is read back: the person slot clearing the operator out of `assignee` records `assigneeCleared`; the
  * agent slot clearing an `@operator` assignee with no row (the operator as the person, by storage) records
- * `personCleared`; removing a user records `reason: "person_removed"` on every Todo that named them. Every other
- * agent-slot write leaves the person alone (no `person_changed` event, the person as read unchanged), by any route: the
- * operator's pen, the assign route, an agent's assign tool, a delegation and an agent's delegate_task tool. */
+ * `personCleared`; removing a user records `reason: "person_removed"` on every Todo that named them. Assigning to the
+ * operator a Todo with no person fills the slot (the operator reads as the person) and records `{ from: null, to:
+ * "@operator" }`. Every other agent-slot write leaves the person alone (no `person_changed` event, the person as read
+ * unchanged), by any route: the operator's pen, the assign route, an agent's assign tool, a delegation and an agent's
+ * delegate_task tool. */
 
 let h: BoardHarness;
 let collab: Member;
@@ -101,14 +103,16 @@ describe("the agent slot clearing the person", () => {
   });
 });
 
-describe("every other agent-slot write leaves the person alone, by any route", () => {
-  const STATES: Array<[string | null, string | null]> = [["alice", "member"], ["alice", OP], [OP, null], [OP, "member"]];
+describe("every other agent-slot write clears no person, by any route", () => {
+  const STATES: Array<[string | null, string | null]> = [[null, null], ["alice", null], ["alice", "member"], ["alice", OP], [OP, null], [OP, "member"]];
   const writers: Array<[string, (id: string, assignee: string | null) => Promise<unknown>]> = [
     ["the operator's pen", (id, assignee) => patch(id, { assignee })],
     ["the assign route", (id, assignee) => (assignee === null ? patch(id, { assignee }) : h.operator("POST", `/api/work-items/${id}/assign`, { assignee }))],
     ["an agent's assign tool", (id, assignee) => (assignee === null ? patch(id, { assignee }) : agentAssign(id, assignee))],
   ];
 
+  // Assigning to the operator a Todo with no person makes the operator the person (that is how "needs the operator" is
+  // stored and read): it fills an empty slot, clears nothing, and records it. Every other write leaves the person alone.
   it.each(writers)("through %s", async (name, write) => {
     for (const [assignee, person] of STATES) for (const next of [null, OP, "alice"]) {
       if (next === assignee || (assignee === OP && person === null && next === null)) continue; // the one that clears, above
@@ -117,7 +121,10 @@ describe("every other agent-slot write leaves the person alone, by any route", (
       const before = { person: store.getWorkItem(id)!.humanAssignee, events: personEvents(id).length };
       await write(id, next);
       const after = store.getWorkItem(id)!;
-      expect([assignee, person, next, after.humanAssignee, personEvents(id).length]).toEqual([assignee, person, next, before.person, before.events]);
+      const fills = before.person === null && next === OP;
+      const expected = fills ? [OP, before.events + 1] : [before.person, before.events];
+      expect([assignee, person, next, after.humanAssignee, personEvents(id).length]).toEqual([assignee, person, next, ...expected]);
+      if (fills) expect(lastPersonEvent(id)).toEqual({ from: null, to: OP });
     }
   });
 });
