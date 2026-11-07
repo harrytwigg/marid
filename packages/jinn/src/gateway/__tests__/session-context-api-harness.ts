@@ -182,7 +182,7 @@ export function useContextMeterHarness() {
       const out = await h.request(init?.method ?? "GET", url.pathname + url.search, { body });
       return new Response(JSON.stringify(out.body), { status: out.status });
     });
-  });
+  }, 60_000);
 
   afterAll(async () => {
     vi.unstubAllGlobals();
