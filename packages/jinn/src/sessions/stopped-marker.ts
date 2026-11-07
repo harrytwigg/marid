@@ -1,7 +1,9 @@
 // Whether a session was stopped on purpose, kept as its own row rather than read
 // back from the session's display fields: `lastError` is overwritten by recovery
 // and other writers, and a copy of the session's transport meta is stale as soon
-// as another path writes it. A deliberate start clears it (the dispatch of a turn).
+// as another path writes it. Any turn that starts afterwards clears it
+// (`updateSession` setting `running` or `waiting`): the guards upstream let only
+// a deliberate start get that far.
 import { initDb } from "../shared/db.js";
 import type { Session } from "../shared/types.js";
 

@@ -237,6 +237,36 @@ describe("what counts as stopped, and who may start it again", () => {
   });
 });
 
+describe("the stop ends when the session runs again, by any path", () => {
+  it("is cleared by a turn that did not come through the web send, so a later restart does not bring it back", async () => {
+    const { session } = runningWithParkedMessages();
+    await h.request("POST", `/api/sessions/${session.id}/stop`);
+
+    // A connector reply runs the session through the manager, which starts its
+    // own attempt; the turn ends; a gateway restart later marks it interrupted.
+    h.registry.beginSessionAttempt(session.id);
+    h.registry.updateSession(session.id, { status: "idle" });
+    h.registry.updateSession(session.id, { status: "interrupted", lastError: "Interrupted: gateway shutting down gracefully" });
+
+    const delivery = claimDelivery(session.id, "after-restart");
+    h.registry.claimSessionDeliveryAttempt(delivery.id, Date.now(), 60_000);
+    const sent = await h.request("POST", `/api/sessions/${session.id}/message`, { body: { callbackDeliveryId: delivery.id } });
+    expect(sent.status).toBe(200);
+    expect(h.registry.getSessionDelivery(delivery.id)!.status).not.toBe("dead_letter");
+    const stranger = h.newSession("claude");
+    expect((await h.request("POST", `/api/sessions/${session.id}/message`, { headers: h.asSession(stranger.id), body: { message: "ping" } })).status).toBe(200);
+  });
+
+  it("is cleared by a turn waiting on a usage limit too", async () => {
+    const { session } = runningWithParkedMessages();
+    await h.request("POST", `/api/sessions/${session.id}/stop`);
+    h.registry.updateSession(session.id, { status: "waiting" });
+    h.registry.updateSession(session.id, { status: "interrupted" });
+    const { isStoppedByUser } = await import("../session-stop.js");
+    expect(isStoppedByUser(h.registry.getSession(session.id)!)).toBe(false);
+  });
+});
+
 describe("stopping a session that is not running", () => {
   it("is a no-op, not an error, and leaves a finished session as it was", async () => {
     const session = h.newSession("claude");
@@ -244,6 +274,18 @@ describe("stopping a session that is not running", () => {
     expect(first).toMatchObject({ status: 200, body: { status: "stopped", noop: true, cancelledMessages: 0 } });
     expect(h.registry.getSession(session.id)).toMatchObject({ status: "idle" });
     expect((await h.request("POST", `/api/sessions/${session.id}/message`, { headers: h.asSession(h.newSession("claude").id), body: { message: "hi" } })).status).toBe(200);
+  });
+
+  it("drops messages held for an idle session and says so, without making it stopped", async () => {
+    const session = h.newSession("claude");
+    const key = session.sessionKey || session.sourceRef || session.id;
+    h.queueItems.enqueueQueueItem(session.id, key, "held for later", { internal: true });
+    const stop = await h.request("POST", `/api/sessions/${session.id}/stop`);
+    expect(stop.body).toMatchObject({ status: "stopped", noop: false, cancelledMessages: 1 });
+    expect(h.pendingPrompts(session.id)).toEqual([]);
+    expect(h.registry.getSession(session.id)).toMatchObject({ status: "idle" });
+    const stranger = h.newSession("claude");
+    expect((await h.request("POST", `/api/sessions/${session.id}/message`, { headers: h.asSession(stranger.id), body: { message: "hi" } })).status).toBe(200);
   });
 
   it("is a no-op the second time", async () => {

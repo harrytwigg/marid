@@ -6,6 +6,11 @@ import { reportingParentSessionId } from "../work-items/employee-session-delegat
 import { json } from "./route-helpers.js";
 import { isDescendantOf, type CallerIdentity } from "./session-comm-guards.js";
 
+/** An agent's reach over a session: one it spawned (directly or transitively) or delegated to. */
+export function sessionIsWithinReach(session: Session, callerId: string): boolean {
+  return isDescendantOf(session.id, callerId, getSession) || reportingParentSessionId(session) === callerId;
+}
+
 /**
  * Whether the caller may act on another session's turns: the operator always,
  * an agent only on a session it spawned (directly or transitively) or delegated
@@ -13,11 +18,6 @@ import { isDescendantOf, type CallerIdentity } from "./session-comm-guards.js";
  * itself and returns false; the stop route and the meter's compact route share
  * it, because both act on a session's turns on its behalf.
  */
-/** An agent's reach over a session: one it spawned (directly or transitively) or delegated to. */
-export function sessionIsWithinReach(session: Session, callerId: string): boolean {
-  return isDescendantOf(session.id, callerId, getSession) || reportingParentSessionId(session) === callerId;
-}
-
 export function callerMayActOnSession(
   res: ServerResponse,
   session: Session,

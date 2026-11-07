@@ -226,6 +226,15 @@ export function disarmHeartbeatsForSession(ownerSessionId: string, now = Date.no
  * a heartbeat whose gateway was down for ten intervals fires once and then
  * resumes on a fresh interval instead of replaying every tick it slept through.
  */
+/** Push a due heartbeat to its next interval without firing it or spending one
+ *  of its fires: its owner is stopped, and the tick would only be refused. */
+export function postponeHeartbeat(id: string, now = Date.now()): void {
+  initDb().prepare(`
+    UPDATE heartbeats SET next_fire_at = ? + every_seconds * 1000
+    WHERE id = ? AND status = 'armed'
+  `).run(now, id);
+}
+
 export function advanceHeartbeat(id: string, now = Date.now()): Heartbeat | undefined {
   const current = getHeartbeat(id);
   if (!current || current.status !== "armed") return current;

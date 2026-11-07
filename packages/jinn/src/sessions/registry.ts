@@ -22,6 +22,7 @@ import type { ChatBlock, ChatBlockEnvelope, EngineSessionRef, EngineSessionRefs,
 import { blockFallbackText, mergeBlock, validateBlockEnvelope } from '../shared/blocks.js';
 import { ptySnapshotStore } from '../engines/pty-snapshot.js';
 import { isLegacyWorkflowPhaseRow, isLegacyWorkflowPhaseSession, LEGACY_WORKFLOW_PHASE_SQL } from './legacy-workflow-phase.js';
+import { clearSessionStopped } from './stopped-marker.js';
 
 export const RESTART_ACK_META_KEY = "restartAcknowledgedAt";
 /** Stamped on a session the gateway itself interrupted, so the next boot can tell it apart from one that was already idle. Consumed in sessions/restart-resume.ts. */
@@ -717,6 +718,9 @@ export function updateSession(id: string, updates: UpdateSessionFields): Session
 
   values.push(id);
   db.prepare(`UPDATE sessions SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+  // A turn under way, started by whatever path, ends a deliberate stop. Kept here
+  // rather than at each start so no runner can leave a stale stop behind it.
+  if (updates.status === 'running' || updates.status === 'waiting') clearSessionStopped(id);
   return getSession(id);
 }
 

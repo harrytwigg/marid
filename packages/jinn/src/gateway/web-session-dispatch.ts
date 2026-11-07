@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { clearSessionStopped } from "../sessions/stopped-marker.js";
 import {
   getFile,
   getSession,
@@ -137,7 +136,6 @@ export function dispatchWebSessionRun(
 ): void {
   let dispatchedAttemptToken: string | undefined;
   const sessionKey = session.sessionKey || session.sourceRef;
-  clearSessionStopped(session.id); // refused upstream unless deliberate: the stop is over
   const run = async () => {
     try {
       await context.sessionManager.getQueue().enqueue(sessionKey, () =>

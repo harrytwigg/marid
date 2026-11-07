@@ -1,9 +1,10 @@
 import { getSession } from "../sessions/registry.js";
+import { isStoppedByUser } from "../sessions/stopped-marker.js";
 import { logger } from "../shared/logger.js";
 import type { Heartbeat } from "./types.js";
 import { childWatchSettledReason } from "./child-watch.js";
 import { deliverHeartbeat } from "./delivery.js";
-import { advanceHeartbeat, claimDueHeartbeats, disarmHeartbeat } from "./store.js";
+import { advanceHeartbeat, claimDueHeartbeats, disarmHeartbeat, postponeHeartbeat } from "./store.js";
 
 const DEFAULT_INTERVAL_MS = 15_000;
 
@@ -15,6 +16,8 @@ export interface HeartbeatSchedulerDeps {
   deliver?: (heartbeat: Heartbeat, fireCount: number) => void;
   /** Test override; defaults to the session registry. */
   ownerExists?: (sessionId: string) => boolean;
+  /** Test override; defaults to the session's durable stop. */
+  ownerStopped?: (sessionId: string) => boolean;
 }
 
 /**
@@ -37,6 +40,26 @@ function disarmReasonFor(
   return childWatchSettledReason(heartbeat);
 }
 
+function ownerIsStopped(sessionId: string): boolean {
+  const owner = getSession(sessionId);
+  return !!owner && isStoppedByUser(owner);
+}
+
+/**
+ * Disarm a due heartbeat that should never fire again, or hold one whose owner
+ * is stopped: the tick would only be refused and dead-lettered, so it waits for
+ * someone to start the session on purpose. True when it was not to be delivered.
+ */
+function settledWithoutDelivery(heartbeat: Heartbeat, now: number, deps: HeartbeatSchedulerDeps): boolean {
+  const ownerExists = deps.ownerExists ?? ((sessionId: string) => !!getSession(sessionId));
+  const ownerStopped = deps.ownerStopped ?? ownerIsStopped;
+  const disarmReason = disarmReasonFor(heartbeat, now, ownerExists);
+  if (disarmReason) disarmHeartbeat(heartbeat.id, disarmReason, now);
+  else if (ownerStopped(heartbeat.ownerSessionId)) postponeHeartbeat(heartbeat.id, now);
+  else return false;
+  return true;
+}
+
 /**
  * One sweep: deliver every heartbeat whose deadline has passed, then reschedule
  * or disarm it. Returns the number delivered. Exported for tests.
@@ -44,14 +67,9 @@ function disarmReasonFor(
 export function sweepOnce(deps: HeartbeatSchedulerDeps = {}): number {
   const now = deps.now?.() ?? Date.now();
   const deliver = deps.deliver ?? deliverHeartbeat;
-  const ownerExists = deps.ownerExists ?? ((sessionId: string) => !!getSession(sessionId));
   let delivered = 0;
   for (const heartbeat of claimDueHeartbeats(now)) {
-    const disarmReason = disarmReasonFor(heartbeat, now, ownerExists);
-    if (disarmReason) {
-      disarmHeartbeat(heartbeat.id, disarmReason, now);
-      continue;
-    }
+    if (settledWithoutDelivery(heartbeat, now, deps)) continue;
     try {
       deliver(heartbeat, heartbeat.fireCount + 1);
     } catch (error) {
