@@ -93,6 +93,22 @@ function summarize(item: Record<string, unknown>, members?: unknown): Record<str
   };
 }
 
+/**
+ * A person that no name map accompanies (the tree, a mutation's reply) reads "a board member": a raw `user:` id is a
+ * meaningless token an agent may echo back, and a name lookup here would call a real person a former member. The operator
+ * keeps reading "operator". The detail and list replies, which do carry names, are already labelled and pass through.
+ */
+function neutralisePeople(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(neutralisePeople);
+  if (!value || typeof value !== "object") return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (key === "humanAssignee" && typeof entry === "string") out[key] = entry === "@operator" ? "operator" : entry.startsWith("user:") ? "a board member" : entry;
+    else out[key] = neutralisePeople(entry);
+  }
+  return out;
+}
+
 /** A detail body with its Todo's `humanAssignee` read as `personLabel` reads it. */
 function withPersonLabel(body: unknown): unknown {
   const detail = body as { workItem?: Record<string, unknown>; members?: unknown } | null;
@@ -645,5 +661,6 @@ export function buildWorkItemTools(): JinnMcpTool[] {
   };
 
   const { dispatch, dispatchConfig, landOn } = workItemDispatchTools();
-  return [list, get, tree, search, create, update, edit, assign, archive, dispatch, landOn, comment, listComments, attach, listAttachments, link, unlink, ...labelTools(), dispatchConfig, departments];
+  const tools = [list, get, tree, search, create, update, edit, assign, archive, dispatch, landOn, comment, listComments, attach, listAttachments, link, unlink, ...labelTools(), dispatchConfig, departments];
+  return tools.map((tool) => ({ ...tool, handler: async (args, ctx) => neutralisePeople(await tool.handler(args, ctx)) }));
 }

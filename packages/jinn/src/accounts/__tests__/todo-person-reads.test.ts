@@ -140,6 +140,22 @@ describe("an agent reads the person as a name, never a user as the operator", ()
     expect(JSON.stringify(listed)).not.toContain(`user:${collab.userId}`);
   });
 
+  it("the tree and a mutation's reply carry no raw user id: a person without a name map reads 'a board member', the operator 'operator'", async () => {
+    const todo = opsTodo({ title: "Tree and mutation replies" });
+    const child = store.createWorkItem({ title: "A child", department: "ops", parentId: todo.id });
+    await operatorSet(todo.id, `user:${collab.userId}`);
+    await operatorSet(child.id, "@operator");
+    const lone = opsTodo({ title: "A Todo with no sub-tasks" });
+    await operatorSet(lone.id, `user:${collab.userId}`);
+    const tree = await tool("get_work_item_tree", { id: todo.id });
+    const assigned = await tool("assign_work_item", { id: lone.id, assignee: "alice" });
+    const edited = await tool("edit_work_item", { id: lone.id, title: "A Todo with no sub-tasks, edited" });
+    for (const reply of [tree, assigned, edited]) expect(JSON.stringify(reply)).not.toContain("user:");
+    expect(tree.tree.root.humanAssignee).toBe("a board member");
+    expect(tree.tree.root.children[0].humanAssignee).toBe("operator");
+    expect(assigned.workItem.humanAssignee).toBe("a board member");
+  });
+
   it("a deleted user reads Former member, and is never shown as the operator", async () => {
     const gone = users.createUser(h.db, { email: "gone@example.test", displayName: "Gil Gone", passwordHash: null, createdBy: "operator" });
     const todo = opsTodo();
