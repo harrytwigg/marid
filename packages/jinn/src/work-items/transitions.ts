@@ -287,7 +287,10 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
   // here with no route to announce them, so the dashboard stayed stale until a
   // reload. The route lanes suppress their own duplicate
   // (`persistTodoMutationActivity`).
-  if (result.event) notifyTodoChanged(result.item, 'status-transitioned', opts.callerSessionId);
+  if (result.event) {
+    const { fromStatus, toStatus } = result.event;
+    notifyTodoChanged(result.item, 'status-transitioned', opts.callerSessionId, undefined, fromStatus && toStatus ? { fromStatus, toStatus } : undefined);
+  }
   // The status bridge feeds operator automation (workflow triggers) that can start agents; a member's
   // move is not an input to it.
   if (!isMemberIdentity(actor)) notifyTodoStatusChange(result.event, result.item);

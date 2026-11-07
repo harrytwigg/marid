@@ -440,6 +440,135 @@ describe("live frames", () => {
     h.rt.memberSockets.remove(socket);
   });
 
+  describe("a close sends `removed` only when that write ended their access", () => {
+    const framesFor = (socket: FakeSocket, id: string) => socket.frames.filter((f) => f.payload.id === id).map((f) => f.payload);
+    const close = (id: string, to: "done" | "cancelled" = "done") => transition(id, to, "operator", { cascade: true, manual: true, human: true } as never);
+    const reopen = (id: string) => transition(id, "backlog", "operator", { manual: true, human: true } as never);
+    /** Closes the operator's and pat's sub-tasks first, so the root can close on its own. */
+    const closeSubtasks = (t: { mine: string; theirs: string }) => { close(t.theirs); close(t.mine); };
+
+    it("is silent for a root closed after they were taken off the board it was filed on", async () => {
+      const t = await patRoot();
+      await assign(t.root, "alice");
+      closeSubtasks(t);
+      h.db.prepare("INSERT INTO board_members (user_id, department, role, granted_by, granted_at) VALUES (?, 'platform', 'viewer', 'operator', ?)")
+        .run(pat.userId, new Date().toISOString());
+      h.db.prepare("DELETE FROM board_members WHERE user_id = ? AND department = 'design'").run(pat.userId);
+      const socket = connect(pat);
+      try {
+        close(t.root);
+        expect(framesFor(socket, t.root)).toEqual([]);
+      } finally {
+        h.db.prepare("DELETE FROM board_members WHERE user_id = ? AND department = 'platform'").run(pat.userId);
+        h.rt.memberSockets.remove(socket);
+      }
+    });
+
+    it("is silent for a root closed after they were disabled", async () => {
+      const t = await patRoot();
+      await assign(t.root, "alice");
+      closeSubtasks(t);
+      const socket = connect(pat);
+      try {
+        h.db.prepare("UPDATE users SET status = 'disabled' WHERE id = ?").run(pat.userId);
+        socket.frames.length = 0;
+        close(t.root);
+        expect(framesFor(socket, t.root)).toEqual([]);
+      } finally {
+        h.rt.memberSockets.remove(socket);
+      }
+    });
+
+    it("is silent for a sub-task of theirs closed after it was reparented out, and again when it is reopened and closed", async () => {
+      const t = await patRoot();
+      await assign(t.root, "alice");
+      const x = store.createWorkItem({ title: "operator tree X", department: "platform" }).id;
+      const socket = connect(pat);
+      try {
+        expect((await h.operator("PUT", `/api/work-items/${t.mine}/parent`, { parentId: x })).status).toBe(200);
+        expect(framesFor(socket, t.mine)).toEqual([{ entity: "todo", action: "removed", id: t.mine }]);
+        socket.frames.length = 0;
+        close(t.mine);
+        reopen(t.mine);
+        close(t.mine, "cancelled");
+        expect(framesFor(socket, t.mine)).toEqual([]);
+      } finally {
+        h.rt.memberSockets.remove(socket);
+      }
+    });
+
+    it("is silent for a root of theirs closed after it was put under another tree", async () => {
+      const t = await patRoot();
+      await assign(t.root, "alice");
+      closeSubtasks(t);
+      const x = store.createWorkItem({ title: "operator tree X", department: "platform" }).id;
+      const socket = connect(pat);
+      try {
+        expect((await h.operator("PUT", `/api/work-items/${t.root}/parent`, { parentId: x })).status).toBe(200);
+        expect(framesFor(socket, t.root)).toEqual([{ entity: "todo", action: "removed", id: t.root }]);
+        socket.frames.length = 0;
+        close(t.root);
+        expect(framesFor(socket, t.root)).toEqual([]);
+      } finally {
+        h.rt.memberSockets.remove(socket);
+      }
+    });
+
+    it("sends one `removed` for a root closed by a cascade, and none for the sub-tasks it closed with it", async () => {
+      const t = await patRoot();
+      await assign(t.root, "@operator");
+      const socket = connect(pat);
+      try {
+        socket.frames.length = 0;
+        close(t.root);
+        expect(store.getWorkItem(t.mine)!.status).toBe("done");
+        expect(framesFor(socket, t.root)).toEqual([{ entity: "todo", action: "removed", id: t.root }]);
+        expect(socket.frames.filter((f) => f.payload.action === "removed").map((f) => f.payload.id)).toEqual([t.root]);
+      } finally {
+        h.rt.memberSockets.remove(socket);
+      }
+    });
+
+    it("sends `removed` again when a root reopened (so readable again) is closed again, and nothing in between but changes", async () => {
+      const t = await patRoot();
+      await assign(t.root, "alice");
+      closeSubtasks(t);
+      const socket = connect(pat);
+      try {
+        close(t.root);
+        expect(framesFor(socket, t.root)).toEqual([{ entity: "todo", action: "removed", id: t.root }]);
+        socket.frames.length = 0;
+        reopen(t.root);
+        expect(framesFor(socket, t.root).map((f) => f.action)).toEqual(["status-transitioned"]);
+        socket.frames.length = 0;
+        close(t.root, "cancelled");
+        expect(framesFor(socket, t.root)).toEqual([{ entity: "todo", action: "removed", id: t.root }]);
+      } finally {
+        h.rt.memberSockets.remove(socket);
+      }
+    });
+
+    it("reads the move the event carries, not the Todo's latest status event", async () => {
+      const t = await patRoot();
+      await assign(t.root, "alice");
+      closeSubtasks(t);
+      close(t.root); // its latest status event is now open -> closed
+      const socket = connect(pat);
+      try {
+        const publish = (extra: Record<string, unknown>) =>
+          h.rt.memberSockets.publish("company:changed", { entity: "todo", action: "status-transitioned", id: t.root, version: 1, ...extra });
+        publish({});
+        publish({ fromStatus: "done", toStatus: "cancelled" });
+        publish({ fromStatus: "backlog", toStatus: "executing" });
+        expect(framesFor(socket, t.root)).toEqual([]);
+        publish({ fromStatus: "executing", toStatus: "done" });
+        expect(framesFor(socket, t.root)).toEqual([{ entity: "todo", action: "removed", id: t.root }]);
+      } finally {
+        h.rt.memberSockets.remove(socket);
+      }
+    });
+  });
+
   it("a member removed from the board they filed it on hears nothing of the work done on it afterwards", async () => {
     const t = await patRoot();
     await assign(t.root, "alice");

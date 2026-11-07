@@ -19,6 +19,9 @@ export interface TodoLiveEvent {
   value?: JsonObject;
   /** The department the Todo's board was before a write that moved it. */
   fromDepartment?: string | null;
+  /** For a status write: the Todo's own status before and after it, so a listener reads the move this write made, not whatever is latest when it looks. */
+  fromStatus?: WorkItemStatus;
+  toStatus?: WorkItemStatus;
   /** The session that invoked the write, when one did. The client refetches its
    *  transcript as loss recovery for a dropped activity block. */
   sessionId?: string;
@@ -74,8 +77,14 @@ export function setTodoLiveEmitter(next: TodoLiveEmitter | null): void {
   emitter = next;
 }
 
-/** `fromDepartment` is the department the Todo's board was before a write that moved it, for a board member's feed. */
-export function notifyTodoChanged(item: WorkItem, action: string, sessionId?: string, fromDepartment?: string | null): void {
+/**
+ * `fromDepartment` is the department the Todo's board was before a write that moved it, and `statusMove` the status move a
+ * status write made, both for a board member's feed.
+ */
+export function notifyTodoChanged(
+  item: WorkItem, action: string, sessionId?: string, fromDepartment?: string | null,
+  statusMove?: { fromStatus: WorkItemStatus; toStatus: WorkItemStatus },
+): void {
   emitOrHold(() => {
     if (!emitter) return;
     try {
@@ -87,6 +96,7 @@ export function notifyTodoChanged(item: WorkItem, action: string, sessionId?: st
         value: item as unknown as JsonObject,
         ...(sessionId ? { sessionId } : {}),
         ...(fromDepartment !== undefined ? { fromDepartment } : {}),
+        ...(statusMove ? { fromStatus: statusMove.fromStatus, toStatus: statusMove.toStatus } : {}),
       });
     } catch {
       // A broken listener must never fail the write it observes.

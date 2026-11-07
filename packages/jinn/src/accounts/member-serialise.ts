@@ -15,7 +15,7 @@ import { readStopCause } from "../work-items/stop-cause.js";
 import { initDb } from "../shared/db.js";
 import { TODO_ID_PATTERN } from "../work-items/id.js";
 import { OPERATOR_ASSIGNEE } from "../work-items/operator-assignee.js";
-import { boardOfTodo, creatorAccess } from "./member-access.js";
+import { boardOfTodo, creatorAccess, isClosedStatus } from "./member-access.js";
 import type { MemberRouteContext } from "./member-context.js";
 import { getGrant } from "./board-members.js";
 
@@ -68,13 +68,16 @@ export class Viewer {
     return creatorAccess(this.db, this.userId, oldRootId, { asRoot: oldRootId === itemId }) !== undefined;
   }
 
-  /** Whether the Todo's latest status move is the one that closed it (open to done or cancelled): the write that ended a creator's access to it. */
-  justClosed(todoId: string): boolean {
-    const last = this.db.prepare(
-      "SELECT from_status AS fromStatus, to_status AS toStatus FROM work_item_events WHERE work_item_id = ? AND kind = 'status_change' ORDER BY rowid DESC LIMIT 1",
-    ).get(todoId) as { fromStatus: string | null; toStatus: string | null } | undefined;
-    const closed = (status: string | null | undefined) => status === "done" || status === "cancelled";
-    return !!last && closed(last.toStatus) && !closed(last.fromStatus);
+  /**
+   * Whether the status write being announced is the one that ended the reader's creator access to this Todo: the Todo is a
+   * root, the write's own move took it from open to done or cancelled, and immediately before it they read it as its creator
+   * (active, it is theirs, and they still hold the board it was filed on, none of which a status write changes). Read from
+   * the move the write carries, never from the Todo's latest event, so a close of a Todo they had already lost (taken off the
+   * board, moved under another tree, a sub-task moved out) is silent.
+   */
+  closedAsCreatorRoot(item: Pick<WorkItem, "id" | "rootId">, move: { fromStatus: string; toStatus: string } | undefined): boolean {
+    if (!move || !isClosedStatus(move.toStatus) || isClosedStatus(move.fromStatus)) return false;
+    return creatorAccess(this.db, this.userId, item.id, { openBeforeWrite: true }) !== undefined;
   }
 
   /** Whether a root is open and was created by the reader on a board they still hold, so its tree stays readable to them after it leaves that board. */

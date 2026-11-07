@@ -7,7 +7,7 @@ export function MovedLabel({ testId, className }: { testId: string; className?: 
       data-testid={testId}
       className={`inline-flex h-5 w-fit max-w-full items-center whitespace-nowrap rounded-[10px] bg-[var(--fill-tertiary)] px-2 text-[calc(11px*var(--text-scale))] font-medium text-[var(--text-secondary)] ${className ?? ""}`}
     >
-      {MOVED_TO_ANOTHER_BOARD}
+      <span className="min-w-0 truncate">{MOVED_TO_ANOTHER_BOARD}</span>
     </span>
   )
 }

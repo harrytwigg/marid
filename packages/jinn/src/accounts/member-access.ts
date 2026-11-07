@@ -26,7 +26,10 @@ export type TodoAccess =
   | { via: "creator"; canComment: boolean };
 
 /** Statuses that end a creator's access to a tree that left their boards. */
-const CLOSED_ROOT = new Set(["done", "cancelled"]);
+const CLOSED_ROOT: ReadonlySet<string> = new Set(["done", "cancelled"]);
+
+/** Whether a status is one that ends a creator's access (done or cancelled). */
+export const isClosedStatus = (status: string): boolean => CLOSED_ROOT.has(status);
 
 /** The board a member filed a root Todo on, as its `created` event recorded it; undefined for any root not filed through the member API. */
 function createdOnBoard(db: DatabaseType, rootId: string): string | undefined {
@@ -42,9 +45,13 @@ function createdOnBoard(db: DatabaseType, rootId: string): string | undefined {
  * created on. Removing them from that board therefore ends it, and the role they keep there (collaborator or owner) is the one
  * that lets them comment: taking a board away never widens what they may do. A root with no recorded board grants nothing.
  * `asRoot` asks it of a Todo that has since been moved under another tree, as it stood when it was still a root.
+ * `openBeforeWrite` asks it of a root the caller knows was open immediately before the write that closed it (the write's own
+ * status move says so), as it stood then; nothing else here is something a status write changes.
  */
-export function creatorAccess(db: DatabaseType, userId: string, rootId: string, opts: { asRoot?: boolean } = {}): { canComment: boolean; board: string } | undefined {
-  if (!isOpenRootOf(db, userId, rootId, opts.asRoot === true)) return undefined;
+export function creatorAccess(
+  db: DatabaseType, userId: string, rootId: string, opts: { asRoot?: boolean; openBeforeWrite?: boolean } = {},
+): { canComment: boolean; board: string } | undefined {
+  if (!isOpenRootOf(db, userId, rootId, opts.asRoot === true, opts.openBeforeWrite === true)) return undefined;
   if (getUserById(db, userId)?.status !== "active") return undefined;
   const board = createdOnBoard(db, rootId);
   const grant = board ? getGrant(db, userId, board) : undefined;
@@ -52,11 +59,15 @@ export function creatorAccess(db: DatabaseType, userId: string, rootId: string, 
   return { canComment: roleAtLeast(grant.role, "collaborator"), board };
 }
 
-/** Whether the Todo is open and was created by this user, and is a root (or, `asRoot`, was one before it was moved under another tree). */
-function isOpenRootOf(db: DatabaseType, userId: string, rootId: string, asRoot: boolean): boolean {
+/**
+ * Whether the Todo is open (or, `openBeforeWrite`, was open until the write being announced) and was created by this user, and
+ * is a root (or, `asRoot`, was one before it was moved under another tree).
+ */
+function isOpenRootOf(db: DatabaseType, userId: string, rootId: string, asRoot: boolean, openBeforeWrite: boolean): boolean {
   const root = db.prepare("SELECT parent_id, created_by, status FROM work_items WHERE id = ?").get(rootId) as
     { parent_id: string | null; created_by: string; status: string } | undefined;
-  if (!root || root.created_by !== memberIdentity(userId) || CLOSED_ROOT.has(root.status)) return false;
+  if (!root || root.created_by !== memberIdentity(userId)) return false;
+  if (!openBeforeWrite && CLOSED_ROOT.has(root.status)) return false;
   return root.parent_id === null || asRoot;
 }
 
