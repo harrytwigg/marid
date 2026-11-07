@@ -152,27 +152,43 @@ describe("a Todo whose person is the operator", () => {
 describe("a Todo that waits on the operator behind a member's name", () => {
   const waiting = () => agentMade({ status: "blocked", assignee: "@operator", humanAssignee: "user:me" })
 
-  it("offers a collaborator a rename but no clear, as the gateway allows: clearing would name the operator", async () => {
+  it("is read-only to a collaborator, as the gateway has it: renaming would hand it on, clearing would name the operator", async () => {
     principal = member("collaborator")
     setup(waiting())
     const person = await screen.findByTestId("rail-person")
-    expect(person.closest("button")).not.toBeNull()
+    expect(person.closest("button")).toBeNull()
     expect(screen.getByTestId("rail-assignee").textContent).toContain("Needs the operator")
     expect(screen.queryByTestId("rail-person-clear")).toBeNull()
     expect(screen.queryByTestId("chip-person-clear")).toBeNull()
-    fireEvent.click(person)
-    const picker = await screen.findByTestId("picker-person")
-    expect(within(picker).queryByTestId("person-option-clear")).toBeNull()
-    fireEvent.click(within(picker).getByTestId("person-option-kit"))
-    await waitFor(() => expect(setWorkItemPerson).toHaveBeenCalledWith("PLT-1", "user:kit"))
   })
 
-  it("lets the operator clear it", async () => {
+  it("tells the operator, before they choose, that naming someone else takes it off their desk", async () => {
     principal = { kind: "operator" }
-    updateWorkItem.mockResolvedValue({ workItem: agentMade({ status: "blocked", assignee: "@operator", humanAssignee: "@operator", version: 4 }), replayed: false })
     setup(waiting())
-    fireEvent.click(await screen.findByTestId("rail-person-clear"))
-    await waitFor(() => expect(updateWorkItem).toHaveBeenCalledWith("PLT-1", expect.objectContaining({ patch: { humanAssignee: null } })))
+    fireEvent.click(await screen.findByTestId("rail-person"))
+    const picker = await screen.findByTestId("picker-person")
+    expect(within(picker).getByTestId("person-option-kit").textContent).toContain("Takes it off your desk")
+    expect(within(picker).getByTestId("person-option-me").textContent).not.toContain("Takes it off your desk")
+    expect(within(picker).getByTestId("person-option-clear").textContent).toContain("Leaves you as the person")
+    expect(within(picker).getByTestId("person-option-operator").textContent).not.toContain("Takes it off your desk")
+  })
+
+  it("says the same when the operator is the person the Todo waits on", async () => {
+    principal = { kind: "operator" }
+    setup(agentMade({ status: "blocked", assignee: "@operator", humanAssignee: "@operator" }))
+    fireEvent.click(await screen.findByTestId("rail-person"))
+    const picker = await screen.findByTestId("picker-person")
+    expect(within(picker).getByTestId("person-option-kit").textContent).toContain("Takes it off your desk")
+    expect(within(picker).getByTestId("person-option-clear").textContent).toContain("Takes it off your desk")
+  })
+
+  it("leaves the hint off a Todo an agent holds", async () => {
+    principal = { kind: "operator" }
+    setup(agentMade({ humanAssignee: "user:me" }))
+    fireEvent.click(await screen.findByTestId("rail-person"))
+    const picker = await screen.findByTestId("picker-person")
+    expect(picker.textContent).not.toContain("Takes it off your desk")
+    expect(picker.textContent).not.toContain("Leaves you as the person")
   })
 })
 

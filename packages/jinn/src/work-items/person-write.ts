@@ -16,14 +16,14 @@ import { clearTodoPerson, storedTodoPerson, writeTodoPerson } from "./todo-peopl
  *
  * Setting an agent while `assignee` is `@operator` keeps the operator as the person (the row appears). Clearing the agent
  * while the row is `@operator` hands the Todo back to the operator (`assignee = '@operator'`, row gone), so it needs them
- * again. Clearing the person while `assignee` is `@operator` with no row clears that assignee. Naming a user while the
- * operator is the person that way clears it too: the operator is no longer the one it waits on.
+ * again. Clearing the person while `assignee` is `@operator` with no row clears that assignee. Naming a user while
+ * `assignee` is `@operator` clears it too, with or without a user's row beside it: naming someone else hands the Todo on,
+ * and the `person_changed` event records `assigneeCleared`.
  *
  * An assignment to the operator (an agent handing the Todo over, say) never changes a person that is a user: the row
  * stays beside `assignee = '@operator'`, which then reads as "needs the operator" in the agent slot. Only the operator
- * moves the person, so no agent can change a field that agents may not set. In that state the waiting marker stays put
- * whoever moves the person: naming another user only replaces the row, and clearing the person drops the row, which
- * leaves the operator as the person (the Todo still waits on them; clearing again clears the assignee as above).
+ * moves the person, so no agent can change a field that agents may not set. Clearing the person in that state drops the
+ * row and leaves the operator as the person (the Todo still waits on them; clearing again clears the assignee as above).
  */
 
 export interface OwnershipInput {
@@ -60,9 +60,9 @@ function movePerson(agent: string | null, person: string | null, next: string | 
   if (next === effective(agent, person)) return { agent, person };
   if (next === null) return person !== null ? { agent, person: null } : { agent: null, person: null };
   if (next === OPERATOR_ASSIGNEE) return agent === null || agent === OPERATOR_ASSIGNEE ? { agent: OPERATOR_ASSIGNEE, person: null } : { agent, person: OPERATOR_ASSIGNEE };
-  // `@operator` with no row is the operator as the person, replaced by the one named. Beside a user's row it is the
-  // waiting marker (an agent handed the Todo over), which naming someone else leaves alone: the Todo still needs the operator.
-  return { agent: agent === OPERATOR_ASSIGNEE && person === null ? null : agent, person: next };
+  // Naming a user hands a Todo that waits on the operator on: `@operator` leaves the agent slot, with or without a user's
+  // row beside it, and the event says so (`assigneeCleared`). Only the operator can do this; a member's route refuses it.
+  return { agent: agent === OPERATOR_ASSIGNEE ? null : agent, person: next };
 }
 
 /** Pure: where the two slots land for an edit of either. */

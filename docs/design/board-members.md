@@ -394,8 +394,7 @@ attention lane, backlog dispatch, quiet-watch, the review addressee) keeps meani
 | Set an agent X while `assignee = '@operator'` | `assignee = X`, row `@operator` (the operator stays the person) |
 | Clear the agent while the row is `@operator` | `assignee = '@operator'`, row deleted (it needs the operator again) |
 | Clear the person while `assignee = '@operator'`, no row | `assignee = null` |
-| Name a user while `assignee = '@operator'`, no row | `assignee = null`, row = that user (it no longer waits on the operator) |
-| Name another user while `assignee = '@operator'` beside a user's row | `assignee` unchanged, row = that user (it still waits on the operator) |
+| Name a user while `assignee = '@operator'` (with or without a user's row) | `assignee = null`, row = that user: naming someone else hands the Todo on, and the `person_changed` event records `assigneeCleared: true` |
 | Clear the person while `assignee = '@operator'` beside a user's row | `assignee` unchanged, row deleted: the operator is the person again (it still waits on them; clearing again clears `assignee`, above) |
 | Assign to the operator over a user's row (an agent handing the Todo over, say) | `assignee = '@operator'`, the user's row **stays**: the Todo waits on the operator, and no agent moves the person |
 | Assign to the operator over an `@operator` row | `assignee = '@operator'`, the redundant row deleted |
@@ -416,12 +415,12 @@ quiet-watch treatment, then sets an agent, clears it, and asserts the "needs you
   `PUT /api/member/todos/:id/person { person: string | null }`: a label of responsibility, not steering, so it needs no
   member-only tree. **Members never write `assignee` and never choose `@operator`.** The route accepts only a `user:<id>` with
   access to the board, or `null`: `@operator` is `422`. On a Todo whose person is the operator (a row, or the `assignee`
-  fallback) it answers `403` (`person_operator_only`) and changes nothing. On a Todo that waits on the operator beside a
-  user's row, a member may name another user (only the row moves) but not clear the person, which would make the operator
-  the person: `403` `person_operator_only`. A member's change only ever touches `todo_people`. Viewers get `403`; a Todo outside the member's grants is `404`. The route is in the member router, so the
+  fallback) it answers `403` (`person_operator_only`) and changes nothing, and so it does on a Todo that waits on the operator
+  beside a user's row: renaming would hand it on (clearing `assignee`) and clearing would make the operator the person, both
+  the operator's to do. A member's change only ever touches `todo_people`. Viewers get `403`; a Todo outside the member's grants is `404`. The route is in the member router, so the
   allowlist and default-deny are unchanged.
 - **Nothing wakes.** A person change writes one `person_changed` event `{ from, to }` (plus `assigneeCleared` when it cleared
-  the operator out of `assignee`), emitted as an ordinary Todo update so cards refresh live. It never starts, wakes or
+  the operator out of `assignee`; a member's timeline keeps it), emitted as an ordinary Todo update so cards refresh live. It never starts, wakes or
   notifies an agent, fires no board hook, and is never written as `metadata_edited`, which a hook reads. The one exception is
   the operator choosing themselves with no agent, which is an assignment to the operator and fires what that fires. It is on
   the member event-detail allowlist with its ids mapped like any actor. There is no agent tool to set it.
@@ -435,8 +434,11 @@ quiet-watch treatment, then sets an agent, clears it, and asserts the "needs you
   `EmployeeAvatar`), a dashed outline with "No person" / "No agent" for an empty slot. The card no longer shows its creator in
   a free slot. The Todo page has a Person row and chip (the operator's picker offers "You (operator)" and the board's people,
   with a clear button) and an Agent row and chip whose picker lists employees only. A member gets the person picker where they
-  are a collaborator or owner, without the operator option, read-only on a Todo whose person is the operator, and without a
-  clear (button or picker row) on a Todo that waits on the operator; the agent row is read-only for members.
+  are a collaborator or owner, without the operator option, and read-only on a Todo whose person is the operator or that
+  waits on the operator (the gateway refuses both); the agent row is read-only for members. On a Todo that waits on the
+  operator, the operator's person picker says what a choice does before they make it: each other person reads "Takes it
+  off your desk", and "No person" reads the same when the operator is the person, or "Leaves you as the person" beside
+  someone else's name. The activity line for a hand-on reads "handed it on to another person".
 
 ## Phases
 

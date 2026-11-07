@@ -23,7 +23,7 @@ const CASES: Case[] = [
   { name: "assigning to the operator over an @operator row drops that now-redundant row", from: { assignee: "mason", person: OP }, edit: { assignee: OP }, to: { assignee: OP, person: null } },
   { name: "naming the operator as the person over a user's row, with the Todo already on the operator, drops the row", from: { assignee: OP, person: USER }, edit: { humanAssignee: OP }, to: { assignee: OP, person: null } },
   { name: "clearing the person while a user's row sits beside the operator assignee leaves the Todo on the operator", from: { assignee: OP, person: USER }, edit: { humanAssignee: null }, to: { assignee: OP, person: null } },
-  { name: "naming another user while a user's row sits beside the operator assignee keeps the Todo waiting on the operator", from: { assignee: OP, person: USER }, edit: { humanAssignee: OTHER }, to: { assignee: OP, person: OTHER } },
+  { name: "naming another user while a user's row sits beside the operator assignee hands it on: the operator assignee clears", from: { assignee: OP, person: USER }, edit: { humanAssignee: OTHER }, to: { assignee: null, person: OTHER } },
   { name: "clearing the agent leaves a user as the person", from: { assignee: "mason", person: USER }, edit: { assignee: null }, to: { assignee: null, person: USER } },
   { name: "changing the agent leaves the person", from: { assignee: "mason", person: USER }, edit: { assignee: "alice" }, to: { assignee: "alice", person: USER } },
   { name: "an edit that changes nothing changes nothing", from: { assignee: "mason", person: OP }, edit: { assignee: "mason", humanAssignee: OP }, to: { assignee: "mason", person: OP } },
@@ -51,7 +51,7 @@ describe("planOwnership", () => {
   it("reads the person before and after as the Todo does: the row, else the operator when the assignee is", () => {
     expect(planOwnership({ assignee: OP }, null, { humanAssignee: USER })).toMatchObject({ from: OP, to: USER, assigneeMovedByPerson: true });
     expect(planOwnership({ assignee: "mason" }, OP, { assignee: null })).toMatchObject({ from: OP, to: OP, assigneeMovedByPerson: false });
-    expect(planOwnership({ assignee: OP }, USER, { humanAssignee: OTHER })).toMatchObject({ assignee: OP, from: USER, to: OTHER, assigneeMovedByPerson: false });
+    expect(planOwnership({ assignee: OP }, USER, { humanAssignee: OTHER })).toMatchObject({ assignee: null, from: USER, to: OTHER, assigneeMovedByPerson: true });
     expect(planOwnership({ assignee: OP }, USER, { humanAssignee: null })).toMatchObject({ assignee: OP, from: USER, to: OP, assigneeMovedByPerson: false });
   });
 });

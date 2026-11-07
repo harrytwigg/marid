@@ -134,24 +134,15 @@ export function AssigneeSlots({ item, byName, variant }: {
 }
 
 /**
- * Whether the viewer may clear the person. A board member may not while the Todo waits on the operator behind someone
- * else's name: clearing would leave the operator as the person, which a member never names (the gateway answers 403).
+ * The person row's picker, offering exactly what the gateway allows: a board member never changes a Todo whose person is
+ * the operator, nor one that waits on the operator (`@operator` in the agent slot): renaming would hand it on and clearing
+ * would name the operator, both the operator's to do (the gateway answers 403). A viewer's role has no picker at all.
  */
-export function personClearable(item: { assignee?: string | null; humanAssignee?: string | null }, viewer: "operator" | "member"): boolean {
-  return !!item.humanAssignee && !(viewer === "member" && item.assignee === OPERATOR_ASSIGNEE)
-}
-
-/**
- * The person row's picker, offering exactly what the gateway allows: a board member never changes a Todo whose person
- * is the operator (the operator's to change, 403), may rename but not clear one that waits on the operator (see
- * `personClearable`), and has no picker for a viewer's role.
- */
-export function personRowFor<R extends { onClear?: () => void }>(
+export function personRowFor<R>(
   rowFor: (row: "person") => R | undefined,
   item: { assignee?: string | null; humanAssignee?: string | null },
   viewer: "operator" | "member",
 ): R | undefined {
-  if (viewer === "member" && item.humanAssignee === OPERATOR_ASSIGNEE) return undefined
-  const row = rowFor("person")
-  return row && !personClearable(item, viewer) ? { ...row, onClear: undefined } : row
+  const operatorsToChange = item.humanAssignee === OPERATOR_ASSIGNEE || item.assignee === OPERATOR_ASSIGNEE
+  return viewer === "member" && operatorsToChange ? undefined : rowFor("person")
 }
