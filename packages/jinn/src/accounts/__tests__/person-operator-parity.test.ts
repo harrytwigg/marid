@@ -109,6 +109,17 @@ describe("the operator chooses themselves as the person on an unassigned Todo", 
     expect(await desk()).toContain(viaPerson);
   });
 
+  it("the operator chosen as the person beside an agent leaves the Todo with the agent, off the operator's desk", async () => {
+    const held = mk("blocked");
+    await patch(held, { assignee: "alice" });
+    expect(await desk()).not.toContain(held);
+    await chooseSelf(held);
+    expect(await desk()).not.toContain(held);
+    // Handing it back to the operator puts it on the desk: the same filter, so the line above is not vacuous.
+    await patch(held, { assignee: null });
+    expect(await desk()).toContain(held);
+  });
+
   it("the assign route settles the person the same way: an agent over @operator keeps the operator as the person", async () => {
     const todo = mk("backlog");
     await chooseSelf(todo);
