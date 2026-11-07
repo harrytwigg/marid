@@ -223,7 +223,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
   if (detailQuery.isSuccess && detailQuery.data === null) {
     return (
       <TaskFrame embedded={embedded}>
-        <TaskEmpty message={member ? NOT_SHARED : `${id} doesn't exist (anymore).`} onBack={member ? () => navigate("/") : backToTodos} />
+        <TaskEmpty message={member ? NOT_SHARED : `${id} doesn't exist (anymore).`} onBack={member ? () => navigate("/") : backToTodos} backLabel={member ? "Your boards" : undefined} />
       </TaskFrame>
     )
   }

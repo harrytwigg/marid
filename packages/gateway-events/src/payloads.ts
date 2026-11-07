@@ -36,7 +36,9 @@ export interface TalkProactiveCuePayload {
 
 export type CompanyChangedEvent =
   | {
-    entity: "todo"; action: string; id: string; sessionId?: string; version: number; value?: JsonObject
+    entity: "todo"; action: string; id: string; sessionId?: string
+    /** Absent only on a `removed` frame, which tells a board member that a Todo left what they can read and names nothing else. */
+    version?: number; value?: JsonObject
     /** The department the Todo's board was before a write that moved it (a department change, an assignment that derived one, a reparent). A board member's feed uses it to say a card left their board. */
     fromDepartment?: string | null
   }
