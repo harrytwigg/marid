@@ -7,9 +7,9 @@ import { MemberAvatar, MemberName, useViewer } from "./attribution"
 import { OPERATOR_ASSIGNEE } from "./util"
 
 /* A Todo's two assignees as two small circles, the person left and the agent right, on the board card and the
- * list row. They answer different questions and are set apart: the person is who is responsible, the agent is
- * who does the work. An empty slot is a dashed outline so the pair never changes width or reads as missing data,
- * and both are drawn on every card, an instance with no accounts included. */
+ * list row once the instance has an account (before that, a card keeps its one assignee circle: `AssigneeSlots`).
+ * They answer different questions and are set apart: the person is who is responsible, the agent is who does the
+ * work. An empty slot is a dashed outline so the pair never changes width or reads as missing data. */
 
 function EmptyCircle({ size, label, testId }: { size: number; label: string; testId: string }) {
   return (
@@ -49,8 +49,8 @@ export function agentOf(assignee: string | null | undefined): string | null {
   return assignee && assignee !== OPERATOR_ASSIGNEE ? assignee : null
 }
 
-/** A Todo that waits on the operator while the person responsible is someone else: `@operator` holds the agent slot (an agent
- *  handed it over, or the operator named another person). When the operator is the person, the person slot already says so. */
+/** A Todo that waits on the operator while the person responsible is someone else: `@operator` holds the agent slot beside
+ *  a user's row (an agent handed it over). When the operator is the person, the person slot already says so. */
 export function waitsOnOperator(item: { assignee: string | null | undefined; humanAssignee?: string | null }): boolean {
   return item.assignee === OPERATOR_ASSIGNEE && item.humanAssignee !== OPERATOR_ASSIGNEE
 }
@@ -134,9 +134,24 @@ export function AssigneeSlots({ item, byName, variant }: {
 }
 
 /**
- * The person row's picker, or nothing where the person may not change it: a board member never changes a Todo whose
- * person is the operator (the operator's to change, the gateway answers 403), and has no picker for a viewer's role.
+ * Whether the viewer may clear the person. A board member may not while the Todo waits on the operator behind someone
+ * else's name: clearing would leave the operator as the person, which a member never names (the gateway answers 403).
  */
-export function personRowFor<R>(rowFor: (row: "person") => R | undefined, item: { humanAssignee?: string | null }, viewer: "operator" | "member"): R | undefined {
-  return viewer === "member" && item.humanAssignee === OPERATOR_ASSIGNEE ? undefined : rowFor("person")
+export function personClearable(item: { assignee?: string | null; humanAssignee?: string | null }, viewer: "operator" | "member"): boolean {
+  return !!item.humanAssignee && !(viewer === "member" && item.assignee === OPERATOR_ASSIGNEE)
+}
+
+/**
+ * The person row's picker, offering exactly what the gateway allows: a board member never changes a Todo whose person
+ * is the operator (the operator's to change, 403), may rename but not clear one that waits on the operator (see
+ * `personClearable`), and has no picker for a viewer's role.
+ */
+export function personRowFor<R extends { onClear?: () => void }>(
+  rowFor: (row: "person") => R | undefined,
+  item: { assignee?: string | null; humanAssignee?: string | null },
+  viewer: "operator" | "member",
+): R | undefined {
+  if (viewer === "member" && item.humanAssignee === OPERATOR_ASSIGNEE) return undefined
+  const row = rowFor("person")
+  return row && !personClearable(item, viewer) ? { ...row, onClear: undefined } : row
 }

@@ -11,6 +11,7 @@ import {
   type AttachmentUploadTarget,
 } from "./work-item-attachments.js";
 import { workItemDispatchTools } from "./work-item-dispatch-tools.js";
+import { neutralisePeople, personLabel, withPersonLabel } from "./person-labels.js";
 import { assertIdentity, gatewayFailure, mutationResult } from "./work-item-result.js";
 import type { JinnMcpContext } from "./toolkit.js";
 import { BLOCK_KIND_ERROR, BLOCK_KINDS, parseBlockKind } from "../work-items/blocks.js";
@@ -59,19 +60,6 @@ function qs(params: Record<string, string | number | undefined>): string {
   return parts.join("&");
 }
 
-/**
- * The person responsible for a Todo as an agent reads it: "operator", or "<name> (board member)", never a bare `user:` id
- * and never a user as the operator (a board member's words and standing are not the operator's). The gateway sends the
- * names it knows in a `members` map beside the Todos; a user it no longer knows reads "Former member".
- */
-function personLabel(person: unknown, members: unknown): string | null {
-  if (typeof person !== "string") return null;
-  if (person === "@operator") return "operator";
-  if (!person.startsWith("user:")) return null;
-  const named = (members as Record<string, { displayName?: unknown }> | undefined)?.[person]?.displayName;
-  return typeof named === "string" && named !== "Former member" ? `${named} (board member)` : "Former member";
-}
-
 function summarize(item: Record<string, unknown>, members?: unknown): Record<string, unknown> {
   const person = personLabel(item.humanAssignee, members);
   return {
@@ -91,29 +79,6 @@ function summarize(item: Record<string, unknown>, members?: unknown): Record<str
     ...(person ? { humanAssignee: person } : {}),
     updatedAt: item.updatedAt ?? null,
   };
-}
-
-/**
- * A person that no name map accompanies (the tree, a mutation's reply) reads "a board member": a raw `user:` id is a
- * meaningless token an agent may echo back, and a name lookup here would call a real person a former member. The operator
- * keeps reading "operator". The detail and list replies, which do carry names, are already labelled and pass through.
- */
-function neutralisePeople(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(neutralisePeople);
-  if (!value || typeof value !== "object") return value;
-  const out: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value)) {
-    if (key === "humanAssignee" && typeof entry === "string") out[key] = entry === "@operator" ? "operator" : entry.startsWith("user:") ? "a board member" : entry;
-    else out[key] = neutralisePeople(entry);
-  }
-  return out;
-}
-
-/** A detail body with its Todo's `humanAssignee` read as `personLabel` reads it. */
-function withPersonLabel(body: unknown): unknown {
-  const detail = body as { workItem?: Record<string, unknown>; members?: unknown } | null;
-  if (!detail?.workItem || !("humanAssignee" in detail.workItem)) return body;
-  return { ...detail, workItem: { ...detail.workItem, humanAssignee: personLabel(detail.workItem.humanAssignee, detail.members) } };
 }
 
 function workItemsFrom(body: unknown): Array<Record<string, unknown>> {

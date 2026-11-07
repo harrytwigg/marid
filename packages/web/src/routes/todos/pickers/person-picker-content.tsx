@@ -3,12 +3,13 @@ import { HumanAvatar } from "@/components/ui/human-avatar"
 import { memberIdentity } from "@/lib/accounts-api"
 import { usePersonChoices } from "@/hooks/use-person-choices"
 import { useViewer } from "../attribution"
+import { personClearable } from "../assignee-circles"
 import { OPERATOR_ASSIGNEE } from "../util"
 import { PickerNote, PickerRow } from "./picker-shell"
 import type { PickerContentProps } from "./picker-contents"
 
 /** The person picker: the operator (the operator's own picker only: a board member never names the operator), then the people on
- *  this Todo's board, and a row to clear. It names a person responsible and nothing else: it never starts or notifies an agent,
+ *  this Todo's board, and a row to clear where the viewer may clear it. It names a person responsible and nothing else: it never starts or notifies an agent,
  *  so it carries no creator-access note. */
 export function PersonPickerContent({
   detail,
@@ -23,7 +24,7 @@ export function PersonPickerContent({
   const pick = (person: string | null) => { if (person !== current) commit(person); onDone() }
   return (
     <>
-      {current !== null && (
+      {personClearable(detail.workItem, viewer) && (
         <PickerRow
           sheet={sheet}
           label={<span className="text-[var(--text-tertiary)]">No person</span>}

@@ -131,7 +131,7 @@ export function assignWorkItem(
     // executor once the Todo is somebody else's: left linked, its turns would
     // keep the new owner's dispatch refused and keep deriving the Todo's status.
     // The agent slot's change settles the person with it: the operator kept as the person when an agent is set over
-    // `@operator`, and the person's row dropped when the Todo goes back to the operator (person-write.ts).
+    // `@operator`, and an `@operator` row dropped when the Todo goes back to the operator; a user's row stays (person-write.ts).
     writeOwnership(db, item, planOwnership(item, storedTodoPerson(db, id), { assignee }), { actor: actor ?? 'operator', effect: 'companion', append: appendWorkItemEvent });
     const releasedSessions = releaseSelfStartedLinks(db, id, { exceptEmployee: assignee });
     const event = appendWorkItemEvent(assignmentEvent(item, { assignee, department, actor, actorEmployee, origin, releasedSessions }));

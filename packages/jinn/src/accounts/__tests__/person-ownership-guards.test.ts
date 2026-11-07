@@ -10,12 +10,27 @@ let collab: Member;
 let designer: Member;
 let store: typeof import("../../work-items/store.js");
 let transitions: typeof import("../../work-items/transitions.js");
+let walk: typeof import("../../board-walk/board.js");
 
 const mk = () => store.createWorkItem({ title: "A Todo", department: "ops" });
 const stored = (id: string) => h.db.prepare("SELECT person FROM todo_people WHERE todo_id = ?").pluck().get(id) as string | undefined;
 const personEvents = (id: string) => store.listWorkItemEvents(id).filter((event) => event.kind === "person_changed");
 const patch = (id: string, body: Record<string, unknown>) => h.operator("PATCH", `/api/work-items/${id}`, { ...body, expectedVersion: store.getWorkItem(id)!.version });
 const putPerson = (m: Member, id: string, person: unknown) => h.as(m, "PUT", `/api/member/todos/${id}/person`, { person });
+/** The operator's desk as the gateway builds it for `needsAttentionFor=me`: the org root's queue plus the operator's. */
+const desk = async () => (await h.operator("GET", "/api/work-items?needsAttentionFor=me&limit=200")).body.workItems.map((row: { id: string }) => row.id) as string[];
+/** A Todo an agent has handed to the operator while a member is the person: `assignee = '@operator'` beside the member's row. */
+const handedOver = async () => {
+  const todo = mk();
+  store.updateWorkItem(todo.id, { assignee: "alice" });
+  transitions.transition(todo.id, "blocked", "operator", { human: true, detail: { note: "Needs a decision" } });
+  await putPerson(collab, todo.id, `user:${collab.userId}`);
+  expect(await desk()).not.toContain(todo.id); // alice's own blocked Todo: hers, not the operator's
+  // Through the pen, which leaves the department alone (the assign route derives it, taking the Todo off the member's board).
+  store.updateWorkItem(todo.id, { assignee: "@operator" });
+  expect(store.getWorkItem(todo.id)).toMatchObject({ assignee: "@operator", humanAssignee: `user:${collab.userId}`, department: "ops" });
+  return todo.id;
+};
 
 /** An agent's tool call: a real session and the capability the gateway minted for it, as an engine passes them. */
 const tool = async (name: string, args: Record<string, unknown>) => {
@@ -33,6 +48,7 @@ beforeAll(async () => {
   h = await startBoardHarness();
   store = await import("../../work-items/store.js");
   transitions = await import("../../work-items/transitions.js");
+  walk = await import("../../board-walk/board.js");
   collab = await h.join("collab@example.test", "collaborator", "ops", "Casey Collab");
   designer = await h.join("designer@example.test", "collaborator", "design", "Dee Designer");
   await h.join("collab@example.test", "collaborator", "design", "Casey Collab"); // Casey holds both boards
@@ -52,27 +68,46 @@ describe("an agent handing a Todo to the operator", () => {
     expect(store.getWorkItem(todo.id)).toMatchObject({ assignee: "@operator", humanAssignee: `user:${collab.userId}` });
     expect(stored(todo.id)).toBe(`user:${collab.userId}`);
     expect(personEvents(todo.id)).toHaveLength(before);
-    expect(store.queryWorkItems({ needsAttentionOperator: true, limit: 200 }).workItems.map((item) => item.id)).toContain(todo.id);
+    expect(await desk()).toContain(todo.id);
 
     // The operator handing it back to the agent finds the person where the member left it.
     await h.operator("POST", `/api/work-items/${todo.id}/assign`, { assignee: "alice" });
     expect(store.getWorkItem(todo.id)).toMatchObject({ assignee: "alice", humanAssignee: `user:${collab.userId}` });
   });
 
-  it("leaves a member unable to clear or replace the person while the Todo waits on the operator behind someone else's name", async () => {
-    const todo = mk();
-    store.updateWorkItem(todo.id, { assignee: "alice" });
-    await putPerson(collab, todo.id, `user:${collab.userId}`);
-    // Through the pen, which leaves the department alone (the assign route derives it, taking the Todo off the member's board).
-    store.updateWorkItem(todo.id, { assignee: "@operator" });
-    expect(store.getWorkItem(todo.id)).toMatchObject({ assignee: "@operator", humanAssignee: `user:${collab.userId}`, department: "ops" });
+  it("lets the operator rename the person without dropping the operator: the Todo still waits on them", async () => {
+    const id = await handedOver();
+    const peer = await h.join("renamed@example.test", "collaborator", "ops", "Rae Renamed");
+    expect(await desk()).toContain(id);
+    const reply = await patch(id, { humanAssignee: `user:${peer.userId}` });
+    expect(reply.body.workItem).toMatchObject({ assignee: "@operator", humanAssignee: `user:${peer.userId}` });
+    expect(walk.noAutoStartReason(store.getWorkItem(id)!)).toBe("assigned to the operator");
+    expect(await desk()).toContain(id);
+    expect(personEvents(id).at(-1)?.detail).toEqual({ from: `user:${collab.userId}`, to: `user:${peer.userId}` });
+  });
+
+  it("clearing that person leaves the operator as the person, still waiting on them; clearing again clears the assignee", async () => {
+    const id = await handedOver();
+    expect((await patch(id, { humanAssignee: null })).body.workItem).toMatchObject({ assignee: "@operator", humanAssignee: "@operator" });
+    expect(stored(id)).toBeUndefined();
+    expect(walk.noAutoStartReason(store.getWorkItem(id)!)).toBe("assigned to the operator");
+    expect((await patch(id, { humanAssignee: null })).body.workItem).toMatchObject({ assignee: null, humanAssignee: null });
+  });
+
+  it("lets a member rename the person there (only the row moves) but never clear it, which would name the operator", async () => {
+    const id = await handedOver();
     const peer = await h.join("peer@example.test", "collaborator", "ops", "Pia Peer");
-    const before = JSON.stringify([store.getWorkItem(todo.id), stored(todo.id), personEvents(todo.id)]);
-    for (const person of [null, `user:${peer.userId}`]) {
-      const reply = await putPerson(collab, todo.id, person);
-      expect([person, reply.status, reply.body.code]).toEqual([person, 403, "person_operator_only"]);
-    }
-    expect(JSON.stringify([store.getWorkItem(todo.id), stored(todo.id), personEvents(todo.id)])).toBe(before);
+    const before = JSON.stringify([store.getWorkItem(id), stored(id), personEvents(id)]);
+    const cleared = await putPerson(collab, id, null);
+    expect([cleared.status, cleared.body.code]).toEqual([403, "person_operator_only"]);
+    expect(JSON.stringify([store.getWorkItem(id), stored(id), personEvents(id)])).toBe(before);
+
+    const { version, assignee, department } = store.getWorkItem(id)!;
+    const renamed = await putPerson(collab, id, `user:${peer.userId}`);
+    expect(renamed.status).toBe(200);
+    expect(store.getWorkItem(id)).toMatchObject({ assignee, department, humanAssignee: `user:${peer.userId}`, version: version + 1 });
+    expect(stored(id)).toBe(`user:${peer.userId}`);
+    expect(await desk()).toContain(id);
   });
 });
 

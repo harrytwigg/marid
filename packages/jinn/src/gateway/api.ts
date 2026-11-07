@@ -205,9 +205,7 @@ import { resolveDelegationLinkRole, WORK_ITEM_LINK_ROLES, type WorkItemLinkRole 
 import { retiredTodoFieldError } from "../work-items/retired-fields.js";
 import { OPERATOR_ASSIGNEE } from "../work-items/operator-assignee.js";
 import { resolveTodoEditAuthority, todoEditRefusal } from "./todo-edit-authority.js";
-import { personChoiceProblem } from "../accounts/todo-person.js";
-import { planOwnership } from "../work-items/person-write.js";
-import { storedTodoPerson } from "../work-items/todo-people.js";
+import { ownershipEditProblem } from "../accounts/todo-person.js";
 import { isTodoId, resolveTodoIdPrefix } from "../work-items/id.js";
 import {
   addComment,
@@ -2592,16 +2590,8 @@ export async function handleApiRequest(
         }
       }
 
-      if (typeof patch.humanAssignee === "string") {
-        // Judged against the board the Todo will be on: a root that this same edit moves takes its person's access with it.
-        const landing = item.rootId === item.id && patch.department !== undefined ? { ...item, department: patch.department } : item;
-        const problem = personChoiceProblem(initDb(), landing, patch.humanAssignee);
-        if (problem) return json(res, { error: problem, code: "todo_invalid_person" }, 422);
-      }
-      if (patch.assignee !== undefined && patch.humanAssignee !== undefined
-        && planOwnership(item, storedTodoPerson(initDb(), item.id), patch).assignee !== patch.assignee) {
-        return json(res, { error: "assignee and humanAssignee contradict each other: naming that person moves the agent slot", code: "todo_invalid_ownership" }, 422);
-      }
+      const ownership = ownershipEditProblem(initDb(), item, patch);
+      if (ownership) return json(res, ownership, 422);
 
       try {
         const result = updateWorkItemConditional(params.id, patch, {

@@ -149,6 +149,33 @@ describe("a Todo whose person is the operator", () => {
   })
 })
 
+describe("a Todo that waits on the operator behind a member's name", () => {
+  const waiting = () => agentMade({ status: "blocked", assignee: "@operator", humanAssignee: "user:me" })
+
+  it("offers a collaborator a rename but no clear, as the gateway allows: clearing would name the operator", async () => {
+    principal = member("collaborator")
+    setup(waiting())
+    const person = await screen.findByTestId("rail-person")
+    expect(person.closest("button")).not.toBeNull()
+    expect(screen.getByTestId("rail-assignee").textContent).toContain("Needs the operator")
+    expect(screen.queryByTestId("rail-person-clear")).toBeNull()
+    expect(screen.queryByTestId("chip-person-clear")).toBeNull()
+    fireEvent.click(person)
+    const picker = await screen.findByTestId("picker-person")
+    expect(within(picker).queryByTestId("person-option-clear")).toBeNull()
+    fireEvent.click(within(picker).getByTestId("person-option-kit"))
+    await waitFor(() => expect(setWorkItemPerson).toHaveBeenCalledWith("PLT-1", "user:kit"))
+  })
+
+  it("lets the operator clear it", async () => {
+    principal = { kind: "operator" }
+    updateWorkItem.mockResolvedValue({ workItem: agentMade({ status: "blocked", assignee: "@operator", humanAssignee: "@operator", version: 4 }), replayed: false })
+    setup(waiting())
+    fireEvent.click(await screen.findByTestId("rail-person-clear"))
+    await waitFor(() => expect(updateWorkItem).toHaveBeenCalledWith("PLT-1", expect.objectContaining({ patch: { humanAssignee: null } })))
+  })
+})
+
 describe("a viewer", () => {
   it("sees the person as a plain value with nothing to open or clear", async () => {
     principal = member("viewer")

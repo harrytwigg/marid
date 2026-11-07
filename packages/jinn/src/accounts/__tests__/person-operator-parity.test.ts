@@ -20,6 +20,8 @@ const mk = (status: "backlog" | "blocked" | "executing") => {
 const detail = async (id: string) => (await h.operator("GET", `/api/work-items/${id}`)).body;
 const chooseSelf = (id: string) => h.operator("PATCH", `/api/work-items/${id}`, { humanAssignee: "@operator", expectedVersion: store.getWorkItem(id)!.version });
 const patch = (id: string, body: Record<string, unknown>) => h.operator("PATCH", `/api/work-items/${id}`, { ...body, expectedVersion: store.getWorkItem(id)!.version });
+/** The operator's desk as the gateway builds it for `needsAttentionFor=me`: the org root's queue plus the operator's. */
+const desk = async () => (await h.operator("GET", "/api/work-items?needsAttentionFor=me&limit=200")).body.workItems.map((row: { id: string }) => row.id) as string[];
 const stored = (id: string) => h.db.prepare("SELECT person FROM todo_people WHERE todo_id = ?").pluck().get(id) as string | undefined;
 
 /** What every reader of `assignee` decides about a Todo. */
@@ -63,8 +65,11 @@ describe("the operator chooses themselves as the person on an unassigned Todo", 
     const twin = mk("blocked");
     await chooseSelf(viaPerson);
     await h.operator("POST", `/api/work-items/${twin}/assign`, { assignee: "@operator" });
-    const desk = store.queryWorkItems({ needsAttentionOperator: true, limit: 200 }).workItems.map((item) => item.id);
-    expect(desk).toEqual(expect.arrayContaining([viaPerson, twin]));
+    const offDesk = mk("blocked");
+    await patch(offDesk, { assignee: "alice" }); // an agent's blocked Todo is the agent's, not the operator's
+    const onDesk = await desk();
+    expect(onDesk).toEqual(expect.arrayContaining([viaPerson, twin]));
+    expect(onDesk).not.toContain(offDesk);
     expect((await treatment(viaPerson)).autoStartRefusal).toBe("assigned to the operator");
   });
 
@@ -95,12 +100,13 @@ describe("the operator chooses themselves as the person on an unassigned Todo", 
     expect(withAgent.body.workItem).toMatchObject({ assignee: "alice", humanAssignee: "@operator" });
     expect(stored(viaPerson)).toBe("@operator");
     expect((await treatment(viaPerson)).autoStartRefusal).not.toBe("assigned to the operator");
+    expect(await desk()).not.toContain(viaPerson);
 
     const cleared = await patch(viaPerson, { assignee: null });
     expect(cleared.body.workItem).toMatchObject({ assignee: "@operator", humanAssignee: "@operator" });
     expect(stored(viaPerson)).toBeUndefined();
     expect(await treatment(viaPerson)).toEqual(await treatment(twin));
-    expect(store.queryWorkItems({ needsAttentionOperator: true, limit: 200 }).workItems.map((item) => item.id)).toContain(viaPerson);
+    expect(await desk()).toContain(viaPerson);
   });
 
   it("the assign route settles the person the same way: an agent over @operator keeps the operator as the person", async () => {
@@ -111,11 +117,11 @@ describe("the operator chooses themselves as the person on an unassigned Todo", 
     expect(stored(todo)).toBe("@operator");
   });
 
-  it("clearing the person of a Todo that waits on the operator clears the assignee, so it leaves the desk", async () => {
+  it("clearing the person of a Todo that waits on the operator clears the assignee; unassigned and blocked, it stays on the desk", async () => {
     const todo = mk("blocked");
     await chooseSelf(todo);
     expect((await patch(todo, { humanAssignee: null })).body.workItem).toMatchObject({ assignee: null, humanAssignee: null });
-    expect(store.queryWorkItems({ needsAttentionOperator: true, limit: 200 }).workItems.map((item) => item.id)).toContain(todo); // unassigned blocked still counts as the operator's
+    expect(await desk()).toContain(todo); // unassigned blocked still counts as the operator's
     expect(stored(todo)).toBeUndefined();
   });
 });
