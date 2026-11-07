@@ -17,7 +17,7 @@ import {
 import { TransitionError, transition } from "../work-items/transitions.js";
 import {
   NotMemberEditableError, NotVisibleError, RoleRefusedError, assertCollaborator, assertVisibleTodo, assertWritableTodo,
-  boardOfTodo, grantedBoard, grantedTodo, requireRole, ROLE_REFUSAL, type GrantedTodo,
+  boardOfTodo, grantedBoard, grantedTodo, requireBoardRole, requireRole, ROLE_REFUSAL, type GrantedTodo,
 } from "./member-access.js";
 import type { MemberRouteContext } from "./member-context.js";
 import {
@@ -96,7 +96,7 @@ function createInput(ctx: MemberRouteContext, department: string, input: CreateI
   return {
     title: input.title,
     body: input.body,
-    ...(input.parentId ? {} : { department }),
+    ...(input.parentId ? {} : { department, createdOnBoard: department }),
     // `connector` is a source no reader grants standing; the member is on `created_by` and the `user:` ref.
     source: "connector",
     sourceRef: memberSourceRef(ctx.principal.userId, input.key ? keyDigest(input.key) : undefined),
@@ -188,7 +188,7 @@ function writePatch(ctx: MemberRouteContext, granted: GrantedTodo, input: PatchI
 /** `PATCH /api/member/todos/:id`: title, body, priority and labels, in a member-only tree. */
 export async function patchTodo(ctx: MemberRouteContext): Promise<void> {
   const granted = grantedTodo(ctx, ctx.params.id);
-  if (!granted || !requireRole(ctx, granted.grant, "collaborator")) return;
+  if (!granted || !requireBoardRole(ctx, granted, "collaborator")) return;
   const body = await readObject(ctx, { strict: true });
   if (!body || refuseUnsupported(ctx, body, PATCH_FIELDS)) return;
   const input = parsePatch(body);
@@ -219,7 +219,7 @@ function moveStatus(current: WorkItem, target: string, actor: string): WorkItem 
  */
 export async function setStatus(ctx: MemberRouteContext): Promise<void> {
   const granted = grantedTodo(ctx, ctx.params.id);
-  if (!granted || !requireRole(ctx, granted.grant, "collaborator")) return;
+  if (!granted || !requireBoardRole(ctx, granted, "collaborator")) return;
   const body = await readObject(ctx);
   if (!body || refuseUnsupported(ctx, body, new Set(["status"]))) return;
   if (body.status !== "done" && body.status !== "backlog") return badRequest(ctx.res, "Board members can set a Todo to done or backlog");

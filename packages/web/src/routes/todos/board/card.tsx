@@ -11,6 +11,7 @@ import { hasStopLead, StopCauseLead, stopLeadKey } from "./stop-cause"
 import { KeepToggle } from "./keep-control"
 import { MoveToMenu } from "./move-menu"
 import { useMember } from "@/hooks/use-principal"
+import { MovedLabel } from "../moved-label"
 
 /* The board card, Variant A: four rows, the same four on every card.
  * ID + assignee, status glyph + title, priority + labels + roll-up, cost + due.
@@ -176,12 +177,12 @@ export const BoardCard = memo(function BoardCard({
        *  left. */}
       <div className="flex h-3.5 items-center gap-2">
         <span
-          className="leading-none tracking-[.04em] text-[calc(11px*var(--text-scale))] text-[var(--text-tertiary)]"
+          className="flex-none whitespace-nowrap leading-none tracking-[.04em] text-[calc(11px*var(--text-scale))] text-[var(--text-tertiary)]"
           style={{ fontFamily: "var(--font-code)" }}
         >
           {item.id}
         </span>
-        <span className="ml-auto flex items-center gap-1">
+        <span className="ml-auto flex min-w-0 items-center gap-1">
           {/* Hover-revealed here alone: the resting face is a fixed grid, and a
            *  pin at rest in the row the avatar owns competes with it on every
            *  card. The list row and the task page still show it at rest. */}
@@ -193,9 +194,11 @@ export const BoardCard = memo(function BoardCard({
               className="opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
             />
           )}
+          {/* The label gives way before the name: it shortens to an ellipsis, the chip keeps its width. */}
+          {item.movedToAnotherBoard && <MovedLabel testId={`board-moved-${item.id}`} className="min-w-0 shrink" />}
           {/* A member's Todo is unassigned, so the slot is free for who made it. */}
           {!item.assignee && item.createdBy && isMemberIdentity(item.createdBy, viewer) && (
-            <MemberChip identity={item.createdBy} size={20} className="max-w-[140px] text-[calc(11px*var(--text-scale))] text-[var(--text-tertiary)]" />
+            <MemberChip identity={item.createdBy} size={20} className="max-w-[140px] flex-none text-[calc(11px*var(--text-scale))] text-[var(--text-tertiary)]" />
           )}
           {item.assignee && (
             <span title={assigneeName ?? undefined} className="flex-none">

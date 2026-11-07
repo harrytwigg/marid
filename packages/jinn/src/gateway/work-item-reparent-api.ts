@@ -24,7 +24,7 @@ export interface ReparentApiOptions {
   /** api.ts's work-item caller resolution; undefined once it has answered. */
   resolveCaller: () => WorkItemCaller | undefined;
   /** Tell the live surfaces these Todos' projections changed. */
-  emitProjection: (id: string, fromDepartment?: string | null) => void;
+  emitProjection: (id: string, fromDepartment?: string | null, fromRootId?: string) => void;
 }
 
 /** The new parent a body names: a Todo id, or null for none. Answers 400 itself. */
@@ -90,9 +90,11 @@ export async function handleReparentApi(
   try {
     // The board the moved Todos leave, read before the move: a board member's feed says the cards left it.
     const fromDepartment = boardOfTodo(target.item);
+    // And the root they were under, so a member's feed can tell whether they could read them before this write.
+    const fromRootId = target.item.rootId;
     const result = reparentWorkItem(target.item.id, target.parentId, { actor: workItemActor(caller), origin: caller.origin });
     if (result.changed) {
-      for (const id of result.moved) options.emitProjection(id, fromDepartment);
+      for (const id of result.moved) options.emitProjection(id, fromDepartment, fromRootId);
       for (const id of result.parents) options.emitProjection(id);
     }
     const { id, parentId, rootId, depth, version } = result.item;

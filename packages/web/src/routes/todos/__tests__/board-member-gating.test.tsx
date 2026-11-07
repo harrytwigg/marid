@@ -29,12 +29,14 @@ function treeFor(id: string) {
 
 const createWorkItem = vi.fn()
 const listWorkItems = vi.fn()
+const listMovedOffBoard = vi.fn()
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>()
   return {
     ...actual,
     api: {
       listWorkItems: (...args: unknown[]) => listWorkItems(...args),
+      listMovedOffBoard: (...args: unknown[]) => listMovedOffBoard(...args),
       getWorkItemTree: async (id: string) => ({ tree: treeFor(id) }),
       getWorkItemTrees: async (ids: string[]) => ({ trees: Object.fromEntries(ids.map((id) => [id, treeFor(id)])) }),
       getWorkItems: async () => ({ workItems: [] }),
@@ -71,6 +73,7 @@ beforeEach(() => {
   clearBoardScrollCache()
   sessionStorage.clear()
   localStorage.clear()
+  listMovedOffBoard.mockResolvedValue({ workItems: [], total: 0, nextOffset: null })
   listWorkItems.mockImplementation(async (params: { status?: string }) =>
     params.status === "backlog" ? { workItems: [card], total: 1, nextOffset: null } : { workItems: [], total: 0, nextOffset: null })
 })
@@ -135,5 +138,35 @@ describe("the board for a member", () => {
     await screen.findByTestId("board-card-PLT-1")
     // Until the tree lands the card holds its height with $0.00; once it says null there is no cost to show.
     await waitFor(() => expect(screen.getByTestId("board-card-PLT-1").textContent).not.toMatch(/\$\d/))
+  })
+
+  it("shows what left the board in its own group, each card saying only that it moved", async () => {
+    principal = memberOf("collaborator")
+    const moved = { ...card, id: "PLT-7", title: "Asked for, now elsewhere", department: null, movedToAnotherBoard: true } as WorkItemCompactWire
+    listMovedOffBoard.mockResolvedValue({ workItems: [moved], total: 1, nextOffset: null })
+    renderBoard()
+    await screen.findByTestId("board-card-PLT-1")
+    const group = await screen.findByTestId("moved-off-board")
+    expect(group.textContent).toContain("Moved off this board")
+    expect(group.textContent).toContain("Asked for, now elsewhere")
+    expect(screen.getByTestId("board-moved-PLT-7").textContent).toBe("Moved to another board")
+    // The board's own card is not marked, and the moved one is not among the board's columns.
+    expect(screen.queryByTestId("board-moved-PLT-1")).toBeNull()
+    expect(group.contains(screen.getByTestId("board-card-PLT-1"))).toBe(false)
+    // Asked for this board's own list, not a list for every board.
+    expect(listMovedOffBoard).toHaveBeenCalledWith("platform", expect.anything())
+  })
+
+  it("has no group while nothing has moved, and the operator never asks for one", async () => {
+    principal = memberOf("viewer")
+    renderBoard()
+    await screen.findByTestId("board-card-PLT-1")
+    expect(screen.queryByTestId("moved-off-board")).toBeNull()
+    expect(listMovedOffBoard).toHaveBeenCalled()
+    listMovedOffBoard.mockClear()
+    principal = { kind: "operator" }
+    renderBoard()
+    await waitFor(() => expect(screen.getAllByTestId("board-card-PLT-1").length).toBeGreaterThan(0))
+    expect(listMovedOffBoard).not.toHaveBeenCalled()
   })
 })

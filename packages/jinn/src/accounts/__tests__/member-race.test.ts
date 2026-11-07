@@ -79,6 +79,30 @@ describe("a Todo that stops being member-only while the body arrives", () => {
   });
 });
 
+describe("a Todo that leaves the board while the body arrives, still member-only", () => {
+  // A department change assigns nothing, so the tree is still member-only: only the creator rule refuses the write.
+  const moveToAnotherDepartment = async (id: string) => {
+    const moved = await h.operator("PATCH", `/api/work-items/${id}`, { department: "design", expectedVersion: store.getWorkItem(id)!.version });
+    expect(moved.status).toBe(200);
+    expect(store.getWorkItem(id)!.assignee).toBeNull();
+  };
+
+  it("an edit is refused and writes nothing", async () => {
+    const todo = await own("keep this title");
+    const version = store.getWorkItem(todo.id)!.version;
+    const reply = await slowRequest(pat, "PATCH", `/api/member/todos/${todo.id}`, { first: '{"title":"renamed","expectedVersion":', second: `${version}}` }, () => moveToAnotherDepartment(todo.id));
+    expect([reply.status, reply.body.code]).toEqual([403, "todo_not_member_editable"]);
+    expect(store.getWorkItem(todo.id)!.title).toBe("keep this title");
+  });
+
+  it("a status move is refused and writes nothing", async () => {
+    const todo = await own("keep this open");
+    const reply = await slowRequest(pat, "POST", `/api/member/todos/${todo.id}/status`, { first: '{"status":', second: '"done"}' }, () => moveToAnotherDepartment(todo.id));
+    expect([reply.status, reply.body.code]).toEqual([403, "todo_not_member_editable"]);
+    expect(store.getWorkItem(todo.id)!.status).toBe("backlog");
+  });
+});
+
 describe("a grant that goes while the body arrives", () => {
   it("a comment is refused with the 404 an unheld Todo answers", async () => {
     const lee = await h.join("lee@example.test", "collaborator", "ops", "Lee Member");
@@ -131,11 +155,14 @@ describe("other write answers", () => {
     } finally { spy.mockRestore(); }
   });
 
-  it("an idempotent create replay does not hand back a Todo that has left the member's boards", async () => {
+  it("an idempotent create replay hands back the member's own open Todo that left their boards, marked moved, and never one they can no longer read", async () => {
     const first = await h.as(pat, "POST", "/api/member/boards/ops/todos", { title: "once", idempotencyKey: "replay-1" });
     expect(first.status).toBe(201);
     h.db.prepare("UPDATE work_items SET department = 'design' WHERE id = ?").run(first.body.workItem.id);
     const again = await h.as(pat, "POST", "/api/member/boards/ops/todos", { title: "once", idempotencyKey: "replay-1" });
-    expect(again.status).toBe(404);
+    expect(again.status).toBe(200);
+    expect(again.body).toMatchObject({ replayed: true, workItem: { id: first.body.workItem.id, department: null, movedToAnotherBoard: true } });
+    h.db.prepare("UPDATE work_items SET status = 'cancelled' WHERE id = ?").run(first.body.workItem.id);
+    expect((await h.as(pat, "POST", "/api/member/boards/ops/todos", { title: "once", idempotencyKey: "replay-1" })).status).toBe(404);
   });
 });

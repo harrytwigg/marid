@@ -15,7 +15,7 @@ import { readStopCause } from "../work-items/stop-cause.js";
 import { initDb } from "../shared/db.js";
 import { TODO_ID_PATTERN } from "../work-items/id.js";
 import { OPERATOR_ASSIGNEE } from "../work-items/operator-assignee.js";
-import { boardOfTodo } from "./member-access.js";
+import { boardOfTodo, creatorAccess, isClosedStatus } from "./member-access.js";
 import type { MemberRouteContext } from "./member-context.js";
 import { getGrant } from "./board-members.js";
 
@@ -39,6 +39,7 @@ export class Viewer {
   private readonly known = new Map<string, boolean>();
   private readonly held = new Map<string, boolean>();
   private readonly boards = new Map<string, boolean>();
+  private readonly creatorRoots = new Map<string, { canComment: boolean } | null>();
   constructor(readonly db: DatabaseType, readonly userId: string) {}
 
   /** Whether a department is one of the reader's boards. */
@@ -51,17 +52,56 @@ export class Viewer {
     return answer;
   }
 
-  /** Whether a Todo (by id) is on a board the reader holds; a Todo that is gone or on no board is not. */
+  /** What the reader's creator access to a root is (see `creatorAccess`), or null when it gives them none. Asked once per root. */
+  creatorAccessOf(rootId: string): { canComment: boolean } | null {
+    let answer = this.creatorRoots.get(rootId);
+    if (answer === undefined) {
+      const access = creatorAccess(this.db, this.userId, rootId);
+      answer = access ? { canComment: access.canComment } : null;
+      this.creatorRoots.set(rootId, answer);
+    }
+    return answer;
+  }
+
+  /** Whether the reader had creator access to a root as it stood before a reparent took `itemId` out from under it (`itemId` itself when it was the root). */
+  hadCreatorAccess(oldRootId: string, itemId: string): boolean {
+    return creatorAccess(this.db, this.userId, oldRootId, { asRoot: oldRootId === itemId }) !== undefined;
+  }
+
+  /**
+   * Whether the status write being announced is the one that ended the reader's creator access to this Todo: the Todo is a
+   * root, the write's own move took it from open to done or cancelled, and immediately before it they read it as its creator
+   * (active, it is theirs, and they still hold the board it was filed on, none of which a status write changes). Read from
+   * the move the write carries, never from the Todo's latest event, so a close of a Todo they had already lost (taken off the
+   * board, moved under another tree, a sub-task moved out) is silent.
+   */
+  closedAsCreatorRoot(item: Pick<WorkItem, "id" | "rootId">, move: { fromStatus: string; toStatus: string } | undefined): boolean {
+    if (!move || !isClosedStatus(move.toStatus) || isClosedStatus(move.fromStatus)) return false;
+    return creatorAccess(this.db, this.userId, item.id, { openBeforeWrite: true }) !== undefined;
+  }
+
+  /** Whether a root is open and was created by the reader on a board they still hold, so its tree stays readable to them after it leaves that board. */
+  readsAsCreator(rootId: string): boolean {
+    return this.creatorAccessOf(rootId) !== null;
+  }
+
+  /** Whether a Todo (by id) is one the reader may read: on a board they hold, or in an open tree whose root they created; a Todo that is gone is not. */
   holdsTodo(todoId: string): boolean {
     let answer = this.held.get(todoId);
     if (answer === undefined) {
       const row = initDb().prepare("SELECT id, root_id, department FROM work_items WHERE id = ?").get(todoId) as
         { id: string; root_id: string; department: string | null } | undefined;
       const board = row ? boardOfTodo({ id: row.id, rootId: row.root_id, department: row.department }) : null;
-      answer = !!board && this.holdsBoard(board);
+      answer = !!row && ((!!board && this.holdsBoard(board)) || this.readsAsCreator(row.root_id));
       this.held.set(todoId, answer);
     }
     return answer;
+  }
+
+  /** Whether a Todo has left the reader's boards: it is on another board, or on the company board, and they read it as its creator. */
+  movedOff(item: Pick<WorkItem, "id" | "rootId" | "department">): boolean {
+    const board = boardOfTodo(item);
+    return board === null || !this.holdsBoard(board);
   }
 
   knows(otherId: string): boolean {
@@ -124,7 +164,19 @@ function memberLabels(labels: Label[], viewer: Viewer): Label[] {
 export function memberWorkItem(item: WorkItem, viewer: Viewer): WorkItem {
   return {
     ...item, sourceRef: null, budgetUsd: null, createdBy: memberWho(item.createdBy, viewer), department: memberDepartment(item.department, viewer),
+    ...movedMarker(item, viewer),
   };
+}
+
+/**
+ * `movedToAnotherBoard: true` on a Todo the reader reads only as its creator, after it left the board they filed it on, with
+ * `memberCanComment` saying whether their role there lets them comment. The destination is never named: the Todo's own
+ * department reads `null`, and nothing here says where it went.
+ */
+function movedMarker(item: Pick<WorkItem, "id" | "rootId" | "department">, viewer: Viewer): { movedToAnotherBoard?: true; memberCanComment?: boolean } {
+  if (!viewer.movedOff(item)) return {};
+  const access = viewer.creatorAccessOf(item.rootId);
+  return access ? { movedToAnotherBoard: true, memberCanComment: access.canComment } : {};
 }
 
 type CompactExtras = Parameters<typeof compactWorkItem>[1];
@@ -141,6 +193,7 @@ function memberCompact(item: WorkItem, extras: CompactExtras, viewer: Viewer): R
     sourceRef: null,
     kept: false,
     attentionLane: null,
+    ...movedMarker(item, viewer),
   };
 }
 

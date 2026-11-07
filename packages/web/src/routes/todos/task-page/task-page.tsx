@@ -9,7 +9,7 @@ import { withMentionRootByName } from "@/lib/mentions"
 import { copyText } from "@/platform"
 import { useDepartments } from "@/hooks/use-departments"
 import { restrictRows, TodoCapabilitiesProvider, useTodoCapabilitiesFor } from "@/hooks/use-todo-capabilities"
-import { useMember } from "@/hooks/use-principal"
+import { useMember, useMemberGrants } from "@/hooks/use-principal"
 import { NOT_SHARED } from "@/routes/member/board-not-shared"
 import { useTheme } from "@/routes/providers"
 import { useEmployeesByName, useOrg, useSetWorkItemStatus, useTodoById } from "../use-todos"
@@ -27,6 +27,12 @@ import { SessionDirectoryProvider } from "./session-ref"
 import { useTodoSessions, hasOnlyWaitingWorkers } from "./use-todo-sessions"
 import { ChipCluster } from "./chip-cluster"
 import { MemberCloseControl } from "./member-close-control"
+import { MovedLabel } from "../moved-label"
+import { MemberCreatorProvider } from "../pickers/picker-contents"
+import { VisibleToCreatorHint, VisibleToMembersHint } from "../visibility-hint"
+import { isMemberIdentity } from "../attribution"
+import { useVisibleToMembers } from "@/hooks/use-visible-to-members"
+import { useMemberCreator } from "@/hooks/use-member-creator-keeps"
 import { useTaskPickers } from "./use-task-pickers"
 import { BodyEditor } from "./body-editor"
 import { SubTasksSection } from "./subtasks"
@@ -91,7 +97,15 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
   const rootNode = treeQuery.data?.tree.root
   const ancestors = useMemo(() => (id ? ancestorsOf(rootNode, id) : []), [rootNode, id])
   const member = useMember()
-  const caps = useTodoCapabilitiesFor(item?.department, rootNode)
+  const moved = item?.movedToAnotherBoard === true
+  const caps = useTodoCapabilitiesFor(item?.department, rootNode, moved ? { canComment: item?.memberCanComment === true } : null)
+  const memberGrants = useMemberGrants()
+  const visibleToMembers = useVisibleToMembers(rootNode ? rootNode.department : item?.department, moved)
+  // The operator changing who holds a Todo a board member made is told what that does to the member's access.
+  const creatorIdentity = !member && rootNode && isMemberIdentity(rootNode.createdBy) ? rootNode.createdBy ?? null : null
+  const memberCreator = useMemberCreator(creatorIdentity, rootNode?.id)
+  // While that root is open its creator reads everything written on it, wherever it now sits.
+  const creatorReader = memberCreator && memberCreator.keeps !== "none" && rootNode && rootNode.status !== "done" && rootNode.status !== "cancelled" ? memberCreator.identity : null
 
   const org = useOrg()
   const byName = useEmployeesByName(org.data?.employees)
@@ -130,6 +144,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
     employees: org.data?.employees ?? [],
     departments: departments.data ?? [],
     ...closeGate,
+    memberCreator,
     mobile,
     announce,
     root: scrollRef,
@@ -170,7 +185,9 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
   )
   // ── Board context (the crumb's back affordance) ───────────────────────────
   const keep = useKeepWorkItem(announce)
-  const boardKeyRaw = routeState.fromBoard ?? item?.department ?? "everything"
+  // A member's Todo that left their boards has no board of theirs to name: its crumb leads back to one they hold, not to "Everything".
+  const memberBoard = member ? memberGrants?.[0]?.department : undefined
+  const boardKeyRaw = routeState.fromBoard ?? item?.department ?? memberBoard ?? "everything"
   const board = parseBoardParam(boardKeyRaw)
   const boardLabel = board.kind === "department" ? departmentTitle(board.slug)
     : board.kind === "attention" ? "Attention"
@@ -270,6 +287,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
     // The directory rides a context because the surfaces that resolve a session
     // id — rail, audit whisper, comment author — sit at unrelated depths.
     <TodoCapabilitiesProvider value={caps}>
+      <MemberCreatorProvider value={memberCreator}>
     <SessionDirectoryProvider directory={sessionTree?.directory}>
     <TaskFrame embedded={embedded} hideMobileTabBar={mobile}>
       <AttachmentDropSurface className="flex h-full min-h-0 flex-col" onUpload={(files) => caps.attach && attachments.upload.mutate(files)}>
@@ -340,6 +358,14 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
                 mobile={mobile}
                 onCommit={(title) => pickers.patchField({ title })}
               />
+
+              {moved && <MovedLabel testId="task-moved-label" className="mt-2" />}
+              {(visibleToMembers || creatorReader) && (
+                <div className="mt-2 flex flex-col gap-0.5">
+                  {visibleToMembers && <VisibleToMembersHint testId="task-visibility-hint" />}
+                  {creatorReader && <VisibleToCreatorHint identity={creatorReader} testId="task-creator-hint" />}
+                </div>
+              )}
 
               {detail && (
                 <ChipCluster
@@ -417,6 +443,8 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
                   mobile={mobile}
                   isDark={isDark}
                   announce={announce}
+                  visibleToMembers={visibleToMembers}
+                  creatorReader={creatorReader}
                 />
               )}
             </main>
@@ -452,6 +480,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
       )}
     </TaskFrame>
     </SessionDirectoryProvider>
+      </MemberCreatorProvider>
     </TodoCapabilitiesProvider>
   )
 }

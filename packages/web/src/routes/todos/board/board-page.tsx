@@ -47,6 +47,7 @@ import { BoardViewSwitch, ColumnDots } from "./board-view-switch"
 import { loadBoardView, PHONE_CARD_MOVE, saveBoardView, useColumnPosition, useIsBoardMobile, type BoardView } from "./phone-board"
 import { useBoardFilters } from "./use-board-filters"
 import { useBoardMemberView } from "./use-board-member-view"
+import { MovedOffBoard } from "./moved-off-board"
 import { useBoardSprints } from "../sprints/use-board-sprints"
 import { GroupSkeleton } from "./group-skeleton"
 
@@ -591,6 +592,8 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
             {sprintTools.strip}
           </div>
         )}
+
+        {gate.member && board.kind === "department" && <MovedOffBoard board={board.slug} byName={byName} onOpen={onOpen} />}
 
         {!isAttention && mobile && (
           <div className="flex-none px-[var(--space-3)] md:px-[var(--space-10)]">

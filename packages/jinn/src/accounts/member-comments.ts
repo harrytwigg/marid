@@ -8,7 +8,7 @@ import { WorkItemCommentError, addComment, editComment, getComment, tombstoneCom
 import { initDb } from "../shared/db.js";
 import { holdLiveSignalsUntilCommit } from "../work-items/live-events.js";
 import { getWorkItem } from "../work-items/store.js";
-import { NotVisibleError, assertCollaborator, boardOfTodo, grantedTodo, requireRole, type GrantedTodo } from "./member-access.js";
+import { NotVisibleError, assertCommenter, grantedTodo, requireCommenter, type GrantedTodo } from "./member-access.js";
 import type { MemberRouteContext } from "./member-context.js";
 import { readObject } from "./member-input.js";
 import { memberAttachment, memberComment, viewerOf } from "./member-serialise.js";
@@ -16,10 +16,10 @@ import { actorOf, announce, answerWriteError } from "./member-writes.js";
 
 const COMMENT_ID = /^wic_[0-9a-f]{12}$/;
 
-/** The Todo in the path when the member may write comments and files on it (a collaborator or owner of its board), else undefined once answered. */
+/** The Todo in the path when the member may write comments and files on it (a collaborator or owner of its board, or its creator when their role allowed comments), else undefined once answered. */
 function writableTodo(ctx: MemberRouteContext): GrantedTodo | undefined {
   const granted = grantedTodo(ctx, ctx.params.id);
-  return granted && requireRole(ctx, granted.grant, "collaborator") ? granted : undefined;
+  return granted && requireCommenter(ctx, granted) ? granted : undefined;
 }
 
 /**
@@ -31,7 +31,7 @@ function inGrantedTransaction<T>(ctx: MemberRouteContext, todoId: string, write:
   return holdLiveSignalsUntilCommit(() => db.transaction((): T => {
     const current = getWorkItem(todoId);
     if (!current) throw new NotVisibleError();
-    assertCollaborator(db, ctx.principal.userId, boardOfTodo(current));
+    assertCommenter(db, ctx.principal.userId, current);
     return write();
   }).immediate());
 }

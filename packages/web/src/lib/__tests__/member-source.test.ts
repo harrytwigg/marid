@@ -31,6 +31,11 @@ describe("member request source", () => {
     expect(calls()).toEqual([{ path: "/api/member/boards/platform/todos?rootsOnly=true&status=backlog&limit=20", method: "GET", body: undefined }])
   })
 
+  it("reads the Todos a member filed on a board that have left their boards through that board's moved route", async () => {
+    await source("/api/work-items?movedOff=true&department=platform", { method: "GET" })
+    expect(calls()).toEqual([{ path: "/api/member/boards/platform/moved", method: "GET", body: undefined }])
+  })
+
   it("answers a list with no board, an id list or the attention feed locally, without a request", async () => {
     for (const path of ["/api/work-items?status=backlog", "/api/work-items?ids=A-1,A-2", "/api/work-items?needsAttentionFor=me&department=platform"]) {
       const res = await source(path, { method: "GET" })
