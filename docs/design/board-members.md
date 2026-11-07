@@ -86,7 +86,7 @@ user_sessions(
   created_at, last_seen_at, expires_at                  -- 90 days absolute; 30 days idle ends it
   user_agent, ip, revoked_at
 )
-login_attempts(email_or_ip TEXT, at TEXT)              -- rate limiting, pruned after 1 hour
+login_attempts(email_or_ip TEXT, at TEXT)              -- rate limiting, pruned after 1 hour (`ok:` success rows: 30 days)
 ```
 
 Raw tokens are never stored; only hashes, as the pairing code does. A board-less user is
@@ -100,11 +100,15 @@ allowed (an instance invite, or every grant removed): they sign in and see no bo
   no composition rules.
 - A **global hashing cap**: at most 2 hashes run at once and at most 16 wait; beyond that the
   endpoint answers `429` with `Retry-After`. Each hash is ~32 MiB and ~120 ms, and per-IP limits
-  alone do not bound attempts spread over many addresses.
+  alone do not bound attempts spread over many addresses. An **instance-wide failure budget** (100
+  failed sign-ins per 15 minutes) bounds them too: over it, sign-in from an address that has never
+  signed in is refused. See [Running behind a proxy](../behind-a-proxy.md).
 - Login for an unknown or disabled email still runs one hash against a fixed dummy, so timing
   does not reveal which emails exist.
 - Invite and reset tokens are looked up (by hash) and rejected before any password is hashed;
-  the inspect, accept and complete endpoints share the login rate limits per IP.
+  the inspect, accept and complete endpoints share the login rate limits per IP. Behind a tunnel
+  or proxy the per-IP buckets need `gateway.trustedProxies` to see real clients; without it a loopback
+  peer has no IP bucket (see [Running behind a proxy](../behind-a-proxy.md)).
 - Setting a password by reset, or changing one's own, revokes that user's other sessions
   (member sessions and owner device sessions alike).
 - The per-email limit means anyone can temporarily lock the instance owner out of password
