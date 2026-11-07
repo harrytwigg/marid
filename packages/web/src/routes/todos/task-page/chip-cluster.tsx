@@ -4,6 +4,7 @@ import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { StatusCircle } from "../state-glyph"
 import { displayNameOf } from "../util"
 import { useViewer } from "../attribution"
+import { agentOf, PersonCircle, PersonName } from "../assignee-circles"
 import { ReviewForChip } from "../review-for-chip"
 import { type RailPickers } from "./props-rail"
 import { SESSION_WAITING_COLOR, SESSION_WAITING_LABEL } from "@/lib/session-waiting"
@@ -69,6 +70,45 @@ function ElapsedChip({ working, waiting }: { working: string; waiting: boolean }
   )
 }
 
+/** The two chips that say who holds a Todo: the person responsible, then the agent, each with its own clear control. */
+function OwnerChips({ item, byName, rowFor, mobile }: {
+  item: WorkItemDetailWire["workItem"]
+  byName: Map<string, Employee>
+  rowFor: NonNullable<RailPickers["rowFor"]>
+  mobile: boolean
+}) {
+  const viewer = useViewer()
+  const onClearPerson = rowFor("person")?.onClear
+  const onClearAssignee = rowFor("assignee")?.onClear
+  const agent = agentOf(item.assignee)
+  const clearClass = `absolute right-0 top-0 ${mobile ? "size-[34px]" : "size-7"}`
+  return (
+    <>
+      <div className="relative flex-none">
+        <Chip mobile={mobile} label="Person" testId="chip-person" clearSlot={!!onClearPerson} onOpen={rowFor("person")?.onOpen}>
+          <PersonCircle person={item.humanAssignee} size={20} />
+          {item.humanAssignee ? <PersonName person={item.humanAssignee} viewer={viewer} /> : <span className="text-[var(--text-tertiary)]">No person</span>}
+        </Chip>
+        {onClearPerson && <RemoveButton label="Remove person" testId="chip-person-clear" onClick={onClearPerson} className={clearClass} />}
+      </div>
+      <div className="relative flex-none">
+        <Chip mobile={mobile} label="Agent" testId="chip-assignee" clearSlot={!!onClearAssignee} onOpen={rowFor("assignee")?.onOpen}>
+          {agent ? (
+            <>
+              <EmployeeAvatar name={agent} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
+              {displayNameOf(agent, byName, viewer)}
+            </>
+          ) : (
+            <span className="text-[var(--text-tertiary)]">No agent</span>
+          )}
+        </Chip>
+        {/* Sibling of the pill, laid over the room `clearSlot` reserved: the chip itself is a button, so the × cannot live inside it. */}
+        {onClearAssignee && <RemoveButton label="Remove agent" testId="chip-assignee-clear" onClick={onClearAssignee} className={clearClass} />}
+      </div>
+    </>
+  )
+}
+
 export function ChipCluster({
   detail,
   byName,
@@ -87,10 +127,8 @@ export function ChipCluster({
    *  working, so the chip says so in amber rather than pulsing blue. */
   waiting?: boolean
 }) {
-  const viewer = useViewer()
   const item = detail.workItem
   const labels = detail.labels ?? []
-  const onClearAssignee = rowFor("assignee")?.onClear
   const opener = (row: Parameters<typeof rowFor>[0]) => (rowFor(row) ? () => rowFor(row)?.onOpen() : undefined)
   const reviewFor = reviewAddresseeEmployee({ status: item.status, reviewAddressee: detail.reviewAddressee })
   return (
@@ -104,28 +142,7 @@ export function ChipCluster({
         {reviewFor && <ReviewForChip employee={reviewFor} byName={byName} />}
         {working && <ElapsedChip working={working} waiting={waiting} />}
       </Chip>
-      <div className="relative flex-none">
-        <Chip mobile={mobile} label="Assignee" testId="chip-assignee" clearSlot={!!onClearAssignee} onOpen={opener("assignee")}>
-          {item.assignee ? (
-            <>
-              <EmployeeAvatar name={item.assignee} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
-              {displayNameOf(item.assignee, byName, viewer)}
-            </>
-          ) : (
-            <span className="text-[var(--text-tertiary)]">Unassigned</span>
-          )}
-        </Chip>
-        {onClearAssignee && (
-          // Sibling of the pill, laid over the room `clearSlot` reserved — the
-          // chip itself is a button, so the × cannot live inside it.
-          <RemoveButton
-            label="Remove assignee"
-            testId="chip-assignee-clear"
-            onClick={onClearAssignee}
-            className={`absolute right-0 top-0 ${mobile ? "size-[34px]" : "size-7"}`}
-          />
-        )}
-      </div>
+      <OwnerChips item={item} byName={byName} rowFor={rowFor} mobile={mobile} />
       <Chip mobile={mobile} label="Priority" testId="chip-priority" onOpen={opener("priority")}>
         <RailPriorityBars priority={item.priority} />
         {priorityLabel(item.priority)}

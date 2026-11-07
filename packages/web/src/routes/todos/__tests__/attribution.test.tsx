@@ -182,11 +182,20 @@ describe("the board card", () => {
   const card = (item: WorkItemCompactWire) =>
     wrap(<BoardCard item={item} byName={new Map()} expanded={false} onToggleTree={() => {}} onOpen={() => {}} onOpenChild={() => {}} onAddSubTask={() => {}} />)
 
-  it("shows a member-made, unassigned card's creator in the assignee slot", async () => {
-    card(compact({ createdBy: "user:ada1", source: "connector" }))
+  it("shows the person responsible as a human avatar in the person circle, beside the agent's empty one", async () => {
+    card(compact({ createdBy: "user:ada1", source: "connector", humanAssignee: "user:ada1" }))
+    const circles = screen.getByTestId("board-card-TSK-1").querySelector('[data-testid="assignee-circles"]')!
+    await waitFor(() => expect(circles.querySelector('[data-testid="human-avatar"]')?.getAttribute("aria-label")).toBe("Ada Lovelace"))
+    expect(circles.children[0].querySelector('[data-testid="human-avatar"]')).toBeTruthy()
+    expect(circles.children[1].getAttribute("data-testid")).toBe("agent-circle-empty")
+  })
+
+  it("no longer puts a member-made card's creator in a free slot: only the person responsible is drawn", () => {
+    card(compact({ createdBy: "user:ada1", source: "connector", humanAssignee: null }))
     const row = screen.getByTestId("board-card-TSK-1").children[0]
-    await waitFor(() => expect(row.textContent).toContain("Ada Lovelace"))
-    expect(row.querySelector('[data-testid="human-avatar"]')).toBeTruthy()
+    expect(row.textContent).toBe("TSK-1")
+    expect(screen.queryByTestId("human-avatar")).toBeNull()
+    expect(screen.getByTestId("person-circle-empty")).toBeTruthy()
   })
 
   it("leaves operator- and employee-made cards exactly as they were, and asks the directory nothing", () => {
@@ -240,12 +249,13 @@ describe("in a board member's view", () => {
     expect(screen.getByTestId("whisper-wie_s").textContent).not.toContain("You")
   })
 
-  it("names the operator as the Todo's creator and assignee Operator", () => {
-    wrap(<PropsRail detail={detailOf({ item: { assignee: "@operator" } })} byName={new Map()} departments={[]} />)
+  it("names the operator as the Todo's creator and as the person responsible: Operator", () => {
+    wrap(<PropsRail detail={detailOf({ item: { assignee: "@operator", humanAssignee: "@operator" } })} byName={new Map()} departments={[]} />)
     expect(screen.getByTestId("rail-created-by").textContent).toContain("Operator")
     expect(screen.getByTestId("rail-created-by").textContent).not.toContain("You")
-    expect(screen.getByTestId("rail-assignee").textContent).toContain("Operator")
-    expect(screen.getByTestId("rail-assignee").textContent).not.toContain("You")
+    expect(screen.getByTestId("rail-person").textContent).toContain("Operator")
+    expect(screen.getByTestId("rail-person").textContent).not.toContain("You")
+    expect(screen.getByTestId("rail-assignee").textContent).toContain("No agent")
   })
 })
 

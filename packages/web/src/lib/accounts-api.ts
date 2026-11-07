@@ -286,6 +286,11 @@ const USER_PREFIX = "user:"
  *  "Former member". It names nobody, so nothing looks it up. */
 export const GENERIC_MEMBER = "member"
 
+/** The identity a user is stamped with on a Todo, comment or event. */
+export function memberIdentity(userId: string): string {
+  return `user:${userId}`
+}
+
 export function memberIdOf(identity: string | null | undefined): string | null {
   return identity?.startsWith(USER_PREFIX) ? identity.slice(USER_PREFIX.length) : null
 }

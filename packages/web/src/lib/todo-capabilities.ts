@@ -19,6 +19,8 @@ export interface TodoCapabilities {
   edit: boolean
   /** Mark done and reopen to backlog. Member-only trees only. */
   close: boolean
+  /** Name or clear the person responsible, on any Todo on the board, an agent's included: a label of responsibility, not steering. */
+  person: boolean
   /** Everything else on the page: pickers, assignment, dispatch, sessions, keep, runs. */
   operatorControls: boolean
 }
@@ -30,6 +32,7 @@ export const OPERATOR_CAPABILITIES: TodoCapabilities = {
   create: true,
   edit: true,
   close: true,
+  person: true,
   operatorControls: true,
 }
 
@@ -57,6 +60,7 @@ export function memberCapabilities(role: BoardRole | null | undefined, memberOnl
     create: contributes && memberOnly,
     edit: contributes && memberOnly,
     close: contributes && memberOnly,
+    person: contributes,
     operatorControls: false,
   }
 }
@@ -64,7 +68,7 @@ export function memberCapabilities(role: BoardRole | null | undefined, memberOnl
 /** A tree the member created that has left their boards: they read it, and comment where a role of theirs allows comments, and
  *  that is all. Never an edit, a status change or a sub-task. */
 export function movedCapabilities(canComment: boolean): TodoCapabilities {
-  return { memberMode: true, comment: canComment, attach: canComment, create: false, edit: false, close: false, operatorControls: false }
+  return { memberMode: true, comment: canComment, attach: canComment, create: false, edit: false, close: false, person: false, operatorControls: false }
 }
 
 export interface CommentPowers {

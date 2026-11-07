@@ -21,6 +21,8 @@ export interface WorkItemEditPatch {
   title?: string
   body?: string
   assignee?: string | null
+  /** The person responsible: `@operator`, `user:<id>`, or null to clear. Operator only; never touches the agent. */
+  humanAssignee?: string | null
   department?: string | null
   priority?: number
   rank?: number

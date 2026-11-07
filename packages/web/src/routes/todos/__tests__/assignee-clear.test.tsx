@@ -5,10 +5,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkItemDetailWire, WorkItemFullWire, WorkItemTreeNodeWire } from "@/lib/api"
 import TaskPage from "../task-page/task-page"
 
-/* Dropping an assignee is a one-tap action, not a scroll to the bottom of the
- * roster: Unassign is pinned above the people, and both surfaces that show an
- * assignee (the properties rail, the chip cluster) carry their own × that
- * commits through the picker's exact lane. */
+/* Dropping the agent, or the person, is a one-tap action, not a scroll to the bottom of the
+ * roster: the clear row is pinned above the choices, and both surfaces that show them (the
+ * properties rail, the chip cluster) carry their own × that commits through the picker's exact
+ * lane. The agent picker lists employees only; the operator is a person, chosen in the person
+ * picker, which never goes through the assign lane. */
 
 vi.mock("@/components/page-layout", () => ({ PageLayout: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
 vi.mock("@/routes/settings-provider", () => ({ useSettings: () => ({ settings: { employeeOverrides: {} } }) }))
@@ -89,7 +90,7 @@ beforeEach(() => {
   )
 })
 
-describe("the assignee picker's Unassign row", () => {
+describe("the agent picker's clear row", () => {
   it("sits above every person, out of the roster's scroller, and is absent when nobody is assigned", async () => {
     getWorkItem.mockResolvedValue(detailOf(full("TSK-12", { assignee: "mason" })))
     const assigned = renderTask()
@@ -97,9 +98,9 @@ describe("the assignee picker's Unassign row", () => {
 
     const picker = await screen.findByTestId("picker-assignee")
     const rows = [...picker.querySelectorAll<HTMLElement>('[data-testid^="assignee-option-"]')]
+    // Employees only: no operator row, and the system employee is never offered.
     expect(rows.map((row) => row.dataset.testid)).toEqual([
       "assignee-option-unassign",
-      "assignee-option-@operator",
       "assignee-option-mason",
       "assignee-option-scout",
     ])
@@ -116,7 +117,7 @@ describe("the assignee picker's Unassign row", () => {
   })
 })
 
-describe("clearing the assignee without opening a picker", () => {
+describe("clearing the agent without opening a picker", () => {
   it("the rail's clear control commits the same null the picker's Unassign does", async () => {
     const item = full("TSK-12", { assignee: "mason" })
     getWorkItem.mockResolvedValue(detailOf(item))
@@ -124,7 +125,7 @@ describe("clearing the assignee without opening a picker", () => {
     renderTask()
 
     const clear = await screen.findByTestId("rail-assignee-clear")
-    expect(clear.getAttribute("aria-label")).toBe("Remove assignee")
+    expect(clear.getAttribute("aria-label")).toBe("Remove agent")
     clear.focus()
     expect(document.activeElement).toBe(clear)
 
@@ -148,7 +149,7 @@ describe("clearing the assignee without opening a picker", () => {
     renderTask()
 
     const clear = await screen.findByTestId("chip-assignee-clear")
-    expect(clear.getAttribute("aria-label")).toBe("Remove assignee")
+    expect(clear.getAttribute("aria-label")).toBe("Remove agent")
     fireEvent.click(clear)
     await waitFor(() =>
       expect(updateWorkItem).toHaveBeenCalledWith("TSK-12", expect.objectContaining({
@@ -170,20 +171,49 @@ describe("clearing the assignee without opening a picker", () => {
   })
 })
 
-describe("the operator as an assignee", () => {
-  it("offers 'You (operator)' and posts the reserved value", async () => {
+describe("the person row", () => {
+  it("offers the operator and the board's people, and commits the person through the pen, never the assign lane", async () => {
     getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
+    updateWorkItem.mockResolvedValue({ workItem: { ...full("TSK-12"), humanAssignee: "@operator", version: 4 }, replayed: false })
     renderTask()
-    fireEvent.click(await screen.findByTestId("rail-assignee"))
-    const option = await screen.findByTestId("assignee-option-@operator")
+    expect((await screen.findByTestId("rail-person")).textContent).toContain("No person")
+    fireEvent.click(screen.getByTestId("rail-person"))
+    const option = await screen.findByTestId("person-option-operator")
     expect(option.textContent).toContain("You (operator)")
     fireEvent.click(option)
-    await waitFor(() => expect(assignWorkItem).toHaveBeenCalledWith("TSK-12", "@operator"))
+    await waitFor(() =>
+      expect(updateWorkItem).toHaveBeenCalledWith("TSK-12", expect.objectContaining({ patch: { humanAssignee: "@operator" }, expectedVersion: 3 })),
+    )
+    expect(assignWorkItem).not.toHaveBeenCalled()
   })
 
-  it("shows the reserved value as You", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("TSK-12", { assignee: "@operator" })))
+  it("shows a Todo that needs the operator with the operator as the person and an empty agent row", async () => {
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12", { assignee: "@operator", humanAssignee: "@operator" })))
     renderTask()
-    expect((await screen.findByTestId("rail-assignee")).textContent).toContain("You")
+    expect((await screen.findByTestId("rail-person")).textContent).toContain("You (operator)")
+    expect(screen.getByTestId("rail-assignee").textContent).toContain("No agent")
+    expect(screen.queryByTestId("rail-assignee-clear")).toBeNull()
+  })
+
+  it("the rail's and the chip's clear controls commit a null person, and leave the agent alone", async () => {
+    const item = full("TSK-12", { assignee: "mason", humanAssignee: "@operator" })
+    getWorkItem.mockResolvedValue(detailOf(item))
+    updateWorkItem.mockResolvedValue({ workItem: { ...item, humanAssignee: null, version: 4 }, replayed: false })
+    renderTask()
+    for (const testId of ["rail-person-clear", "chip-person-clear"]) {
+      const clear = await screen.findByTestId(testId)
+      expect(clear.getAttribute("aria-label")).toBe("Remove person")
+      fireEvent.click(clear)
+    }
+    await waitFor(() => expect(updateWorkItem).toHaveBeenCalledTimes(2))
+    for (const call of updateWorkItem.mock.calls) expect(call[1]).toMatchObject({ patch: { humanAssignee: null }, expectedVersion: 3 })
+  })
+
+  it("offers nothing to clear when no person is set", async () => {
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12", { assignee: "mason" })))
+    renderTask()
+    await screen.findByTestId("rail-person")
+    expect(screen.queryByTestId("rail-person-clear")).toBeNull()
+    expect(screen.queryByTestId("chip-person-clear")).toBeNull()
   })
 })

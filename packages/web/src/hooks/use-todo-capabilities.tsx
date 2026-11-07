@@ -34,10 +34,10 @@ export function TodoCapabilitiesProvider({ value, children }: { value: TodoCapab
   return <TodoCapabilitiesContext.Provider value={value}>{children}</TodoCapabilitiesContext.Provider>
 }
 
-type RowKey = "status" | "priority" | "assignee" | "labels" | "department" | "start" | "due"
+type RowKey = "status" | "priority" | "assignee" | "person" | "labels" | "department" | "start" | "due"
 
-/** The property rows a person may open: all of them for the operator; for a member only priority, and only where they may edit. */
+/** The property rows a person may open: all of them for the operator; for a member priority where they may edit, and the person row where they collaborate on the board. */
 export function restrictRows<R>(rowFor: (row: RowKey) => R | undefined, caps: TodoCapabilities): (row: RowKey) => R | undefined {
   if (caps.operatorControls) return rowFor
-  return (row) => (row === "priority" && caps.edit ? rowFor(row) : undefined)
+  return (row) => ((row === "priority" && caps.edit) || (row === "person" && caps.person) ? rowFor(row) : undefined)
 }

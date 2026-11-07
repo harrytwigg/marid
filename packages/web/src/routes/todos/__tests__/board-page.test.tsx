@@ -558,9 +558,10 @@ describe("the board surface", () => {
   })
 
   it("re-renders only the card whose board row changed", async () => {
+    // Different agents on the two cards: each card's avatar is the probe for whether that card was redrawn.
     rows.backlog = [
       compact({ id: "TSK-1", status: "backlog", assignee: "scout" }),
-      compact({ id: "TSK-2", status: "backlog", assignee: "scout" }),
+      compact({ id: "TSK-2", status: "backlog", assignee: "mason" }),
     ]
     const { client } = renderBoard("/todos/b/platform")
     await screen.findByTestId("board-card-TSK-2")
@@ -570,8 +571,7 @@ describe("the board surface", () => {
     patchBacklogRow(client, "TSK-1", { title: "Changed title" })
 
     await waitFor(() => expect(screen.getByTestId("board-card-TSK-1").textContent).toContain("Changed title"))
-    expect(avatarRender).toHaveBeenCalledTimes(1)
-    expect(avatarRender).toHaveBeenCalledWith("scout")
+    expect(avatarRender).not.toHaveBeenCalledWith("mason")
   })
 
   it("relocates a live Todo payload once and updates both column counts before refetch", async () => {

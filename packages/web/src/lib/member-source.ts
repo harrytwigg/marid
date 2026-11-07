@@ -52,6 +52,7 @@ const COMMENT = re(`/${ID}/comments/${ID}`)
 const ATTACHMENTS = re(`/${ID}/attachments`)
 const ATTACHMENT = re(`/${ID}/attachments/${ID}`)
 const LABELS = re(`/${ID}/labels`)
+const PERSON = re(`/${ID}/person`)
 const SESSIONS = re(`/${ID}/sessions`)
 
 function query(path: string): URLSearchParams {
@@ -198,6 +199,7 @@ const RULES: Rule[] = [
     verbs: ["GET", "POST"],
     handle: (m, path, init) => forward(mine(m[1], `/attachments${method(init) === "GET" ? withQuery(path) : ""}`), init),
   },
+  { pattern: PERSON, verbs: ["PUT"], handle: (m, _p, init) => forward(mine(m[1], "/person"), init) },
   {
     pattern: LABELS,
     verbs: ["PUT"],

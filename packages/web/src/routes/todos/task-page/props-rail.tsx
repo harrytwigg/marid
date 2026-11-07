@@ -14,6 +14,7 @@ import { AutoStartRow } from "./auto-start-row"
 import { SprintRailRow } from "../sprints/sprint-rail-row"
 import { displayNameOf, formatRelativeTime } from "../util"
 import { isMemberIdentity, LastTouchedBy, MemberChip, useViewer } from "../attribution"
+import { agentOf, PersonCircle, PersonName } from "../assignee-circles"
 import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
 
 /* Todos v2 slice 6 — the chrome-free properties rail (design-doc §7.2/§7.3,
@@ -27,11 +28,11 @@ import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
 export interface RailPickers {
   /** Task 6 mounts the picker surfaces here, keyed by row. Absent = read row. */
   status?: React.ReactNode
-  rowFor?: (row: "status" | "priority" | "assignee" | "labels" | "department" | "start" | "due") => {
+  rowFor?: (row: "status" | "priority" | "assignee" | "person" | "labels" | "department" | "start" | "due") => {
     onOpen: () => void
     open: boolean
     picker: React.ReactNode
-    /** Assignee only: drops the value without opening the picker at all. */
+    /** Agent and person rows: drops the value without opening the picker at all. */
     onClear?: () => void
   } | undefined
 }
@@ -80,6 +81,8 @@ export function PropsRail({
   const statusPick = pick("status")
   const prioPick = pick("priority")
   const assigneePick = pick("assignee")
+  const personPick = pick("person")
+  const agent = agentOf(item.assignee)
   const labelsPick = pick("labels")
   const deptPick = pick("department")
   const startPick = pick("start")
@@ -103,26 +106,40 @@ export function PropsRail({
         {prioPick?.picker}
       </div>
       <div className="relative">
-        <RailRow testId="rail-assignee" label="Assignee" onOpen={assigneePick?.onOpen} open={assigneePick?.open}>
-          {item.assignee ? (
+        <RailRow testId="rail-person" label="Person" onOpen={personPick?.onOpen} open={personPick?.open}>
+          <PersonCircle person={item.humanAssignee} size={20} />
+          {item.humanAssignee ? <PersonName person={item.humanAssignee} viewer={viewer} /> : <span className="text-[var(--text-tertiary)]">No person</span>}
+        </RailRow>
+        {item.humanAssignee && personPick?.onClear && (
+          <RemoveButton
+            label="Remove person"
+            testId="rail-person-clear"
+            onClick={personPick.onClear}
+            className="absolute right-5 top-1/2 size-6 -translate-y-1/2 max-[700px]:size-[34px]"
+          />
+        )}
+        {personPick?.picker}
+      </div>
+      <div className="relative">
+        <RailRow testId="rail-assignee" label="Agent" onOpen={assigneePick?.onOpen} open={assigneePick?.open}>
+          {agent ? (
             <>
-              <EmployeeAvatar name={item.assignee} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
-              {displayNameOf(item.assignee, byName, viewer)}
+              <EmployeeAvatar name={agent} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
+              {displayNameOf(agent, byName, viewer)}
             </>
           ) : (
             <>
-              <span className="grid size-5 flex-none place-items-center rounded-full bg-[var(--fill-secondary)] text-[var(--text-quaternary)]">
+              <span className="grid size-5 flex-none place-items-center rounded-full border border-dashed border-[var(--text-quaternary)] text-[var(--text-quaternary)]">
                 <UserRound size={11} aria-hidden />
               </span>
-              <span className="text-[var(--text-tertiary)]">Unassigned</span>
+              <span className="text-[var(--text-tertiary)]">No agent</span>
             </>
           )}
         </RailRow>
-        {item.assignee && assigneePick?.onClear && (
-          // Sibling, not a child: the row is a button. `right-5` parks the ×
-          // clear of the row's own trailing disclosure chevron.
+        {agent && assigneePick?.onClear && (
+          // Sibling, not a child: the row is a button. `right-5` parks the × clear of the row's own trailing disclosure chevron.
           <RemoveButton
-            label="Remove assignee"
+            label="Remove agent"
             testId="rail-assignee-clear"
             onClick={assigneePick.onClear}
             className="absolute right-5 top-1/2 size-6 -translate-y-1/2 max-[700px]:size-[34px]"

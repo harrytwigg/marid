@@ -11,7 +11,7 @@ import {
 import { priorityLabel } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { RailPriorityBars } from "../task-page/rail-rows"
-import { OPERATOR_ROW } from "../util"
+import { agentOf } from "../assignee-circles"
 import { MemberName } from "../attribution"
 import type { CreatorKeeps, MemberCreator } from "@/hooks/use-member-creator-keeps"
 import { PickerNote, PickerRow } from "./picker-shell"
@@ -93,12 +93,14 @@ export function AssigneePickerContent({
   const inherited = useContext(MemberCreatorContext)
   const memberCreator = given ?? inherited ?? undefined
   const [query, setQuery] = useState("")
-  const current = detail.workItem.assignee
+  // The agent slot holds employees only: the operator is a person, chosen in the person picker. `@operator` here is the
+  // legacy "needs the operator" marker, which is not an agent, so it reads as an empty slot.
+  const current = agentOf(detail.workItem.assignee)
   const filtered = useMemo(() => {
-    const people = [OPERATOR_ROW, ...employees.filter((e) => !e.system)]
+    const agents = employees.filter((e) => !e.system)
     const q = query.trim().toLowerCase()
-    if (!q) return people
-    return people.filter((e) => e.name.toLowerCase().includes(q) || e.displayName.toLowerCase().includes(q))
+    if (!q) return agents
+    return agents.filter((e) => e.name.toLowerCase().includes(q) || e.displayName.toLowerCase().includes(q))
   }, [employees, query])
   return (
     <>
@@ -108,8 +110,8 @@ export function AssigneePickerContent({
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search people…"
-          aria-label="Search people"
+          placeholder="Search agents…"
+          aria-label="Search agents"
           data-testid="assignee-search"
           className="w-full rounded-full bg-[var(--fill-tertiary)] px-3 py-1.5 text-[13px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-quaternary)]"
         />
@@ -117,7 +119,7 @@ export function AssigneePickerContent({
       {current !== null && (
         <PickerRow
           sheet={sheet}
-          label={<span className="text-[var(--text-tertiary)]">Unassign</span>}
+          label={<span className="text-[var(--text-tertiary)]">No agent</span>}
           onSelect={() => {
             commit(null)
             onDone()
@@ -141,7 +143,7 @@ export function AssigneePickerContent({
             testId={`assignee-option-${employee.name}`}
           />
         ))}
-        {filtered.length === 0 && <PickerNote>Nobody matches "{query.trim()}".</PickerNote>}
+        {filtered.length === 0 && <PickerNote>No agent matches "{query.trim()}".</PickerNote>}
       </div>
     </>
   )
