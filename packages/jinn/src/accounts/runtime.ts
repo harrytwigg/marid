@@ -1,6 +1,9 @@
 import type { Database as DatabaseType } from "better-sqlite3";
 import type { IncomingMessage } from "node:http";
 import { verifyGatewayAuth } from "../gateway/auth.js";
+import { resolveClientAddress, type ClientAddress } from "../gateway/client-address.js";
+import type { ProxyTrustConfig } from "../shared/proxy-trust-config.js";
+import { createBudgetWarner, LOGIN_MAX_INSTANCE, type BudgetWarner } from "./login-attempts.js";
 import { requestUserToken } from "./cookie.js";
 import { createMemberSocketRegistry, type MemberSocketRegistry } from "./member-sockets.js";
 import { createHashLimiter, globalHashLimiter, type HashLimiter } from "./passwords.js";
@@ -24,6 +27,10 @@ export interface AccountsRuntime {
   authRequired(): boolean;
   now(): number;
   limiter: HashLimiter;
+  /** Failed sign-ins the whole instance tolerates per window before unrecognised addresses are refused. */
+  loginBudget: { max: number; warner: BudgetWarner };
+  /** Who this request really came from, for sign-in limits and the address a session records; read live from the config. */
+  clientAddress(req: RequestLike): ClientAddress;
   memberSockets: MemberSocketRegistry;
   /** Whether a board (department) exists to be shared. */
   departmentExists(slug: string): boolean;
@@ -44,6 +51,10 @@ export interface AccountsRuntimeOptions {
   limiter?: HashLimiter;
   /** Whether a slug names a department the gateway knows. When given it is the whole rule; otherwise only a `departments` row counts. */
   knownDepartment?: (slug: string) => boolean;
+  /** Read live: `gateway.trustedProxies` / `gateway.clientIpHeader`. Absent trusts no proxy. */
+  proxyTrust?: () => ProxyTrustConfig | undefined;
+  /** Tests inject a smaller instance-wide failure budget. */
+  loginBudgetMax?: number;
 }
 
 export function createAccountsRuntime(opts: AccountsRuntimeOptions): AccountsRuntime {
@@ -75,6 +86,8 @@ export function createAccountsRuntime(opts: AccountsRuntimeOptions): AccountsRun
     authRequired: opts.authRequired,
     now,
     limiter: opts.limiter ?? globalHashLimiter,
+    loginBudget: { max: opts.loginBudgetMax ?? LOGIN_MAX_INSTANCE, warner: createBudgetWarner() },
+    clientAddress: (req) => resolveClientAddress(req, opts.proxyTrust?.()),
     memberSockets,
     departmentExists(slug) {
       if (opts.knownDepartment) return opts.knownDepartment(slug);

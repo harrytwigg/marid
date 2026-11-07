@@ -1,5 +1,4 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { isLoopback } from "../gateway/hook-endpoint.js";
 import { json } from "../gateway/route-helpers.js";
 import { readJsonBody } from "../gateway/http-helpers.js";
 import type { ParsedRoute } from "../gateway/route-helpers.js";
@@ -55,17 +54,19 @@ export async function readObjectBody(ctx: AccountRouteContext): Promise<Record<s
   return parsed.body as Record<string, unknown>;
 }
 
-export function clientIp(req: IncomingMessage): string | undefined {
-  return req.socket.remoteAddress;
+/** The address a session records: the real client when the peer is a trusted proxy that named one, else the socket's peer. */
+export function clientIp(rt: AccountsRuntime, req: IncomingMessage): string | undefined {
+  return rt.clientAddress(req).address;
 }
 
 /**
- * The peer a rate-limit bucket counts, or undefined for none. A loopback peer is a local tunnel or proxy
- * standing in for many clients, so it gets no shared IP bucket: it is limited per address and by the hash cap.
+ * The address a rate-limit bucket counts, or undefined for none. An address that stands for many clients (a
+ * loopback peer, or a trusted proxy that named nobody) gets no shared IP bucket, so one person cannot lock
+ * everybody out: it is limited per address, by the hash cap and by the instance budget instead.
  */
-export function limitIp(req: IncomingMessage): string | undefined {
-  const ip = clientIp(req);
-  return ip === undefined || isLoopback(ip) ? undefined : ip;
+export function limitIp(rt: AccountsRuntime, req: IncomingMessage): string | undefined {
+  const { address, shared } = rt.clientAddress(req);
+  return shared ? undefined : address;
 }
 
 export function tooManyRequests(res: ServerResponse, retryAfterSeconds: number, message = "Too many attempts, try again later"): void {

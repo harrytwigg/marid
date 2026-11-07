@@ -59,7 +59,7 @@ function signedInOwner(ctx: AccountRouteContext, deviceId: string | undefined): 
 export async function currentPasswordRight(ctx: AccountRouteContext, user: UserRecord, given: unknown): Promise<boolean> {
   const { res, rt } = ctx;
   const db = rt.getDb();
-  const keys = { email: user.email, ip: limitIp(ctx.req) };
+  const keys = { email: user.email, ip: limitIp(rt, ctx.req) };
   const limit = checkAttemptLimits(db, keys, rt.now());
   if (!limit.allowed) { tooManyRequests(res, limit.retryAfterSeconds); return false; }
   const reservation = reserveAttempt(db, keys, rt.now());

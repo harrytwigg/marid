@@ -94,7 +94,17 @@ export interface Harness {
   close(): void;
 }
 
-export async function startHarness(opts: { authRequired?: boolean; limiter?: import("../passwords.js").HashLimiter } = {}): Promise<Harness> {
+export interface HarnessOptions {
+  authRequired?: boolean;
+  limiter?: import("../passwords.js").HashLimiter;
+  /** `gateway.trustedProxies` / `gateway.clientIpHeader`, as config.yaml would carry them. */
+  trustedProxies?: string[];
+  clientIpHeader?: string;
+  /** A smaller instance-wide failure budget than the real 100. */
+  loginBudgetMax?: number;
+}
+
+export async function startHarness(opts: HarnessOptions = {}): Promise<Harness> {
   const home = fs.mkdtempSync(path.join(tmpRoot, "home-"));
   fs.chmodSync(home, 0o700);
   const db = new Database(":memory:");
@@ -108,10 +118,17 @@ export async function startHarness(opts: { authRequired?: boolean; limiter?: imp
   const { shouldRequireGatewayAuth } = await import("../../gateway/auth.js");
   const { createGatewayRequestHandler } = await import("../../gateway/request-handler.js");
   const { isKnownDepartmentSlug } = await import("../../gateway/departments-api.js");
-  const config = { gateway: { host: "0.0.0.0", ...(opts.authRequired === false ? { host: "127.0.0.1", authRequired: false } : {}) } as Record<string, unknown> };
+  const config = {
+    gateway: {
+      host: "0.0.0.0", ...(opts.authRequired === false ? { host: "127.0.0.1", authRequired: false } : {}),
+      ...(opts.trustedProxies ? { trustedProxies: opts.trustedProxies } : {}),
+      ...(opts.clientIpHeader ? { clientIpHeader: opts.clientIpHeader } : {}),
+    } as Record<string, unknown>,
+  };
   const clock = { now: Date.now() };
   const rt = createAccountsRuntime({
     getDb: () => db, home, gatewayAuthToken: GATEWAY_TOKEN,
+    proxyTrust: () => config.gateway,
     authRequired: () => shouldRequireGatewayAuth(config as any),
     now: () => clock.now,
     // The rule server.ts wires: a `departments` row, a definition file, an `org/<slug>` folder or an employee's `department:`.
@@ -119,6 +136,7 @@ export async function startHarness(opts: { authRequired?: boolean; limiter?: imp
     knownDepartment: (slug) => !!db.prepare("SELECT 1 FROM departments WHERE slug = ?").get(slug)
       || isKnownDepartmentSlug(slug, { getConfig: () => config } as any),
     ...(opts.limiter ? { limiter: opts.limiter } : {}),
+    ...(opts.loginBudgetMax !== undefined ? { loginBudgetMax: opts.loginBudgetMax } : {}),
   });
   const handler = createGatewayRequestHandler({
     authRequired: () => shouldRequireGatewayAuth(config as any),

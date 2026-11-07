@@ -1,8 +1,9 @@
 import { authCookieHeaders, createAuthSession, requestArrivedOverHttps, revokeAuthSessionsForUser } from "../gateway/auth.js";
 import { json } from "../gateway/route-helpers.js";
+import { logger } from "../shared/logger.js";
 import { userCookieHeader } from "./cookie.js";
 import { upsertGrant } from "./board-members.js";
-import { checkAttemptLimits, recordFailure, releaseAttempt, reserveAttempt } from "./login-attempts.js";
+import { checkAttemptLimits, checkInstanceBudget, recordFailure, recordSuccess, releaseAttempt, reserveAttempt } from "./login-attempts.js";
 import { PASSWORD_MAX_LENGTH, passwordProblem, verifyAgainstDummy, verifyPassword } from "./passwords.js";
 import {
   findToken, linkTokenToUser, listOpenBoardInvitesFor, markTokenUsed, revokeOpenResets, tokenState, type TokenPurpose, type TokenRecord,
@@ -35,7 +36,7 @@ function startSession(ctx: AccountRouteContext, user: UserRecord): { principal: 
   const db = rt.getDb();
   pruneUserSessions(db, rt.now());
   const created = createUserSession(db, {
-    userId: user.id, userAgent: String(req.headers["user-agent"] ?? "") || null, ip: clientIp(req) ?? null, now: rt.now(),
+    userId: user.id, userAgent: String(req.headers["user-agent"] ?? "") || null, ip: clientIp(rt, req) ?? null, now: rt.now(),
   });
   res.setHeader("Set-Cookie", userCookieHeader(created.token, rt.home, secure));
   const user_ = publicUser(user);
@@ -68,6 +69,25 @@ function unchangedSince(ctx: AccountRouteContext, user: UserRecord): boolean {
   return !!now && now.status === "active" && now.instanceRole === user.instanceRole && now.passwordHash === user.passwordHash;
 }
 
+/**
+ * Writes the 429 and returns true when this sign-in may not proceed: the address or IP is out of attempts, or the
+ * whole instance is out of failures and this address has never signed in. Refusals are never counted.
+ */
+function refusedOverLimits(ctx: AccountRouteContext, keys: { email: string; ip: string | undefined }): boolean {
+  const { res, rt } = ctx;
+  const db = rt.getDb();
+  const limit = checkAttemptLimits(db, keys, rt.now());
+  if (!limit.allowed) { tooManyRequests(res, limit.retryAfterSeconds); return true; }
+  const budget = checkInstanceBudget(db, { address: keys.ip, max: rt.loginBudget.max }, rt.now());
+  if (budget.allowed) return false;
+  if (rt.loginBudget.warner.shouldWarn(rt.now())) {
+    const until = new Date(rt.now() + budget.retryAfterSeconds * 1000).toISOString();
+    logger.warn(`Sign-in failure budget reached; new sign-ins from unrecognised addresses are refused until ${until}`);
+  }
+  tooManyRequests(res, budget.retryAfterSeconds);
+  return true;
+}
+
 async function login(ctx: AccountRouteContext): Promise<void> {
   const { req, res, rt } = ctx;
   const body = await readObjectBody(ctx);
@@ -75,12 +95,13 @@ async function login(ctx: AccountRouteContext): Promise<void> {
   const rawEmail = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 254) : "";
   const password = typeof body.password === "string" ? body.password : "";
   const db = rt.getDb();
-  const keys = { email: rawEmail, ip: limitIp(req) };
+  const ip = limitIp(rt, req);
+  const keys = { email: rawEmail, ip };
   // Limits come before any hashing, so a locked address or IP costs the gateway one indexed read; the attempt
-  // is counted before the hash too, so a burst of concurrent guesses cannot all slip under the limit.
-  const limit = checkAttemptLimits(db, keys, rt.now());
-  if (!limit.allowed) return tooManyRequests(res, limit.retryAfterSeconds);
-  const reservation = reserveAttempt(db, keys, rt.now());
+  // is counted before the hash too, so a burst of concurrent guesses cannot all slip under the limit. The check
+  // and the reservation share one synchronous stretch: nothing can slip in between them.
+  if (refusedOverLimits(ctx, keys)) return;
+  const reservation = reserveAttempt(db, { ...keys, instance: true }, rt.now());
   let user: UserRecord | undefined;
   try {
     user = await checkCredentials(ctx, rawEmail, password);
@@ -92,6 +113,7 @@ async function login(ctx: AccountRouteContext): Promise<void> {
   // No await from this check to the session below: nothing can change the user in between.
   if (!user || !unchangedSince(ctx, user)) return json(res, { error: LOGIN_FAILED }, 401);
   releaseAttempt(db, reservation);
+  if (ip !== undefined) recordSuccess(db, ip, rt.now()); // an address that has signed in is let in even over the instance budget
   json(res, { status: "ok", ...startSession(ctx, user) });
 }
 
@@ -99,11 +121,11 @@ async function login(ctx: AccountRouteContext): Promise<void> {
 function usableToken(ctx: AccountRouteContext, raw: unknown, purpose: TokenPurpose): TokenRecord | undefined {
   const { req, res, rt } = ctx;
   const db = rt.getDb();
-  const limit = checkAttemptLimits(db, { ip: limitIp(req) }, rt.now());
+  const limit = checkAttemptLimits(db, { ip: limitIp(rt, req) }, rt.now());
   if (!limit.allowed) { tooManyRequests(res, limit.retryAfterSeconds); return undefined; }
   const token = findToken(db, raw, purpose);
   if (token && tokenState(token, rt.now()) === "valid") return token;
-  recordFailure(db, { ip: limitIp(req) }, rt.now());
+  recordFailure(db, { ip: limitIp(rt, req) }, rt.now());
   json(res, { error: LINK_DEAD }, 410);
   return undefined;
 }
@@ -175,7 +197,7 @@ function usableReset(ctx: AccountRouteContext, raw: unknown): { token: TokenReco
   if (!token) return undefined;
   const user = token.userId ? getUserById(ctx.rt.getDb(), token.userId) : undefined;
   if (user && user.status === "active") return { token, user };
-  recordFailure(ctx.rt.getDb(), { ip: limitIp(ctx.req) }, ctx.rt.now());
+  recordFailure(ctx.rt.getDb(), { ip: limitIp(ctx.rt, ctx.req) }, ctx.rt.now());
   json(ctx.res, { error: LINK_DEAD }, 410);
   return undefined;
 }

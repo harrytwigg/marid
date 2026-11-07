@@ -71,6 +71,7 @@ export async function startBoardHarness(): Promise<BoardHarness> {
   const broadcasts: BoardHarness["broadcasts"] = [];
   const rt = createAccountsRuntime({
     getDb: () => db, home, gatewayAuthToken: GATEWAY_TOKEN,
+    proxyTrust: () => config.gateway,
     authRequired: () => shouldRequireGatewayAuth(config as any),
     knownDepartment: (slug) => !!db.prepare("SELECT 1 FROM departments WHERE slug = ?").get(slug) || isKnownDepartmentSlug(slug, { getConfig: () => config } as any),
   });

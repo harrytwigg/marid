@@ -920,6 +920,7 @@ export async function startGateway(
     home: JINN_HOME,
     authRequired: () => shouldRequireGatewayAuth(currentConfig),
     gatewayAuthToken,
+    proxyTrust: () => currentConfig.gateway,
     // The same rule as the departments API, so a board is whatever that API calls a department.
     knownDepartment: (slug) => isKnownDepartmentSlug(slug, apiContext),
   });

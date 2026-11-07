@@ -12,6 +12,7 @@ import type { JinnConfig } from "./types.js";
 import { todoRecoveryProblems } from "./todo-recovery-config.js";
 import { todoDepartmentsProblems } from "./todo-departments-config.js";
 import { remoteMcpProblems } from "./remote-mcp-config.js";
+import { proxyTrustProblems } from "./proxy-trust-config.js";
 import { warnAboutHookProblems } from "./board-hooks-config.js";
 import { nameAliases } from "./codename.js";
 
@@ -78,6 +79,7 @@ export function validateConfigShape(config: unknown, options: { tolerateDuplicat
       if (c.gateway.resumeInterruptedSessions !== undefined && typeof c.gateway.resumeInterruptedSessions !== "boolean") {
         problems.push(`gateway.resumeInterruptedSessions must be a boolean (got ${typeof c.gateway.resumeInterruptedSessions})`);
       }
+      problems.push(...proxyTrustProblems(c.gateway));
       problems.push(...todoRecoveryProblems(c.gateway.todoRecovery));
       problems.push(...todoDepartmentsProblems(c.gateway.todoDepartments));
       problems.push(...remoteMcpProblems(c.gateway.remoteMcp));
