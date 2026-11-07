@@ -16,7 +16,7 @@ set it for common setups. It only matters where gateway auth is required, which 
 A refused request is never counted, and a correct password gives its attempt back.
 
 The last row is the instance budget. Once 100 sign-ins have failed within 15 minutes, a new sign-in from an
-address that has **never signed in successfully** (within the last 30 days) is answered `429` with
+address that has **never signed in successfully** (accepting an invite counts as a sign-in; within the last 30 days) is answered `429` with
 `Retry-After`, even with the right password, until the window has passed. An address that has signed in
 before is still let in: its password is still checked, and it can still be locked by the per-email and per-IP
 limits. The gateway logs one warning when the budget trips. Paired devices, the gateway token, and members or

@@ -2,6 +2,7 @@ import net from "node:net";
 import type { IncomingMessage } from "node:http";
 import { normaliseIp, parseTrustEntry, type ProxyTrustConfig } from "../shared/proxy-trust-config.js";
 import { isLoopback } from "./hook-endpoint.js";
+import { singleRequestHeader } from "./request-authority.js";
 
 /**
  * Who a request really came from, for the one job of keying sign-in rate limits and recording where a session
@@ -64,12 +65,7 @@ function headerValue(req: RequestLike, name: string): string | undefined {
 
 /** The single value of a header that must appear exactly once and hold exactly one address. */
 function singleHeaderAddress(req: RequestLike, name: string): string | undefined {
-  if (req.rawHeaders) {
-    let seen = 0;
-    for (let i = 0; i < req.rawHeaders.length; i += 2) if (req.rawHeaders[i]!.toLowerCase() === name) seen += 1;
-    if (seen > 1) return undefined;
-  }
-  const value = headerValue(req, name);
+  const value = singleRequestHeader(req, name);
   return value === undefined || value.includes(",") ? undefined : normaliseIp(value);
 }
 

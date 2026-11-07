@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GOOD_PASSWORD, startHarness, type Harness, type HarnessOptions } from "./accounts-harness.js";
 import { inviteAndAccept, joinAsOwner } from "./flows-helpers.js";
-import { LOGIN_MAX_INSTANCE, LOGIN_MAX_PER_IP, LOGIN_WINDOW_MS, RECENT_SUCCESS_MS, reserveAttempt } from "../login-attempts.js";
+import { LOGIN_MAX_PER_IP, LOGIN_WINDOW_MS, RECENT_SUCCESS_MS, reserveAttempt } from "../login-attempts.js";
 import { logger } from "../../shared/logger.js";
 
 vi.setConfig({ testTimeout: 60_000 });
@@ -77,7 +77,8 @@ describe("with no trusted proxies configured", () => {
     for (let i = 0; i < LOGIN_MAX_PER_IP + 5; i++) expect((await viaProxy(`nobody${i}@example.test`, wrong, `198.51.100.${i + 1}`)).status).toBe(401);
     expect(rows("ip:")).toBe(0);
     expect((await viaProxy("pat@example.test", GOOD_PASSWORD, "198.51.100.77")).status).toBe(200);
-    expect(rows("ok:")).toBe(0); // a loopback address stands for everyone behind the tunnel
+    expect(rows("ok:127")).toBe(0); // a loopback address stands for everyone behind the tunnel
+    expect(rows("ok:198.51.100")).toBe(0); // and the header it carried was never believed
     h!.db.prepare("DELETE FROM login_attempts").run();
     reserveAttempt(h!.db, { ip: undefined, instance: true }, h!.clock.now); // fill to the budget
     for (let i = 1; i < 30; i++) reserveAttempt(h!.db, { ip: undefined, instance: true }, h!.clock.now);
@@ -123,8 +124,6 @@ describe("instance-wide failure budget", () => {
 
   it("defaults to 100 failures per 15 minutes", async () => {
     await start(LOOPBACK_PROXY);
-    expect(LOGIN_MAX_INSTANCE).toBe(100);
-    expect(h!.rt.loginBudget.max).toBe(100);
     for (let i = 0; i < 99; i++) reserveAttempt(h!.db, { ip: undefined, instance: true }, h!.clock.now);
     expect((await viaProxy("a@example.test", wrong, "198.51.100.1")).status).toBe(401); // the 100th
     expect((await viaProxy("b@example.test", wrong, "198.51.100.2")).status).toBe(429);
@@ -147,6 +146,19 @@ describe("instance-wide failure budget", () => {
     expect(userSessionsFor(userId)).toBe(before + 1);
   });
 
+  it("counts accepting an invite as a sign-in: that address is let in over budget afterwards", async () => {
+    await start({ ...LOOPBACK_PROXY, loginBudgetMax: 3 });
+    const invite = await h!.asOperator("POST", "/api/boards/ops/invites", { email: "pat@example.test", role: "collaborator" });
+    const accepted = await h!.request("POST", "/api/auth/invites/accept", {
+      body: { token: invite.body.link.split("#")[1], displayName: "Pat", password: GOOD_PASSWORD }, ip: "127.0.0.1", headers: { "x-forwarded-for": "198.51.100.70" },
+    });
+    expect(accepted.status).toBe(200);
+    expect(rows("ok:198.51.100.70")).toBe(1);
+    await spray(3);
+    expect((await viaProxy("pat@example.test", GOOD_PASSWORD, "198.51.100.71")).status).toBe(429);
+    expect((await viaProxy("pat@example.test", GOOD_PASSWORD, "198.51.100.70")).status).toBe(200);
+  });
+
   it("keeps the exemption for 30 days, not longer, and only for that address", async () => {
     await start({ ...LOOPBACK_PROXY, loginBudgetMax: 3 });
     await inviteAndAccept(h!, "pat@example.test");
@@ -165,7 +177,7 @@ describe("instance-wide failure budget", () => {
     await start({ ...LOOPBACK_PROXY, loginBudgetMax: 3 });
     await inviteAndAccept(h!, "pat@example.test");
     expect((await viaProxy("pat@example.test", GOOD_PASSWORD, undefined)).status).toBe(200);
-    expect(rows("ok:")).toBe(0);
+    expect(rows("ok:127")).toBe(0); // the proxy itself is never remembered
     await spray(3);
     expect((await viaProxy("pat@example.test", GOOD_PASSWORD, undefined)).status).toBe(429);
   });

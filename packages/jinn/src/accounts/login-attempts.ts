@@ -100,22 +100,19 @@ function hasRecentSuccess(db: DatabaseType, address: string, now: number): boole
   return !!db.prepare("SELECT 1 FROM login_attempts WHERE email_or_ip = ? AND at > ? LIMIT 1").get(successKey(address), isoNow(now - RECENT_SUCCESS_MS));
 }
 
-export interface BudgetDecision extends RateDecision {
-  /** Over budget, but let through because `address` has signed in before. */
-  exempt: boolean;
-}
-
 /**
  * Whether the instance may take another sign-in attempt from `address` (the resolved client address, or
  * undefined when it is shared and so can never be recognised). Over the budget only an address with a recent
- * success gets in: it cannot be a stranger spraying passwords, and the account owner is never locked out.
+ * success gets in. That bounds a stranger spraying passwords from new addresses, at a price: anyone who can
+ * sign in from an address once (any member) keeps that address usable for 30 days, and a person signing in
+ * from a new address, or from behind a shared one, waits out the window.
  */
-export function checkInstanceBudget(db: DatabaseType, input: { address: string | undefined; max: number }, now = Date.now()): BudgetDecision {
+export function checkInstanceBudget(db: DatabaseType, input: { address: string | undefined; max: number }, now = Date.now()): RateDecision {
   const { n, oldest } = countAndOldest(db, INSTANCE_KEY, isoNow(now - LOGIN_WINDOW_MS));
-  if (n < input.max || !oldest) return { allowed: true, retryAfterSeconds: 0, exempt: false };
-  if (input.address !== undefined && hasRecentSuccess(db, input.address, now)) return { allowed: true, retryAfterSeconds: 0, exempt: true };
+  if (n < input.max || !oldest) return { allowed: true, retryAfterSeconds: 0 };
+  if (input.address !== undefined && hasRecentSuccess(db, input.address, now)) return { allowed: true, retryAfterSeconds: 0 };
   const retry = Math.ceil((Date.parse(oldest) + LOGIN_WINDOW_MS - now) / 1000);
-  return { allowed: false, retryAfterSeconds: Math.max(1, retry), exempt: false };
+  return { allowed: false, retryAfterSeconds: Math.max(1, retry) };
 }
 
 /** Says once per window that the budget tripped, so a sustained spray logs one line, not one per request. */

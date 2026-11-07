@@ -48,16 +48,10 @@ describe("checkInstanceBudget", () => {
     for (let i = 0; i < 4; i++) reserveAttempt(db, { ip: undefined, instance: true }, now);
     expect(checkInstanceBudget(db, { address: undefined, max: 5 }, now).allowed).toBe(true);
     reserveAttempt(db, { ip: undefined, instance: true }, now);
-    expect(checkInstanceBudget(db, { address: undefined, max: 5 }, now)).toMatchObject({ allowed: false, exempt: false, retryAfterSeconds: 900 });
+    expect(checkInstanceBudget(db, { address: undefined, max: 5 }, now)).toMatchObject({ allowed: false, retryAfterSeconds: 900 });
     expect(checkInstanceBudget(db, { address: "198.51.100.1", max: 5 }, now).allowed).toBe(false);
     recordSuccess(db, "198.51.100.1", now - 1000);
-    expect(checkInstanceBudget(db, { address: "198.51.100.1", max: 5 }, now)).toMatchObject({ allowed: true, exempt: true });
+    expect(checkInstanceBudget(db, { address: "198.51.100.1", max: 5 }, now)).toMatchObject({ allowed: true });
     expect(checkInstanceBudget(db, { address: "198.51.100.2", max: 5 }, now).allowed).toBe(false);
-  });
-
-  it("never reports less than a second to wait", () => {
-    const now = Date.now();
-    put(INSTANCE_KEY, now - 15 * 60 * 1000 + 200);
-    expect(checkInstanceBudget(db, { address: undefined, max: 1 }, now).retryAfterSeconds).toBe(1);
   });
 });

@@ -26,6 +26,9 @@ const LINK_DEAD = "This link is no longer valid";
 /** Set the cookie a fresh session needs and answer with who is now signed in. */
 function startSession(ctx: AccountRouteContext, user: UserRecord): { principal: Record<string, unknown> } {
   const { req, res, rt } = ctx;
+  // Signing in or accepting an invite both count: an address that has done either is let in even over the instance budget.
+  const address = limitIp(rt, req);
+  if (address !== undefined) recordSuccess(rt.getDb(), address, rt.now());
   const secure = requestArrivedOverHttps(req);
   if (user.instanceRole === "owner") {
     // An instance owner signs in to an ordinary operator device session, so everything an operator can do works.
@@ -113,7 +116,6 @@ async function login(ctx: AccountRouteContext): Promise<void> {
   // No await from this check to the session below: nothing can change the user in between.
   if (!user || !unchangedSince(ctx, user)) return json(res, { error: LOGIN_FAILED }, 401);
   releaseAttempt(db, reservation);
-  if (ip !== undefined) recordSuccess(db, ip, rt.now()); // an address that has signed in is let in even over the instance budget
   json(res, { status: "ok", ...startSession(ctx, user) });
 }
 
