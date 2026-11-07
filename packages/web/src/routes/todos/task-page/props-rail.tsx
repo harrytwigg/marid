@@ -2,7 +2,7 @@ import { ArrowUpRight, Calendar, CalendarClock, LoaderCircle, Send, UserRound } 
 import type { DepartmentSummaryWire, Employee, LinkedSessionWire, WorkItemDetailWire } from "@/lib/api"
 import { useOpenSession } from "@/components/chat/file-open-context"
 import { STATUS_LABEL, priorityLabel } from "@/lib/todos"
-import { EmployeeAvatar } from "@/components/ui/employee-avatar"
+import { EmployeeAvatar, OPERATOR_DEFAULT_EMOJI } from "@/components/ui/employee-avatar"
 import { StatusCircle } from "../state-glyph"
 import { sessionIdFromActor, type SessionTreeWire } from "@/lib/session-tree-api"
 import { isSessionWaiting, SESSION_WAITING_COLOR } from "@/lib/session-waiting"
@@ -14,7 +14,7 @@ import { AutoStartRow } from "./auto-start-row"
 import { SprintRailRow } from "../sprints/sprint-rail-row"
 import { displayNameOf, formatRelativeTime } from "../util"
 import { isMemberIdentity, LastTouchedBy, MemberChip, useViewer } from "../attribution"
-import { agentOf, PersonCircle, PersonName, personRowFor } from "../assignee-circles"
+import { agentOf, PersonCircle, PersonName, personRowFor, waitsOnOperator } from "../assignee-circles"
 import { AssigneeRailRow } from "./legacy-assignee"
 import { useTwoSlotAssignees } from "@/hooks/use-two-slot-assignees"
 import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
@@ -131,6 +131,11 @@ export function PropsRail({
               <>
                 <EmployeeAvatar name={agent} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
                 {displayNameOf(agent, byName, viewer)}
+              </>
+            ) : waitsOnOperator(item) ? (
+              <>
+                <EmployeeAvatar name="operator" fallback={OPERATOR_DEFAULT_EMOJI} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
+                {viewer === "member" ? "Needs the operator" : "Needs you"}
               </>
             ) : (
               <>

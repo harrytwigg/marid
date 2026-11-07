@@ -103,22 +103,12 @@ describe("the operator chooses themselves as the person on an unassigned Todo", 
     expect(store.queryWorkItems({ needsAttentionOperator: true, limit: 200 }).workItems.map((item) => item.id)).toContain(viaPerson);
   });
 
-  it("the assign route settles the person the same way: an agent over @operator keeps the operator, @operator over a person's row replaces them", async () => {
+  it("the assign route settles the person the same way: an agent over @operator keeps the operator as the person", async () => {
     const todo = mk("backlog");
     await chooseSelf(todo);
     expect((await h.operator("POST", `/api/work-items/${todo}/assign`, { assignee: "alice" })).status).toBe(200);
     expect(store.getWorkItem(todo)).toMatchObject({ assignee: "alice", humanAssignee: "@operator" });
     expect(stored(todo)).toBe("@operator");
-
-    const other = mk("backlog");
-    const casey = h.db.prepare("SELECT id FROM users LIMIT 1").pluck().get() as string | undefined;
-    if (casey) {
-      h.db.prepare("INSERT INTO todo_people (todo_id, person, set_by, set_at) VALUES (?, ?, 'operator', 't')").run(other, `user:${casey}`);
-      await h.operator("POST", `/api/work-items/${other}/assign`, { assignee: "@operator" });
-      expect(store.getWorkItem(other)).toMatchObject({ assignee: "@operator", humanAssignee: "@operator" });
-      expect(stored(other)).toBeUndefined();
-      expect(store.listWorkItemEvents(other).find((event) => event.kind === "person_changed")?.detail).toMatchObject({ from: `user:${casey}`, to: "@operator" });
-    }
   });
 
   it("clearing the person of a Todo that waits on the operator clears the assignee, so it leaves the desk", async () => {

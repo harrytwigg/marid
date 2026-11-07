@@ -52,7 +52,7 @@ function writePerson(ctx: MemberRouteContext, id: string, next: string | null): 
     if (problem) throw new PersonRefusedError(problem, 422, "todo_invalid_person");
     const plan = planOwnership(current, storedTodoPerson(db, id), { humanAssignee: next });
     // A member's change only ever touches the person's row, never `assignee`.
-    if (plan.assignee !== current.assignee) throw new PersonRefusedError("Only the operator can change this Todo's agent", 403, "person_operator_only");
+    if (plan.assignee !== current.assignee || plan.to === OPERATOR_ASSIGNEE) throw new PersonRefusedError("Only the operator can change a Todo's agent or name itself as the person", 403, "person_operator_only");
     const changed = writeOwnership(db, current, plan, { actor: actorOf(ctx), effect: "state", append: appendWorkItemEvent });
     return { item: getWorkItem(id)!, changed };
   }).immediate());

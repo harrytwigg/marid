@@ -9,21 +9,20 @@ export interface PersonChoice {
 }
 
 /**
- * The people who can be named as the person responsible for a Todo on a board. The operator reads the People list and
- * keeps those with a grant on the board (or who own the instance); a member reads the people on their own boards, and
- * the gateway refuses anyone who has no access to this one. Asked only where accounts exist: an instance without
+ * The people who can be named as the person responsible for a Todo on a board (the Todo's root board, not a sub-task's own
+ * department). The operator reads the People list and keeps those with a grant on the board (or who own the instance); a member reads the people on that one board. Asked only where accounts exist: an instance without
  * them has the operator to choose and nothing else, and makes no request.
  */
 export function usePersonChoices(board: string | null | undefined): { people: PersonChoice[]; ready: boolean } {
   const auth = useAuthOptional()
   const member = auth?.principal?.kind === "member"
-  const enabled = member || auth?.authState?.accountsEnabled === true
+  const enabled = member || auth?.authState?.hasAccounts === true
   const query = useQuery({
     queryKey: ["person-choices", member ? "member" : "operator", board ?? ""],
     enabled,
     staleTime: 30_000,
     queryFn: async (): Promise<PersonChoice[]> => {
-      if (member) return (await accountsApi.getMemberPeople()).people
+      if (member) return (await accountsApi.getMemberPeople(board ?? undefined)).people
       const people = await accountsApi.listPeople()
       return people
         .filter((person) => person.status === "active" && (person.instanceRole === "owner" || person.boards.some((grant) => grant.department === board)))

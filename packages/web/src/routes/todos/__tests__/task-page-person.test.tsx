@@ -16,8 +16,9 @@ vi.mock("@/routes/auth-provider", () => ({ useAuthOptional: () => ({ principal, 
 vi.mock("@/components/page-layout", () => ({ PageLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }))
 vi.mock("@/routes/settings-provider", () => ({ useSettings: () => ({ settings: { employeeOverrides: {} } }) }))
 vi.mock("@/routes/providers", () => ({ useTheme: () => ({ theme: "dark" }) }))
+const personChoices = vi.hoisted(() => vi.fn())
 vi.mock("@/hooks/use-person-choices", () => ({
-  usePersonChoices: () => ({ people: [{ id: "me", displayName: "Mia Member", initials: "MM" }, { id: "kit", displayName: "Kit Colleague", initials: "KC" }], ready: true }),
+  usePersonChoices: (board: unknown) => personChoices(board) ?? ({ people: [{ id: "me", displayName: "Mia Member", initials: "MM" }, { id: "kit", displayName: "Kit Colleague", initials: "KC" }], ready: true }),
 }))
 
 const getWorkItem = vi.fn()
@@ -110,6 +111,29 @@ describe("a collaborator or owner", () => {
     fireEvent.click(await screen.findByTestId("person-option-kit"))
     await waitFor(() => expect(setWorkItemPerson).toHaveBeenCalled())
     await waitFor(() => expect(screen.getByTestId("rail-person").textContent).toContain("No person"))
+  })
+})
+
+describe("the pickers", () => {
+  it("name the agent row Agent, and offer the people of the root board, not of a sub-task's own department", async () => {
+    principal = { kind: "operator" }
+    const sub = agentMade({ id: "PLT-2", rootId: "PLT-1", parentId: "PLT-1", depth: 1, department: "design" })
+    getWorkItem.mockResolvedValue({ workItem: sub, spendUsd: 0, events: [] })
+    getWorkItemTree.mockResolvedValue({ tree: { root: { ...agentMade(), children: [{ ...sub, children: [] }] } as WorkItemTreeNodeWire, totals: { executing: 2 }, spendUsd: 0 } })
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/todos/PLT-2"]}>
+          <Routes><Route path="/todos/:todoId" element={<TaskPage />} /></Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    fireEvent.click(await screen.findByTestId("rail-assignee"))
+    expect((await screen.findByTestId("picker-assignee")).getAttribute("aria-label")).toBe("Agent")
+    fireEvent.click(screen.getByTestId("rail-assignee"))
+    fireEvent.click(await screen.findByTestId("rail-person"))
+    await screen.findByTestId("picker-person")
+    await waitFor(() => expect(personChoices).toHaveBeenLastCalledWith("platform"))
   })
 })
 

@@ -137,9 +137,13 @@ export async function readAttachment(ctx: MemberRouteContext): Promise<void> {
 export function listMemberPeople(ctx: MemberRouteContext): void {
   const db = ctx.deps.accounts.getDb();
   const boards = listGrantsForUser(db, ctx.principal.userId).map((grant) => grant.department);
+  // `?board=<department>` narrows the people to that one board (a person picker offers only who can be chosen there); a board the
+  // member does not hold is the 404 every unheld board answers.
+  const only = ctx.route.url.searchParams.get("board");
+  if (only !== null && !boards.includes(only)) return notFound(ctx.res);
   const seen = new Set<string>();
   const people: Array<{ id: string; displayName: string; initials: string }> = [];
-  for (const board of boards) {
+  for (const board of only !== null ? [only] : boards) {
     for (const grant of listGrantsForBoard(db, board)) {
       if (seen.has(grant.userId)) continue;
       const user = getUserById(db, grant.userId);

@@ -243,7 +243,8 @@ export const accountsApi = {
     (await send<{ sessions: UserSessionWire[] }>("GET", "/api/member/sessions")).sessions,
   revokeMemberSession: (id: string) => send<void>("DELETE", `/api/member/sessions/${enc(id)}`),
   listMemberBoards: async () => (await send<{ boards: MemberBoardWire[] }>("GET", "/api/member/boards")).boards,
-  getMemberPeople: () => send<MemberPeopleWire>("GET", "/api/member/people"),
+  /** The people on the member's boards, or on one of them with `board` (a person picker offers only who can be chosen there). */
+  getMemberPeople: (board?: string) => send<MemberPeopleWire>("GET", `/api/member/people${board ? `?board=${enc(board)}` : ""}`),
   getMemberBoardRoster: (department: string) =>
     send<BoardRosterWire>("GET", `/api/member/boards/${enc(department)}/members`),
   memberInviteToBoard: (department: string, email: string, role: BoardRole) =>

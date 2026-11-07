@@ -1,10 +1,10 @@
 import type { Employee, WorkItemDetailWire } from "@/lib/api"
 import { STATUS_LABEL, priorityLabel, reviewAddresseeEmployee } from "@/lib/todos"
-import { EmployeeAvatar } from "@/components/ui/employee-avatar"
+import { EmployeeAvatar, OPERATOR_DEFAULT_EMOJI } from "@/components/ui/employee-avatar"
 import { StatusCircle } from "../state-glyph"
 import { displayNameOf } from "../util"
 import { useViewer } from "../attribution"
-import { agentOf, PersonCircle, PersonName, personRowFor } from "../assignee-circles"
+import { agentOf, PersonCircle, PersonName, personRowFor, waitsOnOperator } from "../assignee-circles"
 import { ReviewForChip } from "../review-for-chip"
 import { type RailPickers } from "./props-rail"
 import { SESSION_WAITING_COLOR, SESSION_WAITING_LABEL } from "@/lib/session-waiting"
@@ -47,13 +47,32 @@ interface OwnerChipProps {
   mobile: boolean
 }
 
+/** What the agent chip says: the employee holding the Todo, the operator when it waits on them, or nobody. */
+function AgentChipBody({ item, byName, viewer }: { item: WorkItemDetailWire["workItem"]; byName: Map<string, Employee>; viewer: "operator" | "member" }) {
+  const agent = agentOf(item.assignee)
+  if (agent) {
+    return (
+      <>
+        <EmployeeAvatar name={agent} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
+        {displayNameOf(agent, byName, viewer)}
+      </>
+    )
+  }
+  if (!waitsOnOperator(item)) return <span className="text-[var(--text-tertiary)]">No agent</span>
+  return (
+    <>
+      <EmployeeAvatar name="operator" fallback={OPERATOR_DEFAULT_EMOJI} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
+      {viewer === "member" ? "Needs the operator" : "Needs you"}
+    </>
+  )
+}
+
 /** The two chips that say who holds a Todo once an account exists: the person responsible, then the agent, each with its own clear control. */
 function TwoSlotChips({ item, byName, rowFor, mobile }: OwnerChipProps) {
   const viewer = useViewer()
   const personPick = personRowFor(rowFor, item, viewer)
   const onClearPerson = personPick?.onClear
   const onClearAssignee = rowFor("assignee")?.onClear
-  const agent = agentOf(item.assignee)
   const clearClass = `absolute right-0 top-0 ${mobile ? "size-[34px]" : "size-7"}`
   return (
     <>
@@ -66,14 +85,7 @@ function TwoSlotChips({ item, byName, rowFor, mobile }: OwnerChipProps) {
       </div>
       <div className="relative flex-none">
         <Chip mobile={mobile} label="Agent" testId="chip-assignee" clearSlot={!!onClearAssignee} onOpen={rowFor("assignee")?.onOpen}>
-          {agent ? (
-            <>
-              <EmployeeAvatar name={agent} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
-              {displayNameOf(agent, byName, viewer)}
-            </>
-          ) : (
-            <span className="text-[var(--text-tertiary)]">No agent</span>
-          )}
+          <AgentChipBody item={item} byName={byName} viewer={viewer} />
         </Chip>
         {/* Sibling of the pill, laid over the room `clearSlot` reserved: the chip itself is a button, so the × cannot live inside it. */}
         {onClearAssignee && <RemoveButton label="Remove agent" testId="chip-assignee-clear" onClick={onClearAssignee} className={clearClass} />}

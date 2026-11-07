@@ -49,9 +49,22 @@ export function agentOf(assignee: string | null | undefined): string | null {
   return assignee && assignee !== OPERATOR_ASSIGNEE ? assignee : null
 }
 
-/** The agent slot: an employee's avatar, or a dashed circle when no agent holds the Todo. `name` is the employee's display name, when the roster has one. */
-export function AgentCircle({ assignee, name, size = 20 }: { assignee: string | null | undefined; name?: string; size?: number }) {
+/** A Todo that waits on the operator while the person responsible is someone else: `@operator` holds the agent slot (an agent
+ *  handed it over, or the operator named another person). When the operator is the person, the person slot already says so. */
+export function waitsOnOperator(item: { assignee: string | null | undefined; humanAssignee?: string | null }): boolean {
+  return item.assignee === OPERATOR_ASSIGNEE && item.humanAssignee !== OPERATOR_ASSIGNEE
+}
+
+/** The agent slot: an employee's avatar, the operator's when the Todo waits on them, or a dashed circle when nobody holds it. `name` is the employee's display name, when the roster has one. */
+export function AgentCircle({ assignee, name, size = 20, waitsOnYou = false }: { assignee: string | null | undefined; name?: string; size?: number; waitsOnYou?: boolean }) {
   const agent = agentOf(assignee)
+  if (!agent && waitsOnYou) {
+    return (
+      <span title="Needs the operator" data-testid="agent-circle-operator" className="flex-none">
+        <EmployeeAvatar name="operator" fallback={OPERATOR_DEFAULT_EMOJI} size={size} fontSize={Math.round(size * 0.55)} className="bg-[var(--fill-secondary)]" />
+      </span>
+    )
+  }
   if (!agent) return <EmptyCircle size={size} label="No agent" testId="agent-circle-empty" />
   return (
     <span title={name ?? agent} data-testid="agent-circle" className="flex-none">
@@ -71,7 +84,7 @@ const CirclePair = memo(function CirclePair({ assignee, humanAssignee, agentName
   return (
     <span data-testid="assignee-circles" className="flex flex-none items-center gap-1">
       <PersonCircle person={humanAssignee} size={size} />
-      <AgentCircle assignee={assignee} name={agentName} size={size} />
+      <AgentCircle assignee={assignee} name={agentName} size={size} waitsOnYou={waitsOnOperator({ assignee, humanAssignee })} />
     </span>
   )
 })

@@ -388,15 +388,16 @@ attention lane, backlog dispatch, quiet-watch, the review addressee) keeps meani
 
 | Edit | Stored |
 |---|---|
-| Person `@operator`, no agent | `assignee = '@operator'`, no `todo_people` row (an `@operator` assignee never has a row) |
+| Person `@operator`, no agent | `assignee = '@operator'`, no `todo_people` row (an `@operator` assignee never has an `@operator` row; it may have a user's row) |
 | Person `@operator`, agent X | `assignee = X`, row `@operator` (the agent owns execution) |
 | Set an agent X while `assignee = '@operator'` | `assignee = X`, row `@operator` (the operator stays the person) |
 | Clear the agent while the row is `@operator` | `assignee = '@operator'`, row deleted (it needs the operator again) |
 | Clear the person while `assignee = '@operator'` | `assignee = null` |
 | Name another person while `assignee = '@operator'` | `assignee = null`, row = that person (it no longer waits on the operator) |
-| Assign to the operator over a person's row | `assignee = '@operator'`, row deleted, `person_changed` records it |
+| Assign to the operator over a user's row (an agent handing the Todo over, say) | `assignee = '@operator'`, the user's row **stays**: the Todo waits on the operator, and no agent moves the person |
+| Assign to the operator over an `@operator` row | `assignee = '@operator'`, the redundant row deleted |
 
-Choosing yourself with no agent is therefore an assignment to the operator, written by the pen's `assignee` write (the
+A Todo with `assignee = '@operator'` and a user as the person reads "needs the operator" in the agent slot (the operator's avatar, "Needs you"), because the person slot names someone else. Choosing yourself with no agent is therefore an assignment to the operator, written by the pen's `assignee` write (the
 department is left alone, unlike the assign route, which derives it) and it fires what an assignment to the operator has
 always fired. A test drives it end to end through the edit route against a twin Todo given to the operator through the assign
 route, and asserts the same `assignee`, attention lane, review addressee, board-walk refusal, operator desk membership and
@@ -405,7 +406,9 @@ quiet-watch treatment, then sets an agent, clears it, and asserts the "needs you
 ### Who can set it
 
 - **Operator**: any Todo, through the Todo edit route (`humanAssignee`, version-fenced like the other fields; an agent session
-  that sends it is refused as for `assignee`).
+  that sends it is refused as for `assignee`). The person is judged against the board the Todo is on after the edit (a root
+  moved by the same patch is judged against its new board), and a patch whose `assignee` and `humanAssignee` contradict each
+  other (naming that person moves the agent slot) is `422` `todo_invalid_ownership`, never silently rewritten.
 - **Collaborators and board owners**: any Todo on their board (agent-created ones included) through
   `PUT /api/member/todos/:id/person { person: string | null }`: a label of responsibility, not steering, so it needs no
   member-only tree. **Members never write `assignee` and never choose `@operator`.** The route accepts only a `user:<id>` with
@@ -507,7 +510,7 @@ Settled while building the web against this contract; the gateway answers exactl
 - `GET /api/member/boards/:department/moved` → the board list wrapper `{ workItems, total, nextOffset: null, totals, limit, offset }`
   with compact rows, each carrying `movedToAnotherBoard: true` and `memberCanComment`; `404` for a board the member does not hold.
 - `GET /api/member/people` → `{ people: [{ id, displayName, initials }], employees: [{ name,
-  displayName, emoji }] }`.
+  displayName, emoji }] }`; `?board=<department>` narrows `people` to that board's (`404` for a board the member does not hold).
 - Invite and reset-link POSTs → `{ link, expiresAt }` (`link` is `null` when the gateway cannot
   determine the request's origin; the UI then says so instead of offering a copy box); an invite
   to an existing active account → `{ granted: true }`.

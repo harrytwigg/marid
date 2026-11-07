@@ -77,6 +77,21 @@ describe.each(surfaces)("on the %s", (_name, draw) => {
   })
 })
 
+describe.each(surfaces)("on the %s when the Todo waits on the operator behind someone else's name", (_name, draw) => {
+  it("shows the operator in the agent circle, since the person circle names someone else", () => {
+    draw(compact({ assignee: "@operator", humanAssignee: "user:ada1" }))
+    const pair = screen.getByTestId("assignee-circles")
+    expect([...pair.children].map((child) => child.getAttribute("data-testid"))).toEqual(["person-circle", "agent-circle-operator"])
+    expect(within(pair).getByTitle("Needs the operator")).toBeTruthy()
+  })
+
+  it("leaves the agent circle empty when the operator is the person: the person circle already says so", () => {
+    draw(compact({ assignee: "@operator", humanAssignee: "@operator" }))
+    expect(screen.getByTestId("agent-circle-empty")).toBeTruthy()
+    expect(screen.queryByTestId("agent-circle-operator")).toBeNull()
+  })
+})
+
 describe.each(surfaces)("on the %s of an instance with no accounts", (_name, draw) => {
   beforeEach(() => { auth.value = { principal: null, authState: { accountsEnabled: true, hasAccounts: false } } })
 

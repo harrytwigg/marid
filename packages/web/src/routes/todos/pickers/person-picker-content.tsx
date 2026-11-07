@@ -15,14 +15,12 @@ export function PersonPickerContent({
   commit,
   sheet,
   onDone,
-}: Omit<PickerContentProps, "memberCreator"> & { commit: (person: string | null) => void }) {
+  board,
+}: Omit<PickerContentProps, "memberCreator"> & { commit: (person: string | null) => void; board: string | null }) {
   const viewer = useViewer()
   const current = detail.workItem.humanAssignee ?? null
-  const { people } = usePersonChoices(detail.workItem.department)
-  const pick = (person: string | null) => {
-    if (person !== current) commit(person)
-    onDone()
-  }
+  const { people } = usePersonChoices(board)
+  const pick = (person: string | null) => { if (person !== current) commit(person); onDone() }
   return (
     <>
       {current !== null && (

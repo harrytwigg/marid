@@ -29,6 +29,7 @@ import { StatusPickerContent } from "../pickers/status-picker-content"
 import { PersonPickerContent } from "../pickers/person-picker-content"
 import { offeredDepartments } from "../pickers/department-filters"
 import { agentOf } from "../assignee-circles"
+import { useTwoSlotAssignees } from "@/hooks/use-two-slot-assignees"
 
 /* Todos v2 slice 6 — the task page's picker wiring: ONE picker open at a time,
  * one content component per property rendered in the popover shell (desktop —
@@ -59,6 +60,7 @@ export function useTaskPickers({
   openDescendants,
   memberCreator = null,
   memberMode = false,
+  board = null,
   mobile,
   announce,
   root,
@@ -70,12 +72,17 @@ export function useTaskPickers({
   memberCreator?: MemberCreator | null
   /** A board member's session: the person is named through the member route, not the operator's pen. */
   memberMode?: boolean
+  /** The Todo's root board: the people a person picker offers have access to it. */
+  board?: string | null
   mobile: boolean
   announce: (message: string) => void
   /** This view's own subtree: two Todos can be open side by side, each with its own rail. */
   root: RefObject<HTMLElement | null>
 } & CloseGateCounts) {
   const qc = useQueryClient()
+  const twoSlots = useTwoSlotAssignees()
+  /** The agent row is the Assignee row until an account exists; the title is what the sheet and the popover say. */
+  const titleOf = useCallback((key: PickerKey): string => (key === "assignee" && !twoSlots ? "Assignee" : PICKER_TITLE[key]), [twoSlots])
   const [openPicker, setOpenPicker] = useState<PickerKey | null>(null)
   const id = detail?.workItem.id
 
@@ -183,7 +190,7 @@ export function useTaskPickers({
         status: () => <StatusPickerContent {...shared} openChildren={openChildren} openDescendants={openDescendants} commit={transitionTo} />,
         priority: () => <PriorityPickerContent {...shared} commit={(priority) => patchField({ priority })} />,
         assignee: () => <AssigneePickerContent {...shared} employees={employees} commit={commitAssignee} />,
-        person: () => <PersonPickerContent detail={detail} sheet={sheet} onDone={close} commit={commitPerson} />,
+        person: () => <PersonPickerContent detail={detail} sheet={sheet} onDone={close} commit={commitPerson} board={board} />,
         labels: () => <LabelsPickerContent {...shared} commit={commitLabels} />,
         start: () => <DuePickerContent {...shared} field="startAt" commit={(startAt) => patchField({ startAt })} />,
         due: () => <DuePickerContent {...shared} commit={(dueAt) => patchField({ dueAt })} />,
@@ -191,7 +198,7 @@ export function useTaskPickers({
       }
       return renderers[key]()
     },
-    [detail, close, memberCreator, openChildren, openDescendants, transitionTo, patchField, commitAssignee, commitPerson, employees, departments, commitLabels],
+    [detail, close, memberCreator, openChildren, openDescendants, transitionTo, patchField, commitAssignee, commitPerson, employees, departments, commitLabels, board],
   )
 
   /** The superimposed row index (law 1): the current value's option row sits
@@ -231,7 +238,7 @@ export function useTaskPickers({
           !mobile && openPicker === key ? (
             <PickerPopover
               key={key}
-              label={PICKER_TITLE[key]}
+              label={titleOf(key)}
               onClose={close}
               currentIndex={currentIndexFor(key)}
               autoFocusFirst={key !== "assignee" && key !== "person"}
@@ -242,13 +249,13 @@ export function useTaskPickers({
           ) : null,
       }
     },
-    [detail, openPicker, mobile, close, currentIndexFor, contentFor, clearFor],
+    [detail, openPicker, mobile, close, currentIndexFor, contentFor, clearFor, titleOf],
   )
 
   /** The one mobile sheet (law 4) — rendered at page level via a portal. */
   const mobileSheet =
     mobile && openPicker && detail ? (
-      <PickerSheet title={PICKER_TITLE[openPicker]} onClose={close} testId={`picker-sheet-${openPicker}`}>
+      <PickerSheet title={titleOf(openPicker)} onClose={close} testId={`picker-sheet-${openPicker}`}>
         {contentFor(openPicker, true)}
       </PickerSheet>
     ) : null

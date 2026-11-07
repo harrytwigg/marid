@@ -10,7 +10,7 @@ import { clearTodoPerson, storedTodoPerson, writeTodoPerson } from "./todo-peopl
  * attention lane, backlog dispatch, quiet-watch, the review addressee) keeps meaning what it meant:
  *
  *  - person `@operator`, no agent: `assignee = '@operator'`, no `todo_people` row (the invariant: an `@operator`
- *    assignee never has a row, which would shadow it);
+ *    assignee never has an `@operator` row, which would be redundant; it may have a person's row, see below);
  *  - person `@operator`, agent X: `assignee = X` and the row `@operator` (the agent owns execution);
  *  - any other person: the row, and `assignee` is whatever the agent is.
  *
@@ -18,6 +18,10 @@ import { clearTodoPerson, storedTodoPerson, writeTodoPerson } from "./todo-peopl
  * while the row is `@operator` hands the Todo back to the operator (`assignee = '@operator'`, row gone), so it needs them
  * again. Clearing the person while `assignee` is `@operator` clears that assignee. Naming another person while `assignee`
  * is `@operator` clears it too: the operator is no longer the one it waits on.
+ *
+ * An assignment to the operator (an agent handing the Todo over, say) never changes a person that is a user: the row
+ * stays beside `assignee = '@operator'`, which then reads as "needs the operator" in the agent slot. Only the operator
+ * moves the person, so no agent can change a field that agents may not set.
  */
 
 export interface OwnershipInput {
@@ -45,7 +49,7 @@ const effective = (assignee: string | null, person: string | null): string | nul
 /** The agent slot's rules, on the pair as it stands. */
 function moveAgent(agent: string | null, person: string | null, next: string | null): { agent: string | null; person: string | null } {
   if (next === null) return person === OPERATOR_ASSIGNEE ? { agent: OPERATOR_ASSIGNEE, person: null } : { agent: null, person };
-  if (next === OPERATOR_ASSIGNEE) return { agent: OPERATOR_ASSIGNEE, person: null };
+  if (next === OPERATOR_ASSIGNEE) return { agent: OPERATOR_ASSIGNEE, person: person === OPERATOR_ASSIGNEE ? null : person };
   return { agent: next, person: agent === OPERATOR_ASSIGNEE && person === null ? OPERATOR_ASSIGNEE : person };
 }
 
@@ -53,7 +57,7 @@ function moveAgent(agent: string | null, person: string | null, next: string | n
 function movePerson(agent: string | null, person: string | null, next: string | null): { agent: string | null; person: string | null } {
   if (next === effective(agent, person)) return { agent, person };
   if (next === null) return person !== null ? { agent, person: null } : { agent: null, person: null };
-  if (next === OPERATOR_ASSIGNEE) return agent === null ? { agent: OPERATOR_ASSIGNEE, person: null } : { agent, person: OPERATOR_ASSIGNEE };
+  if (next === OPERATOR_ASSIGNEE) return agent === null || agent === OPERATOR_ASSIGNEE ? { agent: OPERATOR_ASSIGNEE, person: null } : { agent, person: OPERATOR_ASSIGNEE };
   return { agent: agent === OPERATOR_ASSIGNEE ? null : agent, person: next };
 }
 

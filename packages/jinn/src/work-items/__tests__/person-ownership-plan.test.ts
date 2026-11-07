@@ -18,7 +18,10 @@ const CASES: Case[] = [
   { name: "clearing the person when the row is the operator beside an agent drops only the row", from: { assignee: "mason", person: OP }, edit: { humanAssignee: null }, to: { assignee: "mason", person: null } },
   { name: "naming another person while the assignee is @operator clears the assignee: it no longer waits on the operator", from: { assignee: OP, person: null }, edit: { humanAssignee: USER }, to: { assignee: null, person: USER } },
   { name: "naming a person leaves the agent alone", from: { assignee: "mason", person: null }, edit: { humanAssignee: USER }, to: { assignee: "mason", person: USER } },
-  { name: "assigning to the operator drops a row that would shadow it", from: { assignee: "mason", person: USER }, edit: { assignee: OP }, to: { assignee: OP, person: null } },
+  { name: "assigning to the operator never changes a person that is a user: the row stays beside the operator assignee", from: { assignee: "mason", person: USER }, edit: { assignee: OP }, to: { assignee: OP, person: USER } },
+  { name: "assigning to the operator over an @operator row drops that now-redundant row", from: { assignee: "mason", person: OP }, edit: { assignee: OP }, to: { assignee: OP, person: null } },
+  { name: "naming the operator as the person over a user's row, with the Todo already on the operator, drops the row", from: { assignee: OP, person: USER }, edit: { humanAssignee: OP }, to: { assignee: OP, person: null } },
+  { name: "clearing the person while a user's row sits beside the operator assignee leaves the Todo on the operator", from: { assignee: OP, person: USER }, edit: { humanAssignee: null }, to: { assignee: OP, person: null } },
   { name: "clearing the agent leaves a user as the person", from: { assignee: "mason", person: USER }, edit: { assignee: null }, to: { assignee: null, person: USER } },
   { name: "changing the agent leaves the person", from: { assignee: "mason", person: USER }, edit: { assignee: "alice" }, to: { assignee: "alice", person: USER } },
   { name: "an edit that changes nothing changes nothing", from: { assignee: "mason", person: OP }, edit: { assignee: "mason", humanAssignee: OP }, to: { assignee: "mason", person: OP } },
@@ -30,15 +33,15 @@ describe("planOwnership", () => {
     expect({ assignee: plan.assignee, person: plan.person }).toEqual(to);
   });
 
-  it("never leaves an @operator assignee with a row, from any start and any single edit", () => {
+  it("never leaves an @operator row beside an @operator assignee, from any start and any single edit", () => {
     const agents = [null, OP, "mason"];
     const people = [null, OP, USER];
     const edits: Array<Case["edit"]> = [{ assignee: null }, { assignee: OP }, { assignee: "alice" }, { humanAssignee: null }, { humanAssignee: OP }, { humanAssignee: USER }];
     for (const assignee of agents) for (const person of people) {
-      if (assignee === OP && person !== null) continue; // not a state the writers can reach
+      if (assignee === OP && person === OP) continue; // not a state the writers can reach
       for (const edit of edits) {
         const plan = planOwnership({ assignee }, person, edit);
-        expect([assignee, person, edit, plan.assignee === OP && plan.person !== null]).toEqual([assignee, person, edit, false]);
+        expect([assignee, person, edit, plan.assignee === OP && plan.person === OP]).toEqual([assignee, person, edit, false]);
       }
     }
   });
