@@ -50,8 +50,6 @@ afterAll(() => {
 
 beforeEach(() => {
   for (const file of fs.readdirSync(CLAUDE_DIR)) fs.rmSync(path.join(CLAUDE_DIR, file));
-  const limitsDir = path.dirname(CLAUDE_DIR);
-  for (const file of fs.readdirSync(limitsDir)) if (file.startsWith("claude-five-hour-absent.")) fs.rmSync(path.join(limitsDir, file));
   delete process.env.JINN_CLAUDE_USAGE_API;
   readClaudeOAuthToken.mockReset();
   readClaudeOAuthToken.mockResolvedValue("oauth-token");
@@ -108,12 +106,12 @@ describe("claudeResetsAtSeconds", () => {
   });
 
   describe("a five-hour bucket the account does not have", () => {
-    function zeroSessionResponse(): Response {
+    function zeroSessionResponse(percent = 0): Response {
       return {
         ok: true,
         json: async () => ({
           limits: [
-            { kind: "session", percent: 0, resets_at: "2026-08-19T17:00:00.000Z" },
+            { kind: "session", percent, resets_at: "2026-08-19T17:00:00.000Z" },
             { kind: "weekly_all", percent: 40, resets_at: "2026-08-24T12:00:00.000Z" },
           ],
         }),
@@ -129,7 +127,7 @@ describe("claudeResetsAtSeconds", () => {
 
     const weeklyOnly = { seven_day: { used_percentage: 40, resets_at: FUTURE + 5 * 86_400 } };
 
-    it("gives no reset when a recent snapshot sees only a weekly limit", async () => {
+    it("gives no reset when the snapshot sees only a weekly limit", async () => {
       vi.stubGlobal("fetch", vi.fn(async () => zeroSessionResponse()));
       writeAccountSnapshot(weeklyOnly, 10 * 60_000);
       expect(await claudeResetsAtSeconds(NOW_MS)).toBeUndefined();
@@ -141,17 +139,23 @@ describe("claudeResetsAtSeconds", () => {
       expect(await claudeResetsAtSeconds(NOW_MS)).toBe(FUTURE);
     });
 
-    it("gives no reset once the account is known to have no five-hour limit, however long it has been idle", async () => {
+    it("gives no reset however old the weekly-only snapshot is", async () => {
       vi.stubGlobal("fetch", vi.fn(async () => zeroSessionResponse()));
-      writeAccountSnapshot(weeklyOnly, 10 * 60_000);
-      expect(await claudeResetsAtSeconds(NOW_MS)).toBeUndefined();
       writeAccountSnapshot(weeklyOnly, 30 * 60 * 60_000);
       expect(await claudeResetsAtSeconds(NOW_MS)).toBeUndefined();
     });
 
-    it("keeps the reset when the weekly-only snapshot is older than five hours and nothing was established", async () => {
+    it("keeps the reset when the snapshot's five_hour entry is empty or has null fields", async () => {
       vi.stubGlobal("fetch", vi.fn(async () => zeroSessionResponse()));
-      writeAccountSnapshot(weeklyOnly, 6 * 60 * 60_000);
+      writeAccountSnapshot({ ...weeklyOnly, five_hour: { used_percentage: null, resets_at: null } }, 10 * 60_000);
+      expect(await claudeResetsAtSeconds(NOW_MS)).toBe(FUTURE);
+      writeAccountSnapshot({ ...weeklyOnly, five_hour: {} }, 10 * 60_000);
+      expect(await claudeResetsAtSeconds(NOW_MS)).toBe(FUTURE);
+    });
+
+    it("keeps the reset of a five-hour reading above zero, however small", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => zeroSessionResponse(0.4)));
+      writeAccountSnapshot(weeklyOnly, 10 * 60_000);
       expect(await claudeResetsAtSeconds(NOW_MS)).toBe(FUTURE);
     });
   });

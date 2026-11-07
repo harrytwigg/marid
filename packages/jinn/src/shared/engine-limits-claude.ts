@@ -20,12 +20,7 @@ import { claudeProfileDirExists, type ClaudeProfile } from "./claude-profile.js"
 import { buildEngineChildEnv } from "./child-env.js";
 import { readClaudeOAuthToken } from "./claude-models.js";
 import { resolveBin } from "./resolve-bin.js";
-import { windowsFromClaudeUsage } from "./engine-limits-claude-usage.js";
-import {
-  settleFiveHourAbsence,
-  withoutZeroFiveHour,
-  type ClaudeStatuslineEvidence,
-} from "./claude-five-hour-absence.js";
+import { statuslineShowsNoFiveHour, windowsFromClaudeUsage } from "./engine-limits-claude-usage.js";
 export { windowsFromClaudeUsage } from "./engine-limits-claude-usage.js";
 import {
   baseSnapshot,
@@ -145,8 +140,8 @@ async function claudeAuthPlan(config: JinnConfig, profile: ClaudeProfile): Promi
 
 interface ClaudeStatuslineSnapshot {
   windows: EngineLimitWindow[];
-  /** The file's write time: how recent the CLI's reading is. */
-  capturedAtMs: number;
+  /** The snapshot shows the plan has no five-hour limit (`statuslineShowsNoFiveHour`). */
+  noFiveHour: boolean;
   context?: EngineLimitEngineSnapshot["context"];
   costUsd?: number;
   refreshedAt: string;
@@ -172,7 +167,7 @@ function readClaudeStatusline(file: string): ClaudeStatuslineSnapshot | null {
     const stat = fs.statSync(file);
     return {
       windows,
-      capturedAtMs: stat.mtimeMs,
+      noFiveHour: statuslineShowsNoFiveHour(rateLimits),
       context: ctx
         ? {
             usedPercent: num(ctx.used_percentage),
@@ -255,11 +250,11 @@ function claudeFromStatusline(
   };
 }
 
-/** The account's latest statusline reading, for callers that check the usage
- *  API's windows against it (`settleFiveHourAbsence`). */
-export function claudeStatuslineEvidence(account: string): ClaudeStatuslineEvidence | null {
+/** Whether the account's newest statusline snapshot, at any age, shows its plan
+ *  has no five-hour limit. */
+export function claudePlanHasNoFiveHour(account: string): boolean {
   const file = claudeSnapshotFile(CLAUDE_LIMITS_DIR, account);
-  return file ? readClaudeStatusline(file) : null;
+  return file ? readClaudeStatusline(file)?.noFiveHour === true : false;
 }
 
 /** One local Claude account's reading: the default profile when `profile` is
@@ -277,9 +272,9 @@ export async function collectClaudeLimits(config: JinnConfig, profile: ClaudePro
     fetchClaudeOAuthUsage(process.env, profile),
   ]);
   const statusline = latest ? readClaudeStatusline(latest) : null;
-  const usageWindows = oauthUsage ? windowsFromClaudeUsage(oauthUsage) : [];
-  const noFiveHour = settleFiveHourAbsence(account, { statusline, usageWindows, accountPlan, nowMs: Date.now() });
-  const liveWindows = noFiveHour ? withoutZeroFiveHour(usageWindows) : usageWindows;
+  const liveWindows = oauthUsage
+    ? windowsFromClaudeUsage(oauthUsage, { planHasNoFiveHour: statusline?.noFiveHour === true })
+    : [];
 
   // Live path: the OAuth usage API carries every bucket (including per-model
   // ones like the Fable weekly bucket) that the statusline payload never sees.

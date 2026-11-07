@@ -16,10 +16,9 @@ import { windowFromCodexRollout } from "./engine-limits.js";
 import { claudeAccountKey } from "./engine-account.js";
 import type { ClaudeProfile } from "./claude-profile.js";
 import { lastAccountReading } from "./account-readings.js";
-import { settleFiveHourAbsence, withoutZeroFiveHour } from "./claude-five-hour-absence.js";
 import {
+  claudePlanHasNoFiveHour,
   claudeSnapshotFile,
-  claudeStatuslineEvidence,
   fetchClaudeOAuthUsage,
   windowFromClaude,
   windowsFromClaudeUsage,
@@ -69,7 +68,7 @@ export async function claudeResetsAtSeconds(nowMs: number = Date.now(), source: 
   if ("remoteAccount" in source) {
     return stillAhead(lastAccountReading(source.remoteAccount)?.snapshot.windows?.find((window) => window.name === "5h")?.resetsAt);
   }
-  const live = stillAhead(await liveSessionResetsAt(source.profile, nowMs));
+  const live = stillAhead(await liveSessionResetsAt(source.profile));
   if (live !== undefined) return live;
   try {
     return stillAhead(claudeSnapshotResetsAt(claudeAccountKey(source.profile)));
@@ -80,15 +79,12 @@ export async function claudeResetsAtSeconds(nowMs: number = Date.now(), source: 
 
 /** The live usage API's five-hour reset for the profile's account, if it answers.
  *  A five-hour bucket the account does not have is no reset: the Limits page
- *  leaves it out, and so does the backoff (`settleFiveHourAbsence`). */
-async function liveSessionResetsAt(profile: ClaudeProfile, nowMs: number): Promise<number | undefined> {
+ *  leaves it out, and so does the backoff. */
+async function liveSessionResetsAt(profile: ClaudeProfile): Promise<number | undefined> {
   try {
     const usage = await fetchClaudeOAuthUsage(process.env, profile);
-    const usageWindows = usage ? windowsFromClaudeUsage(usage) : [];
-    const account = claudeAccountKey(profile);
-    const statusline = claudeStatuslineEvidence(account);
-    const windows = settleFiveHourAbsence(account, { statusline, usageWindows, nowMs }) ? withoutZeroFiveHour(usageWindows) : usageWindows;
-    return windows.find((window) => window.name === "5h")?.resetsAt;
+    const planHasNoFiveHour = claudePlanHasNoFiveHour(claudeAccountKey(profile));
+    return (usage ? windowsFromClaudeUsage(usage, { planHasNoFiveHour }) : []).find((window) => window.name === "5h")?.resetsAt;
   } catch {
     // The usage API is one of two sources; the on-disk snapshot is the other.
     return undefined;

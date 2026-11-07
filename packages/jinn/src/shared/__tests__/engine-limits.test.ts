@@ -281,7 +281,7 @@ describe("collectEngineLimits — recovery + unsupported", () => {
 });
 
 describe("windowsFromClaudeUsage — OAuth usage-API bucket mapping", () => {
-  let windowsFromClaudeUsage: (usage: Record<string, unknown>) => Array<{
+  let windowsFromClaudeUsage: (usage: Record<string, unknown>, options?: { planHasNoFiveHour?: boolean }) => Array<{
     name: string; usedPercent?: number; windowDurationMins?: number; resetsAt?: number; resetsAtIso?: string;
   }>;
   beforeAll(async () => {
@@ -380,6 +380,52 @@ describe("windowsFromClaudeUsage — OAuth usage-API bucket mapping", () => {
     it("shows no five-hour window from the named-bucket fallback when five_hour is absent", () => {
       expect(names({ seven_day: { utilization: 37, resets_at: "2026-11-12T09:00:00Z" } })).toEqual(["7d"]);
       expect(names({ five_hour: null, seven_day: { utilization: 37, resets_at: "2026-11-12T09:00:00Z" } })).toEqual(["7d"]);
+    });
+
+    describe("when the account's snapshot shows the plan has no five-hour limit", () => {
+      const noFiveHour = { planHasNoFiveHour: true };
+      const namesFor = (usage: Record<string, unknown>) => windowsFromClaudeUsage(usage, noFiveHour).map((w) => w.name);
+
+      it("leaves out a zeroed session entry the payload says nothing about", () => {
+        expect(namesFor({ limits: [session(0), weekly] })).toEqual(["7d"]);
+      });
+
+      it("leaves out a zeroed five_hour bucket from the named-bucket fallback", () => {
+        expect(namesFor({ five_hour: { utilization: 0 }, seven_day: { utilization: 37 } })).toEqual(["7d"]);
+      });
+
+      it("keeps any reading above zero, however small, in limits[] and in the fallback", () => {
+        expect(namesFor({ limits: [session(0.4), weekly] })).toEqual(["5h", "7d"]);
+        expect(namesFor({ five_hour: { utilization: 0.4 }, seven_day: { utilization: 37 } })).toEqual(["5h", "7d"]);
+      });
+    });
+
+    it("keeps a reading above zero that the payload itself marks inactive", () => {
+      expect(names({ limits: [session(0.4, { is_active: false }), weekly] })).toEqual(["5h", "7d"]);
+    });
+  });
+
+  describe("statuslineShowsNoFiveHour", () => {
+    let statuslineShowsNoFiveHour: (rateLimits: unknown) => boolean;
+    beforeAll(async () => {
+      ({ statuslineShowsNoFiveHour } = await import("../engine-limits-claude-usage.js"));
+    });
+    const sevenDay = { used_percentage: 37, resets_at: 1789102800 };
+
+    it("is true for a weekly reading with no five_hour key", () => {
+      expect(statuslineShowsNoFiveHour({ seven_day: sevenDay })).toBe(true);
+    });
+
+    it("is false for any five_hour entry, including an empty or null one", () => {
+      expect(statuslineShowsNoFiveHour({ seven_day: sevenDay, five_hour: { used_percentage: 0, resets_at: 1789000000 } })).toBe(false);
+      expect(statuslineShowsNoFiveHour({ seven_day: sevenDay, five_hour: {} })).toBe(false);
+      expect(statuslineShowsNoFiveHour({ seven_day: sevenDay, five_hour: { used_percentage: null, resets_at: null } })).toBe(false);
+      expect(statuslineShowsNoFiveHour({ seven_day: sevenDay, five_hour: null })).toBe(false);
+    });
+
+    it("is false with no weekly reading to go on", () => {
+      expect(statuslineShowsNoFiveHour({})).toBe(false);
+      expect(statuslineShowsNoFiveHour(undefined)).toBe(false);
     });
   });
 
