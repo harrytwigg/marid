@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -26,7 +26,7 @@ function freshDatabase(name: string) {
 }
 
 describe("account tables are additive and shape-verified at boot", () => {
-  it("creates all five at their frozen shape on a fresh database, and the verifier accepts them", () => {
+  it("creates all six at their frozen shape on a fresh database, and the verifier accepts them", () => {
     const { db } = freshDatabase("fresh.db");
     for (const table of ACCOUNT_TABLES) expect(shape(storedSql(db, table.name))).toBe(shape(table.tableDdl));
     expect(() => migrate.verifyCurrentWorkItemSchema(db)).not.toThrow();
@@ -35,7 +35,7 @@ describe("account tables are additive and shape-verified at boot", () => {
 
   it("heals a database that predates them: classified current, tables gained, work_items untouched", () => {
     const { file, db } = freshDatabase("heal.db");
-    for (const name of ["user_sessions", "board_members", "user_tokens", "login_attempts", "users"]) db.exec(`DROP TABLE ${name}`);
+    for (const name of ["todo_people", "user_sessions", "board_members", "user_tokens", "login_attempts", "users"]) db.exec(`DROP TABLE ${name}`);
     const workItemsBefore = storedSql(db, "work_items");
     db.close();
 
@@ -67,5 +67,29 @@ describe("account tables are additive and shape-verified at boot", () => {
     expect(() => db.prepare("INSERT INTO board_members VALUES ('usr_a@x.test', 'ops', 'admin', 'operator', 't')").run()).toThrow(/CHECK/);
     expect(() => db.prepare("INSERT INTO user_tokens (id, token_hash, purpose, email, created_by, created_at, expires_at) VALUES ('utk_1', 'h', 'login', 'a@x.test', 'operator', 't', 't')").run()).toThrow(/CHECK/);
     db.close();
+  });
+
+  it("an older build's verifier boots over a database that carries todo_people, and leaves it alone", async () => {
+    const { file, db } = freshDatabase("rollback.db");
+    db.prepare("INSERT INTO todo_people (todo_id, person, set_by, set_at) VALUES ('OPS-1', '@operator', 'operator', 't')").run();
+    db.close();
+    // The previous build's verifier: the same module, whose account tables never listed this one.
+    vi.resetModules();
+    vi.doMock("../schema.js", async () => {
+      const real = await vi.importActual<typeof import("../schema.js")>("../schema.js");
+      return { ...real, ACCOUNT_TABLES: real.ACCOUNT_TABLES.filter((table) => table.name !== "todo_people") };
+    });
+    try {
+      const older = await import("../../work-items/migrate.js");
+      expect(older.preflightWorkItemsDatabase(file)).toBe("current");
+      const reopened = new Database(file);
+      expect(older.migrateWorkItemsSchema(reopened, "current").rebuilt).toBe(false);
+      expect(() => older.verifyCurrentWorkItemSchema(reopened)).not.toThrow();
+      expect(reopened.prepare("SELECT person FROM todo_people WHERE todo_id = 'OPS-1'").pluck().get()).toBe("@operator");
+      reopened.close();
+    } finally {
+      vi.doUnmock("../schema.js");
+      vi.resetModules();
+    }
   });
 });

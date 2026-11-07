@@ -1,6 +1,6 @@
 /**
- * Tables for user accounts, board grants, invite and reset tokens, member sessions and the
- * sign-in rate limiter. See docs/design/board-members.md, "Identity model".
+ * Tables for user accounts, board grants, invite and reset tokens, member sessions, the
+ * sign-in rate limiter and the person responsible for a Todo. See docs/design/board-members.md, "Identity model".
  *
  * All additive: nothing here changes an existing table, so an older build ignores these and a
  * rollback stays bootable. Each `*_TABLE_DDL` is the single statement the boot shape verifier
@@ -69,6 +69,20 @@ CREATE TABLE IF NOT EXISTS login_attempts (
   at          TEXT NOT NULL
 )`;
 
+/**
+ * The person responsible for a Todo, beside the agent that `work_items.assignee` names. One row per Todo while a person
+ * is set. `person` is `@operator` or `user:<id>`. Keyed by Todo alone and not a foreign key, so a rebuild of `work_items`
+ * never has to know about it; nothing deletes a Todo today, and whatever does must delete its row (`clearTodoPerson`).
+ * A user's rows go with the user (`deleteUser`).
+ */
+export const TODO_PEOPLE_TABLE_DDL = `
+CREATE TABLE IF NOT EXISTS todo_people (
+  todo_id TEXT PRIMARY KEY,
+  person  TEXT NOT NULL,
+  set_by  TEXT NOT NULL,
+  set_at  TEXT NOT NULL
+)`;
+
 export const USERS_DDL = `${USERS_TABLE_DDL};`;
 export const BOARD_MEMBERS_DDL = `${BOARD_MEMBERS_TABLE_DDL};
 CREATE INDEX IF NOT EXISTS idx_board_members_department ON board_members(department);`;
@@ -76,6 +90,8 @@ export const USER_TOKENS_DDL = `${USER_TOKENS_TABLE_DDL};
 CREATE INDEX IF NOT EXISTS idx_user_tokens_email ON user_tokens(email);`;
 export const USER_SESSIONS_DDL = `${USER_SESSIONS_TABLE_DDL};
 CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id);`;
+export const TODO_PEOPLE_DDL = `${TODO_PEOPLE_TABLE_DDL};
+CREATE INDEX IF NOT EXISTS idx_todo_people_person ON todo_people(person);`;
 export const LOGIN_ATTEMPTS_DDL = `${LOGIN_ATTEMPTS_TABLE_DDL};
 CREATE INDEX IF NOT EXISTS idx_login_attempts_key ON login_attempts(email_or_ip, at);`;
 
@@ -86,6 +102,7 @@ export const ACCOUNT_TABLES: ReadonlyArray<{ name: string; tableDdl: string; ddl
   { name: "user_tokens", tableDdl: USER_TOKENS_TABLE_DDL, ddl: USER_TOKENS_DDL },
   { name: "user_sessions", tableDdl: USER_SESSIONS_TABLE_DDL, ddl: USER_SESSIONS_DDL },
   { name: "login_attempts", tableDdl: LOGIN_ATTEMPTS_TABLE_DDL, ddl: LOGIN_ATTEMPTS_DDL },
+  { name: "todo_people", tableDdl: TODO_PEOPLE_TABLE_DDL, ddl: TODO_PEOPLE_DDL },
 ];
 
 /** Create whichever account tables are missing. Safe to call repeatedly. */

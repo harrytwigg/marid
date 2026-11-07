@@ -3,7 +3,7 @@ import type { UpdateWorkItemInput, WorkItem } from './store.js';
 
 /** The metadata pen's columns, and the fingerprint its idempotency receipts key on.
  *  Moved out of `store.ts` to pay for that file's size budget. */
-export const UPDATE_FIELD_COLUMNS: Readonly<Record<Exclude<keyof UpdateWorkItemInput, 'startAt'>, string>> = {
+export const UPDATE_FIELD_COLUMNS: Readonly<Record<Exclude<keyof UpdateWorkItemInput, 'startAt' | 'humanAssignee'>, string>> = {
   title: 'title',
   body: 'body',
   assignee: 'assignee',
@@ -15,12 +15,13 @@ export const UPDATE_FIELD_COLUMNS: Readonly<Record<Exclude<keyof UpdateWorkItemI
   dueAt: 'due_at',
 };
 
-/** Every field the pen edits, in fingerprint order. `startAt` has no column
- *  (start-date.ts holds it) and is appended last, so a receipt minted before it
- *  existed, which never names it, keeps its fingerprint. */
+/** Every field the pen edits, in fingerprint order. `startAt` and `humanAssignee` have no column
+ *  (start-date.ts and todo-people.ts hold them) and are appended last, so a receipt minted before
+ *  they existed, which never names them, keeps its fingerprint. */
 const UPDATE_FIELDS: ReadonlyArray<keyof UpdateWorkItemInput> = [
   ...(Object.keys(UPDATE_FIELD_COLUMNS) as Array<keyof typeof UPDATE_FIELD_COLUMNS>),
   'startAt',
+  'humanAssignee',
 ];
 
 export function canonicalUpdateFingerprint(id: string, input: UpdateWorkItemInput, expectedVersion: number): string {

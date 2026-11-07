@@ -10,7 +10,7 @@ import { workItemActor, type WorkItemCaller } from './work-item-arming.js';
 const TODO_CONTENT_FIELDS: ReadonlyArray<keyof UpdateWorkItemInput> = ['title', 'body', 'priority', 'dueAt', 'startAt'];
 
 /** Who a Todo BELONGS to: the operator's alone. */
-const TODO_OWNERSHIP_FIELDS: ReadonlyArray<keyof UpdateWorkItemInput> = ['assignee', 'department', 'rank'];
+const TODO_OWNERSHIP_FIELDS: ReadonlyArray<keyof UpdateWorkItemInput> = ['assignee', 'humanAssignee', 'department', 'rank'];
 
 export interface TodoEditAuthority {
   fields: ReadonlySet<keyof UpdateWorkItemInput>;
@@ -28,8 +28,8 @@ export interface TodoEditAuthority {
  * perform the write for it. Every new kind of participant needed its own
  * relation and its own 403 before it could describe its own Todo.
  *
- * Ownership stays operator-only, and deliberately: assignee, department, and
- * rank decide who is accountable. Those are governance, not description, and an
+ * Ownership stays operator-only, and deliberately: assignee, humanAssignee, department,
+ * and rank decide who is accountable. Those are governance, not description, and an
  * agent reassigning its own work is exactly what the review model exists to
  * prevent.
  */

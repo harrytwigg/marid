@@ -156,6 +156,18 @@ describe("member", () => {
     await h.as(collab, "POST", `/api/member/todos/${todoId}/status`, { status: "backlog" });
   });
 
+  it("PUT /api/member/todos/:id/person { person } → { workItem } carrying humanAssignee", async () => {
+    const reply = await h.as(collab, "PUT", `/api/member/todos/${todoId}/person`, { person: null });
+    expect([reply.status, keys(reply.body)]).toEqual([200, ["workItem"]]);
+    expect(reply.body.workItem).toHaveProperty("humanAssignee");
+    for (const [path, body] of [[`/api/member/todos/${todoId}`, "workItem"], [`/api/work-items/${todoId}`, "workItem"]] as const) {
+      const read = await (path.startsWith("/api/member") ? h.as(collab, "GET", path) : h.operator("GET", path));
+      expect([path, Object.keys(read.body[body])]).toEqual([path, expect.arrayContaining(["humanAssignee", "assignee"])]);
+    }
+    const rows = [(await h.as(collab, "GET", "/api/member/boards/ops/todos")).body, (await h.operator("GET", "/api/work-items?department=ops")).body];
+    for (const list of rows) expect(list.workItems[0]).toHaveProperty("humanAssignee");
+  });
+
   it("POST /api/member/todos/:id/comments { body, parentCommentId? } → { comment }", async () => {
     const reply = await h.as(collab, "POST", `/api/member/todos/${todoId}/comments`, { body: "hi" });
     expect([reply.status, keys(reply.body)]).toEqual([201, ["comment"]]);

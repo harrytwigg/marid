@@ -9,6 +9,7 @@ import {
 } from "./member-reads.js";
 import { addTodoComment, deleteTodoComment, editTodoComment, uploadAttachment } from "./member-comments.js";
 import { createTodo, patchTodo, setStatus } from "./member-writes.js";
+import { setPerson } from "./member-person.js";
 import { shareRoutes } from "./member-share.js";
 import { currentPasswordRight } from "./routes-account.js";
 import { hashOrBusy, readObjectBody } from "./routes-common.js";
@@ -81,6 +82,7 @@ export const MEMBER_ROUTES: readonly MemberRoute[] = [
   ...shareRoutes(ownerOnBoard),
   { method: "GET", pattern: "/api/member/todos/:id", run: showTodo },
   { method: "PATCH", pattern: "/api/member/todos/:id", run: patchTodo },
+  { method: "PUT", pattern: "/api/member/todos/:id/person", run: setPerson },
   { method: "GET", pattern: "/api/member/todos/:id/tree", run: showTree },
   { method: "POST", pattern: "/api/member/todos/:id/status", run: setStatus },
   { method: "GET", pattern: "/api/member/todos/:id/comments", run: listTodoComments },

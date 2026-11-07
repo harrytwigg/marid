@@ -13,6 +13,8 @@ import { allocateWorkItemId, useWorkItemAllocationClaim } from './migrate.js';
 import { createdEventDetail, type WriteOrigin } from './origin.js';
 import { HOME_SCOPE_SQL, KEPT_EXISTS_SQL } from './kept.js';
 import { sprintFilterCondition } from './sprints-schema.js';
+import { HUMAN_ASSIGNEE_COLUMN_SQL } from './todo-people.js';
+import { changeTodoPerson } from './person-write.js';
 import { applyStartAtEdit, assertTodoDateOrder, START_AT_COLUMN_SQL, startAtInstant, writeWorkItemStartAt } from './start-date.js';
 import { toWorkItemLinkRole, type WorkItemLinkRole } from './link-role.js';
 import { searchWorkItemIds, workItemMatchReasons, type WorkItemMatch } from './search.js';
@@ -76,6 +78,8 @@ export interface WorkItem {
   status: WorkItemStatus;
   department: string | null;
   assignee: string | null;
+  /** The person responsible, `@operator` or `user:<id>`: the `todo_people` row, else the operator when `assignee` is. Held beside the agent, not instead of it. */
+  humanAssignee: string | null;
   /** Who asked for this item: 'operator', an employee slug, or 'system'. */
   createdBy: string;
   /** Sub-task tree (Todos v2): parent link, denormalized root, and depth 0..3. */
@@ -198,6 +202,7 @@ function rowToWorkItem(row: Record<string, unknown>): WorkItem {
     status: row.status as WorkItemStatus,
     department: (row.department as string) ?? null,
     assignee: (row.assignee as string) ?? null,
+    humanAssignee: (row.human_assignee as string) ?? null,
     createdBy: row.created_by as string,
     parentId: (row.parent_id as string) ?? null,
     rootId: row.root_id as string,
@@ -371,7 +376,7 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
 
   const selectExisting = (): WorkItem | undefined => {
     const row = db
-      .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL} FROM work_items WHERE source = ? AND source_ref = ?`)
+      .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL}, ${HUMAN_ASSIGNEE_COLUMN_SQL} FROM work_items WHERE source = ? AND source_ref = ?`)
       .get(source, sourceRef) as Record<string, unknown> | undefined;
     return row ? rowToWorkItem(row) : undefined;
   };
@@ -462,7 +467,7 @@ export function ensureDepartmentRegistered(slug: string | null | undefined): voi
 export function getWorkItem(id: string): WorkItem | undefined {
   const db = initDb();
   const todoId = parseTodoId(id);
-  const row = db.prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL} FROM work_items WHERE id = ?`).get(todoId) as Record<string, unknown> | undefined;
+  const row = db.prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL}, ${HUMAN_ASSIGNEE_COLUMN_SQL} FROM work_items WHERE id = ?`).get(todoId) as Record<string, unknown> | undefined;
   return row ? rowToWorkItem(row) : undefined;
 }
 
@@ -474,7 +479,7 @@ export function getWorkItems(ids: readonly string[]): WorkItem[] {
   const db = initDb();
   const placeholders = requestedIds.map(() => '?').join(', ');
   const rows = db
-    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL} FROM work_items WHERE id IN (${placeholders})`)
+    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL}, ${HUMAN_ASSIGNEE_COLUMN_SQL} FROM work_items WHERE id IN (${placeholders})`)
     .all(...requestedIds) as Record<string, unknown>[];
   const byId = new Map(rows.map(rowToWorkItem).map((item) => [item.id, item]));
   return requestedIds.flatMap((id) => {
@@ -488,7 +493,7 @@ export function getWorkItems(ids: readonly string[]): WorkItem[] {
 export function getWorkItemBySourceRef(source: WorkItemSource, sourceRef: string): WorkItem | undefined {
   const db = initDb();
   const row = db
-    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL} FROM work_items WHERE source = ? AND source_ref = ?`)
+    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL}, ${HUMAN_ASSIGNEE_COLUMN_SQL} FROM work_items WHERE source = ? AND source_ref = ?`)
     .get(source, sourceRef) as Record<string, unknown> | undefined;
   return row ? rowToWorkItem(row) : undefined;
 }
@@ -596,7 +601,7 @@ export function queryWorkItems(filter: ListWorkItemsFilter = {}): WorkItemPage {
   const orderValues = textIds ? [JSON.stringify(textIds)] : [];
   const order = filter.order === 'closed' ? CLOSED_ORDER_SQL : '(rank IS NULL) ASC, rank ASC, updated_at DESC';
   const rows = db
-    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL} FROM work_items ${where} ORDER BY ${relevance}${order}, created_at DESC, id ASC LIMIT ? OFFSET ?`)
+    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL}, ${HUMAN_ASSIGNEE_COLUMN_SQL} FROM work_items ${where} ORDER BY ${relevance}${order}, created_at DESC, id ASC LIMIT ? OFFSET ?`)
     .all(...values, ...orderValues, limit, offset) as Record<string, unknown>[];
   const counts = db
     .prepare(`SELECT status, COUNT(*) AS total FROM work_items ${where} GROUP BY status`)
@@ -655,7 +660,7 @@ export function getWorkItemTrees(ids: readonly string[]): Record<string, WorkIte
   const placeholders = requestedIds.map(() => '?').join(', ');
   const requestedRoots = `SELECT root_id FROM work_items WHERE id IN (${placeholders})`;
   const family = (db
-    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL} FROM work_items WHERE root_id IN (${requestedRoots})`)
+    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL}, ${HUMAN_ASSIGNEE_COLUMN_SQL} FROM work_items WHERE root_id IN (${requestedRoots})`)
     .all(...requestedIds) as Record<string, unknown>[])
     .map(rowToWorkItem);
   if (family.length === 0) return {};
@@ -721,6 +726,8 @@ export interface UpdateWorkItemInput {
   dueAt?: string | null;
   /** Held in its own table (start-date.ts), not a `work_items` column. */
   startAt?: string | null;
+  /** The person responsible, `@operator` or `user:<id>`; held in `todo_people` (todo-people.ts). Changes nothing about the agent. */
+  humanAssignee?: string | null;
 }
 
 export interface ConditionalWorkItemUpdateOptions {
@@ -809,17 +816,25 @@ export function updateWorkItemConditional(
         throw new WorkItemVersionConflictError(latest.version);
       }
       const releasedSessions = releaseOnOwnerChange(db, current, input.assignee);
-      appendWorkItemEvent({
-        workItemId: id,
-        kind: 'metadata_edited',
-        actor: opts.actor ?? null,
-        detail: {
-          updatedFields: [...fields.map((field) => field.name), ...(startDateEdited ? ['startAt'] : [])],
-          ...(opts.origin ? { origin: opts.origin } : {}),
-          ...(releasedSessions.length > 0 ? { releasedSessions } : {}),
-        },
-        versionEffect: 'companion',
-      });
+      const updatedFields = [...fields.map((field) => field.name), ...(startDateEdited ? ['startAt'] : [])];
+      // The person is a label beside the agent: its own `person_changed` event, never `metadata_edited`, which a board hook reads.
+      if (input.humanAssignee !== undefined) {
+        const assignee = input.assignee !== undefined ? input.assignee : current.assignee;
+        changeTodoPerson(db, { ...current, assignee }, input.humanAssignee, { actor: opts.actor ?? 'operator', effect: 'companion', append: appendWorkItemEvent, releaseOnOwnerChange });
+      }
+      if (updatedFields.length > 0 || input.humanAssignee === undefined) {
+        appendWorkItemEvent({
+          workItemId: id,
+          kind: 'metadata_edited',
+          actor: opts.actor ?? null,
+          detail: {
+            updatedFields,
+            ...(opts.origin ? { origin: opts.origin } : {}),
+            ...(releasedSessions.length > 0 ? { releasedSessions } : {}),
+          },
+          versionEffect: 'companion',
+        });
+      }
       item = getWorkItem(id)!;
     }
 
@@ -982,7 +997,7 @@ export function releaseSelfStartedLinks(
  *  the assignee. Every writer of `assignee` calls this, in its own transaction,
  *  so a Todo given to someone else — or to nobody — never keeps the old owner's
  *  chat as its executor. */
-function releaseOnOwnerChange(db: ReturnType<typeof initDb>, current: WorkItem, assignee: string | null | undefined): string[] {
+export function releaseOnOwnerChange(db: ReturnType<typeof initDb>, current: WorkItem, assignee: string | null | undefined): string[] {
   if (assignee === undefined || assignee === current.assignee) return [];
   return releaseSelfStartedLinks(db, current.id, { exceptEmployee: assignee ?? undefined });
 }

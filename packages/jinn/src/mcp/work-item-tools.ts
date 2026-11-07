@@ -59,12 +59,26 @@ function qs(params: Record<string, string | number | undefined>): string {
   return parts.join("&");
 }
 
-function summarize(item: Record<string, unknown>): Record<string, unknown> {
+/**
+ * The person responsible for a Todo as an agent reads it: "operator", or "<name> (board member)", never a bare `user:` id
+ * and never a user as the operator (a board member's words and standing are not the operator's). The gateway sends the
+ * names it knows in a `members` map beside the Todos; a user it no longer knows reads "Former member".
+ */
+function personLabel(person: unknown, members: unknown): string | null {
+  if (typeof person !== "string") return null;
+  if (person === "@operator") return "operator";
+  if (!person.startsWith("user:")) return null;
+  const named = (members as Record<string, { displayName?: unknown }> | undefined)?.[person]?.displayName;
+  return typeof named === "string" && named !== "Former member" ? `${named} (board member)` : "Former member";
+}
+
+function summarize(item: Record<string, unknown>, members?: unknown): Record<string, unknown> {
   return {
     id: item.id,
     title: item.title,
     status: item.status,
     assignee: item.assignee ?? null,
+    humanAssignee: personLabel(item.humanAssignee, members),
     department: item.department ?? null,
     source: item.source,
     parentId: item.parentId ?? null,
@@ -77,9 +91,16 @@ function summarize(item: Record<string, unknown>): Record<string, unknown> {
   };
 }
 
+/** A detail body with its Todo's `humanAssignee` read as `personLabel` reads it. */
+function withPersonLabel(body: unknown): unknown {
+  const detail = body as { workItem?: Record<string, unknown>; members?: unknown } | null;
+  if (!detail?.workItem || !("humanAssignee" in detail.workItem)) return body;
+  return { ...detail, workItem: { ...detail.workItem, humanAssignee: personLabel(detail.workItem.humanAssignee, detail.members) } };
+}
+
 function workItemsFrom(body: unknown): Array<Record<string, unknown>> {
-  const rec = (body ?? {}) as { workItems?: Array<Record<string, unknown>> };
-  return Array.isArray(rec.workItems) ? rec.workItems.map(summarize) : [];
+  const rec = (body ?? {}) as { workItems?: Array<Record<string, unknown>>; members?: unknown };
+  return Array.isArray(rec.workItems) ? rec.workItems.map((item) => summarize(item, rec.members)) : [];
 }
 
 /** PATCH the metadata pen at a freshly read version, retrying ONCE on a concurrent
@@ -172,7 +193,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
       const id = requireTodoId(args);
       const { status, body } = await gatewayRequest(ctx, "GET", `/api/work-items/${encodeURIComponent(id)}`);
       if (status >= 400) throw gatewayFailure(`getting work item "${id}"`, status, body);
-      return body;
+      return withPersonLabel(body);
     },
   };
 
