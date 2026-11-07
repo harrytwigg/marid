@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { startBoardHarness, type BoardHarness, type Member } from "./board-harness.js";
 
 /** A session id is not a member's to hold, wherever an agent's work shows up: creators, comment authors, uploaders, relations, frames. */
@@ -154,10 +154,22 @@ describe("a member's event carries only the detail keys its kind allows, each ju
     expect(JSON.stringify(detail)).not.toContain(child.id);
   });
 
-  it("a detail key no kind allows never reaches a member, whatever it holds, in a read or a frame", async () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  // The cost secret is a sentinel no timestamp, id or counter can contain; a short number like 12.5 also reads inside "...:12.560Z".
+  const COST_SENTINEL = 98765.4321;
+  const SECRET_TEXT = ["/srv/private", "build-box.internal", "secret-model-x", String(COST_SENTINEL), "hidden thing"];
+  const leaks = (text: string) => SECRET_TEXT.filter((value) => text.includes(value));
+
+  it("the leak check sees a secret anywhere in the text and ignores a timestamp that reads 12.5xx", () => {
+    for (const value of SECRET_TEXT) expect(leaks(`{"x":{"y":"before ${value} after"}}`)).toEqual([value]);
+    expect(leaks(JSON.stringify({ updatedAt: "2026-11-06T23:09:12.560Z", n: 12.5, id: "wi_12.5" }))).toEqual([]);
+  });
+
+  const unknownKeysNeverReachAMember = async () => {
     const todo = store.createWorkItem({ title: "Unknown keys", department: "ops" });
-    const secrets = { path: "/srv/private/instance/config.yaml", host: "build-box.internal", model: "secret-model-x", costUsd: 12.5, prompt: "SYSTEM: do the hidden thing" };
-    store.appendWorkItemEvent({ workItemId: todo.id, kind: "note", actor: "operator", detail: { assignee: "alice", ...secrets, nested: { ...secrets } } });
+    const secrets = { path: "/srv/private/instance/config.yaml", host: "build-box.internal", model: "secret-model-x", costUsd: COST_SENTINEL, prompt: "SYSTEM: do the hidden thing" };
+    const stored = store.appendWorkItemEvent({ workItemId: todo.id, kind: "note", actor: "operator", detail: { assignee: "alice", ...secrets, nested: { ...secrets } } });
     store.appendWorkItemEvent({ workItemId: todo.id, kind: "status_change", fromStatus: "backlog", toStatus: "executing", actor: "operator", detail: { note: "started", ...secrets } });
     store.appendWorkItemEvent({ workItemId: todo.id, kind: "verify_result" as never, actor: "operator", detail: { ...secrets } });
     store.appendWorkItemEvent({ workItemId: todo.id, kind: "some_future_kind" as never, actor: "operator", detail: { ...secrets } });
@@ -171,13 +183,27 @@ describe("a member's event carries only the detail keys its kind allows, each ju
     const tree = (await h.as(viewer, "GET", `/api/member/todos/${todo.id}/tree`)).body;
     const list = (await h.as(viewer, "GET", "/api/member/boards/ops/todos?limit=200")).body;
     const text = JSON.stringify([detail, tree, list, frames]);
-    for (const value of ["/srv/private", "build-box.internal", "secret-model-x", "12.5", "hidden thing"]) expect(text).not.toContain(value);
+    expect(leaks(text)).toEqual([]);
+    // Not vacuous: the secrets really were stored, so a leak would have shown.
+    expect(leaks(JSON.stringify(stored))).toEqual(SECRET_TEXT);
     // What the web renders still arrives: the assignee on a note, the note on a move.
     expect(detail.events.find((event: any) => event.kind === "note").detail).toEqual({ assignee: "alice" });
     expect(detail.events.find((event: any) => event.kind === "status_change").detail).toEqual({ note: "started" });
     expect(detail.events.find((event: any) => event.kind === "some_future_kind").detail).toEqual({});
     // An event is the wire's fields and no others.
     for (const event of detail.events) expect(Object.keys(event).sort()).toEqual(["actor", "createdAt", "detail", "fromStatus", "id", "kind", "toStatus", "workItemId"]);
+    return text;
+  };
+
+  it("a detail key no kind allows never reaches a member, whatever it holds, in a read or a frame", async () => {
+    await unknownKeysNeverReachAMember();
+  });
+
+  it("the same holds when every timestamp reads 12.5xx seconds", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-06T23:09:12.560Z"));
+    const text = await unknownKeysNeverReachAMember();
+    expect(text).toContain("23:09:12.560Z"); // the clock really reached the payload
   });
 
   it("an allowed key holding a session id, internal identity or unshared person is still dropped or generic", async () => {
