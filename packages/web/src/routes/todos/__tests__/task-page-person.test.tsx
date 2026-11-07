@@ -182,6 +182,19 @@ describe("a Todo that waits on the operator behind a member's name", () => {
     expect(within(picker).getByTestId("person-option-clear").textContent).toContain("Takes it off your desk")
   })
 
+  it("names what the row's and the chip's × do to the other slot before the click", async () => {
+    principal = { kind: "operator" }
+    const { unmount } = setup(waiting())
+    for (const testId of ["rail-person-clear", "chip-person-clear"]) {
+      const button = await screen.findByTestId(testId)
+      expect([testId, button.getAttribute("aria-label"), button.getAttribute("title")]).toEqual([testId, "Remove person: leaves you as the person", "Remove person: leaves you as the person"])
+    }
+    unmount()
+    setup(agentMade({ status: "blocked", assignee: "@operator", humanAssignee: "@operator" }))
+    expect((await screen.findByTestId("rail-person-clear")).getAttribute("aria-label")).toBe("Remove person: takes it off your desk")
+    expect(screen.getByTestId("chip-person-clear").getAttribute("title")).toBe("Remove person: takes it off your desk")
+  })
+
   it("leaves the hint off a Todo an agent holds", async () => {
     principal = { kind: "operator" }
     setup(agentMade({ humanAssignee: "user:me" }))
@@ -189,6 +202,7 @@ describe("a Todo that waits on the operator behind a member's name", () => {
     const picker = await screen.findByTestId("picker-person")
     expect(picker.textContent).not.toContain("Takes it off your desk")
     expect(picker.textContent).not.toContain("Leaves you as the person")
+    expect(screen.getByTestId("rail-person-clear").getAttribute("aria-label")).toBe("Remove person")
   })
 })
 

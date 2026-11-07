@@ -14,7 +14,7 @@ import { AutoStartRow } from "./auto-start-row"
 import { SprintRailRow } from "../sprints/sprint-rail-row"
 import { displayNameOf, formatRelativeTime } from "../util"
 import { isMemberIdentity, LastTouchedBy, MemberChip, useViewer } from "../attribution"
-import { agentOf, PersonCircle, PersonName, personRowFor, waitsOnOperator } from "../assignee-circles"
+import { agentOf, PersonCircle, PersonName, personRowFor, removePersonLabel, waitsOnOperator } from "../assignee-circles"
 import { AssigneeRailRow } from "./legacy-assignee"
 import { useTwoSlotAssignees } from "@/hooks/use-two-slot-assignees"
 import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
@@ -117,7 +117,8 @@ export function PropsRail({
           </RailRow>
           {item.humanAssignee && personPick?.onClear && (
             <RemoveButton
-              label="Remove person"
+              label={removePersonLabel(item, viewer)}
+              title={removePersonLabel(item, viewer)}
               testId="rail-person-clear"
               onClick={personPick.onClear}
               className="absolute right-5 top-1/2 size-6 -translate-y-1/2 max-[700px]:size-[34px]"

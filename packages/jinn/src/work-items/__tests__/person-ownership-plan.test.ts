@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planOwnership } from "../person-write.js";
+import { personChangedDetail, planOwnership } from "../person-write.js";
 
 /* Where the person and the agent land for an edit of either: the operator as the person is stored the way "needs the
  * operator" always was, so nothing that reads `assignee` changes meaning. */
@@ -53,5 +53,42 @@ describe("planOwnership", () => {
     expect(planOwnership({ assignee: "mason" }, OP, { assignee: null })).toMatchObject({ from: OP, to: OP, assigneeMovedByPerson: false });
     expect(planOwnership({ assignee: OP }, USER, { humanAssignee: OTHER })).toMatchObject({ assignee: null, from: USER, to: OTHER, assigneeMovedByPerson: true });
     expect(planOwnership({ assignee: OP }, USER, { humanAssignee: null })).toMatchObject({ assignee: OP, from: USER, to: OP, assigneeMovedByPerson: false });
+  });
+
+  describe("no edit clears a slot it does not name without saying so", () => {
+    const states = [
+      { assignee: null, person: null }, { assignee: OP, person: null }, { assignee: "mason", person: null },
+      { assignee: null, person: USER }, { assignee: OP, person: USER }, { assignee: "mason", person: USER }, { assignee: "mason", person: OP },
+    ];
+
+    it("an agent edit never clears a person silently: it clears one only when the assignee was the operator as the person, and records personCleared", () => {
+      for (const state of states) for (const assignee of [null, OP, "alice", "mason"]) {
+        if (assignee === state.assignee) continue;
+        const plan = planOwnership({ assignee: state.assignee }, state.person, { assignee });
+        const operatorAsPersonCleared = state.assignee === OP && state.person === null && assignee === null;
+        // Assigning to the operator with no person makes the operator read as the person: it fills the slot, clearing nothing.
+        const operatorFillsEmpty = plan.from === null && plan.to === OP && assignee === OP;
+        expect([state, assignee, plan.to === plan.from || operatorFillsEmpty]).toEqual([state, assignee, !operatorAsPersonCleared]);
+        if (operatorAsPersonCleared) expect(personChangedDetail(plan)).toEqual({ from: OP, to: null, personCleared: true });
+      }
+    });
+
+    it("a person edit that moves the agent slot either names the operator over an empty slot or records assigneeCleared", () => {
+      for (const state of states) for (const humanAssignee of [null, OP, USER, OTHER]) {
+        const plan = planOwnership({ assignee: state.assignee }, state.person, { humanAssignee });
+        if (plan.assignee === state.assignee) continue;
+        const namedOperator = state.assignee === null && humanAssignee === OP && plan.assignee === OP;
+        const cleared = plan.assignee === null && personChangedDetail(plan).assigneeCleared === true;
+        expect([state, humanAssignee, namedOperator || cleared]).toEqual([state, humanAssignee, true]);
+      }
+    });
+
+    it("records assigneeCleared only when the person slot cleared the agent slot", () => {
+      expect(personChangedDetail(planOwnership({ assignee: OP }, null, { humanAssignee: null }))).toEqual({ from: OP, to: null, assigneeCleared: true });
+      expect(personChangedDetail(planOwnership({ assignee: OP }, null, { humanAssignee: USER }))).toEqual({ from: OP, to: USER, assigneeCleared: true });
+      expect(personChangedDetail(planOwnership({ assignee: OP }, USER, { humanAssignee: OTHER }))).toEqual({ from: USER, to: OTHER, assigneeCleared: true });
+      expect(personChangedDetail(planOwnership({ assignee: OP }, USER, { humanAssignee: null }))).toEqual({ from: USER, to: OP });
+      expect(personChangedDetail(planOwnership({ assignee: "mason" }, USER, { humanAssignee: null }))).toEqual({ from: USER, to: null });
+    });
   });
 });

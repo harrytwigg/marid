@@ -419,8 +419,15 @@ quiet-watch treatment, then sets an agent, clears it, and asserts the "needs you
   beside a user's row: renaming would hand it on (clearing `assignee`) and clearing would make the operator the person, both
   the operator's to do. A member's change only ever touches `todo_people`. Viewers get `403`; a Todo outside the member's grants is `404`. The route is in the member router, so the
   allowlist and default-deny are unchanged.
-- **Nothing wakes.** A person change writes one `person_changed` event `{ from, to }` (plus `assigneeCleared` when it cleared
-  the operator out of `assignee`; a member's timeline keeps it), emitted as an ordinary Todo update so cards refresh live. It never starts, wakes or
+- **No slot is cleared silently.** Any write that clears a slot it did not name says so in its `person_changed` event:
+  `assigneeCleared: true` when the person slot took the operator out of `assignee` (clearing or renaming the person of a
+  Todo that waits on the operator); `personCleared: true` when the agent slot cleared the person, which happens only when
+  an `@operator` assignee with no row (the operator as the person, by storage) is cleared; `reason: "person_removed"` on
+  each Todo whose person was a user who was removed (`to` is the person as read afterwards; the Todo's version advances and
+  its card refreshes live). Every other agent-slot write leaves the person as read unchanged, which tests prove over every
+  state and through the pen, the assign route and an agent's assign tool. A member's timeline keeps all three keys. The UI
+  says it before the choice (see Web), and the remove-person confirmation says Todos naming them lose their person.
+- **Nothing wakes.** A person change writes one `person_changed` event `{ from, to }` (plus the keys above), emitted as an ordinary Todo update so cards refresh live. It never starts, wakes or
   notifies an agent, fires no board hook, and is never written as `metadata_edited`, which a hook reads. The one exception is
   the operator choosing themselves with no agent, which is an assignment to the operator and fires what that fires. It is on
   the member event-detail allowlist with its ids mapped like any actor. There is no agent tool to set it.
@@ -438,7 +445,9 @@ quiet-watch treatment, then sets an agent, clears it, and asserts the "needs you
   waits on the operator (the gateway refuses both); the agent row is read-only for members. On a Todo that waits on the
   operator, the operator's person picker says what a choice does before they make it: each other person reads "Takes it
   off your desk", and "No person" reads the same when the operator is the person, or "Leaves you as the person" beside
-  someone else's name. The activity line for a hand-on reads "handed it on to another person".
+  someone else's name. The row's and the chip's × carry the same words in their name and tooltip ("Remove person: takes it
+  off your desk"). The activity line for a hand-on reads "handed it on to another person", and for a removed user
+  "removed the person's account".
 
 ## Phases
 

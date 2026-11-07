@@ -134,13 +134,19 @@ export function setUserPasswordHash(db: DatabaseType, id: string, passwordHash: 
   db.prepare("UPDATE users SET password_hash = ?, password_set_at = ?, updated_at = ? WHERE id = ?").run(passwordHash, at, at, id);
 }
 
-/** Removes the user and what hangs off them: grants and sessions (also by cascade), any token naming them and the Todos that named them as the person responsible. */
-export function deleteUser(db: DatabaseType, id: string): boolean {
-  return db.transaction((): boolean => {
+/**
+ * Removes the user and what hangs off them: grants and sessions (also by cascade), any token naming them, and their rows
+ * as the person responsible, each Todo told with a `person_changed` event. `onPeopleCleared` hears which Todos those were.
+ */
+export function deleteUser(db: DatabaseType, id: string, onPeopleCleared?: (todoIds: string[]) => void): boolean {
+  const { deleted, cleared } = db.transaction((): { deleted: boolean; cleared: string[] } => {
     db.prepare("DELETE FROM board_members WHERE user_id = ?").run(id);
     db.prepare("DELETE FROM user_sessions WHERE user_id = ?").run(id);
     db.prepare("DELETE FROM user_tokens WHERE user_id = ?").run(id);
-    clearPeopleOfUser(db, memberIdentity(id));
-    return db.prepare("DELETE FROM users WHERE id = ?").run(id).changes > 0;
+    const cleared = clearPeopleOfUser(db, memberIdentity(id));
+    const deleted = db.prepare("DELETE FROM users WHERE id = ?").run(id).changes > 0;
+    return { deleted, cleared };
   })();
+  if (cleared.length > 0) onPeopleCleared?.(cleared);
+  return deleted;
 }

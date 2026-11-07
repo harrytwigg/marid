@@ -90,6 +90,7 @@ describe("the merged feed model", () => {
     expect(whisperOf(event("e", "person_changed" as never, "t", { detail: { from: "user:a", to: "user:b" } })).text).toBe("changed the person")
     expect(whisperOf(event("e", "person_changed" as never, "t", { detail: { from: "user:a", to: "user:b", assigneeCleared: true } })).text).toBe("handed it on to another person")
     expect(whisperOf(event("e", "person_changed" as never, "t", { detail: { from: "@operator", to: null, assigneeCleared: true } })).text).toBe("cleared the person")
+    expect(whisperOf(event("e", "person_changed" as never, "t", { detail: { from: "user:a", to: null, reason: "person_removed" } })).text).toBe("removed the person's account")
     expect(
       whisperOf(event("e", "status_change", "t", { fromStatus: "in_review", toStatus: "executing", detail: { bounce: true, rounds: 2 } })).text,
     ).toBe("sent it back · round 2")

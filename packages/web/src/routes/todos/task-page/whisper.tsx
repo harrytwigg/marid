@@ -68,6 +68,7 @@ const WHISPERS: Record<string, WhisperRule> = {
   metadata_edited: { Icon: Pencil, text: "edited the details" },
   // The person responsible, beside the agent: who it names is on the card and the rail, so the line says only what changed.
   person_changed: (detail) => {
+    if (detail.reason === "person_removed") return { Icon: UserRound, text: "removed the person's account" }
     if (detail.to === null || detail.to === undefined) return { Icon: UserRound, text: "cleared the person" }
     // Naming someone else on a Todo that waited on the operator handed it on: say that, not just "changed".
     if (detail.assigneeCleared === true && detail.to !== OPERATOR_ASSIGNEE) return { Icon: UserRound, text: "handed it on to another person" }

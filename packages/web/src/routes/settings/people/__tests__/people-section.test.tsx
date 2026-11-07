@@ -181,6 +181,8 @@ describe("People list", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Remove Sam Member" }))
     expect(api.deletePerson).not.toHaveBeenCalled()
+    // Before the choice: what removing them clears on Todos that named them as the person.
+    expect(screen.getByRole("alert").textContent).toContain("any Todo naming them as the person responsible loses its person")
     fireEvent.click(screen.getByRole("button", { name: "Remove person" }))
     await waitFor(() => expect(api.deletePerson).toHaveBeenCalledWith("usr_mem"))
   })

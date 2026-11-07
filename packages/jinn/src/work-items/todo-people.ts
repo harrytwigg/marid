@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Database as DatabaseType } from "better-sqlite3";
 import { OPERATOR_ASSIGNEE } from "./operator-assignee.js";
 
@@ -32,7 +33,26 @@ export function clearTodoPerson(db: DatabaseType, todoId: string): boolean {
   return db.prepare("DELETE FROM todo_people WHERE todo_id = ?").run(todoId).changes > 0;
 }
 
-/** Drop every row naming a user, in the transaction that deletes the user. */
-export function clearPeopleOfUser(db: DatabaseType, userIdentity: string): number {
-  return db.prepare("DELETE FROM todo_people WHERE person = ?").run(userIdentity).changes;
+/**
+ * Drop every row naming a user, in the transaction that deletes the user, and say so on each Todo: a `person_changed`
+ * event `{ from, to, reason: "person_removed" }` that advances its version, so no Todo loses its person silently. `to` is
+ * the person as read afterwards (the operator when the Todo waits on them). Written here rather than through the store's
+ * event append, which imports this module; a person change fires no board hook either way. Returns the Todos touched.
+ */
+export function clearPeopleOfUser(db: DatabaseType, userIdentity: string, actor = "operator"): string[] {
+  const ids = db.prepare("SELECT todo_id FROM todo_people WHERE person = ?").pluck().all(userIdentity) as string[];
+  if (ids.length === 0) return [];
+  db.prepare("DELETE FROM todo_people WHERE person = ?").run(userIdentity);
+  const now = new Date().toISOString();
+  const bump = db.prepare("UPDATE work_items SET updated_at = ?, version = version + 1 WHERE id = ? RETURNING assignee");
+  const append = db.prepare(
+    "INSERT INTO work_item_events (id, work_item_id, kind, from_status, to_status, actor, detail, created_at) VALUES (?, ?, 'person_changed', NULL, NULL, ?, ?, ?)",
+  );
+  for (const id of ids) {
+    const row = bump.get(now, id) as { assignee: string | null } | undefined;
+    if (!row) continue;
+    const to = row.assignee === OPERATOR_ASSIGNEE ? OPERATOR_ASSIGNEE : null;
+    append.run(`wie_${randomUUID().replace(/-/g, "").slice(0, 12)}`, id, actor, JSON.stringify({ from: userIdentity, to, reason: "person_removed" }), now);
+  }
+  return ids;
 }

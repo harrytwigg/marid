@@ -1,0 +1,137 @@
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { GATEWAY_TOKEN } from "./accounts-harness.js";
+import { startBoardHarness, type BoardHarness, type Member } from "./board-harness.js";
+
+/* No write clears a slot the writer did not name without saying so. Each path that can is driven through its real route
+ * and its event is read back: the person slot clearing the operator out of `assignee` records `assigneeCleared`; the
+ * agent slot clearing an `@operator` assignee with no row (the operator as the person, by storage) records
+ * `personCleared`; removing a user records `reason: "person_removed"` on every Todo that named them. Every other
+ * agent-slot write leaves the person alone (no `person_changed` event, the person as read unchanged), by any route. */
+
+let h: BoardHarness;
+let collab: Member;
+let peer: Member;
+let store: typeof import("../../work-items/store.js");
+
+const OP = "@operator";
+const mk = () => store.createWorkItem({ title: "A Todo", department: "ops" }).id;
+const patch = (id: string, body: Record<string, unknown>) => h.operator("PATCH", `/api/work-items/${id}`, { ...body, expectedVersion: store.getWorkItem(id)!.version });
+const personEvents = (id: string) => store.listWorkItemEvents(id).filter((event) => event.kind === "person_changed");
+const lastPersonEvent = (id: string) => personEvents(id).at(-1)?.detail;
+const putPerson = (m: Member, id: string, person: unknown) => h.as(m, "PUT", `/api/member/todos/${id}/person`, { person });
+
+/** A Todo in a given state of the two slots, reached through the pen as the operator would reach it. */
+async function inState(assignee: string | null, person: string | null): Promise<string> {
+  const id = mk();
+  if (person === OP) await patch(id, { humanAssignee: OP });
+  else if (person) await patch(id, { humanAssignee: person });
+  if (assignee) store.updateWorkItem(id, { assignee });
+  expect(store.getWorkItem(id)).toMatchObject({ assignee, humanAssignee: person ?? (assignee === OP ? OP : null) });
+  return id;
+}
+
+/** An agent's tool call: a real session and the capability the gateway minted for it, as an engine passes them. */
+async function agentAssign(id: string, assignee: string) {
+  const { buildWorkItemTools } = await import("../../mcp/work-item-tools.js");
+  const { createSession } = await import("../../sessions/registry.js");
+  const { ensureSessionCapability } = await import("../../mcp/identity.js");
+  const session = createSession({ engine: "claude", source: "web", sourceRef: "agent", employee: "alice" } as never);
+  const tool = buildWorkItemTools().find((candidate) => candidate.name === "assign_work_item")!;
+  return tool.handler({ id, assignee }, {
+    gatewayUrl: h.baseUrl, token: GATEWAY_TOKEN, callerSessionId: session.id, sessionCapability: ensureSessionCapability(session.id),
+  } as never);
+}
+
+beforeAll(async () => {
+  h = await startBoardHarness();
+  store = await import("../../work-items/store.js");
+  collab = await h.join("collab@example.test", "collaborator", "ops", "Casey Collab");
+  peer = await h.join("peer@example.test", "collaborator", "ops", "Pia Peer");
+}, 60_000);
+afterAll(async () => { await h.close(); });
+
+describe("the person slot clearing the operator out of the agent slot", () => {
+  it("clearing the person of a Todo that waits on the operator records assigneeCleared", async () => {
+    const id = await inState(OP, null);
+    expect((await patch(id, { humanAssignee: null })).body.workItem).toMatchObject({ assignee: null, humanAssignee: null });
+    expect(lastPersonEvent(id)).toEqual({ from: OP, to: null, assigneeCleared: true });
+  });
+
+  it("naming a person on a Todo that waits on the operator records assigneeCleared", async () => {
+    const id = await inState(OP, null);
+    expect((await patch(id, { humanAssignee: `user:${collab.userId}` })).body.workItem).toMatchObject({ assignee: null });
+    expect(lastPersonEvent(id)).toEqual({ from: OP, to: `user:${collab.userId}`, assigneeCleared: true });
+  });
+
+  it("naming another person beside a member's name on a Todo that waits on the operator records assigneeCleared", async () => {
+    const id = await inState(OP, `user:${collab.userId}`);
+    expect((await patch(id, { humanAssignee: `user:${peer.userId}` })).body.workItem).toMatchObject({ assignee: null });
+    expect(lastPersonEvent(id)).toEqual({ from: `user:${collab.userId}`, to: `user:${peer.userId}`, assigneeCleared: true });
+  });
+
+  it("clearing a member's name there clears no other slot: the agent slot stays, and the operator reads as the person", async () => {
+    const id = await inState(OP, `user:${collab.userId}`);
+    expect((await patch(id, { humanAssignee: null })).body.workItem).toMatchObject({ assignee: OP, humanAssignee: OP });
+    expect(lastPersonEvent(id)).toEqual({ from: `user:${collab.userId}`, to: OP });
+  });
+
+  it("a member's write never clears the agent slot: refused where it would, and it moves only the row where it may", async () => {
+    const waiting = await inState(OP, `user:${collab.userId}`);
+    expect((await putPerson(collab, waiting, `user:${peer.userId}`)).status).toBe(403);
+    expect(store.getWorkItem(waiting)).toMatchObject({ assignee: OP, humanAssignee: `user:${collab.userId}` });
+    const held = await inState("alice", `user:${collab.userId}`);
+    expect((await putPerson(collab, held, null)).status).toBe(200);
+    expect(store.getWorkItem(held)).toMatchObject({ assignee: "alice", humanAssignee: null });
+    expect(lastPersonEvent(held)).toEqual({ from: `user:${collab.userId}`, to: null });
+  });
+});
+
+describe("the agent slot clearing the person", () => {
+  it("clearing an @operator assignee with no row clears the operator as the person, and records personCleared", async () => {
+    const id = await inState(OP, null);
+    expect((await patch(id, { assignee: null })).body.workItem).toMatchObject({ assignee: null, humanAssignee: null });
+    expect(lastPersonEvent(id)).toEqual({ from: OP, to: null, personCleared: true });
+  });
+});
+
+describe("every other agent-slot write leaves the person alone, by any route", () => {
+  const STATES: Array<[string | null, string | null]> = [["alice", "member"], ["alice", OP], [OP, null], [OP, "member"]];
+  const writers: Array<[string, (id: string, assignee: string | null) => Promise<unknown>]> = [
+    ["the operator's pen", (id, assignee) => patch(id, { assignee })],
+    ["the assign route", (id, assignee) => (assignee === null ? patch(id, { assignee }) : h.operator("POST", `/api/work-items/${id}/assign`, { assignee }))],
+    ["an agent's assign tool", (id, assignee) => (assignee === null ? patch(id, { assignee }) : agentAssign(id, assignee))],
+  ];
+
+  it.each(writers)("through %s", async (name, write) => {
+    for (const [assignee, person] of STATES) for (const next of [null, OP, "alice"]) {
+      if (next === assignee || (assignee === OP && person === null && next === null)) continue; // the one that clears, above
+      if (name === "an agent's assign tool" && assignee !== "alice") continue; // an agent reassigns only a Todo it holds
+      const id = await inState(assignee, person === "member" ? `user:${collab.userId}` : person);
+      const before = { person: store.getWorkItem(id)!.humanAssignee, events: personEvents(id).length };
+      await write(id, next);
+      const after = store.getWorkItem(id)!;
+      expect([assignee, person, next, after.humanAssignee, personEvents(id).length]).toEqual([assignee, person, next, before.person, before.events]);
+    }
+  });
+});
+
+describe("removing a user", () => {
+  it("tells every Todo that named them, with the person as read afterwards, on the operator's and a member's timeline", async () => {
+    const doomed = await h.join("doomed@example.test", "collaborator", "ops", "Dom Doomed");
+    const held = await inState("alice", `user:${doomed.userId}`);
+    const waiting = await inState(OP, `user:${doomed.userId}`);
+    const versions = [store.getWorkItem(held)!.version, store.getWorkItem(waiting)!.version];
+    h.broadcasts.length = 0;
+
+    expect((await h.operator("DELETE", `/api/people/${doomed.userId}`)).status).toBe(200);
+
+    expect(lastPersonEvent(held)).toEqual({ from: `user:${doomed.userId}`, to: null, reason: "person_removed" });
+    expect(lastPersonEvent(waiting)).toEqual({ from: `user:${doomed.userId}`, to: OP, reason: "person_removed" });
+    expect([store.getWorkItem(held)!.version, store.getWorkItem(waiting)!.version]).toEqual(versions.map((v) => v + 1));
+    expect(store.getWorkItem(held)).toMatchObject({ assignee: "alice", humanAssignee: null });
+    const refreshed = h.broadcasts.filter((b) => b.event === "company:changed" && b.payload.entity === "todo").map((b) => b.payload.id);
+    expect(refreshed).toEqual(expect.arrayContaining([held, waiting]));
+    const timeline = (await h.as(collab, "GET", `/api/member/todos/${held}`)).body.events.filter((event: any) => event.kind === "person_changed");
+    expect(timeline.at(-1)?.detail).toMatchObject({ to: null, reason: "person_removed" });
+  });
+});

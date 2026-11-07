@@ -4,7 +4,7 @@ import { EmployeeAvatar, OPERATOR_DEFAULT_EMOJI } from "@/components/ui/employee
 import { StatusCircle } from "../state-glyph"
 import { displayNameOf } from "../util"
 import { useViewer } from "../attribution"
-import { agentOf, PersonCircle, PersonName, personRowFor, waitsOnOperator } from "../assignee-circles"
+import { agentOf, PersonCircle, PersonName, personRowFor, removePersonLabel, waitsOnOperator } from "../assignee-circles"
 import { ReviewForChip } from "../review-for-chip"
 import { type RailPickers } from "./props-rail"
 import { SESSION_WAITING_COLOR, SESSION_WAITING_LABEL } from "@/lib/session-waiting"
@@ -72,6 +72,7 @@ function TwoSlotChips({ item, byName, rowFor, mobile }: OwnerChipProps) {
   const viewer = useViewer()
   const personPick = personRowFor(rowFor, item, viewer)
   const onClearPerson = personPick?.onClear
+  const removeLabel = removePersonLabel(item, viewer)
   const onClearAssignee = rowFor("assignee")?.onClear
   const clearClass = `absolute right-0 top-0 ${mobile ? "size-[34px]" : "size-7"}`
   return (
@@ -81,7 +82,7 @@ function TwoSlotChips({ item, byName, rowFor, mobile }: OwnerChipProps) {
           <PersonCircle person={item.humanAssignee} size={20} />
           {item.humanAssignee ? <PersonName person={item.humanAssignee} viewer={viewer} /> : <span className="text-[var(--text-tertiary)]">No person</span>}
         </Chip>
-        {onClearPerson && <RemoveButton label="Remove person" testId="chip-person-clear" onClick={onClearPerson} className={clearClass} />}
+        {onClearPerson && <RemoveButton label={removeLabel} title={removeLabel} testId="chip-person-clear" onClick={onClearPerson} className={clearClass} />}
       </div>
       <div className="relative flex-none">
         <Chip mobile={mobile} label="Agent" testId="chip-assignee" clearSlot={!!onClearAssignee} onOpen={rowFor("assignee")?.onOpen}>

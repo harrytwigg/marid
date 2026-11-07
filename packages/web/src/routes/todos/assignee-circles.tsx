@@ -134,6 +134,23 @@ export function AssigneeSlots({ item, byName, variant }: {
 }
 
 /**
+ * What a person choice does to the other slot, said before the operator makes it, on a Todo that waits on them: naming
+ * someone else hands it on and takes it off their desk. Clearing does too when the operator is the person; beside someone
+ * else's name it makes the operator the person instead. No other choice clears a slot it does not name, so nothing to say.
+ */
+export function personChoiceHints(item: { assignee?: string | null; humanAssignee?: string | null }, viewer: "operator" | "member"): { handsOn?: string; onClear?: string } {
+  if (viewer !== "operator" || item.assignee !== OPERATOR_ASSIGNEE) return {}
+  const handsOn = "Takes it off your desk"
+  return { handsOn, onClear: item.humanAssignee === OPERATOR_ASSIGNEE ? handsOn : "Leaves you as the person" }
+}
+
+/** The person row's clear button's name, carrying what clearing does to the other slot when it does anything. */
+export function removePersonLabel(item: { assignee?: string | null; humanAssignee?: string | null }, viewer: "operator" | "member"): string {
+  const { onClear } = personChoiceHints(item, viewer)
+  return onClear ? `Remove person: ${onClear.toLowerCase()}` : "Remove person"
+}
+
+/**
  * The person row's picker, offering exactly what the gateway allows: a board member never changes a Todo whose person is
  * the operator, nor one that waits on the operator (`@operator` in the agent slot): renaming would hand it on and clearing
  * would name the operator, both the operator's to do (the gateway answers 403). A viewer's role has no picker at all.

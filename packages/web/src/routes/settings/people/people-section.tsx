@@ -208,7 +208,7 @@ function RenameForm({ current, pending, onSave, onCancel }: { current: string; p
 function RemoveConfirm({ name, pending, onConfirm, onCancel }: { name: string; pending: boolean; onConfirm: () => void; onCancel: () => void }) {
   return (
     <div role="alert" className="mt-3 flex flex-col gap-2 rounded-[var(--radius-md)] bg-[color-mix(in_srgb,var(--system-red)_8%,transparent)] p-3">
-      <p className={NOTE}>Remove {name}? They are signed out everywhere and lose access to every board. Their Todos and comments stay, shown as a former member.</p>
+      <p className={NOTE}>Remove {name}? They are signed out everywhere and lose access to every board. Their Todos and comments stay, shown as a former member, and any Todo naming them as the person responsible loses its person.</p>
       <div className="flex gap-2">
         <Button size="sm" variant="destructive" disabled={pending} onClick={onConfirm}>Remove person</Button>
         <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>

@@ -1,5 +1,7 @@
 import { clearAuthCookieHeaders, currentAuthDeviceId, listAuthSessionsForUser, revokeAuthSession, revokeAuthSessionsForUser } from "../gateway/auth.js";
 import { json, notFound } from "../gateway/route-helpers.js";
+import { notifyTodoChanged } from "../work-items/live-events.js";
+import { getWorkItem } from "../work-items/store.js";
 import { listGrantsForUser } from "./board-members.js";
 import { initialsOf } from "./initials.js";
 import {
@@ -86,7 +88,13 @@ async function patchPerson(ctx: AccountRouteContext, id: string): Promise<void> 
 function removePerson(ctx: AccountRouteContext, id: string): void {
   if (!getUserById(ctx.rt.getDb(), id)) return notFound(ctx.res);
   revokeAuthSessionsForUser(ctx.rt.home, id);
-  deleteUser(ctx.rt.getDb(), id);
+  // Each Todo that named them as the person changed: its card refreshes live, as for any person change.
+  deleteUser(ctx.rt.getDb(), id, (todoIds) => {
+    for (const todoId of todoIds) {
+      const item = getWorkItem(todoId);
+      if (item) notifyTodoChanged(item, "metadata-updated");
+    }
+  });
   notifyUserSessionsRevoked();
   json(ctx.res, { status: "ok" });
 }

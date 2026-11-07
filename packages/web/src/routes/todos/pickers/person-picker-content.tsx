@@ -3,20 +3,10 @@ import { HumanAvatar } from "@/components/ui/human-avatar"
 import { memberIdentity } from "@/lib/accounts-api"
 import { usePersonChoices } from "@/hooks/use-person-choices"
 import { useViewer } from "../attribution"
+import { personChoiceHints } from "../assignee-circles"
 import { OPERATOR_ASSIGNEE } from "../util"
 import { PickerNote, PickerRow } from "./picker-shell"
 import type { PickerContentProps } from "./picker-contents"
-
-/**
- * What a choice does, said before the operator makes it, on a Todo that waits on them: naming someone else hands it on and
- * takes it off their desk. Clearing does too when the operator is the person; beside someone else's name it makes the
- * operator the person instead. Nothing to say anywhere else.
- */
-function choiceHints(item: { assignee: string | null; humanAssignee?: string | null }, viewer: "operator" | "member"): { handsOn?: string; onClear?: string } {
-  if (viewer !== "operator" || item.assignee !== OPERATOR_ASSIGNEE) return {}
-  const handsOn = "Takes it off your desk"
-  return { handsOn, onClear: item.humanAssignee === OPERATOR_ASSIGNEE ? handsOn : "Leaves you as the person" }
-}
 
 /** The person picker: the operator (the operator's own picker only: a board member never names the operator), then the people on
  *  this Todo's board, and a row to clear. It names a person responsible and nothing else: it never starts or notifies an agent,
@@ -26,7 +16,7 @@ export function PersonPickerContent({ detail, commit, sheet, onDone, board }: Om
   const current = detail.workItem.humanAssignee ?? null
   const { people } = usePersonChoices(board)
   const pick = (person: string | null) => { if (person !== current) commit(person); onDone() }
-  const { handsOn, onClear } = choiceHints(detail.workItem, viewer)
+  const { handsOn, onClear } = personChoiceHints(detail.workItem, viewer)
   return (
     <>
       {current !== null && (

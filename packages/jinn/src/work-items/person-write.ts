@@ -43,6 +43,8 @@ export interface OwnershipPlan {
   to: string | null;
   /** The person slot moved `assignee` (not the agent slot): a clear, or the operator chosen with no agent. */
   assigneeMovedByPerson: boolean;
+  /** The agent slot moved the person as read: clearing an `@operator` assignee with no row, which is the operator as the person. */
+  personMovedByAgent: boolean;
 }
 
 const effective = (assignee: string | null, person: string | null): string | null =>
@@ -71,8 +73,25 @@ export function planOwnership(current: Pick<WorkItem, "assignee">, storedPerson:
   let pair = { agent: current.assignee, person: storedPerson };
   if (input.assignee !== undefined && input.assignee !== current.assignee) pair = moveAgent(pair.agent, pair.person, input.assignee);
   const afterAgent = pair.agent;
+  const personMovedByAgent = effective(pair.agent, pair.person) !== from;
   if (input.humanAssignee !== undefined) pair = movePerson(pair.agent, pair.person, input.humanAssignee);
-  return { assignee: pair.agent, person: pair.person, from, to: effective(pair.agent, pair.person), assigneeMovedByPerson: pair.agent !== afterAgent };
+  return { assignee: pair.agent, person: pair.person, from, to: effective(pair.agent, pair.person), assigneeMovedByPerson: pair.agent !== afterAgent, personMovedByAgent };
+}
+
+/**
+ * The `person_changed` detail for a plan: the person as read before and after, plus what the edit cleared in the slot it
+ * did not name, so no write clears a slot silently. `assigneeCleared`: the person slot took the operator out of
+ * `assignee`. `personCleared`: the agent slot cleared the person, which happens only when an `@operator` assignee with no
+ * row (the operator as the person, by storage) is cleared; every other agent edit leaves the person as read alone (the
+ * ownership tests prove both over every state).
+ */
+export function personChangedDetail(plan: OwnershipPlan): { from: string | null; to: string | null; assigneeCleared?: true; personCleared?: true } {
+  return {
+    from: plan.from,
+    to: plan.to,
+    ...(plan.assigneeMovedByPerson && plan.assignee === null ? { assigneeCleared: true as const } : {}),
+    ...(plan.personMovedByAgent && plan.to === null ? { personCleared: true as const } : {}),
+  };
 }
 
 /** Who writes and how, with what the writes need from the store (passed in because the store imports this module). */
@@ -97,7 +116,7 @@ export function writeOwnership(db: DatabaseType, current: Pick<WorkItem, "id">, 
     workItemId: current.id,
     kind: "person_changed",
     actor: write.actor,
-    detail: { from: plan.from, to: plan.to, ...(plan.assigneeMovedByPerson && plan.assignee === null ? { assigneeCleared: true } : {}) },
+    detail: personChangedDetail(plan),
     versionEffect: write.effect,
   });
   return true;
