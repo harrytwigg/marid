@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { GATEWAY_TOKEN } from "./accounts-harness.js";
 import { startBoardHarness, type BoardHarness, type Member } from "./board-harness.js";
@@ -6,7 +8,8 @@ import { startBoardHarness, type BoardHarness, type Member } from "./board-harne
  * and its event is read back: the person slot clearing the operator out of `assignee` records `assigneeCleared`; the
  * agent slot clearing an `@operator` assignee with no row (the operator as the person, by storage) records
  * `personCleared`; removing a user records `reason: "person_removed"` on every Todo that named them. Every other
- * agent-slot write leaves the person alone (no `person_changed` event, the person as read unchanged), by any route. */
+ * agent-slot write leaves the person alone (no `person_changed` event, the person as read unchanged), by any route: the
+ * operator's pen, the assign route, an agent's assign tool, a delegation and an agent's delegate_task tool. */
 
 let h: BoardHarness;
 let collab: Member;
@@ -30,21 +33,25 @@ async function inState(assignee: string | null, person: string | null): Promise<
   return id;
 }
 
-/** An agent's tool call: a real session and the capability the gateway minted for it, as an engine passes them. */
-async function agentAssign(id: string, assignee: string) {
+/** An agent's tool call as alice: a real session and the capability the gateway minted for it, as an engine passes them. */
+async function agentTool(name: string, args: Record<string, unknown>) {
   const { buildWorkItemTools } = await import("../../mcp/work-item-tools.js");
+  const { buildDelegationTools } = await import("../../mcp/delegation-tools.js");
   const { createSession } = await import("../../sessions/registry.js");
   const { ensureSessionCapability } = await import("../../mcp/identity.js");
   const session = createSession({ engine: "claude", source: "web", sourceRef: "agent", employee: "alice" } as never);
-  const tool = buildWorkItemTools().find((candidate) => candidate.name === "assign_work_item")!;
-  return tool.handler({ id, assignee }, {
+  const tool = [...buildWorkItemTools(), ...buildDelegationTools()].find((candidate) => candidate.name === name)!;
+  return tool.handler(args, {
     gatewayUrl: h.baseUrl, token: GATEWAY_TOKEN, callerSessionId: session.id, sessionCapability: ensureSessionCapability(session.id),
   } as never);
 }
+const agentAssign = (id: string, assignee: string) => agentTool("assign_work_item", { id, assignee });
 
 beforeAll(async () => {
-  h = await startBoardHarness();
+  h = await startBoardHarness({ sessions: true });
   store = await import("../../work-items/store.js");
+  // A second agent on alice's team, for a delegation that moves a Todo from one agent to another.
+  fs.writeFileSync(path.join(process.env.JINN_HOME!, "org", "ops", "mason.yaml"), "name: mason\ndisplayName: Mason\ndepartment: ops\nrank: employee\nreportsTo: alice\nengine: claude\nmodel: sonnet\npersona: test employee\n");
   collab = await h.join("collab@example.test", "collaborator", "ops", "Casey Collab");
   peer = await h.join("peer@example.test", "collaborator", "ops", "Pia Peer");
 }, 60_000);
@@ -111,6 +118,28 @@ describe("every other agent-slot write leaves the person alone, by any route", (
       await write(id, next);
       const after = store.getWorkItem(id)!;
       expect([assignee, person, next, after.humanAssignee, personEvents(id).length]).toEqual([assignee, person, next, before.person, before.events]);
+    }
+  });
+});
+
+describe("a delegation never changes the person: the route delegate_task calls, and the tool itself", () => {
+  const person = (id: string) => ({ person: store.getWorkItem(id)!.humanAssignee, events: personEvents(id).length });
+
+  it("through POST /api/delegations, from every state, to another agent", async () => {
+    for (const [assignee, who, to] of [[OP, null, "alice"], [OP, "member", "alice"], [null, "member", "alice"], ["alice", "member", "mason"], ["alice", OP, "mason"]] as const) {
+      const id = await inState(assignee, who === "member" ? `user:${collab.userId}` : who);
+      const before = person(id);
+      const reply = await h.operator("POST", "/api/delegations", { workItemId: id, employee: to, task: "Take this on" });
+      expect([assignee, who, reply.status, store.getWorkItem(id)!.assignee, person(id)]).toEqual([assignee, who, 201, to, before]);
+    }
+  });
+
+  it("through an agent's delegate_task tool on a Todo it holds", async () => {
+    for (const who of ["member", OP] as const) {
+      const id = await inState("alice", who === "member" ? `user:${collab.userId}` : who);
+      const before = person(id);
+      await agentTool("delegate_task", { workItemId: id, employee: "mason", task: "Take this on" });
+      expect([who, store.getWorkItem(id)!.assignee, person(id)]).toEqual([who, "mason", before]);
     }
   });
 });

@@ -52,7 +52,18 @@ export interface BoardHarness {
 
 export interface Member { cookie: string; userId: string; email: string; sessionId: string }
 
-export async function startBoardHarness(): Promise<BoardHarness> {
+/** A session manager whose engine never runs a turn: enough for a route that starts a session (a delegation) to finish. */
+const idleSessionManager = () => {
+  const engine = { name: "stub", run: async () => ({ result: "ok" }), isAlive: () => false, kill: () => {}, killAll: () => {} };
+  const queue = {
+    enqueue: async () => {}, clearCancelled: () => {}, clearQueue: () => {}, pauseQueue: () => {}, resumeQueue: () => {},
+    getPendingCount: () => 0, getRowlessWaitingCount: () => 0, getTransportState: (_key: string, status: string) => status,
+  };
+  return { getEngines: () => new Map([["claude", engine]]), getEngine: () => engine, getQueue: () => queue };
+};
+
+/** `sessions`: give the gateway an idle session manager, for tests that drive a route which starts a session. */
+export async function startBoardHarness(opts: { sessions?: boolean } = {}): Promise<BoardHarness> {
   const { initDb } = await import("../../shared/db.js");
   const db = initDb();
   // One employee on the roster, so a name can be told from an identifier a member must not see.
@@ -91,6 +102,7 @@ export async function startBoardHarness(): Promise<BoardHarness> {
       gatewayAuthToken: GATEWAY_TOKEN, jinnHome: home, accounts: rt, emit,
       getConfig: () => ({ ...config, engines: { default: "claude" } }),
       config, connectors: new Map(), startTime: Date.now(),
+      ...(opts.sessions ? { sessionManager: idleSessionManager() } : {}),
     } as any,
   });
   const bodyReaders: Array<{ path: string; resolve: () => void; reject: (err: Error) => void }> = [];
