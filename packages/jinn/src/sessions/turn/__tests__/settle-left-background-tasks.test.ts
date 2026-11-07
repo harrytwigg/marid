@@ -41,10 +41,15 @@ function run(carriedLeftBackgroundTaskIds: string[]) {
 
 const ATTEMPT = { result: { result: "ok", numTurns: 1, sessionId: "native-1" } };
 
-async function settleWith(carried: string[], enginePromptRead: boolean): Promise<Record<string, unknown> | undefined> {
+async function settleWith(
+  carried: string[],
+  enginePromptRead: boolean,
+  over: { error?: string; streamedThrough?: number } = {},
+): Promise<Record<string, unknown> | undefined> {
   settled.length = 0;
-  await settleAnsweredTurn(run(carried) as never, ATTEMPT as never, undefined, {
-    quietPreempted: !enginePromptRead, streamedThrough: 0, superseded: false, enginePromptRead,
+  const attempt = over.error ? { result: { ...ATTEMPT.result, error: over.error } } : ATTEMPT;
+  await settleAnsweredTurn(run(carried) as never, attempt as never, undefined, {
+    quietPreempted: !enginePromptRead, streamedThrough: over.streamedThrough ?? 0, superseded: false, enginePromptRead,
   });
   return settled[0]?.fields.transportMeta;
 }
@@ -71,6 +76,18 @@ describe("settling a turn that carried left-behind background tasks", () => {
     liveSession = { id: "s1", transportMeta: { [LEFT_BACKGROUND_TASKS_META_KEY]: [OWED("carried-1")] } };
 
     expect(await settleWith(["carried-1"], false)).toBeUndefined();
+  });
+
+  it("keeps them owed when the turn failed before the engine said anything", async () => {
+    liveSession = { id: "s1", transportMeta: { [LEFT_BACKGROUND_TASKS_META_KEY]: [OWED("carried-1")] } };
+
+    expect(await settleWith(["carried-1"], true, { error: "claude did not start: its process exited" })).toBeUndefined();
+  });
+
+  it("drops them when the turn failed after the engine had streamed output, which proves it read the prompt", async () => {
+    liveSession = { id: "s1", transportMeta: { [LEFT_BACKGROUND_TASKS_META_KEY]: [OWED("carried-1")] } };
+
+    expect(await settleWith(["carried-1"], true, { error: "stopped partway", streamedThrough: 1_000 })).toEqual({});
   });
 
   it("leaves the session's meta alone when the turn carried none", async () => {

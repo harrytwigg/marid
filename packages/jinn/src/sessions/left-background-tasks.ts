@@ -136,3 +136,14 @@ export function withLeftBackgroundTasksCleared(meta: unknown, ids: readonly stri
   else delete base[LEFT_BACKGROUND_TASKS_META_KEY];
   return base;
 }
+
+/** The note as it sits ahead of a prompt: its first line through the line that tells the model what to do. */
+const LEADING_NOTE = /^\[Gateway\] (?:A background task|\d+ background tasks) this session started [\s\S]*?\nCheck (?:its|each one's) outcome directly[^\n]*(?:\n\n|$)/;
+
+/**
+ * A prompt read back from an engine's own transcript, without the note this gateway put ahead of it, so a
+ * transcript sync matches the message the session stored and never writes the note in as a new one.
+ */
+export function withoutLeftBackgroundNote(text: string): string {
+  return text.replace(LEADING_NOTE, "");
+}

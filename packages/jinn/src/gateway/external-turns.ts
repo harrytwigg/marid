@@ -8,6 +8,7 @@ import type { HookPayload } from "./hook-registry.js";
 import type { GatewayEmit } from "../shared/gateway-events.js";
 import type { Employee, Session } from "../shared/types.js";
 import { withoutBoardReminder } from "../sessions/turn/board-reminder.js";
+import { withoutLeftBackgroundNote } from "../sessions/left-background-tasks.js";
 
 /**
  * External-turn sync: persist turns that happened OUTSIDE a gateway run() —
@@ -117,7 +118,7 @@ export function transcriptEntryText(obj: any): { role: "user" | "assistant"; con
   if (typeof content !== "string" || !content.trim()) return null;
   if (isControlText(content)) return null;
   // The gateway appends the board reminder to the prompt it sends; the session's message is what the sender wrote.
-  if (obj.type === "user") content = withoutBoardReminder(content);
+  if (obj.type === "user") content = withoutLeftBackgroundNote(withoutBoardReminder(content));
   if (!content.trim()) return null;
   return { role: obj.type, content: content.trim() };
 }

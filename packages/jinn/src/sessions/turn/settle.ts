@@ -250,7 +250,7 @@ function answeredReceipt(
     durationMs: result.durationMs,
     accounting: { cost: result.cost, numTurns: result.numTurns, ...(model ? { model } : {}) },
     ...filed,
-    fields: servedFields(run.input, buildTerminalFields(run, meteredContextTokens(run, result), verdict, !resumesAfter(run, filed)), !result.error && !quietPreempted),
+    fields: servedFields(run.input, buildTerminalFields(run, meteredContextTokens(run, result), verdict, { stillLost: !resumesAfter(run, filed), result }), !result.error && !quietPreempted),
     employee: run.input.employee,
     // An interrupted turn stays silent upward: whoever interrupted it reports.
     notifyParent: !quietPreempted,
@@ -331,28 +331,41 @@ function meteredContextTokens(run: TurnRun, result: EngineResult): number | null
   return undefined;
 }
 
-function buildTerminalFields(run: TurnRun, contextTokens: number | null | undefined, verdict: TurnVerdict, stillLost: boolean): UpdateSessionFields {
+function buildTerminalFields(
+  run: TurnRun,
+  contextTokens: number | null | undefined,
+  verdict: TurnVerdict,
+  outcome: { stillLost: boolean; result: EngineResult },
+): UpdateSessionFields {
   const fields: UpdateSessionFields = { ...run.terminalFields() };
   if (contextTokens !== undefined) fields.lastContextTokens = contextTokens;
-  const meta = settledTransportMeta(run, fields, verdict, stillLost);
+  const meta = settledTransportMeta(run, fields, verdict, outcome);
   if (meta !== undefined) fields.transportMeta = meta as UpdateSessionFields["transportMeta"];
   return fields;
 }
 
 /** What this turn settles of the markers its prompt carried. */
-function settledMarkers(run: TurnRun, verdict: TurnVerdict) {
+function settledMarkers(run: TurnRun, verdict: TurnVerdict, result: EngineResult) {
+  // A turn that failed before the engine said anything may never have read the prompt, so the
+  // tasks its note named stay owed: the next turn is the only place they would be told.
+  const noteRead = verdict.enginePromptRead && (!result.error || verdict.streamedThrough > 0);
   return {
     syncMarkers: run.plan.syncRequested && !verdict.quietPreempted,
     // The held prompts and tasks this turn put in front of the engine are owed no
     // longer, and only the engine having read them settles that.
     carriedPrompts: run.plan.carriedInterruptedPrompts && verdict.enginePromptRead,
-    leftTaskIds: verdict.enginePromptRead ? run.plan.carriedLeftBackgroundTaskIds : [],
+    leftTaskIds: noteRead ? run.plan.carriedLeftBackgroundTaskIds : [],
   };
 }
 
 /** The session's meta as this turn leaves it, or undefined when the turn changes none of it. */
-function settledTransportMeta(run: TurnRun, fields: UpdateSessionFields, verdict: TurnVerdict, stillLost: boolean): unknown {
-  const settle = settledMarkers(run, verdict);
+function settledTransportMeta(
+  run: TurnRun,
+  fields: UpdateSessionFields,
+  verdict: TurnVerdict,
+  { stillLost, result }: { stillLost: boolean; result: EngineResult },
+): unknown {
+  const settle = settledMarkers(run, verdict, result);
   if (!settle.syncMarkers && !settle.carriedPrompts && settle.leftTaskIds.length === 0) return undefined;
   let meta: unknown = fields.transportMeta ?? getSession(run.input.session.id)?.transportMeta;
   // A lost conversation's transcript is owed until the session has a new
