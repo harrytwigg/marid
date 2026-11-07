@@ -31,6 +31,7 @@ import { refreshFallbackChains } from "@/hooks/use-fallback-chains"
 import { SttSettingsSection } from "./stt-section"
 import { VoiceSection } from "./voice-section"
 import { PairingSection } from "./pairing-section"
+import { PeopleEntry } from "./people/entry"
 import { ShortcutsSection } from "./shortcuts-section"
 import { ResetSection } from "./reset-section"
 import { useConfigCommit } from "./use-config-commit"
@@ -490,6 +491,8 @@ export default function SettingsPage() {
           </Section>
 
           <PairingSection />
+
+          <PeopleEntry />
 
           <ShortcutsSection />
 

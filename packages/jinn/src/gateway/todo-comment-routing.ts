@@ -7,6 +7,7 @@ import { addComment, getComment, setTodoCommentListener, type WorkItemComment } 
 import { canMessageSession } from "../work-items/employee-sessions.js";
 import { parseMentions } from "../work-items/mentions.js";
 import { getWorkItem, type WorkItem } from "../work-items/store.js";
+import { isMemberIdentity, memberLabel } from "../work-items/member-identity.js";
 import { owningEmployeeSession } from "../work-items/todo-owner-session.js";
 import { orgRegistry } from "./org-registry.js";
 import { deliverIntoSession, wakeEmployeeOnTodo, wakeRootOnTodo, type WakeEmployeeResult } from "./todo-employee-session.js";
@@ -47,6 +48,11 @@ export interface CommentWake {
   started: boolean;
 }
 
+/** A comment's author as an agent should read them: a board member as "<name> (board member)", never as the operator. */
+function authorLabel(comment: WorkItemComment): string {
+  return isMemberIdentity(comment.author) ? memberLabel(comment.author) : comment.author;
+}
+
 function threadHint(comment: WorkItemComment): string {
   return `Reply on the thread with comment_work_item { id: "${comment.workItemId}", body: "<reply>", `
     + `parentCommentId: "${comment.id}" }. Mention @<employee> in a comment to bring someone else in.`;
@@ -54,7 +60,7 @@ function threadHint(comment: WorkItemComment): string {
 
 function mentionPrompt(item: WorkItem, comment: WorkItemComment): string {
   return `🏷️ You were tagged in this comment on Todo ${item.id}, "${item.title}" (/todos/${item.id}).\n\n`
-    + `${comment.author} wrote:\n${comment.body}\n\n`
+    + `${authorLabel(comment)} wrote:\n${comment.body}\n\n`
     + `Read the Todo with get_work_item { id: "${item.id}" } and its thread with list_work_item_comments { id: "${item.id}" }. `
     + `${threadHint(comment)}\n\n`
     + `Unless you are already working this Todo, you are being consulted, not handed the work: whoever holds it `
@@ -62,7 +68,7 @@ function mentionPrompt(item: WorkItem, comment: WorkItemComment): string {
 }
 
 function replyPrompt(item: WorkItem, comment: WorkItemComment): string {
-  return `💬 ${comment.author} replied to your comment on Todo ${item.id}, "${item.title}".\n\n`
+  return `💬 ${authorLabel(comment)} replied to your comment on Todo ${item.id}, "${item.title}".\n\n`
     + `${comment.body}\n\n${threadHint(comment)} Reply only when the thread needs something from you: `
     + `an acknowledgement or thanks wakes the other side for nothing.`;
 }
@@ -122,7 +128,7 @@ function wakeTarget(context: ApiContext, item: WorkItem, comment: WorkItemCommen
     sourceAttempt: `mention:${comment.id}`,
     deliveryKind: "todo-mention",
     message: mentionPrompt(item, comment),
-    displayMessage: `🏷️ ${item.id} · ${comment.author}\n${comment.body}`,
+    displayMessage: `🏷️ ${item.id} · ${authorLabel(comment)}\n${comment.body}`,
   };
   if (!employee) return wakeRootOnTodo(context, input);
   const owner = owningEmployeeSession(item, employee.name);
@@ -190,7 +196,7 @@ function deliverReply(item: WorkItem, comment: WorkItemComment, session: Session
     sourceAttempt: `reply:${comment.id}`,
     deliveryKind: comment.authorKind === "employee" ? "todo-agent-reply" : "todo-reply",
     message: replyPrompt(item, comment),
-    displayMessage: `💬 ${item.id} · ${comment.author}\n${comment.body}`,
+    displayMessage: `💬 ${item.id} · ${authorLabel(comment)}\n${comment.body}`,
   }, comment.authorKind === "employee" ? MAX_AGENT_REPLIES_PER_TODO : undefined);
   if (!delivered) {
     addComment({

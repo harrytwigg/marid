@@ -11,6 +11,7 @@ import { registerRoutePrefetch } from './lib/route-prefetch'
 import { startKeyboardInset } from './platform'
 import { RouteLoading } from './components/route-loading'
 import { RouteFailure } from './components/route-failure'
+import { PublicShell } from './routes/auth/public-shell'
 import { AriaRouter } from './components/ui/aria-router'
 import { TodosBoardRedirect, TodosIndexRedirect, todosBoardLoader, todosIndexLoader } from './routes/todos/board/todos-index-redirect'
 import { LegacyChatRedirect } from './routes/chat/legacy-chat-redirect'
@@ -41,6 +42,8 @@ const SkillsPage = lazyRoute(() => import('./routes/skills/page'), 'skills')
 const SkillDetailPage = lazyRoute(() => import('./routes/skills/detail'), 'skill-detail')
 const FilePage = lazyRoute(() => import('./routes/file/page'), 'file')
 const MorePage = lazyRoute(() => import('./routes/more/page'), 'more')
+const InvitePage = lazyRoute(() => import('./routes/auth/invite-page'), 'invite')
+const ResetPage = lazyRoute(() => import('./routes/auth/reset-page'), 'reset')
 const TalkOrbHarnessPage = lazyRoute(() => import('./routes/talk-orb-harness/page'), 'talk-orb-harness')
 
 registerRoutePrefetch('/', ChatPage.prefetch)
@@ -155,7 +158,13 @@ const appRoutes: RouteObject[] = APP_ROUTES.flatMap((route) => {
   return element ? [{ path: route.path, element, ...(loader ? { loader } : {}) }] : []
 })
 
+// Reserved for the app although they sit outside APP_ROUTES: a person arriving on one has no
+// session, so they are not part of the authenticated surface that list describes.
+const PUBLIC_PATHS = ['/invite', '/reset'] as const
+
 const router = createBrowserRouter([
+  { path: '/invite', element: <PublicShell><InvitePage /></PublicShell> },
+  { path: '/reset', element: <PublicShell><ResetPage /></PublicShell> },
   {
     element: <AppShell />,
     // Outside AppShell, so it needs its own router provider for a link in it.
@@ -166,7 +175,7 @@ const router = createBrowserRouter([
       // matched first — a contribution can never shadow one of them.
       {
         path: '*',
-        element: <ContributedRoute reserved={reservedSegments(APP_ROUTES.filter((route) => route.id !== "plugin-contributed").map((route) => route.path))} />,
+        element: <ContributedRoute reserved={reservedSegments([...APP_ROUTES.filter((route) => route.id !== "plugin-contributed").map((route) => route.path), ...PUBLIC_PATHS])} />,
       },
     ],
   },

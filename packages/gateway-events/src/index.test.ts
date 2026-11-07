@@ -81,6 +81,12 @@ describe("decodeGatewayEvent", () => {
     expect(decodeGatewayEvent({ event: "company:changed", payload: { entity: "sprint", action: "started" } })).toBeNull()
   })
 
+  it("accepts a member's removed frame, which names only the Todo, and still requires a version on every other Todo change", () => {
+    expect(decodeGatewayEvent({ event: "company:changed", payload: { entity: "todo", action: "removed", id: "todo-1" } })).not.toBeNull()
+    expect(decodeGatewayEvent({ event: "company:changed", payload: { entity: "todo", action: "removed", id: "todo-1", version: "3" } })).toBeNull()
+    expect(decodeGatewayEvent({ event: "company:changed", payload: { entity: "todo", action: "updated", id: "todo-1" } })).toBeNull()
+  })
+
   it("rejects non-JSON values nested in company Todo snapshots", () => {
     expect(decodeGatewayEvent({
       event: "company:changed",

@@ -10,6 +10,7 @@ import {
 import { DepartmentScopeBadge } from "@/components/department-scope-badge"
 import type { DepartmentRowWire } from "@/lib/department-api"
 import { useSwitchBoard } from "./board-location"
+import { useMember } from "@/hooks/use-principal"
 import { isSameBoard, type BoardId } from "./board-route"
 import { useBoardMenuCounts } from "./use-board"
 
@@ -40,6 +41,8 @@ export interface BoardSwitcherProps {
 
 export function BoardSwitcher({ board, title, departments, attentionCount }: BoardSwitcherProps) {
   const switchBoard = useSwitchBoard()
+  // Attention and Everything are the operator's lenses; a member switches between the boards they were granted.
+  const lenses = useMember() === null
   const [open, setOpen] = useState(false)
   const archive = useArchivedRows(board, departments)
   // Counts only for the rows the menu shows: every archived department would otherwise
@@ -69,7 +72,7 @@ export function BoardSwitcher({ board, title, departments, attentionCount }: Boa
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className={MENU_CLASS}>
-        <DropdownMenuItem className={ROW_CLASS} data-testid="board-menu-attention" onClick={() => go({ kind: "attention" })}>
+        {lenses && <DropdownMenuItem className={ROW_CLASS} data-testid="board-menu-attention" onClick={() => go({ kind: "attention" })}>
           <LensIcon of={Bell} />
           Attention
           {attentionCount > 0 && (
@@ -77,12 +80,12 @@ export function BoardSwitcher({ board, title, departments, attentionCount }: Boa
               {attentionCount}
             </span>
           )}
-        </DropdownMenuItem>
-        <DropdownMenuItem className={ROW_CLASS} data-testid="board-menu-everything" onClick={() => go({ kind: "everything" })}>
+        </DropdownMenuItem>}
+        {lenses && <DropdownMenuItem className={ROW_CLASS} data-testid="board-menu-everything" onClick={() => go({ kind: "everything" })}>
           <LensIcon of={Globe} />
           Everything
           {countOf(counts.data?.everything)}
-        </DropdownMenuItem>
+        </DropdownMenuItem>}
         {(departments?.length ?? 0) > 0 && (
           <>
             <DropdownMenuLabel className="px-2.5 pb-1 pt-2.5 text-[length:var(--text-caption1)] font-semibold uppercase tracking-[0.06em] text-[var(--text-tertiary)]">

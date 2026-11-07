@@ -1,6 +1,7 @@
 import { getSession } from "../sessions/registry.js";
 import type { WorkItemComment } from "../work-items/comments.js";
 import type { WorkItem, WorkItemEvent } from "../work-items/store.js";
+import { memberIdOf } from "../work-items/member-identity.js";
 import type { HookActor } from "./types.js";
 
 const SESSION_ACTOR = "session:";
@@ -42,6 +43,9 @@ export function actorOf(event: WorkItemEvent, comment?: WorkItemComment): HookAc
   const sessionId = actorSessionId(event, comment);
   const raw = comment ? comment.author : event.actor;
   const base = { raw, ...(sessionId ? { sessionId } : {}) };
+  // A board member is neither the operator nor an employee, whatever kind the row was stored as.
+  const member = memberIdOf(raw);
+  if (member) return { ...base, kind: "member", member };
   if (isOperator(event, comment)) {
     // A close an employee carried out on the operator's word in their chat is the operator's, made by that employee.
     const onBehalf = comment ? undefined : stringDetail(event, "asOperatorEmployee");
@@ -74,8 +78,17 @@ function creatingSessionId(item: WorkItem): string | undefined {
 export function creatorOf(event: WorkItemEvent, item: WorkItem): HookActor {
   const sessionId = creatingSessionId(item);
   const base = { raw: event.actor, ...(sessionId ? { sessionId } : {}) };
+  // A member's create records the source as its actor; the member is on the Todo's `created_by`.
+  const member = memberIdOf(item.createdBy);
+  if (member) return { ...base, kind: "member", member };
   if (item.createdBy === HUMAN_CREATOR || item.source === "human") return { ...base, kind: "operator" };
-  const employee = (sessionId ? getSession(sessionId)?.employee : undefined)
-    ?? (EMPLOYEE_CREATED_SOURCES.has(item.source) && !item.createdBy.startsWith(SESSION_ACTOR) ? item.createdBy : undefined);
+  const employee = creatingEmployee(item, sessionId);
   return employee ? { ...base, kind: "employee", employee } : { ...base, kind: "system" };
+}
+
+/** The employee a non-human Todo was created by: the creating session's, else the slug a session or delegation recorded. */
+function creatingEmployee(item: WorkItem, sessionId: string | undefined): string | undefined {
+  const fromSession = sessionId ? getSession(sessionId)?.employee : undefined;
+  if (fromSession) return fromSession;
+  return EMPLOYEE_CREATED_SOURCES.has(item.source) && !item.createdBy.startsWith(SESSION_ACTOR) ? item.createdBy : undefined;
 }

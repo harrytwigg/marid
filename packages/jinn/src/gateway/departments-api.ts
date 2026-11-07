@@ -118,6 +118,11 @@ function knownDepartment(slug: string, context: ApiContext): boolean {
   }
 }
 
+/** Whether `slug` names a department the gateway knows: a well-formed slug that `knownDepartment` accepts. Board sharing asks this so it agrees with the departments API. */
+export function isKnownDepartmentSlug(slug: string, context: ApiContext): boolean {
+  return SLUG.test(slug) && knownDepartment(slug, context);
+}
+
 /** What the registry knows of a department; a department with no row yet has no prefix and no Todos. */
 function registryFields(row: DepartmentSummary | undefined): Pick<DepartmentDefinitionWire, "prefix" | "todoCount" | "archived" | "archivedAt"> {
   if (!row) return { prefix: null, todoCount: 0, archived: false, archivedAt: null };

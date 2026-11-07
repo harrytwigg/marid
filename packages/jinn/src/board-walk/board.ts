@@ -4,6 +4,7 @@ import type { Session } from "../shared/types.js";
 import { listSessionsByWorkItem } from "../sessions/registry.js";
 import { listWorkItems, type WorkItem, type WorkItemStatus } from "../work-items/store.js";
 import { commentsTail } from "../work-items/comments.js";
+import { isMemberIdentity, memberDisplayName } from "../work-items/member-identity.js";
 import { listRelations } from "../work-items/relations.js";
 import { getWorkItemLabels } from "../work-items/labels.js";
 import { getTodoDispatchConfig } from "../work-items/dispatch-config.js";
@@ -125,12 +126,19 @@ function optional<T extends object>(entries: { [K in keyof T]: T[K] | undefined 
   return Object.fromEntries(Object.entries(entries).filter(([, value]) => value !== undefined && value !== null && value !== false && value !== "")) as Partial<T>;
 }
 
+/** Who wrote a comment, as the walk's agent reads it: a board member by name and as a board member, never as the operator or a system voice. */
+function commentWho(comment: { author: string; authorKind: string }): { author: string; authorKind: string } {
+  return isMemberIdentity(comment.author)
+    ? { author: memberDisplayName(comment.author), authorKind: "board member" }
+    : { author: comment.author, authorKind: comment.authorKind };
+}
+
 /** One Todo with everything a gate can hang on, links resolved. */
 export async function digestTodo(item: WorkItem, opts: DigestOptions): Promise<BoardTodo> {
   const labels = getWorkItemLabels(item.id).map((label) => label.name);
   const tail = commentsTail(item.id, COMMENTS_PER_TODO);
   const comments = tail.comments.filter((comment) => !comment.deletedAt)
-    .map((comment) => ({ author: comment.author, authorKind: comment.authorKind, at: comment.createdAt, body: truncate(comment.body, COMMENT_CHARS) ?? "" }));
+    .map((comment) => ({ ...commentWho(comment), at: comment.createdAt, body: truncate(comment.body, COMMENT_CHARS) ?? "" }));
   const links = await Promise.all(
     findLinks([item.body, ...tail.comments.map((comment) => comment.body)], LINKS_PER_TODO)
       .map(({ url, kind }) => opts.resolveLink(url, kind)),

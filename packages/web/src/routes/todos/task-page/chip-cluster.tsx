@@ -3,6 +3,7 @@ import { STATUS_LABEL, priorityLabel, reviewAddresseeEmployee } from "@/lib/todo
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { StatusCircle } from "../state-glyph"
 import { displayNameOf } from "../util"
+import { useViewer } from "../attribution"
 import { ReviewForChip } from "../review-for-chip"
 import { type RailPickers } from "./props-rail"
 import { SESSION_WAITING_COLOR, SESSION_WAITING_LABEL } from "@/lib/session-waiting"
@@ -21,7 +22,8 @@ function Chip({
   mobile,
   clearSlot,
 }: {
-  onOpen: () => void
+  /** Absent for a property the person may not change: the chip is then a label, not a button. */
+  onOpen?: () => void
   children: React.ReactNode
   testId?: string
   label: string
@@ -29,20 +31,19 @@ function Chip({
   /** Reserves trailing room for a clear control laid over the pill's end. */
   clearSlot?: boolean
 }) {
+  const Tag = onOpen ? "button" : "span"
   return (
-    <button
-      type="button"
+    <Tag
+      {...(onOpen ? { type: "button" as const, "aria-label": label, onClick: onOpen } : { title: label })}
       data-testid={testId}
-      aria-label={label}
-      onClick={onOpen}
-      className={`focus-outline flex flex-none items-center gap-[7px] bg-[var(--fill-tertiary)] font-medium text-[var(--text-secondary)] outline-none hover:bg-[var(--fill-secondary)] ${
+      className={`focus-outline flex flex-none items-center gap-[7px] bg-[var(--fill-tertiary)] font-medium text-[var(--text-secondary)] outline-none ${onOpen ? "hover:bg-[var(--fill-secondary)]" : ""} ${
         mobile
           ? `h-[34px] rounded-[17px] text-[13.5px] ${clearSlot ? "pl-3 pr-[34px]" : "px-3"}`
           : `h-7 rounded-[14px] text-[12.5px] ${clearSlot ? "pl-[11px] pr-7" : "px-[11px]"}`
       }`}
     >
       {children}
-    </button>
+    </Tag>
   )
 }
 
@@ -86,27 +87,29 @@ export function ChipCluster({
    *  working, so the chip says so in amber rather than pulsing blue. */
   waiting?: boolean
 }) {
+  const viewer = useViewer()
   const item = detail.workItem
   const labels = detail.labels ?? []
   const onClearAssignee = rowFor("assignee")?.onClear
+  const opener = (row: Parameters<typeof rowFor>[0]) => (rowFor(row) ? () => rowFor(row)?.onOpen() : undefined)
   const reviewFor = reviewAddresseeEmployee({ status: item.status, reviewAddressee: detail.reviewAddressee })
   return (
     <div
       data-testid="task-chip-cluster"
       className="mt-3 flex min-h-7 flex-wrap gap-2 max-[700px]:min-h-[34px] max-[700px]:flex-nowrap max-[700px]:overflow-x-auto"
     >
-      <Chip mobile={mobile} label="Status" testId="chip-status" onOpen={() => rowFor("status")?.onOpen()}>
+      <Chip mobile={mobile} label="Status" testId="chip-status" onOpen={opener("status")}>
         <StatusCircle status={item.status} size={16} />
         {STATUS_LABEL[item.status]}
         {reviewFor && <ReviewForChip employee={reviewFor} byName={byName} />}
         {working && <ElapsedChip working={working} waiting={waiting} />}
       </Chip>
       <div className="relative flex-none">
-        <Chip mobile={mobile} label="Assignee" testId="chip-assignee" clearSlot={!!onClearAssignee} onOpen={() => rowFor("assignee")?.onOpen()}>
+        <Chip mobile={mobile} label="Assignee" testId="chip-assignee" clearSlot={!!onClearAssignee} onOpen={opener("assignee")}>
           {item.assignee ? (
             <>
               <EmployeeAvatar name={item.assignee} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
-              {displayNameOf(item.assignee, byName)}
+              {displayNameOf(item.assignee, byName, viewer)}
             </>
           ) : (
             <span className="text-[var(--text-tertiary)]">Unassigned</span>
@@ -123,12 +126,12 @@ export function ChipCluster({
           />
         )}
       </div>
-      <Chip mobile={mobile} label="Priority" testId="chip-priority" onOpen={() => rowFor("priority")?.onOpen()}>
+      <Chip mobile={mobile} label="Priority" testId="chip-priority" onOpen={opener("priority")}>
         <RailPriorityBars priority={item.priority} />
         {priorityLabel(item.priority)}
       </Chip>
       {labels.length > 0 && (
-        <Chip mobile={mobile} label="Labels" testId="chip-labels" onOpen={() => rowFor("labels")?.onOpen()}>
+        <Chip mobile={mobile} label="Labels" testId="chip-labels" onOpen={opener("labels")}>
           {labels.map((label) => (
             <span key={label.id} className="flex items-center gap-1">
               <span className="size-[5px] rounded-full" style={{ background: label.color ?? "var(--text-quaternary)" }} />

@@ -10,6 +10,7 @@ import { clearStopCause, writeStopCause, type TodoStopCause } from './stop-cause
 import { changedStopCause, restateStopCause } from './stop-cause-restate.js';
 export { changedStopCause } from './stop-cause-restate.js';
 import { EDGES } from './transition-edges.js';
+import { isMemberIdentity } from './member-identity.js';
 import {
   appendWorkItemEvent,
   getWorkItem,
@@ -274,7 +275,9 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
     // A child settling is recorded with the move, so its parent's owner is
     // woken for it (child-settle-wake.ts): a rollback drops the row with the
     // move, and a crash after the commit leaves it for the sweep.
-    if (isChildSettle(item.parentId, from, target)) recordChildSettle(db, item.parentId!, event);
+    // A board member's close never queues a parent wake, whatever the tree: members start, wake and
+    // steer no agent.
+    if (!isMemberIdentity(actor) && isChildSettle(item.parentId, from, target)) recordChildSettle(db, item.parentId!, event);
 
     return { item: getWorkItem(id)!, escalated, event };
   });
@@ -284,8 +287,13 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
   // here with no route to announce them, so the dashboard stayed stale until a
   // reload. The route lanes suppress their own duplicate
   // (`persistTodoMutationActivity`).
-  if (result.event) notifyTodoChanged(result.item, 'status-transitioned', opts.callerSessionId);
-  notifyTodoStatusChange(result.event, result.item);
+  if (result.event) {
+    const { fromStatus, toStatus } = result.event;
+    notifyTodoChanged(result.item, 'status-transitioned', opts.callerSessionId, undefined, fromStatus && toStatus ? { fromStatus, toStatus } : undefined);
+  }
+  // The status bridge feeds operator automation (workflow triggers) that can start agents; a member's
+  // move is not an input to it.
+  if (!isMemberIdentity(actor)) notifyTodoStatusChange(result.event, result.item);
   return result;
 }
 

@@ -80,3 +80,20 @@ describe("Talk delegation board event", () => {
     expect(linked[0].detail).toMatchObject({ sessionId: session.id, via: "delegation" });
   });
 });
+
+describe("Talk delegation live signal", () => {
+  it("announces the Todo's assignment only once the delegation's transaction has committed", async () => {
+    const { setTodoLiveEmitter } = await import("../../../work-items/live-events.js");
+    const { initDb } = await import("../../../shared/db.js");
+    const seen: Array<{ id: string; inTransaction: boolean; fromDepartment?: string | null }> = [];
+    setTodoLiveEmitter((event) => seen.push({ id: event.id, inTransaction: initDb().inTransaction, fromDepartment: event.fromDepartment }));
+    try {
+      const session = delegate("fallback-children");
+      const forTodo = seen.filter((event) => event.id === session.workItemId);
+      expect(forTodo.some((event) => event.fromDepartment !== undefined)).toBe(true);
+      expect(forTodo.every((event) => !event.inTransaction)).toBe(true);
+    } finally {
+      setTodoLiveEmitter(null);
+    }
+  });
+});

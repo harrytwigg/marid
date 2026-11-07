@@ -12,6 +12,7 @@ import { WORK_ITEM_BLOCKS_DDL } from "./blocks.js";
 import { WORK_ITEM_STOP_CAUSE_DDL } from "./stop-cause.js";
 import { WORK_ITEM_CHILD_SETTLES_DDL, WORK_ITEM_CHILD_SETTLES_TABLE_DDL } from "./child-settles.js";
 import { WORK_ITEM_QUIET_WATCH_DDL, WORK_ITEM_QUIET_WATCH_TABLE_DDL } from "./quiet-watch-rows.js";
+import { ACCOUNT_TABLES } from "../accounts/schema.js";
 import { WORK_ITEM_RECOVERY_TABLES } from "./recovery.js";
 import { clearAutoKeptOnce, WORK_ITEM_KEPT_DDL } from "./kept.js";
 import { migrateRetiredWorkItemData } from "./retired-approvals.js";
@@ -518,6 +519,7 @@ const REQUIRED_TABLE_SQL = new Map<string, string>([
   ["departments", DEPARTMENTS_TABLE_DDL],
   ["department_scopes", DEPARTMENT_SCOPES_TABLE_DDL],
   ["department_archives", DEPARTMENT_ARCHIVES_TABLE_DDL],
+  ...ACCOUNT_TABLES.map((table) => [table.name, table.tableDdl] as [string, string]),
 ]);
 
 /** Tables added additively AFTER the v2 rebuild first shipped, in ship order. A v2 database whose
@@ -547,7 +549,7 @@ const V2_ADDITIVE_TABLES: ReadonlyArray<{ name: string; ddl: string }> = [
   { name: "work_item_start_dates", ddl: WORK_ITEM_START_DATES_DDL },
   { name: "work_item_child_settles", ddl: WORK_ITEM_CHILD_SETTLES_DDL },
   { name: "work_item_quiet_watch", ddl: WORK_ITEM_QUIET_WATCH_DDL },
-].concat(WORK_ITEM_RECOVERY_TABLES);
+].concat(WORK_ITEM_RECOVERY_TABLES, ACCOUNT_TABLES.map((table) => ({ name: table.name, ddl: table.ddl })));
 /**
  * Copy a shadow-column table's `approval_*` values into `work_item_approvals`,
  * one row per item carrying a state — a one-shot step inside each rebuild, and

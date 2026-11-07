@@ -4,6 +4,10 @@ import { preloadQuickCapture } from "../quick-add/capture-bar-lazy"
 import { LargeTitleHeader } from "@/components/shell/large-title-header"
 import type { DepartmentSummaryWire } from "@/lib/api"
 import type { BoardId } from "./board-route"
+import { ShareBoardButton } from "@/components/people/share-board-button"
+import { useNavigate } from "react-router-dom"
+import { useAuthOptional } from "@/routes/auth-provider"
+import { useBoardAbilities, useMember } from "@/hooks/use-principal"
 import { ArchivedTag, BoardSwitcher } from "./board-switcher"
 import { DepartmentArchiveMenu } from "./department-archive-menu"
 
@@ -95,16 +99,33 @@ function BoardSubtitle({
   )
 }
 
+/** Who may share this board and in which mode. Sharing needs accounts, which exist only where gateway auth is on;
+ *  the operator shares as the operator, and a member who owns the board shares in member mode. */
+function BoardShare({ department }: { department: DepartmentSummaryWire }) {
+  const auth = useAuthOptional()
+  const member = useMember()
+  const abilities = useBoardAbilities(department.slug)
+  const navigate = useNavigate()
+  if (member) {
+    return abilities?.canShare
+      ? <ShareBoardButton department={department.slug} mode="member" ownRole={abilities.role ?? undefined} selfUserId={member.user.id} onLeft={() => navigate("/", { replace: true })} />
+      : null
+  }
+  return auth?.authState?.accountsEnabled === true ? <ShareBoardButton department={department.slug} mode="operator" /> : null
+}
+
 export function BoardHeader({ board, title, departments, deptPrefix, onQuickCapture, ...counts }: BoardHeaderProps) {
   const department = boardDepartment(board, departments)
+  const member = useMember()
   return (
     <LargeTitleHeader
       title={<BoardSwitcher board={board} title={title} departments={departments} attentionCount={counts.attentionCount} />}
       subtitle={<BoardSubtitle deptPrefix={deptPrefix} archived={department?.archived === true} {...counts} />}
       trailing={
         <div className="flex items-center gap-2">
-          {department && <DepartmentArchiveMenu slug={department.slug} prefix={department.prefix} archived={department.archived === true} />}
-          <QuickCaptureButton onClick={onQuickCapture} />
+          {department && <BoardShare department={department} />}
+          {department && !member && <DepartmentArchiveMenu slug={department.slug} prefix={department.prefix} archived={department.archived === true} />}
+          {!member && <QuickCaptureButton onClick={onQuickCapture} />}
         </div>
       }
     />
