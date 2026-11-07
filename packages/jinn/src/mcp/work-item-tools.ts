@@ -73,12 +73,12 @@ function personLabel(person: unknown, members: unknown): string | null {
 }
 
 function summarize(item: Record<string, unknown>, members?: unknown): Record<string, unknown> {
+  const person = personLabel(item.humanAssignee, members);
   return {
     id: item.id,
     title: item.title,
     status: item.status,
     assignee: item.assignee ?? null,
-    humanAssignee: personLabel(item.humanAssignee, members),
     department: item.department ?? null,
     source: item.source,
     parentId: item.parentId ?? null,
@@ -87,6 +87,8 @@ function summarize(item: Record<string, unknown>, members?: unknown): Record<str
     version: item.version,
     // Dates only when set: most rows carry neither, and every row is context.
     ...(item.startAt ? { startAt: item.startAt } : {}), ...(item.dueAt ? { dueAt: item.dueAt } : {}),
+    // Only when a person is set, like the dates: most rows have none, and every row is context.
+    ...(person ? { humanAssignee: person } : {}),
     updatedAt: item.updatedAt ?? null,
   };
 }
