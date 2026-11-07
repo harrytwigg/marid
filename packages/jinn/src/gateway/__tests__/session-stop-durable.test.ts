@@ -1,3 +1,4 @@
+import { PassThrough } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import { useContextMeterHarness } from "./session-context-api-harness.js";
 
@@ -147,7 +148,7 @@ describe("callback and Todo deliveries to a stopped session", () => {
 
     const turns = watchTurnStarts();
     try {
-      expect((await h.request("POST", `/api/sessions/${session.id}/stop`)).body).toMatchObject({ cancelledMessages: 0, noop: false });
+      expect((await h.request("POST", `/api/sessions/${session.id}/stop`)).body).toMatchObject({ cancelledMessages: 1, noop: false });
       expect(h.pendingPrompts(session.id)).toEqual([]);
       expect(h.registry.getMessages(session.id).some((m) => String(m.content).includes("todo wake parked"))).toBe(true);
       const { resumePendingWebQueueItems } = await import("../api.js");
@@ -237,6 +238,87 @@ describe("what counts as stopped, and who may start it again", () => {
   });
 });
 
+/** POST a message whose body arrives in two parts, so a stop can land between them. */
+async function slowSend(sessionId: string, headers: Record<string, string>, body: unknown, between: () => Promise<unknown>) {
+  const { handleApiRequest } = await import("../api.js");
+  const stream = new PassThrough();
+  const req = Object.assign(stream, {
+    method: "POST", url: `/api/sessions/${sessionId}/message`,
+    headers: { host: "gateway.test", "content-type": "application/json", ...Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v])) },
+  });
+  let status = 0;
+  const chunks: string[] = [];
+  const res = {
+    statusCode: 200, writeHead(code: number) { status = code; return this; }, setHeader() { return this; }, getHeader() { return undefined; },
+    write(chunk: unknown) { chunks.push(String(chunk)); return true; }, end(chunk?: unknown) { if (chunk) chunks.push(String(chunk)); if (!status) status = 200; },
+  };
+  const raw = JSON.stringify(body);
+  stream.write(raw.slice(0, 10));
+  const handled = handleApiRequest(req as never, res as never, h.apiCtx);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  await between();
+  stream.end(raw.slice(10));
+  await handled;
+  return { status, body: JSON.parse(chunks.join("") || "{}") as Record<string, unknown> };
+}
+
+describe("a stop racing what is already on its way", () => {
+  it("refuses a send whose body was still arriving when the stop landed", async () => {
+    const session = h.newSession("claude");
+    h.registry.updateSession(session.id, { status: "running" });
+    const stranger = h.newSession("claude");
+    const turns = watchTurnStarts();
+    try {
+      const sent = await slowSend(session.id, h.asSession(stranger.id), { message: "carry on with the old plan" },
+        () => h.request("POST", `/api/sessions/${session.id}/stop`));
+      expect(sent).toMatchObject({ status: 409, body: { status: "not_delivered" } });
+      expect(turns.startsOn(session)).toBe(0);
+      expect(h.pendingPrompts(session.id)).toEqual([]);
+      expect(h.registry.getSession(session.id)).toMatchObject({ status: "interrupted" });
+      const { isStoppedByUser } = await import("../session-stop.js");
+      expect(isStoppedByUser(session)).toBe(true);
+    } finally {
+      turns.restore();
+    }
+  });
+
+  it("does not replay the stopped turn's own row when the gateway restarts before the turn settles", async () => {
+    const session = h.newSession("claude");
+    const key = session.sessionKey || session.sourceRef || session.id;
+    const row = h.queueItems.enqueueQueueItem(session.id, key, "the old plan, in progress");
+    h.queueItems.markQueueItemRunning(row);
+    h.registry.updateSession(session.id, { status: "running" });
+    const turns = watchTurnStarts();
+    try {
+      await h.request("POST", `/api/sessions/${session.id}/stop`);
+      // The gateway dies before the killed turn's lane settles its row; the next boot:
+      h.registry.recoverStaleQueueItems();
+      const { resumePendingWebQueueItems } = await import("../api.js");
+      resumePendingWebQueueItems(h.apiCtx);
+      expect(turns.startsOn(session)).toBe(0);
+      expect(h.registry.getSession(session.id)).toMatchObject({ status: "interrupted" });
+    } finally {
+      turns.restore();
+    }
+  });
+
+  it("drops, rather than replays, a row a stopped session still holds", async () => {
+    const session = h.newSession("claude");
+    const key = session.sessionKey || session.sourceRef || session.id;
+    await h.request("POST", `/api/sessions/${session.id}/stop`);
+    h.queueItems.enqueueQueueItem(session.id, key, "slipped in after the stop");
+    const turns = watchTurnStarts();
+    try {
+      const { resumePendingWebQueueItems } = await import("../api.js");
+      resumePendingWebQueueItems(h.apiCtx);
+      expect(turns.startsOn(session)).toBe(0);
+      expect(h.pendingPrompts(session.id)).toEqual([]);
+    } finally {
+      turns.restore();
+    }
+  });
+});
+
 describe("the stop ends when the session runs again, by any path", () => {
   it("is cleared by a turn that did not come through the web send, so a later restart does not bring it back", async () => {
     const { session } = runningWithParkedMessages();
@@ -268,24 +350,30 @@ describe("the stop ends when the session runs again, by any path", () => {
 });
 
 describe("stopping a session that is not running", () => {
-  it("is a no-op, not an error, and leaves a finished session as it was", async () => {
+  it("holds a finished session stopped without touching its status, and refuses a later wake", async () => {
     const session = h.newSession("claude");
     const first = await h.request("POST", `/api/sessions/${session.id}/stop`);
-    expect(first).toMatchObject({ status: 200, body: { status: "stopped", noop: true, cancelledMessages: 0 } });
+    expect(first).toMatchObject({ status: 200, body: { status: "stopped", noop: false, wasRunning: false, cancelledMessages: 0 } });
     expect(h.registry.getSession(session.id)).toMatchObject({ status: "idle" });
-    expect((await h.request("POST", `/api/sessions/${session.id}/message`, { headers: h.asSession(h.newSession("claude").id), body: { message: "hi" } })).status).toBe(200);
+    const stranger = h.newSession("claude");
+    expect((await h.request("POST", `/api/sessions/${session.id}/message`, { headers: h.asSession(stranger.id), body: { message: "your review came back" } })).status).toBe(409);
+    expect((await h.request("GET", `/api/sessions/${session.id}`)).body).toMatchObject({ status: "idle", stopped: true });
+    expect((await h.request("POST", `/api/sessions/${session.id}/stop`)).body).toMatchObject({ noop: true, cancelledMessages: 0 });
   });
 
-  it("drops messages held for an idle session and says so, without making it stopped", async () => {
+  it("counts every message it drops from an idle session, a held delivery's included", async () => {
     const session = h.newSession("claude");
     const key = session.sessionKey || session.sourceRef || session.id;
     h.queueItems.enqueueQueueItem(session.id, key, "held for later", { internal: true });
+    const delivery = claimDelivery(session.id, "held");
+    h.registry.claimSessionDeliveryAttempt(delivery.id, Date.now(), 60_000);
+    h.registry.updateSession(session.id, { status: "running" }); // park the delivery behind a turn
+    expect((await h.request("POST", `/api/sessions/${session.id}/message`, { body: { callbackDeliveryId: delivery.id } })).status).toBe(200);
+    h.registry.updateSession(session.id, { status: "idle" });
+    expect(h.pendingPrompts(session.id)).toHaveLength(2);
     const stop = await h.request("POST", `/api/sessions/${session.id}/stop`);
-    expect(stop.body).toMatchObject({ status: "stopped", noop: false, cancelledMessages: 1 });
+    expect(stop.body).toMatchObject({ status: "stopped", noop: false, wasRunning: false, cancelledMessages: 2 });
     expect(h.pendingPrompts(session.id)).toEqual([]);
-    expect(h.registry.getSession(session.id)).toMatchObject({ status: "idle" });
-    const stranger = h.newSession("claude");
-    expect((await h.request("POST", `/api/sessions/${session.id}/message`, { headers: h.asSession(stranger.id), body: { message: "hi" } })).status).toBe(200);
   });
 
   it("is a no-op the second time", async () => {

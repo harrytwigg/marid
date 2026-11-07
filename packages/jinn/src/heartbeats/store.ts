@@ -219,13 +219,6 @@ export function disarmHeartbeatsForSession(ownerSessionId: string, now = Date.no
   return result.changes;
 }
 
-/**
- * Book one delivery against `id` and schedule the next.
- *
- * The next deadline is computed from `now`, never from the deadline just met, so
- * a heartbeat whose gateway was down for ten intervals fires once and then
- * resumes on a fresh interval instead of replaying every tick it slept through.
- */
 /** Push a due heartbeat to its next interval without firing it or spending one
  *  of its fires: its owner is stopped, and the tick would only be refused. */
 export function postponeHeartbeat(id: string, now = Date.now()): void {
@@ -235,6 +228,13 @@ export function postponeHeartbeat(id: string, now = Date.now()): void {
   `).run(now, id);
 }
 
+/**
+ * Book one delivery against `id` and schedule the next.
+ *
+ * The next deadline is computed from `now`, never from the deadline just met, so
+ * a heartbeat whose gateway was down for ten intervals fires once and then
+ * resumes on a fresh interval instead of replaying every tick it slept through.
+ */
 export function advanceHeartbeat(id: string, now = Date.now()): Heartbeat | undefined {
   const current = getHeartbeat(id);
   if (!current || current.status !== "armed") return current;

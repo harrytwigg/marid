@@ -369,6 +369,11 @@ describe("session tools — unit (stub gateway)", () => {
     const nothing = (await tool("stop_session").handler({ sessionId: "c" }, noop.ctx)) as Record<string, unknown>;
     expect(nothing.action).toBe("already-stopped");
 
+    const idle = stub(() => ({ status: 200, body: { status: "stopped", sessionId: "c", noop: false, wasRunning: false, cancelledMessages: 0 } }), "p");
+    const held = (await tool("stop_session").handler({ sessionId: "c" }, idle.ctx)) as Record<string, unknown>;
+    expect(held.action).toBe("stopped");
+    expect(String(held.hint)).toMatch(/not running; it is now held stopped/);
+
     const denied = stub(() => ({ status: 403, body: { error: "not a descendant of your session" } }), "p");
     await expect(tool("stop_session").handler({ sessionId: "x" }, denied.ctx)).rejects.toThrow(/403.*descendant/);
   });

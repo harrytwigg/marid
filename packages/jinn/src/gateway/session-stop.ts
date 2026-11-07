@@ -1,13 +1,13 @@
 // `POST /api/sessions/:id/stop`, made durable: a stop cancels the messages
 // parked for the session as well as the turn, and a session stopped on purpose
-// then takes no message from anyone but the operator or its owner.
+// then takes no message from anyone but the operator or whoever may stop it.
 import type { ServerResponse } from "node:http";
 import type { JsonObject, Session } from "../shared/types.js";
 import { USER_STOP_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
 import type { QueueItem } from "../sessions/queue-item-registry.js";
 import { withdrawPendingQueueItemsForStop } from "../sessions/queue-stop.js";
 import { hasStoppedMark, markSessionStopped } from "../sessions/stopped-marker.js";
-import { RESTART_RESUME_META_KEY, RESTART_RESUME_REASON_META_KEY, updateSession } from "../sessions/registry.js";
+import { listReleasableParentCompletionQueuesForSource, RESTART_RESUME_META_KEY, RESTART_RESUME_REASON_META_KEY, updateSession } from "../sessions/registry.js";
 import { interruptSessionTurn } from "./session-interrupt.js";
 import type { ApiContext } from "./api.js";
 
@@ -25,9 +25,11 @@ export function refuseStoppedSession(res: ServerResponse, session: Session): boo
 }
 
 export interface SessionStopResult {
-  /** False when nothing was running or left to stop: it had finished, or was already stopped. */
+  /** A turn was running (or waiting on a limit) and was cut short. */
+  wasRunning: boolean;
+  /** False when it was already stopped, nothing ran and nothing was parked: the stop changed nothing. */
   changed: boolean;
-  /** Parked messages dropped by this stop. */
+  /** Parked messages dropped by this stop, delivery-owned ones included. */
   cancelled: number;
 }
 
@@ -52,22 +54,34 @@ function announceWithdrawn(context: ApiContext, session: Session, withdrawn: Que
   });
 }
 
+/** Let a parent's completion batch held behind this session's queue go on its way. */
+function releaseHeldParentCompletions(context: ApiContext, session: Session): void {
+  for (const held of listReleasableParentCompletionQueuesForSource(session.id)) {
+    context.sessionManager.getQueue().releaseCallbackDrain(held.sessionKey, held.queueItemId);
+  }
+}
+
 /**
  * Stop a session. `effectiveStatus` is the status readers see: a turn that
  * ended with background work still going is `running` there, though stored `idle`.
- * Idempotent: a session with nothing running, and not interrupted, keeps its state.
+ *
+ * Whatever its status, the session is left stopped: a running turn is cut short,
+ * everything parked is dropped, and the stop mark makes every later wake but a
+ * deliberate start get `not_delivered`. A session stopped while idle keeps its
+ * status (nothing ran to interrupt). Stopping a stopped session changes nothing.
  */
 export function stopSession(context: ApiContext, session: Session, effectiveStatus: Session["status"]): SessionStopResult {
   // Rows first: the turn's slot settles as soon as the kill lands, and the next
   // slot must find nothing `pending` left to claim.
-  const withdrawn = withdrawPendingQueueItemsForStop(session.id);
-  const live = effectiveStatus === "running" || effectiveStatus === "waiting";
-  const interrupted = session.status === "interrupted";
-  const changed = live || (interrupted && !hasStoppedMark(session.id));
-  if (live) interruptSessionTurn(context, session, USER_STOP_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON);
-  if (live || interrupted) markSessionStopped(session.id);
-  const transportMeta = !live && interrupted ? withoutRestartResumeMark(session) : undefined;
+  const { withdrawn, cancelledDeliveries } = withdrawPendingQueueItemsForStop(session.id);
+  const wasRunning = effectiveStatus === "running" || effectiveStatus === "waiting";
+  const alreadyStopped = hasStoppedMark(session.id);
+  if (wasRunning) interruptSessionTurn(context, session, USER_STOP_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON);
+  markSessionStopped(session.id);
+  const transportMeta = !wasRunning && session.status === "interrupted" ? withoutRestartResumeMark(session) : undefined;
   if (transportMeta) updateSession(session.id, { transportMeta });
   announceWithdrawn(context, session, withdrawn);
-  return { changed, cancelled: withdrawn.length };
+  releaseHeldParentCompletions(context, session);
+  const cancelled = withdrawn.length + cancelledDeliveries;
+  return { wasRunning, changed: wasRunning || !alreadyStopped || cancelled > 0 || transportMeta !== undefined, cancelled };
 }

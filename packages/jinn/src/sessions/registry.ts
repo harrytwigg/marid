@@ -22,7 +22,7 @@ import type { ChatBlock, ChatBlockEnvelope, EngineSessionRef, EngineSessionRefs,
 import { blockFallbackText, mergeBlock, validateBlockEnvelope } from '../shared/blocks.js';
 import { ptySnapshotStore } from '../engines/pty-snapshot.js';
 import { isLegacyWorkflowPhaseRow, isLegacyWorkflowPhaseSession, LEGACY_WORKFLOW_PHASE_SQL } from './legacy-workflow-phase.js';
-import { clearSessionStopped } from './stopped-marker.js';
+import { clearSessionStopped, stoppedMarkerKey } from './stopped-marker.js';
 
 export const RESTART_ACK_META_KEY = "restartAcknowledgedAt";
 /** Stamped on a session the gateway itself interrupted, so the next boot can tell it apart from one that was already idle. Consumed in sessions/restart-resume.ts. */
@@ -2042,7 +2042,7 @@ export function deleteSession(id: string): boolean {
     if (!session || session.work_item_id) return false;
     db.prepare('DELETE FROM messages WHERE session_id = ?').run(id);
     db.prepare('DELETE FROM queue_items WHERE session_id = ?').run(id);
-    db.prepare('DELETE FROM meta WHERE key = ?').run(`session-stopped:${id}`);
+    db.prepare('DELETE FROM meta WHERE key = ?').run(stoppedMarkerKey(id));
     db.prepare('DELETE FROM chat_pins WHERE pin_key = ?').run(id);
     return db.prepare('DELETE FROM sessions WHERE id = ? AND work_item_id IS NULL').run(id).changes > 0;
   });
@@ -2063,7 +2063,7 @@ export function deleteSessions(ids: string[]): number {
     const placeholders = deletable.map(() => '?').join(',');
     db.prepare(`DELETE FROM messages WHERE session_id IN (${placeholders})`).run(...deletable);
     db.prepare(`DELETE FROM queue_items WHERE session_id IN (${placeholders})`).run(...deletable);
-    db.prepare(`DELETE FROM meta WHERE key IN (${placeholders})`).run(...deletable.map((id) => `session-stopped:${id}`));
+    db.prepare(`DELETE FROM meta WHERE key IN (${placeholders})`).run(...deletable.map(stoppedMarkerKey));
     db.prepare(`DELETE FROM chat_pins WHERE pin_key IN (${placeholders})`).run(...deletable);
     const result = db.prepare(`DELETE FROM sessions WHERE id IN (${placeholders}) AND work_item_id IS NULL`).run(...deletable);
     return { changes: result.changes, deletedIds: deletable };

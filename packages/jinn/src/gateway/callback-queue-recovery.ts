@@ -8,6 +8,8 @@ import {
   getSessionDeliveryByQueueItemId, shouldHoldParentCompletionQueueDispatch, updateSession,
 } from "../sessions/registry.js";
 import { dispatchWebSessionRun } from "./web-session-dispatch.js";
+import { isStoppedByUser } from "../sessions/stopped-marker.js";
+import { withdrawPendingQueueItemsForStop } from "../sessions/queue-stop.js";
 
 export function resumePendingWebQueueItems(context: ApiContext): void {
   coalescePendingParentCompletionQueueItems();
@@ -26,6 +28,12 @@ export function resumePendingWebQueueItems(context: ApiContext): void {
 
 function resumePendingQueueItem(item: QueueItem, context: ApiContext): boolean {
   let session = getSession(item.sessionId);
+  // A replay is never a deliberate start. A row a stopped session still holds
+  // (one that raced the stop) is dropped, not run.
+  if (session && isStoppedByUser(session)) {
+    withdrawPendingQueueItemsForStop(session.id);
+    return false;
+  }
   if (!session) {
     cancelQueueItem(item.id);
     for (const held of listReleasableParentCompletionQueuesForSource(item.sessionId)) {

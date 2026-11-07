@@ -9,21 +9,31 @@ import type { Session } from "../shared/types.js";
 
 const KEY_PREFIX = "session-stopped:";
 
+/** The `meta` key that holds `sessionId`'s stop, for the writers that delete sessions. */
+export function stoppedMarkerKey(sessionId: string): string {
+  return `${KEY_PREFIX}${sessionId}`;
+}
+
 /** Record that `sessionId` was stopped on purpose. */
 export function markSessionStopped(sessionId: string): void {
-  initDb().prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run(`${KEY_PREFIX}${sessionId}`, new Date().toISOString());
+  initDb().prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run(stoppedMarkerKey(sessionId), new Date().toISOString());
 }
 
 /** Forget it: someone started the session on purpose, or it was deleted. */
 export function clearSessionStopped(sessionId: string): void {
-  initDb().prepare("DELETE FROM meta WHERE key = ?").run(`${KEY_PREFIX}${sessionId}`);
+  initDb().prepare("DELETE FROM meta WHERE key = ?").run(stoppedMarkerKey(sessionId));
 }
 
 export function hasStoppedMark(sessionId: string): boolean {
-  return initDb().prepare("SELECT 1 FROM meta WHERE key = ?").get(`${KEY_PREFIX}${sessionId}`) !== undefined;
+  return initDb().prepare("SELECT 1 FROM meta WHERE key = ?").get(stoppedMarkerKey(sessionId)) !== undefined;
 }
 
-/** Stopped on purpose and not started since: nothing but a deliberate start may wake it. */
-export function isStoppedByUser(session: Session): boolean {
-  return session.status === "interrupted" && hasStoppedMark(session.id);
+/**
+ * Stopped on purpose and not started since: nothing but a deliberate start may
+ * wake it. The mark alone decides, whatever the status: a session stopped while
+ * idle keeps `idle`, and every turn start clears the mark, so a later restart
+ * interruption cannot make a session that has run since look stopped.
+ */
+export function isStoppedByUser(session: Pick<Session, "id">): boolean {
+  return hasStoppedMark(session.id);
 }

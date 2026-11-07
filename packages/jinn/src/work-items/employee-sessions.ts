@@ -118,14 +118,15 @@ export function isLiveEmployeeSession(session: Session | undefined, workItemId: 
     && holderOf(session) === employee
     && session.workItemId === workItemId
     && canMessageSession(session)
-    && !isStoppedByUser(session)
     && !isLegacyWorkflowPhaseSession(session);
 }
 
-/** Neither errored nor archived, not a terminal, and not a session reset with
- *  /new, which stays linked only as evidence of what it did. */
+/** Neither errored nor archived, not a terminal, not stopped on purpose, and not
+ *  a session reset with /new, which stays linked only as evidence of what it did.
+ *  A Todo wake that finds none starts, redispatches or comments instead. */
 export function canMessageSession(session: Session): boolean {
   return session.status !== 'error'
+    && !isStoppedByUser(session)
     && !session.archivedAt
     && !session.sessionKey?.startsWith('archived:')
     && !isTerminalSession(session);

@@ -1124,7 +1124,7 @@ function serializeSessionList(sessions: readonly Session[], context: ApiContext)
 
 function serializeSessionResponse(session: Session, context: ApiContext): Session {
   const delegatedActivityIndex = buildSessionDelegatedActivityIndex(listSessions(), context);
-  return serializeSession(session, context, delegatedActivityIndex, countPendingQueueItemsByKey());
+  return { ...serializeSession(session, context, delegatedActivityIndex, countPendingQueueItemsByKey()), stopped: isStoppedByUser(session) };
 }
 
 function isSessionLiveRunning(session: Session, context: ApiContext): boolean {
@@ -2045,7 +2045,9 @@ export async function handleApiRequest(
         instead: "Ask the operator or the session's parent instead.",
       })) return;
       const stopped = stopSession(context, session, effectiveSessionStatus(session, currentRuntimeActivity(session, context)));
-      return json(res, { status: "stopped", sessionId: params.id, noop: !stopped.changed && stopped.cancelled === 0, cancelledMessages: stopped.cancelled });
+      return json(res, {
+        status: "stopped", sessionId: params.id, noop: !stopped.changed, wasRunning: stopped.wasRunning, cancelledMessages: stopped.cancelled,
+      });
     }
 
     // POST /api/sessions/:id/reset — clear stuck session state (stale engine IDs, errors)
@@ -3836,10 +3838,15 @@ export async function handleApiRequest(
       let session = getSession(params.id);
       if (!session) return notFound(res);
       if (isTerminalSession(session)) return json(res, { error: TERMINAL_REFUSES_MESSAGES }, 409);
-      session = maybeRevertEngineOverride(session, undefined, context.getConfig());
       const _parsed = await readJsonBody(req, res);
       if (!_parsed.ok) return;
       const body = _parsed.body as any;
+      // Read it again: a stop (or a delete) can land while the body streams in, and
+      // every guard below, the stop's included, must judge the session as it is now.
+      // Nothing between here and the enqueue awaits.
+      const current = getSession(params.id);
+      if (!current) return notFound(res);
+      session = maybeRevertEngineOverride(current, undefined, context.getConfig());
 
       // Child callbacks claim a durable outbox identity before entering this
       // route. The receipt is the source of truth; request payload fields are
