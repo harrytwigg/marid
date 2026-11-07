@@ -22,7 +22,7 @@ import { onLimitProbeChange } from "../sessions/limit-probe.js";
 import { createRuntimeActivityHandler } from "./runtime-activity.js";
 import { getPackageVersion } from "../shared/version.js";
 import { PRODUCT_NAME, productBanner } from "../shared/brand.js";
-import { LOST_BACKGROUND_NUDGE_WINDOW_MS, notifyLostBackgroundTasks } from "../sessions/lost-background-tasks.js";
+import { handleLostBackgroundTasks } from "../sessions/lost-background-tasks.js";
 import { acknowledgeRestartRequesters, backgroundWorkAtShutdown, interruptRunningSessionsForShutdown, recordSessionsRunningAtBoot, resumeRestartInterruptedSessions } from "../sessions/restart-resume.js";
 import { initDb } from "../shared/db.js";
 import { SessionManager, type RouteOptions } from "../sessions/manager.js";
@@ -887,16 +887,8 @@ export async function startGateway(
   // a respawn, a crash) is never re-invoked by them: ask it to carry on. Not
   // while shutting down, when the restart record nudges what the shutdown kills.
   let shuttingDown = false;
-  interactiveClaudeEngine.onLostBackgroundTasks((sessionId, tasks) => {
-    if (shuttingDown) return;
-    const result = notifyLostBackgroundTasks(sessionId, tasks);
-    const ids = tasks.map((task) => task.id).join(", ");
-    if (result.claimed) logger.info(`Asked session ${sessionId} to carry on after its process ended under ${tasks.length} background task(s)`);
-    else if (result.reason === "rate-limited") {
-      logger.warn(`Did not ask session ${sessionId} to carry on after losing background tasks (${ids}): it was already asked within the last ${LOST_BACKGROUND_NUDGE_WINDOW_MS / 60_000}m`);
-    } else if (result.reason !== "already-nudged" && result.reason !== "already-delivered") {
-      logger.info(`Did not ask session ${sessionId} to carry on after losing background tasks (${ids}): ${result.reason}`);
-    }
+  interactiveClaudeEngine.onLostBackgroundTasks((sessionId, tasks, deliberate) => {
+    if (!shuttingDown) handleLostBackgroundTasks(sessionId, tasks, deliberate);
   });
 
   // Unsolicited-Stop consumer: a Stop hook nobody claims within the registry's

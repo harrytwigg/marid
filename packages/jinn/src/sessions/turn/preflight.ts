@@ -19,6 +19,7 @@ import { openTurnMessages } from "../queue-item-registry.js";
 import { isRemoteMcpSession } from "../remote-mcp-session.js";
 import { isTerminalSession, TERMINAL_REFUSES_MESSAGES } from "../../terminals/session.js";
 import { readUnseenInterruptedPrompts } from "./superseded.js";
+import { withLeftBackgroundNote } from "../left-background-tasks.js";
 import { resolveBoardReminder } from "./board-reminder.js";
 import { findBuiltinMcp } from "../../mcp/builtin-name.js";
 import type { TurnHierarchy, TurnInput, TurnPlan, TurnPreflight } from "./types.js";
@@ -170,7 +171,7 @@ export function preflightTurn(input: TurnInput): TurnPreflight {
 
   const baseContextOptions = contextOptionsFor(input, effortLevel, resolvedMcp, runtimeSource);
   const rawCommand = isRawEngineCommand(engineName, input.prompt);
-  const turnPrompt = rawCommand ? verbatimTurnPrompt(input.prompt) : resolveTurnPrompt(session, engineName, input.prompt, Boolean(resumeRef.id));
+  const turnPrompt = rawCommand ? verbatimTurnPrompt(input.prompt) : withLeftBackgroundNote(session, resolveTurnPrompt(session, engineName, input.prompt, Boolean(resumeRef.id)));
 
   return {
     ok: true,
@@ -198,8 +199,8 @@ export function preflightTurn(input: TurnInput): TurnPreflight {
  * and the command never runs. Both stay owed: neither is marked delivered, so
  * the next ordinary turn carries them.
  */
-function verbatimTurnPrompt(prompt: string): Pick<TurnPlan, "promptToRun" | "syncRequested" | "carriedInterruptedPrompts"> {
-  return { promptToRun: prompt, syncRequested: false, carriedInterruptedPrompts: false };
+function verbatimTurnPrompt(prompt: string): Pick<TurnPlan, "promptToRun" | "syncRequested" | "carriedInterruptedPrompts" | "carriedLeftBackgroundTaskIds"> {
+  return { promptToRun: prompt, syncRequested: false, carriedInterruptedPrompts: false, carriedLeftBackgroundTaskIds: [] };
 }
 
 /** The per-attempt context builder: system prompt, fingerprint, and the
