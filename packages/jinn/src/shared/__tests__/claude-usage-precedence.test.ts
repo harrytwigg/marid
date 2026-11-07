@@ -69,6 +69,31 @@ function writeStatusline(fiveHour: number, sevenDay: number): void {
   );
 }
 
+/** A snapshot from an account whose plan has no five-hour limit: the CLI only
+ *  ever sees a weekly rate-limit header for it. */
+function writeWeeklyOnlyStatusline(sevenDay: number, fiveHour?: unknown, ageMs = 0): void {
+  const file = path.join(CLAUDE_DIR, "session.json");
+  fs.writeFileSync(
+    file,
+    JSON.stringify({
+      captured_at: new Date(Date.now() - ageMs).toISOString(),
+      rate_limits: { ...(fiveHour !== undefined ? { five_hour: fiveHour } : {}), seven_day: { used_percentage: sevenDay, resets_at: 1789102800 } },
+    }),
+  );
+  const at = new Date(Date.now() - ageMs);
+  fs.utimesSync(file, at, at);
+}
+
+/** The usage API's view of the same account: a session bucket at zero beside a real weekly one. */
+function sessionAtUsagePayload(sessionPercent: number, sessionResetsAt: string | null = "2026-11-06T16:59:59Z"): Record<string, unknown> {
+  return {
+    limits: [
+      { kind: "session", group: "session", percent: sessionPercent, resets_at: sessionResetsAt, scope: null },
+      { kind: "weekly_all", group: "weekly", percent: 37, resets_at: "2026-11-12T09:00:00Z", scope: null },
+    ],
+  };
+}
+
 async function claudeSnapshot() {
   const res = await collectEngineLimits(cfg(), { engine: "claude" });
   return res.engines.claude;
@@ -139,5 +164,83 @@ describe("collectEngineLimits — claude usage-API vs statusline precedence", ()
     const claude = await claudeSnapshot();
     expect(claude.source).toBe("claude oauth usage api");
     expect(claude.status).toBe("live");
+  });
+});
+
+describe("collectEngineLimits — claude five-hour window the plan does not have", () => {
+  it("drops the usage API's zero five-hour bucket when the CLI only ever sees a weekly limit", async () => {
+    stubUsageApi(sessionAtUsagePayload(0));
+    writeWeeklyOnlyStatusline(37);
+
+    const claude = await claudeSnapshot();
+    expect(claude.source).toBe("claude oauth usage api");
+    expect(claude.windows?.map((w) => w.name)).toEqual(["7d"]);
+  });
+
+  it("keeps a five-hour bucket the usage API reads above zero", async () => {
+    stubUsageApi(sessionAtUsagePayload(100));
+    writeWeeklyOnlyStatusline(37);
+
+    const claude = await claudeSnapshot();
+    expect(claude.windows?.[0]).toMatchObject({ name: "5h", usedPercent: 100, windowDurationMins: 300 });
+  });
+
+  it("keeps the 0% straight after a reset on an account that has a five-hour limit (its snapshot carries five_hour)", async () => {
+    stubUsageApi(sessionAtUsagePayload(0, null));
+    writeStatusline(0, 37);
+
+    const claude = await claudeSnapshot();
+    expect(claude.source).toBe("claude oauth usage api");
+    expect(claude.windows?.map((w) => [w.name, w.usedPercent])).toEqual([["5h", 0], ["7d", 37]]);
+  });
+
+  it("keeps the 5h window off however long the account has sat idle since its newest snapshot", async () => {
+    stubUsageApi(sessionAtUsagePayload(0));
+    writeWeeklyOnlyStatusline(37, undefined, 9 * 60 * 60_000);
+    expect((await claudeSnapshot()).windows?.map((w) => w.name)).toEqual(["7d"]);
+
+    writeWeeklyOnlyStatusline(37, undefined, 30 * 24 * 60 * 60_000);
+    const claude = await claudeSnapshot();
+    expect(claude.source).toBe("claude oauth usage api");
+    expect(claude.windows?.map((w) => w.name)).toEqual(["7d"]);
+  });
+
+  it("brings the 5h window back once the newest snapshot carries five_hour", async () => {
+    stubUsageApi(sessionAtUsagePayload(0));
+    writeWeeklyOnlyStatusline(37);
+    expect((await claudeSnapshot()).windows?.map((w) => w.name)).toEqual(["7d"]);
+
+    writeStatusline(0, 37);
+    expect((await claudeSnapshot()).windows?.map((w) => [w.name, w.usedPercent])).toEqual([["5h", 0], ["7d", 37]]);
+  });
+
+  it("keeps the usage API's 0% when the snapshot's five_hour entry is empty, null or has null fields", async () => {
+    stubUsageApi(sessionAtUsagePayload(0));
+    for (const fiveHour of [{}, null, { used_percentage: null, resets_at: null }]) {
+      writeWeeklyOnlyStatusline(37, fiveHour);
+      const claude = await claudeSnapshot();
+      expect(claude.source).toBe("claude oauth usage api");
+      expect(claude.windows?.map((w) => [w.name, w.usedPercent])).toEqual([["5h", 0], ["7d", 37]]);
+    }
+  });
+
+  it("keeps a five-hour reading above zero, however small, beside a weekly-only snapshot", async () => {
+    stubUsageApi(sessionAtUsagePayload(0.4));
+    writeWeeklyOnlyStatusline(37);
+
+    const claude = await claudeSnapshot();
+    expect(claude.windows?.map((w) => [w.name, w.usedPercent])).toEqual([["5h", 0], ["7d", 37]]);
+  });
+
+  it("shows no five-hour window from a statusline snapshot without one", async () => {
+    vi.stubGlobal("fetch", async () => ({ ok: false }) as unknown as Response);
+    writeWeeklyOnlyStatusline(37);
+    expect((await claudeSnapshot()).windows?.map((w) => w.name)).toEqual(["7d"]);
+
+    // An empty bucket has no reading to draw.
+    writeWeeklyOnlyStatusline(37, {});
+    const claude = await claudeSnapshot();
+    expect(claude.source).toBe("claude-statusline");
+    expect(claude.windows?.map((w) => w.name)).toEqual(["7d"]);
   });
 });

@@ -17,6 +17,7 @@ import { claudeAccountKey } from "./engine-account.js";
 import type { ClaudeProfile } from "./claude-profile.js";
 import { lastAccountReading } from "./account-readings.js";
 import {
+  claudePlanHasNoFiveHour,
   claudeSnapshotFile,
   fetchClaudeOAuthUsage,
   windowFromClaude,
@@ -76,11 +77,14 @@ export async function claudeResetsAtSeconds(nowMs: number = Date.now(), source: 
   }
 }
 
-/** The live usage API's five-hour reset for the profile's account, if it answers. */
+/** The live usage API's five-hour reset for the profile's account, if it answers.
+ *  A five-hour bucket the account does not have is no reset: the Limits page
+ *  leaves it out, and so does the backoff. */
 async function liveSessionResetsAt(profile: ClaudeProfile): Promise<number | undefined> {
   try {
     const usage = await fetchClaudeOAuthUsage(process.env, profile);
-    return (usage ? windowsFromClaudeUsage(usage) : []).find((window) => window.name === "5h")?.resetsAt;
+    const planHasNoFiveHour = claudePlanHasNoFiveHour(claudeAccountKey(profile));
+    return (usage ? windowsFromClaudeUsage(usage, { planHasNoFiveHour }) : []).find((window) => window.name === "5h")?.resetsAt;
   } catch {
     // The usage API is one of two sources; the on-disk snapshot is the other.
     return undefined;
