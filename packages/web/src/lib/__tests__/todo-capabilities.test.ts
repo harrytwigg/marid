@@ -42,12 +42,22 @@ describe("member-only trees", () => {
 
 describe("capabilities", () => {
   it("gives a viewer nothing to write", () => {
-    expect(memberCapabilities("viewer", true)).toMatchObject({ comment: false, attach: false, create: false, edit: false, close: false, operatorControls: false })
+    expect(memberCapabilities("viewer", true)).toMatchObject({ comment: false, attach: false, create: false, edit: false, close: false, person: false, operatorControls: false })
   })
 
   it("lets a collaborator comment anywhere but edit, create and close only in a member-only tree", () => {
     expect(memberCapabilities("collaborator", false)).toMatchObject({ comment: true, attach: true, create: false, edit: false, close: false })
     expect(memberCapabilities("collaborator", true)).toMatchObject({ comment: true, create: true, edit: true, close: true })
+  })
+
+  it("lets a collaborator or owner name the person on any Todo on the board, member-only tree or not, and never a viewer or a moved Todo", () => {
+    for (const role of ["collaborator", "owner"] as const) {
+      expect(memberCapabilities(role, false).person).toBe(true)
+      expect(memberCapabilities(role, true).person).toBe(true)
+    }
+    expect(memberCapabilities("viewer", true).person).toBe(false)
+    expect(movedCapabilities(true).person).toBe(false)
+    expect(OPERATOR_CAPABILITIES.person).toBe(true)
   })
 
   it("never hands a member the operator's controls, at any role", () => {
@@ -78,8 +88,8 @@ describe("capabilities", () => {
 
 describe("a tree the member created that left their boards", () => {
   it("reads, and comments only where a role of theirs allows it, and never edits, closes or adds a sub-task", () => {
-    expect(movedCapabilities(true)).toEqual({ memberMode: true, comment: true, attach: true, create: false, edit: false, close: false, operatorControls: false })
-    expect(movedCapabilities(false)).toEqual({ memberMode: true, comment: false, attach: false, create: false, edit: false, close: false, operatorControls: false })
+    expect(movedCapabilities(true)).toEqual({ memberMode: true, comment: true, attach: true, create: false, edit: false, close: false, person: false, operatorControls: false })
+    expect(movedCapabilities(false)).toEqual({ memberMode: true, comment: false, attach: false, create: false, edit: false, close: false, person: false, operatorControls: false })
   })
 
   it("lets them edit and delete only their own comments", () => {

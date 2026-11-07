@@ -395,7 +395,10 @@ export interface WorkItemCompactWire extends TodoStopCauseWire {
   version?: number
   title: string
   status: WorkItemStatusWire
+  /** The agent slot: an employee, or `@operator` on a Todo that needs the operator (which shows no agent). */
   assignee: string | null
+  /** The person slot: `@operator`, `user:<id>`, or on a member's reads `member` for someone off their boards. Optional: older gateways omit it, which reads as nobody. */
+  humanAssignee?: string | null
   department: string | null
   source: WorkItemSourceWire
   sourceRef: string | null
@@ -431,6 +434,8 @@ export interface WorkItemCompactWire extends TodoStopCauseWire {
  *  the whole filtered set and the offset to fetch next (null = exhausted). */
 export interface WorkItemListWire {
   workItems: WorkItemCompactWire[]
+  /** Names of the board members the rows name as their person, by `user:<id>`. Absent when none. */
+  members?: Record<string, { kind: "member"; displayName: string }>
   total?: number
   totals?: Partial<Record<WorkItemStatusWire, number>>
   limit?: number
@@ -448,6 +453,8 @@ export interface WorkItemFullWire {
   status: WorkItemStatusWire
   department: string | null
   assignee: string | null
+  /** The person slot, as on the compact row. */
+  humanAssignee?: string | null
   priority: number
   /** Manual order is part of the whole-row CAS response and detail baseline. */
   rank: number | null
@@ -822,6 +829,10 @@ export const api = {
     labels?: string[]
   }, origin?: WriteOriginWire) =>
     post<{ workItem: WorkItemFullWire }>("/api/work-items", input, origin),
+  /** A board member names or clears the person responsible (`@operator`, `user:<id>`, null); the member source maps it to
+   *  the member route. The operator edits the same field through the pen (`humanAssignee`). */
+  setWorkItemPerson: (id: string, person: string | null) =>
+    put<{ workItem: WorkItemFullWire }>(`/api/work-items/${encodeURIComponent(id)}/person`, { person }),
   /** Todos v2 slice 6: roster-validated assignment; status is unchanged. `@operator` assigns to the operator. */
   assignWorkItem: (id: string, assignee: string, origin?: WriteOriginWire) =>
     post<{ workItem: WorkItemFullWire }>(`/api/work-items/${encodeURIComponent(id)}/assign`, { assignee }, origin),

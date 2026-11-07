@@ -20,7 +20,7 @@ describe("a member's cookie is default-deny", () => {
     ["GET", "/api/people"], ["POST", "/api/people/invites"], ["PATCH", "/api/people/usr_x"], ["GET", "/api/boards/ops/members"],
     ["POST", "/api/boards/ops/invites"], ["POST", "/api/account/setup"], ["POST", "/api/account/password"],
     ["GET", "/api/auth/devices"], ["POST", "/api/auth/pairing-codes"], ["POST", "/api/internal/hook"], ["GET", "/api/files"],
-    ["GET", "/api/plugins/x/events"], ["GET", "/api/terminals"], ["GET", "/api/member"], ["GET", "/api/membership"],
+    ["GET", "/api/plugins/x/events"], ["GET", "/api/terminals"], ["GET", "/api/member"], ["GET", "/api/membership"], ["PUT", "/api/work-items/OPS-1/person"],
     ["GET", "/api/member/../people"], ["POST", "/api/auth/state"], ["GET", "/api/auth/logout"], ["POST", "/api/auth/login"],
   ];
   it.each(GENERAL)("%s %s answers 403 and never reaches the general API", async (method, url) => {
@@ -42,6 +42,9 @@ describe("a member's cookie is default-deny", () => {
     for (const url of ["/api/member/nothing-here", "/api/member/todos/OPS-1/nothing"]) {
       expect((await h.request("GET", url, { cookie: pat.cookie })).status).toBe(404);
     }
+    // The person route is deliberately on the member router: an unknown Todo is the 404 any member route answers, not the default-deny 403.
+    expect((await h.request("PUT", "/api/member/todos/OPS-1/person", { cookie: pat.cookie, body: { person: null } })).status).toBe(404);
+    expect((await h.request("GET", "/api/member/todos/OPS-1/person", { cookie: pat.cookie })).status).toBe(404);
     const state = await h.request("GET", "/api/auth/state", { cookie: pat.cookie });
     expect(state.status).toBe(200);
     expect(state.body).toMatchObject({ authRequired: true, authenticated: false, accountsEnabled: true, hasAccounts: true, principal: { kind: "member", boards: [{ department: "ops", role: "collaborator" }] } });

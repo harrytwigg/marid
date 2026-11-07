@@ -1,4 +1,6 @@
 import type { Database as DatabaseType } from "better-sqlite3";
+import { memberIdentity } from "../work-items/member-identity.js";
+import { clearPeopleOfUser } from "../work-items/todo-people.js";
 import { isoNow, newId } from "./ids.js";
 
 export type InstanceRole = "member" | "owner";
@@ -132,12 +134,13 @@ export function setUserPasswordHash(db: DatabaseType, id: string, passwordHash: 
   db.prepare("UPDATE users SET password_hash = ?, password_set_at = ?, updated_at = ? WHERE id = ?").run(passwordHash, at, at, id);
 }
 
-/** Removes the user and what hangs off them: grants and sessions (also by cascade) and any token naming them. */
+/** Removes the user and what hangs off them: grants and sessions (also by cascade), any token naming them and the Todos that named them as the person responsible. */
 export function deleteUser(db: DatabaseType, id: string): boolean {
   return db.transaction((): boolean => {
     db.prepare("DELETE FROM board_members WHERE user_id = ?").run(id);
     db.prepare("DELETE FROM user_sessions WHERE user_id = ?").run(id);
     db.prepare("DELETE FROM user_tokens WHERE user_id = ?").run(id);
+    clearPeopleOfUser(db, memberIdentity(id));
     return db.prepare("DELETE FROM users WHERE id = ?").run(id).changes > 0;
   })();
 }

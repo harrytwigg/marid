@@ -201,13 +201,13 @@ describe("the operator assigning or moving a Todo a member created", () => {
     expect(assignWorkItem).toHaveBeenCalledWith("PLT-1", "bob")
   })
 
-  it("is told the same when handing it to the operator", async () => {
+  it("is told nothing when naming the operator as the person responsible: that is no assignment to an agent and changes no one's access", async () => {
     principal = { kind: "operator" }
     setup(full("PLT-1"))
-    const picker = await openAssignee()
-    await waitFor(() => expect(within(picker).getByTestId("picker-member-creator-note").textContent).toBe(WARNING))
-    fireEvent.click(within(picker).getByTestId("assignee-option-@operator"))
-    expect(assignWorkItem).toHaveBeenCalledWith("PLT-1", "@operator")
+    fireEvent.click(await screen.findByTestId("rail-person"))
+    const picker = await screen.findByTestId("picker-person")
+    expect(within(picker).queryByTestId("picker-member-creator-note")).toBeNull()
+    expect(within(picker).queryByTestId("assignee-option-@operator")).toBeNull()
   })
 
   it("is told the same when assigning within the board", async () => {

@@ -89,6 +89,17 @@ describe("member request source", () => {
     expect(calls()).toEqual([{ path: "/api/member/todos/A-1/status", method: "POST", body: { status: "done" } }])
   })
 
+  it("turns the person PUT into the member person route, and refuses any other verb on it", async () => {
+    await source("/api/work-items/A-1/person", { method: "PUT", ...json, body: JSON.stringify({ person: "user:u1" }) })
+    expect(calls()).toEqual([{ path: "/api/member/todos/A-1/person", method: "PUT", body: { person: "user:u1" } }])
+    request.mockClear()
+    for (const verb of ["GET", "PATCH", "DELETE", "POST"]) {
+      const refused = await source("/api/work-items/A-1/person", { method: verb })
+      expect([verb, refused.status]).toEqual([verb, 403])
+    }
+    expect(request).not.toHaveBeenCalled()
+  })
+
   it("turns the labels PUT into a member PATCH", async () => {
     await source("/api/work-items/A-1/labels", { method: "PUT", ...json, body: JSON.stringify({ labels: ["l1"] }) })
     expect(calls()).toEqual([{ path: "/api/member/todos/A-1", method: "PATCH", body: { labels: ["l1"] } }])

@@ -2,7 +2,7 @@ import { ArrowUpRight, Calendar, CalendarClock, LoaderCircle, Send, UserRound } 
 import type { DepartmentSummaryWire, Employee, LinkedSessionWire, WorkItemDetailWire } from "@/lib/api"
 import { useOpenSession } from "@/components/chat/file-open-context"
 import { STATUS_LABEL, priorityLabel } from "@/lib/todos"
-import { EmployeeAvatar } from "@/components/ui/employee-avatar"
+import { EmployeeAvatar, OPERATOR_DEFAULT_EMOJI } from "@/components/ui/employee-avatar"
 import { StatusCircle } from "../state-glyph"
 import { sessionIdFromActor, type SessionTreeWire } from "@/lib/session-tree-api"
 import { isSessionWaiting, SESSION_WAITING_COLOR } from "@/lib/session-waiting"
@@ -14,6 +14,9 @@ import { AutoStartRow } from "./auto-start-row"
 import { SprintRailRow } from "../sprints/sprint-rail-row"
 import { displayNameOf, formatRelativeTime } from "../util"
 import { isMemberIdentity, LastTouchedBy, MemberChip, useViewer } from "../attribution"
+import { agentOf, PersonCircle, PersonName, personRowFor, waitsOnOperator } from "../assignee-circles"
+import { AssigneeRailRow } from "./legacy-assignee"
+import { useTwoSlotAssignees } from "@/hooks/use-two-slot-assignees"
 import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
 
 /* Todos v2 slice 6 — the chrome-free properties rail (design-doc §7.2/§7.3,
@@ -27,11 +30,11 @@ import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
 export interface RailPickers {
   /** Task 6 mounts the picker surfaces here, keyed by row. Absent = read row. */
   status?: React.ReactNode
-  rowFor?: (row: "status" | "priority" | "assignee" | "labels" | "department" | "start" | "due") => {
+  rowFor?: (row: "status" | "priority" | "assignee" | "person" | "labels" | "department" | "start" | "due") => {
     onOpen: () => void
     open: boolean
     picker: React.ReactNode
-    /** Assignee only: drops the value without opening the picker at all. */
+    /** Agent and person rows: drops the value without opening the picker at all. */
     onClear?: () => void
   } | undefined
 }
@@ -80,6 +83,9 @@ export function PropsRail({
   const statusPick = pick("status")
   const prioPick = pick("priority")
   const assigneePick = pick("assignee")
+  const twoSlots = useTwoSlotAssignees()
+  const personPick = personRowFor(pick, item, viewer)
+  const agent = agentOf(item.assignee)
   const labelsPick = pick("labels")
   const deptPick = pick("department")
   const startPick = pick("start")
@@ -102,34 +108,59 @@ export function PropsRail({
         </RailRow>
         {prioPick?.picker}
       </div>
-      <div className="relative">
-        <RailRow testId="rail-assignee" label="Assignee" onOpen={assigneePick?.onOpen} open={assigneePick?.open}>
-          {item.assignee ? (
-            <>
-              <EmployeeAvatar name={item.assignee} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
-              {displayNameOf(item.assignee, byName, viewer)}
-            </>
-          ) : (
-            <>
-              <span className="grid size-5 flex-none place-items-center rounded-full bg-[var(--fill-secondary)] text-[var(--text-quaternary)]">
-                <UserRound size={11} aria-hidden />
-              </span>
-              <span className="text-[var(--text-tertiary)]">Unassigned</span>
-            </>
+      {twoSlots ? (
+        <>
+        <div className="relative">
+          <RailRow testId="rail-person" label="Person" onOpen={personPick?.onOpen} open={personPick?.open}>
+            <PersonCircle person={item.humanAssignee} size={20} />
+            {item.humanAssignee ? <PersonName person={item.humanAssignee} viewer={viewer} /> : <span className="text-[var(--text-tertiary)]">No person</span>}
+          </RailRow>
+          {item.humanAssignee && personPick?.onClear && (
+            <RemoveButton
+              label="Remove person"
+              testId="rail-person-clear"
+              onClick={personPick.onClear}
+              className="absolute right-5 top-1/2 size-6 -translate-y-1/2 max-[700px]:size-[34px]"
+            />
           )}
-        </RailRow>
-        {item.assignee && assigneePick?.onClear && (
-          // Sibling, not a child: the row is a button. `right-5` parks the ×
-          // clear of the row's own trailing disclosure chevron.
-          <RemoveButton
-            label="Remove assignee"
-            testId="rail-assignee-clear"
-            onClick={assigneePick.onClear}
-            className="absolute right-5 top-1/2 size-6 -translate-y-1/2 max-[700px]:size-[34px]"
-          />
-        )}
-        {assigneePick?.picker}
-      </div>
+          {personPick?.picker}
+        </div>
+        <div className="relative">
+          <RailRow testId="rail-assignee" label="Agent" onOpen={assigneePick?.onOpen} open={assigneePick?.open}>
+            {agent ? (
+              <>
+                <EmployeeAvatar name={agent} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
+                {displayNameOf(agent, byName, viewer)}
+              </>
+            ) : waitsOnOperator(item) ? (
+              <>
+                <EmployeeAvatar name="operator" fallback={OPERATOR_DEFAULT_EMOJI} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
+                {viewer === "member" ? "Needs the operator" : "Needs you"}
+              </>
+            ) : (
+              <>
+                <span className="grid size-5 flex-none place-items-center rounded-full border border-dashed border-[var(--text-quaternary)] text-[var(--text-quaternary)]">
+                  <UserRound size={11} aria-hidden />
+                </span>
+                <span className="text-[var(--text-tertiary)]">No agent</span>
+              </>
+            )}
+          </RailRow>
+          {agent && assigneePick?.onClear && (
+            // Sibling, not a child: the row is a button. `right-5` parks the × clear of the row's own trailing disclosure chevron.
+            <RemoveButton
+              label="Remove agent"
+              testId="rail-assignee-clear"
+              onClick={assigneePick.onClear}
+              className="absolute right-5 top-1/2 size-6 -translate-y-1/2 max-[700px]:size-[34px]"
+            />
+          )}
+          {assigneePick?.picker}
+        </div>
+        </>
+      ) : (
+        <AssigneeRailRow assignee={item.assignee} byName={byName} viewer={viewer} pick={assigneePick} />
+      )}
       {railSession && (
         <button
           type="button"

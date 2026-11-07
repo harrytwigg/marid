@@ -1,9 +1,9 @@
 import { memo } from "react"
 import type { Employee, WorkItemCompactWire } from "@/lib/api"
-import { emojiForName } from "@/lib/emoji-pool"
 import { StatusCircle } from "../state-glyph"
 import { hasStopLead, StopCauseLead } from "../board/stop-cause"
 import { KeepToggle, KeptCaption } from "../board/keep-control"
+import { AssigneeSlots } from "../assignee-circles"
 import { formatRelativeTime } from "../util"
 
 function PriorityBars({ priority }: { priority: number }) {
@@ -45,7 +45,6 @@ export const TodoListRow = memo(function TodoListRow({
   /** Keep this Todo on Home, or take it off. Absent = no keep affordance. */
   onKeep?: (vars: { id: string; kept: boolean }) => void
 }) {
-  const assignee = item.assignee ? byName.get(item.assignee) : undefined
   return (
     <div className="flex items-center gap-1">
     <button
@@ -85,14 +84,7 @@ export const TodoListRow = memo(function TodoListRow({
         >
           {formatRelativeTime(item.updatedAt, now)}
         </span>
-        {item.assignee && (
-          <span
-            title={assignee?.displayName ?? item.assignee}
-            className="grid size-5 place-items-center rounded-full bg-[var(--fill-secondary)] text-[11px]"
-          >
-            {emojiForName(item.assignee)}
-          </span>
-        )}
+        <AssigneeSlots item={item} byName={byName} variant="row" />
       </span>
       </span>
       {/* Under the title, as on the card: above it, the line reads as if it

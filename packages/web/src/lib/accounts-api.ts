@@ -243,7 +243,8 @@ export const accountsApi = {
     (await send<{ sessions: UserSessionWire[] }>("GET", "/api/member/sessions")).sessions,
   revokeMemberSession: (id: string) => send<void>("DELETE", `/api/member/sessions/${enc(id)}`),
   listMemberBoards: async () => (await send<{ boards: MemberBoardWire[] }>("GET", "/api/member/boards")).boards,
-  getMemberPeople: () => send<MemberPeopleWire>("GET", "/api/member/people"),
+  /** The people on the member's boards, or on one of them with `board` (a person picker offers only who can be chosen there). */
+  getMemberPeople: (board?: string) => send<MemberPeopleWire>("GET", `/api/member/people${board ? `?board=${enc(board)}` : ""}`),
   getMemberBoardRoster: (department: string) =>
     send<BoardRosterWire>("GET", `/api/member/boards/${enc(department)}/members`),
   memberInviteToBoard: (department: string, email: string, role: BoardRole) =>
@@ -285,6 +286,11 @@ const USER_PREFIX = "user:"
 /** The generic actor a member's reads carry for a person who is no longer on any of their boards; the web reads it as
  *  "Former member". It names nobody, so nothing looks it up. */
 export const GENERIC_MEMBER = "member"
+
+/** The identity a user is stamped with on a Todo, comment or event. */
+export function memberIdentity(userId: string): string {
+  return `user:${userId}`
+}
 
 export function memberIdOf(identity: string | null | undefined): string | null {
   return identity?.startsWith(USER_PREFIX) ? identity.slice(USER_PREFIX.length) : null

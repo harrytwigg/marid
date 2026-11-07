@@ -116,6 +116,15 @@ describe("the assignee picker's Unassign row", () => {
   })
 })
 
+describe("the picker of an instance with no accounts", () => {
+  it("is still named Assignee, as it always was", async () => {
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12", { assignee: "mason" })))
+    renderTask()
+    fireEvent.click(await screen.findByTestId("rail-assignee"))
+    expect((await screen.findByTestId("picker-assignee")).getAttribute("aria-label")).toBe("Assignee")
+  })
+})
+
 describe("clearing the assignee without opening a picker", () => {
   it("the rail's clear control commits the same null the picker's Unassign does", async () => {
     const item = full("TSK-12", { assignee: "mason" })

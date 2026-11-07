@@ -145,6 +145,8 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
     departments: departments.data ?? [],
     ...closeGate,
     memberCreator,
+    memberMode: caps.memberMode,
+    board: rootNode ? rootNode.department : item?.department ?? null,
     mobile,
     announce,
     root: scrollRef,

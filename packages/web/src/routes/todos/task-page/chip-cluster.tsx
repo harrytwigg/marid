@@ -1,51 +1,22 @@
 import type { Employee, WorkItemDetailWire } from "@/lib/api"
 import { STATUS_LABEL, priorityLabel, reviewAddresseeEmployee } from "@/lib/todos"
-import { EmployeeAvatar } from "@/components/ui/employee-avatar"
+import { EmployeeAvatar, OPERATOR_DEFAULT_EMOJI } from "@/components/ui/employee-avatar"
 import { StatusCircle } from "../state-glyph"
 import { displayNameOf } from "../util"
 import { useViewer } from "../attribution"
+import { agentOf, PersonCircle, PersonName, personRowFor, waitsOnOperator } from "../assignee-circles"
 import { ReviewForChip } from "../review-for-chip"
 import { type RailPickers } from "./props-rail"
 import { SESSION_WAITING_COLOR, SESSION_WAITING_LABEL } from "@/lib/session-waiting"
 import { RailPriorityBars } from "./rail-rows"
 import { RemoveButton } from "./label-chip"
+import { Chip } from "./chip"
+import { AssigneeChip } from "./legacy-assignee"
+import { useTwoSlotAssignees } from "@/hooks/use-two-slot-assignees"
 
 /* Variant A — the task's working identity lives directly under its title.
  * Desktop uses the approved 28px chips; mobile keeps every interactive target
  * at 34px. Less-frequent properties remain in the folded Details document. */
-
-function Chip({
-  onOpen,
-  children,
-  testId,
-  label,
-  mobile,
-  clearSlot,
-}: {
-  /** Absent for a property the person may not change: the chip is then a label, not a button. */
-  onOpen?: () => void
-  children: React.ReactNode
-  testId?: string
-  label: string
-  mobile: boolean
-  /** Reserves trailing room for a clear control laid over the pill's end. */
-  clearSlot?: boolean
-}) {
-  const Tag = onOpen ? "button" : "span"
-  return (
-    <Tag
-      {...(onOpen ? { type: "button" as const, "aria-label": label, onClick: onOpen } : { title: label })}
-      data-testid={testId}
-      className={`focus-outline flex flex-none items-center gap-[7px] bg-[var(--fill-tertiary)] font-medium text-[var(--text-secondary)] outline-none ${onOpen ? "hover:bg-[var(--fill-secondary)]" : ""} ${
-        mobile
-          ? `h-[34px] rounded-[17px] text-[13.5px] ${clearSlot ? "pl-3 pr-[34px]" : "px-3"}`
-          : `h-7 rounded-[14px] text-[12.5px] ${clearSlot ? "pl-[11px] pr-7" : "px-[11px]"}`
-      }`}
-    >
-      {children}
-    </Tag>
-  )
-}
 
 /** The elapsed time under the status chip: blue and pulsing while anything is
  *  working, amber and still when every live worker is paused. */
@@ -69,6 +40,69 @@ function ElapsedChip({ working, waiting }: { working: string; waiting: boolean }
   )
 }
 
+interface OwnerChipProps {
+  item: WorkItemDetailWire["workItem"]
+  byName: Map<string, Employee>
+  rowFor: NonNullable<RailPickers["rowFor"]>
+  mobile: boolean
+}
+
+/** What the agent chip says: the employee holding the Todo, the operator when it waits on them, or nobody. */
+function AgentChipBody({ item, byName, viewer }: { item: WorkItemDetailWire["workItem"]; byName: Map<string, Employee>; viewer: "operator" | "member" }) {
+  const agent = agentOf(item.assignee)
+  if (agent) {
+    return (
+      <>
+        <EmployeeAvatar name={agent} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
+        {displayNameOf(agent, byName, viewer)}
+      </>
+    )
+  }
+  if (!waitsOnOperator(item)) return <span className="text-[var(--text-tertiary)]">No agent</span>
+  return (
+    <>
+      <EmployeeAvatar name="operator" fallback={OPERATOR_DEFAULT_EMOJI} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
+      {viewer === "member" ? "Needs the operator" : "Needs you"}
+    </>
+  )
+}
+
+/** The two chips that say who holds a Todo once an account exists: the person responsible, then the agent, each with its own clear control. */
+function TwoSlotChips({ item, byName, rowFor, mobile }: OwnerChipProps) {
+  const viewer = useViewer()
+  const personPick = personRowFor(rowFor, item, viewer)
+  const onClearPerson = personPick?.onClear
+  const onClearAssignee = rowFor("assignee")?.onClear
+  const clearClass = `absolute right-0 top-0 ${mobile ? "size-[34px]" : "size-7"}`
+  return (
+    <>
+      <div className="relative flex-none">
+        <Chip mobile={mobile} label="Person" testId="chip-person" clearSlot={!!onClearPerson} onOpen={personPick?.onOpen}>
+          <PersonCircle person={item.humanAssignee} size={20} />
+          {item.humanAssignee ? <PersonName person={item.humanAssignee} viewer={viewer} /> : <span className="text-[var(--text-tertiary)]">No person</span>}
+        </Chip>
+        {onClearPerson && <RemoveButton label="Remove person" testId="chip-person-clear" onClick={onClearPerson} className={clearClass} />}
+      </div>
+      <div className="relative flex-none">
+        <Chip mobile={mobile} label="Agent" testId="chip-assignee" clearSlot={!!onClearAssignee} onOpen={rowFor("assignee")?.onOpen}>
+          <AgentChipBody item={item} byName={byName} viewer={viewer} />
+        </Chip>
+        {/* Sibling of the pill, laid over the room `clearSlot` reserved: the chip itself is a button, so the × cannot live inside it. */}
+        {onClearAssignee && <RemoveButton label="Remove agent" testId="chip-assignee-clear" onClick={onClearAssignee} className={clearClass} />}
+      </div>
+    </>
+  )
+}
+
+/** Who holds a Todo, as chips: the person and the agent once an account exists, the one assignee before. */
+function OwnerChips(props: OwnerChipProps) {
+  const twoSlots = useTwoSlotAssignees()
+  const viewer = useViewer()
+  const { item, byName, rowFor, mobile } = props
+  if (twoSlots) return <TwoSlotChips {...props} />
+  return <AssigneeChip assignee={item.assignee} byName={byName} viewer={viewer} onOpen={rowFor("assignee")?.onOpen} onClear={rowFor("assignee")?.onClear} mobile={mobile} />
+}
+
 export function ChipCluster({
   detail,
   byName,
@@ -87,10 +121,8 @@ export function ChipCluster({
    *  working, so the chip says so in amber rather than pulsing blue. */
   waiting?: boolean
 }) {
-  const viewer = useViewer()
   const item = detail.workItem
   const labels = detail.labels ?? []
-  const onClearAssignee = rowFor("assignee")?.onClear
   const opener = (row: Parameters<typeof rowFor>[0]) => (rowFor(row) ? () => rowFor(row)?.onOpen() : undefined)
   const reviewFor = reviewAddresseeEmployee({ status: item.status, reviewAddressee: detail.reviewAddressee })
   return (
@@ -104,28 +136,7 @@ export function ChipCluster({
         {reviewFor && <ReviewForChip employee={reviewFor} byName={byName} />}
         {working && <ElapsedChip working={working} waiting={waiting} />}
       </Chip>
-      <div className="relative flex-none">
-        <Chip mobile={mobile} label="Assignee" testId="chip-assignee" clearSlot={!!onClearAssignee} onOpen={opener("assignee")}>
-          {item.assignee ? (
-            <>
-              <EmployeeAvatar name={item.assignee} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
-              {displayNameOf(item.assignee, byName, viewer)}
-            </>
-          ) : (
-            <span className="text-[var(--text-tertiary)]">Unassigned</span>
-          )}
-        </Chip>
-        {onClearAssignee && (
-          // Sibling of the pill, laid over the room `clearSlot` reserved — the
-          // chip itself is a button, so the × cannot live inside it.
-          <RemoveButton
-            label="Remove assignee"
-            testId="chip-assignee-clear"
-            onClick={onClearAssignee}
-            className={`absolute right-0 top-0 ${mobile ? "size-[34px]" : "size-7"}`}
-          />
-        )}
-      </div>
+      <OwnerChips item={item} byName={byName} rowFor={rowFor} mobile={mobile} />
       <Chip mobile={mobile} label="Priority" testId="chip-priority" onOpen={opener("priority")}>
         <RailPriorityBars priority={item.priority} />
         {priorityLabel(item.priority)}

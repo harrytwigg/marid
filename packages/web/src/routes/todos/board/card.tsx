@@ -2,9 +2,8 @@ import { memo, useCallback, useMemo } from "react"
 import { ChevronRight } from "@/components/ui/icon"
 import type { Employee, WorkItemCompactWire, WorkItemOpenDetailWire, WorkItemStatusWire, WorkItemTreeWire } from "@/lib/api"
 import { stateKeyOf } from "@/lib/todos"
-import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { StateCircle } from "../state-glyph"
-import { isMemberIdentity, MemberChip, useViewer } from "../attribution"
+import { AssigneeSlots } from "../assignee-circles"
 import { stopReasonOf } from "../util"
 import { CardTree } from "./card-tree"
 import { hasStopLead, StopCauseLead, stopLeadKey } from "./stop-cause"
@@ -14,7 +13,7 @@ import { useMember } from "@/hooks/use-principal"
 import { MovedLabel } from "../moved-label"
 
 /* The board card, Variant A: four rows, the same four on every card.
- * ID + assignee, status glyph + title, priority + labels + roll-up, cost + due.
+ * ID + the person and the agent, status glyph + title, priority + labels + roll-up, cost + due.
  *
  * Every row is unconditional, so a card's height is settled by its title alone
  * and enrichment landing later cannot push the column around. The price, taken
@@ -137,10 +136,7 @@ export const BoardCard = memo(function BoardCard({
   // card keeps its height). A member is never shown cost, and the gateway sends null for them.
   const spendUsd = tree?.spendUsd ?? 0
   const member = useMember() !== null
-  const viewer = useViewer()
   const showCost = !member && tree?.spendUsd !== null
-  const employee = item.assignee ? byName.get(item.assignee) : undefined
-  const assigneeName = employee?.displayName ?? item.assignee
   const overdue = !!item.dueAt && Date.parse(item.dueAt) < Date.now()
   // Shown only while it holds the Todo: a first start from the backlog, before the date.
   const startsLater = item.status === "backlog" && !!item.startAt && Date.parse(item.startAt) > Date.now()
@@ -169,7 +165,7 @@ export const BoardCard = memo(function BoardCard({
     >
       {hasStopLead(item) && <StopCauseLead item={item} />}
 
-      {/* Row 1 — which Todo, and whose. The row is as tall as the ID's own line
+      {/* Row 1 — which Todo, and whose (the person's circle, then the agent's). The row is as tall as the ID's own line
        *  rather than as tall as the avatar: centring 11px text inside a 20px
        *  disc pushes it 6px below the inset the left edge sets, which is the
        *  top-heaviness this face exists to fix. The disc overflows the row
@@ -196,15 +192,7 @@ export const BoardCard = memo(function BoardCard({
           )}
           {/* The label gives way before the name: it shortens to an ellipsis, the chip keeps its width. */}
           {item.movedToAnotherBoard && <MovedLabel testId={`board-moved-${item.id}`} className="min-w-0 shrink" />}
-          {/* A member's Todo is unassigned, so the slot is free for who made it. */}
-          {!item.assignee && item.createdBy && isMemberIdentity(item.createdBy, viewer) && (
-            <MemberChip identity={item.createdBy} size={20} className="max-w-[140px] flex-none text-[calc(11px*var(--text-scale))] text-[var(--text-tertiary)]" />
-          )}
-          {item.assignee && (
-            <span title={assigneeName ?? undefined} className="flex-none">
-              <EmployeeAvatar name={item.assignee} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
-            </span>
-          )}
+          <AssigneeSlots item={item} byName={byName} variant="card" />
           {onMove && !ghost && <MoveToMenu item={item} openChildren={rollup ? rollup.total - rollup.closed : 0} onMove={onMove} />}
         </span>
       </div>

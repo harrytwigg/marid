@@ -26,7 +26,10 @@ import {
   PriorityPickerContent,
 } from "../pickers/picker-contents"
 import { StatusPickerContent } from "../pickers/status-picker-content"
+import { PersonPickerContent } from "../pickers/person-picker-content"
 import { offeredDepartments } from "../pickers/department-filters"
+import { agentOf } from "../assignee-circles"
+import { useTwoSlotAssignees } from "@/hooks/use-two-slot-assignees"
 
 /* Todos v2 slice 6 — the task page's picker wiring: ONE picker open at a time,
  * one content component per property rendered in the popover shell (desktop —
@@ -34,12 +37,13 @@ import { offeredDepartments } from "../pickers/department-filters"
  * chips, law 4). Commits are optimistic; a server refusal snaps the value back
  * (cache invalidation) and surfaces the gateway's words via `announce`. */
 
-export type PickerKey = "status" | "priority" | "assignee" | "labels" | "start" | "due" | "department"
+export type PickerKey = "status" | "priority" | "assignee" | "person" | "labels" | "start" | "due" | "department"
 
 const PICKER_TITLE: Record<PickerKey, string> = {
   status: "Status",
   priority: "Priority",
-  assignee: "Assignee",
+  assignee: "Agent",
+  person: "Person",
   labels: "Labels",
   start: "Start date",
   due: "Due date",
@@ -55,6 +59,8 @@ export function useTaskPickers({
   openChildren,
   openDescendants,
   memberCreator = null,
+  memberMode = false,
+  board = null,
   mobile,
   announce,
   root,
@@ -64,12 +70,19 @@ export function useTaskPickers({
   departments: DepartmentSummaryWire[]
   /** The board member (`user:<id>`) who created this Todo's root, when it was one: assigning or moving it tells the operator what that does to their access. */
   memberCreator?: MemberCreator | null
+  /** A board member's session: the person is named through the member route, not the operator's pen. */
+  memberMode?: boolean
+  /** The Todo's root board: the people a person picker offers have access to it. */
+  board?: string | null
   mobile: boolean
   announce: (message: string) => void
   /** This view's own subtree: two Todos can be open side by side, each with its own rail. */
   root: RefObject<HTMLElement | null>
 } & CloseGateCounts) {
   const qc = useQueryClient()
+  const twoSlots = useTwoSlotAssignees()
+  /** The agent row is the Assignee row until an account exists; the title is what the sheet and the popover say. */
+  const titleOf = useCallback((key: PickerKey): string => (key === "assignee" && !twoSlots ? "Assignee" : PICKER_TITLE[key]), [twoSlots])
   const [openPicker, setOpenPicker] = useState<PickerKey | null>(null)
   const id = detail?.workItem.id
 
@@ -135,6 +148,17 @@ export function useTaskPickers({
       .finally(() => void invalidateTodoCaches(qc, id))
   }, [id, qc, announce, patchField])
 
+  /** The person responsible is a label of responsibility: it never goes through the assign lane, starts nothing, and a
+   *  board member names it through their own route. */
+  const commitPerson = useCallback((person: string | null) => {
+    if (!id) return
+    if (!memberMode) return patchField({ humanAssignee: person })
+    qc.setQueryData<WorkItemDetailWire>(["work-item", id], (current) => (current ? { ...current, workItem: { ...current.workItem, humanAssignee: person } } : current))
+    api.setWorkItemPerson(id, person)
+      .catch((error) => announce(operatorSafeTodoError(error, "Couldn't set the person")))
+      .finally(() => void invalidateTodoCaches(qc, id))
+  }, [id, memberMode, qc, announce, patchField])
+
   const labelsMutation = useMutation({
     mutationFn: ({ labels }: { labels: string[] }) => api.setWorkItemLabels(id!, labels),
     onError: (error) => announce(operatorSafeTodoError(error, "Couldn't update the labels")),
@@ -157,35 +181,24 @@ export function useTaskPickers({
 
   // ── Shell assembly ────────────────────────────────────────────────────────
 
+  /** One renderer per row, so a new picker adds an entry rather than a branch. The agent goes through the assign lane, the person through its own. */
   const contentFor = useCallback(
     (key: PickerKey, sheet: boolean): React.ReactNode => {
       if (!detail) return null
       const shared = { detail, sheet, onDone: close, ...(memberCreator ? { memberCreator } : {}) }
-      switch (key) {
-        case "status":
-          return (
-            <StatusPickerContent
-              {...shared}
-              openChildren={openChildren}
-              openDescendants={openDescendants}
-              commit={transitionTo}
-            />
-          )
-        case "priority":
-          return <PriorityPickerContent {...shared} commit={(priority) => patchField({ priority })} />
-        case "assignee":
-          return <AssigneePickerContent {...shared} employees={employees} commit={commitAssignee} />
-        case "labels":
-          return <LabelsPickerContent {...shared} commit={commitLabels} />
-        case "start":
-          return <DuePickerContent {...shared} field="startAt" commit={(startAt) => patchField({ startAt })} />
-        case "due":
-          return <DuePickerContent {...shared} commit={(dueAt) => patchField({ dueAt })} />
-        case "department":
-          return <DepartmentPickerContent {...shared} departments={offeredDepartments(departments, detail.workItem.department)} commit={(department) => patchField({ department })} />
+      const renderers: Record<PickerKey, () => React.ReactNode> = {
+        status: () => <StatusPickerContent {...shared} openChildren={openChildren} openDescendants={openDescendants} commit={transitionTo} />,
+        priority: () => <PriorityPickerContent {...shared} commit={(priority) => patchField({ priority })} />,
+        assignee: () => <AssigneePickerContent {...shared} employees={employees} commit={commitAssignee} />,
+        person: () => <PersonPickerContent detail={detail} sheet={sheet} onDone={close} commit={commitPerson} board={board} />,
+        labels: () => <LabelsPickerContent {...shared} commit={commitLabels} />,
+        start: () => <DuePickerContent {...shared} field="startAt" commit={(startAt) => patchField({ startAt })} />,
+        due: () => <DuePickerContent {...shared} commit={(dueAt) => patchField({ dueAt })} />,
+        department: () => <DepartmentPickerContent {...shared} departments={offeredDepartments(departments, detail.workItem.department)} commit={(department) => patchField({ department })} />,
       }
+      return renderers[key]()
     },
-    [detail, close, memberCreator, openChildren, openDescendants, transitionTo, patchField, commitAssignee, employees, departments, commitLabels],
+    [detail, close, memberCreator, openChildren, openDescendants, transitionTo, patchField, commitAssignee, commitPerson, employees, departments, commitLabels, board],
   )
 
   /** The superimposed row index (law 1): the current value's option row sits
@@ -205,6 +218,13 @@ export function useTaskPickers({
     [detail, departments],
   )
 
+  /** The one-tap clear for the agent and person rows; the other rows have none. */
+  const clearFor = useCallback((key: PickerKey, current: WorkItemDetailWire): (() => void) | undefined => {
+    if (key === "assignee" && agentOf(current.workItem.assignee)) return () => patchField({ assignee: null })
+    if (key === "person" && current.workItem.humanAssignee) return () => commitPerson(null)
+    return undefined
+  }, [patchField, commitPerson])
+
   const rowFor = useCallback(
     (key: PickerKey) => {
       if (!detail) return undefined
@@ -213,15 +233,15 @@ export function useTaskPickers({
         open: openPicker === key,
         // The same commit lane the picker's own Unassign row uses, so a surface
         // that clears in one tap and one that picks agree after a refetch.
-        onClear: key === "assignee" && detail.workItem.assignee ? () => patchField({ assignee: null }) : undefined,
+        onClear: clearFor(key, detail),
         picker:
           !mobile && openPicker === key ? (
             <PickerPopover
               key={key}
-              label={PICKER_TITLE[key]}
+              label={titleOf(key)}
               onClose={close}
               currentIndex={currentIndexFor(key)}
-              autoFocusFirst={key !== "assignee"}
+              autoFocusFirst={key !== "assignee" && key !== "person"}
               testId={`picker-${key}`}
             >
               {contentFor(key, false)}
@@ -229,13 +249,13 @@ export function useTaskPickers({
           ) : null,
       }
     },
-    [detail, openPicker, mobile, close, currentIndexFor, contentFor, patchField],
+    [detail, openPicker, mobile, close, currentIndexFor, contentFor, clearFor, titleOf],
   )
 
   /** The one mobile sheet (law 4) — rendered at page level via a portal. */
   const mobileSheet =
     mobile && openPicker && detail ? (
-      <PickerSheet title={PICKER_TITLE[openPicker]} onClose={close} testId={`picker-sheet-${openPicker}`}>
+      <PickerSheet title={titleOf(openPicker)} onClose={close} testId={`picker-sheet-${openPicker}`}>
         {contentFor(openPicker, true)}
       </PickerSheet>
     ) : null

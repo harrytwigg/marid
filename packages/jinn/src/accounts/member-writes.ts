@@ -8,6 +8,7 @@ import { DepartmentArchivedError } from "../work-items/department-archive.js";
 import { setWorkItemLabels } from "../work-items/labels.js";
 import { holdLiveSignalsUntilCommit } from "../work-items/live-events.js";
 import { memberIdentity, memberSourceRef } from "../work-items/member-identity.js";
+import { writeTodoPerson } from "../work-items/todo-people.js";
 import { TodoDateOrderError } from "../work-items/start-date.js";
 import { TodoDepartmentNotAllowedError } from "../shared/todo-departments-config.js";
 import {
@@ -127,6 +128,8 @@ function writeCreate(ctx: MemberRouteContext, db: DatabaseType, row: CreateWorkI
       if (input.labels) setWorkItemLabels(result.item.id, input.labels, actorOf(ctx));
       // Written with the create, so the board walk can never start it, whatever happens next.
       writeAutoStartRow(db, result.item.id, false, result.item.createdAt);
+      // The creator is the person responsible until someone changes it, written with the create.
+      writeTodoPerson(db, result.item.id, actorOf(ctx), actorOf(ctx), result.item.createdAt);
     }
     return result;
   }).immediate());

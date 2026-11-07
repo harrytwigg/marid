@@ -160,10 +160,17 @@ function memberLabels(labels: Label[], viewer: Viewer): Label[] {
   return labels.map((label) => ({ ...label, department: memberDepartment(label.department, viewer) }));
 }
 
+/** The person responsible as a member reads them: the operator stays, a user on the reader's boards (or the reader) stays, any other person is the generic `member`. */
+export function memberHuman(person: string | null, viewer: Viewer): string | null {
+  if (person === null || person === OPERATOR_ASSIGNEE) return person;
+  return memberIdOf(person) !== undefined ? memberWho(person, viewer) : null;
+}
+
 /** A Todo as a member reads it: the operator's row without the session-bearing `sourceRef`, budget, session creator or another board's name. */
 export function memberWorkItem(item: WorkItem, viewer: Viewer): WorkItem {
   return {
     ...item, sourceRef: null, budgetUsd: null, createdBy: memberWho(item.createdBy, viewer), department: memberDepartment(item.department, viewer),
+    humanAssignee: memberHuman(item.humanAssignee, viewer),
     ...movedMarker(item, viewer),
   };
 }
@@ -189,6 +196,7 @@ function memberCompact(item: WorkItem, extras: CompactExtras, viewer: Viewer): R
     ...row,
     labels: memberLabels(row.labels as Label[], viewer),
     createdBy: memberWho(item.createdBy, viewer),
+    humanAssignee: memberHuman(item.humanAssignee, viewer),
     department: memberDepartment(item.department, viewer),
     sourceRef: null,
     kept: false,
@@ -208,8 +216,12 @@ export function memberPagePayload(page: ReturnType<typeof queryWorkItems>, viewe
     // One query for the page, as the operator's list reads it, rather than one per row (the lane itself is not shown to members).
     recovery: recoveryByItem(ids),
   };
+  const workItems = page.workItems.map((item) => memberCompact(item, extras, viewer));
+  // As the operator's list does: the names of the people the rows name, so a reader can say who they are.
+  const members = membersNamed(workItems.map((row) => row.humanAssignee as string | null));
   return {
-    workItems: page.workItems.map((item) => memberCompact(item, extras, viewer)),
+    workItems,
+    ...(Object.keys(members).length > 0 ? { members } : {}),
     total: page.total,
     totals: page.totals,
     limit: page.limit,
@@ -325,6 +337,7 @@ const MEMBER_DETAIL_KEYS: Readonly<Record<string, readonly string[]>> = {
   status_change: ["bounce", "rounds", "note", "reason"],
   escalated: ["reason", "note"],
   note: ["assignee", "note", "updatedFields", "department"],
+  person_changed: ["from", "to"],
 };
 
 /** An assignee named on a member's timeline: the operator's reserved value, or an employee through the actor rule. */
@@ -379,7 +392,7 @@ export function memberDetailPayload(viewer: Viewer, item: WorkItem): Record<stri
   const events = memberEvents(listWorkItemEvents(item.id), item.createdBy, viewer);
   const comments = memberCommentPage(commentsTail(item.id), viewer);
   const workItem = memberWorkItem(item, viewer);
-  const members = membersNamed([workItem.createdBy, ...events.map((event) => event.actor), ...comments.comments.map((comment) => comment.author)]);
+  const members = membersNamed([workItem.createdBy, workItem.humanAssignee, ...events.map((event) => event.actor), ...comments.comments.map((comment) => comment.author)]);
   const stop = item.status === "blocked" ? readStopCause(initDb(), item.id) ?? {} : {};
   return {
     workItem,

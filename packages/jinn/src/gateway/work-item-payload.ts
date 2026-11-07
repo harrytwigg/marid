@@ -62,6 +62,7 @@ export function compactWorkItem(
     status: item.status,
     version: item.version,
     assignee: item.assignee,
+    humanAssignee: item.humanAssignee,
     department: item.department,
     createdBy: item.createdBy,
     parentId: item.parentId,
@@ -96,8 +97,10 @@ export function workItemPagePayload(page: ReturnType<typeof queryWorkItems>): Re
     kept: keptSet(initDb(), ids),
     recovery: recoveryByItem(ids),
   };
+  const members = membersNamed(page.workItems.map((item) => item.humanAssignee));
   return {
     workItems: page.workItems.map((item) => compactWorkItem(item, extras)),
+    ...(Object.keys(members).length > 0 ? { members } : {}),
     total: page.total,
     totals: page.totals,
     limit: page.limit,
@@ -133,7 +136,7 @@ export function outwardCommentPage<T extends CommentPage>(page: T): Omit<T, "com
   return { ...page, comments: page.comments.map((comment) => outwardComment(comment)) };
 }
 
-/** The board members a Todo names (its creator, comment authors, event actors), by identity, so a reader can say who they are. */
+/** The board members a Todo names (its creator, its person responsible, comment authors, event actors), by identity, so a reader can say who they are. */
 function membersNamed(identities: ReadonlyArray<string | null | undefined>): Record<string, { kind: "member"; displayName: string }> {
   const named: Record<string, { kind: "member"; displayName: string }> = {};
   for (const identity of identities) {
@@ -145,7 +148,7 @@ function membersNamed(identities: ReadonlyArray<string | null | undefined>): Rec
 export function fullWorkItemPayload(item: WorkItem): Record<string, unknown> {
   const events = listWorkItemEvents(item.id);
   const comments = commentsTail(item.id);
-  const members = membersNamed([item.createdBy, ...events.map((event) => event.actor), ...comments.comments.map((comment) => comment.author)]);
+  const members = membersNamed([item.createdBy, item.humanAssignee, ...events.map((event) => event.actor), ...comments.comments.map((comment) => comment.author)]);
   return {
     workItem: item,
     spendUsd: getWorkItemSpend(item.id),

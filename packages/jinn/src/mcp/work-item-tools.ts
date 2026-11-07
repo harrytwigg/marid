@@ -59,7 +59,21 @@ function qs(params: Record<string, string | number | undefined>): string {
   return parts.join("&");
 }
 
-function summarize(item: Record<string, unknown>): Record<string, unknown> {
+/**
+ * The person responsible for a Todo as an agent reads it: "operator", or "<name> (board member)", never a bare `user:` id
+ * and never a user as the operator (a board member's words and standing are not the operator's). The gateway sends the
+ * names it knows in a `members` map beside the Todos; a user it no longer knows reads "Former member".
+ */
+function personLabel(person: unknown, members: unknown): string | null {
+  if (typeof person !== "string") return null;
+  if (person === "@operator") return "operator";
+  if (!person.startsWith("user:")) return null;
+  const named = (members as Record<string, { displayName?: unknown }> | undefined)?.[person]?.displayName;
+  return typeof named === "string" && named !== "Former member" ? `${named} (board member)` : "Former member";
+}
+
+function summarize(item: Record<string, unknown>, members?: unknown): Record<string, unknown> {
+  const person = personLabel(item.humanAssignee, members);
   return {
     id: item.id,
     title: item.title,
@@ -73,13 +87,38 @@ function summarize(item: Record<string, unknown>): Record<string, unknown> {
     version: item.version,
     // Dates only when set: most rows carry neither, and every row is context.
     ...(item.startAt ? { startAt: item.startAt } : {}), ...(item.dueAt ? { dueAt: item.dueAt } : {}),
+    // Only when a person is set, like the dates: most rows have none, and every row is context.
+    ...(person ? { humanAssignee: person } : {}),
     updatedAt: item.updatedAt ?? null,
   };
 }
 
+/**
+ * A person that no name map accompanies (the tree, a mutation's reply) reads "a board member": a raw `user:` id is a
+ * meaningless token an agent may echo back, and a name lookup here would call a real person a former member. The operator
+ * keeps reading "operator". The detail and list replies, which do carry names, are already labelled and pass through.
+ */
+function neutralisePeople(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(neutralisePeople);
+  if (!value || typeof value !== "object") return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (key === "humanAssignee" && typeof entry === "string") out[key] = entry === "@operator" ? "operator" : entry.startsWith("user:") ? "a board member" : entry;
+    else out[key] = neutralisePeople(entry);
+  }
+  return out;
+}
+
+/** A detail body with its Todo's `humanAssignee` read as `personLabel` reads it. */
+function withPersonLabel(body: unknown): unknown {
+  const detail = body as { workItem?: Record<string, unknown>; members?: unknown } | null;
+  if (!detail?.workItem || !("humanAssignee" in detail.workItem)) return body;
+  return { ...detail, workItem: { ...detail.workItem, humanAssignee: personLabel(detail.workItem.humanAssignee, detail.members) } };
+}
+
 function workItemsFrom(body: unknown): Array<Record<string, unknown>> {
-  const rec = (body ?? {}) as { workItems?: Array<Record<string, unknown>> };
-  return Array.isArray(rec.workItems) ? rec.workItems.map(summarize) : [];
+  const rec = (body ?? {}) as { workItems?: Array<Record<string, unknown>>; members?: unknown };
+  return Array.isArray(rec.workItems) ? rec.workItems.map((item) => summarize(item, rec.members)) : [];
 }
 
 /** PATCH the metadata pen at a freshly read version, retrying ONCE on a concurrent
@@ -172,7 +211,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
       const id = requireTodoId(args);
       const { status, body } = await gatewayRequest(ctx, "GET", `/api/work-items/${encodeURIComponent(id)}`);
       if (status >= 400) throw gatewayFailure(`getting work item "${id}"`, status, body);
-      return body;
+      return withPersonLabel(body);
     },
   };
 
@@ -622,5 +661,6 @@ export function buildWorkItemTools(): JinnMcpTool[] {
   };
 
   const { dispatch, dispatchConfig, landOn } = workItemDispatchTools();
-  return [list, get, tree, search, create, update, edit, assign, archive, dispatch, landOn, comment, listComments, attach, listAttachments, link, unlink, ...labelTools(), dispatchConfig, departments];
+  const tools = [list, get, tree, search, create, update, edit, assign, archive, dispatch, landOn, comment, listComments, attach, listAttachments, link, unlink, ...labelTools(), dispatchConfig, departments];
+  return tools.map((tool) => ({ ...tool, handler: async (args, ctx) => neutralisePeople(await tool.handler(args, ctx)) }));
 }
