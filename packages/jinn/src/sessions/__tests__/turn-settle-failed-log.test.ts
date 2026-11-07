@@ -37,7 +37,7 @@ function runFor(error: string | undefined): { run: TurnRun; attempt: EngineAttem
   const session = reg.beginSessionAttempt(created.id)!;
   const run = {
     input: { session, attemptToken: session.attemptToken!, prompt: "do the thing", attachments: [], config: { engines: {} } },
-    plan: { ok: true, engineName: "claude" },
+    plan: { ok: true, engineName: "claude", carriedLeftBackgroundTaskIds: [] },
     surface: silentSurface,
     heartbeat: { stop: () => {} },
     partialStream: { write: () => {} },

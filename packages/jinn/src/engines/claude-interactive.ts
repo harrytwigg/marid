@@ -1677,9 +1677,9 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
   private taskStore = new BackgroundTaskStore((jinnSessionId) => this.publishBackgroundState(jinnSessionId));
   private backgroundSilenceTimers = new Map<string, NodeJS.Timeout>();
   private backgroundActivityCb?: (jinnSessionId: string, info: UpstreamActivityInfo | null) => void;
-  private lostBackgroundTasksCb?: (jinnSessionId: string, tasks: BackgroundTaskWait[]) => void;
+  private lostBackgroundTasksCb?: (jinnSessionId: string, tasks: BackgroundTaskWait[], deliberate: boolean) => void;
   /** Sessions whose PTY kill() is releasing: the session was stopped on purpose, so the
-   *  background tasks that die with it are not reported lost. Held only for the release. */
+   *  background tasks that die with it are reported deliberate. Held only for the release. */
   private deliberateReleases = new Set<string>();
   /** killAll ran: the gateway is shutting down, and the restart record owns what dies with it. */
   private shuttingDown = false;
@@ -1820,10 +1820,10 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
   /** Single registration: a session's Claude Code process ended (it exited, was
    *  evicted as idle, or was respawned) while background tasks it launched were
    *  still running. Claude Code never announces those tasks' ends, so nothing
-   *  would re-invoke the model; the gateway asks the session to carry on. Not
-   *  called when the session was stopped on purpose (kill) or the gateway is
-   *  shutting down. */
-  onLostBackgroundTasks(cb: (jinnSessionId: string, tasks: BackgroundTaskWait[]) => void): void {
+   *  would re-invoke the model; the gateway asks the session to carry on, or
+   *  keeps the tasks for its next turn. `deliberate`: stopped on purpose (kill)
+   *  or the gateway is shutting down, so not woken but not forgotten. */
+  onLostBackgroundTasks(cb: (jinnSessionId: string, tasks: BackgroundTaskWait[], deliberate: boolean) => void): void {
     this.lostBackgroundTasksCb = cb;
   }
 
@@ -1838,7 +1838,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       + `still running (${tasks.map((task) => task.id).join(", ")}): `
       + (deliberate ? "it was stopped on purpose, so the session is not asked to carry on" : "reporting them so the session can be asked to carry on"),
     );
-    if (!deliberate) this.lostBackgroundTasksCb?.(jinnSessionId, tasks);
+    this.lostBackgroundTasksCb?.(jinnSessionId, tasks, deliberate);
   }
 
   /** Per-PTY SSE proxy reported an in-flight change. Always record it (counts

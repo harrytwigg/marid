@@ -26,6 +26,7 @@ import { rateLimitAccount, recordAccountRateLimit } from "../rate-limit-account.
 import type { EngineResult } from "../../shared/types.js";
 import { recordRefusedBeforeEngine } from "../engine-reach.js";
 import { servedFields } from "./served-fields.js";
+import { withLeftBackgroundTasksCleared } from "../left-background-tasks.js";
 import type { TurnInput, TurnRun, TurnSurface } from "./types.js";
 
 /**
@@ -333,19 +334,33 @@ function meteredContextTokens(run: TurnRun, result: EngineResult): number | null
 function buildTerminalFields(run: TurnRun, contextTokens: number | null | undefined, verdict: TurnVerdict, stillLost: boolean): UpdateSessionFields {
   const fields: UpdateSessionFields = { ...run.terminalFields() };
   if (contextTokens !== undefined) fields.lastContextTokens = contextTokens;
-  const clearSyncMarkers = run.plan.syncRequested && !verdict.quietPreempted;
-  // The held prompts this turn put in front of the engine are owed no longer,
-  // and only the engine having read them settles that.
-  const clearCarriedPrompts = run.plan.carriedInterruptedPrompts && verdict.enginePromptRead;
-  if (clearSyncMarkers || clearCarriedPrompts) {
-    let meta: unknown = fields.transportMeta ?? getSession(run.input.session.id)?.transportMeta;
-    // A lost conversation's transcript is owed until the session has a new
-    // conversation to resume, which a turn that carried it began.
-    if (clearSyncMarkers) meta = withSyncMarkersCleared(meta, { keepLostConversation: stillLost });
-    if (clearCarriedPrompts) meta = withUnseenInterruptedPromptsCleared(meta);
-    fields.transportMeta = meta as UpdateSessionFields["transportMeta"];
-  }
+  const meta = settledTransportMeta(run, fields, verdict, stillLost);
+  if (meta !== undefined) fields.transportMeta = meta as UpdateSessionFields["transportMeta"];
   return fields;
+}
+
+/** What this turn settles of the markers its prompt carried. */
+function settledMarkers(run: TurnRun, verdict: TurnVerdict) {
+  return {
+    syncMarkers: run.plan.syncRequested && !verdict.quietPreempted,
+    // The held prompts and tasks this turn put in front of the engine are owed no
+    // longer, and only the engine having read them settles that.
+    carriedPrompts: run.plan.carriedInterruptedPrompts && verdict.enginePromptRead,
+    leftTaskIds: verdict.enginePromptRead ? run.plan.carriedLeftBackgroundTaskIds : [],
+  };
+}
+
+/** The session's meta as this turn leaves it, or undefined when the turn changes none of it. */
+function settledTransportMeta(run: TurnRun, fields: UpdateSessionFields, verdict: TurnVerdict, stillLost: boolean): unknown {
+  const settle = settledMarkers(run, verdict);
+  if (!settle.syncMarkers && !settle.carriedPrompts && settle.leftTaskIds.length === 0) return undefined;
+  let meta: unknown = fields.transportMeta ?? getSession(run.input.session.id)?.transportMeta;
+  // A lost conversation's transcript is owed until the session has a new
+  // conversation to resume, which a turn that carried it began.
+  if (settle.syncMarkers) meta = withSyncMarkersCleared(meta, { keepLostConversation: stillLost });
+  if (settle.carriedPrompts) meta = withUnseenInterruptedPromptsCleared(meta);
+  if (settle.leftTaskIds.length > 0) meta = withLeftBackgroundTasksCleared(meta, settle.leftTaskIds);
+  return meta;
 }
 
 /**
