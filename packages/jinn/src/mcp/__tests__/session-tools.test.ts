@@ -359,6 +359,11 @@ describe("session tools — unit (stub gateway)", () => {
     expect(out.action).toBe("stopped");
     expect(out.status).toBeUndefined();
     expect(String(out.hint)).toMatch(/recoverable/i);
+    expect(out.droppedMessages).toBeUndefined();
+
+    const withParked = stub(() => ({ status: 200, body: { status: "stopped", sessionId: "c", cancelledMessages: 2 } }), "p");
+    const dropped = (await tool("stop_session").handler({ sessionId: "c" }, withParked.ctx)) as Record<string, unknown>;
+    expect(dropped.droppedMessages).toBe(2);
 
     const denied = stub(() => ({ status: 403, body: { error: "not a descendant of your session" } }), "p");
     await expect(tool("stop_session").handler({ sessionId: "x" }, denied.ctx)).rejects.toThrow(/403.*descendant/);

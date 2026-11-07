@@ -347,7 +347,7 @@ export function buildSessionTools(): JinnMcpTool[] {
         action: "stopped",
         sessionId,
         ...(typeof dropped === "number" && dropped > 0 ? { droppedMessages: dropped } : {}),
-        hint: "Stopped; queued messages were dropped and nothing restarts it. Only its parent or the operator can start it again. Next: read_session.",
+        hint: "Stopped, recoverable only by its parent or the operator; queued messages were dropped and nothing restarts it on its own. Next: read_session.",
       };
     },
   };
