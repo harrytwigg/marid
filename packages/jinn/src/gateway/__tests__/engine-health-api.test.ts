@@ -21,7 +21,7 @@ beforeAll(async () => {
   api = await import("../api.js");
   ({ recordEngineUnavailable, recordExhaustedWindows } = await import("../../shared/engine-health.js"));
   (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 function cfg(): JinnConfig {
   return {

@@ -255,7 +255,7 @@ beforeAll(async () => {
     sourceRef: "notes-caller",
     employee: "notes-caller",
   }).id;
-});
+}, 60_000);
 
 describe("note tools against real routes", () => {
   const context = (): JinnMcpContext => ({

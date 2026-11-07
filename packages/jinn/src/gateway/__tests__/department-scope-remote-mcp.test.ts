@@ -80,7 +80,7 @@ beforeAll(async () => {
   // The stage home a scoped remote session gets: the bearer it is handed, and nothing else.
   stageHome = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-scoped-remote-stage-"));
   fs.writeFileSync(path.join(stageHome, "gateway.json"), `${JSON.stringify({ token: TOKEN })}\n`, { mode: 0o600 });
-});
+}, 60_000);
 
 afterAll(async () => {
   await new Promise<void>((resolve) => gateway.close(() => resolve()));

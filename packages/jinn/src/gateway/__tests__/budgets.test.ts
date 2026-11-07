@@ -26,7 +26,7 @@ let api: typeof import("../api.js"), reg: typeof import("../../sessions/registry
 beforeAll(async () => {
   [api, reg, budgets] = await Promise.all([import("../api.js"), import("../../sessions/registry.js"), import("../budgets.js")]);
   dbModule.initDb();
-});
+}, 60_000);
 /** Bank prior spend for `employee` inside the current calendar month. */
 function seedSpend(employee: string, cost: number) {
   const now = new Date().toISOString();

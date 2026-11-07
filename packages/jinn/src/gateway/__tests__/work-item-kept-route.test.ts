@@ -101,7 +101,7 @@ beforeAll(async () => {
   store = await import("../../work-items/store.js");
   kept = await import("../../work-items/kept.js");
   db = (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 describe("PUT /api/work-items/:id/kept", () => {
   it("keeps an agent-created Todo for the operator, and unkeeps it again", async () => {

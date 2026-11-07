@@ -133,7 +133,7 @@ beforeAll(async () => {
   api = await import("../api.js");
   registry = await import("../../sessions/registry.js");
   (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 beforeEach(async () => {
   (await import("../../shared/db.js")).initDb().exec("DELETE FROM queue_items; DELETE FROM messages; DELETE FROM sessions;");

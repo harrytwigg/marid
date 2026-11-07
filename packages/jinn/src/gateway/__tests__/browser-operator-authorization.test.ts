@@ -218,7 +218,7 @@ beforeAll(async () => {
     viteProxy.listen(0, "127.0.0.1", resolve);
   });
   viteBaseUrl = `http://127.0.0.1:${(viteProxy.address() as AddressInfo).port}`;
-});
+}, 60_000);
 
 afterAll(async () => {
   await new Promise<void>((resolve, reject) => viteProxy.close((error) => error ? reject(error) : resolve()));

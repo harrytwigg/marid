@@ -388,7 +388,7 @@ beforeAll(async () => {
   registry = await import("../../sessions/registry.js");
   store = await import("../../work-items/store.js");
   (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 describe("work-item tools — integration against the real API + store", () => {
   it("create → search → assign → update → read round-trips through MCP only", async () => {

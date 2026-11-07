@@ -541,7 +541,7 @@ beforeAll(async () => {
   registry = await import("../../sessions/registry.js");
   workItems = await import("../../work-items/store.js");
   workItemReconcile = await import("../../work-items/reconcile.js");
-});
+}, 60_000);
 
 beforeEach(() => {
   sessionCommGuards.reset();

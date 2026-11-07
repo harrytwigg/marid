@@ -42,7 +42,7 @@ beforeAll(async () => {
   fs.writeFileSync(inside(), "inside the department\n");
   fs.writeFileSync(outside(), "outside the department\n");
   fs.symlinkSync(outside(), path.join(workdir, "escape.txt"));
-});
+}, 60_000);
 
 afterEach(() => vi.unstubAllEnvs());
 

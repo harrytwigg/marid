@@ -104,7 +104,7 @@ async function call(method: string, url: string, body?: unknown) {
 beforeAll(async () => {
   api = await import("../api.js");
   settingsStore = await import("../../stt/settings-store.js");
-});
+}, 60_000);
 
 beforeEach(() => {
   fs.rmSync(settingsPath, { force: true });

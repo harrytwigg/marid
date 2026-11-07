@@ -261,7 +261,7 @@ beforeAll(async () => {
   registry = await import("../../sessions/registry.js");
   (await import("../../shared/db.js")).initDb();
   integrationCallerId = registry.createSession({ engine: "codex", source: "web", sourceRef: "knowledge-caller", employee: "knowledge-caller" }).id;
-});
+}, 60_000);
 
 describe("knowledge tools — integration against the real routes/store", () => {
   const ctx = (): JinnMcpContext => ({

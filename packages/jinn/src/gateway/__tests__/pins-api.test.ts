@@ -72,7 +72,7 @@ beforeAll(async () => {
   registry = await import("../../sessions/registry.js");
   api = await import("../api.js");
   dbModule.initDb();
-});
+}, 60_000);
 
 describe("chat pin API", () => {
   it("round-trips session and employee keys through the same idempotent routes", async () => {

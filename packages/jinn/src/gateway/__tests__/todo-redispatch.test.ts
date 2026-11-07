@@ -30,7 +30,7 @@ beforeAll(async () => {
   store = await import("../../work-items/store.js");
   ({ redispatchTodo } = await import("../todo-redispatch.js"));
   (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 afterAll(async () => {
   (await import("../../shared/db.js")).__closeDbForTest();

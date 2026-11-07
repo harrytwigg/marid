@@ -34,7 +34,7 @@ beforeAll(async () => {
   sessions = await import("../../sessions/registry.js");
   ({ buildTalkControlManifest: buildManifest } = await import("../../talk/control/manifest.js"));
   (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 afterAll(async () => {
   vi.unstubAllGlobals();

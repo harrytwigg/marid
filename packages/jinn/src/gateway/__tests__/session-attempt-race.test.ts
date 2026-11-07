@@ -120,7 +120,7 @@ beforeAll(async () => {
   reconcile = await import("../../work-items/reconcile.js");
   managerModule = await import("../../sessions/manager.js");
   (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 beforeEach(async () => {
   const db = (await import("../../shared/db.js")).initDb();

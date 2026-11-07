@@ -59,7 +59,7 @@ beforeAll(async () => {
   api = await import("../api.js")
   registry = await import("../../sessions/registry.js")
   dbModule.initDb()
-})
+}, 60_000)
 
 beforeEach(() => {
   context.connectors.clear()

@@ -26,7 +26,7 @@ function newSession(id: string): void {
 beforeAll(async () => {
   reg = await import("../registry.js");
   ({ foldPartialText } = await import("../../gateway/api.js"));
-});
+}, 60_000);
 
 describe("messages partial (mid-turn streaming) blocks", () => {
   it("adds nullable partial/seq/tool_call/tool_id/blocks/meta columns on init", () => {

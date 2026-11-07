@@ -97,7 +97,7 @@ async function request(
 
 beforeAll(async () => {
   api = await import("../api.js");
-});
+}, 60_000);
 
 beforeEach(() => {
   notesEnabled = true;

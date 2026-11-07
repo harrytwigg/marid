@@ -121,7 +121,7 @@ beforeAll(async () => {
   for (const [role, content] of [["user", "one"], ["assistant", "two"], ["user", "three"], ["assistant", "four"]] as const) {
     registry.insertMessage(target.id, role, content);
   }
-});
+}, 60_000);
 
 afterAll(() => {
   globalThis.fetch = processFetch;

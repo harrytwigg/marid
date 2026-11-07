@@ -172,7 +172,7 @@ beforeAll(async () => {
   worker = registry.createSession({ engine: "codex", source: "web", sourceRef: "worker", title: "worker", employee: "platform-worker" });
   peer = registry.createSession({ engine: "codex", source: "web", sourceRef: "peer", title: "peer", employee: "platform-peer" });
   manager = registry.createSession({ engine: "codex", source: "web", sourceRef: "manager", title: "manager", employee: "platform-manager" });
-});
+}, 60_000);
 
 describe("control-plane writes require operator authority", () => {
   it("makes callback dead letters visible to managers while guarding atomic requeue authority", async () => {

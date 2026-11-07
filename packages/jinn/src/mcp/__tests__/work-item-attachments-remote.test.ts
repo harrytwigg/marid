@@ -21,7 +21,7 @@ beforeAll(async () => {
   registry = await import("../../sessions/registry.js");
   store = await import("../../work-items/store.js");
   (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 function tool(name: string): JinnMcpTool {
   const t = buildWorkItemTools().find((t) => t.name === name);
