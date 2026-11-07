@@ -84,7 +84,8 @@ import {
 } from "../sessions/registry.js";
 import { claimIncomingTurn, lateralSendDedupeKey } from "../sessions/incoming-turn.js";
 import { blockFallbackText, validateBlockEnvelope } from "../shared/blocks.js";
-import { USER_MESSAGE_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
+import { USER_MESSAGE_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
+import { refuseMessageToStoppedSession, stopSession } from "./session-stop.js";
 export {
   foldPartialText,
   normalizeBlockDeltaForTurn,
@@ -2066,8 +2067,8 @@ export async function handleApiRequest(
         verb: "stop",
         instead: "Ask the operator or the session's parent instead.",
       })) return;
-      interruptSessionTurn(context, session, USER_STOP_INTERRUPTION_REASON, "Interrupted by user");
-      return json(res, { status: "stopped", sessionId: params.id });
+      const stopped = stopSession(context, session);
+      return json(res, { status: "stopped", sessionId: params.id, noop: !stopped.wasRunning && stopped.cancelled === 0, cancelledMessages: stopped.cancelled });
     }
 
     // POST /api/sessions/:id/reset — clear stuck session state (stale engine IDs, errors)
@@ -3927,6 +3928,9 @@ export async function handleApiRequest(
         }
         const callerParentId = reportingParentSessionId(caller);
         const targetParentId = reportingParentSessionId(session);
+        // Only the session's own parent may restart it by messaging it; anyone
+        // else is told it was not delivered, so it never wakes a handed-over folder.
+        if (targetParentId !== caller.id && refuseMessageToStoppedSession(res, session)) return;
         const plan = prepareLateralSend({
           caller,
           targetSessionId: params.id,
@@ -3977,6 +3981,7 @@ export async function handleApiRequest(
         // would, so it renders as a relay banner instead. Operator origin ⇒ a
         // fresh hop with no lateral cap; `fromSessionId` is optional (pass the
         // real source session to make the relay openable/linked).
+        if (refuseMessageToStoppedSession(res, session)) return;
         const fromLabel = stripControlChars(body.from).trim().slice(0, 160);
         const relayFromSessionId = typeof body.fromSessionId === "string" && body.fromSessionId.trim()
           ? stripControlChars(body.fromSessionId).trim().slice(0, 160)

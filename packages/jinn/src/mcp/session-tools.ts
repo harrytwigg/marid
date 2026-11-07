@@ -342,10 +342,12 @@ export function buildSessionTools(): JinnMcpTool[] {
       // correctly shows `idle`. A `status: "stopped"` return masqueraded
       // as that state field and contradicted read; `action: "stopped"` reads as
       // "the stop succeeded" without inventing a fake persistent 'stopped' state.
+      const dropped = (body as { cancelledMessages?: unknown }).cancelledMessages;
       return {
         action: "stopped",
         sessionId,
-        hint: "Stopped, recoverable. Next: read_session or send_to_session.",
+        ...(typeof dropped === "number" && dropped > 0 ? { droppedMessages: dropped } : {}),
+        hint: "Stopped; queued messages were dropped and nothing restarts it. Only its parent or the operator can start it again. Next: read_session.",
       };
     },
   };
