@@ -200,7 +200,7 @@ export const CHAT_SCREENS = [
         const out = []
         const b = box(barEl)
         if (b.bottom > box(composer).top + 0.5) out.push(`the bar ends at ${b.bottom}, below the composer's top ${box(composer).top}`)
-        for (const [name, el] of [['Send all now', button], ['the count', label]]) {
+        for (const [name, el] of /** @type {[string, Element][]} */ ([['Send all now', button], ['the count', label]])) {
           const r = box(el)
           const cy = (r.top + r.bottom) / 2
           for (const [x, y] of [[r.left + (r.right - r.left) / 4, cy], [(r.left + r.right) / 2, r.top + 4], [(r.left + r.right) / 2, r.bottom - 4], [r.right - (r.right - r.left) / 4, cy]]) {
