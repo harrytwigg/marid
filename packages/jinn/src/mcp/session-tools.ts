@@ -147,7 +147,7 @@ function statusHint(s: SessionRecord): string {
     case "waiting":
       return "Waiting on limit. Next: no action.";
     case "interrupted":
-      return "Interrupted. Next: send_to_session.";
+      return "Interrupted. Next: send_to_session (refused as not delivered if it was stopped and is not yours).";
     default:
       return "Next: read_session or send_to_session.";
   }
@@ -342,12 +342,16 @@ export function buildSessionTools(): JinnMcpTool[] {
       // correctly shows `idle`. A `status: "stopped"` return masqueraded
       // as that state field and contradicted read; `action: "stopped"` reads as
       // "the stop succeeded" without inventing a fake persistent 'stopped' state.
-      const dropped = (body as { cancelledMessages?: unknown }).cancelledMessages;
+      const stopped = body as { cancelledMessages?: unknown; noop?: unknown };
+      const dropped = stopped.cancelledMessages;
+      if (stopped.noop === true) {
+        return { action: "already-stopped", sessionId, hint: "Nothing was running; nothing changed. Next: read_session." };
+      }
       return {
         action: "stopped",
         sessionId,
         ...(typeof dropped === "number" && dropped > 0 ? { droppedMessages: dropped } : {}),
-        hint: "Stopped, recoverable only by its parent or the operator; queued messages were dropped and nothing restarts it on its own. Next: read_session.",
+        hint: "Stopped, recoverable only by its owner or the operator; queued messages were dropped and nothing restarts it on its own. Next: read_session.",
       };
     },
   };

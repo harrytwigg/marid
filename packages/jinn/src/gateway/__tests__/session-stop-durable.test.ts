@@ -24,7 +24,10 @@ function watchTurnStarts() {
     getPendingCount: () => 0, getRowlessWaitingCount: () => 0, getTransportState: (_key: string, status: string) => status,
   };
   const spy = vi.spyOn(h.apiCtx.sessionManager, "getQueue").mockReturnValue(queue as never);
-  return { enqueue, restore: () => spy.mockRestore() };
+  /** Turns started on this session's lane: other sessions' rows in the shared database replay too. */
+  const startsOn = (session: { sessionKey?: string | null; sourceRef?: string | null; id: string }) =>
+    (enqueue.mock.calls as unknown[][]).filter((call) => call[0] === (session.sessionKey || session.sourceRef || session.id)).length;
+  return { enqueue, startsOn, restore: () => spy.mockRestore() };
 }
 
 describe("stop_session with messages queued", () => {
@@ -41,7 +44,7 @@ describe("stop_session with messages queued", () => {
       const { resumePendingWebQueueItems } = await import("../api.js");
       resumePendingWebQueueItems(h.apiCtx);
 
-      expect(turns.enqueue).not.toHaveBeenCalled();
+      expect(turns.startsOn(session)).toBe(0);
       expect(h.registry.getSession(session.id)).toMatchObject({ status: "interrupted" });
     } finally {
       turns.restore();
@@ -120,6 +123,117 @@ describe("stop_session with messages queued", () => {
     });
     expect(followUp.status).toBe(200);
     expect(h.registry.getSession(child.id)).toMatchObject({ status: "running" });
+  });
+});
+
+/** A Todo/callback delivery claimed for `sessionId`, the way the outbox does before it POSTs. */
+function claimDelivery(sessionId: string, attempt: string) {
+  return h.registry.claimSessionDelivery({
+    targetSessionId: sessionId, sourceKind: "work-item", sourceId: "W-1", sourceAttempt: attempt,
+    sourceOutcome: "comment", sourceVersion: 1, deliveryKind: "comment",
+    payload: { message: `todo wake ${attempt}`, displayMessage: `todo wake ${attempt}` },
+  }).delivery;
+}
+
+describe("callback and Todo deliveries to a stopped session", () => {
+  it("cancels an accepted one parked behind the turn, keeps its report in the transcript, and a replay starts nothing", async () => {
+    const session = h.newSession("claude");
+    h.registry.updateSession(session.id, { status: "running" });
+    const delivery = claimDelivery(session.id, "parked");
+    h.registry.claimSessionDeliveryAttempt(delivery.id, Date.now(), 60_000);
+    const accepted = await h.request("POST", `/api/sessions/${session.id}/message`, { body: { callbackDeliveryId: delivery.id } });
+    expect(accepted.status).toBe(200);
+    expect(h.pendingPrompts(session.id)).toHaveLength(1);
+
+    const turns = watchTurnStarts();
+    try {
+      expect((await h.request("POST", `/api/sessions/${session.id}/stop`)).body).toMatchObject({ cancelledMessages: 0, noop: false });
+      expect(h.pendingPrompts(session.id)).toEqual([]);
+      expect(h.registry.getMessages(session.id).some((m) => String(m.content).includes("todo wake parked"))).toBe(true);
+      const { resumePendingWebQueueItems } = await import("../api.js");
+      resumePendingWebQueueItems(h.apiCtx);
+      expect(turns.startsOn(session)).toBe(0);
+      expect(h.registry.getSession(session.id)).toMatchObject({ status: "interrupted" });
+    } finally {
+      turns.restore();
+    }
+  });
+
+  it("gives up on one that arrives after the stop: refused, dead-lettered, nothing queued", async () => {
+    const { session } = runningWithParkedMessages();
+    await h.request("POST", `/api/sessions/${session.id}/stop`);
+    const delivery = claimDelivery(session.id, "late");
+    h.registry.claimSessionDeliveryAttempt(delivery.id, Date.now(), 60_000);
+
+    const sent = await h.request("POST", `/api/sessions/${session.id}/message`, { body: { callbackDeliveryId: delivery.id } });
+    expect(sent.status).toBe(409);
+    expect(sent.body).toMatchObject({ status: "not_delivered" });
+    expect(h.registry.getSessionDelivery(delivery.id)).toMatchObject({ status: "dead_letter" });
+    expect(h.pendingPrompts(session.id)).toEqual([]);
+    expect(h.registry.getSession(session.id)).toMatchObject({ status: "interrupted" });
+  });
+
+  it("does not count a stopped session as the employee's live session on a Todo", async () => {
+    const { isLiveEmployeeSession } = await import("../../work-items/employee-sessions.js");
+    const { session } = runningWithParkedMessages();
+    const onTodo = { ...session, employee: "dev", workItemId: "W-1" };
+    expect(isLiveEmployeeSession({ ...onTodo, status: "idle" }, "W-1", "dev")).toBe(true);
+    await h.request("POST", `/api/sessions/${session.id}/stop`);
+    const stopped = h.registry.getSession(session.id)!;
+    expect(isLiveEmployeeSession({ ...stopped, employee: "dev", workItemId: "W-1" }, "W-1", "dev")).toBe(false);
+  });
+});
+
+describe("what counts as stopped, and who may start it again", () => {
+  it("survives anything else overwriting the session's last error", async () => {
+    const { session } = runningWithParkedMessages();
+    await h.request("POST", `/api/sessions/${session.id}/stop`);
+    h.registry.updateSession(session.id, { lastError: "Engine not available" });
+    const stranger = h.newSession("claude");
+    const sent = await h.request("POST", `/api/sessions/${session.id}/message`, { headers: h.asSession(stranger.id), body: { message: "ping" } });
+    expect(sent.status).toBe(409);
+  });
+
+  it("lets any ancestor of the session start it again, and only an ancestor", async () => {
+    const grandparent = h.newSession("claude");
+    const parent = h.newSession("claude", { parentSessionId: grandparent.id });
+    const child = h.newSession("claude", { parentSessionId: parent.id });
+    h.registry.updateSession(child.id, { status: "running" });
+    expect((await h.request("POST", `/api/sessions/${child.id}/stop`, { headers: h.asSession(grandparent.id) })).status).toBe(200);
+    const stranger = h.newSession("claude");
+    expect((await h.request("POST", `/api/sessions/${child.id}/message`, { headers: h.asSession(stranger.id), body: { message: "no" } })).status).toBe(409);
+    expect((await h.request("POST", `/api/sessions/${child.id}/message`, { headers: h.asSession(grandparent.id), body: { message: "again" } })).status).toBe(200);
+    expect(h.registry.getSession(child.id)).toMatchObject({ status: "running" });
+  });
+
+  it("stops a session whose turn ended with background work still going", async () => {
+    const session = h.newSession("claude");
+    const killed = vi.fn();
+    const spy = vi.spyOn(h.apiCtx.sessionManager, "getEngine").mockReturnValue({ ...h.apiCtx.sessionManager.getEngine("claude")!, kill: killed } as never);
+    (h.apiCtx as { backgroundActivity?: Map<string, unknown> }).backgroundActivity = new Map([[session.id, { activeStreams: 0, backgroundAgents: 1, lastActivityAt: Date.now() }]]);
+    try {
+      const stop = await h.request("POST", `/api/sessions/${session.id}/stop`);
+      expect(stop.body).toMatchObject({ status: "stopped", noop: false });
+      expect(killed).toHaveBeenCalled();
+      expect(h.registry.getSession(session.id)).toMatchObject({ status: "interrupted" });
+    } finally {
+      spy.mockRestore();
+      delete (h.apiCtx as { backgroundActivity?: unknown }).backgroundActivity;
+    }
+  });
+
+  it("makes a restart-interrupted session stopped for good: the resume mark goes and agents are refused", async () => {
+    const session = h.newSession("claude");
+    h.registry.updateSession(session.id, {
+      status: "interrupted", lastError: "Interrupted: gateway shutting down gracefully",
+      transportMeta: { [h.registry.RESTART_RESUME_META_KEY]: new Date().toISOString() },
+    });
+    const stop = await h.request("POST", `/api/sessions/${session.id}/stop`);
+    expect(stop.body).toMatchObject({ noop: false });
+    expect(h.registry.getSession(session.id)!.transportMeta?.[h.registry.RESTART_RESUME_META_KEY]).toBeUndefined();
+    const stranger = h.newSession("claude");
+    expect((await h.request("POST", `/api/sessions/${session.id}/message`, { headers: h.asSession(stranger.id), body: { message: "ping" } })).status).toBe(409);
+    expect((await h.request("POST", `/api/sessions/${session.id}/stop`)).body).toMatchObject({ noop: true });
   });
 });
 

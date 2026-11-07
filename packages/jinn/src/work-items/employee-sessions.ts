@@ -4,6 +4,7 @@ import { initDb } from '../shared/db.js';
 import type { Session } from '../shared/types.js';
 import { getSession, listSessionsByWorkItem } from '../sessions/registry.js';
 import { isLegacyWorkflowPhaseSession } from '../sessions/legacy-workflow-phase.js';
+import { isStoppedByUser } from '../sessions/stopped-marker.js';
 import { isTerminalSession } from '../terminals/session.js';
 import { toWorkItemLinkRole } from './link-role.js';
 
@@ -109,13 +110,15 @@ function holderOf(session: Session): string | undefined {
  * that employee's (or the root's, for {@link ROOT_SESSION_SLOT}), and it can
  * still be messaged. Idle, waiting and interrupted all count — a session from
  * days ago is resumed on purpose, so the employee keeps the Todo's context and
- * is never started twice.
+ * is never started twice. One that was stopped on purpose does not: it takes no
+ * message until someone starts it, so the Todo's next wake goes to a new session.
  */
 export function isLiveEmployeeSession(session: Session | undefined, workItemId: string, employee: string): session is Session {
   return !!session
     && holderOf(session) === employee
     && session.workItemId === workItemId
     && canMessageSession(session)
+    && !isStoppedByUser(session)
     && !isLegacyWorkflowPhaseSession(session);
 }
 

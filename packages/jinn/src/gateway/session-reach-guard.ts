@@ -13,6 +13,11 @@ import { isDescendantOf, type CallerIdentity } from "./session-comm-guards.js";
  * itself and returns false; the stop route and the meter's compact route share
  * it, because both act on a session's turns on its behalf.
  */
+/** An agent's reach over a session: one it spawned (directly or transitively) or delegated to. */
+export function sessionIsWithinReach(session: Session, callerId: string): boolean {
+  return isDescendantOf(session.id, callerId, getSession) || reportingParentSessionId(session) === callerId;
+}
+
 export function callerMayActOnSession(
   res: ServerResponse,
   session: Session,
@@ -23,9 +28,7 @@ export function callerMayActOnSession(
     json(res, { error: UNIDENTIFIED_TOOL_CALL_ERROR }, 403);
     return false;
   }
-  if (caller.kind === "session"
-    && !isDescendantOf(session.id, caller.callerId, getSession)
-    && reportingParentSessionId(session) !== caller.callerId) {
+  if (caller.kind === "session" && !sessionIsWithinReach(session, caller.callerId)) {
     json(res, {
       error: `session ${session.id} is not a descendant of your session — agents may only ${refusal.verb} sessions they spawned (directly or transitively) or delegated to. ${refusal.instead}`,
     }, 403);

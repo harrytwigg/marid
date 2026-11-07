@@ -1,7 +1,7 @@
 // What a stop does to the messages parked behind a session's turn. Split out of
 // `queue-item-registry.ts`, which owns the rows and is at its size limit.
 import { initDb } from "../shared/db.js";
-import { listPendingQueueItemIdsForSession, withdrawPendingQueueItem, type QueueItem } from "./queue-item-registry.js";
+import { cancelQueueItem, listPendingQueueItemIdsForSession, withdrawPendingQueueItem, type QueueItem } from "./queue-item-registry.js";
 import { getSessionDeliveryByQueueItemId } from "./registry.js";
 
 /**
@@ -10,17 +10,20 @@ import { getSessionDeliveryByQueueItemId } from "./registry.js";
  * The in-memory lane is only a view of these rows: leaving one `pending` after a
  * stop is what let a replay wake the session again.
  *
- * Accepted callback deliveries are left alone. Their acceptance was committed to
- * a durable outbox, and dropping them would lose a child's report rather than a
- * message somebody sent to this session.
+ * A row an accepted callback or Todo delivery owns is cancelled too, so that a
+ * replay cannot start it, but its message stays in the transcript: it is a
+ * report the session was given, not a bubble nobody saw run.
  *
- * Returns the rows withdrawn, as they were read inside the transaction.
+ * Returns the rows withdrawn with their bubbles, as read inside the transaction.
  */
 export function withdrawPendingQueueItemsForStop(sessionId: string): QueueItem[] {
   return initDb().transaction(() => {
     const withdrawn: QueueItem[] = [];
     for (const itemId of listPendingQueueItemIdsForSession(sessionId)) {
-      if (getSessionDeliveryByQueueItemId(itemId)) continue;
+      if (getSessionDeliveryByQueueItemId(itemId)) {
+        cancelQueueItem(itemId);
+        continue;
+      }
       const item = withdrawPendingQueueItem(itemId);
       if (item) withdrawn.push(item);
     }

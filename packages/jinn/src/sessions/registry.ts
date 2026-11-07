@@ -2038,6 +2038,7 @@ export function deleteSession(id: string): boolean {
     if (!session || session.work_item_id) return false;
     db.prepare('DELETE FROM messages WHERE session_id = ?').run(id);
     db.prepare('DELETE FROM queue_items WHERE session_id = ?').run(id);
+    db.prepare('DELETE FROM meta WHERE key = ?').run(`session-stopped:${id}`);
     db.prepare('DELETE FROM chat_pins WHERE pin_key = ?').run(id);
     return db.prepare('DELETE FROM sessions WHERE id = ? AND work_item_id IS NULL').run(id).changes > 0;
   });
@@ -2058,6 +2059,7 @@ export function deleteSessions(ids: string[]): number {
     const placeholders = deletable.map(() => '?').join(',');
     db.prepare(`DELETE FROM messages WHERE session_id IN (${placeholders})`).run(...deletable);
     db.prepare(`DELETE FROM queue_items WHERE session_id IN (${placeholders})`).run(...deletable);
+    db.prepare(`DELETE FROM meta WHERE key IN (${placeholders})`).run(...deletable.map((id) => `session-stopped:${id}`));
     db.prepare(`DELETE FROM chat_pins WHERE pin_key IN (${placeholders})`).run(...deletable);
     const result = db.prepare(`DELETE FROM sessions WHERE id IN (${placeholders}) AND work_item_id IS NULL`).run(...deletable);
     return { changes: result.changes, deletedIds: deletable };
@@ -2735,6 +2737,18 @@ export function claimSessionDeliveryAttempt(
       AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
   `).run(now, now + Math.max(1, leaseMs), deliveryId, now);
   return result.changes === 1 ? getSessionDelivery(deliveryId) : undefined;
+}
+
+/** Give up on a pending delivery now, with `reason` kept on the dead-letter row
+ *  for whoever reads the list. A target that will never take it must not be
+ *  retried: a retry that lands after a later, deliberate start would wake it. */
+export function deadLetterSessionDelivery(deliveryId: string, reason: string): boolean {
+  return initDb().prepare(`
+    UPDATE callback_deliveries
+    SET status = 'dead_letter', next_attempt_at = NULL, last_error = ?, dead_lettered_at = ?,
+        attempt_count = MAX(attempt_count, 1), last_attempt_at = COALESCE(last_attempt_at, ?)
+    WHERE id = ? AND status = 'pending'
+  `).run(reason, Date.now(), Date.now(), deliveryId).changes === 1;
 }
 
 export function recordSessionDeliveryFailure(
