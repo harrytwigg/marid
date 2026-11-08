@@ -37,12 +37,6 @@ function runEntries(run: WorkItemRunWire): FeedEntry[] {
   return [start, { kind: "run-end", at: run.endedAt, run, outcome: run.outcome }]
 }
 
-/** The events a Todo's feed shows: with no accounts there is no person slot to speak of, so its `person_changed` lines
- *  (the operator as the person moving with the assignee) stay out and the feed reads as it always did. */
-export function feedEventsFor(events: WorkItemEventWire[], twoSlots: boolean): WorkItemEventWire[] {
-  return twoSlots ? events : events.filter((event) => event.kind !== "person_changed")
-}
-
 export function buildFeed(
   events: WorkItemEventWire[],
   comments: WorkItemCommentWire[],

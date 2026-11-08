@@ -18,8 +18,7 @@ import { CommentAuthor, CommentAvatar, useViewer, withCreatorActor } from "../at
 import { AttachmentChips } from "./comment-attachments"
 import { CommentSessionLink } from "./session-ref"
 import { WhisperLine } from "./whisper"
-import { buildFeed, feedEventsFor, stripCommentMarkers } from "./activity-feed"
-import { useTwoSlotAssignees } from "@/hooks/use-two-slot-assignees"
+import { buildFeed, stripCommentMarkers } from "./activity-feed"
 import { RunEndLine, RunStartLine } from "./runs"
 import { commentPowers } from "@/lib/todo-capabilities"
 import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
@@ -249,10 +248,9 @@ export function ActivitySection({
       ? commentsById.get(comment.repliedToId)
       : undefined
   const viewer = useViewer()
-  const twoSlots = useTwoSlotAssignees()
   const blocks = useMemo(
-    () => buildFeed(withCreatorActor(feedEventsFor(detail.events, twoSlots), detail.workItem.createdBy, viewer), comments, detail.runs ?? []).reverse(),
-    [detail.events, detail.workItem.createdBy, comments, detail.runs, viewer, twoSlots],
+    () => buildFeed(withCreatorActor(detail.events, detail.workItem.createdBy, viewer), comments, detail.runs ?? []).reverse(),
+    [detail.events, detail.workItem.createdBy, comments, detail.runs, viewer],
   )
 
   const [openFolds, setOpenFolds] = useState<Set<string>>(new Set())

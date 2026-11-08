@@ -21,7 +21,7 @@ describe("usePersonChoices", () => {
   it("asks nothing where there are no accounts", () => {
     auth.value = { principal: null, authState: { accountsEnabled: true, hasAccounts: false } }
     const { result } = renderHook(() => usePersonChoices("ops"), { wrapper })
-    expect(result.current).toEqual({ people: [], ready: true })
+    expect(result.current).toEqual({ people: [], ready: true, asked: false })
     expect(api.listPeople).not.toHaveBeenCalled()
     expect(api.getMemberPeople).not.toHaveBeenCalled()
   })
@@ -33,6 +33,7 @@ describe("usePersonChoices", () => {
     ])
     const { result } = renderHook(() => usePersonChoices("ops"), { wrapper })
     await waitFor(() => expect(result.current.ready).toBe(true))
+    expect(result.current.asked).toBe(true)
     expect(result.current.people.map((p) => p.id)).toEqual(["ada", "cy"])
   })
 

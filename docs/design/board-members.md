@@ -359,8 +359,9 @@ member cookies stop working, member comments read as `system` comments and membe
 ## Person and agent assignees
 
 A Todo has two assignee slots that answer different questions. The **agent** is who does the work; the **person** is who is
-responsible for it. They are set and cleared independently. Once an instance has an account, the board card, the list row and
-the Todo page show both (a person circle, then an agent circle; the Todo page has a "Person" and an "Agent" row).
+responsible for it. They are set and cleared independently. **Both slots show on every instance**, with or without accounts:
+the board card, the list row and the Todo page show both (a person circle, then an agent circle; the Todo page has an
+"Agent" and a "Person" row). Without accounts the person picker offers the operator ("You") and "No person".
 
 - **Agent slot = the existing `assignee`**, unchanged in storage, dispatch and semantics. It shows only when `assignee` is an
   employee. `@operator` there is the "needs the operator" marker: with no person row it reads as the operator in the person
@@ -436,15 +437,17 @@ quiet-watch treatment, then sets an agent, clears it, and asserts the "needs you
 
 ### Web
 
-- **With no account on the instance the UI is today's, unchanged**: a single assignee circle on the card and the list row, a
-  single "Assignee" row and chip on the Todo page whose picker keeps its operator option and its assign lane, and whose ×
-  clears whoever holds it, the operator included. The activity feed leaves `person_changed` lines out, so it and its folds
-  read as before (the events are still written). The two-slot
-  surfaces appear once `hasAccounts` (already on `GET /api/auth/state`) is true, so the first account turns them on.
-- With accounts: two 20px circles on the card and the list row (`HumanAvatar`, or the operator's own avatar, then
+- **Both slots show on every instance.** The gate that kept the two-slot surfaces for instances with an account is gone, so
+  an instance with no accounts reads the same way: the person circle then the agent circle on every card and list row, on
+  every board including Everything. Members only exist with accounts and are unaffected.
+- Two 20px circles on the card and the list row (`HumanAvatar`, or the operator's own avatar, then
   `EmployeeAvatar`), a dashed outline with "No person" / "No agent" for an empty slot. The card no longer shows its creator in
-  a free slot. The Todo page has a Person row and chip (the operator's picker offers "You (operator)" and the board's people,
-  with a clear button) and an Agent row and chip whose picker lists employees only. A member gets the person picker where they
+  a free slot. On the Todo page the Agent chip sits where the one assignee chip always did, directly after Status, with the
+  Person chip right after it and Priority and the rest following; the Properties rail runs Status, Priority, Agent, Person,
+  then Dispatch, Auto-start and the rest. Each keeps its own picker and its × clear. The Person picker offers "You
+  (operator)" and the board's people (with accounts) and "No person", and the Agent picker lists employees only. With no
+  accounts the person picker offers "You (operator)" and "No person" alone; choosing yourself is an assignment to the
+  operator in every respect (needs-you lane, dispatch, quiet-watch, review addressee). A member gets the person picker where they
   are a collaborator or owner, without the operator option, and read-only on a Todo whose person is the operator or that
   waits on the operator (the gateway refuses both); the agent row is read-only for members. On a Todo that waits on the
   operator, the operator's person picker says what a choice does before they make it: each other person reads "Takes it

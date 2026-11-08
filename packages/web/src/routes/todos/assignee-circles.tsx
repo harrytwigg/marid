@@ -1,15 +1,12 @@
 import { memo } from "react"
 import type { Employee } from "@/lib/api"
 import { EmployeeAvatar, OPERATOR_DEFAULT_EMOJI } from "@/components/ui/employee-avatar"
-import { emojiForName } from "@/lib/emoji-pool"
-import { useTwoSlotAssignees } from "@/hooks/use-two-slot-assignees"
 import { MemberAvatar, MemberName, useViewer } from "./attribution"
 import { OPERATOR_ASSIGNEE } from "./util"
 
 /* A Todo's two assignees as two small circles, the person left and the agent right, on the board card and the
- * list row once the instance has an account (before that, a card keeps its one assignee circle: `AssigneeSlots`).
- * They answer different questions and are set apart: the person is who is responsible, the agent is who does the
- * work. An empty slot is a dashed outline so the pair never changes width or reads as missing data. */
+ * list row, on every instance. They answer different questions and are set apart: the person is who is responsible,
+ * the agent is who does the work. An empty slot is a dashed outline so the pair never changes width or reads as missing data. */
 
 function EmptyCircle({ size, label, testId }: { size: number; label: string; testId: string }) {
   return (
@@ -102,35 +99,6 @@ export function AssigneeCircles({
 }) {
   const agent = agentOf(assignee)
   return <CirclePair assignee={assignee} humanAssignee={humanAssignee} agentName={agent ? byName.get(agent)?.displayName : undefined} size={size} />
-}
-
-/** The one assignee circle an instance with no accounts has always shown, on the board card and on the list row. */
-function SingleAssignee({ assignee, byName, variant }: { assignee: string | null; byName: Map<string, Employee>; variant: "card" | "row" }) {
-  if (!assignee) return null
-  const title = byName.get(assignee)?.displayName ?? assignee
-  if (variant === "card") {
-    return (
-      <span title={title} className="flex-none">
-        <EmployeeAvatar name={assignee} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
-      </span>
-    )
-  }
-  return (
-    <span title={title} className="grid size-5 place-items-center rounded-full bg-[var(--fill-secondary)] text-[11px]">
-      {emojiForName(assignee)}
-    </span>
-  )
-}
-
-/** What a card or a row shows for who holds a Todo: the person and the agent once an account exists, the one assignee before. */
-export function AssigneeSlots({ item, byName, variant }: {
-  item: { assignee: string | null; humanAssignee?: string | null }
-  byName: Map<string, Employee>
-  variant: "card" | "row"
-}) {
-  const twoSlots = useTwoSlotAssignees()
-  if (!twoSlots) return <SingleAssignee assignee={item.assignee} byName={byName} variant={variant} />
-  return <AssigneeCircles assignee={item.assignee} humanAssignee={item.humanAssignee} byName={byName} />
 }
 
 /**

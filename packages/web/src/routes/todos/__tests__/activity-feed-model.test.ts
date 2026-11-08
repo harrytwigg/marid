@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildFeed, feedEventsFor, stripCommentMarkers } from "../task-page/activity-feed"
+import { buildFeed, stripCommentMarkers } from "../task-page/activity-feed"
 import { whisperOf } from "../task-page/whisper"
 import { comment, event, run } from "./fixtures/task-wire"
 
@@ -115,16 +115,16 @@ describe("the merged feed model", () => {
 
 })
 
-describe("the person lines with no accounts", () => {
-  it("are left out, so the feed and its folds read as they did before the person slot existed", () => {
+describe("the person lines", () => {
+  it("stay in the feed beside the other audit events, on every instance", () => {
     const events = [
       event("e1", "note", "2026-07-20T08:00:00.000Z", { detail: { assignee: "@operator" } }),
       event("e2", "person_changed" as never, "2026-07-20T08:00:00.000Z", { detail: { from: null, to: "@operator" } }),
       event("e3", "metadata_edited", "2026-07-20T09:00:00.000Z"),
       event("e4", "person_changed" as never, "2026-07-20T09:00:00.000Z", { detail: { from: "@operator", to: null, personCleared: true } }),
     ]
-    expect(feedEventsFor(events, false).map((e) => e.id)).toEqual(["e1", "e3"])
-    expect(feedEventsFor(events, true)).toBe(events)
-    expect(buildFeed(feedEventsFor(events, false), [], []).map((block) => block.kind)).toEqual(["event", "event"])
+    const folded = buildFeed(events, [], [])
+    expect(folded.map((block) => block.kind)).toEqual(["fold"])
+    expect(folded[0]).toMatchObject({ events: [{ id: "e1" }, { id: "e2" }, { id: "e3" }, { id: "e4" }] })
   })
 })

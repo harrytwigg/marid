@@ -11,8 +11,6 @@ import { SESSION_WAITING_COLOR, SESSION_WAITING_LABEL } from "@/lib/session-wait
 import { RailPriorityBars } from "./rail-rows"
 import { RemoveButton } from "./label-chip"
 import { Chip } from "./chip"
-import { AssigneeChip } from "./legacy-assignee"
-import { useTwoSlotAssignees } from "@/hooks/use-two-slot-assignees"
 
 /* Variant A — the task's working identity lives directly under its title.
  * Desktop uses the approved 28px chips; mobile keeps every interactive target
@@ -67,8 +65,9 @@ function AgentChipBody({ item, byName, viewer }: { item: WorkItemDetailWire["wor
   )
 }
 
-/** The two chips that say who holds a Todo once an account exists: the person responsible, then the agent, each with its own clear control. */
-function TwoSlotChips({ item, byName, rowFor, mobile }: OwnerChipProps) {
+/** The two chips that say who holds a Todo: the agent, where the one assignee chip always sat, then the person responsible,
+ *  each with its own clear control. */
+function OwnerChips({ item, byName, rowFor, mobile }: OwnerChipProps) {
   const viewer = useViewer()
   const personPick = personRowFor(rowFor, item, viewer)
   const onClearPerson = personPick?.onClear
@@ -78,30 +77,21 @@ function TwoSlotChips({ item, byName, rowFor, mobile }: OwnerChipProps) {
   return (
     <>
       <div className="relative flex-none">
-        <Chip mobile={mobile} label="Person" testId="chip-person" clearSlot={!!onClearPerson} onOpen={personPick?.onOpen}>
-          <PersonCircle person={item.humanAssignee} size={20} />
-          {item.humanAssignee ? <PersonName person={item.humanAssignee} viewer={viewer} /> : <span className="text-[var(--text-tertiary)]">No person</span>}
-        </Chip>
-        {onClearPerson && <RemoveButton label={removeLabel} title={removeLabel} testId="chip-person-clear" onClick={onClearPerson} className={clearClass} />}
-      </div>
-      <div className="relative flex-none">
         <Chip mobile={mobile} label="Agent" testId="chip-assignee" clearSlot={!!onClearAssignee} onOpen={rowFor("assignee")?.onOpen}>
           <AgentChipBody item={item} byName={byName} viewer={viewer} />
         </Chip>
         {/* Sibling of the pill, laid over the room `clearSlot` reserved: the chip itself is a button, so the × cannot live inside it. */}
         {onClearAssignee && <RemoveButton label="Remove agent" testId="chip-assignee-clear" onClick={onClearAssignee} className={clearClass} />}
       </div>
+      <div className="relative flex-none">
+        <Chip mobile={mobile} label="Person" testId="chip-person" clearSlot={!!onClearPerson} onOpen={personPick?.onOpen}>
+          <PersonCircle person={item.humanAssignee} size={20} />
+          {item.humanAssignee ? <PersonName person={item.humanAssignee} viewer={viewer} /> : <span className="text-[var(--text-tertiary)]">No person</span>}
+        </Chip>
+        {onClearPerson && <RemoveButton label={removeLabel} title={removeLabel} testId="chip-person-clear" onClick={onClearPerson} className={clearClass} />}
+      </div>
     </>
   )
-}
-
-/** Who holds a Todo, as chips: the person and the agent once an account exists, the one assignee before. */
-function OwnerChips(props: OwnerChipProps) {
-  const twoSlots = useTwoSlotAssignees()
-  const viewer = useViewer()
-  const { item, byName, rowFor, mobile } = props
-  if (twoSlots) return <TwoSlotChips {...props} />
-  return <AssigneeChip assignee={item.assignee} byName={byName} viewer={viewer} onOpen={rowFor("assignee")?.onOpen} onClear={rowFor("assignee")?.onClear} mobile={mobile} />
 }
 
 export function ChipCluster({

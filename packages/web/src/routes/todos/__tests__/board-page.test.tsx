@@ -570,8 +570,8 @@ describe("the board surface", () => {
     patchBacklogRow(client, "TSK-1", { title: "Changed title" })
 
     await waitFor(() => expect(screen.getByTestId("board-card-TSK-1").textContent).toContain("Changed title"))
-    expect(avatarRender).toHaveBeenCalledTimes(1)
-    expect(avatarRender).toHaveBeenCalledWith("scout")
+    // The changed card's circles were handed the same people and its sibling was untouched: no avatar drew again.
+    expect(avatarRender).not.toHaveBeenCalled()
   })
 
   it("relocates a live Todo payload once and updates both column counts before refetch", async () => {

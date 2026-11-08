@@ -95,23 +95,32 @@ describe.each(surfaces)("on the %s when the Todo waits on the operator behind so
 describe.each(surfaces)("on the %s of an instance with no accounts", (_name, draw) => {
   beforeEach(() => { auth.value = { principal: null, authState: { accountsEnabled: true, hasAccounts: false } } })
 
-  it("is today's: no pair, one circle for the agent, nothing at all for a Todo nobody holds", () => {
+  it("draws the pair all the same: the person on the left, the agent on the right", () => {
     draw(compact({ assignee: "mason", humanAssignee: "@operator" }))
-    expect(screen.queryByTestId("assignee-circles")).toBeNull()
-    expect(screen.queryByTestId("person-circle")).toBeNull()
-    expect(screen.getByTitle("Mason")).toBeTruthy()
+    const pair = screen.getByTestId("assignee-circles")
+    expect([...pair.children].map((child) => child.getAttribute("data-testid"))).toEqual(["person-circle", "agent-circle"])
+    expect(within(pair).getByTitle("Mason")).toBeTruthy()
+    expect(within(pair).getByTitle("You (operator)")).toBeTruthy()
   })
 
-  it("draws no circle, dashed or otherwise, for an unassigned Todo", () => {
+  it("draws two dashed circles for an unassigned Todo, and asks the people directory nothing", () => {
     draw(compact())
-    expect(screen.queryByTestId("assignee-circles")).toBeNull()
-    expect(screen.queryByTitle("No person")).toBeNull()
-    expect(screen.queryByTitle("No agent")).toBeNull()
+    const pair = screen.getByTestId("assignee-circles")
+    expect([...pair.children].map((child) => child.getAttribute("data-testid"))).toEqual(["person-circle-empty", "agent-circle-empty"])
+    expect(directory.listPeople).not.toHaveBeenCalled()
+    expect(directory.getMemberPeople).not.toHaveBeenCalled()
   })
 
-  it("draws a Todo assigned to the operator as the one assignee circle, as it always did", () => {
+  it("draws a Todo assigned to the operator as the operator in the person circle and an empty agent circle", () => {
     draw(compact({ assignee: "@operator", humanAssignee: "@operator" }))
-    expect(screen.queryByTestId("person-circle")).toBeNull()
-    expect(screen.getByTitle("@operator")).toBeTruthy()
+    expect(screen.getByTestId("person-circle")).toBeTruthy()
+    expect(screen.getByTestId("agent-circle-empty")).toBeTruthy()
+  })
+
+  it("draws the same pair with no auth state at all", () => {
+    auth.value = null
+    draw(compact({ assignee: "mason" }))
+    expect(screen.getByTestId("assignee-circles")).toBeTruthy()
+    expect(screen.getByTestId("person-circle-empty")).toBeTruthy()
   })
 })

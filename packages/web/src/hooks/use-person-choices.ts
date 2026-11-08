@@ -11,9 +11,9 @@ export interface PersonChoice {
 /**
  * The people who can be named as the person responsible for a Todo on a board (the Todo's root board, not a sub-task's own
  * department). The operator reads the People list and keeps those with a grant on the board (or who own the instance); a member reads the people on that one board. Asked only where accounts exist: an instance without
- * them has the operator to choose and nothing else, and makes no request.
+ * them has the operator to choose and nothing else, and makes no request (`asked` is false).
  */
-export function usePersonChoices(board: string | null | undefined): { people: PersonChoice[]; ready: boolean } {
+export function usePersonChoices(board: string | null | undefined): { people: PersonChoice[]; ready: boolean; asked: boolean } {
   const auth = useAuthOptional()
   const member = auth?.principal?.kind === "member"
   const enabled = member || auth?.authState?.hasAccounts === true
@@ -29,5 +29,5 @@ export function usePersonChoices(board: string | null | undefined): { people: Pe
         .map((person) => ({ id: person.id, displayName: person.displayName, initials: person.initials || initialsOf(person.displayName) }))
     },
   })
-  return { people: query.data ?? [], ready: !enabled || query.isSuccess }
+  return { people: query.data ?? [], ready: !enabled || query.isSuccess, asked: enabled }
 }

@@ -29,7 +29,6 @@ import { StatusPickerContent } from "../pickers/status-picker-content"
 import { PersonPickerContent } from "../pickers/person-picker-content"
 import { offeredDepartments } from "../pickers/department-filters"
 import { agentOf } from "../assignee-circles"
-import { useTwoSlotAssignees } from "@/hooks/use-two-slot-assignees"
 
 /* Todos v2 slice 6 — the task page's picker wiring: ONE picker open at a time,
  * one content component per property rendered in the popover shell (desktop —
@@ -80,9 +79,6 @@ export function useTaskPickers({
   root: RefObject<HTMLElement | null>
 } & CloseGateCounts) {
   const qc = useQueryClient()
-  const twoSlots = useTwoSlotAssignees()
-  /** The agent row is the Assignee row until an account exists; the title is what the sheet and the popover say. */
-  const titleOf = useCallback((key: PickerKey): string => (key === "assignee" && !twoSlots ? "Assignee" : PICKER_TITLE[key]), [twoSlots])
   const [openPicker, setOpenPicker] = useState<PickerKey | null>(null)
   const id = detail?.workItem.id
 
@@ -218,14 +214,14 @@ export function useTaskPickers({
     [detail, departments],
   )
 
-  /** The one-tap clear for the agent and person rows; the other rows have none. With no accounts the one assignee row
-   *  clears whoever holds it, the operator included, as it always did; with two slots `@operator` is not an agent. */
+  /** The one-tap clear for the agent and person rows; the other rows have none. `@operator` is not an agent, so the agent
+   *  row has nothing to clear when it is all that is there. */
   const clearFor = useCallback((key: PickerKey, current: WorkItemDetailWire): (() => void) | undefined => {
     const assignee = current.workItem.assignee
-    if (key === "assignee" && (twoSlots ? agentOf(assignee) : assignee)) return () => patchField({ assignee: null })
+    if (key === "assignee" && agentOf(assignee)) return () => patchField({ assignee: null })
     if (key === "person" && current.workItem.humanAssignee) return () => commitPerson(null)
     return undefined
-  }, [patchField, commitPerson, twoSlots])
+  }, [patchField, commitPerson])
 
   const rowFor = useCallback(
     (key: PickerKey) => {
@@ -240,7 +236,7 @@ export function useTaskPickers({
           !mobile && openPicker === key ? (
             <PickerPopover
               key={key}
-              label={titleOf(key)}
+              label={PICKER_TITLE[key]}
               onClose={close}
               currentIndex={currentIndexFor(key)}
               autoFocusFirst={key !== "assignee" && key !== "person"}
@@ -251,13 +247,13 @@ export function useTaskPickers({
           ) : null,
       }
     },
-    [detail, openPicker, mobile, close, currentIndexFor, contentFor, clearFor, titleOf],
+    [detail, openPicker, mobile, close, currentIndexFor, contentFor, clearFor],
   )
 
   /** The one mobile sheet (law 4) — rendered at page level via a portal. */
   const mobileSheet =
     mobile && openPicker && detail ? (
-      <PickerSheet title={titleOf(openPicker)} onClose={close} testId={`picker-sheet-${openPicker}`}>
+      <PickerSheet title={PICKER_TITLE[openPicker]} onClose={close} testId={`picker-sheet-${openPicker}`}>
         {contentFor(openPicker, true)}
       </PickerSheet>
     ) : null
