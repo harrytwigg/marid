@@ -286,17 +286,15 @@ function acceptNoteRefusal(item: WorkItem, note: string): StatusLaneResult | und
   return note ? undefined : refuse(400, `accepting Todo ${item.id} needs the reason in note: it is posted on the Todo as a comment`);
 }
 
-/** Why `employee` produced `item`: the assignee, a hand in ({@link closerHandIn}),
- *  or the handoff unless another employee worked it. */
+/** Why `employee` produced `item`: the assignee, or a hand in ({@link closerHandIn}). */
 function ownWorkReason(employee: string, item: WorkItem): string | undefined {
   return item.assignee === employee
     ? `${employee} is assigned to it`
     : closerHandIn(employee, item, { producedElsewhere: otherProducer(employee, item) !== undefined });
 }
 
-/** The parent's owner accepting a delegated child still `executing`, or sending
- *  one back from review. With a hand in, a send-back is the producer's own
- *  take-back (agent lane), not a review bounce. */
+/** The parent's owner accepting a delegated child still `executing`, or sending one
+ *  back from review (with a hand in that is the producer's own take-back, agent lane). */
 function resolveParentOwnerLane(employee: string, item: WorkItem, target: WorkItemStatus, note: string): StatusLaneResult | undefined {
   if (item.status === "executing") return resolveExecutingAccept(employee, item, note);
   if (target === "done" || ownWorkReason(employee, item)) return undefined;
@@ -322,8 +320,8 @@ export function resolveStatusLane(
   if (hasOperatorLane(caller)) return { ok: true, lane: { kind: "operator" } };
   if (caller.kind !== "session") return refuse(403, "caller has no session identity");
   if (asOperator) return resolveCoordinatorLane(caller, item, target, note);
-  const closeLane = resolveAncestorOwnerClose({ employee: caller.session.employee ?? undefined, sessionId: caller.callerId }, item, target, note,
-    { ownWork: ownWorkReason, liveWork: liveWorkRefusal });
+  const who = { employee: caller.session.employee ?? undefined, sessionId: caller.callerId };
+  const closeLane = resolveAncestorOwnerClose(who, item, target, note, { ownWork: ownWorkReason, liveWork: liveWorkRefusal });
   if (closeLane) return closeLane;
   const owner = parentOwnerOf(caller, item, target);
   const ownerLane = owner ? resolveParentOwnerLane(owner, item, target, note) : undefined;

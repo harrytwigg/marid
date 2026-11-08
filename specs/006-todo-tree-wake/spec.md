@@ -163,9 +163,12 @@ child, and carries the tree to completion. Only the root goes to the operator.
    - `in_review → executing`, recorded as a review bounce (`bounce: true`, `rounds`
      counts, the policy's max rounds escalates to `blocked` as for the operator).
 
-   The self-review ban holds (`closerHandIn`): an employee that worked the child, started
-   it, or handed it to review cannot close it. Cancelling, reopening and cascading stay the
-   operator's. The `update_work_item` description names the new case within the tool
+   The self-review ban holds (`closerHandIn`) for a child still `executing` and for the
+   send-back: an employee that worked the child, started it, or handed it to review cannot
+   accept it from `executing`. From `in_review` the close is the ancestor owner's, at any
+   depth and whoever produced the child, the owner included (`work-item-ancestor-close.ts`):
+   the ban is applied one level up, because a root can never be closed that way and its
+   review reaches the operator. Cancelling, reopening and cascading stay the operator's. The `update_work_item` description names the new case within the tool
    manifest budget.
 4. **The operator's desk shows only what is addressed to the operator.** A child in
    `in_review` addressed to an employee gets attention lane `manager` (not `operator`); the

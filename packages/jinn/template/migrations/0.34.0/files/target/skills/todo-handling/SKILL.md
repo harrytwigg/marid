@@ -25,7 +25,9 @@ A Todo's department is its top-level Todo's. In a `scoped` or `dedicated` depart
 
 ## Who may move a Todo where
 
-Agent sessions work inside the open statuses: pick work up or put it down (backlog ↔ executing), hand it to review and take it back (executing ↔ in_review), and stop or resume it (any open status ↔ blocked, with a note saying why). Closing a Todo (`done`), cancelling it, reopening closed work and archiving are the operator's. The gateway refuses them to every agent session, reviewers included.
+Agent sessions work inside the open statuses: pick work up or put it down (backlog ↔ executing), hand it to review and take it back (executing ↔ in_review), and stop or resume it (any open status ↔ blocked, with a note saying why). Closing a Todo (`done`), cancelling it, reopening closed work and archiving are the operator's. The gateway refuses them to every agent session, reviewers included, with two exceptions below: the owner of a Todo above it, and the coordinator.
+
+The first exception is the owner of the tree. If you are the assignee of a Todo that is executing or blocked, you may move any Todo below it (a child, a grandchild, any depth) from in_review to `done` with `update_work_item` and a `note` saying what landed and where, including work you produced yourself. Close bottom-up, since a Todo with open sub-tasks cannot be closed, and let any other session still working a Todo stop first. A root Todo has nothing above it, so its review is always the operator's: move it to in_review and wait.
 
 The one exception is the top-level coordinator session the operator is talking to, which carries no employee identity of its own and was opened from the web console, Talk or a chat connector. In exceptional circumstances it may close a Todo as `done` on the operator's behalf: `update_work_item` with `status: "done"`, `asOperator: true`, and the operator's reason in `note`. The reason is required. The audit event records the operator as the actor and names the calling session, and the reason is posted as a comment on the Todo. `asOperator` does nothing else: cancelling, archiving and reopening stay with the operator, and closing a Todo's open descendants along with it stays on the human surface. The coordinator may use it only on a turn the operator's own message started (a message they typed in the web console, a first prompt they sent, or a message that arrived in a chat connector's own conversation). A message from another session, a delegation brief or a sub-task's report landing in the chat is not the operator talking: `asOperator` is refused there, so after a callback ask the operator to close the Todo instead of closing it yourself.
 
@@ -92,7 +94,7 @@ There is no separate approval step. When work needs a person's decision, stop it
 - Worker finished and ready for review: `update_work_item` to in_review with a note naming artifacts, checks, and remaining risks. The note is required: it is the review handoff, and the gateway posts it on the Todo as a comment.
 - Cannot proceed without an external change: move to `blocked` and state the concrete blocker plus what would unblock it.
 - A manager/operator decision is required: move to `blocked` and say in the note what is needed, then comment with the options and your recommendation.
-- Finished work waits in in_review for the operator, who closes it. No agent marks a Todo `done`.
+- Finished work waits in in_review for its reviewer: the operator, who closes it, or for a sub-Todo the owner of a Todo above it, who closes it with `done` and a note. A root Todo always waits for the operator. No one else marks a Todo `done`.
 
 Example:
 
