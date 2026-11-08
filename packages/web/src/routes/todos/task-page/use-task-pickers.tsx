@@ -29,6 +29,8 @@ import { StatusPickerContent } from "../pickers/status-picker-content"
 import { PersonPickerContent } from "../pickers/person-picker-content"
 import { offeredDepartments } from "../pickers/department-filters"
 import { agentOf } from "../assignee-circles"
+import { personLane } from "./person-route"
+import { OPERATOR_ASSIGNEE } from "../util"
 
 /* Todos v2 slice 6 — the task page's picker wiring: ONE picker open at a time,
  * one content component per property rendered in the popover shell (desktop —
@@ -138,22 +140,27 @@ export function useTaskPickers({
    *  live notify; the pen is the one lane that can clear it. Peek ships the same split. */
   const commitAssignee = useCallback((assignee: string | null) => {
     if (!id || assignee === null) return patchField({ assignee })
-    qc.setQueryData<WorkItemDetailWire>(["work-item", id], (current) => (current ? { ...current, workItem: { ...current.workItem, assignee } } : current))
+    qc.setQueryData<WorkItemDetailWire>(["work-item", id], (current) => (current ? { ...current, workItem: { ...current.workItem, assignee, ...(assignee === OPERATOR_ASSIGNEE ? { humanAssignee: current.workItem.humanAssignee ?? OPERATOR_ASSIGNEE } : {}) } } : current))
     api.assignWorkItem(id, assignee)
       .catch((error) => announce(operatorSafeTodoError(error, "Couldn't assign this Todo")))
       .finally(() => void invalidateTodoCaches(qc, id))
   }, [id, qc, announce, patchField])
 
-  /** The person responsible is a label of responsibility: it never goes through the assign lane, starts nothing, and a
-   *  board member names it through their own route. */
+  /** The person responsible is a label of responsibility: it starts nothing, and a board member names it through their own
+   *  route. The operator's choice that leaves what assign-to-the-operator or unassign leaves goes through that route (`personLane`). */
   const commitPerson = useCallback((person: string | null) => {
     if (!id) return
-    if (!memberMode) return patchField({ humanAssignee: person })
+    if (!memberMode) {
+      const lane = personLane(detail?.workItem ?? {}, person)
+      if (lane === "assign-operator") return commitAssignee(OPERATOR_ASSIGNEE)
+      if (lane === "unassign") return commitAssignee(null)
+      return patchField({ humanAssignee: person })
+    }
     qc.setQueryData<WorkItemDetailWire>(["work-item", id], (current) => (current ? { ...current, workItem: { ...current.workItem, humanAssignee: person } } : current))
     api.setWorkItemPerson(id, person)
       .catch((error) => announce(operatorSafeTodoError(error, "Couldn't set the person")))
       .finally(() => void invalidateTodoCaches(qc, id))
-  }, [id, memberMode, qc, announce, patchField])
+  }, [id, memberMode, qc, announce, patchField, commitAssignee, detail])
 
   const labelsMutation = useMutation({
     mutationFn: ({ labels }: { labels: string[] }) => api.setWorkItemLabels(id!, labels),

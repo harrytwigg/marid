@@ -200,8 +200,18 @@ describe("the operator as the person, with no accounts", () => {
     expect(within(picker).queryByText(/No one else has access/)).toBeNull()
   })
 
-  it("posts the person as the operator and nothing else when you pick yourself", async () => {
-    const item = full("TSK-12")
+  it("writes picking yourself through today's assign-to-operator route when nobody holds either slot", async () => {
+    getWorkItem.mockResolvedValue(detailOf(full("TSK-12")))
+    renderTask()
+    fireEvent.click(await screen.findByTestId("rail-person"))
+    fireEvent.click(await screen.findByTestId("person-option-operator"))
+    await waitFor(() => expect(assignWorkItem).toHaveBeenCalledWith("TSK-12", "@operator"))
+    expect(assignWorkItem).toHaveBeenCalledTimes(1)
+    expect(updateWorkItem).not.toHaveBeenCalled()
+  })
+
+  it("writes picking yourself through the person write when an agent holds the Todo, so the agent stays", async () => {
+    const item = full("TSK-12", { assignee: "mason" })
     getWorkItem.mockResolvedValue(detailOf(item))
     updateWorkItem.mockResolvedValue({ workItem: { ...item, humanAssignee: "@operator", version: 4 }, replayed: false })
     renderTask()
@@ -211,7 +221,7 @@ describe("the operator as the person, with no accounts", () => {
     expect(assignWorkItem).not.toHaveBeenCalled()
   })
 
-  it("offers 'No person' once the operator holds the slot, and clears it", async () => {
+  it("offers 'No person' once the operator holds the slot, and clears it through today's unassign write", async () => {
     const item = full("TSK-12", { assignee: "@operator", humanAssignee: "@operator" })
     getWorkItem.mockResolvedValue(detailOf(item))
     updateWorkItem.mockResolvedValue({ workItem: { ...item, assignee: null, humanAssignee: null, version: 4 }, replayed: false })
@@ -221,7 +231,8 @@ describe("the operator as the person, with no accounts", () => {
     fireEvent.click(await screen.findByTestId("rail-person"))
     expect((await screen.findByTestId("person-option-clear")).textContent).toContain("No person")
     fireEvent.click(screen.getByTestId("person-option-clear"))
-    await waitFor(() => expect(updateWorkItem).toHaveBeenCalledWith("TSK-12", expect.objectContaining({ patch: { humanAssignee: null } })))
+    await waitFor(() => expect(updateWorkItem).toHaveBeenCalledWith("TSK-12", expect.objectContaining({ patch: { assignee: null } })))
+    expect(assignWorkItem).not.toHaveBeenCalled()
   })
 
   it("reads a Todo assigned to the operator as the operator in both person surfaces and an empty agent", async () => {
