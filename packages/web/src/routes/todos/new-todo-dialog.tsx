@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import {
   Building2,
   CalendarDays,
-  ChevronDown,
   Flag,
   GitBranch,
   Tags,
@@ -15,7 +14,8 @@ import {
 } from "@/lib/api"
 import { operatorSafeTodoError, priorityLabel } from "@/lib/todos"
 import { createDetail } from "./new-todo-preview"
-import { assignOnCreate } from "./new-todo-assign"
+import { PropertyChip, useIsCreateMobile } from "./new-todo-chips"
+import { AssignOnCreateError, assignOnCreate } from "./new-todo-assign"
 import { MemberName } from "./attribution"
 import { OPERATOR_ASSIGNEE } from "./util"
 import { TodoDialog } from "./todo-dialog"
@@ -31,59 +31,6 @@ import { PickerPopover, PickerSheet } from "./pickers/picker-shell"
 import { creatableDepartment, offeredDepartments } from "./pickers/department-filters"
 
 type CreatePicker = "assignee" | "person" | "department" | "priority" | "due" | "labels"
-
-const MOBILE_QUERY = "(max-width: 700px)"
-
-function useIsCreateMobile(): boolean {
-  const [mobile, setMobile] = useState(
-    () => typeof window !== "undefined" && (window.matchMedia?.(MOBILE_QUERY).matches ?? false),
-  )
-  useEffect(() => {
-    const query = window.matchMedia?.(MOBILE_QUERY)
-    if (!query) return
-    const onChange = (event: MediaQueryListEvent) => setMobile(event.matches)
-    query.addEventListener("change", onChange)
-    return () => query.removeEventListener("change", onChange)
-  }, [])
-  return mobile
-}
-
-function PropertyChip({
-  icon,
-  label,
-  testId,
-  active,
-  onClick,
-  children,
-}: {
-  icon: React.ReactNode
-  label: React.ReactNode
-  testId: string
-  active?: boolean
-  onClick: () => void
-  children?: React.ReactNode
-}) {
-  return (
-    <span className="relative">
-      <button
-        type="button"
-        data-testid={testId}
-        aria-expanded={active || undefined}
-        onClick={onClick}
-        className={`focus-outline inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium outline-none transition-colors ${
-          active
-            ? "bg-[var(--accent-fill)] text-[var(--accent)]"
-            : "bg-[var(--fill-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]"
-        }`}
-      >
-        {icon}
-        <span>{label}</span>
-        <ChevronDown size={11} aria-hidden className="opacity-60" />
-      </button>
-      {children}
-    </span>
-  )
-}
 
 export function NewTodoDialog({
   onClose,
@@ -183,11 +130,11 @@ export function NewTodoDialog({
       })
       try {
         await assignOnCreate(created.workItem, { assignee, person })
-      } catch {
-        // The Todo exists: clear the form so another click cannot create it again, and say what is still unset.
+      } catch (caught) {
+        // The Todo exists: clear the form so another click cannot create it again, and say which slot is still unset.
         reset()
         setBusy(false)
-        setError(`Created ${created.workItem.id}, but couldn't set who it's for. Set it on the Todo.`)
+        setError(`Created ${created.workItem.id}, but couldn't set the ${caught instanceof AssignOnCreateError ? caught.slot : "agent or person"}. Set it on the Todo.`)
         return
       }
       if (keepOpen) {
