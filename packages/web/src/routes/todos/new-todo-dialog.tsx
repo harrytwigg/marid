@@ -134,7 +134,7 @@ export function NewTodoDialog({
         // The Todo exists: clear the form so another click cannot create it again, and say which slot is still unset.
         reset()
         setBusy(false)
-        setError(`Created ${created.workItem.id}, but couldn't set the ${caught instanceof AssignOnCreateError ? caught.slot : "agent or person"}. Set it on the Todo.`)
+        setError(`Created ${created.workItem.id}, but couldn't set the ${caught instanceof AssignOnCreateError ? caught.slots.join(" and ") : "agent or person"}. Set it on the Todo.`)
         return
       }
       if (keepOpen) {

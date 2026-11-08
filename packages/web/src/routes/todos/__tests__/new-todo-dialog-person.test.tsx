@@ -212,6 +212,52 @@ describe("the New Todo dialog after the Todo exists", () => {
     expect(updateWorkItem.mock.invocationCallOrder[0]).toBeLessThan(assignWorkItem.mock.invocationCallOrder[0])
   })
 
+  it("still names the agent when naming a board member fails, and says only the person is unset", async () => {
+    auth.value = { principal: { kind: "operator" }, authState: { accountsEnabled: true, hasAccounts: true } }
+    listPeople.mockResolvedValue([{ id: "ada1", displayName: "Ada Lovelace", initials: "AL", status: "active", instanceRole: "member", boards: [{ department: "platform", role: "collaborator" }] }])
+    updateWorkItem.mockRejectedValueOnce(new Error("no grant"))
+    const user = userEvent.setup()
+    renderDialog()
+    await user.type(screen.getByTestId("todo-new-title"), "Grant revoked")
+    await user.click(screen.getByTestId("todo-new-person-chip"))
+    await user.click(await screen.findByTestId("person-option-ada1"))
+    await user.click(screen.getByTestId("todo-new-assignee-chip"))
+    await user.click(await screen.findByTestId("assignee-option-mason"))
+    await user.click(screen.getByTestId("todo-new-create"))
+    expect(await screen.findByText("Created TSK-9, but couldn't set the person. Set it on the Todo.")).toBeTruthy()
+    expect(assignWorkItem).toHaveBeenCalledWith("TSK-9", "mason")
+  })
+
+  it("names both slots when neither could be set", async () => {
+    auth.value = { principal: { kind: "operator" }, authState: { accountsEnabled: true, hasAccounts: true } }
+    listPeople.mockResolvedValue([{ id: "ada1", displayName: "Ada Lovelace", initials: "AL", status: "active", instanceRole: "member", boards: [{ department: "platform", role: "collaborator" }] }])
+    updateWorkItem.mockRejectedValueOnce(new Error("no grant"))
+    assignWorkItem.mockRejectedValueOnce(new Error("refused"))
+    const user = userEvent.setup()
+    renderDialog()
+    await user.type(screen.getByTestId("todo-new-title"), "Neither")
+    await user.click(screen.getByTestId("todo-new-person-chip"))
+    await user.click(await screen.findByTestId("person-option-ada1"))
+    await user.click(screen.getByTestId("todo-new-assignee-chip"))
+    await user.click(await screen.findByTestId("assignee-option-mason"))
+    await user.click(screen.getByTestId("todo-new-create"))
+    expect(await screen.findByText("Created TSK-9, but couldn't set the agent and person. Set it on the Todo.")).toBeTruthy()
+  })
+
+  it("still names you as the person when the agent's assignment fails, and says only the agent is unset", async () => {
+    assignWorkItem.mockRejectedValueOnce(new Error("refused"))
+    const user = userEvent.setup()
+    renderDialog()
+    await user.type(screen.getByTestId("todo-new-title"), "Agent refused, you kept")
+    await user.click(screen.getByTestId("todo-new-assignee-chip"))
+    await user.click(await screen.findByTestId("assignee-option-mason"))
+    await user.click(screen.getByTestId("todo-new-person-chip"))
+    await user.click(await screen.findByTestId("person-option-operator"))
+    await user.click(screen.getByTestId("todo-new-create"))
+    expect(await screen.findByText("Created TSK-9, but couldn't set the agent. Set it on the Todo.")).toBeTruthy()
+    expect(updateWorkItem).toHaveBeenCalledWith("TSK-9", expect.objectContaining({ patch: { humanAssignee: "@operator" }, expectedVersion: 1 }))
+  })
+
   it("says it was the agent that could not be set when the agent's assignment fails", async () => {
     assignWorkItem.mockRejectedValueOnce(new Error("refused"))
     const user = userEvent.setup()
