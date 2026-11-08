@@ -2,11 +2,12 @@ import type { IncomingMessage as HttpRequest, ServerResponse } from "node:http";
 import { readJsonBody } from "./http-helpers.js";
 import { badRequest, json, matchRoute, notFound, type ParsedRoute } from "./route-helpers.js";
 import { workItemActor, type WorkItemCaller } from "./work-item-arming.js";
-import { authorizeWorkItemOwnerManagerOrRoot } from "./work-item-authority.js";
+import { authorizeAssignOverSubTasks, authorizeWorkItemOwnerManagerOrRoot } from "./work-item-authority.js";
 import { isTodoId } from "../work-items/id.js";
 import { DepartmentBoundaryError } from "../work-items/department-scope.js";
 import { DepartmentArchivedError } from "../work-items/department-archive.js";
 import { ReparentError, reparentWorkItem } from "../work-items/reparent.js";
+import { listWorkItemEvents } from "../work-items/event-log.js";
 import { getWorkItem, type WorkItem } from "../work-items/store.js";
 
 /**
@@ -16,7 +17,11 @@ import { getWorkItem, type WorkItem } from "../work-items/store.js";
  * move with it. The caller needs the standing that assigns a Todo (its owner,
  * the owner of a Todo above it, a manager over the owner, the org root, the
  * operator) over the Todo itself, and over the new parent when there is one:
- * hanging work under a Todo hands its owner that work's review.
+ * hanging work under a Todo hands its owner that work's review. Two attaches
+ * need only one end, so a detach can always be undone without the operator:
+ * putting a detached Todo back under the parent it left (its owner already took
+ * that review once), and a parent's owner taking in a root Todo nobody is
+ * assigned to.
  */
 
 export interface ReparentApiOptions {
@@ -48,14 +53,37 @@ function refuse(res: ServerResponse, err: unknown): void {
   throw err;
 }
 
-/** Standing over the Todo and over its new parent; answers 403 itself. */
-function mayReparent(res: ServerResponse, caller: WorkItemCaller, targets: ReadonlyArray<WorkItem | undefined>): boolean {
-  for (const target of targets) {
-    if (!target) continue;
-    const authorized = authorizeWorkItemOwnerManagerOrRoot(caller, target, "reparent");
-    if (!authorized.ok) return json(res, { error: authorized.error }, authorized.status), false;
+/** Whether `item` was last detached from exactly `parentId` and has no parent since. */
+function wasDetachedFrom(item: WorkItem, parentId: string): boolean {
+  if (item.parentId !== null) return false;
+  for (const event of [...listWorkItemEvents(item.id)].reverse()) {
+    const moved = (event.detail as { reparented?: { from?: unknown; to?: unknown } } | null | undefined)?.reparented;
+    if (!moved || !("to" in moved) || moved.to !== null) continue;
+    return moved.from === parentId;
   }
-  return true;
+  return false;
+}
+
+type Standing = ReturnType<typeof authorizeWorkItemOwnerManagerOrRoot>;
+
+/** The two attaches that need standing over one end only. */
+function mayAttachWithOneEnd(caller: WorkItemCaller, item: WorkItem, parent: WorkItem, overItem: Standing, overParent: Standing): boolean {
+  // Put back where it came from: the caller may edit the Todo, and its parent's owner already held it.
+  if (overItem.ok && wasDetachedFrom(item, parent.id)) return true;
+  // A parent's owner taking in a root nobody is assigned to; it must also be able to hold what sits below it.
+  return overParent.ok && !item.assignee && item.parentId === null && authorizeAssignOverSubTasks(caller, item, "assign").ok;
+}
+
+/** Standing over the Todo and over its new parent, or one of the two narrower
+ *  attaches; answers 403 itself. A detach (no parent) needs the Todo only. */
+function mayReparent(res: ServerResponse, caller: WorkItemCaller, item: WorkItem, parent: WorkItem | undefined): boolean {
+  const overItem = authorizeWorkItemOwnerManagerOrRoot(caller, item, "reparent");
+  const overParent: Standing = parent ? authorizeWorkItemOwnerManagerOrRoot(caller, parent, "reparent") : { ok: true };
+  if (overItem.ok && overParent.ok) return true;
+  if (parent && mayAttachWithOneEnd(caller, item, parent, overItem, overParent)) return true;
+  const refusal = overItem.ok ? overParent : overItem;
+  if (!refusal.ok) json(res, { error: refusal.error }, refusal.status);
+  return false;
 }
 
 /** The Todo and its new parent (if any), both standing-checked. Answers every refusal itself. */
@@ -72,7 +100,7 @@ async function resolveReparent(
   if (!body) return undefined;
   const parent = body.parentId === null ? undefined : getWorkItem(body.parentId);
   if (body.parentId !== null && !parent) return json(res, { error: `parent Todo ${body.parentId} not found` }, 404), undefined;
-  return mayReparent(res, caller, [item, parent]) ? { item, parentId: body.parentId } : undefined;
+  return mayReparent(res, caller, item, parent) ? { item, parentId: body.parentId } : undefined;
 }
 
 export async function handleReparentApi(
