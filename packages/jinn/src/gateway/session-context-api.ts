@@ -15,6 +15,7 @@ import {
   SELF_COMPACTION_COOLDOWN_MS,
   selfCompactionClaimedAt,
 } from "../sessions/self-compaction.js";
+import { isStoppedByUser } from "../sessions/stopped-marker.js";
 import { isTerminalSession } from "../terminals/session.js";
 import { enqueueViaMessageRoute } from "./self-compaction-api.js";
 import { json, matchRoute, notFound, type ParsedRoute } from "./route-helpers.js";
@@ -40,7 +41,7 @@ import { callerMayActOnSession } from "./session-reach-guard.js";
  */
 
 export type RefusalCode =
-  | "busy" | "queued" | "compacting" | "cooldown" | "unsupported" | "no-conversation" | "terminal";
+  | "busy" | "queued" | "compacting" | "cooldown" | "unsupported" | "no-conversation" | "terminal" | "stopped";
 
 export type CompactRefused = { available: false; reason: { code: RefusalCode; message: string }; retryAt?: string };
 export type CompactAvailability = { available: true } | CompactRefused;
@@ -68,6 +69,9 @@ const refusal = (code: RefusalCode, message: string, retryAt?: number): CompactR
 /** Refusals that are about the session itself, whatever it is doing. */
 function structuralRefusal(session: Session, opencodeMode: string | undefined): CompactRefused | undefined {
   if (isTerminalSession(session)) return refusal("terminal", "A terminal session has no model context to compact.");
+  // A compaction is a turn, and any turn ends a stop: compacting must not be a
+  // way round it.
+  if (isStoppedByUser(session)) return refusal("stopped", "This session was stopped. Start it again with a message first, then compact.");
   const hasConversation = Boolean(getEngineSessionRef(session, session.engine).id);
   const message = compactCommandRefusal(session.engine, opencodeMode, hasConversation);
   if (!message) return undefined;
@@ -91,7 +95,7 @@ function activityRefusal(session: Session, deps: AvailabilityDeps): CompactRefus
 
 /**
  * Whether a manual compaction of `session` would be accepted now, and if not
- * why. Checked in this order, first refusal wins: terminal, unsupported,
+ * why. Checked in this order, first refusal wins: terminal, stopped, unsupported,
  * no-conversation, compacting, busy, queued, cooldown. Reads the cooldown
  * without claiming it; the POST claims it.
  */
