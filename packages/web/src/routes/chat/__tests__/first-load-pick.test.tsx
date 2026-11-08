@@ -40,7 +40,7 @@ async function tapBeforeTheListReports(id: string) {
   await settled()
 }
 
-describe('a chat tapped while the page is still loading', () => {
+describe('the chat page while it is still loading', () => {
   beforeEach(() => {
     sessionIds.splice(0, sessionIds.length, 'a', 'b', 'c', 'd')
     localStorage.clear()
@@ -82,5 +82,20 @@ describe('a chat tapped while the page is still loading', () => {
 
     await waitFor(() => expect(stripTab('a')).toBeTruthy())
     expect(stripTab('b')).toBeTruthy()
+  })
+
+  it('leaves the newest chat the page primed on load without a tab of its own on the strip', async () => {
+    // The list reports its first load in the same flush as the page's first effects, so the page primes the
+    // newest chat then: that first run is the load, not a back or forward, and the chat stays one nobody opened.
+    chatTabsMock.tabs = []
+    renderDataRoute('/')
+    await waitFor(() => expect(routeLocation()).toBe('/?session=a'))
+    await settled()
+
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'Todos' }))
+    await screen.findByTestId('phone-todos')
+    await settled()
+
+    expect(stripTab('a')).toBeNull()
   })
 })
