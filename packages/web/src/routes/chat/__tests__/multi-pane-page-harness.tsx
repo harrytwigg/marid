@@ -94,7 +94,7 @@ vi.mock('@/components/page-layout', () => ({
  *  roster contact hang off the mobile instance only, so the desktop suites keep
  *  the surface they were written against. */
 vi.mock('@/components/chat/chat-sidebar', async () => {
-  const { useEffect, useRef } = await import('react')
+  const { startTransition, useEffect, useRef } = await import('react')
   return {
     ChatSidebar: ({ variant, onNewChat, onSelect, onSessionsLoaded, onOrderComputed, onContactEmployee }: {
       variant?: string
@@ -105,12 +105,16 @@ vi.mock('@/components/chat/chat-sidebar', async () => {
       onContactEmployee?: (name: string) => void
     }) => {
       const announced = useRef(false)
+      // As the real sidebar does: the report goes to the latest handler, from a transition.
+      const latest = useRef(onSessionsLoaded)
+      useEffect(() => { latest.current = onSessionsLoaded })
       useEffect(() => {
         if (variant !== 'mobile' || announced.current) return
         announced.current = true
-        const report = () => onSessionsLoaded?.(sessionIds.map((id) => ({ id })))
+        const report = () => latest.current?.(sessionIds.map((id) => ({ id })))
+        // A held report is delivered at the moment the suite chooses; otherwise it takes the transition.
         if (listLoadGate.hold) listLoadGate.held.push(report)
-        else report()
+        else startTransition(report)
       })
       useEffect(() => {
         onOrderComputed?.({ sessionIds, employeeNames: [], employeeSessionMap: {} })

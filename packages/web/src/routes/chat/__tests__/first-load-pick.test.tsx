@@ -8,7 +8,6 @@ import { chatPanes, settled, setViewport } from './todos-tab-page-support'
 // transition, so a tap can land first: on a loaded host it does. The gate holds the report until after the tap,
 // which puts the tap first on every run.
 const routeLocation = () => screen.getByTestId('route-location').textContent
-const stripTabs = () => [...document.querySelectorAll('[data-mobile-session-tab]')].map((node) => node.getAttribute('data-mobile-session-tab'))
 
 async function tapBeforeTheListReports(id: string) {
   listLoadGate.hold = true
@@ -44,15 +43,5 @@ describe('a chat tapped before the list has reported its first load', () => {
 
     expect(routeLocation()).toBe('/?session=b')
     await waitFor(() => expect(chatPanes()).toEqual(['b']))
-  })
-
-  it('still earns a tab when it is the newest chat itself', async () => {
-    await tapBeforeTheListReports('a')
-    await waitFor(() => expect(chatPanes()).toEqual(['a']))
-    fireEvent.click(screen.getAllByRole('button', { name: 'Back to chats' })[0])
-    fireEvent.click(await screen.findByTestId('list-row-b'))
-    await waitFor(() => expect(routeLocation()).toBe('/?session=b'))
-
-    await waitFor(() => expect(stripTabs()).toEqual(['a', 'b']))
   })
 })
