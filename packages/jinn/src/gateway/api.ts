@@ -75,6 +75,7 @@ import {
   listReleasableParentCompletionQueuesForSource,
   getSessionDelivery,
   deadLetterSessionDelivery,
+  releaseSelfCompactionOfDelivery,
   listDeadLetterSessionDeliveries,
   requeueDeadLetterSessionDelivery,
   acceptSessionDelivery,
@@ -3875,6 +3876,7 @@ export async function handleApiRequest(
       // deliberate start would replay it into a session that has moved on.
       if (callbackDelivery && isStoppedByUser(session)) {
         deadLetterSessionDelivery(callbackDelivery.id, STOPPED_SESSION_NOT_DELIVERED);
+        releaseSelfCompactionOfDelivery(callbackDelivery);
         refuseStoppedSession(res, session);
         return;
       }
