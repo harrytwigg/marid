@@ -162,6 +162,28 @@ describe("a compaction turn on its way when the session is stopped", () => {
     expect(h.registry.getSession(child.id)!.transportMeta?.reportedToParentAttempt).toBeUndefined();
   });
 
+  it("still wakes the parent for the stopped child's next reply outside a gateway turn", async () => {
+    const parent = h.newSession("claude");
+    const child = h.newSession("claude", { parentSessionId: parent.id });
+    h.registry.updateSession(child.id, { status: "running", attemptToken: "attempt-asking-turn" });
+    h.setBeforeLoopback(async () => {
+      if (h.loopbacks().length === 2) await h.request("POST", `/api/sessions/${child.id}/stop`);
+    });
+    expect((await h.request("POST", "/api/compactions", { headers: h.asSession(child.id), body: HANDOFF })).status).toBe(409);
+    h.setBeforeLoopback(undefined);
+
+    // The stopped child keeps its attempt token, so a reply synced from its
+    // terminal (a late Stop, or a turn typed there) belongs to the same attempt.
+    const stoppedChild = h.registry.getSession(child.id)!;
+    expect(stoppedChild.attemptToken).toBe("attempt-asking-turn");
+    const before = h.loopbacks().length;
+    const { notifyParentOfExternalTurn } = await import("../../sessions/callbacks.js");
+    await notifyParentOfExternalTurn(stoppedChild, "Here is the answer the parent asked for.", "turn-1");
+
+    const toParent = h.loopbacks().slice(before).filter((l) => l.path === `/api/sessions/${parent.id}/message`);
+    expect(toParent).toHaveLength(1);
+  });
+
   it("leaves a send_to_session relay's suppression standing when the stop lands before the resume", async () => {
     const parent = h.newSession("claude");
     const child = h.newSession("claude", { parentSessionId: parent.id });
