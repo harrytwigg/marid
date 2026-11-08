@@ -117,6 +117,8 @@ function ChatPage() {
   // tab→URL reconciler must stand down or it re-navigates against the stale
   // URL and clobbers the entry (state included). undefined = nothing pending.
   const pendingNavRef = useRef<string | null | undefined>(undefined)
+  // Whether the reader asked for the selection in flight, as opposed to the page picking one by itself.
+  const pendingNavIsReadersRef = useRef(false)
   // Mobile opens on the THREAD when the URL already selects a session
   // (refresh / deep link / direct open) and on the LIST for bare `/` — the
   // pane derives from the URL at mount, not only from tap events.
@@ -316,6 +318,7 @@ function ChatPage() {
       // routine pre-claims the sentinel before issuing its replace.
       if (id !== selectedIdRef.current && (opts?.replace || pendingNavRef.current !== id)) {
         pendingNavRef.current = id
+        pendingNavIsReadersRef.current = !opts?.system
         navigate(sessionPath(id), {
           replace: opts?.replace,
           state: opts?.from ? { from: opts.from } : undefined,
@@ -353,13 +356,13 @@ function ChatPage() {
   const didMountRef = useRef(false)
   useEffect(() => {
     // A run is a navigation landing, apart from the first, which is the page mounting: its POP is the initial load,
-    // not back/forward, and nothing of ours has landed. Effects run a task after their commit, so a tap can be
-    // handled in between, and the list's first report can prime a chat in the same flush: clearing either mark
-    // here would let the tab→URL reconciler pick the tapped chat again, or count the primed one as opened.
-    if (didMountRef.current) {
-      pendingNavRef.current = undefined
-      if (navigationType === 'POP') setSystemPrimedId(null)
-    }
+    // not back/forward, and nothing of ours has landed. Effects run a task after their commit, so a reader's tap can
+    // be handled in between: its navigation stays marked in flight, or the tab→URL reconciler picks the tapped chat
+    // again as one nobody asked for. A pick the page made by itself (the warm list's first report primes the newest
+    // chat in this same flush) is dropped as before, so the reconciler still restores the saved active tab over it,
+    // and the mark that pick set stays: the initial POP must not count the primed chat as opened.
+    if (didMountRef.current || !pendingNavIsReadersRef.current) pendingNavRef.current = undefined
+    if (didMountRef.current && navigationType === 'POP') setSystemPrimedId(null)
     // A commit the bulk archive overtook names a chat that is already gone, so it is
     // not an arrival: it must not clear the removed mark or open the tab back up.
     // The route follows the active tab instead — the step the tab→URL reconciler
