@@ -43,6 +43,9 @@ export type { WorkItemAttemptEvidence } from './attempt-evidence.js';
  *     while it waits on QA or the operator — only by its producer's explicit
  *     move. The settle just clears a transient `blocked` back to `executing`.
  *   - Newest attempt with an explicit `failed`/`interrupted` receipt → `blocked`.
+ *   - The assignee's own declared move to `executing` (from a session that is
+ *     not an execution attempt, such as a mention) is not undone by receipts that
+ *     predate it — see `attempt-evidence.ts`. A newer failed attempt still blocks.
  *
  * All writes go through the guarded `transitions.ts` (event-audited, optimistic,
  * sticky-safe) — the reconciler is a consumer of the state machine, not a second
@@ -136,7 +139,7 @@ export function reconcileWorkItem(id: string): ReconcileResult | undefined {
   // TRUST-close, or otherwise rewrite them. Explicit guarded Todo actions remain
   // available through the normal operator surfaces.
   if (item.source === 'workflow') return { item, changed: false };
-  const { attempts, decisionFloorAt } = collectAttemptEvidence(id);
+  const { attempts, decisionFloorAt } = collectAttemptEvidence(id, item.status);
   // Every attempt predates the operator's own move (or the park expiry that
   // re-queued it), so nothing has happened since that decision about where this
   // Todo belongs and the reconciler has nothing to say — neither a derived
