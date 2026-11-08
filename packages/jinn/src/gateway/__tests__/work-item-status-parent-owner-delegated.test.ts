@@ -230,9 +230,20 @@ describe("the parent's owner accepting a delegated child", () => {
       ]);
     });
 
-    it("closes from executing a child the owner only paused and resumed", async () => {
+    const takeBackRefusal = /owner-dev cannot accept Todo \S+: owner-dev moved it back to executing and child-dev has not worked it since.*self-review ban/;
+
+    it("refuses from executing a child the owner paused and resumed while its producer did nothing", async () => {
       const { child } = await delegatedChild("Paused and resumed, executing");
       const owner = await pauseAndResume(child.id);
+      const res = await statusPost(owner.id, child.id, accept);
+      expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(takeBackRefusal)]);
+      expect(statusOf(child.id)).toBe("executing");
+    });
+
+    it("closes from executing a child the owner paused and resumed once its producer worked it again", async () => {
+      const { child } = await delegatedChild("Paused, resumed, reworked");
+      const owner = await pauseAndResume(child.id);
+      workItems.linkSession(child.id, (await sessionOf("child-dev")).id, "delegation", "execute", { via: "delegation" });
       const res = await statusPost(owner.id, child.id, accept);
       expect([res.status, statusOf(child.id)]).toEqual([200, "done"]);
     });
@@ -291,11 +302,40 @@ describe("the parent's owner accepting a delegated child", () => {
       expect([res.status, statusOf(child.id)]).toEqual([200, "done"]);
     });
 
-    it("closes from executing a child the owner only bounced from review", async () => {
+    it("refuses from executing a child the owner bounced from review while its producer did nothing", async () => {
       const { child } = await delegatedChild("Bounced, executing", "in_review");
       const owner = await bounce(child.id);
       const res = await statusPost(owner.id, child.id, accept);
+      expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(takeBackRefusal)]);
+      expect(statusOf(child.id)).toBe("executing");
+    });
+
+    it("closes from executing a child the owner bounced from review once its producer worked it again", async () => {
+      const { child } = await delegatedChild("Bounced, reworked, executing", "in_review");
+      const owner = await bounce(child.id);
+      workItems.linkSession(child.id, (await sessionOf("child-dev")).id, "delegation", "execute", { via: "delegation" });
+      const res = await statusPost(owner.id, child.id, accept);
       expect([res.status, statusOf(child.id)]).toEqual([200, "done"]);
+    });
+
+    it("closes from executing a child the producer reworked and paused, though the owner bounced it", async () => {
+      const { child, producer } = await delegatedChild("Bounced, producer paused and resumed", "in_review");
+      const owner = await bounce(child.id);
+      expect((await statusPost(producer.id, child.id, { status: "blocked", note: "Waiting on a dependency" })).status).toBe(200);
+      expect((await statusPost(producer.id, child.id, { status: "executing" })).status).toBe(200);
+      const res = await statusPost(owner.id, child.id, accept);
+      expect([res.status, statusOf(child.id)]).toEqual([200, "done"]);
+    });
+
+    it("refuses again once the owner bounces a child its producer had reworked and handed back", async () => {
+      const { child, producer } = await delegatedChild("Bounced twice", "in_review");
+      const owner = await bounce(child.id);
+      expect((await statusPost(producer.id, child.id, { status: "in_review", note: "Reworked" })).status).toBe(200);
+      expect((await statusPost(owner.id, child.id, { status: "executing", note: "One more pass" })).status).toBe(200);
+
+      const res = await statusPost(owner.id, child.id, accept);
+      expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(takeBackRefusal)]);
+      expect(statusOf(child.id)).toBe("executing");
     });
 
     it("still refuses an owner that bounced the child from review and then handed it to review itself", async () => {

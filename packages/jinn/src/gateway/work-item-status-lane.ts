@@ -145,7 +145,8 @@ function moveEmployee(event: WorkItemEvent): string | undefined {
  * alone, or a review bounce alone, is not a hand in. A move into `executing`
  * (a review bounce included) together with the latest handoff is, since an
  * employee that took the Todo back and then handed it to review itself took
- * the work over.
+ * the work over. A take-back with no handoff is judged only while the Todo is
+ * still `executing`, by {@link tookBackUnworked}.
  */
 function closerHandIn(employee: string, item: WorkItem, { producedElsewhere = false } = {}): string | undefined {
   const events = listWorkItemEvents(item.id);
@@ -177,6 +178,25 @@ function movedToExecutingBy(event: WorkItemEvent, employee: string): boolean {
 /** `employee` starting or resuming the Todo: a move into `executing` that is not a review bounce. */
 function startedBy(event: WorkItemEvent, employee: string): boolean {
   return movedToExecutingBy(event, employee) && event.fromStatus !== "in_review";
+}
+
+/**
+ * Whether `employee` took the Todo back and the producer has not worked it
+ * since: the latest move into `executing` is the employee's (a review bounce,
+ * a resume or a start alike), and after it the producer made no status move
+ * and was linked to execute no new session. Whatever happened to the work
+ * afterwards is then the employee's own, with or without a handoff. Once the
+ * producer acts, the move was bookkeeping around its work and the employee
+ * may accept what the producer stopped on. Read from the audit trail in
+ * order, so a second take-back starts the question again.
+ */
+function tookBackUnworked(employee: string, producer: string, item: WorkItem): boolean {
+  const events = listWorkItemEvents(item.id);
+  const entries = events.filter((event) => event.kind === "status_change" && event.toStatus === "executing");
+  const entry = entries.at(-1);
+  if (!entry || moveEmployee(entry) !== employee) return false;
+  return !events.slice(events.indexOf(entry) + 1).some((event) => workedBy(event, producer)
+    || (event.kind === "status_change" && moveEmployee(event) === producer));
 }
 
 /** A granted employee closing a Todo as `done`, with the reason it will post.
@@ -239,11 +259,14 @@ function selfReviewRefusal(employee: string, item: WorkItem, handIn: string): St
 }
 
 /** The owner accepting a child that is still `executing`: only one another
- *  employee is assigned and was linked to work, and the owner had no hand in.
+ *  employee is assigned and was linked to work, and the owner had no hand in
+ *  and did not take it back from the producer ({@link tookBackUnworked}).
  *  Anything else is left to the ordinary agent lane, which refuses the close. */
 function resolveExecutingAccept(employee: string, item: WorkItem, note: string): StatusLaneResult | undefined {
-  if (!otherProducer(employee, item)) return undefined;
-  const handIn = closerHandIn(employee, item, { producedElsewhere: true });
+  const producer = otherProducer(employee, item);
+  if (!producer) return undefined;
+  const handIn = closerHandIn(employee, item, { producedElsewhere: true })
+    ?? (tookBackUnworked(employee, producer, item) ? `${employee} moved it back to executing and ${producer} has not worked it since` : undefined);
   if (handIn) return selfReviewRefusal(employee, item, handIn);
   return liveWorkRefusal(item) ?? acceptNoteRefusal(item, note) ?? { ok: true, lane: { kind: "parent-owner", employee } };
 }
