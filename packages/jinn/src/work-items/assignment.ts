@@ -97,6 +97,18 @@ function departmentAfterAssignment(item: WorkItem, assigneeDepartment: string | 
   return isNonOpenDepartment(assigneeDepartment) || isDepartmentArchived(db, assigneeDepartment) ? item.department : assigneeDepartment;
 }
 
+/** Refuses what assignment may not do to `item`. Clearing the assignee has no holder to check, but an
+ *  executing Todo has a live attempt and a watch that reads its assignee: clearing it would leave work
+ *  running that nobody owns and nothing nudges, so it moves out of executing first. Otherwise (FR-015)
+ *  the assignee must be one who may hold a Todo in its root's department. */
+function assertAssignable(item: WorkItem, assignee: string | null): void {
+  if (assignee !== null) {
+    assertMayHold(assignee, item.id, scopeDepartmentOfItem(item, getWorkItem));
+  } else if (item.assignee !== null && item.status === 'executing') {
+    throw new TransitionError('conflict', `cannot unassign work item ${item.id} while it is executing — move it to backlog or blocked first`);
+  }
+}
+
 export function assignWorkItem(
   id: string,
   assignee: string | null,
@@ -111,9 +123,7 @@ export function assignWorkItem(
     if (STICKY_STATUSES.has(item.status)) {
       throw new TransitionError('illegal-edge', `cannot assign work item ${id} while it is in terminal state ${item.status}`);
     }
-    // FR-015: the assignee must be one who may hold a Todo in its root's department.
-    // Clearing the assignee gives the Todo to nobody, so there is no holder to check.
-    if (assignee !== null) assertMayHold(assignee, item.id, scopeDepartmentOfItem(item, getWorkItem));
+    assertAssignable(item, assignee);
     const department = departmentAfterAssignment(item, assigneeDepartment);
     if (item.assignee === assignee && item.department === department) {
       return { item, escalated: false };

@@ -404,10 +404,10 @@ export function buildWorkItemTools(): JinnMcpTool[] {
     handler: async (args, ctx) => {
       assertIdentity(ctx);
       const id = requireTodoId(args);
-      const assignee = args.assignee === null ? null : requireString(args, "assignee");
+      const assignee = requireString(args, "assignee");
       const { status, body } = await gatewayRequest(ctx, "POST", `/api/work-items/${encodeURIComponent(id)}/assign`, { assignee });
       if (status >= 400) throw gatewayFailure(`assigning work item "${id}"`, status, body);
-      return mutationResult(body, assignee === null || assignee === UNASSIGNED_FILTER ? "Todo unassigned." : "Todo assigned.");
+      return mutationResult(body, assignee === UNASSIGNED_FILTER ? "Todo unassigned." : "Todo assigned.");
     },
   };
 

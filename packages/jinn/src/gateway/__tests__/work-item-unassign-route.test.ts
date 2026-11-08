@@ -9,6 +9,8 @@ import {
   ensureSessionCapability,
 } from "../../mcp/identity.js";
 import { call, home, startRouteHarness, stopRouteHarness, type Registry, type WorkItems } from "./todo-route-harness.js";
+import { boardEventName } from "../../board-hooks/events.js";
+import { listWorkItemEvents } from "../../work-items/event-log.js";
 
 /**
  * Giving a Todo to someone and taking it back are the same governance decision:
@@ -125,6 +127,56 @@ describe("POST /api/work-items/:id/assign clears the assignee", () => {
     const missing = await call("POST", `/api/work-items/${closed.id}/assign`, {});
     expect(missing.status).toBe(400);
     expect(workItems.getWorkItem(closed.id)!.assignee).toBe("holder");
+  });
+});
+
+describe("unassigning respects the Todo's state", () => {
+  it("refuses an executing Todo and leaves it owned", async () => {
+    const item = workItems.createWorkItem({ title: "executing stays owned", assignee: "holder", status: "executing" });
+    const session = sessionOf("holder", "executing-owner");
+    const response = await call("POST", `/api/work-items/${item.id}/assign`, { assignee: "@unassigned" }, callerHeaders(session.id));
+    expect(response.status).toBe(409);
+    expect(response.body.error).toMatch(/executing.*backlog or blocked/);
+    expect(workItems.getWorkItem(item.id)).toMatchObject({ assignee: "holder", status: "executing" });
+  });
+
+  it.each(["blocked", "in_review"] as const)("clears a %s Todo and keeps its status", async (status) => {
+    const item = workItems.createWorkItem({ title: `unassign ${status}`, assignee: "holder", status: "executing" });
+    const session = sessionOf("holder", `state-${status}`);
+    const moved = await call("POST", `/api/work-items/${item.id}/status`, { status, note: "parked" }, callerHeaders(session.id));
+    if (moved.status >= 400) throw new Error(`could not move to ${status}: ${JSON.stringify(moved.body)}`);
+    const response = await call("POST", `/api/work-items/${item.id}/assign`, { assignee: "@unassigned" }, callerHeaders(session.id));
+    expect(response.status).toBe(200);
+    expect(workItems.getWorkItem(item.id)).toMatchObject({ assignee: null, status });
+  });
+
+  it("refuses a Todo in a terminal state", async () => {
+    const item = workItems.createWorkItem({ title: "terminal", assignee: "holder", status: "executing" });
+    const done = await call("POST", `/api/work-items/${item.id}/status`, { status: "done", asOperator: true });
+    if (done.status >= 400) throw new Error(`could not close: ${JSON.stringify(done.body)}`);
+    const response = await call("POST", `/api/work-items/${item.id}/assign`, { assignee: "@unassigned" });
+    expect(response.status).toBe(409);
+    expect(workItems.getWorkItem(item.id)!.assignee).toBe("holder");
+  });
+
+  it("leaves a parent's sub-tasks alone and still gates the parent on standing", async () => {
+    const parent = assignedTodo("holder", "parent");
+    const child = workItems.createWorkItem({ title: "child", parentId: parent.id, assignee: "mgr-report" });
+    const owner = sessionOf("holder", "parent-owner");
+    const response = await call("POST", `/api/work-items/${parent.id}/assign`, { assignee: "@unassigned" }, callerHeaders(owner.id));
+    expect(response.status).toBe(200);
+    expect(workItems.getWorkItem(child.id)!.assignee).toBe("mgr-report");
+    const stranger = sessionOf("outsider", "parent-stranger");
+    const refused = await call("POST", `/api/work-items/${parent.id}/assign`, { assignee: "@unassigned" }, callerHeaders(stranger.id));
+    expect(refused.status).toBe(403);
+  });
+
+  it("records a note with a null assignee that fires no assigned board event", async () => {
+    const item = assignedTodo("holder", "audit shape");
+    await call("POST", `/api/work-items/${item.id}/assign`, { assignee: "@unassigned" });
+    const note = [...listWorkItemEvents(item.id)].reverse().find((event) => event.kind === "note");
+    expect(note?.detail).toMatchObject({ assignee: null });
+    expect(boardEventName(note!)).toBeNull();
   });
 });
 

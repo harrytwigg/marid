@@ -340,14 +340,13 @@ describe("work-item tools — unit (stub gateway)", () => {
     ]);
   });
 
-  it("assign passes @unassigned and an explicit null through to clear the assignee", async () => {
+  it("assign passes @unassigned through to clear the assignee", async () => {
     const { calls, ctx } = stub(() => ({ status: 200, body: { workItem: { id: "JIN-1", assignee: null } } }), "sess-1");
     await tool("assign_work_item").handler({ id: "JIN-1", assignee: "@unassigned" }, ctx);
-    await tool("assign_work_item").handler({ id: "JIN-1", assignee: null }, ctx);
-    expect(calls.map((c) => c.body)).toEqual([{ assignee: "@unassigned" }, { assignee: null }]);
+    expect(calls.map((c) => c.body)).toEqual([{ assignee: "@unassigned" }]);
     await expect(tool("assign_work_item").handler({ id: "JIN-1", assignee: "" }, ctx)).rejects.toThrow(/assignee is required/);
     await expect(tool("assign_work_item").handler({ id: "JIN-1" }, ctx)).rejects.toThrow(/assignee is required/);
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(1);
   });
 
   it("assign validates through the route and maps readable 400 near-match errors", async () => {
