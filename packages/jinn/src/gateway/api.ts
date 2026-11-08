@@ -86,7 +86,7 @@ import {
 import { claimIncomingTurn, lateralSendDedupeKey } from "../sessions/incoming-turn.js";
 import { blockFallbackText, validateBlockEnvelope } from "../shared/blocks.js";
 import { USER_MESSAGE_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
-import { isStoppedByUser, refuseStoppedSession, STOPPED_SESSION_NOT_DELIVERED, stopSession } from "./session-stop.js";
+import { endStopOnDeliberateSend, isStoppedByUser, refuseStoppedSession, STOPPED_SESSION_NOT_DELIVERED, stopSession } from "./session-stop.js";
 import { interruptSessionTurn, killSessionEngines } from "./session-interrupt.js";
 export { interruptSessionTurn };
 export {
@@ -4158,6 +4158,7 @@ export async function handleApiRequest(
           content: isNotification ? displayMessage : prompt, media: userMedia, meta: notificationMeta,
         });
         if (claim.deduplicated) return json(res, { status: "duplicate", sessionId: session.id, queueItemId: claim.queueItemId });
+        endStopOnDeliberateSend(session);
         queueItemId = claim.queueItemId;
         incomingMessageId = claim.messageId;
       }

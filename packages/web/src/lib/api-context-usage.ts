@@ -15,6 +15,7 @@ export type CompactRefusalCode =
   | "unsupported"
   | "no-conversation"
   | "terminal"
+  | "stopped"
 
 export interface ContextUsageWire {
   sessionId: string
