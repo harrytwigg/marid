@@ -486,6 +486,10 @@ function ChatPage() {
 
   const handleSessionsLoaded = useCallback(
     (sessions: { id: string }[]) => {
+      // The list reports its first load from a transition, so a reader can tap a row before this runs:
+      // that navigation is in flight and `selectedId` is still the stale null, but the pick is theirs and
+      // the auto-select must not replace it (nor re-mark the tapped chat as one nobody asked for).
+      if (typeof pendingNavRef.current === 'string') return
       if (!selectedId && !newChatIntentRef.current && sessions.length > 0) {
         // Background auto-select of the most-recent session: primes the desktop
         // thread, but stays on the chat LIST on mobile (navigateMobile: false),

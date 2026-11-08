@@ -7,14 +7,18 @@ import type { SessionWaitsResponse } from '@/lib/session-waits'
 import ChatPageWrapper from '../page'
 import { CHAT_SESSION_DND_MIME } from '../chat-session-dnd'
 
-const { sessionIds, chatTabsMock } = vi.hoisted((): {
+const { sessionIds, chatTabsMock, listLoadGate } = vi.hoisted((): {
   sessionIds: string[]
   // The page's open-chats list. A suite that needs it empty, or needs to see the page clear it,
   // moves `tabs` or reads the spy; every other suite gets the four seeded chats, as before.
   chatTabsMock: { tabs: unknown[]; closeAllTabs: Mock }
+  // Holds the list's report of its first load, so a suite can act before the page hears it: a loaded host
+  // does that by chance. Open by default; `held` is what the page has not heard yet.
+  listLoadGate: { hold: boolean; held: Array<() => void> }
 } => ({
   sessionIds: ['a', 'b', 'c', 'd'],
   chatTabsMock: { tabs: [], closeAllTabs: vi.fn() },
+  listLoadGate: { hold: false, held: [] },
 }))
 const gateway = vi.hoisted(() => ({
   listeners: new Set<(frame: { event: string; payload: unknown }) => void>(),
@@ -104,7 +108,9 @@ vi.mock('@/components/chat/chat-sidebar', async () => {
       useEffect(() => {
         if (variant !== 'mobile' || announced.current) return
         announced.current = true
-        onSessionsLoaded?.(sessionIds.map((id) => ({ id })))
+        const report = () => onSessionsLoaded?.(sessionIds.map((id) => ({ id })))
+        if (listLoadGate.hold) listLoadGate.held.push(report)
+        else report()
       })
       useEffect(() => {
         onOrderComputed?.({ sessionIds, employeeNames: [], employeeSessionMap: {} })
@@ -229,4 +235,4 @@ export async function openChatBeside() {
   fireEvent.click((await screen.findAllByRole('menuitem', { name: 'Open beside' }))[0])
 }
 
-export { apiMocks, chatTabsMock, gateway, sessionIds }
+export { apiMocks, chatTabsMock, gateway, listLoadGate, sessionIds }
