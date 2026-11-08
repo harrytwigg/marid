@@ -113,6 +113,59 @@ describe("a compaction turn on its way when the session is stopped", () => {
 
   const HANDOFF = { goal: "finish the report", done: "drafted it", next: "proofread it", context: "none", waitingOn: "nothing" };
 
+  it("gives the claim back and promises no resume when the stop lands between the compaction turn and the resume", async () => {
+    const session = h.newSession("claude");
+    h.registry.updateSession(session.id, { status: "running" });
+    // The 2nd loopback is the resume turn leaving; the compaction turn was accepted by then.
+    h.setBeforeLoopback(async () => {
+      if (h.loopbacks().length === 2) await h.request("POST", `/api/sessions/${session.id}/stop`);
+    });
+
+    const res = await h.request("POST", "/api/compactions", { headers: h.asSession(session.id), body: HANDOFF });
+    expect(h.loopbacks()).toHaveLength(2);
+    // Not a 202 that says the resume is still on its way: it was refused for good.
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ code: "stopped" });
+    expect(res.body.resume).toBeUndefined();
+    expect(await stopped(session.id)).toBe(true);
+    // The stop withdrew the compaction row; the claim it was made under goes with it.
+    expect(h.selfCompactionAt(session.id)).toBeUndefined();
+
+    // The operator starts the session again with a deliberate message and compacts it.
+    h.finishQueue(session.id);
+    h.registry.updateSession(session.id, { status: "idle" });
+    const sent = await h.request("POST", `/api/sessions/${session.id}/message`, { body: { message: "carry on" } });
+    expect(sent.status).toBe(200);
+    expect(await stopped(session.id)).toBe(false);
+    h.finishQueue(session.id);
+    const compact = await h.request("POST", `/api/sessions/${session.id}/compact`);
+    expect(compact.status).toBe(202);
+  });
+
+  it("gives the claim back when a resume already in the outbox is dead-lettered by a later stop", async () => {
+    const session = h.newSession("claude");
+    h.registry.updateSession(session.id, { status: "running" });
+    // The resume cannot be delivered the first time (the gateway answers 503), so it waits in the outbox.
+    h.setBeforeLoopback(() => { if (h.loopbacks().length === 1) h.setFailLoopback(true); });
+    const res = await h.request("POST", "/api/compactions", { headers: h.asSession(session.id), body: HANDOFF });
+    h.setFailLoopback(false);
+    h.setBeforeLoopback(undefined);
+    expect(res.status).toBe(202);
+    expect(res.body.resume).toBe("retrying");
+    expect(h.selfCompactionAt(session.id)).toBeDefined();
+
+    await h.request("POST", `/api/sessions/${session.id}/stop`);
+    const { deliverClaimedSessionDelivery } = await import("../../sessions/callbacks.js");
+    const delivery = h.db.initDb().prepare("SELECT id FROM callback_deliveries WHERE target_session_id = ? AND delivery_kind = 'self-compaction-resume'")
+      .get(session.id) as { id: string };
+    // The retry comes due.
+    h.db.initDb().prepare("UPDATE callback_deliveries SET next_attempt_at = last_attempt_at WHERE id = ?").run(delivery.id);
+    await deliverClaimedSessionDelivery(delivery.id);
+
+    expect(h.registry.getSessionDelivery(delivery.id)?.status).toBe("dead_letter");
+    expect(h.selfCompactionAt(session.id)).toBeUndefined();
+  });
+
   it("is refused for compact_session from a session already stopped, which stays stopped", async () => {
     const session = h.newSession("claude");
     h.registry.updateSession(session.id, { status: "running" });

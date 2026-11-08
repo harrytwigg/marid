@@ -10,6 +10,7 @@ import {
   claimSelfCompaction,
   claimSessionDelivery,
   getSession,
+  getSessionDelivery,
   recordChildReportedToParent,
   releaseSelfCompaction,
 } from "../sessions/registry.js";
@@ -40,6 +41,8 @@ import type { Session } from "../shared/types.js";
  * through the durable session outbox, whose retries can only ever land it
  * later, never earlier.
  */
+export type ResumeDelivery = "accepted" | "retrying" | "stopped";
+
 export interface SelfCompactionApiOptions {
   /** The gateway's verified view of who is calling. */
   resolveCaller: () => CallerIdentity;
@@ -48,8 +51,9 @@ export interface SelfCompactionApiOptions {
   /** Queue a notification-role turn on a session. Defaults to the same
    *  internal message route parent callbacks use. */
   enqueueTurn?: (sessionId: string, message: string, displayMessage: string) => Promise<void>;
-  /** Queue the resume turn durably. Returns whether it is already accepted. */
-  deliverResume?: (session: Session, claimedAt: number, message: string) => Promise<"accepted" | "retrying">;
+  /** Queue the resume turn durably. Returns whether it is already accepted, will
+   *  be retried, or was refused for good because the session was stopped. */
+  deliverResume?: (session: Session, claimedAt: number, message: string) => Promise<ResumeDelivery>;
   now?: () => number;
 }
 
@@ -90,7 +94,7 @@ function isNotDelivered(text: string): boolean {
   }
 }
 
-async function deliverResumeViaOutbox(session: Session, claimedAt: number, message: string): Promise<"accepted" | "retrying"> {
+async function deliverResumeViaOutbox(session: Session, claimedAt: number, message: string): Promise<ResumeDelivery> {
   const { delivery } = claimSessionDelivery({
     targetSessionId: session.id,
     // A session delivering to itself. "session" is the closest existing source
@@ -105,7 +109,10 @@ async function deliverResumeViaOutbox(session: Session, claimedAt: number, messa
     payload: { message, displayMessage: RESUME_TURN_DISPLAY },
   });
   if (delivery.status === "accepted") return "accepted";
-  return (await deliverClaimedSessionDelivery(delivery.id)) === "accepted" ? "accepted" : "retrying";
+  if ((await deliverClaimedSessionDelivery(delivery.id)) === "accepted") return "accepted";
+  // The message route dead-letters a resume for a stopped session and never
+  // retries it: nothing will arrive, so it must not be reported as on its way.
+  return getSessionDelivery(delivery.id)?.status === "dead_letter" ? "stopped" : "retrying";
 }
 
 /** The caller's session when it can compact at all; otherwise answers why not. */
@@ -232,7 +239,7 @@ async function scheduleResume(
   message: string,
   options: SelfCompactionApiOptions,
 ): Promise<void> {
-  let resume: "accepted" | "retrying";
+  let resume: ResumeDelivery;
   try {
     resume = await (options.deliverResume ?? deliverResumeViaOutbox)(session, claimedAt, message);
   } catch (error) {
@@ -245,6 +252,13 @@ async function scheduleResume(
       error: `the compaction is queued but the resume turn could not be recorded (${reason}). `
         + "End your turn with the handoff written out in your reply, so it is in the transcript the compaction summarizes.",
     });
+  }
+  if (resume === "stopped") {
+    // The stop withdrew the queued compaction and refused the resume for good,
+    // so nothing was scheduled after all: give the claim back and say so.
+    releaseSelfCompaction(session.id, claimedAt);
+    logger.info(`[self-compaction] ${session.id}: stopped before the resume was delivered; compaction withdrawn`);
+    return send(res, 409, STOPPED_REFUSAL);
   }
   logger.info(`[self-compaction] ${session.id} (${session.engine}) scheduled compaction + resume (resume ${resume})`);
   send(res, 202, { status: "scheduled", sessionId: session.id, engine: session.engine, resume });

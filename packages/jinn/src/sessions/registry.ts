@@ -943,6 +943,22 @@ export function releaseSelfCompaction(id: string, at: number): void {
   `).run(id, at);
 }
 
+/** The `selfCompactionAt` instant a self-compaction resume delivery was queued
+ *  under (its `sourceAttempt`), or undefined for any other delivery. */
+export function selfCompactionClaimOfDelivery(delivery: { deliveryKind: string; sourceAttempt: string }): number | undefined {
+  if (delivery.deliveryKind !== "self-compaction-resume") return undefined;
+  const at = Number(delivery.sourceAttempt.replace(/^self-compaction:/, ""));
+  return Number.isFinite(at) ? at : undefined;
+}
+
+/** A stop gave up on a resume delivery for good, so the compaction it belonged
+ *  to never ran to completion: hand back the claim it was made under, so the
+ *  session is not held to a cooldown for a compaction that did not happen. */
+export function releaseSelfCompactionOfDelivery(delivery: { targetSessionId: string; deliveryKind: string; sourceAttempt: string }): void {
+  const at = selfCompactionClaimOfDelivery(delivery);
+  if (at !== undefined) releaseSelfCompaction(delivery.targetSessionId, at);
+}
+
 /**
  * Atomically clear the relay marker if it still names `attemptToken`. Returns
  * true when this caller consumed it — i.e. the callback it is about to skip is
