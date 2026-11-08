@@ -183,7 +183,7 @@ export function NewTodoDialog({
       })
       try {
         await assignOnCreate(created.workItem, { assignee, person })
-      } catch (caught) {
+      } catch {
         // The Todo exists: clear the form so another click cannot create it again, and say what is still unset.
         reset()
         setBusy(false)
