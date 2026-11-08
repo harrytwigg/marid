@@ -392,12 +392,12 @@ export function buildWorkItemTools(): JinnMcpTool[] {
 
   const assign: JinnMcpTool = {
     name: "assign_work_item",
-    description: "Assign a Todo; assignee @unassigned (or null) clears it.",
+    description: "Assign a Todo; @unassigned clears.",
     inputSchema: {
       type: "object",
       properties: {
         id: TODO_ID_SCHEMA,
-        assignee: { type: ["string", "null"] },
+        assignee: { type: "string" },
       },
       required: ["id", "assignee"],
     },
@@ -413,7 +413,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
 
   const archive: JinnMcpTool = {
     name: "archive_work_item",
-    description: "Archive a Todo; retain its audit. Operator only.",
+    description: "Archive a Todo. Operator only.",
     inputSchema: {
       type: "object",
       properties: {

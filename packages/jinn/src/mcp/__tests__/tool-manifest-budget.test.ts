@@ -292,6 +292,10 @@ const ATTESTED = {
   // "gateway guards apply" (the refusals say which guard fired). The field's
   // own meaning is taught by the result's hint, which is not in the manifest.
   // Token counts are unchanged, so only the SHAs move.
+  // Rebased for clearing an assignee: assign_work_item says "@unassigned clears"
+  // (the value is not guessable), paid for by dropping "; retain its audit" from
+  // archive_work_item, which the name already says. One token over the old text,
+  // so the ceiling does not move.
   rpc: { tokens: 4035, sha256: "ee1d29aec596c17f4c0a59c5de54d01d0998047fd1c48c5b9e5c0b7e43e78af0" },
   pi: { tokens: 4370, sha256: "4f834fb74d1707147699b5a50c84c4e72fb49c64c9528bc96e6272dd56883fab" },
   openai: { tokens: 4174, sha256: "7fa4726ea6c802dbc7e2df928a042689fe34a9e0ec2de7ef91fdd0a536622324" },
