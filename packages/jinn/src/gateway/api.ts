@@ -205,7 +205,7 @@ import {
 } from "../work-items/store.js";
 import { resolveDelegationLinkRole, WORK_ITEM_LINK_ROLES, type WorkItemLinkRole } from "../work-items/link-role.js";
 import { retiredTodoFieldError } from "../work-items/retired-fields.js";
-import { OPERATOR_ASSIGNEE } from "../work-items/operator-assignee.js";
+import { OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from "../work-items/operator-assignee.js";
 import { resolveTodoEditAuthority, todoEditRefusal } from "./todo-edit-authority.js";
 import { isTodoId, resolveTodoIdPrefix } from "../work-items/id.js";
 import {
@@ -2714,16 +2714,21 @@ export async function handleApiRequest(
         return badRequest(res, "request body must be a JSON object");
       }
       const body = parsed.body as Record<string, unknown>;
-      const assignee = typeof body.assignee === "string"
-        ? (body.assignee as string).trim()
-        : "";
-      if (!assignee) return badRequest(res, "assignee is required");
-      const roster = orgRegistry(context.getConfig());
-      // The assignee is an employee or the operator; never a system employee,
-      // which routes and shapes Todos but owns none.
-      const checked = checkAssignee(roster, assignee, { operator: true });
-      if (!checked.ok) return badRequest(res, checked.error);
-      const employee = checked.employee;
+      // `@unassigned` (or an explicit null) clears the assignee; a missing or empty value is still a mistake.
+      const requested = typeof body.assignee === "string" ? (body.assignee as string).trim() : "";
+      const unassign = body.assignee === null || requested === UNASSIGNED_FILTER;
+      if (!unassign && !requested) return badRequest(res, "assignee is required — name an employee, @operator, or @unassigned to clear it");
+      let assignee: string | null = null;
+      let employee: Employee | undefined;
+      if (!unassign) {
+        const roster = orgRegistry(context.getConfig());
+        // The assignee is an employee or the operator; never a system employee,
+        // which routes and shapes Todos but owns none.
+        const checked = checkAssignee(roster, requested, { operator: true });
+        if (!checked.ok) return badRequest(res, checked.error);
+        assignee = requested;
+        employee = checked.employee;
+      }
       const current = getWorkItem(params.id);
       if (!current) return notFound(res);
       if (STICKY_STATUSES.has(current.status)) {
@@ -2733,6 +2738,7 @@ export async function handleApiRequest(
         caller.kind === "session" &&
         current.status === "backlog" &&
         current.assignee === null &&
+        assignee !== null &&
         caller.session.employee === assignee;
       if (!explicitSelfClaim) {
         const authorized = authorizeWorkItemOwnerManagerOrRoot(caller, current, "assign");

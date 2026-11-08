@@ -26,7 +26,7 @@ import { todoProvenanceSnapshot, TransitionError, type TransitionResult } from '
 export { OPERATOR_ASSIGNEE } from './operator-assignee.js';
 
 interface Assignment {
-  assignee: string;
+  assignee: string | null;
   department: string | null;
   actor?: string | null;
   /** The employee behind a `session:` actor, when the caller knows it. */
@@ -60,7 +60,8 @@ function assignmentEvent(
   };
 }
 
-/** Assign a Todo to an employee, or to the operator. Sole owner of assignment: the assign route
+/** Assign a Todo to an employee, or to the operator, or clear its assignee with
+ * `null` (back to the unassigned state; the Todo keeps its status and department). Sole owner of assignment: the assign route
  * and delegation are its only callers and carry the roster check. The operator pen instead restores
  * or clears the ownership fields, version-fenced, with no notification. */
 export interface AssignWorkItemOptions {
@@ -98,7 +99,7 @@ function departmentAfterAssignment(item: WorkItem, assigneeDepartment: string | 
 
 export function assignWorkItem(
   id: string,
-  assignee: string,
+  assignee: string | null,
   assigneeDepartment: string | null,
   actor?: string | null,
   { origin, actorEmployee }: AssignWorkItemOptions = {},
@@ -111,7 +112,8 @@ export function assignWorkItem(
       throw new TransitionError('illegal-edge', `cannot assign work item ${id} while it is in terminal state ${item.status}`);
     }
     // FR-015: the assignee must be one who may hold a Todo in its root's department.
-    assertMayHold(assignee, item.id, scopeDepartmentOfItem(item, getWorkItem));
+    // Clearing the assignee gives the Todo to nobody, so there is no holder to check.
+    if (assignee !== null) assertMayHold(assignee, item.id, scopeDepartmentOfItem(item, getWorkItem));
     const department = departmentAfterAssignment(item, assigneeDepartment);
     if (item.assignee === assignee && item.department === department) {
       return { item, escalated: false };
@@ -127,7 +129,7 @@ export function assignWorkItem(
     // A chat that started this Todo for its own employee stops being its
     // executor once the Todo is somebody else's: left linked, its turns would
     // keep the new owner's dispatch refused and keep deriving the Todo's status.
-    const releasedSessions = releaseSelfStartedLinks(db, id, { exceptEmployee: assignee });
+    const releasedSessions = releaseSelfStartedLinks(db, id, { exceptEmployee: assignee ?? undefined });
     const event = appendWorkItemEvent(assignmentEvent(item, { assignee, department, actor, actorEmployee, origin, releasedSessions }));
     return { item: getWorkItem(id)!, escalated: false, event };
   });
