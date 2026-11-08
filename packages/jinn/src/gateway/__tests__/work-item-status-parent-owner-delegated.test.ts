@@ -230,7 +230,7 @@ describe("the parent's owner accepting a delegated child", () => {
       ]);
     });
 
-    const takeBackRefusal = /owner-dev cannot accept Todo \S+: owner-dev moved it back to executing and child-dev has not worked it since.*self-review ban/;
+    const takeBackRefusal = /owner-dev cannot accept Todo \S+: owner-dev moved it to (?:executing|blocked) and child-dev has not worked it since.*self-review ban/;
 
     it("refuses from executing a child the owner paused and resumed while its producer did nothing", async () => {
       const { child } = await delegatedChild("Paused and resumed, executing");
@@ -325,6 +325,48 @@ describe("the parent's owner accepting a delegated child", () => {
       expect((await statusPost(producer.id, child.id, { status: "executing" })).status).toBe(200);
       const res = await statusPost(owner.id, child.id, accept);
       expect([res.status, statusOf(child.id)]).toEqual([200, "done"]);
+    });
+
+    /** A time after any move made so far, so the producer's sign of work is unambiguously later. */
+    const later = () => new Date(Date.now() + 60_000).toISOString();
+
+    it("closes from executing a child the owner bounced and the producer reworked in a session it already held", async () => {
+      // A re-delegation into the producer's live session writes no link event: it opens a run.
+      const { child, producer } = await delegatedChild("Bounced, live session rework", "in_review");
+      const owner = await bounce(child.id);
+      const { openWorkItemRun } = await import("../../work-items/runs.js");
+      openWorkItemRun({ workItemId: child.id, sessionId: producer.id, startedAt: later() });
+      const res = await statusPost(owner.id, child.id, accept);
+      expect([res.status, statusOf(child.id)]).toEqual([200, "done"]);
+    });
+
+    it("closes from executing a child the owner bounced and a session of the producer was later active on", async () => {
+      const { child, producer } = await delegatedChild("Bounced, producer session active", "in_review");
+      const owner = await bounce(child.id);
+      const { updateSession } = await import("../../sessions/registry.js");
+      updateSession(producer.id, { lastActivity: later() });
+      const res = await statusPost(owner.id, child.id, accept);
+      expect([res.status, statusOf(child.id)]).toEqual([200, "done"]);
+    });
+
+    it("refuses an owner whose bounce was followed by a pause and resume by the reconciler, the producer idle", async () => {
+      const { child } = await delegatedChild("Bounced, reconciler hop", "in_review");
+      const owner = await bounce(child.id);
+      transition(child.id, "blocked", "reconciler", { manual: true, agent: true });
+      transition(child.id, "executing", "reconciler", { manual: true, agent: true });
+      const res = await statusPost(owner.id, child.id, accept);
+      expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(takeBackRefusal)]);
+      expect(statusOf(child.id)).toBe("executing");
+    });
+
+    it("refuses an owner whose pause was resumed by the operator, the producer idle", async () => {
+      const { child } = await delegatedChild("Paused, operator resume");
+      const owner = await sessionOf("owner-dev");
+      expect((await statusPost(owner.id, child.id, { status: "blocked", note: "Pausing while the parent re-plans" })).status).toBe(200);
+      transition(child.id, "executing", "operator", { manual: true });
+      const res = await statusPost(owner.id, child.id, accept);
+      expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(takeBackRefusal)]);
+      expect(statusOf(child.id)).toBe("executing");
     });
 
     it("refuses again once the owner bounces a child its producer had reworked and handed back", async () => {

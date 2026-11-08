@@ -1,6 +1,7 @@
 import { getSession, isCoordinatorSession, isOperatorCoordinatorTurn, isOperatorEmployeeTurn, listSessionsByWorkItem } from "../sessions/registry.js";
 import { awaitsRestartResume } from "../sessions/restart-resume-window.js";
 import { listWorkItemEvents } from "../work-items/event-log.js";
+import { listWorkItemRuns } from "../work-items/runs.js";
 import { isExecutionAttempt, toWorkItemLinkRole } from "../work-items/link-role.js";
 import { STICKY_STATUSES, type WorkItem, type WorkItemEvent, type WorkItemStatus } from "../work-items/store.js";
 import { reviewAddresseeEmployee } from "../work-items/review-addressee.js";
@@ -181,22 +182,34 @@ function startedBy(event: WorkItemEvent, employee: string): boolean {
 }
 
 /**
- * Whether `employee` took the Todo back and the producer has not worked it
- * since: the latest move into `executing` is the employee's (a review bounce,
- * a resume or a start alike), and after it the producer made no status move
- * and was linked to execute no new session. Whatever happened to the work
- * afterwards is then the employee's own, with or without a handoff. Once the
- * producer acts, the move was bookkeeping around its work and the employee
- * may accept what the producer stopped on. Read from the audit trail in
- * order, so a second take-back starts the question again.
+ * Why `employee` took the Todo back from `producer` and the producer has not
+ * worked it since: the employee's latest status move (a review bounce, a
+ * pause, a resume or a start, whoever moved it on afterwards) has no sign of
+ * the producer after it. Whatever happened to the work then is the employee's
+ * own, with or without a handoff. Once the producer acts, the move was
+ * bookkeeping around its work and the employee may accept what the producer
+ * stopped on. A second move starts the question again.
  */
-function tookBackUnworked(employee: string, producer: string, item: WorkItem): boolean {
+function tookBackUnworked(employee: string, producer: string, item: WorkItem): string | undefined {
   const events = listWorkItemEvents(item.id);
-  const entries = events.filter((event) => event.kind === "status_change" && event.toStatus === "executing");
-  const entry = entries.at(-1);
-  if (!entry || moveEmployee(entry) !== employee) return false;
-  return !events.slice(events.indexOf(entry) + 1).some((event) => workedBy(event, producer)
+  const move = events.filter((event) => event.kind === "status_change" && event.toStatus !== null
+    && moveEmployee(event) === employee).at(-1);
+  if (!move) return undefined;
+  const workedSince = events.slice(events.indexOf(move) + 1).some((event) => workedBy(event, producer)
     || (event.kind === "status_change" && moveEmployee(event) === producer));
+  return workedSince || producerRanSince(producer, item, move.createdAt)
+    ? undefined : `${employee} moved it to ${move.toStatus} and ${producer} has not worked it since`;
+}
+
+/** A session of `producer` ran on the Todo after `since`: a run opened for it (a
+ *  re-delegation into a session it already holds writes no link event, only a
+ *  run), or an execute session of it with later activity. Strictly later, so a
+ *  row written in the same instant as the move is not mistaken for work. */
+function producerRanSince(producer: string, item: WorkItem, since: string): boolean {
+  const ranAfter = (iso: string | null | undefined) => typeof iso === "string" && iso > since;
+  if (listWorkItemRuns(item.id).some((run) => ranAfter(run.startedAt) && sessionEmployee(run.sessionId) === producer)) return true;
+  return listSessionsByWorkItem(item.id).some((session) => session.employee === producer && isExecutionAttempt(session)
+    && ranAfter(session.lastActivity));
 }
 
 /** A granted employee closing a Todo as `done`, with the reason it will post.
@@ -266,7 +279,7 @@ function resolveExecutingAccept(employee: string, item: WorkItem, note: string):
   const producer = otherProducer(employee, item);
   if (!producer) return undefined;
   const handIn = closerHandIn(employee, item, { producedElsewhere: true })
-    ?? (tookBackUnworked(employee, producer, item) ? `${employee} moved it back to executing and ${producer} has not worked it since` : undefined);
+    ?? tookBackUnworked(employee, producer, item);
   if (handIn) return selfReviewRefusal(employee, item, handIn);
   return liveWorkRefusal(item) ?? acceptNoteRefusal(item, note) ?? { ok: true, lane: { kind: "parent-owner", employee } };
 }
