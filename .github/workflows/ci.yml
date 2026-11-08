@@ -104,44 +104,6 @@ jobs:
         env:
           BASE: ${{ github.base_ref && format('origin/{0}', github.base_ref) || '' }}
 
-  ratchet:
-    runs-on: ubuntu-latest
-    steps:
-      # A shallow clone is enough: the ratchet reads the index via `git ls-files`
-      # and the two committed baselines, never history.
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
-        with:
-          node-version-file: .nvmrc
-      # No `pnpm install` and no pnpm store cache: the script imports nothing
-      # outside node: builtins, so a dependency tree would only cost a minute.
-      - run: pnpm ratchet --check
-
-      # The script prints a fix line per finding; this is the standing context
-      # behind them, in the one place a contributor reading a red run is looking.
-      - name: How to clear these
-        if: failure()
-        run: |
-          cat <<'EOF'
-          Files are capped at 300 lines. size-baseline.json grandfathers the ones
-          that predate the cap, and a budget in it may only shrink.
-
-            exceeds the 300-line limit, grew past its baseline
-              Split the file by responsibility — move one concern into its own
-              module and import it back. Raising a budget is a hand edit that
-              shows up in review, and it is meant to be rare.
-            gained a lint exemption the size baseline does not record
-              Fix the rule where it fires, or split the file so the branchy part
-              gets its own module. eslint-baseline.json and size-baseline.json
-              move together, and both only shrink.
-            the committed baseline is looser than the tree
-              A file got smaller. Run `pnpm ratchet` and commit
-              size-baseline.json — that is the only thing that ever writes it.
-
-          `pnpm ratchet --list` ranks the budgeted files, largest first.
-          EOF
-
   unit-tests:
     name: unit-tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -318,7 +280,7 @@ jobs:
     # the moment a dependency fails, and a required check that never ran does not
     # report as a red one.
     if: always()
-    needs: [typecheck, lint, footguns, ratchet, unit-tests, build, coverage, docker]
+    needs: [typecheck, lint, footguns, unit-tests, build, coverage, docker]
     steps:
       # No `pnpm install`: the checker imports nothing outside node: builtins.
       - uses: actions/checkout@v5

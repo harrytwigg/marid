@@ -1,6 +1,6 @@
 // The settings-family routes: settings (top and a lower section), plugins, skills, cron, logs, limits,
-// auto-dispatch, notes and more. They sit in their own file so screens.mjs stays under the size
-// ratchet; it spreads them into SCREENS. Skills, cron and notes read the fixtures in seed-pages.mjs.
+// auto-dispatch, notes and more. They sit in their own file so screens.mjs stays small;
+// it spreads them into SCREENS. Skills, cron and notes read the fixtures in seed-pages.mjs.
 
 // A heading brought to the top of the scroll area, for a section below the fold.
 const scrollTo = (text) => async (page) => {

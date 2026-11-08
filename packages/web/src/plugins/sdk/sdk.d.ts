@@ -95,8 +95,8 @@ export interface HostNotice {
   level?: HostNotifyLevel
 }
 
-/* The typed verb tier is split out so this entry point stays below the size
- * ratchet while plugin authors still read one public module. */
+/* The typed verb tier is split out so this entry point stays small
+ * while plugin authors still read one public module. */
 export type {
   HostConnectorMessage,
   HostCronJob,

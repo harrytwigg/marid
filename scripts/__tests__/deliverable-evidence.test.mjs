@@ -184,7 +184,7 @@ test("route refuses a workspace declaration whose diff touches a shipping path",
 })
 
 test("route names every offending file, not just the first", () => {
-  const offenders = ["packages/gateway/src/server.ts", "scripts/ratchet.mjs", "package.json"]
+  const offenders = ["packages/gateway/src/server.ts", "scripts/check-footguns.mjs", "package.json"]
   const stream = diff("M", "docs/architecture.md", ...offenders.flatMap((offender) => ["M", offender]))
   const routed = route(stream, "--declared", "workspace")
   assert.equal(routed.status, 2, routed.out)

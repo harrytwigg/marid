@@ -17,7 +17,7 @@ export interface WorkItemDispatchConfigWire {
 }
 
 /** The detail payload carries the field; the wire type in `api.ts` does not
- *  spell it yet (that file is at its ratchet budget), so it is read here. */
+ *  spell it yet (that file is kept small on purpose), so it is read here. */
 export function dispatchConfigOf(detail: WorkItemDetailWire): WorkItemDispatchConfigWire | null {
   const carried = (detail as Partial<{ dispatchConfig: WorkItemDispatchConfigWire | null }>).dispatchConfig
   return carried ?? null

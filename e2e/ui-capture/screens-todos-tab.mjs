@@ -1,7 +1,7 @@
 // The Todos tab in the chat layout: beside a chat in a split, in a tab bar with pinned tabs and its pin
 // menu, and on a phone (the tab switcher with the Todos entry, and the Todos screen itself). The `board`
 // and `board-phone` screens are the board reached by its address, which now opens the same tab. They sit
-// in their own file so screens.mjs stays under the size ratchet; it spreads them into SCREENS.
+// in their own file so screens.mjs stays small; it spreads them into SCREENS.
 const PLAN_READY = 'Add a step for the changelog'
 const BOARD_READY = 'Draft the release checklist'
 const NARROW = { width: 390, height: 844 }
