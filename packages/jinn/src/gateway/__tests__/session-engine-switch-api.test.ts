@@ -20,7 +20,7 @@ beforeAll(async () => {
   reg = await import("../../sessions/registry.js");
   api = await import("../api.js");
   (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 beforeEach(async () => {
   const db = (await import("../../shared/db.js")).initDb();

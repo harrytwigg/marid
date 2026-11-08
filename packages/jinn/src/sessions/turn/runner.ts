@@ -17,6 +17,7 @@ import { runEngineAttempt, resolveModelFallback, type EngineAttempt } from "./en
 import { compactColdSessionFirst, settlePreemptedBeforeEngine } from "./auto-compact.js";
 import { armTurnHeartbeat } from "./heartbeat.js";
 import { preflightTurn, resolveTurnPrompt, warnIfNearUsageLimit } from "./preflight.js";
+import { withLeftBackgroundNote } from "../left-background-tasks.js";
 import { backgroundSessionMayHoldPrompt, isLostConversationError, isProcessStartFailure } from "../../shared/process-start.js";
 import { isRawEngineCommand } from "../../shared/skill-commands.js";
 import { ensureRemoteHostReady } from "./remote-ready.js";
@@ -149,13 +150,15 @@ async function runEngineOrStartAfresh(run: TurnRun): Promise<{ attempt: EngineAt
   clearDeadEngineSession(sessionId, run.plan.engineName, { lostConversation: true });
   deletePartialMessages(sessionId);
   updateSession(sessionId, { lastError: null });
+  const session = getSession(sessionId) ?? run.input.session;
   run.plan = {
     ...run.plan,
     resumeSessionId: undefined,
     resumeNativeId: undefined,
     // clearDeadEngineSession marked the conversation lost, so this is the
-    // lost-conversation prompt, owed until a turn settles cleanly with it.
-    ...resolveTurnPrompt(getSession(sessionId) ?? run.input.session, run.plan.engineName, run.input.prompt, false),
+    // lost-conversation prompt, owed until a turn settles cleanly with it. The
+    // note about tasks left behind is recomposed with it: the first attempt's is gone.
+    ...withLeftBackgroundNote(session, resolveTurnPrompt(session, run.plan.engineName, run.input.prompt, false)),
   };
   return await runEngineWithModelFallback(run);
 }

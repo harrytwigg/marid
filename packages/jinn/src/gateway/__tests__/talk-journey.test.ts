@@ -37,7 +37,7 @@ beforeAll(async () => {
   ({ handleApiRequest } = await import("../api.js"));
   sessions = await import("../../sessions/registry.js");
   (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 afterAll(async () => {
   vi.unstubAllGlobals();

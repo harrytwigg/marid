@@ -18,7 +18,7 @@ describe("InteractiveClaudeEngine — background tasks lost with the process", (
   let registry: HookRegistry;
   let lifecycle: PtyLifecycleManager;
   let engine: InteractiveClaudeEngine;
-  let lost: Array<{ sessionId: string; tasks: BackgroundTaskWait[] }>;
+  let lost: Array<{ sessionId: string; tasks: BackgroundTaskWait[]; deliberate: boolean }>;
 
   const hook = (payload: HookPayload) =>
     (engine as unknown as { handleBackgroundMonitorHook(sessionId: string, hook: HookPayload): void })
@@ -38,7 +38,7 @@ describe("InteractiveClaudeEngine — background tasks lost with the process", (
     lifecycle = new PtyLifecycleManager({ maxLivePtys: 8 });
     engine = new InteractiveClaudeEngine(lifecycle, registry);
     lost = [];
-    engine.onLostBackgroundTasks((sessionId, tasks) => lost.push({ sessionId, tasks }));
+    engine.onLostBackgroundTasks((sessionId, tasks, deliberate) => lost.push({ sessionId, tasks, deliberate }));
     lifecycle.adopt("s1", fakeHandle());
   });
 
@@ -70,6 +70,27 @@ describe("InteractiveClaudeEngine — background tasks lost with the process", (
     expect(lost).toHaveLength(1);
   });
 
+  it("wakes on a completion notice, opens a re-run, and has nothing left to report when the process ends later", () => {
+    const observe = (payload: HookPayload) =>
+      (engine as unknown as { observeBackgroundWork(sessionId: string, hook: HookPayload): void }).observeBackgroundWork("s1", payload);
+    launchBash("bk2tests1", "sleep 30; echo done");
+    expect(engine.backgroundTasks("s1").tasks.map((task) => task.id)).toEqual(["bk2tests1"]);
+
+    // What Claude Code 2.1.319 hands the model when a background Bash ends: a turn opened by this prompt.
+    observe({
+      hook_event_name: "UserPromptSubmit",
+      prompt: "<task-notification>\n<task-id>bk2tests1</task-id>\n<status>completed</status>\n"
+        + "<summary>Background command \"sleep 30; echo done\" completed (exit code 0)</summary>\n</task-notification>",
+    });
+
+    expect(engine.backgroundTasks("s1")).toEqual({ tasks: [], rerun: { startedAt: null } });
+    observe({ hook_event_name: "Stop" });
+    expect(engine.backgroundTasks("s1")).toEqual({ tasks: [] });
+
+    lifecycle.releaseSession("s1");
+    expect(lost).toEqual([]);
+  });
+
   it("reports nothing when the process ends with no live tasks", () => {
     launchBash("done-1", "true");
     hook({
@@ -84,27 +105,27 @@ describe("InteractiveClaudeEngine — background tasks lost with the process", (
     expect(lost).toEqual([]);
   });
 
-  it("reports nothing when the session is stopped on purpose, but still forgets the tasks", () => {
+  it("reports a session stopped on purpose as deliberate, so it is recorded rather than woken", () => {
     launchBash("t-1", "sleep 600");
 
     engine.kill("s1", "Interrupted: stopped by the operator");
 
-    expect(lost).toEqual([]);
+    expect(lost.map((entry) => [entry.tasks.map((task) => task.id), entry.deliberate])).toEqual([[["t-1"], true]]);
     expect(engine.backgroundTasks("s1").tasks).toEqual([]);
 
-    // The next release that is not a kill reports again.
+    // The next release that is not a kill is reported as a loss to act on.
     lifecycle.adopt("s1", fakeHandle());
     launchBash("t-2", "sleep 600");
     lifecycle.releaseSession("s1");
-    expect(lost.map((entry) => entry.tasks.map((task) => task.id))).toEqual([["t-2"]]);
+    expect(lost.map((entry) => [entry.tasks.map((task) => task.id), entry.deliberate])).toEqual([[["t-1"], true], [["t-2"], false]]);
   });
 
-  it("reports nothing while the gateway shuts down", () => {
+  it("reports the loss at gateway shutdown as deliberate, for the gateway to leave to the restart record", () => {
     launchBash("t-1", "sleep 600");
 
     engine.killAll();
 
-    expect(lost).toEqual([]);
+    expect(lost.map((entry) => entry.deliberate)).toEqual([true]);
     expect(engine.backgroundTasks("s1").tasks).toEqual([]);
   });
 

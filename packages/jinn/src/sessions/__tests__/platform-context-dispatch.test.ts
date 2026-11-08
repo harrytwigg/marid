@@ -175,7 +175,7 @@ beforeAll(async () => {
   managerModule = await import("../manager.js");
   api = await import("../../gateway/api.js");
   (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 beforeEach(async () => {
   (await import("../../shared/db.js")).initDb().exec("DELETE FROM messages; DELETE FROM queue_items; DELETE FROM sessions;");

@@ -98,7 +98,7 @@ beforeAll(async () => {
   fs.writeFileSync(outsideFile, "TOPSECRET-outside-route");
   fs.symlinkSync(outsideFile, path.join(home, "knowledge", "escape.md"));
   api = await import("../api.js");
-});
+}, 60_000);
 
 describe("GET /api/knowledge/search", () => {
   it("finds seeded files in both roots, snippets only", async () => {

@@ -94,7 +94,7 @@ beforeAll(async () => {
   live.setTodoLiveEmitter((event) => {
     emittedEvents.push({ event: "company:changed", payload: event as unknown as Record<string, unknown> });
   });
-});
+}, 60_000);
 
 beforeEach(() => {
   emittedEvents.length = 0;

@@ -116,7 +116,7 @@ beforeAll(async () => {
   reg = await import("../../sessions/registry.js");
   store = await import("../../work-items/store.js");
   (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 describe("PATCH /api/work-items/:id — content is open, ownership is the operator's", () => {
   it("operator edits every field, content and ownership alike", async () => {

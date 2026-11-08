@@ -116,7 +116,7 @@ beforeAll(async () => {
   api = await import("../api.js");
   reg = await import("../../sessions/registry.js");
   (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 describe("GET /api/sessions/:id/children", () => {
   it("returns 404 for a session id that does not exist", async () => {

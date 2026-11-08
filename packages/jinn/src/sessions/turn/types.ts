@@ -114,6 +114,8 @@ export interface TurnPlan {
   syncRequested: boolean;
   /** True when the prompt carries messages an interrupt kept from the engine. */
   carriedInterruptedPrompts: boolean;
+  /** Ids of the left-behind background tasks the prompt's leading note names (settle drops them once read). */
+  carriedLeftBackgroundTaskIds: string[];
   /** Appended to the prompt when the engine is called (board-reminder.ts); undefined carries none. */
   boardReminder?: string;
   /** This turn is `/compact`: the engine's own compaction, not a prompt. */

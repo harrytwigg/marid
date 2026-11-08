@@ -423,6 +423,8 @@ export interface Session {
   /** Most recent turn's input-context token count (for the UI context meter). */
   lastContextTokens: number | null;
   queueDepth?: number;
+  /** Wire-only, on a single-session read: stopped on purpose and not started since. */
+  stopped?: boolean;
   transportState?: "idle" | "queued" | "running" | "error" | "interrupted";
   /** Serialize-time only (in-memory, never persisted): post-settle background
    *  work — upstream agent requests, background sub-agents, a background re-run

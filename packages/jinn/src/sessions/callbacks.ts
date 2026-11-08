@@ -570,6 +570,11 @@ export async function deliverClaimedSessionDelivery(deliveryId: string): Promise
       return "accepted";
     }
     const diagnostic = error instanceof Error ? error.message : String(error);
+    if (getSessionDelivery(attempt.id)?.status === "dead_letter") {
+      // The target refused it for good (it was stopped) and dead-lettered it with the reason.
+      logger.warn(`[callbacks] Delivery ${attempt.id} refused by session ${attempt.targetSessionId}: ${diagnostic}`);
+      return "scheduled";
+    }
     const delayIndex = Math.min(attempt.attemptCount - 1, CALLBACK_DELIVERY_RETRY_DELAYS_MS.length - 1);
     const failed = recordSessionDeliveryFailure(attempt.id, diagnostic, {
       now: Date.now(),

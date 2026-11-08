@@ -75,6 +75,7 @@ export function useContextMeterHarness() {
   let engineConfig: Record<string, unknown> = {};
   let loopbacks: Array<{ path: string; body: Record<string, unknown> }> = [];
   let failLoopback = false;
+  let beforeLoopback: (() => Promise<void> | void) | undefined;
   const apiCtx = {
     getConfig: () => ({ gateway: {}, engines: { default: "claude", opencode: { mode: opencodeMode }, ...engineConfig }, sessions: {} }),
     connectors: new Map(),
@@ -97,6 +98,8 @@ export function useContextMeterHarness() {
     db: undefined as unknown as typeof import("../../shared/db.js"),
     loopbacks: () => loopbacks,
     setFailLoopback: (fail: boolean) => { failLoopback = fail; },
+    /** Run `hook` as each loopback leaves, before the message route sees it. */
+    setBeforeLoopback: (hook: (() => Promise<void> | void) | undefined) => { beforeLoopback = hook; },
     setOpencodeMode: (mode: "run" | "server") => { opencodeMode = mode; },
     setEngineConfig: (config: Record<string, unknown>) => { engineConfig = config; },
 
@@ -179,10 +182,11 @@ export function useContextMeterHarness() {
       const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : {};
       loopbacks.push({ path: url.pathname, body });
       if (failLoopback) return new Response(JSON.stringify({ error: "simulated" }), { status: 503 });
+      await beforeLoopback?.();
       const out = await h.request(init?.method ?? "GET", url.pathname + url.search, { body });
       return new Response(JSON.stringify(out.body), { status: out.status });
     });
-  });
+  }, 60_000);
 
   afterAll(async () => {
     vi.unstubAllGlobals();
@@ -192,6 +196,7 @@ export function useContextMeterHarness() {
   beforeEach(() => {
     loopbacks = [];
     failLoopback = false;
+    beforeLoopback = undefined;
     opencodeMode = "server";
     engineConfig = {};
   });

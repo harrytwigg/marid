@@ -118,6 +118,7 @@ interface SessionRecord {
   lastActivity?: string | null;
   lastError?: string | null;
   parentSessionId?: string | null;
+  stopped?: boolean;
   messages?: Array<{ role?: string; content?: string; timestamp?: number }>;
 }
 
@@ -130,11 +131,15 @@ function summarize(s: SessionRecord): Record<string, unknown> {
     status: s.status,
     lastActivity: s.lastActivity ?? null,
     parentSessionId: s.parentSessionId ?? null,
+    ...(s.stopped === true ? { stopped: true } : {}),
   };
 }
 
 /** Deterministic next-step hint from a session's status alone. */
 function statusHint(s: SessionRecord): string {
+  if (s.stopped === true) {
+    return "Stopped on purpose: nothing wakes it; a message from anyone but its owner or the operator is refused as not delivered.";
+  }
   switch (s.status) {
     case "running":
       return "Running: END YOUR TURN; reply wakes you. Next: read_session; never poll.";
@@ -342,10 +347,17 @@ export function buildSessionTools(): JinnMcpTool[] {
       // correctly shows `idle`. A `status: "stopped"` return masqueraded
       // as that state field and contradicted read; `action: "stopped"` reads as
       // "the stop succeeded" without inventing a fake persistent 'stopped' state.
+      const stopped = body as { cancelledMessages?: unknown; noop?: unknown; wasRunning?: unknown };
+      const dropped = stopped.cancelledMessages;
+      if (stopped.noop === true) {
+        return { action: "already-stopped", sessionId, hint: "It was already stopped; nothing changed. Next: read_session." };
+      }
+      const turn = stopped.wasRunning === false ? "It was not running; it is now held stopped" : "Its turn was cut short";
       return {
         action: "stopped",
         sessionId,
-        hint: "Stopped, recoverable. Next: read_session or send_to_session.",
+        ...(typeof dropped === "number" && dropped > 0 ? { droppedMessages: dropped } : {}),
+        hint: `${turn}. Queued messages were dropped and nothing starts it on its own. Recoverable: its owner or the operator starts it by messaging it. Next: read_session.`,
       };
     },
   };

@@ -4,6 +4,7 @@ import { initDb } from '../shared/db.js';
 import type { Session } from '../shared/types.js';
 import { getSession, listSessionsByWorkItem } from '../sessions/registry.js';
 import { isLegacyWorkflowPhaseSession } from '../sessions/legacy-workflow-phase.js';
+import { isStoppedByUser } from '../sessions/stopped-marker.js';
 import { isTerminalSession } from '../terminals/session.js';
 import { toWorkItemLinkRole } from './link-role.js';
 
@@ -109,7 +110,8 @@ function holderOf(session: Session): string | undefined {
  * that employee's (or the root's, for {@link ROOT_SESSION_SLOT}), and it can
  * still be messaged. Idle, waiting and interrupted all count — a session from
  * days ago is resumed on purpose, so the employee keeps the Todo's context and
- * is never started twice.
+ * is never started twice. One that was stopped on purpose does not: it takes no
+ * message until someone starts it, so the Todo's next wake goes to a new session.
  */
 export function isLiveEmployeeSession(session: Session | undefined, workItemId: string, employee: string): session is Session {
   return !!session
@@ -119,10 +121,12 @@ export function isLiveEmployeeSession(session: Session | undefined, workItemId: 
     && !isLegacyWorkflowPhaseSession(session);
 }
 
-/** Neither errored nor archived, not a terminal, and not a session reset with
- *  /new, which stays linked only as evidence of what it did. */
+/** Neither errored nor archived, not a terminal, not stopped on purpose, and not
+ *  a session reset with /new, which stays linked only as evidence of what it did.
+ *  A Todo wake that finds none starts, redispatches or comments instead. */
 export function canMessageSession(session: Session): boolean {
   return session.status !== 'error'
+    && !isStoppedByUser(session)
     && !session.archivedAt
     && !session.sessionKey?.startsWith('archived:')
     && !isTerminalSession(session);

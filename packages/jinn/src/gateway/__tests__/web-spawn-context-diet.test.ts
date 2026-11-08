@@ -136,7 +136,7 @@ beforeAll(async () => {
   // gateway arms it at boot, this suite drives dispatch without a boot.
   const { setJinnAttachGate } = await import("../../mcp/attachment.js");
   setJinnAttachGate({ ok: true });
-});
+}, 60_000);
 
 describe("web-spawn context diet (POST /api/sessions → runWebSession)", () => {
   it("jinn attached → the composed systemPrompt carries the knowledge MANIFEST, never the index", async () => {

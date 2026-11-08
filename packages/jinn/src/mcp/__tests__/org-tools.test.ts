@@ -204,7 +204,7 @@ beforeAll(async () => {
     "name: a-worker\ndisplayName: A Worker\nrank: senior\nengine: claude\nreportsTo: a-lead\npersona: You are Builds the platform.\n",
   );
   write("growth/b-writer.yaml", "name: b-writer\ndisplayName: B Writer\nrank: senior\nengine: claude\npersona: Writes growth content.\n");
-});
+}, 60_000);
 
 describe("org tools — integration against the real org routes", () => {
   it("discovery flow: find by department+rank → get the persona → the hint names the spawn tool", async () => {

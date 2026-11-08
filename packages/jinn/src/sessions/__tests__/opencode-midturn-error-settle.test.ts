@@ -61,7 +61,7 @@ async function settle(prompt: string) {
   const result = await engine.run({ prompt, cwd: tmp, sessionId: session.id, bin: FAKE, model: "opencode-go/mock-model" });
   const run = {
     input: { session, attemptToken: session.attemptToken!, prompt, attachments: [], config: { engines: {} } },
-    plan: { ok: true, engineName: "opencode" },
+    plan: { ok: true, engineName: "opencode", carriedLeftBackgroundTaskIds: [] },
     surface: silentSurface,
     heartbeat: { stop: () => {} },
     partialStream: { write: () => {} },

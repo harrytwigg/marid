@@ -23,6 +23,7 @@ import {
   selfCompactionRefusal,
 } from "../sessions/self-compaction.js";
 import { listPendingQueueItemIdsForSession } from "../sessions/queue-item-registry.js";
+import { isStoppedByUser } from "../sessions/stopped-marker.js";
 import { isTerminalSession } from "../terminals/session.js";
 import { logger } from "../shared/logger.js";
 import type { Session } from "../shared/types.js";
@@ -54,6 +55,20 @@ export interface SelfCompactionApiOptions {
 
 const send = (res: ServerResponse, status: number, body: unknown): void => json(res, body, status);
 
+export const STOPPED_SESSION_COMPACT_REFUSAL = "This session was stopped. Start it again with a message first, then compact.";
+
+/** The message route refused the compaction turn because the session was
+ *  stopped while it was on its way: nothing was queued and the stop stands. */
+export class CompactionTurnRefusedAsStopped extends Error {
+  constructor() {
+    super(STOPPED_SESSION_COMPACT_REFUSAL);
+    this.name = "CompactionTurnRefusedAsStopped";
+  }
+}
+
+/** Queue the compaction turn through the message route, as a notification: the
+ *  route refuses it on a stopped session, so a stop that lands while this call
+ *  is on its way is kept rather than lifted. */
 export async function enqueueViaMessageRoute(sessionId: string, message: string, displayMessage: string): Promise<void> {
   const gateway = internalGatewayConnection();
   const response = await fetch(`${gateway.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/message`, {
@@ -61,9 +76,17 @@ export async function enqueueViaMessageRoute(sessionId: string, message: string,
     headers: internalGatewayHeaders(gateway),
     body: JSON.stringify({ message, role: "notification", displayMessage }),
   });
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`the session refused the compaction turn (${response.status}${text ? `: ${text.slice(0, 200)}` : ""})`);
+  if (response.ok) return;
+  const text = await response.text().catch(() => "");
+  if (response.status === 409 && isNotDelivered(text)) throw new CompactionTurnRefusedAsStopped();
+  throw new Error(`the session refused the compaction turn (${response.status}${text ? `: ${text.slice(0, 200)}` : ""})`);
+}
+
+function isNotDelivered(text: string): boolean {
+  try {
+    return (JSON.parse(text) as { status?: unknown }).status === "not_delivered";
+  } catch {
+    return false;
   }
 }
 
@@ -92,6 +115,12 @@ function compactableSession(res: ServerResponse, callerId: string, options: Self
     send(res, 404, { error: `unknown session "${callerId}"` });
     return undefined;
   }
+  // The operator stopped this session while its compact_session call was on its
+  // way. The compaction and the resume would each start it again.
+  if (isStoppedByUser(session)) {
+    send(res, 409, STOPPED_REFUSAL);
+    return undefined;
+  }
   if (isTerminalSession(session)) {
     send(res, 409, { error: "a terminal session has no model context to compact" });
     return undefined;
@@ -103,6 +132,11 @@ function compactableSession(res: ServerResponse, callerId: string, options: Self
   }
   return session;
 }
+
+const STOPPED_REFUSAL = {
+  code: "stopped",
+  error: "this session was stopped, so nothing was scheduled. End your turn; whoever stopped it decides when it runs again.",
+};
 
 function queuedRefusal(count: number): string {
   return `${count} message${count === 1 ? " is" : "s are"} already queued for this session and would run between this turn `
@@ -137,6 +171,10 @@ async function queueCompactionTurn(
     releaseSelfCompaction(session.id, claimedAt);
     const reason = error instanceof Error ? error.message : String(error);
     logger.warn(`[self-compaction] ${session.id}: compaction turn not queued: ${reason}`);
+    if (error instanceof CompactionTurnRefusedAsStopped) {
+      send(res, 409, STOPPED_REFUSAL);
+      return false;
+    }
     send(res, 502, { error: `nothing was scheduled: ${reason}. Carry on without compacting.` });
     return false;
   }
@@ -148,10 +186,12 @@ async function requestCompaction(
   callerId: string,
   options: SelfCompactionApiOptions,
 ): Promise<void> {
-  const session = compactableSession(res, callerId, options);
-  if (!session) return;
+  if (!compactableSession(res, callerId, options)) return;
   const parsed = await readJsonBody(req, res);
   if (!parsed.ok) return;
+  // Judge the session as it is now: a stop can land while the body streams in.
+  const session = compactableSession(res, callerId, options);
+  if (!session) return;
   const handoff = parseCompactionHandoff(parsed.body);
   if (!handoff.ok) return send(res, 400, { error: handoff.error });
 

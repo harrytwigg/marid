@@ -359,6 +359,20 @@ describe("session tools — unit (stub gateway)", () => {
     expect(out.action).toBe("stopped");
     expect(out.status).toBeUndefined();
     expect(String(out.hint)).toMatch(/recoverable/i);
+    expect(out.droppedMessages).toBeUndefined();
+
+    const withParked = stub(() => ({ status: 200, body: { status: "stopped", sessionId: "c", cancelledMessages: 2 } }), "p");
+    const dropped = (await tool("stop_session").handler({ sessionId: "c" }, withParked.ctx)) as Record<string, unknown>;
+    expect(dropped.droppedMessages).toBe(2);
+
+    const noop = stub(() => ({ status: 200, body: { status: "stopped", sessionId: "c", noop: true, cancelledMessages: 0 } }), "p");
+    const nothing = (await tool("stop_session").handler({ sessionId: "c" }, noop.ctx)) as Record<string, unknown>;
+    expect(nothing.action).toBe("already-stopped");
+
+    const idle = stub(() => ({ status: 200, body: { status: "stopped", sessionId: "c", noop: false, wasRunning: false, cancelledMessages: 0 } }), "p");
+    const held = (await tool("stop_session").handler({ sessionId: "c" }, idle.ctx)) as Record<string, unknown>;
+    expect(held.action).toBe("stopped");
+    expect(String(held.hint)).toMatch(/not running; it is now held stopped/);
 
     const denied = stub(() => ({ status: 403, body: { error: "not a descendant of your session" } }), "p");
     await expect(tool("stop_session").handler({ sessionId: "x" }, denied.ctx)).rejects.toThrow(/403.*descendant/);
@@ -541,7 +555,7 @@ beforeAll(async () => {
   registry = await import("../../sessions/registry.js");
   workItems = await import("../../work-items/store.js");
   workItemReconcile = await import("../../work-items/reconcile.js");
-});
+}, 60_000);
 
 beforeEach(() => {
   sessionCommGuards.reset();

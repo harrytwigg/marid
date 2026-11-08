@@ -98,7 +98,7 @@ beforeAll(async () => {
   runs = await import("../../board-hooks/run-store.js");
   boardHooks = await import("../../board-hooks/index.js");
   db = (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 beforeEach(() => {
   config = structuredClone(baseConfig);

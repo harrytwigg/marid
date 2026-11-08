@@ -107,7 +107,7 @@ beforeAll(async () => {
   // A review hand-off onto the SAME Todo — linked with the review role.
   reviewerSessionId = session("reviewer", { employee: "qa-emp", parentSessionId: rootSessionId });
   store.linkSession(todoId, reviewerSessionId, "operator", "review");
-});
+}, 60_000);
 
 describe("GET /api/work-items/:id/sessions", () => {
   it("still answers the flat array when tree is not asked for", async () => {

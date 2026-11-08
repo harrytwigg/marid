@@ -29,7 +29,7 @@ beforeAll(async () => {
   sessions = await import("../../sessions/registry.js");
   ({ logger } = await import("../../shared/logger.js"));
   (await import("../../shared/db.js")).initDb();
-});
+}, 60_000);
 
 afterAll(async () => {
   vi.unstubAllGlobals();

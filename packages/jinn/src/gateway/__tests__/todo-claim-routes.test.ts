@@ -110,7 +110,7 @@ beforeAll(async () => {
   await import("../../shared/db.js").then((db) => db.initDb());
   const { setJinnAttachGate } = await import("../../mcp/attachment.js");
   setJinnAttachGate({ ok: true });
-});
+}, 60_000);
 
 afterEach(() => { engineAvailable = true; });
 

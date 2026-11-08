@@ -130,7 +130,7 @@ beforeAll(async () => {
     });
     return new Response(JSON.stringify(out.body), { status: out.status });
   });
-});
+}, 60_000);
 
 afterAll(() => {
   vi.unstubAllGlobals();

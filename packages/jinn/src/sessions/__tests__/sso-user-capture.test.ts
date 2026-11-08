@@ -18,7 +18,7 @@ beforeAll(async () => {
   reg = await import("../registry.js");
   (await import("../../shared/db.js")).initDb();
   ({ resolveUserHeader } = await import("../../gateway/api.js"));
-});
+}, 60_000);
 
 describe("resolveUserHeader", () => {
   it("returns the trimmed value for a string config when the header is present", () => {

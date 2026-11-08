@@ -59,15 +59,53 @@ describe("web platform adapter", () => {
 
   it("fails closed outside a secure context", async () => {
     const share = vi.fn(async () => {})
-    const clipboard = vi.fn(async () => {})
-    const platform = webPlatform({ secureContext: false, share, writeClipboard: clipboard })
+    const platform = webPlatform({ secureContext: false, share })
 
     await expect(platform.perform({ kind: "sharing.share", text: "hello" }))
       .resolves.toMatchObject({ status: "unsupported" })
+    expect(share).not.toHaveBeenCalled()
+  })
+
+  it("copies with the legacy path where the async clipboard API is withheld", async () => {
+    const writeClipboard = vi.fn(async () => {})
+    const copyLegacy = vi.fn(() => true)
+    const platform = webPlatform({ secureContext: false, writeClipboard, copyLegacy })
+
+    await expect(platform.capability("clipboard.copy")).resolves.toMatchObject({ supported: true, available: true })
+    await expect(platform.perform({ kind: "clipboard.copy", text: "hello" }))
+      .resolves.toEqual({ status: "performed", value: { method: "legacy-copy" } })
+    expect(copyLegacy).toHaveBeenCalledWith("hello")
+    expect(writeClipboard).not.toHaveBeenCalled()
+  })
+
+  it("reports clipboard copy unsupported when no copy path exists", async () => {
+    const platform = webPlatform({ secureContext: false })
     await expect(platform.perform({ kind: "clipboard.copy", text: "hello" }))
       .resolves.toMatchObject({ status: "unsupported" })
-    expect(share).not.toHaveBeenCalled()
-    expect(clipboard).not.toHaveBeenCalled()
+    await expect(platform.capability("clipboard.copy")).resolves.toMatchObject({ supported: false })
+  })
+
+  it("reports a failed legacy copy instead of a silent success", async () => {
+    await expect(webPlatform({ secureContext: false, copyLegacy: () => false }).perform({ kind: "clipboard.copy", text: "hello" }))
+      .resolves.toMatchObject({ status: "failed", error: { code: "clipboard-write" } })
+    await expect(webPlatform({ secureContext: false, copyLegacy: () => { throw new Error("boom") } }).perform({ kind: "clipboard.copy", text: "hello" }))
+      .resolves.toMatchObject({ status: "failed" })
+  })
+
+  it("falls back to the legacy copy when the async write is rejected", async () => {
+    const writeClipboard = vi.fn(async () => { throw new DOMException("blocked", "NotAllowedError") })
+    const copyLegacy = vi.fn(() => true)
+    await expect(webPlatform({ writeClipboard, copyLegacy }).perform({ kind: "clipboard.copy", text: "hello" }))
+      .resolves.toEqual({ status: "performed", value: { method: "legacy-copy" } })
+    expect(writeClipboard).toHaveBeenCalledWith("hello")
+    // With no fallback to try, the browser's own verdict stands.
+    await expect(webPlatform({ writeClipboard }).perform({ kind: "clipboard.copy", text: "hello" }))
+      .resolves.toEqual({ status: "denied", permission: "denied" })
+    // An aborted write is the user's call; it is not retried behind their back.
+    const aborted = vi.fn(async () => { throw new DOMException("cancelled", "AbortError") })
+    await expect(webPlatform({ writeClipboard: aborted, copyLegacy }).perform({ kind: "clipboard.copy", text: "hello" }))
+      .resolves.toEqual({ status: "cancelled" })
+    expect(copyLegacy).toHaveBeenCalledTimes(1)
   })
 
   it("classifies sharing success, cancellation, denial, failure, and missing support", async () => {

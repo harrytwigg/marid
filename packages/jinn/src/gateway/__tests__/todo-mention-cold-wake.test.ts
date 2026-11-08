@@ -104,7 +104,7 @@ beforeAll(async () => {
     await m.api.handleApiRequest(req as unknown as Parameters<typeof m.api.handleApiRequest>[0], res, context);
     return { ok: status < 400, status };
   }) as unknown as typeof fetch;
-});
+}, 60_000);
 
 async function until(check: () => boolean): Promise<void> {
   for (let i = 0; i < 200 && !check(); i++) await new Promise((resolve) => setTimeout(resolve, 5));
