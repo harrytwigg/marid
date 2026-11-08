@@ -18,7 +18,7 @@ board, and no way to tell two people apart.
 - What a person creates or says is attributed to them by name, with an avatar that is
   visibly a human, distinct from agents and from the operator.
 - Revoking access takes effect on the next request, without a restart.
-- An instance that never creates an account behaves exactly as today.
+- An instance that never creates an account behaves as it does today, except that every Todo shows both assignee slots, a person and an agent (see "Person and agent assignees").
 
 ## Non-goals (v1)
 
@@ -337,7 +337,7 @@ route (chat, org, settings) is redirected to their boards.
 No existing row is rewritten and no existing table changes shape (unknown tables are ignored
 by the boot schema verifier, so rollback stays bootable). Paired devices remain operator
 sessions. With no `users` rows, the sign-in form is not shown, no member path is reachable,
-and every screen renders as today. On rollback to an older build the new tables stay unused,
+and every screen renders as before except the assignee surfaces, which show the person and agent slots on every instance. On rollback to an older build the new tables stay unused,
 member cookies stop working, member comments read as `system` comments and member Todos as
 `connector` Todos: both grant nothing.
 
