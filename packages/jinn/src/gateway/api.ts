@@ -86,8 +86,7 @@ import {
 import { claimIncomingTurn, lateralSendDedupeKey } from "../sessions/incoming-turn.js";
 import { blockFallbackText, validateBlockEnvelope } from "../shared/blocks.js";
 import { USER_MESSAGE_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
-import { isStoppedByUser, refuseStoppedSession, STOPPED_SESSION_NOT_DELIVERED, stopSession } from "./session-stop.js";
-import { clearSessionStopped } from "../sessions/stopped-marker.js";
+import { endStopOnDeliberateSend, isStoppedByUser, refuseStoppedSession, STOPPED_SESSION_NOT_DELIVERED, stopSession } from "./session-stop.js";
 import { interruptSessionTurn, killSessionEngines } from "./session-interrupt.js";
 export { interruptSessionTurn };
 export {
@@ -4159,11 +4158,7 @@ export async function handleApiRequest(
           content: isNotification ? displayMessage : prompt, media: userMedia, meta: notificationMeta,
         });
         if (claim.deduplicated) return json(res, { status: "duplicate", sessionId: session.id, queueItemId: claim.queueItemId });
-        // Every sender a stopped session refuses has been turned away above, so this
-        // message is a deliberate start: end the stop now, not when its turn begins.
-        // A replay before then (a reload while the lane is paused) would otherwise
-        // read the session as stopped and withdraw the message it just accepted.
-        if (isStoppedByUser(session)) clearSessionStopped(session.id);
+        endStopOnDeliberateSend(session);
         queueItemId = claim.queueItemId;
         incomingMessageId = claim.messageId;
       }

@@ -6,7 +6,7 @@ import type { JsonObject, Session } from "../shared/types.js";
 import { USER_STOP_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
 import type { QueueItem } from "../sessions/queue-item-registry.js";
 import { withdrawPendingQueueItemsForStop } from "../sessions/queue-stop.js";
-import { hasStoppedMark, markSessionStopped } from "../sessions/stopped-marker.js";
+import { clearSessionStopped, hasStoppedMark, isStoppedByUser, markSessionStopped } from "../sessions/stopped-marker.js";
 import { listReleasableParentCompletionQueuesForSource, RESTART_RESUME_META_KEY, RESTART_RESUME_REASON_META_KEY, updateSession } from "../sessions/registry.js";
 import { interruptSessionTurn } from "./session-interrupt.js";
 import type { ApiContext } from "./api.js";
@@ -16,6 +16,16 @@ export { isStoppedByUser } from "../sessions/stopped-marker.js";
 export const STOPPED_SESSION_NOT_DELIVERED =
   "not delivered: this session was stopped and is not running. Its owner or the operator must start it again " +
   "deliberately; a message sent to a stopped session is dropped, never held for later.";
+
+/**
+ * A message the route accepted after every refusal above has passed is a
+ * deliberate start, so the stop ends now rather than when its turn begins. A
+ * replay before then (a reload while the lane is paused) would otherwise read
+ * the session as stopped and withdraw the message it had just accepted.
+ */
+export function endStopOnDeliberateSend(session: Pick<Session, "id">): void {
+  if (isStoppedByUser(session)) clearSessionStopped(session.id);
+}
 
 /** Refuse a message that would silently restart a stopped session. True when it refused. */
 export function refuseStoppedSession(res: ServerResponse, session: Session): boolean {
