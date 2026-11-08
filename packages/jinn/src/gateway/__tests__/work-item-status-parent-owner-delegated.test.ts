@@ -4,8 +4,9 @@ import { call, sessionOf, startParentReviewHarness, statusPost } from "./review-
 /**
  * The parent-owner lane for a child the owner delegated, through the real
  * `handleApiRequest`: the owner accepts it (`done`, with a reason) from
- * `executing` once another employee worked it and stopped, or from `in_review`,
- * and the self-review ban holds whenever the owner had a hand in it.
+ * `executing` once another employee worked it and stopped, or from `in_review`.
+ * From `executing` the self-review ban holds whenever the owner had a hand in it;
+ * from `in_review` the owner closes as the ancestor owner, its own work included.
  */
 
 let workItems: Awaited<ReturnType<typeof startParentReviewHarness>>["workItems"];
@@ -25,6 +26,11 @@ beforeAll(async () => {
 const statusOf = (id: string) => workItems.getWorkItem(id)?.status;
 const lastMove = (id: string) => listWorkItemEvents(id).filter((event) => event.toStatus !== null).at(-1)!;
 const accept = { status: "done", note: "Integrated into the parent branch" };
+/** From review the owner's own hand in the work no longer holds the close (the ancestor-owner close); the event says so. */
+const closedAsOwnWork = (res: { status: number }, id: string) => {
+  expect([res.status, statusOf(id)]).toEqual([200, "done"]);
+  expect(lastMove(id).detail).toMatchObject({ parentOwner: true, ownWork: true });
+};
 
 describe("the parent's owner accepting a delegated child", () => {
   /** A child the owner created and delegated: assigned to child-dev, executing,
@@ -86,7 +92,7 @@ describe("the parent's owner accepting a delegated child", () => {
     expect(statusOf(child.id)).toBe("executing");
   });
 
-  it("refuses an owner that is the child's own assignee, from executing and from review", async () => {
+  it("refuses an owner that is the child's own assignee from executing, and closes it from review as its own work", async () => {
     const parent = workItems.createWorkItem({ title: "Self parent", status: "executing", assignee: "owner-dev" });
     const child = workItems.createWorkItem({ title: "Self child", status: "executing", parentId: parent.id, assignee: "owner-dev" });
     const owner = await sessionOf("owner-dev");
@@ -95,9 +101,7 @@ describe("the parent's owner accepting a delegated child", () => {
     expect([fromExecuting.status, fromExecuting.body.error]).toEqual([403, expect.stringMatching(/operator's decision/)]);
 
     expect((await statusPost(owner.id, child.id, { status: "in_review", note: "Done myself" })).status).toBe(200);
-    const fromReview = await statusPost(owner.id, child.id, accept);
-    expect([fromReview.status, fromReview.body.error]).toEqual([403, expect.stringMatching(/owner-dev cannot accept .*owner-dev is assigned to it.*self-review ban/)]);
-    expect([statusOf(child.id), listComments(child.id).comments.filter((comment) => comment.body.startsWith("Accepted")).length]).toEqual(["in_review", 0]);
+    closedAsOwnWork(await statusPost(owner.id, child.id, accept), child.id);
   });
 
   it.each([["unassigned", null], ["the operator's", "@operator"], ["not an employee's", "nobody-dev"]] as const)(
@@ -176,35 +180,33 @@ describe("the parent's owner accepting a delegated child", () => {
     expect(statusOf(child.id)).toBe("executing");
   });
 
-  it("refuses the owner that relayed an unworked child into review: the handoff is its own", async () => {
+  it("closes from review a child the owner relayed unworked: the handoff is its own work", async () => {
     const parent = workItems.createWorkItem({ title: "Unworked relay parent", status: "executing", assignee: "owner-dev" });
     const child = workItems.createWorkItem({ title: "Unworked relay child", status: "executing", parentId: parent.id, assignee: "child-dev" });
     const owner = await sessionOf("owner-dev");
     expect((await statusPost(owner.id, child.id, { status: "in_review", note: "Nothing to report" })).status).toBe(200);
-    const res = await statusPost(owner.id, child.id, accept);
-    expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/owner-dev handed it to review.*self-review ban/)]);
-    expect(statusOf(child.id)).toBe("in_review");
+    closedAsOwnWork(await statusPost(owner.id, child.id, accept), child.id);
   });
 
-  it("refuses an owner the child was reassigned to after the producer moved it to review", async () => {
+  it("closes from review a child reassigned to the owner after the producer moved it to review", async () => {
     const { child } = await delegatedChild("Reassigned to the owner", "in_review");
     assignWorkItem(child.id, "owner-dev", "engineering", "operator");
-    const res = await statusPost((await sessionOf("owner-dev")).id, child.id, accept);
-    expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/owner-dev is assigned to it.*self-review ban/)]);
-    expect(statusOf(child.id)).toBe("in_review");
+    closedAsOwnWork(await statusPost((await sessionOf("owner-dev")).id, child.id, accept), child.id);
   });
 
-  it.each(["executing", "in_review"] as const)(
-    "refuses, from %s, a later session of an owner that was linked to work the child, though another employee is now its assignee",
-    async (status) => {
-      const { child } = await delegatedChild(`Owner worked it ${status}`, status);
-      workItems.linkSession(child.id, (await sessionOf("owner-dev")).id);
-      const later = await sessionOf("owner-dev");
-      const res = await statusPost(later.id, child.id, accept);
-      expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/a session of owner-dev was linked to work on it.*self-review ban/)]);
-      expect(statusOf(child.id)).toBe(status);
-    },
-  );
+  it("refuses from executing a later session of an owner that was linked to work the child, though another employee is now its assignee", async () => {
+    const { child } = await delegatedChild("Owner worked it executing");
+    workItems.linkSession(child.id, (await sessionOf("owner-dev")).id);
+    const res = await statusPost((await sessionOf("owner-dev")).id, child.id, accept);
+    expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/a session of owner-dev was linked to work on it.*self-review ban/)]);
+    expect(statusOf(child.id)).toBe("executing");
+  });
+
+  it("closes from review as its own work a child a later session of the owner was linked to work", async () => {
+    const { child } = await delegatedChild("Owner worked it in review", "in_review");
+    workItems.linkSession(child.id, (await sessionOf("owner-dev")).id);
+    closedAsOwnWork(await statusPost((await sessionOf("owner-dev")).id, child.id, accept), child.id);
+  });
 
   describe("a status move is not authorship", () => {
     /** The owner pauses the delegated child and resumes it: both moves are the owner's. */
@@ -261,7 +263,7 @@ describe("the parent's owner accepting a delegated child", () => {
     });
 
     it.each(["executing", "in_review"] as const)(
-      "still refuses, from %s, an owner that paused and resumed the child and then took the work over as producer",
+      "for an owner that paused and resumed the child and then took the work over as producer: refuses from executing, closes from review as its own work (%s)",
       async (status) => {
         const { child } = await delegatedChild(`Paused then taken over ${status}`);
         const owner = await pauseAndResume(child.id);
@@ -269,19 +271,18 @@ describe("the parent's owner accepting a delegated child", () => {
         if (status === "in_review") transition(child.id, "in_review", "reconciler", { manual: true, agent: true });
 
         const res = await statusPost(owner.id, child.id, accept);
+        if (status === "in_review") return closedAsOwnWork(res, child.id);
         expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/a session of owner-dev was linked to work on it.*self-review ban/)]);
         expect(statusOf(child.id)).toBe(status);
       },
     );
 
-    it("still refuses an owner that resumed the child and then handed it to review itself", async () => {
+    it("closes from review, as its own work, a child the owner resumed and then handed to review itself", async () => {
       const { child } = await delegatedChild("Resumed then relayed", "in_review");
       const owner = await pauseAndResume(child.id);
       expect((await statusPost(owner.id, child.id, { status: "in_review", note: "I did the work myself" })).status).toBe(200);
 
-      const res = await statusPost(owner.id, child.id, accept);
-      expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/owner-dev moved it to executing and handed it to review.*self-review ban/)]);
-      expect(statusOf(child.id)).toBe("in_review");
+      closedAsOwnWork(await statusPost(owner.id, child.id, accept), child.id);
     });
 
     /** The owner sends the delegated child back from review: a review bounce, and the owner's move. */
@@ -380,14 +381,12 @@ describe("the parent's owner accepting a delegated child", () => {
       expect(statusOf(child.id)).toBe("executing");
     });
 
-    it("still refuses an owner that bounced the child from review and then handed it to review itself", async () => {
+    it("closes from review, as its own work, a child the owner bounced and then handed to review itself", async () => {
       const { child } = await delegatedChild("Bounced then relayed", "in_review");
       const owner = await bounce(child.id);
       expect((await statusPost(owner.id, child.id, { status: "in_review", note: "I did the rework myself" })).status).toBe(200);
 
-      const res = await statusPost(owner.id, child.id, accept);
-      expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/owner-dev cannot accept Todo \S+: owner-dev moved it to executing and handed it to review.*self-review ban/)]);
-      expect(statusOf(child.id)).toBe("in_review");
+      closedAsOwnWork(await statusPost(owner.id, child.id, accept), child.id);
     });
 
     it("still refuses that owner once it bounces the child again and accepts from executing", async () => {
@@ -401,7 +400,7 @@ describe("the parent's owner accepting a delegated child", () => {
       expect(statusOf(child.id)).toBe("executing");
     });
 
-    it("still refuses an owner that started the child, handed it to review itself, and was joined by the assignee later", async () => {
+    it("closes from review, as its own work, a child the owner started and handed to review itself before the assignee joined", async () => {
       const parent = workItems.createWorkItem({ title: "Late link parent", status: "executing", assignee: "owner-dev" });
       const child = workItems.createWorkItem({ title: "Late link child", status: "backlog", parentId: parent.id, assignee: "child-dev" });
       const owner = await sessionOf("owner-dev");
@@ -409,20 +408,16 @@ describe("the parent's owner accepting a delegated child", () => {
       expect((await statusPost(owner.id, child.id, { status: "in_review", note: "Done by the owner" })).status).toBe(200);
       workItems.linkSession(child.id, (await sessionOf("child-dev")).id, "delegation", "execute", { via: "delegation" });
 
-      const res = await statusPost(owner.id, child.id, accept);
-      expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/self-review ban/)]);
-      expect(statusOf(child.id)).toBe("in_review");
+      closedAsOwnWork(await statusPost(owner.id, child.id, accept), child.id);
     });
 
-    it("still refuses an owner that paused and resumed the child and then took the assignment", async () => {
+    it("closes from review, as its own work, a child the owner paused and resumed and then took the assignment of", async () => {
       const { child } = await delegatedChild("Paused then reassigned");
       const owner = await pauseAndResume(child.id);
       transition(child.id, "in_review", "reconciler", { manual: true, agent: true });
       assignWorkItem(child.id, "owner-dev", "engineering", "operator");
 
-      const res = await statusPost(owner.id, child.id, accept);
-      expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/owner-dev is assigned to it.*self-review ban/)]);
-      expect(statusOf(child.id)).toBe("in_review");
+      closedAsOwnWork(await statusPost(owner.id, child.id, accept), child.id);
     });
   });
 
