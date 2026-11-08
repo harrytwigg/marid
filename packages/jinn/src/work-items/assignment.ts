@@ -75,12 +75,16 @@ export interface AssignWorkItemOptions {
   announcesMove?: boolean;
 }
 
-/** With open departments a Todo follows its assignee's org department. Under
- *  `gateway.todoDepartments` (JIN-1) the department is a classification, so
- *  assignment keeps it and only fills an empty one with the configured default.
- *  Whatever the mode, assignment never moves a Todo across a non-open department's
- *  boundary: a Todo whose ROOT sits in one keeps its department, for an employee
- *  elsewhere, `@operator` and an engine-only delegate alike. */
+/** With open departments a Todo follows its assignee's org department, when the
+ *  assignee has one. An assignee with none (`@operator`, an engine-only delegate)
+ *  gives the Todo nothing to follow, so it stays on its board rather than leaving
+ *  it for the company namespace; the Todo edit route (PATCH) already behaves this
+ *  way for `@operator`. Under `gateway.todoDepartments` (JIN-1) the department is a
+ *  classification, so assignment keeps it and only fills an empty one with the
+ *  configured default. Whatever the mode, assignment never moves a Todo across a
+ *  non-open department's boundary: a Todo whose ROOT sits in one keeps its
+ *  department, for an employee elsewhere, `@operator` and an engine-only delegate
+ *  alike. */
 function departmentAfterAssignment(item: WorkItem, assigneeDepartment: string | null): string | null {
   const rootDepartment = scopeDepartmentOfItem(item, getWorkItem);
   // FR-003: never move a Todo across a non-open boundary, in either direction. A root in a
@@ -94,6 +98,7 @@ function departmentAfterAssignment(item: WorkItem, assigneeDepartment: string | 
   const db = initDb();
   // Under a closed policy the department is a classification: an empty one is filled with the default, even for a scoped assignee.
   if (policy) return item.department ?? usableDefaultDepartment(db, policy.defaultDepartment);
+  if (assigneeDepartment === null) return item.department;
   return isNonOpenDepartment(assigneeDepartment) || isDepartmentArchived(db, assigneeDepartment) ? item.department : assigneeDepartment;
 }
 

@@ -109,9 +109,26 @@ describe("open departments keep today's behaviour", () => {
     expect(assign(item.id, "eng-dev", "engineering")?.department).toBe("engineering");
   });
 
-  it("clears the department for @operator", () => {
+  it("keeps the department for @operator, who has none to follow", () => {
     const item = todoIn("platform");
+    expect(assign(item.id, "@operator", null)).toMatchObject({ assignee: "@operator", department: "platform" });
+    expect(getWorkItem(item.id)?.department).toBe("platform");
+  });
+
+  it("keeps the department for an engine-only delegate with no department", () => {
+    const item = todoIn("platform");
+    expect(assign(item.id, "engine-only", null)?.department).toBe("platform");
+  });
+
+  it("leaves a company Todo in the company namespace for @operator", () => {
+    const item = todoIn(null);
     expect(assign(item.id, "@operator", null)?.department).toBeNull();
+  });
+
+  it("still follows a later employee's department after the operator held it", () => {
+    const item = todoIn("platform");
+    assign(item.id, "@operator", null);
+    expect(assign(item.id, "eng-dev", "engineering")?.department).toBe("engineering");
   });
 
   it("refuses a scoped employee on an open Todo (FR-015), and the Todo stays in its open department", () => {

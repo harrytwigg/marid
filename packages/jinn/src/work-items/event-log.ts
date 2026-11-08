@@ -72,6 +72,7 @@ interface StatusTransitionProvenance {
   fromStatus: WorkItemStatus | null;
   actor: string | null;
   detail: string | null;
+  createdAt: string;
 }
 
 /** Read the newest transition into a status without loading the full audit trail. */
@@ -80,16 +81,17 @@ function latestStatusTransition(workItemId: string, toStatus: WorkItemStatus): S
   const id = parseTodoId(workItemId);
   const row = db
     .prepare(
-      `SELECT from_status, actor, detail FROM work_item_events
+      `SELECT from_status, actor, detail, created_at FROM work_item_events
        WHERE work_item_id = ? AND to_status = ?
        ORDER BY created_at DESC, rowid DESC LIMIT 1`,
     )
-    .get(id, toStatus) as { from_status: WorkItemStatus | null; actor: string | null; detail: string | null } | undefined;
+    .get(id, toStatus) as { from_status: WorkItemStatus | null; actor: string | null; detail: string | null; created_at: string } | undefined;
   return row
     ? {
         fromStatus: row.from_status,
         actor: row.actor,
         detail: row.detail,
+        createdAt: row.created_at,
       }
     : undefined;
 }
@@ -121,6 +123,59 @@ export function isBlockDeclared(workItemId: string): boolean {
  */
 export function isReviewBounceDeclared(workItemId: string): boolean {
   return latestStatusTransition(workItemId, 'executing')?.fromStatus === 'in_review';
+}
+
+/**
+ * When the Todo's own assignee last declared it `executing` and nothing has put
+ * it into `executing` since, or undefined if that is not how it got there.
+ *
+ * `employeeOf` names the employee behind a session actor (`session:<id>`); the
+ * mover counts as the assignee when it matches both the assignee recorded on the
+ * event itself and the Todo's `currentAssignee`, so a Todo handed to somebody
+ * else afterwards is no longer shielded by a move its new owner never made.
+ * Moves by the reconciler, the operator (his own floor covers those) and
+ * out of review (the bounce guard covers those) never count, and neither does a
+ * mover that is not a session of the assignee: a stranger's `executing` is a
+ * claim the attempt receipts may still overrule.
+ *
+ * Only the newest transition into `executing` is read, so a declaration cannot
+ * outlive a later block-and-resume the reconciler made.
+ */
+export function latestAssigneeExecutingDeclaredAt(
+  workItemId: string,
+  currentAssignee: string | null,
+  employeeOf: (sessionId: string) => string | undefined,
+): string | undefined {
+  const move = latestStatusTransition(workItemId, 'executing');
+  const sessionId = move && move.fromStatus !== 'in_review' ? sessionIdOf(move.actor) : undefined;
+  if (!move || !sessionId) return undefined;
+  const detail = parseDetail(move.detail);
+  const assignee = detail ? recordedAssignee(detail) : undefined;
+  const mover = recordedMover(detail) ?? employeeOf(sessionId);
+  return assignee && mover === assignee && assignee === currentAssignee ? move.createdAt : undefined;
+}
+
+/** The employee the status route stamped on the event as its mover, if any. */
+function recordedMover(detail: Record<string, unknown> | undefined): string | undefined {
+  return typeof detail?.actorEmployee === 'string' ? detail.actorEmployee : undefined;
+}
+
+/** The assignee the event stamped on itself (`todoProvenance`), if any. */
+function recordedAssignee(detail: Record<string, unknown>): string | undefined {
+  const provenance = detail.todoProvenance as { assignee?: unknown } | undefined;
+  return typeof provenance?.assignee === 'string' && provenance.assignee ? provenance.assignee : undefined;
+}
+
+function sessionIdOf(actor: string | null): string | undefined {
+  return actor?.startsWith('session:') ? actor.slice('session:'.length) : undefined;
+}
+
+function parseDetail(raw: string | null): Record<string, unknown> | undefined {
+  try {
+    return raw ? (JSON.parse(raw) as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Actors whose status moves raise the reconciler's evidence floor. */
