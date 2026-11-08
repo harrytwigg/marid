@@ -179,7 +179,7 @@ function usePickerContent({ detail, employees, close, children, transitionTo, co
     if (!detail) return null
     const shared = { detail, onDone: close }
     if (key === 'assignee') {
-      return <AssigneePickerContent {...shared} {...(memberCreator ? { memberCreator } : {})} employees={employees} commit={commitAssignee} />
+      return <AssigneePickerContent {...shared} {...(memberCreator ? { memberCreator } : {})} employees={employees} commit={commitAssignee} offerOperator />
     }
     if (children.failed) {
       return (

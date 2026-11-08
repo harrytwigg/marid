@@ -447,9 +447,11 @@ quiet-watch treatment, then sets an agent, clears it, and asserts the "needs you
   a free slot. On the Todo page the Agent chip sits where the one assignee chip always did, directly after Status, with the
   Person chip right after it and Priority and the rest following; the Properties rail runs Status, Priority, Agent, Person,
   then Dispatch, Auto-start and the rest. Each keeps its own picker and its × clear. The Person picker offers "You
-  (operator)" and the board's people (with accounts) and "No person", and the Agent picker lists employees only. Every picker that sets the
-  agent (the Todo page, the New Todo dialog, the sub-task assign picker and the search workbench Owner picker) lists employees
-  only, on every instance; naming yourself is the person. The Todo page and the New Todo dialog (agent chip first, then
+  (operator)" and the board's people (with accounts) and "No person", and the Agent picker lists employees only. Where a Person picker sits
+  beside it (the Todo page, the New Todo dialog) the Agent picker lists employees only, on every instance, and naming yourself
+  is the person. The sub-task assign picker and the search workbench Owner picker have no person slot, so they keep "You
+  (operator)" first, assigning the operator through the assign route as they always did: nothing an operator could do
+  before is lost on any surface. The Todo page and the New Todo dialog (agent chip first, then
   person chip) each have a Person picker, and creating a Todo as yourself with no agent goes through the assign route and
   stores `@operator`, as it always did. The Todo page's Person picker does the same: a choice that leaves exactly what
   assign-to-the-operator leaves (yourself, nobody holding either slot) is written through the assign route, and clearing the

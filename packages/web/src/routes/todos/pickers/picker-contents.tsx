@@ -11,10 +11,11 @@ import {
 import { priorityLabel } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { RailPriorityBars } from "../task-page/rail-rows"
-import { agentOf } from "../assignee-circles"
 import { MemberName } from "../attribution"
 import type { CreatorKeeps, MemberCreator } from "@/hooks/use-member-creator-keeps"
 import { PickerNote, PickerRow } from "./picker-shell"
+import { heldInPicker, OperatorAssignRow } from "./operator-assign-row"
+import { OPERATOR_ASSIGNEE } from "../util"
 
 /* Todos v2 slice 6 — the picker CONTENTS (design-doc §7.3): one component per
  * property, rendered by either shell (popover desktop / bottom sheet mobile).
@@ -89,13 +90,15 @@ export function AssigneePickerContent({
   sheet,
   onDone,
   memberCreator: given,
-}: PickerContentProps & { employees: Employee[]; commit: (assignee: string | null) => void }) {
+  offerOperator = false,
+}: PickerContentProps & { employees: Employee[]; commit: (assignee: string | null) => void; offerOperator?: boolean }) {
   const inherited = useContext(MemberCreatorContext)
   const memberCreator = given ?? inherited ?? undefined
   const [query, setQuery] = useState("")
   // The agent slot holds employees only: the operator is a person, chosen in the person picker, and `@operator` here is the
   // "needs the operator" marker, which reads as an empty slot. A system employee routes Todos but owns none, so it is never offered.
-  const current = agentOf(detail.workItem.assignee)
+  // Without a person slot beside it (`offerOperator`), the operator is assigned here as it always was, and clearing clears them too.
+  const current = heldInPicker(detail.workItem.assignee, offerOperator)
   const filtered = useMemo(() => {
     const people = employees.filter((e) => !e.system)
     const q = query.trim().toLowerCase()
@@ -128,6 +131,8 @@ export function AssigneePickerContent({
         />
       )}
       <div className={sheet ? "" : "max-h-[288px] overflow-y-auto"}>
+        <OperatorAssignRow offered={offerOperator} query={query} assignee={detail.workItem.assignee} sheet={sheet}
+          onSelect={() => { if (current !== OPERATOR_ASSIGNEE) commit(OPERATOR_ASSIGNEE); onDone() }} />
         {filtered.map((employee) => (
           <PickerRow
             key={employee.name}

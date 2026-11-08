@@ -185,6 +185,7 @@ function AssignPicker({ child, employees, onClose, onChildAssign }: PickerProps)
       <AssigneePickerContent
         detail={{ workItem: child, spendUsd: 0, events: [] }}
         employees={employees}
+        offerOperator
         onDone={onClose}
         commit={(assignee) => {
           if (assignee) onChildAssign(child.id, assignee)
