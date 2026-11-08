@@ -352,8 +352,14 @@ function ChatPage() {
   // push is a no-op.
   const didMountRef = useRef(false)
   useEffect(() => {
-    pendingNavRef.current = undefined
-    if (navigationType === 'POP') setSystemPrimedId(null)
+    // A run is a navigation landing, apart from the first, which is the page mounting: its POP is the initial load,
+    // not back/forward, and nothing of ours has landed. Effects run a task after their commit, so a tap can be
+    // handled in between, and the list's first report can prime a chat in the same flush: clearing either mark
+    // here would let the tab→URL reconciler pick the tapped chat again, or count the primed one as opened.
+    if (didMountRef.current) {
+      pendingNavRef.current = undefined
+      if (navigationType === 'POP') setSystemPrimedId(null)
+    }
     // A commit the bulk archive overtook names a chat that is already gone, so it is
     // not an arrival: it must not clear the removed mark or open the tab back up.
     // The route follows the active tab instead — the step the tab→URL reconciler
