@@ -361,7 +361,7 @@ member cookies stop working, member comments read as `system` comments and membe
 A Todo has two assignee slots that answer different questions. The **agent** is who does the work; the **person** is who is
 responsible for it. They are set and cleared independently. **Both slots show on every instance**, with or without accounts:
 the board card, the list row and the Todo page show both (a person circle, then an agent circle; the Todo page has an
-"Agent" and a "Person" row). Without accounts the person picker offers the operator ("You") and "No person".
+"Agent" and a "Person" row). Without accounts the person picker offers the operator ("You (operator)") and "No person".
 
 - **Agent slot = the existing `assignee`**, unchanged in storage, dispatch and semantics. It shows only when `assignee` is an
   employee. `@operator` there is the "needs the operator" marker: with no person row it reads as the operator in the person
@@ -445,7 +445,9 @@ quiet-watch treatment, then sets an agent, clears it, and asserts the "needs you
   a free slot. On the Todo page the Agent chip sits where the one assignee chip always did, directly after Status, with the
   Person chip right after it and Priority and the rest following; the Properties rail runs Status, Priority, Agent, Person,
   then Dispatch, Auto-start and the rest. Each keeps its own picker and its × clear. The Person picker offers "You
-  (operator)" and the board's people (with accounts) and "No person", and the Agent picker lists employees only. With no
+  (operator)" and the board's people (with accounts) and "No person", and the Agent picker lists employees only. Every picker that sets the
+  agent (the Todo page, the New Todo dialog, the sub-task assign picker and the search workbench Owner picker) lists employees
+  only, on every instance; naming yourself is the person, set on the Todo page. With no
   accounts the person picker offers "You (operator)" and "No person" alone; choosing yourself is an assignment to the
   operator in every respect (needs-you lane, dispatch, quiet-watch, review addressee). A member gets the person picker where they
   are a collaborator or owner, without the operator option, and read-only on a Todo whose person is the operator or that

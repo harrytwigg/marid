@@ -84,10 +84,6 @@ export const OPERATOR_ASSIGNEE = "@operator"
 /** The `assignee` filter value that matches Todos with no assignee. */
 export const UNASSIGNED_FILTER = "@unassigned"
 
-/** The operator as an assignee-picker row, listed before the employees. A
- *  system employee is never offered: it routes Todos but owns none. */
-export const OPERATOR_ROW: Pick<Employee, "name" | "displayName" | "department"> = { name: OPERATOR_ASSIGNEE, displayName: "You (operator)", department: "" }
-
 /** Who is reading a Todo: the operator, or a board member (see `useViewer`). */
 export type Viewer = "operator" | "member"
 

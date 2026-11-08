@@ -14,7 +14,7 @@ import type { PickerContentProps } from "./picker-contents"
 export function PersonPickerContent({ detail, commit, sheet, onDone, board }: Omit<PickerContentProps, "memberCreator"> & { commit: (person: string | null) => void; board: string | null }) {
   const viewer = useViewer()
   const current = detail.workItem.humanAssignee ?? null
-  const { people, asked } = usePersonChoices(board)
+  const { people, asked, ready } = usePersonChoices(board)
   const pick = (person: string | null) => { if (person !== current) commit(person); onDone() }
   const { handsOn, onClear } = personChoiceHints(detail.workItem, viewer)
   return (
@@ -51,7 +51,7 @@ export function PersonPickerContent({ detail, commit, sheet, onDone, board }: Om
             testId={`person-option-${person.id}`}
           />
         ))}
-        {asked && people.length === 0 && <PickerNote>No one else has access to this board.</PickerNote>}
+        {asked && ready && people.length === 0 && <PickerNote>No one else has access to this board.</PickerNote>}
       </div>
     </>
   )

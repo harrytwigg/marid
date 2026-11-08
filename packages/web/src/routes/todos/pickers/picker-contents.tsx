@@ -82,9 +82,6 @@ export function PriorityPickerContent({
   )
 }
 
-/** What the picker says. */
-const AGENT_WORDS = { search: "Search agents…", searchLabel: "Search agents", clear: "No agent", nobody: "No agent" }
-
 export function AssigneePickerContent({
   detail,
   employees,
@@ -97,8 +94,7 @@ export function AssigneePickerContent({
   const memberCreator = given ?? inherited ?? undefined
   const [query, setQuery] = useState("")
   // The agent slot holds employees only: the operator is a person, chosen in the person picker, and `@operator` here is the
-  // "needs the operator" marker, which reads as an empty slot.
-  const words = AGENT_WORDS
+  // "needs the operator" marker, which reads as an empty slot. A system employee routes Todos but owns none, so it is never offered.
   const current = agentOf(detail.workItem.assignee)
   const filtered = useMemo(() => {
     const people = employees.filter((e) => !e.system)
@@ -114,8 +110,8 @@ export function AssigneePickerContent({
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={words.search}
-          aria-label={words.searchLabel}
+          placeholder="Search agents…"
+          aria-label="Search agents"
           data-testid="assignee-search"
           className="w-full rounded-full bg-[var(--fill-tertiary)] px-3 py-1.5 text-[13px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-quaternary)]"
         />
@@ -123,7 +119,7 @@ export function AssigneePickerContent({
       {current !== null && (
         <PickerRow
           sheet={sheet}
-          label={<span className="text-[var(--text-tertiary)]">{words.clear}</span>}
+          label={<span className="text-[var(--text-tertiary)]">No agent</span>}
           onSelect={() => {
             commit(null)
             onDone()
@@ -147,7 +143,7 @@ export function AssigneePickerContent({
             testId={`assignee-option-${employee.name}`}
           />
         ))}
-        {filtered.length === 0 && <PickerNote>{words.nobody} matches "{query.trim()}".</PickerNote>}
+        {filtered.length === 0 && <PickerNote>No agent matches "{query.trim()}".</PickerNote>}
       </div>
     </>
   )
