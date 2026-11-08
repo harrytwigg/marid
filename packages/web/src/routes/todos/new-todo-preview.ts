@@ -8,6 +8,7 @@ export function createDetail({
   title,
   department,
   assignee,
+  humanAssignee = null,
   priority,
   dueAt,
   labels,
@@ -15,6 +16,7 @@ export function createDetail({
   title: string
   department: string | null
   assignee: string | null
+  humanAssignee?: string | null
   priority: number
   dueAt: string | null
   labels: WorkItemLabelWire[]
@@ -29,6 +31,7 @@ export function createDetail({
       status: "backlog",
       department,
       assignee,
+      humanAssignee,
       priority,
       rank: null,
       source: "human",

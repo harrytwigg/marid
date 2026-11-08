@@ -15,6 +15,9 @@ import {
 } from "@/lib/api"
 import { operatorSafeTodoError, priorityLabel } from "@/lib/todos"
 import { createDetail } from "./new-todo-preview"
+import { assignOnCreate } from "./new-todo-assign"
+import { MemberName } from "./attribution"
+import { OPERATOR_ASSIGNEE } from "./util"
 import { TodoDialog } from "./todo-dialog"
 import {
   AssigneePickerContent,
@@ -23,10 +26,11 @@ import {
   LabelsPickerContent,
   PriorityPickerContent,
 } from "./pickers/picker-contents"
+import { PersonPickerContent } from "./pickers/person-picker-content"
 import { PickerPopover, PickerSheet } from "./pickers/picker-shell"
 import { creatableDepartment, offeredDepartments } from "./pickers/department-filters"
 
-type CreatePicker = "assignee" | "department" | "priority" | "due" | "labels"
+type CreatePicker = "assignee" | "person" | "department" | "priority" | "due" | "labels"
 
 const MOBILE_QUERY = "(max-width: 700px)"
 
@@ -53,7 +57,7 @@ function PropertyChip({
   children,
 }: {
   icon: React.ReactNode
-  label: string
+  label: React.ReactNode
   testId: string
   active?: boolean
   onClick: () => void
@@ -105,6 +109,7 @@ export function NewTodoDialog({
   const seededDepartment = creatableDepartment(defaults?.departments ?? [], defaults?.department)
   const [department, setDepartment] = useState<string | null>(seededDepartment)
   const [assignee, setAssignee] = useState<string | null>(null)
+  const [person, setPerson] = useState<string | null>(null)
   const [priority, setPriority] = useState(0)
   const [dueAt, setDueAt] = useState<string | null>(null)
   const [labelIds, setLabelIds] = useState<string[]>([])
@@ -125,12 +130,13 @@ export function NewTodoDialog({
     title,
     department,
     assignee,
+    humanAssignee: person,
     priority,
     dueAt,
     labels: selectedLabels,
-  }), [title, department, assignee, priority, dueAt, selectedLabels])
+  }), [title, department, assignee, person, priority, dueAt, selectedLabels])
   const dirty = Boolean(
-    title.trim() || body.trim() || parentId.trim() || assignee
+    title.trim() || body.trim() || parentId.trim() || assignee || person
     || priority || dueAt || labelIds.length || department !== seededDepartment,
   )
 
@@ -140,6 +146,7 @@ export function NewTodoDialog({
     setParentId("")
     setDepartment(seededDepartment)
     setAssignee(null)
+    setPerson(null)
     setPriority(0)
     setDueAt(null)
     setLabelIds([])
@@ -151,7 +158,7 @@ export function NewTodoDialog({
   const create = useCallback(async (keepOpen: boolean) => {
     const nextTitle = title.trim()
     if (!nextTitle || busy) return
-    if (defaults?.askAssignee && !assignee) {
+    if (defaults?.askAssignee && !assignee && !person) {
       setError("Pick who this is assigned to")
       setPicker("assignee")
       return
@@ -168,7 +175,7 @@ export function NewTodoDialog({
         ...(dueAt ? { dueAt } : {}),
         ...(labelIds.length ? { labels: labelIds } : {}),
       })
-      if (assignee) await api.assignWorkItem(created.workItem.id, assignee)
+      await assignOnCreate(created.workItem, { assignee, person })
       if (keepOpen) {
         reset()
         setBusy(false)
@@ -180,12 +187,13 @@ export function NewTodoDialog({
       setBusy(false)
       setError(operatorSafeTodoError(caught, "Failed to create"))
     }
-  }, [assignee, body, busy, department, dueAt, labelIds, parentId, priority, reset, title, defaults?.askAssignee])
+  }, [assignee, person, body, busy, department, dueAt, labelIds, parentId, priority, reset, title, defaults?.askAssignee])
 
   const closePicker = () => setPicker(null)
   const togglePicker = (next: CreatePicker) => setPicker((current) => current === next ? null : next)
   const pickerTitle: Record<CreatePicker, string> = {
-    assignee: "Assignee",
+    assignee: "Agent",
+    person: "Person",
     department: "Department",
     priority: "Priority",
     due: "Due date",
@@ -196,6 +204,8 @@ export function NewTodoDialog({
     switch (kind) {
       case "assignee":
         return <AssigneePickerContent {...common} employees={defaults?.employees ?? []} commit={setAssignee} />
+      case "person":
+        return <PersonPickerContent {...common} commit={setPerson} board={department} />
       case "department":
         return <DepartmentPickerContent {...common} departments={offeredDepartments(defaults?.departments ?? [], department)} commit={setDepartment} />
       case "priority":
@@ -269,12 +279,21 @@ export function NewTodoDialog({
           )}
           <PropertyChip
             icon={<UserRound size={13} aria-hidden />}
-            label={employee?.displayName ?? (defaults?.askAssignee ? "Assignee required" : "Assignee")}
+            label={employee?.displayName ?? (defaults?.askAssignee && !person ? "Agent required" : "Agent")}
             testId="todo-new-assignee-chip"
             active={picker === "assignee"}
             onClick={() => togglePicker("assignee")}
           >
             {desktopPicker("assignee")}
+          </PropertyChip>
+          <PropertyChip
+            icon={<UserRound size={13} aria-hidden />}
+            label={person ? (person === OPERATOR_ASSIGNEE ? "You (operator)" : <MemberName identity={person} />) : "Person"}
+            testId="todo-new-person-chip"
+            active={picker === "person"}
+            onClick={() => togglePicker("person")}
+          >
+            {desktopPicker("person")}
           </PropertyChip>
           <PropertyChip
             icon={<Building2 size={13} aria-hidden />}

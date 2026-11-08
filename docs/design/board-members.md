@@ -447,7 +447,9 @@ quiet-watch treatment, then sets an agent, clears it, and asserts the "needs you
   then Dispatch, Auto-start and the rest. Each keeps its own picker and its × clear. The Person picker offers "You
   (operator)" and the board's people (with accounts) and "No person", and the Agent picker lists employees only. Every picker that sets the
   agent (the Todo page, the New Todo dialog, the sub-task assign picker and the search workbench Owner picker) lists employees
-  only, on every instance; naming yourself is the person, set on the Todo page. With no
+  only, on every instance; naming yourself is the person. The Todo page and the New Todo dialog (agent chip first, then
+  person chip) each have a Person picker, and creating a Todo as yourself with no agent goes through the assign route and
+  stores `@operator`, as it always did. With no
   accounts the person picker offers "You (operator)" and "No person" alone; choosing yourself is an assignment to the
   operator in every respect (needs-you lane, dispatch, quiet-watch, review addressee). A member gets the person picker where they
   are a collaborator or owner, without the operator option, and read-only on a Todo whose person is the operator or that
