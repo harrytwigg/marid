@@ -178,7 +178,8 @@ dispatches anything in the tree it stops being member-only and members can only 
 any of it.
 
 **A tree the member created that left their board.** Where departments are open, an assignment can move a member-created
-root to another department, or (assigned to `@operator`) to the company board. The member keeps **read** access (detail,
+root to another department, and the operator can move it to the company board (no department). Assigning `@operator`
+moves nothing: the Todo stays on its board. The member keeps **read** access (detail,
 tree, comments, attachments, events, live frames) to the whole open tree whose root they created (`created_by =
 user:<self>`), wherever it now sits, and **comment** access (comment, reply, attach, edit or delete their own comments)
 when their role on the board they filed it on is collaborator or owner. That board is recorded on the root's `created`

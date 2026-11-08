@@ -52,6 +52,9 @@ async function patRoot(): Promise<{ root: string; mine: string; theirs: string }
 }
 
 const assign = (id: string, assignee: string) => h.operator("POST", `/api/work-items/${id}/assign`, { assignee });
+/** The operator moves a root off every board to the company board (no department). Assigning the operator no longer does:
+ *  a Todo assigned to them stays on its board. */
+const toCompanyBoard = (id: string) => h.operator("PATCH", `/api/work-items/${id}`, { department: null, expectedVersion: store.getWorkItem(id)!.version });
 const detail = (member: Member, id: string) => h.as(member, "GET", `/api/member/todos/${id}`);
 
 describe("an assignment that moves the root to another department", () => {
@@ -136,10 +139,10 @@ describe("an assignment that moves the root to another department", () => {
   });
 });
 
-describe("an assignment to @operator, which leaves the company board", () => {
+describe("a move to the company board", () => {
   it("keeps the same reads and comment access, and the same refusals", async () => {
     const t = await patRoot();
-    expect((await assign(t.root, "@operator")).status).toBe(200);
+    expect((await toCompanyBoard(t.root)).status).toBe(200);
     expect(store.getWorkItem(t.root)!.department).toBeNull();
     const read = await detail(pat, t.root);
     expect(read.status).toBe(200);
@@ -191,7 +194,7 @@ describe("access ends", () => {
   it("when the root is done or cancelled", async () => {
     for (const status of ["done", "cancelled"] as const) {
       const t = await patRoot();
-      await assign(t.root, "@operator");
+      await toCompanyBoard(t.root);
       expect((await detail(pat, t.root)).status).toBe(200);
       transition(t.theirs, status === "done" ? "done" : "cancelled", "operator", { cascade: true, manual: true } as never);
       transition(t.mine, status === "done" ? "done" : "cancelled", "operator", { cascade: true, manual: true } as never);
@@ -257,7 +260,7 @@ describe("access ends", () => {
 
   it("is listed only under the board it was filed on", async () => {
     const t = await patRoot();
-    await assign(t.root, "@operator");
+    await toCompanyBoard(t.root);
     h.db.prepare("INSERT INTO board_members (user_id, department, role, granted_by, granted_at) VALUES (?, 'ops', 'viewer', 'operator', ?)")
       .run(pat.userId, new Date().toISOString());
     try {
@@ -347,7 +350,7 @@ describe("live frames", () => {
 
   it("closing the root sends its creator `removed` for the root, then nothing", async () => {
     const t = await patRoot();
-    await assign(t.root, "@operator");
+    await toCompanyBoard(t.root);
     const patSocket = connect(pat);
     try {
       transition(t.theirs, "done", "operator", { cascade: true, manual: true } as never);
@@ -409,7 +412,7 @@ describe("live frames", () => {
 
     // (b) closed: one removal for the close, none for a department change afterwards.
     const b = await patRoot();
-    await assign(b.root, "@operator");
+    await toCompanyBoard(b.root);
     for (const id of [b.theirs, b.mine]) transition(id, "done", "operator", { cascade: true, manual: true } as never);
     socket.frames.length = 0;
     transition(b.root, "done", "operator", { cascade: true, manual: true } as never);
@@ -516,7 +519,7 @@ describe("live frames", () => {
 
     it("sends one `removed` for a root closed by a cascade, and none for the sub-tasks it closed with it", async () => {
       const t = await patRoot();
-      await assign(t.root, "@operator");
+      await toCompanyBoard(t.root);
       const socket = connect(pat);
       try {
         socket.frames.length = 0;

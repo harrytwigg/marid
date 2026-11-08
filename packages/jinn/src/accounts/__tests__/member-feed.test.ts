@@ -87,12 +87,22 @@ describe("a member's socket hears only re-serialised Todo changes on its own boa
   });
 
   it("an assignment that derives another department (the assignee's) removes the card too", async () => {
-    const todo = store.createWorkItem({ title: "Assigned away", department: "ops" });
+    const todo = store.createWorkItem({ title: "Assigned away", department: "design" });
+    designSocket.frames.length = 0;
+    const assigned = await h.operator("POST", `/api/work-items/${todo.id}/assign`, { assignee: "alice" });
+    expect(assigned.status).toBe(200);
+    expect(store.getWorkItem(todo.id)!.department).toBe("ops");
+    expect(designSocket.frames.map((f) => f.payload)).toEqual([{ entity: "todo", action: "removed", id: todo.id }]);
+  });
+
+  it("an assignment to the operator keeps the card on its board, as a change", async () => {
+    const todo = store.createWorkItem({ title: "Assigned to the operator", department: "ops" });
     opsSocket.frames.length = 0;
     const assigned = await h.operator("POST", `/api/work-items/${todo.id}/assign`, { assignee: "@operator" });
     expect(assigned.status).toBe(200);
-    expect(store.getWorkItem(todo.id)!.department).toBeNull();
-    expect(opsSocket.frames.map((f) => f.payload)).toEqual([{ entity: "todo", action: "removed", id: todo.id }]);
+    expect(store.getWorkItem(todo.id)!.department).toBe("ops");
+    expect(opsSocket.frames.map((f) => f.payload.action)).not.toContain("removed");
+    expect(opsSocket.frames.map((f) => f.payload.id)).toContain(todo.id);
   });
 
   it("an assignment by any writer (delegation, Talk, the route) that moves a root off the board removes the card", async () => {
