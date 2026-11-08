@@ -64,10 +64,11 @@ export interface TransitionOptions {
    * The calling session's id (the GRS-017 identity seam), when the transition
    * comes from an agent. Enforces the SELF-REVIEW BAN (design §1.5): a session
    * that is one of the item's linked non-phase execution attempts cannot move
-   * the item to `done` — its reviewer does. Workflow phases are linked for run
-   * attribution and do not become producers merely because of that link.
+   * the item to `done` — its reviewer does (workflow phases are not producers).
    */
   callerSessionId?: string;
+  /** The caller owns an ancestor and closes from review: the one `done` the ban above gives way to. */
+  ancestorOwnerClose?: boolean;
   /**
    * The agent lane. The calling surface has already held the move to
    * `isAgentLaneMove`, whose pairs are all declared edges, so only the
@@ -175,7 +176,7 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
     if (from !== to && !EDGES[from].has(to)) {
       throw new TransitionError('illegal-edge', `illegal transition ${from} → ${to} for work item ${id}`);
     }
-    if (to === 'done' && opts.callerSessionId) {
+    if (to === 'done' && opts.callerSessionId && !opts.ancestorOwnerClose) {
       const linked = listSessionsByWorkItem(id);
       if (linked.some((s) => s.id === opts.callerSessionId && isExecutionAttempt(s))) {
         throw new TransitionError(

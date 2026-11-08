@@ -8,6 +8,7 @@ import { reviewAddresseeEmployee } from "../work-items/review-addressee.js";
 import { isAgentLaneMove } from "../work-items/transition-edges.js";
 import { orgRegistry } from "./org-registry.js";
 import { remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
+import { ancestorCloseComment, resolveAncestorOwnerClose, type AncestorCloseFields } from "./work-item-ancestor-close.js";
 import { workItemActor, type WorkItemCaller } from "./work-item-arming.js";
 
 /**
@@ -47,7 +48,7 @@ export type StatusLane =
   | { kind: "operator" }
   | { kind: "coordinator"; actingAs: string; employee?: string }
   | { kind: "closer"; employee: string }
-  | { kind: "parent-owner"; employee: string }
+  | { kind: "parent-owner"; employee: string; ancestor?: AncestorCloseFields }
   | { kind: "agent" };
 
 export type StatusLaneResult = { ok: true; lane: StatusLane } | { ok: false; status: number; error: string };
@@ -233,9 +234,10 @@ function resolveCloserLane(employee: string, item: WorkItem, note: string): Stat
 }
 
 /** The employee a session acts as when it owns the parent of a child Todo and
- *  the move is the accept (from `executing` or `in_review`: a delegated child's
- *  report lands with the owner whether or not the producer moved it to review)
- *  or the send-back (from `in_review`). Read live from the parent and the
+ *  the move is the accept of a delegated child still `executing` (its report
+ *  lands with the owner whether or not the producer moved it to review) or the
+ *  send-back (from `in_review`). The close from `in_review` is the ancestor
+ *  owner's ({@link resolveAncestorOwnerClose}). Read live from the parent and the
  *  roster, so a reassigned parent hands the review elsewhere at once.
  *  `undefined` leaves the move to the other lanes. */
 function parentOwnerOf(
@@ -243,16 +245,16 @@ function parentOwnerOf(
   item: WorkItem,
   target: WorkItemStatus,
 ): string | undefined {
-  const accepts = target === "done" && (item.status === "executing" || item.status === "in_review");
+  const accepts = target === "done" && item.status === "executing";
   const sendsBack = target === "executing" && item.status === "in_review";
   if (!accepts && !sendsBack) return undefined;
   const employee = caller.session.employee;
   return employee && reviewAddresseeEmployee(item) === employee ? employee : undefined;
 }
 
-/** A session still working on `item`: a turn in flight, or one a restart resumes; not one that ended or was stopped. */
-function liveWorkRefusal(item: WorkItem): StatusLaneResult | undefined {
-  const live = listSessionsByWorkItem(item.id).find((session) => isExecutionAttempt(session)
+/** A session still working on `item`: a turn in flight, or one a restart resumes; not one that ended or was stopped, nor `exceptSessionId`. */
+function liveWorkRefusal(item: WorkItem, exceptSessionId?: string): StatusLaneResult | undefined {
+  const live = listSessionsByWorkItem(item.id).find((session) => isExecutionAttempt(session) && session.id !== exceptSessionId
     && (session.status === "running" || session.status === "waiting" || awaitsRestartResume(session)));
   if (!live) return undefined;
   const who = live.employee ? `a session of ${live.employee}` : `session ${live.id}`;
@@ -267,10 +269,6 @@ function otherProducer(employee: string, item: WorkItem): string | undefined {
   return listWorkItemEvents(item.id).some((event) => workedBy(event, producer)) ? producer : undefined;
 }
 
-function selfReviewRefusal(employee: string, item: WorkItem, handIn: string): StatusLaneResult {
-  return refuse(403, `${employee} cannot accept Todo ${item.id}: ${handIn}, and an employee never closes its own work (self-review ban); another reviewer or the operator closes it`);
-}
-
 /** The owner accepting a child that is still `executing`: only one another
  *  employee is assigned and was linked to work, and the owner had no hand in
  *  and did not take it back from the producer ({@link tookBackUnworked}).
@@ -280,7 +278,7 @@ function resolveExecutingAccept(employee: string, item: WorkItem, note: string):
   if (!producer) return undefined;
   const handIn = closerHandIn(employee, item, { producedElsewhere: true })
     ?? tookBackUnworked(employee, producer, item);
-  if (handIn) return selfReviewRefusal(employee, item, handIn);
+  if (handIn) return refuse(403, `${employee} cannot accept Todo ${item.id}: ${handIn}, and an employee never closes its own work (self-review ban); another reviewer or the operator closes it`);
   return liveWorkRefusal(item) ?? acceptNoteRefusal(item, note) ?? { ok: true, lane: { kind: "parent-owner", employee } };
 }
 
@@ -288,26 +286,26 @@ function acceptNoteRefusal(item: WorkItem, note: string): StatusLaneResult | und
   return note ? undefined : refuse(400, `accepting Todo ${item.id} needs the reason in note: it is posted on the Todo as a comment`);
 }
 
-/** The parent's owner accepting a child or sending one back from review. The
- *  ban keys on who produced it: the assignee, a hand in ({@link closerHandIn}),
- *  or the handoff unless another employee worked it. With a hand in, a send-back
- *  is the producer's own take-back (agent lane), not a review bounce. */
-function resolveParentOwnerLane(employee: string, item: WorkItem, target: WorkItemStatus, note: string): StatusLaneResult | undefined {
-  if (item.status === "executing") return resolveExecutingAccept(employee, item, note);
-  const handIn = item.assignee === employee
+/** Why `employee` produced `item`: the assignee, or a hand in ({@link closerHandIn}). */
+function ownWorkReason(employee: string, item: WorkItem): string | undefined {
+  return item.assignee === employee
     ? `${employee} is assigned to it`
     : closerHandIn(employee, item, { producedElsewhere: otherProducer(employee, item) !== undefined });
-  if (handIn) return target === "done" ? selfReviewRefusal(employee, item, handIn) : undefined;
-  const refusal = target === "done"
-    ? liveWorkRefusal(item) ?? acceptNoteRefusal(item, note)
-    : note ? undefined : refuse(400, `sending Todo ${item.id} back needs the feedback in note: it is posted on the Todo as a comment`);
-  return refusal ?? { ok: true, lane: { kind: "parent-owner", employee } };
+}
+
+/** The parent's owner accepting a delegated child still `executing`, or sending one
+ *  back from review (with a hand in that is the producer's own take-back, agent lane). */
+function resolveParentOwnerLane(employee: string, item: WorkItem, target: WorkItemStatus, note: string): StatusLaneResult | undefined {
+  if (item.status === "executing") return resolveExecutingAccept(employee, item, note);
+  if (target === "done" || ownWorkReason(employee, item)) return undefined;
+  return note ? { ok: true, lane: { kind: "parent-owner", employee } }
+    : refuse(400, `sending Todo ${item.id} back needs the feedback in note: it is posted on the Todo as a comment`);
 }
 
 /** The comment the gateway posts when an employee's lane closes a Todo as `done`. */
 export function employeeCloseComment(lane: StatusLane, note: string): string | undefined {
   if (lane.kind === "closer") return `Closed as done by ${lane.employee}. Reason: ${note}`;
-  if (lane.kind === "parent-owner") return `Accepted as done by ${lane.employee}, who owns the parent Todo. Reason: ${note}`;
+  if (lane.kind === "parent-owner") return ancestorCloseComment(lane, note);
   return undefined;
 }
 
@@ -322,6 +320,9 @@ export function resolveStatusLane(
   if (hasOperatorLane(caller)) return { ok: true, lane: { kind: "operator" } };
   if (caller.kind !== "session") return refuse(403, "caller has no session identity");
   if (asOperator) return resolveCoordinatorLane(caller, item, target, note);
+  const who = { employee: caller.session.employee ?? undefined, sessionId: caller.callerId };
+  const closeLane = resolveAncestorOwnerClose(who, item, target, note, { ownWork: ownWorkReason, liveWork: liveWorkRefusal });
+  if (closeLane) return closeLane;
   const owner = parentOwnerOf(caller, item, target);
   const ownerLane = owner ? resolveParentOwnerLane(owner, item, target, note) : undefined;
   if (ownerLane) return ownerLane;

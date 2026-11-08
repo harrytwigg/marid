@@ -250,6 +250,7 @@ import { TodoDepartmentNotAllowedError } from "../shared/todo-departments-config
 import { DepartmentArchivedError, isDepartmentArchived } from "../work-items/department-archive.js";
 import { DepartmentBoundaryError, scopedDepartmentOf } from "../work-items/department-scope.js";
 import { parseStatusUpdateFields } from "./work-item-status-fields.js";
+import { parentOwnerEventDetail, parentOwnerMoveOptions } from "./work-item-ancestor-close.js";
 import { employeeCloseComment, hasOperatorLane, resolveStatusLane, WORK_ITEM_STATUSES } from "./work-item-status-lane.js";
 import { assignWorkItem, changedStopCause, transition, TransitionError } from "../work-items/transitions.js";
 import { checkAssignee } from "./todo-assignee.js";
@@ -2626,7 +2627,7 @@ export async function handleApiRequest(
         // A close on the operator's standing grant says so: the actor stays the closer's own session.
         ...(lane.kind === "closer" ? { closeTodos: true } : {}),
         // The parent's owner accepting or sending back a child's review: the actor stays its own session.
-        ...(lane.kind === "parent-owner" ? { parentOwner: true } : {}),
+        ...(lane.kind === "parent-owner" ? parentOwnerEventDetail(lane) : {}),
       }, caller.origin);
       // The banner's asked-for-after reason (design-doc §5): a same-status
       // operator move with a note annotates the CURRENT stop instead of
@@ -2660,7 +2661,7 @@ export async function handleApiRequest(
               // agent pairs, so the manual-start rule does not also govern it.
               agent: lane.kind === "agent" || undefined,
               // The parent's owner sending a child back from review is the review bounce.
-              ...(lane.kind === "parent-owner" && target === "executing" ? { bounce: true } : {}),
+              ...parentOwnerMoveOptions(lane, target as WorkItemStatus),
               callerSessionId: caller.kind === "session" ? caller.callerId : undefined, ...(blockKind ? { blockKind } : {}),
               ...(cascade ? { cascade: true } : {}), ...(stopCause ? { stopCause } : {}),
               detail,

@@ -10,7 +10,7 @@ const OPERATOR: ReviewAddressee = { kind: "operator" };
 /** The parent statuses in which its owner is woken or escalated to about a
  *  child, so a review addressed to them is never parked with someone who will
  *  not be told. A parent in `backlog` or `in_review`, or closed, is not one. */
-const OWNER_ADDRESSED_PARENT_STATUSES: ReadonlySet<WorkItemStatus> = new Set<WorkItemStatus>(["executing", "blocked"]);
+export const OWNER_ADDRESSED_PARENT_STATUSES: ReadonlySet<WorkItemStatus> = new Set<WorkItemStatus>(["executing", "blocked"]);
 
 /**
  * The parent's owner when the Todo has a parent, that parent's assignee is an
