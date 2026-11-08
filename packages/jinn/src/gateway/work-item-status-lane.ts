@@ -142,16 +142,21 @@ function moveEmployee(event: WorkItemEvent): string | undefined {
  * review it, or bouncing it back, is reviewing and leaves the close open.
  * Once another employee produced the work (`producedElsewhere`), the status
  * moves are the mover's bookkeeping: a handoff alone, or a pause and resume
- * alone, is not a hand in. Only the two together are, since an employee that
- * resumed the Todo and then handed it to review itself took the work over.
+ * alone, or a review bounce alone, is not a hand in. A move into `executing`
+ * (a review bounce included) together with the latest handoff is, since an
+ * employee that took the Todo back and then handed it to review itself took
+ * the work over.
  */
 function closerHandIn(employee: string, item: WorkItem, { producedElsewhere = false } = {}): string | undefined {
   const events = listWorkItemEvents(item.id);
   if (events.some((event) => workedBy(event, employee))) return `a session of ${employee} was linked to work on it`;
-  const started = events.some((event) => startedBy(event, employee));
   const handoff = events.filter((event) => event.toStatus === "in_review" && event.fromStatus !== "in_review").at(-1);
   const handedOff = handoff !== undefined && moveEmployee(handoff) === employee;
-  if (producedElsewhere) return started && handedOff ? `${employee} moved it to executing and handed it to review` : undefined;
+  if (producedElsewhere) {
+    const tookBack = events.some((event) => movedToExecutingBy(event, employee));
+    return tookBack && handedOff ? `${employee} moved it to executing and handed it to review` : undefined;
+  }
+  const started = events.some((event) => startedBy(event, employee));
   if (started) return `${employee} moved it to executing`;
   return handedOff ? `${employee} handed it to review` : undefined;
 }
@@ -164,9 +169,14 @@ function workedBy(event: WorkItemEvent, employee: string): boolean {
   return linked === employee;
 }
 
+/** Any move of `employee`'s into `executing`, a review bounce included. */
+function movedToExecutingBy(event: WorkItemEvent, employee: string): boolean {
+  return event.kind === "status_change" && event.toStatus === "executing" && moveEmployee(event) === employee;
+}
+
+/** `employee` starting or resuming the Todo: a move into `executing` that is not a review bounce. */
 function startedBy(event: WorkItemEvent, employee: string): boolean {
-  return event.kind === "status_change" && event.toStatus === "executing" && event.fromStatus !== "in_review"
-    && moveEmployee(event) === employee;
+  return movedToExecutingBy(event, employee) && event.fromStatus !== "in_review";
 }
 
 /** A granted employee closing a Todo as `done`, with the reason it will post.

@@ -273,6 +273,52 @@ describe("the parent's owner accepting a delegated child", () => {
       expect(statusOf(child.id)).toBe("in_review");
     });
 
+    /** The owner sends the delegated child back from review: a review bounce, and the owner's move. */
+    async function bounce(childId: string) {
+      const owner = await sessionOf("owner-dev");
+      const res = await statusPost(owner.id, childId, { status: "executing", note: "Needs another pass on the edge cases" });
+      expect([res.status, statusOf(childId)]).toEqual([200, "executing"]);
+      expect(lastMove(childId).detail).toMatchObject({ actorEmployee: "owner-dev" });
+      return owner;
+    }
+
+    it("closes a child the owner bounced from review once its producer handed it back", async () => {
+      const { child, producer } = await delegatedChild("Bounced then reworked", "in_review");
+      const owner = await bounce(child.id);
+      expect((await statusPost(producer.id, child.id, { status: "in_review", note: "Edge cases covered" })).status).toBe(200);
+
+      const res = await statusPost(owner.id, child.id, accept);
+      expect([res.status, statusOf(child.id)]).toEqual([200, "done"]);
+    });
+
+    it("closes from executing a child the owner only bounced from review", async () => {
+      const { child } = await delegatedChild("Bounced, executing", "in_review");
+      const owner = await bounce(child.id);
+      const res = await statusPost(owner.id, child.id, accept);
+      expect([res.status, statusOf(child.id)]).toEqual([200, "done"]);
+    });
+
+    it("still refuses an owner that bounced the child from review and then handed it to review itself", async () => {
+      const { child } = await delegatedChild("Bounced then relayed", "in_review");
+      const owner = await bounce(child.id);
+      expect((await statusPost(owner.id, child.id, { status: "in_review", note: "I did the rework myself" })).status).toBe(200);
+
+      const res = await statusPost(owner.id, child.id, accept);
+      expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/owner-dev cannot accept Todo \S+: owner-dev moved it to executing and handed it to review.*self-review ban/)]);
+      expect(statusOf(child.id)).toBe("in_review");
+    });
+
+    it("still refuses that owner once it bounces the child again and accepts from executing", async () => {
+      const { child } = await delegatedChild("Bounced, relayed, bounced", "in_review");
+      const owner = await bounce(child.id);
+      expect((await statusPost(owner.id, child.id, { status: "in_review", note: "I did the rework myself" })).status).toBe(200);
+      expect((await statusPost(owner.id, child.id, { status: "executing", note: "Taking it back" })).status).toBe(200);
+
+      const res = await statusPost(owner.id, child.id, accept);
+      expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/owner-dev moved it to executing and handed it to review.*self-review ban/)]);
+      expect(statusOf(child.id)).toBe("executing");
+    });
+
     it("still refuses an owner that started the child, handed it to review itself, and was joined by the assignee later", async () => {
       const parent = workItems.createWorkItem({ title: "Late link parent", status: "executing", assignee: "owner-dev" });
       const child = workItems.createWorkItem({ title: "Late link child", status: "backlog", parentId: parent.id, assignee: "child-dev" });
