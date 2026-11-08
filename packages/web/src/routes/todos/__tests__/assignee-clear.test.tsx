@@ -245,7 +245,7 @@ describe("the operator as the person, with no accounts", () => {
     expect(screen.queryByTestId("rail-assignee-clear")).toBeNull()
   })
 
-  it("puts the person line in the feed beside the assignment", async () => {
+  it("leaves one line for the operator assigned through one write, and a person set on its own keeps its line", async () => {
     const item = full("TSK-12", { assignee: "@operator" })
     const at = "2026-07-23T08:00:00.000Z"
     const events = [
@@ -255,6 +255,16 @@ describe("the operator as the person, with no accounts", () => {
     getWorkItem.mockResolvedValue({ ...detailOf(item), events })
     renderTask()
     await screen.findByText(/assigned it to the operator/)
+    expect(screen.queryByText(/named the operator as the person/)).toBeNull()
+  })
+
+  it("shows the person line when it was set by a write that did not assign anything", async () => {
+    const item = full("TSK-12", { assignee: "mason", humanAssignee: "@operator" })
+    const events = [
+      { id: "e1", workItemId: "TSK-12", kind: "person_changed", fromStatus: null, toStatus: null, actor: "operator", detail: { from: null, to: "@operator" }, createdAt: "2026-07-23T08:00:00.000Z" },
+    ]
+    getWorkItem.mockResolvedValue({ ...detailOf(item), events })
+    renderTask()
     expect(await screen.findByText(/named the operator as the person/)).toBeTruthy()
   })
 

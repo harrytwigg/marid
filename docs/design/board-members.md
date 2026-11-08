@@ -452,7 +452,7 @@ quiet-watch treatment, then sets an agent, clears it, and asserts the "needs you
   stores `@operator`, as it always did. The Todo page's Person picker does the same: a choice that leaves exactly what
   assign-to-the-operator leaves (yourself, nobody holding either slot) is written through the assign route, and clearing the
   operator who holds the Todo by storage through the unassign write, so those carry the same audit events and effects they
-  always had; every other choice (an agent held, a user in either direction) goes through the person write. With no
+  always had; every other choice (an agent held, a user in either direction) goes through the person write. The activity feed shows one line for one action: a `person_changed` that only restates the operator moving with the assignee, written by the same actor in the same write as an assignment ("assigned it to the operator", "edited the details"), is folded into that line; a person set on its own, and any user, keeps its own line. With no
   accounts the person picker offers "You (operator)" and "No person" alone; choosing yourself is an assignment to the
   operator in every respect (needs-you lane, dispatch, quiet-watch, review addressee). A member gets the person picker where they
   are a collaborator or owner, without the operator option, and read-only on a Todo whose person is the operator or that
