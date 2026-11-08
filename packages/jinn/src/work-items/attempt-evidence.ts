@@ -1,10 +1,11 @@
-import { latestEvidenceFloorAt } from './event-log.js';
+import { latestAssigneeExecutingDeclaredAt, latestEvidenceFloorAt } from './event-log.js';
 import { closeWorkItemRun, findOpenWorkItemRunBySession, runOutcomeForReceipt } from './runs.js';
-import { listSessionsByWorkItem } from '../sessions/registry.js';
+import { getSession, listSessionsByWorkItem } from '../sessions/registry.js';
 import { settledAttemptOutcome } from '../sessions/restart-resume-window.js';
 import { isExecutionAttempt } from './link-role.js';
 import { logger } from '../shared/logger.js';
 import type { Session, SessionAttemptOutcome } from '../shared/types.js';
+import type { WorkItem } from './store.js';
 
 /**
  * What a Todo's execution attempts say, and as of when.
@@ -86,6 +87,27 @@ function attemptsAfterDecision(floor: string | undefined, sessions: readonly Ses
 }
 
 /**
+ * Drop the attempts that predate the assignee's own declared move to
+ * `executing`. The assignee may take a stopped Todo from a session that is not
+ * linked as an execution attempt (a mention links `consult`), so the attempts
+ * still counted are older runs that ended badly, and deriving from them undoes
+ * the move seconds later. Like the operator's floor it is causal: an attempt
+ * that runs after the declaration passes it and speaks again, so a newer failed
+ * run still blocks the Todo. It applies only while the Todo sits `executing`
+ * from that declaration, and only while the declarer is still its assignee; a
+ * review bounce keeps its own guard.
+ */
+function attemptsAfterAssigneeResume(
+  workItemId: string,
+  current: Pick<WorkItem, 'status' | 'assignee'> | undefined,
+  sessions: readonly Session[],
+): readonly Session[] {
+  if (current?.status !== 'executing' || sessions.length === 0) return sessions;
+  const declaredAt = latestAssigneeExecutingDeclaredAt(workItemId, current.assignee, (sessionId) => getSession(sessionId)?.employee ?? undefined);
+  return attemptsAfterDecision(declaredAt, sessions);
+}
+
+/**
  * One attempt's evidence. A turn the restart interrupted and the gateway is
  * about to resume (queue replay or restart nudge) is still in flight, not a
  * settled interruption: reading it as settled would block the Todo and wake its
@@ -104,15 +126,16 @@ function attemptEvidence(session: Session): WorkItemAttemptEvidence {
  * bookkeeping about a finished attempt stays true regardless of whether that
  * attempt still counts as evidence.
  */
-export function collectAttemptEvidence(workItemId: string): WorkItemAttemptReading {
+export function collectAttemptEvidence(workItemId: string, current?: Pick<WorkItem, 'status' | 'assignee'>): WorkItemAttemptReading {
   // A legacy Workflow phase session is linked to its Todo only so its spend
   // rolled up there; it never produced the Todo's work, so its receipt is not
   // evidence about the Todo's status (isExecutionAttempt).
   const sessions = listSessionsByWorkItem(workItemId).filter(isExecutionAttempt);
   closeRunsForSettledAttempts(sessions);
   const decisionFloorAt = latestEvidenceFloorAt(workItemId);
+  const afterDecision = attemptsAfterDecision(decisionFloorAt, sessions);
   return {
     decisionFloorAt,
-    attempts: attemptsAfterDecision(decisionFloorAt, sessions).map(attemptEvidence),
+    attempts: attemptsAfterAssigneeResume(workItemId, current, afterDecision).map(attemptEvidence),
   };
 }
