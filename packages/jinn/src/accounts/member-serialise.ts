@@ -337,7 +337,7 @@ const MEMBER_DETAIL_KEYS: Readonly<Record<string, readonly string[]>> = {
   status_change: ["bounce", "rounds", "note", "reason"],
   escalated: ["reason", "note"],
   note: ["assignee", "note", "updatedFields", "department"],
-  person_changed: ["from", "to", "assigneeCleared", "reason"],
+  person_changed: ["from", "to", "assigneeCleared", "reason", "withAgent"],
 };
 
 /** An assignee named on a member's timeline: the operator's reserved value, or an employee through the actor rule. */

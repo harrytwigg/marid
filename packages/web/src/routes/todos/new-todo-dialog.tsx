@@ -155,6 +155,12 @@ export function NewTodoDialog({
     setError(null)
   }, [seededDepartment])
 
+  /** A board member is a person only on a board they can reach, so moving the draft to another board lets them go. */
+  const commitDepartment = useCallback((next: string | null) => {
+    setDepartment(next)
+    if (next !== department) setPerson((current) => (current === OPERATOR_ASSIGNEE ? current : null))
+  }, [department])
+
   const create = useCallback(async (keepOpen: boolean) => {
     const nextTitle = title.trim()
     if (!nextTitle || busy) return
@@ -175,7 +181,15 @@ export function NewTodoDialog({
         ...(dueAt ? { dueAt } : {}),
         ...(labelIds.length ? { labels: labelIds } : {}),
       })
-      await assignOnCreate(created.workItem, { assignee, person })
+      try {
+        await assignOnCreate(created.workItem, { assignee, person })
+      } catch (caught) {
+        // The Todo exists: clear the form so another click cannot create it again, and say what is still unset.
+        reset()
+        setBusy(false)
+        setError(`Created ${created.workItem.id}, but couldn't set who it's for. Set it on the Todo.`)
+        return
+      }
       if (keepOpen) {
         reset()
         setBusy(false)
@@ -207,7 +221,7 @@ export function NewTodoDialog({
       case "person":
         return <PersonPickerContent {...common} commit={setPerson} board={department} />
       case "department":
-        return <DepartmentPickerContent {...common} departments={offeredDepartments(defaults?.departments ?? [], department)} commit={setDepartment} />
+        return <DepartmentPickerContent {...common} departments={offeredDepartments(defaults?.departments ?? [], department)} commit={commitDepartment} />
       case "priority":
         return <PriorityPickerContent {...common} commit={setPriority} />
       case "due":

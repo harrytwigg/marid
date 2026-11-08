@@ -51,7 +51,9 @@ export function PersonPickerContent({ detail, commit, sheet, onDone, board }: Om
             testId={`person-option-${person.id}`}
           />
         ))}
-        {asked && ready && people.length === 0 && <PickerNote>No one else has access to this board.</PickerNote>}
+        {asked && ready && people.length === 0 && (
+          <PickerNote>{board ? "No one else has access to this board." : "Choose a board to name someone else."}</PickerNote>
+        )}
       </div>
     </>
   )

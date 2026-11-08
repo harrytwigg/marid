@@ -99,7 +99,7 @@ describe("the agent slot clearing the person", () => {
   it("clearing an @operator assignee with no row clears the operator as the person, and records personCleared", async () => {
     const id = await inState(OP, null);
     expect((await patch(id, { assignee: null })).body.workItem).toMatchObject({ assignee: null, humanAssignee: null });
-    expect(lastPersonEvent(id)).toEqual({ from: OP, to: null, personCleared: true });
+    expect(lastPersonEvent(id)).toEqual({ from: OP, to: null, personCleared: true, withAgent: true });
   });
 });
 
@@ -124,7 +124,7 @@ describe("every other agent-slot write clears no person, by any route", () => {
       const fills = before.person === null && next === OP;
       const expected = fills ? [OP, before.events + 1] : [before.person, before.events];
       expect([assignee, person, next, after.humanAssignee, personEvents(id).length]).toEqual([assignee, person, next, ...expected]);
-      if (fills) expect(lastPersonEvent(id)).toEqual({ from: null, to: OP });
+      if (fills) expect(lastPersonEvent(id)).toEqual({ from: null, to: OP, withAgent: true });
     }
   });
 });

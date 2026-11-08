@@ -250,7 +250,7 @@ describe("the operator as the person, with no accounts", () => {
     const at = "2026-07-23T08:00:00.000Z"
     const events = [
       { id: "e1", workItemId: "TSK-12", kind: "note", fromStatus: null, toStatus: null, actor: "operator", detail: { assignee: "@operator" }, createdAt: at },
-      { id: "e2", workItemId: "TSK-12", kind: "person_changed", fromStatus: null, toStatus: null, actor: "operator", detail: { from: null, to: "@operator" }, createdAt: at },
+      { id: "e2", workItemId: "TSK-12", kind: "person_changed", fromStatus: null, toStatus: null, actor: "operator", detail: { from: null, to: "@operator", withAgent: true }, createdAt: at },
     ]
     getWorkItem.mockResolvedValue({ ...detailOf(item), events })
     renderTask()

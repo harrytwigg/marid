@@ -37,24 +37,10 @@ function runEntries(run: WorkItemRunWire): FeedEntry[] {
   return [start, { kind: "run-end", at: run.endedAt, run, outcome: run.outcome }]
 }
 
-/** How close two audit rows must be to be one write: they are appended in the same transaction. */
-const SAME_WRITE_MS = 2000
-
-/** The write that assigns or unassigns the operator: the assign route's note naming `@operator`, or an edit that touched `assignee`. */
-function isAssignmentWrite(event: WorkItemEventWire): boolean {
-  const detail = event.detail ?? {}
-  if (event.kind === "note") return detail.assignee === "@operator"
-  return event.kind === "metadata_edited" && Array.isArray(detail.updatedFields) && detail.updatedFields.includes("assignee")
-}
-
-/** A `person_changed` that only restates the operator moving with the assignee: the same write already says it ("assigned it to the
- *  operator", "edited the details"), so one action leaves one line. A person set on its own, or any user, keeps its line. */
-function impliedByAssignment(event: WorkItemEventWire, events: WorkItemEventWire[]): boolean {
-  if (event.kind !== "person_changed") return false
-  const { from, to } = event.detail ?? {}
-  const operatorOnly = (to === "@operator" || to == null) && (from == null || from === "@operator")
-  const at = Date.parse(event.createdAt)
-  return operatorOnly && events.some((other) => isAssignmentWrite(other) && other.actor === event.actor && Math.abs(Date.parse(other.createdAt) - at) <= SAME_WRITE_MS)
+/** A `person_changed` the gateway marked `withAgent`: the write named only the agent slot (assigning or unassigning the operator),
+ *  and that write's own line already says it, so one action leaves one line. A person set on its own keeps its line. */
+function impliedByAssignment(event: WorkItemEventWire): boolean {
+  return event.kind === "person_changed" && event.detail?.withAgent === true
 }
 
 export function buildFeed(
@@ -64,7 +50,7 @@ export function buildFeed(
 ): FeedBlock[] {
   const entries: FeedEntry[] = [
     ...events
-      .filter((event) => !FEED_HIDDEN_KINDS.has(event.kind) && !impliedByAssignment(event, events))
+      .filter((event) => !FEED_HIDDEN_KINDS.has(event.kind) && !impliedByAssignment(event))
       .map((event): FeedEntry => ({ kind: "event", at: event.createdAt, event })),
     ...buildCommentThread(comments).map((node): FeedEntry => ({ kind: "comment", at: threadAt(node), node })),
     ...runs.flatMap(runEntries),

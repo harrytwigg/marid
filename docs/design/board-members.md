@@ -423,7 +423,9 @@ quiet-watch treatment, then sets an agent, clears it, and asserts the "needs you
 - **No slot is cleared silently.** Any write that clears a slot it did not name says so in its `person_changed` event:
   `assigneeCleared: true` when the person slot took the operator out of `assignee` (clearing or renaming the person of a
   Todo that waits on the operator); `personCleared: true` when the agent slot cleared the person, which happens only when
-  an `@operator` assignee with no row (the operator as the person, by storage) is cleared; `reason: "person_removed"` on
+  an `@operator` assignee with no row (the operator as the person, by storage) is cleared; `withAgent: true` whenever a
+  write that named only the agent slot moved the person (that clear, or assigning the operator a Todo with no person), so a
+  feed can show the one action once; `reason: "person_removed"` on
   each Todo whose person was a user who was removed (`to` is the person as read afterwards; the Todo's version advances and
   its card refreshes live). Assigning to the operator a Todo with no person fills the empty slot (the operator reads as the
   person, by storage) and records `{ from: null, to: "@operator" }`; it clears nothing. Every other agent-slot write leaves
@@ -452,7 +454,7 @@ quiet-watch treatment, then sets an agent, clears it, and asserts the "needs you
   stores `@operator`, as it always did. The Todo page's Person picker does the same: a choice that leaves exactly what
   assign-to-the-operator leaves (yourself, nobody holding either slot) is written through the assign route, and clearing the
   operator who holds the Todo by storage through the unassign write, so those carry the same audit events and effects they
-  always had; every other choice (an agent held, a user in either direction) goes through the person write. The activity feed shows one line for one action: a `person_changed` that only restates the operator moving with the assignee, written by the same actor in the same write as an assignment ("assigned it to the operator", "edited the details"), is folded into that line; a person set on its own, and any user, keeps its own line. With no
+  always had; every other choice (an agent held, a user in either direction) goes through the person write. The activity feed shows one line for one action: when a write names only the agent slot and that moves the person (assigning or unassigning the operator, who is the person by storage), its `person_changed` carries `withAgent: true` and the feed leaves it out, since the assignment's own line says it; a person set through the person slot, and any user, keeps its own line. With no
   accounts the person picker offers "You (operator)" and "No person" alone; choosing yourself is an assignment to the
   operator in every respect (needs-you lane, dispatch, quiet-watch, review addressee). A member gets the person picker where they
   are a collaborator or owner, without the operator option, and read-only on a Todo whose person is the operator or that

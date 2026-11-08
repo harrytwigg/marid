@@ -45,6 +45,8 @@ export interface OwnershipPlan {
   assigneeMovedByPerson: boolean;
   /** The agent slot moved the person as read: clearing an `@operator` assignee with no row, which is the operator as the person. */
   personMovedByAgent: boolean;
+  /** Only the agent slot was named, and it moved the person: the assignment says it, so the event is marked `withAgent`. */
+  personMovedOnlyByAgent: boolean;
 }
 
 const effective = (assignee: string | null, person: string | null): string | null =>
@@ -75,7 +77,15 @@ export function planOwnership(current: Pick<WorkItem, "assignee">, storedPerson:
   const afterAgent = pair.agent;
   const personMovedByAgent = effective(pair.agent, pair.person) !== from;
   if (input.humanAssignee !== undefined) pair = movePerson(pair.agent, pair.person, input.humanAssignee);
-  return { assignee: pair.agent, person: pair.person, from, to: effective(pair.agent, pair.person), assigneeMovedByPerson: pair.agent !== afterAgent, personMovedByAgent };
+  return {
+    assignee: pair.agent,
+    person: pair.person,
+    from,
+    to: effective(pair.agent, pair.person),
+    assigneeMovedByPerson: pair.agent !== afterAgent,
+    personMovedByAgent,
+    personMovedOnlyByAgent: personMovedByAgent && input.humanAssignee === undefined,
+  };
 }
 
 /**
@@ -83,14 +93,16 @@ export function planOwnership(current: Pick<WorkItem, "assignee">, storedPerson:
  * did not name, so no write clears a slot silently. `assigneeCleared`: the person slot took the operator out of
  * `assignee`. `personCleared`: the agent slot cleared the person, which happens only when an `@operator` assignee with no
  * row (the operator as the person, by storage) is cleared; every other agent edit leaves the person as read alone (the
- * ownership tests prove both over every state).
+ * ownership tests prove both over every state). `withAgent`: the write named only the agent slot and that moved the person
+ * (the operator, by storage), so the assignment's own event already says it and a feed shows one line for the one action.
  */
-export function personChangedDetail(plan: OwnershipPlan): { from: string | null; to: string | null; assigneeCleared?: true; personCleared?: true } {
+export function personChangedDetail(plan: OwnershipPlan): { from: string | null; to: string | null; assigneeCleared?: true; personCleared?: true; withAgent?: true } {
   return {
     from: plan.from,
     to: plan.to,
     ...(plan.assigneeMovedByPerson && plan.assignee === null ? { assigneeCleared: true as const } : {}),
     ...(plan.personMovedByAgent && plan.to === null ? { personCleared: true as const } : {}),
+    ...(plan.personMovedOnlyByAgent ? { withAgent: true as const } : {}),
   };
 }
 

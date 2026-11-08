@@ -69,7 +69,16 @@ describe("planOwnership", () => {
         // Assigning to the operator with no person makes the operator read as the person: it fills the slot, clearing nothing.
         const operatorFillsEmpty = plan.from === null && plan.to === OP && assignee === OP;
         expect([state, assignee, plan.to === plan.from || operatorFillsEmpty]).toEqual([state, assignee, !operatorAsPersonCleared]);
-        if (operatorAsPersonCleared) expect(personChangedDetail(plan)).toEqual({ from: OP, to: null, personCleared: true });
+        if (operatorAsPersonCleared) expect(personChangedDetail(plan)).toEqual({ from: OP, to: null, personCleared: true, withAgent: true });
+        // Whatever the agent slot moves of the person, it says so: the assignment's own event already carries the change.
+        expect(personChangedDetail(plan).withAgent === true).toBe(plan.from !== plan.to);
+      }
+    });
+
+    it("never marks a change the person slot made as the agent's, even when the same edit names both slots", () => {
+      for (const state of states) for (const humanAssignee of [null, OP, "user:u1"]) for (const assignee of [undefined, null, OP, "mason"]) {
+        const plan = planOwnership({ assignee: state.assignee }, state.person, { assignee, humanAssignee });
+        expect([state, assignee, humanAssignee, personChangedDetail(plan).withAgent]).toEqual([state, assignee, humanAssignee, undefined]);
       }
     });
 

@@ -117,30 +117,23 @@ describe("the merged feed model", () => {
 
 describe("the person lines", () => {
   const ids = (events: ReturnType<typeof event>[]) => buildFeed(events, [], []).flatMap((block) => (block.kind === "fold" ? block.events : block.kind === "event" ? [block.event] : [])).map((e) => e.id)
-  const person = (id: string, at: string, detail: Record<string, unknown>, extra = {}) => event(id, "person_changed" as never, at, { detail, ...extra })
+  const person = (id: string, at: string, detail: Record<string, unknown>) => event(id, "person_changed" as never, at, { detail })
 
-  it("fold into the write that made them: one action leaves one line", () => {
-    // Assigning to the operator through the assign route, and unassigning through the pen: the assignment line already says it.
+  it("leave the feed when the gateway marks them as the assignment's own (withAgent): one action, one line", () => {
     expect(ids([
       event("a1", "note", "2026-07-20T08:00:00.000Z", { detail: { assignee: "@operator" } }),
-      person("a2", "2026-07-20T08:00:00.100Z", { from: null, to: "@operator" }),
+      person("a2", "2026-07-20T08:00:00.100Z", { from: null, to: "@operator", withAgent: true }),
       event("u1", "metadata_edited", "2026-07-20T09:00:00.000Z", { detail: { updatedFields: ["assignee"] } }),
-      person("u2", "2026-07-20T09:00:00.100Z", { from: "@operator", to: null, personCleared: true }),
+      person("u2", "2026-07-20T09:00:00.100Z", { from: "@operator", to: null, personCleared: true, withAgent: true }),
     ])).toEqual(["a1", "u1"])
   })
 
-  it("keep their own line when the person was set on its own, is a user, or came from another write", () => {
+  it("keep their own line whenever the person slot made the change, however close to an assignment", () => {
     expect(ids([
       person("p1", "2026-07-20T08:00:00.000Z", { from: null, to: "@operator" }),
-      event("m1", "metadata_edited", "2026-07-20T08:00:00.100Z", { detail: { updatedFields: ["humanAssignee"] } }),
       event("n1", "note", "2026-07-20T09:00:00.000Z", { detail: { assignee: "@operator" } }),
-      person("p2", "2026-07-20T09:00:00.100Z", { from: null, to: "user:ada1" }),
-      event("n2", "note", "2026-07-20T10:00:00.000Z", { detail: { assignee: "@operator" } }),
-      person("p3", "2026-07-20T10:00:00.100Z", { from: null, to: "@operator" }, { actor: "user:ada1" }),
-      event("n3", "note", "2026-07-20T11:00:00.000Z", { detail: { assignee: "@operator" } }),
-      person("p4", "2026-07-20T11:00:05.000Z", { from: null, to: "@operator" }),
-      event("n4", "note", "2026-07-20T12:00:00.000Z", { detail: { assignee: "mason" } }),
-      person("p5", "2026-07-20T12:00:00.100Z", { from: null, to: "@operator" }),
-    ])).toEqual(["p1", "m1", "n1", "p2", "n2", "p3", "n3", "p4", "n4", "p5"])
+      person("p2", "2026-07-20T09:00:00.000Z", { from: "@operator", to: "user:ada1", assigneeCleared: true }),
+      person("p3", "2026-07-20T10:00:00.000Z", { from: "user:ada1", to: null, reason: "person_removed" }),
+    ])).toEqual(["p1", "n1", "p2", "p3"])
   })
 })

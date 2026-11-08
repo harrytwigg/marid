@@ -130,4 +130,79 @@ describe("the New Todo dialog's person picker, on an instance with accounts", ()
     expect(assignWorkItem).not.toHaveBeenCalled()
     expect(updateWorkItem).toHaveBeenCalledWith("TSK-9", expect.objectContaining({ patch: { humanAssignee: "user:ada1" }, expectedVersion: 1 }))
   })
+
+  it("lets a board member go as the person when the draft moves off their board", async () => {
+    auth.value = { principal: { kind: "operator" }, authState: { accountsEnabled: true, hasAccounts: true } }
+    listPeople.mockResolvedValue([{ id: "ada1", displayName: "Ada Lovelace", initials: "AL", status: "active", instanceRole: "member", boards: [{ department: "platform", role: "collaborator" }] }])
+    const user = userEvent.setup()
+    const { onCreated } = renderDialog()
+    await user.type(screen.getByTestId("todo-new-title"), "Moved")
+    await user.click(screen.getByTestId("todo-new-person-chip"))
+    await user.click(await screen.findByTestId("person-option-ada1"))
+    await user.click(screen.getByTestId("todo-new-department-chip"))
+    await user.click(await screen.findByTestId("department-option-none"))
+    expect(screen.getByTestId("todo-new-person-chip").textContent).not.toContain("Ada")
+    await user.click(screen.getByTestId("todo-new-create"))
+    await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1))
+    expect(updateWorkItem).not.toHaveBeenCalled()
+    expect(assignWorkItem).not.toHaveBeenCalled()
+  })
+
+  it("keeps you as the person when the draft moves to another board", async () => {
+    auth.value = { principal: { kind: "operator" }, authState: { accountsEnabled: true, hasAccounts: true } }
+    listPeople.mockResolvedValue([])
+    const user = userEvent.setup()
+    renderDialog()
+    await user.click(screen.getByTestId("todo-new-person-chip"))
+    await user.click(await screen.findByTestId("person-option-operator"))
+    await user.click(screen.getByTestId("todo-new-department-chip"))
+    await user.click(await screen.findByTestId("department-option-none"))
+    expect(screen.getByTestId("todo-new-person-chip").textContent).toContain("You (operator)")
+  })
+
+  it("says to choose a board, not that nobody has access, when the draft has no board", async () => {
+    auth.value = { principal: { kind: "operator" }, authState: { accountsEnabled: true, hasAccounts: true } }
+    listPeople.mockResolvedValue([{ id: "own1", displayName: "Olive Owner", initials: "OO", status: "active", instanceRole: "owner", boards: [] }])
+    const user = userEvent.setup()
+    renderDialog()
+    await user.click(screen.getByTestId("todo-new-department-chip"))
+    await user.click(await screen.findByTestId("department-option-none"))
+    await user.click(screen.getByTestId("todo-new-person-chip"))
+    const picker = await screen.findByTestId("todo-new-person-picker")
+    expect(await within(picker).findByText("Choose a board to name someone else.")).toBeTruthy()
+    expect(within(picker).queryByText(/No one else has access/)).toBeNull()
+    expect(within(picker).queryByTestId("person-option-own1")).toBeNull()
+  })
+})
+
+describe("the New Todo dialog after the Todo exists", () => {
+  it("keeps the created Todo and never creates it again when naming who it is for fails", async () => {
+    assignWorkItem.mockRejectedValueOnce(new Error("refused"))
+    const user = userEvent.setup()
+    const { onCreated } = renderDialog()
+    await user.type(screen.getByTestId("todo-new-title"), "Half done")
+    await user.click(screen.getByTestId("todo-new-person-chip"))
+    await user.click(await screen.findByTestId("person-option-operator"))
+    await user.click(screen.getByTestId("todo-new-create"))
+    expect(await screen.findByText("Created TSK-9, but couldn't set who it's for. Set it on the Todo.")).toBeTruthy()
+    expect(screen.getByTestId("todo-new-create")).toHaveProperty("disabled", true)
+    await user.click(screen.getByTestId("todo-new-create"))
+    expect(createWorkItem).toHaveBeenCalledTimes(1)
+    expect(onCreated).not.toHaveBeenCalled()
+    expect(screen.getByTestId("todo-new-person-chip").textContent).not.toContain("You (operator)")
+  })
+
+  it("asks before discarding a draft whose only choice is the person", async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <NewTodoDialog onClose={onClose} onCreated={vi.fn()} defaults={{ employees, departments, department: "platform" }} />
+      </QueryClientProvider>,
+    )
+    await user.click(screen.getByTestId("todo-new-person-chip"))
+    await user.click(await screen.findByTestId("person-option-operator"))
+    await user.click(screen.getByRole("button", { name: "Cancel" }))
+    expect(screen.getByText("Discard this Todo draft?")).toBeTruthy()
+  })
 })

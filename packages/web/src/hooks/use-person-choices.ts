@@ -23,6 +23,8 @@ export function usePersonChoices(board: string | null | undefined): { people: Pe
     staleTime: 30_000,
     queryFn: async (): Promise<PersonChoice[]> => {
       if (member) return (await accountsApi.getMemberPeople(board ?? undefined)).people
+      // A Todo with no board has no members to name: the gateway refuses anyone but the operator there.
+      if (!board) return []
       const people = await accountsApi.listPeople()
       return people
         .filter((person) => person.status === "active" && (person.instanceRole === "owner" || person.boards.some((grant) => grant.department === board)))
