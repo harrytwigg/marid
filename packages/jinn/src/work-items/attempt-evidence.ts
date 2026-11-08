@@ -5,7 +5,7 @@ import { settledAttemptOutcome } from '../sessions/restart-resume-window.js';
 import { isExecutionAttempt } from './link-role.js';
 import { logger } from '../shared/logger.js';
 import type { Session, SessionAttemptOutcome } from '../shared/types.js';
-import type { WorkItemStatus } from './store.js';
+import type { WorkItem } from './store.js';
 
 /**
  * What a Todo's execution attempts say, and as of when.
@@ -94,15 +94,16 @@ function attemptsAfterDecision(floor: string | undefined, sessions: readonly Ses
  * the move seconds later. Like the operator's floor it is causal: an attempt
  * that runs after the declaration passes it and speaks again, so a newer failed
  * run still blocks the Todo. It applies only while the Todo sits `executing`
- * from that declaration; a review bounce keeps its own guard.
+ * from that declaration, and only while the declarer is still its assignee; a
+ * review bounce keeps its own guard.
  */
 function attemptsAfterAssigneeResume(
   workItemId: string,
-  currentStatus: WorkItemStatus | undefined,
+  current: Pick<WorkItem, 'status' | 'assignee'> | undefined,
   sessions: readonly Session[],
 ): readonly Session[] {
-  if (currentStatus !== 'executing' || sessions.length === 0) return sessions;
-  const declaredAt = latestAssigneeExecutingDeclaredAt(workItemId, (sessionId) => getSession(sessionId)?.employee ?? undefined);
+  if (current?.status !== 'executing' || sessions.length === 0) return sessions;
+  const declaredAt = latestAssigneeExecutingDeclaredAt(workItemId, current.assignee, (sessionId) => getSession(sessionId)?.employee ?? undefined);
   return attemptsAfterDecision(declaredAt, sessions);
 }
 
@@ -125,7 +126,7 @@ function attemptEvidence(session: Session): WorkItemAttemptEvidence {
  * bookkeeping about a finished attempt stays true regardless of whether that
  * attempt still counts as evidence.
  */
-export function collectAttemptEvidence(workItemId: string, currentStatus?: WorkItemStatus): WorkItemAttemptReading {
+export function collectAttemptEvidence(workItemId: string, current?: Pick<WorkItem, 'status' | 'assignee'>): WorkItemAttemptReading {
   // A legacy Workflow phase session is linked to its Todo only so its spend
   // rolled up there; it never produced the Todo's work, so its receipt is not
   // evidence about the Todo's status (isExecutionAttempt).
@@ -135,6 +136,6 @@ export function collectAttemptEvidence(workItemId: string, currentStatus?: WorkI
   const afterDecision = attemptsAfterDecision(decisionFloorAt, sessions);
   return {
     decisionFloorAt,
-    attempts: attemptsAfterAssigneeResume(workItemId, currentStatus, afterDecision).map(attemptEvidence),
+    attempts: attemptsAfterAssigneeResume(workItemId, current, afterDecision).map(attemptEvidence),
   };
 }

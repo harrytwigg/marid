@@ -129,9 +129,10 @@ export function isReviewBounceDeclared(workItemId: string): boolean {
  * it into `executing` since, or undefined if that is not how it got there.
  *
  * `employeeOf` names the employee behind a session actor (`session:<id>`); the
- * mover counts as the assignee when it matches the assignee recorded on the
- * event itself, so a later reassignment cannot retroactively change whose move
- * it was. Moves by the reconciler, the operator (his own floor covers those) and
+ * mover counts as the assignee when it matches both the assignee recorded on the
+ * event itself and the Todo's `currentAssignee`, so a Todo handed to somebody
+ * else afterwards is no longer shielded by a move its new owner never made.
+ * Moves by the reconciler, the operator (his own floor covers those) and
  * out of review (the bounce guard covers those) never count, and neither does a
  * mover that is not a session of the assignee: a stranger's `executing` is a
  * claim the attempt receipts may still overrule.
@@ -141,6 +142,7 @@ export function isReviewBounceDeclared(workItemId: string): boolean {
  */
 export function latestAssigneeExecutingDeclaredAt(
   workItemId: string,
+  currentAssignee: string | null,
   employeeOf: (sessionId: string) => string | undefined,
 ): string | undefined {
   const move = latestStatusTransition(workItemId, 'executing');
@@ -148,8 +150,13 @@ export function latestAssigneeExecutingDeclaredAt(
   if (!move || !sessionId) return undefined;
   const detail = parseDetail(move.detail);
   const assignee = detail ? recordedAssignee(detail) : undefined;
-  const mover = typeof detail?.actorEmployee === 'string' ? detail.actorEmployee : employeeOf(sessionId);
-  return assignee && mover === assignee ? move.createdAt : undefined;
+  const mover = recordedMover(detail) ?? employeeOf(sessionId);
+  return assignee && mover === assignee && assignee === currentAssignee ? move.createdAt : undefined;
+}
+
+/** The employee the status route stamped on the event as its mover, if any. */
+function recordedMover(detail: Record<string, unknown> | undefined): string | undefined {
+  return typeof detail?.actorEmployee === 'string' ? detail.actorEmployee : undefined;
 }
 
 /** The assignee the event stamped on itself (`todoProvenance`), if any. */

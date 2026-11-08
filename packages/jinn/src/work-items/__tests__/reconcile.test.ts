@@ -11,10 +11,14 @@ process.env.JINN_HOME = tmp;
 type Store = typeof import("../store.js");
 type Reconcile = typeof import("../reconcile.js");
 type Transitions = typeof import("../transitions.js");
+type EventLog = typeof import("../event-log.js");
+type AttemptEvidence = typeof import("../attempt-evidence.js");
 
 let store: Store;
 let reconcile: Reconcile;
 let tr: Transitions;
+let eventLog: EventLog;
+let attemptEvidence: AttemptEvidence;
 let db: import("better-sqlite3").Database;
 
 type SessionStatus = "idle" | "running" | "error" | "waiting" | "interrupted";
@@ -59,6 +63,8 @@ beforeAll(async () => {
   store = await import("../store.js");
   reconcile = await import("../reconcile.js");
   tr = await import("../transitions.js");
+  eventLog = await import("../event-log.js");
+  attemptEvidence = await import("../attempt-evidence.js");
   db = (await import("../../shared/db.js")).initDb();
 });
 
@@ -343,22 +349,24 @@ describe("reconcileWorkItem — integration against real store + registry", () =
   });
 });
 
-describe("reconcileWorkItem — the assignee resuming a Todo from a consult session", () => {
+describe("reconcileWorkItem — the assignee's declared resume of a stopped Todo", () => {
   const FAILED_AT = "2026-11-08T13:00:00.000Z";
+  const later = (ms: number) => new Date(Date.now() + ms).toISOString();
 
   /** A Todo whose only execute attempt ended badly and was blocked by it, then
-   *  taken by its assignee from a mention (consult) session. */
-  function takenFromConsult(title: string, failedStatus: SessionStatus = "interrupted"): string {
+   *  moved to executing by a session of its assignee that is not linked as an
+   *  execution attempt (a stand-in for one the route could not link as executor). */
+  function resumedByAssignee(title: string, mover = "dev"): string {
     const wi = store.createWorkItem({ title, status: "executing", source: "session", assignee: "dev" });
-    roleSession(`s-${title}-dispatch`, wi.id, { role: "execute", employee: "todo-dispatcher" }, { status: failedStatus, at: FAILED_AT });
+    roleSession(`s-${title}-dispatch`, wi.id, { role: "execute", employee: "todo-dispatcher" }, { status: "interrupted", at: FAILED_AT });
     expect(reconcile.reconcileWorkItem(wi.id)).toMatchObject({ changed: true, item: { status: "blocked" } });
-    roleSession(`s-${title}-consult`, wi.id, { role: "consult", employee: "dev" }, { status: "running", at: new Date(Date.now() + 1_000).toISOString() });
-    tr.transition(wi.id, "executing", `session:s-${title}-consult`);
+    roleSession(`s-${title}-mover`, wi.id, { role: "consult", employee: mover }, { status: "running", at: later(1_000) });
+    tr.transition(wi.id, "executing", `session:s-${title}-mover`);
     return wi.id;
   }
 
-  it("keeps the assignee's declared move to executing against an older failed execute attempt", () => {
-    const id = takenFromConsult("consult-take");
+  it("keeps the declared move against an older failed execute attempt, across passes, with no escalation", () => {
+    const id = resumedByAssignee("resume-keep");
 
     expect(reconcile.reconcileWorkItem(id)).toMatchObject({ changed: false, item: { status: "executing" } });
     expect(reconcile.reconcileWorkItem(id)).toMatchObject({ changed: false, item: { status: "executing" } });
@@ -367,33 +375,52 @@ describe("reconcileWorkItem — the assignee resuming a Todo from a consult sess
   });
 
   it("still blocks the Todo when an execute attempt that ran after the declaration failed", () => {
-    const id = takenFromConsult("consult-then-fail");
-    const later = new Date(Date.now() + 60_000).toISOString();
-    roleSession("s-consult-then-fail-retry", id, { role: "execute", employee: "dev" }, { status: "error", at: later });
+    const id = resumedByAssignee("resume-then-fail");
+    roleSession("s-resume-then-fail-retry", id, { role: "execute", employee: "dev" }, { status: "error", at: later(60_000) });
 
     expect(reconcile.reconcileWorkItem(id)).toMatchObject({ changed: true, item: { status: "blocked" } });
   });
 
-  it("does not protect a declared move by someone who is not the assignee", () => {
-    const wi = store.createWorkItem({ title: "stranger-take", status: "executing", source: "session", assignee: "dev" });
-    roleSession("s-stranger-dispatch", wi.id, { role: "execute", employee: "todo-dispatcher" }, { status: "interrupted", at: FAILED_AT });
-    reconcile.reconcileWorkItem(wi.id);
-    roleSession("s-stranger-consult", wi.id, { role: "consult", employee: "someone-else" }, { status: "running", at: new Date(Date.now() + 1_000).toISOString() });
-    tr.transition(wi.id, "executing", "session:s-stranger-consult");
+  it("does not protect a declared move by somebody who is not the assignee", () => {
+    const id = resumedByAssignee("resume-stranger", "someone-else");
 
-    expect(reconcile.reconcileWorkItem(wi.id)).toMatchObject({ changed: true, item: { status: "blocked" } });
+    expect(reconcile.reconcileWorkItem(id)).toMatchObject({ changed: true, item: { status: "blocked" } });
+  });
+
+  it("stops protecting the move once the Todo is assigned to somebody else", () => {
+    const id = resumedByAssignee("resume-reassigned");
+    db.prepare("UPDATE work_items SET assignee = 'other-dev' WHERE id = ?").run(id);
+
+    expect(reconcile.reconcileWorkItem(id)).toMatchObject({ changed: true, item: { status: "blocked" } });
   });
 
   it("lets a derived resume fall back to ordinary derivation, since only the declaration is protected", () => {
-    const id = takenFromConsult("consult-then-resume");
-    roleSession("s-consult-then-resume-fail", id, { role: "execute", employee: "dev" }, { status: "error", at: new Date(Date.now() + 60_000).toISOString() });
+    const id = resumedByAssignee("resume-derived");
+    roleSession("s-resume-derived-fail", id, { role: "execute", employee: "dev" }, { status: "error", at: later(60_000) });
     expect(reconcile.reconcileWorkItem(id)).toMatchObject({ changed: true, item: { status: "blocked" } });
 
-    roleSession("s-consult-then-resume-ok", id, { role: "execute", employee: "dev" }, { status: "idle", at: new Date(Date.now() + 120_000).toISOString(), outcome: "succeeded" });
+    roleSession("s-resume-derived-ok", id, { role: "execute", employee: "dev" }, { status: "idle", at: later(120_000), outcome: "succeeded" });
     expect(reconcile.reconcileWorkItem(id)).toMatchObject({ changed: true, item: { status: "executing" } });
     // The resume was the reconciler's, so a later failure derives blocked again.
-    roleSession("s-consult-then-resume-fail2", id, { role: "execute", employee: "dev" }, { status: "error", at: new Date(Date.now() + 180_000).toISOString() });
+    roleSession("s-resume-derived-fail2", id, { role: "execute", employee: "dev" }, { status: "error", at: later(180_000) });
     expect(reconcile.reconcileWorkItem(id)).toMatchObject({ changed: true, item: { status: "blocked" } });
+  });
+
+  it("does not protect a move out of review (a bounce has its own guard)", () => {
+    const wi = store.createWorkItem({ title: "resume-from-review", status: "in_review", source: "session", assignee: "dev" });
+    roleSession("s-resume-from-review", wi.id, { role: "consult", employee: "dev" }, { status: "running", at: later(1_000) });
+    tr.transition(wi.id, "executing", "session:s-resume-from-review");
+
+    expect(eventLog.latestAssigneeExecutingDeclaredAt(wi.id, "dev", () => "dev")).toBeUndefined();
+  });
+
+  it("applies the floor only while the Todo is executing", () => {
+    const id = resumedByAssignee("resume-not-executing");
+    const sessionsView = (status?: "executing" | "blocked") => attemptEvidence.collectAttemptEvidence(id, status ? { status, assignee: "dev" } : undefined).attempts;
+
+    expect(sessionsView("executing")).toHaveLength(0);
+    expect(sessionsView("blocked")).toHaveLength(1);
+    expect(sessionsView()).toHaveLength(1);
   });
 });
 
