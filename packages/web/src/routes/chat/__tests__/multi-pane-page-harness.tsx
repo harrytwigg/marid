@@ -7,14 +7,18 @@ import type { SessionWaitsResponse } from '@/lib/session-waits'
 import ChatPageWrapper from '../page'
 import { CHAT_SESSION_DND_MIME } from '../chat-session-dnd'
 
-const { sessionIds, chatTabsMock } = vi.hoisted((): {
+const { sessionIds, chatTabsMock, listLoadGate } = vi.hoisted((): {
   sessionIds: string[]
   // The page's open-chats list. A suite that needs it empty, or needs to see the page clear it,
   // moves `tabs` or reads the spy; every other suite gets the four seeded chats, as before.
   chatTabsMock: { tabs: unknown[]; closeAllTabs: Mock }
+  // Holds the list's report of its first load, so a suite can act before the page hears it: a loaded host
+  // does that by chance. Open by default; `held` is what the page has not heard yet.
+  listLoadGate: { hold: boolean; held: Array<() => void> }
 } => ({
   sessionIds: ['a', 'b', 'c', 'd'],
   chatTabsMock: { tabs: [], closeAllTabs: vi.fn() },
+  listLoadGate: { hold: false, held: [] },
 }))
 const gateway = vi.hoisted(() => ({
   listeners: new Set<(frame: { event: string; payload: unknown }) => void>(),
@@ -90,7 +94,7 @@ vi.mock('@/components/page-layout', () => ({
  *  roster contact hang off the mobile instance only, so the desktop suites keep
  *  the surface they were written against. */
 vi.mock('@/components/chat/chat-sidebar', async () => {
-  const { useEffect, useRef } = await import('react')
+  const { startTransition, useEffect, useRef } = await import('react')
   return {
     ChatSidebar: ({ variant, onNewChat, onSelect, onSessionsLoaded, onOrderComputed, onContactEmployee }: {
       variant?: string
@@ -101,10 +105,16 @@ vi.mock('@/components/chat/chat-sidebar', async () => {
       onContactEmployee?: (name: string) => void
     }) => {
       const announced = useRef(false)
+      // As the real sidebar does: the report goes to the latest handler, from a transition.
+      const latest = useRef(onSessionsLoaded)
+      useEffect(() => { latest.current = onSessionsLoaded })
       useEffect(() => {
         if (variant !== 'mobile' || announced.current) return
         announced.current = true
-        onSessionsLoaded?.(sessionIds.map((id) => ({ id })))
+        const report = () => latest.current?.(sessionIds.map((id) => ({ id })))
+        // A held report is delivered at the moment the suite chooses; otherwise it takes the transition.
+        if (listLoadGate.hold) listLoadGate.held.push(report)
+        else startTransition(report)
       })
       useEffect(() => {
         onOrderComputed?.({ sessionIds, employeeNames: [], employeeSessionMap: {} })
@@ -229,4 +239,4 @@ export async function openChatBeside() {
   fireEvent.click((await screen.findAllByRole('menuitem', { name: 'Open beside' }))[0])
 }
 
-export { apiMocks, chatTabsMock, gateway, sessionIds }
+export { apiMocks, chatTabsMock, gateway, listLoadGate, sessionIds }
