@@ -13,8 +13,10 @@ import { call, home, startRouteHarness, stopRouteHarness, type Registry, type Wo
 /**
  * Who may re-parent a Todo as an employee. Moving a Todo needs standing over it
  * and over its new parent, except for the two attaches that undo or complete a
- * detach: putting a detached Todo back under the parent it left, and a parent's
- * owner taking in a root Todo nobody is assigned to.
+ * employee's detach: the employee who detached a Todo putting it back under the
+ * parent it left, and that parent's owner taking back an unassigned Todo that was
+ * detached from it. A detach by the operator, or a Todo that never sat under the
+ * parent, still needs both ends.
  */
 
 function writeEmployee(name: string) {
@@ -89,13 +91,28 @@ describe("re-attaching a detached Todo", () => {
     expect(workItems.getWorkItem(child.id)).toMatchObject({ parentId: parent.id });
   });
 
-  it("lets a parent's owner take in an unassigned detached child", async () => {
+  it("lets a parent's owner take back an unassigned child it detached", async () => {
     const { parent, child } = family(null);
-    expect((await call("PUT", `/api/work-items/${child.id}/parent`, { parentId: null })).status).toBe(200);
+    expect((await move(child.id, null, "parent-owner", "detach")).status).toBe(200);
     const taken = await move(child.id, parent.id, "parent-owner", "adopt");
     expect(taken.body.error).toBeUndefined();
     expect(taken.status).toBe(200);
     expect(workItems.getWorkItem(child.id)).toMatchObject({ parentId: parent.id, rootId: parent.id });
+  });
+
+  it("lets a parent's owner take back an unassigned child another employee detached", async () => {
+    const { parent, child } = family(null);
+    expect((await move(child.id, null, "boss", "boss-detach")).status).toBe(200);
+    expect((await move(child.id, parent.id, "parent-owner", "adopt")).status).toBe(200);
+  });
+
+  it("answers a repeated attach as a no-op instead of refusing it", async () => {
+    const { parent, child } = family();
+    expect((await move(child.id, null, "child-owner", "detach")).status).toBe(200);
+    expect((await move(child.id, parent.id, "child-owner", "attach")).status).toBe(200);
+    const again = await move(child.id, parent.id, "child-owner", "attach-again");
+    expect(again.status).toBe(200);
+    expect(again.body).toMatchObject({ parentId: parent.id, changed: false });
   });
 
   it("still lets the owner of both ends attach", async () => {
@@ -152,10 +169,32 @@ describe("re-parenting stays bounded", () => {
 
   it("does not let a parent's owner take another employee's child", async () => {
     const { parent, child } = family();
-    expect((await call("PUT", `/api/work-items/${child.id}/parent`, { parentId: null })).status).toBe(200);
+    expect((await move(child.id, null, "parent-owner", "detach")).status).toBe(200);
     const refused = await move(child.id, parent.id, "parent-owner", "take-assigned");
     expect(refused.status).toBe(403);
     expect(refused.body.error).toContain(`does not own Todo ${child.id}`);
+  });
+
+  it("does not let a parent's owner pull in an unassigned Todo that was never under it", async () => {
+    const parent = workItems.createWorkItem({ title: "parent", assignee: "parent-owner", status: "executing" });
+    const stray = workItems.createWorkItem({ title: "stray" });
+    const refused = await move(stray.id, parent.id, "parent-owner", "pull-stray");
+    expect(refused.status).toBe(403);
+    expect(refused.body.error).toContain(`does not own Todo ${stray.id}`);
+    expect(workItems.getWorkItem(stray.id)).toMatchObject({ parentId: null });
+  });
+
+  it("does not let a parent's owner pull in an unassigned Todo from another department", async () => {
+    const parent = workItems.createWorkItem({ title: "parent", assignee: "parent-owner", status: "executing" });
+    const foreign = workItems.createWorkItem({ title: "foreign", department: "otherdept" });
+    expect((await move(foreign.id, parent.id, "parent-owner", "pull-foreign")).status).toBe(403);
+  });
+
+  it("does not let a parent's owner take an unassigned Todo that was detached from a different parent", async () => {
+    const { child } = family(null);
+    const mine = workItems.createWorkItem({ title: "mine", assignee: "other-parent-owner", status: "executing" });
+    expect((await move(child.id, null, "parent-owner", "detach")).status).toBe(200);
+    expect((await move(child.id, mine.id, "other-parent-owner", "pull")).status).toBe(403);
   });
 
   it("does not let a parent's owner take an unassigned Todo that still sits under another parent", async () => {
@@ -165,13 +204,39 @@ describe("re-parenting stays bounded", () => {
     expect(workItems.getWorkItem(child.id)).not.toMatchObject({ parentId: mine.id });
   });
 
-  it("does not let a parent's owner take an unassigned Todo with open work below it that is not theirs", async () => {
+  it("names the missing standing over open sub-tasks when that alone refuses a take-back", async () => {
     const { parent, child } = family(null);
     workItems.createWorkItem({ title: "grandchild", parentId: child.id, assignee: "child-owner", status: "executing" });
-    expect((await call("PUT", `/api/work-items/${child.id}/parent`, { parentId: null })).status).toBe(200);
+    expect((await move(child.id, null, "parent-owner", "detach")).status).toBe(200);
     const refused = await move(child.id, parent.id, "parent-owner", "adopt-subtree");
     expect(refused.status).toBe(403);
+    expect(refused.body.error).toContain("open sub-tasks");
     expect(workItems.getWorkItem(child.id)).toMatchObject({ parentId: null });
+  });
+
+  it("does not let the child's owner undo a detach the parent's owner made", async () => {
+    const { parent, child } = family();
+    expect((await move(child.id, null, "parent-owner", "parent-detach")).status).toBe(200);
+    const refused = await move(child.id, parent.id, "child-owner", "undo");
+    expect(refused.status).toBe(403);
+    expect(refused.body.error).toContain(`does not own Todo ${parent.id}`);
+  });
+
+  it("does not let an employee overrule a detach the operator made", async () => {
+    const { parent, child } = family();
+    expect((await call("PUT", `/api/work-items/${child.id}/parent`, { parentId: null })).status).toBe(200);
+    expect((await move(child.id, parent.id, "child-owner", "overrule")).status).toBe(403);
+    const unassigned = family(null);
+    expect((await call("PUT", `/api/work-items/${unassigned.child.id}/parent`, { parentId: null })).status).toBe(200);
+    expect((await move(unassigned.child.id, unassigned.parent.id, "parent-owner", "overrule-adopt")).status).toBe(403);
+  });
+
+  it("does not let a Todo's new owner restore a detach its previous owner made, nor the previous owner", async () => {
+    const { parent, child } = family();
+    expect((await move(child.id, null, "child-owner", "detach")).status).toBe(200);
+    expect((await call("POST", `/api/work-items/${child.id}/assign`, { assignee: "outsider" })).status).toBe(200);
+    expect((await move(child.id, parent.id, "outsider", "new-owner")).status).toBe(403);
+    expect((await move(child.id, parent.id, "child-owner", "old-owner")).status).toBe(403);
   });
 
   it("still refuses a cycle and a Todo as its own parent", async () => {
