@@ -17,7 +17,7 @@ import {
 } from "../sessions/self-compaction.js";
 import { isStoppedByUser } from "../sessions/stopped-marker.js";
 import { isTerminalSession } from "../terminals/session.js";
-import { enqueueViaMessageRoute } from "./self-compaction-api.js";
+import { CompactionTurnRefusedAsStopped, enqueueViaMessageRoute, STOPPED_SESSION_COMPACT_REFUSAL } from "./self-compaction-api.js";
 import { json, matchRoute, notFound, type ParsedRoute } from "./route-helpers.js";
 import type { CallerIdentity } from "./session-comm-guards.js";
 import { callerMayActOnSession } from "./session-reach-guard.js";
@@ -71,7 +71,7 @@ function structuralRefusal(session: Session, opencodeMode: string | undefined): 
   if (isTerminalSession(session)) return refusal("terminal", "A terminal session has no model context to compact.");
   // A compaction is a turn, and any turn ends a stop: compacting must not be a
   // way round it.
-  if (isStoppedByUser(session)) return refusal("stopped", "This session was stopped. Start it again with a message first, then compact.");
+  if (isStoppedByUser(session)) return refusal("stopped", STOPPED_SESSION_COMPACT_REFUSAL);
   const hasConversation = Boolean(getEngineSessionRef(session, session.engine).id);
   const message = compactCommandRefusal(session.engine, opencodeMode, hasConversation);
   if (!message) return undefined;
@@ -180,6 +180,8 @@ async function requestCompact(res: ServerResponse, session: Session, options: Se
     releaseSelfCompaction(session.id, claim.at);
     const reason = error instanceof Error ? error.message : String(error);
     logger.warn(`[context-meter] ${session.id}: compaction turn not queued: ${reason}`);
+    // Stopped after the availability check above: the same answer it would have given.
+    if (error instanceof CompactionTurnRefusedAsStopped) return refusalResponse(res, refusal("stopped", reason));
     return json(res, { error: `Nothing was queued: ${reason}` }, 502);
   }
   logger.info(`[context-meter] ${session.id} (${session.engine}) manual compaction queued`);

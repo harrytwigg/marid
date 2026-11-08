@@ -3958,6 +3958,9 @@ export async function handleApiRequest(
         // only ever tightens the budget, never loosens it.
         if (plan.parentLink) sessionCommGuards.recordPairDelivery(caller.id, params.id, plan.hops);
         else sessionCommGuards.recordDelivery(params.id, plan.hops);
+      } else if (body.role === "notification" && isStoppedByUser(session)) {
+        // No session sent it (a compaction turn, an operator relay): never a deliberate start.
+        return void refuseStoppedSession(res, session);
       } else if (
         msgCaller.kind === "operator" &&
         body.role === "notification" &&
@@ -3973,7 +3976,6 @@ export async function handleApiRequest(
         // would, so it renders as a relay banner instead. Operator origin ⇒ a
         // fresh hop with no lateral cap; `fromSessionId` is optional (pass the
         // real source session to make the relay openable/linked).
-        if (isStoppedByUser(session) && refuseStoppedSession(res, session)) return;
         const fromLabel = stripControlChars(body.from).trim().slice(0, 160);
         const relayFromSessionId = typeof body.fromSessionId === "string" && body.fromSessionId.trim()
           ? stripControlChars(body.fromSessionId).trim().slice(0, 160)
