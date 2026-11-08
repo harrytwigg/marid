@@ -9,6 +9,7 @@ import { deliverClaimedSessionDelivery } from "../sessions/callbacks.js";
 import {
   claimSelfCompaction,
   claimSessionDelivery,
+  consumeChildReportedToParent,
   getSession,
   getSessionDelivery,
   recordChildReportedToParent,
@@ -215,8 +216,8 @@ async function requestCompaction(
     return send(res, 409, { error: queuedRefusal(queued) });
   }
   if (!await queueCompactionTurn(res, session, claim.at, buildCompactCommand(handoff.handoff), options)) return;
-  suppressStopgapCallback(session);
-  await scheduleResume(res, session, claim.at, buildResumeMessage(handoff.handoff), options);
+  const suppressed = suppressStopgapCallback(session);
+  await scheduleResume(res, session, { claimedAt: claim.at, message: buildResumeMessage(handoff.handoff), suppressed }, options);
 }
 
 /**
@@ -224,19 +225,30 @@ async function requestCompaction(
  * A parent waiting on this child must not take it for the final report, so that
  * one callback is suppressed exactly as for a child that already reported up
  * with send_to_session: per attempt, consumed by the settle it matches, and
- * self-expiring with the attempt.
+ * self-expiring with the attempt. Returns the attempt when this call set the
+ * marker, so a compaction withdrawn by a stop can undo exactly that.
  */
-function suppressStopgapCallback(session: Session): void {
-  if (reportingParentSessionId(session) && session.attemptToken && session.status === "running") {
-    recordChildReportedToParent(session.id, session.attemptToken);
-  }
+function suppressStopgapCallback(session: Session): string | undefined {
+  if (!reportingParentSessionId(session) || !session.attemptToken || session.status !== "running") return undefined;
+  // A send_to_session relay earlier in this attempt already suppresses that
+  // callback; the marker is then the relay's, not this route's to undo.
+  if (getSession(session.id)?.transportMeta?.reportedToParentAttempt === session.attemptToken) return undefined;
+  recordChildReportedToParent(session.id, session.attemptToken);
+  return session.attemptToken;
+}
+
+/** The compaction this call claimed and queued: the claim, the resume turn's
+ *  message, and the attempt whose stopgap callback it suppressed, if it did. */
+interface QueuedCompaction {
+  claimedAt: number;
+  message: string;
+  suppressed: string | undefined;
 }
 
 async function scheduleResume(
   res: ServerResponse,
   session: Session,
-  claimedAt: number,
-  message: string,
+  { claimedAt, message, suppressed }: QueuedCompaction,
   options: SelfCompactionApiOptions,
 ): Promise<void> {
   let resume: ResumeDelivery;
@@ -255,8 +267,11 @@ async function scheduleResume(
   }
   if (resume === "stopped") {
     // The stop withdrew the queued compaction and refused the resume for good,
-    // so nothing was scheduled after all: give the claim back and say so.
+    // so nothing was scheduled after all: give the claim back and say so. The
+    // stopgap suppression goes with it, so the parent is not left waiting on a
+    // report that will never come.
     releaseSelfCompaction(session.id, claimedAt);
+    if (suppressed) consumeChildReportedToParent(session.id, suppressed);
     logger.info(`[self-compaction] ${session.id}: stopped before the resume was delivered; compaction withdrawn`);
     return send(res, 409, STOPPED_REFUSAL);
   }
