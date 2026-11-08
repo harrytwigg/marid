@@ -229,7 +229,7 @@ Two things close a Todo without the operator's click. An employee that owns a To
 - **Standing is read live.** An ancestor in backlog or in review, a closed one, one assigned to the operator or to a name that has left the org, or an unassigned one gives no standing; the walk goes on to the next ancestor up.
 - **Open sub-tasks still hold the close.** Close bottom-up: each close keeps its own note, and the parent closes once its sub-tasks are done.
 - **Everything else is unchanged.** Cancelling, reopening a closed Todo and `cascade` stay the operator's. Sending a Todo back from review, and accepting a delegated child that is still executing (its producer's session stopped and the owner not having worked it), belong to the owner of the direct parent only.
-- **What it allows.** An employee with standing can move a subordinate's Todo that is not in review under its own Todo and close it later. The root still goes to the operator.
+- **What it allows.** Any employee can move a Todo that is not in review under an executing Todo it owns and close it later, whether it is a subordinate's Todo or the employee's own root. The root it ends up under still goes to the operator.
 
 `closeTodos: true` in an employee's YAML lets that employee's sessions move a Todo to `done`, so a reviewer an automation starts (for example from a hook on a Todo's status change; the repository's hooks documentation has a worked example) can check the work, merge it and close the Todo without the operator's click.
 

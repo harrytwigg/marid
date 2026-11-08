@@ -167,9 +167,6 @@ describe("what stays refused", () => {
   it.each([
     ["in the backlog", "backlog", "owner-dev"],
     ["in review", "in_review", "owner-dev"],
-    ["assigned to the operator", "executing", "@operator"],
-    ["assigned to a name not in the org", "executing", "nobody-dev"],
-    ["unassigned", "executing", null],
   ] as const)("gives no standing when the ancestor is %s", async (_label, status, assignee) => {
     const ancestor = todo("Standing root", status, assignee);
     const middle = todo("Standing middle", "executing", "child-dev", ancestor.id);
@@ -178,6 +175,19 @@ describe("what stays refused", () => {
     expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(operatorsDecision)]);
     expect(statusOf(leaf.id)).toBe("in_review");
   });
+
+  /** The caller itself is the ancestor's assignee, so only the live-org and system-employee checks refuse it. */
+  it.each([["an employee missing from the org", "ghost-dev"], ["a system employee", "todo-dispatcher"]] as const)(
+    "gives no standing to %s that is assigned the executing ancestor",
+    async (_label, employee) => {
+      const ancestor = todo("Caller root", "executing", employee);
+      const middle = todo("Caller middle", "executing", "child-dev", ancestor.id);
+      const leaf = await produced("Caller leaf", middle.id, "child-dev");
+      const res = await statusPost((await sessionOf(employee)).id, leaf.id, closeBody);
+      expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(operatorsDecision)]);
+      expect(statusOf(leaf.id)).toBe("in_review");
+    },
+  );
 
   it.each(["backlog", "executing", "blocked"] as const)("does not close a %s Todo through a non-direct ancestor", async (status) => {
     const root = todo("Open root", "executing", "owner-dev");
