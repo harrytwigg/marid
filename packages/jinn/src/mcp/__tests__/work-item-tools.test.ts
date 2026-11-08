@@ -130,7 +130,7 @@ describe("work-item tools — registry + schemas", () => {
     expect(todoSkill).toContain("One operator outcome should normally map to one root Todo.");
     expect(todoSkill).toContain("A checklist does not imply one Todo per item.");
     expect(todoSkill).toContain("Only independently assignable or independently reviewable deliverables become child Todos.");
-    expect(todoSkill).toContain("No agent marks a Todo `done`.");
+    expect(todoSkill).toContain("A root Todo always waits for the operator. No one else marks a Todo `done`.");
     expect(template).not.toContain(["", "Users", ""].join("/"));
   });
 });
