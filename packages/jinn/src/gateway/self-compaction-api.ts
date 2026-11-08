@@ -9,7 +9,9 @@ import { deliverClaimedSessionDelivery } from "../sessions/callbacks.js";
 import {
   claimSelfCompaction,
   claimSessionDelivery,
+  consumeChildReportedToParent,
   getSession,
+  getSessionDelivery,
   recordChildReportedToParent,
   releaseSelfCompaction,
 } from "../sessions/registry.js";
@@ -40,6 +42,8 @@ import type { Session } from "../shared/types.js";
  * through the durable session outbox, whose retries can only ever land it
  * later, never earlier.
  */
+export type ResumeDelivery = "accepted" | "retrying" | "stopped";
+
 export interface SelfCompactionApiOptions {
   /** The gateway's verified view of who is calling. */
   resolveCaller: () => CallerIdentity;
@@ -48,8 +52,9 @@ export interface SelfCompactionApiOptions {
   /** Queue a notification-role turn on a session. Defaults to the same
    *  internal message route parent callbacks use. */
   enqueueTurn?: (sessionId: string, message: string, displayMessage: string) => Promise<void>;
-  /** Queue the resume turn durably. Returns whether it is already accepted. */
-  deliverResume?: (session: Session, claimedAt: number, message: string) => Promise<"accepted" | "retrying">;
+  /** Queue the resume turn durably. Returns whether it is already accepted, will
+   *  be retried, or was refused for good because the session was stopped. */
+  deliverResume?: (session: Session, claimedAt: number, message: string) => Promise<ResumeDelivery>;
   now?: () => number;
 }
 
@@ -90,7 +95,7 @@ function isNotDelivered(text: string): boolean {
   }
 }
 
-async function deliverResumeViaOutbox(session: Session, claimedAt: number, message: string): Promise<"accepted" | "retrying"> {
+async function deliverResumeViaOutbox(session: Session, claimedAt: number, message: string): Promise<ResumeDelivery> {
   const { delivery } = claimSessionDelivery({
     targetSessionId: session.id,
     // A session delivering to itself. "session" is the closest existing source
@@ -105,7 +110,10 @@ async function deliverResumeViaOutbox(session: Session, claimedAt: number, messa
     payload: { message, displayMessage: RESUME_TURN_DISPLAY },
   });
   if (delivery.status === "accepted") return "accepted";
-  return (await deliverClaimedSessionDelivery(delivery.id)) === "accepted" ? "accepted" : "retrying";
+  if ((await deliverClaimedSessionDelivery(delivery.id)) === "accepted") return "accepted";
+  // The message route dead-letters a resume for a stopped session and never
+  // retries it: nothing will arrive, so it must not be reported as on its way.
+  return getSessionDelivery(delivery.id)?.status === "dead_letter" ? "stopped" : "retrying";
 }
 
 /** The caller's session when it can compact at all; otherwise answers why not. */
@@ -208,8 +216,8 @@ async function requestCompaction(
     return send(res, 409, { error: queuedRefusal(queued) });
   }
   if (!await queueCompactionTurn(res, session, claim.at, buildCompactCommand(handoff.handoff), options)) return;
-  suppressStopgapCallback(session);
-  await scheduleResume(res, session, claim.at, buildResumeMessage(handoff.handoff), options);
+  const suppressed = suppressStopgapCallback(session);
+  await scheduleResume(res, session, { claimedAt: claim.at, message: buildResumeMessage(handoff.handoff), suppressed }, options);
 }
 
 /**
@@ -217,22 +225,33 @@ async function requestCompaction(
  * A parent waiting on this child must not take it for the final report, so that
  * one callback is suppressed exactly as for a child that already reported up
  * with send_to_session: per attempt, consumed by the settle it matches, and
- * self-expiring with the attempt.
+ * self-expiring with the attempt. Returns the attempt when this call set the
+ * marker, so a compaction withdrawn by a stop can undo exactly that.
  */
-function suppressStopgapCallback(session: Session): void {
-  if (reportingParentSessionId(session) && session.attemptToken && session.status === "running") {
-    recordChildReportedToParent(session.id, session.attemptToken);
-  }
+function suppressStopgapCallback(session: Session): string | undefined {
+  if (!reportingParentSessionId(session) || !session.attemptToken || session.status !== "running") return undefined;
+  // A send_to_session relay earlier in this attempt already suppresses that
+  // callback; the marker is then the relay's, not this route's to undo.
+  if (getSession(session.id)?.transportMeta?.reportedToParentAttempt === session.attemptToken) return undefined;
+  recordChildReportedToParent(session.id, session.attemptToken);
+  return session.attemptToken;
+}
+
+/** The compaction this call claimed and queued: the claim, the resume turn's
+ *  message, and the attempt whose stopgap callback it suppressed, if it did. */
+interface QueuedCompaction {
+  claimedAt: number;
+  message: string;
+  suppressed: string | undefined;
 }
 
 async function scheduleResume(
   res: ServerResponse,
   session: Session,
-  claimedAt: number,
-  message: string,
+  { claimedAt, message, suppressed }: QueuedCompaction,
   options: SelfCompactionApiOptions,
 ): Promise<void> {
-  let resume: "accepted" | "retrying";
+  let resume: ResumeDelivery;
   try {
     resume = await (options.deliverResume ?? deliverResumeViaOutbox)(session, claimedAt, message);
   } catch (error) {
@@ -245,6 +264,16 @@ async function scheduleResume(
       error: `the compaction is queued but the resume turn could not be recorded (${reason}). `
         + "End your turn with the handoff written out in your reply, so it is in the transcript the compaction summarizes.",
     });
+  }
+  if (resume === "stopped") {
+    // The stop withdrew the queued compaction and refused the resume for good,
+    // so nothing was scheduled after all: give the claim back and say so. The
+    // stopgap suppression goes with it, so the parent is not left waiting on a
+    // report that will never come.
+    releaseSelfCompaction(session.id, claimedAt);
+    if (suppressed) consumeChildReportedToParent(session.id, suppressed);
+    logger.info(`[self-compaction] ${session.id}: stopped before the resume was delivered; compaction withdrawn`);
+    return send(res, 409, STOPPED_REFUSAL);
   }
   logger.info(`[self-compaction] ${session.id} (${session.engine}) scheduled compaction + resume (resume ${resume})`);
   send(res, 202, { status: "scheduled", sessionId: session.id, engine: session.engine, resume });

@@ -113,6 +113,117 @@ describe("a compaction turn on its way when the session is stopped", () => {
 
   const HANDOFF = { goal: "finish the report", done: "drafted it", next: "proofread it", context: "none", waitingOn: "nothing" };
 
+  it("gives the claim back and promises no resume when the stop lands between the compaction turn and the resume", async () => {
+    const session = h.newSession("claude");
+    h.registry.updateSession(session.id, { status: "running" });
+    // The 2nd loopback is the resume turn leaving; the compaction turn was accepted by then.
+    h.setBeforeLoopback(async () => {
+      if (h.loopbacks().length === 2) await h.request("POST", `/api/sessions/${session.id}/stop`);
+    });
+
+    const res = await h.request("POST", "/api/compactions", { headers: h.asSession(session.id), body: HANDOFF });
+    expect(h.loopbacks()).toHaveLength(2);
+    // Not a 202 that says the resume is still on its way: it was refused for good.
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ code: "stopped" });
+    expect(res.body.resume).toBeUndefined();
+    expect(await stopped(session.id)).toBe(true);
+    // The stop withdrew the compaction row; the claim it was made under goes with it.
+    expect(h.selfCompactionAt(session.id)).toBeUndefined();
+
+    // The operator starts the session again with a deliberate message and compacts it.
+    h.finishQueue(session.id);
+    h.registry.updateSession(session.id, { status: "idle" });
+    const sent = await h.request("POST", `/api/sessions/${session.id}/message`, { body: { message: "carry on" } });
+    expect(sent.status).toBe(200);
+    expect(await stopped(session.id)).toBe(false);
+    h.finishQueue(session.id);
+    const compact = await h.request("POST", `/api/sessions/${session.id}/compact`);
+    expect(compact.status).toBe(202);
+  });
+
+  it("undoes the parent-callback suppression it set when the stop lands between the compaction turn and the resume", async () => {
+    const parent = h.newSession("claude");
+    const child = h.newSession("claude", { parentSessionId: parent.id });
+    const attempt = "attempt-asking-turn";
+    h.registry.updateSession(child.id, { status: "running", attemptToken: attempt });
+    let markerAsResumeLeft: unknown;
+    h.setBeforeLoopback(async () => {
+      if (h.loopbacks().length !== 2) return;
+      markerAsResumeLeft = h.registry.getSession(child.id)!.transportMeta?.reportedToParentAttempt;
+      await h.request("POST", `/api/sessions/${child.id}/stop`);
+    });
+
+    const res = await h.request("POST", "/api/compactions", { headers: h.asSession(child.id), body: HANDOFF });
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ code: "stopped" });
+    // It was set for the stopgap turn, and nothing was scheduled after all.
+    expect(markerAsResumeLeft).toBe(attempt);
+    expect(h.registry.getSession(child.id)!.transportMeta?.reportedToParentAttempt).toBeUndefined();
+  });
+
+  it("still wakes the parent for the stopped child's next reply outside a gateway turn", async () => {
+    const parent = h.newSession("claude");
+    const child = h.newSession("claude", { parentSessionId: parent.id });
+    h.registry.updateSession(child.id, { status: "running", attemptToken: "attempt-asking-turn" });
+    h.setBeforeLoopback(async () => {
+      if (h.loopbacks().length === 2) await h.request("POST", `/api/sessions/${child.id}/stop`);
+    });
+    expect((await h.request("POST", "/api/compactions", { headers: h.asSession(child.id), body: HANDOFF })).status).toBe(409);
+    h.setBeforeLoopback(undefined);
+
+    // The stopped child keeps its attempt token, so a reply synced from its
+    // terminal (a late Stop, or a turn typed there) belongs to the same attempt.
+    const stoppedChild = h.registry.getSession(child.id)!;
+    expect(stoppedChild.attemptToken).toBe("attempt-asking-turn");
+    const before = h.loopbacks().length;
+    const { notifyParentOfExternalTurn } = await import("../../sessions/callbacks.js");
+    await notifyParentOfExternalTurn(stoppedChild, "Here is the answer the parent asked for.", "turn-1");
+
+    const toParent = h.loopbacks().slice(before).filter((l) => l.path === `/api/sessions/${parent.id}/message`);
+    expect(toParent).toHaveLength(1);
+  });
+
+  it("leaves a send_to_session relay's suppression standing when the stop lands before the resume", async () => {
+    const parent = h.newSession("claude");
+    const child = h.newSession("claude", { parentSessionId: parent.id });
+    const attempt = "attempt-asking-turn";
+    h.registry.updateSession(child.id, { status: "running", attemptToken: attempt });
+    // The child already reported up during this attempt.
+    h.registry.recordChildReportedToParent(child.id, attempt);
+    h.setBeforeLoopback(async () => {
+      if (h.loopbacks().length === 2) await h.request("POST", `/api/sessions/${child.id}/stop`);
+    });
+
+    const res = await h.request("POST", "/api/compactions", { headers: h.asSession(child.id), body: HANDOFF });
+    expect(res.status).toBe(409);
+    expect(h.registry.getSession(child.id)!.transportMeta?.reportedToParentAttempt).toBe(attempt);
+  });
+
+  it("gives the claim back when a resume already in the outbox is dead-lettered by a later stop", async () => {
+    const session = h.newSession("claude");
+    h.registry.updateSession(session.id, { status: "running" });
+    // The resume cannot be delivered the first time (the gateway answers 503), so it waits in the outbox.
+    h.setBeforeLoopback(() => { if (h.loopbacks().length === 1) h.setFailLoopback(true); });
+    const res = await h.request("POST", "/api/compactions", { headers: h.asSession(session.id), body: HANDOFF });
+    h.setFailLoopback(false);
+    h.setBeforeLoopback(undefined);
+    expect(res.status).toBe(202);
+    expect(res.body.resume).toBe("retrying");
+    expect(h.selfCompactionAt(session.id)).toBeDefined();
+
+    await h.request("POST", `/api/sessions/${session.id}/stop`);
+    const { deliverClaimedSessionDelivery } = await import("../../sessions/callbacks.js");
+    const delivery = h.db.initDb().prepare("SELECT id FROM callback_deliveries WHERE target_session_id = ? AND delivery_kind = 'self-compaction-resume'")
+      .get(session.id) as { id: string };
+    // The retry comes due.
+    h.db.initDb().prepare("UPDATE callback_deliveries SET next_attempt_at = last_attempt_at WHERE id = ?").run(delivery.id);
+    await deliverClaimedSessionDelivery(delivery.id);
+
+    expect(h.registry.getSessionDelivery(delivery.id)?.status).toBe("dead_letter");
+    expect(h.selfCompactionAt(session.id)).toBeUndefined();
+  });
+
   it("is refused for compact_session from a session already stopped, which stays stopped", async () => {
     const session = h.newSession("claude");
     h.registry.updateSession(session.id, { status: "running" });
