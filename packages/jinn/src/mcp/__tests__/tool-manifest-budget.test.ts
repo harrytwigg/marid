@@ -292,9 +292,12 @@ const ATTESTED = {
   // "gateway guards apply" (the refusals say which guard fired). The field's
   // own meaning is taught by the result's hint, which is not in the manifest.
   // Token counts are unchanged, so only the SHAs move.
-  rpc: { tokens: 4035, sha256: "ee1d29aec596c17f4c0a59c5de54d01d0998047fd1c48c5b9e5c0b7e43e78af0" },
-  pi: { tokens: 4370, sha256: "4f834fb74d1707147699b5a50c84c4e72fb49c64c9528bc96e6272dd56883fab" },
-  openai: { tokens: 4174, sha256: "7fa4726ea6c802dbc7e2df928a042689fe34a9e0ec2de7ef91fdd0a536622324" },
+  // Reattested for update_work_item's `done` clause: "parent owner" became
+  // "ancestor owner", since an owner of any executing or blocked Todo above the
+  // one in review may close it. Token counts are unchanged, so only the SHAs move.
+  rpc: { tokens: 4035, sha256: "88ec9b95c6eebe1fe51601774b2422770e37037e54edc561b328a8e07a46db0a" },
+  pi: { tokens: 4370, sha256: "cd5247fb397184502e6c682eb8a99ffdfe413eb452e3b61f41f4ab4cefbc0a34" },
+  openai: { tokens: 4174, sha256: "c10dd725e5efe14f80f2f12f16c5fc72bc926774fe12a346eddc14683a034b3c" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;

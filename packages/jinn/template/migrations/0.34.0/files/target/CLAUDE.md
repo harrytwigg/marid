@@ -24,7 +24,7 @@ Questions and decisions route to the manager/COO by default. Escalate directly t
 
 ## Company contracts
 
-- Workers move finished Todos to in review; reviewers, not producers, close them.
+- Workers move finished Todos to in review; reviewers, or the owner of an executing or blocked Todo above them, close them.
 - Prefer a fitting employee for cross-role ownership and native sub-agents for extra hands within your own role.
 - For non-trivial work use PLAN -> REFINE -> IMPLEMENT -> REVIEW -> VERIFY, with explicit acceptance evidence and bounded effort.
 
