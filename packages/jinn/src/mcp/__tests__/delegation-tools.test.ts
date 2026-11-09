@@ -71,11 +71,12 @@ describe("delegate_task — registry + schema", () => {
     expect(t.inputSchema.required).toEqual(["task"]);
     const props = t.inputSchema.properties as Record<string, { type: string; items?: { type: string } }>;
     expect(props.attachments).toMatchObject({ type: "array", items: { type: "string" } });
+    expect(props.freshSession).toMatchObject({ type: "boolean" });
     for (const [name, prop] of Object.entries(props)) {
-      if (name !== "attachments") expect(prop.type).toBe("string");
+      if (name !== "attachments" && name !== "freshSession") expect(prop.type).toBe("string");
     }
     expect(Object.keys(t.inputSchema.properties).sort()).toEqual(
-      ["attachments", "effortLevel", "employee", "engine", "fallbackMode", "idempotencyKey", "intent", "model", "task", "title", "workItemId"].sort(),
+      ["attachments", "effortLevel", "employee", "engine", "fallbackMode", "freshSession", "idempotencyKey", "intent", "model", "task", "title", "workItemId"].sort(),
     );
   });
 
@@ -105,6 +106,17 @@ describe("delegate_task — a Claude profile rides the engine string", () => {
 });
 
 describe("delegate_task — unit (stub gateway)", () => {
+  it("forwards freshSession and names the session it replaced; refuses a non-boolean locally", async () => {
+    const { calls, ctx } = stub(() => ({
+      status: 201, body: { workItemId: "wi_abc", sessionId: "sess-2", replacedSessionId: "sess-1", engine: "codex", status: "running" },
+    }), "caller-1");
+    const out = (await delegateTool().handler({ task: "phase 2", employee: "qa-emp", workItemId: "wi_abc", freshSession: true }, ctx)) as Record<string, unknown>;
+    expect(calls[0]!.body).toMatchObject({ workItemId: "wi_abc", freshSession: true });
+    expect(out).toMatchObject({ sessionId: "sess-2", replacedSessionId: "sess-1" });
+    await expect(delegateTool().handler({ task: "t", employee: "qa-emp", freshSession: "yes" }, ctx)).rejects.toThrow(/freshSession must be a boolean/);
+    expect(calls).toHaveLength(1);
+  });
+
   it("FAILS CLOSED with no caller identity: refuses locally, zero round trips", async () => {
     const { calls, ctx } = stub(() => ({ status: 200, body: {} }));
     await expect(delegateTool().handler({ task: "t", employee: "e" }, ctx)).rejects.toThrow(
