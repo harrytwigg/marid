@@ -59,7 +59,7 @@ Manager personas need only compact operating direction: own decomposition and re
 
 ### Delegate and review
 
-Use `delegate_task` when assignment should start immediately. Otherwise use `create_work_item` then `assign_work_item`: creation never carries an assignee, so authoring and assignment are always separate calls. Keep scheduled work in cron and multi-step work in child Todos, not a long delegation prompt. Review status through `list_work_items` or `search_work_items`; producers move finished work to in_review and the operator closes it. The `todo-handling` skill owns status and comment rules.
+Use `delegate_task` when assignment should start immediately. Otherwise use `create_work_item` then `assign_work_item`: creation never carries an assignee, so authoring and assignment are always separate calls. Keep scheduled work in cron and multi-step work in child Todos, not a long delegation prompt. Review status through `list_work_items` or `search_work_items`; producers move finished work to in_review; the operator closes it, and the owner of an executing or blocked Todo closes finished in_review sub-Todos anywhere below it with a note, its own work included. A root stays with the operator. The `todo-handling` skill owns status and comment rules.
 
 ## Guardrails
 
