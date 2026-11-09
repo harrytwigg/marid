@@ -136,7 +136,7 @@ describe("what the parent-owner lane refuses", () => {
     transition(child.id, status === "backlog" ? "executing" : status, "operator", { human: true, blockKind: "needs_input" });
     if (status === "backlog") transition(child.id, "backlog", "operator", { human: true });
     const res = await statusPost((await sessionOf("owner-dev")).id, child.id, accept);
-    expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/from \w+ is not an agent move: move it to in_review, then you, as the owner of the parent Todo \S+, close it from there with a note/)]);
+    expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(new RegExp(`from ${status} is not an agent move: move it to ${status === "backlog" ? "executing, then to in_review" : "in_review"} with a summary in note, then you, as the owner of the parent Todo \\S+, close it from there with a note`))]);
     expect(statusOf(child.id)).toBe(status);
     expect(listComments(child.id).total).toBe(0);
   });

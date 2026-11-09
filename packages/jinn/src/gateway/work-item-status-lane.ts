@@ -338,7 +338,9 @@ function closeRefusal(item: WorkItem, target: "done" | "cancelled", employee: st
   const standing = target === "done" && employee && !STICKY_STATUSES.has(item.status) ? ancestorOwnerStanding(employee, item) : undefined;
   if (standing) {
     const owns = standing.direct ? "the parent Todo" : "ancestor Todo";
-    return refuse(403, `closing Todo ${item.id} from ${item.status} is not an agent move: move it to in_review, then you, as the owner of ${owns} ${standing.ancestorId}, close it from there with a note`);
+    // Backlog has no agent edge to in_review: the path runs through executing.
+    const toReview = isAgentLaneMove(item.status, "in_review") ? "in_review" : "executing, then to in_review";
+    return refuse(403, `closing Todo ${item.id} from ${item.status} is not an agent move: move it to ${toReview} with a summary in note, then you, as the owner of ${owns} ${standing.ancestorId}, close it from there with a note`);
   }
   return refuse(403, `${target === "done" ? "closing" : "cancelling"} Todo ${item.id} is the operator's decision: move it to in_review and the operator closes it`);
 }

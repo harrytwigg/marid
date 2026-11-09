@@ -10,8 +10,8 @@ import { call, sessionOf, startParentReviewHarness, statusPost } from "./review-
  */
 
 /** The refusal for the owner of an open ancestor: the close is theirs once the Todo is in review, not the operator's. */
-const ownerClosesFromReview = (owns: string) =>
-  new RegExp(`closing Todo \\S+ from \\w+ is not an agent move: move it to in_review, then you, as the owner of ${owns} \\S+, close it from there with a note`);
+const ownerClosesFromReview = (owns: string, path = "in_review") =>
+  new RegExp(`closing Todo \\S+ from \\w+ is not an agent move: move it to ${path} with a summary in note, then you, as the owner of ${owns} \\S+, close it from there with a note`);
 
 let workItems: Awaited<ReturnType<typeof startParentReviewHarness>>["workItems"];
 let listComments: typeof import("../../work-items/comments.js").listComments;

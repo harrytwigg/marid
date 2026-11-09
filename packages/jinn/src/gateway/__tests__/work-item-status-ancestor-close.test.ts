@@ -34,8 +34,8 @@ const lastMove = (id: string) => listWorkItemEvents(id).filter((event) => event.
 const closeBody = { status: "done", note: "Landed in the root's deliverable" };
 const operatorsDecision = /closing Todo \S+ is the operator's decision: move it to in_review and the operator closes it/;
 /** What an owner of an open ancestor is told when it tries `done` before the Todo is in review. */
-const ownerClosesFromReview = (owns: string) =>
-  new RegExp(`closing Todo \\S+ from \\w+ is not an agent move: move it to in_review, then you, as the owner of ${owns} \\S+, close it from there with a note`);
+const ownerClosesFromReview = (owns: string, path = "in_review") =>
+  new RegExp(`closing Todo \\S+ from \\w+ is not an agent move: move it to ${path} with a summary in note, then you, as the owner of ${owns} \\S+, close it from there with a note`);
 
 const todo = (title: string, status: Status, assignee: string | null, parentId?: string) =>
   workItems.createWorkItem({ title, status, ...(assignee ? { assignee } : {}), ...(parentId ? { parentId } : {}) });
@@ -197,9 +197,22 @@ describe("what stays refused", () => {
     const middle = todo("Open middle", "executing", "child-dev", root.id);
     const leaf = todo("Open leaf", status, "child-dev", middle.id);
     const res = await statusPost((await sessionOf("owner-dev")).id, leaf.id, closeBody);
-    expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(ownerClosesFromReview("ancestor Todo"))]);
+    expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(ownerClosesFromReview("ancestor Todo", status === "backlog" ? "executing, then to in_review" : "in_review"))]);
     expect(res.body.error).not.toMatch(/operator/);
     expect(statusOf(leaf.id)).toBe(status);
+  });
+
+  /** The refusal is advice: following it ends in a close, so it never names a move that does not exist. */
+  it.each(["backlog", "executing", "blocked"] as const)("closes a %s Todo by following the refusal", async (status) => {
+    const root = todo("Path root", "executing", "owner-dev");
+    const middle = todo("Path middle", "executing", "child-dev", root.id);
+    const leaf = todo("Path leaf", status, "child-dev", middle.id);
+    const owner = await sessionOf("owner-dev");
+    expect((await statusPost(owner.id, leaf.id, closeBody)).status).toBe(403);
+    if (status === "backlog") expect((await statusPost(owner.id, leaf.id, { status: "executing" })).status).toBe(200);
+    expect((await statusPost(owner.id, leaf.id, { status: "in_review", note: "Summary of the work" })).status).toBe(200);
+    expect((await statusPost(owner.id, leaf.id, closeBody)).status).toBe(200);
+    expect(statusOf(leaf.id)).toBe("done");
   });
 
   it.each(["backlog", "executing", "blocked"] as const)("keeps the operator wording for an outsider closing a %s Todo", async (status) => {
