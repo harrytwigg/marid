@@ -93,9 +93,10 @@ function useStatusLane(id: string | undefined, refusal: Refusal) {
   }, [id, setStatus, refusal])
 }
 
-/** `/assign` takes a name and cannot express "nobody", so Unassign goes through
- *  the conditional edit lane the task page's own Unassign row uses. Both wear
- *  TODO_WRITE_KEY, which is what defers a live invalidation mid-write. */
+/** Unassign goes through the conditional edit lane the task page's own Unassign
+ *  row uses, because that lane is version-fenced (`/assign` can also clear an
+ *  assignee, with `@unassigned`, but is not). Both wear TODO_WRITE_KEY, which is
+ *  what defers a live invalidation mid-write. */
 type AssignVariables = { assignee: string } | { assignee: null; expectedVersion: number }
 
 function useAssignLane(detail: WorkItemDetailWire | undefined, refusal: Refusal) {

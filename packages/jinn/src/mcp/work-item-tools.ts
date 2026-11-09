@@ -16,6 +16,7 @@ import type { JinnMcpContext } from "./toolkit.js";
 import { BLOCK_KIND_ERROR, BLOCK_KINDS, parseBlockKind } from "../work-items/blocks.js";
 import { UNBLOCK_HINT_ERROR, parkRefusal, parseUnblockHint } from "../work-items/stop-cause.js";
 import { parseTodoId } from "../work-items/id.js";
+import { UNASSIGNED_FILTER } from "../work-items/operator-assignee.js";
 import {
   clampInt,
   FILTER_CHAR_CAP,
@@ -391,7 +392,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
 
   const assign: JinnMcpTool = {
     name: "assign_work_item",
-    description: "Assign a Todo.",
+    description: "Assign a Todo; @unassigned clears.",
     inputSchema: {
       type: "object",
       properties: {
@@ -406,13 +407,13 @@ export function buildWorkItemTools(): JinnMcpTool[] {
       const assignee = requireString(args, "assignee");
       const { status, body } = await gatewayRequest(ctx, "POST", `/api/work-items/${encodeURIComponent(id)}/assign`, { assignee });
       if (status >= 400) throw gatewayFailure(`assigning work item "${id}"`, status, body);
-      return mutationResult(body, "Todo assigned.");
+      return mutationResult(body, assignee === UNASSIGNED_FILTER ? "Todo unassigned." : "Todo assigned.");
     },
   };
 
   const archive: JinnMcpTool = {
     name: "archive_work_item",
-    description: "Archive a Todo; retain its audit. Operator only.",
+    description: "Archive a Todo. Operator only.",
     inputSchema: {
       type: "object",
       properties: {

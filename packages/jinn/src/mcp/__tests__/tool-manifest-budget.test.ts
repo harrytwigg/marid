@@ -295,9 +295,13 @@ const ATTESTED = {
   // Reattested for update_work_item's `done` clause: "parent owner" became
   // "ancestor owner", since an owner of any executing or blocked Todo above the
   // one in review may close it. Token counts are unchanged, so only the SHAs move.
-  rpc: { tokens: 4035, sha256: "88ec9b95c6eebe1fe51601774b2422770e37037e54edc561b328a8e07a46db0a" },
-  pi: { tokens: 4370, sha256: "cd5247fb397184502e6c682eb8a99ffdfe413eb452e3b61f41f4ab4cefbc0a34" },
-  openai: { tokens: 4174, sha256: "c10dd725e5efe14f80f2f12f16c5fc72bc926774fe12a346eddc14683a034b3c" },
+  // Rebased for clearing an assignee: assign_work_item says "@unassigned clears"
+  // (the value is not guessable), paid for by dropping "; retain its audit" from
+  // archive_work_item, which the name already says. One token over the old text,
+  // so the ceiling does not move and Pi sits ON it again.
+  rpc: { tokens: 4036, sha256: "4ea1b5d5d7fcd67a9abcef584688242b6199f295ba969e79f5eff9e5d7962d42" },
+  pi: { tokens: 4371, sha256: "0402eae2892101a5f4996416e1c9c4041de649026fea56410d8f88877d4a4ab1" },
+  openai: { tokens: 4175, sha256: "6539606e2ba66cd0784c77b1547d9b3d1b233c1483f1f4f4720d19851ed507d0" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;
