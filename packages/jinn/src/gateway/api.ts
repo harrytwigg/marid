@@ -264,6 +264,7 @@ import { isRemoteTarget, sshDestination } from "../shared/remote-target.js";
 import { cachedRemoteFacts } from "../engines/remote-stage.js";
 import { TODO_DISPATCHER_NAME } from "./system-employees.js";
 import { claimTodoForDelegation } from "./todo-claim.js";
+import { claimBeforeReplacing, freshSessionRefusal, parseFreshSession, replaceLiveSession } from "./delegation-fresh-session.js";
 import { startTodoDispatcher } from "./todo-dispatch.js";
 import { linkSelfStartedTodo } from "./todo-self-start.js";
 import {
@@ -3465,6 +3466,8 @@ export async function handleApiRequest(
       if (delegateAsRoot) return json(res, { error: delegateAsRoot }, 403);
       const fallbackParam = parseFallbackModeParam(body.fallbackMode);
       if (!fallbackParam.ok) return badRequest(res, fallbackParam.error);
+      const fresh = parseFreshSession(body.freshSession);
+      if (!fresh.ok) return badRequest(res, fresh.error);
       let attachments: string[] | undefined;
       if (body.attachments !== undefined) {
         if (!Array.isArray(body.attachments) || body.attachments.length > 20) {
@@ -3603,10 +3606,15 @@ export async function handleApiRequest(
       // One session per employee per Todo: when the delegate already has a live
       // session on it, the brief lands there and that session takes the claim
       // (or keeps the one it holds) instead of a second session being spawned.
-      const reused = requestedWorkItemId && employeeName ? liveEmployeeSession(workItem.id, employeeName) : undefined;
-      const loop = reused && delegationLoopError(workItem.id, reused, parentSessionId);
+      // `freshSession` asks for the opposite: that session is ended and a new one is spawned and linked in its place.
+      const live = requestedWorkItemId && employeeName ? liveEmployeeSession(workItem.id, employeeName) : undefined;
+      const replaced = fresh.fresh ? live : undefined;
+      const reused = replaced ? undefined : live;
+      const loop = (reused && delegationLoopError(workItem.id, reused, parentSessionId))
+        || (replaced && freshSessionRefusal(workItem.id, replaced, parentSessionId));
       if (loop) return json(res, { error: loop }, 409);
-      const claim = (reused && claimHeldBy(workItem.id, reused)) || claimTodoForDelegation(res, workItem.id, dispatcherHandoffFrom);
+      let claim = (reused && claimHeldBy(workItem.id, reused)) || (replaced && claimBeforeReplacing(workItem.id, replaced))
+        || claimTodoForDelegation(res, workItem.id, dispatcherHandoffFrom);
       if (!claim) return;
 
       // 2. SPAWN — the irreversible step. A failure here PRESERVES the minted
@@ -3656,6 +3664,11 @@ export async function handleApiRequest(
       // fresh delegate's brief sat parked behind the previous delegate's whole
       // turn until the reconciler reported it interrupted.
       const sessionKey = idempotencySessionKey ?? `delegation:${workItem.id}:${crypto.randomUUID()}`;
+      // Every refusal has been answered; from here to the link nothing awaits, so no reconcile sees the gap.
+      if (replaced) {
+        const effectiveStatus = effectiveSessionStatus(replaced, currentRuntimeActivity(replaced, context));
+        claim = replaceLiveSession(context, { workItemId: workItem.id, live: replaced, effectiveStatus, claim });
+      }
       let session: Session;
       try {
         session = createSession({
@@ -3769,6 +3782,7 @@ export async function handleApiRequest(
         fallbackMode: session.fallbackMode ?? null,
         status: session.status,
         title,
+        ...(replaced ? { replacedSessionId: replaced.id } : {}),
       }, 201);
     }
 

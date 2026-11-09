@@ -85,7 +85,7 @@ Who a comment wakes:
 - **The portal's name** (`@coo` for a portal named COO), from the operator only, wakes the org root on this Todo when no employee heads the org. An employee cannot tag it: to put something in front of the operator, block the Todo with a note saying what is needed.
 - **Anything else.** A comment with no mention is recorded only and wakes no one. To get someone's attention, mention them.
 
-One employee has one session per Todo. A delegation or dispatch to an employee who already has a session on the Todo lands in that session, which takes the Todo's claim and reports to whoever delegated it.
+One employee has one session per Todo. A delegation or dispatch to an employee who already has a session on the Todo lands in that session, which takes the Todo's claim and reports to whoever delegated it. To run the next phase of a long Todo with a clean context, delegate it with `freshSession: true`: that session is ended and a new one is started and linked in its place, so the Todo keeps a live run behind it. Never stop the session and `spawn_session` a replacement: an unlinked session does not count as the Todo's run, and the Todo is blocked.
 
 There is no separate approval step. When work needs a person's decision, stop it in blocked and comment with what is needed and the options; when it is finished, hand it to the operator in in_review.
 
