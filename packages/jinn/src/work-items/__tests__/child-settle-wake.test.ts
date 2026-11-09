@@ -125,6 +125,8 @@ describe("a child Todo with no session parent settling", () => {
     expect(delivery.payload.message).toContain("board-walk");
     expect(delivery.payload.message).toContain("Opened the PR and ran the suite.");
     expect(delivery.payload.message).toContain("get_work_item");
+    expect(delivery.payload.message).toContain("close any finished in_review sub-Todo anywhere below it, grandchildren and your own work included");
+    expect(delivery.payload.message).toContain("The root stays with the operator.");
     expect(rowsOf(parent.id)).toEqual([expect.objectContaining({ outcome: "woken", delivery_id: delivery.id })]);
     expect(deps.redispatch).not.toHaveBeenCalled();
   });
