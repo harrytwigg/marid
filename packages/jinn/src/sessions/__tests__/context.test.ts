@@ -355,9 +355,8 @@ describe("buildContext — Jinn MCP usage directive", () => {
 
   it("tells the parent owner to accept or send back a child's review, in both lifecycle variants", () => {
     const full = buildContext({ ...baseOpts, employee: qa, hierarchy, jinnMcpAttached: true });
-    expect(full).toMatch(/child of a Todo an employee is working goes to that owner, who accepts it \(done, note\) or sends it back/);
     expect(full).not.toMatch(/except accepting such a child/i);
-    expect(full).toMatch(/never set cancelled\. set done only on a finished in_review sub-todo anywhere below a todo you own that is executing or blocked, with a note, your own work included; a root todo and everything else the operator closes/i);
+    expect(full).toMatch(/the owner of an executing or blocked todo closes \(done, note\) any in_review sub-todo below it, its own work included, or sends a child back\. never set cancelled; roots stay with the operator/i);
 
     const trimmed = buildContext({
       ...baseOpts, employee: qa, hierarchy, jinnMcpAttached: true,
