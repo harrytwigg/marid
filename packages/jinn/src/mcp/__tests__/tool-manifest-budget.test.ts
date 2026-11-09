@@ -286,9 +286,15 @@ const ATTESTED = {
   // ends that session, which no model would guess from the name alone, so it
   // keeps a one-line description. 27 tokens on every wrapper with nothing dead
   // left to cut, so the ceiling moves by exactly that and Pi stays one under it.
-  rpc: { tokens: 4035, sha256: "99287ed56378d1b6fe55b03d18555b0c770036a8c422ac51ed6ace7c71dd31df" },
-  pi: { tokens: 4370, sha256: "2fe7a66c18dfcc65c5513a660789bd71fcae4aa79a7cf5daa69e6781c73b2659" },
-  openai: { tokens: 4174, sha256: "cbddd81e7089b6c5d6ca4867b27e58ccfa7b45a2a346b8e119abc21120044068" },
+  // Reattested for `supersedes` on send_to_session: a sender takes back its own
+  // parked message when a correction replaces it. The bare string costs 9 on
+  // Pi; the tool's description bought it back by dropping "a follow-up" and
+  // "gateway guards apply" (the refusals say which guard fired). The field's
+  // own meaning is taught by the result's hint, which is not in the manifest.
+  // Token counts are unchanged, so only the SHAs move.
+  rpc: { tokens: 4035, sha256: "ee1d29aec596c17f4c0a59c5de54d01d0998047fd1c48c5b9e5c0b7e43e78af0" },
+  pi: { tokens: 4370, sha256: "4f834fb74d1707147699b5a50c84c4e72fb49c64c9528bc96e6272dd56883fab" },
+  openai: { tokens: 4174, sha256: "7fa4726ea6c802dbc7e2df928a042689fe34a9e0ec2de7ef91fdd0a536622324" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;

@@ -35,9 +35,13 @@ export const CREATE_QUEUE_ITEMS_TABLE = `
  * row completes, a genuinely repeated later send is a new intent and enqueues
  * normally.
  *
- * `message_id` links a parked row to the transcript row the operator can see,
- * so the chat can tell which of its own bubbles are still waiting and edit the
- * two together. Null on every row enqueued by a path that has no message.
+ * `message_id` links a parked row to the transcript row it will run, so the
+ * chat can tell which of its own bubbles are still waiting and edit the two
+ * together, and so a withdrawal (the operator's cancel, a sender replacing its
+ * own agent-to-agent send, a stop) can drop the row and the bubble as one. Rows
+ * of agent-to-agent sends carry it too, though the operator's queue panel never
+ * lists them. Null on rows enqueued by a path that has no message, and on
+ * internal rows written before the column was filled for them.
  *
  * `dispatch_payload` holds the rest of what the turn runs on - its attachments
  * and whether its text was spoken. Those used to live only in the dispatch

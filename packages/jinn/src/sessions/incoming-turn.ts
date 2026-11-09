@@ -6,6 +6,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { initDb } from '../shared/db.js';
 import { insertMessage, type MessageMedia } from './registry.js';
 import type { JsonObject } from '../shared/types.js';
+import { lateralSendPrefix, withdrawOwnSend, type SupersedeOutcome } from './queued-send-supersede.js';
 
 /**
  * The durable identity of one agent-initiated (lateral) send.
@@ -18,12 +19,12 @@ import type { JsonObject } from '../shared/types.js';
  */
 export function lateralSendDedupeKey(callerSessionId: string, targetSessionId: string, message: string): string {
   const digest = createHash('sha256').update(message).digest('hex');
-  return `lateral:${callerSessionId}:${targetSessionId}:${digest}`;
+  return `${lateralSendPrefix(callerSessionId, targetSessionId)}${digest}`;
 }
 
 export type IncomingTurnClaim =
-  | { deduplicated: true; queueItemId: string; messageId?: string }
-  | { deduplicated: false; queueItemId?: string; messageId: string };
+  | { deduplicated: true; queueItemId: string; messageId?: string; superseded?: SupersedeOutcome }
+  | { deduplicated: false; queueItemId?: string; messageId: string; superseded?: SupersedeOutcome };
 
 export interface IncomingTurn {
   sessionId: string;
@@ -48,6 +49,10 @@ export interface IncomingTurn {
   /** Notifications default to an internal queue row. Talk operator turns are
    *  visible user work and opt into the ordinary queue surface. */
   queueVisibility?: 'internal' | 'visible';
+  /** An earlier parked send of the same sender that this turn replaces, taken
+   *  back in the same transaction that accepts this one. Only meaningful beside
+   *  a lateral `dedupeKey`, which is what names the sender. */
+  supersedes?: { callerSessionId: string; queueItemId: string };
 }
 
 interface DurableMessageRow {
@@ -108,6 +113,45 @@ function durableReplay(db: ReturnType<typeof initDb>, turn: IncomingTurn): Incom
 }
 
 /**
+ * What accepting a turn does once its message exists, inside the accepting
+ * transaction so the writes commit as one. Every internal row records its
+ * bubble (`message_id`), whether or not it supersedes anything, so that a
+ * withdrawal, by its sender or by a stop, can drop the row and the bubble
+ * together. A turn that replaces an earlier parked send of the same sender
+ * then takes that one back.
+ */
+function acceptedClaim(
+  db: ReturnType<typeof initDb>,
+  turn: IncomingTurn,
+  queueItemId: string | undefined,
+  messageId: string,
+): IncomingTurnClaim {
+  if (queueItemId && turn.queueVisibility !== 'visible') {
+    db.prepare('UPDATE queue_items SET message_id = ? WHERE id = ?').run(messageId, queueItemId);
+  }
+  if (!turn.supersedes) return { deduplicated: false, queueItemId, messageId };
+  const superseded = withdrawOwnSend(db, turn.supersedes.callerSessionId, turn.sessionId, turn.supersedes.queueItemId);
+  return { deduplicated: false, queueItemId, messageId, superseded };
+}
+
+/**
+ * A send that collided with a live row of the same identity is not queued
+ * again, but it can still replace a different parked send of the same sender:
+ * "alpha", "beta", then "beta" superseding "alpha" must leave only "beta". When
+ * the superseded row IS the winner (the same words sent again) nothing is taken
+ * back, and a replayed superseding call finds its target already gone; neither
+ * is reported as a withdrawal.
+ */
+function duplicateClaim(db: ReturnType<typeof initDb>, turn: IncomingTurn, winnerId: string): IncomingTurnClaim {
+  const target = turn.supersedes;
+  if (!target || target.queueItemId === winnerId) return { deduplicated: true, queueItemId: winnerId };
+  const superseded = withdrawOwnSend(db, target.callerSessionId, turn.sessionId, target.queueItemId);
+  return superseded.outcome === 'withdrawn'
+    ? { deduplicated: true, queueItemId: winnerId, superseded }
+    : { deduplicated: true, queueItemId: winnerId };
+}
+
+/**
  * Accept an incoming turn in ONE transaction, so a failed message write can
  * never leave an orphan queue row behind (or the reverse).
  *
@@ -139,12 +183,12 @@ export function claimIncomingTurn(turn: IncomingTurn): IncomingTurnClaim {
           "SELECT id FROM queue_items WHERE dedupe_key = ? AND status IN ('pending', 'running')",
         ).get(turn.dedupeKey) as { id: string } | undefined;
         if (!winner) throw new Error(`queue item for session ${turn.sessionId} conflicted with no live row holding its dedupe key`);
-        return { deduplicated: true, queueItemId: winner.id };
+        return duplicateClaim(db, turn, winner.id);
       }
     }
     const presetId = turn.durableDedupe && turn.dedupeKey ? durableMessageId(turn.dedupeKey) : undefined;
     const messageId = insertMessage(turn.sessionId, turn.role, turn.content, turn.media, undefined, presetId, turn.meta);
-    return { deduplicated: false, queueItemId, messageId };
+    return acceptedClaim(db, turn, queueItemId, messageId);
   });
   return claim.immediate();
 }
