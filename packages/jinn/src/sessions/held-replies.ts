@@ -232,9 +232,11 @@ export function reviewHeldInterimRepliesForWorkItem(workItemId: string): void {
 /** The Todo status listener for held replies: a Todo that leaves execution
  *  lets its children's held replies go, even if a task they launched never ends.
  *  It may also have been the last open child Todo of an orchestrating child
- *  that holds a reply, so every held reply is judged again. */
+ *  that holds a reply, so every held reply is judged again. A move to backlog
+ *  counts: a child parked there (nothing will start it) is no longer open. Only
+ *  a move into execution can never close a hold. */
 export function reviewHeldInterimRepliesOnTodoStatusChange(event: { toStatus: string; item: { id: string } }): void {
-  if (OPEN_EXECUTION_STATUSES.has(event.toStatus)) return;
+  if (event.toStatus === "executing") return;
   for (const sessionId of [...heldReplies.keys()]) reviewHeldInterimReply(sessionId);
 }
 

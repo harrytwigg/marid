@@ -965,6 +965,31 @@ describe("syncExternalTurn — waking the parent", () => {
       }
     });
 
+    it("relays the held reply when its last open child is parked in backlog, where nothing will start it", async () => {
+      const { childId, open, turnEnd } = await orchestrator();
+      const { transition, setTodoStatusChangeListener } = await import("../../work-items/transitions.js");
+      const { HELD_REPLY_SETTLE_MS, reviewHeldInterimRepliesOnTodoStatusChange } = await import("../../sessions/held-replies.js");
+      const store = await import("../../work-items/store.js");
+      setTodoStatusChangeListener(reviewHeldInterimRepliesOnTodoStatusChange);
+      try {
+        await turnEnd("Both streams are running; waiting.");
+        transition(open[0].id, "in_review", "test");
+        // Assigned to the operator, a backlog Todo is one the board walk never starts: not open.
+        const { OPERATOR_ASSIGNEE } = await import("../../work-items/operator-assignee.js");
+        (await import("../../shared/db.js")).initDb().prepare("UPDATE work_items SET assignee = ? WHERE id = ?").run(OPERATOR_ASSIGNEE, open[1].id);
+
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        transition(open[1].id, "backlog", "test");
+        expect(store.getWorkItem(open[1].id)?.status).toBe("backlog");
+        await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS);
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        expect(reg.listHeldInterimReplySessionIds()).not.toContain(childId);
+      } finally {
+        vi.useRealTimers();
+        setTodoStatusChangeListener(null);
+      }
+    });
+
     it("counts a delegated session still in flight, and relays once the child has none open", async () => {
       const { childId, todo, turnEnd } = await orchestrator();
       await settleChildTodos(todo.id);
