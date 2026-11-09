@@ -13,7 +13,7 @@ function sendTool(): JinnMcpTool {
 function gateway(reply: { status: number; body: unknown }) {
   const bodies: unknown[] = [];
   const ctx: JinnMcpContext = {
-    gatewayUrl: "http://127.0.0.1:7777",
+    gatewayUrl: "http://gateway.test",
     callerSessionId: "sender",
     sessionCapability: "cap-test",
     fetchFn: (async (_url: string | URL, init?: RequestInit) => {
