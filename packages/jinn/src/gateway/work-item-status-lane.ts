@@ -8,7 +8,7 @@ import { reviewAddresseeEmployee } from "../work-items/review-addressee.js";
 import { isAgentLaneMove } from "../work-items/transition-edges.js";
 import { orgRegistry } from "./org-registry.js";
 import { remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
-import { ancestorCloseComment, resolveAncestorOwnerClose, type AncestorCloseFields } from "./work-item-ancestor-close.js";
+import { ancestorCloseComment, ancestorOwnerStanding, resolveAncestorOwnerClose, type AncestorCloseFields } from "./work-item-ancestor-close.js";
 import { workItemActor, type WorkItemCaller } from "./work-item-arming.js";
 
 /**
@@ -328,16 +328,28 @@ export function resolveStatusLane(
   if (ownerLane) return ownerLane;
   const closer = target === "done" ? closerOf(caller) : undefined;
   if (closer) return resolveCloserLane(closer, item, note);
-  return resolveAgentLane(item, target, note);
+  return resolveAgentLane(item, target, note, who.employee);
+}
+
+/** Why an agent session may not close or cancel `item` yet. A caller that owns
+ *  an executing or blocked ancestor is told the close is theirs once the Todo
+ *  is in review ({@link resolveAncestorOwnerClose}); anyone else, the operator's. */
+function closeRefusal(item: WorkItem, target: "done" | "cancelled", employee: string | undefined): StatusLaneResult {
+  const standing = target === "done" && employee && !STICKY_STATUSES.has(item.status) ? ancestorOwnerStanding(employee, item) : undefined;
+  if (standing) {
+    const owns = standing.direct ? "the parent Todo" : "ancestor Todo";
+    // Backlog has no agent edge to in_review: the path runs through executing.
+    const toReview = isAgentLaneMove(item.status, "in_review") ? "in_review" : "executing, then to in_review";
+    return refuse(403, `closing Todo ${item.id} from ${item.status} is not an agent move: move it to ${toReview} with a summary in note, then you, as the owner of ${owns} ${standing.ancestorId}, close it from there with a note`);
+  }
+  return refuse(403, `${target === "done" ? "closing" : "cancelling"} Todo ${item.id} is the operator's decision: move it to in_review and the operator closes it`);
 }
 
 /** Every other session: inside the open statuses, and a move into
  *  `in_review` carries the summary the gateway posts. */
-function resolveAgentLane(item: WorkItem, target: WorkItemStatus, note: string): StatusLaneResult {
+function resolveAgentLane(item: WorkItem, target: WorkItemStatus, note: string, employee?: string): StatusLaneResult {
   const closed = STICKY_STATUSES.has(item.status);
-  if (target === "done" || target === "cancelled") {
-    return refuse(403, `${target === "done" ? "closing" : "cancelling"} Todo ${item.id} is the operator's decision: move it to in_review and the operator closes it`);
-  }
+  if (target === "done" || target === "cancelled") return closeRefusal(item, target, employee);
   if (closed) return refuse(403, `Todo ${item.id} is ${item.status}; reopening closed work is the operator's`);
   if (!isAgentLaneMove(item.status, target)) {
     return refuse(403, `${item.status} → ${target} is not an agent move on Todo ${item.id}: ${AGENT_LANE_SHAPE}`);
