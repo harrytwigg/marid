@@ -287,7 +287,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
 
   const update: JinnMcpTool = {
     name: "update_work_item",
-    description: "Update Todo status. done: operator, closeTodos employee or parent owner; reason in note.",
+    description: "Update Todo status. done: operator, closeTodos employee or ancestor owner; reason in note.",
     inputSchema: {
       type: "object",
       properties: {

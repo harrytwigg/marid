@@ -11,7 +11,7 @@
       "path": "CLAUDE.md",
       "operation": "modify",
       "baseSha256": "92e89f2320a11c89f5fbae41c28df1920467d53d7e6e6308c83a42e758d0425a",
-      "targetSha256": "806066f26252d2e25e43bacf57983eb3172b852cc7063fbc72cc534d0f08ec2a",
+      "targetSha256": "233013dbe528982f1dac1f3b5fa1136d1a40ccbd283f0e1d37a0ab1757ae3222",
       "basePayload": "files/base/CLAUDE.md",
       "targetPayload": "files/target/CLAUDE.md"
     },
@@ -131,7 +131,7 @@
       "path": "skills/management/SKILL.md",
       "operation": "modify",
       "baseSha256": "a7ab4f21e35a12c4cd26d1620f1651323e887284579b29b6967a156670cd0de8",
-      "targetSha256": "8dde60a667ad45605ad85c654e22cb6e55ee8dd1e680d195bd3102184f7653ef",
+      "targetSha256": "4d3bfac1256e4ff7330e6d3f07ad26f598f1db87d6ff97fd2f82fa78ae125522",
       "basePayload": "files/base/skills/management/SKILL.md",
       "targetPayload": "files/target/skills/management/SKILL.md"
     },
