@@ -85,6 +85,7 @@ import {
   RESTART_ACK_META_KEY,
 } from "../sessions/registry.js";
 import { claimIncomingTurn, lateralSendDedupeKey } from "../sessions/incoming-turn.js";
+import { sendReceipt, supersedeRequestError, type SupersedeOutcome } from "../sessions/queued-send-supersede.js";
 import { blockFallbackText, validateBlockEnvelope } from "../shared/blocks.js";
 import { USER_MESSAGE_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
 import { endStopOnDeliberateSend, isStoppedByUser, refuseStoppedSession, STOPPED_SESSION_NOT_DELIVERED, stopSession } from "./session-stop.js";
@@ -3920,6 +3921,7 @@ export async function handleApiRequest(
       const msgCaller = resolveScopedWriteCallerIdentity(req, context);
       let parentFollowUp: { caller: Session; message: string } | undefined;
       let lateralDedupeKey: string | undefined;
+      let supersedes: { callerSessionId: string; queueItemId: string } | undefined;
       if (msgCaller.kind === "unidentified-tool") {
         res.writeHead(403, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: UNIDENTIFIED_TOOL_CALL_ERROR }));
@@ -3939,6 +3941,9 @@ export async function handleApiRequest(
           res.end(JSON.stringify({ error: SPENT_DISPATCHER_MESSAGE_REFUSAL }));
           return;
         }
+        const supersedeError = supersedeRequestError(body.supersedes, caller.id, params.id);
+        if (supersedeError) return badRequest(res, supersedeError);
+        if (typeof body.supersedes === "string") supersedes = { callerSessionId: caller.id, queueItemId: body.supersedes };
         const callerParentId = reportingParentSessionId(caller);
         const targetParentId = reportingParentSessionId(session);
         // Whoever may stop a session may start it again by messaging it; anyone
@@ -4146,6 +4151,7 @@ export async function handleApiRequest(
       let queueItemId: string | undefined;
       let incomingMessageId: string;
       let callbackQueueNeedsDispatch = true;
+      let supersededSend: SupersedeOutcome | undefined;
       if (callbackDelivery) {
         const acceptance = acceptSessionDelivery(callbackDelivery.id, session.id, sessionKey);
         if (!acceptance.accepted) {
@@ -4178,9 +4184,15 @@ export async function handleApiRequest(
       } else {
         const claim = claimIncomingTurn({
           sessionId: session.id, sessionKey, prompt, isNotification, role: messageRole, dedupeKey: lateralDedupeKey,
-          content: isNotification ? displayMessage : prompt, media: userMedia, meta: notificationMeta,
+          content: isNotification ? displayMessage : prompt, media: userMedia, meta: notificationMeta, supersedes,
         });
-        if (claim.deduplicated) return json(res, { status: "duplicate", sessionId: session.id, queueItemId: claim.queueItemId });
+        supersededSend = claim.superseded;
+        if (supersededSend?.outcome === "withdrawn" && supersededSend.messageId) {
+          context.emit("queue:updated", { sessionId: session.id, sessionKey, withdrawnMessageId: supersededSend.messageId });
+        }
+        if (claim.deduplicated) {
+          return json(res, { status: "duplicate", sessionId: session.id, queueItemId: claim.queueItemId, ...(supersededSend ? { superseded: supersededSend.outcome } : {}) });
+        }
         endStopOnDeliberateSend(session);
         queueItemId = claim.queueItemId;
         incomingMessageId = claim.messageId;
@@ -4237,6 +4249,7 @@ export async function handleApiRequest(
         context.emit("session:notification", {
           sessionId: session.id,
           message: displayMessage,
+          messageId: incomingMessageId,
           ...(notificationMeta ? { meta: notificationMeta } : {}),
         });
       }
@@ -4327,6 +4340,7 @@ export async function handleApiRequest(
         sessionId: session.id,
         messageId: incomingMessageId,
         queueItemId,
+        ...(msgCaller.kind === "session" ? sendReceipt(msgCaller.callerId, { id: session.id, sessionKey }, session.status === "running", supersededSend) : {}),
         ...(delivery ? { delivery } : {}),
         ...(callbackDelivery ? { callbackDeliveryId: callbackDelivery.id } : {}),
       });

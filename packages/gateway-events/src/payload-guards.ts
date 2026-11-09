@@ -207,7 +207,8 @@ export const payloadGuards: Record<GatewayEventName, PayloadGuard> = {
   "session:completed": isSessionCompleted,
   "session:delta": isSessionDelta,
   "session:notification": (value) =>
-    isRecord(value) && isString(value.sessionId) && isString(value.message) && isOptionalJsonObject(value.meta),
+    isRecord(value) && isString(value.sessionId) && isString(value.message) && isOptionalJsonObject(value.meta)
+      && isOptionalString(value.messageId),
   "session:attachment": isSessionAttachment,
   "session:background": isSessionBackground,
   "queue:updated": (value) =>
