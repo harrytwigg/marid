@@ -295,10 +295,10 @@ const ATTESTED = {
   // Rebased for clearing an assignee: assign_work_item says "@unassigned clears"
   // (the value is not guessable), paid for by dropping "; retain its audit" from
   // archive_work_item, which the name already says. One token over the old text,
-  // so the ceiling does not move.
-  rpc: { tokens: 4035, sha256: "ee1d29aec596c17f4c0a59c5de54d01d0998047fd1c48c5b9e5c0b7e43e78af0" },
-  pi: { tokens: 4370, sha256: "4f834fb74d1707147699b5a50c84c4e72fb49c64c9528bc96e6272dd56883fab" },
-  openai: { tokens: 4174, sha256: "7fa4726ea6c802dbc7e2df928a042689fe34a9e0ec2de7ef91fdd0a536622324" },
+  // so the ceiling does not move and Pi sits ON it again.
+  rpc: { tokens: 4036, sha256: "717777793ebf8442125f13817cc40b6cc8b1686904ab27947a1d2ef47b359b89" },
+  pi: { tokens: 4371, sha256: "60b0b76b6fba82838b4c2390e3946e6282a9fd818e32585aca088398305a0f0c" },
+  openai: { tokens: 4175, sha256: "ad2b7dd7c57af18d3e7590dfcbfce6d2ad2e2e5a7f418d5a1e0d955637e79438" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;

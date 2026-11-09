@@ -200,4 +200,16 @@ describe("PATCH /api/work-items/:id keeps assignee on the operator pen", () => {
     expect(response.status).toBe(200);
     expect(workItems.getWorkItem(item.id)!.assignee).toBeNull();
   });
+
+  // The executing guard belongs to /assign alone. The operator's pen may take a
+  // running Todo off its owner on purpose (the task page's Unassign controls use it).
+  it("lets the operator clear an executing Todo, which /assign refuses", async () => {
+    const item = workItems.createWorkItem({ title: "patch executing", assignee: "holder", status: "executing" });
+    const viaAssign = await call("POST", `/api/work-items/${item.id}/assign`, { assignee: "@unassigned" });
+    expect(viaAssign.status).toBe(409);
+    const current = workItems.getWorkItem(item.id)!;
+    const response = await call("PATCH", `/api/work-items/${item.id}`, { assignee: null, expectedVersion: current.version });
+    expect(response.status).toBe(200);
+    expect(workItems.getWorkItem(item.id)).toMatchObject({ assignee: null, status: "executing" });
+  });
 });

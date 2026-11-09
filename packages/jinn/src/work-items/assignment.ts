@@ -99,8 +99,10 @@ function departmentAfterAssignment(item: WorkItem, assigneeDepartment: string | 
 
 /** Refuses what assignment may not do to `item`. Clearing the assignee has no holder to check, but an
  *  executing Todo has a live attempt and a watch that reads its assignee: clearing it would leave work
- *  running that nobody owns and nothing nudges, so it moves out of executing first. Otherwise (FR-015)
- *  the assignee must be one who may hold a Todo in its root's department. */
+ *  running that nobody owns and nothing nudges, so it moves out of executing first. The operator's
+ *  metadata pen clears assignees on its own path and is deliberately not held to this: the operator
+ *  may take a running Todo off its owner. Otherwise (FR-015) the assignee must be one who may hold a
+ *  Todo in its root's department. */
 function assertAssignable(item: WorkItem, assignee: string | null): void {
   if (assignee !== null) {
     assertMayHold(assignee, item.id, scopeDepartmentOfItem(item, getWorkItem));
