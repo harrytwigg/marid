@@ -864,6 +864,154 @@ describe("syncExternalTurn — waking the parent", () => {
     }
   });
 
+  describe("a child that orchestrates children of its own", () => {
+    // A reply an earlier test left held would be judged (and relayed) by the status-change review.
+    beforeEach(async () => {
+      (await import("../../sessions/held-replies.js")).__resetHeldRepliesForTest();
+    });
+
+    /** A child Todo `executing`, with an orchestrating child session and two open child Todos of its own. */
+    async function orchestrator() {
+      const store = await import("../../work-items/store.js");
+      const parentId = makeSession();
+      const childId = makeSettledChild(parentId);
+      const todo = store.createWorkItem({ title: "multi-stream job", status: "executing" });
+      (await import("../../shared/db.js")).initDb().prepare("UPDATE sessions SET work_item_id = ? WHERE id = ?").run(todo.id, childId);
+      const open = [1, 2].map((n) => store.createWorkItem({ title: `stream ${n}`, status: "executing", parentId: todo.id }));
+      const turnEnd = async (text: string) => {
+        const { notifyParentSessionAndWait } = await import("../../sessions/callbacks.js");
+        reg.insertMessage(childId, "assistant", text);
+        await notifyParentSessionAndWait(reg.getSession(childId)!, { result: text });
+      };
+      return { parentId, childId, todo, open, turnEnd };
+    }
+
+    /** Move every open child Todo of `todoId` out of execution, so the child has none open. */
+    async function settleChildTodos(todoId: string) {
+      const { initDb } = await import("../../shared/db.js");
+      initDb().prepare("UPDATE work_items SET status = 'done' WHERE parent_id = ?").run(todoId);
+    }
+
+    it("holds the turn ends that follow its children's callbacks; its milestone report is the one wake", async () => {
+      const { childId, turnEnd } = await orchestrator();
+      for (const text of ["Stream 1 settled a QA round; still waiting on stream 2.", "No change; waiting on both streams.", "Stream 2 is running its tests; nothing to do yet."]) {
+        await turnEnd(text);
+      }
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect((reg.getSession(childId)!.transportMeta as any).interimRelayHold).toMatchObject({ count: 3 });
+
+      // The milestone goes to the parent with send_to_session (that call is the wake); the turn end that follows adds none.
+      reg.recordChildReportedToParent(childId, reg.getSession(childId)!.attemptToken!);
+      await turnEnd("Milestone sent to the lead.");
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(reg.listHeldInterimReplySessionIds()).not.toContain(childId);
+    });
+
+    it("still relays a question or blocker at once", async () => {
+      const { childId, turnEnd } = await orchestrator();
+      await turnEnd("Still waiting on stream 2.");
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      await turnEnd("I am blocked: which repository should stream 2 use?");
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(fetchSpy.mock.calls[0][1].body).message).toContain("which repository should stream 2 use");
+      expect(reg.listHeldInterimReplySessionIds()).not.toContain(childId);
+    });
+
+    it("still relays an answer to the parent's own message at once", async () => {
+      const { parentId, childId, turnEnd } = await orchestrator();
+      await turnEnd("Still waiting on stream 2.");
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      reg.insertMessage(childId, "notification", "status?", undefined, undefined, undefined, { kind: "agent-relay", fromSessionId: parentId, fromLabel: "Lead", hops: 1, maxHops: 12, fullMessage: "status?" });
+      await turnEnd("Stream 1 is done, stream 2 is half way.");
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(fetchSpy.mock.calls[0][1].body).message).toContain("Stream 1 is done, stream 2 is half way.");
+      expect(reg.listHeldInterimReplySessionIds()).not.toContain(childId);
+    });
+
+    it("relays an error at once, and drops the held wait", async () => {
+      const { childId, turnEnd } = await orchestrator();
+      const { notifyParentSessionAndWait } = await import("../../sessions/callbacks.js");
+      await turnEnd("Still waiting on stream 2.");
+      expect(reg.listHeldInterimReplySessionIds()).toContain(childId);
+      await notifyParentSessionAndWait(reg.getSession(childId)!, { error: "engine crashed" });
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(reg.listHeldInterimReplySessionIds()).not.toContain(childId);
+    });
+
+    it("relays the held reply once its last open child settles, and not before", async () => {
+      const { childId, open, turnEnd } = await orchestrator();
+      const { transition, setTodoStatusChangeListener } = await import("../../work-items/transitions.js");
+      const { HELD_REPLY_SETTLE_MS, reviewHeldInterimRepliesOnTodoStatusChange } = await import("../../sessions/held-replies.js");
+      setTodoStatusChangeListener(reviewHeldInterimRepliesOnTodoStatusChange);
+      try {
+        await turnEnd("Both streams are running; waiting.");
+        expect(reg.listHeldInterimReplySessionIds()).toContain(childId);
+
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        transition(open[0].id, "in_review", "test");
+        await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS);
+        expect(fetchSpy).not.toHaveBeenCalled();
+
+        transition(open[1].id, "in_review", "test");
+        await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS);
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        expect(JSON.parse(fetchSpy.mock.calls[0][1].body).message).toContain("Both streams are running; waiting.");
+        expect(reg.listHeldInterimReplySessionIds()).not.toContain(childId);
+      } finally {
+        vi.useRealTimers();
+        setTodoStatusChangeListener(null);
+      }
+    });
+
+    it("relays the held reply when its last open child is parked in backlog, where nothing will start it", async () => {
+      const { childId, open, turnEnd } = await orchestrator();
+      const { transition, setTodoStatusChangeListener } = await import("../../work-items/transitions.js");
+      const { HELD_REPLY_SETTLE_MS, reviewHeldInterimRepliesOnTodoStatusChange } = await import("../../sessions/held-replies.js");
+      const store = await import("../../work-items/store.js");
+      setTodoStatusChangeListener(reviewHeldInterimRepliesOnTodoStatusChange);
+      try {
+        await turnEnd("Both streams are running; waiting.");
+        transition(open[0].id, "in_review", "test");
+        // Assigned to the operator, a backlog Todo is one the board walk never starts: not open.
+        const { OPERATOR_ASSIGNEE } = await import("../../work-items/operator-assignee.js");
+        (await import("../../shared/db.js")).initDb().prepare("UPDATE work_items SET assignee = ? WHERE id = ?").run(OPERATOR_ASSIGNEE, open[1].id);
+
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        transition(open[1].id, "backlog", "test");
+        expect(store.getWorkItem(open[1].id)?.status).toBe("backlog");
+        await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS);
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        expect(reg.listHeldInterimReplySessionIds()).not.toContain(childId);
+      } finally {
+        vi.useRealTimers();
+        setTodoStatusChangeListener(null);
+      }
+    });
+
+    it("counts a delegated session still in flight, and relays once the child has none open", async () => {
+      const { childId, todo, turnEnd } = await orchestrator();
+      await settleChildTodos(todo.id);
+      const delegate = reg.createSession({ engine: "claude", source: "web", sourceRef: `web:delegate-${++seq}`, prompt: "go", parentSessionId: childId });
+      reg.updateSession(delegate.id, { status: "running" });
+      await turnEnd("Waiting on the delegated session.");
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      reg.updateSession(delegate.id, { status: "idle" });
+      await turnEnd("The delegated session is done; all work is complete.");
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("relays a reply of a child that has no open children, as before", async () => {
+      const { childId, todo, turnEnd } = await orchestrator();
+      await settleChildTodos(todo.id);
+      await turnEnd("Nothing left open; here is the summary.");
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(reg.listHeldInterimReplySessionIds()).not.toContain(childId);
+    });
+  });
+
   it("an explicit send_to_session relay suppresses exactly one later wake", async () => {
     const parentId = makeSession();
     const childId = makeSettledChild(parentId);

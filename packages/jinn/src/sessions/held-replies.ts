@@ -5,9 +5,10 @@ import { initDb } from "../shared/db.js";
 import type { Session } from "../shared/types.js";
 import { OPEN_EXECUTION_STATUSES } from "./delegation-completion-contract.js";
 import { asksOrReportsBlocker } from "./stop-nudge.js";
-import { isAwaitingOwnBackgroundTask, runtimeActivity } from "./background-work.js";
+import { isAwaitingOwnBackgroundTask, runtimeActivity, type RuntimeActivityInfo } from "./background-work.js";
 import { getWorkItem } from "../work-items/store.js";
 import { withReportingParent } from "../work-items/employee-session-delegation.js";
+import { openChildrenOf } from "../heartbeats/child-watch.js";
 
 // A shell task that never ends (a dev server) would hold every reply of a child
 // that is otherwise done. After this many held in a row the next one goes out.
@@ -45,10 +46,23 @@ export function setHeldReplyRelay(next: HeldReplyRelay): void {
 }
 
 /**
+ * Whether the child is still waiting on work of its own whose end wakes it
+ * again: a background task the engine counts (a shell task or a sub-agent), or,
+ * for an orchestrating child, a child Todo or delegated session of its own that
+ * has not settled. Either way a turn that ends now is a wait, not a milestone.
+ */
+function isAwaitingOwnWork(sessionId: string, info: RuntimeActivityInfo | undefined): boolean {
+  if (isAwaitingOwnBackgroundTask(info)) return true;
+  const { todoIds, sessionIds } = openChildrenOf(sessionId);
+  return todoIds.length > 0 || sessionIds.length > 0;
+}
+
+/**
  * Whether this reply is held back from the parent because the child is still
- * waiting on its own background work. The gate is structural: the child's Todo
- * is still open and the engine still counts a background task of the child's
- * (a shell task or a sub-agent), whose end wakes the child again. The text is
+ * waiting on its own work. The gate is structural: the child's Todo is still
+ * open and either the engine still counts a background task of the child's
+ * (a shell task or a sub-agent) or the child has open child Todos or delegated
+ * sessions of its own (it is orchestrating), whose end wakes the child again. The text is
  * only a filter that errs toward relaying: a reply that asks the parent
  * something or reports a blocker always goes out. A turn the parent prompted
  * (`settledTurn`, a message from the parent among its prompts) is an answer
@@ -95,9 +109,10 @@ function holdableWorkItem(
 ): string | undefined {
   const workItemId = childSession.workItemId;
   if (options?.alwaysNotify === false || !workItemId) return undefined;
-  if (!isAwaitingOwnBackgroundTask(runtimeActivity.get(childSession.id)) || asksOrReportsBlocker(text)) return undefined;
+  if (asksOrReportsBlocker(text) || !isOpenForExecution(workItemId)) return undefined;
+  if (!isAwaitingOwnWork(childSession.id, runtimeActivity.get(childSession.id))) return undefined;
   if (options?.settledTurn && turnAnswersParent(childSession)) return undefined;
-  return isOpenForExecution(workItemId) ? workItemId : undefined;
+  return workItemId;
 }
 
 function isOpenForExecution(workItemId: string): boolean {
@@ -166,12 +181,12 @@ export function releaseHeldReply(sessionId: string): void {
 }
 
 /** Whether nothing a held reply waited on is left: no turn or re-run is running
- *  whose own reply would supersede it, and either no task is counted any more
- *  or the child's Todo has left execution. */
+ *  whose own reply would supersede it, and either no task or open child is
+ *  counted any more or the child's Todo has left execution. */
 function heldReplyIsDue(sessionId: string, workItemId: string): boolean {
   const info = runtimeActivity.get(sessionId);
   if (info?.backgroundRerun === true || getSession(sessionId)?.status === "running") return false;
-  return !isAwaitingOwnBackgroundTask(info) || !isOpenForExecution(workItemId);
+  return !isAwaitingOwnWork(sessionId, info) || !isOpenForExecution(workItemId);
 }
 
 function dueOrDoubt(sessionId: string, workItemId: string): boolean {
@@ -215,9 +230,14 @@ export function reviewHeldInterimRepliesForWorkItem(workItemId: string): void {
 }
 
 /** The Todo status listener for held replies: a Todo that leaves execution
- *  lets its children's held replies go, even if a task they launched never ends. */
+ *  lets its children's held replies go, even if a task they launched never ends.
+ *  It may also have been the last open child Todo of an orchestrating child
+ *  that holds a reply, so every held reply is judged again. A move to backlog
+ *  counts: a child parked there (nothing will start it) is no longer open. Only
+ *  a move into execution can never close a hold. */
 export function reviewHeldInterimRepliesOnTodoStatusChange(event: { toStatus: string; item: { id: string } }): void {
-  if (!OPEN_EXECUTION_STATUSES.has(event.toStatus)) reviewHeldInterimRepliesForWorkItem(event.item.id);
+  if (event.toStatus === "executing") return;
+  for (const sessionId of [...heldReplies.keys()]) reviewHeldInterimReply(sessionId);
 }
 
 /** Hand the parent the newest held reply of a child, once. Returns whether there was one. */
