@@ -9,6 +9,10 @@ import { call, sessionOf, startParentReviewHarness, statusPost } from "./review-
  * from `in_review` the owner closes as the ancestor owner, its own work included.
  */
 
+/** The refusal for the owner of an open ancestor: the close is theirs once the Todo is in review, not the operator's. */
+const ownerClosesFromReview = (owns: string) =>
+  new RegExp(`closing Todo \\S+ from \\w+ is not an agent move: move it to in_review, then you, as the owner of ${owns} \\S+, close it from there with a note`);
+
 let workItems: Awaited<ReturnType<typeof startParentReviewHarness>>["workItems"];
 let listComments: typeof import("../../work-items/comments.js").listComments;
 let listWorkItemEvents: typeof import("../../work-items/event-log.js").listWorkItemEvents;
@@ -98,7 +102,7 @@ describe("the parent's owner accepting a delegated child", () => {
     const owner = await sessionOf("owner-dev");
 
     const fromExecuting = await statusPost(owner.id, child.id, accept);
-    expect([fromExecuting.status, fromExecuting.body.error]).toEqual([403, expect.stringMatching(/operator's decision/)]);
+    expect([fromExecuting.status, fromExecuting.body.error]).toEqual([403, expect.stringMatching(ownerClosesFromReview("the parent Todo"))]);
 
     expect((await statusPost(owner.id, child.id, { status: "in_review", note: "Done myself" })).status).toBe(200);
     closedAsOwnWork(await statusPost(owner.id, child.id, accept), child.id);
@@ -110,7 +114,7 @@ describe("the parent's owner accepting a delegated child", () => {
       const parent = workItems.createWorkItem({ title: "Parent", status: "executing", assignee: "owner-dev" });
       const child = workItems.createWorkItem({ title: "Nobody's child", status: "executing", parentId: parent.id, ...(assignee ? { assignee } : {}) });
       const res = await statusPost((await sessionOf("owner-dev")).id, child.id, accept);
-      expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/operator's decision/)]);
+      expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(ownerClosesFromReview("the parent Todo"))]);
       expect([statusOf(child.id), listComments(child.id).total]).toEqual(["executing", 0]);
     },
   );
@@ -176,7 +180,7 @@ describe("the parent's owner accepting a delegated child", () => {
     const parent = workItems.createWorkItem({ title: "Unworked parent", status: "executing", assignee: "owner-dev" });
     const child = workItems.createWorkItem({ title: "Unworked child", status: "executing", parentId: parent.id, assignee: "child-dev" });
     const res = await statusPost((await sessionOf("owner-dev")).id, child.id, accept);
-    expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/operator's decision/)]);
+    expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(ownerClosesFromReview("the parent Todo"))]);
     expect(statusOf(child.id)).toBe("executing");
   });
 
