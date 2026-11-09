@@ -14,7 +14,10 @@ import { randomUUID } from "node:crypto";
 import { logger } from "../shared/logger.js";
 import type { Session } from "../shared/types.js";
 import { claimWorkItem, getWorkItemClaim, releaseWorkItemClaimForSession } from "../work-items/claims.js";
-import { reportsUpTo } from "../work-items/employee-session-delegation.js";
+import { reportingParentSessionId, reportsUpTo } from "../work-items/employee-session-delegation.js";
+import { employeeSessionsTable } from "../work-items/employee-sessions.js";
+import { getSession, listChildSessions } from "../sessions/registry.js";
+import { sessionIsWithinReach } from "./session-reach-guard.js";
 import { stopSession } from "./session-stop.js";
 import { acquiredTodoClaim, type RouteTodoClaim } from "./todo-claim.js";
 import type { ApiContext } from "./api.js";
@@ -26,18 +29,63 @@ export function parseFreshSession(value: unknown): { ok: true; fresh: boolean } 
   return { ok: true, fresh: value };
 }
 
+/** The transport-meta key on the new session naming the one it replaced, so a replay can say so too. */
+export const REPLACED_SESSION_META_KEY = "freshSessionReplaced";
+
+export interface FreshSessionCaller {
+  /** Who the new session reports to: the calling session, or one the operator named. */
+  delegatorSessionId: string | undefined;
+  /** The calling session when an agent is asking; undefined for the operator. */
+  sessionCallerId: string | undefined;
+}
+
 /**
- * Why a fresh delegation may not end `live`: it is the session making the
- * call, or one that session reports to. Stopping either would cut the
- * delegator's own turn, or its manager's, short.
+ * Why a fresh delegation may not end `live`, judged before anything is touched:
+ * - it is the session making the call, or one that session reports to, so
+ *   stopping it would cut the delegator's own turn, or its manager's, short;
+ * - an agent asking may stop only what `POST /api/sessions/:id/stop` lets it
+ *   stop, a session it spawned or delegated to: being allowed to delegate the
+ *   Todo is not leave to end somebody else's run of it;
+ * - sessions are still working for `live`, and their reports would reach a
+ *   stopped session and be dropped.
  */
-export function freshSessionRefusal(workItemId: string, live: Session, delegatorSessionId: string | undefined): string | undefined {
-  if (!delegatorSessionId || !reportsUpTo(delegatorSessionId, live.id)) return undefined;
-  return delegatorSessionId === live.id
-    ? `freshSession would end session ${live.id}, which is the session making this call: it is ${live.employee}'s session `
-      + `on Todo ${workItemId}. Finish the turn here, or ask whoever delegated the Todo to start the next phase fresh.`
-    : `freshSession would end ${live.employee}'s session on Todo ${workItemId} (${live.id}), which your session reports to. `
-      + `Ask that session, or the operator, instead.`;
+export function freshSessionRefusal(workItemId: string, live: Session, caller: FreshSessionCaller): { status: 403 | 409; error: string } | undefined {
+  const { delegatorSessionId, sessionCallerId } = caller;
+  if (delegatorSessionId && reportsUpTo(delegatorSessionId, live.id)) {
+    return { status: 409, error: delegatorSessionId === live.id
+      ? `freshSession would end session ${live.id}, which is the session making this call: it is ${live.employee}'s session `
+        + `on Todo ${workItemId}. Finish the turn here, or ask whoever delegated the Todo to start the next phase fresh.`
+      : `freshSession would end ${live.employee}'s session on Todo ${workItemId} (${live.id}), which your session reports to. `
+        + `Ask that session, or the operator, instead.` };
+  }
+  if (sessionCallerId && !sessionIsWithinReach(live, sessionCallerId)) {
+    return { status: 403, error: `freshSession would end ${live.employee}'s session on Todo ${workItemId} (${live.id}), which is not `
+      + `a descendant of your session — agents may only stop sessions they spawned (directly or transitively) or delegated to. `
+      + `Delegate without freshSession, or ask the operator or the session's parent.` };
+  }
+  const working = inFlightReportsTo(live.id);
+  if (working.length === 0) return undefined;
+  return { status: 409, error: `freshSession would end ${live.employee}'s session on Todo ${workItemId} (${live.id}) while `
+    + `${working.length} session(s) still work for it (${working.join(", ")}); their reports would reach a stopped session and be lost. `
+    + `Start the next phase fresh once they have reported.` };
+}
+
+const IN_FLIGHT = new Set<Session["status"]>(["running", "waiting"]);
+
+/** Sessions in flight whose report goes to `sessionId`: ones it spawned, and ones
+ *  a delegation of its own landed in. */
+function inFlightReportsTo(sessionId: string): string[] {
+  const delegated = employeeSessionsTable()
+    .prepare("SELECT session_id FROM work_item_employee_sessions WHERE delegator_session_id = ?")
+    .pluck().all(sessionId) as string[];
+  const candidates = new Map(listChildSessions(sessionId).map((session) => [session.id, session]));
+  for (const id of delegated) {
+    const session = candidates.has(id) ? undefined : getSession(id);
+    if (session) candidates.set(id, session);
+  }
+  return [...candidates.values()]
+    .filter((session) => IN_FLIGHT.has(session.status) && reportingParentSessionId(session) === sessionId)
+    .map((session) => session.id);
 }
 
 /**

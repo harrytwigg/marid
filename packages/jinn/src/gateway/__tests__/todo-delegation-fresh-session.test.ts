@@ -99,7 +99,7 @@ describe("a fresh-session delegation onto a Todo the employee already has a sess
 
     const retry = await delegateFresh(item.id, { idempotencyKey: "retried-phase-2" });
 
-    expect(retry).toMatchObject({ status: 200, body: { sessionId: first.body.sessionId, replayed: true } });
+    expect(retry).toMatchObject({ status: 200, body: { sessionId: first.body.sessionId, replayed: true, replacedSessionId: first.body.replacedSessionId } });
     expect(stopped.isStoppedByUser({ id: first.body.sessionId })).toBe(false);
     expect(h.registry.getSession(first.body.sessionId)?.status).toBe("running");
   });
@@ -150,6 +150,80 @@ describe("what a fresh-session delegation refuses, leaving the live session runn
     expect(res.status).toBe(409);
     expect(res.body.error).toContain("which your session reports to");
     expect(stopped.isStoppedByUser(manager)).toBe(false);
+  });
+
+  it("lets the session that delegated the live one start the next phase fresh", async () => {
+    const item = h.store.createWorkItem({ title: "orchestrated" });
+    const orchestrator = h.employeeSession("org-root");
+    const first = await h.delegate(item.id, "worker", sessionHeaders(orchestrator.id));
+
+    const res = await delegateFresh(item.id, { headers: sessionHeaders(orchestrator.id) });
+
+    expect(res).toMatchObject({ status: 201, body: { replacedSessionId: first.body.sessionId } });
+  });
+
+  it("lets an orchestrator replace a session its delegation landed in, though somebody else started it", async () => {
+    const item = h.store.createWorkItem({ title: "taken over", assignee: "worker", status: "executing" });
+    const started = h.executing(item.id);
+    h.registry.updateSession(started.id, { status: "idle" });
+    h.claims.releaseWorkItemClaimForSession(started.id);
+    const orchestrator = h.employeeSession("org-root");
+    expect((await h.delegate(item.id, "worker", sessionHeaders(orchestrator.id))).body.reused).toBe(true);
+    h.runBriefTurn(started.id);
+
+    const res = await delegateFresh(item.id, { headers: sessionHeaders(orchestrator.id) });
+
+    expect(res).toMatchObject({ status: 201, body: { replacedSessionId: started.id } });
+  });
+
+  it("refuses an agent ending a session it did not spawn or delegate to, as the stop route does", async () => {
+    const item = h.store.createWorkItem({ title: "not yours to stop", assignee: "worker", status: "executing" });
+    const live = h.executing(item.id);
+    // The org root may delegate any Todo, and the worker's other session may delegate its own,
+    // but neither started this run, so neither may cut it short.
+    for (const caller of [h.employeeSession("org-root"), h.employeeSession("worker", "elsewhere")]) {
+      const stop = await h.call("POST", `/api/sessions/${live.id}/stop`, {}, sessionHeaders(caller.id));
+      const res = await delegateFresh(item.id, { headers: sessionHeaders(caller.id) });
+
+      expect([stop.status, res.status]).toEqual([403, 403]);
+      expect(res.body.error).toContain("agents may only stop sessions they spawned");
+    }
+    expect(stopped.isStoppedByUser(live)).toBe(false);
+    expect(h.registry.getSession(live.id)?.status).toBe("running");
+  });
+
+  it("refuses while a session the live one spawned is still working for it, and allows it once that has reported", async () => {
+    const item = h.store.createWorkItem({ title: "QA still running", assignee: "worker", status: "executing" });
+    const live = h.executing(item.id);
+    const helper = h.registry.createSession({
+      engine: "codex", source: "web", sourceRef: `helper:${crypto.randomUUID()}`, employee: "alpha", connector: "web", parentSessionId: live.id,
+    });
+    h.registry.updateSession(helper.id, { status: "running" });
+
+    const refused = await delegateFresh(item.id);
+    expect(refused.status).toBe(409);
+    expect(refused.body.error).toContain(helper.id);
+    expect(stopped.isStoppedByUser(live)).toBe(false);
+
+    settle(helper.id);
+    expect((await delegateFresh(item.id)).status).toBe(201);
+  });
+
+  it("refuses while a session the live one delegated to is still working for it", async () => {
+    const item = h.store.createWorkItem({ title: "sub-delegation in flight", assignee: "worker", status: "executing" });
+    const live = h.executing(item.id);
+    // bravo's session was started by somebody else; a delegation from the live session landed in it.
+    const other = h.store.createWorkItem({ title: "the live session's own delegation" });
+    const bravo = h.employeeSession("bravo");
+    h.store.linkSession(other.id, bravo.id);
+    h.registry.updateSession(bravo.id, { status: "running" });
+    h.delegation.recordNewDelegateSession(other.id, "bravo", bravo.id, live.id);
+    expect(h.delegation.reportingParentSessionId(h.registry.getSession(bravo.id)!)).toBe(live.id);
+
+    const res = await delegateFresh(item.id);
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain(bravo.id);
   });
 
   it("leaves the session alone when another employee's running session holds the Todo", async () => {

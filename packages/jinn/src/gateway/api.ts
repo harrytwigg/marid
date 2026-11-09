@@ -264,7 +264,7 @@ import { isRemoteTarget, sshDestination } from "../shared/remote-target.js";
 import { cachedRemoteFacts } from "../engines/remote-stage.js";
 import { TODO_DISPATCHER_NAME } from "./system-employees.js";
 import { claimTodoForDelegation } from "./todo-claim.js";
-import { claimBeforeReplacing, freshSessionRefusal, parseFreshSession, replaceLiveSession } from "./delegation-fresh-session.js";
+import { claimBeforeReplacing, freshSessionRefusal, parseFreshSession, REPLACED_SESSION_META_KEY, replaceLiveSession } from "./delegation-fresh-session.js";
 import { startTodoDispatcher } from "./todo-dispatch.js";
 import { linkSelfStartedTodo } from "./todo-self-start.js";
 import {
@@ -3610,9 +3610,12 @@ export async function handleApiRequest(
       const live = requestedWorkItemId && employeeName ? liveEmployeeSession(workItem.id, employeeName) : undefined;
       const replaced = fresh.fresh ? live : undefined;
       const reused = replaced ? undefined : live;
-      const loop = (reused && delegationLoopError(workItem.id, reused, parentSessionId))
-        || (replaced && freshSessionRefusal(workItem.id, replaced, parentSessionId));
+      const loop = reused && delegationLoopError(workItem.id, reused, parentSessionId);
       if (loop) return json(res, { error: loop }, 409);
+      const freshRefusal = replaced && freshSessionRefusal(workItem.id, replaced, {
+        delegatorSessionId: parentSessionId, sessionCallerId: delegationCaller.kind === "session" ? delegationCaller.callerId : undefined,
+      });
+      if (freshRefusal) return json(res, { error: freshRefusal.error }, freshRefusal.status);
       let claim = (reused && claimHeldBy(workItem.id, reused)) || (replaced && claimBeforeReplacing(workItem.id, replaced))
         || claimTodoForDelegation(res, workItem.id, dispatcherHandoffFrom);
       if (!claim) return;
@@ -3690,6 +3693,7 @@ export async function handleApiRequest(
           portalName: config.portal?.portalName,
           transportMeta: reroutedSessionMeta(selection.reroute, {
             [DELEGATION_COMPLETION_TRACKED_META_KEY]: true,
+            ...(replaced ? { [REPLACED_SESSION_META_KEY]: replaced.id } : {}),
             ...(delegateEmployee?.displayName ? { delegationEmployeeDisplay: delegateEmployee.displayName } : {}),
           }),
         });
