@@ -1,6 +1,6 @@
 // Pinned manifest shape fixtures: the exact tool names, required arrays, and
 // enum arrays the MCP surface is allowed to expose. Split out of
-// tool-manifest-budget.test.ts when that file hit the size ratchet.
+// tool-manifest-budget.test.ts when that file grew too large.
 
 export const EXPECTED_TOOL_NAMES = [
   "archive_work_item",

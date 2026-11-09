@@ -1,5 +1,5 @@
 // The Talk orb harness, the sign-in screen and the route failure and loading screens. They sit in their
-// own file so screens.mjs stays under the size ratchet; it spreads them into SCREENS.
+// own file so screens.mjs stays small; it spreads them into SCREENS.
 
 // Route chunks are all named page-*.js. A route opened directly fetches only its own, so holding or
 // refusing the pattern holds or refuses that route.

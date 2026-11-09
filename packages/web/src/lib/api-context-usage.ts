@@ -1,8 +1,8 @@
 import { get, post } from "./api"
 
 /**
- * The context meter's two calls. They live outside `lib/api.ts` because that
- * file sits on its recorded size budget (`size-baseline.json`). The shapes
+ * The context meter's two calls. They live outside `lib/api.ts` to keep that
+ * file from growing further. The shapes
  * mirror `GET /api/sessions/:id/context-usage` and `POST /api/sessions/:id/compact`
  * on the gateway — change both.
  */

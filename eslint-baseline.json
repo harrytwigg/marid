@@ -871,9 +871,6 @@
       "complexity",
       "max-depth"
     ],
-    "scripts/ratchet.mjs": [
-      "complexity"
-    ],
     "scripts/upgrade-lab/run.mjs": [
       "complexity",
       "max-depth",

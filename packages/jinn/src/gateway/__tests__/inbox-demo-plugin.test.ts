@@ -10,7 +10,7 @@ import { call, install, resetPlugins, startHarness, writeConfig } from "./plugin
  * gateway.
  *
  * The point of this case is that the files are the ones a reader is pointed at.
- * `examples/` is outside every tsconfig, the lint config and the size ratchet,
+ * `examples/` is outside every tsconfig and the lint config,
  * so nothing else in CI would notice the day the demo stops working — and a
  * broken example is worse than none, because it is the first thing somebody
  * copies.
