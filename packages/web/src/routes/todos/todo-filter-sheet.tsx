@@ -133,7 +133,7 @@ export function TodoFilterSheet({
               Anyone<Selection selected={!filters.person} />
             </button>
             <button type="button" onClick={() => choose({ ...filters, person: personChoices.me })} className={ROW_CLASS}>
-              Me<Selection selected={filters.person === personChoices.me} />
+              {personChoices.meLabel ?? "Me"}<Selection selected={filters.person === personChoices.me} />
             </button>
             <button type="button" onClick={() => choose({ ...filters, person: UNASSIGNED_FILTER })} className={ROW_CLASS}>
               No person<Selection selected={filters.person === UNASSIGNED_FILTER} />

@@ -56,7 +56,7 @@ function PersonItems({ filters, onChange, choices }: { filters: TodoFilters; onC
         Anyone<MenuCheck on={!filters.person} />
       </DropdownMenuItem>
       <DropdownMenuItem className={ITEM_CLASS} onClick={pick(choices.me)}>
-        Me<MenuCheck on={filters.person === choices.me} />
+        {choices.meLabel ?? "Me"}<MenuCheck on={filters.person === choices.me} />
       </DropdownMenuItem>
       <DropdownMenuItem className={ITEM_CLASS} onClick={pick(UNASSIGNED_FILTER)}>
         No person<MenuCheck on={filters.person === UNASSIGNED_FILTER} />

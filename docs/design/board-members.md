@@ -496,8 +496,10 @@ because that account and the operator are the same person.
   owners, a browser not signed in as one) the first row is "Operator (shared)" and stores `@operator`. Every other account,
   other owners included, is named as itself (`user:<id>`). The operator's picker never writes `user:<you>`; a Todo that
   already names it shows that name and is not checked under the "you" row, and choosing the row puts it back on the desk.
-- **The board's Person filter** offers the operator "Me" for `@operator`, so the "you" account is not listed again beside it;
-  every other account, other owners included, is listed by name. A filter already naming `user:<you>` still reads that name.
+- **The board's Person filter**, for the operator's own view: with no owner account, "Me" for `@operator`, as before. With
+  one owner, "Me" for `@operator`, and that owner's account is not listed again beside it (a filter already naming it still
+  reads its name). With several owners, `@operator` reads "Operator (shared)", not "Me", since the desk is no one owner's,
+  and every owner, this browser's included, is listed by name: one owner can name another as a person (`user:<id>`).
 - **Pickers with no person slot beside them** (a sub-task row, the search workbench Owner) keep their operator row and its
   assign-route write; only its label follows the rule above.
 - Nothing in the gateway's storage, routes or MCP output changes; the rule is the web's and the one auth-state field.
