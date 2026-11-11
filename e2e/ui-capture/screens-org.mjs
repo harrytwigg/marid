@@ -1,5 +1,5 @@
 // The org map and what opens from it, each photographed with the seeded org (seed-org.mjs). They sit
-// in their own file so screens.mjs stays under the size ratchet; it spreads them into SCREENS.
+// in their own file so screens.mjs stays small; it spreads them into SCREENS.
 const READY = 'Engineering Lead'
 
 export const ORG_SCREENS = [

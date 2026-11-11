@@ -3,8 +3,7 @@ import { get, type BackgroundActivity, type DelegatedActivity } from "./api"
 /**
  * The tree a Todo caused, as the gateway serves it.
  *
- * These types live outside `lib/api.ts` because that file sits exactly on its
- * recorded size budget (`size-baseline.json`), and the ratchet only tightens.
+ * These types live outside `lib/api.ts` to keep that file from growing further.
  * They mirror `packages/jinn/src/sessions/session-tree.ts` — change both.
  *
  * `LinkedSessionWire` is deliberately left alone: `parentSessionId`,

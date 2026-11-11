@@ -863,11 +863,14 @@ export function useLiveSession(
 
       if (event === 'session:notification') {
         const notifMessage = String(p.message || '')
+        // The server's id, so a message the sender later withdraws is hidden by that id
+        // and the next history fetch merges the row instead of duplicating it.
+        const notifId = typeof p.messageId === 'string' ? p.messageId : crypto.randomUUID()
         if (notifMessage) {
-          setMessages((prev) => [
+          setMessages((prev) => prev.some((m) => m.id === notifId) ? prev : [
             ...prev,
             {
-              id: crypto.randomUUID(),
+              id: notifId,
               role: 'notification' as const,
               content: notifMessage,
               timestamp: Date.now(),

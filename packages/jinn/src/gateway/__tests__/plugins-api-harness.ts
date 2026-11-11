@@ -9,7 +9,7 @@ import yaml from "js-yaml";
  * The rig plugins-api.test.ts drives the routes through: a private instance home,
  * a plugin installer, and a request that enters handleApiRequest the way the
  * server calls it. It lives beside the test rather than in it because the routes
- * pushed the suite past the size ratchet.
+ * made the suite too large to read.
  *
  * JINN_HOME is set here, at module scope, because paths.js reads it once — every
  * gateway import has to come after this file's body has run, which is why the

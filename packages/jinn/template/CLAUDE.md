@@ -24,7 +24,7 @@ Questions and decisions route to the manager/COO by default. Escalate directly t
 
 ## Company contracts
 
-- Workers move finished Todos to in review; reviewers, not producers, close them.
+- Workers move finished Todos to in review; reviewers, or the owner of an executing or blocked Todo above them, close them.
 - Prefer a fitting employee for cross-role ownership and native sub-agents for extra hands within your own role.
 - For non-trivial work use PLAN -> REFINE -> IMPLEMENT -> REVIEW -> VERIFY, with explicit acceptance evidence and bounded effort.
 
@@ -65,7 +65,7 @@ When no installed skill fits, use `find-and-install`; searching is read-only, bu
 
 Choose employees by role and persona fit. Prefer the chain of command when a manager should own decomposition or review, while direct access remains valid. Use tracked delegation for durable work and quick sessions for bounded consultation. After delegation, tell the parent what was assigned and end the turn; the child callback resumes the work. The `delegation` skill owns retry, callback, review, and round-limit procedure.
 
-Keep the Todo ledger current. One operator outcome normally maps to one root Todo; independently assignable or reviewable deliverables may become children. Producers move finished work to in_review, and the operator closes it. The `todo-handling` skill owns statuses, comments, and mutation rules.
+Keep the Todo ledger current. One operator outcome normally maps to one root Todo; independently assignable or reviewable deliverables may become children. Producers move finished work to in_review; the operator closes it, and the owner of an executing or blocked Todo closes finished in_review sub-Todos anywhere below it with a note, its own work included. A root stays with the operator. The `todo-handling` skill owns statuses, comments, and mutation rules.
 
 Use cron for scheduled prompts. Analytical or decision-informing cron output should route through the COO for review; direct delivery is for simple no-review results. The cron skill owns its schema and tool calls.
 

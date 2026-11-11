@@ -38,7 +38,7 @@ export interface GatewayEventMap {
     sidechain?: boolean
     block?: JsonValue
   }
-  "session:notification": { sessionId: string; message: string; meta?: JsonObject }
+  "session:notification": { sessionId: string; message: string; meta?: JsonObject; messageId?: string }
   "session:attachment": { sessionId: string; id: string; content: string; media: MessageMediaWire[]; timestamp: number }
   "session:background": {
     sessionId: string

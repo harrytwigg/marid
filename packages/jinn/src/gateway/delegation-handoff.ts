@@ -20,6 +20,7 @@ import { persistAndEmitActivityBlock, type ChatActivityContext } from "./chat-ac
 import { rehomeAttachmentsToSession } from "./files.js";
 import { surfaceManagerVisibility } from "./manager-visibility.js";
 import type { RouteTodoClaim } from "./todo-claim.js";
+import { REPLACED_SESSION_META_KEY } from "./delegation-fresh-session.js";
 import { resolveAttachmentPaths } from "./web-session-dispatch.js";
 import type { ApiContext } from "./api.js";
 
@@ -242,6 +243,7 @@ export function delegationReplayBody(replay: Session, reused: boolean): JsonObje
     title: replayItem?.title ?? replay.title ?? null,
     replayed: true,
     ...(reused ? { reused: true } : {}),
+    ...(typeof replay.transportMeta?.[REPLACED_SESSION_META_KEY] === "string" ? { replacedSessionId: replay.transportMeta[REPLACED_SESSION_META_KEY] } : {}),
   };
 }
 

@@ -130,7 +130,7 @@ describe("work-item tools — registry + schemas", () => {
     expect(todoSkill).toContain("One operator outcome should normally map to one root Todo.");
     expect(todoSkill).toContain("A checklist does not imply one Todo per item.");
     expect(todoSkill).toContain("Only independently assignable or independently reviewable deliverables become child Todos.");
-    expect(todoSkill).toContain("No agent marks a Todo `done`.");
+    expect(todoSkill).toContain("A root Todo always waits for the operator. No one else marks a Todo `done`.");
     expect(template).not.toContain(["", "Users", ""].join("/"));
   });
 });
@@ -338,6 +338,15 @@ describe("work-item tools — unit (stub gateway)", () => {
       { status: "done", note: "shipped", asOperator: true },
       { status: "done" },
     ]);
+  });
+
+  it("assign passes @unassigned through to clear the assignee", async () => {
+    const { calls, ctx } = stub(() => ({ status: 200, body: { workItem: { id: "JIN-1", assignee: null } } }), "sess-1");
+    await tool("assign_work_item").handler({ id: "JIN-1", assignee: "@unassigned" }, ctx);
+    expect(calls.map((c) => c.body)).toEqual([{ assignee: "@unassigned" }]);
+    await expect(tool("assign_work_item").handler({ id: "JIN-1", assignee: "" }, ctx)).rejects.toThrow(/assignee is required/);
+    await expect(tool("assign_work_item").handler({ id: "JIN-1" }, ctx)).rejects.toThrow(/assignee is required/);
+    expect(calls).toHaveLength(1);
   });
 
   it("assign validates through the route and maps readable 400 near-match errors", async () => {

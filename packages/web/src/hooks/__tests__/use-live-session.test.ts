@@ -1014,6 +1014,20 @@ describe("useLiveSession (read-only)", () => {
     expect(result.current.messages.at(-1)).toMatchObject({ role: "notification", content: displayMessage, meta })
   })
 
+  it("files a live notification under the server's message id, once, so a withdrawal can hide it", async () => {
+    getSession.mockResolvedValue({ status: "running", messages: [] })
+    const { subscribe, emit } = makeBus()
+    const { result } = renderHook(() => useLiveSession("s1", { subscribe, readOnly: true }))
+    await act(async () => { await Promise.resolve() })
+
+    act(() => {
+      emit("session:notification", { sessionId: "s1", message: "Use route A", messageId: "m-1" })
+      emit("session:notification", { sessionId: "s1", message: "Use route A", messageId: "m-1" })
+    })
+
+    expect(result.current.messages.filter((message) => message.role === "notification")).toMatchObject([{ id: "m-1", content: "Use route A" }])
+  })
+
   it("keeps live task-list blocks separate from tool-call rows", async () => {
     getSession.mockResolvedValue({ status: "running", messages: [] })
     const { subscribe, emit } = makeBus()

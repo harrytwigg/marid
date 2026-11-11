@@ -5,7 +5,8 @@ import { call, sessionOf, startParentReviewHarness, statusPost, treeInReview } f
  * The parent-owner lane, through the real `handleApiRequest`: the employee that
  * owns a child Todo's parent accepts it (`done`, with a reason) while the child is
  * executing or in review, or sends it back (`executing`, a review bounce) while it
- * is in review, and nothing else. A delegated child accepted from `executing`
+ * is in review, and nothing else. A close from review is the ancestor-owner close
+ * (`work-item-status-ancestor-close.test.ts`), so the owner's own work is no bar. A delegated child accepted from `executing`
  * is covered in `work-item-status-parent-owner-delegated.test.ts`.
  */
 
@@ -135,7 +136,7 @@ describe("what the parent-owner lane refuses", () => {
     transition(child.id, status === "backlog" ? "executing" : status, "operator", { human: true, blockKind: "needs_input" });
     if (status === "backlog") transition(child.id, "backlog", "operator", { human: true });
     const res = await statusPost((await sessionOf("owner-dev")).id, child.id, accept);
-    expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(/operator's decision/)]);
+    expect([res.status, res.body.error]).toEqual([403, expect.stringMatching(new RegExp(`from ${status} is not an agent move: move it to ${status === "backlog" ? "executing, then to in_review" : "in_review"} with a summary in note, then you, as the owner of the parent Todo \\S+, close it from there with a note`))]);
     expect(statusOf(child.id)).toBe(status);
     expect(listComments(child.id).total).toBe(0);
   });
@@ -189,17 +190,16 @@ describe("what the parent-owner lane refuses", () => {
     expect([res.status, statusOf(child.id)]).toEqual([403, "in_review"]);
   });
 
-  it("holds the self-review ban: an owner that worked the child cannot accept it", async () => {
+  it("lets an owner that worked the child close it from review as its own work", async () => {
     const { child } = treeInReview(workItems, "Linked owner");
     const owner = await sessionOf("owner-dev");
     workItems.linkSession(child.id, owner.id);
     const res = await statusPost(owner.id, child.id, accept);
-    expect(res.status).toBe(403);
-    expect(res.body.error).toMatch(/owner-dev cannot accept .*: a session of owner-dev was linked to work on it.*self-review ban/);
-    expect([statusOf(child.id), listComments(child.id).total]).toEqual(["in_review", 0]);
+    expect([res.status, statusOf(child.id)]).toEqual([200, "done"]);
+    expect(lastMove(child.id).detail).toMatchObject({ parentOwner: true, ownWork: true });
   });
 
-  it("holds the ban for a second session of an owner that started or handed in the child", async () => {
+  it("lets a second session of an owner that started or handed in the child close it from review as its own work", async () => {
     const parent = workItems.createWorkItem({ title: "Parent", status: "executing", assignee: "owner-dev" });
     const child = workItems.createWorkItem({ title: "Owner-made child", status: "backlog", parentId: parent.id });
     const first = await sessionOf("owner-dev");
@@ -209,9 +209,8 @@ describe("what the parent-owner lane refuses", () => {
     const second = await sessionOf("owner-dev", { parentSessionId: first.id });
     const res = await statusPost(second.id, child.id, accept);
 
-    expect(res.status).toBe(403);
-    expect(res.body.error).toMatch(/owner-dev moved it to executing/);
-    expect(statusOf(child.id)).toBe("in_review");
+    expect([res.status, statusOf(child.id)]).toEqual([200, "done"]);
+    expect(lastMove(child.id).detail).toMatchObject({ parentOwner: true, ownWork: true });
   });
 
   it("treats an owner's own take-back of work it handed in as an ordinary agent move, not a review bounce", async () => {

@@ -158,6 +158,28 @@ function statusHint(s: SessionRecord): string {
   }
 }
 
+interface SendReceipt {
+  status?: string;
+  queueItemId?: string;
+  targetRunning?: boolean;
+  queuedFromYou?: number;
+  superseded?: string;
+}
+
+/** What to do next, given where the message landed. A busy target reads it only when its turn ends. */
+function sendHint(sent: SendReceipt): string {
+  const next = "Next: END YOUR TURN for reply or read_session.";
+  if (sent.status === "duplicate") {
+    const replaced = sent.superseded === "withdrawn" ? " The message it replaces was withdrawn unread." : "";
+    return `Not queued again: an identical message of yours is already queued.${replaced} ${next}`;
+  }
+  if (sent.superseded === "too-late") return `Queued, but the message it replaces had already left the queue (read by the target, or cancelled). ${next}`;
+  if (sent.superseded === "withdrawn") return `Queued; the message it replaces was withdrawn unread. ${next}`;
+  if (!sent.targetRunning) return `Queued. ${next}`;
+  const more = (sent.queuedFromYou ?? 0) > 1 ? ` ${sent.queuedFromYou} of yours are queued: it reads them in order.` : "";
+  return `Queued: target is mid-turn and reads this when it ends.${more} To replace a queued message, send again with supersedes=queueId (to retract one, replace it with a short retraction). ${next}`;
+}
+
 /* ── The tool group ─────────────────────────────────────────────────────────── */
 
 export function buildSessionTools(): JinnMcpTool[] {
@@ -210,12 +232,13 @@ export function buildSessionTools(): JinnMcpTool[] {
 
   const sendToSession: JinnMcpTool = {
     name: "send_to_session",
-    description: "Send a follow-up message to another session; gateway guards apply.",
+    description: "Message another session.",
     inputSchema: {
       type: "object",
       properties: {
         sessionId: { type: "string" },
         message: { type: "string" },
+        supersedes: { type: "string" },
       },
       required: ["sessionId", "message"],
     },
@@ -227,12 +250,18 @@ export function buildSessionTools(): JinnMcpTool[] {
         // Same refusal the gateway gives; checked here to save the round trip.
         throw new JinnMcpToolError("cannot message your own session — write your conclusion in your reply instead.");
       }
-      const { status, body } = await gatewayRequest(ctx, "POST", `${sessionPath(sessionId)}/message`, { message });
+      const supersedes = optionalString(args, "supersedes");
+      const { status, body } = await gatewayRequest(ctx, "POST", `${sessionPath(sessionId)}/message`, { message, ...(supersedes ? { supersedes } : {}) });
       if (status >= 400) throw gatewayFailure(`messaging session "${sessionId}"`, status, body);
+      const sent = (body ?? {}) as SendReceipt;
       return {
-        status: "queued",
+        status: sent.status === "duplicate" ? "duplicate" : "queued",
         sessionId,
-        hint: "Queued. Next: END YOUR TURN for reply or read_session.",
+        ...(sent.queueItemId ? { queueId: sent.queueItemId } : {}),
+        ...(sent.targetRunning !== undefined ? { targetRunning: sent.targetRunning } : {}),
+        ...(sent.queuedFromYou !== undefined ? { queuedFromYou: sent.queuedFromYou } : {}),
+        ...(sent.superseded ? { superseded: sent.superseded } : {}),
+        hint: sendHint(sent),
       };
     },
   };

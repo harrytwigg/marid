@@ -1,6 +1,6 @@
 // The chat screens the glass pass photographs beyond the plain `chat` entry: a thread with delegation cards,
 // the code block's hover, two panes side by side, the phone's chat list and its session tabs, and the
-// header's menu. They sit in their own file so screens.mjs stays under the size ratchet; it spreads
+// header's menu. They sit in their own file so screens.mjs stays small; it spreads
 // them into SCREENS.
 const PLAN_READY = 'Add a step for the changelog'
 const CARDS_READY = 'Review the release checklist for gaps'

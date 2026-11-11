@@ -8,7 +8,7 @@ import { EXPECTED_ENUMS, EXPECTED_REQUIRED, EXPECTED_TOOL_NAMES } from "./tool-m
 // concise rather than growing into this ceiling. Rebased down when the
 // Experiments and Workflow tools were removed, so the ceiling again sits ON
 // the largest wrapper (Pi).
-const MAX_MANIFEST_TOKENS = 4344;
+const MAX_MANIFEST_TOKENS = 4371;
 // Exact gate: js-tiktoken 1.0.21 with its local o200k_base ranks. The provider
 // projection is the OpenAI Responses API function-tool request shape pinned on 2026-07-12.
 const ATTESTED = {
@@ -281,9 +281,27 @@ const ATTESTED = {
   // opened: done."); which sessions qualify is the refusal's to say, and the
   // parameter's name already says it is for the operator. One token under the
   // old text, so the ceiling does not move and Pi sits one under it.
-  rpc: { tokens: 4008, sha256: "36f7347b0f96b308b7ceb214c3d6b59166ed65bdb31c107af6623b0fe1efe0e1" },
-  pi: { tokens: 4343, sha256: "05c747b6a630077102bb8789325e18683c410c38b3131a5e6800ab93b0835c2b" },
-  openai: { tokens: 4147, sha256: "f7a8474b1e39d4b5683d49b9d62dd45380c197e303bfbe748cd8902d27e516b8" },
+  // Rebased for `freshSession` on delegate_task: the next phase of a Todo can
+  // run in a new linked session instead of the delegate's live one. The flag
+  // ends that session, which no model would guess from the name alone, so it
+  // keeps a one-line description. 27 tokens on every wrapper with nothing dead
+  // left to cut, so the ceiling moves by exactly that and Pi stays one under it.
+  // Reattested for `supersedes` on send_to_session: a sender takes back its own
+  // parked message when a correction replaces it. The bare string costs 9 on
+  // Pi; the tool's description bought it back by dropping "a follow-up" and
+  // "gateway guards apply" (the refusals say which guard fired). The field's
+  // own meaning is taught by the result's hint, which is not in the manifest.
+  // Token counts are unchanged, so only the SHAs move.
+  // Reattested for update_work_item's `done` clause: "parent owner" became
+  // "ancestor owner", since an owner of any executing or blocked Todo above the
+  // one in review may close it. Token counts are unchanged, so only the SHAs move.
+  // Rebased for clearing an assignee: assign_work_item says "@unassigned clears"
+  // (the value is not guessable), paid for by dropping "; retain its audit" from
+  // archive_work_item, which the name already says. One token over the old text,
+  // so the ceiling does not move and Pi sits ON it again.
+  rpc: { tokens: 4036, sha256: "4ea1b5d5d7fcd67a9abcef584688242b6199f295ba969e79f5eff9e5d7962d42" },
+  pi: { tokens: 4371, sha256: "0402eae2892101a5f4996416e1c9c4041de649026fea56410d8f88877d4a4ab1" },
+  openai: { tokens: 4175, sha256: "6539606e2ba66cd0784c77b1547d9b3d1b233c1483f1f4f4720d19851ed507d0" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;

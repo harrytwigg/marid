@@ -34,7 +34,7 @@ export interface RouteTodoClaim {
  *  so the board can say that plainly instead of a generic failure. */
 export const TODO_ALREADY_EXECUTING = "TODO_ALREADY_EXECUTING";
 
-function acquired(workItemId: string, owner: string): RouteTodoClaim {
+export function acquiredTodoClaim(workItemId: string, owner: string): RouteTodoClaim {
   return {
     owner,
     bind: (sessionId) => { claimWorkItem({ workItemId, owner, sessionId }); },
@@ -66,7 +66,7 @@ export function claimTodoForDelegation(
   if (dispatcherCallerId) releaseWorkItemClaimForSession(dispatcherCallerId);
   const owner = `delegation:${randomUUID()}`;
   const claim = claimWorkItem({ workItemId, owner });
-  if (claim.state === "acquired") return acquired(workItemId, owner);
+  if (claim.state === "acquired") return acquiredTodoClaim(workItemId, owner);
   if (claim.state === "rejected") return refuse(res, workItemId, claim.reason);
   json(res, {
     error: `Todo ${workItemId} already has live execution session ${claim.claim.sessionId ?? claim.claim.owner}`,
@@ -95,7 +95,7 @@ export type DispatchClaimOutcome =
 export function takeDispatchClaim(workItemId: string): DispatchClaimOutcome {
   const owner = `dispatch:${randomUUID()}`;
   const claim = claimWorkItem({ workItemId, owner });
-  if (claim.state === "acquired") return { state: "acquired", claim: acquired(workItemId, owner) };
+  if (claim.state === "acquired") return { state: "acquired", claim: acquiredTodoClaim(workItemId, owner) };
   if (claim.state === "rejected") return { state: "refused", status: 409, body: { error: claim.reason, workItemId } };
   const holder = claim.claim.sessionId ? getSession(claim.claim.sessionId) : undefined;
   if (holder?.employee === TODO_DISPATCHER_NAME) {

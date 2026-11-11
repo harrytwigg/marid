@@ -52,6 +52,13 @@ function optionalStringArray(args: Record<string, unknown>, name: string): strin
   return value.map((entry) => (entry as string).trim());
 }
 
+function optionalBoolean(args: Record<string, unknown>, name: string): boolean | undefined {
+  const value = args[name];
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "boolean") throw new JinnMcpToolError(`${name} must be a boolean when provided`);
+  return value;
+}
+
 function asText(body: unknown, max = 2000): string {
   const text = typeof body === "string" ? body : JSON.stringify(body);
   return text.length > max ? `${text.slice(0, max)}…` : text;
@@ -68,6 +75,8 @@ interface DelegationResponse {
   status?: string;
   title?: string;
   replayed?: boolean;
+  /** The delegate's session a `freshSession` delegation ended to start this one. */
+  replacedSessionId?: string;
   error?: string;
 }
 
@@ -122,6 +131,10 @@ export function buildDelegationTools(): JinnMcpTool[] {
           description: "review if this delegate reviews rather than executes; defaults from the Todo status.",
         },
         idempotencyKey: { type: "string" },
+        freshSession: {
+          type: "boolean",
+          description: "Ends the employee's live session on workItemId; starts a new linked one.",
+        },
         attachments: {
           type: "array",
           items: { type: "string" },
@@ -139,6 +152,8 @@ export function buildDelegationTools(): JinnMcpTool[] {
         const v = optionalString(args, key);
         if (v !== undefined) body[key] = v;
       }
+      const freshSession = optionalBoolean(args, "freshSession");
+      if (freshSession !== undefined) body.freshSession = freshSession;
       const attachments = optionalStringArray(args, "attachments");
       if (attachments !== undefined) body.attachments = attachments;
       if (!body.employee && !body.engine) {
@@ -157,6 +172,7 @@ export function buildDelegationTools(): JinnMcpTool[] {
         model: d.model ?? null,
         status: d.status,
         replayed: d.replayed === true,
+        ...(d.replacedSessionId ? { replacedSessionId: d.replacedSessionId } : {}),
         hint:
           `Work item ${String(d.workItemId ?? "?")} tracks this; session ${String(d.sessionId ?? "?")} is executing. ` +
           "END YOUR TURN; reply wakes you. Next: read_session; never poll.",

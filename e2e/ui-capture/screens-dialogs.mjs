@@ -1,5 +1,5 @@
 // The dialogs, the lightbox and the phone sheet, each photographed open. They sit in their own file so
-// screens.mjs stays under the size ratchet; it spreads them into SCREENS.
+// screens.mjs stays small; it spreads them into SCREENS.
 const BOARD_READY = 'Draft the release checklist'
 
 const visible = (page, testIds) =>

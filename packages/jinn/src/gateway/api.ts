@@ -85,6 +85,7 @@ import {
   RESTART_ACK_META_KEY,
 } from "../sessions/registry.js";
 import { claimIncomingTurn, lateralSendDedupeKey } from "../sessions/incoming-turn.js";
+import { sendReceipt, supersedeRequestError, type SupersedeOutcome } from "../sessions/queued-send-supersede.js";
 import { blockFallbackText, validateBlockEnvelope } from "../shared/blocks.js";
 import { USER_MESSAGE_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
 import { endStopOnDeliberateSend, isStoppedByUser, refuseStoppedSession, STOPPED_SESSION_NOT_DELIVERED, stopSession } from "./session-stop.js";
@@ -208,7 +209,7 @@ import {
 } from "../work-items/store.js";
 import { resolveDelegationLinkRole, WORK_ITEM_LINK_ROLES, type WorkItemLinkRole } from "../work-items/link-role.js";
 import { retiredTodoFieldError } from "../work-items/retired-fields.js";
-import { OPERATOR_ASSIGNEE } from "../work-items/operator-assignee.js";
+import { OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from "../work-items/operator-assignee.js";
 import { resolveTodoEditAuthority, todoEditRefusal } from "./todo-edit-authority.js";
 import { ownershipEditProblem } from "../accounts/todo-person.js";
 import { isTodoId, resolveTodoIdPrefix } from "../work-items/id.js";
@@ -257,6 +258,7 @@ import { TodoDepartmentNotAllowedError } from "../shared/todo-departments-config
 import { DepartmentArchivedError, isDepartmentArchived } from "../work-items/department-archive.js";
 import { DepartmentBoundaryError, scopedDepartmentOf } from "../work-items/department-scope.js";
 import { parseStatusUpdateFields } from "./work-item-status-fields.js";
+import { parentOwnerEventDetail, parentOwnerMoveOptions } from "./work-item-ancestor-close.js";
 import { employeeCloseComment, hasOperatorLane, resolveStatusLane, WORK_ITEM_STATUSES } from "./work-item-status-lane.js";
 import { assignWorkItem, changedStopCause, transition, TransitionError } from "../work-items/transitions.js";
 import { checkAssignee } from "./todo-assignee.js";
@@ -270,6 +272,7 @@ import { isRemoteTarget, sshDestination } from "../shared/remote-target.js";
 import { cachedRemoteFacts } from "../engines/remote-stage.js";
 import { TODO_DISPATCHER_NAME } from "./system-employees.js";
 import { claimTodoForDelegation } from "./todo-claim.js";
+import { claimBeforeReplacing, freshSessionRefusal, parseFreshSession, REPLACED_SESSION_META_KEY, replaceLiveSession } from "./delegation-fresh-session.js";
 import { startTodoDispatcher } from "./todo-dispatch.js";
 import { linkSelfStartedTodo } from "./todo-self-start.js";
 import {
@@ -2657,7 +2660,7 @@ export async function handleApiRequest(
         // A close on the operator's standing grant says so: the actor stays the closer's own session.
         ...(lane.kind === "closer" ? { closeTodos: true } : {}),
         // The parent's owner accepting or sending back a child's review: the actor stays its own session.
-        ...(lane.kind === "parent-owner" ? { parentOwner: true } : {}),
+        ...(lane.kind === "parent-owner" ? parentOwnerEventDetail(lane) : {}),
       }, caller.origin);
       // The banner's asked-for-after reason (design-doc §5): a same-status
       // operator move with a note annotates the CURRENT stop instead of
@@ -2691,7 +2694,7 @@ export async function handleApiRequest(
               // agent pairs, so the manual-start rule does not also govern it.
               agent: lane.kind === "agent" || undefined,
               // The parent's owner sending a child back from review is the review bounce.
-              ...(lane.kind === "parent-owner" && target === "executing" ? { bounce: true } : {}),
+              ...parentOwnerMoveOptions(lane, target as WorkItemStatus),
               callerSessionId: caller.kind === "session" ? caller.callerId : undefined, ...(blockKind ? { blockKind } : {}),
               ...(cascade ? { cascade: true } : {}), ...(stopCause ? { stopCause } : {}),
               detail,
@@ -2742,16 +2745,21 @@ export async function handleApiRequest(
         return badRequest(res, "request body must be a JSON object");
       }
       const body = parsed.body as Record<string, unknown>;
-      const assignee = typeof body.assignee === "string"
-        ? (body.assignee as string).trim()
-        : "";
-      if (!assignee) return badRequest(res, "assignee is required");
-      const roster = orgRegistry(context.getConfig());
-      // The assignee is an employee or the operator; never a system employee,
-      // which routes and shapes Todos but owns none.
-      const checked = checkAssignee(roster, assignee, { operator: true });
-      if (!checked.ok) return badRequest(res, checked.error);
-      const employee = checked.employee;
+      // `@unassigned` (or an explicit null) clears the assignee; a missing or empty value is still a mistake.
+      const requested = typeof body.assignee === "string" ? (body.assignee as string).trim() : "";
+      const unassign = body.assignee === null || requested === UNASSIGNED_FILTER;
+      if (!unassign && !requested) return badRequest(res, "assignee is required — name an employee, @operator, or @unassigned to clear it");
+      let assignee: string | null = null;
+      let employee: Employee | undefined;
+      if (!unassign) {
+        const roster = orgRegistry(context.getConfig());
+        // The assignee is an employee or the operator; never a system employee,
+        // which routes and shapes Todos but owns none.
+        const checked = checkAssignee(roster, requested, { operator: true });
+        if (!checked.ok) return badRequest(res, checked.error);
+        assignee = requested;
+        employee = checked.employee;
+      }
       const current = getWorkItem(params.id);
       if (!current) return notFound(res);
       if (STICKY_STATUSES.has(current.status)) {
@@ -2761,6 +2769,7 @@ export async function handleApiRequest(
         caller.kind === "session" &&
         current.status === "backlog" &&
         current.assignee === null &&
+        assignee !== null &&
         caller.session.employee === assignee;
       if (!explicitSelfClaim) {
         const authorized = authorizeWorkItemOwnerManagerOrRoot(caller, current, "assign");
@@ -3465,6 +3474,8 @@ export async function handleApiRequest(
       if (delegateAsRoot) return json(res, { error: delegateAsRoot }, 403);
       const fallbackParam = parseFallbackModeParam(body.fallbackMode);
       if (!fallbackParam.ok) return badRequest(res, fallbackParam.error);
+      const fresh = parseFreshSession(body.freshSession);
+      if (!fresh.ok) return badRequest(res, fresh.error);
       let attachments: string[] | undefined;
       if (body.attachments !== undefined) {
         if (!Array.isArray(body.attachments) || body.attachments.length > 20) {
@@ -3603,10 +3614,18 @@ export async function handleApiRequest(
       // One session per employee per Todo: when the delegate already has a live
       // session on it, the brief lands there and that session takes the claim
       // (or keeps the one it holds) instead of a second session being spawned.
-      const reused = requestedWorkItemId && employeeName ? liveEmployeeSession(workItem.id, employeeName) : undefined;
+      // `freshSession` asks for the opposite: that session is ended and a new one is spawned and linked in its place.
+      const live = requestedWorkItemId && employeeName ? liveEmployeeSession(workItem.id, employeeName) : undefined;
+      const replaced = fresh.fresh ? live : undefined;
+      const reused = replaced ? undefined : live;
       const loop = reused && delegationLoopError(workItem.id, reused, parentSessionId);
       if (loop) return json(res, { error: loop }, 409);
-      const claim = (reused && claimHeldBy(workItem.id, reused)) || claimTodoForDelegation(res, workItem.id, dispatcherHandoffFrom);
+      const freshRefusal = replaced && freshSessionRefusal(workItem.id, replaced, {
+        delegatorSessionId: parentSessionId, sessionCallerId: delegationCaller.kind === "session" ? delegationCaller.callerId : undefined,
+      });
+      if (freshRefusal) return json(res, { error: freshRefusal.error }, freshRefusal.status);
+      let claim = (reused && claimHeldBy(workItem.id, reused)) || (replaced && claimBeforeReplacing(workItem.id, replaced))
+        || claimTodoForDelegation(res, workItem.id, dispatcherHandoffFrom);
       if (!claim) return;
 
       // 2. SPAWN — the irreversible step. A failure here PRESERVES the minted
@@ -3656,6 +3675,11 @@ export async function handleApiRequest(
       // fresh delegate's brief sat parked behind the previous delegate's whole
       // turn until the reconciler reported it interrupted.
       const sessionKey = idempotencySessionKey ?? `delegation:${workItem.id}:${crypto.randomUUID()}`;
+      // Every refusal has been answered; from here to the link nothing awaits, so no reconcile sees the gap.
+      if (replaced) {
+        const effectiveStatus = effectiveSessionStatus(replaced, currentRuntimeActivity(replaced, context));
+        claim = replaceLiveSession(context, { workItemId: workItem.id, live: replaced, effectiveStatus, claim });
+      }
       let session: Session;
       try {
         session = createSession({
@@ -3677,6 +3701,7 @@ export async function handleApiRequest(
           portalName: config.portal?.portalName,
           transportMeta: reroutedSessionMeta(selection.reroute, {
             [DELEGATION_COMPLETION_TRACKED_META_KEY]: true,
+            ...(replaced ? { [REPLACED_SESSION_META_KEY]: replaced.id } : {}),
             ...(delegateEmployee?.displayName ? { delegationEmployeeDisplay: delegateEmployee.displayName } : {}),
           }),
         });
@@ -3769,6 +3794,7 @@ export async function handleApiRequest(
         fallbackMode: session.fallbackMode ?? null,
         status: session.status,
         title,
+        ...(replaced ? { replacedSessionId: replaced.id } : {}),
       }, 201);
     }
 
@@ -3902,6 +3928,7 @@ export async function handleApiRequest(
       const msgCaller = resolveScopedWriteCallerIdentity(req, context);
       let parentFollowUp: { caller: Session; message: string } | undefined;
       let lateralDedupeKey: string | undefined;
+      let supersedes: { callerSessionId: string; queueItemId: string } | undefined;
       if (msgCaller.kind === "unidentified-tool") {
         res.writeHead(403, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: UNIDENTIFIED_TOOL_CALL_ERROR }));
@@ -3921,6 +3948,9 @@ export async function handleApiRequest(
           res.end(JSON.stringify({ error: SPENT_DISPATCHER_MESSAGE_REFUSAL }));
           return;
         }
+        const supersedeError = supersedeRequestError(body.supersedes, caller.id, params.id);
+        if (supersedeError) return badRequest(res, supersedeError);
+        if (typeof body.supersedes === "string") supersedes = { callerSessionId: caller.id, queueItemId: body.supersedes };
         const callerParentId = reportingParentSessionId(caller);
         const targetParentId = reportingParentSessionId(session);
         // Whoever may stop a session may start it again by messaging it; anyone
@@ -4128,6 +4158,7 @@ export async function handleApiRequest(
       let queueItemId: string | undefined;
       let incomingMessageId: string;
       let callbackQueueNeedsDispatch = true;
+      let supersededSend: SupersedeOutcome | undefined;
       if (callbackDelivery) {
         const acceptance = acceptSessionDelivery(callbackDelivery.id, session.id, sessionKey);
         if (!acceptance.accepted) {
@@ -4160,9 +4191,15 @@ export async function handleApiRequest(
       } else {
         const claim = claimIncomingTurn({
           sessionId: session.id, sessionKey, prompt, isNotification, role: messageRole, dedupeKey: lateralDedupeKey,
-          content: isNotification ? displayMessage : prompt, media: userMedia, meta: notificationMeta,
+          content: isNotification ? displayMessage : prompt, media: userMedia, meta: notificationMeta, supersedes,
         });
-        if (claim.deduplicated) return json(res, { status: "duplicate", sessionId: session.id, queueItemId: claim.queueItemId });
+        supersededSend = claim.superseded;
+        if (supersededSend?.outcome === "withdrawn" && supersededSend.messageId) {
+          context.emit("queue:updated", { sessionId: session.id, sessionKey, withdrawnMessageId: supersededSend.messageId });
+        }
+        if (claim.deduplicated) {
+          return json(res, { status: "duplicate", sessionId: session.id, queueItemId: claim.queueItemId, ...(supersededSend ? { superseded: supersededSend.outcome } : {}) });
+        }
         endStopOnDeliberateSend(session);
         queueItemId = claim.queueItemId;
         incomingMessageId = claim.messageId;
@@ -4219,6 +4256,7 @@ export async function handleApiRequest(
         context.emit("session:notification", {
           sessionId: session.id,
           message: displayMessage,
+          messageId: incomingMessageId,
           ...(notificationMeta ? { meta: notificationMeta } : {}),
         });
       }
@@ -4309,6 +4347,7 @@ export async function handleApiRequest(
         sessionId: session.id,
         messageId: incomingMessageId,
         queueItemId,
+        ...(msgCaller.kind === "session" ? sendReceipt(msgCaller.callerId, { id: session.id, sessionKey }, session.status === "running", supersededSend) : {}),
         ...(delivery ? { delivery } : {}),
         ...(callbackDelivery ? { callbackDeliveryId: callbackDelivery.id } : {}),
       });

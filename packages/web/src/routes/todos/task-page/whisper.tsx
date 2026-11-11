@@ -63,6 +63,7 @@ const WHISPERS: Record<string, WhisperRule> = {
   note: (detail) => {
     if (detail.assignee === OPERATOR_ASSIGNEE) return { Icon: Pencil, text: "assigned it to the operator" }
     if (typeof detail.assignee === "string") return { Icon: Pencil, text: `assigned ${detail.assignee}` }
+    if ("assignee" in detail && detail.assignee === null) return { Icon: Pencil, text: "unassigned it" }
     return { Icon: Pencil, text: "added a note" }
   },
   metadata_edited: { Icon: Pencil, text: "edited the details" },
