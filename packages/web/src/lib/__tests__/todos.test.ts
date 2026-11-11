@@ -213,8 +213,8 @@ describe("filters (design-todos §4.3)", () => {
 })
 
 describe("the single Assignee filter this replaced", () => {
-  it("opens as the filter it meant: me on the person slot, none on no agent, an employee on the agent slot", () => {
-    expect(filtersFromSearchParams(new URLSearchParams("assignee=@operator"))).toEqual({ status: "open", person: "@operator" })
+  it("opens on the Agent filter, which is the slot it always matched: the operator, none, or an employee", () => {
+    expect(filtersFromSearchParams(new URLSearchParams("assignee=@operator"))).toEqual({ status: "open", agent: "@operator" })
     expect(filtersFromSearchParams(new URLSearchParams("assignee=@unassigned"))).toEqual({ status: "open", agent: "@unassigned" })
     expect(filtersFromSearchParams(new URLSearchParams("assignee=scout&status=blocked"))).toEqual({ status: "blocked", agent: "scout" })
   })
@@ -222,6 +222,8 @@ describe("the single Assignee filter this replaced", () => {
   it("yields to the new params when a link carries both", () => {
     expect(filtersFromSearchParams(new URLSearchParams("assignee=@operator&person=user:u1&agent=scout")))
       .toEqual({ status: "open", person: "user:u1", agent: "scout" })
+    expect(filtersFromSearchParams(new URLSearchParams("assignee=@operator&person=user:u1")))
+      .toEqual({ status: "open", person: "user:u1", agent: "@operator" })
     // An old value fills only the slot the new params leave empty.
     expect(filtersFromSearchParams(new URLSearchParams("assignee=scout&person=@unassigned")))
       .toEqual({ status: "open", person: "@unassigned", agent: "scout" })
@@ -229,7 +231,7 @@ describe("the single Assignee filter this replaced", () => {
 
   it("is rewritten to the new params the next time the view is written", () => {
     const migrated = filtersFromSearchParams(new URLSearchParams("assignee=@operator"))
-    expect(filtersToSearchParams(migrated).toString()).toBe("person=%40operator")
+    expect(filtersToSearchParams(migrated).toString()).toBe("agent=%40operator")
   })
 
   it("still reads as a filtered URL, so the stored view does not override it", () => {
@@ -244,7 +246,7 @@ describe("the single Assignee filter this replaced", () => {
       setItem: () => undefined,
       removeItem: () => undefined,
     }
-    expect(readPersistedFilters(storage)).toEqual({ status: "executing", person: "@operator" })
+    expect(readPersistedFilters(storage)).toEqual({ status: "executing", agent: "@operator" })
     const named = { ...storage, getItem: () => "assignee=scout" }
     expect(readPersistedFilters(named)).toEqual({ status: "open", agent: "scout" })
   })

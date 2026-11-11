@@ -87,6 +87,8 @@ describe("labels", () => {
     expect(agentFilterLabel(UNASSIGNED_FILTER, byName)).toBe("No agent")
     expect(agentFilterLabel("some-employee", byName)).toBe("Some Employee")
     expect(agentFilterLabel("gone-employee", byName)).toBe("gone-employee")
+    // An old Assigned to me link filters the agent slot on the operator.
+    expect(agentFilterLabel(OPERATOR_ASSIGNEE, byName)).toBe("Operator")
   })
   it("a member reads themself as Me and the operator as Operator", () => {
     const member = { me: "user:u1", people: [], offerOperator: true }

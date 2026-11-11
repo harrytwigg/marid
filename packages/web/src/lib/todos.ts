@@ -198,15 +198,12 @@ export interface TodoFilters {
   q?: string
 }
 
-/** The reserved value for the operator in the person slot (and the agent slot of old links). */
-const LEGACY_OPERATOR = "@operator"
 
-/** Where the single Assignee filter's value lands now. "Assigned to me" was the person slot; "Unassigned" was no agent, and
- *  every other value an employee. */
+/** Where the single Assignee filter's value lands now. It always matched the agent slot (`assignee`, including the operator
+ *  and the none sentinel), so it lands on Agent: an old link or saved view keeps its exact Todos. Person = Me is a different
+ *  question (the person slot) and is not what an old "Assigned to me" asked. */
 export function legacyAssigneeFilter(assignee: string | null | undefined): Pick<TodoFilters, "person" | "agent"> {
-  if (!assignee) return {}
-  if (assignee === LEGACY_OPERATOR) return { person: LEGACY_OPERATOR }
-  return { agent: assignee }
+  return assignee ? { agent: assignee } : {}
 }
 
 /** Transport-only work-item ids must never cross into user-facing metadata. */

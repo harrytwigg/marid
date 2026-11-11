@@ -44,8 +44,8 @@ describe("useBoardFilters — URL and storage reconcile", () => {
 
   it("an old link with the single Assignee filter opens as the matching filter, and is remembered in the new form", () => {
     const me = renderFilters("/todos/b/home?assignee=%40operator")
-    expect(me.result.current.filters).toEqual({ status: "open", person: "@operator" })
-    expect(localStorage.getItem(BOARD_FILTERS_STORAGE_KEY)).toBe("person=%40operator")
+    expect(me.result.current.filters).toEqual({ status: "open", agent: "@operator" })
+    expect(localStorage.getItem(BOARD_FILTERS_STORAGE_KEY)).toBe("agent=%40operator")
     me.unmount()
     localStorage.clear()
     const agent = renderFilters("/todos/b/home?assignee=scout")
@@ -56,8 +56,8 @@ describe("useBoardFilters — URL and storage reconcile", () => {
   it("a view saved before the split comes back as the matching filter, and the URL is rewritten to the new params", () => {
     localStorage.setItem(BOARD_FILTERS_STORAGE_KEY, "status=executing&assignee=%40operator")
     const { result } = renderFilters("/todos/b/everything")
-    expect(result.current.filters).toEqual({ status: "executing", person: "@operator" })
-    expect(result.current.search).toBe("status=executing&person=%40operator")
+    expect(result.current.filters).toEqual({ status: "executing", agent: "@operator" })
+    expect(result.current.search).toBe("status=executing&agent=%40operator")
   })
 
   it("an empty URL falls back to the stored set and mirrors it back into the URL", () => {

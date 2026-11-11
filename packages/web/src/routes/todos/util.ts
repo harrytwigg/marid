@@ -110,9 +110,11 @@ export function displayNameOf(assignee: string | null, byName: Map<string, Emplo
   return byName.get(assignee)?.displayName ?? assignee
 }
 
-/** What the Agent filter reads when set: the employee's name, "No agent" for the none sentinel; null when unset. */
+/** What the Agent filter reads when set: the employee's name, "No agent" for the none sentinel, "Operator" for a Todo whose
+ *  agent slot is the operator (an old link's Assigned to me); null when unset. */
 export function agentFilterLabel(agent: string | undefined, byName: Map<string, Employee>): string | null {
   if (!agent) return null
   if (agent === UNASSIGNED_FILTER) return "No agent"
+  if (agent === OPERATOR_ASSIGNEE) return "Operator"
   return byName.get(agent)?.displayName ?? agent
 }

@@ -11,7 +11,7 @@ type Store = typeof import("../store.js");
 
 let store: Store;
 let UNASSIGNED: string;
-const ids = {} as Record<"bothSet" | "personOnly" | "agentOnly" | "operatorOnly" | "otherPersonAgent" | "neither", string>;
+const ids = {} as Record<"operatorHanded" | "bothSet" | "personOnly" | "agentOnly" | "operatorOnly" | "otherPersonAgent" | "neither", string>;
 
 beforeAll(async () => {
   store = await import("../store.js");
@@ -33,6 +33,9 @@ beforeAll(async () => {
   ids.otherPersonAgent = mk("another person and the same agent", "some-employee");
   person(ids.otherPersonAgent, "user:u2");
   ids.neither = mk("nobody");
+  // An agent handing a Todo to the operator keeps the person row beside it: the agent slot is the operator, the person is a user.
+  ids.operatorHanded = mk("handed to the operator, a person beside it", operator.OPERATOR_ASSIGNEE);
+  person(ids.operatorHanded, "user:u1");
 });
 
 const idsFor = (filter: { assignee?: string; humanAssignee?: string }) =>
@@ -41,7 +44,7 @@ const sorted = (...list: string[]) => [...list].sort();
 
 describe("the person filter reads the person slot", () => {
   it("matches a named person exactly", () => {
-    expect(idsFor({ humanAssignee: "user:u1" })).toEqual(sorted(ids.bothSet, ids.personOnly));
+    expect(idsFor({ humanAssignee: "user:u1" })).toEqual(sorted(ids.bothSet, ids.personOnly, ids.operatorHanded));
     expect(idsFor({ humanAssignee: "user:u2" })).toEqual([ids.otherPersonAgent]);
     expect(idsFor({ humanAssignee: "user:nobody" })).toEqual([]);
   });
@@ -84,11 +87,24 @@ describe("the person and agent filters are independent and AND together", () => 
 
   it("composes with status and reports an exact total", () => {
     const page = store.queryWorkItems({ humanAssignee: "user:u1", status: "backlog", limit: 100 });
-    expect(page.total).toBe(2);
+    expect(page.total).toBe(3);
     expect(store.queryWorkItems({ humanAssignee: "user:u1", status: "done", limit: 100 }).total).toBe(0);
   });
 
   it("counts as a filter for search", () => {
-    expect(store.searchWorkItems({ humanAssignee: "user:u1" }).map((item) => item.id).sort()).toEqual(sorted(ids.bothSet, ids.personOnly));
+    expect(store.searchWorkItems({ humanAssignee: "user:u1" }).map((item) => item.id).sort()).toEqual(sorted(ids.bothSet, ids.personOnly, ids.operatorHanded));
+  });
+});
+
+describe("the old Assignee filter's @operator value is the agent slot, and stays so", () => {
+  // The web opens an old `assignee=@operator` link as Agent = Operator, which asks for exactly this. A Todo handed to the
+  // operator with a user's person row beside it must stay in that set, and Person = Me must not stand in for it.
+  it("keeps every Todo whose agent slot is the operator, whoever the person is", () => {
+    expect(idsFor({ assignee: "@operator" })).toEqual(sorted(ids.operatorOnly, ids.operatorHanded));
+  });
+
+  it("is a different question from Person = Me, which reads the person slot", () => {
+    expect(idsFor({ humanAssignee: "@operator" })).toEqual([ids.operatorOnly]);
+    expect(store.getWorkItem(ids.operatorHanded)).toMatchObject({ assignee: "@operator", humanAssignee: "user:u1" });
   });
 });

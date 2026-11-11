@@ -53,12 +53,12 @@ describe("todosPath", () => {
 })
 
 describe("the old assignee argument", () => {
-  it("lands on the slot it meant: @operator on the person, any employee on the agent", () => {
+  it("lands on the agent filter, the slot the single filter matched, whoever it names", () => {
     const read = (args: Parameters<typeof todosPath>[0]) => {
       const path = todosPath(args)
       return filtersFromSearchParams(new URLSearchParams(path.slice(path.indexOf("?"))))
     }
-    expect(read({ assignee: "@operator" })).toEqual({ status: "open", person: "@operator" })
+    expect(read({ assignee: "@operator" })).toEqual({ status: "open", agent: "@operator" })
     expect(read({ assignee: "a-lead" })).toEqual({ status: "open", agent: "a-lead" })
     expect(read({ assignee: "a-lead", person: "@operator" })).toEqual({ status: "open", person: "@operator", agent: "a-lead" })
   })
