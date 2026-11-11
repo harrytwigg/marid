@@ -16,6 +16,7 @@ import { operatorSafeTodoError, priorityLabel } from "@/lib/todos"
 import { createDetail } from "./new-todo-preview"
 import { PropertyChip, useIsCreateMobile } from "./new-todo-chips"
 import { AssignOnCreateError, assignOnCreate } from "./new-todo-assign"
+import { useOperatorSelf } from "@/hooks/use-operator-self"
 import { MemberName } from "./attribution"
 import { OPERATOR_ASSIGNEE } from "./util"
 import { TodoDialog } from "./todo-dialog"
@@ -57,6 +58,7 @@ export function NewTodoDialog({
   const [department, setDepartment] = useState<string | null>(seededDepartment)
   const [assignee, setAssignee] = useState<string | null>(null)
   const [person, setPerson] = useState<string | null>(null)
+  const operatorSelf = useOperatorSelf(person === OPERATOR_ASSIGNEE)
   const [priority, setPriority] = useState(0)
   const [dueAt, setDueAt] = useState<string | null>(null)
   const [labelIds, setLabelIds] = useState<string[]>([])
@@ -249,7 +251,7 @@ export function NewTodoDialog({
           </PropertyChip>
           <PropertyChip
             icon={<UserRound size={13} aria-hidden />}
-            label={person ? (person === OPERATOR_ASSIGNEE ? "You (operator)" : <MemberName identity={person} />) : "Person"}
+            label={person ? (person === OPERATOR_ASSIGNEE ? operatorSelf.label : <MemberName identity={person} />) : "Person"}
             testId="todo-new-person-chip"
             active={picker === "person"}
             onClick={() => togglePicker("person")}

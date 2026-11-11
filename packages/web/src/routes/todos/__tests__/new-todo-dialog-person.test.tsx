@@ -161,9 +161,10 @@ describe("the New Todo dialog's person picker, on an instance with accounts", ()
   })
 
   it("offers the instance owners on a draft with no board, and says to choose a board only when no one is left", async () => {
-    auth.value = { principal: { kind: "operator" }, authState: { accountsEnabled: true, hasAccounts: true } }
+    auth.value = { principal: { kind: "operator", user: { id: "own1", displayName: "Olive Owner" } }, authState: { accountsEnabled: true, hasAccounts: true } }
     listPeople.mockResolvedValue([
       { id: "own1", displayName: "Olive Owner", initials: "OO", status: "active", instanceRole: "owner", boards: [] },
+      { id: "own2", displayName: "Omar Owner", initials: "OW", status: "active", instanceRole: "owner", boards: [] },
       { id: "ada1", displayName: "Ada Lovelace", initials: "AL", status: "active", instanceRole: "member", boards: [{ department: "platform", role: "collaborator" }] },
     ])
     const user = userEvent.setup()
@@ -172,9 +173,31 @@ describe("the New Todo dialog's person picker, on an instance with accounts", ()
     await user.click(await screen.findByTestId("department-option-none"))
     await user.click(screen.getByTestId("todo-new-person-chip"))
     const picker = await screen.findByTestId("todo-new-person-picker")
-    expect(await within(picker).findByTestId("person-option-own1")).toBeTruthy()
+    expect(await within(picker).findByTestId("person-option-own2")).toBeTruthy()
+    // Your own account is the operator row, never a second row for the same person.
+    expect(within(picker).queryByTestId("person-option-own1")).toBeNull()
+    expect(within(picker).getByTestId("person-option-operator").textContent).toContain("Olive Owner (you)")
     expect(within(picker).queryByTestId("person-option-ada1")).toBeNull()
     expect(within(picker).queryByText(/Choose a board/)).toBeNull()
+  })
+
+  it("with one owner, the owner row is yourself: the chip reads their name, and the Todo is created assigned to the operator", async () => {
+    auth.value = { principal: { kind: "operator" }, authState: { accountsEnabled: true, hasAccounts: true } }
+    listPeople.mockResolvedValue([{ id: "own1", displayName: "Olive Owner", initials: "OO", status: "active", instanceRole: "owner", boards: [] }])
+    const user = userEvent.setup()
+    const { onCreated } = renderDialog()
+    await user.type(screen.getByTestId("todo-new-title"), "Mine")
+    await user.click(screen.getByTestId("todo-new-person-chip"))
+    const picker = await screen.findByTestId("todo-new-person-picker")
+    await waitFor(() => expect(within(picker).getByTestId("person-option-operator").textContent).toContain("Olive Owner (you)"))
+    expect(within(picker).queryByTestId("person-option-own1")).toBeNull()
+    await user.click(within(picker).getByTestId("person-option-operator"))
+    expect(screen.getByTestId("todo-new-person-chip").textContent).toContain("Olive Owner")
+    expect(screen.getByTestId("todo-new-person-chip").textContent).not.toContain("You (operator)")
+    await user.click(screen.getByTestId("todo-new-create"))
+    await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1))
+    expect(assignWorkItem).toHaveBeenCalledWith("TSK-9", "@operator")
+    expect(updateWorkItem).not.toHaveBeenCalled()
   })
 
   it("says to choose a board, not that nobody has access, when a draft with no board has no one to offer", async () => {

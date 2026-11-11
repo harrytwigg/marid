@@ -1,20 +1,25 @@
-import { EmployeeAvatar, OPERATOR_DEFAULT_EMOJI } from "@/components/ui/employee-avatar"
 import { HumanAvatar } from "@/components/ui/human-avatar"
 import { memberIdentity } from "@/lib/accounts-api"
-import { usePersonChoices } from "@/hooks/use-person-choices"
+import { usePersonChoices, type PersonChoice } from "@/hooks/use-person-choices"
+import { SHARED_OPERATOR_LABEL, useOperatorSelf, type OperatorSelf } from "@/hooks/use-operator-self"
 import { useViewer } from "../attribution"
-import { personChoiceHints } from "../assignee-circles"
+import { OperatorSelfAvatar, personChoiceHints } from "../assignee-circles"
 import { OPERATOR_ASSIGNEE } from "../util"
 import { PickerNote, PickerRow } from "./picker-shell"
 import type { PickerContentProps } from "./picker-contents"
 
 /** The person picker: the operator (the operator's own picker only: a board member never names the operator), then the people on
- *  this Todo's board, and a row to clear. It names a person responsible and nothing else: it never starts or notifies an agent,
+ *  this Todo's board, and a row to clear. Where an owner account exists the operator is that account: its row reads "<name> (you)"
+ *  and still stores `@operator` (with several owners, or none of them this browser's, "Operator (shared)" does), and the account
+ *  is not listed again as a person of its own. It names a person responsible and nothing else: it never starts or notifies an agent,
  *  so it carries no creator-access note. */
 export function PersonPickerContent({ detail, commit, sheet, onDone, board }: Omit<PickerContentProps, "memberCreator"> & { commit: (person: string | null) => void; board: string | null }) {
   const viewer = useViewer()
   const current = detail.workItem.humanAssignee ?? null
-  const { people, asked, ready } = usePersonChoices(board)
+  const { people: choices, asked, ready } = usePersonChoices(board)
+  const self = useOperatorSelf()
+  // The "you" account is the `@operator` row, never also a `user:` row: a Todo naming it by account reads as it and is not checked.
+  const people = withoutAccount(choices, viewer === "operator" ? self.you : null)
   const pick = (person: string | null) => { if (person !== current) commit(person); onDone() }
   const { handsOn, onClear } = personChoiceHints(detail.workItem, viewer)
   return (
@@ -29,16 +34,7 @@ export function PersonPickerContent({ detail, commit, sheet, onDone, board }: Om
         />
       )}
       <div className={sheet ? "" : "max-h-[288px] overflow-y-auto"}>
-        {viewer === "operator" && (
-          <PickerRow
-            sheet={sheet}
-            glyph={<EmployeeAvatar name="operator" fallback={OPERATOR_DEFAULT_EMOJI} size={22} fontSize={12} className="bg-[var(--fill-secondary)]" />}
-            label="You (operator)"
-            checked={current === OPERATOR_ASSIGNEE}
-            onSelect={() => pick(OPERATOR_ASSIGNEE)}
-            testId="person-option-operator"
-          />
-        )}
+        {viewer === "operator" && <OperatorPersonRow self={self} sheet={sheet} checked={current === OPERATOR_ASSIGNEE} onSelect={() => pick(OPERATOR_ASSIGNEE)} />}
         {people.map((person) => (
           <PickerRow
             key={person.id}
@@ -56,5 +52,30 @@ export function PersonPickerContent({ detail, commit, sheet, onDone, board }: Om
         )}
       </div>
     </>
+  )
+}
+
+function withoutAccount(choices: PersonChoice[], account: PersonChoice | null): PersonChoice[] {
+  return account ? choices.filter((person) => person.id !== account.id) : choices
+}
+
+/** `@operator`. With no owner account, "You (operator)". Where one exists it is the account this browser is, "<name> (you)" (marked
+ *  shared when there are several owners), or with no such account "Operator (shared)". Always stores `@operator`. */
+function OperatorPersonRow({ self, sheet, checked, onSelect }: { self: OperatorSelf; sheet: boolean | undefined; checked: boolean; onSelect: () => void }) {
+  const you = self.you
+  const shared = self.mode === "shared"
+  const glyph = you && self.mode !== "legacy"
+    ? <HumanAvatar name={you.displayName} initials={you.initials} size={22} />
+    : <OperatorSelfAvatar self={self} size={22} fontSize={12} />
+  return (
+    <PickerRow
+      sheet={sheet}
+      glyph={glyph}
+      label={self.mode === "legacy" ? self.label : you ? `${you.displayName} (you)` : SHARED_OPERATOR_LABEL}
+      sub={you && shared ? SHARED_OPERATOR_LABEL : undefined}
+      checked={checked}
+      onSelect={onSelect}
+      testId="person-option-operator"
+    />
   )
 }

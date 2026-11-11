@@ -38,7 +38,8 @@ export interface MemberUserWire {
 }
 
 export type PrincipalWire =
-  | { kind: "operator" }
+  /** `user` is the instance-owner account this browser is signed in as; absent for a paired device or the bearer token. */
+  | { kind: "operator"; user?: { id: string; displayName: string } }
   | { kind: "member"; user: MemberUserWire; boards: BoardGrantWire[] }
   | null
 

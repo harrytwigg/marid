@@ -1,11 +1,11 @@
 import type { IncomingMessage } from "node:http";
 import type { JinnConfig } from "../shared/types.js";
-import { createAuthState } from "../gateway/auth.js";
+import { authSessionUserId, createAuthState, currentAuthDeviceId } from "../gateway/auth.js";
 import type { AccountsRuntime } from "./runtime.js";
-import { countUsers } from "./users.js";
+import { countUsers, getUserById } from "./users.js";
 
 export type AuthStatePrincipal =
-  | { kind: "operator" }
+  | { kind: "operator"; user?: { id: string; displayName: string } }
   | { kind: "member"; user: { id: string; email: string; displayName: string }; boards: Array<{ department: string; role: string }> }
   | null;
 
@@ -17,7 +17,9 @@ type StateRequest = Pick<IncomingMessage, "headers" | "socket">;
  * `accountsEnabled` is true when gateway auth is required, so accounts are possible; `hasAccounts` is true
  * once at least one exists, and the sign-in form is offered when both are (an instance with no accounts
  * renders as it always did). `principal` says who the request is. A member is not
- * `authenticated`: that field has always meant "holds operator credentials".
+ * `authenticated`: that field has always meant "holds operator credentials". An operator principal carries `user` when
+ * this browser's device session is linked to an active instance-owner account (its password sign-in, or "set up my
+ * sign-in"); a paired device, the bearer token, a disabled owner or a member-role link carry none.
  */
 export function buildAuthState(
   config: Pick<JinnConfig, "gateway">,
@@ -34,7 +36,10 @@ export function buildAuthState(
   try {
     hasAccounts = accountsEnabled && countUsers(accounts.getDb()) > 0;
   } catch { /* an unreadable accounts table reads as no accounts */ }
-  if (base.authenticated) return { ...base, accountsEnabled, hasAccounts, principal: { kind: "operator" } };
+  if (base.authenticated) {
+    const user = operatorAccountOf(req, jinnHome, accounts);
+    return { ...base, accountsEnabled, hasAccounts, principal: user ? { kind: "operator", user } : { kind: "operator" } };
+  }
   const principal = accounts.resolvePrincipal(req);
   if (principal.kind !== "member") return { ...base, accountsEnabled, hasAccounts, principal: null };
   return {
@@ -47,4 +52,18 @@ export function buildAuthState(
       boards: accounts.boardsOf(principal.userId).map((grant) => ({ department: grant.department, role: grant.role })),
     },
   };
+}
+
+/** The active owner account this request's device session is linked to, if any. Never throws: an unreadable device
+ *  store or accounts table reads as no account. */
+function operatorAccountOf(req: StateRequest, jinnHome: string | undefined, accounts: AccountsRuntime): { id: string; displayName: string } | undefined {
+  if (!jinnHome) return undefined;
+  try {
+    const userId = authSessionUserId(jinnHome, currentAuthDeviceId(req.headers, jinnHome));
+    if (!userId) return undefined;
+    const user = getUserById(accounts.getDb(), userId);
+    return user && user.status === "active" && user.instanceRole === "owner" ? { id: user.id, displayName: user.displayName } : undefined;
+  } catch {
+    return undefined;
+  }
 }
