@@ -7,7 +7,7 @@ import { orgRegistry } from "../gateway/org-registry.js";
 import { initDb } from "../shared/db.js";
 import { getAttachment } from "../work-items/attachments.js";
 import { COMMENT_PAGE_DEFAULT_LIMIT, COMMENT_PAGE_MAX_LIMIT, listComments } from "../work-items/comments.js";
-import { memberIdentity } from "../work-items/member-identity.js";
+import { memberIdentity, memberIdOf } from "../work-items/member-identity.js";
 import { WORK_ITEM_STATUS_VALUES, ensureDepartmentRegistered, getWorkItem, getWorkItemTree, queryWorkItems, type WorkItem, type WorkItemPage, type WorkItemTotals } from "../work-items/store.js";
 import { listGrantsForBoard, listGrantsForUser } from "./board-members.js";
 import { creatorAccess, grantedBoard, grantedTodo } from "./member-access.js";
@@ -43,7 +43,13 @@ export function boardTodos(ctx: MemberRouteContext): void {
   const { filter, limit, offset } = parsed.value;
   // The operator's desk (Home, the attention queue) is not a board: only the board's own Todos, whatever else was asked for.
   const { kept: _kept, home: _home, needsAttentionFor: _attention, needsAttentionOperator: _operator, ...scoped } = filter;
-  json(ctx.res, memberPagePayload(queryWorkItems({ ...scoped, rootDepartment: department, limit, offset }), viewerOf(ctx)));
+  const viewer = viewerOf(ctx);
+  // A person filter names someone the member may read as a person: the operator, none, or a user they share a board with. Anyone
+  // else is the generic `member` they read, which no Todo stores, so the filter cannot tell them who holds which Todo.
+  const person = scoped.humanAssignee;
+  const personId = person === undefined ? undefined : memberIdOf(person);
+  if (person !== undefined && personId !== undefined && !viewer.knows(personId)) scoped.humanAssignee = "member";
+  json(ctx.res, memberPagePayload(queryWorkItems({ ...scoped, rootDepartment: department, limit, offset }), viewer));
 }
 
 /**

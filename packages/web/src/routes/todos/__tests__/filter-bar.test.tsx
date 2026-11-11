@@ -59,7 +59,8 @@ describe("the board filter row (mock geometry — stage-A review F1)", () => {
         board
       />,
     )
-    expect(screen.getByTestId("filter-chip-assignee").textContent).toContain("Assignee")
+    expect(screen.getByTestId("filter-chip-person").textContent).toContain("Person")
+    expect(screen.getByTestId("filter-chip-agent").textContent).toContain("Agent")
     expect(screen.getByTestId("filter-chip-label").textContent).toContain("Label")
     expect(screen.getByTestId("filter-chip-due").textContent).toContain("Due")
     expect(screen.getByTestId("filter-chip-more")).toBeTruthy()

@@ -16,6 +16,7 @@ import {
 import { useAuthOptional } from "@/routes/auth-provider"
 import { Section } from "../shared"
 import { InviteToInstance, PendingInvites } from "./instance-invites"
+import { RolesPanel } from "./person-roles"
 import { sessionsKey, usePeople, usePendingInvites, useRefreshPeople } from "./use-people"
 
 import { DIVIDER, ERROR, NOTE, SUBHEAD } from "./styles"
@@ -103,7 +104,7 @@ function SetupOwnSignIn() {
 }
 
 // ── One person ───────────────────────────────────────────────────────────────
-type Panel = "none" | "sessions" | "rename" | "remove"
+type Panel = "none" | "roles" | "sessions" | "rename" | "remove"
 
 function usePersonWrites(person: PersonWire, onError: (message: string) => void, onRenamed: () => void) {
   const refresh = useRefreshPeople()
@@ -140,6 +141,7 @@ function PersonRow({ person }: { person: PersonWire }) {
       <div className="mt-2.5 flex flex-wrap gap-1.5">
         <Button size="sm" variant="secondary" aria-label={label("Issue reset link for")} disabled={writes.issue.isPending}
           onClick={() => run(() => { setReset(null); writes.issue.mutate(undefined, { onSuccess: (res) => setReset({ link: res.link, expiresAt: res.expiresAt }) }) })}>Reset link</Button>
+        <Button size="sm" variant="secondary" aria-label={label("Change roles for")} aria-expanded={panel === "roles"} onClick={() => toggle("roles")}>Roles</Button>
         <Button size="sm" variant="secondary" aria-label={label("Sessions for")} aria-expanded={panel === "sessions"} onClick={() => toggle("sessions")}>Sessions</Button>
         <Button size="sm" variant="secondary" aria-label={label("Rename")} aria-expanded={panel === "rename"} onClick={() => toggle("rename")}>Rename</Button>
         <Button size="sm" variant="secondary" aria-label={label(disabled ? "Enable" : "Disable")} disabled={writes.toggleStatus.isPending}
@@ -154,6 +156,7 @@ function PersonRow({ person }: { person: PersonWire }) {
       {panel === "remove" && (
         <RemoveConfirm name={person.displayName} pending={writes.remove.isPending} onConfirm={() => run(() => writes.remove.mutate())} onCancel={() => setPanel("none")} />
       )}
+      {panel === "roles" && <RolesPanel person={person} />}
       {panel === "sessions" && <SessionsPanel person={person} onError={(e) => setError(accountsErrorText(e))} />}
     </li>
   )

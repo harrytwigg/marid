@@ -63,6 +63,22 @@ describe("board owners manage their board's sharing through /api/member/boards/:
     expect((await h.as(owner, "PATCH", `/api/member/boards/ops/members/${collab.userId}`, { role: "viewer" })).status).toBe(404);
   });
 
+  it("the operator changes a grant in place, viewer to collaborator to owner and back, each on the member's next request", async () => {
+    const person = await h.join("stepper@example.test", "viewer", "ops", "Sasha Stepper");
+    const roster = (role: string) => h.operator("PATCH", `/api/boards/ops/members/${person.userId}`, { role });
+    const files = () => h.as(person, "POST", "/api/member/boards/ops/todos", { title: "stepper todo" });
+    const manages = () => h.as(person, "GET", "/api/member/boards/ops/members");
+    expect([(await files()).status, (await manages()).status]).toEqual([403, 403]);
+    expect((await roster("collaborator")).body).toMatchObject({ status: "ok", role: "collaborator" });
+    expect([(await files()).status, (await manages()).status]).toEqual([201, 403]);
+    expect((await roster("owner")).status).toBe(200);
+    expect([(await files()).status, (await manages()).status]).toEqual([201, 200]);
+    expect((await roster("viewer")).status).toBe(200);
+    expect([(await files()).status, (await manages()).status]).toEqual([403, 403]);
+    // The grant changed in place: still one row, never a revoke and a new invite.
+    expect(h.db.prepare("SELECT COUNT(*) AS n FROM board_members WHERE user_id = ? AND department = 'ops'").get(person.userId)).toEqual({ n: 1 });
+  });
+
   it("an owner cannot touch another owner, an instance owner, or grant to one; they may remove themselves", async () => {
     expect((await h.as(owner, "PATCH", `/api/member/boards/ops/members/${otherOwner.userId}`, { role: "viewer" })).status).toBe(403);
     expect((await h.as(owner, "DELETE", `/api/member/boards/ops/members/${otherOwner.userId}`)).status).toBe(403);

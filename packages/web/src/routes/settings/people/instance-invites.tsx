@@ -51,17 +51,26 @@ function useInstanceInvite() {
   return { email, setEmail, role, chooseRole, owner, understood, setUnderstood, error, result, dismiss: () => setResult(null), pending: send.isPending, ready, submit }
 }
 
-function OwnerWarning({ understood, onChange }: { understood: boolean; onChange: (value: boolean) => void }) {
+const OWNER_INVITE_CLOSING = "The link lasts 24 hours, not 7 days. Only invite someone you would hand the keys to."
+
+/** The plain warning before anyone becomes a co-operator: sending an owner invite, or promoting an existing account. */
+export function OwnerWarning({ understood, onChange, testId = "owner-invite-warning", closing = OWNER_INVITE_CLOSING, checkLabel = "I understand this person becomes a co-operator." }: {
+  understood: boolean
+  onChange: (value: boolean) => void
+  testId?: string
+  /** The sentence after the shared one, specific to how the role is being given. */
+  closing?: string
+  checkLabel?: string
+}) {
   return (
-    <div role="alert" data-testid="owner-invite-warning" className="flex flex-col gap-2 rounded-[var(--radius-md)] bg-[color-mix(in_srgb,var(--system-orange)_12%,transparent)] p-3">
+    <div role="alert" data-testid={testId} className="flex flex-col gap-2 rounded-[var(--radius-md)] bg-[color-mix(in_srgb,var(--system-orange)_12%,transparent)] p-3">
       <p className="text-[length:var(--text-footnote)] font-[var(--weight-semibold)] text-[var(--system-orange)]">This makes them a co-operator.</p>
       <p className={NOTE}>
-        An owner has the same authority as you over this whole instance: every board, every employee, settings, and anything that starts or spends. The link
-        lasts 24 hours, not 7 days. Only invite someone you would hand the keys to.
+        An owner has the same authority as you over this whole instance: every board, every employee, settings, and anything that starts or spends. {closing}
       </p>
       <label className="flex items-start gap-2 text-[length:var(--text-footnote)] text-[var(--text-primary)]">
         <input type="checkbox" checked={understood} onChange={(e) => onChange(e.target.checked)} className="mt-0.5" />
-        <span>I understand this person becomes a co-operator.</span>
+        <span>{checkLabel}</span>
       </label>
     </div>
   )

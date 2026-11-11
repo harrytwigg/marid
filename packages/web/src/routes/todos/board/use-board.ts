@@ -62,7 +62,8 @@ async function fetchBoardPage(
     ...scope,
     // A department board IS its department filter; other chips pass through.
     department: scope.department ?? filters.department,
-    assignee: filters.assignee,
+    assignee: filters.agent,
+    humanAssignee: filters.person,
     source: filters.source,
     label: filters.label,
     sprint: filters.sprint,
@@ -80,7 +81,7 @@ async function fetchBoardPage(
 export function boardColumnQueryKey(board: BoardId, status: WorkItemStatusWire, filters: TodoFilters): readonly unknown[] {
   return [
     "work-items", "board", boardKey(board), status,
-    filters.assignee ?? "", filters.department ?? "", filters.source ?? "", filters.date ?? "",
+    filters.agent ?? "", filters.person ?? "", filters.department ?? "", filters.source ?? "", filters.date ?? "",
     filters.label ?? "", filters.sprint ?? "", filters.q ?? "",
   ]
 }

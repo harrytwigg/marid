@@ -36,6 +36,22 @@ describe("People (operator)", () => {
     expect((await h.asOperator("PATCH", "/api/people/usr_000000000000", { status: "active" })).status).toBe(404);
   });
 
+  it("promoting a member to instance owner and back takes effect on their next request, without a re-invite", async () => {
+    const member = await inviteAndAccept(h, "pat@example.test", { role: "viewer" });
+    expect((await h.request("GET", "/api/member/me", { cookie: member.cookie })).status).toBe(200);
+    expect((await h.request("GET", "/api/people", { cookie: member.cookie })).status).not.toBe(200);
+    expect((await h.asOperator("PATCH", `/api/people/${member.userId}`, { instanceRole: "owner" })).body.person.instanceRole).toBe("owner");
+    // The member session ends; the next sign-in is an operator one.
+    expect((await h.request("GET", "/api/member/me", { cookie: member.cookie })).status).toBe(401);
+    const login = await h.request("POST", "/api/auth/login", { body: { email: "pat@example.test", password: GOOD_PASSWORD } });
+    expect(login.status).toBe(200);
+    const operatorCookie = h.cookieFrom(login);
+    expect((await h.request("GET", "/api/people", { cookie: operatorCookie })).status).toBe(200);
+    expect((await h.asOperator("PATCH", `/api/people/${member.userId}`, { instanceRole: "member" })).body.person.instanceRole).toBe("member");
+    expect((await h.request("GET", "/api/people", { cookie: operatorCookie })).status).toBe(401);
+    expect((await h.asOperator("GET", `/api/people/${member.userId}`)).body.person.boards).toEqual([{ department: "ops", role: "viewer" }]);
+  });
+
   it("deleting removes the user, grants, sessions and reset links", async () => {
     const { userId } = await inviteAndAccept(h, "pat@example.test");
     await h.asOperator("POST", `/api/people/${userId}/reset-link`);

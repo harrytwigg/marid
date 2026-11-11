@@ -589,7 +589,7 @@ export interface LinkedSessionWire {
 }
 
 /** Todo list params that pass straight through as a same-named query param. */
-const TODO_LIST_PARAMS = ["status", "assignee", "department", "source", "needsAttentionFor", "since", "until", "q", "createdBy", "label", "sprint", "order", "offset"] as const
+const TODO_LIST_PARAMS = ["status", "assignee", "humanAssignee", "department", "source", "needsAttentionFor", "since", "until", "q", "createdBy", "label", "sprint", "order", "offset"] as const
 
 export const api = {
   listWorkspaces: () => get<WorkspaceInfo[]>('/api/instances'),
@@ -732,7 +732,10 @@ export const api = {
    *  older gateways ignore them (the view applies a defensive client pass). */
   listWorkItems: (params?: {
     status?: WorkItemStatusWire
+    /** The agent slot: an employee, or `@unassigned` for none. */
     assignee?: string
+    /** The person slot: `@operator`, `user:<id>`, or `@unassigned` for none. ANDs with `assignee`. */
+    humanAssignee?: string
     department?: string
     source?: WorkItemSourceWire
     needsAttentionFor?: string
