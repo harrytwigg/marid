@@ -351,7 +351,9 @@ member cookies stop working, member comments read as `system` comments and membe
   out). Composer and new-Todo controls only for collaborators and owners; edit controls only
   in member-only trees.
 - **Operator**: Settings → People (users, their boards and roles, status, reset link, sessions,
-  disable, instance invite, "Set up my sign-in") and a **Share** button on a department board
+  disable, instance invite, "Set up my sign-in"). Each person's **Roles** panel changes their instance role
+  (member or owner; promoting shows the co-operator warning first) and their role on each board they are on,
+  in place and without a re-invite, taking effect on their next request. The operator also has a **Share** button on a department board
   (members of that board, invite with role, change role, remove). A pending invite's link is
   shown once; to resend, re-invite, which revokes the old link.
 - **Attribution**: `HumanAvatar` and names on comments, activity, Todo cards (created by, last

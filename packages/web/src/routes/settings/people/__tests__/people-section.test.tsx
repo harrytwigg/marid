@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   revokeAllPersonSessions: vi.fn(),
   issueResetLink: vi.fn(),
   updatePerson: vi.fn(),
+  setBoardRole: vi.fn(),
   deletePerson: vi.fn(),
   inviteToInstance: vi.fn(),
   revokeInvite: vi.fn(),
@@ -193,6 +194,102 @@ describe("People list", () => {
     renderEntry()
     fireEvent.click(await screen.findByRole("button", { name: "Issue reset link for Sam Member" }))
     expect((await screen.findByTestId("person-error-usr_mem")).textContent).toBe("Too many attempts. Try again in 2 minutes.")
+  })
+})
+
+describe("Changing roles", () => {
+  const openRoles = async (name = "Sam Member") => {
+    renderEntry()
+    fireEvent.click(await screen.findByRole("button", { name: `Change roles for ${name}` }))
+  }
+
+  it("promotes a member to instance owner only after the co-operator warning is acknowledged", async () => {
+    api.updatePerson.mockResolvedValue({ person: { ...member, instanceRole: "owner" } })
+    await openRoles()
+    fireEvent.change(screen.getByLabelText("Instance role for Sam Member"), { target: { value: "owner" } })
+    const warning = screen.getByTestId("promote-warning-usr_mem")
+    expect(warning.textContent).toMatch(/co-operator/i)
+    expect(warning.textContent).toMatch(/same authority as you/i)
+    expect(warning.textContent).toMatch(/every board/i)
+    const apply = screen.getByRole("button", { name: "Make owner" }) as HTMLButtonElement
+    expect(apply.disabled).toBe(true)
+    fireEvent.click(within(warning).getByRole("checkbox"))
+    expect(apply.disabled).toBe(false)
+    fireEvent.click(apply)
+    await waitFor(() => expect(api.updatePerson).toHaveBeenCalledWith("usr_mem", { instanceRole: "owner" }))
+    // The list is re-read, so the badge follows what the gateway holds.
+    await waitFor(() => expect(api.listPeople.mock.calls.length).toBeGreaterThan(1))
+  })
+
+  it("demotes an instance owner back to member, saying what it ends", async () => {
+    api.updatePerson.mockResolvedValue({ person: { ...owner, instanceRole: "member" } })
+    api.listPeople.mockResolvedValue([owner, { ...member, instanceRole: "owner" }])
+    await openRoles()
+    fireEvent.change(screen.getByLabelText("Instance role for Sam Member"), { target: { value: "member" } })
+    expect(screen.getByTestId("demote-note-usr_mem").textContent).toMatch(/operator devices are signed out/i)
+    expect(screen.queryByTestId("promote-warning-usr_mem")).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "Make member" }))
+    await waitFor(() => expect(api.updatePerson).toHaveBeenCalledWith("usr_mem", { instanceRole: "member" }))
+  })
+
+  it("offers no apply while nothing changed, on a member and on an owner, and sends nothing", async () => {
+    api.listPeople.mockResolvedValue([owner, member])
+    renderEntry()
+    for (const name of ["Sam Member", "Olive Owner"]) {
+      fireEvent.click(await screen.findByRole("button", { name: `Change roles for ${name}` }))
+    }
+    expect(screen.queryByRole("button", { name: "Make owner" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Make member" })).toBeNull()
+    expect(api.updatePerson).not.toHaveBeenCalled()
+  })
+
+  it("sends nothing when the pick is cancelled", async () => {
+    await openRoles()
+    fireEvent.change(screen.getByLabelText("Instance role for Sam Member"), { target: { value: "owner" } })
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+    expect(screen.queryByTestId("promote-warning-usr_mem")).toBeNull()
+    expect((screen.getByLabelText("Instance role for Sam Member") as HTMLSelectElement).value).toBe("member")
+    expect(api.updatePerson).not.toHaveBeenCalled()
+  })
+
+  it("shows a refused instance-role change and keeps the choice open", async () => {
+    const { AccountsError } = await import("@/lib/accounts-api")
+    api.updatePerson.mockRejectedValue(new AccountsError(403, "Not allowed"))
+    await openRoles()
+    fireEvent.change(screen.getByLabelText("Instance role for Sam Member"), { target: { value: "owner" } })
+    fireEvent.click(within(screen.getByTestId("promote-warning-usr_mem")).getByRole("checkbox"))
+    fireEvent.click(screen.getByRole("button", { name: "Make owner" }))
+    expect((await screen.findByTestId("instance-role-error-usr_mem")).textContent).toContain("Not allowed")
+  })
+
+  it("changes each board grant between viewer, collaborator and owner", async () => {
+    api.setBoardRole.mockResolvedValue(undefined)
+    await openRoles()
+    const design = screen.getByLabelText("Role for Sam Member on design") as HTMLSelectElement
+    expect(design.value).toBe("collaborator")
+    expect((screen.getByLabelText("Role for Sam Member on ops") as HTMLSelectElement).value).toBe("viewer")
+    expect(Array.from(design.options).map((o) => o.value)).toEqual(["viewer", "collaborator", "owner"])
+    fireEvent.change(design, { target: { value: "owner" } })
+    await waitFor(() => expect(api.setBoardRole).toHaveBeenCalledWith("design", "usr_mem", "owner"))
+    fireEvent.change(screen.getByLabelText("Role for Sam Member on ops"), { target: { value: "collaborator" } })
+    await waitFor(() => expect(api.setBoardRole).toHaveBeenCalledWith("ops", "usr_mem", "collaborator"))
+    expect(api.updatePerson).not.toHaveBeenCalled()
+  })
+
+  it("shows a refused board-role change on that board's row", async () => {
+    const { AccountsError } = await import("@/lib/accounts-api")
+    api.setBoardRole.mockRejectedValue(new AccountsError(404, "Not found"))
+    await openRoles()
+    fireEvent.change(screen.getByLabelText("Role for Sam Member on design"), { target: { value: "viewer" } })
+    const row = screen.getByTestId("board-role-usr_mem-design")
+    expect((await within(row).findByRole("alert")).textContent).toBeTruthy()
+    expect((screen.getByLabelText("Role for Sam Member on design") as HTMLSelectElement).value).toBe("collaborator")
+  })
+
+  it("says so for a person on no boards", async () => {
+    api.listPeople.mockResolvedValue([owner])
+    await openRoles("Olive Owner")
+    expect(screen.getByTestId("roles-usr_owner").textContent).toMatch(/no boards/i)
   })
 })
 
