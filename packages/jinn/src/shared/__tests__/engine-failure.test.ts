@@ -55,6 +55,24 @@ const GOLDENS: readonly [string, EngineFailureClass[]][] = [
   ["error_during_execution", ["terminal"]],
   ["Some error after work", ["terminal"]],
 
+  // A prepaid balance running dry reads as quota, so the fallback chain walks.
+  [
+    "Error: provider.quota: Insufficient balance. Top up at https://opencode.ai/console/wrk_1/billing?credits=1. (HTTP 402)",
+    ["quota"],
+  ],
+  ["Insufficient balance", ["quota"]],
+  ["insufficient_credits", ["quota"]],
+  ["HTTP 402 Payment Required", ["quota"]],
+  ["status: 402", ["quota"]],
+  ["Your credit balance is too low to access the API", ["quota"]],
+  ["You are out of credits. Top up your balance to continue.", ["quota"]],
+  ["request failed (402)", ["quota"]],
+  // ...without over-matching text that merely contains the digits or the word.
+  ["402 files changed", ["terminal"]],
+  ["req_01J402ABC", ["terminal"]],
+  ["billing_error", ["terminal"]],
+  ["Please top up the list of items before submitting", ["terminal"]],
+
   // workflows/__tests__/retry-boundary.test.ts — a model id our own config or our own
   // discovery got wrong, refused before the engine ran anything.
   ["invalid model selection", ["invalid-model"]],

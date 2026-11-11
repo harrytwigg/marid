@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { ACCOUNT_A, CLAUDE_B, DIR_B, HOUR, OPENCODE_X, OPENCODE_Y, answer, claudeProfileFromDir, employee, handleRateLimit, hopsOf, key, limited, limitedTurn, newSession, overrideOf, readEngineHealth, reg, resetsIn, runOf, scripted, tmp, who, useWalkHarness } from "./fallback-walk-harness.js";
+import { ACCOUNT_A, CLAUDE_B, DIR_B, HOUR, OPENCODE_X, OPENCODE_Y, answer, claudeProfileFromDir, failed, employee, handleRateLimit, hopsOf, key, limited, limitedTurn, newSession, overrideOf, readEngineHealth, reg, resetsIn, runOf, scripted, tmp, who, useWalkHarness } from "./fallback-walk-harness.js";
 
 /** A rate-limited turn walks the session's fallback chain (docs/fallback-chains.md): hop after hop within the turn, each target once, each on its own profile and model, until one serves it or the chain runs out and the session waits on its own target. */
 
@@ -27,6 +27,20 @@ describe("a four-link chain: claude/A/opus -> claude/B/sonnet -> opencode/X -> o
       [key(OPENCODE_X), key(OPENCODE_Y), "rate-limit"],
     ]);
     expect(seen.starts.map((start) => start.hop?.to)).toEqual([key(CLAUDE_B), key(OPENCODE_X), key(OPENCODE_Y)]);
+  });
+
+  it("hops past a link whose provider answers with an insufficient-balance error and no rate-limit status", async () => {
+    const billing = "Error: provider.quota: Insufficient balance. Top up at https://opencode.ai/console/wrk_1/billing?credits=1. (HTTP 402)";
+    const { engines, calls } = scripted((call) => {
+      if (who(call) === "y-provider/model-y") return answer("done on Y", "y-thread");
+      return who(call) === "x-provider/model-x" ? failed(billing) : limited();
+    });
+    const id = newSession();
+
+    const outcome = await handleRateLimit(limitedTurn(id, employee(), engines).opts);
+
+    expect(outcome).toMatchObject({ kind: "fallback", result: { result: "done on Y" } });
+    expect(calls.map((call) => call.model)).toEqual(["sonnet", "x-provider/model-x", "y-provider/model-y"]);
   });
 
   it("hands every attempt that did not serve the turn to the failed-attempt hook, with the notices it asked for", async () => {

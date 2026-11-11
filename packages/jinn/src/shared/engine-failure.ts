@@ -28,11 +28,27 @@ export interface EngineFailureClassification {
   resetsAt?: number;
 }
 
-/** The account is out of allowance — a window that clears on its own clock. */
+/**
+ * The account is out of allowance — a window that clears on its own clock, or a
+ * prepaid balance that has run dry. Both are the same verdict to a caller: this
+ * model cannot take the turn right now, so recover (wait, or hop to the next
+ * engine in the fallback chain). A bare `billing` is deliberately NOT a signature —
+ * it appears in unrelated fault codes such as `billing_error`.
+ */
 const QUOTA_SIGNATURES: readonly RegExp[] = [
   /usage.*limit/i,
   /exceeded.*limit/i,
   /out of extra usage/i,
+  // Prepaid balance exhausted ("provider.quota: Insufficient balance ... (HTTP 402)").
+  /\binsufficient[ _-]?(?:balance|funds|credits?|quota)\b/i,
+  /\bout of (?:credits?|funds)\b/i,
+  /\bcredit balance (?:is )?too low\b/i,
+  /\bpayment required\b/i,
+  // A 402 in status context only, so an id or a count ("402 files") does not match.
+  /\b(?:HTTP|status)(?:\s+code)?\s*[:=]?\s*402\b/i,
+  /\(402\)/,
+  // "Top up at <billing url>" / "top up your credits" — a prompt to add funds.
+  /\btop[ -]?up\s+(?:at\b|your\b|credits?\b|balance\b|funds\b)/i,
 ];
 
 /** The request was throttled. `overloaded` lives here AND in provider-outage:

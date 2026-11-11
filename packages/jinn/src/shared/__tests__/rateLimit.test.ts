@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { EngineResult } from "../types.js";
 import { processStartFailure } from "../process-start.js";
 import {
-  computeNextRetryDelayMs, detectRateLimit, isDeadSessionError, nextUnstatedParkDelayMs,
+  computeNextRetryDelayMs, detectRateLimit, isDeadSessionError, isRateLimitMessage, nextUnstatedParkDelayMs,
   MAX_UNSTATED_PARK_ATTEMPTS, MAX_UNSTATED_PARK_DELAY_MS,
 } from "../rateLimit.js";
 
@@ -205,5 +205,15 @@ describe("the unstated-reset park", () => {
     expect(resumeAt).toEqual(new Date(resetsAt * 1000));
     expect(delayMs).toBeGreaterThan(900_000 - 5_000);
     expect(delayMs).toBeLessThanOrEqual(910_000);
+  });
+});
+
+describe("isRateLimitMessage billing exhaustion", () => {
+  it("treats an insufficient-balance response as recoverable so the fallback chain walks", () => {
+    expect(
+      isRateLimitMessage(
+        "Error: provider.quota: Insufficient balance. Top up at https://opencode.ai/console/wrk_1/billing?credits=1. (HTTP 402)",
+      ),
+    ).toBe(true);
   });
 });
