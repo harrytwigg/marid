@@ -37,9 +37,27 @@ describe("useBoardFilters — URL and storage reconcile", () => {
   })
 
   it("a URL that names a filter wins, and is remembered for next time", () => {
-    const { result } = renderFilters("/todos/b/home?sprint=active&assignee=scout")
-    expect(result.current.filters).toEqual({ status: "open", sprint: "active", assignee: "scout" })
-    expect(localStorage.getItem(BOARD_FILTERS_STORAGE_KEY)).toBe("assignee=scout&sprint=active")
+    const { result } = renderFilters("/todos/b/home?sprint=active&person=%40operator&agent=scout")
+    expect(result.current.filters).toEqual({ status: "open", sprint: "active", person: "@operator", agent: "scout" })
+    expect(localStorage.getItem(BOARD_FILTERS_STORAGE_KEY)).toBe("person=%40operator&agent=scout&sprint=active")
+  })
+
+  it("an old link with the single Assignee filter opens as the matching filter, and is remembered in the new form", () => {
+    const me = renderFilters("/todos/b/home?assignee=%40operator")
+    expect(me.result.current.filters).toEqual({ status: "open", person: "@operator" })
+    expect(localStorage.getItem(BOARD_FILTERS_STORAGE_KEY)).toBe("person=%40operator")
+    me.unmount()
+    localStorage.clear()
+    const agent = renderFilters("/todos/b/home?assignee=scout")
+    expect(agent.result.current.filters).toEqual({ status: "open", agent: "scout" })
+    expect(localStorage.getItem(BOARD_FILTERS_STORAGE_KEY)).toBe("agent=scout")
+  })
+
+  it("a view saved before the split comes back as the matching filter, and the URL is rewritten to the new params", () => {
+    localStorage.setItem(BOARD_FILTERS_STORAGE_KEY, "status=executing&assignee=%40operator")
+    const { result } = renderFilters("/todos/b/everything")
+    expect(result.current.filters).toEqual({ status: "executing", person: "@operator" })
+    expect(result.current.search).toBe("status=executing&person=%40operator")
   })
 
   it("an empty URL falls back to the stored set and mirrors it back into the URL", () => {
@@ -65,12 +83,13 @@ describe("useBoardFilters — URL and storage reconcile", () => {
   })
 
   it("carries the whole set, sprint included, through the round trip", () => {
-    const stored = "status=executing&assignee=scout&department=platform&source=cron&date=week&label=infra&sprint=active&due=overdue"
+    const stored = "status=executing&person=user%3Au1&agent=scout&department=platform&source=cron&date=week&label=infra&sprint=active&due=overdue"
     localStorage.setItem(BOARD_FILTERS_STORAGE_KEY, stored)
     const { result } = renderFilters("/todos/b/everything")
     expect(result.current.filters).toEqual({
       status: "executing",
-      assignee: "scout",
+      person: "user:u1",
+      agent: "scout",
       department: "platform",
       source: "cron",
       date: "week",

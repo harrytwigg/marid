@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest"
 import { describeScreenLocation } from "../todos-tab-snapshot"
 
-const tab = { board: { kind: "department", slug: "platform" } as const, search: "assignee=scout&q=a" }
+const tab = { board: { kind: "department", slug: "platform" } as const, search: "agent=scout&q=a" }
 
 describe("the screen described with the Todos tab", () => {
   it("is the board at the tab's board and filters while the tab is the focused one on the chat route", () => {
     const snapshot = describeScreenLocation("/", "?session=x", tab)
-    expect(snapshot).toMatchObject({ kind: "todos", params: { board: "platform" }, filters: { assignee: "scout", q: "a" }, selection: null })
+    expect(snapshot).toMatchObject({ kind: "todos", params: { board: "platform" }, filters: { agent: "scout", q: "a" }, selection: null })
   })
 
   it("is the chat when the tab is not focused", () => {

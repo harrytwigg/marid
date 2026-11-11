@@ -928,7 +928,7 @@ describe("board filter persistence (survives a return, a board switch and a new 
   it("remembers a filter set that arrived in the URL", async () => {
     renderBoard("/todos/b/home?sprint=active&assignee=scout")
     await waitFor(() =>
-      expect(localStorage.getItem(BOARD_FILTERS_STORAGE_KEY)).toBe("assignee=scout&sprint=active"),
+      expect(localStorage.getItem(BOARD_FILTERS_STORAGE_KEY)).toBe("agent=scout&sprint=active"),
     )
   })
 
