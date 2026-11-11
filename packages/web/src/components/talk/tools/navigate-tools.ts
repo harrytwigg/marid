@@ -52,7 +52,8 @@ const openTodos: TalkTool = {
   parameters: params({
     board: BOARD,
     status: STATUS,
-    assignee: str("Only Todos assigned to this employee."),
+    agent: str("Only Todos whose agent is this employee, or @unassigned for those with no agent."),
+    person: str("Only Todos whose person is this one: @operator for the operator, user:<id> for a member, or @unassigned for none."),
     department: str("Only Todos in this department slug."),
     source: str("Only Todos created this way.", ["human", "delegation", "cron", "workflow", "session", "connector", "goal"]),
     label: str("Only Todos carrying this label."),

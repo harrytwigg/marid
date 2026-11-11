@@ -925,10 +925,31 @@ describe("board filter persistence (survives a return, a board switch and a new 
     )
   })
 
+  it("asks the gateway for both slots: the person as humanAssignee and the agent as assignee", async () => {
+    renderBoard("/todos/b/platform?person=user%3Au1&agent=scout")
+    await waitFor(() =>
+      expect(
+        listWorkItems.mock.calls.some(([params]) => params?.status && params?.humanAssignee === "user:u1" && params?.assignee === "scout"),
+      ).toBe(true),
+    )
+    // Every column's request carries both; none carries only one.
+    const statusCalls = listWorkItems.mock.calls.map(([params]) => params).filter((p) => p?.status)
+    expect(statusCalls.every((p) => p.humanAssignee === "user:u1" && p.assignee === "scout")).toBe(true)
+  })
+
+  it("an old link with the Assignee filter asks for the agent slot only, as it always did", async () => {
+    renderBoard("/todos/b/platform?assignee=%40operator")
+    await waitFor(() =>
+      expect(listWorkItems.mock.calls.some(([params]) => params?.status && params?.assignee === "@operator")).toBe(true),
+    )
+    const statusCalls = listWorkItems.mock.calls.map(([params]) => params).filter((p) => p?.status)
+    expect(statusCalls.every((p) => p.humanAssignee === undefined)).toBe(true)
+  })
+
   it("remembers a filter set that arrived in the URL", async () => {
     renderBoard("/todos/b/home?sprint=active&assignee=scout")
     await waitFor(() =>
-      expect(localStorage.getItem(BOARD_FILTERS_STORAGE_KEY)).toBe("assignee=scout&sprint=active"),
+      expect(localStorage.getItem(BOARD_FILTERS_STORAGE_KEY)).toBe("agent=scout&sprint=active"),
     )
   })
 

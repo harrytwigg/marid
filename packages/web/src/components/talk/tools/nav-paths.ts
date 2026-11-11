@@ -1,5 +1,5 @@
 import { sessionPath } from "@/components/chat/chat-route-helpers"
-import { filtersToSearchParams, type TodoFilters } from "@/lib/todos"
+import { filtersToSearchParams, legacyAssigneeFilter, type TodoFilters } from "@/lib/todos"
 import { boardPath, parseBoardParam } from "@/routes/todos/board/board-route"
 import type { ToolArgs } from "./tool-spec"
 
@@ -34,12 +34,19 @@ function query(pairs: Array<[string, string | undefined]>): string {
 
 // ── Todos ───────────────────────────────────────────────────────────────────
 
+/** The person and agent filters. `assignee` is the old single filter: `@operator` meant the person slot, anything else an
+ *  agent; the new arguments win where both are given. */
+function slotFilters(args: ToolArgs): Pick<TodoFilters, "person" | "agent"> {
+  const legacy = legacyAssigneeFilter(text(args.assignee))
+  const person = text(args.person) ?? legacy.person
+  const agent = text(args.agent) ?? legacy.agent
+  return { ...(person ? { person } : {}), ...(agent ? { agent } : {}) }
+}
+
 /** The board filters a voice caller can set. Every one of these round-trips
  *  through `filtersFromSearchParams`, so the board reads back what we wrote. */
 function todoFilters(args: ToolArgs): TodoFilters {
-  const filters: TodoFilters = { status: (text(args.status) ?? "open") as TodoFilters["status"] }
-  const assignee = text(args.assignee)
-  if (assignee) filters.assignee = assignee
+  const filters: TodoFilters = { status: (text(args.status) ?? "open") as TodoFilters["status"], ...slotFilters(args) }
   const department = text(args.department)
   if (department) filters.department = department
   const source = text(args.source)

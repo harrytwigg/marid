@@ -13,8 +13,10 @@ import { OPERATOR_ASSIGNEE } from "./operator-assignee.js";
  *  inside the caller's transaction, and this module never imports the store (the store imports it). */
 
 /** The `human_assignee` select-list term every Todo read carries, so `humanAssignee` is on the row like `startAt`. */
-export const HUMAN_ASSIGNEE_COLUMN_SQL =
-  `COALESCE((SELECT tp.person FROM todo_people tp WHERE tp.todo_id = work_items.id), CASE WHEN work_items.assignee = '${OPERATOR_ASSIGNEE}' THEN '${OPERATOR_ASSIGNEE}' END) AS human_assignee`;
+export const HUMAN_ASSIGNEE_EXPR_SQL =
+  `COALESCE((SELECT tp.person FROM todo_people tp WHERE tp.todo_id = work_items.id), CASE WHEN work_items.assignee = '${OPERATOR_ASSIGNEE}' THEN '${OPERATOR_ASSIGNEE}' END)`;
+
+export const HUMAN_ASSIGNEE_COLUMN_SQL = `${HUMAN_ASSIGNEE_EXPR_SQL} AS human_assignee`;
 
 /** The row's own value, ignoring the legacy fallback: what a clear has to delete. */
 export function storedTodoPerson(db: DatabaseType, todoId: string): string | null {

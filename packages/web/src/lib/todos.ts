@@ -182,7 +182,11 @@ export type DueFilter = "overdue" | "today" | "week" | "month"
 
 export interface TodoFilters {
   status: StatusFilter
-  assignee?: string
+  /** The agent slot: an employee name, or `@unassigned` for Todos with no agent. */
+  agent?: string
+  /** The person slot: `@operator`, `user:<id>`, or `@unassigned` for Todos with no person. Independent of `agent`;
+   *  both set means both must match. */
+  person?: string
   department?: string
   source?: WorkItemSourceWire
   date?: DateFilter
@@ -192,6 +196,14 @@ export interface TodoFilters {
   sprint?: string
   due?: DueFilter
   q?: string
+}
+
+
+/** Where the single Assignee filter's value lands now. It always matched the agent slot (`assignee`, including the operator
+ *  and the none sentinel), so it lands on Agent: an old link or saved view keeps its exact Todos. Person = Me is a different
+ *  question (the person slot) and is not what an old "Assigned to me" asked. */
+export function legacyAssigneeFilter(assignee: string | null | undefined): Pick<TodoFilters, "person" | "agent"> {
+  return assignee ? { agent: assignee } : {}
 }
 
 /** Transport-only work-item ids must never cross into user-facing metadata. */
@@ -205,7 +217,8 @@ export function publicWorkItemReference(value: string | null | undefined): strin
 export function activeFilterCount(f: TodoFilters): number {
   let n = 0
   if (f.status !== "open") n++
-  if (f.assignee) n++
+  if (f.agent) n++
+  if (f.person) n++
   if (f.department) n++
   if (f.source) n++
   if (f.date) n++
@@ -263,7 +276,8 @@ export function matchesDueFilter(dueAt: string | null | undefined, due: DueFilte
 export function filtersToSearchParams(f: TodoFilters): URLSearchParams {
   const p = new URLSearchParams()
   if (f.status !== "open") p.set("status", f.status)
-  if (f.assignee) p.set("assignee", f.assignee)
+  if (f.person) p.set("person", f.person)
+  if (f.agent) p.set("agent", f.agent)
   if (f.department) p.set("department", f.department)
   if (f.source) p.set("source", f.source)
   if (f.date) p.set("date", f.date)
@@ -286,8 +300,13 @@ export function filtersFromSearchParams(p: URLSearchParams): TodoFilters {
   const f: TodoFilters = { status: "open" }
   const status = p.get("status")
   if (status && STATUS_FILTER_VALUES.has(status)) f.status = status as StatusFilter
-  const assignee = p.get("assignee")?.trim()
-  if (assignee) f.assignee = assignee
+  // The single Assignee filter this replaced: links and stored views written before the split still open the same
+  // Todos. New params win when a URL carries both.
+  const legacy = legacyAssigneeFilter(p.get("assignee")?.trim())
+  const person = p.get("person")?.trim() || legacy.person
+  if (person) f.person = person
+  const agent = p.get("agent")?.trim() || legacy.agent
+  if (agent) f.agent = agent
   const department = p.get("department")?.trim()
   if (department) f.department = department
   const source = p.get("source")
@@ -318,7 +337,7 @@ export const BOARD_FILTERS_STORAGE_KEY = "jinn-board-filters"
 /** The dimensions the board filters on — the params a filtered URL carries.
  *  Key-based on purpose: `?status=open` is an explicit request for the default
  *  and must not read as an empty, unfiltered URL. */
-const FILTER_PARAM_KEYS = ["status", "assignee", "department", "source", "date", "label", "sprint", "due", "q"] as const
+const FILTER_PARAM_KEYS = ["status", "person", "agent", "assignee", "department", "source", "date", "label", "sprint", "due", "q"] as const
 
 export function hasFilterParams(p: URLSearchParams): boolean {
   return FILTER_PARAM_KEYS.some((key) => p.has(key))

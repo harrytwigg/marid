@@ -7,7 +7,7 @@ const HERE = { name: "acme", port: "7778" }
 
 function board(): PageSnapshot {
   return {
-    ...describeLocation("/todos/b/platform", "?status=executing&assignee=a-lead&q=orb"),
+    ...describeLocation("/todos/b/platform", "?status=executing&agent=a-lead&q=orb"),
     selection: { kind: "Todo", id: "ABC-744" },
   }
 }
@@ -34,7 +34,7 @@ describe("rendering the page context", () => {
     expect(text).toContain("/todos/b/platform")
     expect(text).toContain("board=platform")
     expect(text).toContain("status=executing")
-    expect(text).toContain("assignee=a-lead")
+    expect(text).toContain("agent=a-lead")
     expect(text).toContain("q=orb")
     expect(text).toContain("ABC-744")
   })

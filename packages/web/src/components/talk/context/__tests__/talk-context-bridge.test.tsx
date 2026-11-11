@@ -25,11 +25,11 @@ describe("the context bridge and the Todos tab", () => {
   afterEach(() => setTodosTabFocused(false))
 
   it("describes the focused Todos tab as the board it shows, with the tab's own board and filters", async () => {
-    seedTodosTabLocation({ kind: "department", slug: "platform" }, "assignee=scout")
+    seedTodosTabLocation({ kind: "department", slug: "platform" }, "agent=scout")
     setTodosTabFocused(true)
     renderBridge()
 
-    await waitFor(() => expect(getPageContext()).toMatchObject({ kind: "todos", params: { board: "platform" }, filters: { assignee: "scout" } }))
+    await waitFor(() => expect(getPageContext()).toMatchObject({ kind: "todos", params: { board: "platform" }, filters: { agent: "scout" } }))
   })
 
   it("moves with the tab's board while it stays focused", async () => {

@@ -120,7 +120,7 @@ const readEnumFilters: FilterReader = (url, filter) => {
 const readNameFilters: FilterReader = (url, filter) => {
   // `rootDepartment`: Todos whose ROOT is in that department (FR-002). A narrowing filter, so it is
   // harmless from any caller; the department-scope gate sets it on every scoped session's list.
-  for (const name of ['assignee', 'department', 'createdBy', 'rootDepartment'] as const) {
+  for (const name of ['assignee', 'humanAssignee', 'department', 'createdBy', 'rootDepartment'] as const) {
     const value = readCleanSearchParam(url, name);
     if (value) filter[name] = value;
   }

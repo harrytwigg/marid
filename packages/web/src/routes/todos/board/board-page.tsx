@@ -587,6 +587,7 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
               hideStatus
               hideDepartment={board.kind === "department"}
               board
+              personBoard={board.kind === "department" ? board.slug : null}
               onManageSprints={sprintTools.openPlanner}
             />
             {sprintTools.strip}
@@ -808,6 +809,7 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
           hideStatus
           hideDepartment={board.kind === "department"}
           showLabelDue
+          personBoard={board.kind === "department" ? board.slug : null}
           onManageSprints={sprintTools.openPlanner}
         />
       )}

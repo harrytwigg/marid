@@ -7,9 +7,12 @@ import { TodoDialog } from "./todo-dialog"
 import { DATE_OPTIONS, DUE_OPTIONS, SOURCE_OPTIONS, STATUS_OPTIONS } from "./filter-options"
 import { useLabelRegistry } from "./use-todos"
 import { sprintChoices, sprintFilterLabel, useSprints } from "./sprints/use-sprints"
-import { assigneeFilterLabel, OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from "./util"
+import { agentFilterLabel, OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from "./util"
+import { HumanAvatar } from "@/components/ui/human-avatar"
+import { memberIdentity } from "@/lib/accounts-api"
+import { personFilterLabel, usePersonFilterChoices } from "./person-filter"
 
-type FilterPanel = "root" | "status" | "person" | "department" | "source" | "date" | "label" | "sprint" | "due"
+type FilterPanel = "root" | "status" | "person" | "agent" | "department" | "source" | "date" | "label" | "sprint" | "due"
 
 const ROW_CLASS =
   "flex min-h-11 w-full min-w-0 items-center gap-3 rounded-[12px] px-3 text-left text-[length:var(--text-subheadline)] text-[var(--text-primary)] transition-[background-color,transform] active:scale-[0.96] hover:bg-[var(--fill-tertiary)]"
@@ -28,6 +31,7 @@ export function TodoFilterSheet({
   hideStatus,
   hideDepartment,
   showLabelDue,
+  personBoard,
   onManageSprints,
 }: {
   filters: TodoFilters
@@ -42,6 +46,8 @@ export function TodoFilterSheet({
   hideDepartment?: boolean
   /** Board contexts add the Label + Due dimensions (stage-A review F1/F5). */
   showLabelDue?: boolean
+  /** The department whose people the Person panel offers; none (Everything) offers every active person. */
+  personBoard?: string | null
   /** Opens the sprint planner from the Sprint panel. */
   onManageSprints?: () => void
 }) {
@@ -52,6 +58,7 @@ export function TodoFilterSheet({
   const leave = useCallback(() => setLeaving(true), [])
   const labelRegistry = useLabelRegistry(!!showLabelDue)
   const sprints = useSprints(!!showLabelDue)
+  const personChoices = usePersonFilterChoices(personBoard)
   const title = panel === "root" ? "Filter" : panel.charAt(0).toUpperCase() + panel.slice(1)
   const choose = (next: TodoFilters) => {
     onChange(next)
@@ -88,7 +95,8 @@ export function TodoFilterSheet({
           <div className="flex flex-col gap-1">
             {([
               ["status", "Status", STATUS_OPTIONS.find((option) => option.value === filters.status)?.label ?? "Open"],
-              ["person", "Person", assigneeFilterLabel(filters.assignee, byName) ?? "Anyone"],
+              ["person", "Person", personFilterLabel(filters.person, personChoices) ?? "Anyone"],
+              ["agent", "Agent", agentFilterLabel(filters.agent, byName) ?? "Anyone"],
               ["label", "Label", filters.label ?? "Any"],
               ["sprint", "Sprint", sprintFilterLabel(filters.sprint, sprints.data) ?? "Any"],
               ["due", "Due", DUE_OPTIONS.find((option) => option.value === filters.due)?.label ?? "Any"],
@@ -121,19 +129,40 @@ export function TodoFilterSheet({
         ))}
         {panel === "person" && (
           <>
-            <button type="button" onClick={() => choose({ ...filters, assignee: undefined })} className={ROW_CLASS}>
-              Anyone<Selection selected={!filters.assignee} />
+            <button type="button" onClick={() => choose({ ...filters, person: undefined })} className={ROW_CLASS}>
+              Anyone<Selection selected={!filters.person} />
             </button>
-            <button type="button" onClick={() => choose({ ...filters, assignee: OPERATOR_ASSIGNEE })} className={ROW_CLASS}>
-              Assigned to me<Selection selected={filters.assignee === OPERATOR_ASSIGNEE} />
+            <button type="button" onClick={() => choose({ ...filters, person: personChoices.me })} className={ROW_CLASS}>
+              Me<Selection selected={filters.person === personChoices.me} />
             </button>
-            <button type="button" onClick={() => choose({ ...filters, assignee: UNASSIGNED_FILTER })} className={ROW_CLASS}>
-              Unassigned<Selection selected={filters.assignee === UNASSIGNED_FILTER} />
+            <button type="button" onClick={() => choose({ ...filters, person: UNASSIGNED_FILTER })} className={ROW_CLASS}>
+              No person<Selection selected={filters.person === UNASSIGNED_FILTER} />
+            </button>
+            {personChoices.offerOperator && (
+              <button type="button" onClick={() => choose({ ...filters, person: OPERATOR_ASSIGNEE })} className={ROW_CLASS}>
+                Operator<Selection selected={filters.person === OPERATOR_ASSIGNEE} />
+              </button>
+            )}
+            {personChoices.people.map((person) => (
+              <button key={person.id} type="button" onClick={() => choose({ ...filters, person: memberIdentity(person.id) })} className={ROW_CLASS}>
+                <HumanAvatar name={person.displayName} initials={person.initials} size={22} />
+                {person.displayName}<Selection selected={filters.person === memberIdentity(person.id)} />
+              </button>
+            ))}
+          </>
+        )}
+        {panel === "agent" && (
+          <>
+            <button type="button" onClick={() => choose({ ...filters, agent: undefined })} className={ROW_CLASS}>
+              Anyone<Selection selected={!filters.agent} />
+            </button>
+            <button type="button" onClick={() => choose({ ...filters, agent: UNASSIGNED_FILTER })} className={ROW_CLASS}>
+              No agent<Selection selected={filters.agent === UNASSIGNED_FILTER} />
             </button>
             {employees.map((employee) => (
-              <button key={employee.name} type="button" onClick={() => choose({ ...filters, assignee: employee.name })} className={ROW_CLASS}>
+              <button key={employee.name} type="button" onClick={() => choose({ ...filters, agent: employee.name })} className={ROW_CLASS}>
                 <EmployeeAvatar name={employee.name} size={22} fontSize={11} className="bg-[var(--fill-secondary)]" />
-                {employee.displayName}<Selection selected={filters.assignee === employee.name} />
+                {employee.displayName}<Selection selected={filters.agent === employee.name} />
               </button>
             ))}
           </>

@@ -8,7 +8,7 @@ describe("describing the operator's location", () => {
       kind: "todos",
       path: "/todos/b/platform",
       params: { board: "platform" },
-      filters: { status: "executing", assignee: "a-lead", q: "orb" },
+      filters: { status: "executing", agent: "a-lead", q: "orb" },
       selection: null,
     })
   })
