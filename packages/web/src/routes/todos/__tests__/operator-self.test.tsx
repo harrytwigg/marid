@@ -199,6 +199,21 @@ describe("two owner accounts", () => {
   })
 })
 
+describe("what asks for the owners", () => {
+  it("a circle with nobody in it asks nothing, even where accounts exist; one holding @operator asks once", async () => {
+    as("unlinked")
+    accounts.listPeople.mockResolvedValue([olive])
+    const { unmount } = render(<><PersonCircle person={null} /><PersonCircle person={undefined} /></>)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(screen.getAllByTestId("person-circle-empty")).toHaveLength(2)
+    expect(accounts.listPeople).not.toHaveBeenCalled()
+    unmount()
+    render(<><PersonCircle person="@operator" /><PersonCircle person="@operator" /></>)
+    await waitFor(() => expect(screen.getAllByTestId("person-circle")[0]!.title).toBe("Olive Owner"))
+    expect(accounts.listPeople).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe("a board member's view", () => {
   it("still reads Operator, and asks for no owners", () => {
     as("member")
