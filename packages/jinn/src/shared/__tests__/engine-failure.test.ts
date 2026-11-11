@@ -55,6 +55,31 @@ const GOLDENS: readonly [string, EngineFailureClass[]][] = [
   ["error_during_execution", ["terminal"]],
   ["Some error after work", ["terminal"]],
 
+  // A prepaid balance running dry is `billing`: hop-worthy, never a wait.
+  [
+    "Error: provider.quota: Insufficient balance. Top up at https://opencode.ai/console/wrk_1/billing?credits=1. (HTTP 402)",
+    ["billing"],
+  ],
+  ["Insufficient balance", ["billing"]],
+  ["insufficient_credits", ["billing"]],
+  ["HTTP 402 Payment Required", ["billing"]],
+  ["402 Payment Required", ["billing"]],
+  ["status: 402", ["billing"]],
+  ["Your credit balance is too low to access the API", ["billing"]],
+  ["You are out of credits. Top up your balance to continue.", ["billing"]],
+  ["Top up at https://example.com/billing", ["billing"]],
+  // ...a window that also names a limit is still a wait, so both classes are carried.
+  ["429 Too Many Requests: usage limit exceeded; insufficient balance", ["rate-limit", "quota", "billing"]],
+  // ...and text that merely contains the digits or the words is not billing.
+  ["402 files changed", ["terminal"]],
+  ["req_01J402ABC", ["terminal"]],
+  ["billing_error", ["terminal"]],
+  ["lint: found problems (402)", ["terminal"]],
+  ["Error: Process exited with code 1 at line (402)", ["terminal"]],
+  ["Please top up at the next stand-up", ["terminal"]],
+  ["Please top up the list of items before submitting", ["terminal"]],
+  ["Payment required fields are missing from the form", ["terminal"]],
+
   // workflows/__tests__/retry-boundary.test.ts — a model id our own config or our own
   // discovery got wrong, refused before the engine ran anything.
   ["invalid model selection", ["invalid-model"]],

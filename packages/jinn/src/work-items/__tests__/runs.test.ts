@@ -187,6 +187,12 @@ describe("a quota window is not a failure", () => {
     expect(runs.listWorkItemRuns(item.id).find((entry) => entry.id === run.id)?.outcome).toBe("rate_limited");
   });
 
+  it("does not settle a spent-balance receipt as rate_limited: waiting does not refill it", () => {
+    const billing = "opencode account is out of credit: Insufficient balance. Top up at https://example.com/billing. (HTTP 402)";
+    expect(runs.runOutcomeForReceipt("failed", billing)).not.toBe("rate_limited");
+    expect(runs.runOutcomeForReceipt("failed", "429 Too Many Requests")).toBe("rate_limited");
+  });
+
   it("reads the receipt the same way when the per-Todo reconciler reaches it first", async () => {
     // Two settlers race for every attempt: this sweep and the reconciler. If
     // they disagree, a quota window reads as `blocked` purely because of which

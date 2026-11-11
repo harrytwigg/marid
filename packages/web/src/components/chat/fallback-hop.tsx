@@ -13,6 +13,7 @@ import type { Message } from '@/lib/conversations'
 const REASON_TEXT: Record<FallbackHopReason, string> = {
   'rate-limit': 'usage limit',
   quota: 'quota used up',
+  billing: 'out of credit',
   'retry-exhausted': 'provider retries ran out',
   'invalid-model': 'model not served',
   auth: 'profile signed out',

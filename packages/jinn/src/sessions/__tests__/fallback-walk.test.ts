@@ -1,11 +1,22 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { ACCOUNT_A, CLAUDE_B, DIR_B, HOUR, OPENCODE_X, OPENCODE_Y, answer, claudeProfileFromDir, employee, handleRateLimit, hopsOf, key, limited, limitedTurn, newSession, overrideOf, readEngineHealth, reg, resetsIn, runOf, scripted, tmp, who, useWalkHarness } from "./fallback-walk-harness.js";
+import type { Employee, Engine } from "../../shared/types.js";
+import { ACCOUNT_A, CLAUDE_B, DIR_B, HOUR, OPENCODE_X, OPENCODE_Y, answer, claudeProfileFromDir, failed, employee, handleRateLimit, hopsOf, key, limited, limitedTurn, newSession, overrideOf, readEngineHealth, reg, resetsIn, runOf, scripted, tmp, who, useWalkHarness } from "./fallback-walk-harness.js";
 
 /** A rate-limited turn walks the session's fallback chain (docs/fallback-chains.md): hop after hop within the turn, each target once, each on its own profile and model, until one serves it or the chain runs out and the session waits on its own target. */
 
 useWalkHarness();
+
+const BILLING = "Error: provider.quota: Insufficient balance. Top up at https://opencode.ai/console/wrk_1/billing?credits=1. (HTTP 402)";
+
+/** The turn of a session whose own provider answered with a spent balance. */
+function billingTurn(id: string, who: Employee | undefined, engines: Map<string, Engine>) {
+  const turn = limitedTurn(id, who, engines);
+  const onBillingFailure = vi.fn();
+  const opts = { ...turn.opts, rateLimit: { billing: true as const }, originalResult: failed(BILLING), hooks: { ...turn.opts.hooks, onBillingFailure } };
+  return { opts: opts as typeof turn.opts, seen: turn.seen, onBillingFailure };
+}
 
 describe("a four-link chain: claude/A/opus -> claude/B/sonnet -> opencode/X -> opencode/Y", () => {
   it("walks hop by hop within one turn, each link on its own engine, profile directory and model", async () => {
@@ -27,6 +38,20 @@ describe("a four-link chain: claude/A/opus -> claude/B/sonnet -> opencode/X -> o
       [key(OPENCODE_X), key(OPENCODE_Y), "rate-limit"],
     ]);
     expect(seen.starts.map((start) => start.hop?.to)).toEqual([key(CLAUDE_B), key(OPENCODE_X), key(OPENCODE_Y)]);
+  });
+
+  it("hops past a link whose provider answers with an insufficient-balance error and no rate-limit status", async () => {
+    const { engines, calls } = scripted((call) => {
+      if (who(call) === "y-provider/model-y") return answer("done on Y", "y-thread");
+      return who(call) === "x-provider/model-x" ? failed(BILLING) : limited();
+    });
+    const id = newSession();
+
+    const outcome = await handleRateLimit(limitedTurn(id, employee(), engines).opts);
+
+    expect(outcome).toMatchObject({ kind: "fallback", result: { result: "done on Y" } });
+    expect(calls.map((call) => call.model)).toEqual(["sonnet", "x-provider/model-x", "y-provider/model-y"]);
+    expect(hopsOf(id).map((hop) => [hop.to, hop.reason])).toContainEqual([key(OPENCODE_Y), "billing"]);
   });
 
   it("hands every attempt that did not serve the turn to the failed-attempt hook, with the notices it asked for", async () => {
@@ -180,4 +205,41 @@ describe("a chain that runs out while a stand-in holds the session", () => {
     expect(runOf(id)).toBeUndefined();
     expect(hopsOf(id)[0]).toMatchObject({ to: null });
   }, 15_000);
+});
+
+describe("a spent balance on the session's own target", () => {
+  it("hops to the chain, and the chain serves it", async () => {
+    const { engines, calls } = scripted((call) => (who(call) === "x-provider/model-x" ? answer("done on X", "x-thread") : limited()));
+    const id = newSession();
+    const { opts, onBillingFailure } = billingTurn(id, employee(), engines);
+
+    expect(await handleRateLimit(opts)).toMatchObject({ kind: "fallback", result: { result: "done on X" } });
+    expect(calls.map((call) => call.model)).toEqual(["sonnet", "x-provider/model-x"]);
+    expect(onBillingFailure).not.toHaveBeenCalled();
+  });
+
+  it("fails the turn instead of parking it when the chain runs out", async () => {
+    const { engines, calls } = scripted(() => limited());
+    const id = newSession();
+    const { opts, seen, onBillingFailure } = billingTurn(id, employee(), engines);
+
+    expect(await handleRateLimit(opts)).toEqual({ kind: "billing" });
+    expect(onBillingFailure).toHaveBeenCalledTimes(1);
+    // Nothing waits, and nothing re-runs the own target: the only calls were the chain's three links.
+    expect(seen.waiting).toEqual([]);
+    expect(reg.getSession(id)!.status).not.toBe("waiting");
+    expect(calls).toHaveLength(3);
+  });
+
+  it("fails the turn instead of parking it when it has no chain at all", async () => {
+    const { engines, calls } = scripted(() => limited());
+    const id = newSession();
+    const { opts, seen, onBillingFailure } = billingTurn(id, employee({ fallback: [] }), engines);
+
+    expect(await handleRateLimit(opts)).toEqual({ kind: "billing" });
+    expect(onBillingFailure).toHaveBeenCalledTimes(1);
+    expect(seen.waiting).toEqual([]);
+    expect(reg.getSession(id)!.status).not.toBe("waiting");
+    expect(calls).toEqual([]);
+  });
 });

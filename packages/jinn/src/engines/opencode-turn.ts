@@ -1,4 +1,5 @@
 import type { EngineResult, StreamDelta } from "../shared/types.js";
+import { isBillingFailureMessage } from "../shared/engine-failure.js";
 import { isRateLimitMessage } from "../shared/rateLimit.js";
 import { extractActivityReceiptId } from "../shared/activity-receipts.js";
 import {
@@ -184,7 +185,7 @@ export class OpencodeTurn {
       // which is exactly the shape `isDeadSessionError` reads as a stale resume
       // id — and it is consulted BEFORE `detectRateLimit`, so without this the
       // session id would be wiped and the engine chain never walked.
-      ...(plugin || isRateLimitMessage(error) ? { rateLimit: { status: "rejected" } } : {}),
+      ...(plugin || isRateLimitMessage(error) || isBillingFailureMessage(error) ? { rateLimit: { status: "rejected" } } : {}),
     };
   }
 

@@ -24,6 +24,19 @@ describe("historical incident replay — classifier", () => {
     expect(verdict).toMatchObject({ class: "transient", lane: "recovering" });
   });
 
+  it("a spent prepaid balance reaches the manager: no clock refills it, so it is not recovering", () => {
+    const verdict = classifyRecovery({
+      todo: { id: "TSK-1b", status: "blocked", assignee: "platform-worker", source: "session" },
+      lastRun: {
+        id: "run_old",
+        outcome: "failed",
+        error: "opencode account is out of credit: Error: provider.quota: Insufficient balance. Top up at https://example.com/billing. (HTTP 402)",
+        endedAt: "2026-08-20T12:00:00.000Z",
+      },
+    });
+    expect(verdict).toMatchObject({ class: "code", lane: "manager" });
+  });
+
   it("code failure routes to manager, not operator", () => {
     const verdict = classifyRecovery({
       todo: { id: "TSK-2", status: "blocked", assignee: "platform-worker", source: "session" },

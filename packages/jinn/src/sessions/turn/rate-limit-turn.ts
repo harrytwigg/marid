@@ -144,6 +144,26 @@ async function settleTimedOutTurn(args: RateLimitTurnArgs): Promise<void> {
   await args.surface.reply("Usage limit didn't reset in time. Please try again later.");
 }
 
+/** A prepaid balance ran dry and no fallback link could serve the turn: fail it with the
+ *  provider's own words (they say where to top up) so it reaches the manager, instead of
+ *  parking it for a window that never opens. */
+async function settleBillingFailedTurn(args: RateLimitTurnArgs): Promise<void> {
+  const session = args.input.session;
+  const provider = args.originalResult.error?.replace(/\s+/g, " ").trim().slice(0, 400) || "the provider reported an insufficient balance";
+  const billingError = `${rateLimitEngineLabel(session.engine)} account is out of credit: ${provider}`;
+  notifyOperatorChannel(`❌ ${billingError}. ${describe(session)} has been stopped.`);
+  await settleTurn({
+    sessionId: session.id,
+    attemptToken: args.input.attemptToken,
+    outcome: "failed",
+    error: billingError,
+    expectedStatuses: ["waiting", "running"],
+    employee: args.input.employee,
+    surface: args.surface,
+  });
+  await args.surface.reply("The provider reports an insufficient balance and no fallback could serve this turn. Top up the account or add a fallback, then try again.");
+}
+
 function rateLimitHooks(args: RateLimitTurnArgs): RateLimitHandlerHooks {
   const { plan, surface } = args;
   return {
@@ -179,6 +199,7 @@ function rateLimitHooks(args: RateLimitTurnArgs): RateLimitHandlerHooks {
       notifyOperatorChannel(`✅ ${rateLimitEngineLabel(args.input.session.engine)} usage limit cleared. ${describe(args.input.session)} resumed.`);
     },
     onTimeout: () => settleTimedOutTurn(args),
+    onBillingFailure: () => settleBillingFailedTurn(args),
   };
 }
 

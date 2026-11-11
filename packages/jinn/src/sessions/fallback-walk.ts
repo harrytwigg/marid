@@ -133,7 +133,7 @@ export async function walkFallbackChain(input: WalkInput): Promise<WalkOutcome> 
 }
 
 const TARGET_FAILED: Record<FallbackHopReason, string> = {
-  "rate-limit": "is limited too", quota: "is limited too", "retry-exhausted": "is limited too",
+  "rate-limit": "is limited too", quota: "is limited too", billing: "is out of credit too", "retry-exhausted": "is limited too",
   "invalid-model": "does not serve this model", auth: "is signed out",
 };
 

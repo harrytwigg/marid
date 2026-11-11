@@ -15,6 +15,8 @@ import type { FallbackHop } from "../shared/fallback-chain-wire.js";
 export interface RateLimitInfo {
   /** Unix timestamp (seconds) when the limit is expected to reset, if known. */
   resetsAt?: number;
+  /** A spent prepaid balance: the chain may serve the turn, but it is never parked to wait. */
+  billing?: true;
 }
 
 /** Outcome categories returned by handleRateLimit so callers can drive transport-side completion. */
@@ -28,6 +30,9 @@ export type RateLimitOutcome =
    *  `reverted` is false when the own account was found still limited and the
    *  window moved out: the session stays on the stand-in. */
   | { kind: "handback"; session: Session; waited: boolean; reverted: boolean }
+  /** The limited turn is a spent balance: the chain had nothing left to serve it, and
+   *  waiting would not refill it, so the turn fails for someone to top up. */
+  | { kind: "billing" }
   | { kind: "timeout" }
   | { kind: "cancelled" };
 
@@ -102,6 +107,8 @@ export interface RateLimitHandlerHooks {
    * mark session errored, emit completion event with the timeout error.
    */
   onTimeout?: () => void | Promise<void>;
+  /** The chain could not serve a spent balance and the turn is not parked. */
+  onBillingFailure?: () => void | Promise<void>;
 
   /**
    * Called when the session was deleted/cancelled while waiting. The handler

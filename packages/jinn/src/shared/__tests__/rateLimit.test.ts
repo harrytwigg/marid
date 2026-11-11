@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import type { EngineResult } from "../types.js";
+import { isBillingFailureMessage } from "../engine-failure.js";
 import { processStartFailure } from "../process-start.js";
 import {
-  computeNextRetryDelayMs, detectRateLimit, isDeadSessionError, nextUnstatedParkDelayMs,
+  computeNextRetryDelayMs, detectRateLimit, isDeadSessionError, isRateLimitMessage, nextUnstatedParkDelayMs,
   MAX_UNSTATED_PARK_ATTEMPTS, MAX_UNSTATED_PARK_DELAY_MS,
 } from "../rateLimit.js";
 
@@ -205,5 +206,28 @@ describe("the unstated-reset park", () => {
     expect(resumeAt).toEqual(new Date(resetsAt * 1000));
     expect(delayMs).toBeGreaterThan(900_000 - 5_000);
     expect(delayMs).toBeLessThanOrEqual(910_000);
+  });
+});
+
+const BILLING = "Error: provider.quota: Insufficient balance. Top up at https://opencode.ai/console/wrk_1/billing?credits=1. (HTTP 402)";
+
+describe("a spent prepaid balance", () => {
+  it("is not a rate limit: nothing may wait it out", () => {
+    expect(isRateLimitMessage(BILLING)).toBe(false);
+  });
+
+  it("is a billing failure only when no throttle or allowance window is named alongside it", () => {
+    expect(isBillingFailureMessage(BILLING)).toBe(true);
+    expect(isBillingFailureMessage("429 Too Many Requests: insufficient balance")).toBe(false);
+    expect(isBillingFailureMessage("billing_error")).toBe(false);
+  });
+
+  it("is detected as limited and flagged billing, so the chain may serve it but the park never runs", () => {
+    expect(detectRateLimit(makeResult({ error: BILLING }))).toEqual({ limited: true, billing: true });
+    expect(detectRateLimit(makeResult({ error: BILLING, rateLimit: { status: "rejected" } }))).toEqual({ limited: true, billing: true });
+  });
+
+  it("is not a dead session when the engine did no work before it", () => {
+    expect(isDeadSessionError(makeResult({ error: BILLING }))).toBe(false);
   });
 });
