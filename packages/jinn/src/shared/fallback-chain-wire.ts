@@ -45,6 +45,7 @@ export type FallbackSkipReason =
 export type FallbackHopReason =
   | "rate-limit"
   | "quota"
+  | "billing" // a prepaid balance ran dry; no clock refills it
   | "retry-exhausted" // the engine gave up on its own provider retries
   | "invalid-model" // only on a fallback link, never the session's own target
   | "auth"; // a fallback link's profile is signed out; only on a fallback link

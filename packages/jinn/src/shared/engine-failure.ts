@@ -15,6 +15,7 @@
 export type EngineFailureClass =
   | "rate-limit"
   | "quota"
+  | "billing"
   | "provider-outage"
   | "network"
   | "auth-terminal"
@@ -28,27 +29,29 @@ export interface EngineFailureClassification {
   resetsAt?: number;
 }
 
-/**
- * The account is out of allowance — a window that clears on its own clock, or a
- * prepaid balance that has run dry. Both are the same verdict to a caller: this
- * model cannot take the turn right now, so recover (wait, or hop to the next
- * engine in the fallback chain). A bare `billing` is deliberately NOT a signature —
- * it appears in unrelated fault codes such as `billing_error`.
- */
+/** The account is out of allowance — a window that clears on its own clock. */
 const QUOTA_SIGNATURES: readonly RegExp[] = [
   /usage.*limit/i,
   /exceeded.*limit/i,
   /out of extra usage/i,
-  // Prepaid balance exhausted ("provider.quota: Insufficient balance ... (HTTP 402)").
-  /\binsufficient[ _-]?(?:balance|funds|credits?|quota)\b/i,
+];
+
+/**
+ * A prepaid balance has run dry. Unlike a quota window it never clears on its own
+ * clock, so waiting is wrong: the right moves are to hop to another provider and,
+ * with none left, to fail loudly so someone tops up. A bare `billing` is
+ * deliberately NOT a signature — it appears in unrelated fault codes such as
+ * `billing_error` — and neither is a bare `402`, so only status context counts.
+ */
+const BILLING_SIGNATURES: readonly RegExp[] = [
+  /\binsufficient[ _-]?(?:balance|funds|credits?)\b/i,
   /\bout of (?:credits?|funds)\b/i,
   /\bcredit balance (?:is )?too low\b/i,
-  /\bpayment required\b/i,
-  // A 402 in status context only, so an id or a count ("402 files") does not match.
+  // HTTP 402 in status context, so an id, a line number or a count ("402 files") does not match.
   /\b(?:HTTP|status)(?:\s+code)?\s*[:=]?\s*402\b/i,
-  /\(402\)/,
-  // "Top up at <billing url>" / "top up your credits" — a prompt to add funds.
-  /\btop[ -]?up\s+(?:at\b|your\b|credits?\b|balance\b|funds\b)/i,
+  /\b402\s+payment required\b/i,
+  // "Top up at <url>" / "top up your credits": a prompt to add funds, not prose.
+  /\btop[ -]?up\s+(?:at\s+https?:\/\/|(?:your\s+)?(?:credits?|balance|funds)\b)/i,
 ];
 
 /** The request was throttled. `overloaded` lives here AND in provider-outage:
@@ -99,6 +102,7 @@ const INVALID_MODEL_SIGNATURES: readonly RegExp[] = [
 
 const SIGNATURES: readonly (readonly [EngineFailureClass, readonly RegExp[]])[] = [
   ["quota", QUOTA_SIGNATURES],
+  ["billing", BILLING_SIGNATURES],
   ["rate-limit", RATE_LIMIT_SIGNATURES],
   ["provider-outage", PROVIDER_OUTAGE_SIGNATURES],
   ["network", NETWORK_SIGNATURES],
@@ -146,4 +150,12 @@ export function hasEngineFailureClass(
   ...classes: EngineFailureClass[]
 ): boolean {
   return classes.some((failureClass) => classification.classes.has(failureClass));
+}
+
+/** Whether error text says a prepaid balance ran dry and nothing else (no throttle or
+ *  allowance window alongside it). Not a rate limit: waiting does not refill a balance.
+ *  Only a hop to another provider helps; with none left the turn fails. */
+export function isBillingFailureMessage(text: string | null | undefined): boolean {
+  const classification = classifyEngineFailureText(text);
+  return hasEngineFailureClass(classification, "billing") && !hasEngineFailureClass(classification, "rate-limit", "quota");
 }

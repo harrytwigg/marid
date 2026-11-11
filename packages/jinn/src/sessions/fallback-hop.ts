@@ -1,4 +1,4 @@
-import { classifyEngineFailureText, hasEngineFailureClass } from "../shared/engine-failure.js";
+import { classifyEngineFailureText, hasEngineFailureClass, isBillingFailureMessage } from "../shared/engine-failure.js";
 import { UNSTATED_RESET_WINDOW_MS } from "../shared/engine-health.js";
 import type { FallbackHop, FallbackHopReason, FallbackHopSkip } from "../shared/fallback-chain-wire.js";
 import { isModelAvailabilityError } from "../shared/model-fallback.js";
@@ -33,6 +33,7 @@ const RETRY_ABANDONED_RE = /would not retry it for/i;
 export function limitReason(result: Pick<EngineResult, "error">): FallbackHopReason {
   const error = result.error ?? "";
   if (RETRY_ABANDONED_RE.test(error)) return "retry-exhausted";
+  if (isBillingFailureMessage(error)) return "billing";
   const classification = classifyEngineFailureText(error);
   return hasEngineFailureClass(classification, "quota") && !hasEngineFailureClass(classification, "rate-limit") ? "quota" : "rate-limit";
 }
@@ -73,6 +74,7 @@ export function hopLogLine(sessionId: string, hop: FallbackHop): string {
 const WHY: Record<FallbackHopReason, string> = {
   "rate-limit": "hit its usage limit",
   quota: "hit its usage limit",
+  billing: "is out of credit",
   "retry-exhausted": "hit its usage limit",
   "invalid-model": "does not serve this model",
   auth: "is signed out",

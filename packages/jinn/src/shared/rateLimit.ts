@@ -1,5 +1,5 @@
 import type { EngineResult } from "./types.js";
-import { classifyEngineFailureText, hasEngineFailureClass } from "./engine-failure.js";
+import { classifyEngineFailureText, hasEngineFailureClass, isBillingFailureMessage } from "./engine-failure.js";
 import { isMissingConversationOutput, isProcessStartFailure } from "./process-start.js";
 
 /** Whether error text reads as a quota window rather than a fault. Engine
@@ -13,6 +13,9 @@ export function isRateLimitMessage(text: string | null | undefined): boolean {
 
 export interface RateLimitDetection {
   limited: boolean;
+  /** The turn can hop along the fallback chain but must never be parked to wait: its
+   *  balance is spent, and no clock refills it. */
+  billing?: true;
   /** Unix timestamp in seconds */
   resetsAt?: number;
 }
@@ -45,6 +48,12 @@ const DEAD_SESSION_PATTERNS = [
   /session.*expired/i,
 ];
 
+/** The provider said no: a rate limit, or a spent balance. Either did no work for a reason of its own,
+ *  and the resume id is as good as it was, so neither makes a session dead. */
+function providerRefused(result: EngineResult): boolean {
+  return Boolean(result.rateLimit?.status) || isBillingFailureMessage(result.error);
+}
+
 /**
  * Detect whether an engine result indicates a dead/expired session rather than
  * a transient or rate-limit error. A dead session is one where the engine exited
@@ -61,8 +70,7 @@ export function isDeadSessionError(result: EngineResult): boolean {
   // conversation is gone (Claude Code, codex) makes the session dead.
   if (isProcessStartFailure(result.error)) return isMissingConversationOutput(result.error, result.sessionId);
 
-  // If rate limit info is present, this is a rate limit, not a dead session
-  if (result.rateLimit?.status) return false;
+  if (providerRefused(result)) return false;
 
   const zeroCost = !result.cost;
   const zeroTurns = !result.numTurns;
@@ -82,6 +90,10 @@ export function detectRateLimit(result: EngineResult): RateLimitDetection {
   const resetsAt = typeof result.rateLimit?.resetsAt === "number"
     ? result.rateLimit.resetsAt
     : undefined;
+
+  if (isBillingFailureMessage(result.error)) {
+    return { limited: true, billing: true };
+  }
 
   if (result.rateLimit?.status === "rejected") {
     return { limited: true, resetsAt };

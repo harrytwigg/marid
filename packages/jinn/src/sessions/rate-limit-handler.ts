@@ -94,6 +94,13 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
       + `(a substitute must be one of ${REMOTE_ENGINE_NAMES.join(", ")} and installed on that host); waiting for the reset instead`,
     );
   }
+  // A spent balance does not reopen on a clock, so there is nothing to wait out: the
+  // chain was the only way past it, and with none left the turn fails to be seen.
+  if (rateLimit.billing) {
+    logger.warn(`Session ${session.id} hit a ${engineLabel} billing failure and no fallback link could serve it; failing the turn instead of waiting`);
+    await hooks.onBillingFailure?.();
+    return { kind: "billing" };
+  }
   const targetReason = walk.reason;
   // Nothing usable in the chain — fall through to wait-and-retry.
 
