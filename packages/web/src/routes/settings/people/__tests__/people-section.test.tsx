@@ -232,9 +232,19 @@ describe("Changing roles", () => {
     await waitFor(() => expect(api.updatePerson).toHaveBeenCalledWith("usr_mem", { instanceRole: "member" }))
   })
 
-  it("sends nothing when the pick is cancelled, and offers no apply while nothing changed", async () => {
-    await openRoles()
+  it("offers no apply while nothing changed, on a member and on an owner, and sends nothing", async () => {
+    api.listPeople.mockResolvedValue([owner, member])
+    renderEntry()
+    for (const name of ["Sam Member", "Olive Owner"]) {
+      fireEvent.click(await screen.findByRole("button", { name: `Change roles for ${name}` }))
+    }
     expect(screen.queryByRole("button", { name: "Make owner" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Make member" })).toBeNull()
+    expect(api.updatePerson).not.toHaveBeenCalled()
+  })
+
+  it("sends nothing when the pick is cancelled", async () => {
+    await openRoles()
     fireEvent.change(screen.getByLabelText("Instance role for Sam Member"), { target: { value: "owner" } })
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
     expect(screen.queryByTestId("promote-warning-usr_mem")).toBeNull()
