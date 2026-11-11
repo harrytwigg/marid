@@ -1,5 +1,6 @@
 import { memberIdentity } from "@/lib/accounts-api"
 import { usePersonChoices, type PersonChoice } from "@/hooks/use-person-choices"
+import { useOperatorSelf } from "@/hooks/use-operator-self"
 import { useAuthOptional } from "@/routes/auth-provider"
 import { OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from "./util"
 
@@ -11,6 +12,8 @@ export interface PersonFilterChoices {
   people: PersonChoice[]
   /** A member also reads the operator as a person they may filter on; the operator's own view has "Me" for that. */
   offerOperator: boolean
+  /** The operator's own owner account, which "Me" already stands for and so is not listed again (null otherwise). */
+  you?: PersonChoice | null
 }
 
 /**
@@ -23,7 +26,13 @@ export function usePersonFilterChoices(board: string | null | undefined): Person
   const principal = auth?.principal
   const me = principal?.kind === "member" ? memberIdentity(principal.user.id) : OPERATOR_ASSIGNEE
   const { people } = usePersonChoices(board, !board)
-  return { me, people: people.filter((person) => memberIdentity(person.id) !== me), offerOperator: me !== OPERATOR_ASSIGNEE }
+  const operator = me === OPERATOR_ASSIGNEE
+  const self = useOperatorSelf(operator)
+  // The operator's own owner account is "Me" (`@operator`), never a second row filtering on `user:<id>` beside it; and until the
+  // People read says who that account is, nobody is listed, so the two never show side by side (the person picker's rule).
+  const you = operator ? self.you : null
+  const others = operator && !self.ready ? [] : people.filter((person) => memberIdentity(person.id) !== me && person.id !== you?.id)
+  return { me, people: others, offerOperator: !operator, you }
 }
 
 /** What the Person filter reads when set: "Me", "No person", the person's name; null when unset. */
@@ -32,6 +41,6 @@ export function personFilterLabel(person: string | undefined, choices: PersonFil
   if (person === choices.me) return "Me"
   if (person === OPERATOR_ASSIGNEE) return "Operator"
   if (person === UNASSIGNED_FILTER) return "No person"
-  const match = choices.people.find((choice) => memberIdentity(choice.id) === person)
+  const match = [...choices.people, ...(choices.you ? [choices.you] : [])].find((choice) => memberIdentity(choice.id) === person)
   return match?.displayName ?? "Someone else"
 }

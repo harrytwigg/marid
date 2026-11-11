@@ -136,20 +136,55 @@ describe("on an instance with accounts", () => {
     ])
   })
 
-  it("a department board offers its own people and the owners, not the others or the disabled", async () => {
+  // The one owner is the operator: "Me" already filters on it, so its account is not listed again.
+  it("a department board offers its own people, not the others, the disabled or the operator's own owner account", async () => {
     setMobile(false)
     render(bar({ status: "open" }, vi.fn(), { personBoard: "platform" }))
     await waitFor(() => expect(listPeople).toHaveBeenCalled())
     open("filter-chip-person")
-    await waitFor(async () => expect(await rows()).toEqual(["Anyone", "Me", "No person", "PDPat Doe", "OPOwen Poe"]))
+    await waitFor(async () => expect(await rows()).toEqual(["Anyone", "Me", "No person", "PDPat Doe"]))
   })
 
-  it("Everything offers every active person", async () => {
+  it("Everything offers every active person but the operator's own owner account", async () => {
     setMobile(false)
     render(bar({ status: "open" }, vi.fn(), { personBoard: null }))
     await waitFor(() => expect(listPeople).toHaveBeenCalled())
     open("filter-chip-person")
-    await waitFor(async () => expect(await rows()).toEqual(["Anyone", "Me", "No person", "PDPat Doe", "SRSam Roe", "OPOwen Poe"]))
+    await waitFor(async () => expect(await rows()).toEqual(["Anyone", "Me", "No person", "PDPat Doe", "SRSam Roe"]))
+  })
+
+  it("an old link filtering on the owner's own account still reads its name", async () => {
+    setMobile(false)
+    render(bar({ status: "open", person: "user:u3" }, vi.fn(), { personBoard: null }))
+    await waitFor(() => expect(screen.getByTestId("filter-chip-person").textContent).toContain("Owen Poe"))
+  })
+
+  it("with several owners, the one this browser signs in as is Me and the other is listed by name", async () => {
+    auth.value = { principal: { kind: "operator", user: { id: "u3", displayName: "Owen Poe" } }, authState: { hasAccounts: true } }
+    listPeople.mockResolvedValue([person("u1", "Pat Doe"), person("u3", "Owen Poe", { instanceRole: "owner" }), person("u5", "Ola Toe", { instanceRole: "owner" })])
+    setMobile(false)
+    render(bar({ status: "open" }, vi.fn(), { personBoard: null }))
+    await waitFor(() => expect(listPeople).toHaveBeenCalled())
+    open("filter-chip-person")
+    await waitFor(async () => expect(await rows()).toEqual(["Anyone", "Me", "No person", "PDPat Doe", "OTOla Toe"]))
+  })
+
+  it("with several owners and none of them this browser, every owner is listed by name", async () => {
+    listPeople.mockResolvedValue([person("u3", "Owen Poe", { instanceRole: "owner" }), person("u5", "Ola Toe", { instanceRole: "owner" })])
+    setMobile(false)
+    render(bar({ status: "open" }, vi.fn(), { personBoard: null }))
+    await waitFor(() => expect(listPeople).toHaveBeenCalled())
+    open("filter-chip-person")
+    await waitFor(async () => expect(await rows()).toEqual(["Anyone", "Me", "No person", "OPOwen Poe", "OTOla Toe"]))
+  })
+
+  it("lists nobody by name while the People read is pending, so the owner never shows beside Me", async () => {
+    listPeople.mockReturnValue(new Promise(() => {}))
+    setMobile(false)
+    render(bar({ status: "open" }, vi.fn(), { personBoard: null }))
+    await waitFor(() => expect(listPeople).toHaveBeenCalled())
+    open("filter-chip-person")
+    expect(await rows()).toEqual(["Anyone", "Me", "No person"])
   })
 
   it("picking a person sets that user's identity, and the chip reads their name", async () => {
