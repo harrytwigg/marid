@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { EmployeeChip } from "@/components/ui/employee-chip"
+import { isMemberIdentity, MemberProvenance } from "./attribution"
 import { STATUS_LABEL, operatorSafeTodoError, provenanceLabel, publicWorkItemReference } from "@/lib/todos"
 import { legalTargets } from "@/lib/legal-targets"
 import { ATTENTION_COPY, ATTENTION_GROUPS, attentionKind, stopCauseQuote, type AttentionKind } from "./needs-you-support"
@@ -55,6 +56,7 @@ function WorkRef({ item }: { item: WorkItemCompactWire }) {
       </span>
     )
   }
+  if (isMemberIdentity(item.createdBy)) return <MemberProvenance identity={item.createdBy!} />
   return <ProvChip source={item.source} sourceRef={item.sourceRef} />
 }
 

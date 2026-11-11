@@ -55,6 +55,17 @@ export interface JinnConfig {
     allowFileOpen?: boolean;
     /** Require token/cookie auth even on loopback. Network binds require auth by default. */
     authRequired?: boolean;
+    /**
+     * IP addresses or CIDR ranges (IPv4 and IPv6) of the reverse proxies and tunnels in front of the gateway.
+     * Only a request whose direct peer is listed may name the real client in a forwarded header, and only
+     * sign-in rate limiting and the address recorded on a member session read it. Default: none.
+     */
+    trustedProxies?: string[];
+    /**
+     * One header name (for example `cf-connecting-ip`, `x-real-ip`, `fly-client-ip`) a trusted proxy sets to the
+     * real client address. When set it is used instead of `X-Forwarded-For`. Ignored for an untrusted peer.
+     */
+    clientIpHeader?: string;
     /** Disable gateway auth. Refused on network binds unless insecureAllowUnauthenticatedNetwork is true. */
     authDisabled?: boolean;
     /** Explicit escape hatch for unauthenticated 0.0.0.0/LAN/Tailscale binds. */

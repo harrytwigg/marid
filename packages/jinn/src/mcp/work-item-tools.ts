@@ -11,6 +11,7 @@ import {
   type AttachmentUploadTarget,
 } from "./work-item-attachments.js";
 import { workItemDispatchTools } from "./work-item-dispatch-tools.js";
+import { neutralisePeople, personLabel, withPersonLabel } from "./person-labels.js";
 import { assertIdentity, gatewayFailure, mutationResult } from "./work-item-result.js";
 import type { JinnMcpContext } from "./toolkit.js";
 import { BLOCK_KIND_ERROR, BLOCK_KINDS, parseBlockKind } from "../work-items/blocks.js";
@@ -60,7 +61,8 @@ function qs(params: Record<string, string | number | undefined>): string {
   return parts.join("&");
 }
 
-function summarize(item: Record<string, unknown>): Record<string, unknown> {
+function summarize(item: Record<string, unknown>, members?: unknown): Record<string, unknown> {
+  const person = personLabel(item.humanAssignee, members);
   return {
     id: item.id,
     title: item.title,
@@ -74,13 +76,15 @@ function summarize(item: Record<string, unknown>): Record<string, unknown> {
     version: item.version,
     // Dates only when set: most rows carry neither, and every row is context.
     ...(item.startAt ? { startAt: item.startAt } : {}), ...(item.dueAt ? { dueAt: item.dueAt } : {}),
+    // Only when a person is set, like the dates: most rows have none, and every row is context.
+    ...(person ? { humanAssignee: person } : {}),
     updatedAt: item.updatedAt ?? null,
   };
 }
 
 function workItemsFrom(body: unknown): Array<Record<string, unknown>> {
-  const rec = (body ?? {}) as { workItems?: Array<Record<string, unknown>> };
-  return Array.isArray(rec.workItems) ? rec.workItems.map(summarize) : [];
+  const rec = (body ?? {}) as { workItems?: Array<Record<string, unknown>>; members?: unknown };
+  return Array.isArray(rec.workItems) ? rec.workItems.map((item) => summarize(item, rec.members)) : [];
 }
 
 /** PATCH the metadata pen at a freshly read version, retrying ONCE on a concurrent
@@ -173,7 +177,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
       const id = requireTodoId(args);
       const { status, body } = await gatewayRequest(ctx, "GET", `/api/work-items/${encodeURIComponent(id)}`);
       if (status >= 400) throw gatewayFailure(`getting work item "${id}"`, status, body);
-      return body;
+      return withPersonLabel(body);
     },
   };
 
@@ -623,5 +627,6 @@ export function buildWorkItemTools(): JinnMcpTool[] {
   };
 
   const { dispatch, dispatchConfig, landOn } = workItemDispatchTools();
-  return [list, get, tree, search, create, update, edit, assign, archive, dispatch, landOn, comment, listComments, attach, listAttachments, link, unlink, ...labelTools(), dispatchConfig, departments];
+  const tools = [list, get, tree, search, create, update, edit, assign, archive, dispatch, landOn, comment, listComments, attach, listAttachments, link, unlink, ...labelTools(), dispatchConfig, departments];
+  return tools.map((tool) => ({ ...tool, handler: async (args, ctx) => neutralisePeople(await tool.handler(args, ctx)) }));
 }

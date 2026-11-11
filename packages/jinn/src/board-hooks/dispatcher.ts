@@ -34,10 +34,13 @@ interface Evaluated {
   chain: string[];
 }
 
-/** The shared payload and loop-guard chain for an event, or null when its Todo is gone. */
+/** The shared payload and loop-guard chain for an event, or null when its Todo is gone or a board member made the write. */
 function evaluate(event: WorkItemEvent, name: BoardHookEvent): Evaluated | null {
   const base = buildBasePayload(event, name);
-  return base ? { base, chain: eventChain(base.actor.sessionId) } : null;
+  // Members start, wake and steer no agent: nothing a member does fires a hook. Keyed on the resolved
+  // actor, never on the raw event actor (the created event records the source there, not the user).
+  if (!base || base.actor.kind === "member") return null;
+  return { base, chain: eventChain(base.actor.sessionId) };
 }
 
 function processEvent(context: ApiContext, event: WorkItemEvent): void {

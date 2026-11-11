@@ -21,6 +21,7 @@ import {
   type WorkItemStatus,
 } from "../../work-items/store.js";
 import { transition } from "../../work-items/transitions.js";
+import { isMemberIdentity, memberLabel } from "../../work-items/member-identity.js";
 import { requiredText, type DomainHandler } from "./domain-types.js";
 
 /** One Todo as Talk describes it: enough for the model to answer about it
@@ -39,7 +40,7 @@ export function todoData(id: string): Record<string, unknown> {
     priority: item.priority,
     version: item.version,
     labels: getWorkItemLabels(id).map((label) => label.name),
-    comments: comments.comments.map((comment) => ({ id: comment.id, author: comment.author, body: comment.body })),
+    comments: comments.comments.map((comment) => ({ id: comment.id, author: isMemberIdentity(comment.author) ? memberLabel(comment.author) : comment.author, body: comment.body })),
     commentCount: comments.total,
   };
 }

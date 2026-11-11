@@ -1,7 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 import { RouteFailure } from "@/components/route-failure"
 import { PairingScreen } from "@/components/auth/pairing-screen"
+import { accountsApi, type PrincipalWire } from "@/lib/accounts-api"
+import { queryClient } from "@/lib/query-client"
+import { createMemberSource } from "@/lib/member-source"
 import {
+  setRequestSource,
+  reportMemberSessionLost,
+  setMemberSessionLostHandler,
   bootstrapLocalAuth,
   createPairingCode,
   getAuthState,
@@ -24,9 +30,13 @@ interface RefreshOptions {
 interface AuthContextValue {
   status: AuthStatus
   authState: AuthState | null
+  /** Who the gateway says this browser is; null when nobody is signed in. */
+  principal: PrincipalWire
   devices: PairedDevice[]
   error: string | null
   pair: (secret: string, mode?: PairingMode) => Promise<void>
+  /** Email and password sign-in. Rejects with an `AccountsError` for the form to word. */
+  signIn: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   unpairDevice: (deviceId: string) => Promise<void>
   refresh: (opts?: RefreshOptions) => Promise<void>
@@ -35,6 +45,23 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
+
+/** For surfaces that also render outside the provider (a page test, the public invite page). */
+export function useAuthOptional(): AuthContextValue | null {
+  return useContext(AuthContext)
+}
+
+let appliedPrincipalKey: string | null = null
+
+/** A member's requests go through the member source; anyone else's go straight to the gateway.
+ *  Whatever the cache held for the previous identity is dropped, so a sign-out and a sign-in as
+ *  someone else in the same tab can never show the first person's boards. */
+function applyPrincipal(principal: PrincipalWire): void {
+  const key = principal?.kind === "member" ? `member:${principal.user.id}` : principal?.kind ?? "none"
+  setRequestSource(principal?.kind === "member" ? createMemberSource(reportMemberSessionLost) : null)
+  if (appliedPrincipalKey !== null && appliedPrincipalKey !== key) queryClient.clear()
+  appliedPrincipalKey = key
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("checking")
@@ -73,16 +100,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (shouldBootstrapLocal && state.authRequired && !state.authenticated && state.canBootstrapLocal) {
         if (await bootstrapLocalAuth()) state = await getAuthState()
       }
+      const member = state.principal?.kind === "member"
+      applyPrincipal(state.principal ?? null)
       setAuthState(state)
-      const paired = !state.authRequired || state.authenticated
+      const paired = !state.authRequired || state.authenticated || member
       setStatus(paired ? "paired" : "pairing-required")
-      if (paired && state.authRequired) await refreshDevices()
+      // A member has no paired devices to list, and the route is the operator's.
+      if (paired && state.authRequired && !member) await refreshDevices()
       else setDevices([])
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to check gateway access")
       setStatus("failed")
     }
   }, [refreshDevices])
+
+  useEffect(() => {
+    setMemberSessionLostHandler(() => { void refresh({ bootstrapLocal: false }) })
+    return () => setMemberSessionLostHandler(null)
+  }, [refresh])
 
   useEffect(() => {
     let alive = true
@@ -101,6 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await pairBrowser(secret, mode)
       const state = await getAuthState()
+      applyPrincipal(state.principal ?? null)
       setAuthState(state)
       const paired = !state.authRequired || state.authenticated
       if (paired && state.authRequired) await refreshDevices()
@@ -112,6 +148,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setStatus("pairing-required")
     }
   }, [refreshDevices])
+
+  const signIn = useCallback(async (email: string, password: string) => {
+    await accountsApi.login(email.trim(), password)
+    await refresh({ bootstrapLocal: false })
+  }, [refresh])
 
   const logout = useCallback(async () => {
     await logoutBrowser()
@@ -131,8 +172,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [devices, refresh, refreshDevices])
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, authState, devices, error, pair, logout, unpairDevice, refresh, refreshDevices, createPairingCode }),
-    [authState, devices, error, logout, pair, refresh, refreshDevices, status, unpairDevice],
+    () => ({ status, authState, principal: authState?.principal ?? null, devices, error, pair, signIn, logout, unpairDevice, refresh, refreshDevices, createPairingCode }),
+    [authState, devices, error, logout, pair, signIn, refresh, refreshDevices, status, unpairDevice],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
@@ -145,7 +186,7 @@ export function useAuth() {
 }
 
 export function AuthGate({ children }: { children: ReactNode }) {
-  const { status, authState, error, pair } = useAuth()
+  const { status, authState, error, pair, signIn } = useAuth()
   if (status === "paired") return <>{children}</>
   if (status === "failed") return <RouteFailure />
   if (status === "checking") {
@@ -161,6 +202,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       pairing={status === "pairing"}
       error={error}
       onPair={(secret, mode) => { void pair(secret, mode) }}
+      onSignIn={authState?.accountsEnabled === true && authState.hasAccounts === true ? signIn : undefined}
     />
   )
 }

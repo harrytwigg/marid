@@ -14,13 +14,12 @@ import type { GatewayEvent, GatewayEventListener } from "@jinn/gateway-events"
 
 vi.mock("@/components/page-layout", () => ({ PageLayout: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
 vi.mock("@/routes/settings-provider", () => ({ useSettings: () => ({ settings: { employeeOverrides: {} } }) }))
-const avatarRender = vi.hoisted(() => vi.fn())
-vi.mock("@/components/ui/employee-avatar", () => ({
-  EmployeeAvatar: ({ name }: { name: string }) => {
-    avatarRender(name)
-    return <span data-testid={`avatar-${name}`} />
-  },
-}))
+const cardGlyphRender = vi.hoisted(() => vi.fn())
+vi.mock("../state-glyph", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../state-glyph")>()
+  // The 16px glyph is drawn once per card render and nowhere else on the board: it counts card renders.
+  return { ...actual, StateCircle: (props: React.ComponentProps<typeof actual.StateCircle>) => { if (props.size === 16) cardGlyphRender(); return <actual.StateCircle {...props} /> } }
+})
 
 const listWorkItems = vi.fn()
 const getWorkItemTree = vi.fn()
@@ -565,13 +564,13 @@ describe("the board surface", () => {
     const { client } = renderBoard("/todos/b/platform")
     await screen.findByTestId("board-card-TSK-2")
     await waitFor(() => expect(getWorkItemTrees).toHaveBeenCalledTimes(1))
-    avatarRender.mockClear()
+    cardGlyphRender.mockClear()
 
     patchBacklogRow(client, "TSK-1", { title: "Changed title" })
 
     await waitFor(() => expect(screen.getByTestId("board-card-TSK-1").textContent).toContain("Changed title"))
-    expect(avatarRender).toHaveBeenCalledTimes(1)
-    expect(avatarRender).toHaveBeenCalledWith("scout")
+    // Only the changed card drew again; its sibling kept its render.
+    expect(cardGlyphRender).toHaveBeenCalledTimes(1)
   })
 
   it("relocates a live Todo payload once and updates both column counts before refetch", async () => {

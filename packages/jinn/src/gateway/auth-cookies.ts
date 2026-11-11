@@ -35,7 +35,7 @@ export function parseCookieHeader(cookieHeader: string | undefined): Record<stri
  * `~/.jinn` home keeps the bare names (no forced re-pair on upgrade); every
  * other explicit home is namespaced, including throwaway sandbox homes.
  */
-function cookieNamespace(jinnHome?: string): string {
+export function cookieNamespace(jinnHome?: string): string {
   const home = jinnHome ?? readEnv(process.env, "HOME"); // footgun: ok the same fallback the cookie name always took
   if (!home) return "";
   const resolved = path.resolve(home);

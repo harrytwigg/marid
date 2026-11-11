@@ -50,6 +50,7 @@ export function writeDetail(
 export function createdEventDetail(
   sourceRef: string | null,
   origin: WriteOrigin | undefined,
+  createdOnBoard?: string,
 ): Record<string, unknown> | null {
-  return writeDetail({ ...(sourceRef ? { sourceRef } : {}) }, origin) ?? null;
+  return writeDetail({ ...(sourceRef ? { sourceRef } : {}), ...(createdOnBoard ? { createdOnBoard } : {}) }, origin) ?? null;
 }

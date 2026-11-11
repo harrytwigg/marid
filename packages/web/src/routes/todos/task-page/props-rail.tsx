@@ -2,7 +2,7 @@ import { ArrowUpRight, Calendar, CalendarClock, LoaderCircle, Send, UserRound } 
 import type { DepartmentSummaryWire, Employee, LinkedSessionWire, WorkItemDetailWire } from "@/lib/api"
 import { useOpenSession } from "@/components/chat/file-open-context"
 import { STATUS_LABEL, priorityLabel } from "@/lib/todos"
-import { EmployeeAvatar } from "@/components/ui/employee-avatar"
+import { EmployeeAvatar, OPERATOR_DEFAULT_EMOJI } from "@/components/ui/employee-avatar"
 import { StatusCircle } from "../state-glyph"
 import { sessionIdFromActor, type SessionTreeWire } from "@/lib/session-tree-api"
 import { isSessionWaiting, SESSION_WAITING_COLOR } from "@/lib/session-waiting"
@@ -13,6 +13,9 @@ import { RailKicker, RailRow, RailPriorityBars, formatDueLong } from "./rail-row
 import { AutoStartRow } from "./auto-start-row"
 import { SprintRailRow } from "../sprints/sprint-rail-row"
 import { displayNameOf, formatRelativeTime } from "../util"
+import { isMemberIdentity, LastTouchedBy, MemberChip, useViewer } from "../attribution"
+import { agentOf, PersonCircle, PersonName, personRowFor, removePersonLabel, waitsOnOperator } from "../assignee-circles"
+import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
 
 /* Todos v2 slice 6 — the chrome-free properties rail (design-doc §7.2/§7.3,
  * mock task-detail.html). No inset boxes: quiet rows on the page surface, the
@@ -25,11 +28,11 @@ import { displayNameOf, formatRelativeTime } from "../util"
 export interface RailPickers {
   /** Task 6 mounts the picker surfaces here, keyed by row. Absent = read row. */
   status?: React.ReactNode
-  rowFor?: (row: "status" | "priority" | "assignee" | "labels" | "department" | "start" | "due") => {
+  rowFor?: (row: "status" | "priority" | "assignee" | "person" | "labels" | "department" | "start" | "due") => {
     onOpen: () => void
     open: boolean
     picker: React.ReactNode
-    /** Assignee only: drops the value without opening the picker at all. */
+    /** Agent and person rows: drops the value without opening the picker at all. */
     onClear?: () => void
   } | undefined
 }
@@ -59,12 +62,16 @@ export function PropsRail({
   sessionTree?: SessionTreeWire
 }) {
   const openSession = useOpenSession()
+  const { operatorControls } = useTodoCapabilities()
   const item = detail.workItem
   const labels = detail.labels ?? []
   const dept = item.department ? departments?.find((d) => d.slug === item.department) : undefined
   const deptTitle = item.department ? item.department.charAt(0).toUpperCase() + item.department.slice(1) : "No department"
   const createdBySession = sessionIdFromActor(item.createdBy)
-  const createdByLabel = !item.createdBy || item.createdBy === "operator" ? "You" : displayNameOf(item.createdBy, byName)
+  const viewer = useViewer()
+  const createdByLabel = !item.createdBy || item.createdBy === "operator"
+    ? (viewer === "member" ? "Operator" : "You")
+    : displayNameOf(item.createdBy, byName, viewer)
   const overdue = !!item.dueAt && Date.parse(item.dueAt) < Date.now()
   const railSessionLive = LIVE_RAIL_STATES.has(railSession?.status ?? "")
   const railSessionWaiting = isSessionWaiting(railSession?.status)
@@ -74,6 +81,9 @@ export function PropsRail({
   const statusPick = pick("status")
   const prioPick = pick("priority")
   const assigneePick = pick("assignee")
+  const personPick = personRowFor(pick, item, viewer)
+  const removeLabel = removePersonLabel(item, viewer)
+  const agent = agentOf(item.assignee)
   const labelsPick = pick("labels")
   const deptPick = pick("department")
   const startPick = pick("start")
@@ -97,32 +107,47 @@ export function PropsRail({
         {prioPick?.picker}
       </div>
       <div className="relative">
-        <RailRow testId="rail-assignee" label="Assignee" onOpen={assigneePick?.onOpen} open={assigneePick?.open}>
-          {item.assignee ? (
+        <RailRow testId="rail-assignee" label="Agent" onOpen={assigneePick?.onOpen} open={assigneePick?.open}>
+          {agent ? (
             <>
-              <EmployeeAvatar name={item.assignee} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
-              {displayNameOf(item.assignee, byName)}
+              <EmployeeAvatar name={agent} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
+              {displayNameOf(agent, byName, viewer)}
+            </>
+          ) : waitsOnOperator(item) ? (
+            <>
+              <EmployeeAvatar name="operator" fallback={OPERATOR_DEFAULT_EMOJI} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
+              {viewer === "member" ? "Needs the operator" : "Needs you"}
             </>
           ) : (
             <>
-              <span className="grid size-5 flex-none place-items-center rounded-full bg-[var(--fill-secondary)] text-[var(--text-quaternary)]">
+              <span className="grid size-5 flex-none place-items-center rounded-full border border-dashed border-[var(--text-quaternary)] text-[var(--text-quaternary)]">
                 <UserRound size={11} aria-hidden />
               </span>
-              <span className="text-[var(--text-tertiary)]">Unassigned</span>
+              <span className="text-[var(--text-tertiary)]">No agent</span>
             </>
           )}
         </RailRow>
-        {item.assignee && assigneePick?.onClear && (
-          // Sibling, not a child: the row is a button. `right-5` parks the ×
-          // clear of the row's own trailing disclosure chevron.
+        {agent && assigneePick?.onClear && (
+          // Sibling, not a child: the row is a button. `right-5` parks the × clear of the row's own trailing disclosure chevron.
           <RemoveButton
-            label="Remove assignee"
+            label="Remove agent"
             testId="rail-assignee-clear"
             onClick={assigneePick.onClear}
             className="absolute right-5 top-1/2 size-6 -translate-y-1/2 max-[700px]:size-[34px]"
           />
         )}
         {assigneePick?.picker}
+      </div>
+      <div className="relative">
+        <RailRow testId="rail-person" label="Person" onOpen={personPick?.onOpen} open={personPick?.open}>
+          <PersonCircle person={item.humanAssignee} size={20} />
+          {item.humanAssignee ? <PersonName person={item.humanAssignee} viewer={viewer} /> : <span className="text-[var(--text-tertiary)]">No person</span>}
+        </RailRow>
+        {item.humanAssignee && personPick?.onClear && (
+          <RemoveButton label={removeLabel} title={removeLabel} testId="rail-person-clear" onClick={personPick.onClear}
+            className="absolute right-5 top-1/2 size-6 -translate-y-1/2 max-[700px]:size-[34px]" />
+        )}
+        {personPick?.picker}
       </div>
       {railSession && (
         <button
@@ -155,7 +180,7 @@ export function PropsRail({
           <ArrowUpRight size={12} aria-hidden className="ml-auto text-[var(--text-quaternary)] opacity-0 transition-opacity group-hover/dispatch:opacity-100" />
         </button>
       )}
-      {!railSessionLive && (
+      {!railSessionLive && onDispatch && (
         <button
           type="button"
           data-testid="rail-dispatch"
@@ -168,7 +193,7 @@ export function PropsRail({
         </button>
       )}
 
-      <AutoStartRow detail={detail} />
+      {operatorControls && <AutoStartRow detail={detail} />}
 
       {sessionTree && sessionTree.roots.length > 0 && (
         <div className="mt-2">
@@ -176,8 +201,8 @@ export function PropsRail({
         </div>
       )}
 
-      <RailKicker later>Labels</RailKicker>
-      <div className="relative">
+      {(operatorControls || labels.length > 0) && <RailKicker later>Labels</RailKicker>}
+      {(operatorControls || labels.length > 0) && <div className="relative">
         <div className="flex flex-wrap gap-1.5 pt-1" data-testid="rail-labels">
           {labels.map((label) => (
             <LabelChip key={label.id} label={label} />
@@ -195,7 +220,7 @@ export function PropsRail({
           )}
         </div>
         {labelsPick?.picker}
-      </div>
+      </div>}
 
       <RailKicker later>Details</RailKicker>
       <div className="relative">
@@ -210,7 +235,7 @@ export function PropsRail({
         </RailRow>
         {deptPick?.picker}
       </div>
-      <SprintRailRow detail={detail} editable={!!rowFor} />
+      {operatorControls && <SprintRailRow detail={detail} editable={!!rowFor} />}
       <div className="relative">
         <RailRow quiet testId="rail-start" label="Start date" onOpen={startPick?.onOpen} open={startPick?.open}>
           <CalendarClock size={14} aria-hidden className="flex-none text-[var(--text-quaternary)]" />
@@ -235,10 +260,12 @@ export function PropsRail({
       </div>
       <RailRow quiet testId="rail-created-by">
         <UserRound size={14} aria-hidden className="flex-none text-[var(--text-quaternary)]" />
-        {createdBySession ? <SessionRef sessionId={createdBySession} byName={byName} /> : createdByLabel}
+        {createdBySession ? <SessionRef sessionId={createdBySession} byName={byName} />
+          : isMemberIdentity(item.createdBy, viewer) ? <MemberChip identity={item.createdBy!} size={16} /> : createdByLabel}
         <span className="text-[12px] font-normal text-[var(--text-quaternary)]">· created {formatRelativeTime(item.createdAt)}</span>
+        <LastTouchedBy events={detail.events} />
       </RailRow>
-      <RailRow quiet testId="rail-spend">
+      {operatorControls && detail.spendUsd !== null && <RailRow quiet testId="rail-spend">
         <span className="text-[11px] font-normal text-[var(--text-quaternary)]" style={{ fontFamily: "var(--font-code)" }}>
           ${detail.spendUsd.toFixed(2)}
         </span>
@@ -255,7 +282,7 @@ export function PropsRail({
             </span>
           </>
         )}
-      </RailRow>
+      </RailRow>}
     </aside>
   )
 }

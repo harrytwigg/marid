@@ -1,10 +1,16 @@
 import { operatorSafeTodoError } from "@/lib/todos"
+import { ApiError } from "@/lib/api"
+import { useMember } from "@/hooks/use-principal"
+import { BoardNotShared } from "@/routes/member/board-not-shared"
 
 /** In a chat layout tab the columns keep a readable width and the strip scrolls sideways, whatever
  *  the pane's width: the route's columns share the screen's. */
 export const TAB_COLUMNS = "[&>[data-board-column]]:min-w-[238px]"
 
 export function BoardErrorCard({ error, testId = "board-error" }: { error: unknown; testId?: string }) {
+  // A member told 404 for their board has lost it (the grant was removed): the same page as a board that was never theirs.
+  const member = useMember()
+  if (member && error instanceof ApiError && error.status === 404) return <BoardNotShared embedded />
   return (
     <div className="px-10 pt-5 max-[700px]:px-0 max-[700px]:pt-2">
       <div

@@ -1,4 +1,5 @@
-import { authFetch, authUrl } from "@/lib/auth"
+import { authFetch, authUrl, isMemberSession } from "@/lib/auth"
+import { memberAttachmentPath } from "@/lib/member-source"
 import type { TodoStopCauseWire } from "@/lib/parked"
 import type {
   CreateNoteInput,
@@ -394,7 +395,10 @@ export interface WorkItemCompactWire extends TodoStopCauseWire {
   version?: number
   title: string
   status: WorkItemStatusWire
+  /** The agent slot: an employee, or `@operator` on a Todo that needs the operator (which shows no agent). */
   assignee: string | null
+  /** The person slot: `@operator`, `user:<id>`, or on a member's reads `member` for someone off their boards. Optional: older gateways omit it, which reads as nobody. */
+  humanAssignee?: string | null
   department: string | null
   source: WorkItemSourceWire
   sourceRef: string | null
@@ -416,6 +420,10 @@ export interface WorkItemCompactWire extends TodoStopCauseWire {
   kept?: boolean
   /** Optional: older gateways omit it, which reads as the operator. */
   reviewAddressee?: ReviewAddresseeWire
+  /** A board member's read only: the Todo left the board they filed it on and they read it as its creator. Never says where it went. */
+  movedToAnotherBoard?: boolean
+  /** With `movedToAnotherBoard`: whether their role on the board they filed it on lets them comment. */
+  memberCanComment?: boolean
   updatedAt: string
   /** Manual sort rank (design-todos §7.3). Null until the operator reorders. */
   rank?: number | null
@@ -426,6 +434,8 @@ export interface WorkItemCompactWire extends TodoStopCauseWire {
  *  the whole filtered set and the offset to fetch next (null = exhausted). */
 export interface WorkItemListWire {
   workItems: WorkItemCompactWire[]
+  /** Names of the board members the rows name as their person, by `user:<id>`. Absent when none. */
+  members?: Record<string, { kind: "member"; displayName: string }>
   total?: number
   totals?: Partial<Record<WorkItemStatusWire, number>>
   limit?: number
@@ -443,6 +453,8 @@ export interface WorkItemFullWire {
   status: WorkItemStatusWire
   department: string | null
   assignee: string | null
+  /** The person slot, as on the compact row. */
+  humanAssignee?: string | null
   priority: number
   /** Manual order is part of the whole-row CAS response and detail baseline. */
   rank: number | null
@@ -459,6 +471,10 @@ export interface WorkItemFullWire {
   startAt?: string | null
   /** On tree nodes and the detail payload; optional: older gateways omit it. */
   reviewAddressee?: ReviewAddresseeWire
+  /** A board member's read only: the Todo left the board they filed it on and they read it as its creator. Never says where it went. */
+  movedToAnotherBoard?: boolean
+  /** With `movedToAnotherBoard`: whether their role on the board they filed it on lets them comment. */
+  memberCanComment?: boolean
   createdAt: string
   updatedAt: string
   closedAt: string | null
@@ -494,11 +510,12 @@ export interface WorkItemTreeNodeWire extends WorkItemFullWire {
   children: WorkItemTreeNodeWire[]
 }
 
-/** The tree payload: subtree + per-status totals + derived subtree spend. */
+/** The tree payload: subtree + per-status counts + derived subtree spend. The counts are numbers for everyone; for a
+ *  board member every cost figure is null, so readers treat a null spend as "nothing to show", not as zero spent. */
 export interface WorkItemTreeWire {
   root: WorkItemTreeNodeWire
   totals: Partial<Record<WorkItemStatusWire, number>>
-  spendUsd: number
+  spendUsd: number | null
 }
 
 /** One attachment row (Todos v2 slice 5) — content-addressed; `commentId`
@@ -542,7 +559,8 @@ export interface WorkItemDetailWire extends TodoStopCauseWire {
   kept?: boolean
   /** Who this Todo's review is addressed to (optional: older gateways omit it). */
   reviewAddressee?: ReviewAddresseeWire
-  spendUsd: number
+  /** Null for a board member: cost is not theirs to see. */
+  spendUsd: number | null
   events: WorkItemEventWire[]
   /** Last-10 comments tail + total (optional: older gateways omit it). */
   comments?: WorkItemCommentPageWire
@@ -738,6 +756,9 @@ export const api = {
     q.set("limit", String(params?.limit ?? 20))
     return get<WorkItemListWire>(`/api/work-items?${q.toString()}`, signal ? { signal } : undefined)
   },
+  /** The open Todos a board member filed on this board that have since left their boards (`movedToAnotherBoard` rows); the operator's list never sends this. */
+  listMovedOffBoard: (department: string, signal?: AbortSignal) =>
+    get<WorkItemListWire>(`/api/work-items?movedOff=true&department=${encodeURIComponent(department)}`, signal ? { signal } : undefined),
   /** GRS-021c: deterministic AND-composed Todo search (escaped-LIKE text over
    *  title + body). Same page params/payload as the list endpoint — the filter
    *  bar's search must carry the date window and page like any other query. */
@@ -808,6 +829,10 @@ export const api = {
     labels?: string[]
   }, origin?: WriteOriginWire) =>
     post<{ workItem: WorkItemFullWire }>("/api/work-items", input, origin),
+  /** A board member names or clears the person responsible (`@operator`, `user:<id>`, null); the member source maps it to
+   *  the member route. The operator edits the same field through the pen (`humanAssignee`). */
+  setWorkItemPerson: (id: string, person: string | null) =>
+    put<{ workItem: WorkItemFullWire }>(`/api/work-items/${encodeURIComponent(id)}/person`, { person }),
   /** Todos v2 slice 6: roster-validated assignment; status is unchanged. `@operator` assigns to the operator. */
   assignWorkItem: (id: string, assignee: string, origin?: WriteOriginWire) =>
     post<{ workItem: WorkItemFullWire }>(`/api/work-items/${encodeURIComponent(id)}/assign`, { assignee }, origin),
@@ -895,7 +920,9 @@ export const api = {
     del<{ removed: boolean }>(`/api/work-items/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}`),
   /** Integrity-checked download path (cookie-authenticated, usable as img src). */
   workItemAttachmentUrl: (id: string, attachmentId: string): string =>
-    authUrl(`/api/work-items/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}`),
+    authUrl(isMemberSession()
+      ? memberAttachmentPath(id, attachmentId)
+      : `/api/work-items/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}`),
   /** Todos v2 slice 3: relations (blocks is cycle-checked server-side). */
   addWorkItemRelation: (id: string, kind: WorkItemRelationKindWire, dstId: string) =>
     post<{ relation: unknown }>(`/api/work-items/${encodeURIComponent(id)}/relations`, { kind, dstId }),

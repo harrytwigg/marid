@@ -40,7 +40,7 @@ export function TaskPageSkeleton({ mobile, bannerExpected }: { mobile: boolean; 
 }
 
 /** `onBack` absent (a Todo shown as a tab), the tab's own close is the way out. */
-export function TaskEmpty({ message, onBack }: { message: string; onBack?: () => void }) {
+export function TaskEmpty({ message, onBack, backLabel = "Back to Todos" }: { message: string; onBack?: () => void; backLabel?: string }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
       <div className="text-[20px] font-bold tracking-[-0.41px] text-[var(--text-primary)]">{message}</div>
@@ -50,7 +50,7 @@ export function TaskEmpty({ message, onBack }: { message: string; onBack?: () =>
           onClick={onBack}
           className="focus-outline rounded-full px-4 py-2 text-[13px] font-semibold text-[var(--accent)] outline-none hover:bg-[var(--accent-fill)]"
         >
-          Back to Todos
+          {backLabel}
         </button>
       )}
     </div>

@@ -2,6 +2,8 @@ import { initDb } from '../shared/db.js';
 import { isNonOpenDepartment, scopeDepartmentOfItem } from './department-scope.js';
 import { assertMayHold } from './department-guard.js';
 import { isDepartmentArchived, usableDefaultDepartment } from './department-archive.js';
+import { departmentBefore } from './board-of.js';
+import { notifyTodoChanged } from './live-events.js';
 import type { WriteOrigin } from './origin.js';
 import {
   appendWorkItemEvent,
@@ -13,6 +15,8 @@ import {
   type AppendWorkItemEventInput,
   type WorkItem,
 } from './store.js';
+import { planOwnership, writeOwnership } from './person-write.js';
+import { storedTodoPerson } from './todo-people.js';
 import { todoProvenanceSnapshot, TransitionError, type TransitionResult } from './transitions.js';
 
 /**
@@ -68,6 +72,8 @@ export interface AssignWorkItemOptions {
   origin?: WriteOrigin;
   /** The employee behind a `session:` actor, when the caller knows it. */
   actorEmployee?: string;
+  /** The caller announces the Todo's change itself, with where its board was (the assign route does), so the move is not announced twice. */
+  announcesMove?: boolean;
 }
 
 /** With open departments a Todo follows its assignee's org department, when the
@@ -116,9 +122,11 @@ export function assignWorkItem(
   assignee: string | null,
   assigneeDepartment: string | null,
   actor?: string | null,
-  { origin, actorEmployee }: AssignWorkItemOptions = {},
+  { origin, actorEmployee, announcesMove }: AssignWorkItemOptions = {},
 ): WorkItem | undefined {
   const db = initDb();
+  /** The department a root's board was in before this assignment moved it, for a board member's feed. */
+  let leftBoard: string | null | undefined;
   const txn = db.transaction((): TransitionResult | undefined => {
     const item = getWorkItem(id);
     if (!item) return undefined;
@@ -141,9 +149,17 @@ export function assignWorkItem(
     // A chat that started this Todo for its own employee stops being its
     // executor once the Todo is somebody else's: left linked, its turns would
     // keep the new owner's dispatch refused and keep deriving the Todo's status.
+    // The agent slot's change settles the person with it: the operator kept as the person when an agent is set over
+    // `@operator`, and an `@operator` row dropped when the Todo goes back to the operator; a user's row stays (person-write.ts).
+    writeOwnership(db, item, planOwnership(item, storedTodoPerson(db, id), { assignee }), { actor: actor ?? 'operator', effect: 'companion', append: appendWorkItemEvent });
     const releasedSessions = releaseSelfStartedLinks(db, id, { exceptEmployee: assignee ?? undefined });
     const event = appendWorkItemEvent(assignmentEvent(item, { assignee, department, actor, actorEmployee, origin, releasedSessions }));
+    leftBoard = departmentBefore(item) !== department ? departmentBefore(item) : undefined;
     return { item: getWorkItem(id)!, escalated: false, event };
   });
-  return txn()?.item;
+  const result = txn()?.item;
+  // Whichever writer reached the assignment (the route, delegation, Talk), a card that left its board is announced
+  // as having done so: the route's own event carries the same fact for the operator's browsers.
+  if (result && leftBoard !== undefined && !announcesMove) notifyTodoChanged(result, 'board-moved', undefined, leftBoard);
+  return result;
 }

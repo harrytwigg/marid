@@ -102,7 +102,7 @@ function applyRootMove(db: Db, move: RootMove, rootId: string, actor: string | n
     setImmediate(() => {
       for (const id of move.cascade) {
         const item = getWorkItem(id);
-        if (item) notifyTodoChanged(item, 'metadata-updated');
+        if (item) notifyTodoChanged(item, 'metadata-updated', undefined, move.from);
       }
     });
   }

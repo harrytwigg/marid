@@ -92,6 +92,9 @@ import { initStt } from "../stt/stt.js";
 import { startWatchers, stopWatchers, syncSkillSymlinks } from "./watcher.js";
 import { gatewayWatchCallbacks } from "./watch-callbacks.js";
 import { createPluginEventsChannel, matchPluginEventsPath } from "./plugin-events-ws.js";
+import { createAccountsRuntime } from "../accounts/runtime.js";
+import { isKnownDepartmentSlug } from "./departments-api.js";
+import { routeMemberUpgrade, startMemberSocketSweep } from "../accounts/member-upgrade.js";
 import { startPluginRuntime, stopPluginRuntime } from "../plugins/runtime.js";
 import { SlackConnector } from "../connectors/slack/index.js";
 import { DiscordConnector, type DiscordConnectorConfig } from "../connectors/discord/index.js";
@@ -817,7 +820,10 @@ export async function startGateway(
 
   const startTime = Date.now();
   const wsClients = new Set<import("ws").WebSocket>();
+  // Board members' sockets hear the same broadcast through their own filter; assigned once accounts exist.
+  let publishToMembers: (event: string, payload: unknown) => void = () => {};
   const broadcast: GatewayEmit = (event, payload): void => {
+    publishToMembers(event, payload);
     const message = JSON.stringify({ event, payload, ts: Date.now() });
     for (const client of wsClients) {
       if (client.readyState === 1) {
@@ -900,8 +906,21 @@ export async function startGateway(
   // continuation is usually the reply the parent is waiting for.
   hookRegistry.setUnclaimedHookHandler(createUnclaimedStopSync(emit, { resolveEmployee: (slug) => employeeRegistry.get(slug) }));
 
+  // User accounts and board members; a member exists only where gateway auth is required.
+  const accounts = createAccountsRuntime({
+    getDb: initDb,
+    home: JINN_HOME,
+    authRequired: () => shouldRequireGatewayAuth(currentConfig),
+    gatewayAuthToken,
+    proxyTrust: () => currentConfig.gateway,
+    // The same rule as the departments API, so a board is whatever that API calls a department.
+    knownDepartment: (slug) => isKnownDepartmentSlug(slug, apiContext),
+  });
+  publishToMembers = (event, payload) => accounts.memberSockets.publish(event, payload);
+
   // API context
   const apiContext: ApiContext = {
+    accounts,
     config: currentConfig,
     sessionManager,
     startTime,
@@ -962,6 +981,7 @@ export async function startGateway(
     try {
       currentConfig = loadConfig();
       apiContext.config = currentConfig;
+      accounts.onConfigReload(); // closes member sockets (4401) if auth is no longer required
       sessionManager.setConfig(currentConfig);
       applyLateralHopConfig(currentConfig);
       invalidateModelRegistry(); // rebuild the model/capability registry from the new config
@@ -1017,6 +1037,7 @@ export async function startGateway(
     home: JINN_HOME,
     apiContext,
     webDir,
+    accounts,
   }));
 
   // Node's parser rejects some malformed authorities before the request
@@ -1042,11 +1063,14 @@ export async function startGateway(
   // the broadcast client set.
   const ptyWss = new WebSocketServer({ noServer: true });
   const pluginEvents = createPluginEventsChannel(() => currentConfig);
+  // Board members' sockets: tied to their sessions, outside the general broadcast.
+  const memberWss = new WebSocketServer({ noServer: true });
+  const stopMemberSocketSweep = startMemberSocketSweep(accounts);
 
   // Protocol-level ping/pong sweep across both WS servers. Terminates half-open
   // (dead but readyState===OPEN) sockets; terminating a PTY socket fires its
   // close handler -> onDisconnect -> viewerCount decrement, fixing the leak.
-  const stopWsHeartbeat = startWsHeartbeat([wss, ptyWss, pluginEvents.wss], {
+  const stopWsHeartbeat = startWsHeartbeat([wss, ptyWss, pluginEvents.wss, memberWss], {
     onSweep: (r) => { if (r.terminated > 0) logger.info(`WS heartbeat reaped ${r.terminated} dead socket(s)`); },
   });
 
@@ -1084,6 +1108,8 @@ export async function startGateway(
     const reqUrl = req.url || "";
     const pathname = reqUrl.split("?")[0];
     if (rejectUnverifiedIdentifiedUpgradeCaller(req, socket)) return;
+    // A member is default-deny here as in the request handler: `/ws` only, resolved before the operator gate.
+    if (routeMemberUpgrade(req, socket, head, { accounts, memberWss })) return;
     if (authRequiredNow() && authRequiredForRequest("GET", pathname)) {
       const auth = authenticateGatewayRequest(req, gatewayAuthToken, JINN_HOME);
       if (!auth.ok) {
@@ -1387,6 +1413,9 @@ export async function startGateway(
 
     // Stop the WS heartbeat sweep before tearing down the WS servers.
     stopWsHeartbeat();
+    stopMemberSocketSweep();
+    accounts.dispose();
+    for (const client of memberWss.clients) client.terminate();
 
     // Close WebSocket connections. Use terminate() during shutdown so lingering
     // PTY/SSE clients cannot hold server.close() open until the force-exit timer.
@@ -1405,6 +1434,7 @@ export async function startGateway(
     // Close WebSocket servers
     await new Promise<void>((resolve) => wss.close(() => resolve()));
     await new Promise<void>((resolve) => ptyWss.close(() => resolve()));
+    await new Promise<void>((resolve) => memberWss.close(() => resolve()));
     await new Promise<void>((resolve) => pluginEvents.wss.close(() => resolve()));
 
     // Close HTTP server

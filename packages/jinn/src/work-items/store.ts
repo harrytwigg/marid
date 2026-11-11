@@ -13,6 +13,8 @@ import { allocateWorkItemId, useWorkItemAllocationClaim } from './migrate.js';
 import { createdEventDetail, type WriteOrigin } from './origin.js';
 import { HOME_SCOPE_SQL, KEPT_EXISTS_SQL } from './kept.js';
 import { sprintFilterCondition } from './sprints-schema.js';
+import { HUMAN_ASSIGNEE_COLUMN_SQL, storedTodoPerson } from './todo-people.js';
+import { planOwnership, writeOwnership } from './person-write.js';
 import { applyStartAtEdit, assertTodoDateOrder, START_AT_COLUMN_SQL, startAtInstant, writeWorkItemStartAt } from './start-date.js';
 import { toWorkItemLinkRole, type WorkItemLinkRole } from './link-role.js';
 import { searchWorkItemIds, workItemMatchReasons, type WorkItemMatch } from './search.js';
@@ -76,6 +78,8 @@ export interface WorkItem {
   status: WorkItemStatus;
   department: string | null;
   assignee: string | null;
+  /** The person responsible, `@operator` or `user:<id>`: the `todo_people` row, else the operator when `assignee` is. Held beside the agent, not instead of it. */
+  humanAssignee: string | null;
   /** Who asked for this item: 'operator', an employee slug, or 'system'. */
   createdBy: string;
   /** Sub-task tree (Todos v2): parent link, denormalized root, and depth 0..3. */
@@ -127,6 +131,8 @@ export interface CreateWorkItemInput {
   sourceRef?: string | null;
   budgetUsd?: number | null;
   origin?: WriteOrigin;
+  /** The board a board member filed a root Todo on, kept on its `created` event: where a board member's creator access is anchored. */
+  createdOnBoard?: string;
 }
 
 export interface ListWorkItemsFilter {
@@ -196,6 +202,7 @@ function rowToWorkItem(row: Record<string, unknown>): WorkItem {
     status: row.status as WorkItemStatus,
     department: (row.department as string) ?? null,
     assignee: (row.assignee as string) ?? null,
+    humanAssignee: (row.human_assignee as string) ?? null,
     createdBy: row.created_by as string,
     parentId: (row.parent_id as string) ?? null,
     rootId: row.root_id as string,
@@ -369,7 +376,7 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
 
   const selectExisting = (): WorkItem | undefined => {
     const row = db
-      .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL} FROM work_items WHERE source = ? AND source_ref = ?`)
+      .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL}, ${HUMAN_ASSIGNEE_COLUMN_SQL} FROM work_items WHERE source = ? AND source_ref = ?`)
       .get(source, sourceRef) as Record<string, unknown> | undefined;
     return row ? rowToWorkItem(row) : undefined;
   };
@@ -416,7 +423,7 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
       throw err;
     }
     if (startAt) writeWorkItemStartAt(db, id, startAt);
-    appendWorkItemEvent({ workItemId: id, kind: 'created', toStatus: status, actor: source, detail: createdEventDetail(sourceRef, input.origin) });
+    appendWorkItemEvent({ workItemId: id, kind: 'created', toStatus: status, actor: source, detail: createdEventDetail(sourceRef, input.origin, input.createdOnBoard) });
     if (parent) {
       // Re-verify the parent under the write lock before auditing the link.
       const liveParent = db.prepare('SELECT depth FROM work_items WHERE id = ?').get(parent.id) as { depth: number } | undefined;
@@ -460,7 +467,7 @@ export function ensureDepartmentRegistered(slug: string | null | undefined): voi
 export function getWorkItem(id: string): WorkItem | undefined {
   const db = initDb();
   const todoId = parseTodoId(id);
-  const row = db.prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL} FROM work_items WHERE id = ?`).get(todoId) as Record<string, unknown> | undefined;
+  const row = db.prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL}, ${HUMAN_ASSIGNEE_COLUMN_SQL} FROM work_items WHERE id = ?`).get(todoId) as Record<string, unknown> | undefined;
   return row ? rowToWorkItem(row) : undefined;
 }
 
@@ -472,7 +479,7 @@ export function getWorkItems(ids: readonly string[]): WorkItem[] {
   const db = initDb();
   const placeholders = requestedIds.map(() => '?').join(', ');
   const rows = db
-    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL} FROM work_items WHERE id IN (${placeholders})`)
+    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL}, ${HUMAN_ASSIGNEE_COLUMN_SQL} FROM work_items WHERE id IN (${placeholders})`)
     .all(...requestedIds) as Record<string, unknown>[];
   const byId = new Map(rows.map(rowToWorkItem).map((item) => [item.id, item]));
   return requestedIds.flatMap((id) => {
@@ -486,7 +493,7 @@ export function getWorkItems(ids: readonly string[]): WorkItem[] {
 export function getWorkItemBySourceRef(source: WorkItemSource, sourceRef: string): WorkItem | undefined {
   const db = initDb();
   const row = db
-    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL} FROM work_items WHERE source = ? AND source_ref = ?`)
+    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL}, ${HUMAN_ASSIGNEE_COLUMN_SQL} FROM work_items WHERE source = ? AND source_ref = ?`)
     .get(source, sourceRef) as Record<string, unknown> | undefined;
   return row ? rowToWorkItem(row) : undefined;
 }
@@ -594,7 +601,7 @@ export function queryWorkItems(filter: ListWorkItemsFilter = {}): WorkItemPage {
   const orderValues = textIds ? [JSON.stringify(textIds)] : [];
   const order = filter.order === 'closed' ? CLOSED_ORDER_SQL : '(rank IS NULL) ASC, rank ASC, updated_at DESC';
   const rows = db
-    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL} FROM work_items ${where} ORDER BY ${relevance}${order}, created_at DESC, id ASC LIMIT ? OFFSET ?`)
+    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL}, ${HUMAN_ASSIGNEE_COLUMN_SQL} FROM work_items ${where} ORDER BY ${relevance}${order}, created_at DESC, id ASC LIMIT ? OFFSET ?`)
     .all(...values, ...orderValues, limit, offset) as Record<string, unknown>[];
   const counts = db
     .prepare(`SELECT status, COUNT(*) AS total FROM work_items ${where} GROUP BY status`)
@@ -653,7 +660,7 @@ export function getWorkItemTrees(ids: readonly string[]): Record<string, WorkIte
   const placeholders = requestedIds.map(() => '?').join(', ');
   const requestedRoots = `SELECT root_id FROM work_items WHERE id IN (${placeholders})`;
   const family = (db
-    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL} FROM work_items WHERE root_id IN (${requestedRoots})`)
+    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL}, ${HUMAN_ASSIGNEE_COLUMN_SQL} FROM work_items WHERE root_id IN (${requestedRoots})`)
     .all(...requestedIds) as Record<string, unknown>[])
     .map(rowToWorkItem);
   if (family.length === 0) return {};
@@ -719,6 +726,8 @@ export interface UpdateWorkItemInput {
   dueAt?: string | null;
   /** Held in its own table (start-date.ts), not a `work_items` column. */
   startAt?: string | null;
+  /** The person responsible, `@operator` or `user:<id>`; held in `todo_people` (todo-people.ts). Changes nothing about the agent. */
+  humanAssignee?: string | null;
 }
 
 export interface ConditionalWorkItemUpdateOptions {
@@ -791,10 +800,14 @@ export function updateWorkItemConditional(
 
     let item = current;
     if (updateChangesItem(current, input)) {
+      // Both slots move by the ownership rules (person-write.ts): an edit of one can move the other, never by a second writer.
+      const plan = planOwnership(current, storedTodoPerson(db, id), input);
+      const assignee = plan.assignee !== current.assignee ? plan.assignee : undefined;
+      const owned: UpdateWorkItemInput = { ...input, assignee };
       const fields = (Object.keys(UPDATE_FIELD_COLUMNS) as Array<keyof typeof UPDATE_FIELD_COLUMNS>)
-        .filter((key) => input[key] !== undefined)
-        .map((key) => ({ column: UPDATE_FIELD_COLUMNS[key], name: key, value: input[key] }));
-      guardWorkItemUpdate(db, current, input, opts.actor, appendWorkItemEvent);
+        .filter((key) => owned[key] !== undefined)
+        .map((key) => ({ column: UPDATE_FIELD_COLUMNS[key], name: key, value: owned[key] }));
+      guardWorkItemUpdate(db, current, owned, opts.actor, appendWorkItemEvent);
       const startDateEdited = applyStartAtEdit(db, current, input);
       if (typeof input.department === 'string') ensureDepartmentRegistered(input.department);
       const now = new Date().toISOString();
@@ -806,18 +819,25 @@ export function updateWorkItemConditional(
         if (!latest) return undefined;
         throw new WorkItemVersionConflictError(latest.version);
       }
-      const releasedSessions = releaseOnOwnerChange(db, current, input.assignee);
-      appendWorkItemEvent({
-        workItemId: id,
-        kind: 'metadata_edited',
-        actor: opts.actor ?? null,
-        detail: {
-          updatedFields: [...fields.map((field) => field.name), ...(startDateEdited ? ['startAt'] : [])],
-          ...(opts.origin ? { origin: opts.origin } : {}),
-          ...(releasedSessions.length > 0 ? { releasedSessions } : {}),
-        },
-        versionEffect: 'companion',
-      });
+      const releasedSessions = releaseOnOwnerChange(db, current, owned.assignee);
+      // The person is a label beside the agent: its own `person_changed` event, never `metadata_edited`, which a board hook reads.
+      // An assignee the person slot cleared is not an assignment either; one it set (the operator chosen with no agent) is.
+      const clearedByPerson = input.assignee === undefined && owned.assignee !== undefined && owned.assignee !== OPERATOR_ASSIGNEE;
+      const updatedFields = [...fields.map((field) => field.name).filter((name) => !(name === 'assignee' && clearedByPerson)), ...(startDateEdited ? ['startAt'] : [])];
+      writeOwnership(db, current, plan, { actor: opts.actor ?? 'operator', effect: 'companion', append: appendWorkItemEvent });
+      if (updatedFields.length > 0 || input.humanAssignee === undefined) {
+        appendWorkItemEvent({
+          workItemId: id,
+          kind: 'metadata_edited',
+          actor: opts.actor ?? null,
+          detail: {
+            updatedFields,
+            ...(opts.origin ? { origin: opts.origin } : {}),
+            ...(releasedSessions.length > 0 ? { releasedSessions } : {}),
+          },
+          versionEffect: 'companion',
+        });
+      }
       item = getWorkItem(id)!;
     }
 
@@ -849,9 +869,13 @@ export function updateWorkItem(id: string, input: UpdateWorkItemInput, actor?: s
   const txn = db.transaction((): WorkItem | undefined => {
     const current = getWorkItem(id);
     if (!current) return undefined;
-    const changedFields = fields.filter((field) => current[field.name] !== field.value);
+    // The agent slot's change settles the person with it (person-write.ts).
+    const plan = planOwnership(current, storedTodoPerson(db, id), { assignee: input.assignee });
+    const changedFields = fields
+      .map((field) => (field.name === 'assignee' ? { ...field, value: plan.assignee } : field))
+      .filter((field) => current[field.name] !== field.value);
     if (changedFields.length === 0) return current;
-    guardWorkItemUpdate(db, current, input, actor, appendWorkItemEvent);
+    guardWorkItemUpdate(db, current, { ...input, ...(input.assignee !== undefined ? { assignee: plan.assignee } : {}) }, actor, appendWorkItemEvent);
     if (changedFields.some((field) => field.name === 'department' && typeof field.value === 'string')) {
       ensureDepartmentRegistered(input.department as string);
     }
@@ -860,7 +884,8 @@ export function updateWorkItem(id: string, input: UpdateWorkItemInput, actor?: s
       .prepare(`UPDATE work_items SET ${changedFields.map((field) => `${field.column} = ?`).join(', ')}, updated_at = ?, version = version + 1 WHERE id = ?`)
       .run(...changedFields.map((field) => field.value), now, id);
     if (result.changes === 0) return undefined;
-    const releasedSessions = releaseOnOwnerChange(db, current, input.assignee);
+    const releasedSessions = releaseOnOwnerChange(db, current, input.assignee !== undefined ? plan.assignee : undefined);
+    writeOwnership(db, current, plan, { actor: actor ?? 'operator', effect: 'companion', append: appendWorkItemEvent });
     appendWorkItemEvent({
       workItemId: id,
       kind: 'note',
@@ -980,7 +1005,7 @@ export function releaseSelfStartedLinks(
  *  the assignee. Every writer of `assignee` calls this, in its own transaction,
  *  so a Todo given to someone else — or to nobody — never keeps the old owner's
  *  chat as its executor. */
-function releaseOnOwnerChange(db: ReturnType<typeof initDb>, current: WorkItem, assignee: string | null | undefined): string[] {
+export function releaseOnOwnerChange(db: ReturnType<typeof initDb>, current: WorkItem, assignee: string | null | undefined): string[] {
   if (assignee === undefined || assignee === current.assignee) return [];
   return releaseSelfStartedLinks(db, current.id, { exceptEmployee: assignee ?? undefined });
 }

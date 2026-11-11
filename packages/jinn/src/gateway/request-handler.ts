@@ -4,6 +4,9 @@ import { authenticateGatewayRequest, authRequiredForRequest } from "./auth.js";
 import { isAllowedCorsOrigin, serveStatic } from "./server.js";
 import { createRemoteMcpHandler, type RemoteMcpHandler } from "./remote-mcp/http.js";
 import { adoptLegacyHeaders, wireHeaderDisplayAliases } from "../shared/wire-names.js";
+import { handleMemberRequest, isApiTarget } from "../accounts/member-router.js";
+import { requestUserToken } from "../accounts/cookie.js";
+import type { AccountsRuntime } from "../accounts/runtime.js";
 
 /** What the handler needs from the running gateway. `authRequired` is a call and
  *  not a value because `config.yaml` reloads while the server is up. */
@@ -17,6 +20,8 @@ export interface GatewayRequestHandlerDependencies {
   webDir: string;
   /** The `/mcp` connector endpoint; built from the fields above unless a test injects one. */
   remoteMcp?: RemoteMcpHandler;
+  /** User accounts. Without it every request is the operator's or nobody's, as before accounts existed. */
+  accounts?: AccountsRuntime;
 }
 
 /**
@@ -65,6 +70,23 @@ function rejectedUnauthenticated(
   return true;
 }
 
+/**
+ * A signed-in member's request, answered here and nowhere else: `/api/*` by the member router, anything
+ * else (static web files) as to anyone. False when the request is not a member's, so it goes on to the
+ * operator path. A request with no member cookie cannot be a member and costs nothing.
+ */
+function answerMember(req: http.IncomingMessage, res: http.ServerResponse, deps: GatewayRequestHandlerDependencies): void | Promise<void> | false {
+  const accounts = deps.accounts;
+  if (!accounts || !requestUserToken(req.headers, deps.home)) return false;
+  const principal = accounts.resolvePrincipal(req);
+  if (principal.kind !== "member") return false;
+  if (!isApiTarget(req.url || "/")) return serveWebUi(req, res, deps.webDir);
+  return handleMemberRequest(req, res, principal, {
+    accounts, getConfig: deps.apiContext.getConfig, gatewayAuthToken: deps.gatewayAuthToken, home: deps.home,
+    emit: deps.apiContext.emit,
+  });
+}
+
 /** Static files for the web UI, and the two answers for a path it has nothing at. */
 function serveWebUi(req: http.IncomingMessage, res: http.ServerResponse, webDir: string): void {
   if (serveStatic(req, res, webDir)) return;
@@ -80,8 +102,9 @@ function serveWebUi(req: http.IncomingMessage, res: http.ServerResponse, webDir:
 
 /**
  * The gateway's HTTP request handler: the remote MCP connector paths (their own
- * auth), then CORS, then the `OPTIONS` short-circuit, then the auth
- * gate, then the connector status read, then the `/api/` dispatch, then static files.
+ * auth), then CORS, then the `OPTIONS` short-circuit, then the member branch,
+ * then the auth gate, then the connector status read, then the `/api/` dispatch,
+ * then static files.
  *
  * That order is itself a security property — `/api/plugins/<id>/*` answers 404
  * versus 200 only to a caller the auth gate has already let through, so an
@@ -115,6 +138,11 @@ export function createGatewayRequestHandler(deps: GatewayRequestHandlerDependenc
       res.end();
       return;
     }
+
+    // A signed-in member is default-deny: after CORS and OPTIONS, and before the 401 gate, the connector
+    // status read and the `/api/` dispatch, so nothing below ever sees a member's request.
+    const member = answerMember(req, res, deps);
+    if (member !== false) return member;
 
     if (rejectedUnauthenticated(req, res, deps)) return;
 

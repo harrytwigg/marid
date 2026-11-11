@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { createContext, useContext, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { ChevronLeft, ChevronRight } from "@/components/ui/icon"
 import {
@@ -11,8 +11,11 @@ import {
 import { priorityLabel } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { RailPriorityBars } from "../task-page/rail-rows"
-import { OPERATOR_ROW } from "../util"
+import { MemberName } from "../attribution"
+import type { CreatorKeeps, MemberCreator } from "@/hooks/use-member-creator-keeps"
 import { PickerNote, PickerRow } from "./picker-shell"
+import { heldInPicker, OperatorAssignRow } from "./operator-assign-row"
+import { OPERATOR_ASSIGNEE } from "../util"
 
 /* Todos v2 slice 6 — the picker CONTENTS (design-doc §7.3): one component per
  * property, rendered by either shell (popover desktop / bottom sheet mobile).
@@ -24,6 +27,31 @@ export interface PickerContentProps {
   detail: WorkItemDetailWire
   sheet?: boolean
   onDone: () => void
+  /** The board member who created this Todo's root. Set, a picker that hands the Todo to someone, or to another board, says what that does to their access before anything is chosen. */
+  memberCreator?: MemberCreator
+}
+
+/** The board member who created the root of the Todo page being shown, for a picker (a sub-task's assign picker) that is not handed one. */
+const MemberCreatorContext = createContext<MemberCreator | null>(null)
+export const MemberCreatorProvider = MemberCreatorContext.Provider
+
+/** What the gateway does for a member who created a Todo the operator then assigns or moves, by the role they hold on the board they filed it on. */
+const CREATOR_KEEPS: Record<CreatorKeeps, string> = {
+  comment: "they can still read it and comment, but not edit it.",
+  read: "they can still read it, but not comment or edit it.",
+  none: "they will lose access to it.",
+}
+
+export function MemberCreatorNote({ creator, sheet }: { creator: MemberCreator; sheet?: boolean }) {
+  return (
+    <div
+      role="note"
+      data-testid="picker-member-creator-note"
+      className={`mx-1 mb-1.5 rounded-[var(--radius-md)] bg-[var(--fill-tertiary)] px-2.5 py-1.5 text-[calc(12px*var(--text-scale))] leading-snug text-[var(--text-secondary)] ${sheet ? "mt-1" : ""}`}
+    >
+      <MemberName identity={creator.identity} /> created this. After this change {CREATOR_KEEPS[creator.keeps]}
+    </div>
+  )
 }
 
 const PRIORITIES = [3, 2, 1, 0] as const
@@ -61,24 +89,32 @@ export function AssigneePickerContent({
   commit,
   sheet,
   onDone,
-}: PickerContentProps & { employees: Employee[]; commit: (assignee: string | null) => void }) {
+  memberCreator: given,
+  offerOperator = false,
+}: PickerContentProps & { employees: Employee[]; commit: (assignee: string | null) => void; offerOperator?: boolean }) {
+  const inherited = useContext(MemberCreatorContext)
+  const memberCreator = given ?? inherited ?? undefined
   const [query, setQuery] = useState("")
-  const current = detail.workItem.assignee
+  // The agent slot holds employees only: the operator is a person, chosen in the person picker, and `@operator` here is the
+  // "needs the operator" marker, which reads as an empty slot. A system employee routes Todos but owns none, so it is never offered.
+  // Without a person slot beside it (`offerOperator`), the operator is assigned here as it always was, and clearing clears them too.
+  const current = heldInPicker(detail.workItem.assignee, offerOperator)
   const filtered = useMemo(() => {
-    const people = [OPERATOR_ROW, ...employees.filter((e) => !e.system)]
+    const people = employees.filter((e) => !e.system)
     const q = query.trim().toLowerCase()
     if (!q) return people
     return people.filter((e) => e.name.toLowerCase().includes(q) || e.displayName.toLowerCase().includes(q))
   }, [employees, query])
   return (
     <>
+      {memberCreator && <MemberCreatorNote creator={memberCreator} sheet={sheet} />}
       <div className="px-1 pb-1.5 pt-0.5">
         <input
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search people…"
-          aria-label="Search people"
+          placeholder="Search agents…"
+          aria-label="Search agents"
           data-testid="assignee-search"
           className="w-full rounded-full bg-[var(--fill-tertiary)] px-3 py-1.5 text-[13px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-quaternary)]"
         />
@@ -86,7 +122,7 @@ export function AssigneePickerContent({
       {current !== null && (
         <PickerRow
           sheet={sheet}
-          label={<span className="text-[var(--text-tertiary)]">Unassign</span>}
+          label={<span className="text-[var(--text-tertiary)]">No agent</span>}
           onSelect={() => {
             commit(null)
             onDone()
@@ -95,6 +131,8 @@ export function AssigneePickerContent({
         />
       )}
       <div className={sheet ? "" : "max-h-[288px] overflow-y-auto"}>
+        <OperatorAssignRow offered={offerOperator} query={query} assignee={detail.workItem.assignee} sheet={sheet}
+          onSelect={() => { if (current !== OPERATOR_ASSIGNEE) commit(OPERATOR_ASSIGNEE); onDone() }} />
         {filtered.map((employee) => (
           <PickerRow
             key={employee.name}
@@ -110,7 +148,7 @@ export function AssigneePickerContent({
             testId={`assignee-option-${employee.name}`}
           />
         ))}
-        {filtered.length === 0 && <PickerNote>Nobody matches "{query.trim()}".</PickerNote>}
+        {filtered.length === 0 && <PickerNote>No agent matches "{query.trim()}".</PickerNote>}
       </div>
     </>
   )
@@ -267,10 +305,12 @@ export function DepartmentPickerContent({
   commit,
   sheet,
   onDone,
+  memberCreator,
 }: PickerContentProps & { departments: DepartmentSummaryWire[]; commit: (department: string | null) => void }) {
   const current = detail.workItem.department
   return (
     <>
+      {memberCreator && <MemberCreatorNote creator={memberCreator} sheet={sheet} />}
       {departments.map((dept) => (
         <PickerRow
           key={dept.slug}

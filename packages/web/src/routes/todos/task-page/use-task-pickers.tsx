@@ -16,6 +16,7 @@ import { operatorSafeTodoError } from "@/lib/todos"
 import type { CloseGateCounts } from "@/lib/legal-targets"
 import { newTodoEditRequest, invalidateTodoCaches, saveTodoDetailRemote } from "../todo-edit-request"
 import { useSetWorkItemStatus } from "../use-todos"
+import type { MemberCreator } from "@/hooks/use-member-creator-keeps"
 import { PickerPopover, PickerSheet } from "../pickers/picker-shell"
 import {
   AssigneePickerContent,
@@ -25,7 +26,11 @@ import {
   PriorityPickerContent,
 } from "../pickers/picker-contents"
 import { StatusPickerContent } from "../pickers/status-picker-content"
+import { PersonPickerContent } from "../pickers/person-picker-content"
 import { offeredDepartments } from "../pickers/department-filters"
+import { agentOf } from "../assignee-circles"
+import { personLane } from "./person-route"
+import { OPERATOR_ASSIGNEE } from "../util"
 
 /* Todos v2 slice 6 — the task page's picker wiring: ONE picker open at a time,
  * one content component per property rendered in the popover shell (desktop —
@@ -33,12 +38,13 @@ import { offeredDepartments } from "../pickers/department-filters"
  * chips, law 4). Commits are optimistic; a server refusal snaps the value back
  * (cache invalidation) and surfaces the gateway's words via `announce`. */
 
-export type PickerKey = "status" | "priority" | "assignee" | "labels" | "start" | "due" | "department"
+export type PickerKey = "status" | "priority" | "assignee" | "person" | "labels" | "start" | "due" | "department"
 
 const PICKER_TITLE: Record<PickerKey, string> = {
   status: "Status",
   priority: "Priority",
-  assignee: "Assignee",
+  assignee: "Agent",
+  person: "Person",
   labels: "Labels",
   start: "Start date",
   due: "Due date",
@@ -53,6 +59,9 @@ export function useTaskPickers({
   departments,
   openChildren,
   openDescendants,
+  memberCreator = null,
+  memberMode = false,
+  board = null,
   mobile,
   announce,
   root,
@@ -60,6 +69,12 @@ export function useTaskPickers({
   detail: WorkItemDetailWire | undefined
   employees: Employee[]
   departments: DepartmentSummaryWire[]
+  /** The board member (`user:<id>`) who created this Todo's root, when it was one: assigning or moving it tells the operator what that does to their access. */
+  memberCreator?: MemberCreator | null
+  /** A board member's session: the person is named through the member route, not the operator's pen. */
+  memberMode?: boolean
+  /** The Todo's root board: the people a person picker offers have access to it. */
+  board?: string | null
   mobile: boolean
   announce: (message: string) => void
   /** This view's own subtree: two Todos can be open side by side, each with its own rail. */
@@ -125,11 +140,27 @@ export function useTaskPickers({
    *  live notify; the pen is the one lane that can clear it. Peek ships the same split. */
   const commitAssignee = useCallback((assignee: string | null) => {
     if (!id || assignee === null) return patchField({ assignee })
-    qc.setQueryData<WorkItemDetailWire>(["work-item", id], (current) => (current ? { ...current, workItem: { ...current.workItem, assignee } } : current))
+    qc.setQueryData<WorkItemDetailWire>(["work-item", id], (current) => (current ? { ...current, workItem: { ...current.workItem, assignee, ...(assignee === OPERATOR_ASSIGNEE ? { humanAssignee: current.workItem.humanAssignee ?? OPERATOR_ASSIGNEE } : {}) } } : current))
     api.assignWorkItem(id, assignee)
       .catch((error) => announce(operatorSafeTodoError(error, "Couldn't assign this Todo")))
       .finally(() => void invalidateTodoCaches(qc, id))
   }, [id, qc, announce, patchField])
+
+  /** The person responsible is a label of responsibility: it starts nothing, and a board member names it through their own
+   *  route. The operator's choice that leaves what assign-to-the-operator or unassign leaves goes through that route (`personLane`). */
+  const commitPerson = useCallback((person: string | null) => {
+    if (!id) return
+    if (!memberMode) {
+      const lane = personLane(detail?.workItem ?? {}, person)
+      if (lane === "assign-operator") return commitAssignee(OPERATOR_ASSIGNEE)
+      if (lane === "unassign") return commitAssignee(null)
+      return patchField({ humanAssignee: person })
+    }
+    qc.setQueryData<WorkItemDetailWire>(["work-item", id], (current) => (current ? { ...current, workItem: { ...current.workItem, humanAssignee: person } } : current))
+    api.setWorkItemPerson(id, person)
+      .catch((error) => announce(operatorSafeTodoError(error, "Couldn't set the person")))
+      .finally(() => void invalidateTodoCaches(qc, id))
+  }, [id, memberMode, qc, announce, patchField, commitAssignee, detail])
 
   const labelsMutation = useMutation({
     mutationFn: ({ labels }: { labels: string[] }) => api.setWorkItemLabels(id!, labels),
@@ -153,35 +184,24 @@ export function useTaskPickers({
 
   // ── Shell assembly ────────────────────────────────────────────────────────
 
+  /** One renderer per row, so a new picker adds an entry rather than a branch. The agent goes through the assign lane, the person through its own. */
   const contentFor = useCallback(
     (key: PickerKey, sheet: boolean): React.ReactNode => {
       if (!detail) return null
-      const shared = { detail, sheet, onDone: close }
-      switch (key) {
-        case "status":
-          return (
-            <StatusPickerContent
-              {...shared}
-              openChildren={openChildren}
-              openDescendants={openDescendants}
-              commit={transitionTo}
-            />
-          )
-        case "priority":
-          return <PriorityPickerContent {...shared} commit={(priority) => patchField({ priority })} />
-        case "assignee":
-          return <AssigneePickerContent {...shared} employees={employees} commit={commitAssignee} />
-        case "labels":
-          return <LabelsPickerContent {...shared} commit={commitLabels} />
-        case "start":
-          return <DuePickerContent {...shared} field="startAt" commit={(startAt) => patchField({ startAt })} />
-        case "due":
-          return <DuePickerContent {...shared} commit={(dueAt) => patchField({ dueAt })} />
-        case "department":
-          return <DepartmentPickerContent {...shared} departments={offeredDepartments(departments, detail.workItem.department)} commit={(department) => patchField({ department })} />
+      const shared = { detail, sheet, onDone: close, ...(memberCreator ? { memberCreator } : {}) }
+      const renderers: Record<PickerKey, () => React.ReactNode> = {
+        status: () => <StatusPickerContent {...shared} openChildren={openChildren} openDescendants={openDescendants} commit={transitionTo} />,
+        priority: () => <PriorityPickerContent {...shared} commit={(priority) => patchField({ priority })} />,
+        assignee: () => <AssigneePickerContent {...shared} employees={employees} commit={commitAssignee} />,
+        person: () => <PersonPickerContent detail={detail} sheet={sheet} onDone={close} commit={commitPerson} board={board} />,
+        labels: () => <LabelsPickerContent {...shared} commit={commitLabels} />,
+        start: () => <DuePickerContent {...shared} field="startAt" commit={(startAt) => patchField({ startAt })} />,
+        due: () => <DuePickerContent {...shared} commit={(dueAt) => patchField({ dueAt })} />,
+        department: () => <DepartmentPickerContent {...shared} departments={offeredDepartments(departments, detail.workItem.department)} commit={(department) => patchField({ department })} />,
       }
+      return renderers[key]()
     },
-    [detail, close, openChildren, openDescendants, transitionTo, patchField, commitAssignee, employees, departments, commitLabels],
+    [detail, close, memberCreator, openChildren, openDescendants, transitionTo, patchField, commitAssignee, commitPerson, employees, departments, commitLabels, board],
   )
 
   /** The superimposed row index (law 1): the current value's option row sits
@@ -201,6 +221,15 @@ export function useTaskPickers({
     [detail, departments],
   )
 
+  /** The one-tap clear for the agent and person rows; the other rows have none. `@operator` is not an agent, so the agent
+   *  row has nothing to clear when it is all that is there. */
+  const clearFor = useCallback((key: PickerKey, current: WorkItemDetailWire): (() => void) | undefined => {
+    const assignee = current.workItem.assignee
+    if (key === "assignee" && agentOf(assignee)) return () => patchField({ assignee: null })
+    if (key === "person" && current.workItem.humanAssignee) return () => commitPerson(null)
+    return undefined
+  }, [patchField, commitPerson])
+
   const rowFor = useCallback(
     (key: PickerKey) => {
       if (!detail) return undefined
@@ -209,7 +238,7 @@ export function useTaskPickers({
         open: openPicker === key,
         // The same commit lane the picker's own Unassign row uses, so a surface
         // that clears in one tap and one that picks agree after a refetch.
-        onClear: key === "assignee" && detail.workItem.assignee ? () => patchField({ assignee: null }) : undefined,
+        onClear: clearFor(key, detail),
         picker:
           !mobile && openPicker === key ? (
             <PickerPopover
@@ -217,7 +246,7 @@ export function useTaskPickers({
               label={PICKER_TITLE[key]}
               onClose={close}
               currentIndex={currentIndexFor(key)}
-              autoFocusFirst={key !== "assignee"}
+              autoFocusFirst={key !== "assignee" && key !== "person"}
               testId={`picker-${key}`}
             >
               {contentFor(key, false)}
@@ -225,7 +254,7 @@ export function useTaskPickers({
           ) : null,
       }
     },
-    [detail, openPicker, mobile, close, currentIndexFor, contentFor, patchField],
+    [detail, openPicker, mobile, close, currentIndexFor, contentFor, clearFor],
   )
 
   /** The one mobile sheet (law 4) — rendered at page level via a portal. */

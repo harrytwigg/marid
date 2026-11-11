@@ -44,6 +44,7 @@ export type WorkItemEventKind =
   | 'respawn_guard_held'
   | 'availability_resumed'
   | 'kept_changed'
+  | 'person_changed'
   | 'recovery_classified'
   | 'recovery_attempted'
   | 'recovery_exhausted'

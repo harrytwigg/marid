@@ -1,5 +1,6 @@
 import { getWorkItemSpend, listWorkItemEvents, type queryWorkItems, type WorkItem, type WorkItemTree, type WorkItemTreeNode } from "../work-items/store.js";
-import { commentsTail } from "../work-items/comments.js";
+import { commentsTail, type CommentPage } from "../work-items/comments.js";
+import { isMemberIdentity, memberDisplayName, outwardComment } from "../work-items/member-identity.js";
 import { blockedSet, isBlocked, listRelations } from "../work-items/relations.js";
 import { getWorkItemLabels, labelSets, type Label } from "../work-items/labels.js";
 import { getWorkItemSprint, sprintRefs, type SprintRef } from "../work-items/sprints.js";
@@ -61,6 +62,7 @@ export function compactWorkItem(
     status: item.status,
     version: item.version,
     assignee: item.assignee,
+    humanAssignee: item.humanAssignee,
     department: item.department,
     createdBy: item.createdBy,
     parentId: item.parentId,
@@ -95,8 +97,10 @@ export function workItemPagePayload(page: ReturnType<typeof queryWorkItems>): Re
     kept: keptSet(initDb(), ids),
     recovery: recoveryByItem(ids),
   };
+  const members = membersNamed(page.workItems.map((item) => item.humanAssignee));
   return {
     workItems: page.workItems.map((item) => compactWorkItem(item, extras)),
+    ...(Object.keys(members).length > 0 ? { members } : {}),
     total: page.total,
     totals: page.totals,
     limit: page.limit,
@@ -127,12 +131,30 @@ function sessionRef(item: WorkItem): Record<string, string> | null {
   return null;
 }
 
+/** A comment page as every outward serialiser shows it: a board member's comment is of the `member` kind, not the `system` it is stored as. */
+export function outwardCommentPage<T extends CommentPage>(page: T): Omit<T, "comments"> & { comments: Array<ReturnType<typeof outwardComment>> } {
+  return { ...page, comments: page.comments.map((comment) => outwardComment(comment)) };
+}
+
+/** The board members a Todo names (its creator, its person responsible, comment authors, event actors), by identity, so a reader can say who they are. */
+function membersNamed(identities: ReadonlyArray<string | null | undefined>): Record<string, { kind: "member"; displayName: string }> {
+  const named: Record<string, { kind: "member"; displayName: string }> = {};
+  for (const identity of identities) {
+    if (isMemberIdentity(identity) && !named[identity]) named[identity] = { kind: "member", displayName: memberDisplayName(identity) };
+  }
+  return named;
+}
+
 export function fullWorkItemPayload(item: WorkItem): Record<string, unknown> {
+  const events = listWorkItemEvents(item.id);
+  const comments = commentsTail(item.id);
+  const members = membersNamed([item.createdBy, item.humanAssignee, ...events.map((event) => event.actor), ...comments.comments.map((comment) => comment.author)]);
   return {
     workItem: item,
     spendUsd: getWorkItemSpend(item.id),
-    events: listWorkItemEvents(item.id),
-    comments: commentsTail(item.id),
+    events,
+    comments: outwardCommentPage(comments),
+    ...(Object.keys(members).length > 0 ? { members } : {}),
     relations: listRelations(item.id),
     labels: getWorkItemLabels(item.id),
     sprint: getWorkItemSprint(item.id),

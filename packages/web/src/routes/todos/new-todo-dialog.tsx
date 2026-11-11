@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import {
   Building2,
   CalendarDays,
-  ChevronDown,
   Flag,
   GitBranch,
   Tags,
@@ -15,6 +14,10 @@ import {
 } from "@/lib/api"
 import { operatorSafeTodoError, priorityLabel } from "@/lib/todos"
 import { createDetail } from "./new-todo-preview"
+import { PropertyChip, useIsCreateMobile } from "./new-todo-chips"
+import { AssignOnCreateError, assignOnCreate } from "./new-todo-assign"
+import { MemberName } from "./attribution"
+import { OPERATOR_ASSIGNEE } from "./util"
 import { TodoDialog } from "./todo-dialog"
 import {
   AssigneePickerContent,
@@ -23,63 +26,11 @@ import {
   LabelsPickerContent,
   PriorityPickerContent,
 } from "./pickers/picker-contents"
+import { PersonPickerContent } from "./pickers/person-picker-content"
 import { PickerPopover, PickerSheet } from "./pickers/picker-shell"
 import { creatableDepartment, offeredDepartments } from "./pickers/department-filters"
 
-type CreatePicker = "assignee" | "department" | "priority" | "due" | "labels"
-
-const MOBILE_QUERY = "(max-width: 700px)"
-
-function useIsCreateMobile(): boolean {
-  const [mobile, setMobile] = useState(
-    () => typeof window !== "undefined" && (window.matchMedia?.(MOBILE_QUERY).matches ?? false),
-  )
-  useEffect(() => {
-    const query = window.matchMedia?.(MOBILE_QUERY)
-    if (!query) return
-    const onChange = (event: MediaQueryListEvent) => setMobile(event.matches)
-    query.addEventListener("change", onChange)
-    return () => query.removeEventListener("change", onChange)
-  }, [])
-  return mobile
-}
-
-function PropertyChip({
-  icon,
-  label,
-  testId,
-  active,
-  onClick,
-  children,
-}: {
-  icon: React.ReactNode
-  label: string
-  testId: string
-  active?: boolean
-  onClick: () => void
-  children?: React.ReactNode
-}) {
-  return (
-    <span className="relative">
-      <button
-        type="button"
-        data-testid={testId}
-        aria-expanded={active || undefined}
-        onClick={onClick}
-        className={`focus-outline inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium outline-none transition-colors ${
-          active
-            ? "bg-[var(--accent-fill)] text-[var(--accent)]"
-            : "bg-[var(--fill-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]"
-        }`}
-      >
-        {icon}
-        <span>{label}</span>
-        <ChevronDown size={11} aria-hidden className="opacity-60" />
-      </button>
-      {children}
-    </span>
-  )
-}
+type CreatePicker = "assignee" | "person" | "department" | "priority" | "due" | "labels"
 
 export function NewTodoDialog({
   onClose,
@@ -105,6 +56,7 @@ export function NewTodoDialog({
   const seededDepartment = creatableDepartment(defaults?.departments ?? [], defaults?.department)
   const [department, setDepartment] = useState<string | null>(seededDepartment)
   const [assignee, setAssignee] = useState<string | null>(null)
+  const [person, setPerson] = useState<string | null>(null)
   const [priority, setPriority] = useState(0)
   const [dueAt, setDueAt] = useState<string | null>(null)
   const [labelIds, setLabelIds] = useState<string[]>([])
@@ -125,12 +77,13 @@ export function NewTodoDialog({
     title,
     department,
     assignee,
+    humanAssignee: person,
     priority,
     dueAt,
     labels: selectedLabels,
-  }), [title, department, assignee, priority, dueAt, selectedLabels])
+  }), [title, department, assignee, person, priority, dueAt, selectedLabels])
   const dirty = Boolean(
-    title.trim() || body.trim() || parentId.trim() || assignee
+    title.trim() || body.trim() || parentId.trim() || assignee || person
     || priority || dueAt || labelIds.length || department !== seededDepartment,
   )
 
@@ -140,6 +93,7 @@ export function NewTodoDialog({
     setParentId("")
     setDepartment(seededDepartment)
     setAssignee(null)
+    setPerson(null)
     setPriority(0)
     setDueAt(null)
     setLabelIds([])
@@ -148,10 +102,16 @@ export function NewTodoDialog({
     setError(null)
   }, [seededDepartment])
 
+  /** A board member is a person only on a board they can reach, so moving the draft to another board lets them go. */
+  const commitDepartment = useCallback((next: string | null) => {
+    setDepartment(next)
+    if (next !== department) setPerson((current) => (current === OPERATOR_ASSIGNEE ? current : null))
+  }, [department])
+
   const create = useCallback(async (keepOpen: boolean) => {
     const nextTitle = title.trim()
     if (!nextTitle || busy) return
-    if (defaults?.askAssignee && !assignee) {
+    if (defaults?.askAssignee && !assignee && !person) {
       setError("Pick who this is assigned to")
       setPicker("assignee")
       return
@@ -168,7 +128,15 @@ export function NewTodoDialog({
         ...(dueAt ? { dueAt } : {}),
         ...(labelIds.length ? { labels: labelIds } : {}),
       })
-      if (assignee) await api.assignWorkItem(created.workItem.id, assignee)
+      try {
+        await assignOnCreate(created.workItem, { assignee, person })
+      } catch (caught) {
+        // The Todo exists: clear the form so another click cannot create it again, and say which slot is still unset.
+        reset()
+        setBusy(false)
+        setError(`Created ${created.workItem.id}, but couldn't set the ${caught instanceof AssignOnCreateError ? caught.slots.join(" and ") : "agent or person"}. Set it on the Todo.`)
+        return
+      }
       if (keepOpen) {
         reset()
         setBusy(false)
@@ -180,12 +148,13 @@ export function NewTodoDialog({
       setBusy(false)
       setError(operatorSafeTodoError(caught, "Failed to create"))
     }
-  }, [assignee, body, busy, department, dueAt, labelIds, parentId, priority, reset, title, defaults?.askAssignee])
+  }, [assignee, person, body, busy, department, dueAt, labelIds, parentId, priority, reset, title, defaults?.askAssignee])
 
   const closePicker = () => setPicker(null)
   const togglePicker = (next: CreatePicker) => setPicker((current) => current === next ? null : next)
   const pickerTitle: Record<CreatePicker, string> = {
-    assignee: "Assignee",
+    assignee: "Agent",
+    person: "Person",
     department: "Department",
     priority: "Priority",
     due: "Due date",
@@ -196,8 +165,10 @@ export function NewTodoDialog({
     switch (kind) {
       case "assignee":
         return <AssigneePickerContent {...common} employees={defaults?.employees ?? []} commit={setAssignee} />
+      case "person":
+        return <PersonPickerContent {...common} commit={setPerson} board={department} />
       case "department":
-        return <DepartmentPickerContent {...common} departments={offeredDepartments(defaults?.departments ?? [], department)} commit={setDepartment} />
+        return <DepartmentPickerContent {...common} departments={offeredDepartments(defaults?.departments ?? [], department)} commit={commitDepartment} />
       case "priority":
         return <PriorityPickerContent {...common} commit={setPriority} />
       case "due":
@@ -269,12 +240,21 @@ export function NewTodoDialog({
           )}
           <PropertyChip
             icon={<UserRound size={13} aria-hidden />}
-            label={employee?.displayName ?? (defaults?.askAssignee ? "Assignee required" : "Assignee")}
+            label={employee?.displayName ?? (defaults?.askAssignee && !person ? "Agent required" : "Agent")}
             testId="todo-new-assignee-chip"
             active={picker === "assignee"}
             onClick={() => togglePicker("assignee")}
           >
             {desktopPicker("assignee")}
+          </PropertyChip>
+          <PropertyChip
+            icon={<UserRound size={13} aria-hidden />}
+            label={person ? (person === OPERATOR_ASSIGNEE ? "You (operator)" : <MemberName identity={person} />) : "Person"}
+            testId="todo-new-person-chip"
+            active={picker === "person"}
+            onClick={() => togglePicker("person")}
+          >
+            {desktopPicker("person")}
           </PropertyChip>
           <PropertyChip
             icon={<Building2 size={13} aria-hidden />}

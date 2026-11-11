@@ -87,6 +87,10 @@ describe("the merged feed model", () => {
     // History written before the retired statuses were migrated still names them.
     expect(whisperOf(event("e", "status_change", "t", { toStatus: "escalated" as never })).text).toBe("moved it to Escalated")
     expect(whisperOf(event("e", "note", "t", { detail: { assignee: "@operator" } })).text).toBe("assigned it to the operator")
+    expect(whisperOf(event("e", "person_changed" as never, "t", { detail: { from: "user:a", to: "user:b" } })).text).toBe("changed the person")
+    expect(whisperOf(event("e", "person_changed" as never, "t", { detail: { from: "user:a", to: "user:b", assigneeCleared: true } })).text).toBe("handed it on to another person")
+    expect(whisperOf(event("e", "person_changed" as never, "t", { detail: { from: "@operator", to: null, assigneeCleared: true } })).text).toBe("cleared the person")
+    expect(whisperOf(event("e", "person_changed" as never, "t", { detail: { from: "user:a", to: null, reason: "person_removed" } })).text).toBe("removed the person's account")
     expect(whisperOf(event("e", "note", "t", { detail: { assignee: null } })).text).toBe("unassigned it")
     expect(whisperOf(event("e", "note", "t", { detail: { updatedFields: ["x"] } })).text).toBe("added a note")
     expect(
@@ -111,4 +115,27 @@ describe("the merged feed model", () => {
     )).toBe("Before\nInline <!-- keep --> text\n<!-- keep --> visible <!-- too -->\n```\n<!-- code -->\n```\nAfter")
   })
 
+})
+
+describe("the person lines", () => {
+  const ids = (events: ReturnType<typeof event>[]) => buildFeed(events, [], []).flatMap((block) => (block.kind === "fold" ? block.events : block.kind === "event" ? [block.event] : [])).map((e) => e.id)
+  const person = (id: string, at: string, detail: Record<string, unknown>) => event(id, "person_changed" as never, at, { detail })
+
+  it("leave the feed when the gateway marks them as the assignment's own (withAgent): one action, one line", () => {
+    expect(ids([
+      event("a1", "note", "2026-07-20T08:00:00.000Z", { detail: { assignee: "@operator" } }),
+      person("a2", "2026-07-20T08:00:00.100Z", { from: null, to: "@operator", withAgent: true }),
+      event("u1", "metadata_edited", "2026-07-20T09:00:00.000Z", { detail: { updatedFields: ["assignee"] } }),
+      person("u2", "2026-07-20T09:00:00.100Z", { from: "@operator", to: null, personCleared: true, withAgent: true }),
+    ])).toEqual(["a1", "u1"])
+  })
+
+  it("keep their own line whenever the person slot made the change, however close to an assignment", () => {
+    expect(ids([
+      person("p1", "2026-07-20T08:00:00.000Z", { from: null, to: "@operator" }),
+      event("n1", "note", "2026-07-20T09:00:00.000Z", { detail: { assignee: "@operator" } }),
+      person("p2", "2026-07-20T09:00:00.000Z", { from: "@operator", to: "user:ada1", assigneeCleared: true }),
+      person("p3", "2026-07-20T10:00:00.000Z", { from: "user:ada1", to: null, reason: "person_removed" }),
+    ])).toEqual(["p1", "n1", "p2", "p3"])
+  })
 })

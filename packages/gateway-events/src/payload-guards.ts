@@ -85,8 +85,10 @@ function isTodoChange(value: WireRecord): boolean {
   return isString(value.action)
     && isString(value.id)
     && isOptionalString(value.sessionId)
-    && isNumber(value.version)
+    // A board member's `removed` frame names only the Todo's id: it carries no version, because the Todo is no longer theirs to read.
+    && (value.action === "removed" ? value.version === undefined || isNumber(value.version) : isNumber(value.version))
     && isOptionalJsonObject(value.value)
+    && (value.fromDepartment === undefined || isNullableString(value.fromDepartment))
 }
 
 function isCompanyChangedEvent(value: unknown): value is CompanyChangedEvent {

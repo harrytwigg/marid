@@ -7,6 +7,7 @@ import { StateCircle, StatusCircle } from "../state-glyph"
 import { PickerPopover, PickerRow } from "../pickers/picker-shell"
 import { AssigneePickerContent } from "../pickers/picker-contents"
 import type { OpenTodoFromClick } from "./task-frame"
+import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
 
 /* One row of the task page's sub-tasks list (design-doc §7.2.8, mock
  * task-detail.html): clean at rest, GROWING its quick actions on hover — the
@@ -40,20 +41,14 @@ export function SubTaskRow({ child, employees, mobile, picking, onPick, onOpenCh
   const closed = child.status === "done" || child.status === "cancelled"
   const kids = (child.children ?? []).length
   const picker = { child, onClose: () => onPick(null), ...write }
+  const { operatorControls } = useTodoCapabilities()
+  const onStatus = useStatusAction(child, picking, onPick, write.onChildStatus)
 
   return (
     <div data-testid={`subtask-row-${child.id}`} className={`${ROW} hover:bg-[var(--fill-quaternary)]`}>
       {/* The disc IS a control: halo on hover, opens that child's
           legal-states popover. */}
-      <button
-        type="button"
-        aria-label={`Change status of ${child.id} (${STATUS_LABEL[child.status]})`}
-        data-testid={`subtask-status-${child.id}`}
-        onClick={() => onPick(picking === "status" ? null : "status")}
-        className="focus-outline mr-[5px] flex-none rounded-full outline-none transition-shadow duration-120 group-hover/sub:shadow-[0_0_0_3px_var(--fill-secondary)]"
-      >
-        <StateCircle keyOf={stateKeyOf(child.status)} size={16} />
-      </button>
+      <StatusDisc child={child} onStatus={onStatus} />
       <span
         className="flex-none text-[11px] text-[var(--text-quaternary)]"
         style={{ fontFamily: "var(--font-code)", letterSpacing: ".04em" }}
@@ -77,10 +72,43 @@ export function SubTaskRow({ child, employees, mobile, picking, onPick, onOpenCh
       {child.assignee && (
         <EmployeeAvatar name={child.assignee} size={18} fontSize={10} className="flex-none bg-[var(--fill-secondary)]" />
       )}
-      <QuickActions id={child.id} mobile={mobile} onAssign={() => onPick(picking === "assign" ? null : "assign")} onOpen={onOpenChild} />
+      <QuickActions id={child.id} mobile={mobile} onAssign={operatorControls ? () => onPick(picking === "assign" ? null : "assign") : undefined} onOpen={onOpenChild} />
       {picking === "status" && <StatusPicker {...picker} employees={employees} />}
       {picking === "assign" && <AssignPicker {...picker} employees={employees} />}
     </div>
+  )
+}
+
+/** What a tap on the status disc does: the operator opens the legal-states picker; a member, who has only
+ *  done and back to to-do, flips between them in one tap; anyone else gets no action at all. */
+function useStatusAction(
+  child: WorkItemTreeNodeWire,
+  picking: PickerKind | null,
+  onPick: (kind: PickerKind | null) => void,
+  onChildStatus: PickerProps["onChildStatus"],
+): { run: () => void; label: string } | undefined {
+  const { operatorControls, close } = useTodoCapabilities()
+  if (operatorControls) {
+    return { run: () => onPick(picking === "status" ? null : "status"), label: `Change status of ${child.id} (${STATUS_LABEL[child.status]})` }
+  }
+  if (!close || (child.status !== "backlog" && child.status !== "done")) return undefined
+  const reopening = child.status === "done"
+  return { run: () => onChildStatus(child.id, reopening ? "backlog" : "done"), label: `${reopening ? "Reopen" : "Mark done"} ${child.id}` }
+}
+
+function StatusDisc({ child, onStatus }: { child: WorkItemTreeNodeWire; onStatus: { run: () => void; label: string } | undefined }) {
+  const disc = <StateCircle keyOf={stateKeyOf(child.status)} size={16} />
+  if (!onStatus) return <span className="mr-[5px] flex-none" title={STATUS_LABEL[child.status]}>{disc}</span>
+  return (
+    <button
+      type="button"
+      aria-label={onStatus.label}
+      data-testid={`subtask-status-${child.id}`}
+      onClick={onStatus.run}
+      className="focus-outline mr-[5px] flex-none rounded-full outline-none transition-shadow duration-120 group-hover/sub:shadow-[0_0_0_3px_var(--fill-secondary)]"
+    >
+      {disc}
+    </button>
   )
 }
 
@@ -93,7 +121,7 @@ function QuickActions({
 }: {
   id: string
   mobile: boolean
-  onAssign: () => void
+  onAssign?: () => void
   onOpen: OpenTodoFromClick
 }) {
   return (
@@ -102,9 +130,11 @@ function QuickActions({
         mobile ? "opacity-100" : "opacity-0 focus-within:opacity-100 group-hover/sub:opacity-100"
       }`}
     >
-      <button type="button" aria-label={`Assign ${id}`} data-testid={`subtask-assign-${id}`} onClick={onAssign} className={ICON_BUTTON}>
-        <UserRound size={14} aria-hidden />
-      </button>
+      {onAssign && (
+        <button type="button" aria-label={`Assign ${id}`} data-testid={`subtask-assign-${id}`} onClick={onAssign} className={ICON_BUTTON}>
+          <UserRound size={14} aria-hidden />
+        </button>
+      )}
       <button type="button" aria-label={`Open ${id}`} data-testid={`subtask-open-${id}`} onClick={(event) => onOpen(id, event)} className={ICON_BUTTON}>
         <ArrowUpRight size={14} aria-hidden />
       </button>
@@ -155,6 +185,7 @@ function AssignPicker({ child, employees, onClose, onChildAssign }: PickerProps)
       <AssigneePickerContent
         detail={{ workItem: child, spendUsd: 0, events: [] }}
         employees={employees}
+        offerOperator
         onDone={onClose}
         commit={(assignee) => {
           if (assignee) onChildAssign(child.id, assignee)

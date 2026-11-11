@@ -84,13 +84,28 @@ export const OPERATOR_ASSIGNEE = "@operator"
 /** The `assignee` filter value that matches Todos with no assignee. */
 export const UNASSIGNED_FILTER = "@unassigned"
 
-/** The operator as an assignee-picker row, listed before the employees. A
- *  system employee is never offered: it routes Todos but owns none. */
-export const OPERATOR_ROW: Pick<Employee, "name" | "displayName" | "department"> = { name: OPERATOR_ASSIGNEE, displayName: "You (operator)", department: "" }
+/** Who is reading a Todo: the operator, or a board member (see `useViewer`). */
+export type Viewer = "operator" | "member"
 
-/** Resolve a display name for an assignee employee key, falling back to the key. */
-export function displayNameOf(assignee: string | null, byName: Map<string, Employee>): string {
+/** The generic actors a member's reads carry instead of internal ids, and the operator, as a member reads them. */
+const MEMBER_ACTOR_WORDS: Record<string, string> = {
+  [OPERATOR_ASSIGNEE]: "Operator",
+  operator: "Operator",
+  agent: "Agent",
+  system: "System",
+}
+
+/** The word a member reads for a generic actor; null for anyone else, and for every actor in the operator's view. */
+export function memberActorWord(actor: string | null | undefined, viewer: Viewer): string | null {
+  return viewer === "member" && actor ? MEMBER_ACTOR_WORDS[actor] ?? null : null
+}
+
+/** Resolve a display name for an assignee employee key, falling back to the key. The operator reads themselves as
+ *  "You"; a member reads the operator and the generic actors as words (`memberActorWord`). */
+export function displayNameOf(assignee: string | null, byName: Map<string, Employee>, viewer: Viewer = "operator"): string {
   if (!assignee) return ""
+  const word = memberActorWord(assignee, viewer)
+  if (word) return word
   if (assignee === OPERATOR_ASSIGNEE) return "You"
   return byName.get(assignee)?.displayName ?? assignee
 }

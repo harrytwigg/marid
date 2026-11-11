@@ -7,8 +7,10 @@ export const MAX_HOOK_CHAIN = 5;
 export interface HookActor {
   /** As recorded on the event row (or the comment's author, for a comment). */
   raw: string | null;
-  kind: "operator" | "employee" | "system";
+  kind: "operator" | "employee" | "system" | "member";
   employee?: string;
+  /** The user id of a board member (`kind: "member"`). */
+  member?: string;
   sessionId?: string;
 }
 

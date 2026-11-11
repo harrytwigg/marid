@@ -37,6 +37,12 @@ function runEntries(run: WorkItemRunWire): FeedEntry[] {
   return [start, { kind: "run-end", at: run.endedAt, run, outcome: run.outcome }]
 }
 
+/** A `person_changed` the gateway marked `withAgent`: the write named only the agent slot (assigning or unassigning the operator),
+ *  and that write's own line already says it, so one action leaves one line. A person set on its own keeps its line. */
+function impliedByAssignment(event: WorkItemEventWire): boolean {
+  return event.kind === "person_changed" && event.detail?.withAgent === true
+}
+
 export function buildFeed(
   events: WorkItemEventWire[],
   comments: WorkItemCommentWire[],
@@ -44,7 +50,7 @@ export function buildFeed(
 ): FeedBlock[] {
   const entries: FeedEntry[] = [
     ...events
-      .filter((event) => !FEED_HIDDEN_KINDS.has(event.kind))
+      .filter((event) => !FEED_HIDDEN_KINDS.has(event.kind) && !impliedByAssignment(event))
       .map((event): FeedEntry => ({ kind: "event", at: event.createdAt, event })),
     ...buildCommentThread(comments).map((node): FeedEntry => ({ kind: "comment", at: threadAt(node), node })),
     ...runs.flatMap(runEntries),

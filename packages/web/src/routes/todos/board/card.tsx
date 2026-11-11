@@ -2,16 +2,18 @@ import { memo, useCallback, useMemo } from "react"
 import { ChevronRight } from "@/components/ui/icon"
 import type { Employee, WorkItemCompactWire, WorkItemOpenDetailWire, WorkItemStatusWire, WorkItemTreeWire } from "@/lib/api"
 import { stateKeyOf } from "@/lib/todos"
-import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { StateCircle } from "../state-glyph"
+import { AssigneeCircles } from "../assignee-circles"
 import { stopReasonOf } from "../util"
 import { CardTree } from "./card-tree"
 import { hasStopLead, StopCauseLead, stopLeadKey } from "./stop-cause"
 import { KeepToggle } from "./keep-control"
 import { MoveToMenu } from "./move-menu"
+import { useMember } from "@/hooks/use-principal"
+import { MovedLabel } from "../moved-label"
 
 /* The board card, Variant A: four rows, the same four on every card.
- * ID + assignee, status glyph + title, priority + labels + roll-up, cost + due.
+ * ID + the person and the agent, status glyph + title, priority + labels + roll-up, cost + due.
  *
  * Every row is unconditional, so a card's height is settled by its title alone
  * and enrichment landing later cannot push the column around. The price, taken
@@ -98,7 +100,8 @@ export interface BoardCardProps {
   onToggleTree: (id: string) => void
   onOpen: (id: string, item?: WorkItemCompactWire) => void
   onOpenChild: (id: string) => void
-  onAddSubTask: (parentId: string, title: string) => void
+  /** Absent where the person may not add sub-tasks from the card. */
+  onAddSubTask?: (parentId: string, title: string) => void
   /** Keep this Todo on Home, or take it off. Absent = no keep affordance. */
   onKeep?: (vars: { id: string; kept: boolean }) => void
   /** Drag lift entry point (the drag hook owns pointer capture). */
@@ -129,13 +132,15 @@ export const BoardCard = memo(function BoardCard({
   const detail = enrichment?.detail
   const rollup = useMemo(() => rollupOf(tree, item.status), [tree, item.status])
   const priority = tree?.root.priority ?? detail?.workItem.priority ?? 2
+  // Cost shows for the operator whenever the gateway reports one (the Todo's tree not yet loaded reads as $0.00, so a
+  // card keeps its height). A member is never shown cost, and the gateway sends null for them.
   const spendUsd = tree?.spendUsd ?? 0
-  const employee = item.assignee ? byName.get(item.assignee) : undefined
-  const assigneeName = employee?.displayName ?? item.assignee
+  const member = useMember() !== null
+  const showCost = !member && tree?.spendUsd !== null
   const overdue = !!item.dueAt && Date.parse(item.dueAt) < Date.now()
   // Shown only while it holds the Todo: a first start from the backlog, before the date.
   const startsLater = item.status === "backlog" && !!item.startAt && Date.parse(item.startAt) > Date.now()
-  const addSubTask = useCallback((title: string) => onAddSubTask(item.id, title), [item.id, onAddSubTask])
+  const addSubTask = useCallback((title: string) => onAddSubTask?.(item.id, title), [item.id, onAddSubTask])
 
   return (
     <article
@@ -160,7 +165,7 @@ export const BoardCard = memo(function BoardCard({
     >
       {hasStopLead(item) && <StopCauseLead item={item} />}
 
-      {/* Row 1 — which Todo, and whose. The row is as tall as the ID's own line
+      {/* Row 1 — which Todo, and whose (the person's circle, then the agent's). The row is as tall as the ID's own line
        *  rather than as tall as the avatar: centring 11px text inside a 20px
        *  disc pushes it 6px below the inset the left edge sets, which is the
        *  top-heaviness this face exists to fix. The disc overflows the row
@@ -168,12 +173,12 @@ export const BoardCard = memo(function BoardCard({
        *  left. */}
       <div className="flex h-3.5 items-center gap-2">
         <span
-          className="leading-none tracking-[.04em] text-[calc(11px*var(--text-scale))] text-[var(--text-tertiary)]"
+          className="flex-none whitespace-nowrap leading-none tracking-[.04em] text-[calc(11px*var(--text-scale))] text-[var(--text-tertiary)]"
           style={{ fontFamily: "var(--font-code)" }}
         >
           {item.id}
         </span>
-        <span className="ml-auto flex items-center gap-1">
+        <span className="ml-auto flex min-w-0 items-center gap-1">
           {/* Hover-revealed here alone: the resting face is a fixed grid, and a
            *  pin at rest in the row the avatar owns competes with it on every
            *  card. The list row and the task page still show it at rest. */}
@@ -185,11 +190,9 @@ export const BoardCard = memo(function BoardCard({
               className="opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
             />
           )}
-          {item.assignee && (
-            <span title={assigneeName ?? undefined} className="flex-none">
-              <EmployeeAvatar name={item.assignee} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
-            </span>
-          )}
+          {/* The label gives way before the name: it shortens to an ellipsis, the chip keeps its width. */}
+          {item.movedToAnotherBoard && <MovedLabel testId={`board-moved-${item.id}`} className="min-w-0 shrink" />}
+          <AssigneeCircles assignee={item.assignee} humanAssignee={item.humanAssignee} byName={byName} />
           {onMove && !ghost && <MoveToMenu item={item} openChildren={rollup ? rollup.total - rollup.closed : 0} onMove={onMove} />}
         </span>
       </div>
@@ -246,10 +249,11 @@ export const BoardCard = memo(function BoardCard({
 
       {/* Row 4 — what it has cost, and when it is due. The cost renders at $0.00
        *  too: a row that only some cards have is a row that changes heights. */}
-      <div className="flex items-center gap-2 text-[calc(11px*var(--text-scale))]">
-        <span className="tabular-nums text-[var(--text-quaternary)]" style={{ fontFamily: "var(--font-code)" }}>
+      {/* A member does not see what a Todo has cost, so for them the row exists only when it has a date to show. */}
+      {(showCost || startsLater || item.dueAt) && <div className="flex items-center gap-2 text-[calc(11px*var(--text-scale))]">
+        {showCost && <span className="tabular-nums text-[var(--text-quaternary)]" style={{ fontFamily: "var(--font-code)" }}>
           ${spendUsd.toFixed(2)}
-        </span>
+        </span>}
         {startsLater && (
           <span data-testid="card-starts" className="ml-auto text-[var(--text-tertiary)]" title="Not started before this date">
             Starts {formatDue(item.startAt!)}
@@ -260,7 +264,7 @@ export const BoardCard = memo(function BoardCard({
             {startsLater ? "· due " : ""}{formatDue(item.dueAt)}
           </span>
         )}
-      </div>
+      </div>}
 
       {/* In-place tree tray. */}
       {expanded && tree && (
@@ -269,7 +273,7 @@ export const BoardCard = memo(function BoardCard({
           cardDepth={item.depth ?? 0}
           byName={byName}
           onOpenChild={onOpenChild}
-          onAddSubTask={addSubTask}
+          onAddSubTask={onAddSubTask ? addSubTask : undefined}
         />
       )}
     </article>

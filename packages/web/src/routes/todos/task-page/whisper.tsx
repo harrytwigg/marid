@@ -1,8 +1,8 @@
-import { ChevronRight, CornerDownRight, Flag, Link2, Paperclip, Pencil, Plus, RotateCw, Tags } from "@/components/ui/icon"
+import { ChevronRight, CornerDownRight, Flag, Link2, Paperclip, Pencil, Plus, RotateCw, Tags, UserRound } from "@/components/ui/icon"
 import type { Employee, WorkItemEventWire } from "@/lib/api"
 import { STATUS_LABEL } from "@/lib/todos"
-import { displayNameOf, formatRelativeTime, OPERATOR_ASSIGNEE } from "../util"
-import { SessionActor } from "./session-ref"
+import { displayNameOf, formatRelativeTime, memberActorWord, OPERATOR_ASSIGNEE, type Viewer } from "../util"
+import { EventActor, useViewer } from "../attribution"
 
 /* One audit event read back as a sentence: who did it, and what it was. The
  * feed that orders these lines lives in activity.tsx. */
@@ -67,6 +67,14 @@ const WHISPERS: Record<string, WhisperRule> = {
     return { Icon: Pencil, text: "added a note" }
   },
   metadata_edited: { Icon: Pencil, text: "edited the details" },
+  // The person responsible, beside the agent: who it names is on the card and the rail, so the line says only what changed.
+  person_changed: (detail) => {
+    if (detail.reason === "person_removed") return { Icon: UserRound, text: "removed the person's account" }
+    if (detail.to === null || detail.to === undefined) return { Icon: UserRound, text: "cleared the person" }
+    // Naming someone else on a Todo that waited on the operator handed it on: say that, not just "changed".
+    if (detail.assigneeCleared === true && detail.to !== OPERATOR_ASSIGNEE) return { Icon: UserRound, text: "handed it on to another person" }
+    return { Icon: UserRound, text: detail.to === OPERATOR_ASSIGNEE ? "named the operator as the person" : "changed the person" }
+  },
   attachment_added: (detail) => ({
     Icon: Paperclip,
     text: `attached ${typeof detail.filename === "string" ? detail.filename : "a file"}`,
@@ -91,16 +99,17 @@ export function whisperOf(event: WorkItemEventWire): Whisper {
   return typeof rule === "function" ? rule(event.detail ?? {}, event) : rule
 }
 
-function actorLabel(actor: string | null, byName: Map<string, Employee>): string {
-  if (!actor || actor === "system") return "The gateway"
+function actorLabel(actor: string | null, byName: Map<string, Employee>, viewer: Viewer): string {
+  const word = memberActorWord(actor, viewer)
+  if (word) return word
+  if (!actor || actor === "system") return viewer === "member" ? "System" : "The gateway"
   if (actor === "operator") return "You"
-  return displayNameOf(actor, byName)
+  return displayNameOf(actor, byName, viewer)
 }
-
-
 
 export function WhisperLine({ event, byName }: { event: WorkItemEventWire; byName: Map<string, Employee> }) {
   const whisper = whisperOf(event)
+  const viewer = useViewer()
   return (
     <div className="flex items-center gap-2 py-[7px] text-[12.5px] text-[var(--text-tertiary)]" data-testid={`whisper-${event.id}`}>
       <span className="mr-1.5 grid w-4 flex-none place-items-center text-[var(--text-quaternary)]">
@@ -108,7 +117,7 @@ export function WhisperLine({ event, byName }: { event: WorkItemEventWire; byNam
       </span>
       <span className="min-w-0 truncate">
         <span className={`font-semibold ${whisper.tinted ? "text-[var(--system-red)]" : "text-[var(--text-secondary)]"}`}>
-          <SessionActor actor={event.actor} byName={byName}>{actorLabel(event.actor, byName)}</SessionActor>
+          <EventActor actor={event.actor} byName={byName}>{actorLabel(event.actor, byName, viewer)}</EventActor>
         </span>{" "}
         {whisper.text}
       </span>

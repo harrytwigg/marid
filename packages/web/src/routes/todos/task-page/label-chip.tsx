@@ -10,17 +10,21 @@ export function RemoveButton({
   onClick,
   testId,
   className,
+  title,
 }: {
   label: string
   onClick: () => void
   testId?: string
   className?: string
+  /** A tooltip, for a button whose name says more than "remove" (what else the click changes). */
+  title?: string
 }) {
   return (
     <button
       type="button"
       data-testid={testId}
       aria-label={label}
+      title={title}
       onClick={onClick}
       className={`focus-outline grid place-items-center rounded-full text-[var(--text-quaternary)] outline-none hover:text-[var(--text-secondary)] ${className ?? ""}`}
     >
