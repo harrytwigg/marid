@@ -1,4 +1,5 @@
 import { useMemo } from "react"
+import { usePersonMatch } from "../person-filter"
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query"
 import {
   api,
@@ -55,6 +56,7 @@ async function fetchBoardPage(
   since: string | undefined,
   until: string | undefined,
   offset: number,
+  personMatch: string | undefined,
 ): Promise<BoardPage> {
   const scope = boardScopeParams(board)
   const r = await api.listWorkItems({
@@ -63,7 +65,8 @@ async function fetchBoardPage(
     // A department board IS its department filter; other chips pass through.
     department: scope.department ?? filters.department,
     assignee: filters.agent,
-    humanAssignee: filters.person,
+    // The Person filter as the list matches it (`usePersonMatch`): "Me" with one owner account is both of the operator's identities.
+    humanAssignee: personMatch ?? filters.person,
     source: filters.source,
     label: filters.label,
     sprint: filters.sprint,
@@ -78,19 +81,26 @@ async function fetchBoardPage(
   return { workItems: r.workItems, total: r.total ?? r.workItems.length, nextOffset: r.nextOffset ?? null }
 }
 
-export function boardColumnQueryKey(board: BoardId, status: WorkItemStatusWire, filters: TodoFilters): readonly unknown[] {
+/** A column's key. The Person filter's wider match, when it has one, is a last element of its own, so the key the URL's filters
+ *  build is a prefix of every column showing them (`visible-objects` reads the cache by that prefix). */
+export function boardColumnQueryKey(board: BoardId, status: WorkItemStatusWire, filters: TodoFilters, personMatch?: string): readonly unknown[] {
   return [
     "work-items", "board", boardKey(board), status,
     filters.agent ?? "", filters.person ?? "", filters.department ?? "", filters.source ?? "", filters.date ?? "",
     filters.label ?? "", filters.sprint ?? "", filters.q ?? "",
+    ...widerPersonMatch(filters.person, personMatch),
   ]
 }
 
-function useBoardColumn(board: BoardId, status: WorkItemStatusWire, filters: TodoFilters, now: number, enabled: boolean) {
+function widerPersonMatch(person: string | undefined, personMatch: string | undefined): string[] {
+  return personMatch !== undefined && personMatch !== person ? [personMatch] : []
+}
+
+function useBoardColumn(board: BoardId, status: WorkItemStatusWire, filters: TodoFilters, now: number, enabled: boolean, personMatch: string | undefined) {
   const { since, until } = dateBounds(filters.date, now)
   return useInfiniteQuery({
-    queryKey: boardColumnQueryKey(board, status, filters),
-    queryFn: ({ pageParam }) => fetchBoardPage(board, status, filters, since, until, pageParam),
+    queryKey: boardColumnQueryKey(board, status, filters, personMatch),
+    queryFn: ({ pageParam }) => fetchBoardPage(board, status, filters, since, until, pageParam, personMatch),
     initialPageParam: 0,
     getNextPageParam: (last) => last.nextOffset ?? undefined,
     enabled,
@@ -143,12 +153,13 @@ export function useBoardData(board: BoardId, filters: TodoFilters, now: number, 
   // Hooks are unconditional: one query per status in fixed order. A status
   // filter leaves only its own column's query on.
   const on = (status: WorkItemStatusWire) => enabled && isColumnInStatusFilter(filters.status, status)
-  const backlog = useBoardColumn(board, "backlog", filters, now, on("backlog"))
-  const executing = useBoardColumn(board, "executing", filters, now, on("executing"))
-  const inReview = useBoardColumn(board, "in_review", filters, now, on("in_review"))
-  const blocked = useBoardColumn(board, "blocked", filters, now, on("blocked"))
-  const done = useBoardColumn(board, "done", filters, now, on("done"))
-  const cancelled = useBoardColumn(board, "cancelled", filters, now, on("cancelled"))
+  const personMatch = usePersonMatch(filters.person)
+  const backlog = useBoardColumn(board, "backlog", filters, now, on("backlog"), personMatch)
+  const executing = useBoardColumn(board, "executing", filters, now, on("executing"), personMatch)
+  const inReview = useBoardColumn(board, "in_review", filters, now, on("in_review"), personMatch)
+  const blocked = useBoardColumn(board, "blocked", filters, now, on("blocked"), personMatch)
+  const done = useBoardColumn(board, "done", filters, now, on("done"), personMatch)
+  const cancelled = useBoardColumn(board, "cancelled", filters, now, on("cancelled"), personMatch)
   const queries = [backlog, executing, inReview, blocked, done, cancelled]
 
   return useMemo((): BoardData => {

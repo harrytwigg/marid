@@ -141,7 +141,8 @@ export interface ListWorkItemsFilter {
   /** The agent slot: an employee, `@operator`, or `@unassigned` for none. */
   assignee?: string;
   /** The person slot (`@operator` or `user:<id>`), as `humanAssignee` reads: the stored person, else the operator when
-   *  the agent slot is. `@unassigned` matches Todos with no person. Composes with `assignee` (AND). */
+   *  the agent slot is. `@unassigned` matches Todos with no person. Several, comma-separated, match any of them (the
+   *  operator's "Me" with one owner account is `@operator,user:<owner>`). Composes with `assignee` (AND). */
   humanAssignee?: string;
   source?: WorkItemSource;
   needsAttentionFor?: string;
@@ -533,12 +534,16 @@ function workItemWhere(filter: ListWorkItemsFilter, textIds?: readonly string[])
     values.push(value);
   }
   if (filter.humanAssignee) {
-    if (filter.humanAssignee === UNASSIGNED_FILTER) {
-      conditions.push(`${HUMAN_ASSIGNEE_EXPR_SQL} IS NULL`);
-    } else {
-      conditions.push(`${HUMAN_ASSIGNEE_EXPR_SQL} = ?`);
-      values.push(filter.humanAssignee);
+    const people = [...new Set(filter.humanAssignee.split(',').map((person) => person.trim()).filter(Boolean))];
+    const named = people.filter((person) => person !== UNASSIGNED_FILTER);
+    const either: string[] = [];
+    if (people.includes(UNASSIGNED_FILTER)) either.push(`${HUMAN_ASSIGNEE_EXPR_SQL} IS NULL`);
+    if (named.length > 0) {
+      either.push(`${HUMAN_ASSIGNEE_EXPR_SQL} IN (${named.map(() => '?').join(', ')})`);
+      values.push(...named);
     }
+    // Only commas: no person named, so it matches nothing rather than everything.
+    conditions.push(either.length > 0 ? `(${either.join(' OR ')})` : '0');
   }
   if (filter.parentId) {
     conditions.push('parent_id = ?');

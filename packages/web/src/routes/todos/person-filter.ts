@@ -48,3 +48,16 @@ export function personFilterLabel(person: string | undefined, choices: PersonFil
   const match = [...choices.people, ...(choices.you ? [choices.you] : [])].find((choice) => memberIdentity(choice.id) === person)
   return match?.displayName ?? "Someone else"
 }
+
+/**
+ * What the list is asked for when the Person filter names `person`. With one owner account, the operator's "Me" (`@operator`)
+ * also takes the Todos that name that account (`user:<id>`): both are the operator, the account is not listed beside "Me", and a
+ * member can name the owner by account. Any other value, and any other reading, is asked for as it is.
+ */
+export function usePersonMatch(person: string | undefined): string | undefined {
+  const auth = useAuthOptional()
+  const operator = auth?.principal?.kind !== "member"
+  const self = useOperatorSelf(operator && person === OPERATOR_ASSIGNEE)
+  if (person !== OPERATOR_ASSIGNEE || !operator || self.mode !== "single" || !self.you) return person
+  return `${OPERATOR_ASSIGNEE},${memberIdentity(self.you.id)}`
+}
