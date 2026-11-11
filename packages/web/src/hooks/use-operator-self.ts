@@ -22,6 +22,8 @@ export interface OperatorSelf {
   you: PersonChoice | null
   /** `@operator` as a name. */
   label: string
+  /** False while the People list this reading comes from is still loading. Nothing is offered or named as a person until it is true. */
+  ready: boolean
 }
 
 export const LEGACY_OPERATOR_LABEL = "You (operator)"
@@ -30,19 +32,22 @@ export const SHARED_OPERATOR_LABEL = "Operator (shared)"
 /** Stands in where a surface renders outside a QueryClientProvider (a bare card or chip in a test): never asked, so never used. */
 const UNPROVIDED_CLIENT = new QueryClient()
 
-const LEGACY: OperatorSelf = { mode: "legacy", owners: [], you: null, label: LEGACY_OPERATOR_LABEL }
+const LEGACY: OperatorSelf = { mode: "legacy", owners: [], you: null, label: LEGACY_OPERATOR_LABEL, ready: true }
 
-/** The reading of `@operator` for a People list and the owner account this browser is signed in as (if any). */
+/** Accounts exist but who the owners are is not known yet: neither "You (operator)" (it may be an owner by name) nor a guess. */
+const PENDING: OperatorSelf = { mode: "legacy", owners: [], you: null, label: "Operator", ready: false }
+
+/** The reading of `@operator` for a People list (undefined while it loads) and the owner account this browser is signed in as (if any). */
 export function deriveOperatorSelf(people: PersonWire[] | undefined, signedInAs: string | undefined): OperatorSelf {
-  if (!people) return LEGACY
+  if (!people) return PENDING
   const owners: PersonChoice[] = people
     .filter((person) => person.status === "active" && person.instanceRole === "owner")
     .map((person) => ({ id: person.id, displayName: person.displayName, initials: person.initials || initialsOf(person.displayName) }))
   if (owners.length === 0) return LEGACY
   const you = owners.find((owner) => owner.id === signedInAs) ?? (owners.length === 1 ? owners[0]! : null)
   return owners.length === 1
-    ? { mode: "single", owners, you, label: owners[0]!.displayName }
-    : { mode: "shared", owners, you, label: SHARED_OPERATOR_LABEL }
+    ? { mode: "single", owners, you, label: owners[0]!.displayName, ready: true }
+    : { mode: "shared", owners, you, label: SHARED_OPERATOR_LABEL, ready: true }
 }
 
 /**
@@ -71,5 +76,6 @@ export function useOperatorSelf(wanted = true): OperatorSelf {
     queryFn: accountsApi.listPeople,
   }, client)
   const people = enabled ? query.data : undefined
-  return useMemo(() => deriveOperatorSelf(people, signedInAs), [people, signedInAs])
+  const failed = enabled && query.isError && !people
+  return useMemo(() => (!enabled || failed ? LEGACY : deriveOperatorSelf(people, signedInAs)), [enabled, failed, people, signedInAs])
 }

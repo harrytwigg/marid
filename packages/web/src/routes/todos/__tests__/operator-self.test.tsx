@@ -71,8 +71,7 @@ describe("no active owner account: exactly as before", () => {
     as("unlinked")
     accounts.listPeople.mockResolvedValue([ada])
     render(<><PersonCircle person="@operator" /><PersonName person="@operator" viewer="operator" /><AssigneePickerContent detail={{ workItem: workItemNode("TSK-7", { assignee: "@operator" }), spendUsd: 0, events: [] }} employees={[]} commit={vi.fn()} onDone={vi.fn()} offerOperator /></>)
-    await waitFor(() => expect(accounts.listPeople).toHaveBeenCalled())
-    expect(screen.getByTestId("person-circle").title).toBe("You (operator)")
+    await waitFor(() => expect(screen.getByTestId("person-circle").title).toBe("You (operator)"))
     expect(screen.getAllByText("You (operator)").length).toBe(2)
     expect(screen.queryByTestId("human-avatar")).toBeNull()
   })
@@ -199,6 +198,64 @@ describe("two owner accounts", () => {
   })
 })
 
+describe("while the People list is still loading", () => {
+  /** Every state the picker's rows pass through, so a moment of "You (operator)" beside the account cannot hide between two assertions. */
+  function watchRows() {
+    const seen: string[][] = []
+    const observer = new MutationObserver(() => seen.push(pickerRows().map((row) => row.text)))
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+    return { seen, stop: () => observer.disconnect() }
+  }
+  function held() {
+    let release!: (people: unknown[]) => void
+    accounts.listPeople.mockReturnValue(new Promise((resolve) => { release = resolve }))
+    return (people: unknown[]) => release(people)
+  }
+
+  it("never shows You (operator) beside the owner's own account, and offers nothing selectable as user:<you>", async () => {
+    as("linked-to-olive")
+    const release = held()
+    const watch = watchRows()
+    const commit = renderPicker("@operator")
+    await waitFor(() => expect(accounts.listPeople).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    // Only the clear row: no operator row, no account rows, no "nobody else" note, nothing that could store user:<you>.
+    expect(pickerRows().map((row) => row.id)).toEqual(["person-option-clear"])
+    expect(screen.queryByText("You (operator)")).toBeNull()
+    expect(screen.queryByText(/No one else has access|Choose a board/)).toBeNull()
+    release([olive, ada])
+    await screen.findByTestId("person-option-ada1")
+    watch.stop()
+    expect(pickerRows().map((row) => row.text)).toEqual(["No person", "OOOlive Owner (you)", "ALAda Lovelace"])
+    for (const rows of watch.seen) expect(rows.some((text) => text.includes("You (operator)")) && rows.some((text) => text.includes("Olive Owner"))).toBe(false)
+    // The picker's people and who the operator is came from one read.
+    expect(accounts.listPeople).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByTestId("person-option-operator"))
+    expect(commit).not.toHaveBeenCalled()
+  })
+
+  it("names the operator neutrally on every surface until it lands, then as the owner", async () => {
+    as("unlinked")
+    const release = held()
+    render(<><PersonCircle person="@operator" /><PersonName person="@operator" viewer="operator" /><AssigneePickerContent detail={{ workItem: workItemNode("TSK-7", { assignee: null }), spendUsd: 0, events: [] }} employees={[]} commit={vi.fn()} onDone={vi.fn()} offerOperator /></>)
+    await waitFor(() => expect(accounts.listPeople).toHaveBeenCalled())
+    expect(screen.getByTestId("person-circle").title).toBe("Operator")
+    expect(screen.queryByText("You (operator)")).toBeNull()
+    expect(screen.getByTestId("assignee-option-@operator").textContent).toContain("Operator")
+    expect(screen.getByTestId("assignee-option-@operator").textContent).not.toContain("You (operator)")
+    release([olive])
+    await waitFor(() => expect(screen.getByTestId("person-circle").title).toBe("Olive Owner"))
+  })
+
+  it("falls back to You (operator) when the People list cannot be read, so the operator can still choose themselves", async () => {
+    as("unlinked")
+    accounts.listPeople.mockRejectedValue(new Error("down"))
+    renderPicker(null)
+    await waitFor(() => expect(pickerRows().map((row) => row.id)).toContain("person-option-operator"))
+    expect(pickerRows().find((row) => row.id === "person-option-operator")!.text).toContain("You (operator)")
+  })
+})
+
 describe("what asks for the owners", () => {
   it("a circle with nobody in it asks nothing, even where accounts exist; one holding @operator asks once", async () => {
     as("unlinked")
@@ -239,7 +296,12 @@ describe("the assign rows with no person slot beside them", () => {
     expect(row.querySelector("svg.ml-auto")).toBeTruthy()
     fireEvent.change(screen.getByTestId("assignee-search"), { target: { value: "olive" } })
     expect(screen.getByTestId("assignee-option-@operator")).toBeTruthy()
-    fireEvent.change(screen.getByTestId("assignee-search"), { target: { value: "you (op" } })
+    // Still found by what it has always answered to, and not by what it is not.
+    for (const typed of ["you", "operator"]) {
+      fireEvent.change(screen.getByTestId("assignee-search"), { target: { value: typed } })
+      expect(screen.getByTestId("assignee-option-@operator")).toBeTruthy()
+    }
+    fireEvent.change(screen.getByTestId("assignee-search"), { target: { value: "zzz" } })
     expect(screen.queryByTestId("assignee-option-@operator")).toBeNull()
     fireEvent.change(screen.getByTestId("assignee-search"), { target: { value: "" } })
     fireEvent.click(screen.getByTestId("assignee-option-unassign"))
@@ -261,7 +323,6 @@ describe("the assign rows with no person slot beside them", () => {
     as("unlinked")
     accounts.listPeople.mockResolvedValue([ada])
     render(<AssigneePickerContent detail={detail} employees={employees} commit={vi.fn()} onDone={vi.fn()} offerOperator />)
-    await waitFor(() => expect(accounts.listPeople).toHaveBeenCalled())
-    expect(screen.getByTestId("assignee-option-@operator").textContent).toContain("You (operator)")
+    await waitFor(() => expect(screen.getByTestId("assignee-option-@operator").textContent).toContain("You (operator)"))
   })
 })

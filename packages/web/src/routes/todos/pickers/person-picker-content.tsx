@@ -20,6 +20,9 @@ export function PersonPickerContent({ detail, commit, sheet, onDone, board }: Om
   const self = useOperatorSelf()
   // The "you" account is the `@operator` row, never also a `user:` row: a Todo naming it by account reads as it and is not checked.
   const people = withoutAccount(choices, viewer === "operator" ? self.you : null)
+  // Who the operator is comes from the same People read as the rows below, so until it lands neither is offered: a "You (operator)"
+  // beside the operator's own account, each choosing something different, must never show.
+  const waiting = viewer === "operator" && !self.ready
   const pick = (person: string | null) => { if (person !== current) commit(person); onDone() }
   const { handsOn, onClear } = personChoiceHints(detail.workItem, viewer)
   return (
@@ -34,22 +37,8 @@ export function PersonPickerContent({ detail, commit, sheet, onDone, board }: Om
         />
       )}
       <div className={sheet ? "" : "max-h-[288px] overflow-y-auto"}>
-        {viewer === "operator" && <OperatorPersonRow self={self} sheet={sheet} checked={current === OPERATOR_ASSIGNEE} onSelect={() => pick(OPERATOR_ASSIGNEE)} />}
-        {people.map((person) => (
-          <PickerRow
-            key={person.id}
-            sheet={sheet}
-            glyph={<HumanAvatar name={person.displayName} initials={person.initials} size={22} />}
-            label={person.displayName}
-            sub={current === memberIdentity(person.id) ? undefined : handsOn}
-            checked={current === memberIdentity(person.id)}
-            onSelect={() => pick(memberIdentity(person.id))}
-            testId={`person-option-${person.id}`}
-          />
-        ))}
-        {asked && ready && people.length === 0 && (
-          <PickerNote>{board ? "No one else has access to this board." : "Choose a board to name someone else."}</PickerNote>
-        )}
+        {viewer === "operator" && !waiting && <OperatorPersonRow self={self} sheet={sheet} checked={current === OPERATOR_ASSIGNEE} onSelect={() => pick(OPERATOR_ASSIGNEE)} />}
+        {!waiting && <PersonRows people={people} current={current} handsOn={handsOn} sheet={sheet} asked={asked && ready} board={board} pick={pick} />}
       </div>
     </>
   )
@@ -77,5 +66,36 @@ function OperatorPersonRow({ self, sheet, checked, onSelect }: { self: OperatorS
       onSelect={onSelect}
       testId="person-option-operator"
     />
+  )
+}
+
+function PersonRows({ people, current, handsOn, sheet, asked, board, pick }: {
+  people: PersonChoice[]
+  current: string | null
+  handsOn: string | undefined
+  sheet: boolean | undefined
+  /** The people list has answered, so an empty one is a fact worth saying. */
+  asked: boolean
+  board: string | null
+  pick: (person: string | null) => void
+}) {
+  return (
+    <>
+      {people.map((person) => (
+        <PickerRow
+          key={person.id}
+          sheet={sheet}
+          glyph={<HumanAvatar name={person.displayName} initials={person.initials} size={22} />}
+          label={person.displayName}
+          sub={current === memberIdentity(person.id) ? undefined : handsOn}
+          checked={current === memberIdentity(person.id)}
+          onSelect={() => pick(memberIdentity(person.id))}
+          testId={`person-option-${person.id}`}
+        />
+      ))}
+      {asked && people.length === 0 && (
+        <PickerNote>{board ? "No one else has access to this board." : "Choose a board to name someone else."}</PickerNote>
+      )}
+    </>
   )
 }

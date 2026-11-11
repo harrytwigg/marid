@@ -1,4 +1,4 @@
-import { useOperatorSelf } from "@/hooks/use-operator-self"
+import { LEGACY_OPERATOR_LABEL, useOperatorSelf } from "@/hooks/use-operator-self"
 import { agentOf, OperatorSelfAvatar } from "../assignee-circles"
 import { OPERATOR_ASSIGNEE } from "../util"
 import { PickerRow } from "./picker-shell"
@@ -16,7 +16,9 @@ export function OperatorAssignRow({ offered, query, assignee, sheet, onSelect }:
   onSelect: () => void
 }) {
   const self = useOperatorSelf()
-  if (!offered || !self.label.toLowerCase().includes(query.trim().toLowerCase())) return null
+  // Found by its name, and still by "you" and "operator": that is what this row has always answered to.
+  const typed = query.trim().toLowerCase()
+  if (!offered || ![self.label, LEGACY_OPERATOR_LABEL].some((name) => name.toLowerCase().includes(typed))) return null
   return (
     <PickerRow
       sheet={sheet}
