@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { GOOD_PASSWORD, startHarness, type Harness } from "./accounts-harness.js";
+import { GATEWAY_TOKEN, GOOD_PASSWORD, startHarness, type Harness } from "./accounts-harness.js";
 import { inviteAndAccept, joinAsOwner } from "./flows-helpers.js";
 import { authCookieName, authDeviceCookieName, createAuthSession, linkAuthSessionToUser } from "../../gateway/auth.js";
 
@@ -39,6 +39,20 @@ describe("GET /api/auth/state: which account is the operator's browser", () => {
     const bearer = await h.asOperator("GET", "/api/auth/state");
     expect(bearer.body.principal).toEqual({ kind: "operator" });
     expect((await state()).body.principal).toBeNull();
+  });
+
+  it("names the owner only for a device whose session verifies, never for its id cookie riding on another credential", async () => {
+    const owner = await joinAsOwner(h, "olive@example.test");
+    const deviceId = /(?:^|;\s*)[^=]*device[^=]*=([^;]+)/i.exec(owner.cookie)?.[1];
+    expect(deviceId).toBeTruthy();
+    // The bearer token with the owner's device id alone: still the operator, but not that owner.
+    const bearer = await h.request("GET", "/api/auth/state", { authorization: `Bearer ${GATEWAY_TOKEN}`, cookie: `${authDeviceCookieName(h.home)}=${deviceId}` });
+    expect(bearer.body.authenticated).toBe(true);
+    expect(bearer.body.principal).toEqual({ kind: "operator" });
+    // Another device's session with the owner's device id swapped in: that cookie pair does not verify, so nobody is named.
+    const other = pairedDevice();
+    const swapped = other.cookie.replace(`${authDeviceCookieName(h.home)}=${other.deviceId}`, `${authDeviceCookieName(h.home)}=${deviceId}`);
+    expect((await state(swapped)).body.principal ?? { kind: "operator" }).toEqual({ kind: "operator" });
   });
 
   it("carries none once the owner is disabled or demoted, and none for a member-role link", async () => {

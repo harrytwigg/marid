@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import type { JinnConfig } from "../shared/types.js";
-import { authSessionUserId, createAuthState, currentAuthDeviceId } from "../gateway/auth.js";
+import { authSessionUserId, createAuthState, verifiedAuthDeviceId } from "../gateway/auth.js";
 import type { AccountsRuntime } from "./runtime.js";
 import { countUsers, getUserById } from "./users.js";
 
@@ -54,12 +54,12 @@ export function buildAuthState(
   };
 }
 
-/** The active owner account this request's device session is linked to, if any. Never throws: an unreadable device
- *  store or accounts table reads as no account. */
+/** The active owner account this request's device session is linked to, if any: the device whose session cookie verified,
+ *  never an id cookie alone. Never throws: an unreadable device store or accounts table reads as no account. */
 function operatorAccountOf(req: StateRequest, jinnHome: string | undefined, accounts: AccountsRuntime): { id: string; displayName: string } | undefined {
   if (!jinnHome) return undefined;
   try {
-    const userId = authSessionUserId(jinnHome, currentAuthDeviceId(req.headers, jinnHome));
+    const userId = authSessionUserId(jinnHome, verifiedAuthDeviceId(req.headers, jinnHome));
     if (!userId) return undefined;
     const user = getUserById(accounts.getDb(), userId);
     return user && user.status === "active" && user.instanceRole === "owner" ? { id: user.id, displayName: user.displayName } : undefined;

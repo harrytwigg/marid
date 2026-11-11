@@ -15,7 +15,7 @@ export function OperatorAssignRow({ offered, query, assignee, sheet, onSelect }:
   sheet?: boolean
   onSelect: () => void
 }) {
-  const self = useOperatorSelf()
+  const self = useOperatorSelf(offered)
   // Found by its name, and still by "you" and "operator": that is what this row has always answered to.
   const typed = query.trim().toLowerCase()
   if (!offered || ![self.label, LEGACY_OPERATOR_LABEL].some((name) => name.toLowerCase().includes(typed))) return null
