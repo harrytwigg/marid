@@ -20,7 +20,11 @@ import { sprintFilterLabel, useSprints } from "./sprints/use-sprints"
 import { SprintFilterItems } from "./sprints/sprint-filter-items"
 import { SearchLauncher } from "./search-launcher"
 import { LazyTodoFilterSheet } from "./todo-filter-sheet-lazy"
-import { assigneeFilterLabel, OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from "./util"
+import { agentFilterLabel, UNASSIGNED_FILTER } from "./util"
+import { personFilterLabel, usePersonFilterChoices, type PersonFilterChoices } from "./person-filter"
+import { HumanAvatar } from "@/components/ui/human-avatar"
+import { memberIdentity } from "@/lib/accounts-api"
+import { OPERATOR_ASSIGNEE } from "./util"
 import { ActiveChip, BoardActiveChip, MenuCheck, SUBMENU_CLASS, ValueChip } from "./filter-chips"
 
 const MENU_CLASS =
@@ -42,6 +46,56 @@ function useIsTodoMobile() {
   return mobile
 }
 
+/** The Person filter's rows: Anyone, Me, No person, then the people with access to the board. Shared by the board chip and the
+ *  refine menu. */
+function PersonItems({ filters, onChange, choices }: { filters: TodoFilters; onChange: (next: TodoFilters) => void; choices: PersonFilterChoices }) {
+  const pick = (person: string | undefined) => () => onChange({ ...filters, person })
+  return (
+    <>
+      <DropdownMenuItem className={ITEM_CLASS} onClick={pick(undefined)}>
+        Anyone<MenuCheck on={!filters.person} />
+      </DropdownMenuItem>
+      <DropdownMenuItem className={ITEM_CLASS} onClick={pick(choices.me)}>
+        Me<MenuCheck on={filters.person === choices.me} />
+      </DropdownMenuItem>
+      <DropdownMenuItem className={ITEM_CLASS} onClick={pick(UNASSIGNED_FILTER)}>
+        No person<MenuCheck on={filters.person === UNASSIGNED_FILTER} />
+      </DropdownMenuItem>
+      {choices.offerOperator && (
+        <DropdownMenuItem className={ITEM_CLASS} onClick={pick(OPERATOR_ASSIGNEE)}>
+          Operator<MenuCheck on={filters.person === OPERATOR_ASSIGNEE} />
+        </DropdownMenuItem>
+      )}
+      {choices.people.map((person) => (
+        <DropdownMenuItem key={person.id} className={ITEM_CLASS} onClick={pick(memberIdentity(person.id))}>
+          <HumanAvatar name={person.displayName} initials={person.initials} size={20} />
+          {person.displayName}<MenuCheck on={filters.person === memberIdentity(person.id)} />
+        </DropdownMenuItem>
+      ))}
+    </>
+  )
+}
+
+/** The Agent filter's rows: Anyone, No agent, then every employee. */
+function AgentItems({ filters, onChange, employees }: { filters: TodoFilters; onChange: (next: TodoFilters) => void; employees: Employee[] }) {
+  return (
+    <>
+      <DropdownMenuItem className={ITEM_CLASS} onClick={() => onChange({ ...filters, agent: undefined })}>
+        Anyone<MenuCheck on={!filters.agent} />
+      </DropdownMenuItem>
+      <DropdownMenuItem className={ITEM_CLASS} onClick={() => onChange({ ...filters, agent: UNASSIGNED_FILTER })}>
+        No agent<MenuCheck on={filters.agent === UNASSIGNED_FILTER} />
+      </DropdownMenuItem>
+      {employees.map((employee) => (
+        <DropdownMenuItem key={employee.name} className={ITEM_CLASS} onClick={() => onChange({ ...filters, agent: employee.name })}>
+          <EmployeeAvatar name={employee.name} size={20} fontSize={10} className="bg-[var(--fill-secondary)]" />
+          {employee.displayName}<MenuCheck on={filters.agent === employee.name} />
+        </DropdownMenuItem>
+      ))}
+    </>
+  )
+}
+
 export function FilterBar({
   filters,
   onChange,
@@ -51,6 +105,7 @@ export function FilterBar({
   hideStatus,
   hideDepartment,
   board,
+  personBoard,
   onManageSprints,
 }: {
   filters: TodoFilters
@@ -66,6 +121,8 @@ export function FilterBar({
    *  right search — stage-A review F1); the legacy list keeps the search-led
    *  row until the stage-C cutover retires it. */
   board?: boolean
+  /** The department whose people the Person filter offers; none (Everything) offers every active person. */
+  personBoard?: string | null
   /** Opens the sprint planner; the Sprint chip's last row. */
   onManageSprints?: () => void
 }) {
@@ -125,7 +182,9 @@ export function FilterBar({
   }
 
   const active = activeFilterCount(filters)
-  const personName = assigneeFilterLabel(filters.assignee, byName)
+  const personChoices = usePersonFilterChoices(personBoard)
+  const personName = personFilterLabel(filters.person, personChoices)
+  const agentName = agentFilterLabel(filters.agent, byName)
   const statusLabel = filters.status === "open" ? null : (STATUS_OPTIONS.find((s) => s.value === filters.status)?.label ?? filters.status)
   const sourceLabel = SOURCE_OPTIONS.find((s) => s.value === filters.source)?.label
   const dateLabel = DATE_OPTIONS.find((d) => d.value === filters.date)?.label
@@ -139,22 +198,12 @@ export function FilterBar({
   if (board && !mobile) {
     return (
       <div className="flex flex-wrap items-center gap-2" data-testid="todos-filters">
-        <ValueChip label="Assignee" set={!!filters.assignee} display={personName} testId="filter-chip-assignee">
-          <DropdownMenuItem className={ITEM_CLASS} onClick={() => onChange({ ...filters, assignee: undefined })}>
-            Anyone<MenuCheck on={!filters.assignee} />
-          </DropdownMenuItem>
-          <DropdownMenuItem className={ITEM_CLASS} onClick={() => onChange({ ...filters, assignee: OPERATOR_ASSIGNEE })}>
-            Assigned to me<MenuCheck on={filters.assignee === OPERATOR_ASSIGNEE} />
-          </DropdownMenuItem>
-          <DropdownMenuItem className={ITEM_CLASS} onClick={() => onChange({ ...filters, assignee: UNASSIGNED_FILTER })}>
-            Unassigned<MenuCheck on={filters.assignee === UNASSIGNED_FILTER} />
-          </DropdownMenuItem>
-          {employees.map((employee) => (
-            <DropdownMenuItem key={employee.name} className={ITEM_CLASS} onClick={() => onChange({ ...filters, assignee: employee.name })}>
-              <EmployeeAvatar name={employee.name} size={20} fontSize={10} className="bg-[var(--fill-secondary)]" />
-              {employee.displayName}<MenuCheck on={filters.assignee === employee.name} />
-            </DropdownMenuItem>
-          ))}
+        <ValueChip label="Person" set={!!filters.person} display={personName} testId="filter-chip-person">
+          <PersonItems filters={filters} onChange={onChange} choices={personChoices} />
+        </ValueChip>
+
+        <ValueChip label="Agent" set={!!filters.agent} display={agentName} testId="filter-chip-agent">
+          <AgentItems filters={filters} onChange={onChange} employees={employees} />
         </ValueChip>
 
         <ValueChip
@@ -351,21 +400,14 @@ export function FilterBar({
             <DropdownMenuSub>
               <DropdownMenuSubTrigger className={ITEM_CLASS}>Person</DropdownMenuSubTrigger>
               <DropdownMenuSubContent className={SUBMENU_CLASS}>
-                <DropdownMenuItem className={ITEM_CLASS} onClick={() => onChange({ ...filters, assignee: undefined })}>
-                  Anyone<MenuCheck on={!filters.assignee} />
-                </DropdownMenuItem>
-                <DropdownMenuItem className={ITEM_CLASS} onClick={() => onChange({ ...filters, assignee: OPERATOR_ASSIGNEE })}>
-                  Assigned to me<MenuCheck on={filters.assignee === OPERATOR_ASSIGNEE} />
-                </DropdownMenuItem>
-                <DropdownMenuItem className={ITEM_CLASS} onClick={() => onChange({ ...filters, assignee: UNASSIGNED_FILTER })}>
-                  Unassigned<MenuCheck on={filters.assignee === UNASSIGNED_FILTER} />
-                </DropdownMenuItem>
-                {employees.map((employee) => (
-                  <DropdownMenuItem key={employee.name} className={ITEM_CLASS} onClick={() => onChange({ ...filters, assignee: employee.name })}>
-                    <EmployeeAvatar name={employee.name} size={20} fontSize={10} className="bg-[var(--fill-secondary)]" />
-                    {employee.displayName}<MenuCheck on={filters.assignee === employee.name} />
-                  </DropdownMenuItem>
-                ))}
+                <PersonItems filters={filters} onChange={onChange} choices={personChoices} />
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger className={ITEM_CLASS}>Agent</DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className={SUBMENU_CLASS}>
+                <AgentItems filters={filters} onChange={onChange} employees={employees} />
               </DropdownMenuSubContent>
             </DropdownMenuSub>
 
@@ -423,7 +465,8 @@ export function FilterBar({
       {active > 0 && (
         <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5" aria-label="Active filters">
           {statusLabel && <ActiveChip label={`Status: ${statusLabel}`} onRemove={() => onChange({ ...filters, status: "open" })} />}
-          {personName && <ActiveChip label={`Person: ${personName}`} onRemove={() => onChange({ ...filters, assignee: undefined })} />}
+          {personName && <ActiveChip label={`Person: ${personName}`} onRemove={() => onChange({ ...filters, person: undefined })} />}
+          {agentName && <ActiveChip label={`Agent: ${agentName}`} onRemove={() => onChange({ ...filters, agent: undefined })} />}
           {filters.department && (
             <ActiveChip
               label={`Department: ${filters.department.charAt(0).toUpperCase() + filters.department.slice(1)}`}
@@ -446,6 +489,7 @@ export function FilterBar({
           hideStatus={hideStatus}
           hideDepartment={hideDepartment}
           showLabelDue={board}
+          personBoard={personBoard}
         />
       )}
     </div>

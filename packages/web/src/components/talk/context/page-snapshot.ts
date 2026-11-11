@@ -72,7 +72,8 @@ function todosView(rest: string[], params: URLSearchParams): View {
     params: { board: boardKey(parseBoardParam(rest[1])) },
     filters: present([
       ["status", filters.status],
-      ["assignee", filters.assignee],
+      ["person", filters.person],
+      ["agent", filters.agent],
       ["department", filters.department],
       ["source", filters.source],
       ["date", filters.date],

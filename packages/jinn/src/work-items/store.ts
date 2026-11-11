@@ -13,7 +13,7 @@ import { allocateWorkItemId, useWorkItemAllocationClaim } from './migrate.js';
 import { createdEventDetail, type WriteOrigin } from './origin.js';
 import { HOME_SCOPE_SQL, KEPT_EXISTS_SQL } from './kept.js';
 import { sprintFilterCondition } from './sprints-schema.js';
-import { HUMAN_ASSIGNEE_COLUMN_SQL, storedTodoPerson } from './todo-people.js';
+import { HUMAN_ASSIGNEE_COLUMN_SQL, HUMAN_ASSIGNEE_EXPR_SQL, storedTodoPerson } from './todo-people.js';
 import { planOwnership, writeOwnership } from './person-write.js';
 import { applyStartAtEdit, assertTodoDateOrder, START_AT_COLUMN_SQL, startAtInstant, writeWorkItemStartAt } from './start-date.js';
 import { toWorkItemLinkRole, type WorkItemLinkRole } from './link-role.js';
@@ -138,7 +138,11 @@ export interface CreateWorkItemInput {
 export interface ListWorkItemsFilter {
   status?: WorkItemStatus;
   department?: string;
+  /** The agent slot: an employee, `@operator`, or `@unassigned` for none. */
   assignee?: string;
+  /** The person slot (`@operator` or `user:<id>`), as `humanAssignee` reads: the stored person, else the operator when
+   *  the agent slot is. `@unassigned` matches Todos with no person. Composes with `assignee` (AND). */
+  humanAssignee?: string;
   source?: WorkItemSource;
   needsAttentionFor?: string;
   /** The queue is the operator's own: blocked Todos assigned to `@operator`, or to nobody, count too. */
@@ -528,6 +532,14 @@ function workItemWhere(filter: ListWorkItemsFilter, textIds?: readonly string[])
     conditions.push(`${column} = ?`);
     values.push(value);
   }
+  if (filter.humanAssignee) {
+    if (filter.humanAssignee === UNASSIGNED_FILTER) {
+      conditions.push(`${HUMAN_ASSIGNEE_EXPR_SQL} IS NULL`);
+    } else {
+      conditions.push(`${HUMAN_ASSIGNEE_EXPR_SQL} = ?`);
+      values.push(filter.humanAssignee);
+    }
+  }
   if (filter.parentId) {
     conditions.push('parent_id = ?');
     values.push(parseTodoId(filter.parentId));
@@ -633,7 +645,7 @@ export function listWorkItems(filter?: ListWorkItemsFilter): WorkItem[] {
 
 /** Deterministic AND-composed Todo search (GRS-021c). */
 export function searchWorkItems(filter: SearchWorkItemsFilter, limit = 20): WorkItem[] {
-  if (!filter.text && !filter.status && !filter.source && !filter.assignee && !filter.department && !filter.needsAttentionFor && !filter.since && !filter.until) {
+  if (!filter.text && !filter.status && !filter.source && !filter.assignee && !filter.humanAssignee && !filter.department && !filter.needsAttentionFor && !filter.since && !filter.until) {
     throw new Error('searchWorkItems requires at least one filter');
   }
   return queryWorkItems({ ...filter, limit }).workItems;

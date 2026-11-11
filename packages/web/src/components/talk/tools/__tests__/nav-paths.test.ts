@@ -39,15 +39,28 @@ describe("todosPath", () => {
   it("round-trips its filters back through the board's own parser", () => {
     // Guards against drift in lib/todos.ts: whatever the tool writes, the board
     // has to read back as the same filters.
-    const path = todosPath({ status: "blocked", assignee: "a-lead", label: "build", due: "overdue", q: "orb" })
+    const path = todosPath({ status: "blocked", agent: "a-lead", person: "@operator", label: "build", due: "overdue", q: "orb" })
     const search = new URLSearchParams(path.slice(path.indexOf("?")))
     expect(filtersFromSearchParams(search)).toEqual({
       status: "blocked",
-      assignee: "a-lead",
+      person: "@operator",
+      agent: "a-lead",
       label: "build",
       due: "overdue",
       q: "orb",
     })
+  })
+})
+
+describe("the old assignee argument", () => {
+  it("lands on the slot it meant: @operator on the person, any employee on the agent", () => {
+    const read = (args: Parameters<typeof todosPath>[0]) => {
+      const path = todosPath(args)
+      return filtersFromSearchParams(new URLSearchParams(path.slice(path.indexOf("?"))))
+    }
+    expect(read({ assignee: "@operator" })).toEqual({ status: "open", person: "@operator" })
+    expect(read({ assignee: "a-lead" })).toEqual({ status: "open", agent: "a-lead" })
+    expect(read({ assignee: "a-lead", person: "@operator" })).toEqual({ status: "open", person: "@operator", agent: "a-lead" })
   })
 })
 

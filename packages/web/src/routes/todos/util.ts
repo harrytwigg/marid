@@ -110,11 +110,9 @@ export function displayNameOf(assignee: string | null, byName: Map<string, Emplo
   return byName.get(assignee)?.displayName ?? assignee
 }
 
-/** What the Assignee filter reads when set: the person's name, "Assigned to me" for the
- *  operator, "Unassigned" for the no-assignee sentinel; null when unset. */
-export function assigneeFilterLabel(assignee: string | undefined, byName: Map<string, Employee>): string | null {
-  if (!assignee) return null
-  if (assignee === OPERATOR_ASSIGNEE) return "Assigned to me"
-  if (assignee === UNASSIGNED_FILTER) return "Unassigned"
-  return byName.get(assignee)?.displayName ?? assignee
+/** What the Agent filter reads when set: the employee's name, "No agent" for the none sentinel; null when unset. */
+export function agentFilterLabel(agent: string | undefined, byName: Map<string, Employee>): string | null {
+  if (!agent) return null
+  if (agent === UNASSIGNED_FILTER) return "No agent"
+  return byName.get(agent)?.displayName ?? agent
 }

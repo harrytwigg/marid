@@ -167,7 +167,7 @@ describe("manual rank (design-todos §4.5/§7.3)", () => {
 
 describe("filters (design-todos §4.3)", () => {
   it("round-trips through URL search params", () => {
-    const f: TodoFilters = { status: "done", assignee: "jinn-dev", department: "platform", source: "cron", date: "week", label: "infra", due: "overdue", q: "digest" }
+    const f: TodoFilters = { status: "done", person: "@operator", agent: "jinn-dev", department: "platform", source: "cron", date: "week", label: "infra", due: "overdue", q: "digest" }
     expect(filtersFromSearchParams(filtersToSearchParams(f))).toEqual(f)
     expect(filtersFromSearchParams(new URLSearchParams("due=nonsense"))).toEqual({ status: "open" })
     // Defaults serialize to an empty string (clean URLs).
@@ -179,16 +179,18 @@ describe("filters (design-todos §4.3)", () => {
     expect(filtersFromSearchParams(new URLSearchParams("status=nope&source=bad&date=huh"))).toEqual({ status: "open" })
   })
   it("trims the free-text values, so a padded URL reads as the filter it names", () => {
-    expect(filtersFromSearchParams(new URLSearchParams("assignee=%20scout%20&department=%20platform%20&label=%20build%20")))
-      .toEqual({ status: "open", assignee: "scout", department: "platform", label: "build" })
+    expect(filtersFromSearchParams(new URLSearchParams("agent=%20scout%20&person=%20user:u1%20&department=%20platform%20&label=%20build%20")))
+      .toEqual({ status: "open", person: "user:u1", agent: "scout", department: "platform", label: "build" })
     // Whitespace alone is not a filter set to nothing — it is no filter at all.
-    expect(filtersFromSearchParams(new URLSearchParams("assignee=%20%20"))).toEqual({ status: "open" })
+    expect(filtersFromSearchParams(new URLSearchParams("agent=%20%20&person=%20%20"))).toEqual({ status: "open" })
   })
 
   it("counts set chips for the Clear control", () => {
     expect(activeFilterCount({ status: "open" })).toBe(0)
     expect(activeFilterCount({ status: "open", q: "roadmap" })).toBe(0)
-    expect(activeFilterCount({ status: "done", assignee: "x", date: "today" })).toBe(3)
+    expect(activeFilterCount({ status: "done", agent: "x", date: "today" })).toBe(3)
+    // Person and Agent are two filters, and count as two.
+    expect(activeFilterCount({ status: "open", person: "@operator", agent: "x" })).toBe(2)
     expect(activeFilterCount({ status: "open", label: "infra", due: "week" })).toBe(2)
   })
 
@@ -210,6 +212,44 @@ describe("filters (design-todos §4.3)", () => {
   })
 })
 
+describe("the single Assignee filter this replaced", () => {
+  it("opens as the filter it meant: me on the person slot, none on no agent, an employee on the agent slot", () => {
+    expect(filtersFromSearchParams(new URLSearchParams("assignee=@operator"))).toEqual({ status: "open", person: "@operator" })
+    expect(filtersFromSearchParams(new URLSearchParams("assignee=@unassigned"))).toEqual({ status: "open", agent: "@unassigned" })
+    expect(filtersFromSearchParams(new URLSearchParams("assignee=scout&status=blocked"))).toEqual({ status: "blocked", agent: "scout" })
+  })
+
+  it("yields to the new params when a link carries both", () => {
+    expect(filtersFromSearchParams(new URLSearchParams("assignee=@operator&person=user:u1&agent=scout")))
+      .toEqual({ status: "open", person: "user:u1", agent: "scout" })
+    // An old value fills only the slot the new params leave empty.
+    expect(filtersFromSearchParams(new URLSearchParams("assignee=scout&person=@unassigned")))
+      .toEqual({ status: "open", person: "@unassigned", agent: "scout" })
+  })
+
+  it("is rewritten to the new params the next time the view is written", () => {
+    const migrated = filtersFromSearchParams(new URLSearchParams("assignee=@operator"))
+    expect(filtersToSearchParams(migrated).toString()).toBe("person=%40operator")
+  })
+
+  it("still reads as a filtered URL, so the stored view does not override it", () => {
+    expect(hasFilterParams(new URLSearchParams("assignee=@operator"))).toBe(true)
+    expect(hasFilterParams(new URLSearchParams("person=@unassigned"))).toBe(true)
+    expect(hasFilterParams(new URLSearchParams("agent=scout"))).toBe(true)
+  })
+
+  it("migrates a view saved before the split when it is read back from storage", () => {
+    const storage = {
+      getItem: (key: string) => (key === BOARD_FILTERS_STORAGE_KEY ? "status=executing&assignee=%40operator" : null),
+      setItem: () => undefined,
+      removeItem: () => undefined,
+    }
+    expect(readPersistedFilters(storage)).toEqual({ status: "executing", person: "@operator" })
+    const named = { ...storage, getItem: () => "assignee=scout" }
+    expect(readPersistedFilters(named)).toEqual({ status: "open", agent: "scout" })
+  })
+})
+
 describe("filter persistence (board survives a return, a board switch and a new tab)", () => {
   function memoryStorage(initial: Record<string, string> = {}) {
     const map = new Map(Object.entries(initial))
@@ -223,7 +263,7 @@ describe("filter persistence (board survives a return, a board switch and a new 
 
   it("reads a filtered URL as a filtered view, an empty one as unfiltered", () => {
     expect(hasFilterParams(new URLSearchParams("sprint=active"))).toBe(true)
-    expect(hasFilterParams(new URLSearchParams("assignee=scout&label=infra"))).toBe(true)
+    expect(hasFilterParams(new URLSearchParams("agent=scout&label=infra"))).toBe(true)
     expect(hasFilterParams(new URLSearchParams("q=roadmap"))).toBe(true)
     // `status=open` is an explicit ask for the default, not an empty URL.
     expect(hasFilterParams(new URLSearchParams("status=open"))).toBe(true)
@@ -234,7 +274,7 @@ describe("filter persistence (board survives a return, a board switch and a new 
 
   it("round-trips the whole set, sprint included, through storage", () => {
     const storage = memoryStorage()
-    const f: TodoFilters = { status: "executing", assignee: "scout", department: "platform", source: "cron", date: "week", label: "infra", sprint: "active", due: "overdue" }
+    const f: TodoFilters = { status: "executing", person: "user:u1", agent: "scout", department: "platform", source: "cron", date: "week", label: "infra", sprint: "active", due: "overdue" }
     writePersistedFilters(f, storage)
     expect(readPersistedFilters(storage)).toEqual(f)
     expect(storage.dump()[BOARD_FILTERS_STORAGE_KEY]).toBe(filtersToSearchParams(f).toString())

@@ -162,7 +162,7 @@ function searchWorkItemsRoute(res: ServerResponse, url: URL, options: SearchApiO
     Object.assign(filter, target);
   }
   if (Object.keys(filter).length === 0) {
-    return badRequest(res, "at least one filter is required (q, text, status, source, assignee, department, since, until, needsAttentionFor)");
+    return badRequest(res, "at least one filter is required (q, text, status, source, assignee, humanAssignee, department, since, until, needsAttentionFor)");
   }
   return json(res, workItemPagePayload(queryWorkItems({ ...filter, limit, offset })));
 }
