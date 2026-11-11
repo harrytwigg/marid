@@ -71,8 +71,9 @@ function SetupOwnSignIn() {
       setConfirm("")
       await refresh()
       // The first owner changes what this tab's auth state says (accounts exist now, and this browser is that account), and the
-      // person pickers read the operator from it: without a re-read the duplicate stays until a reload.
-      await auth?.refresh({ bootstrapLocal: false })
+      // person pickers read the operator from it: without a re-read the duplicate stays until a reload. Read in place: a full
+      // refresh puts the whole app behind the "checking" screen and remounts every pane.
+      await auth?.reread()
     },
     onError: (e) => setError(accountsErrorText(e)),
   })

@@ -40,6 +40,9 @@ interface AuthContextValue {
   logout: () => Promise<void>
   unpairDevice: (deviceId: string) => Promise<void>
   refresh: (opts?: RefreshOptions) => Promise<void>
+  /** Re-reads who this browser is in place, for a change made from inside the app (an owner account set up here): no
+   *  "checking" screen, nothing unmounts, and a failed read keeps what is shown. */
+  reread: () => Promise<void>
   refreshDevices: () => Promise<void>
   createPairingCode: () => Promise<PairingCode>
 }
@@ -114,6 +117,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshDevices])
 
+  const reread = useCallback(async () => {
+    try {
+      const state = await getAuthState()
+      // Lost access is the full refresh's to handle (it shows the pairing or sign-in screen); in place, only a reading that
+      // still lets this browser in replaces the current one.
+      if (state.authRequired && !state.authenticated && state.principal?.kind !== "member") return
+      applyPrincipal(state.principal ?? null)
+      setAuthState(state)
+    } catch {
+      // Keep the current reading: the change was made, and the next full check will see it.
+    }
+  }, [])
+
   useEffect(() => {
     setMemberSessionLostHandler(() => { void refresh({ bootstrapLocal: false }) })
     return () => setMemberSessionLostHandler(null)
@@ -172,8 +188,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [devices, refresh, refreshDevices])
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, authState, principal: authState?.principal ?? null, devices, error, pair, signIn, logout, unpairDevice, refresh, refreshDevices, createPairingCode }),
-    [authState, devices, error, logout, pair, signIn, refresh, refreshDevices, status, unpairDevice],
+    () => ({ status, authState, principal: authState?.principal ?? null, devices, error, pair, signIn, logout, unpairDevice, refresh, reread, refreshDevices, createPairingCode }),
+    [authState, devices, error, logout, pair, signIn, refresh, reread, refreshDevices, status, unpairDevice],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
