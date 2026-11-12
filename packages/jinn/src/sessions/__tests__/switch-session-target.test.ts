@@ -16,6 +16,7 @@ const { resolveSyncPrompt, resolveTurnPrompt } = await import("../turn/preflight
 const { mergeTransportMeta } = await import("../manager.js");
 const { claudeAccountKey } = await import("../../shared/engine-account.js");
 const { claudeProfileFromDir } = await import("../../shared/claude-profile.js");
+const sessionAccount = await import("../session-account.js");
 
 const WORK = "/profiles/work";
 const WORK_ACCOUNT = claudeAccountKey(claudeProfileFromDir(WORK));
@@ -82,13 +83,42 @@ describe("the left conversation", () => {
     // Retired on the way back, the lone `claude` slot is the own login's, not a pre-account row's to be filed under the profile.
     const back = reg.switchSessionTarget(s.id, { engine: "claude", claudeConfigDir: null, model: "opus", leftConversation: "retire" })!;
     expect(back.engineSessions?.claude?.id).toBe("own-thread");
-    expect(back.engineSessions?.[WORK_ACCOUNT]).toBeUndefined();
+    expect(back.engineSessions?.[WORK_ACCOUNT]?.id).toBeUndefined();
     expect(back.engineSessionId).toBe("own-thread");
 
     // And a fresh target opens a new conversation there instead of resuming it.
     reg.switchSessionTarget(s.id, { engine: "claude", claudeConfigDir: WORK, model: "opus", leftConversation: "park" });
     const fresh = reg.switchSessionTarget(s.id, { engine: "claude", claudeConfigDir: null, model: "opus", leftConversation: "retire", freshTarget: true })!;
     expect(fresh.engineSessionId).toBeNull();
+  });
+
+  it("leaves the retired profile's slot as an empty stub, so the own login's lone slot is never read as the profile's", () => {
+    const { legacyThreadRef } = sessionAccount;
+    const s = claudeSession("web:retire-stub");
+    reg.switchSessionTarget(s.id, { engine: "claude", claudeConfigDir: WORK, model: "opus", leftConversation: "park" });
+    reg.recordEngineSessionId(s.id, "claude", "work-thread", { model: "opus" });
+
+    // Off the profile to another engine; the profile stays on the row for the way back.
+    const away = reg.switchSessionTarget(s.id, { engine: "codex", model: "gpt-5.5", leftConversation: "retire" })!;
+    expect(away.claudeConfigDir).toBe(WORK);
+    expect(away.engineSessions?.[WORK_ACCOUNT]).toEqual({ model: "opus" });
+    expect(away.engineSessions?.claude?.id).toBe("own-thread");
+    expect(legacyThreadRef(away, "claude")).toBeUndefined();
+    expect(reg.getEngineSessionRef(away, "claude").id).toBeUndefined();
+
+    // The way back to the profile starts fresh; the own login's thread is still its own.
+    const toProfile = reg.switchSessionTarget(s.id, { engine: "claude", model: "opus", leftConversation: "park" })!;
+    expect(toProfile.claudeConfigDir).toBe(WORK);
+    expect(toProfile.engineSessionId).toBeNull();
+    const toOwn = reg.switchSessionTarget(s.id, { engine: "claude", claudeConfigDir: null, model: "opus", leftConversation: "park" })!;
+    expect(toOwn.engineSessionId).toBe("own-thread");
+  });
+
+  it("deletes another engine's retired slot outright: only a Claude account's is kept as a stub", () => {
+    const s = reg.createSession({ engine: "codex", source: "web", sourceRef: "web:retire-codex", model: "gpt-5.5" });
+    reg.recordEngineSessionId(s.id, "codex", "codex-thread", { model: "gpt-5.5" });
+    const away = reg.switchSessionTarget(s.id, { engine: "claude", model: "opus", leftConversation: "retire" })!;
+    expect(away.engineSessions?.codex).toBeUndefined();
   });
 
   it("files a pre-account row's legacy slot under its profile before retiring it, so nothing of it survives", () => {

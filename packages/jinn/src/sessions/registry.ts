@@ -3,6 +3,7 @@ export type { MessageMedia, SessionMessage, MessagePage, MessagePageOptions } fr
 import { CALLBACK_DELIVERY_SELECT } from "./callback-delivery-query.js";
 import { pendingCompletionBatch } from "./completion-batching.js";
 import { withoutCatchUpMarkers } from "./sync-markers.js";
+import { isClaudeAccount } from "../shared/engine-account.js";
 import { legacyThreadRef, threadSlot, withLegacySlotMoved, withoutAccountOverride } from "./session-account.js";
 export { coalescePendingParentCompletionQueueItems } from "./completion-batching.js";
 export { shouldHoldParentCompletionQueueDispatch, listReleasableParentCompletionQueuesForSource } from "./completion-drain.js";
@@ -1167,6 +1168,18 @@ function rekeyLegacyClaudeSlot(session: Session, refs: EngineSessionRefs): void 
   delete refs.claude;
 }
 
+/**
+ * Drop a retired conversation's thread. A Claude account's slot is kept, empty but for its model:
+ * with it gone, a lone `claude` slot (the own login's parked thread) would read as a pre-account row's
+ * and be taken for the account's, which is how a later return to the profile resumed another login's thread.
+ * Another engine's slot, or the default account's own, is deleted outright.
+ */
+function retireSlot(refs: EngineSessionRefs, slot: string, model: string | undefined): void {
+  const stub = slot !== 'claude' && isClaudeAccount(slot) ? cleanEngineSessionRef({ model }) : {};
+  if (Object.keys(stub).length > 0) refs[slot] = stub;
+  else delete refs[slot];
+}
+
 /** The slots after the switch: the left conversation parked or retired, and the target's own ref (with its model/effort) in place. */
 function targetRefs(session: Session, opts: SwitchSessionTargetOptions, nextDir: string | null) {
   const refs = cleanEngineSessionRefs(session.engineSessions) ?? {};
@@ -1184,7 +1197,7 @@ function targetRefs(session: Session, opts: SwitchSessionTargetOptions, nextDir:
       model: session.model ?? currentRef.model,
       effortLevel: session.effortLevel ?? currentRef.effortLevel,
     });
-    if (retiring) delete refs[leftSlot];
+    if (retiring) retireSlot(refs, leftSlot, current.model);
     // Parked under the account it ran on; the switch drops any override, so the target reads the session's own account.
     else if (Object.keys(current).length > 0) refs[leftSlot] = current;
   }

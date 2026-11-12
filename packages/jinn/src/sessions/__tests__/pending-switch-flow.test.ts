@@ -484,6 +484,44 @@ describe("a new conversation on a slot that holds a parked one", () => {
   });
 });
 
+describe("leaving a profile for another engine, and coming back", () => {
+  it("opens the profile fresh with a pointer and no paste, and the own login still resumes its own thread", async () => {
+    const { patchSessionTarget } = await import("../../gateway/session-target-patch.js");
+    const operator = (body: Record<string, unknown>) => {
+      registry.updateSession(me, { status: "idle" });
+      const result = patchSessionTarget({ session: registry.getSession(me)!, config, emit: () => {}, body, busy: false });
+      expect(result.kind).toBe("switched");
+    };
+    const me = startSession();
+    const ownThread = registry.getSession(me)!.engineSessionId!;
+    // The operator moves the chat to alpha, where it works on a thread of its own.
+    operator({ profile: "alpha" });
+    registry.recordEngineSessionId(me, "claude", "thread-on-alpha", { model: "opus" });
+    registry.updateSession(me, { status: "running", attemptToken: "ask-alpha" } as never);
+
+    // The session leaves for codex by its own request; the profile stays on the row for the way back.
+    await schedule(me, { engine: "codex" });
+    await runSwitch(me);
+    expect(registry.getSession(me)!.engine).toBe("codex");
+    expect(registry.getSession(me)!.claudeConfigDir).toBe(alpha.dir);
+
+    // Back to claude: alpha opens fresh, told where the history is, nothing pasted.
+    operator({ engine: "claude" });
+    await runRow(me, { id: "back-to-alpha", prompt: "carry on please" });
+    const onAlpha = resumeCall();
+    expect(onAlpha).toMatchObject({ engine: "claude", profile: alpha.dir });
+    expect(onAlpha.resume).toBeUndefined();
+    expect(onAlpha.prompt).toContain("read_session");
+    expect(onAlpha.prompt).not.toContain(EARLIER);
+    expect(onAlpha.prompt).not.toContain(ownThread);
+
+    // And to the own login: its parked thread resumes.
+    operator({ profile: null });
+    await runRow(me, { id: "back-to-own", prompt: "and now here" });
+    expect(resumeCall()).toMatchObject({ engine: "claude", profile: null, resume: ownThread });
+  });
+});
+
 describe("a switch that can no longer happen", () => {
   it("a target that is no longer valid at apply: the session stays, is told so, and the notice says it did not happen", async () => {
     const me = startSession();
