@@ -822,6 +822,9 @@ interface ChatMessagesProps {
    *  pending, that turn's answer names it instead of reading as final. */
   backgroundActivity?: BackgroundActivity | null
   delegatedActivity?: DelegatedActivity | null
+  /** Something else is shown over this transcript (a document tab). It stays mounted for its scroll
+   *  and stream, but it is not on screen, so it offers no jump to its latest message. */
+  covered?: boolean
 }
 
 /** The latest turn's answer, or -1 when that turn has none to show. */
@@ -862,6 +865,7 @@ export function ChatMessages({
   initialScrollTop,
   backgroundActivity = null,
   delegatedActivity = null,
+  covered = false,
 }: ChatMessagesProps) {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null)
@@ -1182,7 +1186,7 @@ export function ChatMessages({
       {/* Jump-to-latest — outside the scrollable transcript so it stays pinned
           above the composer instead of moving with the message content. */}
       <JumpToLatestButton
-        show={showJump}
+        show={showJump && !covered}
         unreadCount={unreadCount}
         onClick={() => scrollToBottom('smooth')}
       />
