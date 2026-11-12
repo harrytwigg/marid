@@ -62,7 +62,6 @@ const resume = at("--resume");
 const separator = args.indexOf("--");
 const argvPrompt = separator >= 0 ? args.slice(separator + 1).join(" ") : "";
 const projectDir = path.join(configDir, "projects", cwd.replace(/[^a-zA-Z0-9]/g, "-"));
-const scenario = loadScenario();
 const settings = at("--settings") ? JSON.parse(fs.readFileSync(at("--settings"), "utf8")) : {};
 
 const signedIn = () => {
@@ -164,6 +163,8 @@ function compacted(text) {
 }
 
 function turn(text) {
+  // Read per turn, as the header says: a warm process picks up a scenario rewritten between turns.
+  const scenario = loadScenario();
   const { outcome, scenarioKey, step } = pickOutcome(scenario, "claude", claudeKeys(profile, model));
   ledger({
     outcome: outcome.outcome, scenarioKey, step, generation: scenario._generation ?? null, consumed: true, warm: turns > 0, sessionId,
