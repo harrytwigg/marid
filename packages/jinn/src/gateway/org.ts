@@ -36,7 +36,7 @@ function orgMcpFlag(data: Record<string, unknown>): boolean | undefined {
  * the CLI's own default stands.
  */
 function employeeModel(declared: unknown, engine: string, config: JinnConfig | undefined): string | undefined {
-  if (typeof declared === "string" && declared.trim()) return declared;
+  if (typeof declared === "string" && declared.trim()) return declared.trim();
   if (engine === "claude") return "sonnet";
   const configured = (config?.engines as unknown as Record<string, { model?: unknown } | undefined> | undefined)?.[engine]?.model;
   return typeof configured === "string" && configured.trim() ? configured.trim() : undefined;
@@ -74,6 +74,9 @@ export function scanOrg(config?: JinnConfig, scopeOf: (slug: string) => Departme
         if (builtIn?.system) {
           const employee = { ...builtIn };
           if (typeof data.engine === "string" && data.engine.trim()) employee.engine = data.engine.trim();
+          // The built-in's model belongs to the engine it was resolved for: an override that
+          // moves the engine and names no model takes the new engine's default, not the old one's.
+          if (employee.engine !== builtIn.engine) employee.model = employeeModel(undefined, employee.engine, config);
           if (typeof data.model === "string" && data.model.trim()) employee.model = data.model.trim();
           if (typeof data.effortLevel === "string" && data.effortLevel.trim()) employee.effortLevel = data.effortLevel.trim();
           if (typeof data.alwaysNotify === "boolean") employee.alwaysNotify = data.alwaysNotify;
@@ -81,7 +84,7 @@ export function scanOrg(config?: JinnConfig, scopeOf: (slug: string) => Departme
           return undefined;
         }
         if (!data.persona) return undefined;
-        const engineName = data.engine || "claude";
+        const engineName = typeof data.engine === "string" && data.engine.trim() ? data.engine.trim() : "claude";
         const employee: Employee = {
           name: data.name,
           displayName: data.displayName || data.name,

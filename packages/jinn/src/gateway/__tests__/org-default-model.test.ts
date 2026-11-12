@@ -17,6 +17,7 @@ vi.mock("../../shared/models.js", async (importOriginal) => ({
 }));
 
 import { scanOrg } from "../org.js";
+import { resolveSystemEmployees } from "../system-employees.js";
 import { newSessionEngineSelection } from "../../sessions/new-session-engine.js";
 import { linkHealthKey } from "../../shared/fallback-chain-health.js";
 
@@ -106,5 +107,33 @@ describe("employee files that set no model", () => {
     const employee = scanOrg(config).get("oc-worker")!;
     const engines = new Map<string, Engine>([["opencode", { name: "opencode", run: vi.fn() }]]);
     expect(newSessionEngineSelection(config, engines, { employee }).model).toBeFalsy();
+  });
+
+  it("moves a system employee's model with its engine override", () => {
+    writeEmployee("todo-dispatcher", "engine: opencode");
+    const withModel = scanOrg(configWith("opencode-go/deepseek-v4.1-flash")).get("todo-dispatcher")!;
+    expect(withModel.engine).toBe("opencode");
+    expect(withModel.model).toBe("opencode-go/deepseek-v4.1-flash");
+    // Not the built-in's Claude model, and not an invented one, when nothing is configured.
+    expect(scanOrg(configWith()).get("todo-dispatcher")!.model).toBeUndefined();
+    writeEmployee("todo-dispatcher", "engine: opencode\nmodel: openrouter/z-ai/glm-5");
+    expect(scanOrg(configWith()).get("todo-dispatcher")!.model).toBe("openrouter/z-ai/glm-5");
+  });
+
+  it("leaves an engine-less system employee file on the built-in's model", () => {
+    writeEmployee("todo-dispatcher", "alwaysNotify: false");
+    const dispatcher = scanOrg(configWith("opencode-go/deepseek-v4.1-flash")).get("todo-dispatcher")!;
+    expect(dispatcher.engine).toBe("claude");
+    expect(dispatcher.model).toBe("opus");
+  });
+
+  it("gives system employees no model on a non-Claude default engine with none configured", () => {
+    const config = { engines: { default: "opencode", opencode: { bin: "opencode" } } } as unknown as JinnConfig;
+    for (const employee of resolveSystemEmployees(config)) {
+      expect(employee.engine).toBe("opencode");
+      expect(employee.model).toBeUndefined();
+    }
+    const configured = { engines: { default: "opencode", opencode: { bin: "opencode", model: "opencode-go/flash" } } } as unknown as JinnConfig;
+    expect(resolveSystemEmployees(configured).every((employee) => employee.model === "opencode-go/flash")).toBe(true);
   });
 });

@@ -78,7 +78,9 @@ export function resolveSystemEmployees(config?: JinnConfig): Employee[] {
   const engineConfig = config?.engines[engine] as
     | { model?: string; effortLevel?: string }
     | undefined;
-  const model = engineConfig?.model ?? (engine === "claude" ? "sonnet" : "default");
+  // A non-Claude engine with no configured model gives the system employees none: the
+  // engine's own default stands ("default" and the sonnet alias are ids on no engine but Claude's).
+  const model = engineConfig?.model ?? (engine === "claude" ? "sonnet" : undefined);
 
   return SYSTEM_EMPLOYEES.map((employee) => ({
     ...employee,
