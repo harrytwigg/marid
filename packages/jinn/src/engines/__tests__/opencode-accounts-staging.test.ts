@@ -189,6 +189,42 @@ describe("a real run turn", { timeout: 20_000 }, () => {
   });
 });
 
+describe("a turn on a model the local opencode cannot serve", { timeout: 30_000 }, () => {
+  const MESSAGE = 'go-b/beta is not served by account "b" on OpenCode 1.x (models on another endpoint need OpenCode 2)';
+
+  it("fails before opencode is launched, saying why, on a 1.x binary (run mode)", async () => {
+    process.env.FAKE_OPENCODE_VERSION = "1.19.0";
+    const engine = new OpencodeEngine({ mode: () => "run", accounts: () => staging() });
+    const result = await engine.run(runOpts({ sessionId: "sess-unserved-run", model: "go-b/beta" }));
+    expect(result.error).toBe(MESSAGE);
+    expect(result.conversationIntact).toBe(true);
+    expect(staged()).toEqual([]);
+  });
+
+  it("fails the same way on a 1.x binary in server mode, with no server started", async () => {
+    process.env.FAKE_OPENCODE_VERSION = "1.19.0";
+    const lifecycle = new PtyLifecycleManager({ maxLivePtys: 8, enforceLocalCap: false });
+    const pool = new OpencodeServerPool(lifecycle, { bin: () => FAKE, accounts: () => staging() });
+    try {
+      const engine = new OpencodeEngine({ mode: () => "server", servers: pool, accounts: () => staging() });
+      const result = await engine.run(runOpts({ sessionId: "sess-unserved-server", model: "go-b/beta" }));
+      expect(result.error).toBe(MESSAGE);
+      expect(staged()).toEqual([]);
+    } finally {
+      await pool.stopAll();
+    }
+  });
+
+  it("runs on OpenCode 2.x, and a 1.x turn on a model on the main endpoint runs too", async () => {
+    process.env.FAKE_OPENCODE_VERSION = "2.0.32";
+    const engine = new OpencodeEngine({ mode: () => "run", accounts: () => staging() });
+    expect((await engine.run(runOpts({ sessionId: "sess-served-2", model: "go-b/beta" }))).error).toBeUndefined();
+    process.env.FAKE_OPENCODE_VERSION = "1.19.0";
+    expect((await engine.run(runOpts({ sessionId: "sess-served-1", model: "go-b/alpha" }))).error).toBeUndefined();
+    expect(staged()).toHaveLength(2);
+  });
+});
+
 describe("a real local server", { timeout: 30_000 }, () => {
   let pools: OpencodeServerPool[] = [];
   afterEach(async () => {

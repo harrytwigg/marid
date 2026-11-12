@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import type { JinnConfig } from "../shared/types.js";
 import { opencodeClones } from "../shared/opencode-catalogue.js";
 import { stagedOpencodeAccounts } from "../shared/opencode-accounts-config.js";
-import { accountCloneModels, planAccountProvider, type OpencodeProviderBlock } from "../shared/opencode-accounts.js";
+import { accountCloneModels, planAccountProvider, unservedModelError, type OpencodeProviderBlock } from "../shared/opencode-accounts.js";
 import type { OpencodeApi } from "./opencode-version.js";
 import { opencodeAccountKeyEnvironment } from "../shared/child-env.js";
 
@@ -22,6 +22,8 @@ import { opencodeAccountKeyEnvironment } from "../shared/child-env.js";
 export interface OpencodeAccountStaging {
   /** `provider` blocks by provider id, for a process whose CLI speaks `api`. */
   providers(api: OpencodeApi): Record<string, OpencodeProviderBlock>;
+  /** The error for a turn on `model` (`<provider>/<model>`) that a process of this CLI generation cannot serve (an account's model off its main endpoint, on 1.x), or undefined when it can. */
+  unservedModel(model: string, api: OpencodeApi): string | undefined;
   /** `<keyEnv>` → key, for each account whose variable is set in the gateway's environment. Set on a local child explicitly (the gateway scrubs what it passes down), and carried to a remote host through its session-env file. */
   readonly env: Readonly<Record<string, string>>;
   /** What makes a warm server stale: each account's provider id, model list and a short hash of its key. Never the key. */
@@ -72,6 +74,12 @@ export function opencodeAccountStaging(
   return {
     providers(api) {
       return Object.fromEntries(resolved.map(({ account, models }) => [account.provider, planAccountProvider(account, models, api).block]));
+    },
+    unservedModel(model, api) {
+      for (const { account, models } of resolved) {
+        if (planAccountProvider(account, models, api).dropped.some((id) => `${account.provider}/${id}` === model)) return unservedModelError(model, account.name);
+      }
+      return undefined;
     },
     env,
     fingerprint,

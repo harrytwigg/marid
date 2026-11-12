@@ -27,6 +27,7 @@ import { describeOpencodeLaunch } from "./opencode-protocol.js";
 import { opencodeApiOf } from "./opencode-version.js";
 import { withKnownEffort, type ModelEffortLevels } from "./opencode-variant.js";
 import { localOpencodeVersion } from "../shared/opencode-bin-version.js";
+import { unservedTurnModel } from "./opencode-model-served.js";
 import { resolveBin } from "../shared/resolve-bin.js";
 
 interface LiveProcess extends RemoteRun {
@@ -186,6 +187,11 @@ export class OpencodeEngine implements InterruptibleEngine {
     const trackingId = opts.sessionId || `opencode-${Date.now()}`;
     const onStream = opts.onStream || null;
 
+    // A model this host's opencode cannot serve fails here, with the reason, rather than inside opencode with none.
+    const accounts = this.readAccounts({ sessionId: trackingId, ...(opts.model ? { model: opts.model } : {}) });
+    const unserved = await unservedTurnModel(opts, accounts);
+    if (unserved) return { sessionId: opts.resumeSessionId || "", result: "", error: unserved, conversationIntact: true };
+
     // A server belongs to a Jinn session; a turn without one has nothing to reuse it.
     if (this.servers && this.readMode() === "server" && opts.sessionId) {
       return await this.runOnServer(opts, trackingId, onStream);
@@ -195,20 +201,21 @@ export class OpencodeEngine implements InterruptibleEngine {
     // still holds. (Only in `run` mode: a server-mode turn without a session id
     // must not stop every other session's server.)
     if (this.servers && this.readMode() !== "server" && this.servers.size() > 0) await this.servers.stopAll();
-    return await this.runPlain(opts, trackingId, onStream);
+    return await this.runPlain(opts, trackingId, onStream, accounts);
   }
 
-  /** One headless `opencode run` for this turn — the `run` mode, unchanged. */
+  /** One headless `opencode run` for this turn — the `run` mode, unchanged. `accounts` is what this turn's reader already answered. */
   private async runPlain(
     opts: EngineRunOpts,
     trackingId: string,
     onStream: ((delta: StreamDelta) => void) | null,
+    accountsRead?: ReturnType<OpencodeAccountsReader>,
   ): Promise<EngineResult> {
     // The binary's version decides the staged config's shape and whether the
     // turn needs `--standalone` (opencode-launch.ts); a remote host's comes
     // with its facts.
     const commandTimeoutMs = this.readCommandTimeoutMs();
-    const accounts = this.readAccounts({ sessionId: trackingId, ...(opts.model ? { model: opts.model } : {}) });
+    const accounts = accountsRead ?? this.readAccounts({ sessionId: trackingId, ...(opts.model ? { model: opts.model } : {}) });
     const processOptions = { disableFff: this.readDisableFff(), ...(commandTimeoutMs > 0 ? { commandTimeoutMs } : {}), ...(accounts ? { accounts } : {}) };
     if (!isRemoteTarget(opts)) {
       const api = opencodeApiOf(await localOpencodeVersion(resolveBin("opencode", opts.bin)));

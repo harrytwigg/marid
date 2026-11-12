@@ -50,6 +50,18 @@ function newLanding(o: { refresh: number; bin: string; changed: () => void; seco
   return { refresh: o.refresh, bin: o.bin, changed: o.changed, secondLook: o.secondLook, clones: newCloneSink(o.cloneProviders), ...(o.env ? { env: o.env } : {}) };
 }
 
+/** The local opencode binary's API (1 or 2) as the last refresh read it; undefined when there is no binary or it could not say. */
+let localApi: 1 | 2 | undefined;
+
+export function opencodeLocalApi(): 1 | 2 | undefined {
+  return localApi;
+}
+
+/** Record the local binary's API. Callers invalidate the registry that reads it. */
+export function setOpencodeLocalApi(api: 1 | 2 | undefined): void {
+  localApi = api;
+}
+
 /** The discovered models, or null before any discovery found one. */
 export function opencodeCatalogue(): ModelInfo[] | null {
   return snapshot;

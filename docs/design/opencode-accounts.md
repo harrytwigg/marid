@@ -160,9 +160,13 @@ same on 1.x and 2.x:
   carries a per-model `provider: {npm, api}`. A 2.x package name
   `@opencode/ai/providers/<sdk>` is written as `@ai-sdk/<sdk>`.
 - **On a 1.x host**, by finding 5, a model whose endpoint differs from the
-  provider-level one is left out of the block. A chain link to it on that host
-  fails as an unknown model and hops. `jinn doctor` reports such models for
-  the local binary.
+  provider-level one is left out of the block. When the local binary is 1.x the
+  model registry leaves it out too, so a chain link to it is skipped as
+  `model-not-served` and the pickers do not offer it. A turn whose own model is
+  one of them (on the local binary or a remote host's facts) fails before
+  opencode is launched, with `<model> is not served by account "<name>" on
+  OpenCode 1.x (models on another endpoint need OpenCode 2)`. `jinn doctor`
+  reports such models for the local binary.
 - **A session gets only the accounts its chain reaches.** An account's block and
   key are staged for a session only when its provider is the provider of the
   session's own model, of an opencode link in its resolved chain (the same
@@ -177,7 +181,16 @@ same on 1.x and 2.x:
   (`shared/child-env.ts`). No spawn site can then pass a key on by accident,
   whatever env it hands down. Only the opencode launch paths and the
   key-state readers read the value back, and the gateway's own successor
-  (daemon start, restart) is given it.
+  (daemon start, restart) is given it. A reload that removes an account
+  forgets its key.
+- **opencode's MCP children do not inherit it.** opencode passes its whole
+  environment to the MCP servers it launches. Every opencode process the
+  gateway starts (run, serve, local and remote) carries `JINN_SCRUB_ENV`, the
+  names of every declared `keyEnv`, and `mcp/scrub-entry.ts` and the jinn MCP
+  `server-entry` delete those names and the list before launching or serving.
+  Inherent: the session's own shell tool can read the key (opencode needs it),
+  and `/proc/<gateway pid>/environ` shows the gateway's start environment to
+  same-user processes, as for every gateway secret.
 - **The key never appears in a staged file.** The file holds only
   `{env:<keyEnv>}`.
   - Local processes get `<keyEnv>` set explicitly on the child's env, from

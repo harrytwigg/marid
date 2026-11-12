@@ -100,3 +100,37 @@ describe.skipIf(process.platform === "win32")("catalogue cloning through discove
     expect(opencodeClones().get("base-go")).toHaveLength(2);
   });
 });
+
+describe.skipIf(process.platform === "win32")("the registry on a local 1.x binary", () => {
+  const BETA_URL = "https://go.example.test/anthropic/v1";
+  /** 1.x's `--verbose` list with `beta` served from another endpoint than the block's, and a `--version` that says which generation it is. */
+  function versionedBin(name: string, version: string): string {
+    const text = ["alpha", "beta", "gamma"].map((id) => `base-go/${id}\n${JSON.stringify({
+      id, providerID: "base-go", name: id, api: { id, url: id === "beta" ? BETA_URL : URL_A, npm: "@ai-sdk/openai-compatible" },
+      limit: { context: 100_000, output: 8_000 }, variants: {},
+    }, null, 2)}`).join("\n") + "\n";
+    fs.writeFileSync(path.join(dir, `${name}.txt`), text);
+    const bin = path.join(dir, name);
+    fs.writeFileSync(bin, `#!/bin/sh\ncase "$*" in --version) echo ${version};; *--verbose*) cat '${dir}/${name}.txt';; *) printf 'base-go/alpha\\n';; esac\n`, { mode: 0o755 });
+    return bin;
+  }
+
+  it("leaves the model off the main endpoint out of the account's models, so a chain link to it is skipped and no picker offers it", async () => {
+    const config = configFor(versionedBin("oc-v1-drop", "1.19.0"), ACCOUNTS);
+    await refreshOpencodeModels(config);
+    invalidateModelRegistry();
+    const ids = buildRegistry(config).opencode.models.map((m) => m.id);
+    expect(ids).toContain("go-b/alpha");
+    expect(ids).not.toContain("go-b/beta");
+    // The base provider's own models are untouched: this account is the only thing 1.x cannot serve.
+    expect(ids).toContain("base-go/beta");
+  });
+
+  it("lists every model of the account on OpenCode 2", async () => {
+    const config = configFor(versionedBin("oc-v2-keep", "2.0.32"), ACCOUNTS);
+    await refreshOpencodeModels(config);
+    invalidateModelRegistry();
+    const ids = buildRegistry(config).opencode.models.map((m) => m.id);
+    expect(ids).toEqual(expect.arrayContaining(["go-b/alpha", "go-b/beta"]));
+  });
+});
