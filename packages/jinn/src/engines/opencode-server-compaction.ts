@@ -44,7 +44,7 @@ export const RESEED_PREAMBLE =
   "[Jinn] Your context was just compacted. These are the operating instructions and the session context "
   + "this session runs under; they still apply in full, and the summary above does not replace them.";
 
-type StoredMessage = { info?: Record<string, unknown> };
+type StoredMessage = { info?: Record<string, unknown>; parts?: Array<{ type?: unknown; text?: unknown }> };
 
 const isAssistant = (m: StoredMessage): boolean => m.info?.role === "assistant";
 
@@ -61,14 +61,26 @@ function summaryAndReplaced(messages: StoredMessage[]): { summary?: StoredMessag
 const tokensOf = (m: StoredMessage | undefined): number | undefined =>
   contextTokensFromStep(m?.info?.tokens as StepTokens | undefined);
 
-/** See {@link OpencodeServerCompaction.summaryReport}. */
-function summaryReport(messages: StoredMessage[]): { cost?: number; compaction: CompactionStats } {
+/** The summary message's text parts joined, or undefined when it has none. */
+function summaryText(summary: StoredMessage | undefined): string | undefined {
+  const text = (summary?.parts ?? [])
+    .filter((part) => part?.type === "text" && typeof part.text === "string")
+    .map((part) => part.text as string)
+    .join("\n")
+    .trim();
+  return text || undefined;
+}
+
+/** See {@link OpencodeServerCompaction.summaryReport}. Exported for tests. */
+export function summaryReport(messages: StoredMessage[]): { cost?: number; compaction: CompactionStats; summary?: string } {
   const { summary, replaced } = summaryAndReplaced(messages);
   const cost = summary?.info?.cost;
   const preTokens = tokensOf(replaced) ?? tokensOf(summary);
+  const text = summaryText(summary);
   return {
     ...(typeof cost === "number" && cost > 0 ? { cost } : {}),
     compaction: preTokens ? { preTokens } : {},
+    ...(text ? { summary: text } : {}),
   };
 }
 
@@ -131,8 +143,8 @@ export class OpencodeServerCompaction {
     logger.info(`opencode compaction summarized session ${sessionId} (${model.providerID}/${model.modelID})`);
 
     await this.reseed(route, model);
-    const { cost, compaction } = await this.summaryReport(route);
-    return { sessionId, result: "", numTurns: 1, compaction, ...(cost ? { cost } : {}) };
+    const { cost, compaction, summary } = await this.summaryReport(route);
+    return { sessionId, result: "", numTurns: 1, compaction, ...(summary ? { compactionSummary: summary } : {}), ...(cost ? { cost } : {}) };
   }
 
   /** Put Jinn's system prompt back in front of the model (see the header).
@@ -179,10 +191,11 @@ export class OpencodeServerCompaction {
    * conversation (live, 1.18.32: 1.5k against a 21.9k context with the system
    * prompt and tools). The summary's input is the fallback. The size after is
    * not reported: the summary plus the re-seeded system prompt, which no one
-   * message counts. Best effort: summarize already answered, so the compaction
+   * message counts. The summary's own text rides along for a session that is
+   * switching to another engine and carries it over. Best effort: summarize already answered, so the compaction
    * happened either way.
    */
-  private async summaryReport(route: string): Promise<{ cost?: number; compaction: CompactionStats }> {
+  private async summaryReport(route: string): Promise<{ cost?: number; compaction: CompactionStats; summary?: string }> {
     try {
       return summaryReport(await this.messages(route, 10));
     } catch {

@@ -246,3 +246,90 @@ export function resolveSwitchTarget(config: JinnConfig, session: Session, reques
   const refused = opts.caller === "session" ? selfRefusal(config, session, own, built.target, opts.now ?? new Date()) : undefined;
   return refused ?? { ok: true, target: built.target, own, sameTarget: isOwnTarget(config, session, own, built.target) };
 }
+
+/** What a target reads as to its allowance: `ok`, or `exhausted` with the end of the window. */
+export interface SwitchTargetHealth {
+  state: "ok" | "exhausted";
+  until?: string;
+}
+
+export interface SwitchTargetProfile {
+  /** The declared account's name; "" is the session's own login. */
+  name: string;
+  label: string;
+  health: SwitchTargetHealth;
+}
+
+export interface SwitchTargetEngine {
+  name: string;
+  defaultModel: string;
+  health: SwitchTargetHealth;
+  models: Array<{ id: string; label: string; contextWindow?: number }>;
+  /** Claude only, and not for a remote employee's session. */
+  profiles?: SwitchTargetProfile[];
+}
+
+/** Every target a session may name, with what it reads as now: the structured list behind a refusal. */
+export interface SwitchTargetList {
+  current: { engine: string; profile: string | null; model: string | null };
+  engines: SwitchTargetEngine[];
+}
+
+function healthOf(reading: ReturnType<typeof readEngineHealth>, keys: string[], now: Date): SwitchTargetHealth {
+  const key = keys.find((candidate) => isEngineExhausted(reading, candidate, now));
+  return key ? { state: "exhausted", until: exhaustedEngineReturnsAt(reading, key, now).toISOString() } : { state: "ok" };
+}
+
+/** The Claude profiles a session may name, own login first; none for a remote employee's session, which runs on its host's login. */
+function listProfiles(config: JinnConfig, session: Session, reading: ReturnType<typeof readEngineHealth>, now: Date): SwitchTargetProfile[] {
+  const own = { name: "", label: "own login", dir: null as string | null };
+  const declared = declaredClaudeAccounts(config).map((account) => ({ name: account.name, label: account.name, dir: account.profile.dir as string | null }));
+  return [own, ...declared].map(({ name, label, dir }) => ({
+    name,
+    label,
+    health: healthOf(reading, healthKeys({ engine: "claude", account: claudeAccountFor(config, session, dir) }), now),
+  }));
+}
+
+/** An engine is out when its own keys say so; Claude is out only when every profile is. */
+function engineHealth(name: string, profiles: SwitchTargetProfile[] | undefined, reading: ReturnType<typeof readEngineHealth>, now: Date): SwitchTargetHealth {
+  if (!profiles) return healthOf(reading, healthKeys({ engine: name, account: name }), now);
+  const spent = profiles.filter((profile) => profile.health.state === "exhausted");
+  if (spent.length < profiles.length) return { state: "ok" };
+  const soonest = spent.map((profile) => profile.health.until ?? "").sort()[0];
+  return { state: "exhausted", ...(soonest ? { until: soonest } : {}) };
+}
+
+/**
+ * The targets {@link resolveSwitchTarget} would accept for this session, with their health
+ * (an exhausted one, or the session's own, is listed but refused for a session asking).
+ * Engines are the ones installed where the session runs; a department-scoped session
+ * lists `claude` only; Claude's profiles are omitted for a remote employee's session.
+ */
+export function listSwitchTargets(config: JinnConfig, session: Session, now: Date = new Date()): SwitchTargetList {
+  const own = ownSwitchTarget(config, session);
+  const employee = employeeOf(config, session);
+  const remote = isRemoteTarget(employee);
+  const destination = remote ? sshDestination(employee) : undefined;
+  const reading = engineHealthForTarget(readEngineHealth(now), employee);
+  const registry = getModelRegistry(config);
+  const engines = Object.keys(registry)
+    .filter((name) => !scopedSwitchRefusal(session, name) && engineInstalledWhereRun(config, name, destination))
+    .map((name): SwitchTargetEngine => {
+      const profiles = name === "claude" && !remote ? listProfiles(config, session, reading, now) : undefined;
+      return {
+        name,
+        defaultModel: registry[name].defaultModel,
+        health: engineHealth(name, profiles, reading, now),
+        models: registry[name].models.map((model) => ({ id: model.id, label: model.label ?? model.id, ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}) })),
+        ...(profiles ? { profiles } : {}),
+      };
+    });
+  return { current: { engine: own.engine, profile: own.profile, model: own.model ?? registry[own.engine]?.defaultModel ?? null }, engines };
+}
+
+/** Whether the target leaves the session in the conversation slot it is in: the same engine, and for Claude the same account. */
+export function staysInSlot(config: JinnConfig, session: Session, target: SwitchTargetView): boolean {
+  if (target.engine !== session.engine) return false;
+  return target.engine !== "claude" || claudeAccountFor(config, session, target.claudeConfigDir) === claudeAccountFor(config, session, session.claudeConfigDir);
+}

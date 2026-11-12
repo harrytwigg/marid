@@ -26,9 +26,12 @@ import {
 } from "../sessions/self-compaction.js";
 import { listPendingQueueItemIdsForSession } from "../sessions/queue-item-registry.js";
 import { isStoppedByUser } from "../sessions/stopped-marker.js";
+import { removePendingSwitch, writePendingSwitch, type PendingSwitch } from "../sessions/pending-switch.js";
+import { buildPendingSwitch, scheduledSwitchBody, switchRefusalBody, switchRequestOf } from "../sessions/switch-request.js";
+import { resolveSwitchTarget, type SwitchRequest } from "../sessions/switch-target.js";
 import { isTerminalSession } from "../terminals/session.js";
 import { logger } from "../shared/logger.js";
-import type { Session } from "../shared/types.js";
+import type { JinnConfig, Session } from "../shared/types.js";
 
 /**
  * `POST /api/compactions` — a session asks to compact its own context and be
@@ -49,6 +52,8 @@ export interface SelfCompactionApiOptions {
   resolveCaller: () => CallerIdentity;
   /** `engines.opencode.mode`, read live. */
   opencodeMode: () => string | undefined;
+  /** The live config: a session's own switch is judged against it (installed engines, declared profiles, models). */
+  getConfig: () => JinnConfig;
   /** Queue a notification-role turn on a session. Defaults to the same
    *  internal message route parent callbacks use. */
   enqueueTurn?: (sessionId: string, message: string, displayMessage: string) => Promise<void>;
@@ -116,8 +121,9 @@ async function deliverResumeViaOutbox(session: Session, claimedAt: number, messa
   return getSessionDelivery(delivery.id)?.status === "dead_letter" ? "stopped" : "retrying";
 }
 
-/** The caller's session when it can compact at all; otherwise answers why not. */
-function compactableSession(res: ServerResponse, callerId: string, options: SelfCompactionApiOptions): Session | undefined {
+/** The caller's session when it can be asked to compact or switch at all; otherwise answers why not. The engine's own
+ *  ability to compact is not judged here: a plain compaction needs it, a switch does not (see `engineCompactionRefusal`). */
+function compactableSession(res: ServerResponse, callerId: string): Session | undefined {
   const session = getSession(callerId);
   if (!session) {
     send(res, 404, { error: `unknown session "${callerId}"` });
@@ -133,12 +139,14 @@ function compactableSession(res: ServerResponse, callerId: string, options: Self
     send(res, 409, { error: "a terminal session has no model context to compact" });
     return undefined;
   }
-  const refusal = selfCompactionRefusal(session.engine, options.opencodeMode());
-  if (refusal) {
-    send(res, 409, { error: refusal });
-    return undefined;
-  }
   return session;
+}
+
+/** A plain compaction of an engine Jinn cannot compact is refused; answers false when it did. */
+function engineCompactionRefusal(res: ServerResponse, session: Session, options: SelfCompactionApiOptions): boolean {
+  const refusal = selfCompactionRefusal(session.engine, options.opencodeMode());
+  if (refusal) send(res, 409, { error: refusal });
+  return Boolean(refusal);
 }
 
 const STOPPED_REFUSAL = {
@@ -194,17 +202,32 @@ async function requestCompaction(
   callerId: string,
   options: SelfCompactionApiOptions,
 ): Promise<void> {
-  if (!compactableSession(res, callerId, options)) return;
+  if (!compactableSession(res, callerId)) return;
   const parsed = await readJsonBody(req, res);
   if (!parsed.ok) return;
   // Judge the session as it is now: a stop can land while the body streams in.
-  const session = compactableSession(res, callerId, options);
+  const session = compactableSession(res, callerId);
   if (!session) return;
+  const target = switchRequestOf(parsed.body);
+  if (target) return await requestSwitch(res, session, parsed.body, target, options);
+  if (engineCompactionRefusal(res, session, options)) return;
   const handoff = parseCompactionHandoff(parsed.body);
   if (!handoff.ok) return send(res, 400, { error: handoff.error });
 
+  const claim = claimWithQueueCheck(res, session, options);
+  if (!claim) return;
+  if (!await queueCompactionTurn(res, session, claim.at, buildCompactCommand(handoff.handoff), options)) return;
+  const suppressed = suppressStopgapCallback(session);
+  await scheduleResume(res, session, { claimedAt: claim.at, message: buildResumeMessage(handoff.handoff), suppressed }, options);
+}
+
+/** Claim the session's compaction slot and refuse when messages are already queued. Answers and returns undefined on a refusal. */
+function claimWithQueueCheck(res: ServerResponse, session: Session, options: SelfCompactionApiOptions): { at: number } | undefined {
   const claim = claimSelfCompaction(session.id, (options.now ?? Date.now)(), SELF_COMPACTION_COOLDOWN_MS);
-  if (!claim.claimed) return send(res, 429, cooldownRefusal(claim.previousAt));
+  if (!claim.claimed) {
+    send(res, 429, cooldownRefusal(claim.previousAt));
+    return undefined;
+  }
   // Anything already queued would run as a full turn AFTER the asking turn and
   // BEFORE the compaction — work the handoff, written earlier, knows nothing
   // about. Refuse rather than let a stale handoff steer the resume: handling
@@ -213,11 +236,46 @@ async function requestCompaction(
   const queued = listPendingQueueItemIdsForSession(session.id).length;
   if (queued > 0) {
     releaseSelfCompaction(session.id, claim.at);
-    return send(res, 409, { error: queuedRefusal(queued) });
+    send(res, 409, { error: queuedRefusal(queued) });
+    return undefined;
   }
-  if (!await queueCompactionTurn(res, session, claim.at, buildCompactCommand(handoff.handoff), options)) return;
+  return { at: claim.at };
+}
+
+/**
+ * A session asking to move itself (a body naming an engine, profile or model). The target is
+ * judged first, and a refusal carries the list of valid targets and takes no claim; then the
+ * handoff, the claim, the queue check, the pending switch the resume will apply, the native
+ * compaction when the engine has one, and the durable resume.
+ */
+async function requestSwitch(
+  res: ServerResponse,
+  session: Session,
+  body: unknown,
+  target: SwitchRequest,
+  options: SelfCompactionApiOptions,
+): Promise<void> {
+  const config = options.getConfig();
+  const resolved = resolveSwitchTarget(config, session, target, { caller: "session" });
+  if (!resolved.ok) {
+    const refusal = switchRefusalBody(config, session, resolved, target);
+    return send(res, refusal.status, refusal.body);
+  }
+  const handoff = parseCompactionHandoff(body);
+  if (!handoff.ok) return send(res, 400, { error: handoff.error });
+  const claim = claimWithQueueCheck(res, session, options);
+  if (!claim) return;
+  const pending = buildPendingSwitch(config, session, resolved, { claimedAt: claim.at, handoff: handoff.handoff, opencodeMode: options.opencodeMode() });
+  if (!writePendingSwitch(session.id, pending)) {
+    releaseSelfCompaction(session.id, claim.at);
+    return send(res, 404, { error: `unknown session "${session.id}"` });
+  }
+  if (pending.compactionQueued && !await queueCompactionTurn(res, session, claim.at, buildCompactCommand(handoff.handoff), options)) {
+    removePendingSwitch(session.id, claim.at);
+    return;
+  }
   const suppressed = suppressStopgapCallback(session);
-  await scheduleResume(res, session, { claimedAt: claim.at, message: buildResumeMessage(handoff.handoff), suppressed }, options);
+  await scheduleResume(res, session, { claimedAt: claim.at, message: buildResumeMessage(handoff.handoff), suppressed, pending }, options);
 }
 
 /**
@@ -243,12 +301,14 @@ interface QueuedCompaction {
   claimedAt: number;
   message: string;
   suppressed: string | undefined;
+  /** The switch this request left for the resume to apply, when it asked for one. */
+  pending?: PendingSwitch;
 }
 
 async function scheduleResume(
   res: ServerResponse,
   session: Session,
-  { claimedAt, message, suppressed }: QueuedCompaction,
+  { claimedAt, message, suppressed, pending }: QueuedCompaction,
   options: SelfCompactionApiOptions,
 ): Promise<void> {
   let resume: ResumeDelivery;
@@ -260,9 +320,14 @@ async function scheduleResume(
     // rather than pretend: the agent can still put the handoff in its reply.
     const reason = error instanceof Error ? error.message : String(error);
     logger.error(`[self-compaction] ${session.id}: compaction queued but resume not recorded: ${reason}`);
+    // The claim stays, as for a compaction: whatever was queued still runs. The switch it was to carry does not.
+    if (pending) removePendingSwitch(session.id, claimedAt);
     return send(res, 500, {
-      error: `the compaction is queued but the resume turn could not be recorded (${reason}). `
-        + "End your turn with the handoff written out in your reply, so it is in the transcript the compaction summarizes.",
+      error: pending
+        ? `the compaction is queued and will run, but the resume could not be recorded, so no switch was scheduled (${reason}). `
+          + "End your turn with the handoff written out in your reply."
+        : `the compaction is queued but the resume turn could not be recorded (${reason}). `
+          + "End your turn with the handoff written out in your reply, so it is in the transcript the compaction summarizes.",
     });
   }
   if (resume === "stopped") {
@@ -271,12 +336,16 @@ async function scheduleResume(
     // stopgap suppression goes with it, so the parent is not left waiting on a
     // report that will never come.
     releaseSelfCompaction(session.id, claimedAt);
+    if (pending) removePendingSwitch(session.id, claimedAt);
     if (suppressed) consumeChildReportedToParent(session.id, suppressed);
     logger.info(`[self-compaction] ${session.id}: stopped before the resume was delivered; compaction withdrawn`);
     return send(res, 409, STOPPED_REFUSAL);
   }
   logger.info(`[self-compaction] ${session.id} (${session.engine}) scheduled compaction + resume (resume ${resume})`);
-  send(res, 202, { status: "scheduled", sessionId: session.id, engine: session.engine, resume });
+  send(res, 202, {
+    status: "scheduled", sessionId: session.id, engine: session.engine, resume,
+    ...(pending ? { switch: scheduledSwitchBody(pending) } : {}),
+  });
 }
 
 export async function handleSelfCompactionApi(

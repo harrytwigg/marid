@@ -162,20 +162,9 @@ export const COMPACTION_TURN_DISPLAY = "🗜️ Compacting context — requested
  *  (`compactionConfirmation`) is the only one that says so. */
 export const RESUME_TURN_DISPLAY = "🗜️ Handoff queued — this session resumes from it once the compaction has finished";
 
-/** The resume turn: the handoff, verbatim, with the one instruction that turns
- *  it into a continuation rather than a message to answer. */
-export function buildResumeMessage(handoff: CompactionHandoff): string {
-  const sections = [
-    "[Self-compaction resume] Your context was just compacted at your own request (compact_session). "
-      + "Below is the handoff you wrote immediately before. It is exact where the summary is lossy, so prefer it "
-      + "for what it says — but anything the summary shows happening after you wrote it is newer than it. "
-      + "Resume the work now from \"Next\" — do not wait for another message, "
-      + "and do not compact again straight away. If the compaction did not happen, you still have "
-      + "your full context; carry on the same way.",
-    `## Goal\n${handoff.goal}`,
-    `## Done\n${handoff.done}`,
-    `## Next\n${handoff.next}`,
-  ];
+/** The handoff as the sections a resume message carries, verbatim, with the note on replies the session is waiting on. */
+export function handoffSections(handoff: CompactionHandoff): string[] {
+  const sections = [`## Goal\n${handoff.goal}`, `## Done\n${handoff.done}`, `## Next\n${handoff.next}`];
   if (handoff.context) sections.push(`## Context\n${handoff.context}`);
   if (handoff.waitingOn) {
     sections.push(
@@ -184,5 +173,19 @@ export function buildResumeMessage(handoff: CompactionHandoff): string {
         + "To check on one sooner, read_session its session id.",
     );
   }
-  return sections.join("\n\n");
+  return sections;
+}
+
+/** The resume turn: the handoff, verbatim, with the one instruction that turns
+ *  it into a continuation rather than a message to answer. */
+export function buildResumeMessage(handoff: CompactionHandoff): string {
+  return [
+    "[Self-compaction resume] Your context was just compacted at your own request (compact_session). "
+      + "Below is the handoff you wrote immediately before. It is exact where the summary is lossy, so prefer it "
+      + "for what it says — but anything the summary shows happening after you wrote it is newer than it. "
+      + "Resume the work now from \"Next\" — do not wait for another message, "
+      + "and do not compact again straight away. If the compaction did not happen, you still have "
+      + "your full context; carry on the same way.",
+    ...handoffSections(handoff),
+  ].join("\n\n");
 }

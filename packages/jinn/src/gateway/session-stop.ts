@@ -8,6 +8,7 @@ import type { QueueItem } from "../sessions/queue-item-registry.js";
 import { withdrawPendingQueueItemsForStop } from "../sessions/queue-stop.js";
 import { clearSessionStopped, hasStoppedMark, isStoppedByUser, markSessionStopped } from "../sessions/stopped-marker.js";
 import { listReleasableParentCompletionQueuesForSource, RESTART_RESUME_META_KEY, RESTART_RESUME_REASON_META_KEY, updateSession } from "../sessions/registry.js";
+import { removePendingSwitch } from "../sessions/pending-switch.js";
 import { interruptSessionTurn } from "./session-interrupt.js";
 import type { ApiContext } from "./api.js";
 
@@ -90,8 +91,11 @@ export function stopSession(context: ApiContext, session: Session, effectiveStat
   markSessionStopped(session.id);
   const transportMeta = !wasRunning && session.status === "interrupted" ? withoutRestartResumeMark(session) : undefined;
   if (transportMeta) updateSession(session.id, { transportMeta });
+  // A stop between a session's own switch request and its resume withdraws the switch: the resume, if it runs at all, is a plain one.
+  // After the write above, which was built from the row as it stood and would bring the switch back.
+  const withdrewSwitch = removePendingSwitch(session.id);
   announceWithdrawn(context, session, withdrawn);
   releaseHeldParentCompletions(context, session);
   const cancelled = withdrawn.length + cancelledDeliveries;
-  return { wasRunning, changed: wasRunning || !alreadyStopped || cancelled > 0 || transportMeta !== undefined, cancelled };
+  return { wasRunning, changed: wasRunning || !alreadyStopped || cancelled > 0 || transportMeta !== undefined || withdrewSwitch, cancelled };
 }

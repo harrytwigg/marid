@@ -23,6 +23,8 @@ export interface LastSwitch {
   carryOver: SwitchCarryOver;
   /** Why a switch did not happen, or why a compaction failed before a manual handover. */
   reason?: string;
+  /** The engine the compaction ran on, when it was not `from`'s (a session on a stand-in engine). */
+  compactedOn?: string;
   /** The left Claude conversation's transcript path, computed before the write (unscoped sessions only). */
   leftTranscript?: string;
 }
@@ -36,21 +38,23 @@ const FAILURE_PHRASES: Record<string, string> = {
   "no-outcome": "it did not finish",
 };
 
+/** Why a compaction left no summary, in words: the failure reason, or that the engine has no compaction at all. */
+export function compactionFailureText(reason: string | undefined, fromEngine: string): string {
+  if (reason === "not-supported") return `${rateLimitEngineLabel(fromEngine)} has no compaction`;
+  return `the compaction failed (${FAILURE_PHRASES[reason ?? ""] ?? reason ?? "unknown"})`;
+}
+
 function requestedBy(by: LastSwitch["by"]): string {
   return by === "operator" ? "changed by the operator" : "requested by this session";
 }
 
 function carriedBy(last: LastSwitch): string {
   switch (last.carryOver) {
-    case "same-conversation": return "context compacted in place";
+    case "same-conversation":
+      return last.reason ? `${compactionFailureText(last.reason, last.compactedOn ?? last.from.engine)}, so the context was not compacted` : "context compacted in place";
     case "summary": return "carried over by compaction summary";
     case "transcript-pointer": return "the new conversation was told where to read the history";
-    case "manual-handover": {
-      const why = last.reason === "not-supported"
-        ? `${rateLimitEngineLabel(last.from.engine)} has no compaction`
-        : `the compaction failed (${FAILURE_PHRASES[last.reason ?? ""] ?? last.reason ?? "unknown"})`;
-      return `${why}, so the new conversation was told where to read the history`;
-    }
+    case "manual-handover": return `${compactionFailureText(last.reason, last.compactedOn ?? last.from.engine)}, so the new conversation was told where to read the history`;
   }
 }
 

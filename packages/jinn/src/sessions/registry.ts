@@ -3,6 +3,7 @@ export type { MessageMedia, SessionMessage, MessagePage, MessagePageOptions } fr
 import { CALLBACK_DELIVERY_SELECT } from "./callback-delivery-query.js";
 import { pendingCompletionBatch } from "./completion-batching.js";
 import { withoutCatchUpMarkers } from "./sync-markers.js";
+import { isClaudeAccount } from "../shared/engine-account.js";
 import { legacyThreadRef, threadSlot, withLegacySlotMoved, withoutAccountOverride } from "./session-account.js";
 export { coalescePendingParentCompletionQueueItems } from "./completion-batching.js";
 export { shouldHoldParentCompletionQueueDispatch, listReleasableParentCompletionQueuesForSource } from "./completion-drain.js";
@@ -1140,6 +1141,8 @@ export interface SwitchSessionTargetOptions {
   effortLevel?: string | null;
   /** `park` keeps the left conversation so a return resumes it; `retire` drops it so a return starts fresh. Default `park`. */
   leftConversation?: "park" | "retire";
+  /** The target's own parked conversation, if it holds one, is not resumed: the move opens a new conversation there (a session's own switch tells it so). */
+  freshTarget?: boolean;
   /** `pointer` (default) owes the new conversation a history pointer; `none` owes it nothing (a caller that supplies its own prompt). */
   sync?: "pointer" | "none";
   /** Written to `transportMeta.lastSwitch` in the same write. */
@@ -1165,9 +1168,26 @@ function rekeyLegacyClaudeSlot(session: Session, refs: EngineSessionRefs): void 
   delete refs.claude;
 }
 
+/**
+ * Drop a retired conversation's thread. A Claude account's slot is kept, empty but for its model:
+ * with it gone, a lone `claude` slot (the own login's parked thread) would read as a pre-account row's
+ * and be taken for the account's, which is how a later return to the profile resumed another login's thread.
+ * Another engine's slot, or the default account's own, is deleted outright.
+ */
+function retireSlot(refs: EngineSessionRefs, slot: string, model: string | undefined): void {
+  const stub = slot !== 'claude' && isClaudeAccount(slot) ? cleanEngineSessionRef({ model }) : {};
+  if (Object.keys(stub).length > 0) refs[slot] = stub;
+  else delete refs[slot];
+}
+
 /** The slots after the switch: the left conversation parked or retired, and the target's own ref (with its model/effort) in place. */
 function targetRefs(session: Session, opts: SwitchSessionTargetOptions, nextDir: string | null) {
   const refs = cleanEngineSessionRefs(session.engineSessions) ?? {};
+  const was = withoutAccountOverride(session);
+  const retiring = opts.leftConversation === 'retire';
+  // A retired conversation may be the legacy `claude` slot: file it under its account so it goes with the retirement. Done
+  // before the delete, because once the left slot is gone a lone `claude` slot would read as the legacy one and be misfiled.
+  if (retiring) rekeyLegacyClaudeSlot(was, refs);
   const leftSlot = session.engine ? threadSlot(session, session.engine) : undefined;
   if (session.engine && leftSlot) {
     const currentRef = getEngineSessionRef(session, session.engine);
@@ -1177,19 +1197,21 @@ function targetRefs(session: Session, opts: SwitchSessionTargetOptions, nextDir:
       model: session.model ?? currentRef.model,
       effortLevel: session.effortLevel ?? currentRef.effortLevel,
     });
-    if (opts.leftConversation === 'retire') delete refs[leftSlot];
+    if (retiring) retireSlot(refs, leftSlot, current.model);
     // Parked under the account it ran on; the switch drops any override, so the target reads the session's own account.
     else if (Object.keys(current).length > 0) refs[leftSlot] = current;
   }
-  const was = withoutAccountOverride(session);
   const own = { ...was, claudeConfigDir: nextDir };
   const targetSlot = threadSlot(own, opts.engine);
   // A pre-account row keeps its own account's thread under `claude`. Another account never inherits it: it is re-keyed to
   // the account it belongs to, and only a target on that same account reads it by the old spelling.
   const sameAccount = threadSlot(own, 'claude') === threadSlot(was, 'claude');
-  if (!sameAccount) rekeyLegacyClaudeSlot(was, refs);
+  if (!sameAccount && !retiring) rekeyLegacyClaudeSlot(was, refs);
   let target = cleanEngineSessionRef(refs[targetSlot] ?? (sameAccount ? legacyThreadRef({ ...own, engineSessions: refs }, opts.engine) : undefined) ?? {});
   const requestedModel = typeof opts.model === 'string' && opts.model.trim() ? opts.model : undefined;
+  if (opts.freshTarget && target.id) {
+    target = cleanEngineSessionRef({ ...target, id: undefined, lastSyncedAt: undefined, platformContextFingerprint: undefined });
+  }
   if (opts.engine === 'grok' && target.id && requestedModel && target.model !== requestedModel) {
     target = cleanEngineSessionRef({
       ...target,

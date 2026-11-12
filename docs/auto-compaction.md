@@ -119,6 +119,8 @@ A new operator message does **not** interrupt an auto-compaction in progress, ev
 
 The compaction is the engine's own: Claude Code's `/compact`, or opencode's summarize. Claude gets a one-line focus that asks it to keep the task and its goal, decisions made and why, exact identifiers (Todo and session ids, branches, paths, PRs), work delegated and still awaited, and open problems. The focus also names any child sessions still running, since their results will arrive into the compacted context. opencode's summarize takes no focus.
 
+A session can also move itself to another engine, Claude profile or model through `compact_session`; see [Switching a running session](session-fallback-mode.md#switching-a-running-session).
+
 There is no handoff here, unlike `compact_session`. The session did not choose the moment, so it had nothing to write. Agents are told this in the template `CLAUDE.md`: when they pause long work, they should leave its state somewhere a summary will keep it.
 
 ## Checking the saving
