@@ -10,6 +10,14 @@
 // the settings' hooks, runs the settings' statusLine command with the account's windows,
 // and on a limit fires StopFailure with `error: "rate_limit"`.
 //
+// A `/compact` turn does what 2.1.28x does: its command entries, a PostCompact{trigger:
+// "manual"} and no Stop, then (FAKE_COMPACT_BOUNDARY_DELAY_MS later, as the CLI appends it after
+// the hook) a `compact_boundary` system entry and a user entry marked `isCompactSummary` that
+// opens "This session is being continued from a previous conversation". The scenario decides
+// its outcome like any turn's: a rate-limited profile fails the compaction with a limit.
+// FAKE_COMPACT_SUMMARY_SHAPE=array writes the summary as text parts; FAKE_COMPACT_NO_SUMMARY=1
+// writes a boundary and no summary.
+//
 // What happens to a turn comes from the scenario file (FAKE_PROVIDER_SCENARIO), keyed by
 // profile (CLAUDE_CONFIG_DIR) and model (--model): see ./scenario.mjs. Every turn is
 // appended to the ledger (FAKE_PROVIDER_LEDGER). The profile is signed in when its
@@ -23,6 +31,7 @@ import {
   appendLedger, claudeKeys, loadScenario, pickOutcome, profileLabel, promptHead, promptMarks, promptTag,
 } from "./scenario.mjs";
 import {
+  COMPACT_SUMMARY_OPENING, compactBoundaryEntry, compactCommandEntries, compactSummaryEntry,
   hookPayload, rateLimitMessage, statusLinePayload, stopFailurePayload, transcriptEntry,
 } from "./claude-hooks.mjs";
 
@@ -89,7 +98,9 @@ let turns = 0;
 let argvPending = Boolean(argvPrompt);
 let hanging = false;
 let stdinEnded = false;
-const exitWhenDone = () => { if (stdinEnded && !argvPending && !hanging) process.exit(0); };
+// A compaction whose boundary entry is still to be written keeps the process alive until it has been.
+let compacting = 0;
+const exitWhenDone = () => { if (stdinEnded && !argvPending && !hanging && compacting === 0) process.exit(0); };
 
 function fire(event, payload) {
   for (const matcher of settings.hooks?.[event] ?? []) {
@@ -135,6 +146,23 @@ function answered(text) {
   fire("Stop", hookPayload("Stop", base, { last_assistant_message: reply }));
 }
 
+/** What a manual `/compact` leaves: PostCompact first, then the boundary and the summary after a beat. */
+function compacted(text) {
+  for (const entry of compactCommandEntries(text.replace(/^\/compact\s*/, ""), base)) fs.appendFileSync(transcriptPath, `${JSON.stringify(entry)}\n`);
+  fire("PostCompact", hookPayload("PostCompact", base, { trigger: "manual" }));
+  const delay = Number(process.env.FAKE_COMPACT_BOUNDARY_DELAY_MS ?? 150);
+  compacting += 1;
+  setTimeout(() => {
+    compacting -= 1;
+    const uuid = () => crypto.randomUUID();
+    fs.appendFileSync(transcriptPath, `${JSON.stringify(compactBoundaryEntry({ ...base, uuid: uuid(), preTokens: 9000, postTokens: 1200 }))}\n`);
+    if (process.env.FAKE_COMPACT_NO_SUMMARY === "1") return exitWhenDone();
+    const summary = `${COMPACT_SUMMARY_OPENING} fake-summary profile=${profile} session=${sessionId} ${process.env.FAKE_COMPACT_SUMMARY_TEXT ?? ""}`.trim();
+    fs.appendFileSync(transcriptPath, `${JSON.stringify(compactSummaryEntry(summary, { ...base, uuid: uuid(), parts: process.env.FAKE_COMPACT_SUMMARY_SHAPE === "array" }))}\n`);
+    exitWhenDone();
+  }, delay);
+}
+
 function turn(text) {
   const { outcome, scenarioKey, step } = pickOutcome(scenario, "claude", claudeKeys(profile, model));
   ledger({
@@ -148,6 +176,7 @@ function turn(text) {
   if (outcome.outcome === "rate-limit") limited(outcome);
   else if (outcome.outcome === "signed-out") failed(outcome, "authentication_failed", "Invalid API key · Please run /login");
   else if (outcome.outcome === "fail") failed(outcome, "max_output_tokens", "fake provider failure");
+  else if (/^\/compact(\s|$)/.test(text)) compacted(text);
   else answered(text);
 }
 

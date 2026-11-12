@@ -70,3 +70,50 @@ export function transcriptEntry(role, text, { sessionId, cwd, model, uuid, error
     ...(error ? { isApiErrorMessage: true } : {}),
   };
 }
+
+/** The `compact_boundary` system entry Claude Code appends when a `/compact` finishes. */
+export function compactBoundaryEntry({ sessionId, cwd, uuid, preTokens, postTokens }) {
+  return {
+    type: "system",
+    subtype: "compact_boundary",
+    content: "Conversation compacted",
+    compactMetadata: { trigger: "manual", preTokens, postTokens },
+    uuid,
+    sessionId,
+    cwd,
+    version: "2.1.300",
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/** The opening sentence of the summary Claude Code writes after a boundary (what `isCompactSummary` marks). */
+export const COMPACT_SUMMARY_OPENING = "This session is being continued from a previous conversation that ran out of context.";
+
+/** The user entry holding the summary, marked `isCompactSummary` as the CLI marks it. `parts` gives array content instead of a string. */
+export function compactSummaryEntry(text, { sessionId, cwd, uuid, parts = false }) {
+  return {
+    type: "user",
+    message: { role: "user", content: parts ? [{ type: "text", text }] : text },
+    isCompactSummary: true,
+    isVisibleInTranscriptOnly: true,
+    uuid,
+    sessionId,
+    cwd,
+    version: "2.1.300",
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/** The plain user entries a manual `/compact` writes around its boundary (not summaries). */
+export function compactCommandEntries(args, { sessionId, cwd }) {
+  const entry = (content) => ({
+    type: "user",
+    message: { role: "user", content },
+    uuid: `fake-${Math.random().toString(36).slice(2)}`,
+    sessionId,
+    cwd,
+    version: "2.1.300",
+    timestamp: new Date().toISOString(),
+  });
+  return [entry(`<command-name>/compact</command-name>\n<command-args>${args}</command-args>`), entry("<local-command-stdout>Compacted</local-command-stdout>")];
+}
