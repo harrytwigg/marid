@@ -21,6 +21,9 @@ vi.mock("@/hooks/use-person-choices", () => ({
   usePersonChoices: (board: unknown) => personChoices(board) ?? ({ people: [{ id: "me", displayName: "Mia Member", initials: "MM" }, { id: "kit", displayName: "Kit Colleague", initials: "KC" }], ready: true }),
 }))
 
+// Who the operator is comes from the People list (useOperatorSelf): an instance with members and no owner account.
+vi.mock("@/lib/accounts-api", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/accounts-api")>()), accountsApi: { listPeople: async () => [] } }))
+
 const getWorkItem = vi.fn()
 const getWorkItemTree = vi.fn()
 const setWorkItemPerson = vi.fn()
@@ -167,7 +170,7 @@ describe("a Todo that waits on the operator behind a member's name", () => {
     setup(waiting())
     fireEvent.click(await screen.findByTestId("rail-person"))
     const picker = await screen.findByTestId("picker-person")
-    expect(within(picker).getByTestId("person-option-kit").textContent).toContain("Takes it off your desk")
+    expect((await within(picker).findByTestId("person-option-kit")).textContent).toContain("Takes it off your desk")
     expect(within(picker).getByTestId("person-option-me").textContent).not.toContain("Takes it off your desk")
     expect(within(picker).getByTestId("person-option-clear").textContent).toContain("Leaves you as the person")
     expect(within(picker).getByTestId("person-option-operator").textContent).not.toContain("Takes it off your desk")
@@ -178,7 +181,7 @@ describe("a Todo that waits on the operator behind a member's name", () => {
     setup(agentMade({ status: "blocked", assignee: "@operator", humanAssignee: "@operator" }))
     fireEvent.click(await screen.findByTestId("rail-person"))
     const picker = await screen.findByTestId("picker-person")
-    expect(within(picker).getByTestId("person-option-kit").textContent).toContain("Takes it off your desk")
+    expect((await within(picker).findByTestId("person-option-kit")).textContent).toContain("Takes it off your desk")
     expect(within(picker).getByTestId("person-option-clear").textContent).toContain("Takes it off your desk")
   })
 

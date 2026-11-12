@@ -1,10 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render as rtlRender, renderHook, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { Employee } from "@/lib/api"
 import { activeFilterCount, filtersFromSearchParams, filtersToSearchParams } from "@/lib/todos"
 import { FilterBar } from "../filter-bar"
-import { personFilterLabel } from "../person-filter"
+import { personFilterLabel, usePersonMatch } from "../person-filter"
 import { agentFilterLabel, OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from "../util"
 
 /* The board filters by the person and by the agent as two independent filters, ANDed. Each has its own chip, its own rows
@@ -136,20 +136,74 @@ describe("on an instance with accounts", () => {
     ])
   })
 
-  it("a department board offers its own people and the owners, not the others or the disabled", async () => {
+  // The one owner is the operator: "Me" already filters on it, so its account is not listed again.
+  it("a department board offers its own people, not the others, the disabled or the operator's own owner account", async () => {
     setMobile(false)
     render(bar({ status: "open" }, vi.fn(), { personBoard: "platform" }))
     await waitFor(() => expect(listPeople).toHaveBeenCalled())
     open("filter-chip-person")
-    await waitFor(async () => expect(await rows()).toEqual(["Anyone", "Me", "No person", "PDPat Doe", "OPOwen Poe"]))
+    await waitFor(async () => expect(await rows()).toEqual(["Anyone", "Me", "No person", "PDPat Doe"]))
   })
 
-  it("Everything offers every active person", async () => {
+  it("Everything offers every active person but the operator's own owner account", async () => {
     setMobile(false)
     render(bar({ status: "open" }, vi.fn(), { personBoard: null }))
     await waitFor(() => expect(listPeople).toHaveBeenCalled())
     open("filter-chip-person")
-    await waitFor(async () => expect(await rows()).toEqual(["Anyone", "Me", "No person", "PDPat Doe", "SRSam Roe", "OPOwen Poe"]))
+    await waitFor(async () => expect(await rows()).toEqual(["Anyone", "Me", "No person", "PDPat Doe", "SRSam Roe"]))
+  })
+
+  it("an old link filtering on the owner's own account still reads its name", async () => {
+    setMobile(false)
+    render(bar({ status: "open", person: "user:u3" }, vi.fn(), { personBoard: null }))
+    await waitFor(() => expect(screen.getByTestId("filter-chip-person").textContent).toContain("Owen Poe"))
+  })
+
+  // Several owners share the desk: it is not "Me" to any one of them, and each owner, this browser's included, is a person by name.
+  it("with several owners, the desk reads Operator (shared) and every owner is listed, the signed-in one too", async () => {
+    auth.value = { principal: { kind: "operator", user: { id: "u3", displayName: "Owen Poe" } }, authState: { hasAccounts: true } }
+    listPeople.mockResolvedValue([person("u1", "Pat Doe"), person("u3", "Owen Poe", { instanceRole: "owner" }), person("u5", "Ola Toe", { instanceRole: "owner" })])
+    setMobile(false)
+    const onChange = vi.fn()
+    const { rerender } = render(bar({ status: "open" }, onChange, { personBoard: null }))
+    await waitFor(() => expect(listPeople).toHaveBeenCalled())
+    open("filter-chip-person")
+    await waitFor(async () => expect(await rows()).toEqual(["Anyone", "Operator (shared)", "No person", "PDPat Doe", "OPOwen Poe", "OTOla Toe"]))
+    fireEvent.click(screen.getByText("Operator (shared)"))
+    expect(onChange).toHaveBeenCalledWith({ status: "open", person: OPERATOR_ASSIGNEE, q: undefined })
+    rerender(bar({ status: "open", person: OPERATOR_ASSIGNEE }, onChange, { personBoard: null }))
+    await waitFor(() => expect(screen.getByTestId("filter-chip-person").textContent).toContain("Operator (shared)"))
+  })
+
+  it("with several owners and none of them this browser, the desk reads Operator (shared) and every owner is listed", async () => {
+    listPeople.mockResolvedValue([person("u3", "Owen Poe", { instanceRole: "owner" }), person("u5", "Ola Toe", { instanceRole: "owner" })])
+    setMobile(false)
+    render(bar({ status: "open" }, vi.fn(), { personBoard: null }))
+    await waitFor(() => expect(listPeople).toHaveBeenCalled())
+    open("filter-chip-person")
+    await waitFor(async () => expect(await rows()).toEqual(["Anyone", "Operator (shared)", "No person", "OPOwen Poe", "OTOla Toe"]))
+  })
+
+  it("the mobile filter sheet reads the shared desk the same way", async () => {
+    listPeople.mockResolvedValue([person("u3", "Owen Poe", { instanceRole: "owner" }), person("u5", "Ola Toe", { instanceRole: "owner" })])
+    setMobile(true)
+    const onChange = vi.fn()
+    render(<FilterBar filters={{ status: "open" }} onChange={onChange} employees={[employee]} departments={[]} byName={byName} personBoard={null} />)
+    await waitFor(() => expect(listPeople).toHaveBeenCalled())
+    fireEvent.click(screen.getByRole("button", { name: "Filter todos" }))
+    fireEvent.click(await screen.findByRole("button", { name: "Person" }))
+    expect(screen.queryByRole("button", { name: /^Me/ })).toBeNull()
+    fireEvent.click(await screen.findByRole("button", { name: /^Operator \(shared\)/ }))
+    expect(onChange).toHaveBeenLastCalledWith({ status: "open", person: OPERATOR_ASSIGNEE, q: undefined })
+  })
+
+  it("lists nobody by name while the People read is pending, so the owner never shows beside Me", async () => {
+    listPeople.mockReturnValue(new Promise(() => {}))
+    setMobile(false)
+    render(bar({ status: "open" }, vi.fn(), { personBoard: null }))
+    await waitFor(() => expect(listPeople).toHaveBeenCalled())
+    open("filter-chip-person")
+    expect(await rows()).toEqual(["Anyone", "Me", "No person"])
   })
 
   it("picking a person sets that user's identity, and the chip reads their name", async () => {
@@ -277,5 +331,47 @@ describe("the mobile sheet", () => {
     fireEvent.click(screen.getByRole("button", { name: "Person" }))
     fireEvent.click(screen.getByRole("button", { name: /^Anyone/ }))
     expect(onChange).toHaveBeenLastCalledWith({ status: "open", agent: UNASSIGNED_FILTER, person: undefined, q: undefined })
+  })
+})
+
+describe("what the board asks the list for", () => {
+  const match = (person: string | undefined) => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    return renderHook(() => usePersonMatch(person), { wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> })
+  }
+
+  it("with one owner, Me also takes the Todos that name that owner's account", async () => {
+    auth.value = { principal: { kind: "operator" }, authState: { hasAccounts: true } }
+    listPeople.mockResolvedValue([person("u1", "Pat Doe"), person("u3", "Owen Poe", { instanceRole: "owner" })])
+    const { result } = match(OPERATOR_ASSIGNEE)
+    await waitFor(() => expect(result.current).toBe("@operator,user:u3"))
+  })
+
+  it("asks for Me as it is until the People read lands, then widens", async () => {
+    auth.value = { principal: { kind: "operator" }, authState: { hasAccounts: true } }
+    let land!: (people: unknown) => void
+    listPeople.mockReturnValue(new Promise((resolve) => { land = resolve }))
+    const { result } = match(OPERATOR_ASSIGNEE)
+    expect(result.current).toBe(OPERATOR_ASSIGNEE)
+    land([person("u3", "Owen Poe", { instanceRole: "owner" })])
+    await waitFor(() => expect(result.current).toBe("@operator,user:u3"))
+  })
+
+  it("with several owners the shared desk is only the desk, and a named person is only that person", async () => {
+    auth.value = { principal: { kind: "operator", user: { id: "u3", displayName: "Owen Poe" } }, authState: { hasAccounts: true } }
+    listPeople.mockResolvedValue([person("u3", "Owen Poe", { instanceRole: "owner" }), person("u5", "Ola Toe", { instanceRole: "owner" })])
+    const desk = match(OPERATOR_ASSIGNEE)
+    await waitFor(() => expect(listPeople).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(desk.result.current).toBe(OPERATOR_ASSIGNEE)
+    expect(match("user:u3").result.current).toBe("user:u3")
+  })
+
+  it("leaves every value alone with no accounts, and for a member, and asks for no people", () => {
+    expect(match(OPERATOR_ASSIGNEE).result.current).toBe(OPERATOR_ASSIGNEE)
+    auth.value = { principal: { kind: "member", user: { id: "u1" }, boards: [] }, authState: { hasAccounts: true } }
+    expect(match(OPERATOR_ASSIGNEE).result.current).toBe(OPERATOR_ASSIGNEE)
+    expect(match(undefined).result.current).toBeUndefined()
+    expect(listPeople).not.toHaveBeenCalled()
   })
 })

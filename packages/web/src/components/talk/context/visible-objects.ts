@@ -68,10 +68,12 @@ function boardObjects(snapshot: PageSnapshot): VisibleObject[] {
   const objects: VisibleObject[] = []
   for (const status of BOARD_STATUS_ORDER) {
     if (!isColumnInStatusFilter(filters.status, status)) continue
-    const column = queryClient.getQueryData(boardColumnQueryKey(board, status, filters))
-    const pages = (column as { pages?: unknown } | undefined)?.pages
-    if (!Array.isArray(pages)) continue
-    for (const item of pages.flatMap(pageItems)) {
+    // By prefix: a column whose Person filter matches more widely than the URL says ("Me" with one owner account) keys that too.
+    const items = queryClient.getQueriesData({ queryKey: boardColumnQueryKey(board, status, filters) }).flatMap(([, column]) => {
+      const pages = (column as { pages?: unknown } | undefined)?.pages
+      return Array.isArray(pages) ? pages.flatMap(pageItems) : []
+    })
+    for (const item of items) {
       if (seen.has(item.id)) continue
       seen.add(item.id)
       objects.push(item)

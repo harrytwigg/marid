@@ -1,10 +1,10 @@
-import { EmployeeAvatar, OPERATOR_DEFAULT_EMOJI } from "@/components/ui/employee-avatar"
-import { agentOf } from "../assignee-circles"
+import { LEGACY_OPERATOR_LABEL, useOperatorSelf } from "@/hooks/use-operator-self"
+import { agentOf, OperatorSelfAvatar } from "../assignee-circles"
 import { OPERATOR_ASSIGNEE } from "../util"
 import { PickerRow } from "./picker-shell"
 
 /**
- * "You (operator)" in an assign picker that has no person slot beside it (a sub-task row, the search workbench's Owner):
+ * The operator's row ("You (operator)", or the owner account / "Operator (shared)" once one exists, see `useOperatorSelf`) in an assign picker that has no person slot beside it (a sub-task row, the search workbench's Owner):
  * there it is the only way to assign a Todo to yourself, so it stays, through the assign route as it always was. Where a
  * person slot sits beside the agent (the Todo page, the create dialog) the operator is chosen there instead.
  */
@@ -15,12 +15,15 @@ export function OperatorAssignRow({ offered, query, assignee, sheet, onSelect }:
   sheet?: boolean
   onSelect: () => void
 }) {
-  if (!offered || !"you (operator)".includes(query.trim().toLowerCase())) return null
+  const self = useOperatorSelf(offered)
+  // Found by its name, and still by "you" and "operator": that is what this row has always answered to.
+  const typed = query.trim().toLowerCase()
+  if (!offered || ![self.label, LEGACY_OPERATOR_LABEL].some((name) => name.toLowerCase().includes(typed))) return null
   return (
     <PickerRow
       sheet={sheet}
-      glyph={<EmployeeAvatar name="operator" fallback={OPERATOR_DEFAULT_EMOJI} size={22} fontSize={12} className="bg-[var(--fill-secondary)]" />}
-      label="You (operator)"
+      glyph={<OperatorSelfAvatar self={self} size={22} fontSize={12} />}
+      label={self.label}
       checked={assignee === OPERATOR_ASSIGNEE}
       onSelect={onSelect}
       testId={`assignee-option-${OPERATOR_ASSIGNEE}`}

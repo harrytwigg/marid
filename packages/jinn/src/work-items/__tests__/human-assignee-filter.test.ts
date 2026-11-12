@@ -58,6 +58,18 @@ describe("the person filter reads the person slot", () => {
     expect(idsFor({ humanAssignee: UNASSIGNED })).toEqual(sorted(ids.agentOnly, ids.neither));
   });
 
+  it("several people, comma-separated, match any of them", () => {
+    expect(idsFor({ humanAssignee: "@operator,user:u1" })).toEqual(sorted(ids.operatorOnly, ids.bothSet, ids.personOnly, ids.operatorHanded));
+    expect(idsFor({ humanAssignee: " user:u2 , user:u2 " })).toEqual([ids.otherPersonAgent]);
+    expect(idsFor({ humanAssignee: `user:u2,${UNASSIGNED}` })).toEqual(sorted(ids.otherPersonAgent, ids.agentOnly, ids.neither));
+    expect(idsFor({ humanAssignee: "@operator,user:u1", assignee: "some-employee" })).toEqual([ids.bothSet]);
+    expect(store.queryWorkItems({ humanAssignee: "@operator,user:u1", limit: 100 }).total).toBe(4);
+  });
+
+  it("a list naming nobody matches nothing, not everything", () => {
+    expect(idsFor({ humanAssignee: ",," })).toEqual([]);
+  });
+
   it("matches the same Todos as the humanAssignee each of them reads", () => {
     for (const who of ["user:u1", "user:u2", "@operator", UNASSIGNED]) {
       const expected = store.queryWorkItems({ limit: 100 }).workItems

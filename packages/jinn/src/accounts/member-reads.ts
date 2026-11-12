@@ -45,10 +45,14 @@ export function boardTodos(ctx: MemberRouteContext): void {
   const { kept: _kept, home: _home, needsAttentionFor: _attention, needsAttentionOperator: _operator, ...scoped } = filter;
   const viewer = viewerOf(ctx);
   // A person filter names someone the member may read as a person: the operator, none, or a user they share a board with. Anyone
-  // else is the generic `member` they read, which no Todo stores, so the filter cannot tell them who holds which Todo.
-  const person = scoped.humanAssignee;
-  const personId = person === undefined ? undefined : memberIdOf(person);
-  if (person !== undefined && personId !== undefined && !viewer.knows(personId)) scoped.humanAssignee = "member";
+  // else is the generic `member` they read, which no Todo stores, so the filter cannot tell them who holds which Todo. Each
+  // name in a comma-separated list is judged on its own, so a known name cannot carry an unknown one past this check.
+  if (scoped.humanAssignee !== undefined) {
+    scoped.humanAssignee = scoped.humanAssignee.split(",").map((person) => {
+      const personId = memberIdOf(person.trim());
+      return personId !== undefined && !viewer.knows(personId) ? "member" : person;
+    }).join(",");
+  }
   json(ctx.res, memberPagePayload(queryWorkItems({ ...scoped, rootDepartment: department, limit, offset }), viewer));
 }
 

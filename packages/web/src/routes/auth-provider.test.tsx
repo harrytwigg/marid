@@ -24,6 +24,7 @@ vi.mock("@/lib/auth", () => ({
   reportMemberSessionLost: vi.fn(),
 }))
 
+import { useEffect, useRef } from "react"
 import { AuthGate, AuthProvider, useAuth } from "./auth-provider"
 
 beforeEach(() => {
@@ -249,4 +250,51 @@ it("does not mistake an unreachable gateway for an unpaired browser", async () =
   expect(screen.queryByText(/Pair This Browser/i)).toBeNull()
   expect(screen.queryByText('Private App')).toBeNull()
   expect(pairBrowser).not.toHaveBeenCalled()
+
 })
+
+describe("reread", () => {
+    // Counts its own mounts: a remount behind the "checking" screen would mount it again.
+    function Probe({ mounts }: { mounts: { n: number } }) {
+      const { reread, principal } = useAuth()
+      const counted = useRef(false)
+      useEffect(() => { if (!counted.current) { counted.current = true; mounts.n++ } }, [mounts])
+      return (
+        <div>
+          <span data-testid="who">{principal?.kind === "operator" ? principal.user?.displayName ?? "operator" : "none"}</span>
+          <button type="button" onClick={() => void reread()}>reread</button>
+        </div>
+      )
+    }
+    const operator = { authRequired: true, authenticated: true, hasAccounts: false, principal: { kind: "operator" } }
+
+    it("updates who this browser is in place, without the checking screen or a remount", async () => {
+      getAuthState.mockResolvedValueOnce(operator)
+      const mounts = { n: 0 }
+      render(<AuthProvider><AuthGate><Probe mounts={mounts} /></AuthGate></AuthProvider>)
+      expect((await screen.findByTestId("who")).textContent).toBe("operator")
+      let release!: (value: unknown) => void
+      getAuthState.mockReturnValueOnce(new Promise((resolve) => { release = resolve }))
+      fireEvent.click(screen.getByText("reread"))
+      // While the read is in flight the app stays up.
+      expect(screen.queryByText(/checking gateway access/i)).toBeNull()
+      expect(screen.getByTestId("who")).toBeTruthy()
+      release({ ...operator, hasAccounts: true, principal: { kind: "operator", user: { id: "usr_1", displayName: "Olive Owner" } } })
+      await waitFor(() => expect(screen.getByTestId("who").textContent).toBe("Olive Owner"))
+      expect(mounts.n).toBe(1)
+    })
+
+    it("keeps the app and the current reading when the read fails", async () => {
+      getAuthState.mockResolvedValueOnce(operator)
+      const mounts = { n: 0 }
+      render(<AuthProvider><AuthGate><Probe mounts={mounts} /></AuthGate></AuthProvider>)
+      await screen.findByTestId("who")
+      getAuthState.mockRejectedValueOnce(new Error("gateway unreachable"))
+      fireEvent.click(screen.getByText("reread"))
+      await waitFor(() => expect(getAuthState).toHaveBeenCalledTimes(2))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(screen.getByTestId("who").textContent).toBe("operator")
+      expect(screen.queryByText(/gateway unreachable/i)).toBeNull()
+      expect(mounts.n).toBe(1)
+    })
+  })

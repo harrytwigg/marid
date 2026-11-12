@@ -84,6 +84,13 @@ describe("a member's board list", () => {
     expect(titles(operator.body)).toEqual(["stranger only"]);
   });
 
+  it("judges each name in a list, so a name they may read cannot carry one they may not", async () => {
+    const mixed = await h.as(casey, "GET", `/api/member/boards/ops/todos?humanAssignee=${enc(`user:${casey.userId},user:${stranger.userId}`)}&limit=100`);
+    expect(titles(mixed.body)).not.toContain("stranger only");
+    const padded = await h.as(casey, "GET", `/api/member/boards/ops/todos?humanAssignee=${enc(`@unassigned, user:${stranger.userId}`)}&limit=100`);
+    expect(titles(padded.body)).toEqual(["agent only", "nobody"]);
+  });
+
   it("@unassigned works for a member, and the filter never widens what they can read", async () => {
     const none = await h.as(casey, "GET", "/api/member/boards/ops/todos?humanAssignee=@unassigned&limit=100");
     expect(titles(none.body)).toEqual(["agent only", "nobody"]);

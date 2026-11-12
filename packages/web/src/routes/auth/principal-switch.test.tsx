@@ -29,7 +29,7 @@ let refresh: () => Promise<void>
 function Probe() {
   const auth = useAuth()
   refresh = () => auth.refresh({ bootstrapLocal: false })
-  return <span data-testid="who">{auth.status === "paired" ? (auth.principal && "user" in auth.principal ? auth.principal.user.id : auth.principal?.kind ?? "none") : auth.status}</span>
+  return <span data-testid="who">{auth.status === "paired" ? (auth.principal?.kind === "member" ? auth.principal.user.id : auth.principal?.kind ?? "none") : auth.status}</span>
 }
 
 async function boot() {
