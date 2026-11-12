@@ -123,11 +123,19 @@ function recheckFrom(statedMs: number | undefined, now: Date): string {
 /** The stated parts of `about`, so an absent one is absent from the record
  *  rather than present-and-undefined — which `JSON.stringify` would drop from
  *  the file anyway, leaving the two shapes silently different in memory. */
-function definedOnly(about: { window?: string; host?: string }): { window?: string; host?: string } {
+function definedOnly(about: EngineHealthAbout): EngineHealthAbout {
   return {
     ...(about.window === undefined ? {} : { window: about.window }),
     ...(about.host === undefined ? {} : { host: about.host }),
+    ...(about.model === undefined ? {} : { model: about.model }),
   };
+}
+
+/** What an observation says it is about, beyond the engine: a quota window, one machine, one model. */
+export interface EngineHealthAbout {
+  window?: string;
+  host?: string;
+  model?: string;
 }
 
 /**
@@ -145,7 +153,7 @@ export function recordEngineUnavailable(
   reason: string,
   resetsAtSeconds?: number,
   now: Date = new Date(),
-  about: { window?: string; host?: string } = {},
+  about: EngineHealthAbout = {},
 ): void {
   const stated = resetsAtSeconds !== undefined && Number.isFinite(resetsAtSeconds)
     ? resetsAtSeconds * 1000
@@ -175,7 +183,7 @@ function nextRecord(stated: number | undefined, live: EngineHealth | undefined, 
   if (live?.state !== "exhausted") {
     return { state: "degraded", until: new Date(now.getTime() + DEGRADED_WINDOW_MS).toISOString() };
   }
-  // `host` is deliberately NOT carried across: it describes the OBSERVATION, and
+  // `host` (and `model`) is deliberately NOT carried across: it describes the OBSERVATION, and
   // the caller's own `about` re-supplies it when this observation names a host
   // too. Carried, a gateway-scoped login would quietly scope the account-wide
   // window it was re-probing, hiding a real limit from every remote session.
@@ -211,13 +219,14 @@ export function recordExhaustedWindows(
 
 /**
  * What one limits reading says about `engine`'s health record: a spent window is
- * recorded, as before, and a reading of a live (or fresh snapshot) source that
- * shows every window under 100% clears a record it contradicts. A reading that
- * is stale, or from a source that is not a reading, only records.
+ * recorded, as before, and a live reading that shows every window under 100%
+ * clears a record it contradicts. A snapshot (the Claude status line never sees
+ * per-model buckets, and non-live engines' readings are downgraded to one) or any
+ * source that is not a live reading only records.
  */
-export function noteLimitReading(engine: string, snapshot: Pick<EngineLimitEngineSnapshot, "status" | "stale" | "refreshedAt" | "windows">): void {
+export function noteLimitReading(engine: string, snapshot: Pick<EngineLimitEngineSnapshot, "status" | "refreshedAt" | "windows">): void {
   recordExhaustedWindows(engine, snapshot.windows);
-  if (snapshot.status !== "live" && !(snapshot.status === "snapshot" && !snapshot.stale)) return;
+  if (snapshot.status !== "live") return;
   clearContradictedHealth(engine, snapshot.windows, Date.parse(snapshot.refreshedAt));
 }
 

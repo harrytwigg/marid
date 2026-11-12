@@ -111,7 +111,7 @@ const ownSpentAgo = (agoMinutes: number) =>
   recordEngineUnavailable("claude", "usage limit", secs(Date.now() + 4 * 24 * 60 * MIN), new Date(Date.now() - agoMinutes * MIN), { window: "7d" });
 /** A turn on the own target, begun a minute ago, was served `agoMinutes` ago. */
 const ownServedAgo = (agoMinutes: number) =>
-  recordEngineServed("claude", Date.now() - (agoMinutes + 1) * MIN, new Date(Date.now() - agoMinutes * MIN));
+  recordEngineServed("claude", Date.now() - (agoMinutes + 1) * MIN, undefined, new Date(Date.now() - agoMinutes * MIN));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -290,6 +290,24 @@ describe("handleRateLimit — a usage-limit retry that is served", () => {
 
     expect(value.kind).toBe("resumed");
     expect(readEngineHealth().claude).toMatchObject({ state: "ok", clearedAt: expect.any(String), reason: "a turn was served" });
+  });
+
+  it("stamps the record with the model that ran, and keeps it through a retry that is limited again", async () => {
+    const session = makeSession({ status: "waiting", model: "opus" });
+    getSessionMock.mockImplementation(() => ({ ...session }));
+    let afterFirst: { model?: string } | undefined;
+    const run = vi.fn()
+      .mockResolvedValueOnce({ result: "", sessionId: "t", error: "limit" })
+      .mockImplementationOnce(async () => { afterFirst = readEngineHealth().claude; return answer; });
+    limitedMock.mockReturnValueOnce({ limited: true, resetsAt: secs(Date.now() + 60 * MIN) });
+    limitedMock.mockReturnValue({ limited: false });
+    const opt = opts(session, run);
+    opt.rateLimit = { resetsAt: secs(Date.now() + 30 * MIN) };
+    let atStart: string | undefined;
+    await drive(handleRateLimit(opt), { 0: () => { atStart = readEngineHealth().claude?.model; }, ...liftedAt(10), ...liftedAt(30) });
+
+    expect(atStart).toBe("opus");
+    expect(afterFirst?.model).toBe("opus");
   });
 
   it("leaves it while the retry is limited again, and clears it once a later retry is served", async () => {

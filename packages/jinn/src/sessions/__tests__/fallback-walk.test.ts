@@ -117,11 +117,11 @@ describe("a four-link chain: claude/A/opus -> claude/B/sonnet -> opencode/X -> o
 
 describe("a link that serves a turn it was offered again", () => {
   /** B's record states a reopening days away, but its re-probe is due: a link the walk offers a probing turn. */
-  function dueForReprobe(keyName: string, observedMinutesAgo: number): void {
+  function dueForReprobe(keyName: string, observedMinutesAgo: number, model?: string): void {
     const at = (minutes: number) => new Date(Date.now() + minutes * 60_000).toISOString();
     fs.mkdirSync(path.join(tmp, "tmp"), { recursive: true });
     fs.writeFileSync(path.join(tmp, "tmp", "engine-health.json"), JSON.stringify({
-      [keyName]: { state: "exhausted", until: at(3 * 24 * 60), recheckAt: at(-1), window: "7d", reason: "usage limit", observedAt: at(-observedMinutesAgo) },
+      [keyName]: { state: "exhausted", until: at(3 * 24 * 60), recheckAt: at(-1), window: "7d", reason: "usage limit", observedAt: at(-observedMinutesAgo), ...(model === undefined ? {} : { model }) },
     }));
   }
   const accountB = `claude:${claudeProfileFromDir(DIR_B).key}`;
@@ -135,6 +135,27 @@ describe("a link that serves a turn it was offered again", () => {
     expect(outcome).toMatchObject({ kind: "fallback", result: { result: "on B" } });
     expect(calls.map((call) => call.model)).toEqual(["sonnet"]);
     expect(readEngineHealth()[accountB]).toMatchObject({ state: "ok", clearedAt: expect.any(String), reason: "a turn was served" });
+  });
+
+  it("clears a limit hit on the model the link served on, and leaves one hit on another model", async () => {
+    dueForReprobe(accountB, 30, "opus");
+    const { engines } = scripted((call) => (who(call) === "B/sonnet" ? answer("on B", "b-thread") : limited()));
+    await handleRateLimit(limitedTurn(newSession(), employee(), engines).opts);
+    expect(readEngineHealth()[accountB]?.state).toBe("exhausted");
+
+    fs.rmSync(path.join(tmp, "tmp", "engine-health.json"), { force: true });
+    dueForReprobe(accountB, 30, "sonnet");
+    await handleRateLimit(limitedTurn(newSession(), employee(), engines).opts);
+    expect(readEngineHealth()[accountB]?.clearedAt).toBeDefined();
+  });
+
+  it("stamps a limit a link hit with the model it ran", async () => {
+    const { engines } = scripted((call) => (who(call) === "y-provider/model-y" ? answer("ok") : limited(resetsIn(2 * HOUR))));
+
+    await handleRateLimit(limitedTurn(newSession(), employee(), engines).opts);
+
+    expect(readEngineHealth()[accountB]?.model).toBe("sonnet");
+    expect(readEngineHealth()["opencode/x-provider"]?.model).toBe("x-provider/model-x");
   });
 
   it("leaves a record written after the link's turn began: that turn proves nothing about it", async () => {

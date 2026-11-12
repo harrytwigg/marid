@@ -78,8 +78,9 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
 
   const { claudeProfile, account } = rateLimitAccount(session.engine, employee, session);
   // Held against the target that ran: its account for Claude, its provider for an opencode model, its engine otherwise.
-  const limitedKey = linkHealthKey({ engine: session.engine, model: session.model ?? engineConfig.model, account });
-  recordAccountRateLimit(account, session.engine, engineLabel, rateLimit.resetsAt, limitedKey);
+  const limitedModel = session.model ?? engineConfig.model;
+  const limitedKey = linkHealthKey({ engine: session.engine, model: limitedModel, account });
+  recordAccountRateLimit(account, session.engine, engineLabel, rateLimit.resetsAt, { healthKey: limitedKey, model: limitedModel });
 
   // ── Branch A: hand the turn along this session's fallback chain ───────────
   // A remote employee's substitute has to be an engine that can ALSO run on that
@@ -270,6 +271,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
       // Reported as waiting until the engine shows output: a probe against a limit that is
       // still up can hang for minutes, and that is not the session running.
       const retryStartedMs = Date.now();
+      const retryModel = currentSession.model ?? engineConfig.model;
       beginLimitProbe(session.id);
       const probeShowedOutput = () => { endLimitProbe(session.id); };
       let retryResult: EngineResult;
@@ -281,7 +283,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
           platformContextRefresh,
           cwd: spawnCwd(session, Boolean(remote)),
           bin: engineConfig.bin,
-          model: currentSession.model ?? engineConfig.model,
+          model: retryModel,
           effortLevel,
           cliFlags,
           // The retry is a fresh spawn, not a resume of the limited process, so it
@@ -321,7 +323,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
       const retryRateLimit = !retryInterrupted ? detectRateLimit(retryResult) : { limited: false as const };
 
       if (retryRateLimit.limited) {
-        recordAccountRateLimit(account, session.engine, engineLabel, retryRateLimit.resetsAt);
+        recordAccountRateLimit(account, session.engine, engineLabel, retryRateLimit.resetsAt, { model: retryModel });
         earlyReset?.limitedAgain();
         logger.info(`Session ${session.id} still rate limited (attempt ${attempt})`);
 
@@ -359,7 +361,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
       }
 
       // The target answered a turn begun after its limit was recorded: the record is stale.
-      if (!retryResult.error) recordEngineServed(limitedKey, retryStartedMs);
+      if (!retryResult.error) recordEngineServed(limitedKey, retryStartedMs, retryModel);
       // Success (or non-rate-limit error) — hand off to caller for persistence + transport.
       await hooks.onRetrySuccess?.(retryResult);
       logger.info(`Session ${session.id} resumed after usage reset`);

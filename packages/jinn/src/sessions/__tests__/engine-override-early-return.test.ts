@@ -30,7 +30,7 @@ const iso = (minutes: number) => at(minutes).toISOString();
 /** The own account's record, observed `minutes` from now, stating a reset four days out. */
 const spend = (minutes: number, key = "claude") =>
   health.recordEngineUnavailable(key, "usage limit", (BASE + 4 * 24 * 3600_000) / 1000, at(minutes), { window: "7d" });
-const clear = (minutes: number, key = "claude") => health.recordEngineServed(key, at(minutes - 1).getTime(), at(minutes));
+const clear = (minutes: number, key = "claude") => health.recordEngineServed(key, at(minutes - 1).getTime(), undefined, at(minutes));
 
 function swapped(ref: string, syncSinceMinutes: number, kind: "account" | "engine" = "account") {
   const s = reg.createSession({ engine: "claude", source: "web", sourceRef: `web:${ref}`, model: "opus" });

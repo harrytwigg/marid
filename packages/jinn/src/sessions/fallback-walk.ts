@@ -220,19 +220,19 @@ async function launch(w: Walk, found: Found, hop: FallbackHop): Promise<WalkOutc
   if (!failure) return await served(w, found, substitution.model ?? substitution.engineConfig.model, { result, startedMs });
   await opts.hooks.onFallbackFailed?.(result);
   if (failure.reason === "auth" && result.error) noteLinkAuthFailure(opts, choice, result.error);
-  failedOver(w, found, failure, result);
+  failedOver(w, found, { ...failure, model: substitution.model ?? substitution.engineConfig.model }, result);
   return undefined;
 }
 
 /** The link failed in a way that moves the walk on: remember it, and hold a limit against its target. */
-function failedOver(w: Walk, found: Found, failure: { reason: FallbackHopReason; resetsAt?: number; isLimit: boolean }, result?: EngineResult): void {
+function failedOver(w: Walk, found: Found, failure: { reason: FallbackHopReason; resetsAt?: number; isLimit: boolean; model?: string }, result?: EngineResult): void {
   const { link } = found.next;
   w.failedOver = true;
   w.tried.add(link.key);
   w.triedLabels.push(link.label);
   w.cursor = found.next.index;
   w.failure = { end: endOf(link), engine: link.engine, account: link.account, reason: failure.reason, resetsAt: failure.resetsAt };
-  if (failure.isLimit) recordLinkLimit(link, failure.resetsAt);
+  if (failure.isLimit) recordLinkLimit(link, failure.resetsAt, failure.model);
   if (result?.error) logger.info(`Session ${w.input.opts.session.id}: ${link.label} could not serve the turn (${failure.reason})`);
 }
 
@@ -249,7 +249,7 @@ async function served(w: Walk, found: Found, model: string | undefined, ran: { r
     updateSessionForAttempt(session.id, attemptToken, { ...thread, ...served });
   }
   // A link that answered a turn begun after its limit was recorded has lifted it.
-  if (!result.error) recordEngineServed(linkHealthKey(found.next.link), ran.startedMs);
+  if (!result.error) recordEngineServed(linkHealthKey(found.next.link), ran.startedMs, model);
   await hooks.onFallbackComplete?.(result, { engine: found.choice.engine as EngineName, model });
   return { kind: "served", result };
 }

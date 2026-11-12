@@ -175,16 +175,18 @@ describe("collectEngineLimits — claude statusline snapshot", () => {
     };
     const health = async () => (await import("../engine-health.js")).readEngineHealth().claude;
 
-    it("is cleared by a fresh snapshot that shows headroom on every window", async () => {
+    it("is not cleared by a fresh snapshot either: the status line never sees per-model buckets", async () => {
       await spentMinutesAgo(10);
       writeClaudeSnapshot("fresh.json", bothWindows(new Date(Date.now() - 2 * 60_000).toISOString()), 2 * 60_000);
 
-      await collectEngineLimits(cfg(), { engine: "claude" });
+      const out = await collectEngineLimits(cfg(), { engine: "claude" });
 
-      expect(await health()).toMatchObject({ state: "ok", clearedAt: expect.any(String) });
+      expect(out.engines.claude).toMatchObject({ status: "snapshot" });
+      expect(out.engines.claude.stale).toBeFalsy();
+      expect((await health())?.state).toBe("exhausted");
     });
 
-    it("is not cleared by a snapshot gone stale, though it was taken after the limit", async () => {
+    it("is not cleared by a stale snapshot taken after the limit", async () => {
       await spentMinutesAgo(60);
       writeClaudeSnapshot("stale.json", bothWindows(new Date(Date.now() - 45 * 60_000).toISOString()), 45 * 60_000);
 

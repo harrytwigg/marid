@@ -144,7 +144,7 @@ describe("recordEngineServed", () => {
   it("clears an exhausted record on a turn that began after it was observed", () => {
     recordSpent();
 
-    recordEngineServed("claude:overflow", at(10).getTime(), at(12));
+    recordEngineServed("claude:overflow", at(10).getTime(), undefined, at(12));
 
     expect(readEngineHealth(at(12))["claude:overflow"]).toEqual({ state: "ok", clearedAt: at(12).toISOString(), observedAt: at(12).toISOString(), reason: "a turn was served" });
   });
@@ -152,23 +152,72 @@ describe("recordEngineServed", () => {
   it("does not clear on a turn that began before someone else observed the limit", () => {
     recordSpent();
 
-    recordEngineServed("claude:overflow", NOW.getTime() - 60_000, at(12));
-    recordEngineServed("claude:overflow", NOW.getTime(), at(12));
+    recordEngineServed("claude:overflow", NOW.getTime() - 60_000, undefined, at(12));
+    recordEngineServed("claude:overflow", NOW.getTime(), undefined, at(12));
 
     expect(isEngineExhausted(readEngineHealth(at(12)), "claude:overflow", at(12))).toBe(true);
+  });
+
+  describe("a limit a turn hit on one model", () => {
+    const spentOn = (model: string | undefined) =>
+      recordEngineUnavailable("claude:overflow", "usage limit", secondsAt(4 * 24 * 60), NOW, model === undefined ? {} : { model });
+    const exhausted = () => isEngineExhausted(readEngineHealth(at(12)), "claude:overflow", at(12));
+
+    it("is cleared by a turn served on that model", () => {
+      spentOn("opus");
+      recordEngineServed("claude:overflow", at(10).getTime(), "opus", at(12));
+      expect(exhausted()).toBe(false);
+    });
+
+    it("is not cleared by a turn served on another model: the limit may be that model's own bucket", () => {
+      spentOn("opus");
+      recordEngineServed("claude:overflow", at(10).getTime(), "sonnet", at(12));
+      expect(exhausted()).toBe(true);
+    });
+
+    it("is not cleared by a turn that names no model", () => {
+      spentOn("opus");
+      recordEngineServed("claude:overflow", at(10).getTime(), undefined, at(12));
+      expect(exhausted()).toBe(true);
+    });
+
+    it("is cleared from any served turn when the record names no model", () => {
+      spentOn(undefined);
+      recordEngineServed("claude:overflow", at(10).getTime(), "sonnet", at(12));
+      expect(exhausted()).toBe(false);
+    });
+
+    it("is still cleared by a live reading showing headroom, whatever model it names", () => {
+      spentOn("opus");
+      clearContradictedHealth("claude:overflow", [win("5h", 0), win("7d", 0)], at(10).getTime(), at(12));
+      expect(exhausted()).toBe(false);
+    });
+
+    it("keeps the model on the record, and a re-probe that names none does not keep a stale one", () => {
+      spentOn("opus");
+      expect(readEngineHealth(NOW)["claude:overflow"]?.model).toBe("opus");
+
+      // The stated reset stands, the probe failed in an ordinary way: a re-probe, observing no model.
+      recordEngineUnavailable("claude:overflow", "unreachable", undefined, at(5));
+      expect(readEngineHealth(at(5))["claude:overflow"]?.state).toBe("exhausted");
+      expect(readEngineHealth(at(5))["claude:overflow"]?.model).toBeUndefined();
+
+      recordEngineUnavailable("claude:overflow", "usage limit", undefined, at(6), { model: "sonnet" });
+      expect(readEngineHealth(at(6))["claude:overflow"]?.model).toBe("sonnet");
+    });
   });
 
   it("leaves a host-scoped record alone and writes nothing", () => {
     recordSpent("claude", { host: "gateway-box" });
     const before = fs.readFileSync(STATE_PATH, "utf-8");
 
-    recordEngineServed("claude", at(10).getTime(), at(12));
+    recordEngineServed("claude", at(10).getTime(), undefined, at(12));
 
     expect(fs.readFileSync(STATE_PATH, "utf-8")).toBe(before);
   });
 
   it("writes nothing for a key with no record", () => {
-    recordEngineServed("claude", at(10).getTime(), at(12));
+    recordEngineServed("claude", at(10).getTime(), undefined, at(12));
 
     expect(fs.existsSync(STATE_PATH)).toBe(false);
   });
@@ -186,7 +235,7 @@ describe("a clear versus a lapse", () => {
 
   it("keeps clearedAt and the reason on a cleared record, long after the stated reset", () => {
     recordSpent();
-    recordEngineServed("claude:overflow", at(10).getTime(), at(12));
+    recordEngineServed("claude:overflow", at(10).getTime(), undefined, at(12));
 
     const later = readEngineHealth(at(10 * 24 * 60))["claude:overflow"];
 
@@ -197,7 +246,7 @@ describe("a clear versus a lapse", () => {
 
   it("is replaced by a fresh limit like any other record", () => {
     recordSpent();
-    recordEngineServed("claude:overflow", at(10).getTime(), at(12));
+    recordEngineServed("claude:overflow", at(10).getTime(), undefined, at(12));
 
     recordEngineUnavailable("claude:overflow", "usage limit", secondsAt(5 * 60), at(20), { window: "5h" });
 
@@ -218,18 +267,16 @@ describe("noteLimitReading", () => {
     expect(readEngineHealth()["claude:overflow"]?.clearedAt).toBeDefined();
   });
 
-  it("clears on a fresh snapshot and not on a stale one", () => {
+  it("does not clear on a snapshot, fresh or not: the status line never sees per-model buckets", () => {
     recordSpent();
-    noteLimitReading("claude:overflow", snapshot({ status: "snapshot", stale: true }));
+    noteLimitReading("claude:overflow", snapshot({ status: "snapshot" }));
+    noteLimitReading("claude:overflow", snapshot({ status: "snapshot", stale: false } as never));
     expect(isEngineExhausted(readEngineHealth(at(31)), "claude:overflow", at(31))).toBe(true);
-
-    noteLimitReading("claude:overflow", snapshot({ status: "snapshot", stale: false }));
-    expect(readEngineHealth()["claude:overflow"]?.clearedAt).toBeDefined();
   });
 
   it("does not clear on a source that is not a reading", () => {
     recordSpent();
-    for (const status of ["static", "unsupported", "unavailable", "error"] as const) noteLimitReading("claude:overflow", snapshot({ status }));
+    for (const status of ["snapshot", "static", "unsupported", "unavailable", "error"] as const) noteLimitReading("claude:overflow", snapshot({ status }));
     expect(isEngineExhausted(readEngineHealth(at(31)), "claude:overflow", at(31))).toBe(true);
   });
 

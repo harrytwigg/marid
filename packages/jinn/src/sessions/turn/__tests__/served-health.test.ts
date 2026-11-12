@@ -82,6 +82,16 @@ describe("noteTurnServed", () => {
     expect(readEngineHealth().claude?.state).toBe("exhausted");
   });
 
+  it("clears a limit a turn hit on this model, and leaves one a turn hit on another", () => {
+    recordEngineUnavailable("claude", "usage limit", (Date.now() + 4 * 24 * 60 * MIN) / 1000, new Date(Date.now() - 30 * MIN), { model: "opus" });
+
+    noteTurnServed(runStartedMinutesAgo(5), makeSession({ model: "sonnet" }), "sonnet", { result: answered, silent: false });
+    expect(readEngineHealth().claude?.state).toBe("exhausted");
+
+    noteTurnServed(runStartedMinutesAgo(5), makeSession({ model: "opus" }), "opus", { result: answered, silent: false });
+    expect(readEngineHealth().claude?.clearedAt).toBeDefined();
+  });
+
   it("keys an opencode model by its provider", () => {
     spentMinutesAgo("opencode/x-provider", 30);
     spentMinutesAgo("opencode/y-provider", 30);

@@ -220,7 +220,7 @@ describe("a limit that lifted before its stated reset", () => {
     expect(mod.readEngineHealth().claude?.clearedAt).toBeDefined();
   });
 
-  it("is cleared for a named account with no live reading by its fresh status-line snapshot", async () => {
+  it("is not cleared for a named account with no live reading by its fresh status-line snapshot", async () => {
     writeCredentials(Date.now() - 60_000);
     spentMinutesAgo(friendKey, 10);
     const dir = path.join(ROOT, "tmp", "engine-limits", "claude");
@@ -235,7 +235,7 @@ describe("a limit that lifted before its stated reset", () => {
       const res = await mod.collectEngineLimits(cfg(), { engine: "claude" });
 
       expect(res.accounts!.claude![1]).toMatchObject({ account: friendKey, status: "snapshot" });
-      expect(mod.readEngineHealth()[friendKey]).toMatchObject({ state: "ok", clearedAt: expect.any(String) });
+      expect(mod.readEngineHealth()[friendKey]?.state).toBe("exhausted");
     } finally {
       mod.registerSessionAccountResolver(undefined);
       fs.rmSync(file, { force: true });

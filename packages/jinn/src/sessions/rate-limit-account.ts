@@ -30,10 +30,16 @@ export function rateLimitAccount(
 
 /** Record a usage limit for the account: the generic record the chain walk
  *  reads, and Claude's own memory, which answers a different question. The
- *  record is kept under `healthKey` (the account's by default): an opencode
- *  model's provider, so one provider's limit does not hold back the others. */
-export function recordAccountRateLimit(account: string, engine: string, engineLabel: string, resetsAt: number | undefined, healthKey: string = account): void {
-  recordEngineUnavailable(healthKey, `${engineLabel} usage limit`, resetsAt);
+ *  record is kept under `held.healthKey` (the account's by default): an opencode
+ *  model's provider, so one provider's limit does not hold back the others.
+ *  `held.model` is the model the limited turn ran on, which the record keeps so
+ *  that only a turn served on it can say the limit lifted. */
+export function recordAccountRateLimit(
+  account: string, engine: string, engineLabel: string, resetsAt: number | undefined,
+  held: { healthKey?: string; model?: string } = {},
+): void {
+  const { healthKey = account, model } = held;
+  recordEngineUnavailable(healthKey, `${engineLabel} usage limit`, resetsAt, new Date(), model === undefined ? {} : { model });
   if (engine === "claude") recordClaudeRateLimit(resetsAt, account);
 }
 

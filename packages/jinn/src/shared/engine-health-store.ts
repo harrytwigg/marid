@@ -38,6 +38,14 @@ export interface EngineHealth {
    * going to use it. Absent = about the account, and applies everywhere.
    */
   host?: string;
+  /**
+   * The model the limit was observed on, when a turn on that model hit it. A limit
+   * can belong to one model (a per-model weekly bucket) although it is held under
+   * the account's key, so only a turn served on the same model says it lifted.
+   * Observation metadata like `host`: a re-probe does not carry it over. Absent on
+   * a record from a usage readout or a login failure, which are about no model.
+   */
+  model?: string;
   reason?: string;
   observedAt?: string;
   /**

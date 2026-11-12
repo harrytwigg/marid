@@ -62,11 +62,14 @@ export function clearContradictedHealth(
 /**
  * Clear `key` when a turn that began after the limit was observed was served: a
  * turn that started before someone else observed the limit proves nothing about it.
+ * A limit a turn hit on one model is cleared only by a turn served on that same
+ * model (exactly), since the limit may be that model's own bucket.
  */
-export function recordEngineServed(key: string, turnStartedAtMs: number, now: Date = new Date()): void {
+export function recordEngineServed(key: string, turnStartedAtMs: number, servedModel: string | undefined, now: Date = new Date()): void {
   const store = readStore();
   const record = clearable(store, key, now);
   if (!record || !newerThanRecord(record, turnStartedAtMs)) return;
+  if (record.model !== undefined && record.model !== servedModel) return;
   clearRecord(store, key, "a turn was served", now);
 }
 

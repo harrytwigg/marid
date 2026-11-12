@@ -25,5 +25,6 @@ export function noteTurnServed(
   if (silent || result.error) return;
   if (!result.result?.trim() && !result.cost) return;
   const { account } = rateLimitAccount(live.engine, run.input.employee, live);
-  recordEngineServed(linkHealthKey({ engine: live.engine, model: model ?? live.model ?? run.plan.engineConfig.model, account }), run.turnStartedAt);
+  const served = model ?? live.model ?? run.plan.engineConfig.model;
+  recordEngineServed(linkHealthKey({ engine: live.engine, model: served, account }), run.turnStartedAt, served);
 }
