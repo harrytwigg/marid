@@ -115,6 +115,48 @@ describe("a four-link chain: claude/A/opus -> claude/B/sonnet -> opencode/X -> o
   });
 });
 
+describe("a link that serves a turn it was offered again", () => {
+  /** B's record states a reopening days away, but its re-probe is due: a link the walk offers a probing turn. */
+  function dueForReprobe(keyName: string, observedMinutesAgo: number): void {
+    const at = (minutes: number) => new Date(Date.now() + minutes * 60_000).toISOString();
+    fs.mkdirSync(path.join(tmp, "tmp"), { recursive: true });
+    fs.writeFileSync(path.join(tmp, "tmp", "engine-health.json"), JSON.stringify({
+      [keyName]: { state: "exhausted", until: at(3 * 24 * 60), recheckAt: at(-1), window: "7d", reason: "usage limit", observedAt: at(-observedMinutesAgo) },
+    }));
+  }
+  const accountB = `claude:${claudeProfileFromDir(DIR_B).key}`;
+
+  it("clears the link's health record: the turn it served began after the limit was recorded", async () => {
+    dueForReprobe(accountB, 30);
+    const { engines, calls } = scripted((call) => (who(call) === "B/sonnet" ? answer("on B", "b-thread") : limited()));
+
+    const outcome = await handleRateLimit(limitedTurn(newSession(), employee(), engines).opts);
+
+    expect(outcome).toMatchObject({ kind: "fallback", result: { result: "on B" } });
+    expect(calls.map((call) => call.model)).toEqual(["sonnet"]);
+    expect(readEngineHealth()[accountB]).toMatchObject({ state: "ok", clearedAt: expect.any(String), reason: "a turn was served" });
+  });
+
+  it("leaves it when the link answers limited again", async () => {
+    dueForReprobe(accountB, 30);
+    const { engines } = scripted((call) => (who(call) === "y-provider/model-y" ? answer("ok") : limited(resetsIn(2 * HOUR))));
+
+    await handleRateLimit(limitedTurn(newSession(), employee(), engines).opts);
+
+    expect(readEngineHealth()[accountB]?.state).toBe("exhausted");
+    expect(readEngineHealth()[accountB]?.clearedAt).toBeUndefined();
+  });
+
+  it("does not clear on a link that failed some other way", async () => {
+    dueForReprobe(accountB, 30);
+    const { engines } = scripted((call) => (who(call) === "B/sonnet" ? failed("connection reset by peer") : answer("ok", "x-thread")));
+
+    await handleRateLimit(limitedTurn(newSession(), employee(), engines).opts);
+
+    expect(readEngineHealth()[accountB]?.clearedAt).toBeUndefined();
+  });
+});
+
 describe("a chain that runs out", () => {
   async function exhausted() {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });

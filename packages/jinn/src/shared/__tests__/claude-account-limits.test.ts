@@ -45,7 +45,9 @@ let mod: {
   collectEngineLimits: (c: JinnConfig, o?: { engine?: string }) => Promise<EngineLimitsResponse>;
   registerAccountRoster: (source: () => Iterable<Employee>) => void;
   invalidateModelRegistry: () => void;
-  recordEngineUnavailable: (engine: string, reason: string, resetsAt?: number) => void;
+  recordEngineUnavailable: (engine: string, reason: string, resetsAt?: number, now?: Date, about?: { window?: string }) => void;
+  readEngineHealth: () => Record<string, { state: string; clearedAt?: string }>;
+  collectClaudeLimits: (c: JinnConfig, profile?: null) => Promise<EngineLimitsResponse["engines"][string]>;
   claudeSnapshotFile: (dir: string, account?: string) => string | null;
   registerSessionAccountResolver: (r: ((id: string) => string | undefined) | undefined) => void;
 };
@@ -179,11 +181,48 @@ describe("two local Claude accounts (FR-071, FR-073)", () => {
 
   it("marks an account recorded at its limit", async () => {
     const until = Math.floor(Date.now() / 1000) + 3600;
-    mod.recordEngineUnavailable(friendKey, "usage limit", until);
+    // The reading carries no 7d window, so it cannot say the limit on it lifted.
+    mod.recordEngineUnavailable(friendKey, "usage limit", until, undefined, { window: "7d" });
     mod.registerAccountRoster(() => [operator, sideDev()]);
     const res = await mod.collectEngineLimits(cfg(), { engine: "claude" });
     expect(res.accounts!.claude![1]!.exhausted).toEqual({ until: new Date(until * 1000).toISOString() });
     expect(res.accounts!.claude![0]!.exhausted).toBeUndefined();
+  });
+});
+
+describe("a limit that lifted before its stated reset", () => {
+  const spentMinutesAgo = (key: string, minutes: number) =>
+    mod.recordEngineUnavailable(key, "usage limit", Math.floor(Date.now() / 1000) + 4 * 24 * 3600, new Date(Date.now() - minutes * 60_000));
+
+  it("is cleared for every account by a readout that shows headroom", async () => {
+    spentMinutesAgo("claude", 5);
+    spentMinutesAgo(friendKey, 5);
+    mod.registerAccountRoster(() => [operator, sideDev()]);
+
+    const res = await mod.collectEngineLimits(cfg(), { engine: "claude" });
+
+    const health = mod.readEngineHealth();
+    expect(health.claude).toMatchObject({ state: "ok", clearedAt: expect.any(String) });
+    expect(health[friendKey]).toMatchObject({ state: "ok", clearedAt: expect.any(String) });
+    // The readout reports them as no longer exhausted.
+    expect(res.accounts!.claude!.every((account) => account.exhausted === undefined)).toBe(true);
+  });
+
+  it("is cleared by the Claude collector alone, the way the board-walk tick reads it", async () => {
+    spentMinutesAgo("claude", 5);
+
+    await mod.collectClaudeLimits(cfg(), null);
+
+    expect(mod.readEngineHealth().claude?.clearedAt).toBeDefined();
+  });
+
+  it("is not cleared by a reading older than the limit", async () => {
+    // Observed after the reading the collector is about to take: the record is newer than the evidence.
+    mod.recordEngineUnavailable("claude", "usage limit", Math.floor(Date.now() / 1000) + 4 * 24 * 3600, new Date(Date.now() + 60 * 60_000));
+
+    await mod.collectClaudeLimits(cfg(), null);
+
+    expect(mod.readEngineHealth().claude?.state).toBe("exhausted");
   });
 });
 
