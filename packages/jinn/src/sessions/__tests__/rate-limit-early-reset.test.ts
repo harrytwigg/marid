@@ -53,7 +53,7 @@ const STATED_RESET_IN_MS = 4 * 60 * MIN;
 const answer: EngineResult = { result: "done", sessionId: "claude-thread-1" };
 const secs = (ms: number) => Math.floor(ms / 1000);
 
-function opts(run: ReturnType<typeof vi.fn>, engine = "claude"): RateLimitHandlerOpts {
+function opts(run: ReturnType<typeof vi.fn>, engine = "claude", extra: Partial<RateLimitHandlerOpts> = {}): RateLimitHandlerOpts {
   return {
     session: makeSession({ engine }),
     attemptToken: "attempt-1",
@@ -65,6 +65,7 @@ function opts(run: ReturnType<typeof vi.fn>, engine = "claude"): RateLimitHandle
     rateLimit: { resetsAt: secs(Date.now() + STATED_RESET_IN_MS) },
     originalResult: { result: "", sessionId: "claude-thread-1" } as EngineResult,
     hooks: {},
+    ...extra,
   };
 }
 
@@ -156,6 +157,52 @@ describe("handleRateLimit — a limit that lifts before its stated reset", () =>
     expect(value.kind).toBe("resumed");
     // The early probe, then the retry at the stated reset: not one a minute.
     expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not let a reading taken during a slow limited probe trigger another probe straight after it", async () => {
+    const statedReset = Date.now() + STATED_RESET_IN_MS;
+    const limited: EngineResult = { result: "", sessionId: "claude-thread-1", error: "limited" };
+    limitedMock.mockImplementation((result) => (result.error === "limited" ? { limited: true, resetsAt: secs(statedReset) } : undefined));
+    const run = vi.fn(async () => {
+      if (Date.now() >= statedReset) return answer;
+      // The first early probe takes five minutes; a misleading reading lands while it runs.
+      await new Promise((resolve) => setTimeout(resolve, 2 * MIN));
+      readingMock.mockReturnValue(reading(20, statedReset + 60 * MIN));
+      await new Promise((resolve) => setTimeout(resolve, 3 * MIN));
+      return limited;
+    });
+
+    const { value } = await drive(handleRateLimit(opts(run)), {
+      10: () => readingMock.mockReturnValue(reading(50, statedReset + 60 * MIN)),
+    });
+
+    expect(value.kind).toBe("resumed");
+    // The early probe the first reading earned, then the retry at the stated reset. The reading
+    // that landed mid-probe predates the limited answer it was contradicted by, so it buys nothing.
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not cut a host backoff short on a usage reading: the host, not the limit, is what is awaited", async () => {
+    const run = vi.fn().mockResolvedValue(answer);
+    const gateCalls: number[] = [];
+    const startedAt = Date.now();
+    const hostUpAt = startedAt + 40 * MIN;
+    const prepareRetry = vi.fn(async () => {
+      gateCalls.push(Math.round((Date.now() - startedAt) / MIN));
+      return Date.now() >= hostUpAt ? { ok: true as const } : { ok: false as const, error: "Remote host unavailable: build-box is asleep" };
+    });
+
+    await drive(handleRateLimit(opts(run, "claude", {
+      rateLimit: { resetsAt: secs(startedAt + MIN) },
+      hooks: { prepareRetry },
+    })), {
+      // Mid-way through the 8-minute backoff that follows the third failure.
+      10: () => readingMock.mockReturnValue(reading(0, startedAt + 300 * MIN)),
+    });
+
+    // Backoff alone: about a minute after the reset, then +1, +2, +4, +8, +16 minutes.
+    expect(gateCalls.filter((minute) => minute > 9 && minute < 15)).toEqual([]);
+    expect(run).toHaveBeenCalledTimes(1);
   });
 
   it("leaves engines without usage readings to sleep to the stated reset", async () => {
