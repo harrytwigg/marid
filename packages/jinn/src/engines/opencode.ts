@@ -27,7 +27,7 @@ import { describeOpencodeLaunch } from "./opencode-protocol.js";
 import { opencodeApiOf } from "./opencode-version.js";
 import { withKnownEffort, type ModelEffortLevels } from "./opencode-variant.js";
 import { localOpencodeVersion } from "../shared/opencode-bin-version.js";
-import { unservedTurnModel } from "./opencode-model-served.js";
+import { unservedTurnResult } from "./opencode-model-served.js";
 import { resolveBin } from "../shared/resolve-bin.js";
 
 interface LiveProcess extends RemoteRun {
@@ -181,6 +181,11 @@ export class OpencodeEngine implements InterruptibleEngine {
     return !!live && !live.proc.killed && live.proc.exitCode === null;
   }
 
+  /** The accounts this turn's session may use, asked for as the session on the model it runs. */
+  private accountsFor(sessionId: string, model: string | undefined): ReturnType<OpencodeAccountsReader> {
+    return this.readAccounts({ sessionId, ...(model ? { model } : {}) });
+  }
+
   async run(requested: EngineRunOpts): Promise<EngineResult> {
     // From here on `effortLevel` is the variant to send, or nothing.
     const opts = withKnownEffort(requested, this.readEffortLevels());
@@ -188,9 +193,9 @@ export class OpencodeEngine implements InterruptibleEngine {
     const onStream = opts.onStream || null;
 
     // A model this host's opencode cannot serve fails here, with the reason, rather than inside opencode with none.
-    const accounts = this.readAccounts({ sessionId: trackingId, ...(opts.model ? { model: opts.model } : {}) });
-    const unserved = await unservedTurnModel(opts, accounts);
-    if (unserved) return { sessionId: opts.resumeSessionId || "", result: "", error: unserved, conversationIntact: true };
+    const accounts = this.accountsFor(trackingId, opts.model);
+    const refused = await unservedTurnResult(opts, accounts);
+    if (refused) return refused;
 
     // A server belongs to a Jinn session; a turn without one has nothing to reuse it.
     if (this.servers && this.readMode() === "server" && opts.sessionId) {
@@ -215,7 +220,7 @@ export class OpencodeEngine implements InterruptibleEngine {
     // turn needs `--standalone` (opencode-launch.ts); a remote host's comes
     // with its facts.
     const commandTimeoutMs = this.readCommandTimeoutMs();
-    const accounts = accountsRead ?? this.readAccounts({ sessionId: trackingId, ...(opts.model ? { model: opts.model } : {}) });
+    const accounts = accountsRead ?? this.accountsFor(trackingId, opts.model);
     const processOptions = { disableFff: this.readDisableFff(), ...(commandTimeoutMs > 0 ? { commandTimeoutMs } : {}), ...(accounts ? { accounts } : {}) };
     if (!isRemoteTarget(opts)) {
       const api = opencodeApiOf(await localOpencodeVersion(resolveBin("opencode", opts.bin)));

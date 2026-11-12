@@ -1,4 +1,4 @@
-import type { EngineRunOpts } from "../shared/types.js";
+import type { EngineResult, EngineRunOpts } from "../shared/types.js";
 import { isRemoteTarget, sshDestination } from "../shared/remote-target.js";
 import { localOpencodeVersion } from "../shared/opencode-bin-version.js";
 import { resolveBin } from "../shared/resolve-bin.js";
@@ -27,4 +27,10 @@ export async function unservedTurnModel(opts: EngineRunOpts, accounts: OpencodeA
   }
   const facts = await gatherFacts(sshDestination(opts)).catch(() => undefined);
   return facts !== undefined && opencodeApiOf(facts.opencodeVersion) === 1 ? onOne : undefined;
+}
+
+/** The failed result of a turn on a model its host's opencode cannot serve; undefined when it can. Nothing ran, so the conversation is intact (it is never read as a stale resume id). */
+export async function unservedTurnResult(opts: EngineRunOpts, accounts: OpencodeAccountStaging | undefined): Promise<EngineResult | undefined> {
+  const error = await unservedTurnModel(opts, accounts);
+  return error === undefined ? undefined : { sessionId: opts.resumeSessionId || "", result: "", error, conversationIntact: true };
 }
