@@ -126,6 +126,7 @@ afterAll(() => {
 
 beforeEach(() => {
   for (const f of fs.readdirSync(CLAUDE_DIR)) fs.rmSync(path.join(CLAUDE_DIR, f));
+  fs.rmSync(path.join(JINN_HOME_TMP, "tmp", "engine-health.json"), { force: true });
   invalidateModelRegistry();
 });
 
@@ -161,6 +162,46 @@ describe("collectEngineLimits — claude statusline snapshot", () => {
     );
     out = await collectEngineLimits(cfg(), { engine: "claude" });
     expect(out.engines.claude.stale).toBeFalsy();
+  });
+
+  describe("a limit recorded before the snapshot was taken", () => {
+    const bothWindows = (capturedAt: string) => JSON.stringify({
+      captured_at: capturedAt,
+      rate_limits: { five_hour: { used_percentage: 0, resets_at: 4_000_000_000 }, seven_day: { used_percentage: 2, resets_at: 4_000_000_000 } },
+    });
+    const spentMinutesAgo = async (minutes: number) => {
+      const { recordEngineUnavailable } = await import("../engine-health.js");
+      recordEngineUnavailable("claude", "usage limit", Date.now() / 1000 + 4 * 24 * 3600, new Date(Date.now() - minutes * 60_000), { window: "7d" });
+    };
+    const health = async () => (await import("../engine-health.js")).readEngineHealth().claude;
+
+    it("is cleared by a fresh snapshot that shows headroom on every window", async () => {
+      await spentMinutesAgo(10);
+      writeClaudeSnapshot("fresh.json", bothWindows(new Date(Date.now() - 2 * 60_000).toISOString()), 2 * 60_000);
+
+      await collectEngineLimits(cfg(), { engine: "claude" });
+
+      expect(await health()).toMatchObject({ state: "ok", clearedAt: expect.any(String) });
+    });
+
+    it("is not cleared by a snapshot gone stale, though it was taken after the limit", async () => {
+      await spentMinutesAgo(60);
+      writeClaudeSnapshot("stale.json", bothWindows(new Date(Date.now() - 45 * 60_000).toISOString()), 45 * 60_000);
+
+      const out = await collectEngineLimits(cfg(), { engine: "claude" });
+
+      expect(out.engines.claude.stale).toBe(true);
+      expect((await health())?.state).toBe("exhausted");
+    });
+
+    it("is not cleared by a snapshot taken before the limit was recorded", async () => {
+      await spentMinutesAgo(1);
+      writeClaudeSnapshot("old.json", bothWindows(new Date(Date.now() - 5 * 60_000).toISOString()), 5 * 60_000);
+
+      await collectEngineLimits(cfg(), { engine: "claude" });
+
+      expect((await health())?.state).toBe("exhausted");
+    });
   });
 
   it("degrades a malformed snapshot to fixed copy, leaking neither payload nor parser detail", async () => {

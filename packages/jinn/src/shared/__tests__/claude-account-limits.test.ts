@@ -216,6 +216,28 @@ describe("a limit that lifted before its stated reset", () => {
     expect(mod.readEngineHealth().claude?.clearedAt).toBeDefined();
   });
 
+  it("is cleared for a named account with no live reading by its fresh status-line snapshot", async () => {
+    writeCredentials(Date.now() - 60_000);
+    spentMinutesAgo(friendKey, 10);
+    const dir = path.join(ROOT, "tmp", "engine-limits", "claude");
+    const file = path.join(dir, "friend-session.json");
+    fs.writeFileSync(file, JSON.stringify({
+      captured_at: new Date(Date.now() - 60_000).toISOString(),
+      rate_limits: { five_hour: { used_percentage: 3, resets_at: 4_000_000_000 }, seven_day: { used_percentage: 1, resets_at: 4_000_000_000 } },
+    }));
+    mod.registerSessionAccountResolver((id) => (id === "friend-session" ? friendKey : "claude"));
+    mod.registerAccountRoster(() => [operator, sideDev()]);
+    try {
+      const res = await mod.collectEngineLimits(cfg(), { engine: "claude" });
+
+      expect(res.accounts!.claude![1]).toMatchObject({ account: friendKey, status: "snapshot" });
+      expect(mod.readEngineHealth()[friendKey]).toMatchObject({ state: "ok", clearedAt: expect.any(String) });
+    } finally {
+      mod.registerSessionAccountResolver(undefined);
+      fs.rmSync(file, { force: true });
+    }
+  });
+
   it("is not cleared by a reading older than the limit", async () => {
     // Observed after the reading the collector is about to take: the record is newer than the evidence.
     mod.recordEngineUnavailable("claude", "usage limit", Math.floor(Date.now() / 1000) + 4 * 24 * 3600, new Date(Date.now() + 60 * 60_000));

@@ -137,6 +137,17 @@ describe("a link that serves a turn it was offered again", () => {
     expect(readEngineHealth()[accountB]).toMatchObject({ state: "ok", clearedAt: expect.any(String), reason: "a turn was served" });
   });
 
+  it("leaves a record written after the link's turn began: that turn proves nothing about it", async () => {
+    // Another session found the link limited while this turn was running.
+    dueForReprobe(accountB, -5);
+    const { engines } = scripted((call) => (who(call) === "B/sonnet" ? answer("on B", "b-thread") : limited()));
+
+    await handleRateLimit(limitedTurn(newSession(), employee(), engines).opts);
+
+    expect(readEngineHealth()[accountB]?.state).toBe("exhausted");
+    expect(readEngineHealth()[accountB]?.clearedAt).toBeUndefined();
+  });
+
   it("leaves it when the link answers limited again", async () => {
     dueForReprobe(accountB, 30);
     const { engines } = scripted((call) => (who(call) === "y-provider/model-y" ? answer("ok") : limited(resetsIn(2 * HOUR))));
