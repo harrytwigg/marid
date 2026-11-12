@@ -210,13 +210,12 @@ function pinnedModel(config: JinnConfig, session: Session, chosen: { engine: str
  * `?` is a list request, never a model. A session asking must name one the engine lists when it lists any.
  */
 function modelRefusal(config: JinnConfig, engine: string, model: unknown, caller: ResolveOptions["caller"]): Extract<SwitchResolution, { ok: false }> | undefined {
-  if (model === undefined || model === null) return undefined;
+  if (typeof model !== "string") return undefined;
+  const id = model.trim();
   const refused = (error: string) => refusal("invalid-target", error) as Extract<SwitchResolution, { ok: false }>;
-  if (typeof model === "string" && model.trim() === "?") return refused(`"?" is not a model — it asks for the list; these are the models "${engine}" offers`);
-  if (caller !== "session" || typeof model !== "string") return undefined;
+  if (id === "?") return refused(`"?" is not a model — it asks for the list; these are the models "${engine}" offers`);
   const listed = getModelRegistry(config)[engine]?.models ?? [];
-  if (listed.length > 0 && !listed.some((entry) => entry.id === model.trim())) return refused(`unknown model "${model.trim()}" for engine "${engine}"`);
-  return undefined;
+  return caller === "session" && listed.length > 0 && !listed.some((entry) => entry.id === id) ? refused(`unknown model "${id}" for engine "${engine}"`) : undefined;
 }
 
 /** The target for an engine and profile directory already cleared, with the model and effort checked against the engine. */
@@ -226,10 +225,7 @@ function buildTarget(
   own: SwitchTargetView,
   chosen: { engine: string; dir: string | null },
   request: SwitchRequest,
-  caller: ResolveOptions["caller"],
 ): { ok: true; target: SwitchTargetView } | Extract<SwitchResolution, { ok: false }> {
-  const asked = modelRefusal(config, chosen.engine, request.model, caller);
-  if (asked) return asked;
   const kept = inheritedSelection(session, own, chosen.engine, chosen.dir);
   // The inherited effort goes in as a default, which the validator drops when the target model has no such level; a requested one is still refused.
   const selection = validateNewSessionSelection(
@@ -259,7 +255,9 @@ export function resolveSwitchTarget(config: JinnConfig, session: Session, reques
   if (engineProblem) return engineProblem;
   const profile = resolveProfile(config, session, named.engine, request.profile);
   if (!profile.ok) return profile;
-  const built = buildTarget(config, session, own, { engine: named.engine, dir: profile.dir }, request, opts.caller);
+  const modelProblem = modelRefusal(config, named.engine, request.model, opts.caller);
+  if (modelProblem) return modelProblem;
+  const built = buildTarget(config, session, own, { engine: named.engine, dir: profile.dir }, request);
   if (!built.ok) return built;
 
   const refused = opts.caller === "session" ? selfRefusal(config, session, own, built.target, opts.now ?? new Date()) : undefined;
