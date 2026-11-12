@@ -263,6 +263,14 @@ describe('ModelSelectorRow primary profile picker', () => {
     expect(last.profile).toBeUndefined()
   })
 
+  it('checks no row for a session profile that is no longer declared, rather than own login', async () => {
+    renderRow(<ModelSelectorRow mode="existing" allowProfiles value={{ engine: 'claude', model: 'opus', profile: 'gone' }} onChange={() => {}} />)
+    openMenu()
+    fireEvent.click(await screen.findByRole('menuitem', { name: /switch engine/i }))
+    const own = await screen.findByRole('menuitem', { name: /^claude · own login$/i })
+    expect(own.querySelector('svg')).toBeNull()
+  })
+
   it('picking a profile in an existing chat from own login records it beside claude', async () => {
     const onChange = vi.fn()
     renderRow(<ModelSelectorRow mode="existing" allowProfiles value={{ engine: 'claude', model: 'opus' }} onChange={onChange} />)
