@@ -107,12 +107,12 @@ export function providerLabel(provider: string): string {
  * An empty query matches everything.
  */
 export function modelMatchesQuery(
-  model: Pick<ModelInfo, 'id' | 'label'>,
+  model: Pick<ModelInfo, 'id' | 'label' | 'account'>,
   query: string,
 ): boolean {
   const q = query.trim().toLowerCase()
   if (!q) return true
   const provider = providerOf(model.id)
-  const haystack = `${model.label} ${model.id} ${provider} ${providerLabel(provider)}`.toLowerCase()
+  const haystack = `${model.label} ${model.id} ${provider} ${providerLabel(provider)} ${model.account ?? ""}`.toLowerCase()
   return haystack.includes(q)
 }

@@ -2,6 +2,7 @@ import { AlertTriangle } from "@/components/ui/icon"
 import type { EngineLimitAccountSnapshot, EngineLimitEngineSnapshot, EngineLimitWindow } from "@/lib/api"
 import { engineDisplayName } from "@/lib/engine-names"
 import { accountStatus } from "./account-status"
+import { AccountFacts, isOpencodeAccount, ModelBuckets } from "./opencode-account-parts"
 import { agoLabel, barColor, clampPercent, resetLabel, windowLabel } from "./format"
 import { deriveFreshness, type FreshnessKind } from "./use-engine-limits"
 
@@ -185,7 +186,14 @@ export function EngineCard({ engine, now, account, title }: {
       )}
 
       <div className="flex-1">
-        <Windows engine={engine} now={now} />
+        {isOpencodeAccount(account) ? (
+          <>
+            <ModelBuckets account={account} now={now} />
+            <AccountFacts account={account} now={now} />
+          </>
+        ) : (
+          <Windows engine={engine} now={now} />
+        )}
       </div>
 
       {creditLabel && (

@@ -60,6 +60,8 @@ function ModelSearchBox({ list }: { list: ModelList }) {
 /** One model row: label, provider badge, accent check on the selected. */
 function ModelRow({ model, selected, keepOpenOnPick }: { model: ModelInfo; selected: boolean; keepOpenOnPick?: boolean }) {
   const provider = providerOf(model.id)
+  // An account model reads as its account, not as the alias provider id it is staged under.
+  const badge = model.account ?? (provider ? providerLabel(provider) : '')
   return (
     <DropdownMenuRadioItem
       value={model.id}
@@ -68,9 +70,12 @@ function ModelRow({ model, selected, keepOpenOnPick }: { model: ModelInfo; selec
     >
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span className="truncate">{model.label}</span>
-        {provider && (
-          <span className="shrink-0 rounded-[5px] bg-[var(--fill-tertiary)] px-1 py-px text-[length:var(--text-caption2)] text-[var(--text-tertiary)]">
-            {providerLabel(provider)}
+        {badge && (
+          <span
+            data-account-badge={model.account}
+            className="shrink-0 rounded-[5px] bg-[var(--fill-tertiary)] px-1 py-px text-[length:var(--text-caption2)] text-[var(--text-tertiary)]"
+          >
+            {badge}
           </span>
         )}
       </span>

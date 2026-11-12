@@ -31,6 +31,25 @@ export interface AccountSettings {
   [key: string]: unknown
 }
 
+/** A declared opencode account under `engines.opencode.accounts`, as written. */
+export interface OpencodeAccountSettings {
+  provider?: string
+  base?: string
+  /** The variable's name, not a secret. */
+  keyEnv?: string
+  label?: string
+  models?: string[]
+  usageLimits?: { monthlyUsd?: Record<string, number> }
+  [key: string]: unknown
+}
+
+/** The declared opencode accounts, in the order config.yaml states them. */
+export function opencodeAccounts(engines: EnginesConfig | undefined): [string, OpencodeAccountSettings][] {
+  const accounts = (engines?.opencode as { accounts?: unknown } | undefined)?.accounts
+  if (!accounts || typeof accounts !== "object" || Array.isArray(accounts)) return []
+  return Object.entries(accounts as Record<string, unknown>).filter(([, a]) => a && typeof a === "object") as [string, OpencodeAccountSettings][]
+}
+
 /** The `engines` block. `default` names an engine; every other key is one. */
 export interface EnginesConfig {
   default?: string
