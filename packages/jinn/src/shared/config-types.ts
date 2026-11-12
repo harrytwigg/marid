@@ -193,6 +193,9 @@ export interface JinnConfig {
        *  unmetered, exactly as before. See docs/engines-opencode.md. */
       usageLimits?: OpencodeUsageLimitsConfig;
       autoCompact?: AutoCompactConfig; // server mode only
+      /** Named accounts: several subscriptions to one provider, each staged as its
+       *  own provider id. See docs/design/opencode-accounts.md. */
+      accounts?: Record<string, OpencodeAccountConfig>;
     };
     musecode?: MusecodeEngineConfig;
     freebuff?: FreebuffEngineConfig;
@@ -402,4 +405,20 @@ export interface OpencodeUsageLimitsConfig {
    *  `provider/*` key covers every model of that provider an exact key does not
    *  name. A model matching no key is not metered. */
   monthlyUsd?: Record<string, number>;
+}
+
+/** One `engines.opencode.accounts` entry (shared/opencode-accounts-config.ts). */
+export interface OpencodeAccountConfig {
+  /** The provider id chains name: `<provider>/<model>`. */
+  provider: string;
+  /** Clone this provider's endpoints, SDKs, prices and limits. Absent = `provider`
+   *  is a built-in one, declared for a name, metering and a card. */
+  base?: string;
+  /** The environment variable holding the account's key (with `base` only). Never the key itself. */
+  keyEnv?: string;
+  label?: string;
+  /** A subset of the base's models (ids without the provider); default all. */
+  models?: string[];
+  /** Keys are model ids without the provider, or `*`. Absent = the engine-level limits of the base apply. */
+  usageLimits?: OpencodeUsageLimitsConfig;
 }

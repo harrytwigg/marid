@@ -94,8 +94,9 @@ engines:
         provider: opencode-go                # a built-in provider, declared for a name, metering and a card
 ```
 
-Rules, checked at load time (an invalid account is reported and ignored; the
-rest of the config still loads):
+Rules, checked at load time (`shared/opencode-accounts-config.ts`, with the
+other config checks; a config that breaks one is refused like any other config
+mistake):
 
 - `provider` must match `^[a-z0-9][a-z0-9._-]*$`. It must be unique across
   accounts, must differ from `base`, and must not be `opencode`.
