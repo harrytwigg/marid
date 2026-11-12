@@ -1,14 +1,9 @@
-import { findSessionTranscript } from "../engines/claude-transcript-path.js";
 import type { GatewayEmit } from "../shared/gateway-events.js";
-import { isRemoteTarget } from "../shared/remote-target.js";
 import type { JinnConfig, JsonObject, Session } from "../shared/types.js";
-import { getEngineSessionRef, getSession, switchSessionTarget } from "../sessions/registry.js";
-import { sessionClaudeProfile } from "../sessions/session-account.js";
-import { transcriptCwd } from "../sessions/session-cwd.js";
-import { sessionScopeDepartment } from "../sessions/session-scope.js";
+import { leftTranscriptOf } from "../sessions/left-transcript.js";
+import { getSession, switchSessionTarget } from "../sessions/registry.js";
 import { recordSwitchNotice, type LastSwitch } from "../sessions/switch-notice.js";
-import { claudeAccountFor, resolveSwitchTarget, type SwitchTargetView } from "../sessions/switch-target.js";
-import { orgRegistry } from "./org-registry.js";
+import { resolveSwitchTarget, staysInSlot, type SwitchTargetView } from "../sessions/switch-target.js";
 
 /**
  * The operator's switch of an existing session's engine or Claude profile
@@ -36,21 +31,6 @@ export interface TargetPatchInput {
   body: { engine?: string; profile?: string | null; model?: unknown; effortLevel?: unknown };
   /** A turn is running, waiting or queued: nothing may move the session meanwhile. */
   busy: boolean;
-}
-
-/** The left Claude conversation's transcript path, found while the row still names it; none for a scoped or remote session or one with no conversation yet. */
-function leftTranscriptOf(session: Session, config: JinnConfig): string | undefined {
-  if (session.engine !== "claude" || sessionScopeDepartment(session)) return undefined;
-  const employee = session.employee ? orgRegistry(config).get(session.employee) : undefined;
-  if (isRemoteTarget(employee)) return undefined;
-  const id = getEngineSessionRef(session, "claude").id;
-  return id ? findSessionTranscript(id, sessionClaudeProfile(session, employee), transcriptCwd(session)) : undefined;
-}
-
-/** Whether the target leaves the session in the conversation slot it is in: nothing to switch, today's model/effort path. */
-function staysInSlot(config: JinnConfig, session: Session, target: SwitchTargetView): boolean {
-  if (target.engine !== session.engine) return false;
-  return target.engine !== "claude" || claudeAccountFor(config, session, target.claudeConfigDir) === claudeAccountFor(config, session, session.claudeConfigDir);
 }
 
 /** The record of an operator's switch, with the left transcript read while the row still names it. */

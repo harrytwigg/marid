@@ -39,6 +39,7 @@ import { stripControlChars, hasControlBytes } from "../shared/sanitize.js";
 import { CONNECTOR_ID_REQUIREMENTS, isValidConnectorId } from "../shared/connector-id.js";
 import { initDb } from "../shared/db.js";
 import { countPendingQueueItemsByKey } from "../sessions/queue-item-registry.js";
+import { withdrawPendingSwitchOfDelivery } from "../sessions/pending-switch.js";
 import {
   listSessions,
   listChatPins,
@@ -1280,6 +1281,7 @@ export async function handleApiRequest(
     if (await handleSelfCompactionApi(req, res, { method, pathname, url }, {
       resolveCaller: () => resolveScopedWriteCallerIdentity(req, context),
       opencodeMode: () => context.getConfig().engines.opencode?.mode,
+      getConfig: context.getConfig,
     })) return;
     if (await handleSessionContextApi(req, res, { method, pathname, url }, { getConfig: context.getConfig, resolveCaller: () => resolveScopedWriteCallerIdentity(req, context) })) return;
     if (pathname.startsWith("/api/terminals") && await handleTerminalApi(req, res, { method, pathname, url }, terminalApiOptions(req, context))) return;
@@ -3894,6 +3896,7 @@ export async function handleApiRequest(
       if (callbackDelivery && isStoppedByUser(session)) {
         deadLetterSessionDelivery(callbackDelivery.id, STOPPED_SESSION_NOT_DELIVERED);
         releaseSelfCompactionOfDelivery(callbackDelivery);
+        withdrawPendingSwitchOfDelivery(callbackDelivery);
         refuseStoppedSession(res, session);
         return;
       }

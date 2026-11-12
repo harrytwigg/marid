@@ -26,6 +26,7 @@ import { rateLimitAccount, recordAccountRateLimit } from "../rate-limit-account.
 import type { EngineResult } from "../../shared/types.js";
 import { recordRefusedBeforeEngine } from "../engine-reach.js";
 import { servedFields } from "./served-fields.js";
+import { recordAnsweredCompaction, recordCompactionFailure } from "./compaction-outcome.js";
 import { withLeftBackgroundTasksCleared } from "../left-background-tasks.js";
 import type { TurnInput, TurnRun, TurnSurface } from "./types.js";
 
@@ -123,6 +124,7 @@ export async function settleRateLimitedCompaction(run: TurnRun, resetsAtSeconds:
   const engineLabel = rateLimitEngineLabel(run.plan.engineName);
   const text = compactionRateLimited(engineLabel, formatResumeTime(resumeAt));
   logger.info(`Session ${sessionId}: /compact hit a usage limit; not retried or moved to another engine`);
+  recordCompactionFailure(run, "usage-limit");
   // Recorded as the rate-limit branch records it, so the next turn — here or
   // in any session — knows the limit without spending a spawn to find it.
   const { account } = rateLimitAccount(run.plan.engineName, run.input.employee, run.input.session);
@@ -187,7 +189,10 @@ export async function settleAnsweredTurn(
  * its error for an answer already.
  */
 async function announceCompaction(run: TurnRun, result: EngineResult): Promise<void> {
-  if (!run.plan.compaction || result.error) return;
+  if (!run.plan.compaction) return;
+  // A session switching itself waits on how this ended: confirmed, unconfirmed or failed.
+  await recordAnsweredCompaction(run, result);
+  if (result.error) return;
   if (!result.compaction) return await run.surface.notice(COMPACTION_UNCONFIRMED);
   const note = unusedFocusNote(run.plan.engineName, run.input.prompt);
   await run.surface.notice([compactionConfirmation(result.compaction), note].filter(Boolean).join(" "));
@@ -305,6 +310,7 @@ function filedEngineSession(
 /** The turn threw: settle it as failed. The caller has confirmed it can land. */
 export async function settleThrownTurn(run: TurnRun, errMsg: string): Promise<void> {
   const sessionId = run.input.session.id;
+  recordCompactionFailure(run, "error");
   deletePartialMessages(sessionId);
   await settleTurn({
     sessionId,
