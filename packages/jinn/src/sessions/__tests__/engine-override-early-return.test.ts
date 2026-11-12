@@ -155,6 +155,18 @@ describe("ownTargetClearedSince", () => {
     expect(ownTargetClearedSince(s, override, { engine: "claude", model: "opus" }, {})).toBe(true);
   });
 
+  it("needs every key of the target clear: a provider's clear does not return a session whose whole engine is out", () => {
+    const s = swapped("keys", -60);
+    const own = { engine: "opencode", model: "x-provider/model-x" };
+    const override = standingOverride(s) as Record<string, unknown>;
+    spend(-120, "opencode/x-provider");
+    clear(-30, "opencode/x-provider");
+    expect(ownTargetClearedSince(s, override, own, {})).toBe(true);
+
+    spend(-20, "opencode");
+    expect(ownTargetClearedSince(s, override, own, {})).toBe(false);
+  });
+
   it("is false for a session with no override, and for an auto-resume session", () => {
     const plain = reg.createSession({ engine: "claude", source: "web", sourceRef: "web:plain" });
     expect(ownTargetCleared(plain)).toBe(false);

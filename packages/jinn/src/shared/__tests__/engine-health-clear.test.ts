@@ -89,6 +89,15 @@ describe("clearContradictedHealth", () => {
     expect(isEngineExhausted(readEngineHealth(at(31)), "claude:overflow", at(31))).toBe(true);
   });
 
+  it("does not clear a record that names no window on a reading with no window either: nothing was read", () => {
+    recordSpent("claude:overflow", {});
+
+    clearContradictedHealth("claude:overflow", [], at(30).getTime(), at(31));
+    clearContradictedHealth("claude:overflow", undefined, at(30).getTime(), at(31));
+
+    expect(isEngineExhausted(readEngineHealth(at(31)), "claude:overflow", at(31))).toBe(true);
+  });
+
   it("clears a record that names no window on any complete reading", () => {
     recordSpent("claude:overflow", {});
 

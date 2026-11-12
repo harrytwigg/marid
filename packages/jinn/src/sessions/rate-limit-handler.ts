@@ -124,7 +124,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
   const resumeAt = earlier(limitResetAt, handBackAt);
   const threadFields = originalResult.sessionId?.trim() ? nextEngineSessionFields(session, session.engine, originalResult.sessionId) : {};
   // A stand-in's wait ends when its own target does: the window closed while this turn ran, or the own target was cleared.
-  const ownCleared = ownTargetClearedCheck({ session, handBackAt, employee, config: opts.config });
+  const ownCleared = ownTargetClearedCheck({ session, employee, config: opts.config });
   const dueOnEntry = handBackDue(handBackAt, ownCleared);
   if (dueOnEntry) {
     noteHandBack(session.id, dueOnEntry);

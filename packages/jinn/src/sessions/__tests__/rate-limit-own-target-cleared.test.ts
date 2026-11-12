@@ -202,6 +202,23 @@ describe.each(["account", "engine"] as const)("handleRateLimit — a wait on a %
   });
 });
 
+describe("handleRateLimit — the own-target check reads the live row", () => {
+  it("judges the override the row carries now, as the hand-back's revert will", async () => {
+    ownSpentAgo(10);
+    ownServedAgo(2);
+    // The turn's snapshot carries a swap older than the clear; the row now carries a newer swap, made after it.
+    const snapshot = standingIn("account", Date.now() + 3 * 60 * MIN, Date.now() - 5 * MIN);
+    const row = standingIn("account", Date.now() + 3 * 60 * MIN, Date.now() + MIN);
+    getSessionMock.mockImplementation(() => ({ ...row, status: "waiting" }));
+    const run = vi.fn().mockResolvedValue(answer);
+
+    const { value, minutes } = await drive(handleRateLimit(opts(snapshot, run)));
+
+    expect(value).toMatchObject({ kind: "handback", waited: true });
+    expect(minutes).toBeGreaterThanOrEqual(180);
+  });
+});
+
 describe("handleRateLimit — the own-target check beside the usage-reading watch", () => {
   it("the earliest wake wins: a reading that lifts the stand-in's limit before the own target clears", async () => {
     ownSpentAgo(10);

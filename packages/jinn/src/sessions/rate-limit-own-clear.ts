@@ -18,16 +18,13 @@ export type HandBackDue = "window" | "own-target-cleared";
 
 export interface OwnClearInput {
   session: Session;
-  /** When the session goes back at the latest; no hand-back pending, no check. */
-  handBackAt: Date | undefined;
   employee?: Employee;
   config?: JinnConfig;
 }
 
-/** The own-target check for a wait: false whenever no hand-back is pending, and read off the live row, whose override is the standing one. */
+/** The own-target check for a wait, read off the live row: its override is the one the hand-back's revert acts on. Only consulted with a hand-back pending (`handBackDue`, `withOwnClearWake`). */
 export function ownTargetClearedCheck(input: OwnClearInput): () => boolean {
-  const { session, handBackAt, employee, config } = input;
-  if (!handBackAt) return () => false;
+  const { session, employee, config } = input;
   return () => ownTargetCleared(getSession(session.id) ?? session, employee, config);
 }
 
