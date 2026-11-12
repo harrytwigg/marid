@@ -51,6 +51,18 @@ describe("switchNoticeText", () => {
       .toMatch(new RegExp(`\\(requested by this session; the compaction failed \\(${phrase}\\), so the new conversation was told where to read the history\\)$`));
   });
 
+  it("says a compaction in place that failed did not compact, rather than that it did", () => {
+    expect(switchNoticeText(config, { ...base, carryOver: "same-conversation", reason: "usage-limit" }))
+      .toMatch(/\(requested by this session; the compaction failed \(usage limit\), so the context was not compacted\)$/);
+  });
+
+  it("gives each failure reason's own words on a manual handover", () => {
+    for (const [reason, words] of [["error", "an error"], ["unconfirmed", "it could not be confirmed"], ["no-summary", "no summary was produced"], ["summary-too-long", "the summary was too long"], ["no-outcome", "it did not finish"]]) {
+      expect(switchNoticeText(config, { ...base, carryOver: "manual-handover", reason }))
+        .toContain(`the compaction failed (${words}), so the new conversation was told where to read the history`);
+    }
+  });
+
   it("says an engine with no compaction has none, rather than that one failed", () => {
     const text = switchNoticeText(config, { ...base, to: oc, from: oc, carryOver: "manual-handover", reason: "not-supported" });
     expect(text).toMatch(/opencode has no compaction, so the new conversation was told where to read the history/);

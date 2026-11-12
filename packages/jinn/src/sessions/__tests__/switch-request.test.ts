@@ -115,7 +115,7 @@ describe("renderRefusal", () => {
 
 describe("listSwitchTargets", () => {
   it("names the session's current target, with own login first and every declared profile", () => {
-    const targets = listSwitchTargets(config, session({ claudeConfigDir: null }));
+    const targets = listSwitchTargets(config, session());
     expect(targets.current).toEqual({ engine: "claude", profile: null, model: "opus" });
     const claude = targets.engines.find((e) => e.name === "claude")!;
     expect(claude.profiles!.map((p) => [p.name, p.label])).toEqual([["", "own login"], ["alpha", "alpha"], ["beta", "beta"]]);
@@ -140,19 +140,18 @@ describe("listSwitchTargets", () => {
   it.each([["unscoped", "plain-dev"], ["scoped", "lab-dev"], ["remote", "far-dev"]])("every target it offers a %s session is one the resolver accepts for it (SC-005)", (_name, employee) => {
     const s = session({ employee });
     const targets = listSwitchTargets(config, s);
-    let checked = 0;
-    for (const engine of targets.engines.filter((e) => e.health.state === "ok")) {
-      const profiles = engine.profiles?.filter((p) => p.health.state === "ok").map((p) => p.name) ?? [undefined];
-      for (const profile of profiles) {
-        for (const model of engine.models) {
-          const isOwn = engine.name === targets.current.engine && (profile === undefined || (profile === "" ? targets.current.profile === null : profile === targets.current.profile)) && model.id === targets.current.model;
-          if (isOwn) continue;
-          const result = resolveSwitchTarget(config, s, { engine: engine.name, ...(profile === undefined ? {} : { profile }), model: model.id }, { caller: "session" });
-          expect(result.ok, `${engine.name}/${profile}/${model.id}: ${result.ok ? "" : result.error}`).toBe(true);
-          checked += 1;
-        }
-      }
-    }
+    type Candidate = { engine: string; profile: string | undefined; model: string };
+    const candidates: Candidate[] = targets.engines
+      .filter((e) => e.health.state === "ok")
+      .flatMap((e) => (e.profiles?.filter((p) => p.health.state === "ok").map((p) => p.name) ?? [undefined]).map((profile) => ({ e, profile })))
+      .flatMap(({ e, profile }) => e.models.map((model) => ({ engine: e.name, profile, model: model.id })));
+    const isOwn = (c: Candidate) => c.engine === targets.current.engine && c.model === targets.current.model
+      && (c.profile === undefined || (c.profile === "" ? targets.current.profile === null : c.profile === targets.current.profile));
+    const checked = candidates.filter((c) => !isOwn(c)).map((c) => {
+      const result = resolveSwitchTarget(config, s, { engine: c.engine, ...(c.profile === undefined ? {} : { profile: c.profile }), model: c.model }, { caller: "session" });
+      expect(result.ok, `${c.engine}/${c.profile}/${c.model}: ${result.ok ? "" : result.error}`).toBe(true);
+      return c;
+    }).length;
     expect(checked).toBeGreaterThan(0);
   });
 });
