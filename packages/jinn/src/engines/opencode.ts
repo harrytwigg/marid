@@ -8,6 +8,7 @@ import type { RemoteExecutionConfig } from "../shared/config-types.js";
 import { cleanupOpencodeSessionConfig, type OpencodeConfigHandle } from "./opencode-mcp.js";
 import { fallbackPluginAbortsTurns, hostHasInternalFallback } from "./opencode-internal-fallback.js";
 import { OpencodeTurn } from "./opencode-turn.js";
+import { readRecordedTurnCost } from "./opencode-v2-run-cost.js";
 import { RemoteKills, type RemoteRun } from "./remote-stage.js";
 import {
   localOpencodeLaunch,
@@ -40,6 +41,8 @@ interface LiveProcess extends RemoteRun {
   turn: OpencodeTurn;
   hardTimeout?: NodeJS.Timeout;
   configHandle?: OpencodeConfigHandle;
+  /** Runs this turn's opencode once it has ended (OpencodeLaunchPlan.runOpencode). */
+  runOpencode?: OpencodeLaunchPlan["runOpencode"];
 }
 
 const STDERR_MAX = 10 * 1024; // 10KB rolling window for error reporting
@@ -421,6 +424,7 @@ export class OpencodeEngine implements InterruptibleEngine {
       resolve,
       turn: new OpencodeTurn(plan.sessionIdOut, () => fallbackPluginAbortsTurns(plan.api, plan.remote?.destination)),
       ...(plan.configHandle ? { configHandle: plan.configHandle } : {}),
+      ...(plan.runOpencode ? { runOpencode: plan.runOpencode } : {}),
       ...(plan.remote ? { remote: plan.remote } : {}),
     };
     this.liveProcesses.set(trackingId, live);
@@ -526,7 +530,20 @@ export class OpencodeEngine implements InterruptibleEngine {
     // A remote run settles only once the opencode over there is known to be
     // gone: the next turn starts on this settle, and would otherwise start
     // beside it. A local run has nothing to wait for.
-    void this.remoteKills.beforeSettle(live, trackingId, code).finally(finish);
+    void this.remoteKills.beforeSettle(live, trackingId, code)
+      .then(() => this.adoptRecordedCost(live))
+      .finally(finish);
+  }
+
+  /** A 2.x `run` turn's stream does not carry its whole cost; opencode's own record of
+   *  the turn's messages does (opencode-v2-run-cost.ts). A turn that ran no step has no
+   *  message to read, and a 1.x binary has nothing to ask. */
+  private async adoptRecordedCost(live: LiveProcess): Promise<void> {
+    const sessionId = live.turn.engineSessionId;
+    const from = live.turn.firstTurnMessageId;
+    if (!live.runOpencode || !sessionId || !from) return;
+    const cost = await readRecordedTurnCost(live.runOpencode, sessionId, from);
+    if (cost !== undefined) live.turn.adoptRecordedCost(cost);
   }
 
   private clearTimers(live: LiveProcess): void {
