@@ -150,3 +150,12 @@ export function buildFreshChatParams(opts: {
     effortLevel: opts.previous.effortLevel,
   })
 }
+
+/** The label an existing chat shows for a profile its config no longer declares (the record has a key but no name). */
+export const UNKNOWN_SESSION_PROFILE = 'Unknown profile'
+
+/** The profile a session record runs on, as a selector value: its name, the unknown label, or undefined for own login. */
+export function sessionProfileValue(claudeProfile: { name?: string | null } | null | undefined): string | undefined {
+  if (!claudeProfile) return undefined
+  return claudeProfile.name ?? UNKNOWN_SESSION_PROFILE
+}

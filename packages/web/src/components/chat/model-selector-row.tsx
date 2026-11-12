@@ -17,7 +17,7 @@ export interface SelectorValue {
   engine?: string
   model?: string
   effortLevel?: string
-  /** Declared Claude account a new chat starts on; beside the bare engine, never inside it. */
+  /** Declared Claude account the chat runs on; beside the bare engine, never inside it. Absent = own login. */
   profile?: string
 }
 
@@ -34,14 +34,12 @@ interface ModelSelectorRowProps {
   /** Most recent turn's input-context token count (session.lastContextTokens),
    *  for the in-dropdown context meter. Omitted/0 → fresh chat (window-only). */
   contextTokens?: number | null
-  /** Offer the declared Claude accounts as primary profiles (new-chat path only). */
+  /** Offer the declared Claude accounts as profiles, in new and existing chats. */
   allowProfiles?: boolean
-  /** The chosen employee runs on a remote host, where the gateway refuses a profile: hide the rows. */
+  /** The chat's employee runs on a remote host, where the gateway refuses a profile: hide the rows. */
   employeeRemote?: boolean
   /** Told the profile the new chat may actually start on: confirmed declared, employee local; undefined otherwise. */
   onEffectiveProfile?: (profile: string | undefined) => void
-  /** An existing session's chosen profile name, shown in the label read-only. */
-  sessionProfileName?: string | null
 }
 
 const effortLabelOf = (lvl: string) => lvl.charAt(0).toUpperCase() + lvl.slice(1)
@@ -95,20 +93,25 @@ function describeSelection(registry: EnginesResponse, engine: string, value: Sel
 }
 
 /** The chip: `✦ Model · Effort ▾`. */
-function SelectorTrigger({ modelLabel, effortLabel, disabled }: { modelLabel: string; effortLabel: string | undefined; disabled?: boolean }) {
+function SelectorTrigger({ engineLabel, profileLabel, modelLabel, effortLabel, disabled }: { engineLabel?: string; profileLabel?: string; modelLabel: string; effortLabel: string | undefined; disabled?: boolean }) {
   return (
     <DropdownMenuTrigger asChild disabled={disabled}>
       <button
         type="button"
         disabled={disabled}
-        aria-label={`Model and effort: ${modelLabel}${effortLabel ? ` · ${effortLabel}` : ''}`}
+        aria-label={`Model and effort: ${[engineLabel, profileLabel, modelLabel].filter(Boolean).join(' · ')}${effortLabel ? ` · ${effortLabel}` : ''}`}
         className="group inline-flex min-h-[40px] md:min-h-0 min-w-0 max-w-full items-center gap-1.5 rounded-lg border-none bg-transparent px-1.5 py-1 text-[length:var(--text-footnote)] transition-colors hover:bg-[var(--fill-secondary)] disabled:cursor-default disabled:opacity-60 cursor-pointer"
       >
         <span aria-hidden className="shrink-0 text-[var(--accent)] text-[11px] leading-none">✦</span>
-        <span className="truncate font-[var(--weight-semibold)] tracking-[-0.2px] text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors">{modelLabel}</span>
+        {engineLabel && <span data-testid="chip-engine" className="min-w-0 shrink-[4] truncate text-[var(--text-tertiary)]">{engineLabel} ·</span>}
+        {profileLabel && (
+          // Second to drop on a narrow composer, after the effort level.
+          <span data-testid="chip-profile" className="min-w-0 shrink-[8] truncate text-[var(--text-tertiary)] @max-[680px]/composer:hidden">{profileLabel} ·</span>
+        )}
+        <span className="min-w-0 truncate font-[var(--weight-semibold)] tracking-[-0.2px] text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors">{modelLabel}</span>
         {effortLabel && (
-          // First thing to drop on a narrow composer — measured against the composer container, so a narrow PANE drops it too, not just a narrow viewport.
-          <span className="shrink-0 text-[var(--text-tertiary)] @max-[340px]/composer:hidden">· {effortLabel}</span>
+          // First thing to drop on a narrow composer (the chip shares a slot with the fallback chip and the context ring, so it gets about a third of the row) — measured against the composer container, so a narrow PANE drops it too, not just a narrow viewport.
+          <span className="shrink-0 text-[var(--text-tertiary)] @max-[760px]/composer:hidden">· {effortLabel}</span>
         )}
         <span aria-hidden className="shrink-0 text-[8px] leading-none text-[var(--text-quaternary)] group-hover:text-[var(--text-tertiary)]">▾</span>
       </button>
@@ -224,10 +227,10 @@ function profileSelection(registry: EnginesResponse, engine: string, modelId: st
  * The model list, search and engine panel are the shared `ModelPicker`; this adds
  * the effort row, notes and context footer around it.
  */
-export function ModelSelectorRow({ mode, value, onChange, pendingNote, errorNote, disabled, contextTokens, allowProfiles, employeeRemote, onEffectiveProfile, sessionProfileName }: ModelSelectorRowProps) {
+export function ModelSelectorRow({ mode, value, onChange, pendingNote, errorNote, disabled, contextTokens, allowProfiles, employeeRemote, onEffectiveProfile }: ModelSelectorRowProps) {
   const { data: registry, isLoading } = useModelRegistry()
   const engine = useResolvedEngine(registry, mode, value, onChange)
-  const profilesEnabled = Boolean(allowProfiles && mode === 'new')
+  const profilesEnabled = Boolean(allowProfiles)
   const { profiles, effective: effectiveProfile } = usePrimaryProfiles(profilesEnabled, value.profile, employeeRemote)
   useEffect(() => { onEffectiveProfile?.(effectiveProfile) }, [onEffectiveProfile, effectiveProfile])
   if (isLoading || !registry) return null
@@ -241,20 +244,21 @@ export function ModelSelectorRow({ mode, value, onChange, pendingNote, errorNote
   const pickProfile = (profile: string | undefined) => onChange(profileSelection(registry, engine, modelId, value, profile))
   const pickModel = (next: string) => onChange(withProfile({ engine, model: next, effortLevel: clampEffort(effortLevelsFor(registry, engine, next), value.effortLevel) }, value.profile))
 
-  // Only Claude has accounts: a session that fell back to another engine no longer runs on its profile.
-  const profileName = engine !== 'claude' ? undefined : mode === 'new' ? effectiveProfile : (sessionProfileName ?? undefined)
-  const shownModelLabel = profileName ? `${engineDisplayName(engine)} · ${profileName} · ${modelLabel}` : modelLabel
+  // Only Claude has accounts: another engine shows no profile. No profile on Claude is the own login, named.
+  // An existing chat shows the profile it runs on, declared or not; a new chat only one it may start on.
+  // A remote employee runs on its host's Claude login, which has no name here: no segment.
+  const profileLabel = engine !== 'claude' || employeeRemote ? undefined : (mode === 'new' ? effectiveProfile : value.profile) ?? 'Own login'
 
   return (
     <DropdownMenu>
-      <SelectorTrigger modelLabel={shownModelLabel} effortLabel={effortLabel} disabled={disabled} />
+      <SelectorTrigger engineLabel={engineDisplayName(engine)} profileLabel={profileLabel} modelLabel={modelLabel} effortLabel={effortLabel} disabled={disabled} />
       <DropdownMenuContent
         side="top"
         align="start"
         sideOffset={8}
         className="w-64 max-w-[calc(100vw-2rem)] rounded-[var(--radius-lg)] p-1.5"
       >
-        <ModelPicker registry={registry} engine={engine} modelId={modelId} onPickEngine={pickEngine} onPickModel={pickModel} profiles={profilesEnabled ? profiles : undefined} profile={effectiveProfile} onPickProfile={profilesEnabled ? pickProfile : undefined}>
+        <ModelPicker registry={registry} engine={engine} modelId={modelId} onPickEngine={pickEngine} onPickModel={pickModel} profiles={profilesEnabled ? profiles : undefined} profile={mode === 'existing' ? value.profile : effectiveProfile} onPickProfile={profilesEnabled ? pickProfile : undefined}>
           <EffortRow efforts={efforts} effort={effort} onPick={(level) => onChange(withProfile({ engine, model: modelId, effortLevel: level }, value.profile))} />
           <SelectorNotes mode={mode} errorNote={errorNote} pendingNote={pendingNote} />
           <ContextFooter usage={formatContextUsage(contextTokens, contextWindowFor(registry, engine, modelId))} />

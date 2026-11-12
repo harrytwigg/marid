@@ -2125,3 +2125,57 @@ describe("isRestingSnapshot", () => {
     expect(isRestingSnapshot({ ...base, session: null }, now)).toBe(false)
   })
 })
+
+describe("a switch made outside this view", () => {
+  const record = (extra: Record<string, unknown>) => ({ id: "s1", status: "idle", engine: "claude", model: "opus", claudeProfile: null, messages: [], ...extra })
+
+  it("updates the target fields on session:updated without a reload, and keeps the rest", async () => {
+    getSession.mockResolvedValue(record({ status: "idle" }))
+    const { subscribe, emit } = makeBus()
+    const { result } = renderHook(() => useLiveSession("s1", { subscribe }))
+    await act(async () => { await Promise.resolve() })
+    expect(result.current.session?.claudeProfile).toBeNull()
+
+    getSession.mockResolvedValue(record({ status: "running", model: "sonnet", claudeProfile: { name: "work", key: "k" } }))
+    await act(async () => { emit("session:updated", { sessionId: "s1" }); await Promise.resolve() })
+    expect(getSession).toHaveBeenLastCalledWith("s1", { messages: false })
+    expect(result.current.session?.model).toBe("sonnet")
+    expect(result.current.session?.claudeProfile).toEqual({ name: "work", key: "k" })
+    expect(result.current.session?.status).toBe("idle")
+  })
+
+  it("keeps the same record when nothing about the target changed", async () => {
+    getSession.mockResolvedValue(record({}))
+    const { subscribe, emit } = makeBus()
+    const { result } = renderHook(() => useLiveSession("s1", { subscribe }))
+    await act(async () => { await Promise.resolve() })
+    const before = result.current.session
+    await act(async () => { emit("session:updated", { sessionId: "s1" }); await Promise.resolve() })
+    expect(result.current.session).toBe(before)
+  })
+
+  it("still applies the new target when a turn started while the re-read was in flight, and leaves the status alone", async () => {
+    getSession.mockResolvedValue(record({}))
+    const { subscribe, emit } = makeBus()
+    const { result } = renderHook(() => useLiveSession("s1", { subscribe }))
+    await act(async () => { await Promise.resolve() })
+
+    let answer: (r: unknown) => void = () => {}
+    getSession.mockReturnValueOnce(new Promise((resolve) => { answer = resolve }))
+    act(() => { emit("session:updated", { sessionId: "s1" }) })
+    act(() => { emit("session:started", { sessionId: "s1" }) })
+    await act(async () => { answer(record({ model: "sonnet", status: "idle" })) })
+    expect(result.current.session?.model).toBe("sonnet")
+    expect(result.current.session?.status).toBe("running")
+  })
+
+  it("ignores another session's update", async () => {
+    getSession.mockResolvedValue(record({}))
+    const { subscribe, emit } = makeBus()
+    renderHook(() => useLiveSession("s1", { subscribe }))
+    await act(async () => { await Promise.resolve() })
+    getSession.mockClear()
+    await act(async () => { emit("session:updated", { sessionId: "other" }); await Promise.resolve() })
+    expect(getSession).not.toHaveBeenCalled()
+  })
+})

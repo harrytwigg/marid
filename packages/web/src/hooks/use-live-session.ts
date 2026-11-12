@@ -180,6 +180,9 @@ function cloneMessages(messages: Message[]): Message[] {
   return messages.map((message) => ({ ...message }))
 }
 
+/** The session fields a switch rewrites; the selector is seeded from them. */
+const SWITCH_TARGET_FIELDS = ['engine', 'model', 'effortLevel', 'effort_level', 'claudeProfile', 'lastSwitch'] as const
+
 function messageMeta(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -994,6 +997,27 @@ export function useLiveSession(
         // (what the composer shows) is authoritative.
         api.getSession(sid, { messages: false })
           .then((s) => { if (sessionIdRef.current === sid) setCurrentSession(s as Record<string, unknown>) })
+          .catch(() => { /* best-effort; the next load picks it up */ })
+      }
+
+      if (event === 'session:updated') {
+        // A switch made by the session (or another view) changes its engine, profile or model with no
+        // other frame: re-read the record and merge only the target, so the selector follows without a reload.
+        // The merge leaves status alone, so a turn that started meanwhile (a switch's resume follows its
+        // update at once) is no reason to drop it.
+        api.getSession(sid, { messages: false })
+          .then((s) => {
+            if (sessionIdRef.current !== sid) return
+            const next = s as Record<string, unknown>
+            setCurrentSession((prev) => {
+              if (!prev) return prev
+              const changed = SWITCH_TARGET_FIELDS.some((k) => JSON.stringify(prev[k] ?? null) !== JSON.stringify(next[k] ?? null))
+              if (!changed) return prev
+              const merged: Record<string, unknown> = { ...prev }
+              for (const k of SWITCH_TARGET_FIELDS) merged[k] = next[k]
+              return merged
+            })
+          })
           .catch(() => { /* best-effort; the next load picks it up */ })
       }
 

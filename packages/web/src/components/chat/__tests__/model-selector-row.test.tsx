@@ -167,7 +167,7 @@ describe('ModelSelectorRow chip', () => {
   it('omits effort from the chip label for effort-less engines (antigravity)', () => {
     renderRow(<ModelSelectorRow mode="new" value={{ engine: 'antigravity', model: 'gemini-3-flash-preview' }} onChange={() => {}} />)
     const chip = screen.getByRole('button', { name: /model and effort/i })
-    expect(chip.getAttribute('aria-label')).toBe('Model and effort: Gemini 3 Flash')
+    expect(chip.getAttribute('aria-label')).toBe('Model and effort: Antigravity · Gemini 3 Flash')
   })
 
   it('shows "Default" for a session with no effort set, not a fabricated tier', () => {
@@ -175,7 +175,30 @@ describe('ModelSelectorRow chip', () => {
     // so the chip must not claim "Medium" from the model's level list.
     renderRow(<ModelSelectorRow mode="existing" value={{ engine: 'claude', model: 'opus' }} onChange={() => {}} />)
     const chip = screen.getByRole('button', { name: /model and effort/i })
-    expect(chip.getAttribute('aria-label')).toBe('Model and effort: Opus 4.8 · Default')
+    expect(chip.getAttribute('aria-label')).toBe('Model and effort: Claude · Own login · Opus 4.8 · Default')
+  })
+
+  it('labels the chip with the engine, the profile or "Own login" for claude, and the engine alone elsewhere', () => {
+    const label = () => screen.getByRole('button', { name: /model and effort/i }).getAttribute('aria-label')
+    const own = renderRow(<ModelSelectorRow mode="existing" value={{ engine: 'claude', model: 'opus', effortLevel: 'high' }} onChange={() => {}} />)
+    expect(label()).toBe('Model and effort: Claude · Own login · Opus 4.8 · High')
+    own.unmount()
+    const named = renderRow(<ModelSelectorRow mode="existing" value={{ engine: 'claude', model: 'opus', effortLevel: 'high', profile: 'work' }} onChange={() => {}} />)
+    expect(label()).toBe('Model and effort: Claude · work · Opus 4.8 · High')
+    named.unmount()
+    renderRow(<ModelSelectorRow mode="existing" value={{ engine: 'antigravity', model: 'gemini-3-flash-preview', profile: 'work' }} onChange={() => {}} />)
+    expect(label()).toBe('Model and effort: Antigravity · Gemini 3 Flash')
+  })
+
+  it('drops effort first and then the profile on a narrow composer', () => {
+    renderRow(<ModelSelectorRow mode="existing" value={{ engine: 'claude', model: 'opus', effortLevel: 'high', profile: 'work' }} onChange={() => {}} />)
+    const chip = screen.getByRole('button', { name: /model and effort/i })
+    const effort = Array.from(chip.querySelectorAll('span')).find((n) => n.textContent === '· High')!
+    const profile = screen.getByTestId('chip-profile')
+    const widthOf = (n: Element) => Number(/@max-\[(\d+)px\]\/composer:hidden/.exec(n.className)?.[1])
+    expect(widthOf(effort)).toBeGreaterThan(widthOf(profile))
+    // The engine and the model never drop.
+    expect(screen.getByTestId('chip-engine').className).not.toContain('hidden')
   })
 
   it('marks no effort pill when the session has no effort set', async () => {
