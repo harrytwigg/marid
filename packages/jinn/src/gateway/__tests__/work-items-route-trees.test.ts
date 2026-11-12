@@ -151,6 +151,69 @@ describe("GET /api/work-items — trees, batch reads, and filters", () => {
     expect(badParent.body.error).toMatch(/parent must be a Todo ID/);
   });
 
+  it("descendantOf lists everything strictly below the anchor and nothing beside or above it", async () => {
+    const root = store.createWorkItem({ title: "descendant fixture root" });
+    const child = store.createWorkItem({ title: "descendant fixture child", parentId: root.id });
+    const grandchild = store.createWorkItem({ title: "descendant fixture grandchild", parentId: child.id });
+    const sibling = store.createWorkItem({ title: "descendant fixture sibling", parentId: root.id });
+    const siblingLeaf = store.createWorkItem({ title: "descendant fixture sibling leaf", parentId: sibling.id });
+    const unrelated = store.createWorkItem({ title: "descendant fixture unrelated root" });
+    store.createWorkItem({ title: "descendant fixture unrelated child", parentId: unrelated.id });
+
+    const ids = async (query: string) => {
+      const out = makeRes();
+      await api.handleApiRequest(makeReq("GET", `/api/work-items?${query}&limit=100`), out.res, ctx);
+      expect(out.status).toBe(200);
+      return { ids: out.body.workItems.map((w: { id: string }) => w.id).sort(), body: out.body };
+    };
+
+    const all = await ids(`descendantOf=${root.id}`);
+    expect(all.ids).toEqual([child.id, grandchild.id, sibling.id, siblingLeaf.id].sort());
+    expect(all.ids).not.toContain(root.id);
+    expect(all.body.total).toBe(4);
+
+    expect((await ids(`descendantOf=${child.id}`)).ids).toEqual([grandchild.id]);
+    expect((await ids(`descendantOf=${grandchild.id}`)).ids).toEqual([]);
+  });
+
+  it("descendantOf ANDs with the other filters, and totals count the filtered set", async () => {
+    const root = store.createWorkItem({ title: "descendant and root" });
+    const child = store.createWorkItem({ title: "descendant and child", parentId: root.id });
+    const grandchild = store.createWorkItem({ title: "descendant and grandchild", parentId: child.id, status: "executing", assignee: "platform-worker" });
+    store.createWorkItem({ title: "descendant and outside", status: "executing", assignee: "platform-worker" });
+
+    const executing = makeRes();
+    await api.handleApiRequest(makeReq("GET", `/api/work-items?descendantOf=${root.id}&status=executing`), executing.res, ctx);
+    expect(executing.body.workItems.map((w: { id: string }) => w.id)).toEqual([grandchild.id]);
+
+    const mine = makeRes();
+    await api.handleApiRequest(makeReq("GET", `/api/work-items?descendantOf=${root.id}&assignee=platform-worker`), mine.res, ctx);
+    expect(mine.body.workItems.map((w: { id: string }) => w.id)).toEqual([grandchild.id]);
+
+    const unrooted = makeRes();
+    await api.handleApiRequest(makeReq("GET", `/api/work-items?descendantOf=${root.id}&rootsOnly=true`), unrooted.res, ctx);
+    expect(unrooted.body.workItems).toEqual([]);
+
+    const everything = makeRes();
+    await api.handleApiRequest(makeReq("GET", `/api/work-items?descendantOf=${root.id}`), everything.res, ctx);
+    expect(everything.body.totals.backlog).toBe(1);
+    expect(everything.body.totals.executing).toBe(1);
+    expect(everything.body.total).toBe(2);
+  });
+
+  it("descendantOf of an unknown Todo is an empty list, and a malformed one is a 400", async () => {
+    const unknown = makeRes();
+    await api.handleApiRequest(makeReq("GET", "/api/work-items?descendantOf=ZZZ-424242"), unknown.res, ctx);
+    expect(unknown.status).toBe(200);
+    expect(unknown.body.workItems).toEqual([]);
+    expect(unknown.body.total).toBe(0);
+
+    const bad = makeRes();
+    await api.handleApiRequest(makeReq("GET", "/api/work-items?descendantOf=garbage"), bad.res, ctx);
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toBe("descendantOf must be a Todo ID");
+  });
+
   it("operator archive with cascade cancels open descendants; without it the gate refuses", async () => {
     const parent = store.createWorkItem({ title: "cascade route parent" });
     const mid = store.createWorkItem({ title: "cascade route mid", parentId: parent.id });

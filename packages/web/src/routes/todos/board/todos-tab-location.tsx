@@ -102,7 +102,7 @@ export function seedTodosTabLocation(board: BoardId, search: string): void {
 /** Opening a card: a Todo tab where the layout can take one, else the Todo's page, as at the route.
  *  A click the layout takes goes no further (`onClick`, on the tab's column), or the pane the board
  *  sits in would take focus back from the new tab, as todo-mention does. */
-function useTodoHandOff() {
+export function useTodoHandOff() {
   const navigate = useNavigate()
   const openTab = useOpenTodo()
   const sessionId = useFileLinkSession()

@@ -155,9 +155,31 @@ async function readTrees(path: string): Promise<Response> {
   return json({ trees })
 }
 
+/** The board a sub-board's Todos are read on: the one its anchor Todo is on. Null where the anchor is not one the member may read. */
+async function boardOfAnchor(anchor: string): Promise<string | null> {
+  const res = await gatewayTransport().request(mine(enc(anchor)), { method: "GET" })
+  if (!res.ok) return null
+  return ((await res.json()) as { workItem?: { department?: string | null } }).workItem?.department ?? null
+}
+
+async function readSubBoard(params: URLSearchParams, anchor: string, init: RequestInit): Promise<Response> {
+  const department = await boardOfAnchor(anchor)
+  if (!department) return json(EMPTY_LIST)
+  const rest = params.toString()
+  return forward(`/api/member/boards/${enc(department)}/todos${rest ? `?${rest}` : ""}`, init)
+}
+
+/** A sub-board names no department: it is the sub-Todos of one Todo, read on the board that Todo is on. */
+function subBoardAnchor(params: URLSearchParams): string | null {
+  if (params.has("ids") || params.has("movedOff")) return null
+  return params.get("descendantOf") ?? params.get("parent")
+}
+
 function readBoard(path: string, init: RequestInit): Promise<Response> | Response {
   const params = query(path)
   const department = params.get("department")
+  const anchor = subBoardAnchor(params)
+  if (!department && anchor) return readSubBoard(params, anchor, init)
   // A list that names ids, or no board, has nothing to read from: members read a board at a time.
   // The Todos a member filed on this board that have left their boards are their own list, not the board's.
   if (params.has("movedOff")) return department ? forward(`/api/member/boards/${enc(department)}/moved`, init) : json(EMPTY_LIST)

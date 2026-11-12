@@ -25,39 +25,45 @@ const DEFAULT_FILTERS: TodoFilters = { status: "open" }
  *
  * `enabled` is false for a board that has no filters of its own (Attention),
  * which reads and writes the URL exactly as before.
+ *
+ * `persist` is false for a board whose location owns its filters (a sub-board's
+ * pop-up): the set lives only in the location's search params, and the main
+ * board's remembered filters are neither read nor written.
  */
 export function useBoardFilters(
   searchParams: URLSearchParams,
   setSearchParams: (next: URLSearchParams, opts?: { replace?: boolean }) => void,
   enabled = true,
+  persist = true,
 ): { filters: TodoFilters; setFilters: (next: TodoFilters) => void } {
   const fromUrl = hasFilterParams(searchParams)
   const urlFilters = useMemo(() => filtersFromSearchParams(searchParams), [searchParams])
   // Only consult storage when the URL carries no filter of its own; the read is
   // memoised per URL commit so a state-only re-render cannot churn `filters`.
+  const remembers = enabled && persist
   const stored = useMemo(
-    () => (enabled && !fromUrl ? readPersistedFilters() : null),
-    [enabled, fromUrl, searchParams],
+    () => (remembers && !fromUrl ? readPersistedFilters() : null),
+    [remembers, fromUrl, searchParams],
   )
   const filters = !enabled || fromUrl ? urlFilters : stored ?? DEFAULT_FILTERS
 
   // A URL-driven arrival (a shared link, back/forward) is worth remembering too.
   useEffect(() => {
-    if (enabled && fromUrl) writePersistedFilters(filters)
-  }, [enabled, fromUrl, filters])
+    if (remembers && fromUrl) writePersistedFilters(filters)
+  }, [remembers, fromUrl, filters])
 
   // An empty URL with a stored set: mirror it into the address bar once, so the
   // restored view is reload-stable and copy-pasteable.
   useEffect(() => {
-    if (enabled && !fromUrl && stored) setSearchParams(filtersToSearchParams(stored), { replace: true })
-  }, [enabled, fromUrl, stored, setSearchParams])
+    if (remembers && !fromUrl && stored) setSearchParams(filtersToSearchParams(stored), { replace: true })
+  }, [remembers, fromUrl, stored, setSearchParams])
 
   const setFilters = useCallback(
     (next: TodoFilters) => {
-      if (enabled) writePersistedFilters(next)
+      if (remembers) writePersistedFilters(next)
       setSearchParams(filtersToSearchParams(next), { replace: false })
     },
-    [enabled, setSearchParams],
+    [remembers, setSearchParams],
   )
 
   return { filters, setFilters }

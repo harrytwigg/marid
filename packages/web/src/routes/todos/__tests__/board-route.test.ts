@@ -10,6 +10,7 @@ import {
   recallBoardScroll,
   clearBoardScrollCache,
   DEFAULT_BOARD_PATH,
+  subBoardRootOf,
 } from "../board/board-route"
 
 describe("parseBoardParam", () => {
@@ -69,6 +70,34 @@ describe("boardKey / boardPath / isSameBoard", () => {
   it("compares by key", () => {
     expect(isSameBoard({ kind: "everything" }, parseBoardParam("my"))).toBe(true)
     expect(isSameBoard({ kind: "department", slug: "a" }, { kind: "department", slug: "b" })).toBe(false)
+  })
+})
+
+describe("the subtree board", () => {
+  const sub = { kind: "subtree", rootId: "TSK-12", depth: "all" } as const
+
+  it("keys by root and depth, so each depth has its own caches and scroll memory", () => {
+    expect(boardKey(sub)).toBe("sub:TSK-12:all")
+    expect(boardKey({ ...sub, depth: "children" })).toBe("sub:TSK-12:children")
+    expect(isSameBoard(sub, { ...sub, depth: "children" })).toBe(false)
+  })
+
+  it("is never produced from a URL param, whatever the param says", () => {
+    for (const raw of ["sub:TSK-12:all", "sub:TSK-12:children", "subtree", "sub", "TSK-12"]) {
+      expect(parseBoardParam(raw).kind).not.toBe("subtree")
+    }
+  })
+
+  it("has no route of its own", () => {
+    expect(boardPath(sub)).toBe(DEFAULT_BOARD_PATH)
+  })
+
+  it("is named back from a card's route state only by its own key", () => {
+    expect(subBoardRootOf(boardKey(sub))).toBe("TSK-12")
+    expect(subBoardRootOf("sub:TSK-12:children")).toBe("TSK-12")
+    expect(subBoardRootOf("platform")).toBeNull()
+    expect(subBoardRootOf("sub:nonsense:all")).toBeNull()
+    expect(subBoardRootOf(undefined)).toBeNull()
   })
 })
 

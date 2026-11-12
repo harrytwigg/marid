@@ -6,6 +6,13 @@ import { workItemNode } from "./fixtures/task-wire"
 import { SubTasksSection } from "../task-page/subtasks"
 import { PENDING_SUBTASK_PREFIX } from "../task-page/use-subtask-mutations"
 
+vi.mock("../board/sub-board-dialog-lazy", () => ({
+  SUB_BOARD_PRELOAD: {},
+  LazySubBoardDialog: ({ rootId, onClose }: { rootId: string; onClose: () => void }) => (
+    <div data-testid="sub-board-stub"><span>{rootId}</span><button type="button" onClick={onClose}>close</button></div>
+  ),
+}))
+
 /** The collapsible sub-tasks group and its inline add field, driven
  *  bare with stub callbacks. The optimistic insert itself lives a level up, in
  *  subtask-optimistic.test.tsx, because it is the query cache that carries it. */
@@ -130,5 +137,19 @@ describe("sub-tasks group", () => {
     const pending = screen.getByTestId("subtask-pending-row")
     expect(pending.textContent).toContain("In flight")
     expect(screen.queryByTestId(`subtask-open-${PENDING_SUBTASK_PREFIX}1`)).toBeNull()
+  })
+
+  it("offers View as board only for a Todo that has sub-tasks, and opens that Todo's board", () => {
+    renderSection([child("TSK-13")])
+    expect(screen.queryByTestId("sub-board-stub")).toBeNull()
+    fireEvent.click(screen.getByTestId("subtasks-view-board"))
+    expect(screen.getByTestId("sub-board-stub").textContent).toContain("TSK-12")
+    fireEvent.click(screen.getByText("close"))
+    expect(screen.queryByTestId("sub-board-stub")).toBeNull()
+  })
+
+  it("has no View as board on a Todo with no sub-tasks", () => {
+    renderSection([])
+    expect(screen.queryByTestId("subtasks-view-board")).toBeNull()
   })
 })

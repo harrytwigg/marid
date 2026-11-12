@@ -14,7 +14,7 @@ import { NOT_SHARED } from "@/routes/member/board-not-shared"
 import { useTheme } from "@/routes/providers"
 import { useEmployeesByName, useOrg, useSetWorkItemStatus, useTodoById } from "../use-todos"
 import { useKeepWorkItem } from "../board/use-board"
-import { parseBoardParam, boardPath, boardKey } from "../board/board-route"
+import { parseBoardParam, boardPath, boardKey, subBoardRootOf } from "../board/board-route"
 import { departmentTitle } from "../board/board-switcher"
 import { CrumbBar } from "./crumb-bar"
 import { ancestorsOf, nodeOf, workingElapsed } from "./task-tree"
@@ -191,9 +191,11 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
   const memberBoard = member ? memberGrants?.[0]?.department : undefined
   const boardKeyRaw = routeState.fromBoard ?? item?.department ?? memberBoard ?? "everything"
   const board = parseBoardParam(boardKeyRaw)
-  const boardLabel = board.kind === "department" ? departmentTitle(board.slug)
+  // Reached from a sub-board's card: the crumb names the Todo whose board it was, and back is the history entry the pop-up was opened from.
+  const subBoardRoot = subBoardRootOf(routeState.fromBoard)
+  const boardLabel = subBoardRoot ?? (board.kind === "department" ? departmentTitle(board.slug)
     : board.kind === "attention" ? "Attention"
-    : "Everything"
+    : "Everything")
   const goBack = useCallback(() => {
     // Arriving from a board leaves it one POP away — going back that way
     // restores the board's cached scroll position. Otherwise push its path.
@@ -205,8 +207,8 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
   }, [routeState.fromBoard, routeState.returnBack, mobile, navigate, board])
 
   const openTodo = useOpenTodoInPlace(embedded, useCallback(
-    (nextId: string) => navigate(todoPath(nextId), { state: { fromBoard: boardKey(board) } }),
-    [navigate, board],
+    (nextId: string) => navigate(todoPath(nextId), { state: { fromBoard: subBoardRoot ? routeState.fromBoard : boardKey(board) } }),
+    [navigate, board, subBoardRoot, routeState.fromBoard],
   ))
 
   const working = detail ? workingElapsed(detail) : null

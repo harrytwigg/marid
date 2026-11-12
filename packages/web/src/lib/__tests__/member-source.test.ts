@@ -31,6 +31,25 @@ describe("member request source", () => {
     expect(calls()).toEqual([{ path: "/api/member/boards/platform/todos?rootsOnly=true&status=backlog&limit=20", method: "GET", body: undefined }])
   })
 
+  it("reads a sub-board on the board its anchor Todo is on, with no department asked for", async () => {
+    request.mockImplementation(async (path: string) => (path === "/api/member/todos/A-1" ? ok({ workItem: { id: "A-1", department: "platform" } }) : ok({ workItems: [], total: 0 })))
+    await source("/api/work-items?descendantOf=A-1&status=backlog&limit=20", { method: "GET" })
+    await source("/api/work-items?parent=A-1&status=backlog", { method: "GET" })
+    expect(calls().map((c) => c.path)).toEqual([
+      "/api/member/todos/A-1",
+      "/api/member/boards/platform/todos?descendantOf=A-1&status=backlog&limit=20",
+      "/api/member/todos/A-1",
+      "/api/member/boards/platform/todos?parent=A-1&status=backlog",
+    ])
+  })
+
+  it("answers a sub-board whose anchor the member cannot read with an empty list", async () => {
+    request.mockImplementation(async () => ok({ error: "not found" }, 404))
+    const res = await source("/api/work-items?descendantOf=A-1&status=backlog", { method: "GET" })
+    expect(await res.json()).toMatchObject({ workItems: [], total: 0 })
+    expect(calls().map((c) => c.path)).toEqual(["/api/member/todos/A-1"])
+  })
+
   it("reads the Todos a member filed on a board that have left their boards through that board's moved route", async () => {
     await source("/api/work-items?movedOff=true&department=platform", { method: "GET" })
     expect(calls()).toEqual([{ path: "/api/member/boards/platform/moved", method: "GET", body: undefined }])

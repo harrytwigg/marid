@@ -40,6 +40,8 @@ import {
 } from "./status-scope"
 import { useBoardDrag } from "./use-board-drag"
 import { boardKey } from "./board-route"
+import { useSubBoardRoot } from "./sub-board-root"
+import { SubBoardHeader } from "./sub-board-header"
 import { RouteBoardLocationProvider, useBoardLocation } from "./board-location"
 import { BoardErrorCard, BoardSkeleton, TAB_COLUMNS } from "./board-states"
 import { useBoardScroll } from "./use-board-scroll"
@@ -95,17 +97,22 @@ export default function TodoBoardPage() {
 /** The board over whatever location it is given (board-location.tsx). `embedded` is the chat layout
  *  tab: its pane supplies the chrome, so the route's shell is left out. */
 export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
-  const { board, searchParams, setSearchParams, navigationType, openTodo } = useBoardLocation()
+  const { board, setBoard, searchParams, setSearchParams, navigationType, openTodo } = useBoardLocation()
   const key = boardKey(board)
   const Frame = embedded ? TAB_FRAME : ROUTE_FRAME
   const isAttention = board.kind === "attention"
+  // A sub-board is one Todo's sub-Todos: the same board over a different scope, with its own header and no switcher.
+  const subtree = board.kind === "subtree" ? board : null
+  const flat = subtree?.depth === "all"
+  const subRoot = useSubBoardRoot(board)
   const gate = useBoardMemberView(board)
   // Columns are the status dimension, so `status` narrows WHICH columns exist
   // rather than filtering within one (useBoardData gates the queries).
   // The filter set rides the URL, but is reconciled with localStorage so a
   // board switch or a new tab restores it instead of resetting (see the hook).
-  // Attention has no filters of its own, so it neither reads nor writes them.
-  const { filters, setFilters } = useBoardFilters(searchParams, setSearchParams, !isAttention)
+  // Attention has no filters of its own, so it neither reads nor writes them. A sub-board's location owns its filters, so it
+  // never touches the ones the main board remembers.
+  const { filters, setFilters } = useBoardFilters(searchParams, setSearchParams, !isAttention, !subtree)
   const now = useMemo(() => Date.now(), [filters.date, filters.due])
 
   // The desktop shows the columns. A phone shows them too, swiped one at a time,
@@ -409,7 +416,7 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
     useBoardScroll(key, navigationType, { dragging: drag !== null, attention: isAttention })
 
   // ── Page chrome state ───────────────────────────────────────────────────────
-  const [creating, setCreating] = useState<null | { department?: string }>(null)
+  const [creating, setCreating] = useState<null | { department?: string; parentId?: string }>(null)
   const [capturing, setCapturing] = useState(false)
   usePreloadQuickCapture()
   usePreloadNewTodoDialog()
@@ -421,6 +428,14 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
     setClosedOpen(closedFilter)
     setMobileFilterOpen(false)
   }, [key, closedFilter])
+
+  // New work on a sub-board is a direct sub-Todo of its root, born in the backlog like any new Todo.
+  const startCreate = useCallback(
+    () => setCreating(subtree
+      ? { parentId: subtree.rootId, department: subRoot.department ?? undefined }
+      : { department: board.kind === "department" ? board.slug : undefined }),
+    [subtree, subRoot.department, board],
+  )
 
   const sprintTools = useBoardSprints({ filters, setFilters, columns: data.columns, mobile, announce })
   // Opening a card carries the board context so the task page's crumb knows
@@ -437,9 +452,12 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
   )
 
   // ── Derived chrome ──────────────────────────────────────────────────────────
+  // Whose people the Person filter offers: a department board's, and a sub-board's is the board its root Todo is on.
+  const personBoard = board.kind === "department" ? board.slug : subtree ? subRoot.department : null
   const deptSummary = board.kind === "department" ? departments.data?.find((d) => d.slug === board.slug) : undefined
   const title = board.kind === "department" ? departmentTitle(board.slug)
     : board.kind === "attention" ? "Attention"
+    : board.kind === "subtree" ? board.rootId
     : "Everything"
   const blockedTotal = countByStatus.blocked ?? 0
   const closedTotal = CLOSED_STATUSES.reduce((sum, status) => sum + (countByStatus[status] ?? 0), 0)
@@ -499,7 +517,10 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
             item={item}
             enrichment={enrichmentById.get(item.id)}
             byName={byName}
-            expanded={expandedTrees.has(item.id)}
+            expanded={!flat && expandedTrees.has(item.id)}
+            flat={flat}
+            parentChipId={flat && item.parentId && item.parentId !== subtree?.rootId ? item.parentId : undefined}
+            parentChipTitle={flat && item.parentId ? subRoot.titleById.get(item.parentId) : undefined}
             onToggleTree={toggleTree}
             onOpen={onOpen}
             onOpenChild={onOpen}
@@ -521,10 +542,7 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
     // Under the client-side due window the server total no longer describes
     // what's visible — the header count follows the filtered list.
     const count = filters.due ? items.length : countByStatus[status] ?? 0
-    const quickAdd =
-      status === "backlog" && gate.canCreate
-        ? () => setCreating({ department: board.kind === "department" ? board.slug : undefined })
-        : undefined
+    const quickAdd = status === "backlog" && gate.canCreate ? startCreate : undefined
     return (
       <BoardColumn
         key={status}
@@ -548,7 +566,16 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
     <Frame>
       <PageScaffold
         scroll="external"
-        header={
+        header={subtree ? (
+          <SubBoardHeader
+            rootId={subtree.rootId}
+            tree={subRoot.tree}
+            missing={subRoot.missing}
+            depth={subtree.depth}
+            onDepth={(depth) => setBoard({ ...subtree, depth })}
+            onOpenRoot={() => openTodo(subtree.rootId, { fromBoard: key })}
+          />
+        ) : (
           <BoardHeader
             board={board}
             title={title}
@@ -564,15 +591,15 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
             blockedTotal={blockedTotal}
             onQuickCapture={() => setCapturing(true)}
           />
-        }
-        primaryAction={gate.canCreate &&
+        )}
+        primaryAction={gate.canCreate && !subtree &&
           <PrimaryAction
             aria-label="New todo"
             label="New Todo"
             icon={<Plus className="size-4" aria-hidden />}
             testId="todo-new"
             warm={NEW_TODO_PRELOAD}
-            onClick={() => setCreating({ department: board.kind === "department" ? board.slug : undefined })}
+            onClick={startCreate}
           />
         }
       >
@@ -585,9 +612,9 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
               departments={board.kind === "everything" ? org.data?.departments ?? [] : []}
               byName={byName}
               hideStatus
-              hideDepartment={board.kind === "department"}
+              hideDepartment={board.kind === "department" || !!subtree}
               board
-              personBoard={board.kind === "department" ? board.slug : null}
+              personBoard={personBoard}
               onManageSprints={sprintTools.openPlanner}
             />
             {sprintTools.strip}
@@ -682,7 +709,7 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
                 now={now}
                 onOpen={onOpen}
                 onKeep={gate.member ? undefined : keep.mutate}
-                onQuickAdd={!gate.canCreate ? undefined : () => setCreating({ department: board.kind === "department" ? board.slug : undefined })}
+                onQuickAdd={!gate.canCreate ? undefined : startCreate}
               />
             )}
           </div>
@@ -692,7 +719,7 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
             onContextMenu={gate.member ? undefined : sprintTools.onContextMenu}
             hidden={mobile && mobileView !== "board"}
             data-testid="todo-board-scroll"
-            data-board-glass={embedded ? "tab" : ""}
+            data-board-glass={subtree ? undefined : embedded ? "tab" : ""}
             data-scrollable
             className="min-h-0 flex-1 overflow-auto pb-[var(--jinn-scaffold-bottom)] max-[700px]:snap-x max-[700px]:snap-mandatory max-[700px]:scroll-px-4 lg:pb-10"
           >
@@ -790,6 +817,7 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
           onFailed={() => setCreating(null)}
           defaults={{
             department: creating.department,
+            parentId: creating.parentId,
             employees: org.data?.employees ?? [],
             departments: departments.data ?? [],
           }}
@@ -807,9 +835,9 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
           byName={byName}
           onClose={() => setMobileFilterOpen(false)}
           hideStatus
-          hideDepartment={board.kind === "department"}
+          hideDepartment={board.kind === "department" || !!subtree}
           showLabelDue
-          personBoard={board.kind === "department" ? board.slug : null}
+          personBoard={personBoard}
           onManageSprints={sprintTools.openPlanner}
         />
       )}
