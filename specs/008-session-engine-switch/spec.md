@@ -55,9 +55,13 @@ routine, can move itself to where the capacity is.
   `compact_session`, with the same per-field caps.
 - **Compaction summary**: the summary an engine's native compaction writes into the
   conversation it compacted.
+- **History pointer**: a short instruction telling a new conversation where the session's
+  earlier history can be read (the session's history in the gateway, and the left
+  conversation's own log file when one exists on this host) and to read what it needs before
+  carrying on. It never pastes the transcript itself: a model handed its own earlier
+  conversation verbatim as a new message handles it badly.
 - **Manual handover**: what a new conversation gets when the compaction of the conversation
-  left behind did not produce a summary: the handoff, the recent transcript, and an
-  instruction to read the session's full earlier history before carrying on.
+  left behind did not produce a summary: the handoff and a history pointer.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -85,8 +89,8 @@ ran on that account and the selector now names it.
    **Then** the selector shows B at once with "applies to your next message", and the next
    turn runs on B.
 4. **Given** that switched chat, **When** the next turn runs on B, **Then** it is a new
-   conversation for B, brought up to date with the recent transcript exactly as the first
-   turn after an engine change is today, with no extra turn.
+   conversation for B, and the operator's message reaches it with a history pointer rather
+   than a pasted transcript, with no extra turn.
 5. **Given** a chat whose turn is running, waiting or queued, **When** the operator tries to
    change its engine or profile, **Then** the change is refused with the reason, as an
    engine switch is today.
@@ -124,9 +128,8 @@ notice naming both targets.
 4. **Given** the same switch, **When** the compaction on A fails (A is out of allowance, the
    compaction turn errors, or it leaves no summary the gateway can read), **Then** the
    session still moves to the target, and its new conversation gets a manual handover: the
-   handoff, the recent transcript, and an instruction to read the session's full earlier
-   history first. The transcript notice says the compaction failed and a manual handover
-   was used.
+   handoff and a history pointer, no pasted transcript. The transcript notice says the
+   compaction failed and a manual handover was used.
 5. **Given** a target equal to the current one, **When** the tool is called, **Then** it is
    refused and points at `compact_session`.
 6. **Given** a target that does not exist, is not installed, or is not available to this
@@ -155,9 +158,8 @@ instance has installed, its declared profiles and each engine's models.
 1. **Given** an unscoped local session, **When** it lists targets, **Then** it sees its
    current target, each installed engine with its models (and their effort levels), and each
    declared local Claude profile with whether its allowance is spent and when it resets.
-2. **Given** a department-scoped session, **When** it lists targets on a turn the operator's
-   own message started, **Then** it sees Claude only, with every declared local profile;
-   on any other turn it sees Claude only and no profiles.
+2. **Given** a department-scoped session, **When** it lists targets, **Then** it sees Claude
+   only, with every declared local profile.
 3. **Given** any session, **When** it lists targets and then switches to one of them,
    **Then** the switch is not refused for being unknown or unavailable (barring config
    changing in between).
@@ -205,9 +207,8 @@ target now in use, and the selector agrees with it.
 - **Remote employee.** Its session runs on its host's own login; a switch to a local profile
   is refused, as starting one there is today.
 - **Department-scoped session** switching to another engine: refused (scoped sessions run
-  only on Claude), as the operator's own engine switch is today. Switching between two
-  Claude profiles is allowed on a turn the operator's own message started (FR-021), in
-  either direction and back to own login.
+  only on Claude), as the operator's own engine switch is today. Switching between Claude
+  profiles is allowed (FR-021), in either direction and back to own login.
 - **Compaction turn hits a usage limit.** The compaction that precedes a switch never walks
   the leaving target's fallback chain: a limit there counts as a failed compaction and the
   switch goes ahead with a manual handover (FR-015b).
@@ -224,12 +225,15 @@ target now in use, and the selector agrees with it.
   only be compacted by the account it belongs to). Detect whether that compaction failed; if
   it did, do a manual handover instead: the new conversation is told to read the old
   conversation's history.
-- Q: May a department-scoped session switch itself to another Claude profile? → A: Only on a
-  turn the operator's own message started, and switching between two profiles within one
-  department must work.
+- Q: May a department-scoped session switch itself to another Claude profile? → A: Yes, on
+  any turn, to any declared local profile and back; switching between two profiles within
+  one department must work. (An earlier reading that limited it to turns the operator's own
+  message started was withdrawn by the operator.)
 - Q: When the operator changes an existing chat's profile from the selector, what does the
-  new conversation get? → A: The recent transcript as a catch-up, as an engine change does
-  today; no extra turn.
+  new conversation get? → A: No compaction and no extra turn.
+- Q (raised by the operator): How does a new conversation learn what came before? → A: Never
+  by piping the same transcript into it; tell it where the logs are and to read them
+  (history pointer). Applies to every switch in this feature.
 
 ## Requirements *(mandatory)*
 
@@ -250,11 +254,13 @@ target now in use, and the selector agrees with it.
 - **FR-005**: The operator's profile change MUST obey the rules that govern starting a
   session on a profile: refused for a remote employee's session; allowed for the operator on
   a department-scoped employee's session (only the operator may move such a session).
-- **FR-006**: After an operator's profile change, the first turn on the new profile starts a
-  new conversation and is brought up to date with the recent transcript, exactly as the first
-  turn after an engine change is today. No compaction or extra turn runs.
+- **FR-006**: After an operator's profile or engine change from the selector, the first turn
+  on the new target starts a new conversation and carries the operator's message with a
+  history pointer, not a pasted transcript. No compaction or extra turn runs. This replaces
+  today's 20-message catch-up for selector engine changes too.
 - **FR-007**: The conversation left behind by an operator's switch is kept, so switching back
-  resumes it with what it missed (today's engine-switch behaviour, extended to profiles).
+  resumes it; what it missed meanwhile reaches it as a history pointer (from the time it last
+  answered), not as pasted messages.
 
 **Switch tool (session)**
 
@@ -288,9 +294,9 @@ target now in use, and the selector agrees with it.
   first message carries the compaction summary, then the handoff.
 - **FR-015b**: When it fails (an error, a usage limit, a stop of the compaction turn alone,
   no summary that can be read back, or no finish within the plan's bound), the session still
-  moves to the target and the resume turn carries a manual handover: the handoff, the recent
-  transcript, and an instruction to read the session's full earlier history (with the exact
-  way to read it) before resuming. The compaction turn never walks a fallback chain.
+  moves to the target and the resume turn carries a manual handover: the handoff and a
+  history pointer giving the exact way to read the earlier history, no pasted transcript.
+  The compaction turn never walks a fallback chain.
 - **FR-015c**: Which path ran (summary or manual handover, and why) is recorded on the
   session and shown in the switch notice.
 - **FR-016**: The resume message MUST name the target the session now runs on and carry the
@@ -310,10 +316,10 @@ target now in use, and the selector agrees with it.
   on its host, Claude profiles declared for its host, models the engine offers. A remote
   employee's session may not switch to a local profile.
 - **FR-021**: A department-scoped session MUST NOT switch to another engine (scoped sessions
-  run only on Claude). It MAY switch to another declared local Claude profile, or back to
-  own login, only on a turn the operator's own message started (the existing operator-turn
-  stamp); on any other turn the profile switch is refused without naming which profiles
-  exist. Two profiles used within one department can be switched between in both directions.
+  run only on Claude). It MAY switch to any declared local Claude profile, or back to own
+  login, on any turn, so two profiles used within one department can be switched between in
+  both directions. (This relaxes, for switching only, today's rule that a scoped session may
+  not start a session on a profile; that spawn rule is unchanged.)
 - **FR-022**: The tool switches only the caller's own session. The target is never another
   session's id.
 
@@ -324,7 +330,7 @@ target now in use, and the selector agrees with it.
   known) and default model; and each Claude profile it may switch to, with whether its
   allowance is spent and when it resets, where known.
 - **FR-031**: The list MUST show exactly what FR-020/FR-021 allow for this caller. A caller
-  that may not use profiles is not told which exist.
+  that may not use profiles (a remote employee's session) is not told which exist.
 - **FR-032**: The list is read-only and has no cooldown.
 
 **Visibility**
@@ -366,7 +372,9 @@ target now in use, and the selector agrees with it.
   the engine name and "own login" label (FR-001).
 - **SC-007**: A cross-engine or cross-profile switch whose compaction fails still lands on the
   target in 100% of trials, with a manual handover and a notice saying so.
-
+- **SC-008**: No switch in this feature puts the earlier conversation's messages into the new
+  conversation's first message; each carries a history pointer (or a compaction summary
+  and handoff) instead.
 ## Assumptions
 
 - "Profile" is a Claude-only idea. OpenCode providers are reached through model ids
@@ -382,6 +390,11 @@ target now in use, and the selector agrees with it.
   who may choose to wait for the reset.
 - Remote declared profiles (`remoteHost`) are fallback targets for remote employees only and
   are not offered by the selector or the tools in this feature.
+- Fallback-chain hops (a usage limit moving a turn to a stand-in) keep their current
+  catch-up; changing them to history pointers is a separate change.
+- The history pointer names a way the new conversation can actually use: the gateway's
+  session history through its session tools where the engine has them, else the log file
+  path on this host.
 - Adding two session tools grows the MCP tool manifest; its budget is rebased as part of the
   work.
 
