@@ -323,7 +323,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
       const retryRateLimit = !retryInterrupted ? detectRateLimit(retryResult) : { limited: false as const };
 
       if (retryRateLimit.limited) {
-        recordAccountRateLimit(account, session.engine, engineLabel, retryRateLimit.resetsAt, { model: retryModel });
+        recordAccountRateLimit(account, session.engine, engineLabel, retryRateLimit.resetsAt, { healthKey: limitedKey, model: retryModel });
         earlyReset?.limitedAgain();
         logger.info(`Session ${session.id} still rate limited (attempt ${attempt})`);
 

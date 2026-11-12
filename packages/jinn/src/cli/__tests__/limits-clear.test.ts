@@ -53,11 +53,11 @@ describe("limits --clear", () => {
     expect(out[0]).toContain("host build-box");
   });
 
-  it("says there was nothing for a key with no record", async () => {
+  it("says there was nothing for a key with no record, and writes no record for it", async () => {
     await runLimits({ clear: "claude:friend01" });
 
-    expect(out[0]).toBe("Cleared claude:friend01 (it had no record: check the key names a Claude account or an engine).");
-    expect(readEngineHealth()["claude:friend01"]?.clearedAt).toBeDefined();
+    expect(out).toEqual(["Nothing to clear: claude:friend01 has no record (a key is an engine, or a Claude account such as claude:<profile>)."]);
+    expect(readEngineHealth()["claude:friend01"]).toBeUndefined();
   });
 
   it("without --clear still reads the limits and touches no record", async () => {

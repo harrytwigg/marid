@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * A turn that ran and was answered clears a limit its target still holds, when the
- * turn began after the limit was recorded. It is read off the live row, so a
- * session standing on a substitute clears the substitute and not its own account.
+ * turn began after the limit was recorded. It is read off the row the turn started
+ * with, so a session standing on a substitute clears the substitute and not its own
+ * account, and a target changed mid-turn is not credited.
  */
 
 const tmp = vi.hoisted(() => `${process.env.TMPDIR ?? "/tmp"}/jinn-served-health-${process.pid}`);
@@ -25,14 +26,16 @@ const MIN = 60_000;
 const FRIEND = "claude:friend01";
 const answered: EngineResult = { sessionId: "t", result: "done", cost: 0.01 };
 
-const spentMinutesAgo = (key: string, minutes: number) =>
-  recordEngineUnavailable(key, "usage limit", (Date.now() + 4 * 24 * 60 * MIN) / 1000, new Date(Date.now() - minutes * MIN));
+/** A limit a turn hit on `model`, recorded `minutes` ago. */
+const spentMinutesAgo = (key: string, minutes: number, model = "opus") =>
+  recordEngineUnavailable(key, "usage limit", (Date.now() + 4 * 24 * 60 * MIN) / 1000, new Date(Date.now() - minutes * MIN), { model });
 
-function runStartedMinutesAgo(minutes: number): TurnRun {
-  return { input: { employee: undefined }, plan: { engineConfig: { model: "opus" } }, turnStartedAt: Date.now() - minutes * MIN } as unknown as TurnRun;
+/** A turn that started `minutes` ago on `session` (the row as the turn began). */
+function runStartedMinutesAgo(minutes: number, session: Session = makeSession()): TurnRun {
+  return { input: { employee: undefined, session }, plan: { engineName: session.engine, engineConfig: { model: "opus" } }, turnStartedAt: Date.now() - minutes * MIN } as unknown as TurnRun;
 }
 
-const served = (run: TurnRun, live: Session, result: EngineResult = answered, silent = false) => noteTurnServed(run, live, "opus", { result, silent });
+const served = (run: TurnRun, result: EngineResult = answered, silent = false) => noteTurnServed(run, "opus", { result, silent });
 
 beforeEach(() => {
   fs.mkdirSync(path.dirname(STATE_PATH), { recursive: true });
@@ -44,7 +47,7 @@ describe("noteTurnServed", () => {
   it("clears the record of the account the turn ran on", () => {
     spentMinutesAgo("claude", 30);
 
-    served(runStartedMinutesAgo(5), makeSession());
+    served(runStartedMinutesAgo(5));
 
     expect(readEngineHealth().claude).toMatchObject({ state: "ok", clearedAt: expect.any(String), reason: "a turn was served" });
   });
@@ -52,7 +55,7 @@ describe("noteTurnServed", () => {
   it("does not clear on a turn that began before the limit was recorded", () => {
     spentMinutesAgo("claude", 5);
 
-    served(runStartedMinutesAgo(30), makeSession());
+    served(runStartedMinutesAgo(30));
 
     expect(readEngineHealth().claude?.state).toBe("exhausted");
   });
@@ -64,7 +67,7 @@ describe("noteTurnServed", () => {
   ])("says nothing for %s", (_name, result, silent) => {
     spentMinutesAgo("claude", 30);
 
-    served(runStartedMinutesAgo(5), makeSession(), result as EngineResult, silent);
+    served(runStartedMinutesAgo(5), result as EngineResult, silent);
 
     expect(readEngineHealth().claude?.state).toBe("exhausted");
   });
@@ -76,28 +79,28 @@ describe("noteTurnServed", () => {
       transportMeta: { engineOverride: { originalEngine: "claude", originalAccount: "claude", substituteAccount: FRIEND, substituteConfigDir: "/tmp/friend", until: new Date(Date.now() + 3600_000).toISOString() } } as never,
     });
 
-    served(runStartedMinutesAgo(5), standing);
+    served(runStartedMinutesAgo(5, standing));
 
     expect(readEngineHealth()[FRIEND]?.clearedAt).toBeDefined();
     expect(readEngineHealth().claude?.state).toBe("exhausted");
   });
 
   it("clears a limit a turn hit on this model, and leaves one a turn hit on another", () => {
-    recordEngineUnavailable("claude", "usage limit", (Date.now() + 4 * 24 * 60 * MIN) / 1000, new Date(Date.now() - 30 * MIN), { model: "opus" });
+    spentMinutesAgo("claude", 30);
 
-    noteTurnServed(runStartedMinutesAgo(5), makeSession({ model: "sonnet" }), "sonnet", { result: answered, silent: false });
+    noteTurnServed(runStartedMinutesAgo(5, makeSession({ model: "sonnet" })), "sonnet", { result: answered, silent: false });
     expect(readEngineHealth().claude?.state).toBe("exhausted");
 
-    noteTurnServed(runStartedMinutesAgo(5), makeSession({ model: "opus" }), "opus", { result: answered, silent: false });
+    noteTurnServed(runStartedMinutesAgo(5, makeSession({ model: "opus" })), "opus", { result: answered, silent: false });
     expect(readEngineHealth().claude?.clearedAt).toBeDefined();
   });
 
   it("keys an opencode model by its provider", () => {
-    spentMinutesAgo("opencode/x-provider", 30);
-    spentMinutesAgo("opencode/y-provider", 30);
-    const live = makeSession({ engine: "opencode", model: "x-provider/model-x" });
+    spentMinutesAgo("opencode/x-provider", 30, "x-provider/model-x");
+    spentMinutesAgo("opencode/y-provider", 30, "y-provider/model-y");
+    const started = makeSession({ engine: "opencode", model: "x-provider/model-x" });
 
-    noteTurnServed(runStartedMinutesAgo(5), live, "x-provider/model-x", { result: answered, silent: false });
+    noteTurnServed(runStartedMinutesAgo(5, started), "x-provider/model-x", { result: answered, silent: false });
 
     expect(readEngineHealth()["opencode/x-provider"]?.clearedAt).toBeDefined();
     expect(readEngineHealth()["opencode/y-provider"]?.state).toBe("exhausted");

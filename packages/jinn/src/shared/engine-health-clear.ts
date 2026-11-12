@@ -59,24 +59,38 @@ export function clearContradictedHealth(
   clearRecord(store, key, "usage reading shows headroom", now);
 }
 
+/** The account-wide windows: every model's turns count against them, so any served turn contradicts one being spent. */
+const ACCOUNT_WINDOWS: readonly string[] = ["5h", "7d"];
+
 /**
- * Clear `key` when a turn that began after the limit was observed was served: a
- * turn that started before someone else observed the limit proves nothing about it.
- * A limit a turn hit on one model is cleared only by a turn served on that same
- * model (exactly), since the limit may be that model's own bucket.
+ * Whether a turn served on `servedModel` contradicts the limit the record holds.
+ * A spent account-wide window, yes, whatever the model. A spent window scoped to
+ * one model (a reading's per-model bucket) never: the readings that recorded it
+ * are what clear it. A limit a turn hit names no window, and the bucket may be that
+ * model's own, so only a turn on the same model counts, the CLI default (no model)
+ * included: an unnamed default may or may not be the model that was served.
+ */
+function servedContradicts(record: EngineHealth, servedModel: string | undefined): boolean {
+  if (record.window !== undefined) return ACCOUNT_WINDOWS.includes(record.window);
+  return record.model === servedModel;
+}
+
+/**
+ * Clear `key` when a turn that began after the limit was observed was served (a
+ * turn that started before someone else observed the limit proves nothing about
+ * it) and the turn's model says something about the limit held: see {@link servedContradicts}.
  */
 export function recordEngineServed(key: string, turnStartedAtMs: number, servedModel: string | undefined, now: Date = new Date()): void {
   const store = readStore();
   const record = clearable(store, key, now);
-  if (!record || !newerThanRecord(record, turnStartedAtMs)) return;
-  if (record.model !== undefined && record.model !== servedModel) return;
+  if (!record || !newerThanRecord(record, turnStartedAtMs) || !servedContradicts(record, servedModel)) return;
   clearRecord(store, key, "a turn was served", now);
 }
 
-/** Write a clear for `key` whatever it holds, for the operator. Returns what it replaced. */
+/** Write a clear over `key`'s record whatever it holds, for the operator. Returns what it replaced; a key with no record is left alone (a mistyped key must not leave a stray record behind). */
 export function clearEngineHealthByOperator(key: string, now: Date = new Date()): EngineHealth | undefined {
   const store = readStore();
   const replaced = store[key];
-  clearRecord(store, key, "cleared by the operator", now);
+  if (replaced) clearRecord(store, key, "cleared by the operator", now);
   return replaced;
 }

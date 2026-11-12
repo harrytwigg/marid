@@ -349,3 +349,26 @@ describe("handleRateLimit — a usage-limit retry that is served", () => {
     expect(readEngineHealth().claude?.state).toBe("exhausted");
   });
 });
+
+describe("handleRateLimit — an opencode model's retry", () => {
+  it("holds a repeat limit under the provider key, never the engine-wide one", async () => {
+    const session = makeSession({ engine: "opencode", model: "x-provider/model-x", status: "waiting" });
+    getSessionMock.mockImplementation(() => ({ ...session, status: "waiting" }));
+    const resetIn = (minutes: number) => secs(Date.now() + minutes * MIN);
+    // Limited again at the first retry, reopening three minutes after it.
+    limitedMock.mockImplementationOnce(() => ({ limited: true, resetsAt: resetIn(3) }));
+    const run = vi.fn().mockResolvedValue(answer);
+    const pending = handleRateLimit({ ...opts(session, run), engineConfig: { bin: "opencode" }, rateLimit: { resetsAt: resetIn(2) } });
+
+    let afterRepeat: ReturnType<typeof readEngineHealth> | undefined;
+    const { value } = await drive(pending, { 4: () => { afterRepeat = readEngineHealth(); } });
+
+    expect(value.kind).toBe("resumed");
+    expect(run).toHaveBeenCalledTimes(2);
+    // The repeat limit was held where the first one was, not on the engine as a whole.
+    expect(afterRepeat?.["opencode/x-provider"]?.state).toBe("exhausted");
+    expect(afterRepeat?.opencode).toBeUndefined();
+    // Nothing engine-wide was left behind to hold every opencode provider out once this one served.
+    expect(readEngineHealth().opencode).toBeUndefined();
+  });
+});

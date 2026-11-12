@@ -89,7 +89,11 @@ function describeReplaced(replaced: EngineHealth): string {
 /** Write a clear for one health key: for a reset the limits readout cannot see. */
 function clearHealth(key: string): void {
   const replaced = clearEngineHealthByOperator(key);
-  console.log(replaced ? `Cleared ${key} (was ${describeReplaced(replaced)}).` : `Cleared ${key} (it had no record: check the key names a Claude account or an engine).`);
+  if (!replaced) {
+    console.log(`Nothing to clear: ${key} has no record (a key is an engine, or a Claude account such as claude:<profile>).`);
+    return;
+  }
+  console.log(`Cleared ${key} (was ${describeReplaced(replaced)}).`);
   console.log("Sessions standing in for it go back to it at their next turn; one waiting on its stand-in's limit hands back within a minute.");
 }
 

@@ -256,6 +256,21 @@ describe("collectEngineLimits — codex session rollout", () => {
     expect(fs.existsSync(live.startedFile)).toBe(true);
   });
 
+  it("does not clear a codex record from a live reading: it carries the main bucket only, not every bucket codex limits on", async () => {
+    const { recordEngineUnavailable, readEngineHealth } = await import("../engine-health.js");
+    recordEngineUnavailable("codex", "usage limit", Date.now() / 1000 + 4 * 24 * 3600, new Date(Date.now() - 30 * 60_000), { model: "gpt-5.3-codex-spark" });
+    const live = writeCodexAppServerStub("codex-live-headroom-stub", {
+      rateLimitsByLimitId: {
+        codex: { limitId: "codex", planType: "pro", primary: { usedPercent: 20, windowDurationMins: 300 }, secondary: { usedPercent: 30, windowDurationMins: 10_080 } },
+      },
+    });
+
+    const out = await collectEngineLimits(cfg({ codex: { bin: live.bin, model: "gpt-5.5" } }), { engine: "codex" });
+
+    expect(out.engines.codex.status).toBe("live");
+    expect(readEngineHealth().codex?.state).toBe("exhausted");
+  });
+
   it("falls back to the rollout snapshot with its original timestamp when the live app-server fails", async () => {
     const ts = new Date(Date.now() - 5 * 60_000).toISOString();
     writeCodexRollout(ts, 72);

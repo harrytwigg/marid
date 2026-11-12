@@ -265,9 +265,9 @@ function noteClaudeLogin(run: TurnRun, result: EngineResult, silent: boolean): v
 }
 
 /** What the turn's outcome says about its target: the login it ran under, and whether it could serve. A silent turn (preempted, dead, limited) says nothing of either. */
-function noteTurnOutcome(run: TurnRun, live: Session, model: string | undefined, outcome: { result: EngineResult; silent: boolean }): void {
+function noteTurnOutcome(run: TurnRun, model: string | undefined, outcome: { result: EngineResult; silent: boolean }): void {
   noteClaudeLogin(run, outcome.result, outcome.silent);
-  noteTurnServed(run, live, model, outcome);
+  noteTurnServed(run, model, outcome);
 }
 
 /**
@@ -314,7 +314,7 @@ async function concludeTurn(run: TurnRun, attempt: EngineAttempt, model: string 
   const dead = !quietPreempted && isDeadSessionError(result);
   if (dead) clearDeadEngineSession(sessionId, run.plan.engineName, { lostConversation: Boolean(run.plan.resumeSessionId) });
   const rateLimit = !quietPreempted && !dead ? detectRateLimit(result) : { limited: false as const };
-  noteTurnOutcome(run, live, model, { result, silent: quietPreempted || dead || rateLimit.limited });
+  noteTurnOutcome(run, model, { result, silent: quietPreempted || dead || rateLimit.limited });
 
   // Keep the same completed evidence the live view kept — interim prose, tools,
   // media, delegation blocks — and drop exact streamed copies of the result,

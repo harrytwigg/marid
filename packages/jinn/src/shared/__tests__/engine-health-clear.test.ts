@@ -181,9 +181,11 @@ describe("recordEngineServed", () => {
       expect(exhausted()).toBe(true);
     });
 
-    it("is cleared from any served turn when the record names no model", () => {
+    it("on the CLI default (no model) is cleared only by a turn on the default: an unnamed default may not be the model served", () => {
       spentOn(undefined);
       recordEngineServed("claude:overflow", at(10).getTime(), "sonnet", at(12));
+      expect(exhausted()).toBe(true);
+      recordEngineServed("claude:overflow", at(10).getTime(), undefined, at(12));
       expect(exhausted()).toBe(false);
     });
 
@@ -204,6 +206,27 @@ describe("recordEngineServed", () => {
 
       recordEngineUnavailable("claude:overflow", "usage limit", undefined, at(6), { model: "sonnet" });
       expect(readEngineHealth(at(6))["claude:overflow"]?.model).toBe("sonnet");
+    });
+  });
+
+  describe("a spent window a reading recorded", () => {
+    const exhausted = () => isEngineExhausted(readEngineHealth(at(12)), "claude:overflow", at(12));
+
+    it.each(["5h", "7d"])("an account-wide %s window is cleared by a turn served on any model", (window) => {
+      recordSpent("claude:overflow", { window });
+      recordEngineServed("claude:overflow", at(10).getTime(), "sonnet", at(12));
+      expect(exhausted()).toBe(false);
+    });
+
+    it("a window scoped to one model is never cleared by a served turn, even on a model that sounds like it: only a reading clears it", () => {
+      recordSpent("claude:overflow", { window: "7d Opus" });
+      recordEngineServed("claude:overflow", at(10).getTime(), "sonnet", at(12));
+      recordEngineServed("claude:overflow", at(10).getTime(), "opus", at(12));
+      recordEngineServed("claude:overflow", at(10).getTime(), undefined, at(12));
+      expect(exhausted()).toBe(true);
+
+      clearContradictedHealth("claude:overflow", [win("5h", 0), win("7d", 0), win("7d Opus", 10)], at(10).getTime(), at(12));
+      expect(exhausted()).toBe(false);
     });
   });
 
@@ -296,8 +319,8 @@ describe("clearEngineHealthByOperator", () => {
     expect(readEngineHealth(at(5)).claude).toEqual({ state: "ok", clearedAt: at(5).toISOString(), observedAt: at(5).toISOString(), reason: "cleared by the operator" });
   });
 
-  it("says there was nothing when the key has no record", () => {
+  it("says there was nothing when the key has no record, and writes nothing: a mistyped key leaves no stray record", () => {
     expect(clearEngineHealthByOperator("claude:none", at(5))).toBeUndefined();
-    expect(readEngineHealth(at(5))["claude:none"]?.clearedAt).toBe(at(5).toISOString());
+    expect(fs.existsSync(STATE_PATH)).toBe(false);
   });
 });
