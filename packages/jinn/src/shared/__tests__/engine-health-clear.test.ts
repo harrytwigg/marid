@@ -218,6 +218,22 @@ describe("recordEngineServed", () => {
       expect(exhausted()).toBe(false);
     });
 
+    it("another engine's 5h/7d is left to readings: which windows its models share is not known", () => {
+      recordSpent("codex", { window: "7d" });
+      recordEngineServed("codex", at(10).getTime(), "gpt-5.5", at(12));
+      expect(isEngineExhausted(readEngineHealth(at(12)), "codex", at(12))).toBe(true);
+    });
+
+    it("a 7d window a turn on one model then re-probed keeps that model's rule: another model's turn does not clear it", () => {
+      recordSpent("claude:overflow", { window: "7d" });
+      // The turn's limit stated no reset: a re-probe that keeps the window and stamps the model.
+      recordEngineUnavailable("claude:overflow", "usage limit", undefined, at(5), { model: "opus" });
+      recordEngineServed("claude:overflow", at(10).getTime(), "sonnet", at(12));
+      expect(exhausted()).toBe(true);
+      recordEngineServed("claude:overflow", at(10).getTime(), "opus", at(12));
+      expect(exhausted()).toBe(false);
+    });
+
     it("a window scoped to one model is never cleared by a served turn, even on a model that sounds like it: only a reading clears it", () => {
       recordSpent("claude:overflow", { window: "7d Opus" });
       recordEngineServed("claude:overflow", at(10).getTime(), "sonnet", at(12));

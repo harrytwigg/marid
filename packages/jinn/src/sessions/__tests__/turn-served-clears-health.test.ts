@@ -47,8 +47,9 @@ async function runOne(result: EngineResult, started?: () => void): Promise<void>
   }, surface);
 }
 
-const spentMinutesAgo = (minutes: number) =>
-  recordEngineUnavailable("claude", "usage limit", (Date.now() + 4 * 24 * 60 * MIN) / 1000, new Date(Date.now() - minutes * MIN));
+/** A limit a turn on opus hit, recorded `minutes` ago against `key`. */
+const spentMinutesAgo = (minutes: number, key = "claude") =>
+  recordEngineUnavailable(key, "usage limit", (Date.now() + 4 * 24 * 60 * MIN) / 1000, new Date(Date.now() - minutes * MIN), { model: "opus" });
 
 beforeEach(async () => {
   fs.rmSync(path.join(tmp, "tmp", "engine-health.json"), { force: true });
@@ -69,6 +70,21 @@ describe("a turn concluded on the default Claude account", () => {
     await runOne({ sessionId: "t", result: "hi there", cost: 0.01 }, () => spentMinutesAgo(-1));
 
     expect(readEngineHealth().claude?.state).toBe("exhausted");
+  });
+
+  it("credits the account the turn started on, not one the row was moved onto while it ran", async () => {
+    const friend = "claude:friend01";
+    spentMinutesAgo(30);
+    spentMinutesAgo(30, friend);
+
+    await runOne({ sessionId: "t", result: "hi there", cost: 0.01 }, () => {
+      // Mid-turn the row is stood on another account: the turn still ran on the default one.
+      const live = reg.listSessions().find((s) => s.status === "running")!;
+      reg.updateSession(live.id, { transportMeta: { engineOverride: { originalEngine: "claude", originalAccount: "claude", substituteAccount: friend, substituteConfigDir: "/tmp/friend", until: new Date(Date.now() + 3600_000).toISOString() } } as never });
+    });
+
+    expect(readEngineHealth().claude?.clearedAt).toBeDefined();
+    expect(readEngineHealth()[friend]?.state).toBe("exhausted");
   });
 
   it("leaves it when the turn ended in an error", async () => {

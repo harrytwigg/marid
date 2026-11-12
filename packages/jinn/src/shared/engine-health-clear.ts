@@ -59,20 +59,24 @@ export function clearContradictedHealth(
   clearRecord(store, key, "usage reading shows headroom", now);
 }
 
-/** The account-wide windows: every model's turns count against them, so any served turn contradicts one being spent. */
-const ACCOUNT_WINDOWS: readonly string[] = ["5h", "7d"];
+/** A Claude account's windows that every model's turns count against (its per-model buckets are named `7d <model>`). */
+const CLAUDE_ACCOUNT_WINDOWS: readonly string[] = ["5h", "7d"];
+/** A Claude account key: the default login, a local profile (`claude:<key>`) or a remote login (`claude@…`). */
+const CLAUDE_ACCOUNT_KEY = /^claude($|[:@])/;
 
 /**
  * Whether a turn served on `servedModel` contradicts the limit the record holds.
- * A spent account-wide window, yes, whatever the model. A spent window scoped to
- * one model (a reading's per-model bucket) never: the readings that recorded it
- * are what clear it. A limit a turn hit names no window, and the bucket may be that
- * model's own, so only a turn on the same model counts, the CLI default (no model)
- * included: an unnamed default may or may not be the model that was served.
+ * The newest limit a turn hit stamps its model, and the bucket may be that model's
+ * own, so only a turn on that model counts. Otherwise a Claude account's spent
+ * account-wide window does, whatever the model; a window scoped to one model, or
+ * any other engine's (whose readings do not say which windows its models share),
+ * is left to readings. A record naming neither came from a turn on the CLI default:
+ * only a turn on the default counts, since an unnamed default may not be the model served.
  */
-function servedContradicts(record: EngineHealth, servedModel: string | undefined): boolean {
-  if (record.window !== undefined) return ACCOUNT_WINDOWS.includes(record.window);
-  return record.model === servedModel;
+function servedContradicts(key: string, record: EngineHealth, servedModel: string | undefined): boolean {
+  if (record.model !== undefined) return record.model === servedModel;
+  if (record.window !== undefined) return CLAUDE_ACCOUNT_KEY.test(key) && CLAUDE_ACCOUNT_WINDOWS.includes(record.window);
+  return servedModel === undefined;
 }
 
 /**
@@ -83,7 +87,7 @@ function servedContradicts(record: EngineHealth, servedModel: string | undefined
 export function recordEngineServed(key: string, turnStartedAtMs: number, servedModel: string | undefined, now: Date = new Date()): void {
   const store = readStore();
   const record = clearable(store, key, now);
-  if (!record || !newerThanRecord(record, turnStartedAtMs) || !servedContradicts(record, servedModel)) return;
+  if (!record || !newerThanRecord(record, turnStartedAtMs) || !servedContradicts(key, record, servedModel)) return;
   clearRecord(store, key, "a turn was served", now);
 }
 
