@@ -1170,6 +1170,11 @@ function rekeyLegacyClaudeSlot(session: Session, refs: EngineSessionRefs): void 
 /** The slots after the switch: the left conversation parked or retired, and the target's own ref (with its model/effort) in place. */
 function targetRefs(session: Session, opts: SwitchSessionTargetOptions, nextDir: string | null) {
   const refs = cleanEngineSessionRefs(session.engineSessions) ?? {};
+  const was = withoutAccountOverride(session);
+  const retiring = opts.leftConversation === 'retire';
+  // A retired conversation may be the legacy `claude` slot: file it under its account so it goes with the retirement. Done
+  // before the delete, because once the left slot is gone a lone `claude` slot would read as the legacy one and be misfiled.
+  if (retiring) rekeyLegacyClaudeSlot(was, refs);
   const leftSlot = session.engine ? threadSlot(session, session.engine) : undefined;
   if (session.engine && leftSlot) {
     const currentRef = getEngineSessionRef(session, session.engine);
@@ -1179,17 +1184,16 @@ function targetRefs(session: Session, opts: SwitchSessionTargetOptions, nextDir:
       model: session.model ?? currentRef.model,
       effortLevel: session.effortLevel ?? currentRef.effortLevel,
     });
-    if (opts.leftConversation === 'retire') delete refs[leftSlot];
+    if (retiring) delete refs[leftSlot];
     // Parked under the account it ran on; the switch drops any override, so the target reads the session's own account.
     else if (Object.keys(current).length > 0) refs[leftSlot] = current;
   }
-  const was = withoutAccountOverride(session);
   const own = { ...was, claudeConfigDir: nextDir };
   const targetSlot = threadSlot(own, opts.engine);
   // A pre-account row keeps its own account's thread under `claude`. Another account never inherits it: it is re-keyed to
   // the account it belongs to, and only a target on that same account reads it by the old spelling.
   const sameAccount = threadSlot(own, 'claude') === threadSlot(was, 'claude');
-  if (!sameAccount) rekeyLegacyClaudeSlot(was, refs);
+  if (!sameAccount && !retiring) rekeyLegacyClaudeSlot(was, refs);
   let target = cleanEngineSessionRef(refs[targetSlot] ?? (sameAccount ? legacyThreadRef({ ...own, engineSessions: refs }, opts.engine) : undefined) ?? {});
   const requestedModel = typeof opts.model === 'string' && opts.model.trim() ? opts.model : undefined;
   if (opts.freshTarget && target.id) {

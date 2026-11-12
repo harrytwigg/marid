@@ -74,6 +74,32 @@ describe("the left conversation", () => {
     expect(back.engineSessionId).toBeNull();
   });
 
+  it("keeps the own login's parked thread under its own slot when the profile's conversation is retired on the way back", () => {
+    const s = claudeSession("web:retire-back");
+    reg.switchSessionTarget(s.id, { engine: "claude", claudeConfigDir: WORK, model: "opus", leftConversation: "park" });
+    reg.recordEngineSessionId(s.id, "claude", "work-thread", { model: "opus" });
+
+    // Retired on the way back, the lone `claude` slot is the own login's, not a pre-account row's to be filed under the profile.
+    const back = reg.switchSessionTarget(s.id, { engine: "claude", claudeConfigDir: null, model: "opus", leftConversation: "retire" })!;
+    expect(back.engineSessions?.claude?.id).toBe("own-thread");
+    expect(back.engineSessions?.[WORK_ACCOUNT]).toBeUndefined();
+    expect(back.engineSessionId).toBe("own-thread");
+
+    // And a fresh target opens a new conversation there instead of resuming it.
+    reg.switchSessionTarget(s.id, { engine: "claude", claudeConfigDir: WORK, model: "opus", leftConversation: "park" });
+    const fresh = reg.switchSessionTarget(s.id, { engine: "claude", claudeConfigDir: null, model: "opus", leftConversation: "retire", freshTarget: true })!;
+    expect(fresh.engineSessionId).toBeNull();
+  });
+
+  it("files a pre-account row's legacy slot under its profile before retiring it, so nothing of it survives", () => {
+    const s = reg.createSession({ engine: "claude", source: "web", sourceRef: "web:legacy-retire", model: "opus", claudeConfigDir: WORK });
+    reg.recordEngineSessionId(s.id, "claude", "legacy-thread");
+    reg.updateSession(s.id, { engineSessions: { claude: { id: "legacy-thread", model: "opus" } } });
+    const back = reg.switchSessionTarget(s.id, { engine: "claude", claudeConfigDir: null, model: "opus", leftConversation: "retire" })!;
+    expect(JSON.stringify(back.engineSessions ?? {})).not.toContain("legacy-thread");
+    expect(back.engineSessionId).toBeNull();
+  });
+
   it("leaves the profile alone when the request names none, and clears it for own login", () => {
     const s = claudeSession("web:keep-dir");
     reg.switchSessionTarget(s.id, { engine: "claude", claudeConfigDir: WORK, model: "opus" });
