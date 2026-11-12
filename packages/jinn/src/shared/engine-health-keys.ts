@@ -19,12 +19,15 @@ export function engineReadKeys(
   return healthKeys({ engine, model: model || config?.engines.opencode?.model || undefined, account: engine });
 }
 
+/** How long a record holds. An `exhausted` record that states no `until` is open-ended (held until a re-probe
+ *  or a clear), so it holds longest; any other record without a readable `until` holds least. */
 function untilMs(record: EngineHealth): number {
   const ms = record.until === undefined ? NaN : Date.parse(record.until);
-  return Number.isFinite(ms) ? ms : -Infinity;
+  if (Number.isFinite(ms)) return ms;
+  return record.state === "exhausted" && record.until === undefined ? Infinity : -Infinity;
 }
 
-/** The record of `state` that holds longest: the latest `until`; one with no `until` only when none states one. */
+/** The record of `state` that holds longest: an open-ended exhausted record, else the latest `until`. */
 function longest(records: readonly EngineHealth[], state: EngineHealth["state"]): EngineHealth | undefined {
   let best: EngineHealth | undefined;
   for (const record of records) {
@@ -38,7 +41,7 @@ function longest(records: readonly EngineHealth[], state: EngineHealth["state"])
  * Of the records an engine reader gathered over {@link engineReadKeys}, the one that binds: an `exhausted`
  * record beats a `degraded` one whatever the key order (a provider's short degraded window must not mask the
  * engine being spent), and among records of one state the latest `until` wins (the engine is back only when
- * the last of them reopens). With no record out, the first one (the provider's, then the engine's), if any.
+ * the last of them reopens; an exhausted record with no `until` is open-ended and wins). With no record out, the first one (the provider's, then the engine's), if any.
  */
 export function bindingHealthRecord(records: readonly EngineHealth[]): EngineHealth | undefined {
   return longest(records, "exhausted") ?? longest(records, "degraded") ?? records[0];

@@ -76,9 +76,10 @@ describe("bindingHealthRecord", () => {
     expect(bindingHealthRecord([deg(5), deg(15)])).toEqual(deg(15));
   });
 
-  it("takes an exhausted record with no until only when none states one", () => {
-    expect(bindingHealthRecord([ex(), ex(30)])).toEqual(ex(30));
-    expect(bindingHealthRecord([ex(), deg(30)])).toEqual(ex());
+  it("takes an open-ended exhausted record (no until) over a timed one, in either order", () => {
+    expect(bindingHealthRecord([ex(), ex(30)])).toEqual(ex());
+    expect(bindingHealthRecord([ex(30), ex()])).toEqual(ex());
+    expect(bindingHealthRecord([deg(30), ex()])).toEqual(ex());
   });
 
   it("is the first record when none is out, and nothing for no records", () => {
@@ -102,6 +103,14 @@ describe("withEngineHealth, several records under opencode's keys", () => {
   it("does not let a provider's degraded record mask the engine being exhausted", () => {
     writeStore({ "opencode/opencode-go-b": { state: "degraded", until: soon }, opencode: { state: "exhausted", until: later } });
     expect(withEngineHealth(registry, config("opencode-go-b/flash")).opencode.health).toMatchObject({ state: "exhausted", until: later });
+  });
+
+  it("reads an open-ended engine hold over a provider's timed one", () => {
+    const openEnded = { state: "exhausted" as const, recheckAt: later, reason: "held until re-probed" };
+    writeStore({ "opencode/opencode-go-b": { state: "exhausted", until: soon }, opencode: openEnded });
+    const read = withEngineHealth(registry, config("opencode-go-b/flash")).opencode.health;
+    expect(read).toMatchObject({ state: "exhausted", reason: "held until re-probed" });
+    expect(read.until).toBeUndefined();
   });
 
   it("names the later reopening when both keys are exhausted", () => {
