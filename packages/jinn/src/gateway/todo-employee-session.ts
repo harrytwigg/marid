@@ -80,8 +80,8 @@ export type WakeEmployeeResult =
 
 interface Spawn { engineName: string; model?: string; effortLevel?: string; reroute?: SessionReroute; prompt: string }
 
-function employeeDefaults(employee: Employee): { engine: string; model: string; employee: string; effortLevel?: string } {
-  return { engine: employee.engine, model: employee.model, employee: employee.name, ...(employee.effortLevel ? { effortLevel: employee.effortLevel } : {}) };
+function employeeDefaults(employee: Employee): { engine: string; model?: string; employee: string; effortLevel?: string } {
+  return { engine: employee.engine, ...(employee.model ? { model: employee.model } : {}), employee: employee.name, ...(employee.effortLevel ? { effortLevel: employee.effortLevel } : {}) };
 }
 
 /** What a new session falls back to: the employee's own selection, or just its

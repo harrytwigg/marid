@@ -23,7 +23,7 @@ const IGNORED_SETTINGS = new Set(["enabled", "fallbackModels", "$schema"]);
 export interface OpencodeEmployee {
   name: string;
   engine: string;
-  model: string;
+  model?: string;
 }
 
 export interface EmployeeSuggestion {
