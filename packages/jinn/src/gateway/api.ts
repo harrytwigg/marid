@@ -1496,7 +1496,7 @@ export async function handleApiRequest(
         // availability stays consistent with /api/engines instead of drifting.
         engines: {
           default: config.engines.default,
-          ...Object.fromEntries(Object.entries(withEngineHealth(getModelRegistry(config))).map(([name, entry]) => [
+          ...Object.fromEntries(Object.entries(withEngineHealth(getModelRegistry(config), config)).map(([name, entry]) => [
             name, { model: entry.defaultModel, available: entry.available, health: entry.health },
           ])),
         },
@@ -4361,7 +4361,7 @@ export async function handleApiRequest(
     // when no `models:` block is configured.
     if (method === "GET" && pathname === "/api/engines") {
       const config = context.getConfig();
-      return json(res, { default: config.engines.default, engines: withInternalFallback(withEngineHealth(getModelRegistry(config))) });
+      return json(res, { default: config.engines.default, engines: withInternalFallback(withEngineHealth(getModelRegistry(config), config)) });
     }
 
     // GET /api/fallback-preview?engine=&model=&employee= — the fallback view a new session
@@ -4394,7 +4394,7 @@ export async function handleApiRequest(
         refreshHermesModels(config),
       ]);
       context.emit("engines:updated", {});
-      return json(res, { default: config.engines.default, engines: withInternalFallback(withEngineHealth(getModelRegistry(config))) });
+      return json(res, { default: config.engines.default, engines: withInternalFallback(withEngineHealth(getModelRegistry(config), config)) });
     }
 
     // GET /api/engine-limits — live/snapshot quota windows and static capability

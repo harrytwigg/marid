@@ -5,6 +5,7 @@ import { CLAUDE_LIMITS_DIR } from "../shared/paths.js";
 import { isDefaultAccountSession } from "../shared/engine-account.js";
 import { collectEngineLimits } from "../shared/engine-limits.js";
 import { isEngineExhausted, readEngineHealth, type EngineHealthReading } from "../shared/engine-health.js";
+import { engineReadKeys } from "../shared/engine-health-keys.js";
 import { readClaudeUsageHistory, type UsageSample } from "../shared/claude-usage-history.js";
 import { isSystemEmployeeName } from "../gateway/system-employees.js";
 import { isLegacyWorkflowPhaseSession } from "../sessions/legacy-workflow-phase.js";
@@ -246,10 +247,7 @@ function operatorSignals(deps: SnapshotDeps, claude: EngineLimitEngineSnapshot |
  * default-model window is what took opencode out for the walk before it was.
  */
 export function engineHeldOut(health: EngineHealthReading, engine: string, config: JinnConfig, now: Date, runsModel?: string): boolean {
-  if (isEngineExhausted(health, engine, now)) return true;
-  const model = engine === "opencode" ? (runsModel || config.engines.opencode?.model) : undefined;
-  const slash = model ? model.indexOf("/") : -1;
-  return slash > 0 && isEngineExhausted(health, `opencode/${model!.slice(0, slash)}`, now);
+  return engineReadKeys(engine, config, runsModel).some((key) => isEngineExhausted(health, key, now));
 }
 
 function engineContext(deps: SnapshotDeps, holding: readonly Session[]): EngineContext {

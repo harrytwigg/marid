@@ -128,9 +128,10 @@ function providerOf(model: string | null | undefined): string | undefined {
   return model && slash > 0 ? model.slice(0, slash) : undefined;
 }
 
-/** Whether a same-engine target is another opencode provider (or account) than the session's own model: its limit is not the one that moved the session, so its health is read. Within one provider, a limit may have been the old model's alone. */
-function otherOpencodeProvider(session: Session, target: StoredFallbackTarget): boolean {
-  return target.engine === "opencode" && providerOf(target.model) !== providerOf(session.model);
+/** Whether a same-engine target is another opencode provider (or account) than the one the session runs on: its limit is not the one that moved the session, so its health is read. Within one provider, a limit may have been the old model's alone. */
+function otherOpencodeProvider(config: JinnConfig, session: Session, target: StoredFallbackTarget): boolean {
+  // A session with no model runs the engine's configured one.
+  return target.engine === "opencode" && providerOf(target.model) !== providerOf(session.model ?? config.engines.opencode?.model);
 }
 
 /** Why the chosen model cannot be switched to now (no longer offered, the one that just hit its limit, or its target's own limit is spent), or undefined. The target is read as a chain link is (`healthKeys`): an opencode target by its provider, a Claude one by its account, so a spent opencode provider or account is refused. */
@@ -140,7 +141,7 @@ function modelRefusal(input: ChooseSubstituteInput, health: EngineHealthReading,
   if (!offered.some((m) => m.id === target.model) && !hasDynamicModelCatalog(target.engine)) return "names a model that is no longer offered";
   if (session.engine === target.engine) {
     if (session.model === target.model) return "is the model that just hit its limit";
-    if (!otherOpencodeProvider(session, target)) return undefined;
+    if (!otherOpencodeProvider(config, session, target)) return undefined;
   }
   const link = { engine: target.engine, model: target.model, account: target.engine };
   return isLinkExhausted(substituteHealth(health, employee, session), link) ? "has hit its own usage limit" : undefined;

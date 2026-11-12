@@ -10,6 +10,7 @@ const AVAILABILITY_RESUME_REASON = "This is a restart: the previous attempt stop
 export function startTodoSweeps(context: ApiContext): () => void {
   const stopResumes = startAvailabilityResumeSweep({
     rearm: (todoId) => redispatchTodo(todoId, context, AVAILABILITY_RESUME_REASON),
+    config: () => context.getConfig(),
   });
   const stopRecovery = startTodoRecovery(context);
   return () => {

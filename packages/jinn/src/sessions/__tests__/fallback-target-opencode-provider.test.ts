@@ -78,3 +78,14 @@ describe("a chosen opencode fallback target", () => {
     expect(choose(onStock("opencode-go/pro")).choice).toMatchObject({ model: "opencode-go/pro" });
   });
 });
+
+describe("a session that runs the engine's configured model", () => {
+  const unpinned = (model: string) => makeSession({ engine: "opencode", model: null, fallbackTarget: { engine: "opencode", model } });
+
+  it("takes a target on the provider it runs on, and refuses one on another spent provider", () => {
+    spend("opencode/opencode-go-b");
+    expect(choose(unpinned("opencode-go-b/pro")).choice).toMatchObject({ model: "opencode-go-b/pro" });
+    spend("opencode/opencode-go-c");
+    expect(choose(unpinned("opencode-go-c/flash")).reason).toMatch(/has hit its own usage limit/);
+  });
+});
