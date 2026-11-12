@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-12
 
-**Status**: Draft (clarification pending)
+**Status**: Draft (clarified 2026-11-12)
 
 **Input**: "In the web chat the operator can switch between engines but not between the
 several Claude profiles (accounts) installed, and a session has no way to move itself to
@@ -53,6 +53,11 @@ routine, can move itself to where the capacity is.
   keeps the conversation; any other switch moves the session to another conversation.
 - **Handoff**: the `goal / done / next / context / waitingOn` text a session writes for
   `compact_session`, with the same per-field caps.
+- **Compaction summary**: the summary an engine's native compaction writes into the
+  conversation it compacted.
+- **Manual handover**: what a new conversation gets when the compaction of the conversation
+  left behind did not produce a summary: the handoff, the recent transcript, and an
+  instruction to read the session's full earlier history before carrying on.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -80,9 +85,8 @@ ran on that account and the selector now names it.
    **Then** the selector shows B at once with "applies to your next message", and the next
    turn runs on B.
 4. **Given** that switched chat, **When** the next turn runs on B, **Then** it is a new
-   conversation for B and it is given the recent transcript so it can continue
-   [NEEDS CLARIFICATION: Q3 — transcript catch-up as an engine switch does today, or a
-   compaction with a handoff first?].
+   conversation for B, brought up to date with the recent transcript exactly as the first
+   turn after an engine change is today, with no extra turn.
 5. **Given** a chat whose turn is running, waiting or queued, **When** the operator tries to
    change its engine or profile, **Then** the change is refused with the reason, as an
    engine switch is today.
@@ -113,16 +117,22 @@ notice naming both targets.
 2. **Given** a session on Claude Opus, **When** it calls the switch tool naming only another
    Claude model, **Then** the conversation is compacted with the engine's native compaction
    and the resume turn runs on the new model in the same conversation.
-3. **Given** a session on Claude, **When** it names engine OpenCode and a model, **Then** it
-   resumes on OpenCode with that model, in a new conversation started from the handoff
-   [NEEDS CLARIFICATION: Q1 — does a switch to another engine or profile first run the
-   native compaction on the conversation being left?].
-4. **Given** a target equal to the current one, **When** the tool is called, **Then** it is
+3. **Given** a session on Claude profile A, **When** it names profile B (or engine OpenCode
+   and a model), **Then** the conversation on A is first compacted natively on A, and the
+   session resumes on the target in a new conversation whose first message carries A's
+   compaction summary and the handoff.
+4. **Given** the same switch, **When** the compaction on A fails (A is out of allowance, the
+   compaction turn errors, or it leaves no summary the gateway can read), **Then** the
+   session still moves to the target, and its new conversation gets a manual handover: the
+   handoff, the recent transcript, and an instruction to read the session's full earlier
+   history first. The transcript notice says the compaction failed and a manual handover
+   was used.
+5. **Given** a target equal to the current one, **When** the tool is called, **Then** it is
    refused and points at `compact_session`.
-5. **Given** a target that does not exist, is not installed, or is not available to this
+6. **Given** a target that does not exist, is not installed, or is not available to this
    session, **When** the tool is called, **Then** it is refused, nothing is scheduled, and
    the refusal names the valid choices or says to list them.
-6. **Given** any refusal `compact_session` gives (stopped session, terminal session,
+7. **Given** any refusal `compact_session` gives (stopped session, terminal session,
    cooldown, messages already queued, unidentified caller, invalid handoff), **When** the
    switch tool is called in the same state, **Then** it refuses the same way and schedules
    nothing.
@@ -145,8 +155,9 @@ instance has installed, its declared profiles and each engine's models.
 1. **Given** an unscoped local session, **When** it lists targets, **Then** it sees its
    current target, each installed engine with its models (and their effort levels), and each
    declared local Claude profile with whether its allowance is spent and when it resets.
-2. **Given** a department-scoped session, **When** it lists targets, **Then** it sees only
-   what it could switch to (see FR-021) and no profile it may not use.
+2. **Given** a department-scoped session, **When** it lists targets on a turn the operator's
+   own message started, **Then** it sees Claude only, with every declared local profile;
+   on any other turn it sees Claude only and no profiles.
 3. **Given** any session, **When** it lists targets and then switches to one of them,
    **Then** the switch is not refused for being unknown or unavailable (barring config
    changing in between).
@@ -194,14 +205,31 @@ target now in use, and the selector agrees with it.
 - **Remote employee.** Its session runs on its host's own login; a switch to a local profile
   is refused, as starting one there is today.
 - **Department-scoped session** switching to another engine: refused (scoped sessions run
-  only on Claude), as the operator's own engine switch is today.
+  only on Claude), as the operator's own engine switch is today. Switching between two
+  Claude profiles is allowed on a turn the operator's own message started (FR-021), in
+  either direction and back to own login.
+- **Compaction turn hits a usage limit.** The compaction that precedes a switch never walks
+  the leaving target's fallback chain: a limit there counts as a failed compaction and the
+  switch goes ahead with a manual handover (FR-015b).
+- **Compaction never settles.** If the compaction turn has not finished within the bound the
+  plan sets, it counts as failed, and the switch goes ahead with a manual handover.
 - **Two calls in one turn.** The second is refused by the shared cooldown.
 
 ## Clarifications
 
 ### Session 2026-11-12
 
-_Pending: questions Q1–Q3 are with the operator._
+- Q: When a session switches itself to another engine or profile, is the conversation it
+  leaves natively compacted first? → A: Yes, on the old target (a Claude conversation can
+  only be compacted by the account it belongs to). Detect whether that compaction failed; if
+  it did, do a manual handover instead: the new conversation is told to read the old
+  conversation's history.
+- Q: May a department-scoped session switch itself to another Claude profile? → A: Only on a
+  turn the operator's own message started, and switching between two profiles within one
+  department must work.
+- Q: When the operator changes an existing chat's profile from the selector, what does the
+  new conversation get? → A: The recent transcript as a catch-up, as an engine change does
+  today; no extra turn.
 
 ## Requirements *(mandatory)*
 
@@ -224,7 +252,7 @@ _Pending: questions Q1–Q3 are with the operator._
   a department-scoped employee's session (only the operator may move such a session).
 - **FR-006**: After an operator's profile change, the first turn on the new profile starts a
   new conversation and is brought up to date with the recent transcript, exactly as the first
-  turn after an engine change is today. [NEEDS CLARIFICATION: Q3]
+  turn after an engine change is today. No compaction or extra turn runs.
 - **FR-007**: The conversation left behind by an operator's switch is kept, so switching back
   resumes it with what it missed (today's engine-switch behaviour, extended to profiles).
 
@@ -251,10 +279,20 @@ _Pending: questions Q1–Q3 are with the operator._
   effort change only) runs the engine's native compaction and then the resume turn on the
   new model, in the same conversation. Where the engine has no native compaction Jinn can
   drive, it starts a new conversation from the handoff instead.
-- **FR-015**: After the asking turn ends, a switch to another engine or profile moves the
-  session to the target and runs the resume turn there, in a new conversation whose first
-  message is the handoff. [NEEDS CLARIFICATION: Q1 — whether the native compaction runs
-  first on the conversation being left]
+- **FR-015**: After the asking turn ends, a switch to another engine or profile first runs the
+  native compaction on the conversation being left, on the target being left (engine,
+  account and model unchanged). Engines without a native compaction Jinn can drive skip
+  this step and go straight to FR-015b.
+- **FR-015a**: When that compaction succeeds (it finishes and its summary can be read back),
+  the session moves to the target and the resume turn runs there in a new conversation whose
+  first message carries the compaction summary, then the handoff.
+- **FR-015b**: When it fails (an error, a usage limit, a stop of the compaction turn alone,
+  no summary that can be read back, or no finish within the plan's bound), the session still
+  moves to the target and the resume turn carries a manual handover: the handoff, the recent
+  transcript, and an instruction to read the session's full earlier history (with the exact
+  way to read it) before resuming. The compaction turn never walks a fallback chain.
+- **FR-015c**: Which path ran (summary or manual handover, and why) is recorded on the
+  session and shown in the switch notice.
 - **FR-016**: The resume message MUST name the target the session now runs on and carry the
   handoff verbatim, with the same "resume from Next" instruction `compact_session` gives.
 - **FR-017**: The switch MUST persist: every later turn uses the new target, the new target's
@@ -272,8 +310,10 @@ _Pending: questions Q1–Q3 are with the operator._
   on its host, Claude profiles declared for its host, models the engine offers. A remote
   employee's session may not switch to a local profile.
 - **FR-021**: A department-scoped session MUST NOT switch to another engine (scoped sessions
-  run only on Claude). Whether it may switch to another Claude profile:
-  [NEEDS CLARIFICATION: Q2].
+  run only on Claude). It MAY switch to another declared local Claude profile, or back to
+  own login, only on a turn the operator's own message started (the existing operator-turn
+  stamp); on any other turn the profile switch is refused without naming which profiles
+  exist. Two profiles used within one department can be switched between in both directions.
 - **FR-022**: The tool switches only the caller's own session. The target is never another
   session's id.
 
@@ -303,7 +343,8 @@ _Pending: questions Q1–Q3 are with the operator._
 - **Conversation slot**: the session's per-engine, per-account conversation id, already kept
   so a session can return to an engine it left. A tool switch retires the slot it leaves.
 - **Scheduled switch**: the target and handoff recorded when the tool is called, applied after
-  the asking turn ends; its claim is the self-compaction cooldown claim.
+  the asking turn ends; its claim is the self-compaction cooldown claim. Records which
+  carry-over path ran (compaction summary or manual handover) and why.
 - **Switch notice**: a transcript entry naming old target, new target and requester.
 
 ## Success Criteria *(mandatory)*
@@ -323,6 +364,8 @@ _Pending: questions Q1–Q3 are with the operator._
   else has changed.
 - **SC-006**: Instances with no declared profiles see no change to the selector other than
   the engine name and "own login" label (FR-001).
+- **SC-007**: A cross-engine or cross-profile switch whose compaction fails still lands on the
+  target in 100% of trials, with a manual handover and a notice saying so.
 
 ## Assumptions
 
@@ -334,7 +377,7 @@ _Pending: questions Q1–Q3 are with the operator._
 - Switching changes one session only. It never changes the employee's own configured engine,
   model or account.
 - The operator's selector does not ask the session to write a handoff; the operator's switch
-  is immediate (see Q3 for the alternative).
+  is immediate (clarified 2026-11-12).
 - A switch to a spent target is refused for a session (FR-012) but allowed for the operator,
   who may choose to wait for the reset.
 - Remote declared profiles (`remoteHost`) are fallback targets for remote employees only and

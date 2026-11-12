@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -31,5 +31,5 @@
 
 ## Notes
 
-- Three [NEEDS CLARIFICATION] markers (Q1 compaction before a cross-conversation switch, Q2 scoped sessions and profiles, Q3 what the operator's mid-chat profile switch carries over) are with the operator.
+- Clarified with the operator 2026-11-12 (three questions, recorded in the spec's Clarifications section).
 - The Problem section names current code paths so the plan can be checked against them; the requirements themselves are behavioural.
