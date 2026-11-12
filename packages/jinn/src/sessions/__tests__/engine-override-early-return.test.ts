@@ -19,7 +19,7 @@ const { standingOverride } = await import("../engine-override-revert.js");
 const health = await import("../../shared/engine-health.js");
 const { claudeProfileFromDir } = await import("../../shared/claude-profile.js");
 
-const friend = claudeProfileFromDir("/Users/operator/.claude-friend");
+const friend = claudeProfileFromDir(path.join(tmp, "claude-friend"));
 const FRIEND_ACCOUNT = `claude:${friend.key}`;
 const config = { engines: { default: "claude", claude: { bin: "claude", model: "opus" } } } as never;
 const STATE_PATH = path.join(tmp, "tmp", "engine-health.json");
