@@ -123,6 +123,10 @@ describe("not-allowed", () => {
     }
   });
 
+  it("names an unknown engine as invalid before it asks whether a scoped session may go there", () => {
+    expect(refused(resolveSwitchTarget(config, session({ employee: "lab-dev" }), { engine: "nonesuch" }, operator)).code).toBe("invalid-target");
+  });
+
   it("lets a department-scoped session change profile, for the operator and for itself", () => {
     const s = session({ employee: "lab-dev" });
     for (const options of [operator, asSession]) {

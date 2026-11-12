@@ -17,6 +17,10 @@ process.env.JINN_HOME = home;
 // Outside the instance home, which the redirected temp dir sits in.
 const OUTSIDE = process.env.JINN_VITEST_SYSTEM_TEMP_ROOT ?? "/tmp";
 const FRIEND = path.join(OUTSIDE, "profile-switch-friend");
+// The gateway's own Claude profile, where an own-login session's transcript is looked for.
+const OWN_CONFIG = fs.mkdtempSync(path.join(OUTSIDE, "profile-switch-own-"));
+process.env.CLAUDE_CONFIG_DIR = OWN_CONFIG;
+fs.writeFileSync(path.join(OWN_CONFIG, ".credentials.json"), JSON.stringify({ claudeAiOauth: { accessToken: "test", refreshToken: "test", expiresAt: 4_102_444_800_000 } }));
 const SPARE = path.join(OUTSIDE, "profile-switch-spare");
 
 vi.mock("../../shared/models.js", async (importOriginal) => ({
@@ -255,6 +259,67 @@ describe("PATCH /api/sessions/:id with a profile", () => {
 
     expect(res.status).toBe(403);
     expect(registry.getSession(s.id)!.claudeConfigDir).toBeNull();
+  });
+});
+
+describe("the left conversation's transcript path", () => {
+  /** A Claude transcript for `thread` under `profileDir`, as Claude Code writes it. */
+  function writeTranscript(profileDir: string, thread: string): string {
+    const dir = path.join(profileDir, "projects", "-some-cwd");
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `${thread}.jsonl`);
+    fs.writeFileSync(file, "{}\n");
+    return file;
+  }
+  const leftOf = (id: string) => (registry.getSession(id)!.transportMeta?.lastSwitch as Record<string, unknown>).leftTranscript;
+
+  it("is recorded for an unscoped session, from the profile it was on", async () => {
+    const s = makeSession({ claudeConfigDir: friend.dir });
+    registry.recordEngineSessionId(s.id, "claude", "friend-thread");
+    const file = writeTranscript(FRIEND, "friend-thread");
+
+    const res = await patch(s.id, { profile: "spare" });
+
+    expect(res.status).toBe(200);
+    expect(leftOf(s.id)).toBe(file);
+  });
+
+  it("is recorded for an own-login session's switch to another engine", async () => {
+    const s = makeSession();
+    registry.recordEngineSessionId(s.id, "claude", "own-thread");
+    const file = writeTranscript(OWN_CONFIG, "own-thread");
+
+    await patch(s.id, { engine: "codex" });
+
+    expect(leftOf(s.id)).toBe(file);
+  });
+
+  it("is left out for a department-scoped session, which reads the history through the tool only", async () => {
+    const s = makeSession({ employee: "lab-dev", claudeConfigDir: friend.dir });
+    registry.recordEngineSessionId(s.id, "claude", "scoped-thread");
+    writeTranscript(FRIEND, "scoped-thread");
+
+    const res = await patch(s.id, { profile: "spare" });
+
+    expect(res.status).toBe(200);
+    expect(leftOf(s.id)).toBeUndefined();
+  });
+
+  it("is left out for a remote employee's session, whose conversation is not on this machine", async () => {
+    const s = makeSession({ employee: "far-dev" });
+    registry.recordEngineSessionId(s.id, "claude", "remote-thread");
+    writeTranscript(OWN_CONFIG, "remote-thread");
+
+    const res = await patch(s.id, { engine: "codex" });
+
+    expect(res.status).toBe(200);
+    expect(leftOf(s.id)).toBeUndefined();
+  });
+
+  it("is left out when the session had no Claude conversation to leave", async () => {
+    const s = makeSession();
+    await patch(s.id, { profile: "friend" });
+    expect(leftOf(s.id)).toBeUndefined();
   });
 });
 
