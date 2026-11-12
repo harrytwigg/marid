@@ -65,7 +65,7 @@ describe("a chain hop's announcement", () => {
   it("leaves the operator channel's line as it was", async () => {
     await (await hooks()).onFallbackStart!({ resumeAt: null, until: new Date(), substitute: "claude", model: "sonnet", hop });
 
-    expect(notifyOperatorChannel).toHaveBeenCalledWith("⚠️ Claude usage limit reached. Session sess-1 (a-worker) switching to Claude (sonnet).");
+    expect(notifyOperatorChannel).toHaveBeenCalledWith("⚠️ Claude usage limit reached. Session sess-1 (a-worker) switching to Claude (sonnet).", undefined, "fallback");
   });
 
   it("is the engine swap's own wording, with no hop on the notice, when the swap is not a chain hop", async () => {

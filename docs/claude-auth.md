@@ -92,6 +92,34 @@ With none of those, alerts are logged at warn and dropped. Set `notifications`
 explicitly; the fallbacks exist so a working connector is used rather than
 nothing, not as a recommendation.
 
+### Muting one kind of alert
+
+Every operator alert belongs to a category, and `notifications.events` switches
+a category off without touching the rest. A category is on unless it is set to
+`false`; with no `events` map, every alert is sent as before.
+
+```yaml
+notifications:
+  connector: telegram
+  channel: "123456789"
+  events:
+    fallback: false     # no "switching to <engine>" ping; the transcript still says so
+```
+
+| Category | Alerts |
+|---|---|
+| `fallback` | A usage limit moved a session to another engine, account or model ("switching to …"). |
+| `paused` | A usage limit parked a session, or its host was not ready when the limit lifted. |
+| `stopped` | A limit wait timed out, a prepaid balance ran dry, or the host never came back. |
+| `resumed` | A limit cleared and the session continued, or it returned to its own account or target. |
+| `claudeAuth` | A Claude login outage, its recovery, and the expiry warning. |
+| `remoteHost` | A remote host waking, coming up, or staying unavailable (`remote.notifyWake` still governs the wake notices). |
+
+Muting only stops the operator-channel message. The notice in the session's
+transcript, the fallback hop record on it, and the session's status are written
+as usual. A muted alert counts as handled, so a once-per-outage marker does not
+re-fire it on every check.
+
 ## The manual step
 
 On the gateway host, as the user the gateway runs as:

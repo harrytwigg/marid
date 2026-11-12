@@ -40,6 +40,14 @@ export interface PortalConfig {
   setupComplete?: boolean;
 }
 
+/** The categories of LLM-free operator alert, each of which `notifications.events` can silence on its own. */
+export type OperatorAlertEvent = "fallback" | "paused" | "stopped" | "resumed" | "claudeAuth" | "remoteHost";
+/** `fallback`: a usage limit moved a session to another engine or model. `paused`: a usage limit parked a session
+ *  (and its host was not ready on retry). `stopped`: a limit wait timed out, a balance ran dry, or the host never came back.
+ *  `resumed`: a limit cleared or the session returned to its own target. `claudeAuth`: a Claude login outage, recovery
+ *  or expiry warning. `remoteHost`: a remote host waking, ready or unavailable. */
+export type OperatorAlertEvents = Partial<Record<OperatorAlertEvent, boolean>>;
+
 export interface JinnConfig {
   /** The instance's own record, keyed by the codename in either spelling: version, and the built-in MCP server's name. */
   jinn?: { version?: string; mcpServerName?: string };
@@ -239,6 +247,8 @@ export interface JinnConfig {
   notifications?: {
     connector?: string;  // defaults to "discord"
     channel?: string;    // Discord channel ID for admin notifications
+    /** Per-category switches for the LLM-free operator alerts. A category is on unless set to `false`. */
+    events?: OperatorAlertEvents;
   };
   /**
    * @deprecated Workflows were removed. The key is still accepted so an older

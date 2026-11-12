@@ -75,7 +75,7 @@ function restoreAfterWait(
     return { ok: false, error: "Session was stopped while waiting for the remote host" };
   }
   if (shouldNotifyWake(input.config.remote)) {
-    notifyOperatorChannel(`✅ ${announced} is up — ${input.employee?.displayName ?? "the employee"} is starting.`);
+    notifyOperatorChannel(`✅ ${announced} is up — ${input.employee?.displayName ?? "the employee"} is starting.`, undefined, "remoteHost");
   }
   logger.info(`Session ${sessionId}: ${announced} became ready`);
   return { ok: true };
@@ -128,7 +128,7 @@ export async function ensureRemoteHostReady(
         lastActivity: new Date().toISOString(),
         lastError: notice.status,
       });
-      if (shouldNotifyWake(input.config.remote)) notifyOperatorChannel(notice.operator);
+      if (shouldNotifyWake(input.config.remote)) notifyOperatorChannel(notice.operator, undefined, "remoteHost");
     },
     // The operator stopping the session is the one thing that should end the
     // wait early. `waiting` is the status this gate set; anything else means
@@ -138,7 +138,7 @@ export async function ensureRemoteHostReady(
 
   if (!readiness.ready) {
     const error = `Remote host unavailable: ${readiness.reason}`;
-    if (announced) notifyOperatorChannel(`❌ ${error}`);
+    if (announced) notifyOperatorChannel(`❌ ${error}`, undefined, "remoteHost");
     return { ok: false, error };
   }
 
@@ -172,14 +172,14 @@ export async function awaitRemoteHostForRetry(
         lastActivity: new Date().toISOString(),
         lastError: notice.status,
       }, ["waiting"]);
-      if (shouldNotifyWake(input.config.remote)) notifyOperatorChannel(notice.operator);
+      if (shouldNotifyWake(input.config.remote)) notifyOperatorChannel(notice.operator, undefined, "remoteHost");
     },
     shouldAbort: () => !stillWaiting(),
   });
   if (!stillWaiting()) return { ok: false, error: "Session was stopped while waiting for the remote host", cancelled: true };
   if (!readiness.ready) return { ok: false, error: `Remote host unavailable: ${readiness.reason}` };
   if (announced && shouldNotifyWake(input.config.remote)) {
-    notifyOperatorChannel(`✅ ${announced} is up — ${input.employee?.displayName ?? "the employee"} is retrying after its usage limit.`);
+    notifyOperatorChannel(`✅ ${announced} is up — ${input.employee?.displayName ?? "the employee"} is retrying after its usage limit.`, undefined, "remoteHost");
   }
   return { ok: true };
 }

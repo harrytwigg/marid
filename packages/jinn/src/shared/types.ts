@@ -900,7 +900,7 @@ export interface EngineModelsConfig {
 /** `models:` block keyed by engine name (claude | codex | antigravity | grok | pi). */
 export type ModelsConfig = Record<string, EngineModelsConfig>;
 
-export type { JinnConfig, PortalConfig, RemoteExecutionConfig, OpencodeMode, OpencodeServerConfig } from "./config-types.js";
+export type { JinnConfig, OperatorAlertEvent, OperatorAlertEvents, PortalConfig, RemoteExecutionConfig, OpencodeMode, OpencodeServerConfig } from "./config-types.js";
 
 /** A purpose-built jinn MCP toolset served instead of the company belt
  *  (mcp/server.ts). */

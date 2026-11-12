@@ -87,4 +87,45 @@ describe("notifyOperatorChannel", () => {
 
     expect(onResult).toHaveBeenCalledExactlyOnceWith(false);
   });
+
+  describe("notifications.events", () => {
+    const config = { notifications: { connector: "telegram", channel: "1", events: { fallback: false } } };
+
+    it("sends nothing for a category that is off, and reports it as handled so a one-shot marker stays set", async () => {
+      hoisted.config = config;
+      const fetchSpy = vi.fn(async () => ({ ok: true }));
+      globalThis.fetch = fetchSpy as unknown as typeof fetch;
+      const onResult = vi.fn();
+
+      notifyOperatorChannel("switching", onResult, "fallback");
+      await flush();
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(onResult).toHaveBeenCalledExactlyOnceWith(true);
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+    it("still sends the other categories, and an alert with no category", async () => {
+      hoisted.config = config;
+      const fetchSpy = vi.fn(async () => ({ ok: true }));
+      globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+      notifyOperatorChannel("paused", undefined, "paused");
+      notifyOperatorChannel("no category");
+      await flush();
+
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it("sends every category when the map is unset", async () => {
+      hoisted.config = { notifications: { connector: "telegram", channel: "1" } };
+      const fetchSpy = vi.fn(async () => ({ ok: true }));
+      globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+      notifyOperatorChannel("switching", undefined, "fallback");
+      await flush();
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+  });
 });

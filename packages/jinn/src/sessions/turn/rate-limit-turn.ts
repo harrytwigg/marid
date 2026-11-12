@@ -92,7 +92,7 @@ async function announceFallback(
   const limitedLabel = rateLimitEngineLabel(limitedEngine);
   const substituteLabel = model ? `${rateLimitEngineLabel(substitute)} (${model})` : rateLimitEngineLabel(substitute);
   const resumeText = formatResumeTime(resumeAt);
-  notifyOperatorChannel(`⚠️ ${limitedLabel} usage limit reached. ${describe(session)} switching to ${substituteLabel}.`);
+  notifyOperatorChannel(`⚠️ ${limitedLabel} usage limit reached. ${describe(session)} switching to ${substituteLabel}.`, undefined, "fallback");
   // A chain hop names both targets in full (account, profile and model) and carries its record; any other swap keeps its own wording.
   if (hop) await noticeHop(args, hopNoticeText(hop), hop);
   else await args.surface.notice(`⚠️ ${limitedLabel} usage limit reached${resumeText ? `. Resets ${resumeText}` : ""}. Switching to ${substituteLabel} for now.`);
@@ -112,7 +112,7 @@ async function announceWaiting(
   const session = args.input.session;
   const engineLabel = rateLimitEngineLabel(session.engine);
   const resumeText = formatResumeTime(resumeAt);
-  notifyOperatorChannel(`⚠️ ${engineLabel} usage limit reached. ${describe(session)} paused${resumeText ? ` until ${resumeText}` : ""}.`);
+  notifyOperatorChannel(`⚠️ ${engineLabel} usage limit reached. ${describe(session)} paused${resumeText ? ` until ${resumeText}` : ""}.`, undefined, "paused");
   await args.surface.waiting(true);
   notifyRateLimited(
     getSession(session.id) ?? session,
@@ -130,7 +130,7 @@ async function announceWaiting(
 async function settleTimedOutTurn(args: RateLimitTurnArgs): Promise<void> {
   const session = args.input.session;
   const timeoutError = `${rateLimitEngineLabel(session.engine)} usage limit did not clear in time`;
-  notifyOperatorChannel(`❌ ${timeoutError}. ${describe(session)} has been stopped.`);
+  notifyOperatorChannel(`❌ ${timeoutError}. ${describe(session)} has been stopped.`, undefined, "stopped");
   await settleTurn({
     sessionId: session.id,
     attemptToken: args.input.attemptToken,
@@ -148,7 +148,7 @@ async function settleTimedOutTurn(args: RateLimitTurnArgs): Promise<void> {
 /** The limit lifted, but the host the retry runs on stayed unreachable for the whole retry window. */
 async function settleUnreachableTurn(args: RateLimitTurnArgs, error: string): Promise<void> {
   const session = args.input.session;
-  notifyOperatorChannel(`❌ ${describe(session)} could not resume after its usage limit: ${error}`);
+  notifyOperatorChannel(`❌ ${describe(session)} could not resume after its usage limit: ${error}`, undefined, "stopped");
   await settleTurn({
     sessionId: session.id,
     attemptToken: args.input.attemptToken,
@@ -167,7 +167,7 @@ async function announceHostNotReady(args: RateLimitTurnArgs, info: { error: stri
   await args.surface.waiting(true);
   if (info.failures !== 1) return;
   const session = args.input.session;
-  notifyOperatorChannel(`⚠️ ${describe(session)}: the usage limit reset but its host is not ready (${info.error}). Retrying with backoff.`);
+  notifyOperatorChannel(`⚠️ ${describe(session)}: the usage limit reset but its host is not ready (${info.error}). Retrying with backoff.`, undefined, "paused");
   await args.surface.notice(`⏳ The usage limit reset, but this session's host is not ready (${info.error}). I'll keep retrying and continue automatically.`);
 }
 
@@ -178,7 +178,7 @@ async function settleBillingFailedTurn(args: RateLimitTurnArgs): Promise<void> {
   const session = args.input.session;
   const provider = args.originalResult.error?.replace(/\s+/g, " ").trim().slice(0, 400) || "the provider reported an insufficient balance";
   const billingError = `${rateLimitEngineLabel(session.engine)} account is out of credit: ${provider}`;
-  notifyOperatorChannel(`❌ ${billingError}. ${describe(session)} has been stopped.`);
+  notifyOperatorChannel(`❌ ${billingError}. ${describe(session)} has been stopped.`, undefined, "stopped");
   await settleTurn({
     sessionId: session.id,
     attemptToken: args.input.attemptToken,
@@ -223,7 +223,7 @@ function rateLimitHooks(args: RateLimitTurnArgs): RateLimitHandlerHooks {
       } : undefined, plan.model, true);
       if (!settled) return;
       notifyRateLimitResumed(settled);
-      notifyOperatorChannel(`✅ ${rateLimitEngineLabel(args.input.session.engine)} usage limit cleared. ${describe(args.input.session)} resumed.`);
+      notifyOperatorChannel(`✅ ${rateLimitEngineLabel(args.input.session.engine)} usage limit cleared. ${describe(args.input.session)} resumed.`, undefined, "resumed");
     },
     prepareRetry: () => awaitRemoteHostForRetry(args.input, plan.engineName),
     onRetryHostNotReady: (info) => announceHostNotReady(args, info),
@@ -269,7 +269,7 @@ export async function runRateLimitTurn(args: RateLimitTurnArgs): Promise<Session
     // The parent and the operator channel were told this session paused; tell them it is moving again.
     await args.surface.waiting(false);
     notifyRateLimitResumed(outcome.session);
-    notifyOperatorChannel(`✅ ${describe(input.session)} back on its own ${accountOverride(input.session) ? "Claude account" : "target"} and resumed.`);
+    notifyOperatorChannel(`✅ ${describe(input.session)} back on its own ${accountOverride(input.session) ? "Claude account" : "target"} and resumed.`, undefined, "resumed");
   }
   await args.surface.notice(accountOverride(input.session) ? "↩️ Back on this session's own Claude account — continuing there." : "↩️ Back on this session's own target — continuing there.");
   return outcome.session;
