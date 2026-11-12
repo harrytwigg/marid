@@ -3,6 +3,7 @@ import { isEngineExhausted, readEngineHealth, type EngineHealth, type EngineHeal
 import { rosterEmployees, type EngineLimitAccountSnapshot } from "./engine-limits-accounts.js";
 import { providerHealthKey } from "./engine-health-meter.js";
 import { declaredOpencodeAccounts, type OpencodeAccount } from "./opencode-accounts-config.js";
+import { opencodeAccountKeyEnvironment } from "./child-env.js";
 
 /**
  * `accounts.opencode` on the limits response: one entry per declared opencode
@@ -129,7 +130,7 @@ export function collectOpencodeAccounts(
   const resolved: Resolved = {
     // Read once per account below, so an iterator (the roster is a Map's values) is made a list first.
     employees: [...(deps.employees ?? rosterEmployees())],
-    env: deps.env ?? process.env,
+    env: deps.env ?? opencodeAccountKeyEnvironment(),
     health: deps.health ?? readEngineHealth(now),
     now,
   };

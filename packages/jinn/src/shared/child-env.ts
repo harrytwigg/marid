@@ -31,9 +31,45 @@ const ENGINE_CHILD_ENV_DENY_EXACT: ReadonlySet<string> = new Set(envNamesFor([
  *  MCP and tool children included, never inherits one. Set when the config loads. */
 let opencodeAccountKeyEnv: ReadonlySet<string> = new Set();
 
-/** Replace the account key variables every child env drops (the config's, in full; an empty list clears them). */
-export function setOpencodeAccountKeyEnv(names: Iterable<string>): void {
+/** The account keys themselves, taken out of the gateway's own environment when the config loads (see below). */
+const opencodeAccountKeys = new Map<string, string>();
+
+/**
+ * Replace the account key variables every child env drops (the config's, in full; an empty list clears them), and
+ * move each one's value out of `env` (the gateway's own `process.env`) into this module. A key is then in no
+ * environment the gateway passes on by default: every spawn site that hands down `process.env`, scrubbed or not,
+ * leaves it out without having to know about accounts. Only the opencode launch paths read it back
+ * ({@link opencodeAccountKeyEnvironment}), and the gateway's own successor gets it ({@link withOpencodeAccountKeys}).
+ * A later reload keeps a key already taken, and takes one a new account names if the environment still has it.
+ */
+export function setOpencodeAccountKeyEnv(names: Iterable<string>, env: NodeJS.ProcessEnv = process.env): void {
   opencodeAccountKeyEnv = new Set(names);
+  for (const name of opencodeAccountKeyEnv) {
+    const value = env[name];
+    if (value === undefined) continue;
+    if (value.trim() !== "") opencodeAccountKeys.set(name, value);
+    delete env[name];
+  }
+}
+
+/** The account key variables as the gateway holds them: a key taken at config load, else what `base` still has. Only for the readers that hand a key to an opencode process or report whether one is set; never a child env as a whole. */
+export function opencodeAccountKeyEnvironment(base: Readonly<Record<string, string | undefined>> = process.env): Record<string, string | undefined> {
+  const out: Record<string, string | undefined> = {};
+  for (const name of new Set([...opencodeAccountKeyEnv, ...opencodeAccountKeys.keys()])) out[name] = opencodeAccountKeys.get(name) ?? base[name];
+  return out;
+}
+
+/** `env` with the account keys the gateway took put back: for a gateway that starts its own successor (daemon start, restart), which reads them again at its own config load. */
+export function withOpencodeAccountKeys(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = { ...env };
+  for (const [name, value] of opencodeAccountKeys) out[name] = value;
+  return out;
+}
+
+/** Test seam: forget the keys taken and the variables denied. */
+export function resetOpencodeAccountKeysForTest(): void {
+  opencodeAccountKeys.clear();
+  opencodeAccountKeyEnv = new Set();
 }
 
 /** Per-engine scrub rules. `exact` names and `prefix` families are stripped

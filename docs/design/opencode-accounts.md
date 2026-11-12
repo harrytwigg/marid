@@ -172,10 +172,16 @@ same on 1.x and 2.x:
   the model the turn runs on. None reachable stages no account block and no
   key. On a server, the staged set is in the fingerprint, so a chain change
   that adds an account restarts the server at the next turn.
+- **The gateway does not keep the key in its own environment.** At config
+  load it moves each `keyEnv` value out of `process.env` into memory
+  (`shared/child-env.ts`). No spawn site can then pass a key on by accident,
+  whatever env it hands down. Only the opencode launch paths and the
+  key-state readers read the value back, and the gateway's own successor
+  (daemon start, restart) is given it.
 - **The key never appears in a staged file.** The file holds only
   `{env:<keyEnv>}`.
-  - Local processes get `<keyEnv>` set explicitly from the gateway's
-    environment on the child's env.
+  - Local processes get `<keyEnv>` set explicitly on the child's env, from
+    the value the gateway holds.
   - Remote processes get it through the 0600 `session-env.sh`
     (`sessionEnv`), never on the ssh command line.
   - An unset `keyEnv` stages the block anyway (the link then fails as auth

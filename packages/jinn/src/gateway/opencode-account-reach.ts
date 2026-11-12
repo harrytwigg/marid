@@ -7,6 +7,7 @@ import { orgRegistry } from "./org-registry.js";
 import { getSession } from "../sessions/registry.js";
 import { sessionAtOwnTarget } from "../sessions/fallback-run.js";
 import type { Employee, JinnConfig, ModelRegistry, Session } from "../shared/types.js";
+import { opencodeAccountKeyEnvironment } from "../shared/child-env.js";
 
 /**
  * Which opencode accounts a session may use (docs/design/opencode-accounts.md,
@@ -66,6 +67,6 @@ export function opencodeAccountsReaderFor(getConfig: () => JinnConfig): Opencode
     const session = sessionId ? getSession(sessionId) : undefined;
     const employee = session?.employee ? orgRegistry(config).get(session.employee) : undefined;
     const reach = reachableOpencodeProviders({ config, registry: getModelRegistry(config), session, employee, model });
-    return opencodeAccountStaging(config, process.env, reach);
+    return opencodeAccountStaging(config, opencodeAccountKeyEnvironment(), reach);
   };
 }
