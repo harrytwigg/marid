@@ -9,7 +9,7 @@ import {
 } from "./engine-health-store.js";
 import { clearContradictedHealth } from "./engine-health-clear.js";
 import { isRemoteTarget } from "./remote-target.js";
-import { engineReadKeys } from "./engine-health-keys.js";
+import { bindingHealthRecord, engineReadKeys } from "./engine-health-keys.js";
 import type { EngineLimitEngineSnapshot, EngineLimitWindow, JinnConfig, ModelRegistry, RemoteTarget } from "./types.js";
 
 // Re-exported so the store split is invisible to callers: every consumer of this
@@ -234,7 +234,8 @@ export function noteLimitReading(engine: string, snapshot: Pick<EngineLimitEngin
 /** The record an engine reads as: its own key's, and for opencode the provider key's when that one is out. */
 function engineRecord(health: EngineHealthReading, name: string, config: Pick<JinnConfig, "engines"> | undefined): EngineHealth {
   const records = engineReadKeys(name, config).flatMap((key) => health[key] ?? []);
-  return records.find((record) => record.state !== "ok") ?? health[name] ?? { state: "ok" as const };
+  const binding = bindingHealthRecord(records);
+  return binding !== undefined && binding.state !== "ok" ? binding : health[name] ?? { state: "ok" as const };
 }
 
 /** The registry as an API consumer reads it: installed availability from the

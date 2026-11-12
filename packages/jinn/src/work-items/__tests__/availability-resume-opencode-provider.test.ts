@@ -12,6 +12,7 @@ let store: typeof import("../store.js");
 let runs: typeof import("../runs.js");
 let resume: typeof import("../availability-resume.js");
 let health: typeof import("../../shared/engine-health.js");
+let healthStore: typeof import("../../shared/engine-health-store.js");
 let db: import("better-sqlite3").Database;
 
 const NOW = new Date("2026-08-20T12:00:00.000Z");
@@ -39,6 +40,7 @@ beforeAll(async () => {
   runs = await import("../runs.js");
   resume = await import("../availability-resume.js");
   health = await import("../../shared/engine-health.js");
+  healthStore = await import("../../shared/engine-health-store.js");
   db = (await import("../../shared/db.js")).initDb();
 });
 
@@ -67,6 +69,32 @@ describe("an opencode attempt that named no time", () => {
   it("waits for a provider window that has not reopened", () => {
     health.recordEngineUnavailable("opencode/opencode-go-d", "quota window spent", Math.floor(NOW.getTime() / 1000) + 3600, NOW);
     const { id, runId } = parked("still spent", "opencode-go-d/flash");
+    sweep();
+    expect(resumed(id, runId)).toHaveLength(0);
+  });
+});
+
+describe("several records under an opencode attempt's keys", () => {
+  const minutesAfter = (minutes: number) => new Date(NOW.getTime() + minutes * 60_000).toISOString();
+
+  it("waits for the engine-wide exhaustion when the provider's record is ok", () => {
+    healthStore.writeStore({ "opencode/opencode-go-e": { state: "ok" }, opencode: { state: "exhausted", until: minutesAfter(120) } });
+    const { id, runId } = parked("provider ok, engine spent", "opencode-go-e/flash");
+    sweep();
+    expect(resumed(id, runId)).toHaveLength(0);
+  });
+
+  it("does not resume on a provider's short degraded window while the engine is exhausted", () => {
+    // The degraded window closed five minutes ago; the engine-wide exhaustion still runs for two hours.
+    healthStore.writeStore({ "opencode/opencode-go-f": { state: "degraded", until: minutesAfter(-5) }, opencode: { state: "exhausted", until: minutesAfter(120) } });
+    const { id, runId } = parked("degraded provider, spent engine", "opencode-go-f/flash");
+    sweep();
+    expect(resumed(id, runId)).toHaveLength(0);
+  });
+
+  it("waits for the later of two exhausted records", () => {
+    healthStore.writeStore({ "opencode/opencode-go-g": { state: "exhausted", until: minutesAfter(-5) }, opencode: { state: "exhausted", until: minutesAfter(120) } });
+    const { id, runId } = parked("two exhausted", "opencode-go-g/flash");
     sweep();
     expect(resumed(id, runId)).toHaveLength(0);
   });

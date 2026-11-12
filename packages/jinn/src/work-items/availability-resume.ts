@@ -1,7 +1,7 @@
 import { initDb } from '../shared/db.js';
 import { classifyEngineFailureText, hasEngineFailureClass } from '../shared/engine-failure.js';
 import { readEngineHealth } from '../shared/engine-health.js';
-import { engineReadKeys } from '../shared/engine-health-keys.js';
+import { bindingHealthRecord, engineReadKeys } from '../shared/engine-health-keys.js';
 import type { JinnConfig } from '../shared/types.js';
 import { logger } from '../shared/logger.js';
 import { isBlockDeclared, listWorkItemEvents } from './event-log.js';
@@ -236,7 +236,7 @@ function engineReset(served: ServedBy, now: Date, config: JinnConfig | undefined
   const health = readEngineHealth(now);
   // opencode's health is per provider: its provider's record first, then the engine's.
   const records = engineReadKeys(served.engine, config, served.model).flatMap((key) => health[key] ?? []);
-  const record = records.find((candidate) => candidate.state !== 'ok') ?? records[0];
+  const record = bindingHealthRecord(records);
   if (record === undefined) return undefined;
   if (record.until !== undefined) return Date.parse(record.until);
   return record.state === 'ok' ? now.getTime() : undefined;
