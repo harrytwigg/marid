@@ -98,8 +98,8 @@ beforeEach(() => {
 describe("a local named profile hits its limit", () => {
   it("records the limit under its own account, never the default's", async () => {
     await handleRateLimit(opts({ claudeConfigDir: FRIEND }, vi.fn(), {}));
-    expect(recordEngineUnavailableMock).toHaveBeenCalledWith(`claude:${friendProfile.key}`, "Claude usage limit", 1_900_000_000);
-    expect(recordEngineUnavailableMock).not.toHaveBeenCalledWith("claude", expect.anything(), expect.anything());
+    expect(recordEngineUnavailableMock).toHaveBeenCalledWith(`claude:${friendProfile.key}`, "Claude usage limit", 1_900_000_000, expect.any(Date), { model: "opus" });
+    expect(recordEngineUnavailableMock).not.toHaveBeenCalledWith("claude", expect.anything(), expect.anything(), expect.anything(), expect.anything());
     expect(recordClaudeRateLimitMock).toHaveBeenCalledWith(1_900_000_000, `claude:${friendProfile.key}`);
   });
 
@@ -124,7 +124,7 @@ describe("the default profile and remote employees keep main's behaviour", () =>
   it("a default-profile session records under `claude` and falls back down the chain", async () => {
     const codex = vi.fn(async () => ({ result: "from-codex", sessionId: "c1" }) as EngineResult);
     const outcome = await handleRateLimit(opts({}, vi.fn(), { codex }));
-    expect(recordEngineUnavailableMock).toHaveBeenCalledWith("claude", "Claude usage limit", 1_900_000_000);
+    expect(recordEngineUnavailableMock).toHaveBeenCalledWith("claude", "Claude usage limit", 1_900_000_000, expect.any(Date), { model: "opus" });
     expect(recordClaudeRateLimitMock).toHaveBeenCalledWith(1_900_000_000, "claude");
     expect(codex).toHaveBeenCalledTimes(1);
     expect(outcome.kind).toBe("fallback");
@@ -142,7 +142,7 @@ describe("the default profile and remote employees keep main's behaviour", () =>
     expect(pi).toHaveBeenCalledTimes(1);
     expect(outcome.kind).toBe("fallback");
     // Its limit is its own login's (FR-070, FR-072), not the default account's.
-    expect(recordEngineUnavailableMock).toHaveBeenCalledWith("claude@build-box:bee4991d", "Claude usage limit", 1_900_000_000);
+    expect(recordEngineUnavailableMock).toHaveBeenCalledWith("claude@build-box:bee4991d", "Claude usage limit", 1_900_000_000, expect.any(Date), { model: "opus" });
   });
 });
 
