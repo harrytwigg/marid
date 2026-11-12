@@ -123,7 +123,10 @@ describe("opencodeAccountsReaderFor", () => {
 
   it("gives a session whose chain names no account nothing: no block and no key", async () => {
     const session = sessions.createSession({ engine: "claude", source: "web", sourceRef: "web:reader-none", model: "opus", employee: "a-worker" });
-    expect(await staged(configWith(), session.id)).toBeUndefined();
+    const accounts = await staged(configWith(), session.id);
+    expect(accounts!.providers(2)).toEqual({});
+    expect(accounts!.env).toEqual({});
+    expect(accounts!.scrub.slice().sort()).toEqual(["GO_A_KEY", "GO_B_KEY"]);
   });
 
   it("gives an unknown session only the account of the model it runs", async () => {

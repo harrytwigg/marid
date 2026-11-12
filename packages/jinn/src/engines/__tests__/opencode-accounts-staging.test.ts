@@ -282,7 +282,12 @@ describe("an employee whose chain reaches one account", () => {
     expect(Object.keys(a.providers(1))).toEqual(["go-a"]);
     expect(a.env).toEqual({ GO_A_KEY: KEYS.GO_A_KEY });
     expect(a.fingerprint).not.toContain("go-b");
-    expect(opencodeAccountStaging(configWith(TWO), KEYS, new Set())).toBeUndefined();
+    // None reachable: no block, no key, but every key variable is still listed to be scrubbed from the child.
+    const none = opencodeAccountStaging(configWith(TWO), KEYS, new Set())!;
+    expect(none.providers(2)).toEqual({});
+    expect(none.env).toEqual({});
+    expect(none.scrub.slice().sort()).toEqual(["GO_A_KEY", "GO_B_KEY"]);
+    expect(buildOpencodeSessionConfigFor(undefined, 2, [], none)).toBeUndefined();
     expect(opencodeAccountStaging(configWith(TWO), KEYS, new Set(["go-a", "go-b"]))!.env).toEqual(KEYS);
   });
 
@@ -345,5 +350,50 @@ describe("an employee whose chain reaches one account", () => {
     } finally {
       await pool.stopAll();
     }
+  });
+});
+
+describe("the gateway's own environment holds every account's key", () => {
+  const stubKeys = () => { vi.stubEnv("GO_A_KEY", KEYS.GO_A_KEY); vi.stubEnv("GO_B_KEY", KEYS.GO_B_KEY); };
+  afterEach(() => vi.unstubAllEnvs());
+  const reader = (reach: string[]) => (_scope: { sessionId?: string; model?: string }) => opencodeAccountStaging(configWith(TWO), process.env, new Set(reach));
+
+  it("leaves a run child exactly the reachable key, and none when none is reachable", async () => {
+    stubKeys();
+    await new OpencodeEngine({ mode: () => "run", accounts: reader(["go-a"]) }).run(runOpts({ sessionId: "sess-env-run-a" }));
+    expect(staged().at(-1)?.env).toEqual({ GO_A_KEY: KEYS.GO_A_KEY, GO_B_KEY: null, OPENCODE_GO_API_KEY: null });
+    await new OpencodeEngine({ mode: () => "run", accounts: reader([]) }).run(runOpts({ sessionId: "sess-env-run-none" }));
+    expect(staged().at(-1)?.env).toEqual({ GO_A_KEY: null, GO_B_KEY: null, OPENCODE_GO_API_KEY: null });
+  });
+
+  it("leaves a local server exactly the reachable key", async () => {
+    stubKeys();
+    const read = reader(["go-a"]);
+    const lifecycle = new PtyLifecycleManager({ maxLivePtys: 8, enforceLocalCap: false });
+    const pool = new OpencodeServerPool(lifecycle, { bin: () => FAKE, accounts: read });
+    try {
+      await new OpencodeEngine({ mode: () => "server", servers: pool, accounts: read }).run(runOpts({ sessionId: "sess-env-server" }));
+      const serve = staged().find((line) => line.verb === "serve");
+      expect(serve?.env).toEqual({ GO_A_KEY: KEYS.GO_A_KEY, GO_B_KEY: null, OPENCODE_GO_API_KEY: null });
+    } finally {
+      await pool.stopAll();
+    }
+  });
+
+  it("gives the launch plans' environments (local, remote's ssh client) no unreachable key, and discovery none at all", async () => {
+    stubKeys();
+    const local = localOpencodeLaunch(runOpts(), "trk-env", { disableFff: true, api: 2, accounts: reader(["go-a"])({}) });
+    try {
+      expect(local.env.GO_A_KEY).toBe(KEYS.GO_A_KEY);
+      expect("GO_B_KEY" in local.env).toBe(false);
+    } finally {
+      cleanupOpencodeSessionConfig(local.configHandle);
+    }
+    const { opencodeDiscoveryEnv, cleanEnv } = await import("../opencode-launch.js");
+    const discovery = opencodeDiscoveryEnv(configWith(TWO));
+    expect("GO_A_KEY" in discovery || "GO_B_KEY" in discovery).toBe(false);
+    // The environment a remote turn's ssh client (and the terminal view) starts with: scrubbed, and nothing added.
+    const client = cleanEnv("sess-env-client", { disableFff: true, accounts: reader(["go-a"])({}) });
+    expect("GO_A_KEY" in client || "GO_B_KEY" in client).toBe(false);
   });
 });

@@ -1,6 +1,7 @@
 import * as pty from "node-pty";
 import type { EngineResult, EngineRunOpts, InterruptibleEngine, ResolvedMcpConfig } from "../shared/types.js";
 import type { OpencodeMode } from "../shared/config-types.js";
+import type { OpencodeAccountsReader, OpencodeAccountStaging } from "./opencode-accounts.js";
 import { logger } from "../shared/logger.js";
 import { JINN_HOME } from "../shared/paths.js";
 import { resolveBin } from "../shared/resolve-bin.js";
@@ -46,6 +47,8 @@ export interface OpencodeInteractiveDeps {
   bin?: () => string | undefined;
   /** `engines.opencode.disableFff`, read per spawn. Absent means on. */
   disableFff?: () => boolean;
+  /** The declared opencode accounts: the terminal view and its client hold none of their keys. */
+  accounts?: OpencodeAccountsReader;
 }
 
 /**
@@ -374,6 +377,12 @@ export class OpencodeInteractiveEngine implements InterruptibleEngine, PtyViewEn
     for (const wake of waiters) wake();
   }
 
+  /** What the terminal view's processes start with. The view only watches the server, so its environment holds no account's key. */
+  private viewProcessOptions(sessionId: string, disableFff: boolean): { disableFff: boolean; accounts?: OpencodeAccountStaging } {
+    const accounts = this.deps.accounts?.({ sessionId });
+    return { disableFff, ...(accounts ? { accounts } : {}) };
+  }
+
   private spawnView(sessionId: string, server: OpencodeServer, engineSessionId: string | undefined): pty.IPty {
     const geom = this.lastGeom.get(sessionId);
     const size = { cols: geom?.cols ?? 120, rows: geom?.rows ?? 40 };
@@ -383,13 +392,14 @@ export class OpencodeInteractiveEngine implements InterruptibleEngine, PtyViewEn
       + `(opencode session: ${engineSessionId ?? "none yet"})`,
     );
     const disableFff = this.deps.disableFff?.() ?? true;
+    const processOptions = this.viewProcessOptions(sessionId, disableFff);
     const where = server.remote;
     if (!where) {
       return pty.spawn(server.bin, args, {
         name: "xterm-256color",
         ...size,
         cwd: server.cwd,
-        env: { ...cleanEnv(sessionId, { disableFff }), TERM: "xterm-256color", OPENCODE_SERVER_PASSWORD: server.password },
+        env: { ...cleanEnv(sessionId, processOptions), TERM: "xterm-256color", OPENCODE_SERVER_PASSWORD: server.password },
       });
     }
     const sshArgs = buildSshSpawnArgs({
@@ -411,7 +421,7 @@ export class OpencodeInteractiveEngine implements InterruptibleEngine, PtyViewEn
       name: "xterm-256color",
       ...size,
       cwd: JINN_HOME,
-      env: { ...cleanEnv(sessionId, { disableFff }), TERM: "xterm-256color" },
+      env: { ...cleanEnv(sessionId, processOptions), TERM: "xterm-256color" },
     });
   }
 

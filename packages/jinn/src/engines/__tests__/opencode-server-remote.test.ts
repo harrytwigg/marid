@@ -260,6 +260,7 @@ describe("opencode accounts on a remote server", () => {
     providers: () => ({ "go-b": { name: "Go B", options: { apiKey: "{env:GO_B_KEY}" }, models: {} } }),
     env: { GO_B_KEY: SENTINEL },
     fingerprint: "go-b",
+    scrub: ["GO_B_KEY"],
   };
 
   it("hands staging the accounts, and carries the key on no ssh argv", async () => {

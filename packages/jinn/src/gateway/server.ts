@@ -718,6 +718,7 @@ export async function startGateway(
     mode: () => opencodeMode(currentConfig.engines.opencode),
     bin: () => currentConfig.engines.opencode?.bin,
     disableFff: () => currentConfig.engines.opencode?.disableFff !== false,
+    accounts: opencodeAccountsReaderFor(() => currentConfig),
     // The MCP set a turn of this session would get, so a server the terminal
     // starts is the one the next turn reuses rather than replaces.
     resolveMcp: (sessionId) => {

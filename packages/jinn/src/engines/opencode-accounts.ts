@@ -25,6 +25,8 @@ export interface OpencodeAccountStaging {
   readonly env: Readonly<Record<string, string>>;
   /** What makes a warm server stale: each account's provider id, model list and a short hash of its key. Never the key. */
   readonly fingerprint: string;
+  /** Every declared account's key variable, reachable or not: taken out of the environment a process inherits, so it holds only the keys in {@link env}. */
+  readonly scrub: readonly string[];
 }
 
 /** Who is asking for accounts: the session a process is for and the model the turn runs on. */
@@ -45,8 +47,8 @@ export function shortKeyHash(key: string): string {
  * The accounts that stage a provider block, resolved against the catalogue
  * clones discovery kept and `environment` (the gateway's own), or undefined
  * when no account has a base. `reach` (provider ids) narrows them to the ones
- * a session may use: its blocks and keys are only those; none reachable stages
- * nothing. An account with no key set still stages its block:
+ * a session may use: its blocks and keys are only those, and none reachable
+ * stages no block and no key (but still lists every key variable to scrub). An account with no key set still stages its block:
  * its turns fail as auth and the chain moves on (doctor names the variable).
  */
 export function opencodeAccountStaging(
@@ -54,8 +56,9 @@ export function opencodeAccountStaging(
   environment: Readonly<Record<string, string | undefined>> = process.env,
   reach?: ReadonlySet<string>,
 ): OpencodeAccountStaging | undefined {
-  const accounts = stagedOpencodeAccounts(config).filter((account) => reach === undefined || reach.has(account.provider));
-  if (accounts.length === 0) return undefined;
+  const declared = stagedOpencodeAccounts(config);
+  if (declared.length === 0) return undefined;
+  const accounts = declared.filter((account) => reach === undefined || reach.has(account.provider));
   const clones = opencodeClones();
   const resolved = accounts.map((account) => ({ account, models: accountCloneModels(account, clones), key: environment[account.keyEnv!]?.trim() || undefined }));
   const env: Record<string, string> = {};
@@ -71,5 +74,6 @@ export function opencodeAccountStaging(
     },
     env,
     fingerprint,
+    scrub: declared.map((account) => account.keyEnv!),
   };
 }

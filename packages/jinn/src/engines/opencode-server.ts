@@ -730,6 +730,12 @@ export class OpencodeServerPool {
     return { disableFff: this.disableFff(), ...(commandTimeoutMs > 0 ? { commandTimeoutMs } : {}) };
   }
 
+  /** What takes every account's key variable out of a process's inherited environment. */
+  private scrubOpts(sessionId: string, spec: OpencodeServerSpec): { accounts?: OpencodeAccountStaging } {
+    const accounts = this.deps.accounts?.({ sessionId, ...(spec.model ? { model: spec.model } : {}) });
+    return accounts ? { accounts } : {};
+  }
+
   /** The staging options a remote server adds to a remote `run` turn's: the accounts (their keys join the 0600 session-env file) and the command-timeout plugin. */
   private accountsOpts(sessionId: string, spec: OpencodeServerSpec): { opencodeAccounts?: OpencodeAccountStaging; opencodeCommandTimeout?: boolean } {
     const accounts = this.deps.accounts?.({ sessionId, ...(spec.model ? { model: spec.model } : {}) });
@@ -756,7 +762,7 @@ export class OpencodeServerPool {
     const plugins = localCommandTimeoutPlugins(api, processOptions.commandTimeoutMs ?? 0);
     const accounts = this.deps.accounts?.({ sessionId, ...(spec.model ? { model: spec.model } : {}) });
     const configHandle = writeOpencodeSessionConfig(spec.resolvedMcp, `${sessionId}.server`, api, plugins, accounts);
-    const env = localServerEnv(sessionId, processOptions, password, configHandle, accounts);
+    const env = localServerEnv(sessionId, { ...processOptions, ...(accounts ? { accounts } : {}) }, password, configHandle, accounts);
     logger.info(`opencode server starting for session ${sessionId}: ${bin} serve on 127.0.0.1:${port} (jinn tools: ${configHandle.staged ? "on" : "off"})`);
     const proc = spawn(bin, buildOpencodeServeArgs(port), {
       cwd: spec.cwd,
@@ -815,7 +821,7 @@ export class OpencodeServerPool {
     );
     const proc = spawn(resolveBin("ssh"), args, {
       cwd: JINN_HOME,
-      env: cleanEnv(sessionId, processOptions),
+      env: cleanEnv(sessionId, { ...processOptions, ...this.scrubOpts(sessionId, spec) }),
       stdio: ["pipe", "pipe", "pipe"],
       detached: process.platform !== "win32",
     });
