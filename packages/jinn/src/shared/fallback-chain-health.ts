@@ -11,7 +11,7 @@ import type { UsageSample } from "./claude-usage-history.js";
  */
 
 /** The parts of a resolved link a health key is made from. */
-export type FallbackLinkIdentity = Pick<ResolvedFallbackLink, "engine" | "model" | "account">;
+export type FallbackLinkIdentity = Pick<ResolvedFallbackLink, "engine" | "model" | "account" | "healthProvider">;
 
 /** The latest cached reading per account key (`readClaudeUsageHistory`'s newest sample); never probed live. */
 export type FallbackLimitReadings = Record<string, UsageSample | undefined>;
@@ -30,12 +30,14 @@ function providerOf(model: string | undefined): string | undefined {
 /**
  * The health-store key of a link's target. A Claude link keeps its account's;
  * an opencode link naming `provider/model` keeps its provider's (`opencode/<provider>`),
- * so one provider's usage limit does not mark another provider's links as spent;
+ * so one provider's usage limit does not mark another provider's links as spent (a
+ * declared opencode account is a provider of its own, so each account is its own key);
  * anything else keeps its engine's.
  */
 export function linkHealthKey(link: FallbackLinkIdentity): string {
   if (link.engine === "claude") return link.account;
-  const provider = link.engine === "opencode" ? providerOf(link.model) : undefined;
+  // A link naming no model runs on the engine's configured one, whose provider the resolver stamps as `healthProvider`.
+  const provider = link.engine === "opencode" ? (link.model === undefined ? link.healthProvider : providerOf(link.model)) : undefined;
   return provider === undefined ? link.engine : `opencode/${provider}`;
 }
 

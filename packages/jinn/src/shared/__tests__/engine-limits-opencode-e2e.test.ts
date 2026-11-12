@@ -54,7 +54,7 @@ describe("collectEngineLimits — opencode metered from the turn ledger", () => 
     expect(out.engines.opencode.unsupportedReason).toContain("engines.opencode.usageLimits");
   });
 
-  it("meters jinn's opencode spend and marks the engine exhausted once a window is spent", async () => {
+  it("meters jinn's opencode spend and marks the provider exhausted once a window is spent", async () => {
     const { readEngineHealth, isEngineExhausted } = await import("../engine-health.js");
     const config = cfg({ bin: NODE, model: FLASH, usageLimits: { monthlyUsd: { "opencode-go/*": 60 } } });
 
@@ -71,10 +71,13 @@ describe("collectEngineLimits — opencode metered from the turn ledger", () => 
     // The $6 turn is the one whose ageing-out brings the window back under $12.
     expect(fiveHour?.resetsAt).toBeGreaterThan(Date.now() / 1000 + 4.9 * 3600);
 
-    const health = readEngineHealth().opencode;
-    expect(health).toMatchObject({ state: "exhausted", window: "5h", reason: "quota window spent" });
+    // One record per provider, stamped with the model that spent it; the engine-wide key is never written.
+    const health = readEngineHealth()["opencode/opencode-go"];
+    expect(health).toMatchObject({ state: "exhausted", window: "5h", reason: "quota window spent", model: FLASH });
     expect(Date.parse(health!.until!)).toBe(fiveHour!.resetsAt! * 1000);
-    expect(isEngineExhausted(readEngineHealth(), "opencode")).toBe(true);
+    expect(isEngineExhausted(readEngineHealth(), "opencode/opencode-go")).toBe(true);
+    expect(readEngineHealth().opencode).toBeUndefined();
+    expect(isEngineExhausted(readEngineHealth(), "opencode")).toBe(false);
   });
 
   it("keeps spend on the model that ran it when the engine default changes afterwards", async () => {

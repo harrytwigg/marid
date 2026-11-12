@@ -147,12 +147,44 @@ engines:
 
 Take the numbers from the Go pricing table for the models you use. A model that matches no key is not metered: pay-per-token providers such as OpenRouter have no window to run out of.
 
-With that set, the Limits page and `jinn limits` show opencode's windows for the engine's default model. `jinn limits` (and `GET /api/engine-limits`) also list a bucket per metered model; the Limits page does not render buckets yet. If the default model matches no key, opencode reads as unsupported with the reason, because nothing configured can speak for the engine. When a window is fully spent, opencode is recorded as **exhausted until the moment the ledger says it reopens**. That is the same record a spent Claude window writes, and it is read the same way:
+With that set, the Limits page and `jinn limits` show opencode's windows for the engine's default model. `jinn limits` (and `GET /api/engine-limits`) also list a bucket per metered model; the Limits page does not render buckets yet. If the default model matches no allowance, opencode reads as unsupported with the reason, because nothing configured can speak for the engine's default; other metered models still count (below).
 
-- A new session whose engine is only a preference (an employee's configured `engine: opencode`, not one named in the request) starts on the first healthy engine in `engines.opencode.fallback`.
-- A mid-turn rate-limit fallback from another engine (for example `engines.claude.fallback: [opencode]`) skips opencode for the next healthy member of its chain.
+**Exhaustion is per provider.** When a window of **any** metered model is fully spent, the meter records `opencode/<provider>` as **exhausted until the moment the ledger says it reopens**, stamped with the model that spent it. When several models or windows of one provider are spent, the latest reopening applies. The meter never writes the engine-wide `opencode` key: one provider running dry must not mark every other provider out. The top-level `windows` of the engine's snapshot stay the default model's, for display only. The record is the same kind a spent Claude window writes, and it is read the same way:
 
-Every one of those is routing through a fallback chain, so the record only moves work where there is somewhere else to go. **Nothing is refused**: if no healthy alternative is left, the turn runs on opencode anyway, exactly as before. To make an exhausted opencode route away from itself, give it a chain: `engines.opencode.fallback: [pi]`, say.
+- A new session whose engine is only a preference (an employee's configured `engine: opencode`, not one named in the request) starts on the first healthy link of its chain. An employee who pins no model is keyed by the provider of `engines.opencode.model`, which is the model its session runs on; the session's own model stays unpinned.
+- A mid-turn rate-limit fallback from another engine (for example `engines.claude.fallback: [opencode]`) skips an exhausted opencode link for the next healthy member of its chain.
+
+**A provider's own refusal outranks the meter.** The ledger does not see the provider's own meter. If a refusal recorded from the provider itself (a quota, sign-in or model-access failure) already holds `opencode/<provider>`, the meter neither clears nor shortens it. It replaces only a record it wrote itself, a degraded one, or a quota refusal that ends sooner than the reopening it computed.
+
+### Limits per account
+
+A declared account (`engines.opencode.accounts`, see [the design](design/opencode-accounts.md)) names its provider, so it has an allowance and an exhaustion of its own:
+
+```yaml
+engines:
+  opencode:
+    usageLimits:
+      monthlyUsd:
+        opencode-go/*: 60              # the stock provider, and the base's allowance for accounts with no limits
+    accounts:
+      go-b:
+        provider: opencode-go-b
+        base: opencode-go
+        keyEnv: OPENCODE_GO_B_API_KEY
+        usageLimits:
+          monthlyUsd: { "*": 100, mimo-v2.6-pro: 15 }   # model ids without the provider; an exact id beats *
+      go-c:
+        provider: opencode-go-c
+        base: opencode-go
+        keyEnv: OPENCODE_GO_C_API_KEY                   # no usageLimits: inherits opencode-go/* above
+```
+
+- An account's `monthlyUsd` meters `<provider>/<model>`: an exact model beats `*`.
+- An account with no `usageLimits` inherits the engine-level `<base>/<model>` key, then `<base>/*`.
+- The engine-level keys still meter any provider directly, an account's alias included (`opencode-go-b/*: 100` works too).
+- Spend is already recorded as `provider/model`, so the ledger separates accounts as it is, and a spent window of one account records `opencode/<its provider>` and no other.
+
+`GET /api/engine-limits` carries `accounts.opencode`, one entry per declared account (built-in providers included): its label, provider, `base`, the key variable's **name** (`keyEnv`, never its value) and whether it is set (`keySet`), a bucket per metered model with its 5h/7d/30d windows, the employees whose own model is on that provider, `exhausted` while health holds the provider, `nextTryAt` (the record's `recheckAt`, else its `until`), and `problems`. `jinn limits` prints a card for each, Claude's accounts included.
 
 The reading refreshes with the engine-health refresh (every 15 minutes) and whenever the Limits page or `jinn limits` reads it.
 
@@ -161,7 +193,7 @@ What the meter does not see:
 - **opencode used by hand**, outside jinn. Only turns jinn ran are in the ledger.
 - **Which model opencode picked for itself.** A turn is charged to the model jinn handed opencode, fixed when the turn is recorded, so changing `engines.opencode.model` later does not move old spend. A turn run with no model at all (neither the session nor `engines.opencode.model` names one, so opencode used its own default) is charged to whatever the default is when it is read.
 - **The provider's own clock.** Windows are treated as trailing. That is exact if Go's windows roll, and conservative if they are anchored at first use.
-- **A per-model engine record.** Engine health has one record per engine, so only the **default model's** windows can mark opencode out. A spent pinned model shows in its bucket, and its next refusal is handled reactively, as before.
+- **A per-model health record.** Health is one record per provider, not per model. A spent window of one model marks its whole provider out, although the provider's other models may still have allowance: Go meters each model, and routing is per provider.
 
 ---
 

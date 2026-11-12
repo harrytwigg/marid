@@ -220,6 +220,39 @@ A Claude target's health is its account's. An opencode target's health is kept
 per provider (`opencode/<provider>`), so a provider's usage limit does not mark
 other providers' links as spent. Every other engine keeps one key.
 
+An opencode link is read under its provider's key and the engine-wide
+`opencode` key (`[opencode/<provider>, opencode]`): the provider's own limit, or
+the engine as a whole being out. An opencode target that names no model (an
+employee who pins none) is read under the provider of `engines.opencode.model`,
+the model its session runs on, without pinning the session's model; it is
+resolved on the own link only, and shows as `healthProvider` in
+`GET /api/fallback-chains`.
+
+### opencode accounts in chains
+
+A declared opencode account (`engines.opencode.accounts`, see
+[opencode accounts](design/opencode-accounts.md)) is a provider of its own, so a
+chain names its models as it names any provider's: `opencode-go-b/<model>`.
+
+- **Links.** `{ engine: opencode, model: opencode-go-b/deepseek-v4.1-flash }` is
+  the second account's copy of a Go model, and `{ engine: opencode, model:
+  opencode-go/deepseek-v4.1-flash }` is the stock provider's. They are different
+  targets, so a chain can list both, and neither dedupes the other.
+- **Health keys.** Each account is its own key, `opencode/<account's provider>`.
+  The usage meter writes it when one of that account's windows is spent
+  (metered by the account's `usageLimits`, or inherited from its base), and a
+  provider's own refusal recorded under the same key outranks the meter. One
+  account being out leaves the stock provider and every other account usable,
+  and none of them writes the engine-wide `opencode` key.
+- **New sessions.** A session whose own provider is an exhausted account starts
+  on the first healthy link of its chain, as for Claude accounts, and goes back
+  when the account's window reopens.
+- **A hop between accounts keeps the thread.** Accounts share opencode's one
+  data directory and one session store; only the provider id and its key differ.
+  `opencode-go/x -> opencode-go-b/x` is "same thread, other model", so the
+  conversation resumes as it does for `opencode-go/x -> openrouter/x`, with no
+  messages replayed.
+
 ### Context across a hop
 
 Each account (and each non-Claude engine) keeps its own conversation thread.

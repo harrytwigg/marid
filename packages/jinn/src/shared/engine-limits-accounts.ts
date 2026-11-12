@@ -99,12 +99,16 @@ export function registerAccountRoster(source: () => Iterable<Employee>): void {
   roster = source;
 }
 
-export function rosterClaudeAccounts(config: JinnConfig): ClaudeAccountInfo[] {
-  let employees: Iterable<Employee> = [];
+/** The registered roster, or none when it cannot be read. */
+export function rosterEmployees(): Iterable<Employee> {
   try {
-    employees = roster();
+    return roster();
   } catch { /* an unreadable roster leaves the default account alone */ }
-  return claudeAccountsFor(employees, config);
+  return [];
+}
+
+export function rosterClaudeAccounts(config: JinnConfig): ClaudeAccountInfo[] {
+  return claudeAccountsFor(rosterEmployees(), config);
 }
 
 /** Reads a remote account over SSH (engines/remote-account-usage.ts, registered

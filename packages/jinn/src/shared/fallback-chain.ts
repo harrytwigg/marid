@@ -111,11 +111,29 @@ function skipDetail(config: JinnConfig, scope: FallbackChainSpec["scope"], link:
   return `${scope.host} has no \`${REMOTE_ENGINE_CLI[link.engine]}\` on its non-interactive PATH`;
 }
 
+/**
+ * The provider an opencode target naming no model runs on: the one in `engines.opencode.model`, which is
+ * the model a session with no pin starts on. Health is kept per provider, so without it such a target would
+ * read only the engine-wide key and never see its own provider (an account, say) out. It is read for health
+ * alone: the session's model stays unpinned.
+ */
+function unpinnedHealthProvider(config: JinnConfig, link: FallbackLink): string | undefined {
+  if (link.engine !== "opencode" || link.model !== undefined) return undefined;
+  const model = config.engines.opencode?.model;
+  const slash = model === undefined ? -1 : model.indexOf("/");
+  return model !== undefined && slash > 0 ? model.slice(0, slash) : undefined;
+}
+
 function resolvedLink(
-  env: FallbackChainEnv, link: FallbackLink, origin: ResolvedFallbackLink["origin"], written: FallbackLink, claudeAccount?: string,
+  env: FallbackChainEnv, link: FallbackLink, origin: ResolvedFallbackLink["origin"], written: FallbackLink,
+  runsAs: { claudeAccount?: string; healthProvider?: string } = {},
 ): ResolvedFallbackLink {
+  const { claudeAccount, healthProvider } = runsAs;
   const account = linkAccount(link, env.config, claudeAccount);
-  const identity = { ...link, key: fallbackLinkKey(link), account, label: fallbackLinkLabel(link), origin, written: { ...written } };
+  const identity = {
+    ...link, key: fallbackLinkKey(link), account, label: fallbackLinkLabel(link), origin, written: { ...written },
+    ...(healthProvider === undefined ? {} : { healthProvider }),
+  };
   return { ...identity, health: linkHealth(env, identity) };
 }
 
@@ -134,7 +152,7 @@ function withModel(env: FallbackChainEnv, subject: FallbackChainSpec, link: Fall
 export function resolveFallbackLinks(env: FallbackChainEnv, subject: FallbackChainSpec): ResolvedFallbackLink[] {
   // An account chain names its Claude accounts itself; an engine chain's unprofiled Claude link is the subject's own login.
   const claudeAccount = subject.mode === "engine" ? subject.claudeAccount : undefined;
-  const own = resolvedLink(env, subject.own, "config", subject.own, claudeAccount);
+  const own = resolvedLink(env, subject.own, "config", subject.own, { claudeAccount, healthProvider: unpinnedHealthProvider(env.config, subject.own) });
   const seen = new Set<string>([own.key]);
   // A remote subject on a declared account is also its own target when a link names no profile: that runs the account it has.
   if (subject.scope.remote && own.profile !== undefined) seen.add(fallbackLinkKey({ engine: own.engine, ...(own.model === undefined ? {} : { model: own.model }) }));
@@ -142,7 +160,7 @@ export function resolveFallbackLinks(env: FallbackChainEnv, subject: FallbackCha
   const links: ResolvedFallbackLink[] = [own];
   for (const { link, origin } of expanded) {
     const target = withModel(env, subject, link);
-    const resolved = resolvedLink(env, target, origin, link, claudeAccount);
+    const resolved = resolvedLink(env, target, origin, link, { claudeAccount });
     if (seen.has(resolved.key)) continue;
     seen.add(resolved.key);
     const skip = skipReason(env, subject, target);
