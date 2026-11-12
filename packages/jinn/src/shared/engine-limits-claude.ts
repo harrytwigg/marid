@@ -27,7 +27,6 @@ import {
   baseSnapshot,
   isoFromSeconds,
   isRecord,
-  nowIso,
   num,
   str,
   type JsonRecord,
@@ -268,6 +267,9 @@ export async function collectClaudeLimits(config: JinnConfig, profile: ClaudePro
 
   const account = claudeAccountKey(profile);
   const latest = claudeSnapshotFile(CLAUDE_LIMITS_DIR, account);
+  // A reading is as old as the moment it was asked for: a limit recorded while the
+  // request was out is newer than what came back, and the reading must not clear it.
+  const readStartedMs = Date.now();
   const [accountPlan, oauthUsage] = await Promise.all([
     claudeAuthPlan(config, profile),
     fetchClaudeOAuthUsage(process.env, profile),
@@ -284,7 +286,7 @@ export async function collectClaudeLimits(config: JinnConfig, profile: ClaudePro
       ...snap,
       status: "live",
       source: "claude oauth usage api",
-      refreshedAt: nowIso(),
+      refreshedAt: new Date(readStartedMs).toISOString(),
       accountPlan,
       windows: liveWindows,
       // Context/cost only ever come from the statusline snapshot (best effort).
@@ -297,7 +299,7 @@ export async function collectClaudeLimits(config: JinnConfig, profile: ClaudePro
     recordClaudeUsageSample(live, Date.now(), usageHistoryPath(account));
     // The loop's tick reads this account without going through the limits readout,
     // so a limit that lifted early is cleared here too.
-    clearContradictedHealth(account, live.windows, Date.now());
+    clearContradictedHealth(account, live.windows, readStartedMs);
     return live;
   }
 

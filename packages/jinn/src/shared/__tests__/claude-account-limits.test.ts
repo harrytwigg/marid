@@ -52,6 +52,8 @@ let mod: {
   registerSessionAccountResolver: (r: ((id: string) => string | undefined) | undefined) => void;
 };
 const fetchCalls: Array<{ url: string; auth: string }> = [];
+/** Runs inside the usage request, before it answers: a limit another session records while the reading is out. */
+let duringFetch: (() => Promise<void>) | undefined;
 
 const cfg = (): JinnConfig => ({
   gateway: { port: 7799, host: "127.0.0.1" },
@@ -85,6 +87,7 @@ beforeAll(async () => {
   delete process.env.JINN_CLAUDE_USAGE_API;
   vi.stubGlobal("fetch", async (url: string, init: { headers: Record<string, string> }) => {
     fetchCalls.push({ url, auth: init.headers.Authorization });
+    await duringFetch?.();
     return { ok: true, json: async () => usage(init.headers.Authorization === `Bearer ${SECRET}` ? 71 : 12) } as unknown as Response;
   });
   const profile = await import("../claude-profile.js");
@@ -108,6 +111,7 @@ afterAll(() => {
 
 beforeEach(() => {
   fetchCalls.length = 0;
+  duringFetch = undefined;
   childEnvs.length = 0;
   keychainServices.length = 0;
   writeCredentials(Date.now() + 3600_000);
@@ -236,6 +240,33 @@ describe("a limit that lifted before its stated reset", () => {
       mod.registerSessionAccountResolver(undefined);
       fs.rmSync(file, { force: true });
     }
+  });
+
+  describe("a limit recorded while the usage request was out", () => {
+    const limitMidFetch = () => {
+      duringFetch = async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        mod.recordEngineUnavailable("claude", "usage limit", Math.floor(Date.now() / 1000) + 4 * 24 * 3600);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      };
+    };
+
+    it("is not cleared by the Claude collector's reading, which was asked for before it", async () => {
+      limitMidFetch();
+
+      await mod.collectClaudeLimits(cfg(), null);
+
+      expect(mod.readEngineHealth().claude?.state).toBe("exhausted");
+    });
+
+    it("is not cleared by the readout built on that reading either", async () => {
+      limitMidFetch();
+      mod.registerAccountRoster(() => [operator]);
+
+      await mod.collectEngineLimits(cfg(), { engine: "claude" });
+
+      expect(mod.readEngineHealth().claude?.state).toBe("exhausted");
+    });
   });
 
   it("is not cleared by a reading older than the limit", async () => {
