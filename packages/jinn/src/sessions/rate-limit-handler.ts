@@ -32,12 +32,11 @@ import { spawnCwd } from "./session-cwd.js";
 import { logger } from "../shared/logger.js";
 import { REMOTE_ENGINE_NAMES } from "../shared/models.js";
 import { linkHealthKey } from "../shared/fallback-chain-health.js";
-import { recordEngineServed } from "../shared/engine-health.js";
 import {
   computeNextRetryDelayMs, computeRateLimitDeadlineMs, detectRateLimit, nextUnstatedParkDelayMs,
   rateLimitEngineLabel, MAX_UNSTATED_PARK_ATTEMPTS,
 } from "../shared/rateLimit.js";
-import { quotaHoldEndsAtSeconds, recordOpencodeModelServed } from "../shared/engine-health-opencode.js";
+import { quotaHoldEndsAtSeconds, recordTurnServed } from "../shared/engine-health-opencode.js";
 import { rateLimitAccount, recordAccountRateLimit } from "./rate-limit-account.js";
 import { walkFallbackChain } from "./fallback-walk.js";
 import { beginLimitProbe, endLimitProbe } from "./limit-probe.js";
@@ -371,8 +370,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
 
       // The target answered a turn begun after its limit was recorded: the record is stale.
       if (!retryResult.error) {
-        recordEngineServed(limitedKey, retryStartedMs, retryModel);
-        if (session.engine === "opencode") recordOpencodeModelServed(retryModel, retryStartedMs);
+        recordTurnServed({ engine: session.engine, key: limitedKey, startedMs: retryStartedMs, model: retryModel, servedOn: remote?.remoteHost });
       }
       // Success (or non-rate-limit error) — hand off to caller for persistence + transport.
       await hooks.onRetrySuccess?.(retryResult);

@@ -1,6 +1,6 @@
 import { linkHealthKey } from "../../shared/fallback-chain-health.js";
-import { recordOpencodeModelServed } from "../../shared/engine-health-opencode.js";
-import { recordEngineServed } from "../../shared/engine-health.js";
+import { recordTurnServed } from "../../shared/engine-health-opencode.js";
+import { isRemoteTarget } from "../../shared/remote-target.js";
 import type { EngineResult } from "../../shared/types.js";
 import { rateLimitAccount } from "../rate-limit-account.js";
 import type { TurnRun } from "./types.js";
@@ -28,6 +28,12 @@ export function noteTurnServed(
   const started = run.input.session;
   const { account } = rateLimitAccount(run.plan.engineName, run.input.employee, started);
   const served = model ?? started.model ?? run.plan.engineConfig.model;
-  recordEngineServed(linkHealthKey({ engine: run.plan.engineName, model: served, account }), run.turnStartedAt, served);
-  if (run.plan.engineName === "opencode") recordOpencodeModelServed(served, run.turnStartedAt);
+  const employee = run.input.employee;
+  recordTurnServed({
+    engine: run.plan.engineName,
+    key: linkHealthKey({ engine: run.plan.engineName, model: served, account }),
+    startedMs: run.turnStartedAt,
+    model: served,
+    servedOn: isRemoteTarget(employee) ? employee.remoteHost : undefined,
+  });
 }

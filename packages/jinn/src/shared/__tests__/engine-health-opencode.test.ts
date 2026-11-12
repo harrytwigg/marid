@@ -12,7 +12,7 @@ vi.mock("../paths.js", async (importOriginal) => ({
 }));
 
 import type { JinnConfig } from "../config-types.js";
-import { quotaHoldEndsAtSeconds, recordOpencodeFailure, recordOpencodeModelServed } from "../engine-health-opencode.js";
+import { quotaHoldEndsAtSeconds, recordOpencodeFailure, recordTurnServed } from "../engine-health-opencode.js";
 import { clearEngineHealthByOperator, engineHealthForTarget, isEngineExhausted, readEngineHealth, recordEngineServed } from "../engine-health.js";
 import { readStore } from "../engine-health-store.js";
 import { healthKeys, isLinkExhausted, linkHealth } from "../fallback-chain-health.js";
@@ -95,6 +95,28 @@ describe("a record about one remote host", () => {
     expect(view({ remoteHost: "host-c" })[key]?.state).toBe("exhausted");
     expect(view({ remoteHost: "host-d" })[key]).toBeUndefined();
     expect(view(undefined)[key]).toBeUndefined();
+  });
+
+  it("leaves this machine's dead key and refused model alone when a turn on another host is served", () => {
+    record(EXPIRED);
+    record(NO_ACCESS, { healthKey: "opencode/opencode-go", model: "opencode-go/glm-5" });
+    const served = { engine: "opencode", key: "opencode/opencode-go", startedMs: at(1).getTime(), model: "opencode-go/glm-5" };
+
+    recordTurnServed({ ...served, servedOn: "host-c" }, at(2));
+    expect(readEngineHealth(at(2))["opencode/opencode-go"]).toMatchObject({ state: "exhausted", failureClass: "auth" });
+    expect(readEngineHealth(at(2))["opencode/opencode-go/glm-5"]).toMatchObject({ state: "exhausted", failureClass: "model-access" });
+
+    // The same turn on this machine lifts both.
+    recordTurnServed(served, at(2));
+    expect(readEngineHealth(at(2))["opencode/opencode-go"]?.state).toBe("ok");
+    expect(readEngineHealth(at(2))["opencode/opencode-go/glm-5"]?.state).toBe("ok");
+  });
+
+  it("does not lengthen this machine's spent-allowance hold by another host's", () => {
+    record(USAGE, { host: "host-c", resetsAt: at(300).getTime() / 1000 });
+    record(FUNDS);
+    expect(readEngineHealth(NOW)["opencode/opencode-go"]).toMatchObject({ failureClass: "quota", until: at(60).toISOString() });
+    expect(readEngineHealth(NOW)["opencode/opencode-go"]?.host).toBeUndefined();
   });
 
   it("does not displace an account-wide record already standing", () => {
@@ -238,7 +260,7 @@ describe("a model the account cannot use (403)", () => {
 
   it("is lifted by a turn served on that model", () => {
     record(NO_ACCESS);
-    recordOpencodeModelServed("opencode-go/kimi-k2", at(1).getTime(), at(2));
+    recordTurnServed({ engine: "opencode", key: "opencode/opencode-go", startedMs: at(1).getTime(), model: "opencode-go/kimi-k2" }, at(2));
     expect(isLinkExhausted(readEngineHealth(at(2)), link("opencode-go/kimi-k2"), at(2))).toBe(false);
   });
 

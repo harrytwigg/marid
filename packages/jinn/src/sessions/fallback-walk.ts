@@ -3,8 +3,7 @@ import type { FallbackChainSource, FallbackHop, FallbackHopReason, ResolvedFallb
 import { logger } from "../shared/logger.js";
 import { rateLimitEngineLabel } from "../shared/rateLimit.js";
 import { linkHealthKey } from "../shared/fallback-chain-health.js";
-import { recordEngineServed } from "../shared/engine-health.js";
-import { recordOpencodeModelServed } from "../shared/engine-health-opencode.js";
+import { recordTurnServed } from "../shared/engine-health-opencode.js";
 import type { EngineName } from "../shared/models.js";
 import type { EngineResult, Session } from "../shared/types.js";
 import { claudeLinkRefusal, linkFailure, noteLinkAuthFailure, recordLinkLimit, runLink } from "./fallback-link-run.js";
@@ -251,8 +250,8 @@ async function served(w: Walk, found: Found, model: string | undefined, ran: { r
   }
   // A link that answered a turn begun after its limit was recorded has lifted it.
   if (!result.error) {
-    recordEngineServed(linkHealthKey(found.next.link), ran.startedMs, model);
-    if (found.next.link.engine === "opencode") recordOpencodeModelServed(model, ran.startedMs);
+    const { link } = found.next;
+    recordTurnServed({ engine: link.engine, key: linkHealthKey(link), startedMs: ran.startedMs, model, servedOn: w.input.remote?.remoteHost });
   }
   await hooks.onFallbackComplete?.(result, { engine: found.choice.engine as EngineName, model });
   return { kind: "served", result };

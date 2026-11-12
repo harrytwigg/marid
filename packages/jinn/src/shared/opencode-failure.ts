@@ -33,8 +33,9 @@ const STATUS_RE = /\(HTTP (\d{3})\)/g;
 
 /** A 403 or typeless `provider.auth` message that is about the model or region, not the key. */
 const MODEL_ACCESS_MESSAGE_RE = /model access|not enabled|not available in (?:your|this) region|region|opt[ -]?in|\bnot (?:served|available)\b/i;
-/** A message that is about the key itself. */
-const KEY_MESSAGE_RE = /\b(?:expired|invalid|revoked|unauthori[sz]ed|forbidden)\b|api key/i;
+/** A message that is about the key itself. A bare "Forbidden" is not: it says the request was refused, not why, and a
+ *  refusal held against the one model costs less when wrong than one holding the whole provider out until the key changes. */
+const KEY_MESSAGE_RE = /\b(?:expired|invalid|revoked|unauthori[sz]ed)\b|api key/i;
 
 function statusOf(text: string): number | undefined {
   let status: number | undefined;
@@ -47,7 +48,8 @@ function kindByMessage(type: string, error: string): OpencodeFailureKind | undef
   if (type === "provider.quota") return /usage.*limit|exceeded.*limit/i.test(error) ? "usage-limit" : "quota";
   if (type !== "provider.auth") return undefined;
   if (MODEL_ACCESS_MESSAGE_RE.test(error)) return "model-access";
-  return KEY_MESSAGE_RE.test(error) ? "auth" : undefined;
+  if (KEY_MESSAGE_RE.test(error)) return "auth";
+  return /\bforbidden\b/i.test(error) ? "model-access" : undefined;
 }
 
 const KIND_BY_STATUS: Readonly<Record<number, OpencodeFailureKind>> = { 402: "quota", 429: "usage-limit", 401: "auth", 403: "model-access" };

@@ -86,7 +86,9 @@ function holdSignedOut(write: OpencodeHealthWrite, provider: string, now: Date, 
 
 function holdSpentAllowance(write: OpencodeHealthWrite, provider: string, now: Date, observed: Pick<EngineHealth, "reason" | "observedAt">): void {
   const stated = write.resetsAt !== undefined && Number.isFinite(write.resetsAt) ? write.resetsAt * 1000 : undefined;
-  const standing = liveUntilMs(readStore()[write.healthKey], now);
+  // A standing hold is kept only when it is about the same machine: another host's says nothing about this one's allowance.
+  const record = readStore()[write.healthKey];
+  const standing = record?.host === write.host ? liveUntilMs(record, now) : undefined;
   const until = Math.max(stated ?? now.getTime() + opencodeReprobeMs(provider, write.config), standing ?? 0);
   // A stated reset is taken on trust only up to the re-probe, as every other stated window is, so a misparse self-corrects.
   const recheck = stated === undefined ? {} : { recheckAt: recheckFrom(until, now) };
@@ -117,10 +119,13 @@ export function recordOpencodeFailure(write: OpencodeHealthWrite): boolean {
   return true;
 }
 
-/** A turn served on `model` says its (provider, model) refusal has lifted. */
-export function recordOpencodeModelServed(model: string | undefined, turnStartedAtMs: number, now: Date = new Date()): void {
-  const key = opencodeModelHealthKey(model);
-  if (key !== undefined) recordEngineServed(key, turnStartedAtMs, model, now);
+/** A turn its target answered: what it contradicts is cleared under the target's key (`linkHealthKey`) and, on
+ *  opencode, under its (provider, model) key, whose refusal a turn on that model has shown lifted. `servedOn` is
+ *  the host the turn ran on when it is not this machine: see `recordEngineServed`. */
+export function recordTurnServed(turn: { engine: string; key: string; startedMs: number; model: string | undefined; servedOn?: string }, now: Date = new Date()): void {
+  recordEngineServed(turn.key, turn.startedMs, turn.model, now, turn.servedOn);
+  const modelKey = turn.engine === "opencode" ? opencodeModelHealthKey(turn.model) : undefined;
+  if (modelKey !== undefined) recordEngineServed(modelKey, turn.startedMs, turn.model, now, turn.servedOn);
 }
 
 /** When the quota hold recorded under `key` ends, in unix seconds: the moment a stand-in's window should end too, so a

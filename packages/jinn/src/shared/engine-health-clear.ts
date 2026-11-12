@@ -73,9 +73,11 @@ const CLAUDE_ACCOUNT_KEY = /^claude($|[:@])/;
  * is left to readings. A record naming neither came from a turn on the CLI default:
  * only a turn on the default counts, since an unnamed default may not be the model served.
  */
-function servedContradicts(key: string, record: EngineHealth, servedModel: string | undefined): boolean {
-  // A turn the provider served says its key works, and one on the model says the model is enabled. (The key is the provider's or the model's, as written.)
-  if (record.failureClass === "auth" || record.failureClass === "model-access") return true;
+function servedContradicts(key: string, record: EngineHealth, servedModel: string | undefined, servedOn: string | undefined): boolean {
+  // A turn the provider served says its key works, and one on the model says the model is enabled (the key is the
+  // provider's or the model's, as written), but only for the machine it ran on: a turn on another host used that
+  // host's credential, and says nothing about the one this record was written against.
+  if (record.failureClass === "auth" || record.failureClass === "model-access") return servedOn === undefined;
   if (record.model !== undefined) return record.model === servedModel;
   if (record.window !== undefined) return CLAUDE_ACCOUNT_KEY.test(key) && CLAUDE_ACCOUNT_WINDOWS.includes(record.window);
   return servedModel === undefined;
@@ -85,11 +87,12 @@ function servedContradicts(key: string, record: EngineHealth, servedModel: strin
  * Clear `key` when a turn that began after the limit was observed was served (a
  * turn that started before someone else observed the limit proves nothing about
  * it) and the turn's model says something about the limit held: see {@link servedContradicts}.
+ * `servedOn` is the host the turn ran on, when it is not this machine.
  */
-export function recordEngineServed(key: string, turnStartedAtMs: number, servedModel: string | undefined, now: Date = new Date()): void {
+export function recordEngineServed(key: string, turnStartedAtMs: number, servedModel: string | undefined, now: Date = new Date(), servedOn?: string): void {
   const store = readStore();
   const record = clearable(store, key, now);
-  if (!record || !newerThanRecord(record, turnStartedAtMs) || !servedContradicts(key, record, servedModel)) return;
+  if (!record || !newerThanRecord(record, turnStartedAtMs) || !servedContradicts(key, record, servedModel, servedOn)) return;
   clearRecord(store, key, "a turn was served", now);
 }
 
