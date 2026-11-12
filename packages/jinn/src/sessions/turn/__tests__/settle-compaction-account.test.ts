@@ -7,9 +7,13 @@ import { describe, expect, it, vi } from "vitest";
  */
 
 const recorded = vi.hoisted(() => [] as string[]);
+const recordedModels = vi.hoisted(() => [] as Array<string | undefined>);
 vi.mock("../../rate-limit-account.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../rate-limit-account.js")>()),
-  recordAccountRateLimit: (account: string) => { recorded.push(account); },
+  recordAccountRateLimit: (account: string, _engine: string, _label: string, _resetsAt: number | undefined, held?: { model?: string }) => {
+    recorded.push(account);
+    recordedModels.push(held?.model);
+  },
 }));
 vi.mock("../completion.js", () => ({ settleTurn: vi.fn(async () => undefined) }));
 
@@ -23,11 +27,13 @@ describe("a rate-limited /compact during an account swap", () => {
         employee: { name: "op", engine: "claude" },
         attemptToken: "t",
       },
-      plan: { engineName: "claude" },
+      plan: { engineName: "claude", model: "opus" },
       surface: { notice: vi.fn(async () => undefined) },
       terminalFields: () => ({}),
     };
     await settleRateLimitedCompaction(run as never, undefined);
     expect(recorded).toEqual(["claude:0a1b2c3d"]);
+    // The model it ran on rides on the record, so only a turn served on it can say the limit lifted.
+    expect(recordedModels).toEqual(["opus"]);
   });
 });

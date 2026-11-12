@@ -20,7 +20,7 @@ import { getEngineSessionRef, getSession, nextEngineSessionFields, updateSession
 import type { FallbackHop } from "../shared/fallback-chain-wire.js";
 import { withHop, withRun, type FallbackRunState } from "./fallback-run.js";
 
-export { maybeRevertEngineOverride, standingOverrideUntil } from "./engine-override-revert.js";
+export { maybeRevertEngineOverride, ownTargetCleared, standingOverrideUntil } from "./engine-override-revert.js";
 
 /** Per-engine config as this module reads it; unconfigured engines resolve to {}. */
 type AccountSwap = { original: string; substitute: string; substituteConfigDir: string | null; fallbackModelMap?: Record<string, string> };

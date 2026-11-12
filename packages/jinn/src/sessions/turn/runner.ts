@@ -34,6 +34,7 @@ import { COMPACT_STARTED_STATUS } from "../compact-command.js";
 import { clearSupersededTurnMeta, isTurnSuperseded } from "./superseded.js";
 import type { TurnInput, TurnRun, TurnSurface } from "./types.js";
 import { recordEngineReached } from "../engine-reach.js";
+import { noteTurnServed } from "./served-health.js";
 
 /**
  * Run one turn, from preflight to terminal receipt, for every transport.
@@ -263,6 +264,12 @@ function noteClaudeLogin(run: TurnRun, result: EngineResult, silent: boolean): v
   observeClaudeTurnOutcome(run.input.employee, result.error, new Date(), run.input.session);
 }
 
+/** What the turn's outcome says about its target: the login it ran under, and whether it could serve. A silent turn (preempted, dead, limited) says nothing of either. */
+function noteTurnOutcome(run: TurnRun, model: string | undefined, outcome: { result: EngineResult; silent: boolean }): void {
+  noteClaudeLogin(run, outcome.result, outcome.silent);
+  noteTurnServed(run, model, outcome);
+}
+
 /**
  * A turn its engine refused with a usage limit: wait and retry, or switch to a
  * fallback engine. Not a compaction, though — a substitute would get "/compact"
@@ -307,7 +314,7 @@ async function concludeTurn(run: TurnRun, attempt: EngineAttempt, model: string 
   const dead = !quietPreempted && isDeadSessionError(result);
   if (dead) clearDeadEngineSession(sessionId, run.plan.engineName, { lostConversation: Boolean(run.plan.resumeSessionId) });
   const rateLimit = !quietPreempted && !dead ? detectRateLimit(result) : { limited: false as const };
-  noteClaudeLogin(run, result, quietPreempted || dead || rateLimit.limited);
+  noteTurnOutcome(run, model, { result, silent: quietPreempted || dead || rateLimit.limited });
 
   // Keep the same completed evidence the live view kept — interim prose, tools,
   // media, delegation blocks — and drop exact streamed copies of the result,

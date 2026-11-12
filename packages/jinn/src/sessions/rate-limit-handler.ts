@@ -32,6 +32,7 @@ import { spawnCwd } from "./session-cwd.js";
 import { logger } from "../shared/logger.js";
 import { REMOTE_ENGINE_NAMES } from "../shared/models.js";
 import { linkHealthKey } from "../shared/fallback-chain-health.js";
+import { recordEngineServed } from "../shared/engine-health.js";
 import {
   computeNextRetryDelayMs, computeRateLimitDeadlineMs, detectRateLimit, nextUnstatedParkDelayMs,
   rateLimitEngineLabel, MAX_UNSTATED_PARK_ATTEMPTS,
@@ -44,6 +45,7 @@ import { standingOverrideUntil } from "./engine-override.js";
 import { earlier, handBack, handBackAt as accountHandBackAt } from "./rate-limit-handback.js";
 import { getSession, updateSessionForAttempt, nextEngineSessionFields } from "./registry.js";
 import { runtimeSessionSource } from "./context.js";
+import { handBackDue, ownTargetClearedCheck, withOwnClearWake } from "./rate-limit-own-clear.js";
 import { EARLY_RESET_POLL_MS, earlyResetWatch, type EarlyReset } from "./rate-limit-early-reset.js";
 import { HostRetryStreak, HOST_RETRY_WINDOW_MS, hostNotReadyFromThrown, isHostNotReadyError } from "./rate-limit-host-retry.js";
 
@@ -76,8 +78,9 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
 
   const { claudeProfile, account } = rateLimitAccount(session.engine, employee, session);
   // Held against the target that ran: its account for Claude, its provider for an opencode model, its engine otherwise.
-  const limitedKey = linkHealthKey({ engine: session.engine, model: session.model ?? engineConfig.model, account });
-  recordAccountRateLimit(account, session.engine, engineLabel, rateLimit.resetsAt, limitedKey);
+  const limitedModel = session.model ?? engineConfig.model;
+  const limitedKey = linkHealthKey({ engine: session.engine, model: limitedModel, account });
+  recordAccountRateLimit(account, session.engine, engineLabel, rateLimit.resetsAt, { healthKey: limitedKey, model: limitedModel });
 
   // ── Branch A: hand the turn along this session's fallback chain ───────────
   // A remote employee's substitute has to be an engine that can ALSO run on that
@@ -121,8 +124,11 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
   const handBackAt = accountHandBackAt(session) ?? (walk.walked ? standingOverrideUntil(session) : undefined);
   const resumeAt = earlier(limitResetAt, handBackAt);
   const threadFields = originalResult.sessionId?.trim() ? nextEngineSessionFields(session, session.engine, originalResult.sessionId) : {};
-  // The window closed while this turn ran: the own account has already reopened, so there is nothing to wait for.
-  if (handBackAt && Date.now() >= handBackAt.getTime()) {
+  // A stand-in's wait ends when its own target does: the window closed while this turn ran, or the own target was cleared.
+  const ownCleared = ownTargetClearedCheck({ session, employee, config: opts.config });
+  const dueOnEntry = handBackDue(handBackAt, ownCleared);
+  if (dueOnEntry) {
+    noteHandBack(session.id, dueOnEntry);
     return await handBack(session.id, attemptToken, hooks, { waited: false, fields: threadFields, employee, config: opts.config });
   }
 
@@ -188,11 +194,12 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
     };
     // A limit can lift before the reset it named; the account's usage readings say so.
     const earlyReset = earlyResetWatch(session.engine, account);
-    const earlyWake = earlyReset ? (endMs: number): number | undefined => {
+    const resetWake = earlyReset ? (endMs: number): number | undefined => {
       const wake = earlyReset.wakeAt(endMs);
       if (wake) noteEarlyReset(session.id, attemptToken, engineLabel, wake.reset);
       return wake?.atMs;
     } : undefined;
+    const earlyWake = withOwnClearWake(resetWake, ownCleared, handBackAt);
     /** The retry reached its host: close any streak, and give the limit a fresh grace from now. */
     const hostAnswered = () => {
       if (hostStreak.active()) deadlineMs = Math.max(deadlineMs, Date.now() + RESET_GRACE_MS);
@@ -230,7 +237,11 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
         return { kind: "cancelled" };
       }
 
-      if (handBackAt && Date.now() >= handBackAt.getTime()) return await handBack(session.id, attemptToken, hooks, { waited: true, employee, config: opts.config });
+      const due = handBackDue(handBackAt, ownCleared);
+      if (due) {
+        noteHandBack(session.id, due);
+        return await handBack(session.id, attemptToken, hooks, { waited: true, employee, config: opts.config });
+      }
 
       // Wake the host the retry runs on and wait for it, still reading `waiting`.
       const prepared = await hooks.prepareRetry?.();
@@ -259,6 +270,8 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
 
       // Reported as waiting until the engine shows output: a probe against a limit that is
       // still up can hang for minutes, and that is not the session running.
+      const retryStartedMs = Date.now();
+      const retryModel = currentSession.model ?? engineConfig.model;
       beginLimitProbe(session.id);
       const probeShowedOutput = () => { endLimitProbe(session.id); };
       let retryResult: EngineResult;
@@ -270,7 +283,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
           platformContextRefresh,
           cwd: spawnCwd(session, Boolean(remote)),
           bin: engineConfig.bin,
-          model: currentSession.model ?? engineConfig.model,
+          model: retryModel,
           effortLevel,
           cliFlags,
           // The retry is a fresh spawn, not a resume of the limited process, so it
@@ -310,7 +323,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
       const retryRateLimit = !retryInterrupted ? detectRateLimit(retryResult) : { limited: false as const };
 
       if (retryRateLimit.limited) {
-        recordAccountRateLimit(account, session.engine, engineLabel, retryRateLimit.resetsAt);
+        recordAccountRateLimit(account, session.engine, engineLabel, retryRateLimit.resetsAt, { healthKey: limitedKey, model: retryModel });
         earlyReset?.limitedAgain();
         logger.info(`Session ${session.id} still rate limited (attempt ${attempt})`);
 
@@ -347,6 +360,8 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
         continue;
       }
 
+      // The target answered a turn begun after its limit was recorded: the record is stale.
+      if (!retryResult.error) recordEngineServed(limitedKey, retryStartedMs, retryModel);
       // Success (or non-rate-limit error) — hand off to caller for persistence + transport.
       await hooks.onRetrySuccess?.(retryResult);
       logger.info(`Session ${session.id} resumed after usage reset`);
@@ -360,6 +375,15 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
   } finally {
     clearInterval(heartbeat);
   }
+}
+
+/** Say why a stand-in's wait ended: its own target cleared, or the override's window closed. */
+function noteHandBack(sessionId: string, due: "window" | "own-target-cleared"): void {
+  logger.info(
+    due === "own-target-cleared"
+      ? `Session ${sessionId}: its own target's limit was cleared while it waited on a stand-in; handing the turn back to it now`
+      : `Session ${sessionId}: the stand-in's window closed; handing the turn back to its own target`,
+  );
 }
 
 /** Say why a wait ended early, in the log and on the session's status line. */

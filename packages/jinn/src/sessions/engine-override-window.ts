@@ -6,7 +6,7 @@
  */
 
 import { logger } from "../shared/logger.js";
-import { engineHealthForTarget, exhaustedEngineReturnsAt, isEngineExhausted, readEngineHealth } from "../shared/engine-health.js";
+import { engineHealthForTarget, exhaustedEngineReturnsAt, isEngineExhausted, readEngineHealth, type EngineHealthReading } from "../shared/engine-health.js";
 import { accountForEmployee } from "../shared/engine-account.js";
 import { ownClaudeAccountOf } from "./session-account.js";
 import { healthKeys } from "../shared/fallback-chain-health.js";
@@ -83,20 +83,21 @@ export interface OwnTarget {
   model: string | null | undefined;
 }
 
+/** The health the session's own target reads as, and the keys that read it. */
+interface OwnHealth {
+  health: EngineHealthReading;
+  keys: string[];
+}
+
 /**
- * When a window that has passed should be extended instead of ended: the target
- * the session is waiting for is still recorded as spent, typically because
- * another session's probe found it still limited and pushed its re-probe out.
- * Every session parked on it would otherwise spend a turn rediscovering that.
- *
  * The target is read the way a chain reads a link's health: a Claude account by
  * its own key (the account an account swap left, else the employee's), an
  * opencode model by its provider, anything else by its engine. One health store,
  * so the answer is the same one the limits readout and the chain walk give.
  */
-function stillSpentUntil(
+function ownHealthOf(
   session: Session, override: Record<string, unknown>, own: OwnTarget, reader: { employee?: Employee; config?: Partial<Pick<JinnConfig, "engines">> },
-): Date | undefined {
+): OwnHealth {
   const { engine } = own;
   const { employee, config } = reader;
   const owner = sessionEmployee(session, employee);
@@ -107,8 +108,41 @@ function stillSpentUntil(
   // Read as the session's own turns would: on its host.
   const health = engineHealthForTarget(readEngineHealth(), owner);
   const account = typeof override.originalAccount === "string" ? override.originalAccount : ownAccountOf(session, owner, engine);
-  const spent = healthKeys({ engine, model: model ?? undefined, account }).find((key) => isEngineExhausted(health, key));
+  return { health, keys: healthKeys({ engine, model: model ?? undefined, account }) };
+}
+
+/**
+ * When a window that has passed should be extended instead of ended: the target
+ * the session is waiting for is still recorded as spent, typically because
+ * another session's probe found it still limited and pushed its re-probe out.
+ * Every session parked on it would otherwise spend a turn rediscovering that.
+ */
+function stillSpentUntil(
+  session: Session, override: Record<string, unknown>, own: OwnTarget, reader: { employee?: Employee; config?: Partial<Pick<JinnConfig, "engines">> },
+): Date | undefined {
+  const { health, keys } = ownHealthOf(session, override, own, reader);
+  const spent = keys.find((key) => isEngineExhausted(health, key));
   return spent === undefined ? undefined : exhaustedEngineReturnsAt(health, spent);
+}
+
+/**
+ * Whether the session's own target has been positively cleared since the swap:
+ * no key of it is exhausted, and one has a record cleared after the override's
+ * sync point (any clear, when the override carries none). A record that merely
+ * lapsed carries no clear, so a stand-in whose window named no reset keeps its
+ * own timing; a target exhausted again after the clear is held again.
+ */
+export function ownTargetClearedSince(
+  session: Session, override: Record<string, unknown>, own: OwnTarget, reader: { employee?: Employee; config?: Partial<Pick<JinnConfig, "engines">> },
+): boolean {
+  const { health, keys } = ownHealthOf(session, override, own, reader);
+  if (keys.some((key) => isEngineExhausted(health, key))) return false;
+  const syncMs = typeof override.syncSince === "string" ? Date.parse(override.syncSince) : NaN;
+  return keys.some((key) => {
+    const record = health[key];
+    const clearedMs = record?.state === "ok" && record.clearedAt !== undefined ? Date.parse(record.clearedAt) : NaN;
+    return Number.isFinite(clearedMs) && (Number.isNaN(syncMs) || clearedMs > syncMs);
+  });
 }
 
 /** The session with its window moved out to the target's recorded return, when

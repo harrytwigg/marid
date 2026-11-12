@@ -45,11 +45,15 @@ let mod: {
   collectEngineLimits: (c: JinnConfig, o?: { engine?: string }) => Promise<EngineLimitsResponse>;
   registerAccountRoster: (source: () => Iterable<Employee>) => void;
   invalidateModelRegistry: () => void;
-  recordEngineUnavailable: (engine: string, reason: string, resetsAt?: number) => void;
+  recordEngineUnavailable: (engine: string, reason: string, resetsAt?: number, now?: Date, about?: { window?: string }) => void;
+  readEngineHealth: () => Record<string, { state: string; clearedAt?: string }>;
+  collectClaudeLimits: (c: JinnConfig, profile?: null) => Promise<EngineLimitsResponse["engines"][string]>;
   claudeSnapshotFile: (dir: string, account?: string) => string | null;
   registerSessionAccountResolver: (r: ((id: string) => string | undefined) | undefined) => void;
 };
 const fetchCalls: Array<{ url: string; auth: string }> = [];
+/** Runs inside the usage request, before it answers: a limit another session records while the reading is out. */
+let duringFetch: (() => Promise<void>) | undefined;
 
 const cfg = (): JinnConfig => ({
   gateway: { port: 7799, host: "127.0.0.1" },
@@ -83,6 +87,7 @@ beforeAll(async () => {
   delete process.env.JINN_CLAUDE_USAGE_API;
   vi.stubGlobal("fetch", async (url: string, init: { headers: Record<string, string> }) => {
     fetchCalls.push({ url, auth: init.headers.Authorization });
+    await duringFetch?.();
     return { ok: true, json: async () => usage(init.headers.Authorization === `Bearer ${SECRET}` ? 71 : 12) } as unknown as Response;
   });
   const profile = await import("../claude-profile.js");
@@ -106,6 +111,7 @@ afterAll(() => {
 
 beforeEach(() => {
   fetchCalls.length = 0;
+  duringFetch = undefined;
   childEnvs.length = 0;
   keychainServices.length = 0;
   writeCredentials(Date.now() + 3600_000);
@@ -179,11 +185,97 @@ describe("two local Claude accounts (FR-071, FR-073)", () => {
 
   it("marks an account recorded at its limit", async () => {
     const until = Math.floor(Date.now() / 1000) + 3600;
-    mod.recordEngineUnavailable(friendKey, "usage limit", until);
+    // The reading carries no 7d window, so it cannot say the limit on it lifted.
+    mod.recordEngineUnavailable(friendKey, "usage limit", until, undefined, { window: "7d" });
     mod.registerAccountRoster(() => [operator, sideDev()]);
     const res = await mod.collectEngineLimits(cfg(), { engine: "claude" });
     expect(res.accounts!.claude![1]!.exhausted).toEqual({ until: new Date(until * 1000).toISOString() });
     expect(res.accounts!.claude![0]!.exhausted).toBeUndefined();
+  });
+});
+
+describe("a limit that lifted before its stated reset", () => {
+  const spentMinutesAgo = (key: string, minutes: number) =>
+    mod.recordEngineUnavailable(key, "usage limit", Math.floor(Date.now() / 1000) + 4 * 24 * 3600, new Date(Date.now() - minutes * 60_000));
+
+  it("is cleared for every account by a readout that shows headroom", async () => {
+    spentMinutesAgo("claude", 5);
+    spentMinutesAgo(friendKey, 5);
+    mod.registerAccountRoster(() => [operator, sideDev()]);
+
+    const res = await mod.collectEngineLimits(cfg(), { engine: "claude" });
+
+    const health = mod.readEngineHealth();
+    expect(health.claude).toMatchObject({ state: "ok", clearedAt: expect.any(String) });
+    expect(health[friendKey]).toMatchObject({ state: "ok", clearedAt: expect.any(String) });
+    // The readout reports them as no longer exhausted.
+    expect(res.accounts!.claude!.every((account) => account.exhausted === undefined)).toBe(true);
+  });
+
+  it("is cleared by the Claude collector alone, the way the board-walk tick reads it", async () => {
+    spentMinutesAgo("claude", 5);
+
+    await mod.collectClaudeLimits(cfg(), null);
+
+    expect(mod.readEngineHealth().claude?.clearedAt).toBeDefined();
+  });
+
+  it("is not cleared for a named account with no live reading by its fresh status-line snapshot", async () => {
+    writeCredentials(Date.now() - 60_000);
+    spentMinutesAgo(friendKey, 10);
+    const dir = path.join(ROOT, "tmp", "engine-limits", "claude");
+    const file = path.join(dir, "friend-session.json");
+    fs.writeFileSync(file, JSON.stringify({
+      captured_at: new Date(Date.now() - 60_000).toISOString(),
+      rate_limits: { five_hour: { used_percentage: 3, resets_at: 4_000_000_000 }, seven_day: { used_percentage: 1, resets_at: 4_000_000_000 } },
+    }));
+    mod.registerSessionAccountResolver((id) => (id === "friend-session" ? friendKey : "claude"));
+    mod.registerAccountRoster(() => [operator, sideDev()]);
+    try {
+      const res = await mod.collectEngineLimits(cfg(), { engine: "claude" });
+
+      expect(res.accounts!.claude![1]).toMatchObject({ account: friendKey, status: "snapshot" });
+      expect(mod.readEngineHealth()[friendKey]?.state).toBe("exhausted");
+    } finally {
+      mod.registerSessionAccountResolver(undefined);
+      fs.rmSync(file, { force: true });
+    }
+  });
+
+  describe("a limit recorded while the usage request was out", () => {
+    const limitMidFetch = () => {
+      duringFetch = async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        mod.recordEngineUnavailable("claude", "usage limit", Math.floor(Date.now() / 1000) + 4 * 24 * 3600);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      };
+    };
+
+    it("is not cleared by the Claude collector's reading, which was asked for before it", async () => {
+      limitMidFetch();
+
+      await mod.collectClaudeLimits(cfg(), null);
+
+      expect(mod.readEngineHealth().claude?.state).toBe("exhausted");
+    });
+
+    it("is not cleared by the readout built on that reading either", async () => {
+      limitMidFetch();
+      mod.registerAccountRoster(() => [operator]);
+
+      await mod.collectEngineLimits(cfg(), { engine: "claude" });
+
+      expect(mod.readEngineHealth().claude?.state).toBe("exhausted");
+    });
+  });
+
+  it("is not cleared by a reading older than the limit", async () => {
+    // Observed after the reading the collector is about to take: the record is newer than the evidence.
+    mod.recordEngineUnavailable("claude", "usage limit", Math.floor(Date.now() / 1000) + 4 * 24 * 3600, new Date(Date.now() + 60 * 60_000));
+
+    await mod.collectClaudeLimits(cfg(), null);
+
+    expect(mod.readEngineHealth().claude?.state).toBe("exhausted");
   });
 });
 

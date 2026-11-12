@@ -126,6 +126,7 @@ afterAll(() => {
 
 beforeEach(() => {
   for (const f of fs.readdirSync(CLAUDE_DIR)) fs.rmSync(path.join(CLAUDE_DIR, f));
+  fs.rmSync(path.join(JINN_HOME_TMP, "tmp", "engine-health.json"), { force: true });
   invalidateModelRegistry();
 });
 
@@ -161,6 +162,48 @@ describe("collectEngineLimits — claude statusline snapshot", () => {
     );
     out = await collectEngineLimits(cfg(), { engine: "claude" });
     expect(out.engines.claude.stale).toBeFalsy();
+  });
+
+  describe("a limit recorded before the snapshot was taken", () => {
+    const bothWindows = (capturedAt: string) => JSON.stringify({
+      captured_at: capturedAt,
+      rate_limits: { five_hour: { used_percentage: 0, resets_at: 4_000_000_000 }, seven_day: { used_percentage: 2, resets_at: 4_000_000_000 } },
+    });
+    const spentMinutesAgo = async (minutes: number) => {
+      const { recordEngineUnavailable } = await import("../engine-health.js");
+      recordEngineUnavailable("claude", "usage limit", Date.now() / 1000 + 4 * 24 * 3600, new Date(Date.now() - minutes * 60_000), { window: "7d" });
+    };
+    const health = async () => (await import("../engine-health.js")).readEngineHealth().claude;
+
+    it("is not cleared by a fresh snapshot either: the status line never sees per-model buckets", async () => {
+      await spentMinutesAgo(10);
+      writeClaudeSnapshot("fresh.json", bothWindows(new Date(Date.now() - 2 * 60_000).toISOString()), 2 * 60_000);
+
+      const out = await collectEngineLimits(cfg(), { engine: "claude" });
+
+      expect(out.engines.claude).toMatchObject({ status: "snapshot" });
+      expect(out.engines.claude.stale).toBeFalsy();
+      expect((await health())?.state).toBe("exhausted");
+    });
+
+    it("is not cleared by a stale snapshot taken after the limit", async () => {
+      await spentMinutesAgo(60);
+      writeClaudeSnapshot("stale.json", bothWindows(new Date(Date.now() - 45 * 60_000).toISOString()), 45 * 60_000);
+
+      const out = await collectEngineLimits(cfg(), { engine: "claude" });
+
+      expect(out.engines.claude.stale).toBe(true);
+      expect((await health())?.state).toBe("exhausted");
+    });
+
+    it("is not cleared by a snapshot taken before the limit was recorded", async () => {
+      await spentMinutesAgo(1);
+      writeClaudeSnapshot("old.json", bothWindows(new Date(Date.now() - 5 * 60_000).toISOString()), 5 * 60_000);
+
+      await collectEngineLimits(cfg(), { engine: "claude" });
+
+      expect((await health())?.state).toBe("exhausted");
+    });
   });
 
   it("degrades a malformed snapshot to fixed copy, leaking neither payload nor parser detail", async () => {
@@ -211,6 +254,21 @@ describe("collectEngineLimits — codex session rollout", () => {
     expect(codex.status).toBe("live");
     expect(codex.windows?.[0]?.usedPercent).toBe(33);
     expect(fs.existsSync(live.startedFile)).toBe(true);
+  });
+
+  it("does not clear a codex record from a live reading: it carries the main bucket only, not every bucket codex limits on", async () => {
+    const { recordEngineUnavailable, readEngineHealth } = await import("../engine-health.js");
+    recordEngineUnavailable("codex", "usage limit", Date.now() / 1000 + 4 * 24 * 3600, new Date(Date.now() - 30 * 60_000), { model: "gpt-5.3-codex-spark" });
+    const live = writeCodexAppServerStub("codex-live-headroom-stub", {
+      rateLimitsByLimitId: {
+        codex: { limitId: "codex", planType: "pro", primary: { usedPercent: 20, windowDurationMins: 300 }, secondary: { usedPercent: 30, windowDurationMins: 10_080 } },
+      },
+    });
+
+    const out = await collectEngineLimits(cfg({ codex: { bin: live.bin, model: "gpt-5.5" } }), { engine: "codex" });
+
+    expect(out.engines.codex.status).toBe("live");
+    expect(readEngineHealth().codex?.state).toBe("exhausted");
   });
 
   it("falls back to the rollout snapshot with its original timestamp when the live app-server fails", async () => {

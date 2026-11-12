@@ -7,12 +7,14 @@ import {
   type EngineHealth,
   type EngineHealthReading,
 } from "./engine-health-store.js";
+import { clearContradictedHealth } from "./engine-health-clear.js";
 import { isRemoteTarget } from "./remote-target.js";
-import type { EngineLimitWindow, ModelRegistry, RemoteTarget } from "./types.js";
+import type { EngineLimitEngineSnapshot, EngineLimitWindow, ModelRegistry, RemoteTarget } from "./types.js";
 
 // Re-exported so the store split is invisible to callers: every consumer of this
 // module reads a record and asks a question about it in the same breath.
 export { readEngineHealth };
+export { clearContradictedHealth, clearEngineHealthByOperator, recordEngineServed } from "./engine-health-clear.js";
 export type { EngineHealth, EngineHealthReading, EngineHealthState } from "./engine-health-store.js";
 
 /**
@@ -121,11 +123,19 @@ function recheckFrom(statedMs: number | undefined, now: Date): string {
 /** The stated parts of `about`, so an absent one is absent from the record
  *  rather than present-and-undefined — which `JSON.stringify` would drop from
  *  the file anyway, leaving the two shapes silently different in memory. */
-function definedOnly(about: { window?: string; host?: string }): { window?: string; host?: string } {
+function definedOnly(about: EngineHealthAbout): EngineHealthAbout {
   return {
     ...(about.window === undefined ? {} : { window: about.window }),
     ...(about.host === undefined ? {} : { host: about.host }),
+    ...(about.model === undefined ? {} : { model: about.model }),
   };
+}
+
+/** What an observation says it is about, beyond the engine: a quota window, one machine, one model. */
+export interface EngineHealthAbout {
+  window?: string;
+  host?: string;
+  model?: string;
 }
 
 /**
@@ -143,7 +153,7 @@ export function recordEngineUnavailable(
   reason: string,
   resetsAtSeconds?: number,
   now: Date = new Date(),
-  about: { window?: string; host?: string } = {},
+  about: EngineHealthAbout = {},
 ): void {
   const stated = resetsAtSeconds !== undefined && Number.isFinite(resetsAtSeconds)
     ? resetsAtSeconds * 1000
@@ -173,7 +183,7 @@ function nextRecord(stated: number | undefined, live: EngineHealth | undefined, 
   if (live?.state !== "exhausted") {
     return { state: "degraded", until: new Date(now.getTime() + DEGRADED_WINDOW_MS).toISOString() };
   }
-  // `host` is deliberately NOT carried across: it describes the OBSERVATION, and
+  // `host` (and `model`) is deliberately NOT carried across: it describes the OBSERVATION, and
   // the caller's own `about` re-supplies it when this observation names a host
   // too. Carried, a gateway-scoped login would quietly scope the account-wide
   // window it was re-probing, hiding a real limit from every remote session.
@@ -205,6 +215,19 @@ export function recordExhaustedWindows(
     binding = window;
   }
   if (binding) recordEngineUnavailable(engine, "quota window spent", binding.resetsAt, now, { window: binding.name });
+}
+
+/**
+ * What one limits reading says about `engine`'s health record: a spent window is
+ * recorded, as before, and a live reading that shows every window under 100%
+ * clears a record it contradicts. A snapshot (the Claude status line never sees
+ * per-model buckets, and non-live engines' readings are downgraded to one) or any
+ * source that is not a live reading only records.
+ */
+export function noteLimitReading(engine: string, snapshot: Pick<EngineLimitEngineSnapshot, "status" | "refreshedAt" | "windows">): void {
+  recordExhaustedWindows(engine, snapshot.windows);
+  if (snapshot.status !== "live") return;
+  clearContradictedHealth(engine, snapshot.windows, Date.parse(snapshot.refreshedAt));
 }
 
 /** The registry as an API consumer reads it: installed availability from the

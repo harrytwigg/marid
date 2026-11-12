@@ -1,5 +1,6 @@
 import { lastAccountReading, rememberAccountReading } from "../shared/account-readings.js";
 import { recordClaudeUsageSample, usageHistoryPath } from "../shared/claude-usage-history.js";
+import { clearContradictedHealth } from "../shared/engine-health-clear.js";
 import { fetchClaudeOAuthUsageWithToken } from "../shared/engine-limits-claude.js";
 import { windowsFromClaudeUsage } from "../shared/engine-limits-claude-usage.js";
 import type { ClaudeAccountInfo, RemoteAccountReader } from "../shared/engine-limits-accounts.js";
@@ -152,6 +153,7 @@ async function readAwake(deps: RemoteAccountUsageDeps, account: ClaudeAccountInf
   const live: EngineLimitEngineSnapshot = { ...base(nowMs), status: "live", accountPlan, windows };
   rememberAccountReading(account.key, live, nowMs);
   recordClaudeUsageSample(live, nowMs, usageHistoryPath(account.key));
+  clearContradictedHealth(account.key, windows, nowMs);
   return live;
 }
 

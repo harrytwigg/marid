@@ -15,6 +15,7 @@ import type {
 } from "./types.js";
 import { recordClaudeUsageSample, usageHistoryPath } from "./claude-usage-history.js";
 import { CLAUDE_LIMITS_DIR } from "./paths.js";
+import { clearContradictedHealth } from "./engine-health-clear.js";
 import { claudeAccountKey, isAccountSession } from "./engine-account.js";
 import { claudeProfileDirExists, type ClaudeProfile } from "./claude-profile.js";
 import { buildEngineChildEnv } from "./child-env.js";
@@ -26,7 +27,6 @@ import {
   baseSnapshot,
   isoFromSeconds,
   isRecord,
-  nowIso,
   num,
   str,
   type JsonRecord,
@@ -267,6 +267,9 @@ export async function collectClaudeLimits(config: JinnConfig, profile: ClaudePro
 
   const account = claudeAccountKey(profile);
   const latest = claudeSnapshotFile(CLAUDE_LIMITS_DIR, account);
+  // A reading is as old as the moment it was asked for: a limit recorded while the
+  // request was out is newer than what came back, and the reading must not clear it.
+  const readStartedMs = Date.now();
   const [accountPlan, oauthUsage] = await Promise.all([
     claudeAuthPlan(config, profile),
     fetchClaudeOAuthUsage(process.env, profile),
@@ -283,7 +286,7 @@ export async function collectClaudeLimits(config: JinnConfig, profile: ClaudePro
       ...snap,
       status: "live",
       source: "claude oauth usage api",
-      refreshedAt: nowIso(),
+      refreshedAt: new Date(readStartedMs).toISOString(),
       accountPlan,
       windows: liveWindows,
       // Context/cost only ever come from the statusline snapshot (best effort).
@@ -294,6 +297,9 @@ export async function collectClaudeLimits(config: JinnConfig, profile: ClaudePro
     // page, the CLI — passes through here, so this is where the usage history
     // the dashboard graphs is kept.
     recordClaudeUsageSample(live, Date.now(), usageHistoryPath(account));
+    // The loop's tick reads this account without going through the limits readout,
+    // so a limit that lifted early is cleared here too.
+    clearContradictedHealth(account, live.windows, readStartedMs);
     return live;
   }
 

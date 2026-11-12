@@ -2,7 +2,7 @@ import path from "node:path";
 import { declaredClaudeAccounts, declaredRemoteClaudeAccounts } from "./claude-accounts-config.js";
 import { resolveEmployeeClaudeProfile, type ClaudeProfile } from "./claude-profile.js";
 import { accountForEmployee, DEFAULT_CLAUDE_ACCOUNT } from "./engine-account.js";
-import { isEngineExhausted, readEngineHealth, recordExhaustedWindows, type EngineHealthReading } from "./engine-health.js";
+import { isEngineExhausted, readEngineHealth, noteLimitReading, type EngineHealthReading } from "./engine-health.js";
 import { collectClaudeLimits } from "./engine-limits-claude.js";
 import { isRemoteTarget, resolveRemoteClaudeConfigDir, sshDestination } from "./remote-target.js";
 import type { Employee, EngineLimitEngineSnapshot, JinnConfig } from "./types.js";
@@ -160,7 +160,7 @@ export async function collectClaudeAccounts(
   const readings = await Promise.all(accounts.map(async (info) => {
     if (info.key === DEFAULT_CLAUDE_ACCOUNT) return { info, snapshot: defaultSnapshot, reachable: true };
     const { snapshot, reachable } = await readAccount(config, info);
-    if (reachable) recordExhaustedWindows(info.key, snapshot.windows);
+    if (reachable) noteLimitReading(info.key, snapshot);
     return { info, snapshot, reachable };
   }));
   const health = readEngineHealth();

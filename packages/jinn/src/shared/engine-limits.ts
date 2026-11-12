@@ -11,7 +11,7 @@ import type {
   EngineLimitsResponse,
   JinnConfig,
 } from "./types.js";
-import { recordExhaustedWindows } from "./engine-health.js";
+import { noteLimitReading, recordExhaustedWindows } from "./engine-health.js";
 import { collectClaudeAccounts } from "./engine-limits-accounts.js";
 import { getModelRegistry } from "./models.js";
 import { resolveBin } from "./resolve-bin.js";
@@ -370,7 +370,10 @@ export async function collectEngineLimits(
     }
 
     if (!LIVE_LIMIT_ENGINES.has(name) && engines[name].status === "live") engines[name].status = "snapshot";
-    recordExhaustedWindows(name, engines[name].windows);
+    // Only a Claude reading carries every bucket the account is limited on (codex's leaves out all but its main
+    // bucket), so only it may clear a record; the others record a spent window and nothing more.
+    if (name === "claude") noteLimitReading(name, engines[name]);
+    else recordExhaustedWindows(name, engines[name].windows);
   }
 
   // Every other Claude account, beside the default one (FR-073). Omitted with a

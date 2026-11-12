@@ -55,9 +55,9 @@ export function linkFailure(result: LinkResult, engine: string): LinkFailure | u
   return isInvalidModelFailure(result.error) ? { reason: "invalid-model", isLimit: false } : undefined;
 }
 
-/** Hold a limit against the link's target: its provider for an opencode model, its account for Claude, its engine for the rest. Claude's own memory of the limit is kept as before. */
-export function recordLinkLimit(link: Pick<ResolvedFallbackLink, "engine" | "model" | "account">, resetsAt: number | undefined): void {
-  recordAccountRateLimit(link.account, link.engine, rateLimitEngineLabel(link.engine), resetsAt, linkHealthKey(link));
+/** Hold a limit against the link's target: its provider for an opencode model, its account for Claude, its engine for the rest. Claude's own memory of the limit is kept as before. `ranModel` is the model the link's turn ran on. */
+export function recordLinkLimit(link: Pick<ResolvedFallbackLink, "engine" | "model" | "account">, resetsAt: number | undefined, ranModel?: string): void {
+  recordAccountRateLimit(link.account, link.engine, rateLimitEngineLabel(link.engine), resetsAt, { healthKey: linkHealthKey(link), model: ranModel });
 }
 
 /** A link's result. `profileNotReady`: the launch was refused because the profile it runs as cannot run unattended on its

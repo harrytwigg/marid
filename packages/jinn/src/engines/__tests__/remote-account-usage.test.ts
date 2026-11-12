@@ -15,6 +15,7 @@ process.env.JINN_HOME = tmp;
 const { REMOTE_TOKEN_SCRIPT, accessTokenFromScriptOutput, readRemoteAccountUsage } = await import("../remote-account-usage.js");
 const { clearAccountReadings, lastAccountReading } = await import("../../shared/account-readings.js");
 const { claudeResetsAtSeconds } = await import("../../shared/engine-reset-times.js");
+const { readEngineHealth, recordEngineUnavailable } = await import("../../shared/engine-health.js");
 
 const ACCESS = "sk-ant-oat01-REMOTE-ACCESS";
 const REFRESH = "sk-ant-ort01-REMOTE-REFRESH";
@@ -90,6 +91,23 @@ describe("the gateway's side of the reading", () => {
       const full = path.join(tmp, file);
       if (fs.statSync(full).isFile()) expect(fs.readFileSync(full, "utf-8")).not.toContain(ACCESS);
     }
+  });
+
+  it("clears the account's health record when the reading shows headroom, as the board-walk tick reads it", async () => {
+    recordEngineUnavailable(ACCOUNT.key, "usage limit", Date.now() / 1000 + 4 * 24 * 3600, new Date(Date.now() - 5 * 60_000));
+
+    await readRemoteAccountUsage(ACCOUNT, deps());
+
+    expect(readEngineHealth()[ACCOUNT.key]).toMatchObject({ state: "ok", clearedAt: expect.any(String) });
+  });
+
+  it("leaves the record alone when the reading still shows the limit", async () => {
+    recordEngineUnavailable(ACCOUNT.key, "usage limit", Date.now() / 1000 + 4 * 24 * 3600, new Date(Date.now() - 5 * 60_000));
+    const spent = { limits: [{ kind: "session", percent: 100, resets_at: "2099-01-01T00:00:00Z" }] };
+
+    await readRemoteAccountUsage(ACCOUNT, deps({ fetchUsage: vi.fn(async () => spent) }));
+
+    expect(readEngineHealth()[ACCOUNT.key]?.state).toBe("exhausted");
   });
 
   it("never wakes a host: one probe, no facts, no commands, and the last reading with its age", async () => {

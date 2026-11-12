@@ -281,12 +281,12 @@ describe("handleRateLimit — a chain member that is out of allowance", () => {
     const opts = makeOpts(answered("from-claude"));
     opts.rateLimit = { resetsAt: RESETS_AT.getTime() / 1000 };
     await handleRateLimit(opts);
-    expect(recordEngineUnavailableMock).toHaveBeenCalledWith("codex", "Codex usage limit", RESETS_AT.getTime() / 1000);
+    expect(recordEngineUnavailableMock).toHaveBeenCalledWith("codex", "Codex usage limit", RESETS_AT.getTime() / 1000, expect.any(Date), { model: "gpt-5.6-sol" });
   });
 
   it("records a limit that stated no reset, leaving nothing to wait for", async () => {
     await handleRateLimit(makeOpts(answered("from-claude")));
-    expect(recordEngineUnavailableMock).toHaveBeenCalledWith("codex", "Codex usage limit", undefined);
+    expect(recordEngineUnavailableMock).toHaveBeenCalledWith("codex", "Codex usage limit", undefined, expect.any(Date), { model: "gpt-5.6-sol" });
   });
 
   it("skips a member whose window has not reopened and takes the next one", async () => {
