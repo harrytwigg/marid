@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import type { ModelInfo } from "./types.js";
 import { logger } from "./logger.js";
+import { buildEngineChildEnv } from "./child-env.js";
 
 export const HERMES_EFFORT_LEVELS: string[] = [];
 
@@ -46,7 +47,7 @@ export async function discoverHermesModels(bin: string): Promise<HermesModelDisc
     try {
       proc = spawn(bin, ["acp"], {
         stdio: ["pipe", "pipe", "ignore"],
-        env: { ...process.env, HERMES_YOLO_MODE: "1", HERMES_ACCEPT_HOOKS: "1" },
+        env: { ...buildEngineChildEnv(process.env), HERMES_YOLO_MODE: "1", HERMES_ACCEPT_HOOKS: "1" },
       });
     } catch (e) {
       logger.warn(`hermes acp discovery spawn failed: ${e instanceof Error ? e.message : e}`);

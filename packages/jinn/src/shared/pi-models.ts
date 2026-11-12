@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import type { ModelInfo } from "./types.js";
 import { logger } from "./logger.js";
+import { buildEngineChildEnv } from "./child-env.js";
 
 /**
  * Dynamic model discovery for the Pi engine.
@@ -106,7 +107,7 @@ export async function discoverPiModels(bin: string): Promise<ModelInfo[]> {
       resolve(s);
     };
     try {
-      const proc = spawn(bin, ["--list-models"], { stdio: ["ignore", "pipe", "pipe"] });
+      const proc = spawn(bin, ["--list-models"], { env: buildEngineChildEnv(process.env), stdio: ["ignore", "pipe", "pipe"] });
       // Pi prints the model table to stderr; capture both streams to be safe.
       proc.stdout.on("data", (d: Buffer) => (out += d.toString()));
       proc.stderr.on("data", (d: Buffer) => (out += d.toString()));

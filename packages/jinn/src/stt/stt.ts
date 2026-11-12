@@ -10,6 +10,7 @@ import {
   seedSharedSttSettings,
   type LocalSttSettings,
 } from "./settings-store.js";
+import { buildEngineChildEnv } from "../shared/child-env.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -137,7 +138,7 @@ export async function downloadModel(
         "-L", // follow redirects
         "-o", tmpPath,
         url,
-      ]);
+      ], { env: buildEngineChildEnv(process.env) });
 
       // Poll file size for progress
       const progressInterval = setInterval(() => {
@@ -203,6 +204,7 @@ async function convertToWav(inputPath: string): Promise<string> {
     wavPath,
   ], {
     timeout: 2 * 60 * 1000, // 2 min timeout
+    env: buildEngineChildEnv(process.env),
   });
   return wavPath;
 }
@@ -232,6 +234,7 @@ export async function transcribe(
       "-f", wavPath,
     ], {
       maxBuffer: 10 * 1024 * 1024,
+      env: buildEngineChildEnv(process.env),
       timeout: 15 * 60 * 1000, // 15 min timeout for long recordings
     });
 
