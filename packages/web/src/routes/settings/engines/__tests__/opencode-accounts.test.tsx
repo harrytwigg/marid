@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import type React from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -120,5 +120,25 @@ describe('opencode accounts list', () => {
     expect(screen.queryByTestId('opencode-accounts')).toBeNull()
     expect(document.querySelector('[data-opencode-account]')).toBeNull()
     expect(limits.calls).toBe(0)
+  })
+
+  it('gives the chain editor each account\'s label, from the config it is editing', async () => {
+    registry.current = {
+      default: 'claude',
+      engines: {
+        claude: engine('claude'),
+        opencode: engine('opencode', [model('opencode-go/a', 'Alpha', { account: 'go-a' }), model('opencode-go-b/a', 'Alpha', { account: 'go-b' })]),
+      },
+    }
+    apiMocks.getConfig.mockResolvedValue({ revision: 'r', config: { engines: {
+      claude: { fallback: [{ engine: 'opencode' }] },
+      opencode: { accounts: { 'go-a': { provider: 'opencode-go' }, 'go-b': { provider: 'opencode-go-b', base: 'opencode-go', keyEnv: 'K', label: 'Go (second workspace)' } } },
+    } } })
+    await renderSettings()
+
+    fireEvent.keyDown(screen.getByRole('button', { name: /Model of link 1 of the Claude chain/ }), { key: 'Enter' })
+    expect(Array.from(document.querySelectorAll('[data-account-badge]')).map((b) => b.textContent)).toEqual(['go-a', 'Go (second workspace)'])
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'second' } })
+    expect(screen.getAllByRole('menuitemradio')).toHaveLength(1)
   })
 })

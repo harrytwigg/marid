@@ -10,5 +10,10 @@ export function useAccountLabels(): Record<string, string> {
 
 /** What a model's account badge reads: the account's label, else its name. */
 export function accountBadgeText(account: string, labels: Record<string, string>): string {
-  return labels[account] ?? account
+  return accountLabel(labels, account) ?? account
+}
+
+/** The label for an account name, own keys only (a name such as `constructor` is allowed). */
+export function accountLabel(labels: Record<string, string>, account: string): string | undefined {
+  return Object.hasOwn(labels, account) ? labels[account] : undefined
 }

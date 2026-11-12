@@ -57,4 +57,9 @@ describe('chain model select with opencode accounts', () => {
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'go-b' } })
     expect(screen.getAllByRole('menuitemradio')).toHaveLength(1)
   })
+
+  it('does not read an Object.prototype member as the label of an account named like one', () => {
+    open(registry([model('p/a', 'Alpha', 'constructor')]))
+    expect(document.querySelector('[data-account-badge]')?.textContent).toBe('constructor')
+  })
 })
