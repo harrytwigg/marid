@@ -27,6 +27,8 @@ describe("validateOpencodeAccounts", () => {
     ["a keyEnv the gateway sets itself", { a: { provider: "p", base: "q", keyEnv: "OPENCODE_SERVER_PASSWORD" } }, /cannot hold an account's key/],
     ["a keyEnv in the program's own namespace", { a: { provider: "p", base: "q", keyEnv: "JINN_EMPLOYEE" } }, /cannot hold an account's key/],
     ["a keyEnv that is an opencode switch", { a: { provider: "p", base: "q", keyEnv: "OPENCODE_DISABLE_FFF" } }, /cannot hold an account's key/],
+    ...["PATH", "HOME", "USER", "SHELL", "LANG", "TERM", "TMPDIR", "PWD", "NODE_OPTIONS", "NODE_PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES", "XDG_CONFIG_HOME", "SSH_AUTH_SOCK", "SSH_ASKPASS"]
+      .map((keyEnv): [string, unknown, RegExp] => [`a keyEnv naming the process variable ${keyEnv}`, { a: { provider: "p", base: "q", keyEnv } }, /cannot hold an account's key/]),
     ["keyEnv without base", { a: { provider: "p", keyEnv: "K" } }, /keyEnv needs base/],
     ["models without base", { a: { provider: "p", models: ["m"] } }, /models needs base/],
     ["models with a provider prefix", { a: { provider: "p", base: "q", keyEnv: "K", models: ["q/m"] } }, /models must be a non-empty list/],

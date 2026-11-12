@@ -26,6 +26,16 @@ const ENGINE_CHILD_ENV_DENY_EXACT: ReadonlySet<string> = new Set(envNamesFor([
   "EMPLOYEE",
 ]));
 
+/** The key variables of the declared opencode accounts (engines.opencode.accounts.*.keyEnv). A key reaches only the opencode
+ *  processes that serve its account, and those add it back after this deny: every other child built here, claude, codex, pi,
+ *  MCP and tool children included, never inherits one. Set when the config loads. */
+let opencodeAccountKeyEnv: ReadonlySet<string> = new Set();
+
+/** Replace the account key variables every child env drops (the config's, in full; an empty list clears them). */
+export function setOpencodeAccountKeyEnv(names: Iterable<string>): void {
+  opencodeAccountKeyEnv = new Set(names);
+}
+
 /** Per-engine scrub rules. `exact` names and `prefix` families are stripped
  *  only when the caller turns that engine's option on. */
 const ENGINE_SCRUB_RULES: ReadonlyArray<{
@@ -117,7 +127,7 @@ function shouldScrubEngineChildEnv(
   options: EngineChildEnvOptions,
   denyExact: ReadonlySet<string>,
 ): boolean {
-  if (ENGINE_CHILD_ENV_DENY_EXACT.has(key) || denyExact.has(key)) return true;
+  if (ENGINE_CHILD_ENV_DENY_EXACT.has(key) || denyExact.has(key) || opencodeAccountKeyEnv.has(key)) return true;
   if (options.scopedSession && !isScopedSessionEnvName(key)) return true;
   return ENGINE_SCRUB_RULES.some(
     (rule) => Boolean(options[rule.option])

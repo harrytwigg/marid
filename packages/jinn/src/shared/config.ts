@@ -5,7 +5,8 @@ import { applyLegacyFallbackMigration, validateEngineFallbackChains, validateEng
 import { validateClaudeAccounts } from "./claude-accounts-config.js";
 import { warnDuplicates, type DuplicateTolerance } from "./fallback-chain-load.js";
 import { opencodeUsageLimitsProblems } from "./opencode-usage-limits-config.js";
-import { validateOpencodeAccounts } from "./opencode-accounts-config.js";
+import { validateOpencodeAccounts, stagedOpencodeAccounts } from "./opencode-accounts-config.js";
+import { setOpencodeAccountKeyEnv } from "./child-env.js";
 import { autoCompactProblems } from "./auto-compact-config.js";
 import { contextConfigProblems } from "./context-config.js";
 import { sessionFallbackConfigProblems } from "./session-fallback-config.js";
@@ -201,6 +202,8 @@ export function loadConfig(): JinnConfig {
   config.engines.claude = normalizeClaudeEngineConfig(config.engines.claude);
   applyLegacyFallbackMigration(config);
   applyGatewayEnvOverrides(config);
+  // Every other process the gateway starts drops these variables (child-env.ts).
+  setOpencodeAccountKeyEnv(stagedOpencodeAccounts(config).map((account) => account.keyEnv!));
   return config;
 }
 
