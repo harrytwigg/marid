@@ -2,6 +2,8 @@ import { awaitEffortLevels } from "../shared/effort-wait.js";
 import type { FallbackChainSource, FallbackHop, FallbackHopReason, ResolvedFallbackLink } from "../shared/fallback-chain-wire.js";
 import { logger } from "../shared/logger.js";
 import { rateLimitEngineLabel } from "../shared/rateLimit.js";
+import { linkHealthKey } from "../shared/fallback-chain-health.js";
+import { recordEngineServed } from "../shared/engine-health.js";
 import type { EngineName } from "../shared/models.js";
 import type { EngineResult, Session } from "../shared/types.js";
 import { claudeLinkRefusal, linkFailure, noteLinkAuthFailure, recordLinkLimit, runLink } from "./fallback-link-run.js";
@@ -212,9 +214,10 @@ async function launch(w: Walk, found: Found, hop: FallbackHop): Promise<WalkOutc
   const cwd = spawnCwd(opts.session, Boolean(remote)); // a scoped session's stage directory, resolved before anything is flipped
   const substitution = await flipOnto(w, found, hop);
   if (!substitution) return { kind: "cancelled" };
+  const startedMs = Date.now();
   const result = await runLink({ walk: w.input, choice, engine: opts.engines.get(choice.engine)!, substitution, prompt: promptFor(w, substitution), cwd });
   const failure = linkFailure(result, choice.engine);
-  if (!failure) return await served(w, found, substitution.model ?? substitution.engineConfig.model, result);
+  if (!failure) return await served(w, found, substitution.model ?? substitution.engineConfig.model, { result, startedMs });
   await opts.hooks.onFallbackFailed?.(result);
   if (failure.reason === "auth" && result.error) noteLinkAuthFailure(opts, choice, result.error);
   failedOver(w, found, failure, result);
@@ -233,7 +236,8 @@ function failedOver(w: Walk, found: Found, failure: { reason: FallbackHopReason;
   if (result?.error) logger.info(`Session ${w.input.opts.session.id}: ${link.label} could not serve the turn (${failure.reason})`);
 }
 
-async function served(w: Walk, found: Found, model: string | undefined, result: EngineResult): Promise<WalkOutcome> {
+async function served(w: Walk, found: Found, model: string | undefined, ran: { result: EngineResult; startedMs: number }): Promise<WalkOutcome> {
+  const { result } = ran;
   const { opts } = w.input;
   const { session, attemptToken, hooks } = opts;
   const live = getSession(session.id);
@@ -244,6 +248,8 @@ async function served(w: Walk, found: Found, model: string | undefined, result: 
     const served = result.error ? {} : { transportMeta: withServedBy(metaOf(live), servedBy(found.next.link)) as never };
     updateSessionForAttempt(session.id, attemptToken, { ...thread, ...served });
   }
+  // A link that answered a turn begun after its limit was recorded has lifted it.
+  if (!result.error) recordEngineServed(linkHealthKey(found.next.link), ran.startedMs);
   await hooks.onFallbackComplete?.(result, { engine: found.choice.engine as EngineName, model });
   return { kind: "served", result };
 }

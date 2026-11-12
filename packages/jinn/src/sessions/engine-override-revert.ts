@@ -8,7 +8,7 @@
 import { logger } from "../shared/logger.js";
 import { accountOverride } from "./session-account.js";
 import { isAutoResume } from "./session-fallback.js";
-import { extendSpentWindow } from "./engine-override-window.js";
+import { extendSpentWindow, ownTargetClearedSince } from "./engine-override-window.js";
 import type { Employee, JinnConfig, Session } from "../shared/types.js";
 import { getEngineSessionRef, nextEngineSessionFields, updateSession } from "./registry.js";
 import { withoutRun } from "./fallback-run.js";
@@ -139,8 +139,26 @@ function heldOverride(opts: {
 }): Session | undefined {
   const { session, meta, override, parked, employee, config } = opts;
   if (isAutoResume(config ?? {}, session)) return undefined;
-  if (parked.until.getTime() > Date.now()) return session;
+  if (parked.until.getTime() > Date.now()) {
+    // The window is still open, but the own target was cleared since the swap: the session goes back now.
+    if (!ownTargetClearedSince(session, override, parked, { employee, config })) return session;
+    logger.info(`Session ${session.id}: ${parked.engine} was cleared of its limit since the swap — ending the stand-in before ${parked.until.toISOString()}`);
+    return undefined;
+  }
   return extendSpentWindow(session, meta, override, parked, { employee, config });
+}
+
+/**
+ * Whether the session's standing override names an own target that has been
+ * cleared since the swap (see {@link ownTargetClearedSince}): what ends a stand-in
+ * before its window does. False with no override, and with `auto-resume`, which
+ * never stands on one.
+ */
+export function ownTargetCleared(session: Session, employee?: Employee, config?: RevertConfig): boolean {
+  const override = standingOverride(session);
+  const parked = override && parkedOverride(override);
+  if (!override || !parked || isAutoResume(config ?? {}, session)) return false;
+  return ownTargetClearedSince(session, override, parked, { employee, config });
 }
 
 /** Restore the pre-rate-limit engine, and the model that belonged to it, once the
@@ -166,7 +184,7 @@ export function maybeRevertEngineOverride(session: Session, employee?: Employee,
 
   const thread = restoredThread(session, meta, parked);
   logger.info(
-    `Session ${session.id}: ${parked.engine}'s stand-in window ended at ${parked.until.toISOString()} — `
+    `Session ${session.id}: ${parked.engine}'s stand-in ${parked.until.getTime() > Date.now() ? "ended before its window closed at" : "window ended at"} ${parked.until.toISOString()} — `
     + `moving back from ${session.engine} to ${parked.engine}${parked.model ? ` (model: ${parked.model})` : ""}`,
   );
   return updateSession(session.id, {

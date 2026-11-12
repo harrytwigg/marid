@@ -11,7 +11,7 @@ import type {
   EngineLimitsResponse,
   JinnConfig,
 } from "./types.js";
-import { recordExhaustedWindows } from "./engine-health.js";
+import { noteLimitReading } from "./engine-health.js";
 import { collectClaudeAccounts } from "./engine-limits-accounts.js";
 import { getModelRegistry } from "./models.js";
 import { resolveBin } from "./resolve-bin.js";
@@ -370,7 +370,7 @@ export async function collectEngineLimits(
     }
 
     if (!LIVE_LIMIT_ENGINES.has(name) && engines[name].status === "live") engines[name].status = "snapshot";
-    recordExhaustedWindows(name, engines[name].windows);
+    noteLimitReading(name, engines[name]);
   }
 
   // Every other Claude account, beside the default one (FR-073). Omitted with a

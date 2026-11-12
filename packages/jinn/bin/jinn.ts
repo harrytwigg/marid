@@ -137,7 +137,8 @@ program
   .description("Show engine rate limits, quota windows, and model capabilities")
   .option("-e, --engine <name>", "Only show one engine")
   .option("--json", "Print raw JSON")
-  .action(async (opts: { engine?: string; json?: boolean }) => {
+  .option("--clear <key>", "Clear an engine's recorded limit (a health key such as claude or claude:<profile>) after a reset the readout cannot see, instead of showing limits")
+  .action(async (opts: { engine?: string; json?: boolean; clear?: string }) => {
     const { runLimits } = await import("../src/cli/limits.js");
     await runLimits(opts);
   });

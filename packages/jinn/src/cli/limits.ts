@@ -5,10 +5,14 @@ import { collectEngineLimits } from "../shared/engine-limits.js";
 import { refreshGrokModels, refreshPiModels, refreshHermesModels, refreshOpencodeModels, refreshMusecodeModels } from "../shared/models.js";
 import type { EngineLimitEngineSnapshot, EngineLimitWindow } from "../shared/types.js";
 import { opencodeDiscoveryEnv } from "../engines/opencode-launch.js";
+import { clearEngineHealthByOperator } from "../shared/engine-health.js";
+import type { EngineHealth } from "../shared/engine-health.js";
 
 export interface LimitsOptions {
   json?: boolean;
   engine?: string;
+  /** Clear this health key's record instead of showing limits. */
+  clear?: string;
 }
 
 function formatReset(window: EngineLimitWindow): string {
@@ -77,9 +81,25 @@ function printEngine(engine: EngineLimitEngineSnapshot): void {
   if (engine.stale) console.log("  Note: latest snapshot is older than 30 minutes.");
 }
 
+function describeReplaced(replaced: EngineHealth): string {
+  const parts = [replaced.state, replaced.until ? `until ${replaced.until}` : undefined, replaced.window ? `window ${replaced.window}` : undefined, replaced.host ? `host ${replaced.host}` : undefined];
+  return parts.filter(Boolean).join(", ");
+}
+
+/** Write a clear for one health key: for a reset the limits readout cannot see. */
+function clearHealth(key: string): void {
+  const replaced = clearEngineHealthByOperator(key);
+  console.log(replaced ? `Cleared ${key} (was ${describeReplaced(replaced)}).` : `Cleared ${key} (it had no record).`);
+  console.log("Sessions on a stand-in for it return at their next turn; sessions waiting on a stand-in's limit retry within a minute.");
+}
+
 export async function runLimits(opts: LimitsOptions = {}): Promise<void> {
   if (!fs.existsSync(JINN_HOME)) {
     console.log("Gateway is not set up. Run \"jinn setup\" first.");
+    return;
+  }
+  if (opts.clear !== undefined) {
+    clearHealth(opts.clear);
     return;
   }
 

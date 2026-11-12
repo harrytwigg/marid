@@ -40,6 +40,13 @@ export interface EngineHealth {
   host?: string;
   reason?: string;
   observedAt?: string;
+  /**
+   * ISO. Set only on an `ok` record that a positive observation wrote over a limit
+   * that had not run out yet (a reading showing headroom, a turn that was served,
+   * the operator). A record that merely lapsed reads `ok` without it, and only a
+   * positive clear may end a held stand-in early.
+   */
+  clearedAt?: string;
 }
 
 /** Live readings keyed by engine name. An engine with no entry is healthy. */
@@ -89,11 +96,12 @@ export function isSpent(record: EngineHealth, now: Date): boolean {
 }
 
 /** Every engine something has been observed about, with a record whose window
- *  has passed reading back as `ok`. */
+ *  has passed reading back as `ok`. A stored `ok` is a positive clear and is kept
+ *  as written: its `clearedAt` is what tells a clear from a lapse. */
 export function readEngineHealth(now: Date = new Date()): EngineHealthReading {
   const live: EngineHealthReading = {};
   for (const [engine, record] of Object.entries(readStore())) {
-    live[engine] = isSpent(record, now)
+    live[engine] = record.state !== "ok" && isSpent(record, now)
       ? { state: "ok", ...(record.observedAt ? { observedAt: record.observedAt } : {}) }
       : record;
   }
