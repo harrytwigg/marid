@@ -4,7 +4,7 @@ import { findSubject, useFallbackChains } from "@/hooks/use-fallback-chains"
 import { Section } from "../shared"
 import { AccountCard, EngineCard, RemoteAccountCard } from "./engine-card"
 import { OpencodeAccountsList } from "./opencode-accounts"
-import { AccountLabelsContext } from "@/hooks/account-labels"
+import { AccountLabelsContext, AccountProvidersContext } from "@/hooks/account-labels"
 import { LegacyFallbackRow } from "./legacy-row"
 import type { ChainBodyProps } from "./chain-body"
 import {
@@ -106,8 +106,14 @@ function EnginesBody({ engines, sessions, onChange, registry }: EnginesSectionPr
     [engines],
   )
 
+  const builtInProviders = useMemo(
+    () => Object.fromEntries(opencodeAccounts(engines).filter(([, a]) => a.base === undefined).map(([name, a]) => [a.provider ?? name, name])),
+    [engines],
+  )
+
   return (
     <AccountLabelsContext.Provider value={accountLabels}>
+    <AccountProvidersContext.Provider value={builtInProviders}>
     <Section title="Engine Fallbacks">
       <div className="flex flex-col gap-[var(--space-2)]">
         {Object.values(registry.engines).map((entry) => (
@@ -134,6 +140,7 @@ function EnginesBody({ engines, sessions, onChange, registry }: EnginesSectionPr
         )}
       </div>
     </Section>
+    </AccountProvidersContext.Provider>
     </AccountLabelsContext.Provider>
   )
 }

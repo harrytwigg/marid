@@ -51,8 +51,8 @@ function Row({ name, account, live }: { name: string; account: OpencodeAccountSe
         <Field name="Models">{account.models?.length ? `${account.models.length}: ${account.models.join(", ")}` : "all"}</Field>
         {limits && <Field name="Limits">{limits}</Field>}
       </dl>
-      {live?.problems?.map((problem) => (
-        <div key={problem} className="mt-[var(--space-1)] text-[var(--system-orange)]" data-testid="account-problem">{problem}</div>
+      {live?.problems?.map((problem, i) => (
+        <div key={`${i}-${problem}`} className="mt-[var(--space-1)] text-[var(--system-orange)]" data-testid="account-problem">{problem}</div>
       ))}
     </div>
   )
@@ -68,7 +68,7 @@ export function OpencodeAccountsList({ accounts }: { accounts: [string, Opencode
     <div className="mt-[var(--space-2)] flex flex-col gap-[var(--space-1)]" data-testid="opencode-accounts">
       <div className="text-[length:var(--text-caption1)] font-[var(--weight-medium)] text-[var(--text-secondary)]">Accounts</div>
       {accounts.map(([name, account]) => (
-        <Row key={name} name={name} account={account} live={live.find((l) => l.account === name || l.provider === (account.provider ?? name))} />
+        <Row key={name} name={name} account={account} live={live.find((l) => l.account === name) ?? live.find((l) => l.provider === (account.provider ?? name))} />
       ))}
     </div>
   )

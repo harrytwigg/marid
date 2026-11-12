@@ -22,7 +22,7 @@ function badge(kind: FreshnessKind, engine: EngineLimitEngineSnapshot, now: numb
     case "unavailable":
       return { color: "var(--text-tertiary)", label: "Unavailable" }
     case "unsupported":
-      return { color: "var(--text-quaternary)", label: "Unsupported" }
+      return { color: "var(--text-quaternary)", label: "Not metered" }
     default:
       return { color: "var(--text-quaternary)", label: "No data" }
   }
@@ -188,9 +188,11 @@ export function EngineCard({ engine, now, account, title }: {
       <div className="flex-1">
         {isOpencodeAccount(account) ? (
           <>
-            <ModelBuckets account={account} now={now} />
+            <ModelBuckets buckets={account.buckets} provider={account.provider} now={now} />
             <AccountFacts account={account} now={now} />
           </>
+        ) : engine.name === "opencode" && engine.buckets?.some((b) => (b.windows?.length ?? 0) + (b.primary ? 1 : 0) > 0) ? (
+          <ModelBuckets buckets={engine.buckets} now={now} />
         ) : (
           <Windows engine={engine} now={now} />
         )}

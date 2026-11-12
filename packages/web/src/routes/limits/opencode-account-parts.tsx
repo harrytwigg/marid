@@ -12,8 +12,9 @@ function bucketWindows(bucket: EngineLimitBucket): EngineLimitWindow[] {
   return [bucket.primary, bucket.secondary].filter((w): w is EngineLimitWindow => w !== undefined)
 }
 
-/** The model of a bucket id `<provider>/<model>`. */
-function modelOf(bucket: EngineLimitBucket, provider: string): string {
+/** The model of a bucket id `<provider>/<model>`; with no provider (the engine's own card) the id is shown whole. */
+function modelOf(bucket: EngineLimitBucket, provider: string | undefined): string {
+  if (provider === undefined) return bucket.id
   const model = bucket.id.startsWith(`${provider}/`) ? bucket.id.slice(provider.length + 1) : bucket.name ?? bucket.id
   return model === "*" ? "All models" : model
 }
@@ -40,12 +41,17 @@ function WindowRow({ window, now }: { window: EngineLimitWindow; now: number }) 
 }
 
 /** One block per metered model, each with its 5h/7d/30d window rows. */
-export function ModelBuckets({ account, now }: { account: EngineLimitAccountSnapshot & { provider: string }; now: number }) {
-  const buckets = (account.buckets ?? []).filter((b) => bucketWindows(b).length > 0)
+export function ModelBuckets({ buckets: all, provider, empty = "No usage limits set on this account.", now }: {
+  buckets: EngineLimitBucket[] | undefined
+  provider?: string
+  empty?: string
+  now: number
+}) {
+  const buckets = (all ?? []).filter((b) => bucketWindows(b).length > 0)
   if (buckets.length === 0) {
     return (
       <div className="mt-[var(--space-6)] text-[length:var(--text-footnote)] text-[var(--text-tertiary)]">
-        No usage limits set on this account.
+        {empty}
       </div>
     )
   }
@@ -54,7 +60,7 @@ export function ModelBuckets({ account, now }: { account: EngineLimitAccountSnap
       {buckets.map((bucket) => (
         <section key={bucket.id} data-bucket={bucket.id} className="min-w-0">
           <h3 className="truncate text-[length:var(--text-footnote)] font-[var(--weight-semibold)] text-[var(--text-primary)]">
-            {modelOf(bucket, account.provider)}
+            {modelOf(bucket, provider)}
           </h3>
           <div className="mt-[var(--space-2)] grid gap-[var(--space-3)]">
             {bucketWindows(bucket).map((w) => <WindowRow key={`${bucket.id}-${w.name}`} window={w} now={now} />)}
@@ -100,8 +106,8 @@ export function AccountFacts({ account, now }: { account: EngineLimitAccountSnap
       <Fact id="key-state" text={keyLine(account)} warn={account.keySet === false} />
       <Fact id="next-try" text={nextTryLine(account, now)} />
       <Fact id="last-failure" text={failureLine(account, now)} />
-      {account.problems?.map((problem) => (
-        <div key={problem} className="flex items-start gap-[var(--space-2)]" data-testid="account-problem">
+      {account.problems?.map((problem, i) => (
+        <div key={`${i}-${problem}`} className="flex items-start gap-[var(--space-2)]" data-testid="account-problem">
           <AlertTriangle size={14} className="mt-[2px] flex-shrink-0" style={{ color: "var(--system-orange)" }} />
           <span>{problem}</span>
         </div>
