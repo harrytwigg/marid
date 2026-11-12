@@ -263,10 +263,15 @@ describe("opencode accounts on a remote server", () => {
   };
 
   it("hands staging the accounts, and carries the key on no ssh argv", async () => {
+    const asked: unknown[] = [];
+    const read = (scope: unknown) => { asked.push(scope); return accounts; };
     const lifecycle = new PtyLifecycleManager({ maxLivePtys: 8, enforceLocalCap: false });
-    const pool = new OpencodeServerPool(lifecycle, { remote: () => REMOTE_CONFIG, gatewayPort: () => GATEWAY_PORT, accounts: () => accounts });
-    const engine = new OpencodeEngine({ remote: () => REMOTE_CONFIG, gatewayPort: () => GATEWAY_PORT, mode: () => "server", servers: pool, accounts: () => accounts });
+    const pool = new OpencodeServerPool(lifecycle, { remote: () => REMOTE_CONFIG, gatewayPort: () => GATEWAY_PORT, accounts: read });
+    const engine = new OpencodeEngine({ remote: () => REMOTE_CONFIG, gatewayPort: () => GATEWAY_PORT, mode: () => "server", servers: pool, accounts: read });
     const result = await engine.run(runOpts());
+    // The accounts are asked for as this session, on the model it runs.
+    expect(asked.length).toBeGreaterThan(0);
+    expect(new Set(asked.map((scope) => JSON.stringify(scope)))).toEqual(new Set([JSON.stringify({ sessionId: "sess-1", model: "opencode-go/deepseek-v4.1-flash" })]));
     expect(result.error).toBeUndefined();
     // Staging gets the accounts (their key joins the 0600 session-env file there) beside the server password.
     expect(hoisted.prepareCalls[0]?.opencodeAccounts).toBe(accounts);

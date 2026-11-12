@@ -58,6 +58,14 @@ const sessionIds: string[] = [];
 const staging = (env: Record<string, string | undefined> = { GO_B_KEY: SENTINEL }) => opencodeAccountStaging({
   gateway: {}, sessions: {}, engines: { default: "claude", opencode: { accounts: { b: { provider: "go-b", base: "base-go", keyEnv: "GO_B_KEY", label: "Go B" } } } },
 } as never, env)!;
+const KEY_A = "sentinel-key-a-0123456789abcdef";
+/** Two accounts declared, the session's chain reaching `reach` of them. */
+const twoAccounts = (reach: string[]) => opencodeAccountStaging({
+  gateway: {}, sessions: {}, engines: { default: "claude", opencode: { accounts: {
+    a: { provider: "go-a", base: "base-go", keyEnv: "GO_A_KEY", label: "Go A" },
+    b: { provider: "go-b", base: "base-go", keyEnv: "GO_B_KEY", label: "Go B" },
+  } } },
+} as never, { GO_A_KEY: KEY_A, GO_B_KEY: SENTINEL }, new Set(reach));
 
 function session(): string {
   const created = createSession({ engine: "opencode", source: "web", sourceRef: "web:remote-accounts" });
@@ -132,6 +140,21 @@ describe.skipIf(process.platform === "win32")("a remote opencode session with ac
     const { config, envFile } = await stage("2.0.32", staging({}));
     expect(config).toHaveProperty("provider.go-b");
     expect(envFile).not.toContain("GO_B_KEY");
+  });
+
+  it("stages only the account a session's chain reaches: its block in the config and its key in the session-env file", async () => {
+    const { config, envFile, configText } = await stage("2.0.32", twoAccounts(["go-a"]));
+    expect(Object.keys((config as { provider: object }).provider)).toEqual(["go-a"]);
+    expect(envFile).toContain(`export GO_A_KEY='${KEY_A}'`);
+    expect(envFile).not.toContain("GO_B_KEY");
+    expect(envFile).not.toContain(SENTINEL);
+    expect(configText).not.toContain("go-b");
+  });
+
+  it("stages no account block and no key for a session whose chain reaches none", async () => {
+    expect((await stage("2.0.32", twoAccounts([]))).config).toBeUndefined();
+    const { envFile } = await stage("2.0.32", undefined);
+    expect(envFile).not.toMatch(/GO_[AB]_KEY/);
   });
 
   it("stages nothing without accounts, MCP servers or a ceiling, as before", async () => {

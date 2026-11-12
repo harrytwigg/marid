@@ -27,8 +27,14 @@ export interface OpencodeAccountStaging {
   readonly fingerprint: string;
 }
 
-/** Reads the current accounts; a closure over the live config, as the engine's other settings are. */
-export type OpencodeAccountsReader = () => OpencodeAccountStaging | undefined;
+/** Who is asking for accounts: the session a process is for and the model the turn runs on. */
+export interface OpencodeAccountScope {
+  sessionId?: string;
+  model?: string;
+}
+
+/** Reads the accounts one session may use; a closure over the live config, as the engine's other settings are. */
+export type OpencodeAccountsReader = (scope: OpencodeAccountScope) => OpencodeAccountStaging | undefined;
 
 /** A short, one-way tag of a key: enough to tell a rotated key from the old one, not enough to use. */
 export function shortKeyHash(key: string): string {
@@ -38,14 +44,17 @@ export function shortKeyHash(key: string): string {
 /**
  * The accounts that stage a provider block, resolved against the catalogue
  * clones discovery kept and `environment` (the gateway's own), or undefined
- * when no account has a base. An account with no key set still stages its block:
+ * when no account has a base. `reach` (provider ids) narrows them to the ones
+ * a session may use: its blocks and keys are only those; none reachable stages
+ * nothing. An account with no key set still stages its block:
  * its turns fail as auth and the chain moves on (doctor names the variable).
  */
 export function opencodeAccountStaging(
   config: JinnConfig,
   environment: Readonly<Record<string, string | undefined>> = process.env,
+  reach?: ReadonlySet<string>,
 ): OpencodeAccountStaging | undefined {
-  const accounts = stagedOpencodeAccounts(config);
+  const accounts = stagedOpencodeAccounts(config).filter((account) => reach === undefined || reach.has(account.provider));
   if (accounts.length === 0) return undefined;
   const clones = opencodeClones();
   const resolved = accounts.map((account) => ({ account, models: accountCloneModels(account, clones), key: environment[account.keyEnv!]?.trim() || undefined }));

@@ -81,6 +81,8 @@ export interface OpencodeServerSpec extends RemoteTarget {
   /** `engines.opencode.bin`. Local servers only: a remote host's binary is the
    *  one its facts probe found, exactly as for a remote `run` turn. */
   bin?: string;
+  /** The model the turn runs on. Not part of what a server is started with; it only tells which accounts the session may use when no session record says. */
+  model?: string;
   resolvedMcp?: ResolvedMcpConfig;
 }
 
@@ -438,7 +440,7 @@ export class OpencodeServerPool {
     kind: HoldKind,
     signal?: AbortSignal,
   ): Promise<OpencodeServer> {
-    const fingerprint = serverFingerprint(spec, this.deps.accounts?.());
+    const fingerprint = serverFingerprint(spec, this.deps.accounts?.({ sessionId, ...(spec.model ? { model: spec.model } : {}) }));
     const fits = (server: OpencodeServer) => kind === "view" || server.fingerprint === fingerprint;
     for (;;) {
       const found = await this.fittingServer(sessionId, fits);
@@ -729,8 +731,8 @@ export class OpencodeServerPool {
   }
 
   /** The staging options a remote server adds to a remote `run` turn's: the accounts (their keys join the 0600 session-env file) and the command-timeout plugin. */
-  private accountsOpts(): { opencodeAccounts?: OpencodeAccountStaging; opencodeCommandTimeout?: boolean } {
-    const accounts = this.deps.accounts?.();
+  private accountsOpts(sessionId: string, spec: OpencodeServerSpec): { opencodeAccounts?: OpencodeAccountStaging; opencodeCommandTimeout?: boolean } {
+    const accounts = this.deps.accounts?.({ sessionId, ...(spec.model ? { model: spec.model } : {}) });
     return {
       ...(accounts ? { opencodeAccounts: accounts } : {}),
       ...((this.deps.commandTimeoutMs?.() ?? 0) > 0 ? { opencodeCommandTimeout: true } : {}),
@@ -752,7 +754,7 @@ export class OpencodeServerPool {
     const api = knownApi ?? opencodeApiOf(await localOpencodeVersion(bin));
     const processOptions = this.processOptions();
     const plugins = localCommandTimeoutPlugins(api, processOptions.commandTimeoutMs ?? 0);
-    const accounts = this.deps.accounts?.();
+    const accounts = this.deps.accounts?.({ sessionId, ...(spec.model ? { model: spec.model } : {}) });
     const configHandle = writeOpencodeSessionConfig(spec.resolvedMcp, `${sessionId}.server`, api, plugins, accounts);
     const env = localServerEnv(sessionId, processOptions, password, configHandle, accounts);
     logger.info(`opencode server starting for session ${sessionId}: ${bin} serve on 127.0.0.1:${port} (jinn tools: ${configHandle.staged ? "on" : "off"})`);
@@ -857,7 +859,7 @@ export class OpencodeServerPool {
       gatewayPort,
       ...(spec.resolvedMcp ? { resolvedMcp: spec.resolvedMcp } : {}),
       sessionEnv: { OPENCODE_SERVER_PASSWORD: password },
-      ...this.accountsOpts(),
+      ...this.accountsOpts(sessionId, spec),
     });
     return { staging, facts: readiness.facts, gatewayPort };
   }

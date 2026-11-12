@@ -208,7 +208,7 @@ export class OpencodeEngine implements InterruptibleEngine {
     // turn needs `--standalone` (opencode-launch.ts); a remote host's comes
     // with its facts.
     const commandTimeoutMs = this.readCommandTimeoutMs();
-    const accounts = this.readAccounts();
+    const accounts = this.readAccounts({ sessionId: trackingId, ...(opts.model ? { model: opts.model } : {}) });
     const processOptions = { disableFff: this.readDisableFff(), ...(commandTimeoutMs > 0 ? { commandTimeoutMs } : {}), ...(accounts ? { accounts } : {}) };
     if (!isRemoteTarget(opts)) {
       const api = opencodeApiOf(await localOpencodeVersion(resolveBin("opencode", opts.bin)));
@@ -575,6 +575,7 @@ function serverSpecFor(opts: EngineRunOpts): OpencodeServerSpec {
   return {
     cwd: opts.cwd || JINN_HOME,
     ...(opts.bin ? { bin: opts.bin } : {}),
+    ...(opts.model ? { model: opts.model } : {}),
     ...(opts.resolvedMcp ? { resolvedMcp: opts.resolvedMcp } : {}),
     ...(opts.remoteHost ? { remoteHost: opts.remoteHost } : {}),
     ...(opts.remoteUser ? { remoteUser: opts.remoteUser } : {}),

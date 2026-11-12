@@ -38,7 +38,6 @@ import { localOpencodeLaunch } from "../opencode-launch.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
 import { clearOpencodeVersionCache } from "../../shared/opencode-bin-version.js";
 import { SERVER_TURN_TIMING } from "../opencode-server-turn.js";
-import { MIN_OPENCODE_V2_SERVER_VERSION } from "../opencode-version.js";
 import { JINN_HOME } from "../../shared/paths.js";
 import type { JinnConfig } from "../../shared/types.js";
 import type { EngineRunOpts } from "../../shared/types.js";
@@ -72,7 +71,7 @@ beforeEach(() => {
   clones.value = new Map([["base-go", GO_MODELS]]);
   fs.rmSync(stagedLog(), { force: true });
   process.env.FAKE_OPENCODE_STAGED_LOG = stagedLog();
-  process.env.FAKE_OPENCODE_STAGED_ENV = "GO_B_KEY,OPENCODE_GO_API_KEY";
+  process.env.FAKE_OPENCODE_STAGED_ENV = "GO_A_KEY,GO_B_KEY,OPENCODE_GO_API_KEY";
   clearOpencodeVersionCache();
   SERVER_TURN_TIMING.statusPollMs = 30_000;
   SERVER_TURN_TIMING.connectMs = 15_000;
@@ -205,11 +204,12 @@ describe("a real local server", { timeout: 30_000 }, () => {
   }
 
   it("starts with the provider block staged and the key variable set", async () => {
-    process.env.FAKE_OPENCODE_VERSION = MIN_OPENCODE_V2_SERVER_VERSION;
     const accounts = staging();
     const { engine } = serverEngine(() => accounts);
     const result = await engine.run(runOpts({ sessionId: "sess-server-acc" }));
     expect(result.error).toBeUndefined();
+    // Served by the server, not by a plain run it fell back to.
+    expect(staged().some((line) => line.verb === "run")).toBe(false);
     const serve = staged().find((line) => line.verb === "serve");
     expect(serve?.env.GO_B_KEY).toBe(SENTINEL);
     const block = (serve?.config as { provider?: Record<string, { options: { apiKey: string } }> }).provider?.["go-b"];
@@ -260,5 +260,90 @@ describe("serverFingerprint", () => {
     expect(accounts.fingerprint).toContain("go-b");
     expect(accounts.fingerprint).toContain("alpha");
     expect(serverFingerprint(spec, accounts)).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+/** Two accounts declared; the session's chain reaches only `go-a` (the narrowing the gateway's reader does). */
+const TWO = {
+  a: { provider: "go-a", base: "base-go", keyEnv: "GO_A_KEY", label: "Go A" },
+  b: { provider: "go-b", base: "base-go", keyEnv: "GO_B_KEY", label: "Go B" },
+};
+const KEYS = { GO_A_KEY: "sentinel-key-a-0123456789abcdef", GO_B_KEY: SENTINEL };
+const readerFor = (reach: string[], asked: Array<{ sessionId?: string; model?: string }> = []) => (scope: { sessionId?: string; model?: string }) => {
+  asked.push(scope);
+  return opencodeAccountStaging(configWith(TWO), KEYS, new Set(reach));
+};
+
+describe("an employee whose chain reaches one account", () => {
+  const blocks = (config: Record<string, unknown> | null) => Object.keys((config as { provider?: Record<string, unknown> } | null)?.provider ?? {});
+
+  it("stages only that account's block and key, and none when it reaches none (staging itself)", () => {
+    const a = opencodeAccountStaging(configWith(TWO), KEYS, new Set(["go-a"]))!;
+    expect(Object.keys(a.providers(1))).toEqual(["go-a"]);
+    expect(a.env).toEqual({ GO_A_KEY: KEYS.GO_A_KEY });
+    expect(a.fingerprint).not.toContain("go-b");
+    expect(opencodeAccountStaging(configWith(TWO), KEYS, new Set())).toBeUndefined();
+    expect(opencodeAccountStaging(configWith(TWO), KEYS, new Set(["go-a", "go-b"]))!.env).toEqual(KEYS);
+  });
+
+  for (const [api, version] of [[1, "1.19.0"], [2, "2.0.32"]] as const) {
+    it(`gets only that account on a real run turn (OpenCode ${api}.x), asking with its session and model`, async () => {
+      process.env.FAKE_OPENCODE_VERSION = version;
+      const asked: Array<{ sessionId?: string; model?: string }> = [];
+      const engine = new OpencodeEngine({ mode: () => "run", accounts: readerFor(["go-a"], asked) });
+      await engine.run(runOpts({ sessionId: `sess-reach-${api}`, model: "go-a/alpha" }));
+      const [seen] = staged();
+      expect(blocks(seen?.config ?? null)).toEqual(["go-a"]);
+      expect(seen?.env).toMatchObject({ GO_A_KEY: KEYS.GO_A_KEY, GO_B_KEY: null });
+      expect(JSON.stringify(seen)).not.toContain(SENTINEL);
+      expect(asked).toEqual([{ sessionId: `sess-reach-${api}`, model: "go-a/alpha" }]);
+    });
+  }
+
+  it("gets no block and no key on a real run turn when its chain reaches no account", async () => {
+    const engine = new OpencodeEngine({ mode: () => "run", accounts: readerFor([]) });
+    await engine.run(runOpts({ sessionId: "sess-reach-none" }));
+    const [seen] = staged();
+    expect(seen?.config).toBeNull();
+    expect(seen?.env).toEqual({ GO_A_KEY: null, GO_B_KEY: null, OPENCODE_GO_API_KEY: null });
+  });
+
+  it("gets only that account on a real local server, asked with its session and model", async () => {
+    const asked: Array<{ sessionId?: string; model?: string }> = [];
+    const reader = readerFor(["go-a"], asked);
+    const lifecycle = new PtyLifecycleManager({ maxLivePtys: 8, enforceLocalCap: false });
+    const pool = new OpencodeServerPool(lifecycle, { bin: () => FAKE, accounts: reader });
+    try {
+      await new OpencodeEngine({ mode: () => "server", servers: pool, accounts: reader }).run(runOpts({ sessionId: "sess-reach-server", model: "go-a/alpha" }));
+      expect(staged().some((line) => line.verb === "run")).toBe(false);
+      const serve = staged().find((line) => line.verb === "serve");
+      expect(blocks(serve?.config ?? null)).toEqual(["go-a"]);
+      expect(serve?.env).toMatchObject({ GO_A_KEY: KEYS.GO_A_KEY, GO_B_KEY: null });
+      expect(asked.every((scope) => scope.sessionId === "sess-reach-server" && scope.model === "go-a/alpha")).toBe(true);
+    } finally {
+      await pool.stopAll();
+    }
+  });
+
+  it("replaces a warm server when a chain change adds an account", async () => {
+    let reach = ["go-a"];
+    const reader = (scope: { sessionId?: string; model?: string }) => readerFor(reach)(scope);
+    const lifecycle = new PtyLifecycleManager({ maxLivePtys: 8, enforceLocalCap: false });
+    const pool = new OpencodeServerPool(lifecycle, { bin: () => FAKE, accounts: reader });
+    try {
+      const engine = new OpencodeEngine({ mode: () => "server", servers: pool, accounts: reader });
+      await engine.run(runOpts({ sessionId: "sess-reach-grow" }));
+      await engine.run(runOpts({ sessionId: "sess-reach-grow" }));
+
+      expect(staged().some((line) => line.verb === "run")).toBe(false);
+      expect(staged().filter((line) => line.verb === "serve")).toHaveLength(1);
+      reach = ["go-a", "go-b"];
+      await engine.run(runOpts({ sessionId: "sess-reach-grow" }));
+      const serves = staged().filter((line) => line.verb === "serve");
+      expect(serves).toHaveLength(2);
+      expect(blocks(serves[1]?.config ?? null).sort()).toEqual(["go-a", "go-b"]);
+    } finally {
+      await pool.stopAll();
+    }
   });
 });
