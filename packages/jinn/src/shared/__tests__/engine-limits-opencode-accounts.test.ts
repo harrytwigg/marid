@@ -149,6 +149,19 @@ describe("collectOpencodeAccounts", () => {
     expect(byName.get("go-a")).not.toHaveProperty("nextTryAt");
   });
 
+  it("reads the engine-wide record as holding every account, its own key first", () => {
+    const config = cfg({ accounts: ACCOUNTS });
+    const until = new Date(NOW + 5 * HOUR).toISOString();
+    const own = new Date(NOW + 2 * HOUR).toISOString();
+    const out = collectOpencodeAccounts(config, engine(config, []), {
+      employees, env: {}, now: new Date(NOW),
+      health: { opencode: { state: "exhausted", until }, "opencode/opencode-go-b": { state: "exhausted", until: own } },
+    })!;
+    const byName = new Map(out.map((account) => [account.account, account]));
+    expect(byName.get("go-a")).toMatchObject({ exhausted: { until }, nextTryAt: until });
+    expect(byName.get("go-b")).toMatchObject({ exhausted: { until: own }, nextTryAt: own });
+  });
+
   it("does not read a degraded or lapsed record as exhausted", () => {
     const config = cfg({ accounts: ACCOUNTS });
     const out = collectOpencodeAccounts(config, engine(config, []), {
