@@ -375,6 +375,7 @@ target now in use, and the selector agrees with it.
 - **SC-008**: No switch in this feature puts the earlier conversation's messages into the new
   conversation's first message; each carries a history pointer (or a compaction summary
   and handoff) instead.
+
 ## Assumptions
 
 - "Profile" is a Claude-only idea. OpenCode providers are reached through model ids
