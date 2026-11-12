@@ -38,6 +38,11 @@ function parseLine(line: string): TranscriptEntry | undefined {
   }
 }
 
+/** Whether a line can be a boundary or a summary candidate; the rest of a long transcript is not parsed. */
+function mattersToSummary(line: string): boolean {
+  return line.includes("compact_boundary") || line.includes("isCompactSummary") || line.includes(SUMMARY_OPENING);
+}
+
 function entryTimeMs(entry: TranscriptEntry): number | undefined {
   const raw = entry.timestamp;
   if (typeof raw === "number" && Number.isFinite(raw)) return raw;
@@ -97,7 +102,7 @@ export function summaryFromTranscript(transcriptPath: string, afterMs: number): 
   try { content = fs.readFileSync(transcriptPath, "utf-8"); } catch { return undefined; }
   let found: Found | undefined;
   for (const line of content.split("\n")) {
-    const entry = line.trim() ? parseLine(line) : undefined;
+    const entry = mattersToSummary(line) ? parseLine(line) : undefined;
     if (entry) found = take(found, entry, afterMs);
   }
   return found?.marked ?? found?.opening;

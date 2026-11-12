@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { awaitSummaryFromTranscript, summaryFromTranscript, SUMMARY_MAX_CHARS } from "../compaction-summary.js";
 import { summaryReport } from "../../engines/opencode-server-compaction.js";
 
@@ -31,6 +31,18 @@ describe("summaryFromTranscript", () => {
   it("reads the marked summary after the boundary, past the command entries a manual /compact writes", () => {
     write(user("earlier work", START - 5000), ...commandEntries(START + 10), boundary(START + 20), summary(`${OPENING} the real one`, START + 21), user("<local-command-stdout>Compacted</local-command-stdout>", START + 22));
     expect(summaryFromTranscript(file, START)).toBe(`${OPENING} the real one`);
+  });
+
+  it("parses only the lines that can be a boundary or a summary, and still finds a summary known only by its opening", () => {
+    const filler = Array.from({ length: 500 }, (_, index) => user(`unrelated work ${index}`, START - 1000 + index));
+    write(...filler, boundary(START + 20), ...filler, { type: "user", message: { role: "user", content: `${OPENING} unmarked` }, timestamp: at(START + 21) }, ...filler);
+    const parse = vi.spyOn(JSON, "parse");
+    try {
+      expect(summaryFromTranscript(file, START)).toBe(`${OPENING} unmarked`);
+      expect(parse.mock.calls.length).toBeLessThanOrEqual(2);
+    } finally {
+      parse.mockRestore();
+    }
   });
 
   it("is undefined with no boundary, and with a boundary and no summary after it yet", () => {

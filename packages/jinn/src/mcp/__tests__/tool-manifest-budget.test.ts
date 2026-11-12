@@ -8,7 +8,7 @@ import { EXPECTED_ENUMS, EXPECTED_REQUIRED, EXPECTED_TOOL_NAMES } from "./tool-m
 // concise rather than growing into this ceiling. Rebased down when the
 // Experiments and Workflow tools were removed, so the ceiling again sits ON
 // the largest wrapper (Pi).
-const MAX_MANIFEST_TOKENS = 4383;
+const MAX_MANIFEST_TOKENS = 4399;
 // Exact gate: js-tiktoken 1.0.21 with its local o200k_base ranks. The provider
 // projection is the OpenAI Responses API function-tool request shape pinned on 2026-07-12.
 const ATTESTED = {
@@ -302,17 +302,17 @@ const ATTESTED = {
   // Rebased for `engine`, `profile` and `model` on compact_session (a session moves itself
   // through its compaction) and the description clause ", optionally on another
   // engine/profile/model". Measured with this tokenizer: +28 on every wrapper (Pi 4371 ->
-  // 4399). Dead prose bought back 16 of it:
-  //   - "Omit for a plain session or if no employee fits." on spawn_session's `employee`; an
-  //     optional property is omitted when it does not apply.
-  //   - "without deleting its record" on stop_session; no tool deletes one.
-  // The rest of the manifest's prose is pinned by its own tests, so the ceiling moves by the
-  // remaining 12, to 4383, and Pi sits ON it again. The tool count is unchanged. The list of
-  // valid targets rides on the gateway's refusal and costs nothing here; two new tools for
-  // the same job measured +168.
-  rpc: { tokens: 4048, sha256: "4124ffe31ceda59d63e41ec203b1311f5fe0cc76a5938909e9baff22d61bed12" },
-  pi: { tokens: 4383, sha256: "2309965b002fb5fd3419a6036e1dc49824a075b4c0a5824ccb418bc039dee772" },
-  openai: { tokens: 4187, sha256: "284d469cbad38520437c073489d380969416e880235417c1571932bf71efb8d2" },
+  // 4399). Buying 16 of it back by cutting "Omit for a plain session or if no employee fits."
+  // from spawn_session's `employee` and "without deleting its record" from stop_session
+  // proved wrong: neither was dead (the first says when to leave the field out, the second
+  // that a stop keeps the session's record). Both are restored, +16 on every wrapper (rpc
+  // 4048 -> 4064, Pi 4383 -> 4399, OpenAI 4187 -> 4203), so the ceiling moves by the whole
+  // 28, to 4399, and Pi sits ON it again. The tool count is unchanged. The list of valid
+  // targets rides on the gateway's refusal and costs nothing here; two new tools for the
+  // same job measured +168.
+  rpc: { tokens: 4064, sha256: "a40959236cc84e282d9eebdd56bb39ba678165d63b7fa1ff447ba6b5b0bd8e29" },
+  pi: { tokens: 4399, sha256: "ee164e26e62f67de3779933d7d804122113bc3eb3edc8f4cf0657f49aaa60c0a" },
+  openai: { tokens: 4203, sha256: "7f2a7ae3964e959e06fc162f4087870f374fc32e1d4f7683f3bd1096f27a7e4c" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;

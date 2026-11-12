@@ -75,8 +75,9 @@ function engineLines(engines: SwitchTargetEngine[], budget: number): string[] {
  * at most {@link REFUSAL_ERROR_MAX_CHARS} characters. A call that names an engine with
  * `model: "?"` lists only that engine, so a long catalogue can be read in full.
  */
-export function renderRefusal(config: JinnConfig, session: Session, reason: string, list: SwitchTargetList, request: SwitchRequest): string {
-  const only = request.model === "?" && typeof request.engine === "string" ? list.engines.filter((engine) => engine.name === request.engine) : [];
+export function renderRefusal(config: JinnConfig, session: Session, reason: string, list: SwitchTargetList, request: SwitchRequest & { listEngine?: string }): string {
+  const onlyName = request.listEngine ?? (request.model === "?" && typeof request.engine === "string" ? request.engine.trim() : undefined);
+  const only = onlyName ? list.engines.filter((engine) => engine.name === onlyName) : [];
   const shown = only.length > 0 ? only : list.engines;
   const intro = `${reason} — ${LIST_INTRO}. Now: ${describeSwitchTarget(config, ownSwitchTarget(config, session))}.`;
   const text = [intro, ...engineLines(shown, REFUSAL_ERROR_MAX_CHARS - intro.length - 1)].join("\n");
@@ -95,7 +96,7 @@ export function switchRefusalBody(
     status: refused.status,
     body: {
       code: refused.code,
-      error: renderRefusal(config, session, refused.error, targets, request),
+      error: renderRefusal(config, session, refused.error, targets, { ...request, listEngine: refused.listEngine }),
       ...(refused.until ? { until: refused.until } : {}),
       targets,
     },

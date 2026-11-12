@@ -66,6 +66,11 @@ function parkedOverride(override: Record<string, unknown>): ParkedOverride | nul
   };
 }
 
+/** Whether a deliberate switch left `engine` a history pointer still unconsumed: its conversation there is new, so it stays pointed at the history. */
+function pointerOwedTo(meta: Record<string, unknown>, engine: string): boolean {
+  return meta["engineSyncTarget"] === engine && meta[SYNC_MODE_META_KEY] === "pointer";
+}
+
 /** The transport meta a restored session carries: the spent record gone, and the
  *  sync marker in its place when the engine coming back is the one that needs it. */
 function revertedMeta(meta: Record<string, unknown>, session: Session, parked: ParkedOverride, thread: string | null): Record<string, unknown> {
@@ -75,8 +80,9 @@ function revertedMeta(meta: Record<string, unknown>, session: Session, parked: P
   // was left at the first swap, so it is caught up from there.
   if (parked.engine === "claude" && parked.syncSince) {
     next["claudeSyncSince"] = earliestPending(meta["claudeSyncSince"], parked.syncSince);
-    // A marker the revert writes is the pasted catch-up's, even over a pointer one a switch left.
-    delete next[SYNC_MODE_META_KEY];
+    // A marker the revert writes is the pasted catch-up's, but a pointer one a deliberate switch left for claude
+    // stays: that conversation is new, and a new conversation is pointed at the history, never handed it.
+    if (!pointerOwedTo(meta, "claude")) delete next[SYNC_MODE_META_KEY];
     // The prompt's sync intro names what happened: another account, not another engine.
     if (accountOverride(session)) next["claudeSyncAccount"] = true;
     else delete next["claudeSyncAccount"];
@@ -87,7 +93,8 @@ function revertedMeta(meta: Record<string, unknown>, session: Session, parked: P
     const pending = meta["engineSyncTarget"] === parked.engine ? meta["engineSyncSince"] : undefined;
     next["engineSyncTarget"] = parked.engine;
     next["engineSyncSince"] = earliestPending(pending, parked.syncSince);
-    delete next[SYNC_MODE_META_KEY];
+    // As for claude: a pointer a deliberate switch left for this engine stays, so its new conversation is pointed at the history.
+    if (!pointerOwedTo(meta, parked.engine)) delete next[SYNC_MODE_META_KEY];
   }
   delete next["engineOverride"];
   // The session is back on its own target: the run is over and the hops stay.

@@ -121,7 +121,7 @@ describe("session tools — registry + schemas", () => {
 
   it("teaches employee selection in the compact employee schema field", () => {
     const props = tool("spawn_session").inputSchema.properties as Record<string, { description?: string }>;
-    expect(props.employee.description).toBe("Employee slug; choose by role/persona fit from list_employees/find_employees.");
+    expect(props.employee.description).toBe("Employee slug; choose by role/persona fit from list_employees/find_employees. Omit for a plain session or if no employee fits.");
   });
 });
 

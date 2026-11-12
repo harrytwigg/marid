@@ -308,6 +308,18 @@ describe("the summary carries the conversation over", () => {
   });
 });
 
+describe("a target checked again as it is applied", () => {
+  it("applies a switch onto a free model the session inherited from its slot, not refusing it as one it named", async () => {
+    const me = startSession();
+    // The operator once typed a free id on opencode; the slot there kept it.
+    registry.recordEngineSessionId(me, "opencode", "thread-typed", { model: "free-provider/typed-model" });
+    await schedule(me, { engine: "opencode" });
+    await runSwitch(me);
+    expect(lastSwitch(me)).toMatchObject({ applied: true, to: { engine: "opencode", model: "free-provider/typed-model" } });
+    expect(registry.getSession(me)!.engine).toBe("opencode");
+  });
+});
+
 describe("every failure lands on the new target with the handoff and a pointer", () => {
   const phrases: Array<[CompactMode, string, string]> = [
     ["error", "error", "the compaction failed (an error)"],
@@ -539,6 +551,21 @@ describe("a switch that can no longer happen", () => {
     expect(resumeCall().resume).toBe(calls[0].resume);
     expect(lastSwitch(me)).toMatchObject({ applied: false });
     expect(notices(me).some((text) => /Switch to Claude · alpha .* did not happen: unknown Claude profile "alpha".*Still on Claude · own login/.test(text))).toBe(true);
+  });
+
+  it.each([
+    ["error", "not compacted"],
+    ["limit", "not compacted"],
+    ["no-summary", "compacted"],
+    ["too-long", "compacted"],
+  ] as const)("a declined switch after a compaction that ended as %s says the context was %s", async (mode, wording) => {
+    compactMode = mode;
+    const me = startSession();
+    await schedule(me, { profile: "alpha" });
+    delete (config.engines.claude as { accounts: Record<string, unknown> }).accounts.alpha;
+    await runSwitch(me);
+    expect(lastSwitch(me)).toMatchObject({ applied: false });
+    expect(resumeCall().prompt).toContain(`Your context was ${wording}.`);
   });
 
   it("the session's own target changed (a model set by the operator): not applied, and its context stays", async () => {
