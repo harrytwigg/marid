@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveOperatorNotificationTarget } from "../operator-notification-target.js";
+import { operatorAlertEnabled, resolveOperatorNotificationTarget } from "../operator-notification-target.js";
 import type { JinnConfig } from "../types.js";
 
 const base = { engines: { default: "claude" }, connectors: {}, logging: { file: false, stdout: false, level: "info" } };
@@ -34,5 +34,27 @@ describe("resolveOperatorNotificationTarget", () => {
   it("resolves nothing when nothing is configured", () => {
     expect(resolveOperatorNotificationTarget(cfg({}))).toBeUndefined();
     expect(resolveOperatorNotificationTarget(cfg({ notifications: { connector: "discord" } }))).toBeUndefined();
+  });
+});
+
+describe("operatorAlertEnabled", () => {
+  it("leaves every category on when notifications.events is absent", () => {
+    for (const config of [cfg({}), cfg({ notifications: { channel: "1" } }), cfg({ notifications: { channel: "1", events: {} } })]) {
+      expect(operatorAlertEnabled(config, "fallback")).toBe(true);
+      expect(operatorAlertEnabled(config, "claudeAuth")).toBe(true);
+    }
+  });
+
+  it("turns off only the category set to false", () => {
+    const config = cfg({ notifications: { channel: "1", events: { fallback: false } } });
+    expect(operatorAlertEnabled(config, "fallback")).toBe(false);
+    for (const event of ["paused", "stopped", "resumed", "claudeAuth", "remoteHost"] as const) {
+      expect(operatorAlertEnabled(config, event)).toBe(true);
+    }
+  });
+
+  it("treats only a literal false as off", () => {
+    const config = cfg({ notifications: { events: { fallback: "false", paused: 0, stopped: null, resumed: true } } });
+    for (const event of ["fallback", "paused", "stopped", "resumed"] as const) expect(operatorAlertEnabled(config, event)).toBe(true);
   });
 });

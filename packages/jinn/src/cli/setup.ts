@@ -331,6 +331,8 @@ portal:
 # Claude login) go to notifications.*, else cron.alert*, else a single-user Telegram allowlist.
 # cron: { alertConnector: slack, alertChannel: "#alerts" }
 # notifications: { connector: telegram, channel: "123456789" }   # chat id / channel id / #channel
+# Silence one kind of alert, leaving the rest: fallback, paused, stopped, resumed, claudeAuth, remoteHost.
+# notifications: { connector: telegram, channel: "123456789", events: { fallback: false } }
 
 logging:
   file: true

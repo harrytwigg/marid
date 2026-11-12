@@ -81,7 +81,7 @@ describe("the fallback announcement", () => {
     await hooks.onFallbackStart!({ resumeAt: null, until: new Date(), substitute: "claude" });
 
     expect(notifyOperatorChannel).toHaveBeenCalledWith(
-      "⚠️ Codex usage limit reached. Session sess-1 (a-worker) switching to Claude.",
+      "⚠️ Codex usage limit reached. Session sess-1 (a-worker) switching to Claude.", undefined, "fallback",
     );
     expect(notice).toHaveBeenCalledWith("⚠️ Codex usage limit reached. Switching to Claude for now.");
   });

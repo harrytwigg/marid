@@ -1,4 +1,4 @@
-import type { JinnConfig } from "./types.js";
+import type { JinnConfig, OperatorAlertEvent } from "./types.js";
 
 /** Where a fixed, LLM-free operator alert is delivered. */
 export interface OperatorNotificationTarget {
@@ -40,4 +40,14 @@ function telegramSoleUserTarget(config: JinnConfig): OperatorNotificationTarget 
   const allowFrom = telegram.allowFrom.filter((id) => Number.isInteger(id) && id > 0);
   if (allowFrom.length !== 1) return undefined;
   return { connector: "telegram", channel: String(allowFrom[0]), via: "telegram.allowFrom" };
+}
+
+/**
+ * Whether an operator alert category is switched on. Every category is on
+ * unless `notifications.events.<event>` is exactly `false`: a missing map, a
+ * missing key or a non-boolean value all leave the alert enabled, so an
+ * existing config keeps every alert it had.
+ */
+export function operatorAlertEnabled(config: JinnConfig, event: OperatorAlertEvent): boolean {
+  return config.notifications?.events?.[event] !== false;
 }

@@ -13,6 +13,8 @@ vi.mock("../../shared/paths.js", async (importOriginal) => ({
 
 const hoisted = vi.hoisted(() => ({
   sent: [] as string[],
+  /** The alert category each send named. */
+  events: [] as (string | undefined)[],
   deliver: true,
   /** Delivery callbacks not yet run — `settle()` drains them. */
   pending: [] as (() => void)[],
@@ -24,8 +26,9 @@ const hoisted = vi.hoisted(() => ({
 // The suite keeps that shape: a mock that confirms synchronously hides the
 // window in which a burst of failures all see "nobody has alerted yet".
 vi.mock("../callbacks.js", () => ({
-  notifyOperatorChannel: vi.fn((message: string, onResult?: (sent: boolean) => void) => {
+  notifyOperatorChannel: vi.fn((message: string, onResult?: (sent: boolean) => void, event?: string) => {
     hoisted.sent.push(message);
+    hoisted.events.push(event);
     hoisted.pending.push(() => onResult?.(hoisted.deliver));
   }),
 }));
@@ -68,6 +71,7 @@ const settle = () => {
 beforeEach(() => {
   fs.rmSync(TEST_HOME, { recursive: true, force: true });
   hoisted.sent.length = 0;
+  hoisted.events.length = 0;
   hoisted.pending.length = 0;
   hoisted.deliver = true;
   hoisted.status = { state: "access-expired", fingerprint: "pair-A", accessExpiresAt: 1, refreshExpiresAt: 2 };
@@ -118,6 +122,14 @@ describe("observeClaudeTurnOutcome", () => {
     expect(hoisted.sent[1]).toContain("✅ Claude authentication recovered on the gateway host");
     expect(hoisted.sent[1]).toContain("42 turns failed");
     expect(activeClaudeAuthOutage(LOCAL_CLAUDE_AUTH_SCOPE)).toBeUndefined();
+  });
+
+  it("files its outage and recovery alerts under the claudeAuth category", () => {
+    observeClaudeTurnOutcome(undefined, AUTH_FAILED, NOW);
+    observeClaudeTurnOutcome(undefined, null, at(60_000));
+
+    expect(hoisted.sent).toHaveLength(2);
+    expect(hoisted.events).toEqual(["claudeAuth", "claudeAuth"]);
   });
 
   it("offers the Telegram login route only when the connector's provider login is enabled", () => {

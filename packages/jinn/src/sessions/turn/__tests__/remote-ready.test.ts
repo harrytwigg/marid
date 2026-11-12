@@ -13,6 +13,7 @@ const hoisted = vi.hoisted(() => ({
   readiness: { ready: true } as any,
   waitStart: undefined as undefined | ((info: { destination: string; waking: boolean; waitingFor?: "host" | "mount" }) => void),
   notifications: [] as string[],
+  events: [] as (string | undefined)[],
   updates: [] as { fields: any; expected?: readonly string[] }[],
   /** Statuses `updateSessionForAttempt` will accept, i.e. the DB's fence. */
   status: "running" as string,
@@ -37,7 +38,7 @@ vi.mock("../../registry.js", () => ({
 }));
 
 vi.mock("../../callbacks.js", () => ({
-  notifyOperatorChannel: vi.fn((m: string) => { hoisted.notifications.push(m); }),
+  notifyOperatorChannel: vi.fn((m: string, _onResult?: unknown, event?: string) => { hoisted.notifications.push(m); hoisted.events.push(event); }),
 }));
 
 import { awaitRemoteHostForRetry, ensureRemoteHostReady, shouldNotifyWake } from "../remote-ready.js";
@@ -63,6 +64,7 @@ beforeEach(() => {
   hoisted.readiness = { ready: true };
   hoisted.waitStart = undefined;
   hoisted.notifications = [];
+  hoisted.events = [];
   hoisted.updates = [];
   hoisted.status = "running";
 });
@@ -218,6 +220,11 @@ describe("remote.notifyWake", () => {
     await wakeThen({ ready: false, reason: "build-box did not come up within 240s" }, { notifyWake: true });
     expect(hoisted.notifications).toHaveLength(2);
     expect(hoisted.notifications[1]).toContain("❌");
+  });
+
+  it("files the wait notice and the failure notice under the remoteHost category", async () => {
+    await wakeThen({ ready: false, reason: "build-box did not come up within 240s" }, { notifyWake: true });
+    expect(hoisted.events).toEqual(["remoteHost", "remoteHost"]);
   });
 });
 

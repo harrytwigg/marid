@@ -95,7 +95,7 @@ function localStatus(): ClaudeCredentialStatus | undefined {
  */
 function tell(message: string, onResult?: (sent: boolean) => void): void {
   try {
-    notifyOperatorChannel(message, onResult);
+    notifyOperatorChannel(message, onResult, "claudeAuth");
   } catch (err) {
     logger.warn(`Claude auth alert not sent: ${err instanceof Error ? err.message : String(err)}`);
     onResult?.(false);
