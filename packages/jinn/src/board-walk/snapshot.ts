@@ -242,12 +242,12 @@ function operatorSignals(deps: SnapshotDeps, claude: EngineLimitEngineSnapshot |
 
 /**
  * Whether health holds `engine` out at `now`: its own key, and for opencode also the key of the provider
- * the engine's default model runs on. Health is kept per provider (`opencode/<provider>`), and a spent
+ * the engine's default model (or `runsModel`, a model the caller runs it on) runs on. Health is kept per provider (`opencode/<provider>`), and a spent
  * default-model window is what took opencode out for the walk before it was.
  */
-export function engineHeldOut(health: EngineHealthReading, engine: string, config: JinnConfig, now: Date): boolean {
+export function engineHeldOut(health: EngineHealthReading, engine: string, config: JinnConfig, now: Date, runsModel?: string): boolean {
   if (isEngineExhausted(health, engine, now)) return true;
-  const model = engine === "opencode" ? config.engines.opencode?.model : undefined;
+  const model = engine === "opencode" ? (runsModel || config.engines.opencode?.model) : undefined;
   const slash = model ? model.indexOf("/") : -1;
   return slash > 0 && isEngineExhausted(health, `opencode/${model!.slice(0, slash)}`, now);
 }
