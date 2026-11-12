@@ -5,7 +5,10 @@
 //
 // To add one: append an entry to SCENARIOS (see README.md). Ids are single letters; the shell
 // script's --pending list names the ones that wait on runtime work not yet merged (none now).
-import { expectEqual, expectTrue, sleep, triesBy, walkOf } from "./lib.mjs";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { expectEqual, expectTrue, sleep, triesBy, waitFor, walkOf } from "./lib.mjs";
 
 const RATE_LIMITS = ["rate-limit", "quota"];
 const WALK_A = "claude/profile-a/opus:rate-limit -> claude/profile-b/sonnet:rate-limit -> opencode/x-provider/model-x:rate-limit -> opencode/y-provider/model-y:ok";
@@ -216,6 +219,72 @@ async function stillLimitedAtReset(h) {
   expectEqual("the stand-in served", rows[rows.length - 1].profile, "profile-b");
 }
 
+const healthOf = (h) => JSON.parse(fs.readFileSync(path.join(h.args.home, "tmp", "engine-health.json"), "utf8"));
+/** The health key profile A's limit was recorded under, read while it is the only exhausted record. */
+function keyOfA(h) {
+  const keys = Object.entries(healthOf(h)).filter(([, record]) => record.state === "exhausted").map(([key]) => key);
+  expectEqual("one exhausted record (A's)", keys.length, 1);
+  return keys[0];
+}
+/** The operator's clear, through the real CLI against the instance home. */
+function cliClear(h, key) {
+  const out = execFileSync(process.execPath, [path.join(process.env.JINN_REPO, "packages/jinn/dist/bin/jinn.js"), "limits", "--clear", key],
+    { env: { ...process.env, JINN_HOME: h.args.home }, encoding: "utf8" });
+  console.log(`         cli: ${out.trim().split("\n")[0]}`);
+  return out;
+}
+
+/** A stand-in held by a window an hour out goes back to its own target at the next turn once the own target is cleared. */
+async function heldReturnsOnClear(h) {
+  const { claudeB } = h.links();
+  await h.putConfig({ engines: { claude: { accounts: { A: { fallback: [claudeB] } } } } });
+  h.writeScenario({ claude: { "profile-a|opus": [limitedFor(3600), "ok"], "profile-b|*": "ok" } });
+  const tag = h.newTag();
+  const id = await h.startSession({ employee: h.layout.employees.onA, tag });
+  await h.settled(id);
+  await h.sendMessage(id, tag);
+  await h.settled(id);
+  expectEqual("held on the stand-in", walkOf(h.rowsFor(tag)), "claude/profile-a/opus:rate-limit -> claude/profile-b/sonnet:ok -> claude/profile-b/sonnet:ok");
+  const key = keyOfA(h);
+  const out = cliClear(h, key);
+  expectTrue("the CLI names what it replaced", /was exhausted/.test(out), out);
+  expectEqual("the record is a positive clear", [healthOf(h)[key].state, typeof healthOf(h)[key].clearedAt], ["ok", "string"]);
+  await h.sendMessage(id, tag);
+  const after = await h.settled(id);
+  const rows = h.rowsFor(tag);
+  expectEqual("the next turn ran on A", [rows.at(-1).profile, rows.at(-1).model, rows.at(-1).outcome], ["profile-a", "opus", "ok"]);
+  expectEqual("back on its own target", [after.engine, after.fallback?.chain?.position, after.transportMeta?.engineOverride], ["claude", 0, undefined]);
+}
+
+/** A session whose chain ran out on its stand-in waits for the stand-in's reset an hour out; clearing its own target hands it back within the minute's look. */
+async function exhaustedWaitHandsBack(h) {
+  const { claudeB } = h.links();
+  await h.putConfig({ engines: { claude: { accounts: { A: { fallback: [claudeB] } } } } });
+  h.writeScenario({ claude: { "profile-a|opus": [limitedFor(3600), "ok"], "profile-b|*": ["ok", limitedFor(3600)] } });
+  const tag = h.newTag();
+  const id = await h.startSession({ employee: h.layout.employees.onA, tag });
+  await h.settled(id);
+  const keyA = keyOfA(h);
+  await h.sendMessage(id, tag);
+  const waiting = await h.settled(id);
+  expectEqual("the chain ran out: waiting", waiting.status, "waiting");
+  expectEqual("walk so far", walkOf(h.rowsFor(tag)), "claude/profile-a/opus:rate-limit -> claude/profile-b/sonnet:ok -> claude/profile-b/sonnet:rate-limit");
+  await sleep(5000);
+  expectEqual("still waiting before the clear", (await h.session(id)).status, "waiting");
+  const clearedAt = Date.now();
+  cliClear(h, keyA);
+  const done = await waitFor("the wait to hand back and the turn to finish on A", async () => {
+    const session = await h.session(id);
+    const last = h.rowsFor(tag).at(-1);
+    return session.status === "idle" && last?.profile === "profile-a" && last.outcome === "ok" ? session : undefined;
+  }, { timeoutMs: 150_000, intervalMs: 1000 });
+  const tookMs = Date.now() - clearedAt;
+  console.log(`         handed back ${Math.round(tookMs / 1000)}s after the clear`);
+  expectTrue("handed back well before the stand-in's reset", tookMs < 120_000, String(tookMs));
+  expectEqual("walk", walkOf(h.rowsFor(tag)), "claude/profile-a/opus:rate-limit -> claude/profile-b/sonnet:ok -> claude/profile-b/sonnet:rate-limit -> claude/profile-a/opus:ok");
+  expectEqual("back on its own target", [done.engine, done.fallback?.chain?.position, done.transportMeta?.engineOverride], ["claude", 0, undefined]);
+}
+
 export const SCENARIOS = [
   { id: "a", title: "four-link chain walks hop by hop, each hop on its own profile and model", run: fourLinkWalk },
   { id: "b", title: "every link limited: each target once, then the session waits on its own", run: everyLinkLimited },
@@ -227,4 +296,6 @@ export const SCENARIOS = [
   { id: "h", title: "an opencode provider hop X to Y within one opencode session", run: opencodeProviderHop },
   { id: "i", title: "the own target serves again from the first turn after its limit reopens", run: returnAfterReset },
   { id: "j", title: "an own target still limited at the reset is probed once, then left alone for the new window", run: stillLimitedAtReset },
+  { id: "k", title: "a held stand-in returns at the next turn once its own target is cleared", run: heldReturnsOnClear },
+  { id: "l", title: "a chain-exhausted wait hands back when its own target is cleared", run: exhaustedWaitHandsBack },
 ];
