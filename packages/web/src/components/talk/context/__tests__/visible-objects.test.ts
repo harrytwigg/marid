@@ -50,6 +50,19 @@ describe("the objects on the board the operator is looking at", () => {
     ])
   })
 
+  it("finds a column whose Person filter matches more widely than the URL says", () => {
+    // "Me" with one owner account asks the list for both of the operator's identities, and keys that.
+    const filters: TodoFilters = { status: "open", person: "@operator" }
+    queryClient.setQueryData(boardColumnQueryKey(PLATFORM, "executing", filters, "@operator,user:u3"), {
+      pages: [{ workItems: [{ id: "ABC-3", title: "Named by account" }], total: 1, nextOffset: null }],
+    })
+    seedColumn("executing", { status: "open", person: "user:u9" }, [{ id: "ABC-OTHER", title: "Someone else's" }])
+
+    expect(visibleObjects(describeLocation("/todos/b/platform", "?person=%40operator"))).toEqual([
+      { id: "ABC-3", title: "Named by account" },
+    ])
+  })
+
   it("leaves out a column the status filter has taken off the board", () => {
     // `?status=executing` is a board of one column, and the others keep whatever
     // they loaded on the way in.

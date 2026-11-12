@@ -13,6 +13,7 @@ import {
   type PersonWire,
   type UserSessionWire,
 } from "@/lib/accounts-api"
+import { useAuthOptional } from "@/routes/auth-provider"
 import { Section } from "../shared"
 import { InviteToInstance, PendingInvites } from "./instance-invites"
 import { RolesPanel } from "./person-roles"
@@ -57,6 +58,7 @@ export function PeopleSection() {
 // ── Set up my sign-in ────────────────────────────────────────────────────────
 function SetupOwnSignIn() {
   const refresh = useRefreshPeople()
+  const auth = useAuthOptional()
   const [email, setEmail] = useState("")
   const [displayName, setDisplayName] = useState("")
   const [password, setPassword] = useState("")
@@ -68,6 +70,10 @@ function SetupOwnSignIn() {
       setPassword("")
       setConfirm("")
       await refresh()
+      // The first owner changes what this tab's auth state says (accounts exist now, and this browser is that account), and the
+      // person pickers read the operator from it: without a re-read the duplicate stays until a reload. Read in place: a full
+      // refresh puts the whole app behind the "checking" screen and remounts every pane.
+      await auth?.reread()
     },
     onError: (e) => setError(accountsErrorText(e)),
   })

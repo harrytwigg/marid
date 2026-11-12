@@ -450,10 +450,11 @@ quiet-watch treatment, then sets an agent, clears it, and asserts the "needs you
   a free slot. On the Todo page the Agent chip sits where the one assignee chip always did, directly after Status, with the
   Person chip right after it and Priority and the rest following; the Properties rail runs Status, Priority, Agent, Person,
   then Dispatch, Auto-start and the rest. Each keeps its own picker and its × clear. The Person picker offers "You
-  (operator)" and the board's people (with accounts) and "No person", and the Agent picker lists employees only. Where a Person picker sits
+  (operator)" and the board's people (with accounts) and "No person" (once an owner account exists, the operator is
+  offered as their own account: see "The operator's own account in the person slot"), and the Agent picker lists employees only. Where a Person picker sits
   beside it (the Todo page, the New Todo dialog) the Agent picker lists employees only, on every instance, and naming yourself
-  is the person. The sub-task assign picker and the search workbench Owner picker have no person slot, so they keep "You
-  (operator)" first, assigning the operator through the assign route as they always did: nothing an operator could do
+  is the person. The sub-task assign picker and the search workbench Owner picker have no person slot, so they keep the
+  operator's row first (labelled by the rule in "The operator's own account in the person slot"), assigning the operator through the assign route as they always did: nothing an operator could do
   before is lost on any surface. The Todo page and the New Todo dialog (agent chip first, then
   person chip) each have a Person picker, and creating a Todo as yourself with no agent goes through the assign route and
   stores `@operator`, as it always did. The Todo page's Person picker does the same: a choice that leaves exactly what
@@ -469,6 +470,40 @@ quiet-watch treatment, then sets an agent, clears it, and asserts the "needs you
   someone else's name. The row's and the chip's × carry the same words in their name and tooltip ("Remove person: takes it
   off your desk"). The activity line for a hand-on reads "handed it on to another person", and for a removed user
   "removed the person's account".
+
+### The operator's own account in the person slot
+
+Every owner account signs in to the operator, and the operator has one desk: `@operator` is that desk, shared by every
+operator credential (an owner's sign-in, a paired device, the bearer token). Storage does not say which owner it means and
+never will. Once an owner account exists, the operator's own pickers stop offering a synthetic "You (operator)" beside it,
+because that account and the operator are the same person.
+
+- **Which account is you.** `GET /api/auth/state` adds `user: { id, displayName }` to the operator principal when this
+  browser's device session is linked to an active owner account (an owner's password sign-in, or "set up my sign-in" in
+  this browser); a paired device or the bearer token carries no `user`. The web's "you" account is that one, else the only
+  active owner when there is exactly one (any operator credential is then that owner), else none.
+- **The label for `@operator`** (the person circle, the Person chip and row, the New Todo dialog, the sub-task and search
+  assign rows), for the operator's own view:
+  - no active owner account (no accounts at all, or members only): "You (operator)", exactly as before;
+  - exactly one active owner: that owner, by name and avatar;
+  - several active owners: "Operator (shared)" with the operator's avatar, the same in every owner's browser. Naming one
+    owner would be a guess, and it would show the same Todo as a different person's in each owner's browser while it sits
+    on all of their desks.
+  A board member keeps reading "Operator".
+- **The person picker** lists people by account. The "you" account's row reads "<name> (you)" and stores `@operator`
+  through the same writes "You (operator)" used, so it means "needs you" in every respect, and it is the row checked when
+  the person is `@operator`. With several owners its sub-line says "Operator (shared)". With no "you" account (several
+  owners, a browser not signed in as one) the first row is "Operator (shared)" and stores `@operator`. Every other account,
+  other owners included, is named as itself (`user:<id>`). The operator's picker never writes `user:<you>`; a Todo that
+  already names it shows that name and is not checked under the "you" row, and choosing the row puts it back on the desk.
+- **The board's Person filter**, for the operator's own view: with no owner account, "Me" for `@operator`, as before. With
+  one owner, "Me" is both of the operator's identities: it matches `@operator` and `user:<owner>` together (a member can
+  name the owner by account, and a change from several owners to one leaves Todos that another owner named that way), so
+  that account is not listed again beside it (a filter already naming it alone still reads its name). With several owners, `@operator` reads "Operator (shared)", not "Me", since the desk is no one owner's,
+  and every owner, this browser's included, is listed by name: one owner can name another as a person (`user:<id>`).
+- **Pickers with no person slot beside them** (a sub-task row, the search workbench Owner) keep their operator row and its
+  assign-route write; only its label follows the rule above.
+- Nothing in the gateway's storage, routes or MCP output changes; the rule is the web's and the one auth-state field.
 
 ## Phases
 
@@ -488,7 +523,7 @@ quiet-watch treatment, then sets an agent, clears it, and asserts the "needs you
 ## API contract (v1)
 
 Unauthenticated: `GET /api/auth/state` (adds `accountsEnabled`, `principal: { kind:
-"operator" } | { kind: "member", user, boards: [{ department, role }] } | null`),
+"operator", user? } | { kind: "member", user, boards: [{ department, role }] } | null`),
 `POST /api/auth/login`, `POST /api/auth/invites/inspect`, `POST /api/auth/invites/accept`,
 `POST /api/auth/resets/inspect`, `POST /api/auth/resets/complete`, `POST /api/auth/logout`.
 
@@ -525,7 +560,8 @@ Settled while building the web against this contract; the gateway answers exactl
 - `GET /api/auth/state` adds `accountsEnabled` (gateway auth is on, so accounts are possible),
   `hasAccounts` (at least one user exists; the sign-in form shows when both are true) and
   `principal`. A member principal is `{ kind: "member", user: { id, email, displayName },
-  boards: [{ department, role }] }`.
+  boards: [{ department, role }] }`. The operator principal is `{ kind: "operator" }`, plus
+  `user: { id, displayName }` when the request's device session is linked to an active owner account.
 - `GET /api/member/boards` → `{ boards: [{ department, role, prefix, displayName? }] }`
   (`prefix` is the board's Todo-id prefix).
 - Member writes answer with the operator routes' shapes and take the same bodies:
@@ -572,6 +608,10 @@ Settled while building the web against this contract; the gateway answers exactl
   `422` (`todo_invalid_person`) for `@operator` or someone who may not be chosen; `400` for a malformed body.
 - `humanAssignee: string | null` is on every Todo serialisation (list rows, board rows, detail, tree nodes, live frames). List
   pages and the detail payload add a `members` map from `user:<id>` to `{ kind: "member", displayName }` when a row names a user.
+- The list's `humanAssignee` filter (`GET /api/work-items`, `GET /api/search/work-items`, `GET /api/member/boards/:department/todos`)
+  takes one person or several, comma-separated, and matches any of them; `@unassigned` among them matches Todos with no
+  person, and a list naming nobody matches nothing. On the member route each name is judged on its own: one the member may
+  not read as a person matches no Todo.
 
 ### Phase 2 build notes
 

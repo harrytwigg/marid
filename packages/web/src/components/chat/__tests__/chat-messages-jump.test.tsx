@@ -43,6 +43,14 @@ afterEach(() => {
 })
 
 describe('ChatMessages jump affordance', () => {
+  it('offers no jump while a document is shown over the transcript, and again once it is not', () => {
+    const { rerender } = render(<ChatMessages messages={messages} loading={false} covered />)
+    expect(screen.queryByRole('button', { name: /jump to latest/i })).toBeNull()
+
+    rerender(<ChatMessages messages={messages} loading={false} />)
+    expect(screen.getByRole('button', { name: /jump to latest/i })).toBeTruthy()
+  })
+
   it('pins the jump control to the visible scrollport instead of the scrollable transcript', () => {
     render(<ChatMessages messages={messages} loading={false} />)
 

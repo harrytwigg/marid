@@ -494,6 +494,18 @@ export function currentAuthDeviceId(
   return requestAuthCookies(parseCookieHeader(cookie), jinnHome).deviceId;
 }
 
+/** The request's device id, only when its session cookie verifies against that device: a bare id cookie, or one that rides
+ *  along with another credential, names nobody. */
+export function verifiedAuthDeviceId(
+  headers: Record<string, string | string[] | undefined>,
+  jinnHome: string,
+): string | undefined {
+  const cookieRaw = headers.cookie;
+  const cookie = Array.isArray(cookieRaw) ? cookieRaw[0] : cookieRaw;
+  const { secret, deviceId } = requestAuthCookies(parseCookieHeader(cookie), jinnHome);
+  return verifyAuthSession(jinnHome, deviceId, secret) ? deviceId : undefined;
+}
+
 export function listAuthSessions(jinnHome: string, currentDeviceId?: string, now = Date.now()): PublicAuthSessionDevice[] {
   return pruneStaleAutomatedAuthSessions(jinnHome, loadStoredAuthSessions(jinnHome), now)
     .map(({ tokenHash: _tokenHash, ...device }) => ({

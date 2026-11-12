@@ -48,12 +48,13 @@ describe.each(surfaces)("on the %s", (_name, draw) => {
     expect(directory.listPeople).not.toHaveBeenCalled()
   })
 
-  it("puts the person on the left and the agent on the right", () => {
+  it("puts the person on the left and the agent on the right", async () => {
     draw(compact({ assignee: "mason", humanAssignee: "@operator" }))
     const pair = screen.getByTestId("assignee-circles")
     expect([...pair.children].map((child) => child.getAttribute("data-testid"))).toEqual(["person-circle", "agent-circle"])
     expect(within(pair).getByTitle("Mason")).toBeTruthy()
-    expect(within(pair).getByTitle("You (operator)")).toBeTruthy()
+    // With accounts, the operator reads as "Operator" until the People list says whether an owner account is who they are.
+    expect(await within(pair).findByTitle("You (operator)")).toBeTruthy()
   })
 
   it("reads a Todo assigned to the operator as the operator in the person circle and an empty agent circle", () => {

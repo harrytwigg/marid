@@ -1,6 +1,8 @@
 import { memo } from "react"
 import type { Employee } from "@/lib/api"
 import { EmployeeAvatar, OPERATOR_DEFAULT_EMOJI } from "@/components/ui/employee-avatar"
+import { HumanAvatar } from "@/components/ui/human-avatar"
+import { useOperatorSelf, type OperatorSelf } from "@/hooks/use-operator-self"
 import { MemberAvatar, MemberName, useViewer } from "./attribution"
 import { OPERATOR_ASSIGNEE } from "./util"
 
@@ -21,23 +23,32 @@ function EmptyCircle({ size, label, testId }: { size: number; label: string; tes
   )
 }
 
-/** The person slot. The operator wears their own avatar, a board member a HumanAvatar, nobody a dashed circle. */
+/** The operator's badge: their own emoji, or, where exactly one owner account is the operator, that account's initials. */
+export function OperatorSelfAvatar({ self, size, fontSize, className = "bg-[var(--fill-secondary)]" }: { self: OperatorSelf; size: number; fontSize?: number; className?: string }) {
+  const owner = self.mode === "single" ? self.owners[0] : undefined
+  if (owner) return <HumanAvatar name={owner.displayName} initials={owner.initials} size={size} />
+  return <EmployeeAvatar name="operator" fallback={OPERATOR_DEFAULT_EMOJI} size={size} fontSize={fontSize ?? Math.round(size * 0.55)} className={className} />
+}
+
+/** The person slot. The operator wears their own avatar (or, with one owner account, that account's), a board member a HumanAvatar, nobody a dashed circle. */
 export function PersonCircle({ person, size = 20 }: { person: string | null | undefined; size?: number }) {
   const viewer = useViewer()
+  const self = useOperatorSelf(person === OPERATOR_ASSIGNEE)
   if (!person) return <EmptyCircle size={size} label="No person" testId="person-circle-empty" />
   if (person === OPERATOR_ASSIGNEE) {
     return (
-      <span title={viewer === "member" ? "Operator" : "You (operator)"} data-testid="person-circle" className="flex-none">
-        <EmployeeAvatar name="operator" fallback={OPERATOR_DEFAULT_EMOJI} size={size} fontSize={Math.round(size * 0.55)} className="bg-[var(--fill-secondary)]" />
+      <span title={viewer === "member" ? "Operator" : self.label} data-testid="person-circle" className="flex-none">
+        <OperatorSelfAvatar self={self} size={size} />
       </span>
     )
   }
   return <span data-testid="person-circle" className="flex-none"><MemberAvatar identity={person} size={size} /></span>
 }
 
-/** The person's name where a row spells it out: the operator reads "You (operator)" to themselves and "Operator" to a board member. */
+/** The person's name where a row spells it out: the operator reads as themselves to themselves (see `useOperatorSelf`) and "Operator" to a board member. */
 export function PersonName({ person, viewer }: { person: string; viewer: "operator" | "member" }) {
-  if (person === OPERATOR_ASSIGNEE) return <>{viewer === "member" ? "Operator" : "You (operator)"}</>
+  const self = useOperatorSelf(person === OPERATOR_ASSIGNEE)
+  if (person === OPERATOR_ASSIGNEE) return <>{viewer === "member" ? "Operator" : self.label}</>
   return <MemberName identity={person} />
 }
 

@@ -25,9 +25,11 @@ const copyText = vi.hoisted(() => vi.fn(async () => ({ status: "performed" })))
 vi.mock("@/platform", () => ({ copyText }))
 
 let authState: { accountsEnabled?: boolean } | null = { accountsEnabled: true }
+const refreshAuth = vi.hoisted(() => vi.fn(async () => {}))
+const rereadAuth = vi.hoisted(() => vi.fn(async () => {}))
 vi.mock("@/routes/auth-provider", () => ({
-  useAuth: () => ({ authState, principal: { kind: "operator" } }),
-  useAuthOptional: () => ({ authState, principal: { kind: "operator" } }),
+  useAuth: () => ({ authState, principal: { kind: "operator" }, refresh: refreshAuth, reread: rereadAuth }),
+  useAuthOptional: () => ({ authState, principal: { kind: "operator" }, refresh: refreshAuth, reread: rereadAuth }),
 }))
 
 import { PeopleEntry } from "../entry"
@@ -115,6 +117,9 @@ describe("People list", () => {
     fireEvent.click(within(form).getByRole("button", { name: /set up sign-in/i }))
     await waitFor(() => expect(api.setupOwnSignIn).toHaveBeenCalledWith({ email: "me@example.com", displayName: "Me", password: "a-long-enough-password" }))
     await waitFor(() => expect(screen.queryByTestId("setup-own-sign-in")).toBeNull())
+    // The tab's auth state is re-read, so the pickers see the new owner without a reload.
+    expect(rereadAuth).toHaveBeenCalledTimes(1)
+    expect(refreshAuth).not.toHaveBeenCalled()
   })
 
   it("hides set up my sign-in once an active owner exists", async () => {

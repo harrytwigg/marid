@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen, within } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkItemFullWire } from "@/lib/api"
@@ -13,6 +13,9 @@ vi.mock("@/routes/auth-provider", () => ({ useAuthOptional: () => auth.value }))
 vi.mock("@/components/page-layout", () => ({ PageLayout: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
 vi.mock("@/routes/settings-provider", () => ({ useSettings: () => ({ settings: { employeeOverrides: {} } }) }))
 vi.mock("@/routes/providers", () => ({ useTheme: () => ({ theme: "dark" }) }))
+
+const listPeople = vi.hoisted(() => vi.fn())
+vi.mock("@/lib/accounts-api", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/accounts-api")>()), accountsApi: { listPeople } }))
 
 const getWorkItem = vi.fn()
 vi.mock("@/lib/api", async (importOriginal) => {
@@ -63,6 +66,7 @@ describe.each(AUTH_STATES)("the Todo page with %s", (_name, state) => {
   beforeEach(() => {
     vi.clearAllMocks()
     auth.value = state
+    listPeople.mockResolvedValue([])
     getWorkItem.mockResolvedValue({ workItem: item("TSK-12"), spendUsd: 0, events: [] })
   })
 
@@ -72,7 +76,7 @@ describe.each(AUTH_STATES)("the Todo page with %s", (_name, state) => {
     const cluster = row.closest<HTMLElement>('[data-testid="task-chip-cluster"]')!
     expect(ids(cluster, ["chip-status", "chip-assignee", "chip-person", "chip-priority"])).toEqual(["chip-status", "chip-assignee", "chip-person", "chip-priority"])
     expect(within(cluster).getByTestId("chip-assignee").textContent).toContain("Mason")
-    expect(within(cluster).getByTestId("chip-person").textContent).toContain("You (operator)")
+    await waitFor(() => expect(within(cluster).getByTestId("chip-person").textContent).toContain("You (operator)"))
   })
 
   it("runs the rail Status, Priority, Agent, Person, then Dispatch, with no Assignee row", async () => {

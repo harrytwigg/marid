@@ -501,7 +501,7 @@ export function ChatPane({
       {showSessionHydration && !shownFile && <ChatHydrationOverlay />}
 
       <div style={PANE_REGION}>
-      <div data-chat-pane-body data-composer-float={!multiPane && !terminalPane && !(viewMode === 'cli' && sessionId) ? '' : undefined} inert={shownFile ? true : undefined} style={PANE_REGION}>
+      <div data-chat-pane-body data-composer-float={!multiPane && !terminalPane && !(viewMode === 'cli' && sessionId) ? '' : undefined} inert={shownFile ? true : undefined} style={CHAT_BODY_REGION}>
 
       {/* Messages / CLI transcript — CliTerminal is display-only; ChatInput below
           sends. The transcript mounts on a blank composer too, with the employee
@@ -517,6 +517,7 @@ export function ChatPane({
       ) : (
         <SessionQueueContext.Provider value={sessionQueue}>
           <ChatMessages
+            covered={Boolean(shownFile)}
             initialScrollTop={initialScrollTop}
             messages={shownMessages}
             loading={loading}
@@ -657,3 +658,6 @@ const NEW_CHAT_FALLBACK_KEY = 'new-chat'
 
 /** The pane below its title bar, and the chat inside it: a file shown over the chat covers exactly this. */
 const PANE_REGION = { position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' } as const
+
+/** The chat's own stacking context: what floats over the transcript (the jump arrow) stays below a document shown over it. */
+const CHAT_BODY_REGION = { ...PANE_REGION, isolation: 'isolate' } as const
