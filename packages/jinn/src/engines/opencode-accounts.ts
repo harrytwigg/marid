@@ -4,6 +4,7 @@ import { opencodeClones } from "../shared/opencode-catalogue.js";
 import { stagedOpencodeAccounts } from "../shared/opencode-accounts-config.js";
 import { accountCloneModels, planAccountProvider, type OpencodeProviderBlock } from "../shared/opencode-accounts.js";
 import type { OpencodeApi } from "./opencode-version.js";
+import { opencodeAccountKeyEnvironment } from "../shared/child-env.js";
 
 /**
  * The accounts of `engines.opencode.accounts` as an opencode process is given
@@ -53,7 +54,7 @@ export function shortKeyHash(key: string): string {
  */
 export function opencodeAccountStaging(
   config: JinnConfig,
-  environment: Readonly<Record<string, string | undefined>> = process.env,
+  environment: Readonly<Record<string, string | undefined>> = opencodeAccountKeyEnvironment(),
   reach?: ReadonlySet<string>,
 ): OpencodeAccountStaging | undefined {
   const declared = stagedOpencodeAccounts(config);

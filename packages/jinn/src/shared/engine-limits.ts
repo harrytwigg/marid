@@ -31,6 +31,7 @@ import {
   str,
   type JsonRecord,
 } from "./engine-limits-util.js";
+import { buildEngineChildEnv } from "./child-env.js";
 
 export interface CollectEngineLimitsOptions {
   engine?: string;
@@ -82,7 +83,7 @@ async function readCodexRateLimits(config: JinnConfig): Promise<JsonRecord> {
     // Same .cmd constraint as above. Codex usage limits were unavailable on
     // Windows entirely because this threw EINVAL and the error was swallowed.
     const appServer = spawnableCommand(bin, ["app-server", "--stdio"]);
-    const child = spawn(appServer.command, appServer.args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true, ...appServer.options });
+    const child = spawn(appServer.command, appServer.args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true, env: buildEngineChildEnv(process.env), ...appServer.options });
     let stdout = "";
     let stderr = "";
     let settled = false;

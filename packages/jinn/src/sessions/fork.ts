@@ -308,7 +308,7 @@ export async function forkHermesSession(engineSessionId: string, cwd: string): P
     stdio: ["pipe", "pipe", "ignore"],
     cwd,
     detached: process.platform !== "win32",
-    env: { ...process.env, HERMES_YOLO_MODE: "1", HERMES_ACCEPT_HOOKS: "1" },
+    env: { ...buildEngineChildEnv(process.env), HERMES_YOLO_MODE: "1", HERMES_ACCEPT_HOOKS: "1" },
   });
 
   const rpc = new HermesRpc(child.stdin!, child.stdout!);

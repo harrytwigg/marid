@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect } from "vitest";
 import path from "node:path";
-import { buildEngineChildEnv, isScopedSessionEnvName } from "../child-env.js";
+import { buildEngineChildEnv, isScopedSessionEnvName, setOpencodeAccountKeyEnv } from "../child-env.js";
 
 describe("buildEngineChildEnv", () => {
   // The gateway resolves CLAUDE_CONFIG_DIR against its own cwd; the engine is spawned
@@ -82,5 +82,41 @@ describe("buildEngineChildEnv for a department-scoped session", () => {
     expect(isScopedSessionEnvName("Path")).toBe(true);
     expect(isScopedSessionEnvName("SystemRoot")).toBe(true);
     expect(isScopedSessionEnvName("Alpha_Api_Key")).toBe(false);
+  });
+});
+
+describe("opencode account keys", () => {
+  const gatewayEnv = { PATH: "/usr/bin", GO_B_KEY: "sk-secret-b", GO_C_KEY: "sk-secret-c", KEEP: "yes" };
+
+  afterEach(() => setOpencodeAccountKeyEnv([]));
+
+  it("keeps a declared account's key out of claude, codex, pi and every other engine child", () => {
+    setOpencodeAccountKeyEnv(["GO_B_KEY", "GO_C_KEY"]);
+    const children = [
+      buildEngineChildEnv(gatewayEnv),
+      buildEngineChildEnv(gatewayEnv, { scrubClaudeCode: true }),
+      buildEngineChildEnv(gatewayEnv, { scrubClaudeCode: true, scrubCodex: true }),
+      buildEngineChildEnv(gatewayEnv, { scrubClaudeCode: true, scrubCodex: true, scrubOpencode: true }),
+    ];
+    for (const env of children) {
+      expect(env).not.toHaveProperty("GO_B_KEY");
+      expect(env).not.toHaveProperty("GO_C_KEY");
+      expect(env.KEEP).toBe("yes");
+    }
+  });
+
+  it("keeps it out of a scoped session's MCP and tool children, even when the variable is allow-listed by prefix", () => {
+    setOpencodeAccountKeyEnv(["XDG_KEY"]);
+    const env = buildEngineChildEnv({ ...gatewayEnv, XDG_KEY: "sk-secret-x" }, { scopedSession: true });
+    expect(env).not.toHaveProperty("XDG_KEY");
+    expect(env).not.toHaveProperty("GO_B_KEY");
+  });
+
+  it("passes the variable through when no account declares it, and again once the declaration is cleared", () => {
+    expect(buildEngineChildEnv(gatewayEnv).GO_B_KEY).toBe("sk-secret-b");
+    setOpencodeAccountKeyEnv(["GO_B_KEY"]);
+    expect(buildEngineChildEnv(gatewayEnv)).not.toHaveProperty("GO_B_KEY");
+    setOpencodeAccountKeyEnv([]);
+    expect(buildEngineChildEnv(gatewayEnv).GO_B_KEY).toBe("sk-secret-b");
   });
 });

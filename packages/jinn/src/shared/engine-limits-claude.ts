@@ -125,7 +125,7 @@ async function claudeAuthPlan(config: JinnConfig, profile: ClaudeProfile): Promi
     const auth = spawnableCommand(bin, ["auth", "status"]);
     // A named profile's plan is its own: the same command under its CLAUDE_CONFIG_DIR, with
     // the inherited CLAUDE_CODE_* (an OAuth token among them) scrubbed as a session's are.
-    const env = profile ? { env: buildEngineChildEnv(process.env, { scrubClaudeCode: true, claudeProfile: profile }) } : {};
+    const env = { env: profile ? buildEngineChildEnv(process.env, { scrubClaudeCode: true, claudeProfile: profile }) : buildEngineChildEnv(process.env) };
     execFile(auth.command, auth.args, { timeout: 3000, windowsHide: true, ...auth.options, ...env }, (err, stdout) => {
       if (err) return resolve(undefined);
       try {

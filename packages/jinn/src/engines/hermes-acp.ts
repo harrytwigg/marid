@@ -8,6 +8,7 @@ import { mapSessionUpdate, extractPromptText, reduceAgentText, isFinalMessageUpd
 import { buildPromptWithPlatformContext } from "./platform-context.js";
 import { buildAcpMcpServers } from "./hermes-mcp.js";
 import { employeeSessionEnv } from "../sessions/employee-env.js";
+import { buildEngineChildEnv } from "../shared/child-env.js";
 
 const TURN_TIMEOUT_MS = 14 * 24 * 60 * 60 * 1000;
 const HANDSHAKE_TIMEOUT_MS = 60_000;
@@ -49,7 +50,7 @@ export class HermesAcpEngine implements InterruptibleEngine {
       cwd,
       detached: process.platform !== "win32",
       env: {
-        ...inheritedEnv,
+        ...buildEngineChildEnv(inheritedEnv),
         ...(jinnSessionId ? { JINN_SESSION_ID: jinnSessionId } : {}),
         ...employeeSessionEnv(jinnSessionId),
         HERMES_YOLO_MODE: "1",

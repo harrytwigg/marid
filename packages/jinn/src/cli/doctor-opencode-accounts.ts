@@ -4,6 +4,7 @@ import { opencodeAccountProblems, opencodeChainContext, opencodeChainProblems } 
 import type { FallbackChainEntry } from "../shared/fallback-chain-wire.js";
 import type { JinnConfig } from "../shared/types.js";
 import type { DoctorFinding } from "./doctor.js";
+import { opencodeAccountKeyEnvironment } from "../shared/child-env.js";
 
 /**
  * `doctor`'s report on opencode accounts (docs/design/opencode-accounts.md):
@@ -75,7 +76,7 @@ export async function collectOpencodeAccounts(config: JinnConfig): Promise<Openc
   const { opencodeApiOf } = await import("../engines/opencode-version.js");
   const api = opencodeApiOf(await localOpencodeVersion(resolveBin("opencode", config.engines.opencode?.bin)));
 
-  const env = process.env;
+  const env = opencodeAccountKeyEnvironment();
   const context = opencodeChainContext(config, catalogue, env, opencodeClones());
   return {
     accounts: accounts.length,

@@ -15,6 +15,7 @@ import { ENGINE_NAMES } from "./models.js";
 import { opencodeCatalogue, opencodeClones } from "./opencode-catalogue.js";
 import { opencodeChainContext, opencodeChainProblems } from "./opencode-accounts.js";
 import type { Employee, JinnConfig, ModelRegistry } from "./types.js";
+import { opencodeAccountKeyEnvironment } from "./child-env.js";
 
 /**
  * The chains the editor shows (`GET /api/fallback-chains`): one subject per
@@ -58,7 +59,7 @@ const OPEN_SCOPE = { scoped: false, remote: false };
 
 /** The opencode links of a written chain that name a model or account opencode does not serve, or an account with no key. Advisory: the catalogue is not known at load. */
 function opencodeProblems(env: FallbackChainEnv, where: string, chain: readonly FallbackChainEntry[] | undefined): string[] {
-  return opencodeChainProblems(where, chain, opencodeChainContext(env.config, opencodeCatalogue(), process.env, opencodeClones()));
+  return opencodeChainProblems(where, chain, opencodeChainContext(env.config, opencodeCatalogue(), opencodeAccountKeyEnvironment(), opencodeClones()));
 }
 
 /** An engine's default chain, `engines.<engine>.fallback`. */

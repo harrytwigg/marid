@@ -14,6 +14,7 @@ process.env.JINN_HOME = "home";
 const publicHome = path.resolve("home");
 
 const { buildGatewayChildEnv } = await import("../lifecycle.js");
+const { resetOpencodeAccountKeysForTest, setOpencodeAccountKeyEnv } = await import("../../shared/child-env.js");
 
 afterAll(() => {
   process.chdir(originalCwd);
@@ -34,5 +35,18 @@ describe("gateway child JINN_HOME identity", () => {
     expect(env.JINN_HOME).toBe(publicHome);
     expect(env.JINN_HOME).not.toBe("home");
     expect(env.JINN_HOME_IDENTITY).toBe(fs.realpathSync.native(home));
+  });
+
+  it("hands the successor gateway the account keys this one took out of its own environment", () => {
+    process.env.ACME_SUCCESSOR_KEY = "sk-successor";
+    setOpencodeAccountKeyEnv(["ACME_SUCCESSOR_KEY"]);
+    try {
+      expect(process.env.ACME_SUCCESSOR_KEY).toBeUndefined();
+      const env = buildGatewayChildEnv({ gateway: { port: 7851, host: "127.0.0.1" }, engines: { default: "claude" } } as any);
+      expect(env.ACME_SUCCESSOR_KEY).toBe("sk-successor");
+    } finally {
+      resetOpencodeAccountKeysForTest();
+      delete process.env.ACME_SUCCESSOR_KEY;
+    }
   });
 });

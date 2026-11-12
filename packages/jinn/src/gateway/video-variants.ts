@@ -4,6 +4,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { VIDEO_CACHE_DIR } from "../shared/paths.js";
 import { logger } from "../shared/logger.js";
+import { buildEngineChildEnv } from "../shared/child-env.js";
 
 type VariantKind = "low" | "poster";
 type ProcessResult = "ok" | "unavailable" | "failed";
@@ -29,7 +30,7 @@ function runProcess(args: string[]): Promise<ProcessResult> {
       settled = true;
       resolve(result);
     };
-    const child = spawn("ffmpeg", args, { stdio: "ignore" });
+    const child = spawn("ffmpeg", args, { stdio: "ignore", env: buildEngineChildEnv(process.env) });
     child.once("error", (error: NodeJS.ErrnoException) => finish(error.code === "ENOENT" ? "unavailable" : "failed"));
     child.once("exit", (code) => finish(code === 0 ? "ok" : "failed"));
   });

@@ -5,6 +5,7 @@ import type { ModelInfo } from "./types.js";
 import { resolveClaudeConfigDir } from "./home.js";
 import { CLAUDE_KEYCHAIN_SERVICE, claudeKeychainService, type ClaudeProfile } from "./claude-profile.js";
 import { ClaudeCatalogRequestError, parseClaudeCredentials } from "./claude-auth.js";
+import { buildEngineChildEnv } from "./child-env.js";
 
 export const CLAUDE_EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"];
 export const CLAUDE_ALIAS_IDS = ["opus", "sonnet", "fable"] as const;
@@ -206,7 +207,7 @@ export async function discoverClaudeEffortLevels(bin: string): Promise<string[]>
       resolve(s);
     };
     try {
-      const proc = spawn(bin, ["--help"], { stdio: ["ignore", "pipe", "pipe"] });
+      const proc = spawn(bin, ["--help"], { env: buildEngineChildEnv(process.env), stdio: ["ignore", "pipe", "pipe"] });
       proc.stdout.on("data", (d: Buffer) => (out += d.toString()));
       proc.stderr.on("data", (d: Buffer) => (out += d.toString()));
       let killTimer: NodeJS.Timeout | undefined;
