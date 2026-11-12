@@ -67,7 +67,8 @@ const config = {
 
 /* ── What the stub engines are run with, and how a compaction ends ─────────── */
 
-interface Call { engine: string; prompt: string; resume?: string; profile: string | null; model?: string }
+interface Call { engine: string; prompt: string; resume?: string; profile: string | null; model?: string; status?: string }
+let runningId = "";
 type CompactMode = "ok" | "error" | "limit" | "unconfirmed" | "no-summary" | "too-long" | "throw";
 let calls: Call[] = [];
 let compactMode: CompactMode = "ok";
@@ -114,7 +115,7 @@ function stubEngine(name: string): Engine {
   return {
     name,
     async run(opts: EngineRunOpts) {
-      calls.push({ engine: name, prompt: opts.prompt, resume: opts.resumeSessionId, profile: opts.claudeProfile?.dir ?? null, model: opts.model });
+      calls.push({ engine: name, prompt: opts.prompt, resume: opts.resumeSessionId, profile: opts.claudeProfile?.dir ?? null, model: opts.model, status: registry.getSession(runningId)?.status });
       if (/^\/compact\b/.test(opts.prompt)) return compactResult(name, opts);
       threads += 1;
       return { sessionId: opts.resumeSessionId ?? `thread-${name}-${threads}`, result: "carried on" };
@@ -224,6 +225,7 @@ const rows = (id: string) => db.initDb()
 
 /** Run one queued turn through dispatch, as the queue would, and wait for it to settle. */
 async function runRow(id: string, row: { id: string; prompt: string }): Promise<void> {
+  runningId = id;
   const session = registry.getSession(id)!;
   const before = running.length;
   dispatch.dispatchWebSessionRun(session, row.prompt, engines.get(session.engine)!, runContext, { queueItemId: row.id });
@@ -267,6 +269,8 @@ describe("the summary carries the conversation over", () => {
     expect(prompt).toContain(`read_session {sessionId: "${me}"}`);
     expect(prompt).not.toContain(EARLIER);
 
+    // The switch is written inside the running turn without touching its status, so that turn still settles.
+    expect(resumeCall().status).toBe("running");
     expect(session.claudeConfigDir).toBe(alpha.dir);
     expect(session.status).toBe("idle");
     expect(session.lastError).toBeNull();
