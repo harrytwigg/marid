@@ -120,6 +120,13 @@ describe("collectOpencodeAccounts", () => {
     expect(out.find((account) => account.account === "go-c")?.employees).toEqual(["on-c"]);
   });
 
+  it("reads a one-shot roster (a Map's values) once, for every account", () => {
+    const config = cfg({ accounts: ACCOUNTS });
+    const roster = new Map(employees.map((employee) => [employee.name, employee])).values();
+    const out = collectOpencodeAccounts(config, engine(config, []), { employees: roster, env: {}, health: {}, now: new Date(NOW) })!;
+    expect(out.map((account) => account.employees)).toEqual([["unpinned"], ["pinned-b"], ["on-c"]]);
+  });
+
   it("carries only the account's own metered models as buckets", () => {
     const config = cfg({ accounts: ACCOUNTS, usageLimits: { monthlyUsd: { "opencode-go/*": 60 } } });
     const out = collectOpencodeAccounts(config, engine(config, [row("opencode-go/flash", 1, 1), row("opencode-go-b/flash", 2, 1)]), { employees, env: {}, health: {}, now: new Date(NOW) })!;

@@ -43,7 +43,7 @@ function providerOf(model: string | undefined | null): string | undefined {
 }
 
 /** Employees whose own model is on `provider`: an unpinned one runs on the engine's configured model. */
-function employeesOn(provider: string, config: JinnConfig, employees: Iterable<Employee>): string[] {
+function employeesOn(provider: string, config: JinnConfig, employees: readonly Employee[]): string[] {
   const names: string[] = [];
   for (const employee of employees) {
     if ((employee.engine ?? config.engines.default) !== "opencode") continue;
@@ -72,7 +72,7 @@ function holdingRecord(health: EngineHealthReading, provider: string, now: Date)
 }
 
 interface Resolved {
-  employees: Iterable<Employee>;
+  employees: readonly Employee[];
   env: Record<string, string | undefined>;
   health: EngineHealthReading;
   now: Date;
@@ -127,7 +127,8 @@ export function collectOpencodeAccounts(
   if (accounts.length === 0) return undefined;
   const now = deps.now ?? new Date();
   const resolved: Resolved = {
-    employees: deps.employees ?? rosterEmployees(),
+    // Read once per account below, so an iterator (the roster is a Map's values) is made a list first.
+    employees: [...(deps.employees ?? rosterEmployees())],
     env: deps.env ?? process.env,
     health: deps.health ?? readEngineHealth(now),
     now,
