@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-12
 
-**Status**: Draft (clarified 2026-11-12)
+**Status**: Draft (clarified 2026-11-12; revised after spec review the same day)
 
 **Input**: "In the web chat the operator can switch between engines but not between the
 several Claude profiles (accounts) installed, and a session has no way to move itself to
@@ -102,9 +102,12 @@ ran on that account and the selector now names it.
 ### User Story 2 - A session switches itself on request (Priority: P1)
 
 The operator tells a chat "switch to profile X" (or "move to Sonnet", or "carry on in
-OpenCode"). The session lists the valid targets, writes a handoff, and calls the switch
-tool. Its turn ends; the session resumes on the named target from its handoff and carries
-on.
+OpenCode"). The session writes a handoff and calls `compact_session` naming the target.
+Its turn ends; the session resumes on the named target from its handoff and carries on.
+
+The switch is an extension of `compact_session` (three optional target fields), not a new
+tool: two new core tools would cost every session in the company about six times the
+manifest tokens (plan.md, Constitution Check IV).
 
 **Why this priority**: it is the second required part, and the one with no manual
 workaround short of starting a new chat.
@@ -115,10 +118,10 @@ notice naming both targets.
 
 **Acceptance Scenarios**:
 
-1. **Given** a session on Claude own login, **When** it calls the switch tool with a handoff
-   and profile B, **Then** the tool answers "scheduled", and after the current turn ends
+1. **Given** a session on Claude own login, **When** it calls `compact_session` with a handoff
+   and `profile: "B"`, **Then** the tool answers "scheduled", and after the current turn ends
    the session resumes on profile B with the handoff as its first message.
-2. **Given** a session on Claude Opus, **When** it calls the switch tool naming only another
+2. **Given** a session on Claude Opus, **When** it calls `compact_session` naming only another
    Claude model, **Then** the conversation is compacted with the engine's native compaction
    and the resume turn runs on the new model in the same conversation.
 3. **Given** a session on Claude profile A, **When** it names profile B (or engine OpenCode
@@ -130,37 +133,40 @@ notice naming both targets.
    session still moves to the target, and its new conversation gets a manual handover: the
    handoff and a history pointer, no pasted transcript. The transcript notice says the
    compaction failed and a manual handover was used.
-5. **Given** a target equal to the current one, **When** the tool is called, **Then** it is
-   refused and points at `compact_session`.
+5. **Given** a target equal to the current one, **When** the call is made, **Then** it is
+   refused and says to call `compact_session` without a target to compact in place.
 6. **Given** a target that does not exist, is not installed, or is not available to this
-   session, **When** the tool is called, **Then** it is refused, nothing is scheduled, and
-   the refusal names the valid choices or says to list them.
-7. **Given** any refusal `compact_session` gives (stopped session, terminal session,
-   cooldown, messages already queued, unidentified caller, invalid handoff), **When** the
-   switch tool is called in the same state, **Then** it refuses the same way and schedules
+   session, **When** the call is made, **Then** it is refused, nothing is scheduled, and the
+   refusal carries the list of valid targets.
+7. **Given** any refusal `compact_session` gives today (stopped session, terminal session,
+   cooldown, messages already queued, unidentified caller, invalid handoff), **When** a call
+   naming a target is made in the same state, **Then** it refuses the same way and schedules
    nothing.
 
 ---
 
-### User Story 3 - A session lists where it can run (Priority: P2)
+### User Story 3 - A session learns where it can run (Priority: P2)
 
-Before switching, the session asks what it can switch to and gets its current target and
-every engine, profile and model it may move to.
+A session that names a target it cannot use (or asks with an engine name it knows is not
+one, such as `"?"`) gets a refusal carrying its current target and every engine, profile
+and model it may move to, and nothing is scheduled.
 
-**Why this priority**: the switch tool is unusable without valid names, but the list is
-small and read-only.
+**Why this priority**: a switch is unusable without valid names. Carrying the list on the
+refusal costs no manifest tokens; a separate read tool would tax every session and shrinks
+no prompt.
 
-**Independent Test**: call the list tool from a session and compare it with the engines the
-instance has installed, its declared profiles and each engine's models.
+**Independent Test**: call `compact_session` with `engine: "?"` from a session and compare
+the refusal's list with the engines the instance has installed, its declared profiles and
+each engine's models.
 
 **Acceptance Scenarios**:
 
-1. **Given** an unscoped local session, **When** it lists targets, **Then** it sees its
+1. **Given** an unscoped local session, **When** it names an unknown target, **Then** it sees its
    current target, each installed engine with its models (and their effort levels), and each
    declared local Claude profile with whether its allowance is spent and when it resets.
-2. **Given** a department-scoped session, **When** it lists targets, **Then** it sees Claude
+2. **Given** a department-scoped session, **When** it names an unknown target, **Then** it sees Claude
    only, with every declared local profile.
-3. **Given** any session, **When** it lists targets and then switches to one of them,
+3. **Given** any session, **When** it is given the list and then switches to one of them,
    **Then** the switch is not refused for being unknown or unavailable (barring config
    changing in between).
 
@@ -184,8 +190,8 @@ target now in use, and the selector agrees with it.
 
 ### Edge Cases
 
-- **Target spent.** The named profile or engine is known to be out of allowance: the switch
-  tool refuses with the reset time, and the list shows it as spent. The operator's selector
+- **Target spent.** The named profile or engine is known to be out of allowance: a switch is
+  refused with the reset time, and the target list shows it as spent. The operator's selector
   still allows it (the operator may choose to wait).
 - **Config changes in between.** The target was valid when scheduled and is gone when the
   switch applies (profile removed, engine uninstalled): the session stays on its current
@@ -253,7 +259,7 @@ target now in use, and the selector agrees with it.
   gets today.
 - **FR-005**: The operator's profile change MUST obey the rules that govern starting a
   session on a profile: refused for a remote employee's session; allowed for the operator on
-  a department-scoped employee's session (only the operator may move such a session).
+  a department-scoped employee's session.
 - **FR-006**: After an operator's profile or engine change from the selector, the first turn
   on the new target starts a new conversation and carries the operator's message with a
   history pointer, not a pasted transcript. No compaction or extra turn runs. This replaces
@@ -262,23 +268,27 @@ target now in use, and the selector agrees with it.
   resumes it; what it missed meanwhile reaches it as a history pointer (from the time it last
   answered), not as pasted messages.
 
-**Switch tool (session)**
+**Switch (session, through `compact_session`)**
 
-- **FR-010**: A new session tool MUST let a session switch **its own** target. It takes a
-  handoff (the `compact_session` fields, required/optional status and caps unchanged) and a
-  target: `engine` (optional, default the current engine), `profile` (Claude only; a
-  declared profile name, or own login), `model` (optional, default the target engine's
-  default model, or the model the session last used there) and `effortLevel` (optional). At
-  least one of them must change the current target.
-- **FR-011**: The tool MUST refuse, scheduling nothing, in every case `compact_session`
-  refuses: a stopped session, a terminal session, an unidentified caller, an invalid handoff,
+- **FR-010**: `compact_session` MUST accept three optional target fields that let a session
+  switch **its own** target: `engine` (default the current engine), `profile` (Claude only;
+  a declared profile name, or `""` for own login; default the current profile when the
+  engine stays Claude, own login when it becomes Claude) and `model` (default the model the
+  session last used on that engine and account, else the engine's default). The handoff
+  fields, required status and caps are unchanged. A call with none of the three is today's
+  `compact_session`, unchanged. A call with any of them is a **switch**, and at least one
+  must change the session's own target. The effort level after a switch is the one last
+  used on the target, else the engine's default; the operator's selector can change it.
+- **FR-011**: A switch MUST refuse, scheduling nothing, in every case `compact_session`
+  refuses except "this engine has no native compaction" (a switch handles that, FR-014 and
+  FR-015): a stopped session, a terminal session, an unidentified caller, an invalid handoff,
   the self-compaction cooldown (shared with `compact_session` and the operator's manual
-  compaction), and messages already queued for the session. Its description says, as
-  `compact_session`'s does, that it is never to be called from a Task sub-agent.
-- **FR-012**: The tool MUST refuse a target that is unknown, not installed, equal to the
-  current target, not allowed for this session (FR-020/FR-021), or known to be out of
-  allowance (with its reset time when known). Each refusal names the problem and points at
-  the list tool.
+  compaction), and messages already queued for the session. The tool description keeps
+  saying it is never to be called from a Task sub-agent.
+- **FR-012**: A switch MUST refuse a target that is unknown, not installed, equal to the
+  session's own target, not allowed for this session (FR-020/FR-021), or known to be out of
+  allowance (with its reset time when known). Each of these refusals names the problem and
+  carries the target list (FR-030).
 - **FR-013**: On success the tool answers "scheduled" and tells the caller to end its turn,
   as `compact_session` does. Nothing changes while the asking turn runs.
 - **FR-014**: After the asking turn ends, a switch that keeps engine and account (a model or
@@ -303,7 +313,7 @@ target now in use, and the selector agrees with it.
   handoff verbatim, with the same "resume from Next" instruction `compact_session` gives.
 - **FR-017**: The switch MUST persist: every later turn uses the new target, the new target's
   fallback chain applies, and any fallback run or stand-in in force on the old target ends.
-- **FR-018**: A conversation left by a tool switch is retired: a later return to that engine
+- **FR-018**: A conversation left by a session's own switch is retired: a later return to that engine
   and account starts a new conversation.
 - **FR-019**: The scheduled switch MUST survive a gateway restart between the tool call and
   the resume (it is delivered durably, as the `compact_session` resume is). If the target is
@@ -320,18 +330,20 @@ target now in use, and the selector agrees with it.
   login, on any turn, so two profiles used within one department can be switched between in
   both directions. (This relaxes, for switching only, today's rule that a scoped session may
   not start a session on a profile; that spawn rule is unchanged.)
-- **FR-022**: The tool switches only the caller's own session. The target is never another
-  session's id.
+- **FR-022**: A switch changes only the caller's own session. No session id is accepted;
+  one sent in the body is ignored.
 
-**List tool (session)**
+**Target list (on refusal)**
 
-- **FR-030**: A session tool MUST list, for the calling session: its current target; each
-  engine it may switch to with its models (id, label, effort levels, context window where
-  known) and default model; and each Claude profile it may switch to, with whether its
+- **FR-030**: Every target refusal (FR-012) MUST carry, for the calling session: its own
+  current target; each engine it may switch to with its models (id, label, context window
+  where known) and default model; and each Claude profile it may switch to, with whether its
   allowance is spent and when it resets, where known.
 - **FR-031**: The list MUST show exactly what FR-020/FR-021 allow for this caller. A caller
   that may not use profiles (a remote employee's session) is not told which exist.
-- **FR-032**: The list is read-only and has no cooldown.
+- **FR-032**: A target refusal takes no cooldown claim and is checked before the handoff, so
+  a session can ask for the list (e.g. `engine: "?"`) without a handoff and as often as it
+  needs.
 
 **Visibility**
 
@@ -366,7 +378,7 @@ target now in use, and the selector agrees with it.
   X from its handoff with no further operator action, and the transcript shows the switch.
 - **SC-004**: Every refusal case in FR-011, FR-012 and FR-021 schedules nothing: the session's
   target, conversation and queue are unchanged afterwards.
-- **SC-005**: Every target the list tool returns is accepted by the switch tool when nothing
+- **SC-005**: Every target a refusal lists is accepted by a switch when nothing
   else has changed.
 - **SC-006**: Instances with no declared profiles see no change to the selector other than
   the engine name and "own login" label (FR-001).
@@ -380,7 +392,7 @@ target now in use, and the selector agrees with it.
 
 - "Profile" is a Claude-only idea. OpenCode providers are reached through model ids
   (`provider/model`), as in fallback chains; there are no OpenCode profiles.
-- The sub-agent rule for the switch tool is the same as `compact_session`'s: stated in the
+- The sub-agent rule for a switch is the same as `compact_session`'s: stated in the
   tool description, not enforced by the gateway, because a Task sub-agent shares its
   session's identity.
 - Switching changes one session only. It never changes the employee's own configured engine,
@@ -394,10 +406,12 @@ target now in use, and the selector agrees with it.
 - Fallback-chain hops (a usage limit moving a turn to a stand-in) keep their current
   catch-up; changing them to history pointers is a separate change.
 - The history pointer names a way the new conversation can actually use: the gateway's
-  session history through its session tools where the engine has them, else the log file
-  path on this host.
-- Adding two session tools grows the MCP tool manifest; its budget is rebased as part of the
-  work.
+  session history through `read_session` on its own id, plus the left conversation's log
+  file path on this host when there is one. A department-scoped session gets `read_session`
+  only, since its department may not read files outside its stage.
+- The three target fields grow the MCP tool manifest by 28 tokens on its largest wrapper
+  (measured: Pi 4,371 → 4,399, against a ceiling of 4,371; plan.md Constitution Check IV).
+  The ceiling is rebased by what is left after any dead prose is bought back.
 
 ## Out of Scope
 

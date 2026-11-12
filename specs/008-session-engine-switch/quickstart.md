@@ -27,9 +27,10 @@ it at a real instance.
 
 ## Tool path (US2, US3)
 
-1. In a chat on own login, ask the session to call `list_session_targets`: own login, `alpha`,
-   `beta`, opencode with models.
-2. Ask it to `switch_session` to `alpha` with a handoff. Expect 202, a `/compact` turn on own
+1. In a chat on own login, ask the session to call `compact_session` with `engine: "?"` and a
+   handoff: refused 400 `invalid-target`, nothing scheduled, `targets` lists own login,
+   `alpha`, `beta` and opencode with models.
+2. Ask it to call `compact_session` with `profile: "alpha"` and a handoff. Expect 202, a `/compact` turn on own
    login, then the resume on `alpha` in a new conversation whose first message holds the
    fake's summary, then the handoff; notice "carried over by compaction summary".
 3. Make the fake rate-limit own login, repeat: compaction fails (usage limit), the session
@@ -39,9 +40,13 @@ it at a real instance.
 6. Refusals: same target (400 same-target), unknown profile (400), exhausted `beta` (409),
    message queued (409), second call within 10 min (429), stop between call and resume
    (no switch, claim released).
-7. Department-scoped employee's session: switch `alpha` ↔ `beta` on an ordinary turn works;
+7. Stop between the call and the resume; then type `/compact` as the operator: no switch, and
+   the operator's compaction is not recorded against a stale pending switch.
+8. Switch the chat from the selector after the call but before the resume: the operator's
+   target stands; the resume runs as a plain resume.
+9. Department-scoped employee's session: switch `alpha` ↔ `beta` on an ordinary turn works;
    to opencode refused (403).
-8. Remove `alpha` from config between the call and the resume: resume on the old target with
+10. Remove `alpha` from config between the call and the resume: resume on the old target with
    "did not happen".
 
 ## Evidence for the PR

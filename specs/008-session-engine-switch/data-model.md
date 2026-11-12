@@ -17,10 +17,11 @@ Serialised as today (`engine`, `model`, `effortLevel`, `claudeProfile: {name, ke
 
 ## Conversation slots (existing, `engineSessions`)
 
-Keyed by `threadSlot`: the engine name, or for Claude the account key (`claude` for own
-login, `claude:<profile key>` otherwise). `switchSessionTarget` with
+Keyed by `threadSlot`: the engine name, or for Claude the account key. Own login is the
+employee's own account (`ownClaudeAccount`): its profile key when the employee has a
+`claudeConfigDir`, else `claude`; a declared profile is `claude:<profile key>`. `switchSessionTarget` with
 `leftConversation: "park"` (operator) keeps the left slot so a return resumes it;
-`"retire"` (tool) deletes it so a return starts fresh (FR-018).
+`"retire"` (a session's own switch to a new conversation) deletes it so a return starts fresh (FR-018).
 
 ## Sync marker (existing keys in `transportMeta`, one added)
 
@@ -30,15 +31,19 @@ login, `claude:<profile key>` otherwise). `switchSessionTarget` with
 | `engineSyncMode` | **new**: `"pointer"` (history pointer, written by `switchSessionTarget`) or absent/`"transcript"` (today's pasted catch-up, every other writer) |
 
 Cleared on a clean settle by `withSyncMarkersCleared`, which must clear `engineSyncMode` too.
+`switchSessionTarget` first clears `claudeSyncSince`, `claudeSyncAccount` and the
+lost-conversation key; the override revert clears `engineSyncMode` when it writes a marker.
+`engineSyncMode`, `pendingSwitch` and `lastSwitch` are protected from adapter merges.
 
 ## Pending switch (new key `transportMeta.pendingSwitch`)
 
-Written by `POST /api/session-switches` after the claim and the queued-message check;
-removed by `applyPendingSwitch`, or by the stop path that dead-letters the resume.
+Written by `POST /api/compactions` (with target fields) after the claim and the
+queued-message check. Removed by `applyPendingSwitch`, by a stop (`stopSession` and the
+dead-letter release), by an operator switch, and by a request that fails after writing it.
 
 ```ts
 interface PendingSwitch {
-  /** The self-compaction claim time; also the resume delivery's `meta.switchResume`. */
+  /** The self-compaction claim time; matched to the resume delivery's `sourceAttempt`. */
   claimedAt: number;
   from: SwitchTargetView;          // target when requested
   to: SwitchTargetView;            // validated target
@@ -52,11 +57,12 @@ interface PendingSwitch {
 }
 
 type CompactionFailure =
-  | "error" | "usage-limit" | "stopped" | "unconfirmed" | "no-summary" | "no-outcome" | "not-supported";
+  | "error" | "usage-limit" | "unconfirmed" | "no-summary" | "summary-too-long" | "no-outcome" | "not-supported";
+// "not-supported": the engine has no native compaction, so none was queued.
 
 interface SwitchTargetView {
   engine: string;
-  profile: string | null;          // declared account name; null = own login
+  profile: string | null;          // declared account name; null = own login (wire: "")
   claudeConfigDir: string | null;  // canonical dir, for apply
   model: string | null;
   effortLevel: string | null;
@@ -66,7 +72,9 @@ interface SwitchTargetView {
 ## Switch outcome (new key `transportMeta.lastSwitch`, informational)
 
 Written by `applyPendingSwitch` and by the operator path, read by the notice and tests:
-`{ at, by: "operator" | "session", from, to, applied: boolean, carryOver: "same-conversation" | "summary" | "manual-handover" | "transcript-pointer", reason?: string }`.
+`{ at, by: "operator" | "session", from, to, applied: boolean, carryOver: "same-conversation" | "summary" | "manual-handover" | "transcript-pointer", reason?: string, leftTranscript?: string }`.
+`leftTranscript` is the left Claude conversation's transcript path, computed before the
+target write (unscoped sessions only).
 `lastSwitch` replaces the previous value; history lives in the transcript notices.
 
 ## Switch notice (new message meta)
@@ -81,8 +89,9 @@ A `notification` message inserted with `meta.sessionSwitch = lastSwitch`. Text, 
 ## State transitions (tool path)
 
 ```
-idle ──switch_session──▶ claimed (selfCompactionAt) ──▶ pendingSwitch written
+idle ──compact_session{target}──▶ claimed (selfCompactionAt) ──▶ pendingSwitch written
    ──▶ [compaction turn queued?] ──settle──▶ pendingSwitch.compaction recorded
    ──▶ resume turn starts ──applyPendingSwitch──▶ target applied | kept (invalid) ──▶ pendingSwitch removed, lastSwitch written, notice
-stop before resume ──▶ resume dead-lettered ──▶ claim released, pendingSwitch removed (no switch)
+stop before resume ──▶ queued resume withdrawn or dead-lettered ──▶ pendingSwitch removed (no switch)
+operator switch before resume ──▶ pendingSwitch removed ──▶ resume runs as a plain resume
 ```
