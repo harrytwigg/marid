@@ -103,15 +103,15 @@ function SelectorTrigger({ engineLabel, profileLabel, modelLabel, effortLabel, d
         className="group inline-flex min-h-[40px] md:min-h-0 min-w-0 max-w-full items-center gap-1.5 rounded-lg border-none bg-transparent px-1.5 py-1 text-[length:var(--text-footnote)] transition-colors hover:bg-[var(--fill-secondary)] disabled:cursor-default disabled:opacity-60 cursor-pointer"
       >
         <span aria-hidden className="shrink-0 text-[var(--accent)] text-[11px] leading-none">✦</span>
-        {engineLabel && <span data-testid="chip-engine" className="shrink-0 text-[var(--text-tertiary)]">{engineLabel} ·</span>}
+        {engineLabel && <span data-testid="chip-engine" className="min-w-0 shrink-[4] truncate text-[var(--text-tertiary)]">{engineLabel} ·</span>}
         {profileLabel && (
           // Second to drop on a narrow composer, after the effort level.
-          <span data-testid="chip-profile" className="min-w-0 shrink-[8] truncate text-[var(--text-tertiary)] @max-[320px]/composer:hidden">{profileLabel} ·</span>
+          <span data-testid="chip-profile" className="min-w-0 shrink-[8] truncate text-[var(--text-tertiary)] @max-[680px]/composer:hidden">{profileLabel} ·</span>
         )}
         <span className="min-w-0 truncate font-[var(--weight-semibold)] tracking-[-0.2px] text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors">{modelLabel}</span>
         {effortLabel && (
-          // First thing to drop on a narrow composer — measured against the composer container, so a narrow PANE drops it too, not just a narrow viewport.
-          <span className="shrink-0 text-[var(--text-tertiary)] @max-[340px]/composer:hidden">· {effortLabel}</span>
+          // First thing to drop on a narrow composer (the chip shares a slot with the fallback chip and the context ring, so it gets about a third of the row) — measured against the composer container, so a narrow PANE drops it too, not just a narrow viewport.
+          <span className="shrink-0 text-[var(--text-tertiary)] @max-[760px]/composer:hidden">· {effortLabel}</span>
         )}
         <span aria-hidden className="shrink-0 text-[8px] leading-none text-[var(--text-quaternary)] group-hover:text-[var(--text-tertiary)]">▾</span>
       </button>
