@@ -112,6 +112,7 @@ vi.mock("../remote-stage.js", async (importOriginal) => {
         tunnelPort: 44321,
         sessionHome: REMOTE_HOME,
         envFilePath: `${REMOTE_HOME}/tmp/session-env.sh`,
+        ...(opts.opencodeAccounts ? { accountKeysFilePath: `${REMOTE_HOME}/tmp/account-keys.sh` } : {}),
         opencodeConfigPath: `${REMOTE_HOME}/tmp/opencode.json`,
       };
     }),
@@ -291,6 +292,8 @@ describe("opencode accounts on a remote server", () => {
     const serverCmd = hoisted.spawns.find((s) => s.kind === "server")!.args.at(-1)!;
     expect(serverCmd).toContain("JINN_SCRUB_ENV='GO_B_KEY'");
     expect(serverCmd).not.toContain(SENTINEL);
+    // The serve command sources the keys file, after the session-env file the terminal view sources too.
+    expect(serverCmd).toContain(`. '${REMOTE_HOME}/tmp/session-env.sh' && . '${REMOTE_HOME}/tmp/account-keys.sh' && `);
   });
 });
 

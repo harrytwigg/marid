@@ -175,6 +175,18 @@ describe("buildSshSpawnArgs — ssh flags", () => {
   });
 });
 
+describe("buildSshSpawnArgs — a second sourced file (opencode account keys)", () => {
+  const command = (over: Partial<Parameters<typeof buildSshSpawnArgs>[0]>) => build(over).at(-1)!;
+
+  it("sources it after the session-env file, and only when asked", () => {
+    expect(command({ envFile: "/h/tmp/session-env.sh", extraEnvFile: "/h/tmp/account-keys.sh" }))
+      .toContain(". '/h/tmp/session-env.sh' && . '/h/tmp/account-keys.sh' && ");
+    const attach = command({ envFile: "/h/tmp/session-env.sh" });
+    expect(attach).toContain(". '/h/tmp/session-env.sh' && ");
+    expect(attach).not.toContain("account-keys");
+  });
+});
+
 describe("buildSshSpawnArgs — tunnel and forwards (opencode server mode)", () => {
   it("leaves the reverse tunnel on unless asked, so every existing caller is unchanged", () => {
     expect(build()).toEqual(build({ reverseTunnel: true }));

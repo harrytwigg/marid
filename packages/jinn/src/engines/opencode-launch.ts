@@ -205,6 +205,7 @@ function opencodeSshArgs(
     // The bearer and the gateway URL, as a sourced 0600 file rather than argv:
     // a remote command line is readable by every process on that host.
     envFile: staging.envFilePath,
+    ...(staging.accountKeysFilePath ? { extraEnvFile: staging.accountKeysFilePath } : {}),
     unsetRemoteEnv: REMOTE_ENV_DENY,
     // The remote host's node, so an MCP server launched as bare `node` can run
     // at all on a version-manager host; then the instance's own bin/, so the
@@ -231,7 +232,7 @@ function remoteHandle(facts: RemoteFacts, staging: RemoteOpencodeStaging): Remot
   };
 }
 
-/** What staging a remote turn's session needs. The accounts' keys travel in the 0600 session-env file, never on the ssh command line. */
+/** What staging a remote turn's session needs. The accounts' keys travel in a 0600 file of their own (sourced by this turn's `run` command only), never on the ssh command line. */
 function remoteStagingOpts(
   opts: EngineRunOpts,
   trackingId: string,

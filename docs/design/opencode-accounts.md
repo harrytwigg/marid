@@ -195,8 +195,10 @@ same on 1.x and 2.x:
   `{env:<keyEnv>}`.
   - Local processes get `<keyEnv>` set explicitly on the child's env, from
     the value the gateway holds.
-  - Remote processes get it through the 0600 `session-env.sh`
-    (`sessionEnv`), never on the ssh command line.
+  - Remote `run` and `serve` processes get it through a 0600 `account-keys.sh`
+    of its own, sourced after `session-env.sh`; the terminal view's
+    `opencode attach` sources `session-env.sh` alone, so it holds no key.
+    Never on the ssh command line.
   - An unset `keyEnv` stages the block anyway (the link then fails as auth
     and hops) and is reported by doctor and chain problems.
 - **Server mode:** `serverFingerprint` includes each staged account's provider
