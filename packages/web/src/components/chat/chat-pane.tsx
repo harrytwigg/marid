@@ -35,7 +35,7 @@ import { useOnboardingSeed } from '@/components/chat/use-onboarding-seed'
 
 const CliTerminal = lazy(() => import('@/components/cli-terminal').then(m => ({ default: m.CliTerminal })))
 import type { CliTerminalHandle } from '@/components/cli-terminal'
-import { buildNewSessionParams, composeSessionEngine, resolveNewSessionSelector, sessionProfileValue, shouldPersistNewSessionSelector, UNKNOWN_SESSION_PROFILE } from '@/components/chat/new-chat-helpers'
+import { buildNewSessionParams, composeSessionEngine, resolveNewSessionSelector, sessionProfileValue, shouldPersistNewSessionSelector } from '@/components/chat/new-chat-helpers'
 import { readNewSessionSelector, writeNewSessionSelector } from '@/components/chat/new-session-selector'
 import { Slot } from '@/contrib/slot'
 import { AREAS } from '@/contrib/types'
@@ -331,7 +331,6 @@ export function ChatPane({
       const recorded = sessionProfileValue(currentSession?.claudeProfile as Session['claudeProfile']) ?? null
       const nextProfile = next.profile ?? null
       const profileChanged = next.engine === 'claude'
-        && nextProfile !== UNKNOWN_SESSION_PROFILE
         && (nextProfile !== (previous.profile ?? null) || nextProfile !== recorded)
       selectorPutsInFlight.current += 1
       api.updateSession(sid, {

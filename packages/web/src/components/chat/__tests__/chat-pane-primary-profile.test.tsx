@@ -259,6 +259,21 @@ describe('an existing chat and the Claude profile', () => {
     expect(apiMocks.updateSession.mock.calls[0][1]).toHaveProperty('profile', null)
   })
 
+  it('keeps the selection while its own update is in flight, even if an older record arrives', async () => {
+    let finish: (v: unknown) => void = () => {}
+    apiMocks.updateSession.mockReturnValue(new Promise((resolve) => { finish = resolve }))
+    const view = renderExisting({ claudeProfile: null })
+    await pickRow(/claude · work/i)
+    liveSessionState = { ...liveSessionState, session: { ...(liveSessionState.session as object), lastContextTokens: 5 } }
+    view.rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <ChatPane sessionId="s1" isActive onFocus={() => {}} subscribe={() => () => {}} events={[]} />
+      </QueryClientProvider>,
+    )
+    expect(chipLabel()).toContain('Claude · work')
+    await act(async () => { finish({}) })
+  })
+
   it('never sends the unknown label as a profile', async () => {
     renderExisting({ claudeProfile: { name: null, key: 'k' } })
     fireEvent.keyDown(await screen.findByRole('button', { name: /model and effort/i }), { key: 'Enter' })
