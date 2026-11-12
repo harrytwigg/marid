@@ -1,5 +1,6 @@
 import type { EngineResult } from "./types.js";
 import { classifyEngineFailureText, hasEngineFailureClass, isBillingFailureMessage } from "./engine-failure.js";
+import { classifyOpencodeFailure, isOpencodeRefusal } from "./opencode-failure.js";
 import { isMissingConversationOutput, isProcessStartFailure } from "./process-start.js";
 
 /** Whether error text reads as a quota window rather than a fault. Engine
@@ -16,6 +17,9 @@ export interface RateLimitDetection {
   /** The turn can hop along the fallback chain but must never be parked to wait: its
    *  balance is spent, and no clock refills it. */
   billing?: true;
+  /** The provider refused the turn for a reason no wait fixes and no retry on the same target survives: its key is dead
+   *  (`auth`) or the account is not enabled for the model (`model-access`). Hops like a spent balance, never parks. */
+  refused?: "auth" | "model-access";
   /** Unix timestamp in seconds */
   resetsAt?: number;
 }
@@ -51,7 +55,7 @@ const DEAD_SESSION_PATTERNS = [
 /** The provider said no: a rate limit, or a spent balance. Either did no work for a reason of its own,
  *  and the resume id is as good as it was, so neither makes a session dead. */
 function providerRefused(result: EngineResult): boolean {
-  return Boolean(result.rateLimit?.status) || isBillingFailureMessage(result.error);
+  return Boolean(result.rateLimit?.status) || isBillingFailureMessage(result.error) || isOpencodeRefusal(result.error);
 }
 
 /**
@@ -90,6 +94,9 @@ export function detectRateLimit(result: EngineResult): RateLimitDetection {
   const resetsAt = typeof result.rateLimit?.resetsAt === "number"
     ? result.rateLimit.resetsAt
     : undefined;
+
+  const refused = classifyOpencodeFailure(result.error)?.kind;
+  if (refused === "auth" || refused === "model-access") return { limited: true, refused };
 
   if (isBillingFailureMessage(result.error)) {
     return { limited: true, billing: true };

@@ -59,6 +59,8 @@ export interface FallbackLinkHealth {
   usedPercent?: number;
   /** The window that is binding, e.g. "5h" or "weekly". */
   window?: string;
+  /** Why an opencode target is out: a spent allowance, a dead key, or a model the account is not enabled for. */
+  failureClass?: "quota" | "auth" | "model-access";
 }
 
 /** A link as the gateway resolved it for one subject or session. */

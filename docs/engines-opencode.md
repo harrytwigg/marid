@@ -163,6 +163,30 @@ What the meter does not see:
 - **The provider's own clock.** Windows are treated as trailing. That is exact if Go's windows roll, and conservative if they are anchored at first use.
 - **A per-model engine record.** Engine health has one record per engine, so only the **default model's** windows can mark opencode out. A spent pinned model shows in its bucket, and its next refusal is handled reactively, as before.
 
+### Failure classes
+
+A provider call that fails is read from opencode's own error, `{type, message, status}`, which both the `run` and server transports put into the turn's error text as `<type>: <message> (HTTP <status>)`. The type and status decide the class; the prose patterns the gateway uses for every engine apply only to an error that carries no `provider.*` type. Each class is held against what it is about, so the next turn, and any new session, skips it **without sending it a request**:
+
+| What opencode says | Class | Held against | Until |
+|---|---|---|---|
+| `provider.quota`, HTTP 402 (`Insufficient account funds`, `Insufficient balance. Top up…`) | `quota` | the provider (`opencode/<provider>`) | the re-probe interval |
+| HTTP 429 `usage limit exceeded` | `quota` | the provider | the reset it states, else the re-probe interval |
+| `provider.auth`, HTTP 401 (`This API key has expired`) | `auth` | the provider, as signed out | the credential changes (see below) |
+| `provider.auth`, HTTP 403 (`Model access is disabled`, a region opt-in refusal) | `model-access` | that one model (`opencode/<provider>/<model>`) | the re-probe interval |
+
+Every class also hops the turn along the session's fallback chain. A dead key and an unavailable model never park a session to wait, since no clock fixes them: with no link left the turn fails with the provider's own words, as a spent balance does.
+
+A 402 holds the provider only when it is a **subscription provider**. That is `opencode-go` unless `engines.opencode.subscriptionProviders` names others (the list replaces the default). A pay-as-you-go provider's 402 is a balance nobody will top up on a timer, and keeps its billing handling: it hops the turn and records nothing that routing reads. The usage ledger is not consulted for a 402: it cannot say when the provider's own meter clears, and a transient 402 has been seen to clear within an hour while the ledger showed the account far below its windows.
+
+```yaml
+engines:
+  opencode:
+    subscriptionProviders: [opencode-go]   # default; providers whose 402 is a spent allowance
+    reprobeMinutes: 60                     # default; how long a spent provider or an unavailable model is held out
+```
+
+A signed-out provider is held until its stored credential is replaced, not for a time. The gateway notes an opaque identity of the credential (never the key) with the record and compares it on every read; a changed or unreadable credential ends the hold. Where the credential cannot be read (a turn on a remote host, or no stored credential found) the hold lasts 24 hours, so a wrong verdict heals by itself. `jinn limits --clear opencode/<provider>` ends any hold at once, and `jinn doctor` lists a signed-out provider as an action to take.
+
 ---
 
 ## Invocation contract

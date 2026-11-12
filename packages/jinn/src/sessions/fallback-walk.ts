@@ -219,20 +219,20 @@ async function launch(w: Walk, found: Found, hop: FallbackHop): Promise<WalkOutc
   const failure = linkFailure(result, choice.engine);
   if (!failure) return await served(w, found, substitution.model ?? substitution.engineConfig.model, { result, startedMs });
   await opts.hooks.onFallbackFailed?.(result);
-  if (failure.reason === "auth" && result.error) noteLinkAuthFailure(opts, choice, result.error);
+  if (failure.reason === "auth" && result.error && choice.engine === "claude") noteLinkAuthFailure(opts, choice, result.error);
   failedOver(w, found, { ...failure, model: substitution.model ?? substitution.engineConfig.model }, result);
   return undefined;
 }
 
 /** The link failed in a way that moves the walk on: remember it, and hold a limit against its target. */
-function failedOver(w: Walk, found: Found, failure: { reason: FallbackHopReason; resetsAt?: number; isLimit: boolean; model?: string }, result?: EngineResult): void {
+function failedOver(w: Walk, found: Found, failure: { reason: FallbackHopReason; resetsAt?: number; isLimit: boolean; model?: string; error?: string }, result?: EngineResult): void {
   const { link } = found.next;
   w.failedOver = true;
   w.tried.add(link.key);
   w.triedLabels.push(link.label);
   w.cursor = found.next.index;
   w.failure = { end: endOf(link), engine: link.engine, account: link.account, reason: failure.reason, resetsAt: failure.resetsAt };
-  if (failure.isLimit) recordLinkLimit(link, failure.resetsAt, failure.model);
+  if (failure.isLimit) recordLinkLimit(link, failure.resetsAt, failure.model, { error: failure.error, config: w.input.opts.config, remote: w.input.remote !== undefined });
   if (result?.error) logger.info(`Session ${w.input.opts.session.id}: ${link.label} could not serve the turn (${failure.reason})`);
 }
 

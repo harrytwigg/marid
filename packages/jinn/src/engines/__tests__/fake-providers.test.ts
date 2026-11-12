@@ -38,7 +38,7 @@ describe("scenario parsing", () => {
     expect(scenarioProblems({ claude: { "a|opus": [] }, grok: {}, opencode: { "p/m": "boom" } })).toEqual([
       'claude["a|opus"] lists no outcome',
       'unknown section "grok" (claude, opencode)',
-      'opencode["p/m"]: unknown outcome "boom" (ok, rate-limit, hang, fail, signed-out, retry-abandon)',
+      'opencode["p/m"]: unknown outcome "boom" (ok, rate-limit, hang, fail, signed-out, retry-abandon, provider-error)',
     ]);
   });
 
@@ -135,6 +135,16 @@ describe("the limits the fake opencode reports", () => {
     const failure = resultOf({ outcome: "fail" });
     expect(failure.error).toMatch(/upstream exploded/);
     expect(detectRateLimit(failure).limited).toBe(false);
+  });
+
+  it("reports a typed provider error as OpenCode 2 prints it, and the gateway reads it by its class", () => {
+    const quota = resultOf({ outcome: "provider-error", type: "provider.quota", status: 402, message: "Insufficient account funds" });
+    expect(quota.error).toBe("provider.quota: Insufficient account funds (HTTP 402)");
+    expect(detectRateLimit(quota)).toEqual({ limited: true, billing: true });
+    const expired = resultOf({ outcome: "provider-error", type: "provider.auth", status: 401, message: "This API key has expired." });
+    expect(detectRateLimit(expired)).toEqual({ limited: true, refused: "auth" });
+    const noAccess = resultOf({ outcome: "provider-error", type: "provider.auth", status: 403, message: "Upstream request failed: Model access is disabled" });
+    expect(detectRateLimit(noAccess)).toEqual({ limited: true, refused: "model-access" });
   });
 
   it("answers an ok turn with the model it ran on", () => {

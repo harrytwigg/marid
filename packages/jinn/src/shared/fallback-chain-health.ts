@@ -1,5 +1,6 @@
 import { isEngineExhausted, type EngineHealth, type EngineHealthReading } from "./engine-health.js";
 import type { FallbackLinkHealth, ResolvedFallbackLink } from "./fallback-chain-wire.js";
+import { opencodeModelHealthKey } from "./opencode-subscription.js";
 import type { UsageSample } from "./claude-usage-history.js";
 
 /**
@@ -39,11 +40,15 @@ export function linkHealthKey(link: FallbackLinkIdentity): string {
   return provider === undefined ? link.engine : `opencode/${provider}`;
 }
 
-/** The keys a link's state is read under: its own, and the engine-wide one (the engine as a whole is out).
+/** The keys a link's state is read under: its own, an opencode model's own (a model the account is not enabled for),
+ *  and the engine-wide one (the engine as a whole is out).
  *  A Claude link has no engine-wide key: `claude` is the default account's, not every account's. */
 export function healthKeys(link: FallbackLinkIdentity): string[] {
   const key = linkHealthKey(link);
-  return link.engine === "claude" || key === link.engine ? [key] : [key, link.engine];
+  if (link.engine === "claude") return [key];
+  const model = link.engine === "opencode" ? opencodeModelHealthKey(link.model) : undefined;
+  const own = model === undefined ? [key] : [key, model];
+  return key === link.engine ? own : [...own, link.engine];
 }
 
 /** Whether health says the link's target is at its limit now: its own key or the engine-wide one. */
@@ -77,6 +82,10 @@ function untilFields(record: EngineHealth | undefined): Pick<FallbackLinkHealth,
   return record?.until === undefined ? {} : { until: record.until };
 }
 
+function classFields(record: EngineHealth | undefined): Pick<FallbackLinkHealth, "failureClass"> {
+  return record?.failureClass === undefined ? {} : { failureClass: record.failureClass };
+}
+
 /** How a link reads: what engine health records for its keys, else what the latest cached limits reading says. */
 export function linkHealth(inputs: FallbackHealthInputs, link: FallbackLinkIdentity): FallbackLinkHealth {
   const now = inputs.now ?? new Date();
@@ -84,7 +93,7 @@ export function linkHealth(inputs: FallbackHealthInputs, link: FallbackLinkIdent
   const usage = bindingUsage(inputs.limits?.[link.account], now);
   const exhausted = records.find((record) => record.state === "exhausted");
   if (isLinkExhausted(inputs.health, link, now)) {
-    return { state: "exhausted", ...untilFields(exhausted), ...usageFields(usage), ...(exhausted?.window ? { window: exhausted.window } : {}) };
+    return { state: "exhausted", ...untilFields(exhausted), ...classFields(exhausted), ...usageFields(usage), ...(exhausted?.window ? { window: exhausted.window } : {}) };
   }
   const degraded = records.find((record) => record.state === "degraded");
   if (degraded) return { state: "degraded", ...untilFields(degraded), ...usageFields(usage) };

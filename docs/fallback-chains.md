@@ -96,6 +96,7 @@ writes it as explicit links.
 | Failure | Moves on from | Recorded in engine health |
 |---|---|---|
 | rate limit, quota, usage limit | any target | yes, on the failing target |
+| opencode provider refuses: spent allowance (402), dead key (401), model not enabled (403) | any target | yes: the provider, or for a 403 the model alone (see [opencode failure classes](engines-opencode.md#failure-classes)) |
 | engine gave up its own provider retries | any target | yes |
 | model not served | a fallback link only | no |
 | profile signed out | a fallback link only | the auth outage record, as today |
@@ -218,7 +219,11 @@ still names one passes it over as `remote`.
 
 A Claude target's health is its account's. An opencode target's health is kept
 per provider (`opencode/<provider>`), so a provider's usage limit does not mark
-other providers' links as spent. Every other engine keeps one key.
+other providers' links as spent, and a link is also read under its own model
+(`opencode/<provider>/<model>`), where a model the account is not enabled for is
+held without marking the provider's other models. A record carries the kind of
+failure it holds (`failureClass`: `quota`, `auth` or `model-access`). Every other
+engine keeps one key.
 
 ### Context across a hop
 

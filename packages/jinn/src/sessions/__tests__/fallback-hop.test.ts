@@ -9,6 +9,9 @@ describe("limitReason", () => {
     ["usage limit reached (rate limit)", "rate-limit"],
     ["overloaded; opencode would not retry it for 40 min", "retry-exhausted"],
     [undefined, "rate-limit"],
+    ["provider.quota: Insufficient account funds (HTTP 402)", "billing"],
+    ["provider.auth: This API key has expired. Create a new API key in OpenCode Console. (HTTP 401)", "auth"],
+    ["provider.auth: Upstream request failed: Model access is disabled (HTTP 403)", "invalid-model"],
   ] as const)("reads %j as %s", (error, reason) => {
     expect(limitReason({ error })).toBe(reason);
   });
