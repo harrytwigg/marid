@@ -245,7 +245,8 @@ describe("opencodeAccountProblems", () => {
     { id: "base-go/beta", label: "beta", supportsEffort: false, effortLevels: [] },
   ];
   const config = (over: Record<string, unknown> = {}) => ({ engines: { opencode: { accounts: { b: { provider: "go-b", base: "base-go", keyEnv: "GO_B_KEY", ...over } } } } }) as never;
-  const inputs = { catalogue, clones: new Map<string, readonly OpencodeCloneModel[]>(), env: { GO_B_KEY: "k" } };
+  const loaded = new Map<string, readonly OpencodeCloneModel[]>([["base-go", clonesFor(API_OUTPUT, parseOpencodeApiModels).clones.get("base-go") ?? []]]);
+  const inputs = { catalogue, clones: loaded, env: { GO_B_KEY: "k" } };
 
   it("is clean for a base in the catalogue, a known subset and a set key", () => {
     expect(opencodeAccountProblems(config({ models: ["alpha"] }), inputs)).toEqual([]);
@@ -274,6 +275,14 @@ describe("opencodeAccountProblems", () => {
     const problems = opencodeAccountProblems(config(), { catalogue, clones, env: { GO_B_KEY: "k" }, localApi: 1 });
     expect(problems).toEqual([expect.stringContaining("left out on this host: beta, delta")]);
     expect(opencodeAccountProblems(config(), { catalogue, clones, env: { GO_B_KEY: "k" }, localApi: 2 })).toEqual([]);
+  });
+
+  it("names an account whose base has models but no endpoint records yet, since its block would be empty", () => {
+    const unstaged = `account "b": the base's endpoints are not known yet (model details have not loaded), so its models cannot be served`;
+    expect(opencodeAccountProblems(config(), { ...inputs, clones: new Map() })).toEqual([unstaged]);
+    expect(opencodeAccountProblems(config(), inputs)).toEqual([]);
+    // Nothing to say while the catalogue itself is not known.
+    expect(opencodeAccountProblems(config(), { ...inputs, catalogue: null })).toEqual([]);
   });
 
   it("does not blame accounts for a catalogue that is not known yet, but still reports the key", () => {
@@ -324,6 +333,15 @@ describe("chain problems for opencode links", () => {
     expect(fallbackChainProblems("fallback", link("mystery/x"), { engines: ["claude", "opencode"], profiles: new Set() })).toEqual([]);
     const ctx = opencodeChainContext(config, catalogue);
     expect(opencodeChainProblems("fallback", [{ engine: "claude", model: "mystery/x" }, { engine: "opencode" }, "opencode"], ctx)).toEqual([]);
+  });
+
+  it("refuses a link to an account whose endpoint records have not loaded, only when clones are given", () => {
+    const none = new Map<string, readonly OpencodeCloneModel[]>();
+    const sentence = `fallback[0]: account "b": the base's endpoints are not known yet (model details have not loaded)`;
+    expect(problems("go-b/alpha", opencodeChainContext(config, catalogue, { GO_B_KEY: "k" }, none))).toEqual([sentence]);
+    expect(problems("go-b/alpha", opencodeChainContext(config, catalogue, { GO_B_KEY: "k" }))).toEqual([]);
+    const loaded = new Map([["base-go", clonesFor(API_OUTPUT, parseOpencodeApiModels).clones.get("base-go") ?? []]]);
+    expect(problems("go-b/alpha", opencodeChainContext(config, catalogue, { GO_B_KEY: "k" }, loaded))).toEqual([]);
   });
 
   it("gives opencodeChainProblems the same sentences, indexed", () => {

@@ -180,6 +180,16 @@ function catalogueProblems(account: OpencodeAccount, catalogue: readonly ModelIn
   return problems;
 }
 
+/** The account's base has models in the catalogue but no endpoint records were kept for them: the staged block would be empty. */
+export function accountUnstaged(account: OpencodeAccount, catalogue: readonly ModelInfo[], clones: OpencodeClones): boolean {
+  return account.base !== undefined && accountModelInfos(account, catalogue).length > 0 && accountCloneModels(account, clones).length === 0;
+}
+
+/** The sentence for {@link accountUnstaged}. */
+function unstagedProblem(account: OpencodeAccount): string {
+  return `account "${account.name}": the base's endpoints are not known yet (model details have not loaded), so its models cannot be served`;
+}
+
 function droppedProblems(account: OpencodeAccount, inputs: AccountProblemInputs): string[] {
   if (inputs.localApi !== 1) return [];
   const { dropped } = planAccountProvider(account, accountCloneModels(account, inputs.clones), 1);
@@ -198,6 +208,7 @@ function droppedProblems(account: OpencodeAccount, inputs: AccountProblemInputs)
 export function opencodeAccountProblems(config: AccountsConfig, inputs: AccountProblemInputs): string[] {
   return stagedOpencodeAccounts(config).flatMap((account) => [
     ...(inputs.catalogue === null || inputs.catalogue.length === 0 ? [] : catalogueProblems(account, inputs.catalogue)),
+    ...(inputs.catalogue !== null && accountUnstaged(account, inputs.catalogue, inputs.clones) ? [unstagedProblem(account)] : []),
     ...(keyEnvIsSet(inputs.env, account.keyEnv) ? [] : [`account "${account.name}" has no key: ${account.keyEnv} is not set`]),
     ...(inputs.catalogue === null || inputs.catalogue.length === 0 ? [] : droppedProblems(account, inputs)),
   ]);
@@ -213,6 +224,7 @@ export function opencodeChainContext(
   config: AccountsConfig,
   catalogue: readonly ModelInfo[] | null,
   env?: Readonly<Record<string, string | undefined>>,
+  clones?: OpencodeClones,
 ): FallbackOpencodeContext {
   const known = catalogue !== null && catalogue.length > 0;
   return {
@@ -221,6 +233,7 @@ export function opencodeChainContext(
       provider: account.provider,
       ...(known && account.base !== undefined ? { models: accountModelInfos(account, catalogue).map((m) => m.id.slice(account.provider.length + 1)) } : {}),
       ...(account.keyEnv === undefined ? {} : { keyEnv: account.keyEnv }),
+      ...(known && clones !== undefined && accountUnstaged(account, catalogue, clones) ? { unstaged: true } : {}),
       ...(env !== undefined && account.keyEnv !== undefined && !keyEnvIsSet(env, account.keyEnv) ? { keyMissing: true } : {}),
     })),
     ...(known ? { providers: new Set(catalogue.map((m) => m.id.slice(0, m.id.indexOf("/")))) } : {}),

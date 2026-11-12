@@ -89,6 +89,16 @@ describe("GET /api/engines", () => {
     expect(models.find((m) => m.id === "opencode/big-pickle")).not.toHaveProperty("account");
   });
 
+  it("keeps an account model's entry when the engine's pinned model is that model", async () => {
+    const config = configWith();
+    (config.engines.opencode as { model: string }).model = "opencode-go-b/alpha";
+    await use(config);
+    const models: ModelInfo[] = (await call("GET", "/api/engines")).body.engines.opencode.models;
+    expect(models.filter((m) => m.id === "opencode-go-b/alpha")).toEqual([
+      { id: "opencode-go-b/alpha", label: "alpha", supportsEffort: true, effortLevels: ["low", "high"], contextWindow: 200_000, account: "b" },
+    ]);
+  });
+
   it("lists only the subset an account names", async () => {
     await use(configWith({ accounts: { b: { provider: "opencode-go-b", base: "opencode-go", keyEnv: KEY_ENV, models: ["beta"] } } }));
     const ids = (await call("GET", "/api/engines")).body.engines.opencode.models.map((m: ModelInfo) => m.id);

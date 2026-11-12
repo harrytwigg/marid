@@ -246,6 +246,8 @@ export interface FallbackOpencodeAccount {
   keyEnv?: string;
   /** The gateway's environment has no value for `keyEnv`. Set only where an environment is known (never in the web). */
   keyMissing?: boolean;
+  /** The account's base has models but its endpoint records have not loaded, so its staged block would be empty. */
+  unstaged?: boolean;
 }
 
 /** What chain validation knows of opencode's models and accounts. */
@@ -315,6 +317,7 @@ export function opencodeLinkProblems(where: string, link: FallbackLink, opencode
 function accountLinkProblems(where: string, id: string, model: string, account: FallbackOpencodeAccount): string[] {
   return [
     ...(account.models !== undefined && !account.models.includes(model) ? [`${where}: model "${id}" is not served by account "${account.name}"`] : []),
+    ...(account.unstaged ? [`${where}: account "${account.name}": the base's endpoints are not known yet (model details have not loaded)`] : []),
     ...(account.keyMissing && account.keyEnv ? [`${where}: account "${account.name}" has no key: ${account.keyEnv} is not set`] : []),
   ];
 }

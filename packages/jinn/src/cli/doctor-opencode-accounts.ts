@@ -76,7 +76,7 @@ export async function collectOpencodeAccounts(config: JinnConfig): Promise<Openc
   const api = opencodeApiOf(await localOpencodeVersion(resolveBin("opencode", config.engines.opencode?.bin)));
 
   const env = process.env;
-  const context = opencodeChainContext(config, catalogue, env);
+  const context = opencodeChainContext(config, catalogue, env, opencodeClones());
   return {
     accounts: accounts.length,
     accountProblems: opencodeAccountProblems(config, { catalogue, clones: opencodeClones(), env, localApi: api }),

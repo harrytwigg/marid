@@ -655,15 +655,16 @@ function buildOpencodeEntry(
   const pinned = config.engines.opencode?.model;
   const discoveredOpencodeModels = opencodeCatalogue();
   if (discoveredOpencodeModels && discoveredOpencodeModels.length > 0) {
-    let models = discoveredOpencodeModels;
+    // An account lists its base's models under its own provider id, so chains, pickers and validation see them as any other.
+    // Taken from the discovered catalogue, before the pinned placeholder below, so a pin on an account model keeps its entry.
+    const accountModels = accountRegistryModels(config, discoveredOpencodeModels).filter((m) => !discoveredOpencodeModels.some((own) => own.id === m.id));
+    let models = [...discoveredOpencodeModels, ...accountModels];
     // A pinned model discovery has not caught up with still has to be
     // selectable — otherwise an employee configured for it cannot start at all.
     if (pinned && !models.some((m) => m.id === pinned)) {
       models = [{ id: pinned, label: pinned, supportsEffort: false, effortLevels: [] }, ...models];
     }
-    // An account lists its base's models under its own provider id, so chains, pickers and validation see them as any other.
-    const accountModels = accountRegistryModels(config, models).filter((m) => !models.some((own) => own.id === m.id));
-    return { name: "opencode", available, defaultModel: pinned || models[0].id, effortMechanism: EFFORT_MECHANISM.opencode, models: withConfiguredOverrides([...models, ...accountModels], opencodeBlock) };
+    return { name: "opencode", available, defaultModel: pinned || models[0].id, effortMechanism: EFFORT_MECHANISM.opencode, models: withConfiguredOverrides(models, opencodeBlock) };
   }
   if (opencodeBlock) return fromEngineModelsConfig("opencode", opencodeBlock, available, pinned);
   return { ...synthEntry, available };
