@@ -2154,7 +2154,7 @@ describe("a switch made outside this view", () => {
     expect(result.current.session).toBe(before)
   })
 
-  it("ignores a late reply once a turn started", async () => {
+  it("still applies the new target when a turn started while the re-read was in flight, and leaves the status alone", async () => {
     getSession.mockResolvedValue(record({}))
     const { subscribe, emit } = makeBus()
     const { result } = renderHook(() => useLiveSession("s1", { subscribe }))
@@ -2164,8 +2164,9 @@ describe("a switch made outside this view", () => {
     getSession.mockReturnValueOnce(new Promise((resolve) => { answer = resolve }))
     act(() => { emit("session:updated", { sessionId: "s1" }) })
     act(() => { emit("session:started", { sessionId: "s1" }) })
-    await act(async () => { answer(record({ model: "sonnet" })) })
-    expect(result.current.session?.model).toBe("opus")
+    await act(async () => { answer(record({ model: "sonnet", status: "idle" })) })
+    expect(result.current.session?.model).toBe("sonnet")
+    expect(result.current.session?.status).toBe("running")
   })
 
   it("ignores another session's update", async () => {

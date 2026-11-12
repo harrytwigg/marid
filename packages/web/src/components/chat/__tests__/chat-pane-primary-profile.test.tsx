@@ -173,6 +173,8 @@ describe('the new-chat pane and the Claude profile', () => {
   })
 })
 
+const UNKNOWN = 'Unknown profile'
+
 describe('an existing chat and the Claude profile', () => {
   beforeEach(() => { apiMocks.updateSession.mockResolvedValue({}) })
 
@@ -233,5 +235,54 @@ describe('an existing chat and the Claude profile', () => {
     renderExisting({ employee: 'local-lead' })
     await pickRow(/claude · work/i)
     expect(apiMocks.updateSession).toHaveBeenCalled()
+  })
+
+  it('says null for own login when coming back to claude after leaving it', async () => {
+    renderExisting({ claudeProfile: { name: 'work', key: 'k' } })
+    await pickRow(/^opencode$/i)
+    await waitFor(() => expect(apiMocks.updateSession).toHaveBeenCalledTimes(1))
+    expect(apiMocks.updateSession.mock.calls[0][1]).not.toHaveProperty('profile')
+    await screen.findByRole('button', { name: /model and effort/i })
+    // The menu may still be open on the main panel after the pick; reach the engine panel either way.
+    if (!screen.queryByRole('menuitem', { name: /switch engine/i })) fireEvent.keyDown(screen.getByRole('button', { name: /model and effort/i }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: /switch engine/i }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /^claude · own login$/i }))
+    await waitFor(() => expect(apiMocks.updateSession).toHaveBeenCalledTimes(2))
+    expect(apiMocks.updateSession.mock.calls[1][1]).toMatchObject({ engine: 'claude', profile: null })
+  })
+
+  it('shows a profile the config no longer declares as unknown, and moves off it to own login with null', async () => {
+    renderExisting({ claudeProfile: { name: null, key: 'k' } })
+    expect(chipLabel()).toContain(`Claude · ${UNKNOWN}`)
+    await pickRow(/^claude · own login$/i)
+    await waitFor(() => expect(apiMocks.updateSession).toHaveBeenCalled())
+    expect(apiMocks.updateSession.mock.calls[0][1]).toHaveProperty('profile', null)
+  })
+
+  it('never sends the unknown label as a profile', async () => {
+    renderExisting({ claudeProfile: { name: null, key: 'k' } })
+    fireEvent.keyDown(await screen.findByRole('button', { name: /model and effort/i }), { key: 'Enter' })
+    fireEvent.click((await screen.findAllByText('Opus')).at(-1)!)
+    await waitFor(() => expect(apiMocks.updateSession).toHaveBeenCalled())
+    expect(apiMocks.updateSession.mock.calls[0][1]).not.toHaveProperty('profile')
+  })
+
+  it('shows no profile segment for a remote employee\'s chat', () => {
+    renderExisting({ employee: 'remote-lead' })
+    expect(chipLabel()).toMatch(/^Model and effort: Claude · Opus/)
+  })
+
+  it('keeps "applies to your next message" when the record echoes this pane\'s own update', async () => {
+    const view = renderExisting({ claudeProfile: null })
+    await pickRow(/claude · work/i)
+    await screen.findByText(/applies to your next message/i)
+    liveSessionState = { ...liveSessionState, session: { ...(liveSessionState.session as object), claudeProfile: { name: 'work', key: 'k' } } }
+    view.rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <ChatPane sessionId="s1" isActive onFocus={() => {}} subscribe={() => () => {}} events={[]} />
+      </QueryClientProvider>,
+    )
+    await waitFor(() => expect(chipLabel()).toContain('Claude · work'))
+    expect(screen.getByText(/applies to your next message/i)).toBeTruthy()
   })
 })

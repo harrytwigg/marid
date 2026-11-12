@@ -1003,10 +1003,11 @@ export function useLiveSession(
       if (event === 'session:updated') {
         // A switch made by the session (or another view) changes its engine, profile or model with no
         // other frame: re-read the record and merge only the target, so the selector follows without a reload.
-        const startsBefore = turnStartsRef.current
+        // The merge leaves status alone, so a turn that started meanwhile (a switch's resume follows its
+        // update at once) is no reason to drop it.
         api.getSession(sid, { messages: false })
           .then((s) => {
-            if (sessionIdRef.current !== sid || turnStartsRef.current !== startsBefore) return
+            if (sessionIdRef.current !== sid) return
             const next = s as Record<string, unknown>
             setCurrentSession((prev) => {
               if (!prev) return prev

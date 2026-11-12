@@ -246,7 +246,8 @@ export function ModelSelectorRow({ mode, value, onChange, pendingNote, errorNote
 
   // Only Claude has accounts: another engine shows no profile. No profile on Claude is the own login, named.
   // An existing chat shows the profile it runs on, declared or not; a new chat only one it may start on.
-  const profileLabel = engine !== 'claude' ? undefined : (mode === 'new' ? effectiveProfile : value.profile) ?? 'Own login'
+  // A remote employee runs on its host's Claude login, which has no name here: no segment.
+  const profileLabel = engine !== 'claude' || employeeRemote ? undefined : (mode === 'new' ? effectiveProfile : value.profile) ?? 'Own login'
 
   return (
     <DropdownMenu>
