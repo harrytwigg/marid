@@ -12,6 +12,8 @@ import {
 } from "./fallback-chain-wire.js";
 import { duplicateProblemsByChain } from "./fallback-chain-load.js";
 import { ENGINE_NAMES } from "./models.js";
+import { opencodeCatalogue } from "./opencode-catalogue.js";
+import { opencodeChainContext, opencodeChainProblems } from "./opencode-accounts.js";
 import type { Employee, JinnConfig, ModelRegistry } from "./types.js";
 
 /**
@@ -54,12 +56,17 @@ function subjectOf(
 
 const OPEN_SCOPE = { scoped: false, remote: false };
 
+/** The opencode links of a written chain that name a model or account opencode does not serve, or an account with no key. Advisory: the catalogue is not known at load. */
+function opencodeProblems(env: FallbackChainEnv, where: string, chain: readonly FallbackChainEntry[] | undefined): string[] {
+  return opencodeChainProblems(where, chain, opencodeChainContext(env.config, opencodeCatalogue(), process.env));
+}
+
 /** An engine's default chain, `engines.<engine>.fallback`. */
 export function engineSubject(env: FallbackChainEnv, engine: string): FallbackChainSubject {
   const written = (env.config.engines as unknown as Record<string, { fallback?: FallbackChainEntry[] } | undefined>)[engine]?.fallback;
   const mode: FallbackExpansionMode = engine === "claude" ? "account" : "engine";
   const own = ownTargetLink(env.config, { engine, model: defaultModel(env.config, env.registry, engine) });
-  const problems = duplicateProblemsByChain(env.config.engines)[`engines.${engine}.fallback`];
+  const problems = [...(duplicateProblemsByChain(env.config.engines)[`engines.${engine}.fallback`] ?? []), ...opencodeProblems(env, `engines.${engine}.fallback`, written)];
   return subjectOf(env, { kind: "engine", id: engine }, { own, ownAccount: engine, entries: written ?? [], mode, scope: OPEN_SCOPE }, written, problems);
 }
 
@@ -68,7 +75,8 @@ export function accountSubject(env: FallbackChainEnv, account: DeclaredClaudeAcc
   const model = defaultModel(env.config, env.registry, "claude");
   const own = { engine: "claude", profile: account.name, ...(model ? { model } : {}) };
   const spec: FallbackChainSpec = { own, ownAccount: account.key, entries: account.fallback ?? [], mode: "account", scope: OPEN_SCOPE };
-  const problems = duplicateProblemsByChain(env.config.engines)[`engines.claude.accounts.${account.name}.fallback`];
+  const where = `engines.claude.accounts.${account.name}.fallback`;
+  const problems = [...(duplicateProblemsByChain(env.config.engines)[where] ?? []), ...opencodeProblems(env, where, account.fallback)];
   return subjectOf(env, { kind: "account", id: account.name }, spec, account.fallback, problems);
 }
 
@@ -96,7 +104,8 @@ export function employeeSubject(env: FallbackChainEnv, employee: Employee, scope
     ...subjectOf(env, { kind: "employee", id: employee.name }, { own, ownAccount, claudeAccount: accountForEmployee(employee, "claude"), entries, mode, scope }, employee.fallback),
     ...inheritedSource(env.config, employee.engine, ownAccount, inherited?.source),
   };
-  return employee.fallbackProblems?.length ? { ...subject, problems: employee.fallbackProblems } : subject;
+  const problems = [...(employee.fallbackProblems ?? []), ...opencodeProblems(env, "fallback", employee.fallback)];
+  return problems.length > 0 ? { ...subject, problems } : subject;
 }
 
 /** The whole response: profiles, every engine and every declared account, and the employee when one is asked for. */

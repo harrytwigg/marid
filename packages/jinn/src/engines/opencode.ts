@@ -17,6 +17,7 @@ import {
 import type { OpencodeMode } from "../shared/config-types.js";
 import { JINN_HOME } from "../shared/paths.js";
 import { type OpencodeServer, type OpencodeServerPool, type OpencodeServerSpec } from "./opencode-server.js";
+import type { OpencodeAccountsReader } from "./opencode-accounts.js";
 import { OpencodeServerTurn } from "./opencode-server-turn.js";
 import { OpencodeServerCompaction } from "./opencode-server-compaction.js";
 import { OpencodeV2ServerTurn } from "./opencode-v2-turn.js";
@@ -90,6 +91,8 @@ export class OpencodeEngine implements InterruptibleEngine {
    *  process. Absent means on. */
   private readDisableFff: () => boolean;
   private readCommandTimeoutMs: () => number;
+  /** The declared opencode accounts, read per turn (opencode-accounts.ts). */
+  private readAccounts: OpencodeAccountsReader;
   /** The effort levels (opencode variants) the registry knows for a model, read
    *  live because discovery refreshes. Absent: none, so no turn sends a variant. */
   private readEffortLevels: () => ModelEffortLevels;
@@ -102,6 +105,8 @@ export class OpencodeEngine implements InterruptibleEngine {
     disableFff?: () => boolean;
     /** `engines.opencode.commandTimeoutMs`, resolved, read per turn; absent or 0: no ceiling. */
     commandTimeoutMs?: () => number;
+    /** The declared opencode accounts, staged as provider blocks; absent: none. */
+    accounts?: OpencodeAccountsReader;
     /** The effort levels (variants) the model registry lists for a model. */
     effortLevels?: () => ModelEffortLevels;
     servers?: OpencodeServerPool;
@@ -111,6 +116,7 @@ export class OpencodeEngine implements InterruptibleEngine {
     this.readMode = opts.mode ?? (() => "run");
     this.readDisableFff = opts.disableFff ?? (() => true);
     this.readCommandTimeoutMs = opts.commandTimeoutMs ?? (() => 0);
+    this.readAccounts = opts.accounts ?? (() => undefined);
     this.readEffortLevels = opts.effortLevels ?? (() => () => []);
     this.servers = opts.servers;
   }
@@ -202,7 +208,8 @@ export class OpencodeEngine implements InterruptibleEngine {
     // turn needs `--standalone` (opencode-launch.ts); a remote host's comes
     // with its facts.
     const commandTimeoutMs = this.readCommandTimeoutMs();
-    const processOptions = { disableFff: this.readDisableFff(), ...(commandTimeoutMs > 0 ? { commandTimeoutMs } : {}) };
+    const accounts = this.readAccounts();
+    const processOptions = { disableFff: this.readDisableFff(), ...(commandTimeoutMs > 0 ? { commandTimeoutMs } : {}), ...(accounts ? { accounts } : {}) };
     if (!isRemoteTarget(opts)) {
       const api = opencodeApiOf(await localOpencodeVersion(resolveBin("opencode", opts.bin)));
       return await this.launch(localOpencodeLaunch(opts, trackingId, { api, ...processOptions }), trackingId, onStream);

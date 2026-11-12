@@ -163,6 +163,30 @@ What the meter does not see:
 - **The provider's own clock.** Windows are treated as trailing. That is exact if Go's windows roll, and conservative if they are anchored at first use.
 - **A per-model engine record.** Engine health has one record per engine, so only the **default model's** windows can mark opencode out. A spent pinned model shows in its bucket, and its next refusal is handled reactively, as before.
 
+### Accounts
+
+Several subscriptions to one opencode provider (two OpenCode Go workspaces, say) are declared as named accounts. Each account becomes its own opencode provider id, so a chain link or a session can name `opencode-go-b/deepseek-v4.1-flash` beside `opencode-go/deepseek-v4.1-flash` and each is billed to its own key. Design and the findings behind it: [design/opencode-accounts.md](design/opencode-accounts.md).
+
+```yaml
+engines:
+  opencode:
+    accounts:
+      go-b:                                  # a name: [A-Za-z0-9][A-Za-z0-9._-]*
+        provider: opencode-go-b              # the provider id chains name: opencode-go-b/<model>
+        base: opencode-go                    # clone this provider's endpoints, SDKs, prices and limits
+        keyEnv: OPENCODE_GO_B_API_KEY        # the variable holding this account's key, in the gateway's environment
+        label: Go (second workspace)         # optional display name
+        models: [deepseek-v4.1-flash]        # optional subset of the base's models; default all
+```
+
+- **No key in config.** `keyEnv` names a variable; an inline `apiKey`, `key` or `token` is refused. Put the key in the gateway's environment (the service unit, or the shell that starts it).
+- **How the key reaches opencode.** The staged opencode config holds only `{env:<keyEnv>}`. A local process is started with the variable set from the gateway's environment; a remote host gets it through the session's 0600 `session-env.sh`, never on the `ssh` command line. In server mode the warm server restarts when an account's key, provider id or model list changes (its fingerprint holds a short hash of the key, never the key). If the variable is unset the block is still staged and the turn fails as an authentication error, so the chain moves on; `jinn doctor` names the variable.
+- **Where models come from.** Discovery keeps each base model's SDK, endpoint, price, limits and effort variants (never a credential), and the account's models are the base's, cut to `models` when given. They appear in the model pickers and chains as `<provider>/<model>` with the base's label, context window and effort levels. `GET /api/engines` marks them with `account`. A built-in provider declared without `base` adds no models of its own. An account added to config is cloned at the next model refresh (a config reload starts one).
+- **Cost is carried over.** Without a `cost` an alias turn is recorded at $0, so the staged block gives each model the base's price (`input`, `output`, `cache_read`, `cache_write`, in USD per million tokens). If the base lists tiered prices only the first tier is used.
+- **The 1.x limit.** OpenCode 1.x sends every model of a provider to the provider's one endpoint, ignoring a per-model endpoint, while Go serves models on several (openai-compatible, anthropic, google). On a 1.x binary (local, or on a remote host) an account therefore serves only the models on its main endpoint (the one most of its models use); the others are left out of the block, and a chain link to one fails as an unknown model and moves on. OpenCode 2.x honours a per-model SDK and endpoint, so every model is served. `jinn doctor` lists the models a 1.x local binary leaves out.
+- **`jinn doctor`** also prints each account's problems that need the catalogue or the environment (the base missing from opencode's catalogue, a provider id that collides with one in it, a `models` entry that is not the base's, `keyEnv` unset), and every chain link that names a model its account does not serve, an account with no key, or a provider that is neither an account's nor in opencode's catalogue. `GET /api/fallback-chains` reports the same under each chain's `problems`. These are advisory: the catalogue is not known when the config loads, so a chain is never refused for them.
+- **Conversations carry over.** All accounts share one opencode data directory, so a hop from `opencode-go/x` to `opencode-go-b/x` is the same thread on another model.
+
 ---
 
 ## Invocation contract

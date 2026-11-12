@@ -9,6 +9,7 @@ import type { JinnConfig, RemoteExecutionConfig } from "../shared/config-types.j
 import { buildOpencodeArgs, buildOpencodePrompt, describeOpencodeLaunch, type OpencodeRunFlags } from "./opencode-protocol.js";
 import { opencodeApiOf, type OpencodeApi } from "./opencode-version.js";
 import { COMMAND_TIMEOUT_ENV, localCommandTimeoutPlugins } from "./opencode-command-timeout.js";
+import type { OpencodeAccountStaging } from "./opencode-accounts.js";
 import {
   writeOpencodeSessionConfig,
   type OpencodeConfigHandle,
@@ -142,11 +143,11 @@ export function runFlagsFor(api: OpencodeApi): OpencodeRunFlags {
 export function localOpencodeLaunch(
   opts: EngineRunOpts,
   trackingId: string,
-  ctx: OpencodeProcessOptions & { api?: OpencodeApi },
+  ctx: OpencodeProcessOptions & { api?: OpencodeApi; accounts?: OpencodeAccountStaging },
 ): OpencodeLaunchPlan {
   const bin = resolveBin("opencode", opts.bin);
   const api = ctx.api ?? 1;
-  const configHandle = writeOpencodeSessionConfig(opts.resolvedMcp, trackingId, api, localCommandTimeoutPlugins(api, ctx.commandTimeoutMs ?? 0));
+  const configHandle = writeOpencodeSessionConfig(opts.resolvedMcp, trackingId, api, localCommandTimeoutPlugins(api, ctx.commandTimeoutMs ?? 0), ctx.accounts);
 
   logger.info(
     `opencode engine starting: ${bin} ${describeOpencodeLaunch(opts)} `
@@ -158,6 +159,8 @@ export function localOpencodeLaunch(
     args: buildOpencodeArgs(opts, runFlagsFor(api)),
     env: {
       ...cleanEnv(trackingId, ctx),
+      // Each account's key variable, set explicitly: the staged config names it as `{env:<keyEnv>}`.
+      ...(ctx.accounts?.env ?? {}),
       ...(configHandle.staged ? { OPENCODE_CONFIG: configHandle.configPath } : {}),
     },
     cwd: opts.cwd,
@@ -220,6 +223,26 @@ function remoteHandle(facts: RemoteFacts, staging: RemoteOpencodeStaging): Remot
   };
 }
 
+/** What staging a remote turn's session needs. The accounts' keys travel in the 0600 session-env file, never on the ssh command line. */
+function remoteStagingOpts(
+  opts: EngineRunOpts,
+  trackingId: string,
+  ctx: OpencodeProcessOptions & { remote: RemoteExecutionConfig | undefined; gatewayPort: number; accounts?: OpencodeAccountStaging },
+  facts: RemoteFacts,
+) {
+  return {
+    target: opts,
+    remote: ctx.remote!,
+    facts,
+    engine: "opencode" as const,
+    jinnSessionId: trackingId,
+    gatewayPort: ctx.gatewayPort,
+    ...(opts.resolvedMcp ? { resolvedMcp: opts.resolvedMcp } : {}),
+    opencodeCommandTimeout: Boolean(ctx.commandTimeoutMs),
+    ...(ctx.accounts ? { opencodeAccounts: ctx.accounts } : {}),
+  };
+}
+
 /**
  * A turn on another machine: the same `opencode run --format json` contract,
  * with an `ssh` client standing in for the local process.
@@ -238,7 +261,7 @@ function remoteHandle(facts: RemoteFacts, staging: RemoteOpencodeStaging): Remot
 export async function remoteOpencodeLaunch(
   opts: EngineRunOpts,
   trackingId: string,
-  ctx: OpencodeProcessOptions & { remote: RemoteExecutionConfig | undefined; gatewayPort: number },
+  ctx: OpencodeProcessOptions & { remote: RemoteExecutionConfig | undefined; gatewayPort: number; accounts?: OpencodeAccountStaging },
 ): Promise<OpencodeLaunchPlan> {
   assertRemoteTarget(opts, ctx.remote);
   // Without a real gateway port the reverse forward would be built as
@@ -250,16 +273,7 @@ export async function remoteOpencodeLaunch(
   const readiness = await ensureRemoteReady(opts, ctx.remote, { engine: "opencode", allowWake: false });
   if (!readiness.ready) throw new Error(`remote host not ready: ${readiness.reason}`);
   const facts = readiness.facts;
-  const staging = await prepareRemoteSession({
-    target: opts,
-    remote: ctx.remote!,
-    facts,
-    engine: "opencode",
-    jinnSessionId: trackingId,
-    gatewayPort: ctx.gatewayPort,
-    ...(opts.resolvedMcp ? { resolvedMcp: opts.resolvedMcp } : {}),
-    opencodeCommandTimeout: Boolean(ctx.commandTimeoutMs),
-  });
+  const staging = await prepareRemoteSession(remoteStagingOpts(opts, trackingId, ctx, facts));
 
   const remote = remoteHandle(facts, staging);
   await reapStaleRemoteEngine(remote, "opencode");

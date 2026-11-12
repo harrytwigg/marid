@@ -94,6 +94,9 @@
 // `--version` prints that version as the real CLI does;
 // FAKE_OPENCODE_ENV_LOG names a file each `serve`, `run` and `attach` appends
 // `<verb> <OPENCODE_DISABLE_FFF or empty>` to;
+// FAKE_OPENCODE_STAGED_LOG names a file each `serve` and `run` appends one JSON line to:
+// the verb, the staged config file (OPENCODE_CONFIG) as it read at start, and the
+// environment variables named by FAKE_OPENCODE_STAGED_ENV (comma separated);
 // FAKE_OPENCODE_RUN_LOG names a file each `run` appends its argv to as one JSON line; FAKE_OPENCODE_SERVE_LOG names a file each
 // `serve` start appends a line to; FAKE_OPENCODE_CREATE_DELAY_MS delays the
 // answer to POST /session; FAKE_OPENCODE_HISTORY_DELAY_MS delays the answer
@@ -117,6 +120,15 @@ const flag = (name) => {
   return i >= 0 ? argv[i + 1] : undefined;
 };
 if (process.env.FAKE_OPENCODE_ENV_LOG && verb !== "--version") fs.appendFileSync(process.env.FAKE_OPENCODE_ENV_LOG, `${verb} ${process.env.OPENCODE_DISABLE_FFF ?? ""}\n`);
+if (process.env.FAKE_OPENCODE_STAGED_LOG && (verb === "serve" || verb === "run")) {
+  const configPath = process.env.OPENCODE_CONFIG;
+  const names = (process.env.FAKE_OPENCODE_STAGED_ENV ?? "").split(",").filter(Boolean);
+  fs.appendFileSync(process.env.FAKE_OPENCODE_STAGED_LOG, `${JSON.stringify({
+    verb,
+    config: configPath && fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, "utf8")) : null,
+    env: Object.fromEntries(names.map((name) => [name, process.env[name] ?? null])),
+  })}\n`);
+}
 const emitLine = (event) => process.stdout.write(`${JSON.stringify(event)}\n`);
 
 /** A run turn under a scenario file: the outcome for its `-m` model, as the lines the real CLI prints. */

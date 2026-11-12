@@ -1,0 +1,66 @@
+import crypto from "node:crypto";
+import type { JinnConfig } from "../shared/types.js";
+import { opencodeClones } from "../shared/opencode-catalogue.js";
+import { stagedOpencodeAccounts } from "../shared/opencode-accounts-config.js";
+import { accountCloneModels, planAccountProvider, type OpencodeProviderBlock } from "../shared/opencode-accounts.js";
+import type { OpencodeApi } from "./opencode-version.js";
+
+/**
+ * The accounts of `engines.opencode.accounts` as an opencode process is given
+ * them (docs/design/opencode-accounts.md, "Staging"): one `provider` block per
+ * account that has a base, in the shape of the process's own CLI generation,
+ * plus the environment variables that hold their keys.
+ *
+ * The key is only ever a value in `env`: the blocks carry `{env:<keyEnv>}`, the
+ * local child's environment and a remote host's 0600 session-env file carry the
+ * value, and the fingerprint carries a short hash of it. Nothing here reaches a
+ * log line, a command line or a staged config.
+ */
+
+/** One resolved view of the declared accounts, taken when a process is started. */
+export interface OpencodeAccountStaging {
+  /** `provider` blocks by provider id, for a process whose CLI speaks `api`. */
+  providers(api: OpencodeApi): Record<string, OpencodeProviderBlock>;
+  /** `<keyEnv>` → key, for each account whose variable is set in the gateway's environment. Set on a local child explicitly (the gateway scrubs what it passes down), and carried to a remote host through its session-env file. */
+  readonly env: Readonly<Record<string, string>>;
+  /** What makes a warm server stale: each account's provider id, model list and a short hash of its key. Never the key. */
+  readonly fingerprint: string;
+}
+
+/** Reads the current accounts; a closure over the live config, as the engine's other settings are. */
+export type OpencodeAccountsReader = () => OpencodeAccountStaging | undefined;
+
+/** A short, one-way tag of a key: enough to tell a rotated key from the old one, not enough to use. */
+export function shortKeyHash(key: string): string {
+  return crypto.createHash("sha256").update(key).digest("hex").slice(0, 12);
+}
+
+/**
+ * The accounts that stage a provider block, resolved against the catalogue
+ * clones discovery kept and `environment` (the gateway's own), or undefined
+ * when no account has a base. An account with no key set still stages its block:
+ * its turns fail as auth and the chain moves on (doctor names the variable).
+ */
+export function opencodeAccountStaging(
+  config: JinnConfig,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): OpencodeAccountStaging | undefined {
+  const accounts = stagedOpencodeAccounts(config);
+  if (accounts.length === 0) return undefined;
+  const clones = opencodeClones();
+  const resolved = accounts.map((account) => ({ account, models: accountCloneModels(account, clones), key: environment[account.keyEnv!]?.trim() || undefined }));
+  const env: Record<string, string> = {};
+  for (const { account, key } of resolved) if (key !== undefined) env[account.keyEnv!] = key;
+  const fingerprint = JSON.stringify(resolved.map(({ account, models, key }) => ({
+    provider: account.provider,
+    models: models.map((m) => m.id),
+    key: key === undefined ? null : shortKeyHash(key),
+  })));
+  return {
+    providers(api) {
+      return Object.fromEntries(resolved.map(({ account, models }) => [account.provider, planAccountProvider(account, models, api).block]));
+    },
+    env,
+    fingerprint,
+  };
+}

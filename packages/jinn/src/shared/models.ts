@@ -12,6 +12,8 @@ import { resolveBin, isInstalled } from "./resolve-bin.js";
 import { discoverPiModels } from "./pi-models.js";
 import { withConfiguredOverrides } from "./opencode-models.js";
 import { opencodeCatalogue, refreshOpencodeCatalogue } from "./opencode-catalogue.js";
+import { stagedOpencodeAccounts } from "./opencode-accounts-config.js";
+import { accountRegistryModels } from "./opencode-accounts.js";
 import { MUSECODE_EFFORT_LEVELS } from "./musecode-effort.js";
 import { buildMusecodeEntry } from "./musecode-registry.js";
 export { musecodeEngineOptions, musecodeModelCost, refreshMusecodeModels } from "./musecode-registry.js";
@@ -349,7 +351,9 @@ export async function refreshOpencodeModels(
   opts: { secondLook?: boolean; env?: Record<string, string> } = {},
 ): Promise<void> {
   const bin = engineAvailable(config, "opencode") ? resolveBin("opencode", engineBinOverride(config, "opencode")) : null;
-  await refreshOpencodeCatalogue(bin, invalidateModelRegistry, opts.secondLook, opts.env);
+  // The models of every base provider an account names are kept in full, to stage the account's provider block from.
+  const cloneProviders = [...new Set(stagedOpencodeAccounts(config).map((account) => account.base!))];
+  await refreshOpencodeCatalogue(bin, invalidateModelRegistry, opts.secondLook, opts.env, cloneProviders);
 }
 
 /**
@@ -657,7 +661,9 @@ function buildOpencodeEntry(
     if (pinned && !models.some((m) => m.id === pinned)) {
       models = [{ id: pinned, label: pinned, supportsEffort: false, effortLevels: [] }, ...models];
     }
-    return { name: "opencode", available, defaultModel: pinned || models[0].id, effortMechanism: EFFORT_MECHANISM.opencode, models: withConfiguredOverrides(models, opencodeBlock) };
+    // An account lists its base's models under its own provider id, so chains, pickers and validation see them as any other.
+    const accountModels = accountRegistryModels(config, models).filter((m) => !models.some((own) => own.id === m.id));
+    return { name: "opencode", available, defaultModel: pinned || models[0].id, effortMechanism: EFFORT_MECHANISM.opencode, models: withConfiguredOverrides([...models, ...accountModels], opencodeBlock) };
   }
   if (opencodeBlock) return fromEngineModelsConfig("opencode", opencodeBlock, available, pinned);
   return { ...synthEntry, available };
