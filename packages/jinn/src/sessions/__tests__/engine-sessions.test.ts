@@ -94,7 +94,8 @@ describe("engine session refs", () => {
       platformContextFingerprint: "claude-fingerprint",
     });
 
-    const switchedToCodex = reg.switchSessionEngine(s.id, "codex", {
+    const switchedToCodex = reg.switchSessionTarget(s.id, {
+      engine: "codex",
       model: "gpt-5.5",
       effortLevel: "medium",
     });
@@ -112,7 +113,8 @@ describe("engine session refs", () => {
       platformContextFingerprint: "codex-fingerprint",
     });
 
-    const switchedBack = reg.switchSessionEngine(s.id, "claude", {
+    const switchedBack = reg.switchSessionTarget(s.id, {
+      engine: "claude",
       model: "opus",
       effortLevel: "high",
     });
@@ -147,7 +149,8 @@ describe("engine session refs", () => {
     });
     reg.updateSession(s.id, { engineSessionId: "legacy-claude-native" });
 
-    const switched = reg.switchSessionEngine(s.id, "codex", {
+    const switched = reg.switchSessionTarget(s.id, {
+      engine: "codex",
       model: "gpt-5.5",
       effortLevel: "medium",
     });
@@ -259,13 +262,15 @@ describe("engine session refs", () => {
       lastSyncedAt: "2026-07-07T08:00:00.000Z",
     });
 
-    const switchedToCodex = reg.switchSessionEngine(s.id, "codex", {
+    const switchedToCodex = reg.switchSessionTarget(s.id, {
+      engine: "codex",
       model: "gpt-5.5",
       effortLevel: "medium",
     });
     expect(switchedToCodex?.engineSessionId).toBeNull();
 
-    const switchedBack = reg.switchSessionEngine(s.id, "grok", {
+    const switchedBack = reg.switchSessionTarget(s.id, {
+      engine: "grok",
       model: "grok-composer-2.5-fast",
       effortLevel: "medium",
     });

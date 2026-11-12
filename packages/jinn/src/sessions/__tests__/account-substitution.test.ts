@@ -227,8 +227,8 @@ describe("an engine switch while an account swap stands", () => {
     swap(s.id, { original: "claude", substitute: FRIEND_ACCOUNT, substituteConfigDir: friend.dir }, new Date().toISOString());
     reg.recordEngineSessionId(s.id, "claude", "b-thread");
     reg.updateSession(s.id, { status: "idle" } as never);
-    reg.switchSessionEngine(s.id, "codex");
-    const back = reg.switchSessionEngine(s.id, "claude")!;
+    reg.switchSessionTarget(s.id, { engine: "codex" });
+    const back = reg.switchSessionTarget(s.id, { engine: "claude" })!;
     expect(back.engineSessionId).toBe("a-thread");
     expect(back.engineSessions?.claude?.id).toBe("a-thread");
     expect(back.engineSessions?.[FRIEND_ACCOUNT]?.id).toBe("b-thread");
@@ -241,7 +241,7 @@ describe("rows written before Claude's slot was keyed by account", () => {
     const s = reg.createSession({ engine: "codex", source: "web", sourceRef: "web:legacy", employee: "side-dev" });
     reg.updateSession(s.id, { engineSessions: { claude: { id: "old-claude-thread" }, codex: { id: "c1" } }, engineSessionId: "c1" } as never);
     expect(reg.getEngineSessionRef(reg.getSession(s.id)!, "claude").id).toBe("old-claude-thread");
-    const back = reg.switchSessionEngine(s.id, "claude")!;
+    const back = reg.switchSessionTarget(s.id, { engine: "claude" })!;
     expect(back.engineSessionId).toBe("old-claude-thread");
     expect(back.engineSessions?.[FRIEND_ACCOUNT]?.id).toBe("old-claude-thread");
   });
@@ -283,7 +283,7 @@ describe("a legacy row's first account-keyed write", () => {
   it("an engine switch back to Claude moves it too", () => {
     const s = reg.createSession({ engine: "codex", source: "web", sourceRef: "web:legacy-move", employee: "side-dev" });
     reg.updateSession(s.id, { engineSessions: { claude: { id: "old-claude-thread" }, codex: { id: "c1" } }, engineSessionId: "c1" } as never);
-    const back = reg.switchSessionEngine(s.id, "claude")!;
+    const back = reg.switchSessionTarget(s.id, { engine: "claude" })!;
     expect(back.engineSessions?.claude).toBeUndefined();
     expect(back.engineSessions?.[FRIEND_ACCOUNT]?.id).toBe("old-claude-thread");
   });
