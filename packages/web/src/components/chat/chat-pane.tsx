@@ -218,6 +218,11 @@ export function ChatPane({
   const selectedEmployeeRemote = Boolean(
     selectedEmployee && pickerEmployees.find((e) => e.name === selectedEmployee)?.remoteHost,
   )
+  // An existing chat's host follows the session's own employee, not the new-chat selection.
+  const sessionEmployeeName = (currentSession?.employee as string | null | undefined) ?? null
+  const sessionEmployeeRemote = Boolean(
+    sessionEmployeeName && pickerEmployees.find((e) => e.name === sessionEmployeeName)?.remoteHost,
+  )
   const employeeDisplayNames = useMemo(
     () => Object.fromEntries((orgData?.employees ?? []).map((employee) => [employee.name, employee.displayName])),
     [orgData],
@@ -280,6 +285,8 @@ export function ChatPane({
       engine: currentSession.engine as string | undefined,
       model: currentSession.model as string | undefined,
       effortLevel: (currentSession.effortLevel ?? currentSession.effort_level) as string | undefined,
+      // No profile = the employee's/gateway's own login.
+      profile: (currentSession.claudeProfile as Session['claudeProfile'])?.name ?? undefined,
     })
     setEffortPendingNote(false)
     setSelectorError(null)
@@ -309,7 +316,14 @@ export function ChatPane({
       setSelector(next)
       setSelectorError(null)
       setEffortPendingNote(false)
-      api.updateSession(sid, { engine: next.engine, model: next.model, effortLevel: next.effortLevel })
+      // The profile rides along only when it changed on claude (`null` = own login); another engine has none.
+      const profileChanged = next.engine === 'claude' && (next.profile ?? null) !== (previous.profile ?? null)
+      api.updateSession(sid, {
+        engine: next.engine,
+        model: next.model,
+        effortLevel: next.effortLevel,
+        ...(profileChanged ? { profile: next.profile ?? null } : {}),
+      })
         .then(() => {
           if (selectorPatchSeq.current === seq) setEffortPendingNote(true)
         })
@@ -610,10 +624,9 @@ export function ChatPane({
             errorNote={selectorError ?? undefined}
             disabled={loading}
             contextTokens={liveContextTokens ?? (currentSession?.lastContextTokens as number | null | undefined) ?? undefined}
-            allowProfiles={!sessionId}
+            allowProfiles
             onEffectiveProfile={setEffectiveProfile}
-            employeeRemote={selectedEmployeeRemote}
-            sessionProfileName={(currentSession?.claudeProfile as Session['claudeProfile'])?.name ?? null}
+            employeeRemote={sessionId ? sessionEmployeeRemote : selectedEmployeeRemote}
           />
           {/* Never locked by a running turn: a change reaches the gateway at once and applies from the next usage limit. */}
           <FallbackModeChip

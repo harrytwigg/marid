@@ -155,7 +155,7 @@ function EngineRow({ label, on, onPick }: { label: string; on: boolean; onPick: 
 }
 
 /** The engine list: pick one to browse its models. With declared Claude accounts, Claude is
- *  listed once per profile — the plain row is the employee's/gateway's own login. */
+ *  listed once per profile — the plain row is the employee's/gateway's own login, named as such. */
 export function EnginePanel({ engines, engine, onBack, onChoose, onRefresh, profiles, profile, onChooseProfile }: {
   engines: EngineRegistryEntry[]
   engine: string
@@ -178,7 +178,7 @@ export function EnginePanel({ engines, engine, onBack, onChoose, onRefresh, prof
         return [
           <EngineRow
             key="claude"
-            label={engineDisplayName('claude')}
+            label={`${engineDisplayName('claude')} · Own login`}
             on={engine === 'claude' && !profile}
             onPick={() => onChooseProfile(undefined)}
           />,

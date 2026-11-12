@@ -102,6 +102,22 @@ beforeEach(() => {
   }
 })
 
+function renderExisting(session: Record<string, unknown>) {
+  liveSessionState = { ...liveSessionState, session: { id: 's1', status: 'idle', engine: 'claude', model: 'opus', ...session } }
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={client}>
+      <ChatPane sessionId="s1" isActive onFocus={() => {}} subscribe={() => () => {}} events={[]} />
+    </QueryClientProvider>,
+  )
+}
+const chipLabel = () => screen.getByRole('button', { name: /model and effort/i }).getAttribute('aria-label')
+async function pickRow(name: RegExp) {
+  fireEvent.keyDown(await screen.findByRole('button', { name: /model and effort/i }), { key: 'Enter' })
+  fireEvent.click(await screen.findByRole('menuitem', { name: /switch engine/i }))
+  fireEvent.click(await screen.findByRole('menuitem', { name }))
+}
+
 function renderPane() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -154,5 +170,68 @@ describe('the new-chat pane and the Claude profile', () => {
     await send()
     expect(apiMocks.createSession.mock.calls[0][0]).toMatchObject({ employee: 'remote-lead', engine: 'claude' })
     expect(remembered().profile).toBe('work')
+  })
+})
+
+describe('an existing chat and the Claude profile', () => {
+  beforeEach(() => { apiMocks.updateSession.mockResolvedValue({}) })
+
+  it('seeds the selector from the session profile and shows own login when it has none', () => {
+    const first = renderExisting({ claudeProfile: { name: 'work', key: 'k' } })
+    expect(chipLabel()).toContain('Claude · work · Opus')
+    first.unmount()
+    renderExisting({ claudeProfile: null })
+    expect(chipLabel()).toContain('Claude · Own login · Opus')
+  })
+
+  it('sends the profile with the update when it changed', async () => {
+    renderExisting({ claudeProfile: null })
+    await pickRow(/claude · work/i)
+    await waitFor(() => expect(apiMocks.updateSession).toHaveBeenCalledTimes(1))
+    expect(apiMocks.updateSession.mock.calls[0]).toEqual(['s1', expect.objectContaining({ engine: 'claude', profile: 'work' })])
+  })
+
+  it('sends null when the pick is own login', async () => {
+    renderExisting({ claudeProfile: { name: 'work', key: 'k' } })
+    await pickRow(/^claude · own login$/i)
+    await waitFor(() => expect(apiMocks.updateSession).toHaveBeenCalledTimes(1))
+    expect(apiMocks.updateSession.mock.calls[0][1]).toHaveProperty('profile', null)
+  })
+
+  it('leaves the profile out of an update that does not change it', async () => {
+    renderExisting({ claudeProfile: { name: 'work', key: 'k' } })
+    await pickRow(/claude · work/i)
+    await waitFor(() => expect(apiMocks.updateSession).toHaveBeenCalled())
+    expect(apiMocks.updateSession.mock.calls[0][1]).not.toHaveProperty('profile')
+  })
+
+  it('does not send a profile when the engine moves off claude', async () => {
+    renderExisting({ claudeProfile: { name: 'work', key: 'k' } })
+    await pickRow(/^opencode$/i)
+    await waitFor(() => expect(apiMocks.updateSession).toHaveBeenCalled())
+    expect(apiMocks.updateSession.mock.calls[0][1]).toMatchObject({ engine: 'opencode' })
+    expect(apiMocks.updateSession.mock.calls[0][1]).not.toHaveProperty('profile')
+  })
+
+  it('rolls the selection back and shows the error when the gateway refuses (turn running)', async () => {
+    apiMocks.updateSession.mockRejectedValue(new Error('Cannot switch engine or profile while a turn is running, waiting, or queued'))
+    renderExisting({ claudeProfile: null })
+    await pickRow(/claude · work/i)
+    await waitFor(() => expect(chipLabel()).toContain('Claude · Own login'))
+    if (!screen.queryByText(/Cannot switch/)) fireEvent.keyDown(screen.getByRole('button', { name: /model and effort/i }), { key: 'Enter' })
+    expect(await screen.findByText(/Cannot switch engine or profile while a turn is running/)).toBeTruthy()
+  })
+
+  it('offers the rows from the session\'s own employee, whatever employee the new-chat picker holds', async () => {
+    // The pane's own session belongs to a remote employee: no rows, even though nothing is picked.
+    const remote = renderExisting({ employee: 'remote-lead' })
+    fireEvent.keyDown(await screen.findByRole('button', { name: /model and effort/i }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: /switch engine/i }))
+    expect(await screen.findByRole('menuitem', { name: /^claude$/i })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: /claude ·/i })).toBeNull()
+    remote.unmount()
+    renderExisting({ employee: 'local-lead' })
+    await pickRow(/claude · work/i)
+    expect(apiMocks.updateSession).toHaveBeenCalled()
   })
 })
