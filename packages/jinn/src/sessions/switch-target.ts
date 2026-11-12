@@ -3,6 +3,7 @@ import { declaredAccountByKey, declaredClaudeAccounts } from "../shared/claude-a
 import { claudeAccountKey } from "../shared/engine-account.js";
 import { engineHealthForTarget, exhaustedEngineReturnsAt, isEngineExhausted, readEngineHealth } from "../shared/engine-health.js";
 import { healthKeys } from "../shared/fallback-chain-health.js";
+import { engineReadKeys } from "../shared/engine-health-keys.js";
 import { getModelRegistry } from "../shared/models.js";
 import { rateLimitEngineLabel } from "../shared/rateLimit.js";
 import { isRemoteTarget, sshDestination } from "../shared/remote-target.js";
@@ -170,7 +171,9 @@ function exhaustedRefusal(config: JinnConfig, session: Session, target: SwitchTa
   const employee = employeeOf(config, session);
   const health = engineHealthForTarget(readEngineHealth(now), employee);
   const account = target.engine === "claude" ? claudeAccountFor(config, session, target.claudeConfigDir) : target.engine;
-  const key = healthKeys({ engine: target.engine, model: target.model ?? undefined, account }).find((candidate) => isEngineExhausted(health, candidate, now));
+  // A switch naming no model runs opencode's configured one, so its provider is the one read.
+  const model = target.model ?? (target.engine === "opencode" ? config.engines.opencode?.model : undefined);
+  const key = healthKeys({ engine: target.engine, model: model ?? undefined, account }).find((candidate) => isEngineExhausted(health, candidate, now));
   if (!key) return undefined;
   const until = exhaustedEngineReturnsAt(health, key, now).toISOString();
   return refusal("target-exhausted", `${describeSwitchTarget(config, target)} is out of allowance; it resets at ${until}`, until);
@@ -313,8 +316,8 @@ function listProfiles(config: JinnConfig, session: Session, reading: ReturnType<
 }
 
 /** An engine is out when its own keys say so; Claude is out only when every profile is. */
-function engineHealth(name: string, profiles: SwitchTargetProfile[] | undefined, reading: ReturnType<typeof readEngineHealth>, now: Date): SwitchTargetHealth {
-  if (!profiles) return healthOf(reading, healthKeys({ engine: name, account: name }), now);
+function engineHealth(config: JinnConfig, name: string, profiles: SwitchTargetProfile[] | undefined, reading: ReturnType<typeof readEngineHealth>, now: Date): SwitchTargetHealth {
+  if (!profiles) return healthOf(reading, engineReadKeys(name, config), now);
   const spent = profiles.filter((profile) => profile.health.state === "exhausted");
   if (spent.length < profiles.length) return { state: "ok" };
   const soonest = spent.map((profile) => profile.health.until ?? "").sort()[0];
@@ -341,7 +344,7 @@ export function listSwitchTargets(config: JinnConfig, session: Session, now: Dat
       return {
         name,
         defaultModel: registry[name].defaultModel,
-        health: engineHealth(name, profiles, reading, now),
+        health: engineHealth(config, name, profiles, reading, now),
         models: registry[name].models.map((model) => ({ id: model.id, label: model.label ?? model.id, ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}) })),
         ...(profiles ? { profiles } : {}),
       };

@@ -82,6 +82,10 @@ export interface ResolvedFallbackLink extends FallbackLink {
    *  for a session on a remote host, which host lacks the engine's CLI. */
   skipDetail?: string;
   health?: FallbackLinkHealth;
+  /** An opencode link naming no model: the provider its turns run on (the engine's configured model's), so
+   *  health is read under `opencode/<provider>`. Set on a session's or employee's own link only, and never
+   *  pins the session's model. */
+  healthProvider?: string;
 }
 
 /** A link a hop passed over. */

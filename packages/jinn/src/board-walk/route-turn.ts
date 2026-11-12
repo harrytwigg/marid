@@ -1,12 +1,13 @@
 import type { Employee, JinnConfig } from "../shared/types.js";
 import { accountForEmployee } from "../shared/engine-account.js";
-import { isEngineExhausted, readEngineHealth } from "../shared/engine-health.js";
+import { readEngineHealth } from "../shared/engine-health.js";
 import { engineAvailable } from "../shared/models.js";
 import { getMessages, getSession } from "../sessions/registry.js";
 import { orgRegistry } from "../gateway/org-registry.js";
 import { CronConnector } from "../connectors/cron/index.js";
 import { OPENCODE_WALK_AGENT } from "../engines/opencode-mcp.js";
 import { isWalkEngine, WALK_ENGINES, type BoardWalkSettings } from "./settings.js";
+import { engineHeldOut } from "./snapshot.js";
 import type { BoardWalkDeps, WalkTurn, WalkTurnResult } from "./walk.js";
 
 /**
@@ -76,7 +77,7 @@ export function lockedDownEmployee(employee: Employee, settings: BoardWalkSettin
 }
 
 /** Why the walk cannot run as configured, or null when it can. */
-function runnerRefusal(settings: BoardWalkSettings, config: JinnConfig, runner?: Employee): string | null {
+export function runnerRefusal(settings: BoardWalkSettings, config: JinnConfig, runner?: Employee): string | null {
   if (!isWalkEngine(settings.engine)) {
     return `the board walk can only run on ${WALK_ENGINES.join(" or ")}, so that its turn has only the walk's tools; "${settings.engine}" cannot be confined to them`;
   }
@@ -85,7 +86,8 @@ function runnerRefusal(settings: BoardWalkSettings, config: JinnConfig, runner?:
   }
   // The runner's own account (FR-076): its engine, and the Claude login it runs as.
   const account = runner ? accountForEmployee(runner, settings.engine) : settings.engine;
-  if (isEngineExhausted(readEngineHealth(), account)) {
+  // opencode is held out per provider too: the provider of the model the walk runs on (settings, else the runner's, else the engine's default).
+  if (engineHeldOut(readEngineHealth(), account, config, new Date(), settings.model || runner?.model)) {
     return `${account === settings.engine ? settings.engine : `the runner's ${settings.engine} account`} is recorded as exhausted; this tick is skipped`;
   }
   return null;
