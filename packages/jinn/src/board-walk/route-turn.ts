@@ -56,7 +56,7 @@ export const OPENCODE_WALK_FLAGS = ["--agent", OPENCODE_WALK_AGENT];
  *  engine's configured model. A model named in the settings is passed to the
  *  session directly (routeTurn), so it needs no place here. */
 function walkModel(employee: Employee, settings: BoardWalkSettings, config: JinnConfig): string {
-  if (employee.engine === settings.engine) return employee.model;
+  if (employee.engine === settings.engine && employee.model) return employee.model;
   const engineConfig = (config.engines as unknown as Record<string, { model?: string } | undefined>)[settings.engine];
   return engineConfig?.model ?? "";
 }

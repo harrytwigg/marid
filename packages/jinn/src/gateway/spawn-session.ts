@@ -135,7 +135,7 @@ function engineChoice(
 /** The employee a spawn is for and the defaults it brings, or why there is none. */
 async function resolveSpawnEmployee(
   config: JinnConfig, employeeName: string | null,
-): Promise<{ ok: false; error: string } | { ok: true; employee?: Employee; defaults?: { engine: string; model: string; effortLevel?: string; employee?: string } }> {
+): Promise<{ ok: false; error: string } | { ok: true; employee?: Employee; defaults?: { engine: string; model?: string; effortLevel?: string; employee?: string } }> {
   if (!employeeName) return { ok: true };
   const { orgRegistry } = await import("./org-registry.js");
   const emp = orgRegistry(config).get(employeeName);
@@ -146,7 +146,7 @@ async function resolveSpawnEmployee(
   // GRS-017f: carry the employee slug so an unregistered configured
   // model produces the same actionable, employee-named error the
   // delegation route surfaces (not a cryptic bare-engine string).
-  const defaults = { engine: emp.engine, model: emp.model, employee: employeeName, ...(emp.effortLevel ? { effortLevel: emp.effortLevel } : {}) };
+  const defaults = { engine: emp.engine, ...(emp.model ? { model: emp.model } : {}), employee: employeeName, ...(emp.effortLevel ? { effortLevel: emp.effortLevel } : {}) };
   return { ok: true, employee: emp, defaults };
 }
 
