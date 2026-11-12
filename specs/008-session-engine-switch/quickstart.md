@@ -39,11 +39,21 @@ it at a real instance.
 5. Switch to opencode: compaction on Claude, resume on opencode.
 6. Refusals: same target (400 same-target), unknown profile (400), exhausted `beta` (409),
    message queued (409), second call within 10 min (429), stop between call and resume
-   (no switch, claim released).
+   (no switch; the queued compaction and resume are withdrawn, and the call's 10-minute
+   cooldown stands: only a stop that lands before the resume is delivered answers the call
+   409 and gives the claim back).
 7. Stop between the call and the resume; then type `/compact` as the operator: no switch, and
    the operator's compaction is not recorded against a stale pending switch.
-8. Switch the chat from the selector after the call but before the resume: the operator's
-   target stands; the resume runs as a plain resume.
+8. Change the chat from the operator side after the call but before the resume. The selector
+   refuses an engine or profile change while the compaction turn runs or the resume is
+   queued (400, "Cannot switch engine or profile while a turn is running, waiting, or
+   queued"), so the operator cannot move the target in that window and nothing is cleared.
+   A model or effort change is accepted. It leaves `pendingSwitch` in place, so the resume
+   finds the session moved, applies nothing, and says the switch "did not happen (the session
+   was moved to another target meanwhile)"; it runs as a plain resume on the operator's
+   model. An operator engine or profile switch clears `pendingSwitch` (the operator's target
+   stands) only while the resume delivery is `retrying`, the one state where no turn is
+   queued and the selector is open; to drive that, make the resume delivery fail once.
 9. Department-scoped employee's session: switch `alpha` ↔ `beta` on an ordinary turn works;
    to opencode refused (403).
 10. Remove `alpha` from config between the call and the resume: resume on the old target with
