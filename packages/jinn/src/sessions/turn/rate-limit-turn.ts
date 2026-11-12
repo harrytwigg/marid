@@ -161,8 +161,10 @@ async function settleUnreachableTurn(args: RateLimitTurnArgs, error: string): Pr
   await args.surface.reply(`The usage limit reset, but the host this session runs on never became ready: ${error}. Send a message to try again.`);
 }
 
-/** The first failure of a streak says so once, in the chat and to the operator; later ones only update the session's status line. */
+/** Every failure puts the transport back to waiting (the retry attempt had set it to thinking); the first of a
+ *  streak also says so once, in the chat and to the operator. Later ones only update the session's status line. */
 async function announceHostNotReady(args: RateLimitTurnArgs, info: { error: string; failures: number; retryAt: Date }): Promise<void> {
+  await args.surface.waiting(true);
   if (info.failures !== 1) return;
   const session = args.input.session;
   notifyOperatorChannel(`⚠️ ${describe(session)}: the usage limit reset but its host is not ready (${info.error}). Retrying with backoff.`);

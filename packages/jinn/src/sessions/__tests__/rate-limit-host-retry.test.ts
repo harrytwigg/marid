@@ -18,6 +18,11 @@ vi.mock("../registry.js", () => ({
   getEngineSessionRef: (session: Session, engine: string) => session.engineSessions?.[engine] ?? {},
   nextEngineSessionFields: () => ({}),
 }));
+const limitedMock = vi.fn<(result: EngineResult) => { limited: boolean; resetsAt?: number } | undefined>(() => undefined);
+vi.mock("../../shared/rateLimit.js", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../../shared/rateLimit.js")>();
+  return { ...real, detectRateLimit: (result: EngineResult) => limitedMock(result) ?? real.detectRateLimit(result) };
+});
 vi.mock("../../engines/remote-stage.js", () => ({ remoteEngineAvailable: () => false }));
 vi.mock("../engine-run-mcp.js", () => ({ resolveEngineRunMcp: vi.fn(() => ({})) }));
 vi.mock("../../shared/usageAwareness.js", () => ({ recordClaudeRateLimit: vi.fn() }));
@@ -80,6 +85,7 @@ describe("handleRateLimit — a retry whose host is not ready", () => {
     vi.useFakeTimers({ now: new Date("2026-03-02T23:00:00Z") });
     // The session stays `waiting` between attempts unless a case stops it.
     getSessionMock.mockImplementation(() => makeSession({ status: "waiting" }));
+    limitedMock.mockReturnValue(undefined);
   });
   afterEach(() => { vi.useRealTimers(); });
 
@@ -167,6 +173,29 @@ describe("handleRateLimit — a retry whose host is not ready", () => {
     // Backed off: far fewer attempts than one a minute.
     expect(run.mock.calls.length).toBeGreaterThan(5);
     expect(run.mock.calls.length).toBeLessThan(40);
+  });
+
+  it("gives the limit a fresh grace once the host is back, so a still-limited answer past the old deadline is retried, not timed out", async () => {
+    // Reset in 10 minutes: the limit's own deadline is 40 minutes out. The host is down for an hour.
+    const startedAt = Date.now();
+    const hostUpAt = startedAt + 60 * 60_000;
+    const prepareRetry = vi.fn(async () => (Date.now() >= hostUpAt
+      ? { ok: true as const }
+      : { ok: false as const, error: "Remote host unavailable: build-box is asleep" }));
+    const limited: EngineResult = { result: "", sessionId: "claude-thread-1", error: "limited" };
+    let newReset = 0;
+    limitedMock.mockImplementation((result) => (result.error === "limited" ? { limited: true, resetsAt: Math.floor(newReset / 1000) } : undefined));
+    const run = vi.fn(async () => {
+      if (newReset === 0) { newReset = Date.now() + 5 * 60_000; return limited; }
+      return answer;
+    });
+    const onTimeout = vi.fn();
+
+    const outcome = await settle(handleRateLimit(opts(run, { prepareRetry, onTimeout })));
+
+    expect(outcome.kind).toBe("resumed");
+    expect(onTimeout).not.toHaveBeenCalled();
+    expect(run).toHaveBeenCalledTimes(2);
   });
 
   it("still fails the turn on a thrown error that is not about the host", async () => {
