@@ -34,7 +34,7 @@ const STATUS_RE = /\(HTTP (\d{3})\)/g;
 /** A 403 or typeless `provider.auth` message that is about the model or region, not the key. */
 const MODEL_ACCESS_MESSAGE_RE = /model access|not enabled|not available in (?:your|this) region|region|opt[ -]?in|\bnot (?:served|available)\b/i;
 /** A message that is about the key itself. */
-const KEY_MESSAGE_RE = /\b(?:expired|invalid|revoked|unauthori[sz]ed)\b|api key/i;
+const KEY_MESSAGE_RE = /\b(?:expired|invalid|revoked|unauthori[sz]ed|forbidden)\b|api key/i;
 
 function statusOf(text: string): number | undefined {
   let status: number | undefined;
@@ -55,6 +55,8 @@ const KIND_BY_STATUS: Readonly<Record<number, OpencodeFailureKind>> = { 402: "qu
 function kindOf(type: string, status: number | undefined, error: string): OpencodeFailureKind | undefined {
   if (/\bRegionError\b/.test(error)) return "model-access";
   if (type === "provider.rate-limit") return "usage-limit";
+  // A 403 that names the key (not a model or region) is a bad credential, as a 401 is.
+  if (status === 403 && KEY_MESSAGE_RE.test(error) && !MODEL_ACCESS_MESSAGE_RE.test(error)) return "auth";
   return (status === undefined ? undefined : KIND_BY_STATUS[status]) ?? kindByMessage(type, error);
 }
 

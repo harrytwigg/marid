@@ -37,7 +37,7 @@ import {
   computeNextRetryDelayMs, computeRateLimitDeadlineMs, detectRateLimit, nextUnstatedParkDelayMs,
   rateLimitEngineLabel, MAX_UNSTATED_PARK_ATTEMPTS,
 } from "../shared/rateLimit.js";
-import { quotaHoldEndsAtSeconds } from "../shared/engine-health-opencode.js";
+import { quotaHoldEndsAtSeconds, recordOpencodeModelServed } from "../shared/engine-health-opencode.js";
 import { rateLimitAccount, recordAccountRateLimit } from "./rate-limit-account.js";
 import { walkFallbackChain } from "./fallback-walk.js";
 import { beginLimitProbe, endLimitProbe } from "./limit-probe.js";
@@ -82,7 +82,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
   const limitedModel = session.model ?? engineConfig.model;
   const limitedKey = linkHealthKey({ engine: session.engine, model: limitedModel, account });
   recordAccountRateLimit(account, session.engine, engineLabel, rateLimit.resetsAt, {
-    healthKey: limitedKey, model: limitedModel, error: originalResult.error, config: opts.config, remote: isRemoteTarget(remoteTarget),
+    healthKey: limitedKey, model: limitedModel, error: originalResult.error, config: opts.config, host: isRemoteTarget(remoteTarget) ? remoteTarget.remoteHost : undefined,
   });
 
   // ── Branch A: hand the turn along this session's fallback chain ───────────
@@ -331,7 +331,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
 
       if (retryRateLimit.limited) {
         recordAccountRateLimit(account, session.engine, engineLabel, retryRateLimit.resetsAt, {
-          healthKey: limitedKey, model: retryModel, error: retryResult.error, config: opts.config, remote: Boolean(remote),
+          healthKey: limitedKey, model: retryModel, error: retryResult.error, config: opts.config, host: remote?.remoteHost,
         });
         earlyReset?.limitedAgain();
         logger.info(`Session ${session.id} still rate limited (attempt ${attempt})`);
@@ -370,7 +370,10 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
       }
 
       // The target answered a turn begun after its limit was recorded: the record is stale.
-      if (!retryResult.error) recordEngineServed(limitedKey, retryStartedMs, retryModel);
+      if (!retryResult.error) {
+        recordEngineServed(limitedKey, retryStartedMs, retryModel);
+        if (session.engine === "opencode") recordOpencodeModelServed(retryModel, retryStartedMs);
+      }
       // Success (or non-rate-limit error) — hand off to caller for persistence + transport.
       await hooks.onRetrySuccess?.(retryResult);
       logger.info(`Session ${session.id} resumed after usage reset`);

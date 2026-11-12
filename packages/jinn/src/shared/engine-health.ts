@@ -115,7 +115,7 @@ function liveRecord(store: EngineHealthReading, engine: string, now: Date): Engi
 
 /** When the engine may be probed again: its stated reopening when that is
  *  nearer, otherwise the re-probe interval. */
-function recheckFrom(statedMs: number | undefined, now: Date): string {
+export function recheckFrom(statedMs: number | undefined, now: Date): string {
   const reprobeAt = now.getTime() + REPROBE_INTERVAL_MS;
   return new Date(statedMs === undefined ? reprobeAt : Math.min(statedMs, reprobeAt)).toISOString();
 }

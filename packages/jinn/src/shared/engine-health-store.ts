@@ -120,7 +120,7 @@ export function isSpent(record: EngineHealth, now: Date): boolean {
   return !Number.isFinite(until) || until <= now.getTime();
 }
 
-/** A record as it may leave the process: without the fields that are the store's own. */
+/** A record as the readers see it: without the fields that are the store's own. */
 export function publicHealth(record: EngineHealth): EngineHealth {
   const { credentialFingerprint: _fingerprint, ...rest } = record;
   return rest;
@@ -143,7 +143,7 @@ export function readEngineHealth(now: Date = new Date()): EngineHealthReading {
   for (const [engine, record] of Object.entries(readStore())) {
     if (record.state !== "ok" && isSpent(record, now)) live[engine] = { state: "ok", ...(record.observedAt ? { observedAt: record.observedAt } : {}) };
     else if (record.state !== "ok" && credentialChanged(engine, record)) live[engine] = { state: "ok", clearedAt: now.toISOString(), observedAt: now.toISOString(), reason: "the credential changed" };
-    else live[engine] = record;
+    else live[engine] = publicHealth(record);
   }
   return live;
 }

@@ -74,6 +74,8 @@ const CLAUDE_ACCOUNT_KEY = /^claude($|[:@])/;
  * only a turn on the default counts, since an unnamed default may not be the model served.
  */
 function servedContradicts(key: string, record: EngineHealth, servedModel: string | undefined): boolean {
+  // A turn the provider served says its key works, and one on the model says the model is enabled. (The key is the provider's or the model's, as written.)
+  if (record.failureClass === "auth" || record.failureClass === "model-access") return true;
   if (record.model !== undefined) return record.model === servedModel;
   if (record.window !== undefined) return CLAUDE_ACCOUNT_KEY.test(key) && CLAUDE_ACCOUNT_WINDOWS.includes(record.window);
   return servedModel === undefined;

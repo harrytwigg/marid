@@ -86,7 +86,6 @@ function storedCredentialIdentity(provider: string, env: NodeJS.ProcessEnv): str
 export interface FingerprintContext {
   /** The turn ran on another machine: its credential lives there and cannot be read from here. */
   remote?: boolean;
-  env?: NodeJS.ProcessEnv;
 }
 
 /**
@@ -101,8 +100,9 @@ export function opencodeCredentialFingerprint(
   provider: string | undefined,
   _config: OpencodeConfig | undefined,
   context: FingerprintContext = {},
+  env: NodeJS.ProcessEnv = process.env,
 ): string | undefined {
   if (provider === undefined || provider === "" || context.remote) return undefined;
-  const identity = storedCredentialIdentity(provider, context.env ?? process.env);
+  const identity = storedCredentialIdentity(provider, env);
   return identity === undefined ? undefined : createHash("sha256").update(`opencode-credential\0${provider}\0${identity}`).digest("hex").slice(0, 32);
 }

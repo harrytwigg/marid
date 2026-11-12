@@ -14,6 +14,8 @@ describe("classifyOpencodeFailure", () => {
     ["provider.auth: Upstream request failed: Model access is disabled (HTTP 403)", { kind: "model-access", type: "provider.auth", status: 403 }],
     ["provider.auth: DeepSeek models require region opt-in", { kind: "model-access", type: "provider.auth" }],
     ["provider.auth: Invalid API key", { kind: "auth", type: "provider.auth" }],
+    ["provider.auth: Invalid API key (HTTP 403)", { kind: "auth", type: "provider.auth", status: 403 }],
+    ["provider.auth: Forbidden (HTTP 403)", { kind: "auth", type: "provider.auth", status: 403 }],
   ])("reads %s", (text, expected) => {
     expect(classifyOpencodeFailure(text)).toEqual(expected);
   });

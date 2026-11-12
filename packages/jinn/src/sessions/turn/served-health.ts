@@ -1,4 +1,5 @@
 import { linkHealthKey } from "../../shared/fallback-chain-health.js";
+import { recordOpencodeModelServed } from "../../shared/engine-health-opencode.js";
 import { recordEngineServed } from "../../shared/engine-health.js";
 import type { EngineResult } from "../../shared/types.js";
 import { rateLimitAccount } from "../rate-limit-account.js";
@@ -28,4 +29,5 @@ export function noteTurnServed(
   const { account } = rateLimitAccount(run.plan.engineName, run.input.employee, started);
   const served = model ?? started.model ?? run.plan.engineConfig.model;
   recordEngineServed(linkHealthKey({ engine: run.plan.engineName, model: served, account }), run.turnStartedAt, served);
+  if (run.plan.engineName === "opencode") recordOpencodeModelServed(served, run.turnStartedAt);
 }

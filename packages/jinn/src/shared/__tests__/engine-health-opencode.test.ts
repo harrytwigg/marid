@@ -12,9 +12,9 @@ vi.mock("../paths.js", async (importOriginal) => ({
 }));
 
 import type { JinnConfig } from "../config-types.js";
-import { quotaHoldEndsAtSeconds, recordOpencodeFailure } from "../engine-health-opencode.js";
-import { clearEngineHealthByOperator, isEngineExhausted, readEngineHealth, recordEngineServed } from "../engine-health.js";
-import { publicHealth } from "../engine-health-store.js";
+import { quotaHoldEndsAtSeconds, recordOpencodeFailure, recordOpencodeModelServed } from "../engine-health-opencode.js";
+import { clearEngineHealthByOperator, engineHealthForTarget, isEngineExhausted, readEngineHealth, recordEngineServed } from "../engine-health.js";
+import { readStore } from "../engine-health-store.js";
 import { healthKeys, isLinkExhausted, linkHealth } from "../fallback-chain-health.js";
 
 const STATE_PATH = path.join(TEST_HOME, "tmp", "engine-health.json");
@@ -83,7 +83,39 @@ describe("a spent subscription allowance (402)", () => {
   });
 });
 
+describe("a record about one remote host", () => {
+  const view = (target: { remoteHost: string } | undefined) => engineHealthForTarget(readEngineHealth(NOW), target as never);
+
+  it.each([
+    ["a dead key", EXPIRED, "opencode/opencode-go"],
+    ["a spent allowance", FUNDS, "opencode/opencode-go"],
+    ["a model the account cannot use", NO_ACCESS, "opencode/opencode-go/kimi-k2"],
+  ])("from %s is read by that host's sessions only", (_what, error, key) => {
+    record(error, { host: "host-c" });
+    expect(view({ remoteHost: "host-c" })[key]?.state).toBe("exhausted");
+    expect(view({ remoteHost: "host-d" })[key]).toBeUndefined();
+    expect(view(undefined)[key]).toBeUndefined();
+  });
+
+  it("does not displace an account-wide record already standing", () => {
+    record(FUNDS);
+    record(EXPIRED, { host: "host-c" });
+    record(FUNDS, { host: "host-c", now: at(1) });
+    expect(readEngineHealth(NOW)["opencode/opencode-go"]).toMatchObject({ failureClass: "quota" });
+    expect(readEngineHealth(NOW)["opencode/opencode-go"]?.host).toBeUndefined();
+  });
+});
+
 describe("a spent usage window (429)", () => {
+  it("is re-probed within 12 hours however far off the reset it stated is", () => {
+    record(USAGE, { resetsAt: at(5 * 24 * 60).getTime() / 1000 });
+    const held = readEngineHealth(NOW)["opencode/opencode-go"]!;
+    expect(held.until).toBe(at(5 * 24 * 60).toISOString());
+    expect(held.recheckAt).toBe(at(12 * 60).toISOString());
+    expect(isEngineExhausted(readEngineHealth(at(11 * 60)), "opencode/opencode-go", at(11 * 60))).toBe(true);
+    expect(isEngineExhausted(readEngineHealth(at(12 * 60 + 1)), "opencode/opencode-go", at(12 * 60 + 1))).toBe(false);
+  });
+
   it("holds the provider until the reset it stated", () => {
     record(USAGE, { resetsAt: at(95).getTime() / 1000 });
     expect(readEngineHealth(NOW)["opencode/opencode-go"]).toMatchObject({ state: "exhausted", failureClass: "quota", until: at(95).toISOString() });
@@ -133,7 +165,7 @@ describe("an expired key (401)", () => {
     const held = readEngineHealth(NOW)["opencode/opencode-go"]!;
     expect(held).toMatchObject({ state: "exhausted", failureClass: "auth" });
     expect(held.until).toBeUndefined();
-    expect(held.credentialFingerprint).toMatch(/^[0-9a-f]{32}$/);
+    expect(readStore()["opencode/opencode-go"]?.credentialFingerprint).toMatch(/^[0-9a-f]{32}$/);
     // A week on, with the same key, it is still out.
     const later = new Date(NOW.getTime() + 7 * 24 * 60 * MIN);
     expect(isEngineExhausted(readEngineHealth(later), "opencode/opencode-go", later)).toBe(true);
@@ -161,19 +193,30 @@ describe("an expired key (401)", () => {
 
   it("is held for a day, with no fingerprint, when the turn ran on a remote host", () => {
     storeCredential(1000);
-    record(EXPIRED, { remote: true });
-    expect(readEngineHealth(NOW)["opencode/opencode-go"]).toMatchObject({ until: at(24 * 60).toISOString() });
-    expect(readEngineHealth(NOW)["opencode/opencode-go"]?.credentialFingerprint).toBeUndefined();
+    record(EXPIRED, { host: "host-c" });
+    expect(readEngineHealth(NOW)["opencode/opencode-go"]).toMatchObject({ until: at(24 * 60).toISOString(), host: "host-c" });
+    expect(readStore()["opencode/opencode-go"]?.credentialFingerprint).toBeUndefined();
   });
 
-  it("keeps the fingerprint out of what leaves the process", () => {
+  it("keeps the fingerprint out of what readers see, and of what a link shows", () => {
     storeCredential(1000);
     record(EXPIRED);
-    const stored = readEngineHealth(NOW)["opencode/opencode-go"]!;
-    expect(publicHealth(stored)).not.toHaveProperty("credentialFingerprint");
+    const fingerprint = readStore()["opencode/opencode-go"]!.credentialFingerprint!;
+    expect(readEngineHealth(NOW)["opencode/opencode-go"]).not.toHaveProperty("credentialFingerprint");
     const shown = linkHealth({ health: readEngineHealth(NOW), now: NOW }, link("opencode-go/kimi-k2"));
     expect(shown).toMatchObject({ state: "exhausted", failureClass: "auth" });
-    expect(JSON.stringify(shown)).not.toContain(stored.credentialFingerprint!);
+    expect(JSON.stringify(shown)).not.toContain(fingerprint);
+    expect(JSON.stringify(readEngineHealth(NOW))).not.toContain(fingerprint);
+  });
+
+  it("is lifted by a turn the provider then served, so a glitch cannot hold a working key out for good", () => {
+    storeCredential(1000);
+    record(EXPIRED);
+    // A turn begun before the failure proves nothing about it.
+    recordEngineServed("opencode/opencode-go", at(-1).getTime(), "opencode-go/kimi-k2", at(2));
+    expect(isEngineExhausted(readEngineHealth(at(2)), "opencode/opencode-go", at(2))).toBe(true);
+    recordEngineServed("opencode/opencode-go", at(1).getTime(), "opencode-go/kimi-k2", at(2));
+    expect(isEngineExhausted(readEngineHealth(at(2)), "opencode/opencode-go", at(2))).toBe(false);
   });
 
   it("holds a provider out whether or not it is a subscription", () => {
@@ -191,6 +234,12 @@ describe("a model the account cannot use (403)", () => {
     expect(isLinkExhausted(health, link("opencode-go/kimi-k2"), NOW)).toBe(true);
     // The provider's other models keep serving.
     expect(isLinkExhausted(health, link("opencode-go/glm-5"), NOW)).toBe(false);
+  });
+
+  it("is lifted by a turn served on that model", () => {
+    record(NO_ACCESS);
+    recordOpencodeModelServed("opencode-go/kimi-k2", at(1).getTime(), at(2));
+    expect(isLinkExhausted(readEngineHealth(at(2)), link("opencode-go/kimi-k2"), at(2))).toBe(false);
   });
 
   it("shows why on the link's health", () => {

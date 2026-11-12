@@ -1,5 +1,7 @@
 import { isBillingFailureMessage } from "./engine-failure.js";
+import { recheckFrom } from "./engine-health.js";
 import { readStore, writeStore, isSpent, type EngineHealth } from "./engine-health-store.js";
+import { recordEngineServed } from "./engine-health-clear.js";
 import { isRateLimitMessage } from "./rateLimit.js";
 import type { JinnConfig } from "./config-types.js";
 import { classifyOpencodeFailure, type OpencodeFailure } from "./opencode-failure.js";
@@ -37,8 +39,9 @@ export interface OpencodeHealthWrite {
   /** When the failure stated the window reopens, in unix seconds. */
   resetsAt?: number;
   config: Pick<JinnConfig, "engines"> | undefined;
-  /** The turn ran on another machine, whose credential this one cannot read. */
-  remote?: boolean;
+  /** The machine the turn ran on, when it is not this one. Its key, allowance and model access are its own: the record
+   *  is about that host (and so is read by that host's sessions only), and this machine cannot read its credential. */
+  host?: string;
   now?: Date;
 }
 
@@ -56,32 +59,38 @@ function liveUntilMs(record: EngineHealth | undefined, now: Date): number | unde
   return Number.isFinite(until) ? until : undefined;
 }
 
-function put(key: string, record: EngineHealth): void {
-  writeStore({ ...readStore(), [key]: record });
+/** Store the record, stamped with the host it is about. One machine's observation never displaces a standing account-wide one. */
+function put(key: string, record: EngineHealth, host: string | undefined, now: Date): void {
+  const store = readStore();
+  const standing = store[key];
+  if (host !== undefined && standing?.state === "exhausted" && standing.host === undefined && !isSpent(standing, now)) return;
+  writeStore({ ...store, [key]: { ...record, ...(host === undefined ? {} : { host }) } });
 }
 
 function holdModel(write: OpencodeHealthWrite, provider: string, now: Date, observed: Pick<EngineHealth, "reason" | "observedAt">): boolean {
   const key = opencodeModelHealthKey(write.model);
   if (key === undefined) return false;
-  put(key, { state: "exhausted", until: new Date(now.getTime() + opencodeReprobeMs(provider, write.config)).toISOString(), failureClass: "model-access", ...observed });
+  put(key, { state: "exhausted", until: new Date(now.getTime() + opencodeReprobeMs(provider, write.config)).toISOString(), failureClass: "model-access", ...observed }, write.host, now);
   return true;
 }
 
 function holdSignedOut(write: OpencodeHealthWrite, provider: string, now: Date, observed: Pick<EngineHealth, "reason" | "observedAt">): void {
-  const fingerprint = write.remote ? undefined : opencodeCredentialFingerprint(provider, write.config);
+  const fingerprint = write.host === undefined ? opencodeCredentialFingerprint(provider, write.config) : undefined;
   put(write.healthKey, {
     state: "exhausted",
     failureClass: "auth",
     ...(fingerprint === undefined ? { until: new Date(now.getTime() + UNFINGERPRINTED_AUTH_HOLD_MS).toISOString() } : { credentialFingerprint: fingerprint }),
     ...observed,
-  });
+  }, write.host, now);
 }
 
 function holdSpentAllowance(write: OpencodeHealthWrite, provider: string, now: Date, observed: Pick<EngineHealth, "reason" | "observedAt">): void {
   const stated = write.resetsAt !== undefined && Number.isFinite(write.resetsAt) ? write.resetsAt * 1000 : undefined;
   const standing = liveUntilMs(readStore()[write.healthKey], now);
   const until = Math.max(stated ?? now.getTime() + opencodeReprobeMs(provider, write.config), standing ?? 0);
-  put(write.healthKey, { state: "exhausted", until: new Date(until).toISOString(), failureClass: "quota", ...(write.model ? { model: write.model } : {}), ...observed });
+  // A stated reset is taken on trust only up to the re-probe, as every other stated window is, so a misparse self-corrects.
+  const recheck = stated === undefined ? {} : { recheckAt: recheckFrom(until, now) };
+  put(write.healthKey, { state: "exhausted", until: new Date(until).toISOString(), ...recheck, failureClass: "quota", ...(write.model ? { model: write.model } : {}), ...observed }, write.host, now);
 }
 
 /**
@@ -106,6 +115,12 @@ export function recordOpencodeFailure(write: OpencodeHealthWrite): boolean {
   if (!subscription) return false;
   holdSpentAllowance(write, provider, now, observed);
   return true;
+}
+
+/** A turn served on `model` says its (provider, model) refusal has lifted. */
+export function recordOpencodeModelServed(model: string | undefined, turnStartedAtMs: number, now: Date = new Date()): void {
+  const key = opencodeModelHealthKey(model);
+  if (key !== undefined) recordEngineServed(key, turnStartedAtMs, model, now);
 }
 
 /** When the quota hold recorded under `key` ends, in unix seconds: the moment a stand-in's window should end too, so a

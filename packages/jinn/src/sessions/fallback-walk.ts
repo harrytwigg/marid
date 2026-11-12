@@ -4,6 +4,7 @@ import { logger } from "../shared/logger.js";
 import { rateLimitEngineLabel } from "../shared/rateLimit.js";
 import { linkHealthKey } from "../shared/fallback-chain-health.js";
 import { recordEngineServed } from "../shared/engine-health.js";
+import { recordOpencodeModelServed } from "../shared/engine-health-opencode.js";
 import type { EngineName } from "../shared/models.js";
 import type { EngineResult, Session } from "../shared/types.js";
 import { claudeLinkRefusal, linkFailure, noteLinkAuthFailure, recordLinkLimit, runLink } from "./fallback-link-run.js";
@@ -219,7 +220,7 @@ async function launch(w: Walk, found: Found, hop: FallbackHop): Promise<WalkOutc
   const failure = linkFailure(result, choice.engine);
   if (!failure) return await served(w, found, substitution.model ?? substitution.engineConfig.model, { result, startedMs });
   await opts.hooks.onFallbackFailed?.(result);
-  if (failure.reason === "auth" && result.error && choice.engine === "claude") noteLinkAuthFailure(opts, choice, result.error);
+  if (failure.reason === "auth" && result.error) noteLinkAuthFailure(opts, choice, result.error);
   failedOver(w, found, { ...failure, model: substitution.model ?? substitution.engineConfig.model }, result);
   return undefined;
 }
@@ -232,7 +233,7 @@ function failedOver(w: Walk, found: Found, failure: { reason: FallbackHopReason;
   w.triedLabels.push(link.label);
   w.cursor = found.next.index;
   w.failure = { end: endOf(link), engine: link.engine, account: link.account, reason: failure.reason, resetsAt: failure.resetsAt };
-  if (failure.isLimit) recordLinkLimit(link, failure.resetsAt, failure.model, { error: failure.error, config: w.input.opts.config, remote: w.input.remote !== undefined });
+  if (failure.isLimit) recordLinkLimit(link, failure.resetsAt, failure.model, { error: failure.error, config: w.input.opts.config, host: w.input.remote?.remoteHost });
   if (result?.error) logger.info(`Session ${w.input.opts.session.id}: ${link.label} could not serve the turn (${failure.reason})`);
 }
 
@@ -249,7 +250,10 @@ async function served(w: Walk, found: Found, model: string | undefined, ran: { r
     updateSessionForAttempt(session.id, attemptToken, { ...thread, ...served });
   }
   // A link that answered a turn begun after its limit was recorded has lifted it.
-  if (!result.error) recordEngineServed(linkHealthKey(found.next.link), ran.startedMs, model);
+  if (!result.error) {
+    recordEngineServed(linkHealthKey(found.next.link), ran.startedMs, model);
+    if (found.next.link.engine === "opencode") recordOpencodeModelServed(model, ran.startedMs);
+  }
   await hooks.onFallbackComplete?.(result, { engine: found.choice.engine as EngineName, model });
   return { kind: "served", result };
 }

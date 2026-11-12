@@ -64,7 +64,7 @@ function limitFailure(result: LinkResult, resetsAt: number | undefined): LinkFai
 /** Hold a limit against the link's target: its provider for an opencode model, its account for Claude, its engine for the rest. Claude's own memory of the limit is kept as before. `ranModel` is the model the link's turn ran on. */
 export function recordLinkLimit(
   link: Pick<ResolvedFallbackLink, "engine" | "model" | "account">, resetsAt: number | undefined, ranModel?: string,
-  failed: { error?: string; config?: Pick<JinnConfig, "engines">; remote?: boolean } = {},
+  failed: { error?: string; config?: Pick<JinnConfig, "engines">; host?: string } = {},
 ): void {
   recordAccountRateLimit(link.account, link.engine, rateLimitEngineLabel(link.engine), resetsAt, { healthKey: linkHealthKey(link), model: ranModel, ...failed });
 }

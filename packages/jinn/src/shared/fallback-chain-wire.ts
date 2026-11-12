@@ -47,8 +47,8 @@ export type FallbackHopReason =
   | "quota"
   | "billing" // a prepaid balance ran dry; no clock refills it
   | "retry-exhausted" // the engine gave up on its own provider retries
-  | "invalid-model" // only on a fallback link, never the session's own target
-  | "auth"; // a fallback link's profile is signed out; only on a fallback link
+  | "invalid-model" // a model the target does not serve: on a fallback link, or an opencode model the account is not enabled for (also on the session's own target)
+  | "auth"; // a Claude fallback link's profile is signed out, or an opencode provider's key is expired or invalid
 
 /** Limit state of one target, from engine health and the latest limits reading. */
 export interface FallbackLinkHealth {

@@ -42,10 +42,10 @@ export function rateLimitAccount(
  *  cannot use that model alone (`engine-health-opencode.ts`). */
 export function recordAccountRateLimit(
   account: string, engine: string, engineLabel: string, resetsAt: number | undefined,
-  held: { healthKey?: string; model?: string; error?: string; config?: Pick<JinnConfig, "engines">; remote?: boolean } = {},
+  held: { healthKey?: string; model?: string; error?: string; config?: Pick<JinnConfig, "engines">; host?: string } = {},
 ): void {
   const { healthKey = account, model } = held;
-  if (engine === "opencode" && recordOpencodeFailure({ healthKey, model, error: held.error, resetsAt, config: held.config, remote: held.remote })) return;
+  if (engine === "opencode" && recordOpencodeFailure({ healthKey, model, error: held.error, resetsAt, config: held.config, host: held.host })) return;
   recordEngineUnavailable(healthKey, `${engineLabel} usage limit`, resetsAt, new Date(), model === undefined ? {} : { model });
   if (engine === "claude") recordClaudeRateLimit(resetsAt, account);
 }

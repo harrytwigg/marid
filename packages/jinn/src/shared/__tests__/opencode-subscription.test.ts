@@ -78,34 +78,34 @@ describe("opencodeCredentialFingerprint", () => {
 
   it("is an opaque hash of the stored credential's identity, never its secret", () => {
     seed([{ id: "cred_1", integration: "opencode-go", active: null, updated: 1000, value: "sk-secret-value" }]);
-    const fingerprint = opencodeCredentialFingerprint("opencode-go", config(), { env: env() })!;
+    const fingerprint = opencodeCredentialFingerprint("opencode-go", config(), {}, env())!;
     expect(fingerprint).toMatch(/^[0-9a-f]{32}$/);
     expect(fingerprint).not.toContain("secret");
   });
 
   it("changes when the credential is replaced or re-saved, and not when another provider's does", () => {
     seed([{ id: "cred_1", integration: "opencode-go", active: null, updated: 1000 }, { id: "cred_2", integration: "openrouter", active: null, updated: 5 }]);
-    const before = opencodeCredentialFingerprint("opencode-go", config(), { env: env() });
+    const before = opencodeCredentialFingerprint("opencode-go", config(), {}, env());
     seed([{ id: "cred_1", integration: "opencode-go", active: null, updated: 1000 }, { id: "cred_2", integration: "openrouter", active: null, updated: 6 }]);
-    expect(opencodeCredentialFingerprint("opencode-go", config(), { env: env() })).toBe(before);
+    expect(opencodeCredentialFingerprint("opencode-go", config(), {}, env())).toBe(before);
     seed([{ id: "cred_1", integration: "opencode-go", active: null, updated: 2000, value: "sk-new" }]);
-    expect(opencodeCredentialFingerprint("opencode-go", config(), { env: env() })).not.toBe(before);
+    expect(opencodeCredentialFingerprint("opencode-go", config(), {}, env())).not.toBe(before);
     seed([{ id: "cred_9", integration: "opencode-go", active: null, updated: 1000 }]);
-    expect(opencodeCredentialFingerprint("opencode-go", config(), { env: env() })).not.toBe(before);
+    expect(opencodeCredentialFingerprint("opencode-go", config(), {}, env())).not.toBe(before);
   });
 
   it("is undefined when nothing can be read: no database, no row for the provider, a remote turn", () => {
-    expect(opencodeCredentialFingerprint("opencode-go", config(), { env: env() })).toBeUndefined();
+    expect(opencodeCredentialFingerprint("opencode-go", config(), {}, env())).toBeUndefined();
     seed([{ id: "cred_1", integration: "openrouter", active: null, updated: 1 }]);
-    expect(opencodeCredentialFingerprint("opencode-go", config(), { env: env() })).toBeUndefined();
+    expect(opencodeCredentialFingerprint("opencode-go", config(), {}, env())).toBeUndefined();
     seed([{ id: "cred_1", integration: "opencode-go", active: null, updated: 1 }]);
-    expect(opencodeCredentialFingerprint("opencode-go", config(), { env: env(), remote: true })).toBeUndefined();
+    expect(opencodeCredentialFingerprint("opencode-go", config(), { remote: true }, env())).toBeUndefined();
   });
 
   it("ignores a stale auth.json beside the database", () => {
     fs.mkdirSync(path.join(data, "opencode"), { recursive: true });
     fs.writeFileSync(path.join(data, "opencode", "auth.json"), JSON.stringify({ "opencode-go": { type: "api", key: "sk-old" } }));
-    expect(opencodeCredentialFingerprint("opencode-go", config(), { env: env() })).toBeUndefined();
+    expect(opencodeCredentialFingerprint("opencode-go", config(), {}, env())).toBeUndefined();
   });
 });
 
