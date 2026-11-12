@@ -52,10 +52,10 @@ export function setOpencodeAccountKeyEnv(names: Iterable<string>, env: NodeJS.Pr
   }
 }
 
-/** The account key variables as the gateway holds them: a key taken at config load, else what `base` still has. Only for the readers that hand a key to an opencode process or report whether one is set; never a child env as a whole. */
+/** `base` (the gateway's environment) with the account keys taken at config load laid over it: a key taken wins, any other variable reads as `base` has it. Only for the readers that hand a key to an opencode process or report whether one is set; never a child env as a whole. */
 export function opencodeAccountKeyEnvironment(base: Readonly<Record<string, string | undefined>> = process.env): Record<string, string | undefined> {
-  const out: Record<string, string | undefined> = {};
-  for (const name of new Set([...opencodeAccountKeyEnv, ...opencodeAccountKeys.keys()])) out[name] = opencodeAccountKeys.get(name) ?? base[name];
+  const out: Record<string, string | undefined> = { ...base };
+  for (const [name, value] of opencodeAccountKeys) out[name] = value;
   return out;
 }
 

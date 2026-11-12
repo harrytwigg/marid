@@ -51,13 +51,13 @@ describe("account key vault", () => {
     process.env[LATE] = "sk-vault-late";
     setOpencodeAccountKeyEnv([KEY, LATE]);
     expect(process.env[LATE]).toBeUndefined();
-    expect(opencodeAccountKeyEnvironment()).toEqual({ [KEY]: "sk-vault-a", [LATE]: "sk-vault-late" });
+    expect(opencodeAccountKeyEnvironment()).toMatchObject({ [KEY]: "sk-vault-a", [LATE]: "sk-vault-late" });
   });
 
   it("drops a blank value without keeping it, and reads an untaken variable from the base", () => {
     process.env[KEY] = "   ";
     setOpencodeAccountKeyEnv([KEY, LATE]);
     expect(process.env[KEY]).toBeUndefined();
-    expect(opencodeAccountKeyEnvironment({ [LATE]: "from-base" })).toEqual({ [KEY]: undefined, [LATE]: "from-base" });
+    expect(opencodeAccountKeyEnvironment({ [LATE]: "from-base" })).toEqual({ [LATE]: "from-base" });
   });
 });
