@@ -328,6 +328,8 @@ export interface EngineLimitBucket {
   primary?: EngineLimitWindow;
   secondary?: EngineLimitWindow;
   credits?: EngineLimitCredits;
+  /** Every window, for a bucket metering more than two (an opencode model: 5h/7d/30d). */
+  windows?: EngineLimitWindow[];
 }
 
 export interface EngineLimitEngineSnapshot {

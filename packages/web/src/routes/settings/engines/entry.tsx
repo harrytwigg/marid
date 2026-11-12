@@ -1,7 +1,10 @@
+import { useMemo } from "react"
 import { useModelRegistry } from "@/hooks/use-model-registry"
 import { findSubject, useFallbackChains } from "@/hooks/use-fallback-chains"
 import { Section } from "../shared"
 import { AccountCard, EngineCard, RemoteAccountCard } from "./engine-card"
+import { OpencodeAccountsList } from "./opencode-accounts"
+import { AccountLabelsContext } from "@/hooks/account-labels"
 import { LegacyFallbackRow } from "./legacy-row"
 import type { ChainBodyProps } from "./chain-body"
 import {
@@ -12,6 +15,7 @@ import {
   legacyFallbackEngine,
   legacyMigrationMutations,
   modelMapFor,
+  opencodeAccounts,
   remoteAccounts,
   substituteChainFor,
   type EnginesConfig,
@@ -97,13 +101,21 @@ function EnginesBody({ engines, sessions, onChange, registry }: EnginesSectionPr
   const { data: chains, isError: chainsFailed } = useFallbackChains()
   const ctx: SectionContext = { engines, registry, chains, chainsFailed, onChange }
   const legacy = legacyFallbackEngine(sessions)
+  const accountLabels = useMemo(
+    () => Object.fromEntries(opencodeAccounts(engines).map(([name, a]) => [name, a.label ?? name])),
+    [engines],
+  )
 
   return (
+    <AccountLabelsContext.Provider value={accountLabels}>
     <Section title="Engine Fallbacks">
       <div className="flex flex-col gap-[var(--space-2)]">
         {Object.values(registry.engines).map((entry) => (
           <div key={entry.name} className="flex flex-col gap-[var(--space-2)]">
             <EngineCard entry={entry} body={bodyForEngine(entry.name, ctx)} map={mapFor(entry.name, ctx)} />
+            {entry.name === "opencode" && opencodeAccounts(engines).length > 0 && (
+              <OpencodeAccountsList accounts={opencodeAccounts(engines)} />
+            )}
             {entry.name === "claude" && allAccountNames(engines).map((account) => {
               const remote = remoteAccounts(engines).find((r) => r.name === account)
               return remote
@@ -122,5 +134,6 @@ function EnginesBody({ engines, sessions, onChange, registry }: EnginesSectionPr
         )}
       </div>
     </Section>
+    </AccountLabelsContext.Provider>
   )
 }

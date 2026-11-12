@@ -1,3 +1,4 @@
+import { useAccountLabels } from '@/hooks/account-labels'
 import { useState } from 'react'
 import type { EnginesResponse, ModelInfo } from '@/lib/api'
 import { modelMatchesQuery } from '@/hooks/use-model-registry'
@@ -36,8 +37,8 @@ function collapsedModels(models: ModelInfo[], modelId: string): ModelInfo[] {
  * otherwise the short form shows until the per-engine "show all" opt-in. Featured sets
  * are NOT capped by MAX_VISIBLE_MODELS: only the no-featured "first few" is.
  */
-function listWindow(models: ModelInfo[], modelId: string, trimmedQuery: string, revealAll: boolean) {
-  const matching = trimmedQuery ? models.filter((m) => modelMatchesQuery(m, trimmedQuery)) : null
+function listWindow(models: ModelInfo[], modelId: string, trimmedQuery: string, revealAll: boolean, labels: Record<string, string>) {
+  const matching = trimmedQuery ? models.filter((m) => modelMatchesQuery(m, trimmedQuery, labels)) : null
   const full = matching ?? models
   const collapsed = matching ? matching.slice(0, MAX_VISIBLE_MODELS) : collapsedModels(models, modelId)
   const hiddenCount = revealAll ? 0 : Math.max(0, full.length - collapsed.length)
@@ -61,12 +62,13 @@ export function useModelList(registry: EnginesResponse, engine: string, modelId:
   const [expandedByEngine, setExpandedByEngine] = useState<Record<string, boolean>>(() => loadExpandedByEngine())
   const [query, setQuery] = useState('')
   const [searchExpanded, setSearchExpanded] = useState(false)
+  const labels = useAccountLabels()
 
   const models = registry.engines[engine]?.models ?? []
   const trimmedQuery = query.trim()
   const searching = trimmedQuery.length > 0
   const expanded = expandedByEngine[engine] ?? false
-  const window = listWindow(models, modelId, trimmedQuery, searching ? searchExpanded : expanded)
+  const window = listWindow(models, modelId, trimmedQuery, searching ? searchExpanded : expanded, labels)
 
   const toggleExpanded = () => {
     if (searching) return setSearchExpanded((v) => !v)

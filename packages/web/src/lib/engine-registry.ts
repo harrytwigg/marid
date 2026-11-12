@@ -12,6 +12,8 @@ export interface ModelInfo {
   contextWindow?: number;
   /** Model is in the engine's featured set — shown by default in the picker. */
   featured?: boolean;
+  /** opencode: the declared account (`engines.opencode.accounts` name) this model is served through. */
+  account?: string;
 }
 /** Whether an engine can serve a turn right now, beside the installed
  *  availability the registry reports. Advisory: an engine with no reading is
