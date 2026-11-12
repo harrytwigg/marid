@@ -170,7 +170,7 @@ describe("the fakes as processes", { timeout: 30_000 }, () => {
     fs.writeFileSync(hook, `#!/bin/sh\ncat >> ${files().hooks}\necho >> ${files().hooks}\n`, { mode: 0o755 });
     const entry = [{ hooks: [{ type: "command", command: hook }] }];
     const file = path.join(dir, "settings.json");
-    fs.writeFileSync(file, JSON.stringify({ hooks: { SessionStart: entry, UserPromptSubmit: entry, Stop: entry, StopFailure: entry } }));
+    fs.writeFileSync(file, JSON.stringify({ hooks: { SessionStart: entry, UserPromptSubmit: entry, Stop: entry, StopFailure: entry, PostCompact: entry } }));
     return file;
   }
 
@@ -197,6 +197,55 @@ describe("the fakes as processes", { timeout: 30_000 }, () => {
     expect(first).toMatchObject({ engine: "claude", profile: "profile-a", profileDir: a, model: "opus", tag: "fc-tag-one", resume: null });
     expect(hookEvents().map((event) => event.hook_event_name)).toEqual(["SessionStart", "UserPromptSubmit", "StopFailure", "SessionStart", "UserPromptSubmit", "Stop"]);
     expect(hookEvents().at(-1).last_assistant_message).toContain("profile=profile-a model=opus");
+  });
+
+  it("answers /compact as the CLI does: PostCompact and no Stop, then a boundary and a marked summary after the hook", () => {
+    fs.writeFileSync(files().scenario, "{}");
+    const a = profile("profile-a");
+    runClaude(a, ["--model", "opus", "--", "work fc-tag-one"]);
+    const thread = ledger()[0].sessionId;
+    runClaude(a, ["--resume", thread, "--model", "opus", "--", "/compact keep the goal fc-tag-one"]);
+    const events = hookEvents().map((event) => event.hook_event_name);
+    expect(events.slice(-3)).toEqual(["SessionStart", "UserPromptSubmit", "PostCompact"]);
+    expect(hookEvents().at(-1)).toMatchObject({ trigger: "manual" });
+    const entries = fs.readFileSync(hookEvents().at(-1).transcript_path, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+    const boundary = entries.findIndex((entry) => entry.subtype === "compact_boundary");
+    const summary = entries.findIndex((entry) => entry.isCompactSummary === true);
+    expect(boundary).toBeGreaterThan(0);
+    expect(summary).toBeGreaterThan(boundary);
+    expect(entries[summary].message.content).toMatch(/^This session is being continued from a previous conversation/);
+    expect(entries[summary].message.content).toContain(`profile=profile-a session=${thread}`);
+    // A manual /compact also writes plain command entries; none of them is the summary.
+    expect(entries.filter((entry) => typeof entry.message?.content === "string" && entry.message.content.includes("<command-name>")).every((entry) => entry.isCompactSummary !== true)).toBe(true);
+  });
+
+  it("fails /compact on a rate-limited profile with the limit, writing no boundary", () => {
+    fs.writeFileSync(files().scenario, JSON.stringify({ claude: { "profile-a|opus": ["ok", "rate-limit"] } }));
+    const a = profile("profile-a");
+    runClaude(a, ["--model", "opus", "--", "work fc-tag-one"]);
+    const thread = ledger()[0].sessionId;
+    runClaude(a, ["--resume", thread, "--model", "opus", "--", "/compact fc-tag-one"]);
+    expect(hookEvents().at(-1)).toMatchObject({ hook_event_name: "StopFailure", error: "rate_limit" });
+    const entries = fs.readFileSync(hookEvents().at(-1).transcript_path, "utf8");
+    expect(entries).not.toContain("compact_boundary");
+  });
+
+  it("writes the summary as text parts, or no summary, when asked", () => {
+    fs.writeFileSync(files().scenario, "{}");
+    const a = profile("profile-a");
+    runClaude(a, ["--model", "opus", "--", "work"]);
+    const thread = ledger()[0].sessionId;
+    const withEnv = (extra: Record<string, string>) => spawnSync(process.execPath, [FAKE_CLAUDE, "--settings", settings(), "--resume", thread, "--model", "opus", "--", "/compact"], {
+      cwd: path.join(dir, "work"), env: { ...env(), CLAUDE_CONFIG_DIR: a, ...extra }, input: "", timeout: 8000, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
+    });
+    withEnv({ FAKE_COMPACT_SUMMARY_SHAPE: "array" });
+    const transcript = hookEvents().at(-1).transcript_path;
+    const read = () => fs.readFileSync(transcript, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+    expect(read().find((entry) => entry.isCompactSummary).message.content).toEqual([{ type: "text", text: expect.stringContaining("fake-summary") }]);
+    const before = read().filter((entry) => entry.isCompactSummary).length;
+    withEnv({ FAKE_COMPACT_NO_SUMMARY: "1" });
+    expect(read().filter((entry) => entry.isCompactSummary)).toHaveLength(before);
+    expect(read().filter((entry) => entry.subtype === "compact_boundary")).toHaveLength(2);
   });
 
   it("refuses to resume a conversation under another profile, and resumes it under its own", () => {

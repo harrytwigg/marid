@@ -35,7 +35,7 @@ import { useOnboardingSeed } from '@/components/chat/use-onboarding-seed'
 
 const CliTerminal = lazy(() => import('@/components/cli-terminal').then(m => ({ default: m.CliTerminal })))
 import type { CliTerminalHandle } from '@/components/cli-terminal'
-import { buildNewSessionParams, composeSessionEngine, resolveNewSessionSelector, shouldPersistNewSessionSelector } from '@/components/chat/new-chat-helpers'
+import { buildNewSessionParams, composeSessionEngine, resolveNewSessionSelector, sessionProfileValue, shouldPersistNewSessionSelector } from '@/components/chat/new-chat-helpers'
 import { readNewSessionSelector, writeNewSessionSelector } from '@/components/chat/new-session-selector'
 import { Slot } from '@/contrib/slot'
 import { AREAS } from '@/contrib/types'
@@ -218,6 +218,11 @@ export function ChatPane({
   const selectedEmployeeRemote = Boolean(
     selectedEmployee && pickerEmployees.find((e) => e.name === selectedEmployee)?.remoteHost,
   )
+  // An existing chat's host follows the session's own employee, not the new-chat selection.
+  const sessionEmployeeName = (currentSession?.employee as string | null | undefined) ?? null
+  const sessionEmployeeRemote = Boolean(
+    sessionEmployeeName && pickerEmployees.find((e) => e.name === sessionEmployeeName)?.remoteHost,
+  )
   const employeeDisplayNames = useMemo(
     () => Object.fromEntries((orgData?.employees ?? []).map((employee) => [employee.name, employee.displayName])),
     [orgData],
@@ -273,20 +278,31 @@ export function ChatPane({
     setSelectorError(null)
   }, [selectedEmployee, sessionId, orgData])
 
-  // Pre-fill for an EXISTING chat from the loaded session.
+  // Pre-fill for an EXISTING chat from the loaded session. A record that changes under the pane (a switch the
+  // session made, or the echo of this pane's own update) re-seeds the selection but keeps the notes; only opening
+  // another chat clears them. While this pane's own update is in flight the record is older than the selection.
+  const seededSessionIdRef = useRef<string | null>(null)
+  const selectorPutsInFlight = useRef(0)
   useEffect(() => {
     if (!sessionId || !currentSession) return
+    const opened = seededSessionIdRef.current !== sessionId
+    if (!opened && selectorPutsInFlight.current > 0) return
+    seededSessionIdRef.current = sessionId
     setSelector({
       engine: currentSession.engine as string | undefined,
       model: currentSession.model as string | undefined,
       effortLevel: (currentSession.effortLevel ?? currentSession.effort_level) as string | undefined,
+      // No profile = the employee's/gateway's own login.
+      profile: sessionProfileValue(currentSession.claudeProfile as Session['claudeProfile']),
     })
-    setEffortPendingNote(false)
-    setSelectorError(null)
+    if (opened) {
+      setEffortPendingNote(false)
+      setSelectorError(null)
+    }
   }, [sessionId, currentSession])
 
   // Apply a selector change. New chat: just track it (sent on first message).
-  // Existing chat: persist model/effort via PATCH (engine is fixed mid-chat).
+  // Existing chat: persist engine, profile, model and effort with PUT; the gateway refuses while a turn runs.
   const handleSelectorChange = useCallback((next: SelectorValue) => {
     const sid = sessionIdRef.current
     if (sid) {
@@ -309,7 +325,21 @@ export function ChatPane({
       setSelector(next)
       setSelectorError(null)
       setEffortPendingNote(false)
-      api.updateSession(sid, { engine: next.engine, model: next.model, effortLevel: next.effortLevel })
+      // The profile rides along only when it changed on claude (`null` = own login); another engine has none.
+      // Changed against what the selector showed AND what the record holds: leaving claude drops the selector's
+      // profile, so coming back to own login must still say null.
+      const recorded = sessionProfileValue(currentSession?.claudeProfile as Session['claudeProfile']) ?? null
+      const nextProfile = next.profile ?? null
+      const profileChanged = next.engine === 'claude'
+        && (nextProfile !== (previous.profile ?? null) || nextProfile !== recorded)
+      selectorPutsInFlight.current += 1
+      api.updateSession(sid, {
+        engine: next.engine,
+        model: next.model,
+        effortLevel: next.effortLevel,
+        ...(profileChanged ? { profile: nextProfile } : {}),
+      })
+        .finally(() => { selectorPutsInFlight.current -= 1 })
         .then(() => {
           if (selectorPatchSeq.current === seq) setEffortPendingNote(true)
         })
@@ -325,7 +355,7 @@ export function ChatPane({
       setSelectorError(null)
       writeNewSessionSelector(next)
     }
-  }, [selector, currentSession?.engine, currentSession?.engineSessionId])
+  }, [selector, currentSession?.engine, currentSession?.engineSessionId, currentSession?.claudeProfile])
 
 
   const handleInterrupt = useCallback(async () => {
@@ -610,10 +640,9 @@ export function ChatPane({
             errorNote={selectorError ?? undefined}
             disabled={loading}
             contextTokens={liveContextTokens ?? (currentSession?.lastContextTokens as number | null | undefined) ?? undefined}
-            allowProfiles={!sessionId}
+            allowProfiles
             onEffectiveProfile={setEffectiveProfile}
-            employeeRemote={selectedEmployeeRemote}
-            sessionProfileName={(currentSession?.claudeProfile as Session['claudeProfile'])?.name ?? null}
+            employeeRemote={sessionId ? sessionEmployeeRemote : selectedEmployeeRemote}
           />
           {/* Never locked by a running turn: a change reaches the gateway at once and applies from the next usage limit. */}
           <FallbackModeChip

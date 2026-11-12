@@ -121,9 +121,7 @@ describe("session tools — registry + schemas", () => {
 
   it("teaches employee selection in the compact employee schema field", () => {
     const props = tool("spawn_session").inputSchema.properties as Record<string, { description?: string }>;
-    expect(props.employee.description).toBe(
-      "Employee slug; choose by role/persona fit from list_employees/find_employees. Omit for a plain session or if no employee fits.",
-    );
+    expect(props.employee.description).toBe("Employee slug; choose by role/persona fit from list_employees/find_employees. Omit for a plain session or if no employee fits.");
   });
 });
 
@@ -159,6 +157,31 @@ describe("compact_session — unit (stub gateway)", () => {
     expect(calls[0].headers["x-jinn-caller-session"]).toBe("me");
     expect(out.status).toBe("scheduled");
     expect(String(out.hint)).toMatch(/END YOUR TURN/);
+  });
+
+  it("forwards the target fields when present (profile \"\" is own login) and sends none when absent", async () => {
+    const { calls, ctx } = stub(() => ({ status: 202, body: { status: "scheduled", sessionId: "me", engine: "claude", resume: "accepted", switch: {} } }), "me");
+    await tool("compact_session").handler({ goal: "g", done: "d", next: "n", engine: "claude", profile: "", model: "sonnet" }, ctx);
+    expect(calls[0].body).toMatchObject({ engine: "claude", profile: "", model: "sonnet" });
+    await tool("compact_session").handler({ goal: "g", done: "d", next: "n", model: "haiku" }, ctx);
+    expect(calls[1].body).toMatchObject({ model: "haiku" });
+    expect(calls[1].body).not.toHaveProperty("engine");
+    expect(calls[1].body).not.toHaveProperty("profile");
+    const schema = tool("compact_session").inputSchema as { properties: Record<string, unknown> };
+    expect(Object.keys(schema.properties)).toEqual(expect.arrayContaining(["engine", "profile", "model"]));
+  });
+
+  it("a refused target reaches the tool error with the rendered list of valid targets intact", async () => {
+    const list = [
+      "unknown engine \"?\" — call again with one of these. Now: Claude · own login · Opus.",
+      "claude: profiles \"\" (own login), work (exhausted until 2026-11-12T15:00Z); models opus, sonnet, haiku.",
+      "opencode: models provider/a, provider/b, … +40 more (call with engine \"opencode\", model \"?\" for its list).",
+    ].join("\n");
+    const { ctx } = stub(() => ({ status: 400, body: { code: "invalid-target", error: list, targets: { engines: [] } } }), "me");
+    const failure = await tool("compact_session").handler({ goal: "g", done: "d", next: "n", engine: "?" }, ctx).catch((error: Error) => error);
+    expect(failure).toBeInstanceOf(JinnMcpToolError);
+    expect((failure as Error).message).toContain(list);
+    expect((failure as Error).message).toMatch(/rejected \(400\)/);
   });
 
   it("passes the gateway's refusal through readable (cooldown, unsupported engine)", async () => {

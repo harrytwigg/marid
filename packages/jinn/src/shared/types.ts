@@ -243,6 +243,10 @@ export interface EngineResult {
   /** Set by a `/compact` turn that compacted: the context size either side of
    *  it, as far as the engine reports them. */
   compaction?: import("./compaction-stats.js").CompactionStats;
+  /** The text of the summary a `/compact` turn wrote, for an engine that reports it
+   *  (opencode server); a session switching engines carries it over. Claude's is read
+   *  from its transcript instead. */
+  compactionSummary?: string;
   /**
    * Optional rate limit metadata returned by an engine.
    * `resetsAt` is a Unix timestamp in seconds.

@@ -210,7 +210,8 @@ describe("syncExternalTurn", () => {
 
   it("does not persist an unclaimed Claude transcript tail after the logical session switches engines", () => {
     const id = makeSession({ engineSessionId: "claude-old" });
-    reg.switchSessionEngine(id, "codex", {
+    reg.switchSessionTarget(id, {
+      engine: "codex",
       model: "gpt-5.5",
       effortLevel: "medium",
     });

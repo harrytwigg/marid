@@ -10,6 +10,8 @@ import {
 import { FILES_DIR } from "../shared/paths.js";
 import { settleTurn } from "../sessions/turn/completion.js";
 import { maybeRevertEngineOverride } from "../sessions/engine-override.js";
+import { applyPendingSwitch } from "../sessions/pending-switch-apply.js";
+import { pendingSwitchOfResume } from "../sessions/pending-switch.js";
 import { resolveTurnHierarchy } from "../sessions/turn/preflight.js";
 import { orgRegistry } from "./org-registry.js";
 import { runTurn } from "../sessions/turn/runner.js";
@@ -93,7 +95,7 @@ async function runQueuedTurn(
   context.emit("session:started", { sessionId: session.id });
   // Item moved pending → running: refresh the queue panel.
   if (opts.queueItemId) context.emit("queue:updated", { sessionId: session.id, sessionKey: opts.sessionKey });
-  await runWebSession(startedAttempt, context, { ...request, attemptToken: startedAttempt.attemptToken });
+  await runWebSession(startedAttempt, context, { ...request, attemptToken: startedAttempt.attemptToken, queueItemId: opts.queueItemId });
 }
 
 /**
@@ -174,6 +176,39 @@ interface WebTurnRequest {
   engine: Engine;
   attemptToken: string;
   attachments?: string[];
+  /** The queue row this turn runs for: how a self-compaction resume is matched to the switch it carries. */
+  queueItemId?: string;
+}
+
+/**
+ * A session's own switch (compact_session with a target) is applied here, when its resume turn
+ * starts: the compaction has settled, a stop between the two turns would have withdrawn the
+ * switch, and the prompt depends on how the compaction ended. A resume that matches no pending
+ * switch (stale, or withdrawn by an operator's switch) is left as queued. Runs before the
+ * stand-in revert, so the revert and the engine pick see the switched row.
+ */
+function applySessionSwitch(
+  liveSession: Session,
+  context: ApiContext,
+  request: WebTurnRequest,
+): { session: Session; request: WebTurnRequest; moved: boolean } {
+  const pending = pendingSwitchOfResume(liveSession, request.queueItemId);
+  const applied = pending
+    ? applyPendingSwitch({ config: context.getConfig(), emit: context.emit }, liveSession, pending, request.attemptToken)
+    : undefined;
+  if (!applied) return { session: liveSession, request, moved: false };
+  return { session: applied.session, request: { ...request, prompt: applied.prompt }, moved: applied.applied };
+}
+
+/**
+ * CLI-mode sends run against the PTY-backed view of the engine so the user sees the turn stream
+ * into their live xterm; everything else takes the headless engine from the session manager. A
+ * switched turn runs headless on its new engine: the terminal view the dispatch picked belongs to
+ * the one it left.
+ */
+function engineForTurn(context: ApiContext, dispatched: Session, current: Session, requested: Engine, moved: boolean): Engine | undefined {
+  const preferredPtyView = !moved && context.ptyViewEngines?.[dispatched.engine] === requested;
+  return (preferredPtyView ? context.ptyViewEngines?.[current.engine] : undefined) ?? context.sessionManager.getEngine(current.engine);
 }
 
 async function runWebSession(
@@ -181,11 +216,12 @@ async function runWebSession(
   context: ApiContext,
   request: WebTurnRequest,
 ): Promise<void> {
-  const liveSession = getSession(session.id);
-  if (!liveSession) {
+  const startedSession = getSession(session.id);
+  if (!startedSession) {
     logger.info(`Skipping deleted web session ${session.id} before run start`);
     return;
   }
+  const { session: liveSession, request: turnRequest, moved } = applySessionSwitch(startedSession, context, request);
   // A session moved onto a stand-in by a spent allowance goes back to the engine
   // it left once that window has passed. Checked here, when the queue lets the
   // turn through, because every web entry point reaches this one — a message,
@@ -194,18 +230,13 @@ async function runWebSession(
   const employee = liveSession.employee ? orgRegistry(context.getConfig()).get(liveSession.employee) : undefined;
   const currentSession = maybeRevertEngineOverride(liveSession, employee, context.getConfig());
 
-  // CLI-mode sends run against the PTY-backed view of the engine so the user
-  // sees the turn stream into their live xterm; everything else takes the
-  // headless engine from the session manager.
-  const preferredPtyView = context.ptyViewEngines?.[session.engine] === request.engine;
-  const runtimeEngine = (preferredPtyView ? context.ptyViewEngines?.[currentSession.engine] : undefined)
-    ?? context.sessionManager.getEngine(currentSession.engine);
+  const runtimeEngine = engineForTurn(context, session, currentSession, turnRequest.engine, moved);
 
   await runTurn({
     session: currentSession,
-    attemptToken: request.attemptToken,
-    prompt: request.prompt,
-    attachments: request.attachments ?? [],
+    attemptToken: turnRequest.attemptToken,
+    prompt: turnRequest.prompt,
+    attachments: turnRequest.attachments ?? [],
     employee,
     config: context.getConfig(),
     engines: context.sessionManager.getEngines(),

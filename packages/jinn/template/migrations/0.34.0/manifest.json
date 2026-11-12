@@ -11,7 +11,7 @@
       "path": "CLAUDE.md",
       "operation": "modify",
       "baseSha256": "92e89f2320a11c89f5fbae41c28df1920467d53d7e6e6308c83a42e758d0425a",
-      "targetSha256": "233013dbe528982f1dac1f3b5fa1136d1a40ccbd283f0e1d37a0ab1757ae3222",
+      "targetSha256": "b4b28e7a941127afe386cabbe8bf82e707ac6d43db423a8b74bae59616932d67",
       "basePayload": "files/base/CLAUDE.md",
       "targetPayload": "files/target/CLAUDE.md"
     },

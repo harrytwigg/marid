@@ -2,6 +2,8 @@ import { parseBlocksColumn, parseMetaColumn, rowToMessage, type MessageRow, type
 export type { MessageMedia, SessionMessage, MessagePage, MessagePageOptions } from './message-row.js';
 import { CALLBACK_DELIVERY_SELECT } from "./callback-delivery-query.js";
 import { pendingCompletionBatch } from "./completion-batching.js";
+import { withoutCatchUpMarkers } from "./sync-markers.js";
+import { isClaudeAccount } from "../shared/engine-account.js";
 import { legacyThreadRef, threadSlot, withLegacySlotMoved, withoutAccountOverride } from "./session-account.js";
 export { coalescePendingParentCompletionQueueItems } from "./completion-batching.js";
 export { shouldHoldParentCompletionQueueDispatch, listReleasableParentCompletionQueuesForSource } from "./completion-drain.js";
@@ -1129,21 +1131,65 @@ export function recordEngineSessionId(
   return updates.engineSessions ? updateSession(sessionId, updates) : session;
 }
 
-export interface SwitchSessionEngineOptions {
+/** What `switchSessionTarget` writes: the target (engine, profile, model, effort) and how the left conversation is carried. */
+export interface SwitchSessionTargetOptions {
+  engine: string;
+  /** The Claude profile directory to run on; `null` is the employee's own login, `undefined` keeps the row's. */
+  claudeConfigDir?: string | null;
+  /** Required (non-null, or kept from the target's own slot) when the move is to another Claude account: see the slot note in `targetRefs`. */
   model?: string | null;
   effortLevel?: string | null;
+  /** `park` keeps the left conversation so a return resumes it; `retire` drops it so a return starts fresh. Default `park`. */
+  leftConversation?: "park" | "retire";
+  /** The target's own parked conversation, if it holds one, is not resumed: the move opens a new conversation there (a session's own switch tells it so). */
+  freshTarget?: boolean;
+  /** `pointer` (default) owes the new conversation a history pointer; `none` owes it nothing (a caller that supplies its own prompt). */
+  sync?: "pointer" | "none";
+  /** Written to `transportMeta.lastSwitch` in the same write. */
+  lastSwitch?: JsonObject;
 }
 
-export function switchSessionEngine(
-  sessionId: string,
-  nextEngine: string,
-  opts: SwitchSessionEngineOptions = {},
-): Session | undefined {
-  const session = getSession(sessionId);
-  if (!session || !nextEngine) return session;
+/** The in-turn write fence: the attempt that owns the running turn. */
+export interface SwitchSessionTargetFence {
+  attemptToken: string;
+}
 
+function metaOf(session: Session): Record<string, unknown> {
+  return (session.transportMeta && typeof session.transportMeta === 'object' && !Array.isArray(session.transportMeta))
+    ? { ...session.transportMeta }
+    : {};
+}
+
+/** Moves a legacy `claude` slot (written before slots were keyed by account) under the account it belongs to; a no-op for any other row. */
+function rekeyLegacyClaudeSlot(session: Session, refs: EngineSessionRefs): void {
+  const legacy = legacyThreadRef({ ...session, engineSessions: refs }, 'claude');
+  if (!legacy) return;
+  refs[threadSlot(session, 'claude')] ??= legacy;
+  delete refs.claude;
+}
+
+/**
+ * Drop a retired conversation's thread. A Claude account's slot is kept, empty but for its model:
+ * with it gone, a lone `claude` slot (the own login's parked thread) would read as a pre-account row's
+ * and be taken for the account's, which is how a later return to the profile resumed another login's thread.
+ * Another engine's slot, or the default account's own, is deleted outright.
+ */
+function retireSlot(refs: EngineSessionRefs, slot: string, model: string | undefined): void {
+  const stub = slot !== 'claude' && isClaudeAccount(slot) ? cleanEngineSessionRef({ model }) : {};
+  if (Object.keys(stub).length > 0) refs[slot] = stub;
+  else delete refs[slot];
+}
+
+/** The slots after the switch: the left conversation parked or retired, and the target's own ref (with its model/effort) in place. */
+function targetRefs(session: Session, opts: SwitchSessionTargetOptions, nextDir: string | null) {
   const refs = cleanEngineSessionRefs(session.engineSessions) ?? {};
-  if (session.engine) {
+  const was = withoutAccountOverride(session);
+  const retiring = opts.leftConversation === 'retire';
+  // A retired conversation may be the legacy `claude` slot: file it under its account so it goes with the retirement. Done
+  // before the delete, because once the left slot is gone a lone `claude` slot would read as the legacy one and be misfiled.
+  if (retiring) rekeyLegacyClaudeSlot(was, refs);
+  const leftSlot = session.engine ? threadSlot(session, session.engine) : undefined;
+  if (session.engine && leftSlot) {
     const currentRef = getEngineSessionRef(session, session.engine);
     const current = cleanEngineSessionRef({
       ...currentRef,
@@ -1151,54 +1197,105 @@ export function switchSessionEngine(
       model: session.model ?? currentRef.model,
       effortLevel: session.effortLevel ?? currentRef.effortLevel,
     });
-    // Parked under the account it ran on; the switch drops any override, so read the session's own account.
-    if (Object.keys(current).length > 0) refs[threadSlot(session, session.engine)] = current;
+    if (retiring) retireSlot(refs, leftSlot, current.model);
+    // Parked under the account it ran on; the switch drops any override, so the target reads the session's own account.
+    else if (Object.keys(current).length > 0) refs[leftSlot] = current;
   }
-  const own = withoutAccountOverride(session);
-  const targetSlot = threadSlot(own, nextEngine);
-
-  let target = cleanEngineSessionRef(refs[targetSlot] ?? legacyThreadRef({ ...own, engineSessions: refs }, nextEngine) ?? {});
-  const requestedTargetModel = typeof opts.model === 'string' && opts.model.trim() ? opts.model : undefined;
-  if (nextEngine === 'grok' && target.id && requestedTargetModel && target.model !== requestedTargetModel) {
+  const own = { ...was, claudeConfigDir: nextDir };
+  const targetSlot = threadSlot(own, opts.engine);
+  // A pre-account row keeps its own account's thread under `claude`. Another account never inherits it: it is re-keyed to
+  // the account it belongs to, and only a target on that same account reads it by the old spelling.
+  const sameAccount = threadSlot(own, 'claude') === threadSlot(was, 'claude');
+  if (!sameAccount && !retiring) rekeyLegacyClaudeSlot(was, refs);
+  let target = cleanEngineSessionRef(refs[targetSlot] ?? (sameAccount ? legacyThreadRef({ ...own, engineSessions: refs }, opts.engine) : undefined) ?? {});
+  const requestedModel = typeof opts.model === 'string' && opts.model.trim() ? opts.model : undefined;
+  if (opts.freshTarget && target.id) {
+    target = cleanEngineSessionRef({ ...target, id: undefined, lastSyncedAt: undefined, platformContextFingerprint: undefined });
+  }
+  if (opts.engine === 'grok' && target.id && requestedModel && target.model !== requestedModel) {
     target = cleanEngineSessionRef({
       ...target,
       id: undefined,
       lastSyncedAt: undefined,
       platformContextFingerprint: undefined,
-      model: requestedTargetModel,
+      model: requestedModel,
     });
   }
-  const nextModel = opts.model !== undefined ? opts.model : target.model ?? null;
-  const nextEffort = opts.effortLevel !== undefined ? opts.effortLevel : target.effortLevel ?? null;
-  const nextTarget = cleanEngineSessionRef({
-    ...target,
-    model: nextModel ?? undefined,
-    effortLevel: nextEffort ?? undefined,
-  });
+  const model = opts.model !== undefined ? opts.model : target.model ?? null;
+  const effortLevel = opts.effortLevel !== undefined ? opts.effortLevel : target.effortLevel ?? null;
+  const nextTarget = cleanEngineSessionRef({ ...target, model: model ?? undefined, effortLevel: effortLevel ?? undefined });
   if (Object.keys(nextTarget).length > 0) refs[targetSlot] = nextTarget;
-  const movedRefs = withLegacySlotMoved(session, session.engine, withLegacySlotMoved({ ...own, engineSessions: session.engineSessions }, nextEngine, refs));
+  // The account-keyed slot is what tells this row from a pre-account one (whose thread sits under `claude`); an empty one is dropped.
+  else if (!sameAccount && opts.engine === 'claude' && targetSlot !== 'claude') throw new Error('switchSessionTarget: a move to another Claude account needs a model to record its slot under');
+  const targetRefsMoved = sameAccount ? withLegacySlotMoved({ ...own, engineSessions: session.engineSessions }, opts.engine, refs) : refs;
+  const movedRefs = withLegacySlotMoved(session, session.engine, targetRefsMoved);
+  return { movedRefs, target, model, effortLevel, moved: targetSlot !== leftSlot };
+}
 
-  const transportMeta = (session.transportMeta && typeof session.transportMeta === 'object' && !Array.isArray(session.transportMeta))
-    ? { ...session.transportMeta }
-    : {};
-  if (nextEngine !== session.engine) {
-    transportMeta.engineSyncTarget = nextEngine;
-    transportMeta.engineSyncSince = target.lastSyncedAt ?? session.createdAt;
+/** The transport meta after the switch: every catch-up marker that could pre-empt or redirect the new slot's first prompt cleared, then its own set. */
+function switchedMeta(session: Session, opts: SwitchSessionTargetOptions, target: { lastSyncedAt?: string }, moved: boolean): JsonObject {
+  const meta = withoutCatchUpMarkers(metaOf(session));
+  delete meta.engineOverride;
+  delete meta.fallbackRun; // a switch is the session leaving the run; the hops stay
+  delete meta.pendingSwitch; // whichever switch was waiting is overtaken by this one
+  if (moved && opts.sync !== 'none') {
+    meta.engineSyncTarget = opts.engine;
+    meta.engineSyncSince = target.lastSyncedAt ?? session.createdAt;
+    meta.engineSyncMode = 'pointer';
   }
-  delete transportMeta.engineOverride;
-  delete transportMeta.fallbackRun; // a manual switch is the session leaving the run; the hops stay
+  if (opts.lastSwitch) meta.lastSwitch = opts.lastSwitch;
+  return meta as JsonObject;
+}
 
-  return updateSession(sessionId, {
-    engine: nextEngine,
-    engineSessionId: target.id ?? null,
-    engineSessions: movedRefs,
-    status: "idle",
-    model: nextModel ?? null,
-    effortLevel: nextEffort ?? null,
-    lastContextTokens: null,
-    transportMeta: transportMeta as JsonObject,
-    lastError: null,
-  });
+function switchFields(session: Session, opts: SwitchSessionTargetOptions, fenced: boolean): { fields: UpdateSessionFields; claudeConfigDir: string | null } {
+  const claudeConfigDir = opts.claudeConfigDir !== undefined ? opts.claudeConfigDir : session.claudeConfigDir;
+  const { movedRefs, target, model, effortLevel, moved } = targetRefs(session, opts, claudeConfigDir);
+  return {
+    claudeConfigDir,
+    fields: {
+      engine: opts.engine,
+      engineSessionId: target.id ?? null,
+      engineSessions: movedRefs,
+      model,
+      effortLevel,
+      lastContextTokens: null,
+      transportMeta: switchedMeta(session, opts, target, moved),
+      // Unfenced the session is idle between turns; fenced it is running the turn that asked, and its settle needs `running` left alone.
+      ...(fenced ? {} : { status: 'idle' as const, lastError: null }),
+    },
+  };
+}
+
+/**
+ * The one write behind every switch of a session's engine, Claude profile, model
+ * or effort. Parks (or retires) the left conversation, writes the target, clears the
+ * override, the fallback run and every catch-up marker that could pre-empt the new
+ * conversation's first prompt, then owes it a history pointer unless `sync` is `none`.
+ *
+ * Unfenced (the operator's switch of an idle session) it leaves the session idle with
+ * no error. Fenced (a switch applied inside the turn that asked) it writes through
+ * `updateSessionForAttempt` while the session is `running` and touches neither status
+ * nor `lastError`, so that turn's settle (`completeSessionAttempt`) still lands; a stale
+ * attempt writes nothing and returns undefined. The profile column is written only here.
+ */
+export function switchSessionTarget(
+  sessionId: string,
+  opts: SwitchSessionTargetOptions,
+  fence?: SwitchSessionTargetFence,
+): Session | undefined {
+  if (!opts.engine) return getSession(sessionId);
+  const database = initDb();
+  const write = (session: Session, fenced: boolean): UpdateSessionFields => {
+    const { fields, claudeConfigDir } = switchFields(session, opts, fenced);
+    database.prepare('UPDATE sessions SET claude_config_dir = ? WHERE id = ?').run(claudeConfigDir, sessionId);
+    return fields;
+  };
+  // The fence's producer runs inside its transaction, so a rejected attempt writes nothing, the profile column included.
+  if (fence) return updateSessionForAttempt(sessionId, fence.attemptToken, (current) => write(current, true));
+  return database.transaction(() => {
+    const session = getSession(sessionId);
+    return session ? updateSession(sessionId, write(session, false)) : undefined;
+  })();
 }
 
 export function clearEngineSessionRefs(sessionId: string, engine?: string): Session | undefined {

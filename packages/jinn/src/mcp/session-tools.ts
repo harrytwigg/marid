@@ -391,13 +391,13 @@ export function buildSessionTools(): JinnMcpTool[] {
     },
   };
 
-  // Self-compaction: always the caller's own session, so there is no target
-  // argument. The gateway queues the compaction and the resume turn behind the
+  // Self-compaction: always the caller's own session, so there is no session
+  // argument (engine, profile and model name where the session resumes). The gateway queues the compaction and the resume turn behind the
   // turn making this call, which is why the call must be followed by ending the
   // turn — nothing is compacted while it is in flight.
   const compactSession: JinnMcpTool = {
     name: "compact_session",
-    description: "Compact your own session's context (never from a Task sub-agent); resume from this handoff. End your turn after.",
+    description: "Compact your own session's context (never from a Task sub-agent); resume from this handoff, optionally on another engine/profile/model. End your turn after.",
     inputSchema: {
       type: "object",
       properties: {
@@ -406,6 +406,9 @@ export function buildSessionTools(): JinnMcpTool[] {
         next: { type: "string" },
         context: { type: "string" },
         waitingOn: { type: "string" },
+        engine: { type: "string" },
+        profile: { type: "string" },
+        model: { type: "string" },
       },
       required: ["goal", "done", "next"],
     },
@@ -417,6 +420,9 @@ export function buildSessionTools(): JinnMcpTool[] {
         next: args.next,
         ...(args.context === undefined ? {} : { context: args.context }),
         ...(args.waitingOn === undefined ? {} : { waitingOn: args.waitingOn }),
+        ...(args.engine === undefined ? {} : { engine: args.engine }),
+        ...(args.profile === undefined ? {} : { profile: args.profile }),
+        ...(args.model === undefined ? {} : { model: args.model }),
       });
       if (status >= 400) throw gatewayFailure("compacting this session", status, body);
       return {

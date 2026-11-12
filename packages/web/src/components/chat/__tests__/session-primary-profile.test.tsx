@@ -36,9 +36,16 @@ const REG: EnginesResponse = {
   },
 }
 
+const onlyClaude = { current: false }
 vi.mock('@/hooks/use-model-registry', async (importActual) => {
   const actual = await importActual<typeof import('@/hooks/use-model-registry')>()
-  return { ...actual, useModelRegistry: () => ({ data: REG, isLoading: false }) }
+  return {
+    ...actual,
+    useModelRegistry: () => ({
+      data: onlyClaude.current ? { ...REG, engines: { claude: REG.engines.claude } } : REG,
+      isLoading: false,
+    }),
+  }
 })
 
 // `null` = the chains read has not loaded (or failed): data is undefined.
@@ -146,7 +153,7 @@ describe('fallback preview for a chosen profile', () => {
 })
 
 describe('ModelSelectorRow primary profile picker', () => {
-  beforeEach(() => { profilesHolder.current = ['work']; remoteProfilesHolder.current = [] })
+  beforeEach(() => { profilesHolder.current = ['work']; remoteProfilesHolder.current = []; onlyClaude.current = false })
 
   it('offers only accounts on this machine, never one declared on another host', async () => {
     remoteProfilesHolder.current = ['box']
@@ -164,7 +171,7 @@ describe('ModelSelectorRow primary profile picker', () => {
     renderRow(<Harness initial={{ engine: 'claude', model: 'opus' }} onChange={onChange} />)
     openMenu()
     fireEvent.click(await screen.findByRole('menuitem', { name: /switch engine/i }))
-    expect(await screen.findByRole('menuitem', { name: /^claude$/i })).toBeTruthy()
+    expect(await screen.findByRole('menuitem', { name: /^claude · own login$/i })).toBeTruthy()
     fireEvent.click(screen.getByRole('menuitem', { name: /claude · work/i }))
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ engine: 'claude', model: 'opus', profile: 'work' }))
     expect(screen.getByRole('button', { name: /model and effort/i }).getAttribute('aria-label')).toContain('Claude · work · Opus 4.8')
@@ -215,7 +222,7 @@ describe('ModelSelectorRow primary profile picker', () => {
 
   it('shows the profile for an existing session only while it is on claude', () => {
     renderRow(
-      <ModelSelectorRow mode="existing" sessionProfileName="work" value={{ engine: 'opencode', model: 'opencode-go/x' }} onChange={() => {}} />,
+      <ModelSelectorRow mode="existing" value={{ engine: 'opencode', model: 'opencode-go/x', profile: 'work' }} onChange={() => {}} />,
     )
     expect(screen.getByRole('button', { name: /model and effort/i }).getAttribute('aria-label')).not.toContain('work')
   })
@@ -240,11 +247,66 @@ describe('ModelSelectorRow primary profile picker', () => {
     expect(screen.queryByRole('menuitem', { name: /claude ·/i })).toBeNull()
   })
 
-  it('shows an existing session profile in the collapsed label, read-only', () => {
+  it('shows an existing session profile in the collapsed label, even one no longer declared', () => {
+    profilesHolder.current = []
     renderRow(
-      <ModelSelectorRow mode="existing" sessionProfileName="work" value={{ engine: 'claude', model: 'opus' }} onChange={() => {}} />,
+      <ModelSelectorRow mode="existing" allowProfiles value={{ engine: 'claude', model: 'opus', profile: 'work' }} onChange={() => {}} />,
     )
     expect(screen.getByRole('button', { name: /model and effort/i }).getAttribute('aria-label')).toContain('Claude · work · Opus 4.8')
+  })
+
+  it('offers the profile rows in an existing chat, with the session\'s own one checked', async () => {
+    const onChange = vi.fn()
+    renderRow(<ModelSelectorRow mode="existing" allowProfiles value={{ engine: 'claude', model: 'opus', profile: 'work' }} onChange={onChange} />)
+    openMenu()
+    fireEvent.click(await screen.findByRole('menuitem', { name: /switch engine/i }))
+    const own = await screen.findByRole('menuitem', { name: /^claude · own login$/i })
+    const work = screen.getByRole('menuitem', { name: /claude · work/i })
+    expect(own.querySelector('svg')).toBeNull()
+    expect(work.querySelector('svg')).not.toBeNull()
+    fireEvent.click(own)
+    const last = onChange.mock.calls.at(-1)?.[0] as SelectorValue
+    expect(last.engine).toBe('claude')
+    expect(last.profile).toBeUndefined()
+  })
+
+  it('still reaches the profile rows when Claude is the only installed engine, and not without profiles', async () => {
+    onlyClaude.current = true
+    const first = renderRow(<ModelSelectorRow mode="existing" allowProfiles value={{ engine: 'claude', model: 'opus' }} onChange={() => {}} />)
+    openMenu()
+    fireEvent.click(await screen.findByRole('menuitem', { name: /switch engine/i }))
+    expect(await screen.findByRole('menuitem', { name: /claude · work/i })).toBeTruthy()
+    first.unmount()
+    profilesHolder.current = []
+    renderRow(<ModelSelectorRow mode="existing" allowProfiles value={{ engine: 'claude', model: 'opus' }} onChange={() => {}} />)
+    openMenu()
+    expect(await screen.findByText(/refresh models/i)).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: /switch engine/i })).toBeNull()
+  })
+
+  it('checks no row for a session profile that is no longer declared, rather than own login', async () => {
+    renderRow(<ModelSelectorRow mode="existing" allowProfiles value={{ engine: 'claude', model: 'opus', profile: 'gone' }} onChange={() => {}} />)
+    openMenu()
+    fireEvent.click(await screen.findByRole('menuitem', { name: /switch engine/i }))
+    const own = await screen.findByRole('menuitem', { name: /^claude · own login$/i })
+    expect(own.querySelector('svg')).toBeNull()
+  })
+
+  it('picking a profile in an existing chat from own login records it beside claude', async () => {
+    const onChange = vi.fn()
+    renderRow(<ModelSelectorRow mode="existing" allowProfiles value={{ engine: 'claude', model: 'opus' }} onChange={onChange} />)
+    openMenu()
+    fireEvent.click(await screen.findByRole('menuitem', { name: /switch engine/i }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /claude · work/i }))
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ engine: 'claude', profile: 'work' }))
+  })
+
+  it('hides the profile rows in an existing chat whose employee is remote', async () => {
+    renderRow(<ModelSelectorRow mode="existing" allowProfiles employeeRemote value={{ engine: 'claude', model: 'opus' }} onChange={() => {}} />)
+    openMenu()
+    fireEvent.click(await screen.findByRole('menuitem', { name: /switch engine/i }))
+    expect(await screen.findByRole('menuitem', { name: /^claude$/i })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: /claude ·/i })).toBeNull()
   })
 })
 

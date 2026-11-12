@@ -8,7 +8,7 @@ import { EXPECTED_ENUMS, EXPECTED_REQUIRED, EXPECTED_TOOL_NAMES } from "./tool-m
 // concise rather than growing into this ceiling. Rebased down when the
 // Experiments and Workflow tools were removed, so the ceiling again sits ON
 // the largest wrapper (Pi).
-const MAX_MANIFEST_TOKENS = 4371;
+const MAX_MANIFEST_TOKENS = 4399;
 // Exact gate: js-tiktoken 1.0.21 with its local o200k_base ranks. The provider
 // projection is the OpenAI Responses API function-tool request shape pinned on 2026-07-12.
 const ATTESTED = {
@@ -299,9 +299,20 @@ const ATTESTED = {
   // (the value is not guessable), paid for by dropping "; retain its audit" from
   // archive_work_item, which the name already says. One token over the old text,
   // so the ceiling does not move and Pi sits ON it again.
-  rpc: { tokens: 4036, sha256: "4ea1b5d5d7fcd67a9abcef584688242b6199f295ba969e79f5eff9e5d7962d42" },
-  pi: { tokens: 4371, sha256: "0402eae2892101a5f4996416e1c9c4041de649026fea56410d8f88877d4a4ab1" },
-  openai: { tokens: 4175, sha256: "6539606e2ba66cd0784c77b1547d9b3d1b233c1483f1f4f4720d19851ed507d0" },
+  // Rebased for `engine`, `profile` and `model` on compact_session (a session moves itself
+  // through its compaction) and the description clause ", optionally on another
+  // engine/profile/model". Measured with this tokenizer: +28 on every wrapper (Pi 4371 ->
+  // 4399). Buying 16 of it back by cutting "Omit for a plain session or if no employee fits."
+  // from spawn_session's `employee` and "without deleting its record" from stop_session
+  // proved wrong: neither was dead (the first says when to leave the field out, the second
+  // that a stop keeps the session's record). Both are restored, +16 on every wrapper (rpc
+  // 4048 -> 4064, Pi 4383 -> 4399, OpenAI 4187 -> 4203), so the ceiling moves by the whole
+  // 28, to 4399, and Pi sits ON it again. The tool count is unchanged. The list of valid
+  // targets rides on the gateway's refusal and costs nothing here; two new tools for the
+  // same job measured +168.
+  rpc: { tokens: 4064, sha256: "a40959236cc84e282d9eebdd56bb39ba678165d63b7fa1ff447ba6b5b0bd8e29" },
+  pi: { tokens: 4399, sha256: "ee164e26e62f67de3779933d7d804122113bc3eb3edc8f4cf0657f49aaa60c0a" },
+  openai: { tokens: 4203, sha256: "7f2a7ae3964e959e06fc162f4087870f374fc32e1d4f7683f3bd1096f27a7e4c" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;
