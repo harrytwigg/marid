@@ -109,10 +109,11 @@ export function providerLabel(provider: string): string {
 export function modelMatchesQuery(
   model: Pick<ModelInfo, 'id' | 'label' | 'account'>,
   query: string,
+  accountLabels: Record<string, string> = {},
 ): boolean {
   const q = query.trim().toLowerCase()
   if (!q) return true
   const provider = providerOf(model.id)
-  const haystack = `${model.label} ${model.id} ${provider} ${providerLabel(provider)} ${model.account ?? ""}`.toLowerCase()
+  const haystack = `${model.label} ${model.id} ${provider} ${providerLabel(provider)} ${model.account ?? ""} ${model.account ? accountLabels[model.account] ?? "" : ""}`.toLowerCase()
   return haystack.includes(q)
 }

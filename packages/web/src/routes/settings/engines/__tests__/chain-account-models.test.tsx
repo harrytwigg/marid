@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import '@/test/preload-menus'
 import type { EnginesResponse } from '@/lib/api'
+import { AccountLabelsContext } from '@/hooks/account-labels'
 import { ChainModelSelect } from '../chain-model-select'
 
 /* An opencode link's model select offers the account models the registry lists as
@@ -13,8 +14,8 @@ function registry(models: ReturnType<typeof model>[]): EnginesResponse {
   return { default: 'opencode', engines: { opencode: { name: 'opencode', available: true, defaultModel: models[0].id, effortMechanism: 'none', models } } } as EnginesResponse
 }
 
-function open(reg: EnginesResponse, value = '', onChange = vi.fn()) {
-  render(<ChainModelSelect registry={reg} engine="opencode" value={value} noModelText="Engine default" ariaLabel="Model" onChange={onChange} />)
+function open(reg: EnginesResponse, value = '', onChange = vi.fn(), labels: Record<string, string> = {}) {
+  render(<AccountLabelsContext.Provider value={labels}><ChainModelSelect registry={reg} engine="opencode" value={value} noModelText="Engine default" ariaLabel="Model" onChange={onChange} /></AccountLabelsContext.Provider>)
   fireEvent.keyDown(screen.getByRole('button', { name: /^Model/ }), { key: 'Enter' })
   return onChange
 }
@@ -46,5 +47,14 @@ describe('chain model select with opencode accounts', () => {
     open(registry([model('opencode-go/a', 'Alpha'), model('opencode/b', 'Beta')]))
     expect(document.querySelector('[data-account-badge]')).toBeNull()
     expect(screen.getByText('opencode go')).toBeTruthy()
+  })
+
+  it('badges and searches by the account label when config gives one, and by name otherwise', () => {
+    open(registry([model('opencode-go/a', 'Alpha', 'go-a'), model('opencode-go-b/a', 'Alpha', 'go-b')]), '', vi.fn(), { 'go-b': 'Go (second workspace)' })
+    expect(Array.from(document.querySelectorAll('[data-account-badge]')).map((b) => b.textContent)).toEqual(['go-a', 'Go (second workspace)'])
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'second' } })
+    expect(screen.getAllByRole('menuitemradio')).toHaveLength(1)
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'go-b' } })
+    expect(screen.getAllByRole('menuitemradio')).toHaveLength(1)
   })
 })

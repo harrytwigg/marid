@@ -106,4 +106,16 @@ describe("LimitsPage — opencode accounts", () => {
     expect(screen.queryByTestId("account-facts")).toBeNull()
     expect(screen.getByText("5h window")).toBeTruthy()
   })
+
+  it("shows only the variable's name when the key state is not reported", () => {
+    show([account("go-b", "Go b", { provider: "p", base: "b", keyEnv: "K", buckets: [] })])
+    expect(within(card("Go b")).getByTestId("key-state").textContent).toBe("Key: K")
+  })
+
+  it("does not call a next try in the past a reset, and names a * bucket as all models", () => {
+    show([account("go-b", "Go b", { provider: "p", nextTryAt: iso(-60_000), buckets: [{ id: "p/*", windows: [win("30d", 43200, 5)] }] })])
+    const c = card("Go b")
+    expect(within(c).getByTestId("next-try").textContent).toBe("Next try now")
+    expect(within(c).getByRole("heading", { level: 3 }).textContent).toBe("All models")
+  })
 })

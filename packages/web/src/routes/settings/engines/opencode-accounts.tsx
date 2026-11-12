@@ -3,11 +3,6 @@ import type { EngineLimitAccountSnapshot } from "@/lib/api"
 import { useEngineLimits } from "@/routes/limits/use-engine-limits"
 import type { OpencodeAccountSettings } from "./chain-model"
 
-/** The accounts as written under `engines.opencode.accounts`, in config order. */
-export function opencodeAccountsOf(accounts: Record<string, OpencodeAccountSettings> | undefined): [string, OpencodeAccountSettings][] {
-  return Object.entries(accounts ?? {})
-}
-
 function usageLimitsText(account: OpencodeAccountSettings): string | null {
   const table = account.usageLimits?.monthlyUsd
   const entries = table && typeof table === "object" ? Object.entries(table) : []

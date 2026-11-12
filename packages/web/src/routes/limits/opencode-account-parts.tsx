@@ -14,7 +14,8 @@ function bucketWindows(bucket: EngineLimitBucket): EngineLimitWindow[] {
 
 /** The model of a bucket id `<provider>/<model>`. */
 function modelOf(bucket: EngineLimitBucket, provider: string): string {
-  return bucket.id.startsWith(`${provider}/`) ? bucket.id.slice(provider.length + 1) : bucket.name ?? bucket.id
+  const model = bucket.id.startsWith(`${provider}/`) ? bucket.id.slice(provider.length + 1) : bucket.name ?? bucket.id
+  return model === "*" ? "All models" : model
 }
 
 function WindowRow({ window, now }: { window: EngineLimitWindow; now: number }) {
@@ -68,11 +69,13 @@ const FAILURE_LABEL = { quota: "quota", auth: "authentication", "model-access": 
 
 function keyLine(account: EngineLimitAccountSnapshot): string | null {
   if (account.base === undefined) return null
+  if (account.keySet === undefined) return `Key: ${account.keyEnv}`
   return `Key: ${account.keyEnv} ${account.keySet ? "is set" : "is not set"}`
 }
 
 function nextTryLine(account: EngineLimitAccountSnapshot, now: number): string | null {
   if (!account.nextTryAt || account.exhausted) return null
+  if (new Date(account.nextTryAt).getTime() <= now) return "Next try now"
   const when = resetLabel(account.nextTryAt, now)?.replace(/^resets /, "")
   return when ? `Next try ${when}` : null
 }

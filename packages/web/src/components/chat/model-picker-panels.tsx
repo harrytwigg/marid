@@ -6,6 +6,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
+import { accountBadgeText, useAccountLabels } from '@/hooks/account-labels'
 import { providerOf, providerLabel } from '@/hooks/use-model-registry'
 import type { EngineRegistryEntry, ModelInfo } from '@/lib/api'
 import { engineDisplayName } from '@/lib/engine-names'
@@ -61,7 +62,8 @@ function ModelSearchBox({ list }: { list: ModelList }) {
 function ModelRow({ model, selected, keepOpenOnPick }: { model: ModelInfo; selected: boolean; keepOpenOnPick?: boolean }) {
   const provider = providerOf(model.id)
   // An account model reads as its account, not as the alias provider id it is staged under.
-  const badge = model.account ?? (provider ? providerLabel(provider) : '')
+  const labels = useAccountLabels()
+  const badge = model.account ? accountBadgeText(model.account, labels) : provider ? providerLabel(provider) : ''
   return (
     <DropdownMenuRadioItem
       value={model.id}
