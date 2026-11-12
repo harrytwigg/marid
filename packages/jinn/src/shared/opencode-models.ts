@@ -1,5 +1,6 @@
 import type { EngineModelsConfig, ModelInfo } from "./types.js";
 import { contextWindowOf, effortLevelsOf, MODEL_LINE, parseRecord } from "./opencode-model-records.js";
+import { cloneFromV1Record, collectClone, type CloneSink } from "./opencode-clone.js";
 
 /**
  * Dynamic model discovery for the opencode engine.
@@ -48,14 +49,16 @@ const stripAnsi = (line: string): string => line.replace(/\x1b\[[0-9;?]*[a-zA-Z]
  * and its `variants` the model's `effortLevels`. A model with no object, a
  * cut-off one or one that is not JSON simply has neither — never a guessed one.
  */
-export function parseOpencodeModels(output: string): ModelInfo[] {
-  const reader: Reader = { models: [], seen: new Set() };
+export function parseOpencodeModels(output: string, clones?: CloneSink): ModelInfo[] {
+  const reader: Reader = { models: [], seen: new Set(), ...(clones ? { clones } : {}) };
   for (const raw of output.split("\n")) readLine(reader, stripAnsi(raw).replace(/\r$/, ""));
   closeObject(reader);
   return reader.models;
 }
 
 interface Reader {
+  /** Collects the clone records (opencode-clone.ts) of the providers it wants. */
+  clones?: CloneSink;
   models: ModelInfo[];
   seen: Set<string>;
   /** The model the JSON object being read belongs to. */
@@ -76,6 +79,8 @@ function closeObject(reader: Reader): void {
       reader.current.supportsEffort = true;
       reader.current.effortLevels = levels;
     }
+    const slash = reader.current.id.indexOf("/");
+    collectClone(reader.clones, reader.current.id.slice(0, slash), cloneFromV1Record(reader.current.id.slice(slash + 1), record));
   }
   reader.json = undefined;
 }

@@ -15,6 +15,10 @@ export type { OpencodeAccountConfig } from "./config-types.js";
 export const OPENCODE_ACCOUNT_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 export const OPENCODE_PROVIDER_ID_RE = /^[a-z0-9][a-z0-9._-]*$/;
 export const OPENCODE_KEY_ENV_RE = /^[A-Z_][A-Z0-9_]*$/;
+/** Variables the gateway sets on every opencode process itself: a key variable of one of these names would overwrite them. */
+const RESERVED_KEY_ENV: ReadonlySet<string> = new Set(["OPENCODE_SERVER_PASSWORD", "OPENCODE_CONFIG", "OPENCODE_PID", "OPENCODE"]);
+/** Prefixes of the variables the gateway or opencode itself reads: the program's own (`JINN_*`, `MARID_*`) and opencode's switches (`OPENCODE_DISABLE_*`). */
+const RESERVED_KEY_ENV_PREFIXES = ["JINN_", "MARID_", "OPENCODE_DISABLE_"] as const;
 /** Fields that would put a secret in config.yaml. Refused, never staged. */
 const INLINE_SECRET_FIELDS = ["apiKey", "key", "token"] as const;
 
@@ -76,6 +80,8 @@ function baseProblems(where: string, raw: Record<string, unknown>): string[] {
   const problems = baseIdProblems(where, base, provider);
   if (typeof keyEnv !== "string" || !OPENCODE_KEY_ENV_RE.test(keyEnv)) {
     problems.push(`${where}.keyEnv must name the environment variable holding the account's key (${OPENCODE_KEY_ENV_RE.source})`);
+  } else if (RESERVED_KEY_ENV.has(keyEnv) || RESERVED_KEY_ENV_PREFIXES.some((prefix) => keyEnv.startsWith(prefix))) {
+    problems.push(`${where}.keyEnv: ${keyEnv} is set by the gateway for each opencode process and cannot hold an account's key`);
   }
   if (models !== undefined && !isModelList(models)) problems.push(`${where}.models must be a non-empty list of the base's model ids, without the provider`);
   return problems;

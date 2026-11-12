@@ -163,6 +163,15 @@ same on 1.x and 2.x:
   provider-level one is left out of the block. A chain link to it on that host
   fails as an unknown model and hops. `jinn doctor` reports such models for
   the local binary.
+- **A session gets only the accounts its chain reaches.** An account's block and
+  key are staged for a session only when its provider is the provider of the
+  session's own model, of an opencode link in its resolved chain (the same
+  resolution `sessionFallbackChain` gives, so its employee's, its account's or
+  its engine's chain, or a stored per-session target; links the session can
+  never walk, such as a department-scoped session's, count for nothing), or of
+  the model the turn runs on. None reachable stages no account block and no
+  key. On a server, the staged set is in the fingerprint, so a chain change
+  that adds an account restarts the server at the next turn.
 - **The key never appears in a staged file.** The file holds only
   `{env:<keyEnv>}`.
   - Local processes get `<keyEnv>` set explicitly from the gateway's

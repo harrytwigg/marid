@@ -12,6 +12,8 @@ import { resolveBin, isInstalled } from "./resolve-bin.js";
 import { discoverPiModels } from "./pi-models.js";
 import { withConfiguredOverrides } from "./opencode-models.js";
 import { opencodeCatalogue, refreshOpencodeCatalogue } from "./opencode-catalogue.js";
+import { stagedOpencodeAccounts } from "./opencode-accounts-config.js";
+import { accountRegistryModels } from "./opencode-accounts.js";
 import { MUSECODE_EFFORT_LEVELS } from "./musecode-effort.js";
 import { buildMusecodeEntry } from "./musecode-registry.js";
 export { musecodeEngineOptions, musecodeModelCost, refreshMusecodeModels } from "./musecode-registry.js";
@@ -349,7 +351,9 @@ export async function refreshOpencodeModels(
   opts: { secondLook?: boolean; env?: Record<string, string> } = {},
 ): Promise<void> {
   const bin = engineAvailable(config, "opencode") ? resolveBin("opencode", engineBinOverride(config, "opencode")) : null;
-  await refreshOpencodeCatalogue(bin, invalidateModelRegistry, opts.secondLook, opts.env);
+  // The models of every base provider an account names are kept in full, to stage the account's provider block from.
+  const cloneProviders = [...new Set(stagedOpencodeAccounts(config).map((account) => account.base!))];
+  await refreshOpencodeCatalogue(bin, invalidateModelRegistry, opts.secondLook, opts.env, cloneProviders);
 }
 
 /**
@@ -651,7 +655,10 @@ function buildOpencodeEntry(
   const pinned = config.engines.opencode?.model;
   const discoveredOpencodeModels = opencodeCatalogue();
   if (discoveredOpencodeModels && discoveredOpencodeModels.length > 0) {
-    let models = discoveredOpencodeModels;
+    // An account lists its base's models under its own provider id, so chains, pickers and validation see them as any other.
+    // Taken from the discovered catalogue, before the pinned placeholder below, so a pin on an account model keeps its entry.
+    const accountModels = accountRegistryModels(config, discoveredOpencodeModels).filter((m) => !discoveredOpencodeModels.some((own) => own.id === m.id));
+    let models = [...discoveredOpencodeModels, ...accountModels];
     // A pinned model discovery has not caught up with still has to be
     // selectable — otherwise an employee configured for it cannot start at all.
     if (pinned && !models.some((m) => m.id === pinned)) {

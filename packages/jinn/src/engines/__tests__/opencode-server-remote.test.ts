@@ -254,6 +254,34 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("opencode accounts on a remote server", () => {
+  const SENTINEL = "sentinel-key-b-0123456789abcdef";
+  const accounts = {
+    providers: () => ({ "go-b": { name: "Go B", options: { apiKey: "{env:GO_B_KEY}" }, models: {} } }),
+    env: { GO_B_KEY: SENTINEL },
+    fingerprint: "go-b",
+    scrub: ["GO_B_KEY"],
+  };
+
+  it("hands staging the accounts, and carries the key on no ssh argv", async () => {
+    const asked: unknown[] = [];
+    const read = (scope: unknown) => { asked.push(scope); return accounts; };
+    const lifecycle = new PtyLifecycleManager({ maxLivePtys: 8, enforceLocalCap: false });
+    const pool = new OpencodeServerPool(lifecycle, { remote: () => REMOTE_CONFIG, gatewayPort: () => GATEWAY_PORT, accounts: read });
+    const engine = new OpencodeEngine({ remote: () => REMOTE_CONFIG, gatewayPort: () => GATEWAY_PORT, mode: () => "server", servers: pool, accounts: read });
+    const result = await engine.run(runOpts());
+    // The accounts are asked for as this session, on the model it runs.
+    expect(asked.length).toBeGreaterThan(0);
+    expect(new Set(asked.map((scope) => JSON.stringify(scope)))).toEqual(new Set([JSON.stringify({ sessionId: "sess-1", model: "opencode-go/deepseek-v4.1-flash" })]));
+    expect(result.error).toBeUndefined();
+    // Staging gets the accounts (their key joins the 0600 session-env file there) beside the server password.
+    expect(hoisted.prepareCalls[0]?.opencodeAccounts).toBe(accounts);
+    expect((hoisted.prepareCalls[0]?.sessionEnv as Record<string, string>).GO_B_KEY).toBeUndefined();
+    expect(hoisted.spawns.length).toBeGreaterThan(0);
+    for (const spawn of hoisted.spawns) expect(JSON.stringify(spawn), spawn.kind).not.toContain(SENTINEL);
+  });
+});
+
 describe("opencode server mode on a remote host", () => {
   it("carries the server on one tty ssh with the tunnel and an API forward; turns ride the forward", async () => {
     const { engine, pool } = setup();

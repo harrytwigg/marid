@@ -9,6 +9,8 @@ import type { JinnConfig, RemoteExecutionConfig } from "../shared/config-types.j
 import { buildOpencodeArgs, buildOpencodePrompt, describeOpencodeLaunch, type OpencodeRunFlags } from "./opencode-protocol.js";
 import { opencodeApiOf, type OpencodeApi } from "./opencode-version.js";
 import { COMMAND_TIMEOUT_ENV, localCommandTimeoutPlugins } from "./opencode-command-timeout.js";
+import type { OpencodeAccountStaging } from "./opencode-accounts.js";
+import { stagedOpencodeAccounts } from "../shared/opencode-accounts-config.js";
 import {
   writeOpencodeSessionConfig,
   type OpencodeConfigHandle,
@@ -102,17 +104,19 @@ export interface OpencodeProcessOptions {
   disableFff: boolean;
   /** `engines.opencode.commandTimeoutMs`, resolved; 0 or absent: no ceiling. */
   commandTimeoutMs?: number;
+  /** The declared accounts: every account's key variable is taken out of the environment the process inherits ({@link OpencodeAccountStaging.scrub}), so it holds only the keys its caller adds back. */
+  accounts?: OpencodeAccountStaging;
 }
 
-/** The gateway's environment with the other engines' variables scrubbed out. */
-const gatewayChildEnv = (): Record<string, string> =>
-  buildEngineChildEnv(process.env, { scrubClaudeCode: true, scrubCodex: true, scrubOpencode: true });
+/** The gateway's environment with the other engines' variables scrubbed out, and `denyExact` (account key variables) with them. */
+const gatewayChildEnv = (denyExact: readonly string[] = []): Record<string, string> =>
+  buildEngineChildEnv(process.env, { scrubClaudeCode: true, scrubCodex: true, scrubOpencode: true, denyExact });
 
 /** The environment every gateway-spawned opencode process starts from. Exported
  *  for the server mode, whose server, client and view must start from exactly
  *  the environment a `run` turn does. */
 export function cleanEnv(sessionId: string, opts: OpencodeProcessOptions): Record<string, string> {
-  const env = gatewayChildEnv();
+  const env = gatewayChildEnv(opts.accounts?.scrub);
   env.JINN_SESSION_ID = sessionId;
   Object.assign(env, employeeSessionEnv(sessionId));
   Object.assign(env, opencodeProcessEnv(opts));
@@ -124,7 +128,8 @@ export function cleanEnv(sessionId: string, opts: OpencodeProcessOptions): Recor
  *  so it needs the same scrubbing and Marid-set variables as a turn, minus the
  *  session identity. `disableFff` is read from the config as the engine does. */
 export function opencodeDiscoveryEnv(config: JinnConfig): Record<string, string> {
-  const env = gatewayChildEnv();
+  // Discovery is no session's: it holds no account's key.
+  const env = gatewayChildEnv(stagedOpencodeAccounts(config).map((account) => account.keyEnv!));
   // A gateway started inside a session carries that session's id; discovery is no session's.
   delete env.JINN_SESSION_ID;
   return Object.assign(env, opencodeProcessEnv({ disableFff: config.engines.opencode?.disableFff !== false }));
@@ -142,11 +147,11 @@ export function runFlagsFor(api: OpencodeApi): OpencodeRunFlags {
 export function localOpencodeLaunch(
   opts: EngineRunOpts,
   trackingId: string,
-  ctx: OpencodeProcessOptions & { api?: OpencodeApi },
+  ctx: OpencodeProcessOptions & { api?: OpencodeApi; accounts?: OpencodeAccountStaging },
 ): OpencodeLaunchPlan {
   const bin = resolveBin("opencode", opts.bin);
   const api = ctx.api ?? 1;
-  const configHandle = writeOpencodeSessionConfig(opts.resolvedMcp, trackingId, api, localCommandTimeoutPlugins(api, ctx.commandTimeoutMs ?? 0));
+  const configHandle = writeOpencodeSessionConfig(opts.resolvedMcp, trackingId, api, localCommandTimeoutPlugins(api, ctx.commandTimeoutMs ?? 0), ctx.accounts);
 
   logger.info(
     `opencode engine starting: ${bin} ${describeOpencodeLaunch(opts)} `
@@ -158,6 +163,8 @@ export function localOpencodeLaunch(
     args: buildOpencodeArgs(opts, runFlagsFor(api)),
     env: {
       ...cleanEnv(trackingId, ctx),
+      // Each account's key variable, set explicitly: the staged config names it as `{env:<keyEnv>}`.
+      ...(ctx.accounts?.env ?? {}),
       ...(configHandle.staged ? { OPENCODE_CONFIG: configHandle.configPath } : {}),
     },
     cwd: opts.cwd,
@@ -220,6 +227,26 @@ function remoteHandle(facts: RemoteFacts, staging: RemoteOpencodeStaging): Remot
   };
 }
 
+/** What staging a remote turn's session needs. The accounts' keys travel in the 0600 session-env file, never on the ssh command line. */
+function remoteStagingOpts(
+  opts: EngineRunOpts,
+  trackingId: string,
+  ctx: OpencodeProcessOptions & { remote: RemoteExecutionConfig | undefined; gatewayPort: number; accounts?: OpencodeAccountStaging },
+  facts: RemoteFacts,
+) {
+  return {
+    target: opts,
+    remote: ctx.remote!,
+    facts,
+    engine: "opencode" as const,
+    jinnSessionId: trackingId,
+    gatewayPort: ctx.gatewayPort,
+    ...(opts.resolvedMcp ? { resolvedMcp: opts.resolvedMcp } : {}),
+    opencodeCommandTimeout: Boolean(ctx.commandTimeoutMs),
+    ...(ctx.accounts ? { opencodeAccounts: ctx.accounts } : {}),
+  };
+}
+
 /**
  * A turn on another machine: the same `opencode run --format json` contract,
  * with an `ssh` client standing in for the local process.
@@ -238,7 +265,7 @@ function remoteHandle(facts: RemoteFacts, staging: RemoteOpencodeStaging): Remot
 export async function remoteOpencodeLaunch(
   opts: EngineRunOpts,
   trackingId: string,
-  ctx: OpencodeProcessOptions & { remote: RemoteExecutionConfig | undefined; gatewayPort: number },
+  ctx: OpencodeProcessOptions & { remote: RemoteExecutionConfig | undefined; gatewayPort: number; accounts?: OpencodeAccountStaging },
 ): Promise<OpencodeLaunchPlan> {
   assertRemoteTarget(opts, ctx.remote);
   // Without a real gateway port the reverse forward would be built as
@@ -250,16 +277,7 @@ export async function remoteOpencodeLaunch(
   const readiness = await ensureRemoteReady(opts, ctx.remote, { engine: "opencode", allowWake: false });
   if (!readiness.ready) throw new Error(`remote host not ready: ${readiness.reason}`);
   const facts = readiness.facts;
-  const staging = await prepareRemoteSession({
-    target: opts,
-    remote: ctx.remote!,
-    facts,
-    engine: "opencode",
-    jinnSessionId: trackingId,
-    gatewayPort: ctx.gatewayPort,
-    ...(opts.resolvedMcp ? { resolvedMcp: opts.resolvedMcp } : {}),
-    opencodeCommandTimeout: Boolean(ctx.commandTimeoutMs),
-  });
+  const staging = await prepareRemoteSession(remoteStagingOpts(opts, trackingId, ctx, facts));
 
   const remote = remoteHandle(facts, staging);
   await reapStaleRemoteEngine(remote, "opencode");
