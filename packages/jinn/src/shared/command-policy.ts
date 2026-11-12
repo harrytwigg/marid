@@ -37,8 +37,14 @@ const DESTRUCTIVE: Array<{ re: RegExp; reason: string }> = [
 
 /** Both codenames, as a regex alternation: a home an older build created, or a symlink left at its old path, is as secret as the current one. */
 const CODENAME_ALTERNATION = nameAliases((n) => n.codename).join("|");
+/**
+ * A dotenv file is a path component that IS `.env` (or `.env.<suffix>`, `.envrc`):
+ * not preceded by a word character, so `process.env` and `sim.env` are not
+ * files, and not followed by one, so `os.environ` is not either.
+ */
+const DOTENV_FILE = "(?<!\\w)\\.env(?:rc|\\.[\\w.-]+)?(?!\\w)";
 const SECRET_PATH = new RegExp(
-  `(?:~/\\.ssh|\\$HOME/\\.ssh|\\.ssh/id_[a-z0-9]+|~/\\.(?:${CODENAME_ALTERNATION})/secrets|\\$HOME/\\.(?:${CODENAME_ALTERNATION})/secrets|\\.env(?:\\.[\\w.-]+)?|auth\\.json)`,
+  `(?:~/\\.ssh|\\$HOME/\\.ssh|\\.ssh/id_[a-z0-9]+|~/\\.(?:${CODENAME_ALTERNATION})/secrets|\\$HOME/\\.(?:${CODENAME_ALTERNATION})/secrets|${DOTENV_FILE}|auth\\.json)`,
   "i",
 );
 const EXFIL = /\b(?:curl|wget|nc|ncat|netcat|scp|rsync|ftp|sftp|python\s+-m\s+http\.server)\b/i;
