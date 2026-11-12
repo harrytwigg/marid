@@ -69,6 +69,7 @@ function lastSwitchOf(pending: PendingSwitch, target: SwitchTargetView, carried:
     to: target,
     applied: true,
     carryOver: carried.carryOver,
+    ...(pending.compactedOn && pending.compactedOn !== pending.from.engine ? { compactedOn: pending.compactedOn } : {}),
     ...(carried.reason ? { reason: carried.reason } : {}),
     ...(leftTranscript ? { leftTranscript } : {}),
   };
@@ -99,7 +100,7 @@ function declineSwitch(env: ApplyEnvironment, session: Session, pending: Pending
   finish(env, session.id, last);
   const compacted = pending.compactionQueued && pending.compaction?.ok === true;
   const prompt = switchResumePrompt({
-    config: env.config, sessionId: session.id, target: pending.to, current: own, fromEngine: own.engine, handoff: pending.handoff,
+    config: env.config, sessionId: session.id, target: pending.to, current: own, fromEngine: pending.compactedOn ?? own.engine, handoff: pending.handoff,
     carry: { kind: "not-applied", reason, compacted },
   });
   return { prompt, session: written, applied: false };
@@ -124,13 +125,14 @@ export function applyPendingSwitch(env: ApplyEnvironment, session: Session, pend
     model: target.model,
     effortLevel: target.effortLevel,
     leftConversation: pending.conversation === "new" ? "retire" : "park",
+    freshTarget: pending.conversation === "new",
     sync: "none",
     lastSwitch: last as unknown as JsonObject,
   }, { attemptToken });
   if (!switched) return undefined;
   finish(env, session.id, last);
   const prompt = switchResumePrompt({
-    config: env.config, sessionId: session.id, target, current: pending.from, fromEngine: pending.from.engine, handoff: pending.handoff,
+    config: env.config, sessionId: session.id, target, current: pending.from, fromEngine: pending.compactedOn ?? pending.from.engine, handoff: pending.handoff,
     carry: carried.carry, leftTranscript,
   });
   return { prompt, session: switched, applied: true };

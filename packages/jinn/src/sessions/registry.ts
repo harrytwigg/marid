@@ -1140,6 +1140,8 @@ export interface SwitchSessionTargetOptions {
   effortLevel?: string | null;
   /** `park` keeps the left conversation so a return resumes it; `retire` drops it so a return starts fresh. Default `park`. */
   leftConversation?: "park" | "retire";
+  /** The target's own parked conversation, if it holds one, is not resumed: the move opens a new conversation there (a session's own switch tells it so). */
+  freshTarget?: boolean;
   /** `pointer` (default) owes the new conversation a history pointer; `none` owes it nothing (a caller that supplies its own prompt). */
   sync?: "pointer" | "none";
   /** Written to `transportMeta.lastSwitch` in the same write. */
@@ -1190,6 +1192,9 @@ function targetRefs(session: Session, opts: SwitchSessionTargetOptions, nextDir:
   if (!sameAccount) rekeyLegacyClaudeSlot(was, refs);
   let target = cleanEngineSessionRef(refs[targetSlot] ?? (sameAccount ? legacyThreadRef({ ...own, engineSessions: refs }, opts.engine) : undefined) ?? {});
   const requestedModel = typeof opts.model === 'string' && opts.model.trim() ? opts.model : undefined;
+  if (opts.freshTarget && target.id) {
+    target = cleanEngineSessionRef({ ...target, id: undefined, lastSyncedAt: undefined, platformContextFingerprint: undefined });
+  }
   if (opts.engine === 'grok' && target.id && requestedModel && target.model !== requestedModel) {
     target = cleanEngineSessionRef({
       ...target,

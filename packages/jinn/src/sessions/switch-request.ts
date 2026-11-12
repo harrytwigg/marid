@@ -112,7 +112,11 @@ export function compactsNatively(session: Session, opencodeMode: string | undefi
   return compactionUnsupported(session.engine, opencodeMode) === undefined;
 }
 
-/** The record a scheduled request leaves for its resume turn: a conversation continued in place only when the engine compacts and the target stays in its slot. */
+/**
+ * The record a scheduled request leaves for its resume turn: a conversation continued in place only
+ * when the engine compacts, the target stays in its slot, and no stand-in holds the session (the
+ * compaction would run on the stand-in's thread, while the apply returns to the original one).
+ */
 export function buildPendingSwitch(
   config: JinnConfig,
   session: Session,
@@ -124,7 +128,8 @@ export function buildPendingSwitch(
     claimedAt,
     from: resolved.own,
     to: resolved.target,
-    conversation: compactionQueued && staysInSlot(config, session, resolved.target) ? "same" : "new",
+    conversation: compactionQueued && !session.transportMeta?.engineOverride && staysInSlot(config, session, resolved.target) ? "same" : "new",
+    compactedOn: session.engine,
     compactionQueued,
     handoff,
   };

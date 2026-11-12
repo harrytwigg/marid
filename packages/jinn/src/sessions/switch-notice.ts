@@ -23,6 +23,8 @@ export interface LastSwitch {
   carryOver: SwitchCarryOver;
   /** Why a switch did not happen, or why a compaction failed before a manual handover. */
   reason?: string;
+  /** The engine the compaction ran on, when it was not `from`'s (a session on a stand-in engine). */
+  compactedOn?: string;
   /** The left Claude conversation's transcript path, computed before the write (unscoped sessions only). */
   leftTranscript?: string;
 }
@@ -49,10 +51,10 @@ function requestedBy(by: LastSwitch["by"]): string {
 function carriedBy(last: LastSwitch): string {
   switch (last.carryOver) {
     case "same-conversation":
-      return last.reason ? `${compactionFailureText(last.reason, last.from.engine)}, so the context was not compacted` : "context compacted in place";
+      return last.reason ? `${compactionFailureText(last.reason, last.compactedOn ?? last.from.engine)}, so the context was not compacted` : "context compacted in place";
     case "summary": return "carried over by compaction summary";
     case "transcript-pointer": return "the new conversation was told where to read the history";
-    case "manual-handover": return `${compactionFailureText(last.reason, last.from.engine)}, so the new conversation was told where to read the history`;
+    case "manual-handover": return `${compactionFailureText(last.reason, last.compactedOn ?? last.from.engine)}, so the new conversation was told where to read the history`;
   }
 }
 

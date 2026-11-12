@@ -423,6 +423,63 @@ describe("a model-only switch keeps the conversation", () => {
   });
 });
 
+describe("a session held on a stand-in", () => {
+  /** Own login's thread parked, the session running thread-sub on account alpha as a stand-in. */
+  async function onStandIn() {
+    const { claudeAccountKey } = await import("../../shared/engine-account.js");
+    const me = startSession();
+    const ownThread = registry.getSession(me)!.engineSessionId!;
+    registry.updateSession(me, {
+      engineSessionId: "thread-sub",
+      engineSessions: { claude: { id: ownThread, model: "opus" }, [claudeAccountKey(alpha)]: { id: "thread-sub", model: "opus" } },
+      transportMeta: { engineOverride: { originalAccount: "claude", substituteAccount: claudeAccountKey(alpha), substituteConfigDir: alpha.dir, until: new Date(Date.now() + 3_600_000).toISOString() } } as never,
+    });
+    return { me, ownThread };
+  }
+
+  it("is never a conversation continued in place: the compaction ran on the stand-in's thread, which the apply leaves", async () => {
+    const { me, ownThread } = await onStandIn();
+    const res = await schedule(me, { model: "sonnet" });
+    expect(res.body.switch).toMatchObject({ conversation: "new", compaction: "queued" });
+    const { session } = await runSwitch(me);
+    expect(calls[0]).toMatchObject({ resume: "thread-sub", profile: alpha.dir });
+    const prompt = resumeCall().prompt;
+    // A new conversation, opened on the summary of the stand-in's thread: not the parked own-login thread, and not "compacted in place".
+    expect(resumeCall().resume).toBeUndefined();
+    expect(resumeCall().resume).not.toBe(ownThread);
+    expect(prompt).toContain("This is a new conversation. The summary of the previous one follows");
+    expect(prompt).not.toContain("compacted in place");
+    expect(session.model).toBe("sonnet");
+  });
+
+  it("names the engine the compaction ran on, not the one the session returns to, when it had none", async () => {
+    const me = startSession({ engine: "codex" });
+    registry.updateSession(me, { transportMeta: { engineOverride: { originalEngine: "claude", originalModel: "opus", until: new Date(Date.now() + 3_600_000).toISOString() } } as never });
+    registry.updateSession(me, { model: "gpt-5.5" });
+    const res = await schedule(me, { model: "sonnet" });
+    expect(res.body.switch).toMatchObject({ conversation: "new", compaction: "skipped", from: { engine: "claude" } });
+    await runSwitch(me);
+    expect(resumeCall().prompt).toContain("(Codex has no compaction)");
+    expect(lastSwitch(me)).toMatchObject({ reason: "not-supported", compactedOn: "codex" });
+    expect(notices(me).some((text) => text.includes("Codex has no compaction"))).toBe(true);
+  });
+});
+
+describe("a new conversation on a slot that holds a parked one", () => {
+  it("opens fresh there instead of resuming the parked thread the prompt calls new", async () => {
+    // Own login's thread parked by an earlier switch to alpha; the session then asks to go back.
+    const me = startSession({ claudeConfigDir: alpha.dir });
+    const { claudeAccountKey } = await import("../../shared/engine-account.js");
+    registry.updateSession(me, { engineSessionId: "thread-on-alpha", engineSessions: { claude: { id: "parked-own-thread", model: "opus" }, [claudeAccountKey(alpha)]: { id: "thread-on-alpha", model: "opus" } } });
+    await schedule(me, { profile: "" });
+    const { session } = await runSwitch(me);
+    expect(resumeCall().resume).toBeUndefined();
+    expect(resumeCall().prompt).toContain("This is a new conversation");
+    expect(session.claudeConfigDir).toBeNull();
+    expect(JSON.stringify(session.engineSessions)).not.toContain("thread-on-alpha");
+  });
+});
+
 describe("a switch that can no longer happen", () => {
   it("a target that is no longer valid at apply: the session stays, is told so, and the notice says it did not happen", async () => {
     const me = startSession();

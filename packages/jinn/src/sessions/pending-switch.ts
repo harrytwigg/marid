@@ -32,6 +32,8 @@ export interface PendingSwitch {
   to: SwitchTargetView;
   /** `same`: model/effort only, on an engine that compacts natively; `new`: a new conversation. */
   conversation: "same" | "new";
+  /** The engine the compaction runs on: the session's current one, which is a stand-in's while an override stands (`from.engine` is the engine it will return to). */
+  compactedOn?: string;
   /** Whether a native compaction turn was queued before the resume (false: the engine has none). */
   compactionQueued: boolean;
   /** As compact_session's, already validated. */
