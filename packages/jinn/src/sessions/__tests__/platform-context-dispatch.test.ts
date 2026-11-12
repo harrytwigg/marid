@@ -336,12 +336,12 @@ describe("SessionManager platform context dispatch", () => {
     await restarted.route(incoming("non-platform context changed", "channel-b"), connector);
     expect(headingCount(alphaRuns[11])).toBe(0);
 
-    registry.switchSessionEngine(session.id, "claude", { model: "model-beta" });
+    registry.switchSessionTarget(session.id, { engine: "claude", model: "model-beta" });
     await restarted.route(incoming("beta fresh", "channel-b"), connector);
     expect(betaRuns[0].resumeSessionId).toBeUndefined();
     expect(headingCount(betaRuns[0])).toBe(0);
 
-    registry.switchSessionEngine(session.id, "codex", { model: "model-alpha-2" });
+    registry.switchSessionTarget(session.id, { engine: "codex", model: "model-alpha-2" });
     await restarted.route(incoming("alpha restored", "channel-b"), connector);
     expect(alphaRuns.at(-1)?.resumeSessionId).toBe("codex-native");
     expect(headingCount(alphaRuns.at(-1)!)).toBe(0);

@@ -35,7 +35,7 @@ beforeEach(async () => {
 describe("a session leaving its run", () => {
   it("by a manual engine switch ends the run, the override, and keeps the hops", () => {
     const id = walkedSession("web:clear-switch");
-    reg.switchSessionEngine(id, "claude", {});
+    reg.switchSessionTarget(id, { engine: "claude" });
 
     expect(metaOf(id).fallbackRun).toBeUndefined();
     expect(metaOf(id).engineOverride).toBeUndefined();

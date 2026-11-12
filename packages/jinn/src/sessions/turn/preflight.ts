@@ -26,13 +26,15 @@ import type { TurnHierarchy, TurnInput, TurnPlan, TurnPreflight } from "./types.
 export { warnIfNearUsageLimit } from "./usage-warning.js";
 
 import { SYNC_TRANSCRIPT_MESSAGES, syncTranscriptPrompt } from "./sync-transcript.js";
+import { LOST_CONVERSATION_META_KEY, SYNC_MODE_META_KEY, withoutCatchUpMarkers } from "../sync-markers.js";
+import { historyPointerPrompt } from "./history-pointer.js";
 
 /**
  * Marks a session whose conversation on this engine was found gone: its next
  * turn without a resume id starts a fresh one handed a transcript, and the
  * marker clears when such a turn settles cleanly.
  */
-export const LOST_CONVERSATION_META_KEY = "lostConversationEngine";
+export { LOST_CONVERSATION_META_KEY };
 
 /**
  * The lost-conversation transcript's budget. It travels in one command-line
@@ -295,6 +297,10 @@ export function resolveSyncPrompt(
 ): { promptToRun: string; syncRequested: boolean } {
   const sync = syncSince(session, engineName);
   if (!sync) return { promptToRun: prompt, syncRequested: false };
+  // A deliberate switch (`switchSessionTarget`) points at the history instead of pasting it.
+  if (sync.engineSwitch && session.transportMeta?.[SYNC_MODE_META_KEY] === "pointer") {
+    return { promptToRun: historyPointerPrompt(session, prompt), syncRequested: true };
+  }
 
   const recentMessages = getMessages(session.id).filter((message) => message.timestamp >= sync.sinceMs);
   const intro = sync.engineSwitch
@@ -404,10 +410,5 @@ function clipToBytes(text: string, max: number): string {
 /** Strip the sync markers a settled synced turn consumed; `keepLostConversation` leaves a lost conversation's owed. */
 export function withSyncMarkersCleared(meta: unknown, opts: { keepLostConversation?: boolean } = {}): Record<string, unknown> {
   const base = meta && typeof meta === "object" && !Array.isArray(meta) ? { ...(meta as Record<string, unknown>) } : {};
-  delete base["claudeSyncSince"];
-  delete base["claudeSyncAccount"];
-  delete base["engineSyncTarget"];
-  delete base["engineSyncSince"];
-  if (!opts.keepLostConversation) delete base[LOST_CONVERSATION_META_KEY];
-  return base;
+  return withoutCatchUpMarkers(base, opts);
 }

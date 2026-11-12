@@ -12,6 +12,7 @@ import { extendSpentWindow } from "./engine-override-window.js";
 import type { Employee, JinnConfig, Session } from "../shared/types.js";
 import { getEngineSessionRef, nextEngineSessionFields, updateSession } from "./registry.js";
 import { withoutRun } from "./fallback-run.js";
+import { SYNC_MODE_META_KEY } from "./sync-markers.js";
 
 /** When a swap made now would end: a standing swap's window, which a nested one
  *  keeps, else `undefined` (the new swap's own `until` applies). */
@@ -74,6 +75,8 @@ function revertedMeta(meta: Record<string, unknown>, session: Session, parked: P
   // was left at the first swap, so it is caught up from there.
   if (parked.engine === "claude" && parked.syncSince) {
     next["claudeSyncSince"] = earliestPending(meta["claudeSyncSince"], parked.syncSince);
+    // A marker the revert writes is the pasted catch-up's, even over a pointer one a switch left.
+    delete next[SYNC_MODE_META_KEY];
     // The prompt's sync intro names what happened: another account, not another engine.
     if (accountOverride(session)) next["claudeSyncAccount"] = true;
     else delete next["claudeSyncAccount"];
@@ -84,6 +87,7 @@ function revertedMeta(meta: Record<string, unknown>, session: Session, parked: P
     const pending = meta["engineSyncTarget"] === parked.engine ? meta["engineSyncSince"] : undefined;
     next["engineSyncTarget"] = parked.engine;
     next["engineSyncSince"] = earliestPending(pending, parked.syncSince);
+    delete next[SYNC_MODE_META_KEY];
   }
   delete next["engineOverride"];
   // The session is back on its own target: the run is over and the hops stay.

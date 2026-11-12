@@ -29,7 +29,6 @@ import { fallbackPreviewFor, parseFallbackModeParam, parseFallbackModePatch, wit
 import { childFallbackMode } from "../sessions/session-fallback.js";
 import { childFallbackTarget } from "../sessions/fallback-target.js";
 import { applyFallbackTargetPatch } from "./session-fallback-api.js";
-import { scopedSwitchRefusal } from "../sessions/scoped-engine.js";
 import { buildDelegatedActivityIndex } from "../sessions/delegated-activity.js";
 import { effectiveSessionStatus, isBackgroundWorkLive, runtimeTransportRunning, serializeRuntimeActivity, type RuntimeActivityInfo } from "../sessions/background-work.js";
 import { readTodoSessionTree } from "../sessions/session-tree.js";
@@ -59,7 +58,6 @@ import {
   archiveSession,
   unarchiveSession,
   recordEngineSessionId,
-  switchSessionEngine,
   clearEngineSessionRefs,
   UpdateSessionFields,
   deleteSession,
@@ -99,6 +97,7 @@ import { forkEngineSession } from "../sessions/fork.js";
 import { spawnCwd } from "../sessions/session-cwd.js";
 import { sessionScopeDepartment } from "../sessions/session-scope.js";
 import { claudeProfileForSession, findTranscriptOfSession } from "./session-claude-profile.js";
+import { parseProfileField, patchSessionTarget } from "./session-target-patch.js";
 import { cleanUpDeletedSession } from "./session-cleanup.js";
 import { ptySnapshotStore } from "../engines/pty-snapshot.js";
 import { configDocumentForApi, deepMerge } from "./config-payload.js";
@@ -1934,32 +1933,23 @@ export async function handleApiRequest(
         }
         requestedEngine = body.engine.trim();
         if (namesClaudeProfile(requestedEngine)) {
-          return badRequest(res, `engine "${requestedEngine}" names a Claude profile, which is chosen when a session is created and cannot be changed afterwards; engine must be an engine name`);
+          return badRequest(res, `engine "${requestedEngine}" names a Claude profile, which is chosen when a session is created; to change it afterwards send "profile", and keep engine an engine name`);
         }
       }
 
-      const engineChanging = Boolean(requestedEngine && requestedEngine !== session.engine);
-      if (engineChanging) {
-        if (blocksEngineSwitch(getSessionTransportState(session, context))) {
-          return badRequest(res, "Cannot switch engine while a turn is running, waiting, or queued");
-        }
-        const scopedRefusal = scopedSwitchRefusal(session, requestedEngine!);
-        if (scopedRefusal) return badRequest(res, scopedRefusal);
-        const savedRef = getEngineSessionRef(session, requestedEngine);
-        const selection = validateNewSessionSelection(configForPatch, {
-          engine: requestedEngine,
-          model: body.model ?? savedRef.model,
-          effortLevel: body.effortLevel ?? savedRef.effortLevel,
-        });
-        if (!selection.ok) return badRequest(res, selection.error || "invalid engine/model/effort");
-        let switched = switchSessionEngine(params.id, selection.engine!, {
-          model: selection.model ?? null,
-          effortLevel: selection.effortLevel ?? null,
-        });
-        if (!switched) return notFound(res);
-        if (Object.keys(updates).length > 0) {
-          switched = updateSession(params.id, updates) ?? switched;
-        }
+      const profileField = parseProfileField(body.profile);
+      if (!profileField.ok) return badRequest(res, profileField.error);
+      // An engine or profile move: the operator's switch (park, history pointer, notice). Anything else falls through to model/effort.
+      const moved = patchSessionTarget({
+        session,
+        config: configForPatch,
+        emit: context.emit,
+        body: { engine: requestedEngine, profile: profileField.profile, model: body.model, effortLevel: body.effortLevel },
+        busy: blocksEngineSwitch(getSessionTransportState(session, context)),
+      });
+      if (moved.kind === "refused") return badRequest(res, moved.error);
+      if (moved.kind === "switched") {
+        const switched = Object.keys(updates).length > 0 ? updateSession(params.id, updates) ?? moved.session : moved.session;
         context.emit("session:updated", { sessionId: params.id });
         return json(res, withFallbackView(serializeSessionResponse(switched, context), switched, context));
       }
