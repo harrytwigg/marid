@@ -36,9 +36,16 @@ const REG: EnginesResponse = {
   },
 }
 
+const onlyClaude = { current: false }
 vi.mock('@/hooks/use-model-registry', async (importActual) => {
   const actual = await importActual<typeof import('@/hooks/use-model-registry')>()
-  return { ...actual, useModelRegistry: () => ({ data: REG, isLoading: false }) }
+  return {
+    ...actual,
+    useModelRegistry: () => ({
+      data: onlyClaude.current ? { ...REG, engines: { claude: REG.engines.claude } } : REG,
+      isLoading: false,
+    }),
+  }
 })
 
 // `null` = the chains read has not loaded (or failed): data is undefined.
@@ -146,7 +153,7 @@ describe('fallback preview for a chosen profile', () => {
 })
 
 describe('ModelSelectorRow primary profile picker', () => {
-  beforeEach(() => { profilesHolder.current = ['work']; remoteProfilesHolder.current = [] })
+  beforeEach(() => { profilesHolder.current = ['work']; remoteProfilesHolder.current = []; onlyClaude.current = false })
 
   it('offers only accounts on this machine, never one declared on another host', async () => {
     remoteProfilesHolder.current = ['box']
@@ -261,6 +268,20 @@ describe('ModelSelectorRow primary profile picker', () => {
     const last = onChange.mock.calls.at(-1)?.[0] as SelectorValue
     expect(last.engine).toBe('claude')
     expect(last.profile).toBeUndefined()
+  })
+
+  it('still reaches the profile rows when Claude is the only installed engine, and not without profiles', async () => {
+    onlyClaude.current = true
+    const first = renderRow(<ModelSelectorRow mode="existing" allowProfiles value={{ engine: 'claude', model: 'opus' }} onChange={() => {}} />)
+    openMenu()
+    fireEvent.click(await screen.findByRole('menuitem', { name: /switch engine/i }))
+    expect(await screen.findByRole('menuitem', { name: /claude · work/i })).toBeTruthy()
+    first.unmount()
+    profilesHolder.current = []
+    renderRow(<ModelSelectorRow mode="existing" allowProfiles value={{ engine: 'claude', model: 'opus' }} onChange={() => {}} />)
+    openMenu()
+    expect(await screen.findByText(/refresh models/i)).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: /switch engine/i })).toBeNull()
   })
 
   it('checks no row for a session profile that is no longer declared, rather than own login', async () => {

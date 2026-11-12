@@ -108,7 +108,8 @@ export function ModelPicker({ registry, engine, modelId, onPickEngine, onPickMod
       <ModelListPanel engine={engine} modelId={modelId} list={list} onPickModel={onPickModel} keepOpenOnPick={keepOpenOnPick} />
       {children}
       <EngineSwitchRow
-        canSwitch={engines.some((e) => e.name !== engine)}
+        // Declared accounts are choices of their own: with Claude the only installed engine, the panel still lists them.
+        canSwitch={engines.some((e) => e.name !== engine) || Boolean(profiles?.length && onPickProfile)}
         onSwitch={() => nav.goToPanel('engine')}
         onRefresh={refreshModels}
       />
