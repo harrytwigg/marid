@@ -98,7 +98,9 @@ function declineSwitch(env: ApplyEnvironment, session: Session, pending: Pending
   });
   if (!written) return undefined;
   finish(env, session.id, last);
-  const compacted = pending.compactionQueued && pending.compaction?.ok === true;
+  // A compaction that ran but left no usable summary did compact the context.
+  const outcome = pending.compaction;
+  const compacted = pending.compactionQueued && outcome !== undefined && (outcome.ok || outcome.reason === "no-summary" || outcome.reason === "summary-too-long");
   const prompt = switchResumePrompt({
     config: env.config, sessionId: session.id, target: pending.to, current: own, fromEngine: pending.compactedOn ?? own.engine, handoff: pending.handoff,
     carry: { kind: "not-applied", reason, compacted },

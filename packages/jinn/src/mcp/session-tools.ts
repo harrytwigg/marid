@@ -194,7 +194,7 @@ export function buildSessionTools(): JinnMcpTool[] {
         employee: {
           type: "string",
           description:
-            "Employee slug; choose by role/persona fit from list_employees/find_employees.",
+            "Employee slug; choose by role/persona fit from list_employees/find_employees. Omit for a plain session or if no employee fits.",
         },
         engine: { type: "string" },
         model: { type: "string" },
@@ -359,7 +359,7 @@ export function buildSessionTools(): JinnMcpTool[] {
 
   const stopSession: JinnMcpTool = {
     name: "stop_session",
-    description: "Stop a running descendant session.",
+    description: "Stop a running descendant session without deleting its record.",
     inputSchema: {
       type: "object",
       properties: { sessionId: { type: "string" } },

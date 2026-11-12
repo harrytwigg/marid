@@ -86,7 +86,8 @@ export function ownSwitchTarget(config: JinnConfig, session: Session): SwitchTar
     profile: engine === "claude" ? profileNameFor(config, session.claudeConfigDir) : null,
     claudeConfigDir: session.claudeConfigDir,
     model,
-    effortLevel: override ? null : session.effortLevel,
+    // The row's own pin: a stand-in's effort is never written to it, so it reads the same with or without one.
+    effortLevel: session.effortLevel,
   };
 }
 
@@ -204,6 +205,20 @@ function pinnedModel(config: JinnConfig, session: Session, chosen: { engine: str
   return movesAccount(config, session, chosen) ? getModelRegistry(config)[chosen.engine]?.defaultModel ?? null : null;
 }
 
+/**
+ * Why a named model cannot be switched to, for engines whose catalogue the validator cannot check (free ids: a typo or `?` passes it).
+ * `?` is a list request, never a model. A session asking must name one the engine lists when it lists any.
+ */
+function modelRefusal(config: JinnConfig, engine: string, model: unknown, caller: ResolveOptions["caller"]): Extract<SwitchResolution, { ok: false }> | undefined {
+  if (model === undefined || model === null) return undefined;
+  const refused = (error: string) => refusal("invalid-target", error) as Extract<SwitchResolution, { ok: false }>;
+  if (typeof model === "string" && model.trim() === "?") return refused(`"?" is not a model — it asks for the list; these are the models "${engine}" offers`);
+  if (caller !== "session" || typeof model !== "string") return undefined;
+  const listed = getModelRegistry(config)[engine]?.models ?? [];
+  if (listed.length > 0 && !listed.some((entry) => entry.id === model.trim())) return refused(`unknown model "${model.trim()}" for engine "${engine}"`);
+  return undefined;
+}
+
 /** The target for an engine and profile directory already cleared, with the model and effort checked against the engine. */
 function buildTarget(
   config: JinnConfig,
@@ -211,13 +226,17 @@ function buildTarget(
   own: SwitchTargetView,
   chosen: { engine: string; dir: string | null },
   request: SwitchRequest,
+  caller: ResolveOptions["caller"],
 ): { ok: true; target: SwitchTargetView } | Extract<SwitchResolution, { ok: false }> {
+  const asked = modelRefusal(config, chosen.engine, request.model, caller);
+  if (asked) return asked;
   const kept = inheritedSelection(session, own, chosen.engine, chosen.dir);
-  const selection = validateNewSessionSelection(config, {
-    engine: chosen.engine,
-    model: request.model ?? kept.model,
-    effortLevel: request.effortLevel ?? kept.effortLevel,
-  });
+  // The inherited effort goes in as a default, which the validator drops when the target model has no such level; a requested one is still refused.
+  const selection = validateNewSessionSelection(
+    config,
+    { engine: chosen.engine, model: request.model ?? kept.model, effortLevel: request.effortLevel },
+    { effortLevel: kept.effortLevel },
+  );
   if (!selection.ok) return refusal("invalid-target", selection.error || "invalid engine/model/effort") as Extract<SwitchResolution, { ok: false }>;
   return {
     ok: true,
@@ -240,7 +259,7 @@ export function resolveSwitchTarget(config: JinnConfig, session: Session, reques
   if (engineProblem) return engineProblem;
   const profile = resolveProfile(config, session, named.engine, request.profile);
   if (!profile.ok) return profile;
-  const built = buildTarget(config, session, own, { engine: named.engine, dir: profile.dir }, request);
+  const built = buildTarget(config, session, own, { engine: named.engine, dir: profile.dir }, request, opts.caller);
   if (!built.ok) return built;
 
   const refused = opts.caller === "session" ? selfRefusal(config, session, own, built.target, opts.now ?? new Date()) : undefined;

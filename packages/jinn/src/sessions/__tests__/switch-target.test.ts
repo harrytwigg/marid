@@ -21,7 +21,9 @@ vi.mock("../../shared/models.js", async (importOriginal) => ({
 
 const { resetDepartmentFixtures, writeDepartmentFile, writeEmployeeFile } = await import("../../gateway/__tests__/department-fixtures.js");
 const { claudeProfileFromDir } = await import("../../shared/claude-profile.js");
+const { getModelRegistry } = await import("../../shared/models.js");
 const { resolveSwitchTarget, ownSwitchTarget, describeSwitchTarget } = await import("../switch-target.js");
+const { switchRefusalBody } = await import("../switch-request.js");
 
 let registry: typeof import("../registry.js");
 
@@ -239,5 +241,60 @@ describe("describeSwitchTarget", () => {
     expect(describeSwitchTarget(config, { engine: "claude", profile: "friend", claudeConfigDir: friend.dir, model: "sonnet", effortLevel: null })).toMatch(/^Claude · friend · Sonnet/);
     expect(describeSwitchTarget(config, { engine: "codex", profile: null, claudeConfigDir: friend.dir, model: null, effortLevel: null })).toBe("Codex · gpt-5.5");
     expect(describeSwitchTarget(config, { engine: "claude", profile: null, claudeConfigDir: SPARE, model: "opus", effortLevel: null })).toMatch(/^Claude · another profile · Opus/);
+  });
+});
+
+describe("a model the engine does not offer", () => {
+  it("never accepts \"?\" (a list request, not a model) from a session or the operator, and lists only the named engine", () => {
+    const s = session();
+    for (const caller of [asSession, operator]) {
+      const result = refused(resolveSwitchTarget(config, s, { engine: "opencode", model: "?" }, caller));
+      expect(result.code).toBe("invalid-target");
+    }
+    const { status, body } = switchRefusalBody(config, s, refused(resolveSwitchTarget(config, s, { engine: "opencode", model: "?" }, asSession)), { engine: "opencode", model: "?" });
+    expect(status).toBe(400);
+    const lines = String(body.error).split("\n");
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toMatch(/^opencode: /);
+  });
+
+  it("refuses, for a session, a free-id engine's model its list does not name, and leaves the operator free to type one", () => {
+    const s = session();
+    const typo = refused(resolveSwitchTarget(config, s, { engine: "opencode", model: "prov/model-typo" }, asSession));
+    expect(typo.code).toBe("invalid-target");
+    expect(typo.error).toContain("prov/model-typo");
+    const [listed] = getModelRegistry(config).opencode.models;
+    expect(resolveSwitchTarget(config, s, { engine: "opencode", model: listed.id }, asSession).ok).toBe(true);
+    expect(resolveSwitchTarget(config, s, { engine: "opencode", model: "prov/model-typo" }, operator)).toMatchObject({ ok: true, target: { model: "prov/model-typo" } });
+  });
+});
+
+describe("the effort a switch inherits", () => {
+  it("is the session's own pin under a stand-in, so a window that ends before the resume does not read as a move", () => {
+    const s = session({ effortLevel: "high" });
+    const before = ownSwitchTarget(config, registry.getSession(s.id)!);
+    registry.updateSession(s.id, {
+      transportMeta: { engineOverride: { originalEngine: "claude", originalModel: "opus", until: "2999-01-01T00:00:00Z", syncSince: "2026-10-19T10:00:00.000Z" } },
+    } as never);
+    const during = ownSwitchTarget(config, registry.getSession(s.id)!);
+
+    expect(before.effortLevel).toBe("high");
+    expect(during).toEqual(before);
+  });
+
+  it("is dropped when the target model takes no effort levels, for the operator and for a session", () => {
+    const s = session({ effortLevel: "high" });
+    // The slot the session once left on opencode kept the effort it ran with there.
+    registry.updateSession(s.id, { engineSessions: {
+      opencode: { id: "old-thread", model: getModelRegistry(config).opencode.models[0].id, effortLevel: "high" },
+    } } as never);
+    const row = registry.getSession(s.id)!;
+
+    for (const caller of [operator, asSession]) {
+      expect(resolveSwitchTarget(config, row, { engine: "opencode" }, caller)).toMatchObject({ ok: true, target: { engine: "opencode", effortLevel: null } });
+    }
+    // The same effort stays on a target that takes it, and a requested one the model cannot take is still refused.
+    expect(resolveSwitchTarget(config, row, { model: "sonnet" }, operator)).toMatchObject({ ok: true, target: { engine: "claude", effortLevel: "high" } });
+    expect(refused(resolveSwitchTarget(config, row, { engine: "opencode", effortLevel: "high" }, operator)).error).toContain("does not support effort levels");
   });
 });

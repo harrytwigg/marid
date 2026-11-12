@@ -46,7 +46,7 @@ switch → `/compact` turn (when the engine compacts natively) → stopgap suppr
 |---|---|---|
 | scheduled | 202 | `{status: "scheduled", sessionId, engine, resume, switch: {from, to, conversation: "same" \| "new", compaction: "queued" \| "skipped"}}` |
 | not a session caller | 403 | `{error: UNIDENTIFIED_TOOL_CALL_ERROR}` (unchanged) |
-| unknown session | 404 | unchanged |
+| unknown session | 403 | `{error: UNIDENTIFIED_TOOL_CALL_ERROR}`: the identity check runs first, as on main, so an unknown session reads as an unidentified caller (not 404) |
 | stopped | 409 | `{code: "stopped", error}` (unchanged) |
 | terminal session | 409 | unchanged |
 | unknown/uninstalled engine (incl. `"?"`), unknown model, unknown profile, profile on a non-claude engine | 400 | `{code: "invalid-target", error, targets}` |

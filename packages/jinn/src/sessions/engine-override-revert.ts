@@ -75,8 +75,9 @@ function revertedMeta(meta: Record<string, unknown>, session: Session, parked: P
   // was left at the first swap, so it is caught up from there.
   if (parked.engine === "claude" && parked.syncSince) {
     next["claudeSyncSince"] = earliestPending(meta["claudeSyncSince"], parked.syncSince);
-    // A marker the revert writes is the pasted catch-up's, even over a pointer one a switch left.
-    delete next[SYNC_MODE_META_KEY];
+    // A marker the revert writes is the pasted catch-up's, but a pointer one a deliberate switch left for claude
+    // stays: that conversation is new, and a new conversation is pointed at the history, never handed it.
+    if (!(meta["engineSyncTarget"] === "claude" && meta[SYNC_MODE_META_KEY] === "pointer")) delete next[SYNC_MODE_META_KEY];
     // The prompt's sync intro names what happened: another account, not another engine.
     if (accountOverride(session)) next["claudeSyncAccount"] = true;
     else delete next["claudeSyncAccount"];

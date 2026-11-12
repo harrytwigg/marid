@@ -541,6 +541,21 @@ describe("a switch that can no longer happen", () => {
     expect(notices(me).some((text) => /Switch to Claude · alpha .* did not happen: unknown Claude profile "alpha".*Still on Claude · own login/.test(text))).toBe(true);
   });
 
+  it.each([
+    ["error", "not compacted"],
+    ["limit", "not compacted"],
+    ["no-summary", "compacted"],
+    ["too-long", "compacted"],
+  ] as const)("a declined switch after a compaction that ended as %s says the context was %s", async (mode, wording) => {
+    compactMode = mode;
+    const me = startSession();
+    await schedule(me, { profile: "alpha" });
+    delete (config.engines.claude as { accounts: Record<string, unknown> }).accounts.alpha;
+    await runSwitch(me);
+    expect(lastSwitch(me)).toMatchObject({ applied: false });
+    expect(resumeCall().prompt).toContain(`Your context was ${wording}.`);
+  });
+
   it("the session's own target changed (a model set by the operator): not applied, and its context stays", async () => {
     const me = startSession();
     await schedule(me, { profile: "alpha" });
