@@ -4,7 +4,7 @@ import type { EngineLimitEngineSnapshot, EngineLimitsResponse, JinnConfig, Sessi
 import { CLAUDE_LIMITS_DIR } from "../shared/paths.js";
 import { isDefaultAccountSession } from "../shared/engine-account.js";
 import { collectEngineLimits } from "../shared/engine-limits.js";
-import { isEngineExhausted, readEngineHealth } from "../shared/engine-health.js";
+import { isEngineExhausted, readEngineHealth, type EngineHealthReading } from "../shared/engine-health.js";
 import { readClaudeUsageHistory, type UsageSample } from "../shared/claude-usage-history.js";
 import { isSystemEmployeeName } from "../gateway/system-employees.js";
 import { isLegacyWorkflowPhaseSession } from "../sessions/legacy-workflow-phase.js";
@@ -240,6 +240,18 @@ function operatorSignals(deps: SnapshotDeps, claude: EngineLimitEngineSnapshot |
   return operator;
 }
 
+/**
+ * Whether health holds `engine` out at `now`: its own key, and for opencode also the key of the provider
+ * the engine's default model runs on. Health is kept per provider (`opencode/<provider>`), and a spent
+ * default-model window is what took opencode out for the walk before it was.
+ */
+export function engineHeldOut(health: EngineHealthReading, engine: string, config: JinnConfig, now: Date): boolean {
+  if (isEngineExhausted(health, engine, now)) return true;
+  const model = engine === "opencode" ? config.engines.opencode?.model : undefined;
+  const slash = model ? model.indexOf("/") : -1;
+  return slash > 0 && isEngineExhausted(health, `opencode/${model!.slice(0, slash)}`, now);
+}
+
 function engineContext(deps: SnapshotDeps, holding: readonly Session[]): EngineContext {
   const health = deps.exhausted ? undefined : readEngineHealth();
   return {
@@ -247,7 +259,7 @@ function engineContext(deps: SnapshotDeps, holding: readonly Session[]): EngineC
     history: (deps.usageHistory ?? readClaudeUsageHistory)(deps.now - 7 * 24 * 60 * 60_000),
     holding,
     startedSince: deps.startedSince ?? ((sinceMs, engine) => listStartedSessions(sinceMs, { engine })),
-    exhausted: deps.exhausted ?? ((engine, at) => isEngineExhausted(health!, engine, new Date(at))),
+    exhausted: deps.exhausted ?? ((engine, at) => engineHeldOut(health!, engine, deps.config, new Date(at))),
   };
 }
 
