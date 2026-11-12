@@ -467,16 +467,20 @@ describe("a session held on a stand-in", () => {
 
 describe("a new conversation on a slot that holds a parked one", () => {
   it("opens fresh there instead of resuming the parked thread the prompt calls new", async () => {
-    // Own login's thread parked by an earlier switch to alpha; the session then asks to go back.
-    const me = startSession({ claudeConfigDir: alpha.dir });
-    const { claudeAccountKey } = await import("../../shared/engine-account.js");
-    registry.updateSession(me, { engineSessionId: "thread-on-alpha", engineSessions: { claude: { id: "parked-own-thread", model: "opus" }, [claudeAccountKey(alpha)]: { id: "thread-on-alpha", model: "opus" } } });
+    // Own login's thread parked by an earlier (operator) switch to alpha, where the session has since worked on a thread of its own.
+    const me = startSession();
+    const parked = registry.getSession(me)!.engineSessionId!;
+    registry.switchSessionTarget(me, { engine: "claude", claudeConfigDir: alpha.dir, model: "opus", leftConversation: "park", sync: "none" });
+    registry.recordEngineSessionId(me, "claude", "thread-on-alpha", { model: "opus" });
+    registry.updateSession(me, { status: "running", attemptToken: "ask-again" } as never);
+    expect(JSON.stringify(registry.getSession(me)!.engineSessions)).toContain(parked);
     await schedule(me, { profile: "" });
     const { session } = await runSwitch(me);
     expect(resumeCall().resume).toBeUndefined();
     expect(resumeCall().prompt).toContain("This is a new conversation");
     expect(session.claudeConfigDir).toBeNull();
     expect(JSON.stringify(session.engineSessions)).not.toContain("thread-on-alpha");
+    expect(calls.some((c) => c.resume === parked && !c.prompt.startsWith("/compact"))).toBe(false);
   });
 });
 
