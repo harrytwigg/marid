@@ -47,7 +47,7 @@ const config = {
   },
   models: {
     claude: { default: "opus", models: [{ id: "opus", label: "Opus" }, { id: "sonnet", label: "Sonnet" }, { id: "haiku", label: "Haiku" }] },
-    codex: { default: "gpt-5.5", models: [{ id: "gpt-5.5" }] },
+    codex: { default: "gpt-5.5", models: [{ id: "gpt-5.5" }, { id: "gpt-5.4" }] },
   },
   remote: { root: "/srv/root", mount: "/mnt/jinn" },
   connectors: {},
@@ -222,6 +222,13 @@ describe("scheduled (202)", () => {
     expect((await request("POST", "/api/compactions", { headers: asSession(plainOc), body: HANDOFF })).status).toBe(409);
   });
 
+  it("a model change on an engine with no compaction is a new conversation with the compaction skipped, never one continued in place", async () => {
+    const codex = newSession({ engine: "codex", model: "gpt-5.5" });
+    const res = await post(codex, { model: "gpt-5.4" });
+    expect(res.status).toBe(202);
+    expect(res.body.switch).toMatchObject({ conversation: "new", compaction: "skipped", to: { engine: "codex", model: "gpt-5.4" } });
+  });
+
   it("ignores a sessionId in the body: the caller's own session is the one asked about", async () => {
     const me = newSession();
     const other = newSession();
@@ -379,6 +386,29 @@ describe("target before handoff, claim and queue", () => {
     expect(registry.getSession(halted)!.transportMeta?.selfCompactionAt).toBeUndefined();
     expect((await request("POST", "/api/compactions", { headers: { authorization: "Bearer test-token" }, body: { ...HANDOFF, profile: "alpha" } })).status).toBe(403);
     expect((await request("POST", "/api/compactions", { headers: asSession("no-such-session"), body: { ...HANDOFF, profile: "alpha" } })).status).toBeGreaterThanOrEqual(400);
+  });
+});
+
+describe("a stop gives up on the resume for good", () => {
+  it("the dead-lettered resume withdraws its switch, and a request that is not a self-compaction resume does not", async () => {
+    const { deliverClaimedSessionDelivery } = await import("../../sessions/callbacks.js");
+    const me = newSession();
+    failLoopback = (index) => index === 1;
+    expect((await post(me, { profile: "alpha" })).body.resume).toBe("retrying");
+    failLoopback = undefined;
+    expect(pending.readPendingSwitch(registry.getSession(me))).toBeDefined();
+    // Some other delivery for the session is dead-lettered by a stop: the switch stands.
+    const stray = registry.claimSessionDelivery({ targetSessionId: me, sourceKind: "session", sourceId: me, sourceAttempt: "x:1", sourceOutcome: "done", sourceVersion: 1, deliveryKind: "parent-callback", payload: { message: "hi", displayMessage: "hi" } }).delivery;
+    stopped.markSessionStopped(me);
+    await deliverClaimedSessionDelivery(stray.id);
+    expect(pending.readPendingSwitch(registry.getSession(me))).toBeDefined();
+    // The resume itself is dead-lettered by the stop: the switch goes with it.
+    const resume = db.initDb().prepare("SELECT id FROM callback_deliveries WHERE target_session_id = ? AND delivery_kind = 'self-compaction-resume'").get(me) as { id: string };
+    // The retry comes due.
+    db.initDb().prepare("UPDATE callback_deliveries SET next_attempt_at = last_attempt_at WHERE id = ?").run(resume.id);
+    await deliverClaimedSessionDelivery(resume.id);
+    expect(registry.getSessionDelivery(resume.id)?.status).toBe("dead_letter");
+    expect(pending.readPendingSwitch(registry.getSession(me))).toBeUndefined();
   });
 });
 

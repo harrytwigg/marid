@@ -68,7 +68,7 @@ const config = {
 /* ── What the stub engines are run with, and how a compaction ends ─────────── */
 
 interface Call { engine: string; prompt: string; resume?: string; profile: string | null; model?: string }
-type CompactMode = "ok" | "error" | "limit" | "unconfirmed" | "no-summary" | "too-long";
+type CompactMode = "ok" | "error" | "limit" | "unconfirmed" | "no-summary" | "too-long" | "throw";
 let calls: Call[] = [];
 let compactMode: CompactMode = "ok";
 let threads = 0;
@@ -96,6 +96,7 @@ function compactResult(name: string, opts: EngineRunOpts): EngineResult {
   const sessionId = opts.resumeSessionId ?? "thread-none";
   const confirmed = { sessionId, result: "", numTurns: 1, compaction: { preTokens: 9000, postTokens: 1200 } };
   switch (compactMode) {
+    case "throw": throw new Error("the engine process died");
     case "error": return { sessionId, result: "", numTurns: 1, error: "the engine failed mid-summary" };
     case "limit": return { sessionId, result: "", numTurns: 1, error: "You've hit your limit · resets 3pm", rateLimit: { status: "rejected", resetsAt: Math.floor(Date.now() / 1000) + 3600 } };
     case "unconfirmed": return { sessionId, result: "", numTurns: 1 };
@@ -310,6 +311,7 @@ describe("every failure lands on the new target with the handoff and a pointer",
     ["unconfirmed", "unconfirmed", "the compaction failed (it could not be confirmed)"],
     ["no-summary", "no-summary", "the compaction failed (no summary was produced)"],
     ["too-long", "summary-too-long", "the compaction failed (the summary was too long)"],
+    ["throw", "error", "the compaction failed (an error)"],
   ];
   it.each(phrases)("%s", async (mode, reason, phrase) => {
     compactMode = mode;
@@ -381,6 +383,17 @@ describe("a model-only switch keeps the conversation", () => {
     expect(session.model).toBe("sonnet");
     expect(session.claudeConfigDir).toBeNull();
     expect(lastSwitch(me)).toMatchObject({ applied: true, carryOver: "same-conversation" });
+    expect(lastSwitch(me)!.reason).toBeUndefined();
+  });
+
+  it("needs no summary: a confirmed in-place compaction is the same conversation even when the transcript holds none", async () => {
+    compactMode = "no-summary";
+    const me = startSession();
+    await schedule(me, { model: "sonnet" });
+    const { session } = await runSwitch(me);
+    expect(resumeCall().prompt).toContain("Your context was compacted in place.");
+    expect(session.model).toBe("sonnet");
+    expect(lastSwitch(me)).toMatchObject({ carryOver: "same-conversation" });
     expect(lastSwitch(me)!.reason).toBeUndefined();
   });
 
@@ -483,6 +496,26 @@ describe("stops", () => {
   });
 });
 
+describe("where the switched turn runs", () => {
+  it("runs headless on its new engine, not on the terminal view the dispatch picked for the engine it left", async () => {
+    const me = startSession();
+    await schedule(me, { engine: "codex" });
+    registry.updateSession(me, { status: "idle" });
+    const queued = rows(me);
+    await runRow(me, queued[0]);
+    const viewRuns: string[] = [];
+    const view = (name: string) => ({ ...stubEngine(name), async run(opts: EngineRunOpts) { viewRuns.push(name); return { sessionId: "view-thread", result: `view ${opts.prompt.length}` }; } }) as unknown as Engine;
+    const viewContext = { ...runContext, ptyViewEngines: { claude: engines.get("claude"), codex: view("codex") } } as unknown as import("../../gateway/api.js").ApiContext;
+    const session = registry.getSession(me)!;
+    const before = running.length;
+    dispatch.dispatchWebSessionRun(session, queued[1].prompt, engines.get("claude")!, viewContext, { queueItemId: queued[1].id });
+    await vi.waitFor(() => expect(running.length).toBeGreaterThan(before));
+    await Promise.all(running);
+    expect(viewRuns).toEqual([]);
+    expect(resumeCall().engine).toBe("codex");
+  });
+});
+
 describe("recording the outcome", () => {
   const turn = (id: string, prompt: string, startedAt: number) => ({ sessionId: id, prompt, startedAt });
 
@@ -504,6 +537,35 @@ describe("recording the outcome", () => {
   it("records nothing, and does not throw, when no switch is pending", () => {
     const me = startSession();
     expect(pending.recordCompactionOutcome(turn(me, "/compact Self-compaction requested by this session mid-task.", Date.now()), { ok: false, reason: "error" })).toBe(false);
+  });
+});
+
+describe("stopping an interrupted session", () => {
+  it("keeps the pending switch withdrawn even when the stop rewrites the row's restart mark from the row it was handed", async () => {
+    const me = startSession();
+    await schedule(me, { profile: "alpha" });
+    const { RESTART_RESUME_META_KEY } = registry;
+    registry.updateSession(me, { status: "interrupted", transportMeta: { ...registry.getSession(me)!.transportMeta, [RESTART_RESUME_META_KEY]: new Date().toISOString() } as never });
+    const { stopSession } = await import("../../gateway/session-stop.js");
+    const handed = registry.getSession(me)!;
+    expect(pending.readPendingSwitch(handed)).toBeDefined();
+    stopSession(runContext, handed, "interrupted");
+    expect(pending.readPendingSwitch(registry.getSession(me))).toBeUndefined();
+  });
+});
+
+describe("a stop on an already stopped session", () => {
+  it("still reports that it changed something when it withdrew a switch", async () => {
+    const me = startSession();
+    registry.updateSession(me, { status: "idle" });
+    const { stopSession } = await import("../../gateway/session-stop.js");
+    const stopped = await import("../stopped-marker.js");
+    stopped.markSessionStopped(me);
+    const stored = { claimedAt: 1, from: {}, to: {}, conversation: "new" as const, compactionQueued: true, handoff: HANDOFF };
+    pending.writePendingSwitch(me, stored as never);
+    expect(stopSession(runContext, registry.getSession(me)!, "idle").changed).toBe(true);
+    expect(pending.readPendingSwitch(registry.getSession(me))).toBeUndefined();
+    expect(stopSession(runContext, registry.getSession(me)!, "idle").changed).toBe(false);
   });
 });
 
