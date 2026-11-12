@@ -109,6 +109,11 @@ describe("noteTurnServed", () => {
 
   describe("an opencode provider's dead key and a model it refused", () => {
     const GO = "opencode-go/kimi-k2";
+    // A dead key's credential is read from opencode's own database; never the machine's real one.
+    beforeEach(() => {
+      vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "xdg-data"));
+      return () => vi.unstubAllEnvs();
+    });
     /** A dead key on the provider and a refused model, both seen on this machine `minutes` ago. */
     function refusedMinutesAgo(minutes: number): void {
       const now = new Date(Date.now() - minutes * MIN);

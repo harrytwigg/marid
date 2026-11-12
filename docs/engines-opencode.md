@@ -172,7 +172,7 @@ A provider call that fails is read from opencode's own error, `{type, message, s
 | `provider.quota`, HTTP 402 (`Insufficient account funds`, `Insufficient balance. Top up…`) | `quota` | the provider (`opencode/<provider>`) | the re-probe interval |
 | HTTP 429 `usage limit exceeded` | `quota` | the provider | the reset it states, else the re-probe interval |
 | `provider.auth`, HTTP 401 (`This API key has expired`) | `auth` | the provider, as signed out | the credential changes (see below) |
-| `provider.auth`, HTTP 403 (`Model access is disabled`, a region opt-in refusal; a 403 whose message names the key, such as `Invalid API key`, reads as a 401) | `model-access` | that one model (`opencode/<provider>/<model>`) | the re-probe interval |
+| `provider.auth`, HTTP 403 (`Model access is disabled`, a region opt-in refusal, or a bare `Forbidden`; a 403 whose message names the key, such as `Invalid API key`, reads as a 401) | `model-access` | that one model (`opencode/<provider>/<model>`) | the re-probe interval |
 
 Every class also hops the turn along the session's fallback chain. A dead key and an unavailable model never park a session to wait, since no clock fixes them: with no link left the turn fails with the provider's own words, as a spent balance does.
 
@@ -185,7 +185,9 @@ engines:
     reprobeMinutes: 60                     # default; how long a spent provider or an unavailable model is held out
 ```
 
-A signed-out provider is held until its stored credential is replaced, not for a time, or until a turn the provider serves shows the key works again. The gateway notes an opaque identity of the credential (never the key) with the record and compares it on every read; a changed or unreadable credential ends the hold. Where the credential cannot be read (a turn on a remote host, or no stored credential found) the hold lasts 24 hours, so a wrong verdict heals by itself. A hold from a turn that ran on a remote host is about that host and is read by its sessions only. `jinn limits --clear opencode/<provider>` ends any hold at once, and `jinn doctor` lists a signed-out provider as an action to take.
+A signed-out provider is held until its stored credential is replaced, not for a time, or until a turn the provider serves shows the key works again. The gateway notes an opaque identity of the credential (never the key) with the record and compares it on every read; a changed or unreadable credential ends the hold. Where the credential cannot be read (a turn on a remote host, or no stored credential found) the hold lasts 24 hours, so a wrong verdict heals by itself. A bare `Forbidden` does not say whether the key or the model is refused, so it is held against the model: if the key is in fact dead, each of the provider's models is held in turn, each for the re-probe interval, rather than the whole provider being held until the key changes.
+
+Every hold is about the machine whose turn hit it. A hold from a turn that ran on a remote host is read by that host's sessions only, lasts its full time (24 hours for a dead key) even if that host signs in again sooner, and never displaces a hold this machine recorded. A turn served on a remote host used that host's key, so it ends none of this machine's dead-key or unavailable-model holds; only a turn served here, a changed credential or the operator does. `jinn limits --clear opencode/<provider>` (or `opencode/<provider>/<model>`) ends any hold at once, and `jinn doctor` lists a signed-out provider as an action to take.
 
 ---
 

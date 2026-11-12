@@ -1,12 +1,22 @@
-import { describe, expect, it, vi } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Employee, Engine } from "../../shared/types.js";
-import { answer, config, failed, handleRateLimit, hopsOf, key, limitedTurn, newSession, overrideOf, readEngineHealth, scripted, useWalkHarness } from "./fallback-walk-harness.js";
+import { answer, config, failed, handleRateLimit, hopsOf, key, limitedTurn, newSession, overrideOf, readEngineHealth, scripted, tmp, useWalkHarness } from "./fallback-walk-harness.js";
 import { recordOpencodeFailure } from "../../shared/engine-health-opencode.js";
 import { isLinkExhausted } from "../../shared/fallback-chain-health.js";
 
 /** An opencode provider that cannot serve the turn is told apart by what it said (docs/engines-opencode.md): a spent allowance holds the provider out, a dead key holds it out as signed out, a model the account cannot use holds that model alone. */
 
 useWalkHarness();
+
+// A dead key's credential is read from opencode's own database; these turns must never read the machine's real one.
+beforeEach(() => {
+  const data = path.join(tmp, "xdg-data");
+  fs.mkdirSync(data, { recursive: true });
+  vi.stubEnv("XDG_DATA_HOME", data);
+  return () => vi.unstubAllEnvs();
+});
 
 const GO = { engine: "opencode", model: "opencode-go/x" };
 const GO_B = { engine: "opencode", model: "opencode-go-b/x" };
