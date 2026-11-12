@@ -31,6 +31,11 @@ function newestSample(account: string): UsageSample | undefined {
   return sample;
 }
 
+/** The newest usage reading recorded for one Claude account, or undefined when none has been read. */
+export function latestAccountReading(account: string): UsageSample | undefined {
+  return newestSample(account);
+}
+
 export function latestLimitReadings(config: JinnConfig, extraAccounts: Iterable<string> = []): FallbackLimitReadings {
   const accounts = new Set([DEFAULT_CLAUDE_ACCOUNT, ...declaredClaudeAccounts(config).map((account) => account.key), ...declaredRemoteClaudeAccounts(config).map((account) => account.key), ...extraAccounts]);
   const readings: FallbackLimitReadings = {};

@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const getSessionMock = vi.fn<(...args: unknown[]) => Session | undefined>();
 const updateSessionForAttemptMock = vi.fn(
-  (_id: string, _token: string, updates: Partial<Session>) => makeSession(updates),
+  (_id: string, _token: string, updates: Partial<Session>, _expected?: readonly string[]) => makeSession(updates),
 );
 vi.mock("../registry.js", () => ({
   getSession: (...a: unknown[]) => getSessionMock(...a),
