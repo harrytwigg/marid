@@ -1,6 +1,6 @@
 # Research: Engine and Profile Switching for a Chat
 
-`G/` = `packages/jinn/src/`, `W/` = `packages/web/src/`. Lines as of `origin/main` `468a6749`;
+`G/` = `packages/jinn/src/`, `W/` = `packages/web/src/`. Lines as of `origin/main` `f5334300`;
 plan.md's table is the full index.
 
 ## R1. Knowing whether a native compaction worked
@@ -114,7 +114,7 @@ tool count unchanged), `tool-manifest-expectations.ts` and `session-tools.test.t
 ## R10. Web
 
 `W/components/chat/model-selector-row.tsx:230` gates profiles on new chats;
-`W/components/chat/chat-pane.tsx:612`/`:614` pass `allowProfiles={!sessionId}` and the
+`W/components/chat/chat-pane.tsx:613`/`:615` pass `allowProfiles={!sessionId}` and the
 new-chat employee's remote flag; `W/lib/api.ts:669` has no `profile`. `EnginePanel` already
 renders profile rows when given them. The session refetch on `session:updated` keeps the
 chip in step (FR-041).

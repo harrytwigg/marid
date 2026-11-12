@@ -155,14 +155,14 @@ and model it may move to, and nothing is scheduled.
 refusal costs no manifest tokens; a separate read tool would tax every session and shrinks
 no prompt.
 
-**Independent Test**: call `compact_session` with `engine: "?"` from a session and compare
-the refusal's list with the engines the instance has installed, its declared profiles and
+**Independent Test**: call `compact_session` with `engine: "?"` and any handoff from a
+session and compare the refusal's list with the engines the instance has installed, its declared profiles and
 each engine's models.
 
 **Acceptance Scenarios**:
 
 1. **Given** an unscoped local session, **When** it names an unknown target, **Then** it sees its
-   current target, each installed engine with its models (and their effort levels), and each
+   current target, each installed engine with its models, and each
    declared local Claude profile with whether its allowance is spent and when it resets.
 2. **Given** a department-scoped session, **When** it names an unknown target, **Then** it sees Claude
    only, with every declared local profile.
@@ -255,8 +255,9 @@ target now in use, and the selector agrees with it.
 - **FR-003**: In an existing chat the operator MUST be able to change the profile, as well as
   the engine, model and effort (the latter three exist today). "Own login" is a choice.
 - **FR-004**: A profile or engine change in an existing chat applies from the next turn and is
-  refused while a turn is running, waiting or queued, with the same message an engine change
-  gets today.
+  refused while a turn is running, waiting or queued, with today's engine-change message
+  widened to name both ("Cannot switch engine or profile while a turn is running, waiting, or
+  queued").
 - **FR-005**: The operator's profile change MUST obey the rules that govern starting a
   session on a profile: refused for a remote employee's session; allowed for the operator on
   a department-scoped employee's session.
@@ -291,8 +292,8 @@ target now in use, and the selector agrees with it.
   carries the target list (FR-030).
 - **FR-013**: On success the tool answers "scheduled" and tells the caller to end its turn,
   as `compact_session` does. Nothing changes while the asking turn runs.
-- **FR-014**: After the asking turn ends, a switch that keeps engine and account (a model or
-  effort change only) runs the engine's native compaction and then the resume turn on the
+- **FR-014**: After the asking turn ends, a switch that keeps engine and account (a model
+  change only) runs the engine's native compaction and then the resume turn on the
   new model, in the same conversation. Where the engine has no native compaction Jinn can
   drive, it starts a new conversation from the handoff instead.
 - **FR-015**: After the asking turn ends, a switch to another engine or profile first runs the
@@ -335,15 +336,18 @@ target now in use, and the selector agrees with it.
 
 **Target list (on refusal)**
 
-- **FR-030**: Every target refusal (FR-012) MUST carry, for the calling session: its own
+- **FR-030**: Every target refusal (FR-012) MUST carry, in the refusal message the session
+  actually sees (not only in fields a tool wrapper may drop), for the calling session: its own
   current target; each engine it may switch to with its models (id, label, context window
   where known) and default model; and each Claude profile it may switch to, with whether its
-  allowance is spent and when it resets, where known.
+  allowance is spent and when it resets, where known. The message is bounded (1,800
+  characters); an engine's model list that does not fit ends "+N more", and a call naming
+  that engine with `model: "?"` lists only that engine's models, within the same bound.
 - **FR-031**: The list MUST show exactly what FR-020/FR-021 allow for this caller. A caller
   that may not use profiles (a remote employee's session) is not told which exist.
-- **FR-032**: A target refusal takes no cooldown claim and is checked before the handoff, so
-  a session can ask for the list (e.g. `engine: "?"`) without a handoff and as often as it
-  needs.
+- **FR-032**: A target refusal takes no cooldown claim and is checked before the handoff is
+  validated, so a session can ask for the list (e.g. `engine: "?"`) with any handoff (the
+  tool still requires `goal`, `done` and `next` to be present) and as often as it needs.
 
 **Visibility**
 

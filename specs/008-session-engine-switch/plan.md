@@ -5,7 +5,7 @@
 
 ## What already exists (Principle VII)
 
-Lines verified against `origin/main` at `468a6749`. `G/` = `packages/jinn/src/`,
+Lines verified against `origin/main` at `f5334300`. `G/` = `packages/jinn/src/`,
 `W/` = `packages/web/src/`.
 
 | `path:line` | What it is | Used / rejected |
@@ -60,7 +60,7 @@ Lines verified against `origin/main` at `468a6749`. `G/` = `packages/jinn/src/`,
 | `G/mcp/__tests__/tool-manifest-budget.test.ts:11`, `:303` | `MAX_MANIFEST_TOKENS = 4371`; Pi attested at 4371 | see Constitution Check IV |
 | `G/mcp/__tests__/context-diet.test.ts:9` | "a read tool that shrinks no prompt does not ship" | why there is no list tool |
 | `W/components/chat/model-selector-row.tsx:230` | `profilesEnabled` only in `new` mode | lifted |
-| `W/components/chat/chat-pane.tsx:612`, `:614` | `allowProfiles={!sessionId}`, `employeeRemote={selectedEmployeeRemote}` (new-chat employee) | both changed for existing chats |
+| `W/components/chat/chat-pane.tsx:613`, `:615` | `allowProfiles={!sessionId}`, `employeeRemote={selectedEmployeeRemote}` (new-chat employee) | both changed for existing chats |
 | `W/lib/api.ts:669` | `updateSession` body type | gains `profile` |
 | `packages/jinn/template/CLAUDE.md:72` | "Long sessions: self-compaction" teaching | gains the switch |
 | `docs/session-fallback-mode.md:71` | "Starting on a chosen profile" (creation-only) | updated |

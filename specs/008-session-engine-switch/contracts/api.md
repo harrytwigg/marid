@@ -59,7 +59,19 @@ switch → `/compact` turn (when the engine compacts natively) → stopgap suppr
 | `/compact` turn not queued | 502 / 409 stopped | unchanged; claim released, `pendingSwitch` removed |
 | resume not recorded | 500 | `{error: "the compaction is queued and will run, but the resume could not be recorded, so no switch was scheduled (…). End your turn with the handoff written out in your reply."}`; claim kept, `pendingSwitch` removed |
 
-`targets` (every target refusal):
+Every target refusal's `error` ends with the list rendered as text, because the MCP wrapper
+passes `error` through and drops other keys. Bound: the whole `error` ≤ 1,800 characters; an
+engine whose models do not fit ends "+N more (call with engine "<name>", model "?" for its
+list)"; a call with a named engine and `model: "?"` renders only that engine, same bound.
+Example:
+
+```text
+unknown engine "?" — call again with one of these. Now: claude · own login · opus.
+claude: profiles "" (own login), work (exhausted until 2026-11-12T15:00Z); models opus, sonnet, haiku.
+opencode: models provider/a, provider/b, … +40 more (call with engine "opencode", model "?" for its list).
+```
+
+The structured `targets` (for HTTP callers and tests):
 
 ```json
 {
