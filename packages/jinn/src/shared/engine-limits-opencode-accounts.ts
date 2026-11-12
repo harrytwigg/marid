@@ -32,7 +32,7 @@ export interface OpencodeAccountLimitSnapshot extends EngineLimitAccountSnapshot
 export interface OpencodeAccountsDeps {
   /** The roster; default: the one the gateway registered at boot. */
   employees?: Iterable<Employee>;
-  /** The gateway's environment, for `keySet`; default: `process.env`. */
+  /** The gateway's environment, for `keySet`; default: the one the gateway holds its account keys in (child-env.ts). */
   env?: Record<string, string | undefined>;
   health?: EngineHealthReading;
   now?: Date;

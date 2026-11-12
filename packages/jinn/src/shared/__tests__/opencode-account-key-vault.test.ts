@@ -32,9 +32,9 @@ describe("account key vault", () => {
     process.env[KEY] = "sk-vault-a";
     setOpencodeAccountKeyEnv([KEY]);
     const probe = `process.stdout.write(process.env.${KEY} ?? "<unset>")`;
-    const bare = spawnSync(process.execPath, ["-e", probe], { env: process.env, encoding: "utf8" });
+    const bare = spawnSync(process.execPath, ["-e", probe], { env: process.env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     expect(bare.stdout).toBe("<unset>");
-    const inherited = spawnSync(process.execPath, ["-e", probe], { encoding: "utf8" });
+    const inherited = spawnSync(process.execPath, ["-e", probe], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     expect(inherited.stdout).toBe("<unset>");
     expect(buildEngineChildEnv(process.env)[KEY]).toBeUndefined();
   });
