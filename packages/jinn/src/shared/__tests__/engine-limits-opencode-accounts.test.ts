@@ -107,7 +107,7 @@ describe("collectOpencodeAccounts", () => {
     expect(a).toMatchObject({ provider: "opencode-go", label: "go-a", location: { kind: "local" }, buckets: [] });
     expect(a).not.toHaveProperty("keyEnv");
     expect(b).toMatchObject({ provider: "opencode-go-b", base: "opencode-go", keyEnv: "GO_B_KEY", keySet: true, label: "Go (second)" });
-    expect(c).toMatchObject({ keyEnv: "GO_C_KEY", keySet: false, problems: ["GO_C_KEY is not set in the gateway's environment"] });
+    expect(c).toMatchObject({ keyEnv: "GO_C_KEY", keySet: false, problems: ['account "go-c" has no key: GO_C_KEY is not set'] });
     // The value of the key is never in the response.
     expect(JSON.stringify(out)).not.toContain("sentinel-secret-value");
   });
@@ -149,17 +149,36 @@ describe("collectOpencodeAccounts", () => {
     expect(byName.get("go-a")).not.toHaveProperty("nextTryAt");
   });
 
-  it("reads the engine-wide record as holding every account, its own key first", () => {
+  it("reads the engine-wide record as holding every account, and the binding one (the later reopening) of it and the account's own key as the account's hold", () => {
     const config = cfg({ accounts: ACCOUNTS });
-    const until = new Date(NOW + 5 * HOUR).toISOString();
-    const own = new Date(NOW + 2 * HOUR).toISOString();
+    const wide = new Date(NOW + 5 * HOUR).toISOString();
+    const earlier = new Date(NOW + 2 * HOUR).toISOString();
+    const later = new Date(NOW + 9 * HOUR).toISOString();
     const out = collectOpencodeAccounts(config, engine(config, []), {
       employees, env: {}, now: new Date(NOW),
-      health: { opencode: { state: "exhausted", until }, "opencode/opencode-go-b": { state: "exhausted", until: own } },
+      health: { opencode: { state: "exhausted", until: wide }, "opencode/opencode-go-b": { state: "exhausted", until: earlier }, "opencode/opencode-go-c": { state: "exhausted", until: later } },
     })!;
     const byName = new Map(out.map((account) => [account.account, account]));
-    expect(byName.get("go-a")).toMatchObject({ exhausted: { until }, nextTryAt: until });
-    expect(byName.get("go-b")).toMatchObject({ exhausted: { until: own }, nextTryAt: own });
+    expect(byName.get("go-a")).toMatchObject({ exhausted: { until: wide }, nextTryAt: wide });
+    // The engine is out until `wide`, whatever the account's own earlier record says.
+    expect(byName.get("go-b")).toMatchObject({ exhausted: { until: wide }, nextTryAt: wide });
+    expect(byName.get("go-c")).toMatchObject({ exhausted: { until: later }, nextTryAt: later });
+  });
+
+  it("takes nextTryAt from the binding record, not from whichever key was read first", () => {
+    const config = cfg({ accounts: ACCOUNTS });
+    const ownUntil = new Date(NOW + 3 * HOUR).toISOString();
+    const ownRecheck = new Date(NOW + 1 * HOUR).toISOString();
+    const wideUntil = new Date(NOW + 8 * HOUR).toISOString();
+    const wideRecheck = new Date(NOW + 6 * HOUR).toISOString();
+    const out = collectOpencodeAccounts(config, engine(config, []), {
+      employees, env: {}, now: new Date(NOW),
+      health: {
+        "opencode/opencode-go-b": { state: "exhausted", until: ownUntil, recheckAt: ownRecheck },
+        opencode: { state: "exhausted", until: wideUntil, recheckAt: wideRecheck },
+      },
+    })!;
+    expect(out.find((account) => account.account === "go-b")).toMatchObject({ exhausted: { until: wideUntil }, nextTryAt: wideRecheck });
   });
 
   it("does not read a degraded or lapsed record as exhausted", () => {

@@ -81,7 +81,7 @@ describe("opencode accounts: meter, health, limits response and reroute", () => 
     expect(b!.buckets[0]!.windows![0]!.usedPercent).toBeGreaterThanOrEqual(100);
     expect(b!.exhausted?.until).toBeDefined();
     expect(b!.nextTryAt).toBeDefined();
-    expect(c).toMatchObject({ keySet: false, problems: ["OC_ACCOUNTS_E2E_KEY_C is not set in the gateway's environment"] });
+    expect(c).toMatchObject({ keySet: false, problems: ['account "go-c" has no key: OC_ACCOUNTS_E2E_KEY_C is not set'] });
     expect(c!.exhausted).toBeUndefined();
     expect(a!.exhausted).toBeUndefined();
     expect(JSON.stringify(out)).not.toContain("sentinel-key-value-b");

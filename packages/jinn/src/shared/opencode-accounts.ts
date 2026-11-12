@@ -228,12 +228,18 @@ function droppedProblems(account: OpencodeAccount, inputs: AccountProblemInputs)
  * known (`catalogue` null) rather than blaming every account for it.
  */
 export function opencodeAccountProblems(config: AccountsConfig, inputs: AccountProblemInputs): string[] {
-  return stagedOpencodeAccounts(config).flatMap((account) => [
+  return stagedOpencodeAccounts(config).flatMap((account) => oneAccountProblems(account, inputs));
+}
+
+/** {@link opencodeAccountProblems} for one account: what `jinn doctor` and `GET /api/engine-limits` say of it. */
+export function oneAccountProblems(account: OpencodeAccount, inputs: AccountProblemInputs): string[] {
+  if (account.base === undefined) return [];
+  return [
     ...(inputs.catalogue === null || inputs.catalogue.length === 0 ? [] : catalogueProblems(account, inputs.catalogue)),
     ...(inputs.catalogue !== null && accountUnstaged(account, inputs.catalogue, inputs.clones) ? [unstagedProblem(account)] : []),
     ...(keyEnvIsSet(inputs.env, account.keyEnv) ? [] : [`account "${account.name}" has no key: ${account.keyEnv} is not set`]),
     ...(inputs.catalogue === null || inputs.catalogue.length === 0 ? [] : droppedProblems(account, inputs)),
-  ]);
+  ];
 }
 
 /**

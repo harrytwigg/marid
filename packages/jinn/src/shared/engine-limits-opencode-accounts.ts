@@ -2,8 +2,11 @@ import type { Employee, EngineLimitBucket, EngineLimitEngineSnapshot, JinnConfig
 import { isEngineExhausted, readEngineHealth, type EngineHealth, type EngineHealthReading } from "./engine-health.js";
 import { rosterEmployees, type EngineLimitAccountSnapshot } from "./engine-limits-accounts.js";
 import { providerHealthKey } from "./engine-health-meter.js";
+import { bindingHealthRecord } from "./engine-health-keys.js";
 import { declaredOpencodeAccounts, type OpencodeAccount } from "./opencode-accounts-config.js";
 import { opencodeAccountKeyEnvironment } from "./child-env.js";
+import { opencodeCatalogue, opencodeClones, opencodeLocalApi } from "./opencode-catalogue.js";
+import { oneAccountProblems } from "./opencode-accounts.js";
 
 /**
  * `accounts.opencode` on the limits response: one entry per declared opencode
@@ -54,22 +57,24 @@ function employeesOn(provider: string, config: JinnConfig, employees: readonly E
 }
 
 /**
- * What this layer can tell is wrong with an account: a key variable the gateway's environment lacks. The checks
- * that need opencode's catalogue (base missing, an unknown subset model, a provider collision) belong to chain
- * problems and `jinn doctor`, which know whether the catalogue was discovered at all: the registry this layer
- * sees may only hold the configured default.
+ * What is wrong with an account, in `jinn doctor`'s words (opencodeAccountProblems): a base missing from the
+ * catalogue, a provider id that collides with one in it, an unknown subset model, a base whose endpoints are not
+ * staged yet, a model a 1.x local binary leaves out, a key variable the gateway lacks. The checks that need the
+ * catalogue wait for it (a gateway whose discovery has not landed blames no account for that).
  */
 function problemsOf(account: OpencodeAccount, env: Record<string, string | undefined>): string[] {
-  return account.base !== undefined && account.keyEnv !== undefined && !env[account.keyEnv]
-    ? [`${account.keyEnv} is not set in the gateway's environment`] : [];
+  return oneAccountProblems(account, {
+    catalogue: opencodeCatalogue(),
+    clones: opencodeClones(),
+    env,
+    ...(opencodeLocalApi() ? { localApi: opencodeLocalApi()! } : {}),
+  });
 }
 
-/** The record holding the provider out right now: its own key first, then the engine-wide one. */
+/** The record holding the provider out right now: of its own key's and the engine-wide one's, the one that binds (the later reopening), so `until` and `nextTryAt` say when the account is next tried. */
 function holdingRecord(health: EngineHealthReading, provider: string, now: Date): EngineHealth | undefined {
-  for (const key of [providerHealthKey(provider), "opencode"]) {
-    if (isEngineExhausted(health, key, now)) return health[key];
-  }
-  return undefined;
+  const holding = [providerHealthKey(provider), "opencode"].filter((key) => isEngineExhausted(health, key, now)).map((key) => health[key]!);
+  return bindingHealthRecord(holding);
 }
 
 interface Resolved {
