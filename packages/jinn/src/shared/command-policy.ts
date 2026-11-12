@@ -38,11 +38,18 @@ const DESTRUCTIVE: Array<{ re: RegExp; reason: string }> = [
 /** Both codenames, as a regex alternation: a home an older build created, or a symlink left at its old path, is as secret as the current one. */
 const CODENAME_ALTERNATION = nameAliases((n) => n.codename).join("|");
 /**
- * A dotenv file is a path component that IS `.env` (or `.env.<suffix>`, `.envrc`):
- * not preceded by a word character, so `process.env` and `sim.env` are not
- * files, and not followed by one, so `os.environ` is not either.
+ * A dotenv file is a path component that IS `.env` (or `.env.<suffix>`, `.envrc`,
+ * `.env_prod`, `.env2`): not preceded by a word character, so `process.env` and
+ * `sim.env` are not files, and not followed by a letter, so `os.environ` is not
+ * either (digits, `_` and `-` after it still count as a dotenv name).
+ *
+ * Known limits, accepted: `<name>.env` (`prod.env`, `secrets.env`) is no longer
+ * a secret path, because it cannot be told apart from `sim.env`; `$VAR.env`
+ * slips past the lookbehind; and `f().env.X` or `a[0].env.X` is still refused.
+ * Like the rest of this layer it reads text, not shell semantics, and is
+ * trivially evaded (`.e""nv`).
  */
-const DOTENV_FILE = "(?<!\\w)\\.env(?:rc|\\.[\\w.-]+)?(?!\\w)";
+const DOTENV_FILE = "(?<!\\w)\\.env(?:rc|\\.[\\w.-]+)?(?![a-z])";
 const SECRET_PATH = new RegExp(
   `(?:~/\\.ssh|\\$HOME/\\.ssh|\\.ssh/id_[a-z0-9]+|~/\\.(?:${CODENAME_ALTERNATION})/secrets|\\$HOME/\\.(?:${CODENAME_ALTERNATION})/secrets|${DOTENV_FILE}|auth\\.json)`,
   "i",
