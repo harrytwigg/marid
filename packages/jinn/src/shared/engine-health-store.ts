@@ -13,6 +13,9 @@ import { JINN_HOME } from "./paths.js";
  * because a sweeper did not run.
  */
 
+/** The reason every record the opencode usage meter wrote carries, and what tells one from a provider's refusal (see engine-health-meter.ts). */
+export const METERED_WINDOW_REASON = "quota window spent";
+
 export type EngineHealthState = "ok" | "exhausted" | "degraded";
 
 export interface EngineHealth {

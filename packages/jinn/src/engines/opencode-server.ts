@@ -812,7 +812,8 @@ export class OpencodeServerPool {
 
     const serverPort = await probeFreePort(staging.destination, facts);
     const localPort = await freeLocalPort();
-    const processOptions = this.processOptions();
+    // With the accounts: the remote serve lists the key variables its MCP children drop, and the ssh client holds none of them.
+    const processOptions = { ...this.processOptions(), ...this.scrubOpts(sessionId, spec) };
     const args = remoteServeSshArgs({ sessionId, spec, staging, facts, bin, gatewayPort, serverPort, localPort, pidFile: handle.pidFile, processOptions });
     logger.info(
       `opencode server starting REMOTE for session ${sessionId} on ${staging.destination}:${spec.remoteCwd} `
@@ -821,7 +822,7 @@ export class OpencodeServerPool {
     );
     const proc = spawn(resolveBin("ssh"), args, {
       cwd: JINN_HOME,
-      env: cleanEnv(sessionId, { ...processOptions, ...this.scrubOpts(sessionId, spec) }),
+      env: cleanEnv(sessionId, processOptions),
       stdio: ["pipe", "pipe", "pipe"],
       detached: process.platform !== "win32",
     });

@@ -34,7 +34,7 @@ import { OpencodeEngine } from "../opencode.js";
 import { OpencodeServerPool, serverFingerprint, type OpencodeServerSpec } from "../opencode-server.js";
 import { opencodeAccountStaging, type OpencodeAccountStaging } from "../opencode-accounts.js";
 import { buildOpencodeSessionConfigFor, cleanupOpencodeSessionConfig, writeOpencodeSessionConfig } from "../opencode-mcp.js";
-import { localOpencodeLaunch } from "../opencode-launch.js";
+import { localOpencodeLaunch, opencodeProcessEnv } from "../opencode-launch.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
 import { clearOpencodeVersionCache } from "../../shared/opencode-bin-version.js";
 import { SERVER_TURN_TIMING } from "../opencode-server-turn.js";
@@ -395,5 +395,39 @@ describe("the gateway's own environment holds every account's key", () => {
     // The environment a remote turn's ssh client (and the terminal view) starts with: scrubbed, and nothing added.
     const client = cleanEnv("sess-env-client", { disableFff: true, accounts: reader(["go-a"])({}) });
     expect("GO_A_KEY" in client || "GO_B_KEY" in client).toBe(false);
+  });
+});
+
+describe("the key variables an opencode process lists for its MCP children to drop", () => {
+  const LISTED = "GO_A_KEY,GO_B_KEY";
+  beforeEach(() => {
+    process.env.FAKE_OPENCODE_STAGED_ENV = "JINN_SCRUB_ENV";
+    vi.stubEnv("GO_A_KEY", KEYS.GO_A_KEY);
+    vi.stubEnv("GO_B_KEY", KEYS.GO_B_KEY);
+  });
+  afterEach(() => vi.unstubAllEnvs());
+  const reader = (reach: string[]) => (_scope: { sessionId?: string; model?: string }) => opencodeAccountStaging(configWith(TWO), process.env, new Set(reach));
+
+  it("names every declared variable by name on a run turn, reachable or not, and no value", async () => {
+    await new OpencodeEngine({ mode: () => "run", accounts: reader(["go-a"]) }).run(runOpts({ sessionId: "sess-scrub-run" }));
+    expect(staged().at(-1)?.env).toEqual({ JINN_SCRUB_ENV: LISTED });
+    await new OpencodeEngine({ mode: () => "run", accounts: reader([]) }).run(runOpts({ sessionId: "sess-scrub-none" }));
+    expect(staged().at(-1)?.env).toEqual({ JINN_SCRUB_ENV: LISTED });
+  });
+
+  it("names them on a local server", async () => {
+    const read = reader(["go-a"]);
+    const lifecycle = new PtyLifecycleManager({ maxLivePtys: 8, enforceLocalCap: false });
+    const pool = new OpencodeServerPool(lifecycle, { bin: () => FAKE, accounts: read });
+    try {
+      await new OpencodeEngine({ mode: () => "server", servers: pool, accounts: read }).run(runOpts({ sessionId: "sess-scrub-server" }));
+      expect(staged().find((line) => line.verb === "serve")?.env).toEqual({ JINN_SCRUB_ENV: LISTED });
+    } finally {
+      await pool.stopAll();
+    }
+  });
+
+  it("is left off a process started with no accounts", () => {
+    expect(opencodeProcessEnv({ disableFff: true })).not.toHaveProperty("JINN_SCRUB_ENV");
   });
 });

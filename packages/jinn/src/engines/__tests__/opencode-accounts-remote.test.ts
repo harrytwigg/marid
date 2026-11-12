@@ -180,4 +180,20 @@ describe.skipIf(process.platform === "win32")("a remote run turn's launch plan",
     expect(JSON.stringify(plan.env)).not.toContain(SENTINEL);
     expect(plan.prompt).not.toContain(SENTINEL);
   });
+
+  it("lists every declared key variable by name for the MCP children to drop, and carries none of their values", async () => {
+    const stub = await import("../remote-stage.js");
+    vi.spyOn(stub, "ensureRemoteReady").mockResolvedValue({ ready: true, facts: { ...facts, opencodeVersion: "2.0.32" } } as never);
+    vi.spyOn(stub, "reapStaleRemoteEngine").mockResolvedValue(undefined as never);
+    const { remoteOpencodeLaunch } = await import("../opencode-launch.js");
+    const plan = await remoteOpencodeLaunch(
+      { prompt: "hi", cwd: tmp, sessionId: session(), model: "go-b/alpha", remoteHost: "box", remoteCwd: path.join(tmp, "root", "work") } as never,
+      sessionIds.at(-1)!,
+      { remote, gatewayPort: 40123, disableFff: true, accounts: twoAccounts(["go-b"]) },
+    );
+    const argv = plan.args.join("\u0000");
+    expect(argv).toContain("JINN_SCRUB_ENV='GO_A_KEY,GO_B_KEY'");
+    expect(argv).not.toContain(SENTINEL);
+    expect(argv).not.toContain(KEY_A);
+  });
 });

@@ -49,4 +49,20 @@ describe("gateway child JINN_HOME identity", () => {
       delete process.env.ACME_SUCCESSOR_KEY;
     }
   });
+
+  it("does not hand the successor the key of an account a reload removed", () => {
+    process.env.ACME_SUCCESSOR_KEY_B = "sk-b";
+    process.env.ACME_SUCCESSOR_KEY_C = "sk-c";
+    setOpencodeAccountKeyEnv(["ACME_SUCCESSOR_KEY_B", "ACME_SUCCESSOR_KEY_C"]);
+    setOpencodeAccountKeyEnv(["ACME_SUCCESSOR_KEY_B"]);
+    try {
+      const env = buildGatewayChildEnv({ gateway: { port: 7851, host: "127.0.0.1" }, engines: { default: "claude" } } as any);
+      expect(env.ACME_SUCCESSOR_KEY_B).toBe("sk-b");
+      expect(env.ACME_SUCCESSOR_KEY_C).toBeUndefined();
+    } finally {
+      resetOpencodeAccountKeysForTest();
+      delete process.env.ACME_SUCCESSOR_KEY_B;
+      delete process.env.ACME_SUCCESSOR_KEY_C;
+    }
+  });
 });

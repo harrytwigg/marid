@@ -12,6 +12,7 @@ vi.mock("../paths.js", async (importOriginal) => ({
 import { readEngineHealth } from "../engine-health.js";
 import { writeStore } from "../engine-health-store.js";
 import { METERED_WINDOW_REASON, recordMeteredExhaustion } from "../engine-health-meter.js";
+import { recordEngineServed } from "../engine-health-clear.js";
 import type { EngineLimitBucket, EngineLimitWindow } from "../types.js";
 
 const STATE_PATH = path.join(TEST_HOME, "tmp", "engine-health.json");
@@ -121,5 +122,23 @@ describe("recordMeteredExhaustion", () => {
       recordMeteredExhaustion(spent, NOW);
       expect(readEngineHealth(NOW).opencode).toMatchObject({ reason: "usage limit exceeded", until: iso(10) });
     });
+  });
+});
+
+describe("a served turn and the meter's hold", () => {
+  it("never clears the record the meter wrote, even for a turn on the model it names", () => {
+    recordMeteredExhaustion([bucket("opencode-go/flash", window("5h", 100, 3))], NOW);
+    const later = new Date(NOW.getTime() + 60_000);
+    recordEngineServed("opencode/opencode-go", later.getTime(), "opencode-go/flash", later);
+    expect(readEngineHealth(later)["opencode/opencode-go"]).toMatchObject({
+      state: "exhausted", until: iso(3), window: "5h", model: "opencode-go/flash", reason: METERED_WINDOW_REASON,
+    });
+  });
+
+  it("still clears a refusal the provider gave when a turn on its model is served", () => {
+    writeStore({ "opencode/opencode-go": { state: "exhausted", reason: "usage limit reached", until: iso(3), observedAt: NOW.toISOString(), model: "opencode-go/flash" } });
+    const later = new Date(NOW.getTime() + 60_000);
+    recordEngineServed("opencode/opencode-go", later.getTime(), "opencode-go/flash", later);
+    expect(readEngineHealth(later)["opencode/opencode-go"]?.state).toBe("ok");
   });
 });

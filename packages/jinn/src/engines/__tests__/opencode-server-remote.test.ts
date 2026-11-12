@@ -280,6 +280,17 @@ describe("opencode accounts on a remote server", () => {
     expect(hoisted.spawns.length).toBeGreaterThan(0);
     for (const spawn of hoisted.spawns) expect(JSON.stringify(spawn), spawn.kind).not.toContain(SENTINEL);
   });
+
+  it("lists the key variables for the server's MCP children to drop, by name only", async () => {
+    const read = () => accounts;
+    const lifecycle = new PtyLifecycleManager({ maxLivePtys: 8, enforceLocalCap: false });
+    const pool = new OpencodeServerPool(lifecycle, { remote: () => REMOTE_CONFIG, gatewayPort: () => GATEWAY_PORT, accounts: read });
+    const engine = new OpencodeEngine({ remote: () => REMOTE_CONFIG, gatewayPort: () => GATEWAY_PORT, mode: () => "server", servers: pool, accounts: read });
+    await engine.run(runOpts());
+    const serverCmd = hoisted.spawns.find((s) => s.kind === "server")!.args.at(-1)!;
+    expect(serverCmd).toContain("JINN_SCRUB_ENV='GO_B_KEY'");
+    expect(serverCmd).not.toContain(SENTINEL);
+  });
 });
 
 describe("opencode server mode on a remote host", () => {

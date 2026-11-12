@@ -1,4 +1,4 @@
-import { isSpent, readStore, type EngineHealth } from "./engine-health-store.js";
+import { isSpent, METERED_WINDOW_REASON, readStore, type EngineHealth } from "./engine-health-store.js";
 import { recordEngineUnavailable } from "./engine-health.js";
 import type { EngineLimitBucket, EngineLimitWindow } from "./types.js";
 
@@ -16,8 +16,7 @@ import type { EngineLimitBucket, EngineLimitWindow } from "./types.js";
  * itself answered with outranks it (see {@link holdsAgainstMeter}).
  */
 
-/** The reason every meter-written record carries, and what tells one from a provider refusal. */
-export const METERED_WINDOW_REASON = "quota window spent";
+export { METERED_WINDOW_REASON };
 
 /** The key a provider's meter-written record lives under. */
 export function providerHealthKey(provider: string): string {
