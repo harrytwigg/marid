@@ -59,7 +59,22 @@ describe("the pointer prompt", () => {
     const prompt = historyPointerPrompt(pointerSession({}, {}), "go");
 
     expect(prompt).toContain("read_session");
-    expect(prompt).not.toMatch(/transcript at/);
+    expect(prompt).not.toMatch(/ at \/profiles/);
+  });
+
+  it("says a new conversation starts without the history", () => {
+    const prompt = historyPointerPrompt(pointerSession(), "go");
+
+    expect(prompt).toMatch(/starts without the earlier history/);
+    expect(prompt).not.toMatch(/away since/);
+  });
+
+  it("says a parked conversation it returns to has the history up to when it was left, and names the time", () => {
+    const prompt = historyPointerPrompt(pointerSession({ engineSessionId: "parked-thread" }), "go");
+
+    expect(prompt).toContain(`switched back to this conversation, which has been away since ${SINCE}`);
+    expect(prompt).toContain("read_session");
+    expect(prompt).not.toMatch(/starts without the earlier history/);
   });
 
   it("gives a department-scoped session read_session only, never a file path", () => {
@@ -69,7 +84,6 @@ describe("the pointer prompt", () => {
 
     expect(prompt).toContain("read_session");
     expect(prompt).not.toContain(TRANSCRIPT);
-    expect(prompt).not.toMatch(/transcript at/);
   });
 
   it("omits the current-message block for an empty prompt", () => {

@@ -190,6 +190,21 @@ describe("the history pointer marker", () => {
     expect(typeof metaOf(s.id).engineSyncSince).toBe("string");
   });
 
+  it("tells a return to the parked conversation when it was left, and a first visit that it starts fresh", () => {
+    const s = claudeSession("web:return");
+    reg.switchSessionTarget(s.id, { engine: "claude", claudeConfigDir: WORK, model: "opus" });
+    const first = resolveSyncPrompt(reg.getSession(s.id)!, "claude", "on work").promptToRun;
+    expect(first).toMatch(/starts without the earlier history/);
+
+    const back = reg.switchSessionTarget(s.id, { engine: "claude", claudeConfigDir: null })!;
+    const since = (back.transportMeta as Record<string, unknown>).engineSyncSince as string;
+    const prompt = resolveSyncPrompt(back, "claude", "home again").promptToRun;
+
+    expect(back.engineSessionId).toBe("own-thread");
+    expect(prompt).toContain(`which has been away since ${since}`);
+    expect(prompt).not.toMatch(/starts without the earlier history/);
+  });
+
   it("is not set when the switch carries its own prompt (sync: none)", () => {
     const s = claudeSession("web:sync-none");
 

@@ -424,6 +424,7 @@ describe("the turn after a switch", () => {
     expect(back.claudeProfile ?? null).toBeNull();
     expect(back.resumeSessionId).toBe("claude-native-1");
     expect(back.prompt).toContain("read_session");
+    expect(back.prompt).toMatch(/switched back to this conversation, which has been away since 20\d\d-/);
     expect(back.prompt).toContain("back home");
     expect(back.prompt).not.toContain("on friend");
   });

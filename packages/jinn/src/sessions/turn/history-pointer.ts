@@ -21,13 +21,28 @@ function leftTranscriptOf(session: Session): string | undefined {
   return typeof path === "string" && path.trim() ? path : undefined;
 }
 
+/** When a resumed conversation was last brought up to date: the marker a switch wrote, which a return to a parked conversation keeps. */
+function awaySince(session: Session): string | undefined {
+  const since = session.transportMeta?.engineSyncSince;
+  return typeof since === "string" && since.trim() ? since : undefined;
+}
+
+/** The opening: a new conversation has none of the history; a parked one it returns to has all but what happened while it was away. */
+function pointerIntro(session: Session): string {
+  const since = session.engineSessionId ? awaySince(session) : undefined;
+  return session.engineSessionId
+    ? "This session was switched back to this conversation"
+      + `${since ? `, which has been away since ${since}` : ""}. It has everything up to then; what happened meanwhile is not repeated here:`
+    : "This session was switched to another engine or Claude profile, so this conversation starts without the earlier history. It is not repeated here:";
+}
+
 export function historyPointerPrompt(session: Session, prompt: string): string {
   const transcript = leftTranscriptOf(session);
   const intro = [
-    "This session was switched to another engine or Claude profile, so this conversation starts without the earlier history.",
-    "It is not repeated here: before you rely on it, read it with read_session",
+    pointerIntro(session),
+    "before you rely on it, read it with read_session",
     `{sessionId: "${session.id}", last: ${POINTER_READ_LAST}} (up to ${POINTER_READ_MAX} for more)`
-      + `${transcript ? `, or open the previous conversation's own transcript at ${transcript}` : ""}.`,
+      + `${transcript ? `, or open the conversation left behind at ${transcript}` : ""}.`,
     "Then respond to the current message.",
   ].join(" ");
   return [intro, prompt.trim() ? `CURRENT MESSAGE:\n${prompt}` : ""].filter(Boolean).join("\n\n");
