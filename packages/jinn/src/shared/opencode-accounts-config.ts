@@ -21,8 +21,13 @@ const RESERVED_KEY_ENV: ReadonlySet<string> = new Set([
   // Common process variables: an account's key must never overwrite or stand in for one.
   "PATH", "HOME", "USER", "SHELL", "LANG", "TERM", "TMPDIR", "PWD", "NODE_OPTIONS", "NODE_PATH",
 ]);
-/** Prefixes of the variables the gateway or opencode itself reads: the program's own (`JINN_*`, `MARID_*`), opencode's switches (`OPENCODE_DISABLE_*`) and the loader, XDG and ssh families. */
-const RESERVED_KEY_ENV_PREFIXES = ["JINN_", "MARID_", "OPENCODE_DISABLE_", "LD_", "DYLD_", "XDG_", "SSH_"] as const;
+/** Prefixes of the variables the gateway or opencode itself reads: the program's own (`JINN_*`, `MARID_*`), every opencode variable (`OPENCODE_*`) and the loader, XDG and ssh families. */
+const RESERVED_KEY_ENV_PREFIXES = ["JINN_", "MARID_", "OPENCODE_", "LD_", "DYLD_", "XDG_", "SSH_"] as const;
+/** The standard key variables of the common providers. Other tools, and opencode's own providers, read these; a key moved out of the gateway's environment for an account would be withheld from them. */
+const PROVIDER_KEY_ENV: ReadonlySet<string> = new Set([
+  "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY",
+  "DEEPSEEK_API_KEY", "XAI_API_KEY", "MISTRAL_API_KEY", "GROQ_API_KEY",
+]);
 /** Fields that would put a secret in config.yaml. Refused, never staged. */
 const INLINE_SECRET_FIELDS = ["apiKey", "key", "token"] as const;
 
@@ -73,7 +78,15 @@ function baseIdProblems(where: string, base: unknown, provider: unknown): string
 }
 
 /** An alias (with base) needs a key variable; a built-in provider takes neither a key variable nor a model subset. */
-function baseProblems(where: string, raw: Record<string, unknown>): string[] {
+/** Why `keyEnv` cannot name an account's key variable, or undefined when it can. */
+function reservedKeyEnvReason(keyEnv: string, references: ReadonlySet<string>): string | undefined {
+  if (RESERVED_KEY_ENV.has(keyEnv) || RESERVED_KEY_ENV_PREFIXES.some((prefix) => keyEnv.startsWith(prefix))) return "is set by the gateway, opencode or the system for every process";
+  if (PROVIDER_KEY_ENV.has(keyEnv)) return "is a provider's standard key variable, read by other tools";
+  if (references.has(keyEnv)) return "is expanded elsewhere in config.yaml (${VAR})";
+  return undefined;
+}
+
+function baseProblems(where: string, raw: Record<string, unknown>, references: ReadonlySet<string>): string[] {
   const { provider, base, keyEnv, models } = raw;
   if (base === undefined) {
     return [
@@ -84,14 +97,15 @@ function baseProblems(where: string, raw: Record<string, unknown>): string[] {
   const problems = baseIdProblems(where, base, provider);
   if (typeof keyEnv !== "string" || !OPENCODE_KEY_ENV_RE.test(keyEnv)) {
     problems.push(`${where}.keyEnv must name the environment variable holding the account's key (${OPENCODE_KEY_ENV_RE.source})`);
-  } else if (RESERVED_KEY_ENV.has(keyEnv) || RESERVED_KEY_ENV_PREFIXES.some((prefix) => keyEnv.startsWith(prefix))) {
-    problems.push(`${where}.keyEnv: ${keyEnv} is set by the gateway or the system for every process and cannot hold an account's key`);
+  } else {
+    const reserved = reservedKeyEnvReason(keyEnv, references);
+    if (reserved) problems.push(`${where}.keyEnv: ${keyEnv} ${reserved} and cannot hold an account's key: the gateway removes an account's key variable from every other process it starts, so it would be unset for them. Give the account its own variable`);
   }
   if (models !== undefined && !isModelList(models)) problems.push(`${where}.models must be a non-empty list of the base's model ids, without the provider`);
   return problems;
 }
 
-function accountProblems(name: string, raw: unknown, providers: Map<string, string>): string[] {
+function accountProblems(name: string, raw: unknown, providers: Map<string, string>, references: ReadonlySet<string>): string[] {
   const where = `engines.opencode.accounts.${name}`;
   if (!OPENCODE_ACCOUNT_NAME_RE.test(name)) return [`${where}: an account name must match ${OPENCODE_ACCOUNT_NAME_RE.source}`];
   if (!isMapping(raw)) return [`${where} must be a mapping`];
@@ -100,16 +114,16 @@ function accountProblems(name: string, raw: unknown, providers: Map<string, stri
   const label = raw.label === undefined || (typeof raw.label === "string" && raw.label.trim() !== "") ? [] : [`${where}.label must be a non-empty string`];
   const limits = raw.usageLimits === undefined ? []
     : isMapping(raw.usageLimits) ? monthlyUsdProblems(where, raw.usageLimits.monthlyUsd) : [`${where}.usageLimits must be a mapping`];
-  return [...providerProblems(where, name, raw.provider, providers), ...inline, ...baseProblems(where, raw), ...label, ...limits];
+  return [...providerProblems(where, name, raw.provider, providers), ...inline, ...baseProblems(where, raw, references), ...label, ...limits];
 }
 
-/** Load-time problems with `engines.opencode.accounts` (empty = valid). */
-export function validateOpencodeAccounts(engines: Record<string, unknown>): string[] {
+/** Load-time problems with `engines.opencode.accounts` (empty = valid). `references` are the variables the rest of config.yaml expands from (`configEnvReferences`). */
+export function validateOpencodeAccounts(engines: Record<string, unknown>, references: ReadonlySet<string> = new Set()): string[] {
   const opencode = engines.opencode;
   if (!isMapping(opencode) || opencode.accounts === undefined) return [];
   if (!isMapping(opencode.accounts)) return ["engines.opencode.accounts must be a mapping of account names"];
   const providers = new Map<string, string>();
-  return Object.entries(opencode.accounts).flatMap(([name, raw]) => accountProblems(name, raw, providers));
+  return Object.entries(opencode.accounts).flatMap(([name, raw]) => accountProblems(name, raw, providers, references));
 }
 
 function normalise(name: string, raw: OpencodeAccountConfig): OpencodeAccount {
@@ -129,7 +143,7 @@ export function declaredOpencodeAccounts(config: { engines?: { opencode?: { acco
   const accounts = config.engines?.opencode?.accounts;
   if (!isMapping(accounts)) return [];
   return Object.entries(accounts)
-    .filter(([name, raw]) => accountProblems(name, raw, new Map()).length === 0)
+    .filter(([name, raw]) => accountProblems(name, raw, new Map(), new Set()).length === 0)
     .map(([name, raw]) => normalise(name, raw))
     .sort((a, b) => a.name.localeCompare(b.name));
 }

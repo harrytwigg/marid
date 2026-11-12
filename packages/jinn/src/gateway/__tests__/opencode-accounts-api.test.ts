@@ -13,7 +13,7 @@ import { baseConfig, call, loadApi, resetFallbackFixture, setConfig, unloadApi }
  */
 
 const SENTINEL = "sentinel-key-b-0123456789abcdef";
-const KEY_ENV = "OPENCODE_GO_B_API_KEY";
+const KEY_ENV = "GO_B_API_KEY";
 
 const catalogue: ModelInfo[] = [
   { id: "opencode-go/alpha", label: "alpha", supportsEffort: true, effortLevels: ["low", "high"], contextWindow: 200_000 },

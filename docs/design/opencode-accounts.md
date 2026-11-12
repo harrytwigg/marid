@@ -85,7 +85,7 @@ engines:
       go-b:                                  # account name: [A-Za-z0-9][A-Za-z0-9._-]*
         provider: opencode-go-b              # provider id chains name: opencode-go-b/<model>
         base: opencode-go                    # clone this provider's endpoints, SDKs, prices and limits
-        keyEnv: OPENCODE_GO_B_API_KEY        # read from the gateway's environment at launch
+        keyEnv: GO_B_API_KEY        # read from the gateway's environment at launch
         label: Go (second workspace)         # optional display name
         models: [deepseek-v4.1-flash, mimo-v2.6-pro]   # optional subset of the base's models; default all
         usageLimits:                         # optional; see Metering
@@ -149,7 +149,7 @@ same on 1.x and 2.x:
 { "provider": { "opencode-go-b": {
     "name": "Go (second workspace)",
     "npm": "@ai-sdk/openai-compatible",
-    "options": { "baseURL": "https://…/go/openai/v1", "apiKey": "{env:OPENCODE_GO_B_API_KEY}" },
+    "options": { "baseURL": "https://…/go/openai/v1", "apiKey": "{env:GO_B_API_KEY}" },
     "models": {
       "deepseek-v4.1-flash": { "name": "…", "limit": {…}, "cost": {…}, "variants": {…} },
       "qwen3.7-plus": { "…": "…", "provider": { "npm": "@ai-sdk/anthropic", "api": "https://…/go/anthropic/v1" } } } } } }

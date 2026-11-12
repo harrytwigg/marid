@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { configEnvReferences } from "../config-env-references.js";
 import { declaredOpencodeAccounts, opencodeAccountByProvider, stagedOpencodeAccounts, validateOpencodeAccounts } from "../opencode-accounts-config.js";
 
 const engines = (accounts: unknown) => ({ opencode: { accounts } });
@@ -29,6 +30,9 @@ describe("validateOpencodeAccounts", () => {
     ["a keyEnv that is an opencode switch", { a: { provider: "p", base: "q", keyEnv: "OPENCODE_DISABLE_FFF" } }, /cannot hold an account's key/],
     ...["PATH", "HOME", "USER", "SHELL", "LANG", "TERM", "TMPDIR", "PWD", "NODE_OPTIONS", "NODE_PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES", "XDG_CONFIG_HOME", "SSH_AUTH_SOCK", "SSH_ASKPASS"]
       .map((keyEnv): [string, unknown, RegExp] => [`a keyEnv naming the process variable ${keyEnv}`, { a: { provider: "p", base: "q", keyEnv } }, /cannot hold an account's key/]),
+    ["a keyEnv that is any OPENCODE_ variable", { a: { provider: "p", base: "q", keyEnv: "OPENCODE_GO_B_API_KEY" } }, /cannot hold an account's key.*removes an account's key variable from every other process/],
+    ...["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "DEEPSEEK_API_KEY", "XAI_API_KEY", "MISTRAL_API_KEY", "GROQ_API_KEY"]
+      .map((keyEnv): [string, unknown, RegExp] => [`a keyEnv naming the provider key ${keyEnv}`, { a: { provider: "p", base: "q", keyEnv } }, /standard key variable.*removes an account's key variable from every other process/]),
     ["keyEnv without base", { a: { provider: "p", keyEnv: "K" } }, /keyEnv needs base/],
     ["models without base", { a: { provider: "p", models: ["m"] } }, /models needs base/],
     ["models with a provider prefix", { a: { provider: "p", base: "q", keyEnv: "K", models: ["q/m"] } }, /models must be a non-empty list/],
@@ -75,5 +79,32 @@ describe("declaredOpencodeAccounts", () => {
 
   it("returns nothing without accounts", () => {
     expect(declaredOpencodeAccounts({})).toEqual([]);
+  });
+});
+
+describe("a keyEnv the rest of config.yaml expands", () => {
+  const accounts = { a: { provider: "p", base: "q", keyEnv: "SHARED_TOKEN" } };
+
+  it("is refused, saying the gateway removes the variable from every other process", () => {
+    const problems = validateOpencodeAccounts(engines(accounts), configEnvReferences({ gateway: { host: "${SHARED_TOKEN}" }, engines: { opencode: { accounts } } }));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatch(/expanded elsewhere in config\.yaml.*removes an account's key variable from every other process/);
+  });
+
+  it("is found under either spelling, in any string value, but not in the accounts block itself", () => {
+    const spellings = { hooks: { a: ["run $SHARED_TOKEN now"], b: { c: "x-${SHARED_TOKEN:-none}" } } };
+    expect([...configEnvReferences(spellings)].sort()).toEqual(["SHARED_TOKEN"]);
+    expect(configEnvReferences({ engines: { opencode: { accounts } } }).size).toBe(0);
+    expect(configEnvReferences({ engines: { opencode: { accounts, bin: "$OTHER_BIN" }, claude: { x: "${CLAUDE_X}" } } })).toEqual(new Set(["OTHER_BIN", "CLAUDE_X"]));
+  });
+
+  it("leaves an account whose variable nothing else uses alone", () => {
+    expect(validateOpencodeAccounts(engines(accounts), configEnvReferences({ gateway: { host: "${OTHER}" }, engines: { opencode: { accounts } } }))).toEqual([]);
+  });
+
+  it("refuses it when the whole config is loaded through its shape check", async () => {
+    const { validateConfigShape } = await import("../config.js");
+    const problems = validateConfigShape({ gateway: { port: 7799, host: "$SHARED_TOKEN" }, engines: { claude: {}, opencode: { accounts } }, sessions: {} });
+    expect(problems.join("\n")).toMatch(/keyEnv: SHARED_TOKEN is expanded elsewhere/);
   });
 });
