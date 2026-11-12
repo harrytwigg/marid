@@ -17,3 +17,17 @@ export function accountBadgeText(account: string, labels: Record<string, string>
 export function accountLabel(labels: Record<string, string>, account: string): string | undefined {
   return Object.hasOwn(labels, account) ? labels[account] : undefined
 }
+
+/** Built-in accounts (no `base`) serve their provider's own models, which the registry does not mark with `account`.
+ *  Maps such a provider id to the account's name, so those models badge as the account too. */
+export const AccountProvidersContext = createContext<Record<string, string>>({})
+
+export function useAccountProviders(): Record<string, string> {
+  return useContext(AccountProvidersContext)
+}
+
+/** The account a model is badged with: its own `account`, else the built-in account declared for its provider. */
+export function accountOfModel(model: { account?: string }, provider: string, providers: Record<string, string>): string | undefined {
+  if (model.account) return model.account
+  return provider && Object.hasOwn(providers, provider) ? providers[provider] : undefined
+}

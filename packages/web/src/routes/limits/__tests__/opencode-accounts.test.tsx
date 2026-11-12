@@ -46,7 +46,7 @@ const GO_A = account("go-a", "go-a", { provider: "opencode-go", buckets: [] })
 describe("LimitsPage — opencode accounts", () => {
   it("renders one card per account, a window row per window of each metered model, and the key state", () => {
     show([GO_A, GO_B])
-    expect(screen.getAllByTestId("engine-card")).toHaveLength(2)
+    expect(screen.getAllByTestId("engine-card")).toHaveLength(3)   // the engine's own card, then one per account
     const b = card("Go (second workspace)")
     const buckets = Array.from(b.querySelectorAll("[data-bucket]"))
     expect(buckets.map((s) => s.getAttribute("data-bucket"))).toEqual(["opencode-go-b/deepseek-v4.1-flash", "opencode-go-b/mimo-v2.6-pro"])
@@ -117,5 +117,38 @@ describe("LimitsPage — opencode accounts", () => {
     const c = card("Go b")
     expect(within(c).getByTestId("next-try").textContent).toBe("Next try now")
     expect(within(c).getByRole("heading", { level: 3 }).textContent).toBe("All models")
+  })
+
+  it("keeps the engine card first, with only the buckets no account covers", () => {
+    state = {
+      phase: "ready", refreshing: false, error: null, now, refresh: () => {},
+      data: { generatedAt: iso(0), default: "claude", accounts: { opencode: [GO_A, GO_B] }, engines: { opencode: engine("opencode", { buckets: [
+        { id: "opencode-go/*", windows: [win("30d", 43200, 1)] },
+        { id: "opencode-go-b/mimo-v2.6-pro", windows: [win("30d", 43200, 2)] },
+        { id: "openrouter/*", windows: [win("30d", 43200, 77)] },
+      ] }) } },
+    }
+    render(<LimitsPage />)
+    const cards = screen.getAllByTestId("engine-card")
+    expect(cards).toHaveLength(3)
+    const own = cards[0]
+    expect(Array.from(own.querySelectorAll("[data-bucket]")).map((n) => n.getAttribute("data-bucket"))).toEqual(["openrouter/*"])
+    expect(own.textContent).toContain("77%")
+    expect(within(own).getByRole("heading", { level: 2 }).textContent).toBe("opencode")
+  })
+
+  it("reads a card with nothing metered as Not metered", () => {
+    state = {
+      phase: "ready", refreshing: false, error: null, now, refresh: () => {},
+      data: { generatedAt: iso(0), default: "claude", engines: { opencode: engine("opencode", { status: "unsupported" }) } },
+    }
+    render(<LimitsPage />)
+    expect(screen.getByText("Not metered")).toBeTruthy()
+    expect(screen.queryByText("Unsupported")).toBeNull()
+  })
+
+  it("lists every problem an account carries, repeats included", () => {
+    show([account("go-b", "Go b", { provider: "p", buckets: [], problems: ["one", "two", "two"] })])
+    expect(within(card("Go b")).getAllByTestId("account-problem").map((n) => n.textContent)).toEqual(["one", "two", "two"])
   })
 })

@@ -141,4 +141,35 @@ describe('opencode accounts list', () => {
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'second' } })
     expect(screen.getAllByRole('menuitemradio')).toHaveLength(1)
   })
+
+  it('shows every problem the account carries', async () => {
+    limits.current = { generatedAt: '', default: 'claude', engines: {}, accounts: { opencode: [
+      { account: 'go-b', label: 'go-b', provider: 'p', base: 'b', keyEnv: 'K', keySet: false, problems: ['key not set', 'model "x" is unknown', 'second problem', 'second problem'] },
+    ] } }
+    apiMocks.getConfig.mockResolvedValue({ revision: 'r', config: { engines: { opencode: { accounts: { 'go-b': { provider: 'p', base: 'b', keyEnv: 'K' } } } } } })
+    await renderSettings()
+    expect(screen.getAllByTestId('account-problem').map((n) => n.textContent)).toEqual(['key not set', 'model "x" is unknown', 'second problem', 'second problem'])
+  })
+
+  it('badges a built-in account\'s models with its label, and shows the badge on the closed trigger', async () => {
+    registry.current = {
+      default: 'claude',
+      engines: {
+        claude: engine('claude'),
+        opencode: engine('opencode', [model('opencode-go/a', 'Alpha'), model('opencode-go-b/a', 'Alpha', { account: 'go-b' }), model('opencode/c', 'Gamma')]),
+      },
+    }
+    apiMocks.getConfig.mockResolvedValue({ revision: 'r', config: { engines: {
+      claude: { fallback: [{ engine: 'opencode', model: 'opencode-go-b/a' }] },
+      opencode: { accounts: { 'go-a': { provider: 'opencode-go', label: 'Go primary' }, 'go-b': { provider: 'opencode-go-b', base: 'opencode-go', keyEnv: 'K', label: 'Go (second)' } } },
+    } } })
+    await renderSettings()
+
+    const trigger = screen.getByRole('button', { name: /Model of link 1 of the Claude chain/ })
+    expect(trigger.textContent).toBe('AlphaGo (second)')
+    fireEvent.keyDown(trigger, { key: 'Enter' })
+    const rows = screen.getAllByRole('menuitemradio')
+    expect(Array.from(document.querySelectorAll('[role="menu"] [data-account-badge]')).map((b) => b.textContent)).toEqual(expect.arrayContaining(['Go primary', 'Go (second)']))
+    expect(within(rows[2]).getByText('opencode')).toBeTruthy()
+  })
 })
