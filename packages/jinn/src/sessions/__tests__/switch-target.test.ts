@@ -298,3 +298,35 @@ describe("the effort a switch inherits", () => {
     expect(refused(resolveSwitchTarget(config, row, { engine: "opencode", effortLevel: "high" }, operator)).error).toContain("does not support effort levels");
   });
 });
+
+describe("a model refusal's list and a target checked again as it is applied", () => {
+  it("lists only the engine a refused model is about: an unlisted model, a padded \"?\", and \"?\" on the session's own engine", () => {
+    const s = session();
+    const onlyLine = (request: { engine?: string; model: string }) => {
+      const { body } = switchRefusalBody(config, s, refused(resolveSwitchTarget(config, s, request, asSession)), request);
+      return String(body.error).split("\n").slice(1);
+    };
+    expect(onlyLine({ engine: "opencode", model: "prov/model-typo" })).toEqual([expect.stringMatching(/^opencode: /)]);
+    expect(onlyLine({ engine: " opencode ", model: " ? " })).toEqual([expect.stringMatching(/^opencode: /)]);
+    expect(onlyLine({ model: "?" })).toEqual([expect.stringMatching(/^claude: /)]);
+  });
+
+  it("accepts, as it is applied, a free model the session inherited rather than named", () => {
+    const s = session();
+    // The operator once typed a free id on opencode; the slot kept it, and a later switch there inherits it.
+    registry.updateSession(s.id, { engineSessions: { opencode: { id: "old-thread", model: "free-provider/typed-model" } } } as never);
+    const row = registry.getSession(s.id)!;
+    const asked = resolveSwitchTarget(config, row, { engine: "opencode" }, asSession);
+    expect(asked).toMatchObject({ ok: true, target: { model: "free-provider/typed-model" } });
+
+    // The apply re-resolves with the model spelt out; the inherited model must not be judged as one the session named.
+    const again = { engine: "opencode", model: "free-provider/typed-model" };
+    expect(resolveSwitchTarget(config, row, again, { caller: "session", reapply: true })).toMatchObject({ ok: true });
+    expect(resolveSwitchTarget(config, row, again, asSession).ok).toBe(false);
+  });
+
+  it("takes an operator's explicit null effort as no effort asked for", () => {
+    const s = session({ effortLevel: "high" });
+    expect(resolveSwitchTarget(config, s, { engine: "opencode", effortLevel: null } as never, operator)).toMatchObject({ ok: true, target: { engine: "opencode", effortLevel: null } });
+  });
+});

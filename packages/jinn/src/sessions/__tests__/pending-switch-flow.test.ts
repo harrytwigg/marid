@@ -308,6 +308,18 @@ describe("the summary carries the conversation over", () => {
   });
 });
 
+describe("a target checked again as it is applied", () => {
+  it("applies a switch onto a free model the session inherited from its slot, not refusing it as one it named", async () => {
+    const me = startSession();
+    // The operator once typed a free id on opencode; the slot there kept it.
+    registry.recordEngineSessionId(me, "opencode", "thread-typed", { model: "free-provider/typed-model" });
+    await schedule(me, { engine: "opencode" });
+    await runSwitch(me);
+    expect(lastSwitch(me)).toMatchObject({ applied: true, to: { engine: "opencode", model: "free-provider/typed-model" } });
+    expect(registry.getSession(me)!.engine).toBe("opencode");
+  });
+});
+
 describe("every failure lands on the new target with the handoff and a pointer", () => {
   const phrases: Array<[CompactMode, string, string]> = [
     ["error", "error", "the compaction failed (an error)"],

@@ -330,6 +330,31 @@ describe("the history pointer marker", () => {
   });
 });
 
+describe("the history pointer through a stand-in on another engine", () => {
+  it("keeps a new engine's conversation on the pointer when a stand-in is reverted before its first clean turn", () => {
+    const s = claudeSession("web:revert-pointer-codex");
+    reg.insertMessage(s.id, "user", "EARLIER-ASK-ONE");
+    reg.insertMessage(s.id, "assistant", "EARLIER-ANSWER-ONE");
+    // The operator moves the session to codex: its conversation there is new, owed a pointer.
+    reg.switchSessionTarget(s.id, { engine: "codex", model: "gpt-5.5" });
+    expect(metaOf(s.id)).toMatchObject({ engineSyncTarget: "codex", engineSyncMode: "pointer" });
+    // codex hit its limit before it had a thread, a stand-in held the session, and the window ended.
+    const since = new Date(Date.now() - 1_800_000).toISOString();
+    const override = { originalEngine: "codex", originalModel: "gpt-5.5", until: new Date(Date.now() - 1000).toISOString(), syncSince: since };
+    reg.updateSession(s.id, { transportMeta: { ...metaOf(s.id), engineOverride: override } } as never);
+
+    const reverted = maybeRevertEngineOverride(reg.getSession(s.id)!);
+    const prompt = resolveSyncPrompt(reverted, "codex", "first on codex").promptToRun;
+
+    expect(reverted.engine).toBe("codex");
+    expect(prompt).toContain("read_session");
+    expect(prompt).toContain("first on codex");
+    expect(prompt).not.toContain("EARLIER-ASK-ONE");
+    expect(prompt).not.toContain("EARLIER-ANSWER-ONE");
+    expect(prompt).not.toMatch(/We switched engines/);
+  });
+});
+
 describe("a switch applied inside the turn that asked", () => {
   function running(id: string): string {
     return reg.beginSessionAttempt(id)!.attemptToken!;

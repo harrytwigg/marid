@@ -46,7 +46,7 @@ function requestFor(to: SwitchTargetView): SwitchRequest {
 /** The target to apply, or why the switch no longer can happen: the session moved meanwhile, or the target is no longer one it may move to. */
 function resolveForApply(config: JinnConfig, session: Session, pending: PendingSwitch): { ok: true; target: SwitchTargetView } | { ok: false; reason: string } {
   if (!stillOn(ownSwitchTarget(config, session), pending.from)) return { ok: false, reason: "the session was moved to another target meanwhile" };
-  const resolved = resolveSwitchTarget(config, session, requestFor(pending.to), { caller: "session" });
+  const resolved = resolveSwitchTarget(config, session, requestFor(pending.to), { caller: "session", reapply: true });
   return resolved.ok ? { ok: true, target: resolved.target } : { ok: false, reason: resolved.error };
 }
 
