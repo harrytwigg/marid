@@ -144,3 +144,42 @@ export async function ensureRemoteHostReady(
 
   return announced ? restoreAfterWait(input, announced) : { ok: true };
 }
+
+/**
+ * The same gate before a usage-limit retry: wake the host and wait for its
+ * mount, but leave the session `waiting` throughout. The retry loop moves it to
+ * `running` itself once the gate passes, under a fence that expects `waiting`,
+ * so this must not do it first. Unlike a turn's start, a failure here does not
+ * settle anything: the loop tries again later.
+ */
+export async function awaitRemoteHostForRetry(
+  input: TurnInput,
+  engineName: string,
+): Promise<{ ok: true } | { ok: false; error: string; cancelled?: boolean }> {
+  const target = sessionRemoteTarget(input.employee, remoteScopeFor(input.config.remote, input.session), input.session);
+  if (!target || !engineSupportsRemote(engineName)) return { ok: true };
+  const sessionId = input.session.id;
+  const stillWaiting = () => getSession(sessionId)?.status === "waiting";
+  let announced: string | undefined;
+  const readiness = await ensureRemoteReady(target, input.config.remote, {
+    engine: engineName as RemoteEngineName,
+    allowWake: true,
+    waitForMount: true,
+    onWaitStart: (info) => {
+      announced = info.destination;
+      const notice = waitNotice(info, input.employee?.displayName ?? "the employee");
+      updateSessionForAttempt(sessionId, input.attemptToken, {
+        lastActivity: new Date().toISOString(),
+        lastError: notice.status,
+      }, ["waiting"]);
+      if (shouldNotifyWake(input.config.remote)) notifyOperatorChannel(notice.operator);
+    },
+    shouldAbort: () => !stillWaiting(),
+  });
+  if (!stillWaiting()) return { ok: false, error: "Session was stopped while waiting for the remote host", cancelled: true };
+  if (!readiness.ready) return { ok: false, error: `Remote host unavailable: ${readiness.reason}` };
+  if (announced && shouldNotifyWake(input.config.remote)) {
+    notifyOperatorChannel(`✅ ${announced} is up — ${input.employee?.displayName ?? "the employee"} is retrying after its usage limit.`);
+  }
+  return { ok: true };
+}

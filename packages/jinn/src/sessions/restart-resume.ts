@@ -242,7 +242,8 @@ export function acknowledgeRestartRequesters(gateway: RestartRecordGateway): num
  */
 export function recordSessionsRunningAtBoot(gateway: RestartRecordGateway): { recorded: Session[]; cleanShutdownBootId: string | null } {
   const cleanShutdownBootId = consumeRestartShutdownReceipt();
-  const running = listAllRunningSessions();
+  // A `waiting` row is recovered with the running ones (recoverStaleSessions), so it is recorded with them.
+  const running = listAllRunningSessions({ includeWaiting: true });
   const unrecorded = running.filter((row) => !row.workflowAttempt);
   for (const { session } of unrecorded) {
     recordRestartInterruption(gateway, session, "stale-on-boot", "restart-resume");

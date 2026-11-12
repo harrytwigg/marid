@@ -44,8 +44,11 @@ import { standingOverrideUntil } from "./engine-override.js";
 import { earlier, handBack, handBackAt as accountHandBackAt } from "./rate-limit-handback.js";
 import { getSession, updateSessionForAttempt, nextEngineSessionFields } from "./registry.js";
 import { runtimeSessionSource } from "./context.js";
+import { HostRetryStreak, HOST_RETRY_WINDOW_MS, hostNotReadyFromThrown, isHostNotReadyError } from "./rate-limit-host-retry.js";
 
 const WAIT_CANCEL_POLL_MS = 5000;
+/** How long past a stated reset the wait keeps retrying before it times out. */
+const RESET_GRACE_MS = 30 * 60_000;
 
 export type {
   RateLimitHandlerHooks, RateLimitHandlerOpts, RateLimitInfo, RateLimitOutcome,
@@ -106,9 +109,9 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
 
   // ── Branch B: wait-and-retry on the original engine ────────────────────────
   const { delayMs, resumeAt: limitResetAt } = computeNextRetryDelayMs(rateLimit.resetsAt);
-  const deadlineMs = computeRateLimitDeadlineMs(
+  let deadlineMs = computeRateLimitDeadlineMs(
     rateLimit.resetsAt,
-    rateLimit.resetsAt ? 30 * 60_000 : 6 * 60 * 60_000,
+    rateLimit.resetsAt ? RESET_GRACE_MS : 6 * 60 * 60_000,
   );
   // A session on a substitute Claude account goes back to its own at the
   // override's `until`, which can be days before a weekly-limited substitute
@@ -157,11 +160,41 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
     // to zero the moment one does, so a limit that starts stating a window goes
     // back to being slept to rather than guessed at.
     let unstatedAttempts = 0;
+    // Retries the host they run on was not ready for. While a streak is open the
+    // loop outlives the limit's own deadline; the streak's window bounds it instead.
+    const hostStreak = new HostRetryStreak();
+    const parkForHost = async (error: string): Promise<RateLimitOutcome | number> => {
+      const step = hostStreak.fail();
+      if (step.exhausted) {
+        const hours = Math.round(HOST_RETRY_WINDOW_MS / 3_600_000);
+        const message = `${error} (still not ready ${hours}h after the usage limit reset, ${step.failures} attempts)`;
+        logger.warn(`Session ${session.id} giving up its usage-limit retry: ${message}`);
+        await hooks.onRetryHostUnreachable?.({ error: message });
+        return { kind: "unreachable", error: message };
+      }
+      const parked = updateSessionForAttempt(session.id, attemptToken, {
+        status: "waiting",
+        lastActivity: new Date().toISOString(),
+        lastError: `${error}; retrying at ${step.retryAt.toISOString()}`,
+      }, ["waiting", "running"]);
+      if (!parked) {
+        await hooks.onCancelled?.();
+        return { kind: "cancelled" };
+      }
+      logger.info(`Session ${session.id} could not retry after its usage limit (${error}); attempt ${step.failures} of this streak, next at ${step.retryAt.toISOString()}`);
+      await hooks.onRetryHostNotReady?.({ error, failures: step.failures, retryAt: step.retryAt });
+      return step.delayMs;
+    };
+    /** The retry reached its host: close any streak, and give the limit a fresh grace from now. */
+    const hostAnswered = () => {
+      if (hostStreak.active()) deadlineMs = Math.max(deadlineMs, Date.now() + RESET_GRACE_MS);
+      hostStreak.reset();
+    };
 
     // With a hand-back pending the wait never times out: every sleep is capped at
     // `until` and the hand-back check follows it, so the loop ends there anyway,
     // even when a retry against the substitute runs past it.
-    while (handBackAt || Date.now() < deadlineMs) {
+    while (handBackAt || Date.now() < deadlineMs || hostStreak.active()) {
       const stillWaiting = await waitWhileSessionWaiting(session.id, handBackAt ? Math.min(nextDelayMs, handBackAt.getTime() - Date.now()) : nextDelayMs);
       if (!stillWaiting) {
         const currentSession = getSession(session.id);
@@ -185,6 +218,19 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
       }
 
       if (handBackAt && Date.now() >= handBackAt.getTime()) return await handBack(session.id, attemptToken, hooks, { waited: true, employee, config: opts.config });
+
+      // Wake the host the retry runs on and wait for it, still reading `waiting`.
+      const prepared = await hooks.prepareRetry?.();
+      if (prepared && !prepared.ok) {
+        if (prepared.cancelled) {
+          await hooks.onCancelled?.();
+          return { kind: "cancelled" };
+        }
+        const parked = await parkForHost(prepared.error);
+        if (typeof parked !== "number") return parked;
+        nextDelayMs = parked;
+        continue;
+      }
 
       await hooks.onRetryAttempt?.({ attempt });
       logger.info(`Session ${session.id} retrying after usage limit (attempt ${attempt})`);
@@ -230,9 +276,22 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
             hooks.onRetryStream!(delta);
           } } : {}),
         });
+      } catch (err) {
+        // The engine's own last-moment check found the host gone: try again later rather than fail the turn.
+        const notReady = hostNotReadyFromThrown(err);
+        if (!notReady) throw err;
+        retryResult = { sessionId: "", result: "", error: notReady };
       } finally {
         endLimitProbe(session.id);
       }
+
+      if (retryResult.error && isHostNotReadyError(retryResult.error)) {
+        const parked = await parkForHost(retryResult.error);
+        if (typeof parked !== "number") return parked;
+        nextDelayMs = parked;
+        continue;
+      }
+      hostAnswered();
 
       const retryInterrupted = retryResult.error?.startsWith("Interrupted");
       const retryRateLimit = !retryInterrupted ? detectRateLimit(retryResult) : { limited: false as const };
