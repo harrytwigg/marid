@@ -34,6 +34,9 @@ export type RateLimitOutcome =
    *  waiting would not refill it, so the turn fails for someone to top up. */
   | { kind: "billing" }
   | { kind: "timeout" }
+  /** The limit lifted but the host the retry runs on never became ready inside
+   *  the bounded retry window (rate-limit-host-retry.ts): the turn fails with `error`. */
+  | { kind: "unreachable"; error: string }
   | { kind: "cancelled" };
 
 export interface RateLimitHandlerHooks {
@@ -83,6 +86,22 @@ export interface RateLimitHandlerHooks {
    */
   onRetryAttempt?: (info: { attempt: number }) => void | Promise<void>;
 
+  /**
+   * Called each iteration BEFORE {@link onRetryAttempt}, while the session still
+   * reads `waiting`: bring the place the retry runs to readiness (wake a remote
+   * host and wait for its mount, as a turn's own start does). `cancelled` means
+   * the session left `waiting` during it. Without it the retry spawns as is, and
+   * a host that is not ready fails it at the engine's own check.
+   */
+  prepareRetry?: () => Promise<{ ok: true } | { ok: false; error: string; cancelled?: boolean }>;
+  /**
+   * Called when a retry could not run because its host was not ready; the loop
+   * tries again at `retryAt`. `failures` counts the current streak, so the
+   * transport can speak once (on the first) rather than on every attempt.
+   */
+  onRetryHostNotReady?: (info: { error: string; failures: number; retryAt: Date }) => void | Promise<void>;
+  /** The host stayed not ready for the whole bounded window: fail the turn with `error`. */
+  onRetryHostUnreachable?: (info: { error: string }) => void | Promise<void>;
   /**
    * Called each iteration when the retry was STILL rate-limited — switch UI
    * back to "waiting" state, log, etc.

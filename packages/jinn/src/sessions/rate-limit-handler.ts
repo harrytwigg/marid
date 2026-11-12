@@ -44,8 +44,12 @@ import { standingOverrideUntil } from "./engine-override.js";
 import { earlier, handBack, handBackAt as accountHandBackAt } from "./rate-limit-handback.js";
 import { getSession, updateSessionForAttempt, nextEngineSessionFields } from "./registry.js";
 import { runtimeSessionSource } from "./context.js";
+import { EARLY_RESET_POLL_MS, earlyResetWatch, type EarlyReset } from "./rate-limit-early-reset.js";
+import { HostRetryStreak, HOST_RETRY_WINDOW_MS, hostNotReadyFromThrown, isHostNotReadyError } from "./rate-limit-host-retry.js";
 
 const WAIT_CANCEL_POLL_MS = 5000;
+/** How long past a stated reset the wait keeps retrying before it times out. */
+const RESET_GRACE_MS = 30 * 60_000;
 
 export type {
   RateLimitHandlerHooks, RateLimitHandlerOpts, RateLimitInfo, RateLimitOutcome,
@@ -106,9 +110,9 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
 
   // ── Branch B: wait-and-retry on the original engine ────────────────────────
   const { delayMs, resumeAt: limitResetAt } = computeNextRetryDelayMs(rateLimit.resetsAt);
-  const deadlineMs = computeRateLimitDeadlineMs(
+  let deadlineMs = computeRateLimitDeadlineMs(
     rateLimit.resetsAt,
-    rateLimit.resetsAt ? 30 * 60_000 : 6 * 60 * 60_000,
+    rateLimit.resetsAt ? RESET_GRACE_MS : 6 * 60 * 60_000,
   );
   // A session on a substitute Claude account goes back to its own at the
   // override's `until`, which can be days before a weekly-limited substitute
@@ -157,12 +161,54 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
     // to zero the moment one does, so a limit that starts stating a window goes
     // back to being slept to rather than guessed at.
     let unstatedAttempts = 0;
+    // Retries the host they run on was not ready for. While a streak is open the
+    // loop outlives the limit's own deadline; the streak's window bounds it instead.
+    const hostStreak = new HostRetryStreak();
+    const parkForHost = async (error: string): Promise<RateLimitOutcome | number> => {
+      const step = hostStreak.fail();
+      if (step.exhausted) {
+        const hours = Math.round(HOST_RETRY_WINDOW_MS / 3_600_000);
+        const message = `${error} (still not ready ${hours}h after the usage limit reset, ${step.failures} attempts)`;
+        logger.warn(`Session ${session.id} giving up its usage-limit retry: ${message}`);
+        await hooks.onRetryHostUnreachable?.({ error: message });
+        return { kind: "unreachable", error: message };
+      }
+      const parked = updateSessionForAttempt(session.id, attemptToken, {
+        status: "waiting",
+        lastActivity: new Date().toISOString(),
+        lastError: `${error}; retrying at ${step.retryAt.toISOString()}`,
+      }, ["waiting", "running"]);
+      if (!parked) {
+        await hooks.onCancelled?.();
+        return { kind: "cancelled" };
+      }
+      logger.info(`Session ${session.id} could not retry after its usage limit (${error}); attempt ${step.failures} of this streak, next at ${step.retryAt.toISOString()}`);
+      await hooks.onRetryHostNotReady?.({ error, failures: step.failures, retryAt: step.retryAt });
+      return step.delayMs;
+    };
+    // A limit can lift before the reset it named; the account's usage readings say so.
+    const earlyReset = earlyResetWatch(session.engine, account);
+    const earlyWake = earlyReset ? (endMs: number): number | undefined => {
+      const wake = earlyReset.wakeAt(endMs);
+      if (wake) noteEarlyReset(session.id, attemptToken, engineLabel, wake.reset);
+      return wake?.atMs;
+    } : undefined;
+    /** The retry reached its host: close any streak, and give the limit a fresh grace from now. */
+    const hostAnswered = () => {
+      if (hostStreak.active()) deadlineMs = Math.max(deadlineMs, Date.now() + RESET_GRACE_MS);
+      hostStreak.reset();
+    };
 
     // With a hand-back pending the wait never times out: every sleep is capped at
     // `until` and the hand-back check follows it, so the loop ends there anyway,
     // even when a retry against the substitute runs past it.
-    while (handBackAt || Date.now() < deadlineMs) {
-      const stillWaiting = await waitWhileSessionWaiting(session.id, handBackAt ? Math.min(nextDelayMs, handBackAt.getTime() - Date.now()) : nextDelayMs);
+    while (handBackAt || Date.now() < deadlineMs || hostStreak.active()) {
+      const stillWaiting = await waitWhileSessionWaiting(
+        session.id,
+        handBackAt ? Math.min(nextDelayMs, handBackAt.getTime() - Date.now()) : nextDelayMs,
+        // A host backoff is not waiting on the limit, so a reading has nothing to say about it.
+        hostStreak.active() ? undefined : earlyWake,
+      );
       if (!stillWaiting) {
         const currentSession = getSession(session.id);
         logger.info(`Session ${session.id} stopped while waiting for usage reset (status=${currentSession?.status ?? "deleted"})`);
@@ -185,6 +231,19 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
       }
 
       if (handBackAt && Date.now() >= handBackAt.getTime()) return await handBack(session.id, attemptToken, hooks, { waited: true, employee, config: opts.config });
+
+      // Wake the host the retry runs on and wait for it, still reading `waiting`.
+      const prepared = await hooks.prepareRetry?.();
+      if (prepared && !prepared.ok) {
+        if (prepared.cancelled) {
+          await hooks.onCancelled?.();
+          return { kind: "cancelled" };
+        }
+        const parked = await parkForHost(prepared.error);
+        if (typeof parked !== "number") return parked;
+        nextDelayMs = parked;
+        continue;
+      }
 
       await hooks.onRetryAttempt?.({ attempt });
       logger.info(`Session ${session.id} retrying after usage limit (attempt ${attempt})`);
@@ -230,15 +289,29 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
             hooks.onRetryStream!(delta);
           } } : {}),
         });
+      } catch (err) {
+        // The engine's own last-moment check found the host gone: try again later rather than fail the turn.
+        const notReady = hostNotReadyFromThrown(err);
+        if (!notReady) throw err;
+        retryResult = { sessionId: "", result: "", error: notReady };
       } finally {
         endLimitProbe(session.id);
       }
+
+      if (retryResult.error && isHostNotReadyError(retryResult.error)) {
+        const parked = await parkForHost(retryResult.error);
+        if (typeof parked !== "number") return parked;
+        nextDelayMs = parked;
+        continue;
+      }
+      hostAnswered();
 
       const retryInterrupted = retryResult.error?.startsWith("Interrupted");
       const retryRateLimit = !retryInterrupted ? detectRateLimit(retryResult) : { limited: false as const };
 
       if (retryRateLimit.limited) {
         recordAccountRateLimit(account, session.engine, engineLabel, retryRateLimit.resetsAt);
+        earlyReset?.limitedAgain();
         logger.info(`Session ${session.id} still rate limited (attempt ${attempt})`);
 
         const next = computeNextRetryDelayMs(retryRateLimit.resetsAt);
@@ -289,11 +362,35 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
   }
 }
 
-async function waitWhileSessionWaiting(sessionId: string, delayMs: number): Promise<boolean> {
-  const end = Date.now() + Math.max(0, delayMs);
+/** Say why a wait ended early, in the log and on the session's status line. */
+function noteEarlyReset(sessionId: string, attemptToken: string, engineLabel: string, reset: EarlyReset): void {
+  const readAt = reset.readAt.toISOString();
+  if (reset.kind === "lifted") {
+    logger.info(`Session ${sessionId}: ${engineLabel} usage reading at ${readAt} shows the limit lifted before its stated reset; retrying now`);
+    return;
+  }
+  const reopensAt = reset.reopensAt.toISOString();
+  logger.info(`Session ${sessionId}: ${engineLabel} usage reading at ${readAt} moves the reset earlier, to ${reopensAt}`);
+  updateSessionForAttempt(sessionId, attemptToken, { lastError: `${engineLabel} usage limit — resumes ${reopensAt}` }, ["waiting"]);
+}
+
+/**
+ * Sleep up to `delayMs` while the session stays `waiting`. `earlyWake`, asked
+ * about once a minute with the current end, may bring the end forward (never
+ * back): a usage reading that shows the limit lifted or reopening sooner.
+ */
+async function waitWhileSessionWaiting(sessionId: string, delayMs: number, earlyWake?: (endMs: number) => number | undefined): Promise<boolean> {
+  let end = Date.now() + Math.max(0, delayMs);
+  let nextLook = Date.now() + EARLY_RESET_POLL_MS;
   while (Date.now() < end) {
     const currentSession = getSession(sessionId);
     if (!currentSession || currentSession.status !== "waiting") return false;
+    if (earlyWake && Date.now() >= nextLook) {
+      nextLook = Date.now() + EARLY_RESET_POLL_MS;
+      const wakeAt = earlyWake(end);
+      if (wakeAt !== undefined) end = Math.min(end, Math.max(Date.now(), wakeAt));
+      if (Date.now() >= end) break;
+    }
     const sleepMs = Math.min(WAIT_CANCEL_POLL_MS, end - Date.now());
     if (sleepMs > 0) await new Promise<void>((resolve) => setTimeout(resolve, sleepMs));
   }

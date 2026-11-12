@@ -1661,9 +1661,10 @@ export function getSessionGroupCounts(portalSlug?: string | null): Record<string
  * the restart record must name every kind, and at boot nothing can legitimately
  * be running because the process that ran it is gone.
  */
-export function listAllRunningSessions(): RunningSessionRow[] {
+export function listAllRunningSessions(opts: { includeWaiting?: boolean } = {}): RunningSessionRow[] {
+  const statuses = opts.includeWaiting ? "('running', 'waiting')" : "('running')";
   const rows = initDb()
-    .prepare("SELECT * FROM sessions WHERE status = 'running' ORDER BY last_activity DESC")
+    .prepare(`SELECT * FROM sessions WHERE status IN ${statuses} ORDER BY last_activity DESC`)
     .all() as Record<string, unknown>[];
   return rows.map((row) => ({ session: rowToSession(row), workflowAttempt: isLegacyWorkflowPhaseRow(row) }));
 }
@@ -1678,12 +1679,17 @@ export interface RunningSessionRow {
 /** Mark any sessions stuck in "running" status as "interrupted". Called on gateway startup — if the
  * gateway is starting, no sessions can actually be running. Sessions with an engine_session_id can be
  * resumed via the Claude --resume flag, so each one is stamped for the restart resume nudge as well.
+ *
+ * A `waiting` row is a turn paused on a usage limit (or a host wake) whose wait-and-retry loop lived in
+ * the previous process: nothing in this one would ever retry it, so it is recovered the same way. A web
+ * turn's queue row is replayed at boot and runs it again; any other session gets the resume nudge. Either
+ * way the engine is asked afresh, and a limit that still holds parks the turn again on its reported reset.
  */
 export function recoverStaleSessions(): number {
   const db = initDb();
   const now = new Date().toISOString();
   return db.prepare(
-    `UPDATE sessions SET status = 'interrupted', attempt_outcome = 'interrupted', attempt_terminal_version = attempt_terminal_version + 1, last_activity = ?, transport_meta = json_set(COALESCE(transport_meta, '{}'), '$.${RESTART_RESUME_META_KEY}', ?), last_error = 'Interrupted: gateway restarted while session was running' WHERE status = 'running' AND workflow_kind IS NULL`,
+    `UPDATE sessions SET status = 'interrupted', attempt_outcome = 'interrupted', attempt_terminal_version = attempt_terminal_version + 1, last_activity = ?, transport_meta = json_set(COALESCE(transport_meta, '{}'), '$.${RESTART_RESUME_META_KEY}', ?), last_error = CASE status WHEN 'waiting' THEN 'Interrupted: gateway restarted while session was waiting to retry' ELSE 'Interrupted: gateway restarted while session was running' END WHERE status IN ('running', 'waiting') AND workflow_kind IS NULL`,
   ).run(now, now).changes;
 }
 

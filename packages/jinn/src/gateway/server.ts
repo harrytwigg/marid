@@ -442,7 +442,7 @@ export async function startGateway(
     logger.info(`Previous gateway (boot ${staleAtBoot.cleanShutdownBootId}) shut down cleanly and recorded its interrupted sessions in ${RESTART_RECORD_FILE}`);
   }
   if (staleAtBoot.recorded.length > 0) {
-    logger.warn(`${staleAtBoot.recorded.length} session(s) were still running from the previous gateway${staleAtBoot.cleanShutdownBootId ? "" : ", which did not shut down cleanly"}; recorded in ${RESTART_RECORD_FILE}`);
+    logger.warn(`${staleAtBoot.recorded.length} session(s) were still running or waiting to retry from the previous gateway${staleAtBoot.cleanShutdownBootId ? "" : ", which did not shut down cleanly"}; recorded in ${RESTART_RECORD_FILE}`);
   }
   const recovered = recoverStaleSessions();
   if (recovered > 0) {

@@ -40,7 +40,7 @@ vi.mock("../../callbacks.js", () => ({
   notifyOperatorChannel: vi.fn((m: string) => { hoisted.notifications.push(m); }),
 }));
 
-import { ensureRemoteHostReady, shouldNotifyWake } from "../remote-ready.js";
+import { awaitRemoteHostForRetry, ensureRemoteHostReady, shouldNotifyWake } from "../remote-ready.js";
 
 const EMPLOYEE = {
   name: "builder",
@@ -218,5 +218,52 @@ describe("remote.notifyWake", () => {
     await wakeThen({ ready: false, reason: "build-box did not come up within 240s" }, { notifyWake: true });
     expect(hoisted.notifications).toHaveLength(2);
     expect(hoisted.notifications[1]).toContain("❌");
+  });
+});
+
+describe("awaitRemoteHostForRetry (the gate before a usage-limit retry)", () => {
+  beforeEach(() => { hoisted.status = "waiting"; });
+
+  it("is a no-op for a local employee", async () => {
+    expect(await awaitRemoteHostForRetry(input(undefined), "claude")).toEqual({ ok: true });
+    expect(hoisted.updates).toHaveLength(0);
+  });
+
+  it("wakes the host but leaves the session waiting, so the retry loop's own waiting→running fence still holds", async () => {
+    const { ensureRemoteReady } = await import("../../../engines/remote-stage.js");
+    const res = await awaitRemoteHostForRetry(input(), "claude");
+    expect(res).toEqual({ ok: true });
+    expect(vi.mocked(ensureRemoteReady).mock.calls.at(-1)![2]).toMatchObject({ allowWake: true, waitForMount: true });
+    expect(hoisted.updates.every((u) => u.fields.status === undefined)).toBe(true);
+    expect(hoisted.status).toBe("waiting");
+  });
+
+  it("says why the session is still waiting while the host wakes, without changing its status", async () => {
+    const { ensureRemoteReady } = await import("../../../engines/remote-stage.js");
+    vi.mocked(ensureRemoteReady).mockImplementationOnce(async (_t: any, _r: any, opts: any) => {
+      opts.onWaitStart({ destination: "builder@build-box", waking: true });
+      return { ready: true } as any;
+    });
+    await awaitRemoteHostForRetry(input(EMPLOYEE, { notifyWake: true }), "claude");
+    expect(hoisted.updates).toEqual([
+      { fields: expect.objectContaining({ lastError: "builder@build-box is offline — waking it" }), expected: ["waiting"] },
+    ]);
+    expect(hoisted.notifications.at(-1)).toContain("retrying after its usage limit");
+  });
+
+  it("reports a host that never came up as not ready, for the loop to retry later", async () => {
+    hoisted.readiness = { ready: false, reason: "build-box did not answer within 300s" };
+    expect(await awaitRemoteHostForRetry(input(), "claude")).toEqual({
+      ok: false, error: "Remote host unavailable: build-box did not answer within 300s",
+    });
+  });
+
+  it("reports a session stopped during the wait as cancelled", async () => {
+    const { ensureRemoteReady } = await import("../../../engines/remote-stage.js");
+    vi.mocked(ensureRemoteReady).mockImplementationOnce(async () => {
+      hoisted.status = "idle";
+      return { ready: false, reason: "aborted" } as any;
+    });
+    expect(await awaitRemoteHostForRetry(input(), "claude")).toMatchObject({ ok: false, cancelled: true });
   });
 });

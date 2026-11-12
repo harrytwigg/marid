@@ -131,6 +131,44 @@ describe("restart interruption marking", () => {
     expect(resumableIds()).toEqual([crashed.id]);
   });
 
+  it("recovers a session left waiting to retry a usage limit, since its retry loop died with the old process", () => {
+    const waiting = session("waiting", { lastError: "Claude usage limit — resumes 2026-01-01T00:00:00.000Z" });
+    const idle = session("idle");
+
+    restartResume.interruptRunningSessionsForShutdown(GATEWAY);
+    expect(registry.getSession(waiting.id)?.status).toBe("waiting");
+    expect(registry.recoverStaleSessions()).toBe(1);
+
+    const recovered = registry.getSession(waiting.id)!;
+    expect(recovered.status).toBe("interrupted");
+    expect(recovered.lastError).toBe("Interrupted: gateway restarted while session was waiting to retry");
+    expect(registry.getSession(idle.id)?.status).toBe("idle");
+    expect(resumableIds()).toEqual([waiting.id]);
+  });
+
+  it("hands a recovered waiting session with a replayed queue row to the queue, not the nudge", () => {
+    const waiting = session("waiting");
+    const item = registry.enqueueQueueItem(waiting.id, waiting.sessionKey || waiting.id, "the limited turn");
+    db.prepare("UPDATE queue_items SET status = 'running' WHERE id = ?").run(item);
+
+    registry.recoverStaleSessions();
+    registry.recoverStaleQueueItems();
+
+    expect(restartResume.consumeRestartResumeCandidates()).toEqual({
+      resumable: [],
+      replaying: [expect.objectContaining({ id: waiting.id })],
+    });
+  });
+
+  it("records a waiting session in the restart record with the running ones", () => {
+    const waiting = session("waiting");
+    const running = session("running");
+
+    const { recorded } = restartResume.recordSessionsRunningAtBoot(GATEWAY);
+
+    expect(recorded.map((s) => s.id).sort()).toEqual([waiting.id, running.id].sort());
+  });
+
   it("never makes a workflow attempt session a candidate, however it was interrupted", () => {
     const attempt = session("running");
     db.prepare("UPDATE sessions SET workflow_kind = 'phase' WHERE id = ?").run(attempt.id);

@@ -15,6 +15,7 @@ import { chainExhaustedNotice, hopNoticeText } from "../fallback-hop.js";
 import type { FallbackHop, FallbackHopNoticeMeta } from "../../shared/fallback-chain-wire.js";
 import type { JsonObject } from "../../shared/types.js";
 import { postEngineNotices } from "./engine-notices.js";
+import { awaitRemoteHostForRetry } from "./remote-ready.js";
 
 export interface RateLimitTurnArgs {
   input: TurnInput;
@@ -144,6 +145,32 @@ async function settleTimedOutTurn(args: RateLimitTurnArgs): Promise<void> {
   await args.surface.reply("Usage limit didn't reset in time. Please try again later.");
 }
 
+/** The limit lifted, but the host the retry runs on stayed unreachable for the whole retry window. */
+async function settleUnreachableTurn(args: RateLimitTurnArgs, error: string): Promise<void> {
+  const session = args.input.session;
+  notifyOperatorChannel(`❌ ${describe(session)} could not resume after its usage limit: ${error}`);
+  await settleTurn({
+    sessionId: session.id,
+    attemptToken: args.input.attemptToken,
+    outcome: "failed",
+    error,
+    expectedStatuses: ["waiting", "running"],
+    employee: args.input.employee,
+    surface: args.surface,
+  });
+  await args.surface.reply(`The usage limit reset, but the host this session runs on never became ready: ${error}. Send a message to try again.`);
+}
+
+/** Every failure puts the transport back to waiting (the retry attempt had set it to thinking); the first of a
+ *  streak also says so once, in the chat and to the operator. Later ones only update the session's status line. */
+async function announceHostNotReady(args: RateLimitTurnArgs, info: { error: string; failures: number; retryAt: Date }): Promise<void> {
+  await args.surface.waiting(true);
+  if (info.failures !== 1) return;
+  const session = args.input.session;
+  notifyOperatorChannel(`⚠️ ${describe(session)}: the usage limit reset but its host is not ready (${info.error}). Retrying with backoff.`);
+  await args.surface.notice(`⏳ The usage limit reset, but this session's host is not ready (${info.error}). I'll keep retrying and continue automatically.`);
+}
+
 /** A prepaid balance ran dry and no fallback link could serve the turn: fail it with the
  *  provider's own words (they say where to top up) so it reaches the manager, instead of
  *  parking it for a window that never opens. */
@@ -198,6 +225,9 @@ function rateLimitHooks(args: RateLimitTurnArgs): RateLimitHandlerHooks {
       notifyRateLimitResumed(settled);
       notifyOperatorChannel(`✅ ${rateLimitEngineLabel(args.input.session.engine)} usage limit cleared. ${describe(args.input.session)} resumed.`);
     },
+    prepareRetry: () => awaitRemoteHostForRetry(args.input, plan.engineName),
+    onRetryHostNotReady: (info) => announceHostNotReady(args, info),
+    onRetryHostUnreachable: ({ error }) => settleUnreachableTurn(args, error),
     onTimeout: () => settleTimedOutTurn(args),
     onBillingFailure: () => settleBillingFailedTurn(args),
   };
