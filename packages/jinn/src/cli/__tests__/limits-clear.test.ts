@@ -56,7 +56,7 @@ describe("limits --clear", () => {
   it("says there was nothing for a key with no record", async () => {
     await runLimits({ clear: "claude:friend01" });
 
-    expect(out[0]).toBe("Cleared claude:friend01 (it had no record).");
+    expect(out[0]).toBe("Cleared claude:friend01 (it had no record: check the key names a Claude account or an engine).");
     expect(readEngineHealth()["claude:friend01"]?.clearedAt).toBeDefined();
   });
 
