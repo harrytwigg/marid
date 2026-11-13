@@ -1,5 +1,5 @@
 import type { Employee, EngineLimitBucket, EngineLimitEngineSnapshot, JinnConfig } from "./types.js";
-import { isEngineExhausted, readEngineHealth, type EngineHealth, type EngineHealthReading } from "./engine-health.js";
+import { engineHealthForTarget, isEngineExhausted, readEngineHealth, type EngineHealth, type EngineHealthReading } from "./engine-health.js";
 import { rosterEmployees, type EngineLimitAccountSnapshot } from "./engine-limits-accounts.js";
 import { providerHealthKey } from "./engine-health-meter.js";
 import { bindingHealthRecord } from "./engine-health-keys.js";
@@ -107,7 +107,8 @@ function lastFailureOf(account: OpencodeAccount, resolved: Resolved): OpencodeAc
   const holds = Object.keys(resolved.health)
     .filter((key) => key === own || key.startsWith(`${own}/`))
     .flatMap((key) => classedHold(resolved, key) ?? []);
-  const newest = holds.sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0];
+  const atMs = (hold: { at: string }): number => { const ms = Date.parse(hold.at); return Number.isFinite(ms) ? ms : 0; };
+  const newest = holds.sort((a, b) => atMs(b) - atMs(a))[0];
   if (newest === undefined) return undefined;
   const { failureClass, reason } = newest.record;
   return { class: failureClass!, at: newest.at, ...(reason ? { reason } : {}) };
@@ -125,6 +126,7 @@ function snapshotOf(account: OpencodeAccount, config: JinnConfig, engine: Engine
   const prefix = `${account.provider}/`;
   const buckets = (engine.buckets ?? []).filter((bucket) => bucket.id.startsWith(prefix));
   const problems = problemsOf(account, resolved.env);
+  const failure = lastFailureOf(account, resolved);
   return {
     name: engine.name,
     available: engine.available,
@@ -140,7 +142,7 @@ function snapshotOf(account: OpencodeAccount, config: JinnConfig, engine: Engine
     ...declarationFields(account, resolved.env),
     buckets,
     ...holdFields(account, resolved),
-    ...(lastFailureOf(account, resolved) ? { lastFailure: lastFailureOf(account, resolved)! } : {}),
+    ...(failure ? { lastFailure: failure } : {}),
     ...(problems.length > 0 ? { problems } : {}),
   };
 }
@@ -158,7 +160,8 @@ export function collectOpencodeAccounts(
     // Read once per account below, so an iterator (the roster is a Map's values) is made a list first.
     employees: [...(deps.employees ?? rosterEmployees())],
     env: deps.env ?? opencodeAccountKeyEnvironment(),
-    health: deps.health ?? readEngineHealth(now),
+    // The card is the gateway's own: a hold another machine's turn recorded is not one its sessions see.
+    health: engineHealthForTarget(deps.health ?? readEngineHealth(now), undefined),
     now,
   };
   return accounts.map((account) => snapshotOf(account, config, engine, resolved));

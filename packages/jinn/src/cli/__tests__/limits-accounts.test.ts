@@ -33,7 +33,8 @@ const RESPONSE = {
         ...base, name: "opencode", account: "go-b", label: "Go (second)", location: { kind: "local" }, employees: ["worker"],
         provider: "opencode-go-b", base: "opencode-go", keyEnv: "GO_B_KEY", keySet: false,
         buckets: [{ id: "opencode-go-b/flash", name: "opencode-go-b/flash", planType: "$60/month", windows: [window("5h", 100, 300, "2026-11-12T15:00:00.000Z")] }],
-        exhausted: { until: "2026-11-12T15:00:00.000Z" }, nextTryAt: "2026-11-12T13:00:00.000Z", problems: ['account "go-b" has no key: GO_B_KEY is not set'],
+        exhausted: { until: "2026-11-12T15:00:00.000Z" }, nextTryAt: "2026-11-12T13:00:00.000Z",
+        lastFailure: { class: "quota", at: "2026-11-12T12:00:00.000Z", reason: "the provider reports no usable allowance (HTTP 402)" }, problems: ['account "go-b" has no key: GO_B_KEY is not set'],
       },
       { ...base, name: "opencode", account: "go-a", label: "go-a", location: { kind: "local" }, employees: [], provider: "opencode-go", buckets: [] },
     ],
@@ -61,6 +62,7 @@ describe("jinn limits account cards", () => {
     expect(card).toMatch(/opencode-go-b\/flash, plan \$60\/month\n\s+5h: 100% used, resets /);
     expect(card).not.toContain("5h/5h");
     expect(card).toMatch(/Exhausted until /);
+    expect(card).toMatch(/Last failure: quota, .*\(the provider reports no usable allowance \(HTTP 402\)\)/);
     expect(card).toMatch(/Next try: /);
     expect(card).toContain('Problem: account "go-b" has no key: GO_B_KEY is not set');
   });

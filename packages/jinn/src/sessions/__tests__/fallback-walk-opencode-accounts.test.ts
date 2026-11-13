@@ -85,6 +85,11 @@ describe("an alias account answering 402", () => {
     setOpencodeAccountKeyEnv([KEY], { [KEY]: "sk-first-key" });
     expect(readEngineHealth()["opencode/opencode-go-b"]).toMatchObject({ state: "exhausted", failureClass: "auth" });
 
+    // A reader that does not hold the key (the operator's shell: `jinn limits`, `jinn doctor`) cannot say it changed: the hold stands there.
+    resetOpencodeAccountKeysForTest();
+    expect(readEngineHealth()["opencode/opencode-go-b"]).toMatchObject({ state: "exhausted", failureClass: "auth" });
+    setOpencodeAccountKeyEnv([KEY], { [KEY]: "sk-first-key" });
+
     // A new key reads the record as cleared, and the card drops the failure.
     setOpencodeAccountKeyEnv([KEY], { [KEY]: "sk-second-key" });
     expect(readEngineHealth()["opencode/opencode-go-b"]).toMatchObject({ state: "ok", reason: "the credential changed" });

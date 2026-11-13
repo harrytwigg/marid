@@ -215,6 +215,23 @@ describe("collectOpencodeAccounts", () => {
       expect(out.lastFailure).toMatchObject({ class: "model-access", at: seen(-60_000) });
     });
 
+    it("ignores a hold another machine recorded, as the rest of the card does", () => {
+      const out = card({
+        "opencode/opencode-go-b": { state: "exhausted", until, failureClass: "model-access", observedAt: seen(-1000), host: "some-other-machine" },
+      });
+      expect(out.lastFailure).toBeUndefined();
+      expect(out.exhausted).toBeUndefined();
+      expect(out.nextTryAt).toBeUndefined();
+    });
+
+    it("skips a record whose time cannot be read when ordering, and still reports it", () => {
+      const out = card({
+        "opencode/opencode-go-b": { state: "exhausted", until, failureClass: "quota", observedAt: "not a time" },
+        "opencode/opencode-go-b/flash": { state: "exhausted", until, failureClass: "model-access", observedAt: seen(-1000) },
+      });
+      expect(out.lastFailure).toMatchObject({ class: "model-access" });
+    });
+
     it("is absent with no classed hold in force, and never carries the credential's identity", () => {
       expect(card({}).lastFailure).toBeUndefined();
       expect(card({ "opencode/opencode-go-b": { state: "exhausted", until, observedAt: seen(-1000) } }).lastFailure).toBeUndefined();

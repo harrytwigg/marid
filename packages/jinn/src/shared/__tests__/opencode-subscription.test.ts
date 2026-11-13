@@ -5,7 +5,7 @@ import Database from "better-sqlite3";
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resetOpencodeAccountKeysForTest, setOpencodeAccountKeyEnv } from "../child-env.js";
-import { forgetOpencodeAccountsForTest, rememberOpencodeAccounts } from "../opencode-subscription.js";
+import { forgetOpencodeAccountsForTest, opencodeCredentialChanged, rememberOpencodeAccounts } from "../opencode-subscription.js";
 import { validateConfigShape } from "../config.js";
 import type { JinnConfig } from "../config-types.js";
 import { opencodeSubscriptionProblems } from "../opencode-usage-limits-config.js";
@@ -198,9 +198,59 @@ describe("declared accounts", () => {
       expect(opencodeCredentialFingerprint("go-b", undefined)).toBe(sha("sk-one"));
     });
 
-    it("leaves a built-in account to the stored credential: its fingerprint ignores any key variable", () => {
+    it("leaves a built-in account to the stored credential: its fingerprint is the database's, whatever key variables are held", () => {
+      const data = fs.mkdtempSync(path.join(os.tmpdir(), "oc-builtin-fingerprint-"));
+      try {
+        fs.mkdirSync(path.join(data, "opencode"), { recursive: true });
+        const db = new Database(path.join(data, "opencode", "opencode.db"));
+        db.exec("CREATE TABLE credential (id TEXT PRIMARY KEY, integration_id TEXT, label TEXT NOT NULL, value TEXT NOT NULL, connector_id TEXT, method_id TEXT, active INTEGER, time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL)");
+        db.prepare("INSERT INTO credential (id, integration_id, label, value, active, time_created, time_updated) VALUES ('cred_1', 'opencode-go', 'API key', 'sk-db-secret', NULL, 1, 1000)").run();
+        db.close();
+        const env = { XDG_DATA_HOME: data } as NodeJS.ProcessEnv;
+        const withoutAccounts = opencodeCredentialFingerprint("opencode-go", config(), {}, env);
+        expect(withoutAccounts).toMatch(/^[0-9a-f]{32}$/);
+        setOpencodeAccountKeyEnv(["SUB_TEST_KEY_B"], { SUB_TEST_KEY_B: "sk-one" });
+        expect(opencodeCredentialFingerprint("opencode-go", withAccounts(), {}, env)).toBe(withoutAccounts);
+        expect(withoutAccounts).not.toBe(sha("sk-one"));
+      } finally {
+        fs.rmSync(data, { recursive: true, force: true });
+      }
+    });
+
+    it("finds an alias account in the remembered config when the config passed does not declare it", () => {
       setOpencodeAccountKeyEnv(["SUB_TEST_KEY_B"], { SUB_TEST_KEY_B: "sk-one" });
-      expect(opencodeCredentialFingerprint("opencode-go", withAccounts(), {}, { XDG_DATA_HOME: path.join(os.tmpdir(), "no-such-opencode-data") } as NodeJS.ProcessEnv)).toBeUndefined();
+      rememberOpencodeAccounts(withAccounts());
+      expect(isOpencodeSubscriptionProvider("go-b", config())).toBe(true);
+      expect(opencodeCredentialFingerprint("go-b", config())).toBe(sha("sk-one"));
+    });
+  });
+
+  describe("opencodeCredentialChanged", () => {
+    const sha = (key: string) => createHash("sha256").update(key).digest("hex").slice(0, 32);
+
+    it("is false while the key is the one the record was written against, true once it changed", () => {
+      rememberOpencodeAccounts(withAccounts());
+      setOpencodeAccountKeyEnv(["SUB_TEST_KEY_B"], { SUB_TEST_KEY_B: "sk-one" });
+      expect(opencodeCredentialChanged("go-b", sha("sk-one"))).toBe(false);
+      setOpencodeAccountKeyEnv(["SUB_TEST_KEY_B"], { SUB_TEST_KEY_B: "sk-two" });
+      expect(opencodeCredentialChanged("go-b", sha("sk-one"))).toBe(true);
+    });
+
+    it("is false in a process that does not hold the key: an operator's shell cannot say the key changed", () => {
+      rememberOpencodeAccounts(withAccounts());
+      expect(opencodeCredentialChanged("go-b", sha("sk-one"))).toBe(false);
+    });
+
+    it("keeps reading an unreadable credential of any other provider as changed", () => {
+      rememberOpencodeAccounts(withAccounts());
+      const previous = process.env.XDG_DATA_HOME;
+      process.env.XDG_DATA_HOME = path.join(os.tmpdir(), "no-such-opencode-data");
+      try {
+        expect(opencodeCredentialChanged("opencode-go", "0123456789abcdef0123456789abcdef")).toBe(true);
+        expect(opencodeCredentialChanged("openrouter", "0123456789abcdef0123456789abcdef")).toBe(true);
+      } finally {
+        if (previous === undefined) delete process.env.XDG_DATA_HOME; else process.env.XDG_DATA_HOME = previous;
+      }
     });
   });
 });

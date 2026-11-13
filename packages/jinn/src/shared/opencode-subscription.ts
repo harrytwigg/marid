@@ -49,7 +49,7 @@ export function forgetOpencodeAccountsForTest(): void {
 
 /** The account that is `provider`: the config's when one is given, else the last loaded config's. */
 function accountOf(provider: string, config: OpencodeConfig | undefined): Pick<OpencodeAccount, "base" | "keyEnv"> | undefined {
-  return config ? opencodeAccountByProvider(config, provider) : loadedAccounts.find((account) => account.provider === provider);
+  return (config ? opencodeAccountByProvider(config, provider) : undefined) ?? loadedAccounts.find((account) => account.provider === provider);
 }
 
 function listedSubscription(provider: string, config: OpencodeConfig | undefined): boolean {
@@ -110,6 +110,19 @@ function storedCredentialIdentity(provider: string, env: NodeJS.ProcessEnv): str
   } finally {
     try { db?.close(); } catch { /* best effort */ }
   }
+}
+
+/**
+ * Whether the credential `provider` signs in with is no longer the one `stored` was written against. An alias
+ * account's identity is its key, which only a process that holds the key variable can read (the gateway; not the
+ * operator's shell running `jinn limits` or `jinn doctor`). A reader that cannot read it cannot say the key changed,
+ * so the hold stands there; every other provider reads opencode's stored credential, which any process reaches, and
+ * an unreadable one reads as changed.
+ */
+export function opencodeCredentialChanged(provider: string | undefined, stored: string): boolean {
+  const current = opencodeCredentialFingerprint(provider, undefined);
+  if (current === undefined && provider !== undefined && accountOf(provider, undefined)?.base !== undefined) return false;
+  return current !== stored;
 }
 
 export interface FingerprintContext {

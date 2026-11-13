@@ -111,6 +111,10 @@ function printAccount(engineName: string, account: EngineLimitAccountSnapshot): 
   }
   if (account.buckets?.length) printBuckets(account.buckets);
   if (account.exhausted) console.log(`  Exhausted${account.exhausted.until ? ` until ${formatTime(account.exhausted.until)}` : ""}`);
+  if (isOpencodeAccount(account) && account.lastFailure) {
+    const { class: failureClass, at, reason } = account.lastFailure;
+    console.log(`  Last failure: ${failureClass}, ${formatTime(at)}${reason ? ` (${reason})` : ""}`);
+  }
   if (isOpencodeAccount(account) && account.nextTryAt) console.log(`  Next try: ${formatTime(account.nextTryAt)}`);
   if (account.hostUnreachable) console.log("  Note: the host did not answer; the windows are its last reading.");
   else if (account.noReading) console.log("  Note: no live reading for this account.");
