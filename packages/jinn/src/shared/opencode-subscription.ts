@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import type { JinnConfig } from "./config-types.js";
+import { opencodeAccountKeyEnvironment } from "./child-env.js";
+import { opencodeAccountByProvider, stagedOpencodeAccounts, type OpencodeAccount } from "./opencode-accounts-config.js";
 
 /**
  * Which opencode providers are subscriptions, how long a spent one is held out,
@@ -32,12 +34,39 @@ function opencodeSettings(config: OpencodeConfig | undefined): NonNullable<NonNu
   return config?.engines?.opencode;
 }
 
-/** Whether `provider` is a subscription: a 402 on it is a spent allowance that reopens, not a balance nobody will top up. */
+/** The staged accounts of the config last loaded: a reader that has no config in hand (the health store judging an `auth` record) finds an alias account's key variable here. */
+let loadedAccounts: readonly OpencodeAccount[] = [];
+
+/** Remember the declared accounts of a freshly loaded config. */
+export function rememberOpencodeAccounts(config: Parameters<typeof stagedOpencodeAccounts>[0]): void {
+  loadedAccounts = stagedOpencodeAccounts(config);
+}
+
+/** Test seam. */
+export function forgetOpencodeAccountsForTest(): void {
+  loadedAccounts = [];
+}
+
+/** The account that is `provider`: the config's when one is given, else the last loaded config's. */
+function accountOf(provider: string, config: OpencodeConfig | undefined): Pick<OpencodeAccount, "base" | "keyEnv"> | undefined {
+  return config ? opencodeAccountByProvider(config, provider) : loadedAccounts.find((account) => account.provider === provider);
+}
+
+function listedSubscription(provider: string, config: OpencodeConfig | undefined): boolean {
+  const configured = opencodeSettings(config)?.subscriptionProviders;
+  return (Array.isArray(configured) ? configured : DEFAULT_SUBSCRIPTION_PROVIDERS).includes(provider);
+}
+
+/**
+ * Whether `provider` is a subscription: a 402 on it is a spent allowance that reopens, not a balance nobody will top up.
+ * A declared account counts when its `base` is one (an alias of a subscription); a built-in account is the provider
+ * itself, so the list answers for it.
+ */
 export function isOpencodeSubscriptionProvider(provider: string | undefined, config: OpencodeConfig | undefined): boolean {
   if (provider === undefined || provider === "") return false;
-  const configured = opencodeSettings(config)?.subscriptionProviders;
-  const providers = Array.isArray(configured) ? configured : DEFAULT_SUBSCRIPTION_PROVIDERS;
-  return providers.includes(provider);
+  if (listedSubscription(provider, config)) return true;
+  const base = accountOf(provider, config)?.base;
+  return base !== undefined && listedSubscription(base, config);
 }
 
 /** How long a spent `provider` is held out before it is offered a turn again, in ms. */
@@ -88,6 +117,12 @@ export interface FingerprintContext {
   remote?: boolean;
 }
 
+/** An alias account signs in with the key its variable holds, so its identity is a short sha256 of that key (as the gateway holds it, child-env.ts). undefined with no key set. */
+function aliasKeyFingerprint(keyEnv: string | undefined): string | undefined {
+  const key = keyEnv === undefined ? undefined : opencodeAccountKeyEnvironment()[keyEnv]?.trim();
+  return key ? createHash("sha256").update(key).digest("hex").slice(0, 32) : undefined;
+}
+
 /**
  * An opaque identity of the credential `provider` signs in with, for noticing that
  * it changed. Never the key itself. undefined when nothing can be read, a remote
@@ -98,11 +133,13 @@ export interface FingerprintContext {
  */
 export function opencodeCredentialFingerprint(
   provider: string | undefined,
-  _config: OpencodeConfig | undefined,
+  config: OpencodeConfig | undefined,
   context: FingerprintContext = {},
   env: NodeJS.ProcessEnv = process.env,
 ): string | undefined {
   if (provider === undefined || provider === "" || context.remote) return undefined;
+  const account = accountOf(provider, config);
+  if (account?.base !== undefined) return aliasKeyFingerprint(account.keyEnv);
   const identity = storedCredentialIdentity(provider, env);
   return identity === undefined ? undefined : createHash("sha256").update(`opencode-credential\0${provider}\0${identity}`).digest("hex").slice(0, 32);
 }

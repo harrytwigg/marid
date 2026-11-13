@@ -192,4 +192,35 @@ describe("collectOpencodeAccounts", () => {
     })!;
     expect(out.every((account) => account.exhausted === undefined)).toBe(true);
   });
+
+  describe("lastFailure", () => {
+    const config = cfg({ accounts: ACCOUNTS });
+    const until = new Date(NOW + HOUR).toISOString();
+    const seen = (offset: number) => new Date(NOW + offset).toISOString();
+    const card = (health: Record<string, unknown>, account = "go-b") =>
+      collectOpencodeAccounts(config, engine(config, []), { employees, env: {}, now: new Date(NOW), health: health as never })!.find((a) => a.account === account)!;
+
+    it("carries the class, when it was seen and why, from the provider's record", () => {
+      const out = card({ "opencode/opencode-go-b": { state: "exhausted", until, failureClass: "quota", observedAt: seen(-5 * 60_000), reason: "Insufficient account funds" } });
+      expect(out.lastFailure).toEqual({ class: "quota", at: seen(-5 * 60_000), reason: "Insufficient account funds" });
+      expect(out.nextTryAt).toBe(until);
+    });
+
+    it("takes the newest of the provider's record and its models' records", () => {
+      const out = card({
+        "opencode/opencode-go-b": { state: "exhausted", until, failureClass: "quota", observedAt: seen(-30 * 60_000) },
+        "opencode/opencode-go-b/flash": { state: "exhausted", until, failureClass: "model-access", observedAt: seen(-60_000), reason: "Model access is disabled" },
+        "opencode/opencode-go-c/flash": { state: "exhausted", until, failureClass: "auth", observedAt: seen(-1000) },
+      });
+      expect(out.lastFailure).toMatchObject({ class: "model-access", at: seen(-60_000) });
+    });
+
+    it("is absent with no classed hold in force, and never carries the credential's identity", () => {
+      expect(card({}).lastFailure).toBeUndefined();
+      expect(card({ "opencode/opencode-go-b": { state: "exhausted", until, observedAt: seen(-1000) } }).lastFailure).toBeUndefined();
+      expect(card({ "opencode/opencode-go-b": { state: "ok", observedAt: seen(-HOUR) } }).lastFailure).toBeUndefined();
+      const out = card({ "opencode/opencode-go-b": { state: "exhausted", until, failureClass: "auth", observedAt: seen(-1000), credentialFingerprint: "abcd1234" } });
+      expect(JSON.stringify(out)).not.toContain("abcd1234");
+    });
+  });
 });

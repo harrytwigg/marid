@@ -29,6 +29,8 @@ export interface OpencodeAccountLimitSnapshot extends EngineLimitAccountSnapshot
   buckets: EngineLimitBucket[];
   /** When health stops holding the provider: `recheckAt`, else `until`. */
   nextTryAt?: string;
+  /** What the standing hold on the provider (or one of its models) is: its class, when it was seen and why. Never the credential's identity. */
+  lastFailure?: { class: "quota" | "auth" | "model-access"; at: string; reason?: string };
   problems?: string[];
 }
 
@@ -92,6 +94,25 @@ function holdFields(account: OpencodeAccount, resolved: Resolved): Pick<Opencode
   return { exhausted: holding.until ? { until: holding.until } : {}, ...(nextTryAt ? { nextTryAt } : {}) };
 }
 
+/** A classed hold in force under `key`, with when it was seen. */
+function classedHold(resolved: Resolved, key: string): { record: EngineHealth; at: string } | undefined {
+  const record = resolved.health[key];
+  if (record?.failureClass === undefined || record.observedAt === undefined) return undefined;
+  return isEngineExhausted(resolved.health, key, resolved.now) ? { record, at: record.observedAt } : undefined;
+}
+
+/** The newest classed hold in force on the provider's own key or on one of its models' keys (`opencode/<provider>/<model>`). */
+function lastFailureOf(account: OpencodeAccount, resolved: Resolved): OpencodeAccountLimitSnapshot["lastFailure"] {
+  const own = providerHealthKey(account.provider);
+  const holds = Object.keys(resolved.health)
+    .filter((key) => key === own || key.startsWith(`${own}/`))
+    .flatMap((key) => classedHold(resolved, key) ?? []);
+  const newest = holds.sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0];
+  if (newest === undefined) return undefined;
+  const { failureClass, reason } = newest.record;
+  return { class: failureClass!, at: newest.at, ...(reason ? { reason } : {}) };
+}
+
 /** The account's own declaration: its base, and its key variable's name with whether it is set. */
 function declarationFields(account: OpencodeAccount, env: Resolved["env"]): Pick<OpencodeAccountLimitSnapshot, "base" | "keyEnv" | "keySet"> {
   return {
@@ -119,6 +140,7 @@ function snapshotOf(account: OpencodeAccount, config: JinnConfig, engine: Engine
     ...declarationFields(account, resolved.env),
     buckets,
     ...holdFields(account, resolved),
+    ...(lastFailureOf(account, resolved) ? { lastFailure: lastFailureOf(account, resolved)! } : {}),
     ...(problems.length > 0 ? { problems } : {}),
   };
 }

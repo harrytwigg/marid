@@ -68,7 +68,7 @@ function bindingByProvider(buckets: readonly EngineLimitBucket[], nowMs: number)
  */
 function holdsAgainstMeter(record: EngineHealth | undefined, reopensAtMs: number, now: Date): boolean {
   if (!record || record.state !== "exhausted" || isSpent(record, now)) return false;
-  const failureClass = (record as { failureClass?: string }).failureClass;
+  const failureClass = record.failureClass;
   if (record.reason === METERED_WINDOW_REASON && failureClass === undefined) return false;
   if (failureClass !== "quota" || record.until === undefined) return true;
   return Date.parse(record.until) >= reopensAtMs;

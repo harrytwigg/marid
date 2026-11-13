@@ -2,7 +2,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
+import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { resetOpencodeAccountKeysForTest, setOpencodeAccountKeyEnv } from "../child-env.js";
+import { forgetOpencodeAccountsForTest, rememberOpencodeAccounts } from "../opencode-subscription.js";
 import { validateConfigShape } from "../config.js";
 import type { JinnConfig } from "../config-types.js";
 import { opencodeSubscriptionProblems } from "../opencode-usage-limits-config.js";
@@ -129,5 +132,75 @@ describe("opencodeSubscriptionProblems", () => {
   it("is checked with the rest of the config", () => {
     const problems = validateConfigShape({ gateway: {}, engines: { default: "claude", claude: {}, opencode: { reprobeMinutes: "soon" } } });
     expect(problems.some((problem) => problem.includes("engines.opencode.reprobeMinutes"))).toBe(true);
+  });
+});
+
+
+describe("declared accounts", () => {
+  const accounts = {
+    "go-b": { provider: "go-b", base: "opencode-go", keyEnv: "SUB_TEST_KEY_B" },
+    "router-b": { provider: "router-b", base: "openrouter", keyEnv: "SUB_TEST_KEY_R" },
+    builtin: { provider: "opencode-go" },
+  };
+  const withAccounts = (opencode: Record<string, unknown> = {}) => config({ accounts, ...opencode });
+
+  afterEach(() => { resetOpencodeAccountKeysForTest(); forgetOpencodeAccountsForTest(); });
+
+  it("counts an account whose base is a subscription provider, and not one whose base is not", () => {
+    expect(isOpencodeSubscriptionProvider("go-b", withAccounts())).toBe(true);
+    expect(isOpencodeSubscriptionProvider("router-b", withAccounts())).toBe(false);
+  });
+
+  it("counts a built-in account whose provider is a subscription, and follows a configured list", () => {
+    expect(isOpencodeSubscriptionProvider("opencode-go", withAccounts())).toBe(true);
+    const listed = withAccounts({ subscriptionProviders: ["openrouter"] });
+    expect(isOpencodeSubscriptionProvider("router-b", listed)).toBe(true);
+    expect(isOpencodeSubscriptionProvider("go-b", listed)).toBe(false);
+    expect(isOpencodeSubscriptionProvider("opencode-go", listed)).toBe(false);
+  });
+
+  it("finds an alias account from the last loaded config when none is passed", () => {
+    expect(isOpencodeSubscriptionProvider("go-b", undefined)).toBe(false);
+    rememberOpencodeAccounts(withAccounts());
+    expect(isOpencodeSubscriptionProvider("go-b", undefined)).toBe(true);
+  });
+
+  describe("fingerprint of an alias account", () => {
+    const sha = (key: string) => createHash("sha256").update(key).digest("hex").slice(0, 32);
+
+    it("is a short sha256 of the resolved key, never the key", () => {
+      setOpencodeAccountKeyEnv(["SUB_TEST_KEY_B"], { SUB_TEST_KEY_B: "sk-alias-secret" });
+      const fingerprint = opencodeCredentialFingerprint("go-b", withAccounts())!;
+      expect(fingerprint).toBe(sha("sk-alias-secret"));
+      expect(fingerprint).toMatch(/^[0-9a-f]{32}$/);
+      expect(fingerprint).not.toContain("secret");
+    });
+
+    it("reads the key the gateway took, not process.env, and changes when the key is rotated", () => {
+      process.env.SUB_TEST_KEY_B = "sk-from-process-env";
+      try {
+        setOpencodeAccountKeyEnv(["SUB_TEST_KEY_B"], { SUB_TEST_KEY_B: "sk-one" });
+        const first = opencodeCredentialFingerprint("go-b", withAccounts());
+        setOpencodeAccountKeyEnv(["SUB_TEST_KEY_B"], { SUB_TEST_KEY_B: "sk-two" });
+        expect(opencodeCredentialFingerprint("go-b", withAccounts())).not.toBe(first);
+        expect(first).toBe(sha("sk-one"));
+      } finally {
+        delete process.env.SUB_TEST_KEY_B;
+      }
+    });
+
+    it("is undefined with no key set, on a remote host, and finds the account from the last loaded config", () => {
+      expect(opencodeCredentialFingerprint("go-b", withAccounts())).toBeUndefined();
+      setOpencodeAccountKeyEnv(["SUB_TEST_KEY_B"], { SUB_TEST_KEY_B: "sk-one" });
+      expect(opencodeCredentialFingerprint("go-b", withAccounts(), { remote: true })).toBeUndefined();
+      expect(opencodeCredentialFingerprint("go-b", undefined)).toBeUndefined();
+      rememberOpencodeAccounts(withAccounts());
+      expect(opencodeCredentialFingerprint("go-b", undefined)).toBe(sha("sk-one"));
+    });
+
+    it("leaves a built-in account to the stored credential: its fingerprint ignores any key variable", () => {
+      setOpencodeAccountKeyEnv(["SUB_TEST_KEY_B"], { SUB_TEST_KEY_B: "sk-one" });
+      expect(opencodeCredentialFingerprint("opencode-go", withAccounts(), {}, { XDG_DATA_HOME: path.join(os.tmpdir(), "no-such-opencode-data") } as NodeJS.ProcessEnv)).toBeUndefined();
+    });
   });
 });
