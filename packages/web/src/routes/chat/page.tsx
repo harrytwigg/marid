@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo, Suspense, lazy } from 'react'
 import { useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import { api } from '@/lib/api'
+import { isTabLayoutWidth } from '@/lib/tab-layout-width'
 import {
   initialMobileView,
   parseSelectedSession,
@@ -406,7 +407,7 @@ function ChatPage() {
   // reaches the ChatInput whether the pane remounted or adopted the session.
   useEffect(() => {
     if (previewHandoffTargetRef.current === selectedId) return
-    if (typeof window !== 'undefined' && window.innerWidth < 1024) return
+    if (typeof window !== 'undefined' && !isTabLayoutWidth(window.innerWidth)) return
     if (preservePaneFocusRef.current) {
       const shouldPreserve = preservePaneFocusRef.current === selectedId
       preservePaneFocusRef.current = null
@@ -713,7 +714,7 @@ function ChatPage() {
     if (!destinationFocusPendingRef.current) return
     destinationFocusPendingRef.current = false
     requestAnimationFrame(() => {
-      if (window.innerWidth >= 1024 && focusedSessionId) paneState.bumpFocus(focusedSessionId)
+      if (isTabLayoutWidth(window.innerWidth) && focusedSessionId) paneState.bumpFocus(focusedSessionId)
       else document.querySelector<HTMLElement>('button[aria-label^="Back"]')?.focus({ preventScroll: true })
     })
   }, [focusedSessionId, paneState.bumpFocus])

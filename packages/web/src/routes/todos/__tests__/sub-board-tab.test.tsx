@@ -2,7 +2,7 @@ import "@/test/preload-dialogs"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { createMemoryRouter, RouterProvider, useLocation, type RouteObject } from "react-router-dom"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkItemCompactWire, WorkItemStatusWire, WorkItemTreeNodeWire, WorkItemTreeWire } from "@/lib/api"
 import { TodoBoardTabContext } from "@/components/chat/file-open-context"
 import { BOARD_FILTERS_STORAGE_KEY } from "@/lib/todos"
@@ -87,6 +87,7 @@ const tabRoutes = (todoId = "TSK-1"): RouteObject[] => [
 ]
 
 function phone(matches: boolean) {
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: matches ? 390 : 1280 })
   window.matchMedia = ((query: string) => ({
     matches: matches && query.includes("max-width: 700px"),
     media: query,
@@ -200,6 +201,28 @@ describe("the pop-up's Pin as tab", () => {
     mount("/todos/TSK-1?view=board", popupRoutes())
     await screen.findByTestId("board-card-TSK-2")
     expect(screen.queryByTestId("sub-board-pin")).toBeNull()
+  })
+})
+
+describe("the pop-up's Pin as tab at widths between the board's phone layout and the chat's", () => {
+  afterEach(() => phone(false))
+
+  it("is not offered at 900px, which the chat page lays out as mobile (no tab to land in)", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 900 })
+    mount("/todos/TSK-1?view=board", [
+      { path: "/todos/:todoId", element: <><SubBoardDialog rootId="TSK-1" onClose={vi.fn()} closeOnOpenTodo={false} /><Where /></> },
+    ])
+    await screen.findByTestId("board-card-TSK-2")
+    expect(screen.queryByTestId("sub-board-pin")).toBeNull()
+  })
+
+  it("is offered at 1024px, the chat page's narrowest tab layout", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1024 })
+    mount("/todos/TSK-1?view=board", [
+      { path: "/todos/:todoId", element: <><SubBoardDialog rootId="TSK-1" onClose={vi.fn()} closeOnOpenTodo={false} /><Where /></> },
+    ])
+    await screen.findByTestId("board-card-TSK-2")
+    expect(screen.getByTestId("sub-board-pin")).toBeTruthy()
   })
 })
 
