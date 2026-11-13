@@ -12,6 +12,7 @@ import { claimWorkItem } from "../work-items/claims.js";
 import { notifyTodoChanged } from "../work-items/live-events.js";
 import type { GatewayEmit } from "../shared/gateway-events.js";
 import { runActionJob, type CronActionTrigger } from "./actions.js";
+import { cronEngineError } from "./validation.js";
 
 export interface RunCronJobOptions {
   /**
@@ -57,6 +58,17 @@ export async function runCronJob(
     return runActionJob({ ...job, action: job.action }, { trigger: opts?.trigger ?? "manual", ...(opts?.emit ? { emit: opts.emit } : {}) });
   }
   const startTime = Date.now();
+  // A hand-edited jobs.json (or a file from before an engine was removed) can
+  // name an engine this build does not have. Refuse the fire here, with the same
+  // actionable words as the load, rather than spawning a session that cannot run.
+  const engineError = cronEngineError(job.engine);
+  if (engineError) {
+    const message = `Cron job "${job.name}" (${job.id}) cannot run: ${engineError}`;
+    appendRunLog(job.id, { timestamp: new Date().toISOString(), status: "error", durationMs: 0, error: engineError });
+    opts?.emit?.("cron:run-finished", { jobId: job.id, status: "error" });
+    logger.error(message);
+    return;
+  }
   logger.info(`Cron job "${job.name}" (${job.id}) starting`);
 
   const delivery = job.delivery || config.cron?.defaultDelivery;

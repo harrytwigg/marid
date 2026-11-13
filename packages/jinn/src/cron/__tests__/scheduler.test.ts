@@ -101,6 +101,16 @@ describe("scheduler — manual vs scheduled fire identity (GRS-003b-1)", () => {
     expect(opts.fireIso).toMatch(/^\d{4}-\d{2}-\d{2}T[0-9:.]+Z$/);
   });
 
+  it("refuses a job naming an engine this build removed, and schedules nothing", async () => {
+    const legacy = { ...job, id: "legacy", engine: "freebuff" };
+
+    expect(reloadScheduler([legacy])).toEqual({ scheduled: 0, skipped: 1 });
+
+    const { logger } = await import("../../shared/logger.js");
+    const warnings = (logger.warn as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]));
+    expect(warnings.some((line) => line.includes('engine "freebuff"') && line.includes("removed in 0.34.0"))).toBe(true);
+  });
+
   it("reload skips an invalid job and schedules the valid ones", () => {
     startScheduler([job], deps);
     const oldTask = scheduledTasks[0];

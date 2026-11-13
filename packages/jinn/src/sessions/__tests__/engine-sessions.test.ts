@@ -285,3 +285,17 @@ describe("engine session refs", () => {
     expect(switchedBack?.transportMeta?.engineSyncSince).toBe(s.createdAt);
   });
 });
+
+describe("a session left on a removed engine", () => {
+  it("still reads and lists, so the registry survives the engine going away", () => {
+    const s = reg.createSession({
+      engine: "freebuff",
+      source: "web",
+      sourceRef: "web:legacy-freebuff",
+      model: "MiMo v2.6 Flash Slow",
+    });
+
+    expect(reg.getSession(s.id)?.engine).toBe("freebuff");
+    expect(reg.listSessions().map((session) => session.id)).toContain(s.id);
+  });
+});

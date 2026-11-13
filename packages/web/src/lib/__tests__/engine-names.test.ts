@@ -12,4 +12,8 @@ describe("engineDisplayName", () => {
   it("title-cases an engine it does not know, so a new one still reads", () => {
     expect(engineDisplayName("brandnew")).toBe("Brandnew")
   })
+
+  it("renders a session left on the removed Freebuff engine by its old name", () => {
+    expect(engineDisplayName("freebuff")).toBe("Freebuff")
+  })
 })

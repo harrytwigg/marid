@@ -14,7 +14,6 @@ const ENGINE_DISPLAY_NAMES: Record<string, string> = {
   grok: "Grok",
   antigravity: "Antigravity",
   musecode: "Muse Code",
-  freebuff: "Freebuff",
   opencode: "opencode",
 }
 

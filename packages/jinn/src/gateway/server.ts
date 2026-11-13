@@ -43,7 +43,6 @@ import { OpencodeInteractiveEngine } from "../engines/opencode-interactive.js";
 import { resolveSessionEngineMcp } from "../sessions/engine-run-mcp.js";
 import { GrokEngine } from "../engines/grok.js";
 import { GrokInteractiveEngine } from "../engines/grok-interactive.js";
-import { FreebuffInteractiveEngine } from "../engines/freebuff-interactive.js";
 import { HermesAcpEngine } from "../engines/hermes-acp.js";
 import { HermesInteractiveEngine } from "../engines/hermes-interactive.js";
 import type { PtyViewEngine } from "../engines/pty-view-engine.js";
@@ -664,16 +663,6 @@ export async function startGateway(
     onCleanup: () => refreshPtyPids(),
   });
   const hermesInteractiveEngine = new HermesInteractiveEngine(hermesLifecycle);
-  // Freebuff has no print mode: one terminal engine serves both the work turns
-  // and the dashboard's view, so it is registered under both maps below.
-  const freebuffLifecycle = createPtyLifecycle({
-    onAdopt: () => refreshPtyPids(),
-    onCleanup: () => refreshPtyPids(),
-  });
-  const freebuffEngine = new FreebuffInteractiveEngine(freebuffLifecycle, {
-    remote: () => currentConfig.remote,
-    config: () => currentConfig.engines.freebuff,
-  });
   const piEngine = new PiEngine({
     // Same two live readers the interactive engine takes, and for the same
     // reason: pi is the second engine that can relocate a turn over SSH, so a
@@ -729,7 +718,7 @@ export async function startGateway(
     },
   });
   opencodeViewPids = () => opencodeInteractiveEngine.livePids();
-  logger.info(`Engines initialized: claude (interactive PTY), codex (headless + interactive PTY), antigravity (headless + interactive PTY), grok (headless + interactive PTY), hermes (headless + interactive PTY), pi, opencode (${opencodeMode(config.engines.opencode)} mode), musecode (headless MSP + interactive PTY), freebuff (interactive PTY)`);
+  logger.info(`Engines initialized: claude (interactive PTY), codex (headless + interactive PTY), antigravity (headless + interactive PTY), grok (headless + interactive PTY), hermes (headless + interactive PTY), pi, opencode (${opencodeMode(config.engines.opencode)} mode), musecode (headless MSP + interactive PTY)`);
 
   const codexEngine = new CodexEngine();
   const grokEngine = new GrokEngine();
@@ -755,7 +744,6 @@ export async function startGateway(
   engines.set("pi", piEngine);
   engines.set("opencode", opencodeEngine);
   engines.set("musecode", musecodeEngine);
-  engines.set("freebuff", freebuffEngine);
 
   // PTY-capable engines, keyed by engine name — the /ws/pty handler routes by
   // session.engine so the xterm view attaches to the right engine.
@@ -767,7 +755,6 @@ export async function startGateway(
     hermes: hermesInteractiveEngine,
     opencode: opencodeInteractiveEngine,
     musecode: musecodeInteractiveEngine,
-    freebuff: freebuffEngine,
   };
 
   const terminalEngine = createShellTerminalEngine({ getConfig: () => currentConfig, getSession, employees: (c) => orgRegistry(c).values() });
@@ -1361,7 +1348,6 @@ export async function startGateway(
     opencodeInteractiveEngine.killAll();
     musecodeEngine.killAll();
     musecodeInteractiveEngine.killAll();
-    freebuffEngine.killAll();
     void opencodeServers.stopAll();
 
     // A pi, opencode or Muse Code turn on a remote host is killed over a control
