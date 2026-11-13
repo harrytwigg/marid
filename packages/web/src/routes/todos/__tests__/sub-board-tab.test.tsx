@@ -70,9 +70,11 @@ function Where() {
   return <><span data-testid="where">{location.pathname}{location.search}</span><span data-testid="state">{JSON.stringify(location.state)}</span></>
 }
 
-function mount(entry: string | { pathname: string; state: unknown }, routes: RouteObject[]) {
+type Entry = string | { pathname: string; search?: string; state?: unknown }
+function mount(entry: Entry | Entry[], routes: RouteObject[]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  const router = createMemoryRouter(routes, { initialEntries: [entry] })
+  const entries = Array.isArray(entry) ? entry : [entry]
+  const router = createMemoryRouter(routes, { initialEntries: entries, initialIndex: entries.length - 1 })
   render(
     <QueryClientProvider client={client}>
       <RouterProvider router={router} />
@@ -284,26 +286,38 @@ describe("the pop-up as an address (?view=board)", () => {
 
   it("keeps the page's route state when it opens and when it closes (where it was opened from, its Back target)", async () => {
     const opened = { fromBoard: "subtree:TSK-9", returnBack: true }
-    const router = mount({ pathname: "/todos/TSK-1", state: opened }, routes)
+    mount({ pathname: "/todos/TSK-1", state: opened }, routes)
     expect(stateOf()).toEqual(opened)
     fireEvent.click(screen.getByTestId("open"))
     await screen.findByTestId("sub-board-dialog")
     expect(where()).toBe("/todos/TSK-1?view=board")
+    expect(stateOf()).toMatchObject(opened)
+    fireEvent.keyDown(screen.getByTestId("sub-board-dialog"), { key: "Escape" })
+    await waitFor(() => expect(where()).toBe("/todos/TSK-1"))
     expect(stateOf()).toEqual(opened)
+  })
+
+  it("keeps the route state when a pop-up opened by a link closes (a replace: there is no earlier entry of the page)", async () => {
+    const opened = { fromBoard: "platform" }
+    const router = mount({ pathname: "/todos/TSK-1", search: "?view=board", state: opened }, routes)
+    await screen.findByTestId("sub-board-dialog")
     fireEvent.keyDown(screen.getByTestId("sub-board-dialog"), { key: "Escape" })
     await waitFor(() => expect(where()).toBe("/todos/TSK-1"))
     expect(stateOf()).toEqual(opened)
     expect(router.state.historyAction).toBe("REPLACE")
   })
 
-  it("keeps the route state when it opens from a link and closes", async () => {
+  it("closing a pop-up the button opened leaves the page one entry: Back from it goes where the page was opened from", async () => {
     const opened = { fromBoard: "platform" }
-    mount({ pathname: "/todos/TSK-1", state: opened }, routes)
+    const router = mount([{ pathname: "/todos" }, { pathname: "/todos/TSK-1", state: opened }], [{ path: "/todos", element: <Where /> }, ...routes])
     fireEvent.click(screen.getByTestId("open"))
     await screen.findByTestId("sub-board-dialog")
-    await act(async () => { fireEvent.keyDown(screen.getByTestId("sub-board-dialog"), { key: "Escape" }) })
+    fireEvent.keyDown(screen.getByTestId("sub-board-dialog"), { key: "Escape" })
     await waitFor(() => expect(screen.queryByTestId("sub-board-dialog")).toBeNull())
+    expect(where()).toBe("/todos/TSK-1")
     expect(stateOf()).toEqual(opened)
+    await act(async () => { await router.navigate(-1) })
+    expect(where()).toBe("/todos")
   })
 
   it("a card opens its Todo by the one move, and Back returns to the board still open", async () => {
