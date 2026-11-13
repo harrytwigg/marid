@@ -135,6 +135,17 @@ describe('Switch engine in the new-chat selector', () => {
     expect(screen.getByRole('menuitem', { name: 'opencode · go-a' }).getAttribute('aria-checked')).toBe('false')
   })
 
+  it('re-picking the account already shown only goes back: the chosen model is not replaced', async () => {
+    const onChange = vi.fn()
+    renderUi(<Harness initial={{ engine: 'opencode', model: 'opencode-go/kimi-k3', effortLevel: 'high' }} onChange={onChange} />)
+    await waitFor(() => expect(apiMocks.getEngineLimits).toHaveBeenCalled())
+    await openEnginePanel()
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'opencode · go-a' }))
+    expect(onChange).not.toHaveBeenCalled()
+    expect(await screen.findByText(/Engine · opencode · go-a/)).toBeTruthy()
+    expect(chip().getAttribute('aria-label')).toContain('kimi-k3')
+  })
+
   it('is unchanged with no accounts declared: one "opencode" row, every opencode model, no account segment', async () => {
     apiMocks.getEngineLimits.mockResolvedValue({ generatedAt: 'now', default: 'claude', engines: {} })
     renderUi(<Harness initial={{ engine: 'opencode', model: 'opencode-go/glm-5.3' }} />)
@@ -180,6 +191,18 @@ describe('the fallback chip\'s picker', () => {
     expect(await screen.findByText(/Engine · opencode · go-b/)).toBeTruthy()
     fireEvent.click(screen.getByRole('menuitemradio', { name: /^kimi-k3/ }))
     expect(onChoose).toHaveBeenCalledWith({ engine: 'opencode', model: 'opencode-go-b/kimi-k3' })
+  })
+
+  it('browses the account picked after leaving opencode and coming back, whatever the session\'s own target is', async () => {
+    renderPicker(() => {}, { engine: 'opencode', model: 'opencode-go/glm-5.3' })
+    expect(await screen.findByText(/Engine · opencode · go-a/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: /switch engine/i }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Claude' }))
+    expect(await screen.findByText(/Engine · Claude/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: /switch engine/i }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'opencode · go-b' }))
+    expect(await screen.findByText(/Engine · opencode · go-b/)).toBeTruthy()
+    expect(modelNames().map((n) => n.replace(/go-b$/, ''))).toEqual(['glm-5.3', 'kimi-k3'])
   })
 
   it('starts on the account of the session\'s own target', async () => {

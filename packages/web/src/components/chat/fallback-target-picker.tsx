@@ -35,7 +35,9 @@ export function FallbackTargetPicker({ view, onChoose, onBack }: {
     <ModelPicker
       registry={registry}
       engine={engine}
-      modelId={own?.engine === engine ? own.model ?? '' : ''}
+      // The session's own target model whichever engine is browsed: ids are engine-specific, so it marks a row only on its own engine, and
+      // it stays the same while the operator moves between engines (which the picker's browsed opencode account is keyed to).
+      modelId={own?.model ?? ''}
       onPickEngine={setBrowsing}
       onPickModel={(model) => onChoose({ engine, model })}
       isEngineAllowed={isEngineAllowed}

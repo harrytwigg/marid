@@ -106,8 +106,9 @@ export function ModelPicker({ registry, engine, modelId, onPickEngine, onPickMod
   const chooseAccount = (account: string | undefined) => {
     list.clearSearch()
     oc.browse(account)
-    if (onPickAccount) onPickAccount(account)
-    else if (engine !== 'opencode') onPickEngine('opencode')
+    // Re-picking the account already shown is just a way back, like re-picking the current engine: it must not move the model.
+    const alreadyShown = engine === 'opencode' && account === oc.shown
+    if (!alreadyShown) (onPickAccount ?? (() => onPickEngine('opencode')))(account)
     nav.goToPanel('main')
   }
 
