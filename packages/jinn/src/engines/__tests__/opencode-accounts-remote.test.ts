@@ -82,8 +82,10 @@ async function stage(opencodeVersion: string, opencodeAccounts: ReturnType<typeo
     jinnSessionId: session(),
     gatewayPort: 40123,
     ...(opencodeAccounts ? { opencodeAccounts } : {}),
-  } as never) as { opencodeConfigPath?: string; envFilePath: string };
+  } as never) as { opencodeConfigPath?: string; envFilePath: string; accountKeysFilePath?: string };
   return {
+    accountKeys: staged.accountKeysFilePath ? fs.readFileSync(staged.accountKeysFilePath, "utf-8") : undefined,
+    accountKeysFilePath: staged.accountKeysFilePath,
     config: staged.opencodeConfigPath ? JSON.parse(fs.readFileSync(staged.opencodeConfigPath, "utf-8")) as Record<string, unknown> : undefined,
     configText: staged.opencodeConfigPath ? fs.readFileSync(staged.opencodeConfigPath, "utf-8") : "",
     envFile: fs.readFileSync(staged.envFilePath, "utf-8"),
@@ -127,34 +129,40 @@ describe.skipIf(process.platform === "win32")("a remote opencode session with ac
     expect(Object.keys(models)).toEqual(["alpha"]);
   });
 
-  it("carries the key in the 0600 session-env file, and nowhere on a command line", async () => {
-    const { envFile, envFilePath, configText } = await stage("2.0.32", staging());
-    expect(envFile).toContain(`export GO_B_KEY='${SENTINEL}'\n`);
-    expect(fs.statSync(envFilePath).mode & 0o777).toBe(0o600);
+  it("carries the key in a 0600 file of its own, never the session-env file the terminal view sources, and nowhere on a command line", async () => {
+    const { envFile, envFilePath, accountKeys, accountKeysFilePath, configText } = await stage("2.0.32", staging());
+    expect(accountKeys).toBe(`export GO_B_KEY='${SENTINEL}'\n`);
+    expect(accountKeysFilePath).toMatch(/\/tmp\/account-keys\.sh$/);
+    expect(fs.statSync(accountKeysFilePath!).mode & 0o777).toBe(0o600);
+    expect(envFilePath).not.toBe(accountKeysFilePath);
+    expect(envFile).not.toContain(SENTINEL);
+    expect(envFile).not.toContain("GO_B_KEY");
     expect(configText).not.toContain(SENTINEL);
     expect(spawned.argv.length).toBeGreaterThan(0);
     for (const argv of spawned.argv) expect(argv.join("\u0000"), argv[0]).not.toContain(SENTINEL);
   });
 
   it("stages the block but exports no variable when the gateway has no key", async () => {
-    const { config, envFile } = await stage("2.0.32", staging({}));
+    const { config, envFile, accountKeys } = await stage("2.0.32", staging({}));
     expect(config).toHaveProperty("provider.go-b");
     expect(envFile).not.toContain("GO_B_KEY");
+    expect(accountKeys).toBe("");
   });
 
-  it("stages only the account a session's chain reaches: its block in the config and its key in the session-env file", async () => {
-    const { config, envFile, configText } = await stage("2.0.32", twoAccounts(["go-a"]));
+  it("stages only the account a session's chain reaches: its block in the config and its key in the keys file", async () => {
+    const { config, envFile, accountKeys, configText } = await stage("2.0.32", twoAccounts(["go-a"]));
     expect(Object.keys((config as { provider: object }).provider)).toEqual(["go-a"]);
-    expect(envFile).toContain(`export GO_A_KEY='${KEY_A}'`);
-    expect(envFile).not.toContain("GO_B_KEY");
+    expect(accountKeys).toBe(`export GO_A_KEY='${KEY_A}'\n`);
+    expect(envFile).not.toMatch(/GO_[AB]_KEY/);
     expect(envFile).not.toContain(SENTINEL);
     expect(configText).not.toContain("go-b");
   });
 
-  it("stages no account block and no key for a session whose chain reaches none", async () => {
+  it("stages no account block and no key file for a session whose chain reaches none, or that has no accounts", async () => {
     expect((await stage("2.0.32", twoAccounts([]))).config).toBeUndefined();
-    const { envFile } = await stage("2.0.32", undefined);
+    const { envFile, accountKeysFilePath } = await stage("2.0.32", undefined);
     expect(envFile).not.toMatch(/GO_[AB]_KEY/);
+    expect(accountKeysFilePath).toBeUndefined();
   });
 
   it("stages nothing without accounts, MCP servers or a ceiling, as before", async () => {
@@ -176,8 +184,26 @@ describe.skipIf(process.platform === "win32")("a remote run turn's launch plan",
     const argv = plan.args.join("\u0000");
     expect(argv).toContain("OPENCODE_CONFIG");
     expect(argv).toContain("session-env.sh");
+    // The run command sources the keys file after the session-env file.
+    expect(argv).toMatch(/\. '[^']*session-env\.sh' && \. '[^']*account-keys\.sh' && /);
     expect(argv).not.toContain(SENTINEL);
     expect(JSON.stringify(plan.env)).not.toContain(SENTINEL);
     expect(plan.prompt).not.toContain(SENTINEL);
+  });
+
+  it("lists every declared key variable by name for the MCP children to drop, and carries none of their values", async () => {
+    const stub = await import("../remote-stage.js");
+    vi.spyOn(stub, "ensureRemoteReady").mockResolvedValue({ ready: true, facts: { ...facts, opencodeVersion: "2.0.32" } } as never);
+    vi.spyOn(stub, "reapStaleRemoteEngine").mockResolvedValue(undefined as never);
+    const { remoteOpencodeLaunch } = await import("../opencode-launch.js");
+    const plan = await remoteOpencodeLaunch(
+      { prompt: "hi", cwd: tmp, sessionId: session(), model: "go-b/alpha", remoteHost: "box", remoteCwd: path.join(tmp, "root", "work") } as never,
+      sessionIds.at(-1)!,
+      { remote, gatewayPort: 40123, disableFff: true, accounts: twoAccounts(["go-b"]) },
+    );
+    const argv = plan.args.join("\u0000");
+    expect(argv).toContain("JINN_SCRUB_ENV='GO_A_KEY,GO_B_KEY'");
+    expect(argv).not.toContain(SENTINEL);
+    expect(argv).not.toContain(KEY_A);
   });
 });

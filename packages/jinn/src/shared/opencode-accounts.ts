@@ -142,9 +142,31 @@ export function accountModelInfos(account: OpencodeAccount, catalogue: readonly 
     .map((m) => ({ ...m, id: `${account.provider}/${m.id.slice(prefix.length)}`, effortLevels: [...m.effortLevels], account: account.name }));
 }
 
-/** Every account model the config's accounts add to `catalogue`, to be listed beside it. */
-export function accountRegistryModels(config: AccountsConfig, catalogue: readonly ModelInfo[]): ModelInfo[] {
-  return stagedOpencodeAccounts(config).flatMap((account) => accountModelInfos(account, catalogue));
+/** The ids (without the provider) of the account's models a 1.x binary cannot serve: those off the main endpoint, which 1.x would send to the block's own. None while the base's endpoints are not known. */
+export function accountOffEndpointModels(account: OpencodeAccount, clones: OpencodeClones): string[] {
+  return planAccountProvider(account, accountCloneModels(account, clones), 1).dropped;
+}
+
+/** What decides which account models the registry lists. */
+export interface AccountRegistryInputs {
+  /** The local opencode binary's API. On 1, the models it cannot serve are left out; unknown (undefined) or 2 lists every one. */
+  localApi?: OpencodeStageApi;
+  clones?: OpencodeClones;
+}
+
+/** Every account model the config's accounts add to `catalogue`, to be listed beside it, less (on a local 1.x binary) the models it cannot serve, so chains skip them and pickers do not offer them. */
+export function accountRegistryModels(config: AccountsConfig, catalogue: readonly ModelInfo[], inputs: AccountRegistryInputs = {}): ModelInfo[] {
+  return stagedOpencodeAccounts(config).flatMap((account) => {
+    const infos = accountModelInfos(account, catalogue);
+    if (inputs.localApi !== 1 || inputs.clones === undefined) return infos;
+    const left = new Set(accountOffEndpointModels(account, inputs.clones).map((model) => `${account.provider}/${model}`));
+    return infos.filter((info) => !left.has(info.id));
+  });
+}
+
+/** The error of a turn whose own model the host's opencode generation cannot serve. */
+export function unservedModelError(model: string, account: string): string {
+  return `${model} is not served by account "${account}" on OpenCode 1.x (models on another endpoint need OpenCode 2)`;
 }
 
 /** What the problem checks read of the host. */
@@ -192,9 +214,9 @@ function unstagedProblem(account: OpencodeAccount): string {
 
 function droppedProblems(account: OpencodeAccount, inputs: AccountProblemInputs): string[] {
   if (inputs.localApi !== 1) return [];
-  const { dropped } = planAccountProvider(account, accountCloneModels(account, inputs.clones), 1);
+  const dropped = accountOffEndpointModels(account, inputs.clones);
   return dropped.length === 0 ? []
-    : [`account "${account.name}": the local opencode is 1.x, which sends every model to one endpoint; left out on this host: ${dropped.join(", ")}`];
+    : [`account "${account.name}": the local opencode is 1.x, which sends every model to one endpoint; left out of the model list on this host, and a turn on one fails: ${dropped.join(", ")}`];
 }
 
 /**
@@ -206,12 +228,18 @@ function droppedProblems(account: OpencodeAccount, inputs: AccountProblemInputs)
  * known (`catalogue` null) rather than blaming every account for it.
  */
 export function opencodeAccountProblems(config: AccountsConfig, inputs: AccountProblemInputs): string[] {
-  return stagedOpencodeAccounts(config).flatMap((account) => [
+  return stagedOpencodeAccounts(config).flatMap((account) => oneAccountProblems(account, inputs));
+}
+
+/** {@link opencodeAccountProblems} for one account: what `jinn doctor` and `GET /api/engine-limits` say of it. */
+export function oneAccountProblems(account: OpencodeAccount, inputs: AccountProblemInputs): string[] {
+  if (account.base === undefined) return [];
+  return [
     ...(inputs.catalogue === null || inputs.catalogue.length === 0 ? [] : catalogueProblems(account, inputs.catalogue)),
     ...(inputs.catalogue !== null && accountUnstaged(account, inputs.catalogue, inputs.clones) ? [unstagedProblem(account)] : []),
     ...(keyEnvIsSet(inputs.env, account.keyEnv) ? [] : [`account "${account.name}" has no key: ${account.keyEnv} is not set`]),
     ...(inputs.catalogue === null || inputs.catalogue.length === 0 ? [] : droppedProblems(account, inputs)),
-  ]);
+  ];
 }
 
 /**

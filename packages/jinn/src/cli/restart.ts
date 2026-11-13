@@ -3,6 +3,7 @@ import { JINN_HOME } from "../shared/paths.js";
 import { loadConfig } from "../shared/config.js";
 import { assertPortTakeoverAllowed, restartDetached } from "../gateway/lifecycle.js";
 import { requestRestartFromGateway } from "./restart-request.js";
+import { missingAccountKeyWarning } from "./restart-account-keys.js";
 
 /**
  * `jinn restart` — race-free, in-session-safe gateway restart.
@@ -43,6 +44,8 @@ export async function runRestart(opts: RestartOptions = {}): Promise<void> {
     return;
   }
 
+  const keyWarning = missingAccountKeyWarning(config);
+  if (keyWarning) console.error(keyWarning);
   restartDetached({ takePort: opts.takePort, port });
   console.log("Gateway restarting in the background (detached). It will be back in a few seconds.");
 }

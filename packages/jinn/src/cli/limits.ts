@@ -31,7 +31,9 @@ function formatDuration(minutes?: number): string {
 
 function formatWindow(window: EngineLimitWindow): string {
   const used = window.usedPercent === undefined ? "unknown" : `${window.usedPercent}%`;
-  const duration = window.windowDurationMins ? `/${formatDuration(window.windowDurationMins)}` : "";
+  // A window already named by its length ("5h") needs no second statement of it ("5h/5h").
+  const length = formatDuration(window.windowDurationMins);
+  const duration = length && length !== window.name ? `/${length}` : "";
   return `${window.name}${duration}: ${used} used${formatReset(window)}`;
 }
 

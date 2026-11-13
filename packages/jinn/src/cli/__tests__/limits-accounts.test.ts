@@ -33,7 +33,7 @@ const RESPONSE = {
         ...base, name: "opencode", account: "go-b", label: "Go (second)", location: { kind: "local" }, employees: ["worker"],
         provider: "opencode-go-b", base: "opencode-go", keyEnv: "GO_B_KEY", keySet: false,
         buckets: [{ id: "opencode-go-b/flash", name: "opencode-go-b/flash", planType: "$60/month", windows: [window("5h", 100, 300, "2026-11-12T15:00:00.000Z")] }],
-        exhausted: { until: "2026-11-12T15:00:00.000Z" }, nextTryAt: "2026-11-12T13:00:00.000Z", problems: ["GO_B_KEY is not set in the gateway's environment"],
+        exhausted: { until: "2026-11-12T15:00:00.000Z" }, nextTryAt: "2026-11-12T13:00:00.000Z", problems: ['account "go-b" has no key: GO_B_KEY is not set'],
       },
       { ...base, name: "opencode", account: "go-a", label: "go-a", location: { kind: "local" }, employees: [], provider: "opencode-go", buckets: [] },
     ],
@@ -58,10 +58,11 @@ describe("jinn limits account cards", () => {
     expect(card).toContain("Provider: opencode-go-b (clones opencode-go)");
     expect(card).toContain("Key: GO_B_KEY (NOT SET)");
     expect(card).toContain("Employees: worker");
-    expect(card).toMatch(/opencode-go-b\/flash, plan \$60\/month\n\s+5h\/5h: 100% used, resets /);
+    expect(card).toMatch(/opencode-go-b\/flash, plan \$60\/month\n\s+5h: 100% used, resets /);
+    expect(card).not.toContain("5h/5h");
     expect(card).toMatch(/Exhausted until /);
     expect(card).toMatch(/Next try: /);
-    expect(card).toContain("Problem: GO_B_KEY is not set in the gateway's environment");
+    expect(card).toContain('Problem: account "go-b" has no key: GO_B_KEY is not set');
   });
 
   it("prints a card for a built-in provider's account too", async () => {
@@ -75,7 +76,7 @@ describe("jinn limits account cards", () => {
     expect(text).toContain("claude account claude (local)");
     expect(text).toContain("claude account claude:work (work) (remote build@box)");
     expect(text).toContain("Employees: ana, bo");
-    expect(text).toMatch(/7d\/7d: 100% used, resets /);
+    expect(text).toMatch(/7d: 100% used, resets /);
     expect(text).toContain("the host did not answer");
   });
 
@@ -88,5 +89,15 @@ describe("jinn limits account cards", () => {
   it("hands --json the response unchanged, accounts included", async () => {
     await runLimits({ json: true });
     expect(JSON.parse(out.join("\n"))).toEqual(RESPONSE);
+  });
+
+  it("keeps the length of a window whose name does not state it", async () => {
+    collect.mockResolvedValue({ ...RESPONSE, engines: { opencode: { ...base, name: "opencode", windows: [window("primary", 40, 300), window("7d", 10, 10080), window("30d", 5, 43200)] } }, accounts: {} });
+    await runLimits({});
+    const text = out.join("\n");
+    expect(text).toContain("primary/5h: 40% used");
+    expect(text).toContain("- 7d: 10% used");
+    expect(text).toContain("- 30d: 5% used");
+    expect(text).not.toMatch(/\b(\d+[hdm])\/\1:/);
   });
 });

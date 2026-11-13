@@ -1,4 +1,4 @@
-import { isSpent, readStore, writeStore, type EngineHealth, type EngineHealthReading } from "./engine-health-store.js";
+import { isSpent, METERED_WINDOW_REASON, readStore, writeStore, type EngineHealth, type EngineHealthReading } from "./engine-health-store.js";
 import type { EngineLimitWindow } from "./types.js";
 
 /**
@@ -72,8 +72,11 @@ const CLAUDE_ACCOUNT_KEY = /^claude($|[:@])/;
  * any other engine's (whose readings do not say which windows its models share),
  * is left to readings. A record naming neither came from a turn on the CLI default:
  * only a turn on the default counts, since an unnamed default may not be the model served.
+ * A record the opencode usage meter wrote is never contradicted by a turn: it states that a quota window of the
+ * provider is spent (a model's own may be, while another's is served), and the meter's next reading lifts it.
  */
 function servedContradicts(key: string, record: EngineHealth, servedModel: string | undefined): boolean {
+  if (record.reason === METERED_WINDOW_REASON) return false;
   if (record.model !== undefined) return record.model === servedModel;
   if (record.window !== undefined) return CLAUDE_ACCOUNT_KEY.test(key) && CLAUDE_ACCOUNT_WINDOWS.includes(record.window);
   return servedModel === undefined;

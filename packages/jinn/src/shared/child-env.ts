@@ -40,10 +40,15 @@ const opencodeAccountKeys = new Map<string, string>();
  * environment the gateway passes on by default: every spawn site that hands down `process.env`, scrubbed or not,
  * leaves it out without having to know about accounts. Only the opencode launch paths read it back
  * ({@link opencodeAccountKeyEnvironment}), and the gateway's own successor gets it ({@link withOpencodeAccountKeys}).
- * A later reload keeps a key already taken, and takes one a new account names if the environment still has it.
+ * A later reload keeps a key already taken, takes one a new account names if the environment still has it, and forgets
+ * the key of an account the config no longer declares: it is not put back into `env`, so it reaches no process at all
+ * (not an opencode one, not the gateway's successor, not a claude child).
  */
 export function setOpencodeAccountKeyEnv(names: Iterable<string>, env: NodeJS.ProcessEnv = process.env): void {
   opencodeAccountKeyEnv = new Set(names);
+  for (const name of [...opencodeAccountKeys.keys()]) {
+    if (!opencodeAccountKeyEnv.has(name)) opencodeAccountKeys.delete(name);
+  }
   for (const name of opencodeAccountKeyEnv) {
     const value = env[name];
     if (value === undefined) continue;

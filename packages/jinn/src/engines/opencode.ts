@@ -27,6 +27,7 @@ import { describeOpencodeLaunch } from "./opencode-protocol.js";
 import { opencodeApiOf } from "./opencode-version.js";
 import { withKnownEffort, type ModelEffortLevels } from "./opencode-variant.js";
 import { localOpencodeVersion } from "../shared/opencode-bin-version.js";
+import { mayBeUnserved, unservedTurnResult } from "./opencode-model-served.js";
 import { resolveBin } from "../shared/resolve-bin.js";
 
 interface LiveProcess extends RemoteRun {
@@ -180,12 +181,41 @@ export class OpencodeEngine implements InterruptibleEngine {
     return !!live && !live.proc.killed && live.proc.exitCode === null;
   }
 
+  /** The accounts this turn's session may use, asked for as the session on the model it runs. */
+  private accountsFor(sessionId: string, model: string | undefined): ReturnType<OpencodeAccountsReader> {
+    return this.readAccounts({ sessionId, ...(model ? { model } : {}) });
+  }
+
   async run(requested: EngineRunOpts): Promise<EngineResult> {
     // From here on `effortLevel` is the variant to send, or nothing.
     const opts = withKnownEffort(requested, this.readEffortLevels());
     const trackingId = opts.sessionId || `opencode-${Date.now()}`;
     const onStream = opts.onStream || null;
 
+    // A model this host's opencode cannot serve fails here, with the reason, rather than inside opencode with none.
+    // Only a model an account's 1.x block leaves out waits on the binary; any other turn starts without yielding.
+    const accounts = this.accountsFor(trackingId, opts.model);
+    if (mayBeUnserved(opts, accounts)) return await this.runIfServed(opts, trackingId, onStream, accounts);
+    return await this.dispatch(opts, trackingId, onStream, accounts);
+  }
+
+  /** A turn on a model a 1.x binary would leave out: asks the host's binary first, and fails the turn with the reason when it is 1.x. */
+  private async runIfServed(
+    opts: EngineRunOpts,
+    trackingId: string,
+    onStream: ((delta: StreamDelta) => void) | null,
+    accounts: ReturnType<OpencodeAccountsReader>,
+  ): Promise<EngineResult> {
+    return (await unservedTurnResult(opts, accounts)) ?? (await this.dispatch(opts, trackingId, onStream, accounts));
+  }
+
+  /** The turn on a server, or one headless run. */
+  private async dispatch(
+    opts: EngineRunOpts,
+    trackingId: string,
+    onStream: ((delta: StreamDelta) => void) | null,
+    accounts: ReturnType<OpencodeAccountsReader>,
+  ): Promise<EngineResult> {
     // A server belongs to a Jinn session; a turn without one has nothing to reuse it.
     if (this.servers && this.readMode() === "server" && opts.sessionId) {
       return await this.runOnServer(opts, trackingId, onStream);
@@ -195,20 +225,21 @@ export class OpencodeEngine implements InterruptibleEngine {
     // still holds. (Only in `run` mode: a server-mode turn without a session id
     // must not stop every other session's server.)
     if (this.servers && this.readMode() !== "server" && this.servers.size() > 0) await this.servers.stopAll();
-    return await this.runPlain(opts, trackingId, onStream);
+    return await this.runPlain(opts, trackingId, onStream, accounts);
   }
 
-  /** One headless `opencode run` for this turn — the `run` mode, unchanged. */
+  /** One headless `opencode run` for this turn — the `run` mode, unchanged. `accounts` is what this turn's reader already answered. */
   private async runPlain(
     opts: EngineRunOpts,
     trackingId: string,
     onStream: ((delta: StreamDelta) => void) | null,
+    accountsRead?: ReturnType<OpencodeAccountsReader>,
   ): Promise<EngineResult> {
     // The binary's version decides the staged config's shape and whether the
     // turn needs `--standalone` (opencode-launch.ts); a remote host's comes
     // with its facts.
     const commandTimeoutMs = this.readCommandTimeoutMs();
-    const accounts = this.readAccounts({ sessionId: trackingId, ...(opts.model ? { model: opts.model } : {}) });
+    const accounts = accountsRead ?? this.accountsFor(trackingId, opts.model);
     const processOptions = { disableFff: this.readDisableFff(), ...(commandTimeoutMs > 0 ? { commandTimeoutMs } : {}), ...(accounts ? { accounts } : {}) };
     if (!isRemoteTarget(opts)) {
       const api = opencodeApiOf(await localOpencodeVersion(resolveBin("opencode", opts.bin)));

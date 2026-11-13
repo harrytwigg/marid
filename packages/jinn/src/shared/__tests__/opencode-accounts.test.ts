@@ -4,7 +4,7 @@ import { parseOpencodeModels } from "../opencode-models.js";
 import { newCloneSink, type OpencodeCloneModel } from "../opencode-clone.js";
 import { declaredOpencodeAccounts } from "../opencode-accounts-config.js";
 import {
-  accountCloneModels, accountModelInfos, accountRegistryModels, configNpmName, mainEndpoint, opencodeAccountProblems,
+  accountCloneModels, accountModelInfos, accountOffEndpointModels, accountRegistryModels, configNpmName, unservedModelError, mainEndpoint, opencodeAccountProblems,
   opencodeChainContext, opencodeChainProblems, planAccountProvider,
 } from "../opencode-accounts.js";
 import { fallbackChainProblems } from "../fallback-chain-wire.js";
@@ -239,6 +239,25 @@ describe("the registry's account models", () => {
   });
 });
 
+describe("the registry's account models on a local 1.x binary", () => {
+  const { clones } = clonesFor(API_OUTPUT, parseOpencodeApiModels);
+  const catalogue: ModelInfo[] = ["alpha", "beta", "gamma", "delta"].map((id) => ({ id: `base-go/${id}`, label: id, supportsEffort: false, effortLevels: [] }));
+
+  it("leaves out the models off the account's main endpoint, and lists them all on 2.x or when the binary is unknown", () => {
+    const config = { engines: { opencode: { accounts: { b: { provider: "go-b", base: "base-go", keyEnv: "GO_B_KEY" } } } } } as never;
+    const ids = (inputs: Parameters<typeof accountRegistryModels>[2]) => accountRegistryModels(config, catalogue, inputs).map((m) => m.id);
+    expect(ids({ localApi: 1, clones })).toEqual(["go-b/alpha", "go-b/gamma"]);
+    expect(ids({ localApi: 2, clones })).toEqual(["go-b/alpha", "go-b/beta", "go-b/gamma", "go-b/delta"]);
+    expect(ids({ clones })).toHaveLength(4);
+    expect(ids({ localApi: 1 })).toHaveLength(4);
+  });
+
+  it("names the model, the account and the way out when staging is asked about a dropped model", () => {
+    expect(accountOffEndpointModels(account(), clones)).toEqual(["beta", "delta"]);
+    expect(unservedModelError("go-b/beta", "b")).toBe('go-b/beta is not served by account "b" on OpenCode 1.x (models on another endpoint need OpenCode 2)');
+  });
+});
+
 describe("opencodeAccountProblems", () => {
   const catalogue: ModelInfo[] = [
     { id: "base-go/alpha", label: "alpha", supportsEffort: false, effortLevels: [] },
@@ -273,7 +292,7 @@ describe("opencodeAccountProblems", () => {
   it("names the models a 1.x local binary cannot reach", () => {
     const clones = new Map([["base-go", clonesFor(API_OUTPUT, parseOpencodeApiModels).clones.get("base-go") ?? []]]);
     const problems = opencodeAccountProblems(config(), { catalogue, clones, env: { GO_B_KEY: "k" }, localApi: 1 });
-    expect(problems).toEqual([expect.stringContaining("left out on this host: beta, delta")]);
+    expect(problems).toEqual([expect.stringContaining("left out of the model list on this host, and a turn on one fails: beta, delta")]);
     expect(opencodeAccountProblems(config(), { catalogue, clones, env: { GO_B_KEY: "k" }, localApi: 2 })).toEqual([]);
   });
 

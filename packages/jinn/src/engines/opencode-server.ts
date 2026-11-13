@@ -736,7 +736,7 @@ export class OpencodeServerPool {
     return accounts ? { accounts } : {};
   }
 
-  /** The staging options a remote server adds to a remote `run` turn's: the accounts (their keys join the 0600 session-env file) and the command-timeout plugin. */
+  /** The staging options a remote server adds to a remote `run` turn's: the accounts (their keys go in a 0600 file of their own, sourced by the remote `serve` and `run` only) and the command-timeout plugin. */
   private accountsOpts(sessionId: string, spec: OpencodeServerSpec): { opencodeAccounts?: OpencodeAccountStaging; opencodeCommandTimeout?: boolean } {
     const accounts = this.deps.accounts?.({ sessionId, ...(spec.model ? { model: spec.model } : {}) });
     return {
@@ -812,7 +812,8 @@ export class OpencodeServerPool {
 
     const serverPort = await probeFreePort(staging.destination, facts);
     const localPort = await freeLocalPort();
-    const processOptions = this.processOptions();
+    // With the accounts: the remote serve lists the key variables its MCP children drop, and the ssh client holds none of them.
+    const processOptions = { ...this.processOptions(), ...this.scrubOpts(sessionId, spec) };
     const args = remoteServeSshArgs({ sessionId, spec, staging, facts, bin, gatewayPort, serverPort, localPort, pidFile: handle.pidFile, processOptions });
     logger.info(
       `opencode server starting REMOTE for session ${sessionId} on ${staging.destination}:${spec.remoteCwd} `
@@ -821,7 +822,7 @@ export class OpencodeServerPool {
     );
     const proc = spawn(resolveBin("ssh"), args, {
       cwd: JINN_HOME,
-      env: cleanEnv(sessionId, { ...processOptions, ...this.scrubOpts(sessionId, spec) }),
+      env: cleanEnv(sessionId, processOptions),
       stdio: ["pipe", "pipe", "pipe"],
       detached: process.platform !== "win32",
     });
@@ -1093,6 +1094,7 @@ function remoteServeSshArgs(o: {
       ...(o.staging.opencodeConfigPath ? { OPENCODE_CONFIG: o.staging.opencodeConfigPath } : {}),
     },
     envFile: o.staging.envFilePath,
+    ...(o.staging.accountKeysFilePath ? { extraEnvFile: o.staging.accountKeysFilePath } : {}),
     unsetRemoteEnv: REMOTE_ENV_DENY,
     pathPrepend: [remoteNodeDir(o.facts), remoteSessionBinDir(o.staging.sessionHome)],
     bin: o.bin,

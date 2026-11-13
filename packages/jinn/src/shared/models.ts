@@ -11,7 +11,9 @@ import { keepClaudeCatalogAfter, logClaudeCatalogShortfall, readClaudeCredential
 import { resolveBin, isInstalled } from "./resolve-bin.js";
 import { discoverPiModels } from "./pi-models.js";
 import { withConfiguredOverrides } from "./opencode-models.js";
-import { opencodeCatalogue, refreshOpencodeCatalogue } from "./opencode-catalogue.js";
+import { opencodeCatalogue, opencodeClones, opencodeLocalApi, refreshOpencodeCatalogue, setOpencodeLocalApi } from "./opencode-catalogue.js";
+import { localOpencodeVersion } from "./opencode-bin-version.js";
+import { opencodeApiOf } from "../engines/opencode-version.js";
 import { stagedOpencodeAccounts } from "./opencode-accounts-config.js";
 import { accountRegistryModels } from "./opencode-accounts.js";
 import { MUSECODE_EFFORT_LEVELS } from "./musecode-effort.js";
@@ -353,6 +355,9 @@ export async function refreshOpencodeModels(
   const bin = engineAvailable(config, "opencode") ? resolveBin("opencode", engineBinOverride(config, "opencode")) : null;
   // The models of every base provider an account names are kept in full, to stage the account's provider block from.
   const cloneProviders = [...new Set(stagedOpencodeAccounts(config).map((account) => account.base!))];
+  // The binary's generation decides which account models the registry lists (a 1.x binary cannot serve the ones off the main endpoint). Only read when an account could be affected, and left unknown when the binary cannot say.
+  const version = bin && cloneProviders.length > 0 ? await localOpencodeVersion(bin) : undefined;
+  setOpencodeLocalApi(version === undefined ? undefined : opencodeApiOf(version));
   await refreshOpencodeCatalogue(bin, invalidateModelRegistry, opts.secondLook, opts.env, cloneProviders);
 }
 
@@ -657,7 +662,8 @@ function buildOpencodeEntry(
   if (discoveredOpencodeModels && discoveredOpencodeModels.length > 0) {
     // An account lists its base's models under its own provider id, so chains, pickers and validation see them as any other.
     // Taken from the discovered catalogue, before the pinned placeholder below, so a pin on an account model keeps its entry.
-    const accountModels = accountRegistryModels(config, discoveredOpencodeModels).filter((m) => !discoveredOpencodeModels.some((own) => own.id === m.id));
+    // On a local 1.x binary, the models it cannot serve are left out: chains skip them and pickers do not offer them.
+    const accountModels = accountRegistryModels(config, discoveredOpencodeModels, { ...(opencodeLocalApi() ? { localApi: opencodeLocalApi()! } : {}), clones: opencodeClones() }).filter((m) => !discoveredOpencodeModels.some((own) => own.id === m.id));
     let models = [...discoveredOpencodeModels, ...accountModels];
     // A pinned model discovery has not caught up with still has to be
     // selectable — otherwise an employee configured for it cannot start at all.

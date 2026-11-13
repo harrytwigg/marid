@@ -92,7 +92,7 @@ describe.skipIf(process.platform === "win32")("collectOpencodeAccounts", () => {
     const one = await collectOpencodeAccounts(configFor(fakeBin("one", 1), { accounts: account() }));
     // On 1.x both models share one endpoint in this fake's records only if they do; here they differ, so one is left out.
     expect(one?.accountProblems).toEqual([expect.stringContaining("the local opencode is 1.x")]);
-    expect(one?.accountProblems[0]).toMatch(/left out on this host: (alpha|beta)$/);
+    expect(one?.accountProblems[0]).toMatch(/left out of the model list on this host, and a turn on one fails: (alpha|beta)$/);
     const two = await collectOpencodeAccounts(configFor(fakeBin("two", 2), { accounts: account() }));
     expect(two?.accountProblems).toEqual([]);
   });

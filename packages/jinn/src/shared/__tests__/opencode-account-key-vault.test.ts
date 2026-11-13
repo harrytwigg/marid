@@ -11,11 +11,13 @@ import {
 /** The gateway takes each account key out of its own environment at config load, so no spawn site can pass one on by accident. */
 const KEY = "ACME_VAULT_KEY_A";
 const LATE = "ACME_VAULT_KEY_LATE";
+const GONE = "ACME_VAULT_KEY_GONE";
 
 afterEach(() => {
   resetOpencodeAccountKeysForTest();
   delete process.env[KEY];
   delete process.env[LATE];
+  delete process.env[GONE];
 });
 
 describe("account key vault", () => {
@@ -30,9 +32,9 @@ describe("account key vault", () => {
     process.env[KEY] = "sk-vault-a";
     setOpencodeAccountKeyEnv([KEY]);
     const probe = `process.stdout.write(process.env.${KEY} ?? "<unset>")`;
-    const bare = spawnSync(process.execPath, ["-e", probe], { env: process.env, encoding: "utf8" });
+    const bare = spawnSync(process.execPath, ["-e", probe], { env: process.env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     expect(bare.stdout).toBe("<unset>");
-    const inherited = spawnSync(process.execPath, ["-e", probe], { encoding: "utf8" });
+    const inherited = spawnSync(process.execPath, ["-e", probe], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     expect(inherited.stdout).toBe("<unset>");
     expect(buildEngineChildEnv(process.env)[KEY]).toBeUndefined();
   });
@@ -59,5 +61,17 @@ describe("account key vault", () => {
     setOpencodeAccountKeyEnv([KEY, LATE]);
     expect(process.env[KEY]).toBeUndefined();
     expect(opencodeAccountKeyEnvironment({ [LATE]: "from-base" })).toEqual({ [LATE]: "from-base" });
+  });
+
+  it("forgets a key whose account a reload removed, everywhere it could be read back", () => {
+    process.env[KEY] = "sk-vault-a";
+    process.env[GONE] = "sk-vault-gone";
+    setOpencodeAccountKeyEnv([KEY, GONE]);
+    setOpencodeAccountKeyEnv([KEY]);
+    expect(opencodeAccountKeyEnvironment()[GONE]).toBeUndefined();
+    expect(withOpencodeAccountKeys({ PATH: "/bin" })[GONE]).toBeUndefined();
+    expect(withOpencodeAccountKeys({ PATH: "/bin" })[KEY]).toBe("sk-vault-a");
+    expect(process.env[GONE]).toBeUndefined();
+    expect(buildEngineChildEnv(process.env)[GONE]).toBeUndefined();
   });
 });
