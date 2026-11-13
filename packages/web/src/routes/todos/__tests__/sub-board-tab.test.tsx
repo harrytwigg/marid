@@ -320,6 +320,55 @@ describe("the pop-up as an address (?view=board)", () => {
     expect(where()).toBe("/todos")
   })
 
+  it("closing twice before the first close lands goes back once, never past the page", async () => {
+    function DoubleClose() {
+      const view = useSubBoardView(false)
+      return (
+        <>
+          <button type="button" data-testid="open" onClick={view.show}>open</button>
+          <button type="button" data-testid="close-twice" onClick={() => { view.hide(); view.hide() }}>close</button>
+          {view.open && <SubBoardDialog rootId="TSK-1" onClose={view.hide} closeOnOpenTodo={false} />}
+          <Where />
+        </>
+      )
+    }
+    const router = mount(
+      [{ pathname: "/todos" }, { pathname: "/todos/TSK-1" }],
+      [{ path: "/todos", element: <Where /> }, { path: "/todos/:todoId", element: <DoubleClose /> }],
+    )
+    fireEvent.click(screen.getByTestId("open"))
+    await screen.findByTestId("sub-board-dialog")
+    fireEvent.click(screen.getByTestId("close-twice"))
+    await waitFor(() => expect(screen.queryByTestId("sub-board-dialog")).toBeNull())
+    expect(where()).toBe("/todos/TSK-1")
+    // The guard is per open: the pop-up opens and closes again from the same page.
+    fireEvent.click(screen.getByTestId("open"))
+    await screen.findByTestId("sub-board-dialog")
+    fireEvent.click(screen.getByTestId("close-twice"))
+    await waitFor(() => expect(screen.queryByTestId("sub-board-dialog")).toBeNull())
+    expect(where()).toBe("/todos/TSK-1")
+    await act(async () => { await router.navigate(-1) })
+    expect(where()).toBe("/todos")
+  })
+
+  it("closing a linked pop-up twice stays on the page", async () => {
+    function DoubleClose() {
+      const view = useSubBoardView(false)
+      return (
+        <>
+          <button type="button" data-testid="close-twice" onClick={() => { view.hide(); view.hide() }}>close</button>
+          {view.open && <SubBoardDialog rootId="TSK-1" onClose={view.hide} closeOnOpenTodo={false} />}
+          <Where />
+        </>
+      )
+    }
+    mount("/todos/TSK-1?view=board", [{ path: "/todos/:todoId", element: <DoubleClose /> }])
+    await screen.findByTestId("sub-board-dialog")
+    fireEvent.click(screen.getByTestId("close-twice"))
+    await waitFor(() => expect(screen.queryByTestId("sub-board-dialog")).toBeNull())
+    expect(where()).toBe("/todos/TSK-1")
+  })
+
   it("a card opens its Todo by the one move, and Back returns to the board still open", async () => {
     const router = mount("/todos/TSK-1", [...routes, { path: "/todos/:todoId", element: <Page /> }])
     fireEvent.click(screen.getByTestId("open"))

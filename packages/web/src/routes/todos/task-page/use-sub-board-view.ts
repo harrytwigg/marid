@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom"
 
 const VIEW_PARAM = "view"
@@ -21,8 +21,11 @@ function record(state: unknown): Record<string, unknown> {
 export function useSubBoardView(embedded: boolean) {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
-  const { state } = useLocation()
+  const { state, key } = useLocation()
   const [held, setHeld] = useState(false)
+  /** The entry a close has already started from. A close is a navigation that lands later, so a second close before it
+   *  does (a double click, a second `onClose` caller) must not go back again: that would leave the page. */
+  const closingFrom = useRef<string | null>(null)
   const open = embedded ? held : params.get(VIEW_PARAM) === BOARD_VIEW
   const show = useCallback(() => {
     if (embedded) return setHeld(true)
@@ -34,12 +37,14 @@ export function useSubBoardView(embedded: boolean) {
   }, [embedded, setParams, state])
   const hide = useCallback(() => {
     if (embedded) return setHeld(false)
+    if (closingFrom.current === key) return
+    closingFrom.current = key
     if (record(state)[PUSHED_KEY] === true) return void navigate(-1)
     setParams((current) => {
       const next = new URLSearchParams(current)
       next.delete(VIEW_PARAM)
       return next
     }, { replace: true, state })
-  }, [embedded, navigate, setParams, state])
+  }, [embedded, navigate, setParams, state, key])
   return { open, show, hide }
 }
