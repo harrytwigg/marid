@@ -26,8 +26,8 @@ export const JOBS = [
 export const WORKER = { name: "worker", displayName: "Worker", department: "platform", rank: "employee", engine: "codex", model: "gpt-5.6-sol", alwaysNotify: true };
 export const PERSONA = "Does platform work.";
 export const EDGES = { parentName: null, directReports: [], depth: 0, chain: ["worker"] };
-export const DISPATCHER = { name: "todo-dispatcher", displayName: "Todo Dispatcher", department: "system", rank: "senior", emoji: "🧭", jinnMcp: true, system: true, engine: "codex", model: "gpt-5.6-sol", alwaysNotify: true, role: "Todo Dispatcher, a system employee that starts tracked Todo work", parentName: null, directReports: [], depth: 0, chain: ["todo-dispatcher"] };
-export const SHAPER = { name: "todo-shaper", displayName: "Todo Shaper", department: "system", rank: "senior", emoji: "✍️", jinnMcp: true, system: true, engine: "codex", model: "gpt-5.6-sol", alwaysNotify: true, role: "Todo Shaper, a system employee that shapes rough captures into Todos", parentName: null, directReports: [], depth: 0, chain: ["todo-shaper"] };
+export const DISPATCHER = { name: "todo-dispatcher", displayName: "Todo Dispatcher", department: "system", rank: "senior", emoji: "🧭", jinnMcp: true, mcp: ["jinn", "browser"], system: true, engine: "codex", model: "gpt-5.6-sol", alwaysNotify: true, role: "Todo Dispatcher, a system employee that starts tracked Todo work", parentName: null, directReports: [], depth: 0, chain: ["todo-dispatcher"] };
+export const SHAPER = { name: "todo-shaper", displayName: "Todo Shaper", department: "system", rank: "senior", emoji: "✍️", jinnMcp: true, mcp: ["jinn", "browser"], system: true, engine: "codex", model: "gpt-5.6-sol", alwaysNotify: true, role: "Todo Shaper, a system employee that shapes rough captures into Todos", parentName: null, directReports: [], depth: 0, chain: ["todo-shaper"] };
 
 /** A fresh temp home carrying the cron job, its run log, and the org fixture. */
 export function seedHome(): void {
