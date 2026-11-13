@@ -11,6 +11,8 @@ import { useModelRegistry, engineList, effortLevelsFor, findModel, defaultEffort
 import { fmtK, formatContextUsage, type ContextUsage } from '@/lib/context-usage'
 import { ModelPicker } from './model-picker'
 import { usePrimaryProfiles } from './use-primary-profiles'
+import { useOpencodeAccounts } from './use-opencode-accounts'
+import { accountOfModelId, accountSelection, opencodeAvailable, type OpencodeAccountChoice } from './opencode-accounts'
 import { engineDisplayName } from '@/lib/engine-names'
 
 export interface SelectorValue {
@@ -213,6 +215,18 @@ function profileSelection(registry: EnginesResponse, engine: string, modelId: st
 }
 
 /**
+ * The chip's second segment. Claude has profiles, opencode accounts: another engine shows neither.
+ * No profile on Claude is the own login, named. An existing chat shows the profile it runs on, declared or not;
+ * a new chat only one it may start on. A remote employee runs on its host's Claude login, which has no name
+ * here: no segment. With opencode accounts declared it names the account the model is served through.
+ */
+function chipProfileLabel(o: { engine: string; modelId: string; accounts: OpencodeAccountChoice[]; claude: { mode: 'new' | 'existing'; employeeRemote?: boolean; effective?: string; own?: string } }): string | undefined {
+  if (o.engine === 'opencode') return accountOfModelId(o.modelId, o.accounts)?.label
+  if (o.engine !== 'claude' || o.claude.employeeRemote) return undefined
+  return (o.claude.mode === 'new' ? o.claude.effective : o.claude.own) ?? 'Own login'
+}
+
+/**
  * Engine / Model / Effort selector for the chat composer, rendered as a single
  * "chip" trigger (`✦ Opus 4.8 · High ▾`) that opens one consolidated dropdown:
  * engine header, model radio list, effort pill row, a context-usage footer, and
@@ -232,6 +246,7 @@ export function ModelSelectorRow({ mode, value, onChange, pendingNote, errorNote
   const engine = useResolvedEngine(registry, mode, value, onChange)
   const profilesEnabled = Boolean(allowProfiles)
   const { profiles, effective: effectiveProfile } = usePrimaryProfiles(profilesEnabled, value.profile, employeeRemote)
+  const opencodeAccounts = useOpencodeAccounts(opencodeAvailable(registry))
   useEffect(() => { onEffectiveProfile?.(effectiveProfile) }, [onEffectiveProfile, effectiveProfile])
   if (isLoading || !registry) return null
 
@@ -241,13 +256,12 @@ export function ModelSelectorRow({ mode, value, onChange, pendingNote, errorNote
     const nextModel = ne?.defaultModel ?? ne?.models[0]?.id
     onChange(withProfile({ engine: next, model: nextModel, effortLevel: defaultEffort(effortLevelsFor(registry, next, nextModel)) }, value.profile))
   }
+  // An account pick is a model pick: the account is whichever provider the model is served through.
+  const pickAccount = (account: string | undefined) => onChange(accountSelection(registry, opencodeAccounts, account, (m) => effortLevelsFor(registry, 'opencode', m), defaultEffort))
   const pickProfile = (profile: string | undefined) => onChange(profileSelection(registry, engine, modelId, value, profile))
   const pickModel = (next: string) => onChange(withProfile({ engine, model: next, effortLevel: clampEffort(effortLevelsFor(registry, engine, next), value.effortLevel) }, value.profile))
 
-  // Only Claude has accounts: another engine shows no profile. No profile on Claude is the own login, named.
-  // An existing chat shows the profile it runs on, declared or not; a new chat only one it may start on.
-  // A remote employee runs on its host's Claude login, which has no name here: no segment.
-  const profileLabel = engine !== 'claude' || employeeRemote ? undefined : (mode === 'new' ? effectiveProfile : value.profile) ?? 'Own login'
+  const profileLabel = chipProfileLabel({ engine, modelId, accounts: opencodeAccounts, claude: { mode, employeeRemote, effective: effectiveProfile, own: value.profile } })
 
   return (
     <DropdownMenu>
@@ -258,7 +272,7 @@ export function ModelSelectorRow({ mode, value, onChange, pendingNote, errorNote
         sideOffset={8}
         className="w-64 max-w-[calc(100vw-2rem)] rounded-[var(--radius-lg)] p-1.5"
       >
-        <ModelPicker registry={registry} engine={engine} modelId={modelId} onPickEngine={pickEngine} onPickModel={pickModel} profiles={profilesEnabled ? profiles : undefined} profile={mode === 'existing' ? value.profile : effectiveProfile} onPickProfile={profilesEnabled ? pickProfile : undefined}>
+        <ModelPicker registry={registry} engine={engine} modelId={modelId} onPickEngine={pickEngine} onPickModel={pickModel} profiles={profilesEnabled ? profiles : undefined} profile={mode === 'existing' ? value.profile : effectiveProfile} onPickProfile={profilesEnabled ? pickProfile : undefined} accounts={opencodeAccounts} onPickAccount={pickAccount}>
           <EffortRow efforts={efforts} effort={effort} onPick={(level) => onChange(withProfile({ engine, model: modelId, effortLevel: level }, value.profile))} />
           <SelectorNotes mode={mode} errorNote={errorNote} pendingNote={pendingNote} />
           <ContextFooter usage={formatContextUsage(contextTokens, contextWindowFor(registry, engine, modelId))} />
