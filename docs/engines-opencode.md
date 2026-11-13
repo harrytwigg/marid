@@ -32,7 +32,7 @@ opencode models
 
 | Mode | opencode 1.x | OpenCode 2 (2.x) |
 | --- | --- | --- |
-| `run` (default) | Supported. | Supported. Marid reads the binary's `--version` and adds `--standalone` to a 2.x turn, so the v2 CLI does not start (and leave behind) its background service. |
+| `run` (default) | Supported. | Supported. Marid reads the binary's `--version` and adds `--standalone` to a 2.x turn, so the v2 CLI does not start (and leave behind) its background service, and reads the turn's cost back from opencode once it ends ([why](#cost-of-a-turn-on-opencode-2-run-mode)). |
 | `server` | Supported from **1.18.31**. | Supported from **2.0.28** (verified on 2.0.28 and 2.0.29). See [Server mode on OpenCode 2](#server-mode-on-opencode-2). |
 
 A server that reports an older version than these, or no version, or a major
@@ -133,7 +133,7 @@ So a hung command, or one waiting for input, can hold a turn indefinitely. Upgra
 
 ### Usage limits
 
-opencode publishes no account quota, and neither does OpenCode Go. Go's allowance is documented, though: each model gets a monthly limit in dollars of usage, metered over three windows — five hours at 20% of it, seven days at 50%, thirty days at 100%. opencode reports every step's cost at the provider's own prices, and jinn records every turn's cost with a timestamp, so jinn can meter its own opencode spend against those windows:
+opencode publishes no account quota, and neither does OpenCode Go. Go's allowance is documented, though: each model gets a monthly limit in dollars of usage, metered over three windows — five hours at 20% of it, seven days at 50%, thirty days at 100%. opencode reports every step's cost at the provider's own prices, and jinn records every turn's cost with a timestamp (on OpenCode 2 in `run` mode, read back from opencode once the turn ends; see [Cost of a turn on OpenCode 2](#cost-of-a-turn-on-opencode-2-run-mode)), so jinn can meter its own opencode spend against those windows:
 
 ```yaml
 engines:
@@ -191,6 +191,8 @@ The reading refreshes with the engine-health refresh (every 15 minutes) and when
 What the meter does not see:
 
 - **opencode used by hand**, outside jinn. Only turns jinn ran are in the ledger.
+- **A turn whose cost could not be read.** On OpenCode 2 in `run` mode a failed read leaves the turn at what its stream carried, which may be nothing, so its spend is missing from the ledger (the gateway log says so).
+- **Session titles.** The one short call opencode makes to title a new session is not on a message, so it is not in the ledger.
 - **Which model opencode picked for itself.** A turn is charged to the model jinn handed opencode, fixed when the turn is recorded, so changing `engines.opencode.model` later does not move old spend. A turn run with no model at all (neither the session nor `engines.opencode.model` names one, so opencode used its own default) is charged to whatever the default is when it is read.
 - **The provider's own clock.** Windows are treated as trailing. That is exact if Go's windows roll, and conservative if they are anchored at first use.
 - **A per-model health record.** Health is one record per provider, not per model. A spent window of one model marks its whole provider out, although the provider's other models may still have allowance: Go meters each model, and routing is per provider.
@@ -274,6 +276,17 @@ Two things about that table are easy to get wrong and are worth stating plainly:
 
 - **A turn is several steps.** One `step_finish` arrives per model round trip, and its `tokens` and `cost` are for that step alone. Cost is summed across the turn; the context reading is the last step's `input + cache.read + cache.write`, because that is how full the window is now.
 - **Failures arrive on stdout as JSON**, not on stderr, and the process exits 1. An engine that reads only the exit code and stderr reports a turn that produced nothing, with no reason attached.
+
+#### Cost of a turn on OpenCode 2 (`run` mode)
+
+OpenCode 2's stream is not 1.x's. It sends a `step_finish` for a step that ended on a tool call and none for the step that answers, so a turn with no tool call streams no cost at all, and one with tool calls streams all but the last step's. opencode records the cost on every assistant message, and that is what server mode reads.
+
+So after a 2.x `run` turn's process has exited, Marid asks the same binary for the session's newest assistant messages (`opencode api --standalone session.message.list`, on the local machine or over ssh on the host the turn ran on) and sums the cost of the messages from the turn's first (the first message id its stream named) to the newest. That sum **replaces** what the stream carried; it is not added to it. A resumed session is charged only for the turn's own messages, not for the history it carries.
+
+- **The turn is never failed for its bill.** If the call fails or times out (20 s), or does not list the turn's first message, the turn keeps the cost its stream carried, and a warning is logged. A turn whose stream named no message (it failed before its first step) reads nothing.
+- **A turn that errored after a step ran is still charged**, as it is on 1.x.
+- **What it does not count:** the session title opencode generates on a session's first turn is billed by the provider but is not on an assistant message, so it is in neither this sum nor server mode's. It is a short call made once per session.
+- **1.x is unchanged**: its stream carries the cost, and nothing extra is run. So is server mode, which reads the cost from the message.
 
 ### Sessions and resume
 

@@ -8,6 +8,7 @@ import { assertRemoteTarget } from "../shared/remote-target.js";
 import type { JinnConfig, RemoteExecutionConfig } from "../shared/config-types.js";
 import { buildOpencodeArgs, buildOpencodePrompt, describeOpencodeLaunch, type OpencodeRunFlags } from "./opencode-protocol.js";
 import { opencodeApiOf, type OpencodeApi } from "./opencode-version.js";
+import { runLocalCostRead, runRemoteCostRead } from "./opencode-v2-run-cost.js";
 import { COMMAND_TIMEOUT_ENV, localCommandTimeoutPlugins } from "./opencode-command-timeout.js";
 import type { OpencodeAccountStaging } from "./opencode-accounts.js";
 import { SCRUB_LIST_ENV, scrubListValue } from "../mcp/scrub-list-env.js";
@@ -63,6 +64,10 @@ export interface OpencodeLaunchPlan {
   remote?: RemoteEngineHandle;
   /** The API of the binary the turn runs on (opencode-version.ts); 1 when not stated. */
   api?: OpencodeApi;
+  /** Runs this turn's opencode with these arguments once the turn has ended, on the machine
+   *  it ran on, and returns its stdout. Set for a 2.x binary, whose `run` stream does not
+   *  carry the turn's cost (opencode-v2-run-cost.ts). */
+  runOpencode?: (args: string[]) => Promise<string | undefined>;
 }
 
 /**
@@ -147,6 +152,11 @@ export function runFlagsFor(api: OpencodeApi): OpencodeRunFlags {
   return { standalone: api === 2, variantOnModel: api === 2 };
 }
 
+/** The plan's API, and for a binary whose `run` stream leaves the cost out (2.x) its way back into the turn's opencode. */
+function apiPlan(api: OpencodeApi, read: (args: string[]) => Promise<string | undefined>): Pick<OpencodeLaunchPlan, "api" | "runOpencode"> {
+  return api === 2 ? { api, runOpencode: read } : { api };
+}
+
 /** A turn on the gateway's own machine. `api` is the binary's, from its version. */
 export function localOpencodeLaunch(
   opts: EngineRunOpts,
@@ -162,12 +172,14 @@ export function localOpencodeLaunch(
     + `(resume: ${opts.resumeSessionId || "none"}, jinn tools: ${configHandle.staged ? "on" : "off"})`,
   );
 
+  const baseEnv = cleanEnv(trackingId, ctx);
   return {
     bin,
     args: buildOpencodeArgs(opts, runFlagsFor(api)),
     env: {
-      ...cleanEnv(trackingId, ctx),
-      // Each account's key variable, set explicitly: the staged config names it as `{env:<keyEnv>}`.
+      ...baseEnv,
+      // Each account's key variable, set explicitly: the staged config names it as `{env:<keyEnv>}`. The cost read below
+      // runs on `baseEnv` alone: it reads opencode's own store and needs no key.
       ...(ctx.accounts?.env ?? {}),
       ...(configHandle.staged ? { OPENCODE_CONFIG: configHandle.configPath } : {}),
     },
@@ -175,7 +187,8 @@ export function localOpencodeLaunch(
     prompt: buildOpencodePrompt(opts),
     sessionIdOut: opts.resumeSessionId || "",
     configHandle,
-    api,
+    // The cost read runs without the staged config, which is deleted as the turn settles.
+    ...apiPlan(api, (args) => runLocalCostRead(bin, args, { env: baseEnv, cwd: opts.cwd })),
   };
 }
 
@@ -305,6 +318,6 @@ export async function remoteOpencodeLaunch(
     prompt: buildOpencodePrompt(withRemoteAttachments(opts, staging.sessionHome, trackingId)),
     sessionIdOut: opts.resumeSessionId || "",
     remote,
-    api: opencodeApiOf(facts.opencodeVersion),
+    ...apiPlan(opencodeApiOf(facts.opencodeVersion), (args) => runRemoteCostRead(staging.destination, remote.bin, args)),
   };
 }
