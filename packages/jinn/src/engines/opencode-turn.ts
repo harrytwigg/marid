@@ -45,6 +45,8 @@ export class OpencodeTurn {
   /** Text arrived after the last finished step, i.e. in a step that did not end on a tool call. */
   private textSinceStepFinish = false;
   private cost = 0;
+  /** The first assistant message this turn's events named: where the turn begins in the session's history. */
+  private firstMessageId: string | undefined;
   private contextTokens: number | undefined;
   /** opencode assigns this; until it speaks, the id we asked it to resume. */
   private sessionId: string;
@@ -67,6 +69,7 @@ export class OpencodeTurn {
     if (sessionId) this.sessionId = sessionId;
 
     const part = asRecord(event.part) ?? {};
+    this.firstMessageId ??= trimmedString(part.messageID) || undefined;
     switch (event.type) {
       case "text":
         this.readText(part, onStream);
@@ -132,6 +135,24 @@ export class OpencodeTurn {
     this.cost += numberOr(part.cost, 0);
     const context = contextTokensFromStep(asRecord(part.tokens) as StepTokens | undefined);
     if (context !== undefined) this.contextTokens = context;
+  }
+
+  /** The session opencode ran this turn in, as far as its events named one. */
+  get engineSessionId(): string {
+    return this.sessionId;
+  }
+
+  /** Where this turn begins in its session's history: the first message its events
+   *  named. Undefined when the turn produced no events with one. */
+  get firstTurnMessageId(): string | undefined {
+    return this.firstMessageId;
+  }
+
+  /** Replace the event-derived cost with the one opencode recorded for the turn's
+   *  messages. OpenCode 2's `run` stream ends a step on a tool call with a `step_finish`
+   *  and a step that answers with none, so what the events carried is partial. */
+  adoptRecordedCost(cost: number): void {
+    this.cost = cost;
   }
 
   /** The turn's step accounting, as far as it went. */
