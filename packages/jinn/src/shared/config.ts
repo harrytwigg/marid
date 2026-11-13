@@ -8,6 +8,7 @@ import { opencodeSubscriptionProblems, opencodeUsageLimitsProblems } from "./ope
 import { validateOpencodeAccounts, stagedOpencodeAccounts } from "./opencode-accounts-config.js";
 import { configEnvReferences } from "./config-env-references.js";
 import { setOpencodeAccountKeyEnv } from "./child-env.js";
+import { rememberOpencodeAccounts } from "./opencode-subscription.js";
 import { autoCompactProblems } from "./auto-compact-config.js";
 import { contextConfigProblems } from "./context-config.js";
 import { sessionFallbackConfigProblems } from "./session-fallback-config.js";
@@ -205,6 +206,7 @@ export function loadConfig(): JinnConfig {
   applyGatewayEnvOverrides(config);
   // Every other process the gateway starts drops these variables (child-env.ts).
   setOpencodeAccountKeyEnv(stagedOpencodeAccounts(config).map((account) => account.keyEnv!));
+  rememberOpencodeAccounts(config);
   return config;
 }
 

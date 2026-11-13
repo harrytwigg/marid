@@ -19,10 +19,14 @@ function uncoveredEngine(engine: EngineLimitEngineSnapshot, accounts: EngineLimi
   if (!engine.buckets?.length) return { engine }
   const covered = new Set(accounts.flatMap((a) => (a.provider === undefined ? [] : [a.provider])))
   const buckets = engine.buckets.filter((b) => !covered.has(b.id.split("/")[0] ?? ""))
-  if (buckets.length > 0) return { engine: { ...engine, buckets } }
-  // Every metered bucket is an account's. The engine's top-level windows and plan are one of those buckets
-  // (the most spent), so showing them here would repeat that account's spend under the engine's name.
-  const { accountPlan: _plan, ...rest } = engine
+  // The engine's top-level windows and plan are the DEFAULT model's bucket (not the most spent one). When that
+  // model's provider has an account, they repeat that account's spend under the engine's name, whatever else is left.
+  const { accountPlan, ...rest } = engine
+  const planModel = accountPlan?.split(" · ")[0]
+  const planIsCovered = planModel !== undefined && covered.has(planModel.split("/")[0] ?? "")
+  if (buckets.length > 0) {
+    return planIsCovered ? { engine: { ...rest, buckets, windows: [] } } : { engine: { ...engine, buckets } }
+  }
   return { engine: { ...rest, buckets: [], windows: [] }, emptyNote: ALL_COVERED_NOTE }
 }
 

@@ -137,6 +137,45 @@ describe("LimitsPage — opencode accounts", () => {
     expect(within(own).getByRole("heading", { level: 2 }).textContent).toBe("opencode")
   })
 
+  it("keeps the account's plan and windows off the engine card when only an uncovered bucket is left", () => {
+    state = {
+      phase: "ready", refreshing: false, error: null, now, refresh: () => {},
+      data: { generatedAt: iso(0), default: "claude", accounts: { opencode: [GO_A, GO_B] }, engines: { opencode: engine("opencode", {
+        // The default model is an account's: the top-level plan and windows are its bucket's.
+        accountPlan: "opencode-go-b/mimo-v2.6-pro · $0.30/month",
+        windows: [win("30d", 43200, 2999)],
+        buckets: [
+          { id: "opencode-go-b/mimo-v2.6-pro", windows: [win("30d", 43200, 2999)] },
+          { id: "openrouter/*", windows: [win("30d", 43200, 77)] },
+        ],
+      }) } },
+    }
+    render(<LimitsPage />)
+    const own = screen.getAllByTestId("engine-card")[0]
+    expect(Array.from(own.querySelectorAll("[data-bucket]")).map((n) => n.getAttribute("data-bucket"))).toEqual(["openrouter/*"])
+    expect(own.textContent).toContain("77%")
+    expect(own.textContent).not.toContain("2999")
+    expect(own.textContent).not.toContain("$0.30/month")
+  })
+
+  it("keeps the engine's own plan and windows when its default model is not an account's", () => {
+    state = {
+      phase: "ready", refreshing: false, error: null, now, refresh: () => {},
+      data: { generatedAt: iso(0), default: "claude", accounts: { opencode: [GO_A, GO_B] }, engines: { opencode: engine("opencode", {
+        accountPlan: "openrouter/* · $5/month",
+        windows: [win("30d", 43200, 77)],
+        buckets: [
+          { id: "opencode-go-b/mimo-v2.6-pro", windows: [win("30d", 43200, 2999)] },
+          { id: "openrouter/*", windows: [win("30d", 43200, 77)] },
+        ],
+      }) } },
+    }
+    render(<LimitsPage />)
+    const own = screen.getAllByTestId("engine-card")[0]
+    expect(own.textContent).toContain("$5/month")
+    expect(own.textContent).not.toContain("2999")
+  })
+
   it("shows no figures on the engine card when every metered bucket is an account's", () => {
     state = {
       phase: "ready", refreshing: false, error: null, now, refresh: () => {},
