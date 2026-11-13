@@ -24,7 +24,6 @@ Mix the eight shipped engines. Jinn hides unavailable binaries and lets each emp
 - **opencode** - opencode, bring your own provider
 - **hermes** - NousResearch Hermes over ACP
 - **musecode** - Meta Muse Code over its session protocol
-- **freebuff** - Freebuff terminal coding agent, driven through its screen
 
 ## Quickstart
 

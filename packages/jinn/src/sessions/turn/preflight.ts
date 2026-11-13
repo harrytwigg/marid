@@ -111,7 +111,6 @@ function resolveTurnEffort(input: TurnInput, engineConfig: EngineConfig): string
     session,
     input.employee,
     effortLevelsForModel(input.config, session.engine, session.model ?? undefined),
-    session.engine,
   );
 }
 

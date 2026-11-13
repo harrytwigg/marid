@@ -5,7 +5,7 @@ import { resolveJinnHome } from "../shared/paths.js";
 import type { Employee, JinnConfig } from "../shared/types.js";
 import type { DepartmentScope } from "../work-items/department-scope.js";
 import { logger } from "../shared/logger.js";
-import { getModelRegistry, effortLevelsForModel, hasDynamicModelCatalog } from "../shared/models.js";
+import { getModelRegistry, effortLevelsForModel, hasDynamicModelCatalog, removedEngineProblem } from "../shared/models.js";
 import { effortLevelsPending } from "../shared/opencode-catalogue.js";
 import { validateEmployeeTargets } from "../shared/claude-profile.js";
 import { employeeFallbackUpdate, loadEmployeeFallback, storedFallbackProblems } from "../shared/employee-fallback.js";
@@ -80,6 +80,11 @@ export function scanOrg(config?: JinnConfig, scopeOf: (slug: string) => Departme
           if (typeof data.model === "string" && data.model.trim()) employee.model = data.model.trim();
           if (typeof data.effortLevel === "string" && data.effortLevel.trim()) employee.effortLevel = data.effortLevel.trim();
           if (typeof data.alwaysNotify === "boolean") employee.alwaysNotify = data.alwaysNotify;
+          const engineProblem = removedEngineProblem(employee.engine);
+          if (engineProblem) {
+            logger.error(`Skipping employee file ${fullPath}: ${engineProblem}`);
+            return undefined;
+          }
           registry.set(name, employee);
           return undefined;
         }
@@ -121,6 +126,14 @@ export function scanOrg(config?: JinnConfig, scopeOf: (slug: string) => Departme
               .map((s: any) => ({ name: s.name as string, description: s.description as string }))
             : undefined,
         };
+        const engineProblem = removedEngineProblem(employee.engine);
+        if (engineProblem) {
+          // A roster entry naming an engine that was removed would still spawn and
+          // fail on every turn; refuse it at load, and say which name and what to
+          // set instead.
+          logger.error(`Skipping employee file ${fullPath}: ${engineProblem}`);
+          return undefined;
+        }
         const chain = loadEmployeeFallback(data.fallback, employee, config, fullPath);
         if (chain.fallback) employee.fallback = chain.fallback;
         if (chain.problems) employee.fallbackProblems = chain.problems;

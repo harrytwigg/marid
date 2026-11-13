@@ -10,7 +10,7 @@ import { logger } from "../shared/logger.js";
 import type { SessionManager } from "../sessions/manager.js";
 import type { GatewayEmit } from "../shared/gateway-events.js";
 import { loadJobs, saveJobs } from "./jobs.js";
-import { validateCronSchedule } from "./validation.js";
+import { cronEngineError, validateCronSchedule } from "./validation.js";
 import { cronActionError } from "./actions.js";
 
 type SchedulerDeps = {
@@ -86,6 +86,8 @@ function createTask(job: CronJob): cron.ScheduledTask {
   }
   const actionError = cronActionError(job);
   if (actionError) throw new Error(actionError);
+  const engineError = cronEngineError(job.engine);
+  if (engineError) throw new Error(engineError);
   return cron.schedule(job.schedule, scheduledFire(job), { timezone: job.timezone, scheduled: false, recoverMissedExecutions: true });
 }
 

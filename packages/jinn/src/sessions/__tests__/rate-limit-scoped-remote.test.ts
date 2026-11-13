@@ -14,6 +14,7 @@ vi.mock("../../shared/models.js", () => ({
   REMOTE_ENGINE_NAMES: ["claude", "pi", "opencode"],
   engineSupportsRemote: (name: string) => ["claude", "pi", "opencode"].includes(name),
   isKnownEngine: (name: string) => ["claude", "codex", "antigravity", "grok", "pi", "hermes", "opencode", "musecode"].includes(name),
+  removedEngineProblem: () => undefined,
 }));
 vi.mock("../engine-run-mcp.js", () => ({ resolveEngineRunMcp: vi.fn(() => ({})) }));
 vi.mock("../../engines/remote-stage.js", async (importOriginal) => ({

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { runCronJob } from "../runner.js";
+import { appendRunLog } from "../jobs.js";
 import type { CronJob, Connector, JinnConfig } from "../../shared/types.js";
 
 /**
@@ -61,6 +62,18 @@ describe("runCronJob — what the fire states about its engine", () => {
 
     expect(opts["engine"]).toBe("codex");
     expect(opts["model"]).toBe("gpt-5.6-sol");
+  });
+
+  it("refuses a fire naming an engine this build removed, without spawning anything", async () => {
+    const sessionManager = makeMockSessionManager();
+
+    await runCronJob(makeJob({ engine: "freebuff" }), sessionManager, makeConfig(), connectors);
+
+    expect((sessionManager as unknown as { route: ReturnType<typeof vi.fn> }).route).not.toHaveBeenCalled();
+    expect(appendRunLog).toHaveBeenCalledWith("test-job", expect.objectContaining({
+      status: "error",
+      error: expect.stringContaining("removed in 0.34.0"),
+    }));
   });
 
   it("still passes the job's effort level, which is a per-fire override", async () => {

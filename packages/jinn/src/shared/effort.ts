@@ -7,13 +7,6 @@ const DEFAULT_EFFORT = "high";
 const EFFORT_LADDER = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
 
 /**
- * Engines whose level is a setting on the CLI's own screen, not a flag: when
- * nothing chose one, naming a level would change the model's reasoning from
- * whatever it was set to, so they are told `default`, which they leave alone.
- */
-const UNSET_EFFORT_ENGINES: ReadonlySet<string> = new Set(["freebuff"]);
-
-/**
  * The built-in default for a model's level list: `high` when it has it, else the
  * nearest known level (the lighter one on a tie), else the first level. Never a
  * level the model does not list; with no levels at all the default is returned
@@ -32,10 +25,6 @@ function builtInEffort(validLevels: string[]): string {
     }
   }
   return best?.level ?? validLevels[0];
-}
-
-function unchosenEffort(engine: string | undefined, validLevels: string[]): string {
-  return engine !== undefined && UNSET_EFFORT_ENGINES.has(engine) ? "default" : builtInEffort(validLevels);
 }
 
 /**
@@ -66,9 +55,8 @@ export function resolveEffort(
   session: Pick<Session, "parentSessionId" | "effortLevel">,
   employee: Pick<Employee, "effortLevel"> | null | undefined,
   validLevels: string[],
-  engine?: string,
 ): string {
-  if (validLevels.length === 0) return unchosenEffort(engine, validLevels);
+  if (validLevels.length === 0) return builtInEffort(validLevels);
   const isValid = (level: string) => validLevels.includes(level);
   const clean = (level: string | null | undefined) => level && level !== "default" ? level : undefined;
 
@@ -107,6 +95,6 @@ export function resolveEffort(
   // Non-child sessions (COO) or fallback
   const engineDefault = clean(engineConfig.effortLevel);
   if (engineDefault && isValid(engineDefault)) return engineDefault;
-  if (engineDefault) logger.warn(`Invalid effortLevel "${engineDefault}" in engine config (valid: ${validLevels.join(", ")}), defaulting to "${unchosenEffort(engine, validLevels)}"`);
-  return unchosenEffort(engine, validLevels);
+  if (engineDefault) logger.warn(`Invalid effortLevel "${engineDefault}" in engine config (valid: ${validLevels.join(", ")}), defaulting to "${builtInEffort(validLevels)}"`);
+  return builtInEffort(validLevels);
 }

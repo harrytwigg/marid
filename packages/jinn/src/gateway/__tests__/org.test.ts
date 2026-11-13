@@ -195,3 +195,31 @@ describe("scanOrg — reserved author identities", () => {
     expect(warnings.filter((w) => /reserved author identity/i.test(w))).toHaveLength(5);
   });
 });
+
+describe("scanOrg — an employee naming the removed Freebuff engine", () => {
+  beforeEach(() => {
+    makeTmpOrg("org-test-removed-engine-");
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  it("refuses that roster entry with an actionable error and keeps loading the rest", async () => {
+    const { logger } = await import("../../shared/logger.js");
+    (logger.error as ReturnType<typeof vi.fn>).mockClear();
+    writeYaml("platform", "legacy.yaml", "name: legacy\npersona: A developer\nengine: freebuff\n");
+    writeYaml("platform", "dev.yaml", "name: dev\npersona: A developer\nengine: claude\n");
+
+    const registry = scanOrg();
+
+    expect(registry.has("legacy")).toBe(false);
+    expect(registry.get("dev")).toBeDefined();
+
+    const errors = (logger.error as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]));
+    const refusal = errors.find((line) => /legacy\.yaml/.test(line));
+    expect(refusal).toContain('engine "freebuff" is not available');
+    expect(refusal).toContain("removed in 0.34.0");
+    expect(refusal).toContain("claude, codex");
+  });
+});

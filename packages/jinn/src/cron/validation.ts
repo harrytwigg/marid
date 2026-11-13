@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import { removedEngineProblem } from '../shared/models.js';
 
 export type CronScheduleField = 'schedule' | 'timezone' | 'until';
 
@@ -38,4 +39,14 @@ export function validateCronSchedule(input: CronScheduleInput): CronScheduleVali
     }
   }
   return errors;
+}
+
+/**
+ * Why a cron job's `engine` override cannot run on this gateway, if it cannot.
+ * The job's own engine is optional; when it names one this build does not have
+ * (a job written before that engine was removed, say), the job is refused at
+ * load with the same words a roster entry gets, instead of failing on every fire.
+ */
+export function cronEngineError(engine: string | undefined): string | undefined {
+  return engine ? removedEngineProblem(engine) : undefined;
 }

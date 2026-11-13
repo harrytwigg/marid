@@ -201,6 +201,7 @@ export function loadConfig(): JinnConfig {
   }
   const config = parsed as JinnConfig;
   warnAboutHookProblems(config.hooks);
+  warnAboutRemovedEngineBlocks(config);
   config.engines.claude = normalizeClaudeEngineConfig(config.engines.claude);
   applyLegacyFallbackMigration(config);
   applyGatewayEnvOverrides(config);
@@ -208,6 +209,22 @@ export function loadConfig(): JinnConfig {
   setOpencodeAccountKeyEnv(stagedOpencodeAccounts(config).map((account) => account.keyEnv!));
   rememberOpencodeAccounts(config);
   return config;
+}
+
+// Warn once per removed engine block: loadConfig() runs again on every config
+// hot-reload, so one stale block would otherwise repeat through the gateway lifetime.
+const warnedRemovedEngineBlocks = new Set<string>();
+
+/**
+ * A block for an engine this build no longer ships is ignored, not fatal: the
+ * engine is simply not registered, so nothing reads the block. The operator still
+ * deserves one line telling them it is dead weight and where it is.
+ */
+function warnAboutRemovedEngineBlocks(config: JinnConfig): void {
+  const engines = config.engines as unknown as Record<string, unknown>;
+  if (engines.freebuff === undefined || warnedRemovedEngineBlocks.has("freebuff")) return;
+  warnedRemovedEngineBlocks.add("freebuff");
+  console.warn("Ignoring engines.freebuff in config.yaml: the Freebuff engine was removed in 0.34.0. Delete the block.");
 }
 
 /** The gateway keys JINN_HOST/JINN_PORT may name. */
