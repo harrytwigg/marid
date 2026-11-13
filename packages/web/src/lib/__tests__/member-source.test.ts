@@ -43,6 +43,26 @@ describe("member request source", () => {
     ])
   })
 
+  it("reads a sub-board on its anchor's root's board, not the anchor's own department", async () => {
+    request.mockImplementation(async (path: string) => {
+      if (path === "/api/member/todos/C-1") return ok({ workItem: { id: "C-1", department: "design", rootId: "R-1" } })
+      if (path === "/api/member/todos/R-1") return ok({ workItem: { id: "R-1", department: "ops", rootId: "R-1" } })
+      return ok({ workItems: [], total: 0 })
+    })
+    await source("/api/work-items?descendantOf=C-1&limit=20", { method: "GET" })
+    expect(calls().map((c) => c.path)).toEqual([
+      "/api/member/todos/C-1",
+      "/api/member/todos/R-1",
+      "/api/member/boards/ops/todos?descendantOf=C-1&limit=20",
+    ])
+  })
+
+  it("answers a sub-board whose root the member cannot read with an empty list", async () => {
+    request.mockImplementation(async (path: string) => (path === "/api/member/todos/C-1" ? ok({ workItem: { id: "C-1", department: "design", rootId: "R-1" } }) : ok({ error: "not found" }, 404)))
+    const res = await source("/api/work-items?descendantOf=C-1", { method: "GET" })
+    expect(await res.json()).toMatchObject({ workItems: [], total: 0 })
+  })
+
   it("answers a sub-board whose anchor the member cannot read with an empty list", async () => {
     request.mockImplementation(async () => ok({ error: "not found" }, 404))
     const res = await source("/api/work-items?descendantOf=A-1&status=backlog", { method: "GET" })

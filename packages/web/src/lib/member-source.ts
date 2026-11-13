@@ -155,11 +155,24 @@ async function readTrees(path: string): Promise<Response> {
   return json({ trees })
 }
 
-/** The board a sub-board's Todos are read on: the one its anchor Todo is on. Null where the anchor is not one the member may read. */
-async function boardOfAnchor(anchor: string): Promise<string | null> {
-  const res = await gatewayTransport().request(mine(enc(anchor)), { method: "GET" })
+type TodoPlace = { id: string; department: string | null; rootId: string | null }
+
+/** Where a Todo sits (its department and its root), or null where the member may not read it. */
+async function placeOf(id: string): Promise<TodoPlace | null> {
+  const res = await gatewayTransport().request(mine(enc(id)), { method: "GET" })
   if (!res.ok) return null
-  return ((await res.json()) as { workItem?: { department?: string | null } }).workItem?.department ?? null
+  const { workItem } = (await res.json()) as { workItem?: { id?: string; department?: string | null; rootId?: string } }
+  return { id: workItem?.id ?? id, department: workItem?.department ?? null, rootId: workItem?.rootId ?? null }
+}
+
+/** The board a sub-board's Todos are read on: the one the anchor Todo's root is on, which is the board the gateway
+ *  scopes a member's board reads by. A sub-Todo can name another department than its root, so the anchor's own is
+ *  not the answer. Null where the anchor, or its root, is not one the member may read. */
+async function boardOfAnchor(anchor: string): Promise<string | null> {
+  const place = await placeOf(anchor)
+  if (!place) return null
+  if (!place.rootId || place.rootId === place.id) return place.department
+  return (await placeOf(place.rootId))?.department ?? null
 }
 
 async function readSubBoard(params: URLSearchParams, anchor: string, init: RequestInit): Promise<Response> {

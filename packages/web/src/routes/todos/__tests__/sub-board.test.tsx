@@ -61,11 +61,13 @@ function treeOf(id: string): WorkItemTreeWire {
   if (id === "TSK-1") {
     return { root: node(ROOT, [node(CHILD, [node(GRANDCHILD)]), node(SIBLING)]), totals: { executing: 2, backlog: 2 }, spendUsd: 0 }
   }
-  if (id === "TSK-2") return { root: node(CHILD, [node(GRANDCHILD)]), totals: { backlog: 2 }, spendUsd: 0 }
+  if (id === "TSK-2") return { root: node({ ...CHILD, department: childDepartment }, [node(GRANDCHILD)]), totals: { backlog: 2 }, spendUsd: 0 }
   const item = [CHILD, SIBLING, GRANDCHILD].find((candidate) => candidate.id === id) ?? ROOT
   return { root: node(item), totals: { [item.status]: 1 }, spendUsd: 0 }
 }
 
+/** A sub-Todo may name another department than its root's. */
+let childDepartment = "platform"
 const ALL = [CHILD, SIBLING, GRANDCHILD]
 type ListParams = { status?: WorkItemStatusWire; parent?: string; descendantOf?: string }
 function serve(params: ListParams) {
@@ -80,13 +82,13 @@ function Probe() {
 }
 
 const onClose = vi.fn()
-function renderSubBoard(initialDepth: "children" | "all" = "children") {
+function renderSubBoard(initialDepth: "children" | "all" = "children", rootId = "TSK-1") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={["/page"]}>
         <Routes>
-          <Route path="/page" element={<SubBoardLocationProvider rootId="TSK-1" initialDepth={initialDepth} onClose={onClose}><TodoBoard embedded /></SubBoardLocationProvider>} />
+          <Route path="/page" element={<SubBoardLocationProvider rootId={rootId} initialDepth={initialDepth} onClose={onClose}><TodoBoard embedded /></SubBoardLocationProvider>} />
           <Route path="/todos/:todoId" element={<Probe />} />
         </Routes>
       </MemoryRouter>
@@ -98,6 +100,7 @@ const statusCalls = () => listWorkItems.mock.calls.map(([params]) => params as R
 
 beforeEach(() => {
   principal = { kind: "operator" }
+  childDepartment = "platform"
   vi.clearAllMocks()
   clearBoardScrollCache()
   sessionStorage.clear()
@@ -239,6 +242,14 @@ describe("the sub-board for a board member", () => {
     expect(screen.queryByTestId("board-quick-add-backlog")).toBeNull()
     expect(screen.queryByTestId("todos-filters")).toBeNull()
     expect(screen.queryByTestId("tree-add-subtask")).toBeNull()
+  })
+
+  it("holds a sub-board of a sub-Todo through the board its own root is on, not the department the sub-Todo names", async () => {
+    principal = memberOf("collaborator")
+    childDepartment = "design"
+    renderSubBoard("children", "TSK-2")
+    await screen.findByTestId("board-card-TSK-4")
+    await waitFor(() => expect(screen.getByTestId("board-quick-add-backlog")).toBeTruthy())
   })
 
   it("lets a collaborator file a sub-Todo of the root through the member dialog", async () => {
