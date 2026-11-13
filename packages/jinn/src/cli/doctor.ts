@@ -9,6 +9,8 @@ import { readPendingMove } from "../instances/home-pending.js";
 import { stageRootFor } from "../instances/stage-rename.js";
 import { readSwitchoverReceipt } from "../instances/switchover.js";
 import { loadInstances, type Instance } from "../instances/directory.js";
+import { opencodeHealthFindings } from "./doctor-opencode-health.js";
+import { readEngineHealth, type EngineHealthReading } from "../shared/engine-health.js";
 import { fallbackChainFindings } from "./doctor-fallback.js";
 import { collectOpencodeFallback, opencodeFallbackFindings, type OpencodeFallbackReading } from "./doctor-opencode-fallback.js";
 import { collectOpencodeAccounts, opencodeAccountsFindings, type OpencodeAccountsReading } from "./doctor-opencode-accounts.js";
@@ -34,6 +36,8 @@ export interface DoctorInput {
   opencodeFallback?: OpencodeFallbackReading;
   /** A reading of the declared opencode accounts and the chain links naming opencode models; without one the report has no such finding. */
   opencodeAccounts?: OpencodeAccountsReading;
+  /** The engine-health store as it reads now; opencode providers held out are reported from it. */
+  opencodeHealth?: EngineHealthReading;
 }
 
 const HOME_STATE_FINDINGS: Record<HomeState, (home: string, current: string, legacy: string) => DoctorFinding> = {
@@ -92,6 +96,7 @@ export function doctorFindings(input: DoctorInput = {}, processEnv: NodeJS.Proce
     ...codenameFindings(input, processEnv),
     ...(input.opencodeFallback ? opencodeFallbackFindings(input.opencodeFallback) : []),
     ...(input.opencodeAccounts ? opencodeAccountsFindings(input.opencodeAccounts) : []),
+    ...(input.opencodeHealth ? opencodeHealthFindings(input.opencodeHealth) : []),
   ];
 }
 
@@ -139,7 +144,11 @@ export async function runDoctor(options: { json?: boolean; rename?: boolean; app
   }
   const opencodeFallback = await collectOpencodeFallback();
   const opencodeAccounts = await readOpencodeAccounts();
-  const findings = doctorFindings({ ...(opencodeFallback ? { opencodeFallback } : {}), ...(opencodeAccounts ? { opencodeAccounts } : {}) });
+  const findings = doctorFindings({
+    ...(opencodeFallback ? { opencodeFallback } : {}),
+    ...(opencodeAccounts ? { opencodeAccounts } : {}),
+    opencodeHealth: readEngineHealth(),
+  });
   if (options.json) console.log(JSON.stringify(findings, null, 2));
   else for (const finding of findings) console.log(`${MARK[finding.level]}${finding.message}`);
   if (findings.some((finding) => finding.level === "problem")) process.exitCode = 1;

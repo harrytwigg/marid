@@ -66,6 +66,10 @@ export function runTurnLines(outcome, { sessionID, model, version }) {
     case "retry-abandon": return { lines: [errorEvent(sessionID, RETRY_ABANDON_TEXT, form)], code: 1 };
     case "signed-out":
     case "fail": return { lines: [{ type: "error", sessionID, error: { name: "APIError", data: { message: outcome.error ?? "upstream exploded", statusCode: 500 } } }], code: 1 };
+    case "provider-error": {
+      const error = { type: outcome.type ?? "provider.quota", message: outcome.message ?? "upstream refused", ...(outcome.status === undefined ? {} : { status: outcome.status }) };
+      return { lines: [{ type: "error", sessionID, error }], code: 1 };
+    }
     case "hang": return { lines: [], code: null };
     default: return { lines: [{ type: "text", sessionID, part: { type: "text", text: `fc-ok engine=opencode model=${model} mode=run` } }, accounting], code: 0 };
   }

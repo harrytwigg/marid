@@ -26,6 +26,22 @@ function orgMcpFlag(data: Record<string, unknown>): boolean | undefined {
   return undefined;
 }
 
+/**
+ * The model an employee file resolves to. A file that names one keeps it. One that
+ * names none gets its own engine's configured model (`engines.<engine>.model`), and
+ * only a Claude employee falls back to the `sonnet` alias: that alias names no model
+ * on opencode (`-m sonnet` is not a `provider/model` id), codex or the rest. With
+ * no configured model either the employee carries none (`undefined`), and its
+ * session starts with none: the engine adapters omit their model flag then, so
+ * the CLI's own default stands.
+ */
+function employeeModel(declared: unknown, engine: string, config: JinnConfig | undefined): string | undefined {
+  if (typeof declared === "string" && declared.trim()) return declared.trim();
+  if (engine === "claude") return "sonnet";
+  const configured = (config?.engines as unknown as Record<string, { model?: unknown } | undefined> | undefined)?.[engine]?.model;
+  return typeof configured === "string" && configured.trim() ? configured.trim() : undefined;
+}
+
 export { updateEmployeeYaml, type EmployeeUpdate } from "./org-yaml-files.js";
 
 /** `scopeOf` answers how scoped a department is; the default holds every department open, so a scan that is handed none reads the org as it always did. */
@@ -58,6 +74,9 @@ export function scanOrg(config?: JinnConfig, scopeOf: (slug: string) => Departme
         if (builtIn?.system) {
           const employee = { ...builtIn };
           if (typeof data.engine === "string" && data.engine.trim()) employee.engine = data.engine.trim();
+          // The built-in's model belongs to the engine it was resolved for: an override that
+          // moves the engine and names no model takes the new engine's default, not the old one's.
+          if (employee.engine !== builtIn.engine) employee.model = employeeModel(undefined, employee.engine, config);
           if (typeof data.model === "string" && data.model.trim()) employee.model = data.model.trim();
           if (typeof data.effortLevel === "string" && data.effortLevel.trim()) employee.effortLevel = data.effortLevel.trim();
           if (typeof data.alwaysNotify === "boolean") employee.alwaysNotify = data.alwaysNotify;
@@ -65,13 +84,14 @@ export function scanOrg(config?: JinnConfig, scopeOf: (slug: string) => Departme
           return undefined;
         }
         if (!data.persona) return undefined;
+        const engineName = typeof data.engine === "string" && data.engine.trim() ? data.engine.trim() : "claude";
         const employee: Employee = {
           name: data.name,
           displayName: data.displayName || data.name,
           department: resolveEmployeeDepartment(data.department, path.basename(path.dirname(fullPath))),
           rank: data.rank || "employee",
-          engine: data.engine || "claude",
-          model: data.model || "sonnet",
+          engine: engineName,
+          model: employeeModel(data.model, engineName, config),
           persona: data.persona,
           emoji: typeof data.emoji === "string" ? data.emoji : undefined,
           cliFlags: Array.isArray(data.cliFlags) ? data.cliFlags : undefined,

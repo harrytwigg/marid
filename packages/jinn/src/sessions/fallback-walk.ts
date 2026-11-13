@@ -3,7 +3,7 @@ import type { FallbackChainSource, FallbackHop, FallbackHopReason, ResolvedFallb
 import { logger } from "../shared/logger.js";
 import { rateLimitEngineLabel } from "../shared/rateLimit.js";
 import { linkHealthKey } from "../shared/fallback-chain-health.js";
-import { recordEngineServed } from "../shared/engine-health.js";
+import { recordTurnServed } from "../shared/engine-health-opencode.js";
 import type { EngineName } from "../shared/models.js";
 import type { EngineResult, Session } from "../shared/types.js";
 import { claudeLinkRefusal, linkFailure, noteLinkAuthFailure, recordLinkLimit, runLink } from "./fallback-link-run.js";
@@ -225,14 +225,14 @@ async function launch(w: Walk, found: Found, hop: FallbackHop): Promise<WalkOutc
 }
 
 /** The link failed in a way that moves the walk on: remember it, and hold a limit against its target. */
-function failedOver(w: Walk, found: Found, failure: { reason: FallbackHopReason; resetsAt?: number; isLimit: boolean; model?: string }, result?: EngineResult): void {
+function failedOver(w: Walk, found: Found, failure: { reason: FallbackHopReason; resetsAt?: number; isLimit: boolean; model?: string; error?: string }, result?: EngineResult): void {
   const { link } = found.next;
   w.failedOver = true;
   w.tried.add(link.key);
   w.triedLabels.push(link.label);
   w.cursor = found.next.index;
   w.failure = { end: endOf(link), engine: link.engine, account: link.account, reason: failure.reason, resetsAt: failure.resetsAt };
-  if (failure.isLimit) recordLinkLimit(link, failure.resetsAt, failure.model);
+  if (failure.isLimit) recordLinkLimit(link, failure.resetsAt, failure.model, { error: failure.error, config: w.input.opts.config, host: w.input.remote?.remoteHost });
   if (result?.error) logger.info(`Session ${w.input.opts.session.id}: ${link.label} could not serve the turn (${failure.reason})`);
 }
 
@@ -249,7 +249,10 @@ async function served(w: Walk, found: Found, model: string | undefined, ran: { r
     updateSessionForAttempt(session.id, attemptToken, { ...thread, ...served });
   }
   // A link that answered a turn begun after its limit was recorded has lifted it.
-  if (!result.error) recordEngineServed(linkHealthKey(found.next.link), ran.startedMs, model);
+  if (!result.error) {
+    const { link } = found.next;
+    recordTurnServed({ engine: link.engine, key: linkHealthKey(link), startedMs: ran.startedMs, model, servedOn: w.input.remote?.remoteHost });
+  }
   await hooks.onFallbackComplete?.(result, { engine: found.choice.engine as EngineName, model });
   return { kind: "served", result };
 }

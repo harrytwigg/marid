@@ -25,3 +25,19 @@ export function opencodeUsageLimitsProblems(engines: Record<string, unknown>): s
   if (!isMapping(opencode.usageLimits)) return ["engines.opencode.usageLimits must be a mapping"];
   return monthlyUsdProblems(opencode.usageLimits.monthlyUsd);
 }
+
+/** Shape-check `engines.opencode.subscriptionProviders` and `engines.opencode.reprobeMinutes`: a mistyped list would leave a subscription held like pay-as-you-go, and a quoted `"30"` would silently fall back to an hour. */
+export function opencodeSubscriptionProblems(engines: Record<string, unknown>): string[] {
+  const opencode = engines.opencode;
+  if (!isMapping(opencode)) return [];
+  const problems: string[] = [];
+  const providers = opencode.subscriptionProviders;
+  if (providers !== undefined && (!Array.isArray(providers) || providers.some((name) => typeof name !== "string" || name.trim() === ""))) {
+    problems.push("engines.opencode.subscriptionProviders must be a list of provider names");
+  }
+  const minutes = opencode.reprobeMinutes;
+  if (minutes !== undefined && (typeof minutes !== "number" || !Number.isFinite(minutes) || minutes <= 0)) {
+    problems.push(`engines.opencode.reprobeMinutes must be a positive number of minutes (got ${JSON.stringify(minutes)})`);
+  }
+  return problems;
+}

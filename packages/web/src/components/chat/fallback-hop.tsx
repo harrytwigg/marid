@@ -16,7 +16,7 @@ const REASON_TEXT: Record<FallbackHopReason, string> = {
   billing: 'out of credit',
   'retry-exhausted': 'provider retries ran out',
   'invalid-model': 'model not served',
-  auth: 'profile signed out',
+  auth: 'signed out',
 }
 
 function text(value: unknown): value is string {

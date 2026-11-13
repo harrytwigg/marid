@@ -1,5 +1,6 @@
 import { isClaudeAuthFailure, observeClaudeTurnOutcome, refuseClaudeLaunch } from "./claude-auth-watch.js";
 import { verifyLocalClaudeProfile } from "../shared/claude-profile-signin.js";
+import type { JinnConfig } from "../shared/config-types.js";
 import { linkHealthKey } from "../shared/fallback-chain-health.js";
 import type { ResolvedFallbackLink } from "../shared/fallback-chain-wire.js";
 import { logger } from "../shared/logger.js";
@@ -49,15 +50,23 @@ export function claudeLinkRefusal(opts: WalkInput["opts"], choice: SubstituteCho
 export function linkFailure(result: LinkResult, engine: string): LinkFailure | undefined {
   if (result.error?.startsWith("Interrupted")) return undefined;
   const limit = detectRateLimit(result);
-  if (limit.limited) return { reason: limitReason(result), ...(limit.resetsAt === undefined ? {} : { resetsAt: limit.resetsAt }), isLimit: true };
+  if (limit.limited) return limitFailure(result, limit.resetsAt);
   if (!result.error) return undefined;
   if (engine === "claude" && (result.profileNotReady || isClaudeAuthFailure(result.error))) return { reason: "auth", isLimit: false };
   return isInvalidModelFailure(result.error) ? { reason: "invalid-model", isLimit: false } : undefined;
 }
 
+/** A limit as the walk reads it: why, when it reopens, and the error text an opencode failure is recorded from. */
+function limitFailure(result: LinkResult, resetsAt: number | undefined): LinkFailure {
+  return { reason: limitReason(result), ...(resetsAt === undefined ? {} : { resetsAt }), isLimit: true, ...(result.error ? { error: result.error } : {}) };
+}
+
 /** Hold a limit against the link's target: its provider for an opencode model, its account for Claude, its engine for the rest. Claude's own memory of the limit is kept as before. `ranModel` is the model the link's turn ran on. */
-export function recordLinkLimit(link: Pick<ResolvedFallbackLink, "engine" | "model" | "account">, resetsAt: number | undefined, ranModel?: string): void {
-  recordAccountRateLimit(link.account, link.engine, rateLimitEngineLabel(link.engine), resetsAt, { healthKey: linkHealthKey(link), model: ranModel });
+export function recordLinkLimit(
+  link: Pick<ResolvedFallbackLink, "engine" | "model" | "account">, resetsAt: number | undefined, ranModel?: string,
+  failed: { error?: string; config?: Pick<JinnConfig, "engines">; host?: string } = {},
+): void {
+  recordAccountRateLimit(link.account, link.engine, rateLimitEngineLabel(link.engine), resetsAt, { healthKey: linkHealthKey(link), model: ranModel, ...failed });
 }
 
 /** A link's result. `profileNotReady`: the launch was refused because the profile it runs as cannot run unattended on its

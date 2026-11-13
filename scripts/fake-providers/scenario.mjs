@@ -24,7 +24,9 @@
 //
 // Outcomes: ok, rate-limit (optional resetsAt, in epoch seconds), hang, fail (optional
 // error), signed-out (claude only), retry-abandon (opencode only: a retry due far off,
-// which server mode turns into a rate limit). An unmatched invocation is `ok`.
+// which server mode turns into a rate limit), provider-error (opencode run mode only: OpenCode
+// 2's typed error, `{"outcome": "provider-error", "type": "provider.quota", "status": 402,
+// "message": "Insufficient account funds"}`). An unmatched invocation is `ok`.
 //
 // Every invocation that takes an outcome is appended to the JSONL ledger
 // (FAKE_PROVIDER_LEDGER=<path>), which is also how the nth invocation is counted, so the
@@ -37,7 +39,7 @@ import path from "node:path";
 /** The marker a scenario file may carry to start every sequence over. */
 export const GENERATION_KEY = "_generation";
 
-export const OUTCOMES = ["ok", "rate-limit", "hang", "fail", "signed-out", "retry-abandon"];
+export const OUTCOMES = ["ok", "rate-limit", "hang", "fail", "signed-out", "retry-abandon", "provider-error"];
 
 /** The tag a scenario puts in its prompts so a ledger row can be tied to its session, and the marks it puts in messages to see them carried. */
 const TAG_PATTERN = /fc-tag-[a-z0-9]+/;

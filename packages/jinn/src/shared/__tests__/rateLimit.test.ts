@@ -231,3 +231,22 @@ describe("a spent prepaid balance", () => {
     expect(isDeadSessionError(makeResult({ error: BILLING }))).toBe(false);
   });
 });
+
+describe("an opencode provider that refuses the turn", () => {
+  const EXPIRED = "provider.auth: This API key has expired. Create a new API key in OpenCode Console. (HTTP 401)";
+  const NO_ACCESS = "provider.auth: Upstream request failed: Model access is disabled (HTTP 403)";
+
+  it("is limited and flagged with what it refused, so the chain may serve it but the park never runs", () => {
+    expect(detectRateLimit(makeResult({ error: EXPIRED }))).toEqual({ limited: true, refused: "auth" });
+    expect(detectRateLimit(makeResult({ error: NO_ACCESS }))).toEqual({ limited: true, refused: "model-access" });
+  });
+
+  it("is not a dead session when the engine did no work before it, so the resume id survives the hop", () => {
+    expect(isDeadSessionError(makeResult({ error: EXPIRED }))).toBe(false);
+    expect(isDeadSessionError(makeResult({ error: NO_ACCESS }))).toBe(false);
+  });
+
+  it("leaves an auth failure that names no provider type as it was", () => {
+    expect(detectRateLimit(makeResult({ error: "HTTP 401 from the mcp server" }))).toEqual({ limited: false });
+  });
+});

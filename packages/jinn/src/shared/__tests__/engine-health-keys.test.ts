@@ -29,9 +29,9 @@ describe("engineReadKeys", () => {
     expect(engineReadKeys("codex", undefined)).toEqual(["codex"]);
   });
 
-  it("adds an opencode model's provider first: the given model, else the configured one", () => {
-    expect(engineReadKeys("opencode", config("opencode-go-b/flash"))).toEqual(["opencode/opencode-go-b", "opencode"]);
-    expect(engineReadKeys("opencode", config("opencode-go-b/flash"), "opencode-go/pro")).toEqual(["opencode/opencode-go", "opencode"]);
+  it("adds an opencode model's provider and the model's own key first: the given model, else the configured one", () => {
+    expect(engineReadKeys("opencode", config("opencode-go-b/flash"))).toEqual(["opencode/opencode-go-b", "opencode/opencode-go-b/flash", "opencode"]);
+    expect(engineReadKeys("opencode", config("opencode-go-b/flash"), "opencode-go/pro")).toEqual(["opencode/opencode-go", "opencode/opencode-go/pro", "opencode"]);
   });
 
   it("is the engine's key alone when no model names a provider", () => {

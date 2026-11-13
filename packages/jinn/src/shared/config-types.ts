@@ -192,6 +192,17 @@ export interface JinnConfig {
        *  windowed allowance, since opencode publishes none to read. Absent =
        *  unmetered, exactly as before. See docs/engines-opencode.md. */
       usageLimits?: OpencodeUsageLimitsConfig;
+      /**
+       * Providers sold as a prepaid or capped subscription (default
+       * `["opencode-go"]`). A 402 on one of them means the allowance is spent for
+       * now: the provider is held out of routing and tried again after
+       * `reprobeMinutes`. Any other provider keeps the billing handling that
+       * waits for nobody and fails the turn when no fallback link serves it.
+       */
+      subscriptionProviders?: string[];
+      /** Minutes a spent subscription provider is held out before it is offered a
+       *  turn again, when it stated no reset (default 60). */
+      reprobeMinutes?: number;
       autoCompact?: AutoCompactConfig; // server mode only
       /** Named accounts: several subscriptions to one provider, each staged as its
        *  own provider id. See docs/design/opencode-accounts.md. */

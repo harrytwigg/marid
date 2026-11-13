@@ -62,7 +62,7 @@ describe('hopSentence', () => {
   })
 
   it('leaves the reset out when the failing target stated none', () => {
-    expect(hopSentence({ ...HOP, resetsAt: undefined, reason: 'auth' })).toBe('Fell back from claude · A · opus to claude · B · sonnet: profile signed out')
+    expect(hopSentence({ ...HOP, resetsAt: undefined, reason: 'auth' })).toBe('Fell back from claude · A · opus to claude · B · sonnet: signed out')
   })
 })
 

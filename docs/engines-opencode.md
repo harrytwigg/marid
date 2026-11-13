@@ -223,6 +223,32 @@ engines:
 - **A session gets only the accounts its chain reaches.** Each key belongs to its own workspace, so a session's opencode processes (and a remote host's keys file) get the block and key of an account only when that account's provider is the provider of the session's own model, of a model on an opencode link in its resolved chain (its employee's, its account's or its engine's chain, or a stored per-session fallback target), or of the model the turn runs on. A session whose chain reaches no account gets no account block and no key. A server's fingerprint carries the accounts it was started with, so a chain change that adds an account restarts the server at the next turn.
 - **Conversations carry over.** All accounts share one opencode data directory, so a hop from `opencode-go/x` to `opencode-go-b/x` is the same thread on another model.
 
+### Failure classes
+
+A provider call that fails is read from opencode's own error, `{type, message, status}`, which both the `run` and server transports put into the turn's error text as `<type>: <message> (HTTP <status>)`. The type and status decide the class; the prose patterns the gateway uses for every engine apply only to an error that carries no `provider.*` type. Each class is held against what it is about, so the next turn, and any new session that takes its engine from its employee's default (a session that names its engine or model keeps what it named), skips it **without sending it a request**:
+
+| What opencode says | Class | Held against | Until |
+|---|---|---|---|
+| `provider.quota`, HTTP 402 (`Insufficient account funds`, `Insufficient balance. Top up…`) | `quota` | the provider (`opencode/<provider>`) | the re-probe interval |
+| HTTP 429 `usage limit exceeded` | `quota` | the provider | the reset it states, else the re-probe interval |
+| `provider.auth`, HTTP 401 (`This API key has expired`) | `auth` | the provider, as signed out | the credential changes (see below) |
+| `provider.auth`, HTTP 403 (`Model access is disabled`, a region opt-in refusal, or a bare `Forbidden`; a 403 whose message names the key, such as `Invalid API key`, reads as a 401) | `model-access` | that one model (`opencode/<provider>/<model>`) | the re-probe interval |
+
+Every class also hops the turn along the session's fallback chain. A dead key and an unavailable model never park a session to wait, since no clock fixes them: with no link left the turn fails with the provider's own words, as a spent balance does.
+
+A 402 holds the provider only when it is a **subscription provider**. That is `opencode-go` unless `engines.opencode.subscriptionProviders` names others (the list replaces the default). A pay-as-you-go provider's 402 is a balance nobody will top up on a timer, and keeps its billing handling: it hops the turn and records nothing that routing reads. The usage ledger is not consulted for a 402: it cannot say when the provider's own meter clears, and a transient 402 has been seen to clear within an hour while the ledger showed the account far below its windows.
+
+```yaml
+engines:
+  opencode:
+    subscriptionProviders: [opencode-go]   # default; providers whose 402 is a spent allowance
+    reprobeMinutes: 60                     # default; how long a spent provider or an unavailable model is held out
+```
+
+A signed-out provider is held until its stored credential is replaced, not for a time, or until a turn the provider serves shows the key works again. The gateway notes an opaque identity of the credential (never the key) with the record and compares it on every read; a changed or unreadable credential ends the hold. Where the credential cannot be read (a turn on a remote host, or no stored credential found) the hold lasts 24 hours, so a wrong verdict heals by itself. A bare `Forbidden` does not say whether the key or the model is refused, so it is held against the model: if the key is in fact dead, each of the provider's models is held in turn, each for the re-probe interval, rather than the whole provider being held until the key changes.
+
+Every hold is about the machine whose turn hit it, the gateway included: each host signs opencode in with its own key, so its allowance, its key and the models its account may use are its own. A hold names its host and is read only by sessions that run there, so a dead key, a spent allowance or a refused model on the gateway does not hold a remote employee off the provider, and one on a remote host does not hold the gateway's sessions off it. A served turn ends a hold only on the machine it is about: a turn served on a remote host ends that host's holds and none of the gateway's. A remote host's dead key is otherwise held for its full 24 hours, since the gateway cannot read that host's credential. One provider (or model) has one record, so the newest machine's hold replaces another machine's on the same key. `jinn limits --clear opencode/<provider>` (or `opencode/<provider>/<model>`) ends any hold at once, and `jinn doctor` lists a signed-out provider as an action to take.
+
 ---
 
 ## Invocation contract

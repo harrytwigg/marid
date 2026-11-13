@@ -1,3 +1,4 @@
+import { classifyOpencodeFailure } from "../../shared/opencode-failure.js";
 import { isInterruptibleEngine, type EngineResult, type Session } from "../../shared/types.js";
 import { rateLimitEngineLabel } from "../../shared/rateLimit.js";
 import type { EngineName } from "../../shared/models.js";
@@ -171,13 +172,17 @@ async function announceHostNotReady(args: RateLimitTurnArgs, info: { error: stri
   await args.surface.notice(`⏳ The usage limit reset, but this session's host is not ready (${info.error}). I'll keep retrying and continue automatically.`);
 }
 
-/** A prepaid balance ran dry and no fallback link could serve the turn: fail it with the
- *  provider's own words (they say where to top up) so it reaches the manager, instead of
- *  parking it for a window that never opens. */
+/** A prepaid balance ran dry, a key is dead, or a model is not enabled for the account, and no fallback
+ *  link could serve the turn: fail it with the provider's own words (they say where to top up or sign
+ *  in) so it reaches the manager, instead of parking it for a window that never opens. */
 async function settleBillingFailedTurn(args: RateLimitTurnArgs): Promise<void> {
   const session = args.input.session;
   const provider = args.originalResult.error?.replace(/\s+/g, " ").trim().slice(0, 400) || "the provider reported an insufficient balance";
-  const billingError = `${rateLimitEngineLabel(session.engine)} account is out of credit: ${provider}`;
+  const refused = classifyOpencodeFailure(args.originalResult.error)?.kind;
+  const label = rateLimitEngineLabel(session.engine);
+  const billingError = refused === "auth" ? `${label} provider is signed out: ${provider}`
+    : refused === "model-access" ? `${label} provider does not serve this model for the account: ${provider}`
+    : `${label} account is out of credit: ${provider}`;
   notifyOperatorChannel(`❌ ${billingError}. ${describe(session)} has been stopped.`, undefined, "stopped");
   await settleTurn({
     sessionId: session.id,
@@ -188,7 +193,11 @@ async function settleBillingFailedTurn(args: RateLimitTurnArgs): Promise<void> {
     employee: args.input.employee,
     surface: args.surface,
   });
-  await args.surface.reply("The provider reports an insufficient balance and no fallback could serve this turn. Top up the account or add a fallback, then try again.");
+  await args.surface.reply(
+    refused === "auth" ? "The provider rejected its API key and no fallback could serve this turn. Sign in again or add a fallback, then try again."
+      : refused === "model-access" ? "The provider does not serve this model for the account and no fallback could serve this turn. Enable the model or pick another, then try again."
+      : "The provider reports an insufficient balance and no fallback could serve this turn. Top up the account or add a fallback, then try again.",
+  );
 }
 
 function rateLimitHooks(args: RateLimitTurnArgs): RateLimitHandlerHooks {

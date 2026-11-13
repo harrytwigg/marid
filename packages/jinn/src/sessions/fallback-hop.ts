@@ -1,6 +1,7 @@
 import { classifyEngineFailureText, hasEngineFailureClass, isBillingFailureMessage } from "../shared/engine-failure.js";
 import { UNSTATED_RESET_WINDOW_MS } from "../shared/engine-health.js";
 import type { FallbackHop, FallbackHopReason, FallbackHopSkip } from "../shared/fallback-chain-wire.js";
+import { classifyOpencodeFailure } from "../shared/opencode-failure.js";
 import { isModelAvailabilityError } from "../shared/model-fallback.js";
 import { computeNextRetryDelayMs } from "../shared/rateLimit.js";
 import type { EngineResult } from "../shared/types.js";
@@ -25,6 +26,8 @@ export interface LinkFailure {
   resetsAt?: number;
   /** Whether the failure is a limit that engine health should hold against the target. */
   isLimit: boolean;
+  /** The failed turn's error text, which an opencode failure is recorded from. */
+  error?: string;
 }
 
 const RETRY_ABANDONED_RE = /would not retry it for/i;
@@ -32,6 +35,9 @@ const RETRY_ABANDONED_RE = /would not retry it for/i;
 /** The hop reason of a usage limit: quota for an allowance window, the engine giving up its own retries for that, else a rate limit. */
 export function limitReason(result: Pick<EngineResult, "error">): FallbackHopReason {
   const error = result.error ?? "";
+  const refused = classifyOpencodeFailure(error)?.kind;
+  if (refused === "auth") return "auth";
+  if (refused === "model-access") return "invalid-model";
   if (RETRY_ABANDONED_RE.test(error)) return "retry-exhausted";
   if (isBillingFailureMessage(error)) return "billing";
   const classification = classifyEngineFailureText(error);

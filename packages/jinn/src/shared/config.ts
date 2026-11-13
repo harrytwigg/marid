@@ -4,7 +4,7 @@ import { CONFIG_PATH } from "./paths.js";
 import { applyLegacyFallbackMigration, validateEngineFallbackChains, validateEngineFallbackModelMaps } from "./engine-fallback.js";
 import { validateClaudeAccounts } from "./claude-accounts-config.js";
 import { warnDuplicates, type DuplicateTolerance } from "./fallback-chain-load.js";
-import { opencodeUsageLimitsProblems } from "./opencode-usage-limits-config.js";
+import { opencodeSubscriptionProblems, opencodeUsageLimitsProblems } from "./opencode-usage-limits-config.js";
 import { validateOpencodeAccounts, stagedOpencodeAccounts } from "./opencode-accounts-config.js";
 import { configEnvReferences } from "./config-env-references.js";
 import { setOpencodeAccountKeyEnv } from "./child-env.js";
@@ -100,7 +100,7 @@ export function validateConfigShape(config: unknown, options: { tolerateDuplicat
     }
     problems.push(...validateEngineFallbackChains(c.engines, options.tolerateDuplicates), ...validateClaudeAccounts(c.engines, undefined, options.tolerateDuplicates));
     problems.push(...validateEngineFallbackModelMaps(c.engines));
-    problems.push(...opencodeUsageLimitsProblems(c.engines), ...validateOpencodeAccounts(c.engines, configEnvReferences(c)), ...autoCompactProblems(c.engines));
+    problems.push(...opencodeUsageLimitsProblems(c.engines), ...opencodeSubscriptionProblems(c.engines), ...validateOpencodeAccounts(c.engines, configEnvReferences(c)), ...autoCompactProblems(c.engines));
   }
 
   problems.push(...validateRealtime(c.realtime));

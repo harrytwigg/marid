@@ -450,7 +450,7 @@ ${languageInstruction}
 - **Department**: ${employee.department}
 - **Rank**: ${employee.rank}
 - **Engine**: ${employee.engine}
-- **Model**: ${employee.model}
+- **Model**: ${employee.model || "the engine's default"}
 ${chainOfCommand}
 ${systemContext}`;
 }

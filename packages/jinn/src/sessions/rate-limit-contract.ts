@@ -17,6 +17,8 @@ export interface RateLimitInfo {
   resetsAt?: number;
   /** A spent prepaid balance: the chain may serve the turn, but it is never parked to wait. */
   billing?: true;
+  /** A dead key or a model the account is not enabled for: hops like a spent balance, never parked to wait. */
+  refused?: "auth" | "model-access";
 }
 
 /** Outcome categories returned by handleRateLimit so callers can drive transport-side completion. */
