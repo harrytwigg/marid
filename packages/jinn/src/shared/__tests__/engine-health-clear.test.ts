@@ -106,8 +106,8 @@ describe("clearContradictedHealth", () => {
     expect(readEngineHealth(at(31))["claude:overflow"]?.clearedAt).toBe(at(31).toISOString());
   });
 
-  it("leaves a host-scoped record alone: a login is not an allowance", () => {
-    recordSpent("claude", { host: "gateway-box", window: "7d" });
+  it.each([["another machine", "gateway-box"], ["this machine", os.hostname()]])("leaves a record about %s alone: a login is not an allowance", (_which, host) => {
+    recordSpent("claude", { host, window: "7d" });
     const before = fs.readFileSync(STATE_PATH, "utf-8");
 
     clearContradictedHealth("claude", [win("7d", 0)], at(30).getTime(), at(31));
@@ -246,8 +246,8 @@ describe("recordEngineServed", () => {
     });
   });
 
-  it("leaves a host-scoped record alone and writes nothing", () => {
-    recordSpent("claude", { host: "gateway-box" });
+  it.each([["another machine", "gateway-box"], ["this machine", os.hostname()]])("leaves a login record about %s alone and writes nothing", (_which, host) => {
+    recordSpent("claude", { host });
     const before = fs.readFileSync(STATE_PATH, "utf-8");
 
     recordEngineServed("claude", at(10).getTime(), undefined, at(12));

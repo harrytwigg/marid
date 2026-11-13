@@ -1,5 +1,7 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { opencodeCredentialFingerprint, providerOfOpencodeHealthKey } from "./opencode-subscription.js";
 import { JINN_HOME } from "./paths.js";
 
 /**
@@ -14,6 +16,8 @@ import { JINN_HOME } from "./paths.js";
  */
 
 export type EngineHealthState = "ok" | "exhausted" | "degraded";
+
+export type OpencodeFailureClass = "quota" | "auth" | "model-access";
 
 export interface EngineHealth {
   state: EngineHealthState;
@@ -46,6 +50,20 @@ export interface EngineHealth {
    * a record from a usage readout or a login failure, which are about no model.
    */
   model?: string;
+  /**
+   * What kind of fact an opencode record holds: `quota` (a spent allowance or
+   * balance), `auth` (the provider's key is expired or invalid) or `model-access`
+   * (one model is not enabled for the account). Absent on every other record.
+   * Read by the limits displays, which say why the target is out.
+   */
+  failureClass?: OpencodeFailureClass;
+  /**
+   * Internal: an opaque identity of the credential an `auth` record was written
+   * against. When the credential stored now has a different one the record is
+   * about a key that has since been replaced and reads as cleared. Never shown
+   * and never sent out; see {@link publicHealth}.
+   */
+  credentialFingerprint?: string;
   reason?: string;
   observedAt?: string;
   /**
@@ -61,6 +79,15 @@ export interface EngineHealth {
 export type EngineHealthReading = Record<string, EngineHealth>;
 
 const STATE_PATH = path.join(JINN_HOME, "tmp", "engine-health.json");
+
+/** This machine's name, as a record about it is stamped and as a local session matches a record's `host`. */
+export function localHostName(): string {
+  try {
+    return os.hostname();
+  } catch {
+    return "localhost";
+  }
+}
 
 const HEALTH_STATES: readonly string[] = ["ok", "exhausted", "degraded"];
 
@@ -103,15 +130,30 @@ export function isSpent(record: EngineHealth, now: Date): boolean {
   return !Number.isFinite(until) || until <= now.getTime();
 }
 
+/** A record as the readers see it: without the fields that are the store's own. */
+export function publicHealth(record: EngineHealth): EngineHealth {
+  const { credentialFingerprint: _fingerprint, ...rest } = record;
+  return rest;
+}
+
+/** An `auth` record whose credential is not the one stored now: the key it was
+ *  written against has been replaced, or cannot be read any more. Either way the
+ *  record says nothing reliable about the credential in use, and fail-open is the
+ *  only safe direction for advice. */
+function credentialChanged(key: string, record: EngineHealth): boolean {
+  if (record.failureClass !== "auth" || record.credentialFingerprint === undefined) return false;
+  return opencodeCredentialFingerprint(providerOfOpencodeHealthKey(key), undefined) !== record.credentialFingerprint;
+}
+
 /** Every engine something has been observed about, with a record whose window
  *  has passed reading back as `ok`. A stored `ok` is a positive clear and is kept
  *  as written: its `clearedAt` is what tells a clear from a lapse. */
 export function readEngineHealth(now: Date = new Date()): EngineHealthReading {
   const live: EngineHealthReading = {};
   for (const [engine, record] of Object.entries(readStore())) {
-    live[engine] = record.state !== "ok" && isSpent(record, now)
-      ? { state: "ok", ...(record.observedAt ? { observedAt: record.observedAt } : {}) }
-      : record;
+    if (record.state !== "ok" && isSpent(record, now)) live[engine] = { state: "ok", ...(record.observedAt ? { observedAt: record.observedAt } : {}) };
+    else if (record.state !== "ok" && credentialChanged(engine, record)) live[engine] = { state: "ok", clearedAt: now.toISOString(), observedAt: now.toISOString(), reason: "the credential changed" };
+    else live[engine] = publicHealth(record);
   }
   return live;
 }

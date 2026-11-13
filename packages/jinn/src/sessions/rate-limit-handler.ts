@@ -32,11 +32,11 @@ import { spawnCwd } from "./session-cwd.js";
 import { logger } from "../shared/logger.js";
 import { REMOTE_ENGINE_NAMES } from "../shared/models.js";
 import { linkHealthKey } from "../shared/fallback-chain-health.js";
-import { recordEngineServed } from "../shared/engine-health.js";
 import {
   computeNextRetryDelayMs, computeRateLimitDeadlineMs, detectRateLimit, nextUnstatedParkDelayMs,
   rateLimitEngineLabel, MAX_UNSTATED_PARK_ATTEMPTS,
 } from "../shared/rateLimit.js";
+import { quotaHoldEndsAtSeconds, recordTurnServed } from "../shared/engine-health-opencode.js";
 import { rateLimitAccount, recordAccountRateLimit } from "./rate-limit-account.js";
 import { walkFallbackChain } from "./fallback-walk.js";
 import { beginLimitProbe, endLimitProbe } from "./limit-probe.js";
@@ -80,7 +80,9 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
   // Held against the target that ran: its account for Claude, its provider for an opencode model, its engine otherwise.
   const limitedModel = session.model ?? engineConfig.model;
   const limitedKey = linkHealthKey({ engine: session.engine, model: limitedModel, account });
-  recordAccountRateLimit(account, session.engine, engineLabel, rateLimit.resetsAt, { healthKey: limitedKey, model: limitedModel });
+  recordAccountRateLimit(account, session.engine, engineLabel, rateLimit.resetsAt, {
+    healthKey: limitedKey, model: limitedModel, error: originalResult.error, config: opts.config, host: isRemoteTarget(remoteTarget) ? remoteTarget.remoteHost : undefined,
+  });
 
   // ── Branch A: hand the turn along this session's fallback chain ───────────
   // A remote employee's substitute has to be an engine that can ALSO run on that
@@ -89,7 +91,10 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
   // repository deliberately never cloned there. A chain with nothing left in it
   // falls through to Branch B, which waits the limit out where the work lives.
   const remote = isRemoteTarget(remoteTarget) ? remoteTarget : undefined;
-  const walk = await walkFallbackChain({ opts, remote, remoteTarget, limited: { engine: session.engine, account } });
+  // A subscription held for its re-probe interval is stood in for until then, not for the six hours an unstated limit gets.
+  const heldUntil = rateLimit.resetsAt === undefined && session.engine === "opencode" ? quotaHoldEndsAtSeconds(limitedKey) : undefined;
+  const walkOpts = heldUntil === undefined ? opts : { ...opts, rateLimit: { ...rateLimit, resetsAt: heldUntil } };
+  const walk = await walkFallbackChain({ opts: walkOpts, remote, remoteTarget, limited: { engine: session.engine, account } });
   if (walk.kind === "cancelled") {
     await hooks.onCancelled?.();
     return { kind: "cancelled" };
@@ -101,10 +106,11 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
       + `(a substitute must be one of ${REMOTE_ENGINE_NAMES.join(", ")} and installed on that host); waiting for the reset instead`,
     );
   }
-  // A spent balance does not reopen on a clock, so there is nothing to wait out: the
-  // chain was the only way past it, and with none left the turn fails to be seen.
-  if (rateLimit.billing) {
-    logger.warn(`Session ${session.id} hit a ${engineLabel} billing failure and no fallback link could serve it; failing the turn instead of waiting`);
+  // A spent balance does not reopen on a clock, and neither does a dead key or a model the account
+  // is not enabled for, so there is nothing to wait out: the chain was the only way past it, and
+  // with none left the turn fails to be seen.
+  if (rateLimit.billing || rateLimit.refused) {
+    logger.warn(`Session ${session.id} hit a ${engineLabel} ${rateLimit.refused ?? "billing"} failure and no fallback link could serve it; failing the turn instead of waiting`);
     await hooks.onBillingFailure?.();
     return { kind: "billing" };
   }
@@ -323,7 +329,9 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
       const retryRateLimit = !retryInterrupted ? detectRateLimit(retryResult) : { limited: false as const };
 
       if (retryRateLimit.limited) {
-        recordAccountRateLimit(account, session.engine, engineLabel, retryRateLimit.resetsAt, { healthKey: limitedKey, model: retryModel });
+        recordAccountRateLimit(account, session.engine, engineLabel, retryRateLimit.resetsAt, {
+          healthKey: limitedKey, model: retryModel, error: retryResult.error, config: opts.config, host: remote?.remoteHost,
+        });
         earlyReset?.limitedAgain();
         logger.info(`Session ${session.id} still rate limited (attempt ${attempt})`);
 
@@ -361,7 +369,9 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
       }
 
       // The target answered a turn begun after its limit was recorded: the record is stale.
-      if (!retryResult.error) recordEngineServed(limitedKey, retryStartedMs, retryModel);
+      if (!retryResult.error) {
+        recordTurnServed({ engine: session.engine, key: limitedKey, startedMs: retryStartedMs, model: retryModel, servedOn: remote?.remoteHost });
+      }
       // Success (or non-rate-limit error) — hand off to caller for persistence + transport.
       await hooks.onRetrySuccess?.(retryResult);
       logger.info(`Session ${session.id} resumed after usage reset`);

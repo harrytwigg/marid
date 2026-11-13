@@ -69,6 +69,23 @@ describe("rerouteAtCreation", () => {
     expect(rerouteAtCreation(args({ health: { claude: spent() } }))!.model).toBeUndefined();
   });
 
+  it("starts a new session past a spent subscription provider", () => {
+    const employee = { name: "o", engine: "opencode", fallback: [{ engine: "opencode", model: "go-b/model-x" }, { engine: "opencode", model: "router/model-x" }] } as Employee;
+    const held = { "opencode/opencode-go": { state: "exhausted" as const, failureClass: "quota" as const, until: new Date(NOW.getTime() + HOUR).toISOString() } };
+
+    expect(rerouteAtCreation(args({ engine: "opencode", model: "opencode-go/model-x", config: config({}), employee, health: held })))
+      .toMatchObject({ engine: "opencode", model: "go-b/model-x" });
+  });
+
+  it("starts a new session past an opencode model the account cannot use, while the provider's other models stay usable", () => {
+    const employee = { name: "o", engine: "opencode", fallback: [{ engine: "opencode", model: "opencode-go/model-y" }] } as Employee;
+    const health = { "opencode/opencode-go/model-x": { state: "exhausted" as const, failureClass: "model-access" as const, until: new Date(NOW.getTime() + HOUR).toISOString() } };
+    const own = (model: string) => rerouteAtCreation(args({ engine: "opencode", model, config: config({}), employee, health }));
+
+    expect(own("opencode-go/model-x")).toMatchObject({ engine: "opencode", model: "opencode-go/model-y" });
+    expect(own("opencode-go/model-y")).toBeUndefined();
+  });
+
   it("holds an opencode target's limit under its provider", () => {
     const choice = rerouteAtCreation(args({
       engine: "opencode", model: "x/model-x", config: config({}), registry: installed("claude", "opencode"),

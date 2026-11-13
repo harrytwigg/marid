@@ -82,7 +82,7 @@ function printEngine(engine: EngineLimitEngineSnapshot): void {
 }
 
 function describeReplaced(replaced: EngineHealth): string {
-  const parts = [replaced.state, replaced.until ? `until ${replaced.until}` : undefined, replaced.window ? `window ${replaced.window}` : undefined, replaced.host ? `host ${replaced.host}` : undefined];
+  const parts = [replaced.state, replaced.failureClass, replaced.until ? `until ${replaced.until}` : undefined, replaced.window ? `window ${replaced.window}` : undefined, replaced.host ? `host ${replaced.host}` : undefined];
   return parts.filter(Boolean).join(", ");
 }
 

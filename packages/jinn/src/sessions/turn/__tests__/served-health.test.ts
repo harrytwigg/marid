@@ -17,6 +17,7 @@ vi.mock("../../../shared/paths.js", async (importOriginal) => ({
 
 import { noteTurnServed } from "../served-health.js";
 import { readEngineHealth, recordEngineUnavailable } from "../../../shared/engine-health.js";
+import { recordOpencodeFailure } from "../../../shared/engine-health-opencode.js";
 import { makeSession } from "../../__tests__/helpers/session-fixture.js";
 import type { EngineResult, Session } from "../../../shared/types.js";
 import type { TurnRun } from "../types.js";
@@ -104,5 +105,42 @@ describe("noteTurnServed", () => {
 
     expect(readEngineHealth()["opencode/x-provider"]?.clearedAt).toBeDefined();
     expect(readEngineHealth()["opencode/y-provider"]?.state).toBe("exhausted");
+  });
+
+  describe("an opencode provider's dead key and a model it refused", () => {
+    const GO = "opencode-go/kimi-k2";
+    // A dead key's credential is read from opencode's own database; never the machine's real one.
+    beforeEach(() => {
+      vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "xdg-data"));
+      return () => vi.unstubAllEnvs();
+    });
+    /** A dead key on the provider and a refused model, both seen on this machine `minutes` ago. */
+    function refusedMinutesAgo(minutes: number): void {
+      const now = new Date(Date.now() - minutes * MIN);
+      recordOpencodeFailure({ healthKey: "opencode/opencode-go", model: GO, error: "provider.auth: This API key has expired. (HTTP 401)", config: undefined, now });
+      recordOpencodeFailure({ healthKey: "opencode/opencode-go", model: GO, error: "provider.auth: Model access is disabled (HTTP 403)", config: undefined, now });
+    }
+    const goRun = (employee?: object) => {
+      const run = runStartedMinutesAgo(5, makeSession({ engine: "opencode", model: GO }));
+      return { ...run, input: { ...run.input, employee } } as TurnRun;
+    };
+
+    it("are lifted by a turn this machine served on that model", () => {
+      refusedMinutesAgo(30);
+
+      noteTurnServed(goRun(), GO, { result: answered, silent: false });
+
+      expect(readEngineHealth()["opencode/opencode-go"]).toMatchObject({ state: "ok", clearedAt: expect.any(String) });
+      expect(readEngineHealth()["opencode/opencode-go/kimi-k2"]).toMatchObject({ state: "ok", clearedAt: expect.any(String) });
+    });
+
+    it("are left alone by a turn a remote host served: it used that host's key", () => {
+      refusedMinutesAgo(30);
+
+      noteTurnServed(goRun({ name: "remote-worker", engine: "opencode", remoteHost: "build-box", remoteUser: "ci", remoteCwd: "/work" }), GO, { result: answered, silent: false });
+
+      expect(readEngineHealth()["opencode/opencode-go"]).toMatchObject({ state: "exhausted", failureClass: "auth" });
+      expect(readEngineHealth()["opencode/opencode-go/kimi-k2"]).toMatchObject({ state: "exhausted", failureClass: "model-access" });
+    });
   });
 });

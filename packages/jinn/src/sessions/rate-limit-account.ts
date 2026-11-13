@@ -1,6 +1,8 @@
 import { resolveEmployeeClaudeProfile, type ClaudeProfile } from "../shared/claude-profile.js";
 import { DEFAULT_CLAUDE_ACCOUNT, isRemoteClaudeAccount } from "../shared/engine-account.js";
+import type { JinnConfig } from "../shared/config-types.js";
 import { recordEngineUnavailable, type EngineHealthReading } from "../shared/engine-health.js";
+import { recordOpencodeFailure } from "../shared/engine-health-opencode.js";
 import { recordClaudeRateLimit } from "../shared/usageAwareness.js";
 import type { Employee, Session } from "../shared/types.js";
 import { accountOverride, ownClaudeAccountOf, ownClaudeProfile, sessionClaudeProfile } from "./session-account.js";
@@ -33,12 +35,17 @@ export function rateLimitAccount(
  *  record is kept under `held.healthKey` (the account's by default): an opencode
  *  model's provider, so one provider's limit does not hold back the others.
  *  `held.model` is the model the limited turn ran on, which the record keeps so
- *  that only a turn served on it can say the limit lifted. */
+ *  that only a turn served on it can say the limit lifted.
+ *  An opencode failure that says what it was (`held.error`, with `held.config`) is
+ *  recorded as what it was, against what it belongs to: a subscription's spent
+ *  allowance holds its provider out, a dead key its provider, a model the account
+ *  cannot use that model alone (`engine-health-opencode.ts`). */
 export function recordAccountRateLimit(
   account: string, engine: string, engineLabel: string, resetsAt: number | undefined,
-  held: { healthKey?: string; model?: string } = {},
+  held: { healthKey?: string; model?: string; error?: string; config?: Pick<JinnConfig, "engines">; host?: string } = {},
 ): void {
   const { healthKey = account, model } = held;
+  if (engine === "opencode" && recordOpencodeFailure({ healthKey, model, error: held.error, resetsAt, config: held.config, host: held.host })) return;
   recordEngineUnavailable(healthKey, `${engineLabel} usage limit`, resetsAt, new Date(), model === undefined ? {} : { model });
   if (engine === "claude") recordClaudeRateLimit(resetsAt, account);
 }
