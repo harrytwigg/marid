@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { DropdownMenuLabel } from '@/components/ui/dropdown-menu'
 import { useModelRegistry } from '@/hooks/use-model-registry'
 import { ModelPicker } from './model-picker'
+import { useOpencodeAccounts } from './use-opencode-accounts'
+import { opencodeAvailable } from './opencode-accounts'
 import type { FallbackTargetChoice, SessionFallbackView } from './fallback-mode-model'
 
 /**
@@ -19,6 +21,7 @@ export function FallbackTargetPicker({ view, onChoose, onBack }: {
   const allowed = view.allowedEngines
   const isEngineAllowed = (name: string) => !allowed || allowed.includes(name)
   const [browsing, setBrowsing] = useState<string | undefined>(own?.engine)
+  const accounts = useOpencodeAccounts(opencodeAvailable(registry))
   if (!registry) return <DropdownMenuLabel className="py-1.5 text-[length:var(--text-caption1)] font-normal text-[var(--text-tertiary)]">Loading models…</DropdownMenuLabel>
 
   const installed = Object.values(registry.engines).filter((e) => e.available && isEngineAllowed(e.name))
@@ -38,6 +41,7 @@ export function FallbackTargetPicker({ view, onChoose, onBack }: {
       isEngineAllowed={isEngineAllowed}
       keepOpenOnPick
       onBack={onBack}
+      accounts={accounts}
     />
   )
 }

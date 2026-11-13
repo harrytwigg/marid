@@ -49,6 +49,8 @@ export const queryKeys = {
   engines: {
     all: ['engines'] as const,
   },
+  /** GET /api/engine-limits, optionally narrowed to one engine. */
+  engineLimits: (engine?: string) => ['engine-limits', engine ?? null] as const,
   /** GET /api/fallback-chains, optionally with an employee subject. */
   fallbackChains: (employee?: string) => ['fallback-chains', employee ?? null] as const,
   config: ['config'] as const,

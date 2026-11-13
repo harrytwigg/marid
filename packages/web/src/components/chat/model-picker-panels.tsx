@@ -11,6 +11,7 @@ import { providerOf, providerLabel } from '@/hooks/use-model-registry'
 import type { EngineRegistryEntry, ModelInfo } from '@/lib/api'
 import { engineDisplayName } from '@/lib/engine-names'
 import type { ModelList } from './use-model-list'
+import type { OpencodeAccountChoice } from './opencode-accounts'
 
 const SECTION_LABEL = 'px-2 pt-0.5 pb-1 text-[length:var(--text-caption2)] font-[var(--weight-bold)] uppercase tracking-[0.4px] text-[var(--text-quaternary)]'
 
@@ -111,8 +112,10 @@ function ModelRows({ list, modelId, onPickModel, keepOpenOnPick }: {
 }
 
 /** The model search and short radio list of one engine, under an engine header. */
-export function ModelListPanel({ engine, modelId, list, onPickModel, keepOpenOnPick }: {
+export function ModelListPanel({ engine, accountLabel, modelId, list, onPickModel, keepOpenOnPick }: {
   engine: string
+  /** The opencode account whose models these are, when accounts are declared. */
+  accountLabel?: string
   modelId: string
   list: ModelList
   onPickModel: (model: string) => void
@@ -122,7 +125,7 @@ export function ModelListPanel({ engine, modelId, list, onPickModel, keepOpenOnP
   return (
     <>
       <DropdownMenuLabel className={`${SECTION_LABEL} pt-1 pb-1.5`}>
-        Engine · {engineDisplayName(engine)}
+        Engine · {engineDisplayName(engine)}{accountLabel ? ` · ${accountLabel}` : ''}
       </DropdownMenuLabel>
       {list.models.length === 0 ? (
         <DropdownMenuLabel className="py-1.5 text-[length:var(--text-caption1)] font-normal leading-snug text-[var(--text-secondary)]">
@@ -162,9 +165,34 @@ function EngineRow({ label, on, onPick }: { label: string; on: boolean; onPick: 
   )
 }
 
-/** The engine list: pick one to browse its models. With declared Claude accounts, Claude is
- *  listed once per profile — the plain row is the employee's/gateway's own login, named as such. */
-export function EnginePanel({ engines, engine, onBack, onChoose, onRefresh, profiles, profile, onChooseProfile }: {
+type OpencodeRows = { accounts: OpencodeAccountChoice[]; shown: string | undefined; hasOther: boolean; onChoose: (account: string | undefined) => void }
+
+/** opencode, listed once per declared account (and once for the models no account serves, if there are any). */
+function opencodeRowsOf(opencode: OpencodeRows, engine: string) {
+  const name = engineDisplayName('opencode')
+  const on = engine === 'opencode'
+  return [
+    ...(opencode.hasOther ? [<EngineRow key="opencode" label={`${name} · Other providers`} on={on && opencode.shown === undefined} onPick={() => opencode.onChoose(undefined)} />] : []),
+    ...opencode.accounts.map((a) => (
+      <EngineRow key={`opencode:${a.name}`} label={`${name} · ${a.label}`} on={on && opencode.shown === a.name} onPick={() => opencode.onChoose(a.name)} />
+    )),
+  ]
+}
+
+/** Claude, listed once per profile; the plain row is the employee's/gateway's own login, named as such. */
+function claudeRowsOf(profiles: string[], profile: string | undefined, engine: string, onChooseProfile: (profile: string | undefined) => void) {
+  const name = engineDisplayName('claude')
+  return [
+    <EngineRow key="claude" label={`${name} · Own login`} on={engine === 'claude' && !profile} onPick={() => onChooseProfile(undefined)} />,
+    ...profiles.map((p) => (
+      <EngineRow key={`claude:${p}`} label={`${name} · ${p}`} on={engine === 'claude' && profile === p} onPick={() => onChooseProfile(p)} />
+    )),
+  ]
+}
+
+/** The engine list: pick one to browse its models. With declared Claude accounts, Claude is listed once per profile;
+ *  with declared opencode accounts, opencode is listed once per account. */
+export function EnginePanel({ engines, engine, onBack, onChoose, onRefresh, profiles, profile, onChooseProfile, opencode }: {
   engines: EngineRegistryEntry[]
   engine: string
   onBack: () => void
@@ -174,32 +202,19 @@ export function EnginePanel({ engines, engine, onBack, onChoose, onRefresh, prof
   profiles?: string[]
   profile?: string
   onChooseProfile?: (profile: string | undefined) => void
+  /** Declared opencode accounts; absent or empty leaves opencode as one row. */
+  opencode?: OpencodeRows
 }) {
+  const rowsOf = (e: EngineRegistryEntry) => {
+    if (e.name === 'opencode' && opencode?.accounts.length) return opencodeRowsOf(opencode, engine)
+    if (e.name === 'claude' && profiles?.length && onChooseProfile) return claudeRowsOf(profiles, profile, engine, onChooseProfile)
+    return [<EngineRow key={e.name} label={engineDisplayName(e.name)} on={e.name === engine} onPick={() => onChoose(e.name)} />]
+  }
   return (
     <>
       <BackRow onBack={onBack} />
       <DropdownMenuLabel className={SECTION_LABEL}>Switch engine</DropdownMenuLabel>
-      {engines.flatMap((e) => {
-        if (e.name !== 'claude' || !profiles?.length || !onChooseProfile) {
-          return [<EngineRow key={e.name} label={engineDisplayName(e.name)} on={e.name === engine} onPick={() => onChoose(e.name)} />]
-        }
-        return [
-          <EngineRow
-            key="claude"
-            label={`${engineDisplayName('claude')} · Own login`}
-            on={engine === 'claude' && !profile}
-            onPick={() => onChooseProfile(undefined)}
-          />,
-          ...profiles.map((name) => (
-            <EngineRow
-              key={`claude:${name}`}
-              label={`${engineDisplayName('claude')} · ${name}`}
-              on={engine === 'claude' && profile === name}
-              onPick={() => onChooseProfile(name)}
-            />
-          )),
-        ]
-      })}
+      {engines.flatMap(rowsOf)}
       <DropdownMenuSeparator className="bg-[var(--separator)]" />
       <DropdownMenuItem
         onSelect={(e) => { e.preventDefault(); onRefresh() }}

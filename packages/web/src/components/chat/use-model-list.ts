@@ -57,14 +57,19 @@ function listWindow(models: ModelInfo[], modelId: string, trimmedQuery: string, 
  * Searching gets its own transient reveal flag: "Show N more" while searching must not
  * flip the persisted per-engine expand pref, or clearing the search afterwards would
  * dump the full catalog instead of restoring the short list.
+ *
+ * `scope` narrows the catalogue before anything else is computed from it, so the search,
+ * the short form and the "show all" count all speak of the narrowed list.
  */
-export function useModelList(registry: EnginesResponse, engine: string, modelId: string): ModelList {
+export function useModelList(registry: EnginesResponse, engine: string, modelId: string, scope?: (models: ModelInfo[]) => ModelInfo[]): ModelList {
   const [expandedByEngine, setExpandedByEngine] = useState<Record<string, boolean>>(() => loadExpandedByEngine())
   const [query, setQuery] = useState('')
   const [searchExpanded, setSearchExpanded] = useState(false)
   const labels = useAccountLabels()
 
-  const models = registry.engines[engine]?.models ?? []
+  const all = registry.engines[engine]?.models ?? []
+  // An engine's catalogue narrowed by the parent (an opencode account's own models); absent, the whole of it.
+  const models = scope ? scope(all) : all
   const trimmedQuery = query.trim()
   const searching = trimmedQuery.length > 0
   const expanded = expandedByEngine[engine] ?? false
