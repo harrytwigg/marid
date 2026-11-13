@@ -141,5 +141,26 @@ describe("a model the account cannot use (403)", () => {
   });
 });
 
+describe("an account model this host's opencode cannot serve (OpenCode 1.x)", () => {
+  it("hops the own turn to the next link and holds that model alone", async () => {
+    const { unservedModelError } = await import("../../shared/opencode-accounts.js");
+    const { detectRateLimit } = await import("../../shared/rateLimit.js");
+    const error = unservedModelError(GO.model, "go");
+    const detected = detectRateLimit(failed(error) as never);
+    expect(detected).toMatchObject({ limited: true, refused: "model-access" });
+    const { engines, calls } = scripted((call) => answer(`served by ${call.model}`));
+    const { id, opts } = turnFailing(error, engines, { refused: detected.refused });
+
+    const outcome = await handleRateLimit(opts);
+
+    expect(outcome).toMatchObject({ kind: "fallback", result: { result: "served by opencode-go-b/x" } });
+    expect(calls.map((call) => call.model)).toEqual(["opencode-go-b/x"]);
+    const health = readEngineHealth();
+    expect(health["opencode/opencode-go"]).toBeUndefined();
+    expect(health["opencode/opencode-go/x"]).toMatchObject({ state: "exhausted", failureClass: "model-access" });
+    expect(hopsOf(id).map((hop) => [hop.to, hop.reason])).toContainEqual([key(GO_B), "invalid-model"]);
+  });
+});
+
 // Keep the shared config in view: the default subscription list is what makes opencode-go one here.
 expect(config.engines.opencode).toEqual({ bin: "opencode" });
