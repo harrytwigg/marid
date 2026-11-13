@@ -17,12 +17,12 @@ export const OPENCODE_PROVIDER_ID_RE = /^[a-z0-9][a-z0-9._-]*$/;
 export const OPENCODE_KEY_ENV_RE = /^[A-Z_][A-Z0-9_]*$/;
 /** Variables the gateway sets on every opencode process itself: a key variable of one of these names would overwrite them. */
 const RESERVED_KEY_ENV: ReadonlySet<string> = new Set([
-  "OPENCODE_SERVER_PASSWORD", "OPENCODE_CONFIG", "OPENCODE_PID", "OPENCODE",
+  "OPENCODE", "OPENCODE_API_KEY", "OPENCODE_PID", "OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_CONTENT", "OPENCODE_PURE",
   // Common process variables: an account's key must never overwrite or stand in for one.
   "PATH", "HOME", "USER", "SHELL", "LANG", "TERM", "TMPDIR", "PWD", "NODE_OPTIONS", "NODE_PATH",
 ]);
-/** Prefixes of the variables the gateway or opencode itself reads: the program's own (`JINN_*`, `MARID_*`), every opencode variable (`OPENCODE_*`) and the loader, XDG and ssh families. */
-const RESERVED_KEY_ENV_PREFIXES = ["JINN_", "MARID_", "OPENCODE_", "LD_", "DYLD_", "XDG_", "SSH_"] as const;
+/** Prefixes of the variables the gateway or opencode itself reads: the program's own (`JINN_*`, `MARID_*`), opencode's server and switch families (`OPENCODE_SERVER_*`, `OPENCODE_DISABLE_*`) and the loader, XDG and ssh families. */
+const RESERVED_KEY_ENV_PREFIXES = ["JINN_", "MARID_", "OPENCODE_SERVER_", "OPENCODE_DISABLE_", "LD_", "DYLD_", "XDG_", "SSH_"] as const;
 /** The standard key variables of the common providers. Other tools, and opencode's own providers, read these; a key moved out of the gateway's environment for an account would be withheld from them. */
 const PROVIDER_KEY_ENV: ReadonlySet<string> = new Set([
   "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY",

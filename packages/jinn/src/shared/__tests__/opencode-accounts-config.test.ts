@@ -12,6 +12,10 @@ describe("validateOpencodeAccounts", () => {
     }))).toEqual([]);
   });
 
+  it("accepts a key variable with an OPENCODE_ prefix that opencode does not read", () => {
+    expect(validateOpencodeAccounts(engines({ "go-b": { provider: "opencode-go-b", base: "opencode-go", keyEnv: "OPENCODE_GO_B_API_KEY" } }))).toEqual([]);
+  });
+
   it("accepts no accounts block", () => {
     expect(validateOpencodeAccounts({ opencode: {} })).toEqual([]);
     expect(validateOpencodeAccounts({})).toEqual([]);
@@ -30,7 +34,8 @@ describe("validateOpencodeAccounts", () => {
     ["a keyEnv that is an opencode switch", { a: { provider: "p", base: "q", keyEnv: "OPENCODE_DISABLE_FFF" } }, /cannot hold an account's key/],
     ...["PATH", "HOME", "USER", "SHELL", "LANG", "TERM", "TMPDIR", "PWD", "NODE_OPTIONS", "NODE_PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES", "XDG_CONFIG_HOME", "SSH_AUTH_SOCK", "SSH_ASKPASS"]
       .map((keyEnv): [string, unknown, RegExp] => [`a keyEnv naming the process variable ${keyEnv}`, { a: { provider: "p", base: "q", keyEnv } }, /cannot hold an account's key/]),
-    ["a keyEnv that is any OPENCODE_ variable", { a: { provider: "p", base: "q", keyEnv: "OPENCODE_GO_B_API_KEY" } }, /cannot hold an account's key.*removes an account's key variable from every other process/],
+    ...["OPENCODE", "OPENCODE_API_KEY", "OPENCODE_PID", "OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_CONTENT", "OPENCODE_PURE", "OPENCODE_SERVER_USERNAME"]
+      .map((keyEnv): [string, unknown, RegExp] => [`a keyEnv naming the opencode variable ${keyEnv}`, { a: { provider: "p", base: "q", keyEnv } }, /cannot hold an account's key.*removes an account's key variable from every other process/]),
     ...["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "DEEPSEEK_API_KEY", "XAI_API_KEY", "MISTRAL_API_KEY", "GROQ_API_KEY"]
       .map((keyEnv): [string, unknown, RegExp] => [`a keyEnv naming the provider key ${keyEnv}`, { a: { provider: "p", base: "q", keyEnv } }, /standard key variable.*removes an account's key variable from every other process/]),
     ["keyEnv without base", { a: { provider: "p", keyEnv: "K" } }, /keyEnv needs base/],
