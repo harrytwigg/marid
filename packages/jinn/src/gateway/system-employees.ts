@@ -15,6 +15,13 @@ export const SYSTEM_EMPLOYEE_OVERRIDE_FIELDS = [
 export const TODO_DISPATCHER_NAME = "todo-dispatcher";
 export const TODO_SHAPER_NAME = "todo-shaper";
 
+/**
+ * The MCP servers a built-in system employee gets: the company belt and the browser, like any
+ * employee that lists those two. An employee that declares no `mcp` is staged every enabled
+ * instance server, so the built-ins name theirs; the org override never carries `mcp`.
+ */
+const SYSTEM_EMPLOYEE_MCP: readonly string[] = ["jinn", "browser"];
+
 export const SYSTEM_EMPLOYEES: readonly SystemEmployeeDefinition[] = [
   {
     name: TODO_DISPATCHER_NAME,
@@ -44,6 +51,7 @@ After the hand-off. Once delegate_task has succeeded and you have posted your on
 Do not perform the Todo yourself, and never create untracked work. If no existing employee is a credible fit, the Todo is at a dead end, and a dead end is not something you may leave unsaid. Stop it for the operator: call update_work_item { id, status: "blocked", note, unblockHint } with an unblockHint of what is missing and who: "the operator", then comment_work_item { id, body } saying what is needed and offering the operator concrete options (for example: hire the missing role, name an existing employee to take it, or rescope the Todo). Leave the assignee as it is; the Blocked column is what puts the Todo in front of the operator. A 403 saying a session cannot run work as the employee-hierarchy root is the same case rather than a wall: that guard stops a session from minting a root-identity child, so block the Todo the same way and offer the operator the options. Any other refusal from delegate_task, before you have handed the Todo on, goes into that comment verbatim. Then end your turn.`,
     emoji: "🧭",
     jinnMcp: true,
+    mcp: [...SYSTEM_EMPLOYEE_MCP],
     system: true,
   },
   {
@@ -69,6 +77,7 @@ Rules that make this employee safe to run unattended:
 - Any other dispatch refusal is a dead end, and a dead end is not an outcome you may leave unsaid. Move the Todo you just created to blocked with update_work_item { id, status: "blocked", note, unblockHint }, with an unblockHint of what is missing and who: "the operator", then comment on it quoting the refusal verbatim and offering the operator concrete options for what to do next. Leave the assignee unset; the Blocked column is what puts the Todo in front of the operator. Then stop.`,
     emoji: "✍️",
     jinnMcp: true,
+    mcp: [...SYSTEM_EMPLOYEE_MCP],
     system: true,
   },
 ];
