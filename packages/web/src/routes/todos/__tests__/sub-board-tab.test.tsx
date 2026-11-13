@@ -1,6 +1,6 @@
 import "@/test/preload-dialogs"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { createMemoryRouter, RouterProvider, useLocation, type RouteObject } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkItemCompactWire, WorkItemStatusWire, WorkItemTreeNodeWire, WorkItemTreeWire } from "@/lib/api"
@@ -345,6 +345,29 @@ describe("the pop-up as an address (?view=board)", () => {
     fireEvent.click(screen.getByTestId("open"))
     await screen.findByTestId("sub-board-dialog")
     fireEvent.click(screen.getByTestId("close-twice"))
+    await waitFor(() => expect(screen.queryByTestId("sub-board-dialog")).toBeNull())
+    expect(where()).toBe("/todos/TSK-1")
+    await act(async () => { await router.navigate(-1) })
+    expect(where()).toBe("/todos")
+  })
+
+  it("a pop-up brought back by Forward after a close closes again, by the button and by Escape", async () => {
+    const router = mount([{ pathname: "/todos" }, { pathname: "/todos/TSK-1" }], [{ path: "/todos", element: <Where /> }, ...routes])
+    fireEvent.click(screen.getByTestId("open"))
+    await screen.findByTestId("sub-board-dialog")
+    fireEvent.keyDown(screen.getByTestId("sub-board-dialog"), { key: "Escape" })
+    await waitFor(() => expect(screen.queryByTestId("sub-board-dialog")).toBeNull())
+    expect(where()).toBe("/todos/TSK-1")
+    // Forward brings back the entry the close left, with the same key.
+    await act(async () => { await router.navigate(1) })
+    await screen.findByTestId("sub-board-dialog")
+    expect(where()).toBe("/todos/TSK-1?view=board")
+    fireEvent.keyDown(screen.getByTestId("sub-board-dialog"), { key: "Escape" })
+    await waitFor(() => expect(screen.queryByTestId("sub-board-dialog")).toBeNull())
+    expect(where()).toBe("/todos/TSK-1")
+    await act(async () => { await router.navigate(1) })
+    await screen.findByTestId("sub-board-dialog")
+    fireEvent.click(within(screen.getByTestId("sub-board-dialog")).getAllByRole("button", { name: /^close$/i })[0])
     await waitFor(() => expect(screen.queryByTestId("sub-board-dialog")).toBeNull())
     expect(where()).toBe("/todos/TSK-1")
     await act(async () => { await router.navigate(-1) })

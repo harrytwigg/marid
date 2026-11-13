@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom"
 
 const VIEW_PARAM = "view"
@@ -23,9 +23,13 @@ export function useSubBoardView(embedded: boolean) {
   const navigate = useNavigate()
   const { state, key } = useLocation()
   const [held, setHeld] = useState(false)
-  /** The entry a close has already started from. A close is a navigation that lands later, so a second close before it
-   *  does (a double click, a second `onClose` caller) must not go back again: that would leave the page. */
+  /** The entry a close has started from, while that close is still landing. A close is a navigation that lands later, so a
+   *  second close before it does (a double click, a second `onClose` caller) must not go back again: that would leave the
+   *  page. Cleared once the location moves, because Forward brings the same entry, with its key, back open. */
   const closingFrom = useRef<string | null>(null)
+  useEffect(() => {
+    closingFrom.current = null
+  }, [key])
   const open = embedded ? held : params.get(VIEW_PARAM) === BOARD_VIEW
   const show = useCallback(() => {
     if (embedded) return setHeld(true)
