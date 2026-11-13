@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { PassThrough, Writable } from "node:stream";
 
 /**
@@ -15,15 +15,17 @@ const hoisted = vi.hoisted(() => ({
   events: [] as object[],
   /** what the cost read prints, or null for a read that fails */
   messages: null as string | null,
-  spawns: [] as { bin: string; args: string[] }[],
+  spawns: [] as { bin: string; args: string[]; env: Record<string, string | undefined> }[],
+  /** how long the cost read takes to answer */
+  readDelayMs: 0,
   reads: [] as { bin: string; args: string[]; env: Record<string, string | undefined>; cwd: unknown }[],
   ssh: [] as { destination: string; args: string[] }[],
   sshStdout: null as string | null,
 }));
 
 vi.mock("node:child_process", () => ({
-  spawn: vi.fn((bin: string, args: string[]) => {
-    hoisted.spawns.push({ bin, args });
+  spawn: vi.fn((bin: string, args: string[], opts?: { env?: Record<string, string | undefined> }) => {
+    hoisted.spawns.push({ bin, args, env: { ...(opts?.env ?? {}) } });
     const stdout = new PassThrough();
     const stderr = new PassThrough();
     const stdin = new Writable({ write(_chunk, _enc, cb) { cb(); } });
@@ -51,7 +53,7 @@ vi.mock("node:child_process", () => ({
   }),
   execFile: vi.fn((bin: string, args: string[], opts: { env?: Record<string, string>; cwd?: unknown }, cb: (err: Error | null, stdout: string) => void) => {
     hoisted.reads.push({ bin, args, env: { ...(opts.env ?? {}) }, cwd: opts.cwd });
-    setTimeout(() => (hoisted.messages === null ? cb(new Error("boom"), "") : cb(null, hoisted.messages)), 0);
+    setTimeout(() => (hoisted.messages === null ? cb(new Error("boom"), "") : cb(null, hoisted.messages)), hoisted.readDelayMs);
     return { stdin: { end: () => {} } };
   }),
 }));
@@ -97,6 +99,7 @@ vi.mock("../../shared/logger.js", () => ({
 }));
 
 import { OpencodeEngine } from "../opencode.js";
+import { RemoteKills } from "../remote-stage.js";
 import { JINN_HOME } from "../../shared/paths.js";
 import type { EngineRunOpts } from "../../shared/types.js";
 import { runCostArgs, turnCostFromMessages } from "../opencode-v2-run-cost.js";
@@ -126,11 +129,16 @@ function opts(over: Partial<EngineRunOpts> = {}): EngineRunOpts {
 const REMOTE = { root: "/srv/agents", mount: "/mnt/jinn-home" };
 const engine = () => new OpencodeEngine({ remote: () => REMOTE, gatewayPort: () => 8722 });
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 beforeEach(() => {
   hoisted.version = "2.0.32";
   hoisted.events = PLAIN_TURN;
   hoisted.messages = listing(message(FIRST, 0.00405), message("msg_0001", 0.5));
   hoisted.spawns = [];
+  hoisted.readDelayMs = 0;
   hoisted.reads = [];
   hoisted.ssh = [];
   hoisted.sshStdout = null;
@@ -188,9 +196,38 @@ describe("opencode 2.x `run` turn cost", () => {
   });
 
   it("does not hand the cost read the staged config the turn's cleanup deletes", async () => {
-    await engine().run(opts());
+    // A command timeout stages a config for the turn itself, so there is one to withhold.
+    await new OpencodeEngine({ commandTimeoutMs: () => 60_000 }).run(opts());
+    expect(hoisted.spawns[0]!.env.OPENCODE_CONFIG).toBeTruthy();
     expect(hoisted.reads[0]!.env.OPENCODE_CONFIG).toBeUndefined();
     expect(hoisted.reads[0]!.env.OPENCODE_DISABLE_AUTOUPDATE).toBe("1");
+  });
+
+  it("answers with the finished turn when a stop lands while its cost is being read", async () => {
+    hoisted.readDelayMs = 80;
+    const eng = engine();
+    const running = eng.run(opts());
+    await new Promise((r) => setTimeout(r, 30));
+    expect(hoisted.reads).toHaveLength(1);
+    eng.kill("sess-1", "Interrupted");
+    const result = await running;
+    expect(result.error).toBeUndefined();
+    expect(result.result).toBe("pong");
+    expect(result.cost).toBeCloseTo(0.00405, 10);
+  });
+
+  it("reads a remote turn's cost only once the remote process is known to be gone", async () => {
+    let released = () => {};
+    const gone = new Promise<void>((resolve) => { released = resolve; });
+    vi.spyOn(RemoteKills.prototype, "beforeSettle").mockImplementation(() => gone);
+    hoisted.sshStdout = listing(message(FIRST, 0.00405));
+    const running = engine().run(opts({ remoteHost: "build-box", remoteUser: "builder", remoteCwd: "/srv/agents/proj" }));
+    await new Promise((r) => setTimeout(r, 40));
+    expect(hoisted.ssh).toEqual([]);
+    released();
+    const result = await running;
+    expect(hoisted.ssh).toHaveLength(1);
+    expect(result.cost).toBeCloseTo(0.00405, 10);
   });
 
   it("keeps the turn and what its stream carried when the cost cannot be read", async () => {

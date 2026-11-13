@@ -43,6 +43,8 @@ interface LiveProcess extends RemoteRun {
   configHandle?: OpencodeConfigHandle;
   /** Runs this turn's opencode once it has ended (OpencodeLaunchPlan.runOpencode). */
   runOpencode?: OpencodeLaunchPlan["runOpencode"];
+  /** The turn has ended and only its recorded cost is being read: nothing is left to stop. */
+  readingCost?: boolean;
 }
 
 const STDERR_MAX = 10 * 1024; // 10KB rolling window for error reporting
@@ -136,7 +138,9 @@ export class OpencodeEngine implements InterruptibleEngine {
       return;
     }
     const live = this.liveProcesses.get(sessionId);
-    if (!live) return;
+    // A turn whose answer is in and whose cost is being read has nothing left to stop;
+    // stopping it now would turn a finished answer into an interruption.
+    if (!live || live.readingCost) return;
 
     live.terminationReason = reason;
     logger.info(`Killing opencode process for session ${sessionId}`);
@@ -542,6 +546,7 @@ export class OpencodeEngine implements InterruptibleEngine {
     const sessionId = live.turn.engineSessionId;
     const from = live.turn.firstTurnMessageId;
     if (!live.runOpencode || !sessionId || !from) return;
+    live.readingCost = true;
     const cost = await readRecordedTurnCost(live.runOpencode, sessionId, from);
     if (cost !== undefined) live.turn.adoptRecordedCost(cost);
   }
