@@ -154,6 +154,8 @@ export interface ListWorkItemsFilter {
   parentId?: string;
   /** Whole family sharing this root Todo. */
   rootId?: string;
+  /** Every Todo strictly below this one (children, grandchildren, …), never the Todo itself. */
+  descendantOf?: string;
   /** Only Todos whose root sits in this department: a Todo's scope is its root's (FR-002). */
   rootDepartment?: string;
   /** Only tree roots (parentless items). */
@@ -552,6 +554,13 @@ function workItemWhere(filter: ListWorkItemsFilter, textIds?: readonly string[])
   if (filter.rootId) {
     conditions.push('root_id = ?');
     values.push(parseTodoId(filter.rootId));
+  }
+  if (filter.descendantOf) {
+    // Walks parent_id downward from the anchor; an unknown anchor walks nothing, so the list is empty, not an error.
+    conditions.push(
+      'work_items.id IN (WITH RECURSIVE below(id) AS (SELECT id FROM work_items WHERE parent_id = ? UNION SELECT w.id FROM work_items w JOIN below ON w.parent_id = below.id) SELECT id FROM below)',
+    );
+    values.push(parseTodoId(filter.descendantOf));
   }
   if (filter.rootDepartment) {
     conditions.push('work_items.root_id IN (SELECT scope_root.id FROM work_items scope_root WHERE scope_root.department = ?)');

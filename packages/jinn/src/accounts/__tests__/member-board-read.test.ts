@@ -87,6 +87,18 @@ describe("reads are scoped to the member's boards, and an unheld board is a 404,
     expect(probe.body.total).toBe(0);
   });
 
+  it("descendantOf lists a held board's sub-Todos, and an anchor on an unheld board is empty", async () => {
+    const grandchildId = store.createWorkItem({ title: "Ops grandchild", parentId: childId }).id;
+    const foreignChildId = store.createWorkItem({ title: "Design child", parentId: otherBoardId }).id;
+    const own = await h.as(collab, "GET", `/api/member/boards/ops/todos?descendantOf=${rootId}&limit=100`);
+    expect(own.status).toBe(200);
+    expect(own.body.workItems.map((item: any) => item.id).sort()).toEqual([childId, grandchildId].sort());
+    const foreign = await h.as(collab, "GET", `/api/member/boards/ops/todos?descendantOf=${otherBoardId}`);
+    expect(foreign.body.workItems).toEqual([]);
+    expect(foreign.body.workItems.map((item: any) => item.id)).not.toContain(foreignChildId);
+    expect(foreign.body.total).toBe(0);
+  });
+
   it("list rows are the operator's compact shape minus what references a session", async () => {
     const member = (await h.as(collab, "GET", "/api/member/boards/ops/todos?rootsOnly=true")).body;
     const operator = (await h.operator("GET", "/api/work-items?department=ops&rootsOnly=true&limit=100")).body;

@@ -10,11 +10,11 @@ import { useBoardFilters } from "../board/use-board-filters"
  * same fallback. This drives the real `useSearchParams` so the round trip is
  * the router's, not a stub of it. */
 
-function renderFilters(initialEntry: string, enabled = true) {
+function renderFilters(initialEntry: string, enabled = true, persist = true) {
   return renderHook(
     () => {
       const [params, setParams] = useSearchParams()
-      return { ...useBoardFilters(params, setParams, enabled), search: params.toString() }
+      return { ...useBoardFilters(params, setParams, enabled, persist), search: params.toString() }
     },
     {
       wrapper: ({ children }: { children: React.ReactNode }) => (
@@ -107,5 +107,24 @@ describe("useBoardFilters — URL and storage reconcile", () => {
     expect(result.current.search).toBe("")
     // And it does not overwrite the stored set either.
     expect(localStorage.getItem(BOARD_FILTERS_STORAGE_KEY)).toBe("sprint=active")
+  })
+})
+
+describe("useBoardFilters — a board that does not persist", () => {
+  it("never reads the remembered set, and starts at the default", () => {
+    localStorage.setItem(BOARD_FILTERS_STORAGE_KEY, "sprint=active&agent=scout")
+    const { result } = renderFilters("/sub", true, false)
+    expect(result.current.filters).toEqual({ status: "open" })
+    expect(result.current.search).toBe("")
+  })
+
+  it("keeps its own filters in the location and leaves the remembered set as it was", () => {
+    localStorage.setItem(BOARD_FILTERS_STORAGE_KEY, "agent=scout")
+    const { result } = renderFilters("/sub?label=ops", true, false)
+    expect(result.current.filters).toEqual({ status: "open", label: "ops" })
+    act(() => result.current.setFilters({ status: "open", person: "@operator" }))
+    expect(result.current.filters).toEqual({ status: "open", person: "@operator" })
+    expect(result.current.search).toBe("person=%40operator")
+    expect(localStorage.getItem(BOARD_FILTERS_STORAGE_KEY)).toBe("agent=scout")
   })
 })

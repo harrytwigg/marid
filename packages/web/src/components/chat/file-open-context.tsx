@@ -55,6 +55,19 @@ export function useOpenTodosTab(): OpenTodosTab | null {
 }
 
 /**
+ * Pins a Todo's sub-board as a tab of the chat layout (or shows and pins the one already open). Provided by the chat
+ * page. Returns false when it could not (a phone has no tab to put it in), so the caller does without; without a
+ * provider the board is not in the chat page at all, and the caller asks the chat route for it (lib/todos-tab-entry.ts).
+ */
+export type PinTodoBoardTab = (todoId: string) => boolean
+
+export const TodoBoardTabContext = createContext<PinTodoBoardTab | null>(null)
+
+export function usePinTodoBoardTab(): PinTodoBoardTab | null {
+  return useContext(TodoBoardTabContext)
+}
+
+/**
  * Opens a chat from a link anywhere inside the chat layout (a Todo shown as a tab, its session
  * links): the chat's tab is shown and its pane focused if it is already open, else it opens as it
  * does from the list. Provided by the chat page.
@@ -78,12 +91,13 @@ export function useOpenSession(): OpenSession {
 }
 
 /** The chat page's openers for what a link inside the layout can name: a file, a Todo, a sub-agent, a chat, the Todos board. */
-export function LayoutOpenProviders({ file, todo, subagent, session, todos, children }: {
+export function LayoutOpenProviders({ file, todo, subagent, session, todos, todoBoard = null, children }: {
   file: OpenFile
   todo: OpenTodo
   subagent: OpenSubagent
   session: OpenSession
   todos: OpenTodosTab
+  todoBoard?: PinTodoBoardTab | null
   children: ReactNode
 }) {
   return (
@@ -91,7 +105,9 @@ export function LayoutOpenProviders({ file, todo, subagent, session, todos, chil
       <TodoOpenContext.Provider value={todo}>
         <SubagentOpenContext.Provider value={subagent}>
           <TodosTabOpenContext.Provider value={todos}>
-            <SessionOpenContext.Provider value={session}>{children}</SessionOpenContext.Provider>
+            <TodoBoardTabContext.Provider value={todoBoard}>
+              <SessionOpenContext.Provider value={session}>{children}</SessionOpenContext.Provider>
+            </TodoBoardTabContext.Provider>
           </TodosTabOpenContext.Provider>
         </SubagentOpenContext.Provider>
       </TodoOpenContext.Provider>

@@ -39,6 +39,8 @@ import { fileTabId, type FileTabRef } from './file-tab'
 import { subagentTabId, type SubagentTabRef } from './subagent-tab'
 import { isChatTabId, isNewChatTabId, todoTabId } from './tab-kind'
 import { useTodosTabOpener } from './use-todos-tab-opener'
+import { useTodoBoardTabOpener } from './use-todo-board-tab-opener'
+import { useForgetClosedBoardTabs } from './use-forget-closed-board-tabs'
 import { forgetNewChatDraft } from '@/components/chat/use-chat-draft'
 import { capWindowWidth, savedSidebarWidth } from '../sidebar-width-store'
 import { applySplitDrop, type SplitDropContext } from './split-drop'
@@ -255,8 +257,10 @@ function useTabOpeners(
     return true
   }, [hydrated, project, shown])
   const openTodosTab = useTodosTabOpener(hydrated, project, setLayout)
+  /** A Todo's sub-board, opened and pinned as a tab. */
+  const pinTodoBoard = useTodoBoardTabOpener(hydrated, project, setLayout)
 
-  return { openFile, openTodo, openSubagent, openNewChat, openTodosTab }
+  return { openFile, openTodo, openSubagent, openNewChat, openTodosTab, pinTodoBoard }
 }
 
 /**
@@ -290,7 +294,8 @@ export function useSplitWorkingSet(
    * prediction (removeWorkingSetSession on `state`) cannot see a group's hidden tabs, which is
    * what the pane falls back to. */
   const afterRemove = useCallback((sessionId: string) => workingSetFromLayout(closeSession(shown, sessionId)), [shown])
-  const { openFile, openTodo, openSubagent, openNewChat, openTodosTab } = useTabOpeners(shown, hydrated, project, setLayout)
+  const { openFile, openTodo, openSubagent, openNewChat, openTodosTab, pinTodoBoard } = useTabOpeners(shown, hydrated, project, setLayout)
+  useForgetClosedBoardTabs(layout)
 
-  return { state, add, focus, remove, drop, split, afterRemove, openFile, openTodo, openSubagent, openNewChat, openTodosTab, hydrated }
+  return { state, add, focus, remove, drop, split, afterRemove, openFile, openTodo, openSubagent, openNewChat, openTodosTab, pinTodoBoard, hydrated }
 }

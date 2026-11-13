@@ -27,9 +27,12 @@ const OPEN_STATUSES: readonly WorkItemStatusWire[] = [...PIPELINE_STATUSES, ...E
 export const BOARD_PAGE_SIZE = 20
 
 /** Server params for a board scope (pure — unit-tested). Boards show roots
- *  only (§4): children live in the in-place tree tray, not as cards. */
-export function boardScopeParams(board: BoardId): { department?: string; rootsOnly: true } {
+ *  only (§4): children live in the in-place tree tray, not as cards. A sub-board
+ *  is the one exception: it IS one Todo's children (or every level below it), so
+ *  it names no department and is not limited to roots. */
+export function boardScopeParams(board: BoardId): { department?: string; rootsOnly?: true; parent?: string; descendantOf?: string } {
   if (board.kind === "department") return { department: board.slug, rootsOnly: true }
+  if (board.kind === "subtree") return board.depth === "all" ? { descendantOf: board.rootId } : { parent: board.rootId }
   return { rootsOnly: true }
 }
 
@@ -62,8 +65,9 @@ async function fetchBoardPage(
   const r = await api.listWorkItems({
     status,
     ...scope,
-    // A department board IS its department filter; other chips pass through.
-    department: scope.department ?? filters.department,
+    // A department board IS its department filter; other chips pass through. A sub-board has no department chip at all,
+    // and a stale one in its filters must not narrow it: its Todos are the root's, whatever each one's own department is.
+    department: board.kind === "subtree" ? undefined : scope.department ?? filters.department,
     assignee: filters.agent,
     // The Person filter as the list matches it (`usePersonMatch`): "Me" with one owner account is both of the operator's identities.
     humanAssignee: personMatch ?? filters.person,

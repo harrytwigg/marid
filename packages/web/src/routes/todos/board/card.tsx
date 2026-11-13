@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo } from "react"
-import { ChevronRight } from "@/components/ui/icon"
+import { ChevronRight, CornerDownRight } from "@/components/ui/icon"
 import type { Employee, WorkItemCompactWire, WorkItemOpenDetailWire, WorkItemStatusWire, WorkItemTreeWire } from "@/lib/api"
 import { stateKeyOf } from "@/lib/todos"
 import { StateCircle } from "../state-glyph"
@@ -111,6 +111,12 @@ export interface BoardCardProps {
   dragging?: boolean
   /** Rendered as the floating drag preview: lifted treatment, inert. */
   ghost?: boolean
+  /** A flattened sub-board ("All levels"): the Todos of every level sit side by side, so the roll-up is a plain count with
+   *  no tray to open (the sub-Todos are cards of their own on this board). */
+  flat?: boolean
+  /** On a flattened sub-board, the Todo this one hangs from when that is not the board's root. The title is absent until the root's tree lands. */
+  parentChipId?: string
+  parentChipTitle?: string
 }
 
 export const BoardCard = memo(function BoardCard({
@@ -127,6 +133,9 @@ export const BoardCard = memo(function BoardCard({
   onMove,
   dragging,
   ghost,
+  flat,
+  parentChipId,
+  parentChipTitle,
 }: BoardCardProps) {
   const tree = enrichment?.tree
   const detail = enrichment?.detail
@@ -224,7 +233,16 @@ export const BoardCard = memo(function BoardCard({
             <span className="truncate">{label.name}</span>
           </span>
         ))}
-        {rollup && (
+        {rollup && flat && (
+          <span
+            data-testid={`board-rollup-${item.id}`}
+            aria-label={`${rollup.closed} of ${rollup.total} sub-tasks done`}
+            className="flex h-5 flex-none items-center rounded-[10px] bg-[var(--fill-tertiary)] px-2 text-[calc(11px*var(--text-scale))] font-medium tabular-nums text-[var(--text-secondary)]"
+          >
+            {rollup.closed}/{rollup.total}
+          </span>
+        )}
+        {rollup && !flat && (
           <button
             type="button"
             data-testid={`board-rollup-${item.id}`}
@@ -247,6 +265,18 @@ export const BoardCard = memo(function BoardCard({
         )}
       </div>
 
+      {parentChipId && (
+        <div
+          data-testid={`board-parent-${item.id}`}
+          title={parentChipTitle ? `Sub-task of ${parentChipId} ${parentChipTitle}` : `Sub-task of ${parentChipId}`}
+          className="flex h-5 min-w-0 items-center gap-1.5 rounded-[10px] bg-[var(--fill-quaternary)] px-2 text-[calc(11px*var(--text-scale))] text-[var(--text-tertiary)]"
+        >
+          <CornerDownRight size={11} aria-hidden className="flex-none text-[var(--text-quaternary)]" />
+          <span className="flex-none" style={{ fontFamily: "var(--font-code)", letterSpacing: ".04em" }}>{parentChipId}</span>
+          {parentChipTitle && <span className="min-w-0 truncate">{parentChipTitle}</span>}
+        </div>
+      )}
+
       {/* Row 4 — what it has cost, and when it is due. The cost renders at $0.00
        *  too: a row that only some cards have is a row that changes heights. */}
       {/* A member does not see what a Todo has cost, so for them the row exists only when it has a date to show. */}
@@ -267,7 +297,7 @@ export const BoardCard = memo(function BoardCard({
       </div>}
 
       {/* In-place tree tray. */}
-      {expanded && tree && (
+      {expanded && !flat && tree && (
         <CardTree
           tree={tree}
           cardDepth={item.depth ?? 0}
