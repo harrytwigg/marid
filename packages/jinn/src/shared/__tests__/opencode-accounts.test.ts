@@ -292,7 +292,7 @@ describe("opencodeAccountProblems", () => {
   it("names the models a 1.x local binary cannot reach", () => {
     const clones = new Map([["base-go", clonesFor(API_OUTPUT, parseOpencodeApiModels).clones.get("base-go") ?? []]]);
     const problems = opencodeAccountProblems(config(), { catalogue, clones, env: { GO_B_KEY: "k" }, localApi: 1 });
-    expect(problems).toEqual([expect.stringContaining("left out on this host: beta, delta")]);
+    expect(problems).toEqual([expect.stringContaining("left out of the model list on this host, and a turn on one fails: beta, delta")]);
     expect(opencodeAccountProblems(config(), { catalogue, clones, env: { GO_B_KEY: "k" }, localApi: 2 })).toEqual([]);
   });
 

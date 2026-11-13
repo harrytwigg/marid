@@ -27,7 +27,7 @@ import { describeOpencodeLaunch } from "./opencode-protocol.js";
 import { opencodeApiOf } from "./opencode-version.js";
 import { withKnownEffort, type ModelEffortLevels } from "./opencode-variant.js";
 import { localOpencodeVersion } from "../shared/opencode-bin-version.js";
-import { unservedTurnResult } from "./opencode-model-served.js";
+import { mayBeUnserved, unservedTurnResult } from "./opencode-model-served.js";
 import { resolveBin } from "../shared/resolve-bin.js";
 
 interface LiveProcess extends RemoteRun {
@@ -193,10 +193,29 @@ export class OpencodeEngine implements InterruptibleEngine {
     const onStream = opts.onStream || null;
 
     // A model this host's opencode cannot serve fails here, with the reason, rather than inside opencode with none.
+    // Only a model an account's 1.x block leaves out waits on the binary; any other turn starts without yielding.
     const accounts = this.accountsFor(trackingId, opts.model);
-    const refused = await unservedTurnResult(opts, accounts);
-    if (refused) return refused;
+    if (mayBeUnserved(opts, accounts)) return await this.runIfServed(opts, trackingId, onStream, accounts);
+    return await this.dispatch(opts, trackingId, onStream, accounts);
+  }
 
+  /** A turn on a model a 1.x binary would leave out: asks the host's binary first, and fails the turn with the reason when it is 1.x. */
+  private async runIfServed(
+    opts: EngineRunOpts,
+    trackingId: string,
+    onStream: ((delta: StreamDelta) => void) | null,
+    accounts: ReturnType<OpencodeAccountsReader>,
+  ): Promise<EngineResult> {
+    return (await unservedTurnResult(opts, accounts)) ?? (await this.dispatch(opts, trackingId, onStream, accounts));
+  }
+
+  /** The turn on a server, or one headless run. */
+  private async dispatch(
+    opts: EngineRunOpts,
+    trackingId: string,
+    onStream: ((delta: StreamDelta) => void) | null,
+    accounts: ReturnType<OpencodeAccountsReader>,
+  ): Promise<EngineResult> {
     // A server belongs to a Jinn session; a turn without one has nothing to reuse it.
     if (this.servers && this.readMode() === "server" && opts.sessionId) {
       return await this.runOnServer(opts, trackingId, onStream);

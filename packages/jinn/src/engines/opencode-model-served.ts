@@ -29,6 +29,11 @@ export async function unservedTurnModel(opts: EngineRunOpts, accounts: OpencodeA
   return facts !== undefined && opencodeApiOf(facts.opencodeVersion) === 1 ? onOne : undefined;
 }
 
+/** Whether the turn's model is one a 1.x binary would leave out, so that the binary has to be asked. Synchronous, so a turn that needs no check does not wait before it starts. */
+export function mayBeUnserved(opts: EngineRunOpts, accounts: OpencodeAccountStaging | undefined): accounts is OpencodeAccountStaging {
+  return !!accounts && !!opts.model && accounts.unservedModel(opts.model, 1) !== undefined;
+}
+
 /** The failed result of a turn on a model its host's opencode cannot serve; undefined when it can. Nothing ran, so the conversation is intact (it is never read as a stale resume id). */
 export async function unservedTurnResult(opts: EngineRunOpts, accounts: OpencodeAccountStaging | undefined): Promise<EngineResult | undefined> {
   const error = await unservedTurnModel(opts, accounts);
