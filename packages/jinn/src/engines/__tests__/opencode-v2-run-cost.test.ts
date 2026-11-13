@@ -274,6 +274,27 @@ describe("opencode 2.x `run` turn cost", () => {
   });
 });
 
+describe("opencode 2.x `run` turn on a declared account", () => {
+  const KEY = "ACME_GO_B_KEY";
+  const staging = {
+    providers: () => ({}),
+    unservedModel: () => undefined,
+    env: { [KEY]: "sk-run-cost-b" },
+    fingerprint: "fp",
+    scrub: [KEY, "ACME_GO_C_KEY"],
+  };
+
+  it("charges the account's model the cost opencode recorded, and keeps the key out of the cost read", async () => {
+    const result = await new OpencodeEngine({ accounts: () => staging }).run(opts({ model: "opencode-go-b/flash" }));
+    expect(result.error).toBeUndefined();
+    expect(result.cost).toBeCloseTo(0.00405, 10);
+    expect(hoisted.spawns[0]!.env[KEY]).toBe("sk-run-cost-b");
+    expect(hoisted.reads).toHaveLength(1);
+    expect(hoisted.reads[0]!.env[KEY]).toBeUndefined();
+    expect(hoisted.reads[0]!.env.ACME_GO_C_KEY).toBeUndefined();
+  });
+});
+
 describe("opencode 1.x `run` turn cost is untouched", () => {
   it("never asks opencode for the cost, local or remote", async () => {
     hoisted.version = "1.19.0";
