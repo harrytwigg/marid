@@ -14,7 +14,7 @@ vi.mock("../paths.js", async (importOriginal) => ({
 import type { JinnConfig } from "../config-types.js";
 import { quotaHoldEndsAtSeconds, recordOpencodeFailure, recordTurnServed } from "../engine-health-opencode.js";
 import { clearEngineHealthByOperator, engineHealthForTarget, isEngineExhausted, readEngineHealth, recordEngineServed } from "../engine-health.js";
-import { readStore } from "../engine-health-store.js";
+import { readStore, writeStore } from "../engine-health-store.js";
 import { healthKeys, isLinkExhausted, linkHealth } from "../fallback-chain-health.js";
 
 const STATE_PATH = path.join(TEST_HOME, "tmp", "engine-health.json");
@@ -115,16 +115,54 @@ describe("a record about one remote host", () => {
   it("does not lengthen this machine's spent-allowance hold by another host's", () => {
     record(USAGE, { host: "host-c", resetsAt: at(300).getTime() / 1000 });
     record(FUNDS);
-    expect(readEngineHealth(NOW)["opencode/opencode-go"]).toMatchObject({ failureClass: "quota", until: at(60).toISOString() });
-    expect(readEngineHealth(NOW)["opencode/opencode-go"]?.host).toBeUndefined();
+    expect(readEngineHealth(NOW)["opencode/opencode-go"]).toMatchObject({ failureClass: "quota", until: at(60).toISOString(), host: os.hostname() });
   });
 
   it("does not displace an account-wide record already standing", () => {
-    record(FUNDS);
+    writeStore({ "opencode/opencode-go": { state: "exhausted", until: at(60).toISOString(), failureClass: "quota", observedAt: NOW.toISOString() } });
     record(EXPIRED, { host: "host-c" });
+    record(EXPIRED);
     record(FUNDS, { host: "host-c", now: at(1) });
     expect(readEngineHealth(NOW)["opencode/opencode-go"]).toMatchObject({ failureClass: "quota" });
     expect(readEngineHealth(NOW)["opencode/opencode-go"]?.host).toBeUndefined();
+  });
+});
+
+describe("a record about this machine", () => {
+  const view = (target: { remoteHost: string } | undefined) => engineHealthForTarget(readEngineHealth(NOW), target as never);
+
+  it.each([
+    ["a dead key", EXPIRED, "opencode/opencode-go"],
+    ["a spent allowance", FUNDS, "opencode/opencode-go"],
+    ["a model the account cannot use", NO_ACCESS, "opencode/opencode-go/kimi-k2"],
+  ])("from %s names this machine and is not read by a remote host's sessions", (_what, error, key) => {
+    record(error);
+    expect(readStore()[key]?.host).toBe(os.hostname());
+    expect(view(undefined)[key]?.state).toBe("exhausted");
+    expect(view({ remoteHost: "host-c" })[key]).toBeUndefined();
+  });
+
+  it("is not ended by a turn served on another host, for any class", () => {
+    record(FUNDS, { model: "opencode-go/glm-5" });
+    recordTurnServed({ engine: "opencode", key: "opencode/opencode-go", startedMs: at(1).getTime(), model: "opencode-go/glm-5", servedOn: "host-c" }, at(2));
+    expect(readEngineHealth(at(2))["opencode/opencode-go"]).toMatchObject({ state: "exhausted", failureClass: "quota" });
+  });
+});
+
+describe("a remote host's record and a turn served there", () => {
+  it("ends that host's dead key and refused model, and only that host's", () => {
+    record(EXPIRED, { host: "host-c" });
+    record(NO_ACCESS, { healthKey: "opencode/opencode-go", model: "opencode-go/glm-5", host: "host-c" });
+    const served = { engine: "opencode", key: "opencode/opencode-go", startedMs: at(1).getTime(), model: "opencode-go/glm-5" };
+
+    recordTurnServed(served, at(2));
+    recordTurnServed({ ...served, servedOn: "host-d" }, at(2));
+    expect(readEngineHealth(at(2))["opencode/opencode-go"]).toMatchObject({ state: "exhausted", failureClass: "auth" });
+    expect(readEngineHealth(at(2))["opencode/opencode-go/glm-5"]).toMatchObject({ state: "exhausted", failureClass: "model-access" });
+
+    recordTurnServed({ ...served, servedOn: "host-c" }, at(2));
+    expect(readEngineHealth(at(2))["opencode/opencode-go"]?.state).toBe("ok");
+    expect(readEngineHealth(at(2))["opencode/opencode-go/glm-5"]?.state).toBe("ok");
   });
 });
 

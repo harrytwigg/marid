@@ -1,6 +1,6 @@
-import { hostname } from "node:os";
 import {
   isSpent,
+  localHostName,
   readEngineHealth,
   readStore,
   writeStore,
@@ -55,7 +55,7 @@ export function engineHealthForTarget(
   health: EngineHealthReading,
   target: RemoteTarget | undefined,
 ): EngineHealthReading {
-  const host = isRemoteTarget(target) ? target.remoteHost : hostname();
+  const host = isRemoteTarget(target) ? target.remoteHost : localHostName();
   const out: EngineHealthReading = {};
   for (const [engine, record] of Object.entries(health)) {
     if (record.host !== undefined && record.host !== host) continue;

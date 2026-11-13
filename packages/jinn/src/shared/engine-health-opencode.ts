@@ -1,6 +1,6 @@
 import { isBillingFailureMessage } from "./engine-failure.js";
 import { recheckFrom } from "./engine-health.js";
-import { readStore, writeStore, isSpent, type EngineHealth } from "./engine-health-store.js";
+import { localHostName, readStore, writeStore, isSpent, type EngineHealth } from "./engine-health-store.js";
 import { recordEngineServed } from "./engine-health-clear.js";
 import { isRateLimitMessage } from "./rateLimit.js";
 import type { JinnConfig } from "./config-types.js";
@@ -24,6 +24,11 @@ import {
  *   whose credential cannot be read is held for a day, so a wrong verdict heals.
  * - A model the account cannot use (403, region) holds only that (provider,
  *   model), so the provider's other models keep serving.
+ *
+ * Every record names the machine it is about (`host`), this one included: each
+ * host signs opencode in with its own key, so its allowance, its key and its
+ * model access are its own, and a record without a host would be read by every
+ * remote employee as being about theirs.
  *
  * A pay-as-you-go provider's 402 is not handled here: its balance does not
  * reopen on a clock, so it keeps the billing handling (`handled: false`).
@@ -59,18 +64,23 @@ function liveUntilMs(record: EngineHealth | undefined, now: Date): number | unde
   return Number.isFinite(until) ? until : undefined;
 }
 
+/** The machine a write is about: the remote host its turn ran on, else this one. */
+function hostOf(write: OpencodeHealthWrite): string {
+  return write.host ?? localHostName();
+}
+
 /** Store the record, stamped with the host it is about. One machine's observation never displaces a standing account-wide one. */
-function put(key: string, record: EngineHealth, host: string | undefined, now: Date): void {
+function put(key: string, record: EngineHealth, host: string, now: Date): void {
   const store = readStore();
   const standing = store[key];
-  if (host !== undefined && standing?.state === "exhausted" && standing.host === undefined && !isSpent(standing, now)) return;
-  writeStore({ ...store, [key]: { ...record, ...(host === undefined ? {} : { host }) } });
+  if (standing?.state === "exhausted" && standing.host === undefined && !isSpent(standing, now)) return;
+  writeStore({ ...store, [key]: { ...record, host } });
 }
 
 function holdModel(write: OpencodeHealthWrite, provider: string, now: Date, observed: Pick<EngineHealth, "reason" | "observedAt">): boolean {
   const key = opencodeModelHealthKey(write.model);
   if (key === undefined) return false;
-  put(key, { state: "exhausted", until: new Date(now.getTime() + opencodeReprobeMs(provider, write.config)).toISOString(), failureClass: "model-access", ...observed }, write.host, now);
+  put(key, { state: "exhausted", until: new Date(now.getTime() + opencodeReprobeMs(provider, write.config)).toISOString(), failureClass: "model-access", ...observed }, hostOf(write), now);
   return true;
 }
 
@@ -81,18 +91,18 @@ function holdSignedOut(write: OpencodeHealthWrite, provider: string, now: Date, 
     failureClass: "auth",
     ...(fingerprint === undefined ? { until: new Date(now.getTime() + UNFINGERPRINTED_AUTH_HOLD_MS).toISOString() } : { credentialFingerprint: fingerprint }),
     ...observed,
-  }, write.host, now);
+  }, hostOf(write), now);
 }
 
 function holdSpentAllowance(write: OpencodeHealthWrite, provider: string, now: Date, observed: Pick<EngineHealth, "reason" | "observedAt">): void {
   const stated = write.resetsAt !== undefined && Number.isFinite(write.resetsAt) ? write.resetsAt * 1000 : undefined;
   // A standing hold is kept only when it is about the same machine: another host's says nothing about this one's allowance.
   const record = readStore()[write.healthKey];
-  const standing = record?.host === write.host ? liveUntilMs(record, now) : undefined;
+  const standing = record?.host === hostOf(write) ? liveUntilMs(record, now) : undefined;
   const until = Math.max(stated ?? now.getTime() + opencodeReprobeMs(provider, write.config), standing ?? 0);
   // A stated reset is taken on trust only up to the re-probe, as every other stated window is, so a misparse self-corrects.
   const recheck = stated === undefined ? {} : { recheckAt: recheckFrom(until, now) };
-  put(write.healthKey, { state: "exhausted", until: new Date(until).toISOString(), ...recheck, failureClass: "quota", ...(write.model ? { model: write.model } : {}), ...observed }, write.host, now);
+  put(write.healthKey, { state: "exhausted", until: new Date(until).toISOString(), ...recheck, failureClass: "quota", ...(write.model ? { model: write.model } : {}), ...observed }, hostOf(write), now);
 }
 
 /**

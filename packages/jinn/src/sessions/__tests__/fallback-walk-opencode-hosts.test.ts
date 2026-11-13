@@ -1,9 +1,13 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import Database from "better-sqlite3";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Employee, Engine } from "../../shared/types.js";
 import { answer, failed, handleRateLimit, limited, limitedTurn, newSession, reg, resetsIn, scripted, tmp, useWalkHarness } from "./fallback-walk-harness.js";
 import { readStore, writeStore, type EngineHealth } from "../../shared/engine-health-store.js";
+import { engineHealthForTarget, readEngineHealth } from "../../shared/engine-health.js";
+import { isLinkExhausted } from "../../shared/fallback-chain-health.js";
 
 /**
  * Which machine an opencode provider's failure, or a turn it served, is about. A remote employee's turns run with that
@@ -45,7 +49,7 @@ function heldDueReprobe(key: string, failureClass: EngineHealth["failureClass"])
   const now = Date.now();
   writeStore({
     ...readStore(),
-    [key]: { state: "exhausted", failureClass, until: new Date(now + 60 * MIN).toISOString(), recheckAt: new Date(now - MIN).toISOString(), observedAt: new Date(now - 30 * MIN).toISOString(), reason: "held" },
+    [key]: { state: "exhausted", failureClass, host: os.hostname(), until: new Date(now + 60 * MIN).toISOString(), recheckAt: new Date(now - MIN).toISOString(), observedAt: new Date(now - 30 * MIN).toISOString(), reason: "held" },
   });
 }
 
@@ -120,5 +124,41 @@ describe("an opencode turn the retry after a wait served", () => {
     expect(calls).toHaveLength(1);
     expect(reg.getSession(id)).toBeDefined();
     expect(readStore()["opencode/opencode-go/x"]?.state).toBe(expected);
+  });
+});
+
+describe("this machine's opencode failure and a remote employee", () => {
+  // A stored credential on this machine, so a dead key here is held until the credential changes: the longest hold there is.
+  beforeEach(() => {
+    const dir = path.join(tmp, "xdg-data", "opencode");
+    fs.mkdirSync(dir, { recursive: true });
+    const db = new Database(path.join(dir, "opencode.db"));
+    db.exec("CREATE TABLE IF NOT EXISTS credential (id TEXT PRIMARY KEY, integration_id TEXT, label TEXT NOT NULL, value TEXT NOT NULL, connector_id TEXT, method_id TEXT, active INTEGER, time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL)");
+    db.exec("DELETE FROM credential");
+    db.prepare("INSERT INTO credential (id, integration_id, label, value, active, time_created, time_updated) VALUES ('c1', 'opencode-go-b', 'API key', 'secret', 1, 1, 1)").run();
+    db.close();
+  });
+
+  it.each([
+    ["a dead key", EXPIRED, "opencode/opencode-go-b"],
+    ["a refused model", NO_ACCESS, "opencode/opencode-go-b/x"],
+  ])("leaves the remote employee's walk trying that link after %s here", async (_what, error, key) => {
+    const here = scripted((call) => (call.model === GO_B.model ? failed(error) : answer(`served by ${call.model}`)));
+    await handleRateLimit(turn(local(), here.engines, FUNDS, { billing: true }).opts);
+    expect(readStore()[key]).toMatchObject({ state: "exhausted", host: os.hostname() });
+
+    const there = scripted((call) => answer(`served by ${call.model}`));
+    await handleRateLimit(turn(remote(), there.engines, FUNDS, { billing: true }).opts);
+    expect(there.calls.map((c) => c.model)).toEqual([GO_B.model]);
+  });
+
+  it("does not hold the provider out for a remote employee after a spent allowance here", async () => {
+    const here = scripted((call) => answer(`served by ${call.model}`));
+    await handleRateLimit(turn(local([ROUTER]), here.engines, FUNDS, { billing: true }).opts);
+    expect(readStore()["opencode/opencode-go"]).toMatchObject({ failureClass: "quota", host: os.hostname() });
+
+    const health = (who: Employee) => engineHealthForTarget(readEngineHealth(), who as never);
+    expect(isLinkExhausted(health(local()), { ...GO, account: "opencode" })).toBe(true);
+    expect(isLinkExhausted(health(remote()), { ...GO, account: "opencode" })).toBe(false);
   });
 });

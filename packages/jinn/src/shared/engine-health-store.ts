@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { opencodeCredentialFingerprint, providerOfOpencodeHealthKey } from "./opencode-subscription.js";
 import { JINN_HOME } from "./paths.js";
@@ -78,6 +79,15 @@ export interface EngineHealth {
 export type EngineHealthReading = Record<string, EngineHealth>;
 
 const STATE_PATH = path.join(JINN_HOME, "tmp", "engine-health.json");
+
+/** This machine's name, as a record about it is stamped and as a local session matches a record's `host`. */
+export function localHostName(): string {
+  try {
+    return os.hostname();
+  } catch {
+    return "localhost";
+  }
+}
 
 const HEALTH_STATES: readonly string[] = ["ok", "exhausted", "degraded"];
 

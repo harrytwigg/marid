@@ -1,4 +1,4 @@
-import { isSpent, readStore, writeStore, type EngineHealth, type EngineHealthReading } from "./engine-health-store.js";
+import { isSpent, localHostName, readStore, writeStore, type EngineHealth, type EngineHealthReading } from "./engine-health-store.js";
 import type { EngineLimitWindow } from "./types.js";
 
 /**
@@ -11,16 +11,19 @@ import type { EngineLimitWindow } from "./types.js";
  * positive `ok` record carrying `clearedAt`: a record that merely lapsed reads
  * back `ok` without one, and only a positive clear may end a held stand-in early.
  *
- * Only an account-wide record (no `host`) in an unspent `exhausted` or
- * `degraded` state is ever cleared, and only by evidence newer than the record:
- * a reading taken, or a turn begun, after the limit was observed. A record about
- * one machine's login is the auth watch's to write.
+ * Only an unspent `exhausted` or `degraded` record is ever cleared, and only by
+ * evidence newer than the record: a reading taken, or a turn begun, after the
+ * limit was observed. An account-wide record (no `host`) is cleared by evidence
+ * from anywhere. A record about one machine is cleared only by evidence from that
+ * machine, and only an opencode one (it carries a `failureClass`): any other
+ * record about one machine's login is the auth watch's to write.
  */
 
-/** The record this evidence may clear, or undefined when it may not. */
-function clearable(store: EngineHealthReading, key: string, now: Date): EngineHealth | undefined {
+/** The record evidence from `on` (a remote host; absent = this machine) may clear, or undefined when it may not. */
+function clearable(store: EngineHealthReading, key: string, now: Date, on?: string): EngineHealth | undefined {
   const record = store[key];
-  if (!record || record.state === "ok" || record.host !== undefined || isSpent(record, now)) return undefined;
+  if (!record || record.state === "ok" || isSpent(record, now)) return undefined;
+  if (record.host !== undefined && (record.failureClass === undefined || record.host !== (on ?? localHostName()))) return undefined;
   return record;
 }
 
@@ -76,8 +79,9 @@ const CLAUDE_ACCOUNT_KEY = /^claude($|[:@])/;
 function servedContradicts(key: string, record: EngineHealth, servedModel: string | undefined, servedOn: string | undefined): boolean {
   // A turn the provider served says its key works, and one on the model says the model is enabled (the key is the
   // provider's or the model's, as written), but only for the machine it ran on: a turn on another host used that
-  // host's credential, and says nothing about the one this record was written against.
-  if (record.failureClass === "auth" || record.failureClass === "model-access") return servedOn === undefined;
+  // host's credential, and says nothing about the one this record was written against. A record naming its host has
+  // already been matched to the turn's by `clearable`; one naming none was written here.
+  if (record.failureClass === "auth" || record.failureClass === "model-access") return record.host !== undefined || servedOn === undefined;
   if (record.model !== undefined) return record.model === servedModel;
   if (record.window !== undefined) return CLAUDE_ACCOUNT_KEY.test(key) && CLAUDE_ACCOUNT_WINDOWS.includes(record.window);
   return servedModel === undefined;
@@ -91,7 +95,7 @@ function servedContradicts(key: string, record: EngineHealth, servedModel: strin
  */
 export function recordEngineServed(key: string, turnStartedAtMs: number, servedModel: string | undefined, now: Date = new Date(), servedOn?: string): void {
   const store = readStore();
-  const record = clearable(store, key, now);
+  const record = clearable(store, key, now, servedOn);
   if (!record || !newerThanRecord(record, turnStartedAtMs) || !servedContradicts(key, record, servedModel, servedOn)) return;
   clearRecord(store, key, "a turn was served", now);
 }
