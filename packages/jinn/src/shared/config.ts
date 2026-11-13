@@ -5,6 +5,10 @@ import { applyLegacyFallbackMigration, validateEngineFallbackChains, validateEng
 import { validateClaudeAccounts } from "./claude-accounts-config.js";
 import { warnDuplicates, type DuplicateTolerance } from "./fallback-chain-load.js";
 import { opencodeSubscriptionProblems, opencodeUsageLimitsProblems } from "./opencode-usage-limits-config.js";
+import { validateOpencodeAccounts, stagedOpencodeAccounts } from "./opencode-accounts-config.js";
+import { configEnvReferences } from "./config-env-references.js";
+import { setOpencodeAccountKeyEnv } from "./child-env.js";
+import { rememberOpencodeAccounts } from "./opencode-subscription.js";
 import { autoCompactProblems } from "./auto-compact-config.js";
 import { contextConfigProblems } from "./context-config.js";
 import { sessionFallbackConfigProblems } from "./session-fallback-config.js";
@@ -97,7 +101,7 @@ export function validateConfigShape(config: unknown, options: { tolerateDuplicat
     }
     problems.push(...validateEngineFallbackChains(c.engines, options.tolerateDuplicates), ...validateClaudeAccounts(c.engines, undefined, options.tolerateDuplicates));
     problems.push(...validateEngineFallbackModelMaps(c.engines));
-    problems.push(...opencodeUsageLimitsProblems(c.engines), ...opencodeSubscriptionProblems(c.engines), ...autoCompactProblems(c.engines));
+    problems.push(...opencodeUsageLimitsProblems(c.engines), ...opencodeSubscriptionProblems(c.engines), ...validateOpencodeAccounts(c.engines, configEnvReferences(c)), ...autoCompactProblems(c.engines));
   }
 
   problems.push(...validateRealtime(c.realtime));
@@ -200,6 +204,9 @@ export function loadConfig(): JinnConfig {
   config.engines.claude = normalizeClaudeEngineConfig(config.engines.claude);
   applyLegacyFallbackMigration(config);
   applyGatewayEnvOverrides(config);
+  // Every other process the gateway starts drops these variables (child-env.ts).
+  setOpencodeAccountKeyEnv(stagedOpencodeAccounts(config).map((account) => account.keyEnv!));
+  rememberOpencodeAccounts(config);
   return config;
 }
 

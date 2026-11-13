@@ -62,6 +62,11 @@ function kindOf(type: string, status: number | undefined, error: string): Openco
   return (status === undefined ? undefined : KIND_BY_STATUS[status]) ?? kindByMessage(type, error);
 }
 
+/** The gateway's own refusal of a declared account's model that this host's opencode generation cannot serve
+ *  (`unservedModelError`, shared/opencode-accounts.ts): the model, not the account, is out on this host, so it
+ *  is read as model access. The turn hops, and only that model is held. */
+const UNSERVED_ACCOUNT_MODEL_RE = /\bis not served by account "[^"]+" on OpenCode 1\.x\b/;
+
 /**
  * The failure an opencode turn's error text reports, or undefined when it is not
  * one of the four above (including every text with no `provider.*` type: those
@@ -70,7 +75,7 @@ function kindOf(type: string, status: number | undefined, error: string): Openco
 export function classifyOpencodeFailure(error: string | null | undefined): OpencodeFailure | undefined {
   if (typeof error !== "string" || !error) return undefined;
   const type = TYPE_RE.exec(error)?.[1];
-  if (!type) return /\bRegionError\b/.test(error) ? { kind: "model-access" } : undefined;
+  if (!type) return /\bRegionError\b/.test(error) || UNSERVED_ACCOUNT_MODEL_RE.test(error) ? { kind: "model-access" } : undefined;
   const status = statusOf(error);
   const kind = kindOf(type, status, error);
   return kind === undefined ? undefined : { kind, type, ...(status === undefined ? {} : { status }) };

@@ -1,6 +1,7 @@
 import type { ModelInfo } from "./types.js";
 import { logger } from "./logger.js";
 import { discoverOpencodeModels, settledWithin } from "./opencode-discovery.js";
+import { newCloneSink, type CloneSink, type OpencodeClones } from "./opencode-clone.js";
 
 /**
  * The opencode models discovery last found, and whether their `--verbose`
@@ -19,6 +20,9 @@ import { discoverOpencodeModels, settledWithin } from "./opencode-discovery.js";
  */
 
 let snapshot: ModelInfo[] | null = null;
+/** The clone records of the providers accounts name as their base, from the
+ *  same discovery as `snapshot` (opencode-clone.ts). */
+let clones: OpencodeClones = new Map();
 let detailed = false;
 let generation = 0;
 let pending: { promise: Promise<void>; resolve: () => void } | undefined;
@@ -38,6 +42,24 @@ interface Landing {
   secondLook: boolean;
   /** The environment of every opencode this refresh starts, its second look included. */
   env?: Record<string, string>;
+  /** Collects this refresh's clone records, whichever of its runs is served. */
+  clones: CloneSink;
+}
+
+function newLanding(o: { refresh: number; bin: string; changed: () => void; secondLook: boolean; env?: Record<string, string>; cloneProviders: readonly string[] }): Landing {
+  return { refresh: o.refresh, bin: o.bin, changed: o.changed, secondLook: o.secondLook, clones: newCloneSink(o.cloneProviders), ...(o.env ? { env: o.env } : {}) };
+}
+
+/** The local opencode binary's API (1 or 2) as the last refresh read it; undefined when there is no binary or it could not say. */
+let localApi: 1 | 2 | undefined;
+
+export function opencodeLocalApi(): 1 | 2 | undefined {
+  return localApi;
+}
+
+/** Record the local binary's API. Callers invalidate the registry that reads it. */
+export function setOpencodeLocalApi(api: 1 | 2 | undefined): void {
+  localApi = api;
 }
 
 /** The discovered models, or null before any discovery found one. */
@@ -45,23 +67,33 @@ export function opencodeCatalogue(): ModelInfo[] | null {
   return snapshot;
 }
 
+/** What the last detailed discovery recorded of the base providers' models, for
+ *  the accounts that clone them. Empty until a detailed discovery lands, and
+ *  only for the providers the refresh was asked about (`cloneProviders`). */
+export function opencodeClones(): OpencodeClones {
+  return clones;
+}
+
 /** Discover the models `bin` (null: opencode is not installed) can reach and
  *  keep them. Resolves once the catalogue to serve now is in; details that
  *  outlive the discovery timeout land later and tell {@link onLateOpencodeDetails}.
  *  `secondLook` is the gateway's: a CLI command reads the catalogue once and exits.
- *  `env` is what the opencode runs start with (see `DiscoveryOptions`). */
+ *  `env` is what the opencode runs start with (see `DiscoveryOptions`).
+ *  `cloneProviders` are the providers whose models accounts clone: their SDK,
+ *  endpoint, price and limits are kept beside the catalogue. */
 export async function refreshOpencodeCatalogue(
   bin: string | null,
   changed: () => void,
   secondLook = false,
   env?: Record<string, string>,
+  cloneProviders: readonly string[] = [],
 ): Promise<void> {
   generation += 1;
   if (!detailed && bin !== null) beginPending();
-  const at: Landing = { refresh: generation, bin: bin ?? "", changed, secondLook, ...(env ? { env } : {}) };
+  const at = newLanding({ refresh: generation, bin: bin ?? "", changed, secondLook, env, cloneProviders });
   if (bin === null) return land(at, null, false);
   try {
-    const discovery = await discoverOpencodeModels(bin, { env });
+    const discovery = await discoverOpencodeModels(bin, { env, clones: at.clones });
     logger.info(`opencode model discovery: ${discovery.models.length} model(s)`);
     const { details } = discovery;
     if (!details) return land(at, discovery.models, discovery.detailed);
@@ -101,6 +133,11 @@ function beginPending(): void {
  * at once and confirmed by one more run; until then only a model that answer
  * does not list counts as pending. A warm home answers the same twice.
  */
+/** The records of a plain list say nothing: the last detailed ones stay until a detailed answer replaces them, or until there is nothing left to serve. */
+function keepClones(at: Landing, models: ModelInfo[] | null, isDetailed: boolean): void {
+  if (isDetailed || models === null) clones = at.clones.models;
+}
+
 function land(at: Landing, models: ModelInfo[] | null, isDetailed: boolean): void {
   const current = at.refresh === generation;
   if (!current && !(isDetailed && !detailed)) return;
@@ -108,6 +145,7 @@ function land(at: Landing, models: ModelInfo[] | null, isDetailed: boolean): voi
   snapshot = models;
   detailed = isDetailed;
   if (isDetailed) detailedBy = at.refresh;
+  keepClones(at, models, isDetailed);
   at.changed();
   if (firstDetails && at.secondLook) {
     confirming = true;
@@ -118,7 +156,8 @@ function land(at: Landing, models: ModelInfo[] | null, isDetailed: boolean): voi
 }
 
 async function confirm(at: Landing): Promise<void> {
-  const again = await discoverOpencodeModels(at.bin, { env: at.env });
+  const second = newCloneSink(at.clones.providers);
+  const again = await discoverOpencodeModels(at.bin, { env: at.env, clones: second });
   const models = again.detailed ? again.models : await again.details;
   confirming = false;
   // A newer refresh's detailed answer outranks this look; one that brought
@@ -127,6 +166,7 @@ async function confirm(at: Landing): Promise<void> {
     snapshot = models;
     detailed = true;
     detailedBy = at.refresh;
+    clones = second.models;
     at.changed();
   }
   logger.info(`opencode model discovery: ${models ? `second look found ${models.length} model(s)` : "the second look found nothing; keeping the first answer"}`);

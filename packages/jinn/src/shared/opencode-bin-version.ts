@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs";
+import { buildEngineChildEnv } from "./child-env.js";
 
 /**
  * Which opencode release a local binary is, from `opencode --version`.
@@ -33,7 +34,8 @@ function cacheKey(bin: string): string | undefined {
 function probe(bin: string): Promise<string | undefined> {
   return new Promise((resolve) => {
     try {
-      execFile(bin, ["--version"], { timeout: PROBE_TIMEOUT_MS }, (err, stdout) => {
+      // The probe has no use for an account's key: its environment holds none.
+      execFile(bin, ["--version"], { timeout: PROBE_TIMEOUT_MS, env: buildEngineChildEnv(process.env) }, (err, stdout) => {
         resolve(err ? undefined : parseOpencodeVersion(String(stdout)));
       });
     } catch {

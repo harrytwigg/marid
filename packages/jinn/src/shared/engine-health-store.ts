@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { opencodeCredentialFingerprint, providerOfOpencodeHealthKey } from "./opencode-subscription.js";
+import { opencodeCredentialChanged, providerOfOpencodeHealthKey } from "./opencode-subscription.js";
 import { JINN_HOME } from "./paths.js";
 
 /**
@@ -14,6 +14,9 @@ import { JINN_HOME } from "./paths.js";
  * carries the moment it expires, so a record can never outlive its own window
  * because a sweeper did not run.
  */
+
+/** The reason every record the opencode usage meter wrote carries, and what tells one from a provider's refusal (see engine-health-meter.ts). */
+export const METERED_WINDOW_REASON = "quota window spent";
 
 export type EngineHealthState = "ok" | "exhausted" | "degraded";
 
@@ -142,7 +145,7 @@ export function publicHealth(record: EngineHealth): EngineHealth {
  *  only safe direction for advice. */
 function credentialChanged(key: string, record: EngineHealth): boolean {
   if (record.failureClass !== "auth" || record.credentialFingerprint === undefined) return false;
-  return opencodeCredentialFingerprint(providerOfOpencodeHealthKey(key), undefined) !== record.credentialFingerprint;
+  return opencodeCredentialChanged(providerOfOpencodeHealthKey(key), record.credentialFingerprint);
 }
 
 /** Every engine something has been observed about, with a record whose window

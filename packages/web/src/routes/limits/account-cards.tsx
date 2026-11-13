@@ -6,6 +6,28 @@ interface CardItem {
   engine: EngineLimitEngineSnapshot
   account?: EngineLimitAccountSnapshot
   title?: string
+  /** Said instead of "No quota windows observed yet." when the card has no figures of its own. */
+  emptyNote?: string
+}
+
+/** The engine card's line when every metered bucket belongs to an account's card. */
+export const ALL_COVERED_NOTE = "Nothing metered outside the accounts."
+
+/** The engine's own card when accounts exist: buckets of providers an account covers belong to that
+ *  account's card, so only the rest (an `openrouter/*` bucket, say) stay here. */
+function uncoveredEngine(engine: EngineLimitEngineSnapshot, accounts: EngineLimitAccountSnapshot[]): { engine: EngineLimitEngineSnapshot; emptyNote?: string } {
+  if (!engine.buckets?.length) return { engine }
+  const covered = new Set(accounts.flatMap((a) => (a.provider === undefined ? [] : [a.provider])))
+  const buckets = engine.buckets.filter((b) => !covered.has(b.id.split("/")[0] ?? ""))
+  // The engine's top-level windows and plan are the DEFAULT model's bucket (not the most spent one). When that
+  // model's provider has an account, they repeat that account's spend under the engine's name, whatever else is left.
+  const { accountPlan, ...rest } = engine
+  const planModel = accountPlan?.split(" · ")[0]
+  const planIsCovered = planModel !== undefined && covered.has(planModel.split("/")[0] ?? "")
+  if (buckets.length > 0) {
+    return planIsCovered ? { engine: { ...rest, buckets, windows: [] } } : { engine: { ...engine, buckets } }
+  }
+  return { engine: { ...rest, buckets: [], windows: [] }, emptyNote: ALL_COVERED_NOTE }
 }
 
 /**
@@ -14,16 +36,23 @@ interface CardItem {
  * The gateway has already dropped the engines this instance does not use, so
  * this file only lays the cards out — no group headings, no nested sections.
  */
-export function EngineCards({ data, now }: { data: EngineLimitsResponse | null; now: number }) {
+function cardsOf(data: EngineLimitsResponse | null): CardItem[] {
   const cards: CardItem[] = []
   for (const engine of Object.values(data?.engines ?? {})) {
     const accounts = data?.accounts?.[engine.name]
-    if (accounts?.length) {
-      for (const account of accounts) cards.push({ key: account.account, engine: account, account, title: account.label })
-    } else {
+    if (!accounts?.length) {
       cards.push({ key: engine.name, engine })
+      continue
     }
+    // Claude's first account is the engine's own reading; opencode's accounts cover only the providers they name.
+    if (engine.name === "opencode") cards.push({ key: engine.name, ...uncoveredEngine(engine, accounts) })
+    for (const account of accounts) cards.push({ key: account.account, engine: account, account, title: account.label })
   }
+  return cards
+}
+
+export function EngineCards({ data, now }: { data: EngineLimitsResponse | null; now: number }) {
+  const cards = cardsOf(data)
 
   if (cards.length === 0) {
     return (
@@ -35,8 +64,8 @@ export function EngineCards({ data, now }: { data: EngineLimitsResponse | null; 
 
   return (
     <div className="grid auto-rows-fr items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="limits-grid">
-      {cards.map(({ key, engine, account, title }) => (
-        <EngineCard key={key} engine={engine} now={now} account={account} title={title} />
+      {cards.map(({ key, engine, account, title, emptyNote }) => (
+        <EngineCard key={key} engine={engine} now={now} account={account} title={title} emptyNote={emptyNote} />
       ))}
     </div>
   )

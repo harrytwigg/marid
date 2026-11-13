@@ -1,4 +1,5 @@
 import type { ModelInfo } from "./types.js";
+import { cloneFromApiRecord, collectClone, type CloneSink } from "./opencode-clone.js";
 
 /**
  * What opencode says about one model, as `opencode-models.ts` reads it: the
@@ -73,15 +74,20 @@ function modelFromApiRecord(item: unknown): ModelInfo | undefined {
  * for ids with unusual characters, such as `~`), rather than the API's own
  * order by release date, so the picker does not reshuffle with each release.
  * A record opencode marks `enabled: false` is left out, as its own clients do.
- * Output that is not that shape gives no models.
+ * Output that is not that shape gives no models. `clones` collects the clone
+ * records of the providers it wants (opencode-clone.ts).
  */
-export function parseOpencodeApiModels(output: string): ModelInfo[] {
+export function parseOpencodeApiModels(output: string, clones?: CloneSink): ModelInfo[] {
   const data = parseRecord(output.trim())?.data;
   if (!Array.isArray(data)) return [];
   const models = new Map<string, ModelInfo>();
   for (const item of data) {
     const model = modelFromApiRecord(item);
-    if (model && !models.has(model.id)) models.set(model.id, model);
+    if (!model || models.has(model.id)) continue;
+    models.set(model.id, model);
+    // Only the first record of a model is cloned, as only its first is listed.
+    const slash = model.id.indexOf("/");
+    collectClone(clones, model.id.slice(0, slash), cloneFromApiRecord(model.id.slice(slash + 1), item as Record<string, unknown>));
   }
   return [...models.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }

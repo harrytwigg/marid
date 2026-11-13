@@ -15,6 +15,7 @@ import { ensureGatewayAuthToken } from "./auth.js";
 import { buildRestartEntryArgv } from "./restart-entry-options.js";
 import { syncShippedSkills } from "../migrations/sync-on-boot.js";
 import { pidBelongsToAnotherHome, readProcessJinnHome } from "./process-home.js";
+import { withOpencodeAccountKeys } from "../shared/child-env.js";
 
 export { resolveLocalGatewayConnection, type LocalGatewayConnection } from "./local-gateway-connection.js";
 export { readProcessJinnHome, type ProcessJinnHomeLookup } from "./process-home.js";
@@ -143,7 +144,8 @@ export function buildGatewayChildEnv(
   setEnv(env, "PORT", String(port));
   setEnv(env, "GATEWAY_URL", gatewayBaseUrl({ port, host }));
   setEnv(env, "GATEWAY_TOKEN", ensureGatewayAuthToken(JINN_HOME));
-  return env;
+  // The successor gateway reads the account keys at its own config load; this one took them out of its environment.
+  return withOpencodeAccountKeys(env);
 }
 
 const GATEWAY_CHILD_ENV_SCRUB_EXACT: ReadonlySet<string> = new Set([

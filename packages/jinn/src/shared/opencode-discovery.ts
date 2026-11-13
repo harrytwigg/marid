@@ -3,6 +3,7 @@ import type { ModelInfo } from "./types.js";
 import { logger } from "./logger.js";
 import { parseOpencodeModels } from "./opencode-models.js";
 import { parseOpencodeApiModels } from "./opencode-model-records.js";
+import { adoptClones, newCloneSink, type CloneSink } from "./opencode-clone.js";
 
 /** Discovery must never take the gateway with it: it runs on a timer, and an
  *  opencode that hangs is a reason to have no catalog, not a reason to stall. */
@@ -38,6 +39,9 @@ export interface DiscoveryOptions {
   timeoutMs?: number;
   detailsTimeoutMs?: number;
   env?: Record<string, string>;
+  /** Collects the clone records (opencode-clone.ts) of the providers it wants,
+   *  from whichever run's catalogue is served. */
+  clones?: CloneSink;
 }
 
 /** SIGTERM now, SIGKILL a second later if that was not enough. Returns the
@@ -158,10 +162,14 @@ const PLAIN_MODELS_ARGS: string[][] = [["models", "--standalone"], ["models"]];
 
 /** What to serve when `--verbose` gave nothing (yet): 2.x's API records, with
  *  their windows and variants, else the plain list without them. */
-async function fallbackModels(bin: string, timeoutMs: number, env: Record<string, string> | undefined): Promise<{ models: ModelInfo[]; detailed: boolean }> {
+async function fallbackModels(bin: string, timeoutMs: number, env: Record<string, string> | undefined, clones: CloneSink | undefined): Promise<{ models: ModelInfo[]; detailed: boolean }> {
   const api = await startOpencodeModels(bin, API_MODELS_ARGS, timeoutMs, env).done;
-  const fromApi = api.code === 0 ? parseOpencodeApiModels(api.stdout) : [];
-  if (fromApi.length > 0) return { models: fromApi, detailed: true };
+  const found = clones && newCloneSink(clones.providers);
+  const fromApi = api.code === 0 ? parseOpencodeApiModels(api.stdout, found) : [];
+  if (fromApi.length > 0) {
+    if (clones && found) adoptClones(clones, found);
+    return { models: fromApi, detailed: true };
+  }
   for (const args of PLAIN_MODELS_ARGS) {
     const plain = parseOpencodeModels((await startOpencodeModels(bin, args, timeoutMs, env).done).stdout);
     if (plain.length > 0) return { models: plain, detailed: false };
@@ -170,9 +178,12 @@ async function fallbackModels(bin: string, timeoutMs: number, env: Record<string
 }
 
 /** A finished `--verbose` run's catalogue, or undefined when it failed. */
-function verboseModels(run: ModelsRun): ModelInfo[] | undefined {
-  const models = parseOpencodeModels(run.stdout);
-  return run.code === 0 && models.length > 0 ? models : undefined;
+function verboseModels(run: ModelsRun, clones: CloneSink | undefined): ModelInfo[] | undefined {
+  const found = clones && newCloneSink(clones.providers);
+  const models = parseOpencodeModels(run.stdout, found);
+  if (run.code !== 0 || models.length === 0) return undefined;
+  if (clones && found) adoptClones(clones, found);
+  return models;
 }
 
 /** Run `opencode models --verbose` and return what the installed CLI exposes.
@@ -186,21 +197,21 @@ function verboseModels(run: ModelsRun): ModelInfo[] | undefined {
  *  timeout and the run goes on, its catalogue arriving through `details`. */
 export async function discoverOpencodeModels(bin: string, options: DiscoveryOptions = {}): Promise<OpencodeDiscovery> {
   const timeoutMs = options.timeoutMs ?? DISCOVERY_TIMEOUT_MS;
-  const { env } = options;
+  const { env, clones } = options;
   const verbose = startOpencodeModels(bin, ["models", "--verbose"], options.detailsTimeoutMs ?? DETAILS_TIMEOUT_MS, env);
   const finished = await settledWithin(verbose.done, timeoutMs);
   if (!finished) {
     verbose.detach();
-    const fallback = await fallbackModels(bin, timeoutMs, env);
+    const fallback = await fallbackModels(bin, timeoutMs, env, clones);
     if (fallback.detailed) {
       verbose.stop(); // the API's records answered for it
       return fallback;
     }
     logger.info(`opencode models --verbose is still running after ${timeoutMs} ms; serving the plain list until it finishes`);
-    return { ...fallback, details: verbose.done.then(verboseModels) };
+    return { ...fallback, details: verbose.done.then((run) => verboseModels(run, clones)) };
   }
-  const withWindows = verboseModels(finished);
+  const withWindows = verboseModels(finished, clones);
   if (withWindows) return { models: withWindows, detailed: true };
-  const fallback = await fallbackModels(bin, timeoutMs, env);
+  const fallback = await fallbackModels(bin, timeoutMs, env, clones);
   return fallback.models.length > 0 ? fallback : { models: parseOpencodeModels(finished.stdout), detailed: false };
 }

@@ -13,6 +13,7 @@ import { opencodeHealthFindings } from "./doctor-opencode-health.js";
 import { readEngineHealth, type EngineHealthReading } from "../shared/engine-health.js";
 import { fallbackChainFindings } from "./doctor-fallback.js";
 import { collectOpencodeFallback, opencodeFallbackFindings, type OpencodeFallbackReading } from "./doctor-opencode-fallback.js";
+import { collectOpencodeAccounts, opencodeAccountsFindings, type OpencodeAccountsReading } from "./doctor-opencode-accounts.js";
 import yaml from "js-yaml";
 import path from "node:path";
 
@@ -33,6 +34,8 @@ export interface DoctorInput {
   instances?: Instance[];
   /** An opencode internal-fallback reading to report; without one the report has no such finding. */
   opencodeFallback?: OpencodeFallbackReading;
+  /** A reading of the declared opencode accounts and the chain links naming opencode models; without one the report has no such finding. */
+  opencodeAccounts?: OpencodeAccountsReading;
   /** The engine-health store as it reads now; opencode providers held out are reported from it. */
   opencodeHealth?: EngineHealthReading;
 }
@@ -89,7 +92,12 @@ function legacyEnvFindings(env: NodeJS.ProcessEnv, names: Names): DoctorFinding[
 
 /** The findings, in the order they are printed. */
 export function doctorFindings(input: DoctorInput = {}, processEnv: NodeJS.ProcessEnv = process.env): DoctorFinding[] {
-  return [...codenameFindings(input, processEnv), ...(input.opencodeFallback ? opencodeFallbackFindings(input.opencodeFallback) : []), ...(input.opencodeHealth ? opencodeHealthFindings(input.opencodeHealth) : [])];
+  return [
+    ...codenameFindings(input, processEnv),
+    ...(input.opencodeFallback ? opencodeFallbackFindings(input.opencodeFallback) : []),
+    ...(input.opencodeAccounts ? opencodeAccountsFindings(input.opencodeAccounts) : []),
+    ...(input.opencodeHealth ? opencodeHealthFindings(input.opencodeHealth) : []),
+  ];
 }
 
 function codenameFindings(input: DoctorInput, processEnv: NodeJS.ProcessEnv): DoctorFinding[] {
@@ -115,6 +123,16 @@ function safeInstances(): Instance[] {
 
 const MARK = { ok: "ok     ", info: "note   ", problem: "ACTION " } as const;
 
+/** The opencode accounts reading, or none when the config cannot be loaded (the other findings still print). */
+async function readOpencodeAccounts(): Promise<OpencodeAccountsReading | undefined> {
+  try {
+    const { loadConfig } = await import("../shared/config.js");
+    return await collectOpencodeAccounts(loadConfig());
+  } catch {
+    return undefined;
+  }
+}
+
 export async function runDoctor(options: { json?: boolean; rename?: boolean; apply?: boolean } = {}): Promise<void> {
   if (options.rename) {
     const { printRenameReport, renameReport } = await import("./doctor-rename.js");
@@ -125,7 +143,12 @@ export async function runDoctor(options: { json?: boolean; rename?: boolean; app
     return;
   }
   const opencodeFallback = await collectOpencodeFallback();
-  const findings = doctorFindings({ ...(opencodeFallback ? { opencodeFallback } : {}), opencodeHealth: readEngineHealth() });
+  const opencodeAccounts = await readOpencodeAccounts();
+  const findings = doctorFindings({
+    ...(opencodeFallback ? { opencodeFallback } : {}),
+    ...(opencodeAccounts ? { opencodeAccounts } : {}),
+    opencodeHealth: readEngineHealth(),
+  });
   if (options.json) console.log(JSON.stringify(findings, null, 2));
   else for (const finding of findings) console.log(`${MARK[finding.level]}${finding.message}`);
   if (findings.some((finding) => finding.level === "problem")) process.exitCode = 1;

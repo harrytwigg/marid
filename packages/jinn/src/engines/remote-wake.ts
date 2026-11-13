@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import dgram from "node:dgram";
 import { logger } from "../shared/logger.js";
+import { buildEngineChildEnv } from "../shared/child-env.js";
 
 /**
  * Waking a remote host before a turn needs it: a Wake-on-LAN packet, or the
@@ -61,6 +62,7 @@ export async function runLocalWakeCommand(command: string, timeoutMs: number): P
     // there is no process group to signal and it would only change spawn shape.
     const child = spawn(command, {
       shell: true,
+      env: buildEngineChildEnv(process.env),
       stdio: ["ignore", "pipe", "pipe"],
       detached: process.platform !== "win32",
     });

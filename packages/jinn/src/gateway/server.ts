@@ -48,6 +48,7 @@ import { HermesAcpEngine } from "../engines/hermes-acp.js";
 import { HermesInteractiveEngine } from "../engines/hermes-interactive.js";
 import type { PtyViewEngine } from "../engines/pty-view-engine.js";
 import { startBackgroundRefreshes } from "./background-refresh.js";
+import { opencodeAccountsReaderFor } from "./opencode-account-reach.js";
 import { startBoardWalk } from "../board-walk/walk.js";
 import { boardWalkCronHandler } from "../board-walk/job.js";
 import { setCronActionHandler } from "../cron/actions.js";
@@ -697,6 +698,7 @@ export async function startGateway(
     bin: () => currentConfig.engines.opencode?.bin,
     disableFff: () => currentConfig.engines.opencode?.disableFff !== false,
     commandTimeoutMs: () => resolveCommandTimeoutMs(currentConfig.engines.opencode),
+    accounts: opencodeAccountsReaderFor(() => currentConfig),
   });
   const opencodeEngine = new OpencodeEngine({
     // The same two live readers, for the same reason: opencode is the third
@@ -706,6 +708,8 @@ export async function startGateway(
     mode: () => opencodeMode(currentConfig.engines.opencode),
     disableFff: () => currentConfig.engines.opencode?.disableFff !== false,
     commandTimeoutMs: () => resolveCommandTimeoutMs(currentConfig.engines.opencode),
+    // The declared accounts, staged as provider blocks on every launch path.
+    accounts: opencodeAccountsReaderFor(() => currentConfig),
     // A model's variants are its effort levels, and only those are ever sent.
     effortLevels: () => (model) => exactEffortLevelsForModel(currentConfig, "opencode", model),
     servers: opencodeServers,
@@ -714,6 +718,7 @@ export async function startGateway(
     mode: () => opencodeMode(currentConfig.engines.opencode),
     bin: () => currentConfig.engines.opencode?.bin,
     disableFff: () => currentConfig.engines.opencode?.disableFff !== false,
+    accounts: opencodeAccountsReaderFor(() => currentConfig),
     // The MCP set a turn of this session would get, so a server the terminal
     // starts is the one the next turn reuses rather than replaces.
     resolveMcp: (sessionId) => {

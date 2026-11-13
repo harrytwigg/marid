@@ -23,6 +23,7 @@ import { remapMcpConfigForRemote } from "../mcp/remote-config.js";
 import { confineMcpToDepartment } from "../gateway/department-scope/mcp-servers.js";
 import { piJinnMcpAttachable, piJinnSessionEnv, remotePiExtensionSource } from "./pi-mcp.js";
 import { buildOpencodeSessionConfigFor, serializeOpencodeSessionConfig } from "./opencode-mcp.js";
+import type { OpencodeAccountStaging } from "./opencode-accounts.js";
 import { opencodeApiOf } from "./opencode-version.js";
 import { commandTimeoutPluginEntry, remoteAssetsDir } from "./opencode-command-timeout.js";
 import { parseOpencodeVersion } from "../shared/opencode-bin-version.js";
@@ -1248,6 +1249,10 @@ export interface PrepareRemoteSessionOpts {
   /** opencode only: list Marid's command-timeout plugin in the staged config
    *  (opencode-command-timeout.ts), from this host's own jinn-cli install. */
   opencodeCommandTimeout?: boolean;
+  /** opencode only: the declared accounts. Each gets a `provider` block in the staged config, and its key
+   *  goes into a 0600 file of its own (never the command line, never the session-env file the terminal
+   *  view sources too). */
+  opencodeAccounts?: OpencodeAccountStaging;
 }
 
 interface RemoteSessionStagingBase {
@@ -1295,6 +1300,10 @@ export interface RemoteOpencodeStaging extends RemoteSessionStagingBase {
    *  unauthenticated. opencode generates its own session ids, so sessions
    *  sharing that one store cannot collide the way pi's would. */
   opencodeConfigPath?: string;
+  /** Remote path of the 0600 file exporting the declared accounts' keys, staged when the session has accounts.
+   *  Sourced by the remote `run` and `serve` commands alone: the terminal view's `opencode attach` is a client
+   *  of that server and holds no key. Not {@link RemoteSessionStagingBase.envFilePath}, which the view sources. */
+  accountKeysFilePath?: string;
 }
 
 export interface RemoteMusecodeStaging extends RemoteSessionStagingBase {
@@ -1382,8 +1391,13 @@ async function stageBatchEngine(
     return { ...base, engine, piSessionDir, ...(piExtensionPath ? { piExtensionPath } : {}) };
   }
   if (engine === "opencode") {
-    const opencodeConfigPath = await stageOpencodeConfig(destination, facts, sessionHome, tunnelPort, { resolvedMcp, commandTimeout: opts.opencodeCommandTimeout === true });
-    return { ...base, engine, ...(opencodeConfigPath ? { opencodeConfigPath } : {}) };
+    const opencodeConfigPath = await stageOpencodeConfig(destination, facts, sessionHome, tunnelPort, {
+      resolvedMcp,
+      commandTimeout: opts.opencodeCommandTimeout === true,
+      ...(opts.opencodeAccounts ? { accounts: opts.opencodeAccounts } : {}),
+    });
+    const accountKeysFilePath = opts.opencodeAccounts ? await stageAccountKeysFile(destination, sessionHome, opts.opencodeAccounts.env) : undefined;
+    return { ...base, engine, ...(opencodeConfigPath ? { opencodeConfigPath } : {}), ...(accountKeysFilePath ? { accountKeysFilePath } : {}) };
   }
   if (engine === "musecode") {
     const remapped = remoteMcpFor(facts, sessionHome, tunnelPort, resolvedMcp);
@@ -1471,6 +1485,13 @@ async function stageSessionEnvFile(
   return envFilePath;
 }
 
+/** The 0600 file holding a session's opencode account keys (`export KEY=…` per account), apart from the session-env file so that only the commands that run opencode itself source it. */
+async function stageAccountKeysFile(destination: string, sessionHome: string, keys: Readonly<Record<string, string>>): Promise<string> {
+  const accountKeysPath = path.posix.join(sessionHome, "tmp", "account-keys.sh");
+  await stageRemoteFile(destination, accountKeysPath, buildExportsFile(keys));
+  return accountKeysPath;
+}
+
 /** The sourceable fragment itself. Pure, and exported, so which values land in a
  *  0600 file rather than on a world-readable command line is a testable claim
  *  rather than an assertion about a function that needs two machines to run. */
@@ -1483,6 +1504,12 @@ export function buildSessionEnvFile(
   if (token) lines.push(`export JINN_GATEWAY_TOKEN=${shq(token)}`);
   for (const [key, value] of Object.entries(extraExports)) lines.push(`export ${key}=${shq(value)}`);
   return `${lines.join("\n")}\n`;
+}
+
+/** A sourceable fragment exporting each of `values` (an empty one for none). */
+export function buildExportsFile(values: Readonly<Record<string, string>>): string {
+  const lines = Object.entries(values).map(([key, value]) => `export ${key}=${shq(value)}`);
+  return lines.length === 0 ? "" : `${lines.join("\n")}\n`;
 }
 
 /** Reuse the real settings builder rather than reimplementing the hook set — it
@@ -1594,11 +1621,11 @@ async function stageOpencodeConfig(
   facts: RemoteFacts,
   sessionHome: string,
   tunnelPort: number,
-  staged: { resolvedMcp: ResolvedMcpConfig | undefined; commandTimeout: boolean },
+  staged: { resolvedMcp: ResolvedMcpConfig | undefined; commandTimeout: boolean; accounts?: OpencodeAccountStaging },
 ): Promise<string | undefined> {
   const { resolvedMcp } = staged;
   const hasMcp = Boolean(resolvedMcp && Object.keys(resolvedMcp.mcpServers ?? {}).length > 0);
-  if (!hasMcp && !staged.commandTimeout) return undefined;
+  if (!hasMcp && !staged.commandTimeout && !staged.accounts) return undefined;
   const remapped = hasMcp
     ? remapMcpConfigForRemote(resolvedMcp!, {
       remoteNode: facts.nodeBin,
@@ -1609,7 +1636,7 @@ async function stageOpencodeConfig(
     : undefined;
   const api = opencodeApiOf(facts.opencodeVersion);
   const plugins = staged.commandTimeout ? [commandTimeoutPluginEntry(api, remoteAssetsDir(facts.entryDir), path.posix.join)] : [];
-  const config = buildOpencodeSessionConfigFor(remapped, api, plugins);
+  const config = buildOpencodeSessionConfigFor(remapped, api, plugins, staged.accounts);
   if (!config) return undefined;
   const configPath = path.posix.join(sessionHome, "tmp", "opencode.json");
   await stageRemoteFile(destination, configPath, serializeOpencodeSessionConfig(config));
@@ -1671,6 +1698,8 @@ export interface SshSpawnOpts {
    *  Sourced rather than inlined because a remote command line is readable by
    *  every process on that host. */
   envFile?: string;
+  /** A second 0600 fragment sourced after {@link envFile}, for secrets only the agent process itself needs (opencode's account keys). */
+  extraEnvFile?: string;
   /** The agent CLI ON THE REMOTE host, and its argv. Not "claude": the same
    *  transport carries `pi` for a Pi employee, and the only difference between
    *  the two commands is this pair plus {@link allocateTty}. */
@@ -1759,7 +1788,7 @@ export function buildSshSpawnArgs(opts: SshSpawnOpts): string[] {
   const agent = [opts.bin, ...opts.args].map(shq).join(" ");
   // Sourced BEFORE `env`, so the exported values are inherited through it while
   // `env -u` still strips the billing-critical names from the login profile.
-  const source = opts.envFile ? `. ${shq(opts.envFile)} && ` : "";
+  const source = [opts.envFile, opts.extraEnvFile].filter((file): file is string => file !== undefined).map((file) => `. ${shq(file)} && `).join("");
   // The shell's own pid, which `exec` below hands to the agent, and its start
   // time, which exec preserves and no recycled pid can reproduce. Written
   // before the exec because there is no shell left afterwards to write it.

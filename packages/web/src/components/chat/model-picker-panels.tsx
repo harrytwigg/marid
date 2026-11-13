@@ -6,6 +6,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
+import { accountBadgeText, accountOfModel, useAccountLabels, useAccountProviders } from '@/hooks/account-labels'
 import { providerOf, providerLabel } from '@/hooks/use-model-registry'
 import type { EngineRegistryEntry, ModelInfo } from '@/lib/api'
 import { engineDisplayName } from '@/lib/engine-names'
@@ -60,6 +61,10 @@ function ModelSearchBox({ list }: { list: ModelList }) {
 /** One model row: label, provider badge, accent check on the selected. */
 function ModelRow({ model, selected, keepOpenOnPick }: { model: ModelInfo; selected: boolean; keepOpenOnPick?: boolean }) {
   const provider = providerOf(model.id)
+  // An account model reads as its account, not as the alias provider id it is staged under.
+  const labels = useAccountLabels()
+  const account = accountOfModel(model, provider, useAccountProviders())
+  const badge = account ? accountBadgeText(account, labels) : provider ? providerLabel(provider) : ''
   return (
     <DropdownMenuRadioItem
       value={model.id}
@@ -68,9 +73,12 @@ function ModelRow({ model, selected, keepOpenOnPick }: { model: ModelInfo; selec
     >
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span className="truncate">{model.label}</span>
-        {provider && (
-          <span className="shrink-0 rounded-[5px] bg-[var(--fill-tertiary)] px-1 py-px text-[length:var(--text-caption2)] text-[var(--text-tertiary)]">
-            {providerLabel(provider)}
+        {badge && (
+          <span
+            data-account-badge={account}
+            className="shrink-0 rounded-[5px] bg-[var(--fill-tertiary)] px-1 py-px text-[length:var(--text-caption2)] text-[var(--text-tertiary)]"
+          >
+            {badge}
           </span>
         )}
       </span>

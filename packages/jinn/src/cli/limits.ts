@@ -3,7 +3,9 @@ import { loadConfig } from "../shared/config.js";
 import { JINN_HOME } from "../shared/paths.js";
 import { collectEngineLimits } from "../shared/engine-limits.js";
 import { refreshGrokModels, refreshPiModels, refreshHermesModels, refreshOpencodeModels, refreshMusecodeModels } from "../shared/models.js";
-import type { EngineLimitEngineSnapshot, EngineLimitWindow } from "../shared/types.js";
+import type { EngineLimitBucket, EngineLimitEngineSnapshot, EngineLimitWindow } from "../shared/types.js";
+import type { EngineLimitAccountSnapshot } from "../shared/engine-limits-accounts.js";
+import type { OpencodeAccountLimitSnapshot } from "../shared/engine-limits-opencode-accounts.js";
 import { opencodeDiscoveryEnv } from "../engines/opencode-launch.js";
 import { clearEngineHealthByOperator } from "../shared/engine-health.js";
 import type { EngineHealth } from "../shared/engine-health.js";
@@ -29,8 +31,20 @@ function formatDuration(minutes?: number): string {
 
 function formatWindow(window: EngineLimitWindow): string {
   const used = window.usedPercent === undefined ? "unknown" : `${window.usedPercent}%`;
-  const duration = window.windowDurationMins ? `/${formatDuration(window.windowDurationMins)}` : "";
+  // A window already named by its length ("5h") needs no second statement of it ("5h/5h").
+  const length = formatDuration(window.windowDurationMins);
+  const duration = length && length !== window.name ? `/${length}` : "";
   return `${window.name}${duration}: ${used} used${formatReset(window)}`;
+}
+
+function printBuckets(buckets: readonly EngineLimitBucket[]): void {
+  console.log("  Buckets:");
+  for (const bucket of buckets) {
+    const label = bucket.name && bucket.name !== bucket.id ? `${bucket.id} (${bucket.name})` : bucket.id;
+    const parts = (bucket.windows ?? [bucket.primary, bucket.secondary]).filter(Boolean).map((w) => formatWindow(w!));
+    console.log(`    - ${label}${bucket.planType ? `, plan ${bucket.planType}` : ""}`);
+    for (const part of parts) console.log(`      ${part}`);
+  }
 }
 
 function printEngine(engine: EngineLimitEngineSnapshot): void {
@@ -46,15 +60,7 @@ function printEngine(engine: EngineLimitEngineSnapshot): void {
   }
 
   // A lone bucket is worth printing when the top-level windows are not its own.
-  if (engine.buckets?.length && (engine.buckets.length > 1 || !engine.windows?.length)) {
-    console.log("  Buckets:");
-    for (const bucket of engine.buckets) {
-      const label = bucket.name && bucket.name !== bucket.id ? `${bucket.id} (${bucket.name})` : bucket.id;
-      const parts = (bucket.windows ?? [bucket.primary, bucket.secondary]).filter(Boolean).map((w) => formatWindow(w!));
-      console.log(`    - ${label}${bucket.planType ? `, plan ${bucket.planType}` : ""}`);
-      for (const part of parts) console.log(`      ${part}`);
-    }
-  }
+  if (engine.buckets?.length && (engine.buckets.length > 1 || !engine.windows?.length)) printBuckets(engine.buckets);
 
   if (engine.credits) {
     const creditBits = [
@@ -79,6 +85,41 @@ function printEngine(engine: EngineLimitEngineSnapshot): void {
   if (engine.unsupportedReason) console.log(`  Note: ${engine.unsupportedReason}`);
   if (engine.error) console.log(`  Error: ${engine.error}`);
   if (engine.stale) console.log("  Note: latest snapshot is older than 30 minutes.");
+}
+
+function isOpencodeAccount(account: EngineLimitAccountSnapshot): account is OpencodeAccountLimitSnapshot {
+  return typeof (account as Partial<OpencodeAccountLimitSnapshot>).provider === "string";
+}
+
+function formatTime(iso: string): string {
+  return Number.isNaN(Date.parse(iso)) ? iso : new Date(iso).toLocaleString();
+}
+
+/** One account's card: the name and where it runs, who uses it, what it has spent and whether it is held out. */
+function printAccount(engineName: string, account: EngineLimitAccountSnapshot): void {
+  const where = account.location.kind === "remote" ? `remote ${account.location.host}` : "local";
+  console.log(`${engineName} account ${account.label === account.account ? account.label : `${account.account} (${account.label})`} (${where})`);
+  if (isOpencodeAccount(account)) {
+    console.log(`  Provider: ${account.provider}${account.base ? ` (clones ${account.base})` : ""}`);
+    if (account.keyEnv) console.log(`  Key: ${account.keyEnv} (${account.keySet ? "set" : "NOT SET"})`);
+  }
+  if (account.employees.length) console.log(`  Employees: ${account.employees.join(", ")}`);
+  if (account.accountPlan) console.log(`  Plan: ${account.accountPlan}`);
+  if (account.windows?.length) {
+    console.log("  Limits:");
+    for (const window of account.windows) console.log(`    - ${formatWindow(window)}`);
+  }
+  if (account.buckets?.length) printBuckets(account.buckets);
+  if (account.exhausted) console.log(`  Exhausted${account.exhausted.until ? ` until ${formatTime(account.exhausted.until)}` : ""}`);
+  if (isOpencodeAccount(account) && account.lastFailure) {
+    const { class: failureClass, at, reason } = account.lastFailure;
+    console.log(`  Last failure: ${failureClass}, ${formatTime(at)}${reason ? ` (${reason})` : ""}`);
+  }
+  if (isOpencodeAccount(account) && account.nextTryAt) console.log(`  Next try: ${formatTime(account.nextTryAt)}`);
+  if (account.hostUnreachable) console.log("  Note: the host did not answer; the windows are its last reading.");
+  else if (account.noReading) console.log("  Note: no live reading for this account.");
+  if (isOpencodeAccount(account)) for (const problem of account.problems ?? []) console.log(`  Problem: ${problem}`);
+  if (account.error) console.log(`  Error: ${account.error}`);
 }
 
 function describeReplaced(replaced: EngineHealth): string {
@@ -124,5 +165,12 @@ export async function runLimits(opts: LimitsOptions = {}): Promise<void> {
   for (const engine of Object.values(snapshot.engines)) {
     console.log("");
     printEngine(engine);
+  }
+  // A card per account, beside the engines: Claude's and opencode's declared ones.
+  for (const [engineName, accounts] of Object.entries(snapshot.accounts ?? {})) {
+    for (const account of accounts) {
+      console.log("");
+      printAccount(engineName, account);
+    }
   }
 }

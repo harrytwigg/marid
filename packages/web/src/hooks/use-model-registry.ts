@@ -1,3 +1,4 @@
+import { accountLabel } from '@/hooks/account-labels'
 import { useQuery } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query-keys'
 import { api, type EnginesResponse, type EngineRegistryEntry, type ModelInfo } from '@/lib/api'
@@ -107,12 +108,13 @@ export function providerLabel(provider: string): string {
  * An empty query matches everything.
  */
 export function modelMatchesQuery(
-  model: Pick<ModelInfo, 'id' | 'label'>,
+  model: Pick<ModelInfo, 'id' | 'label' | 'account'>,
   query: string,
+  accountLabels: Record<string, string> = {},
 ): boolean {
   const q = query.trim().toLowerCase()
   if (!q) return true
   const provider = providerOf(model.id)
-  const haystack = `${model.label} ${model.id} ${provider} ${providerLabel(provider)}`.toLowerCase()
+  const haystack = `${model.label} ${model.id} ${provider} ${providerLabel(provider)} ${model.account ?? ""} ${model.account ? accountLabel(accountLabels, model.account) ?? "" : ""}`.toLowerCase()
   return haystack.includes(q)
 }

@@ -14,6 +14,7 @@ process.env.JINN_HOME = "home";
 const publicHome = path.resolve("home");
 
 const { buildGatewayChildEnv } = await import("../lifecycle.js");
+const { resetOpencodeAccountKeysForTest, setOpencodeAccountKeyEnv } = await import("../../shared/child-env.js");
 
 afterAll(() => {
   process.chdir(originalCwd);
@@ -34,5 +35,34 @@ describe("gateway child JINN_HOME identity", () => {
     expect(env.JINN_HOME).toBe(publicHome);
     expect(env.JINN_HOME).not.toBe("home");
     expect(env.JINN_HOME_IDENTITY).toBe(fs.realpathSync.native(home));
+  });
+
+  it("hands the successor gateway the account keys this one took out of its own environment", () => {
+    process.env.ACME_SUCCESSOR_KEY = "sk-successor";
+    setOpencodeAccountKeyEnv(["ACME_SUCCESSOR_KEY"]);
+    try {
+      expect(process.env.ACME_SUCCESSOR_KEY).toBeUndefined();
+      const env = buildGatewayChildEnv({ gateway: { port: 7851, host: "127.0.0.1" }, engines: { default: "claude" } } as any);
+      expect(env.ACME_SUCCESSOR_KEY).toBe("sk-successor");
+    } finally {
+      resetOpencodeAccountKeysForTest();
+      delete process.env.ACME_SUCCESSOR_KEY;
+    }
+  });
+
+  it("does not hand the successor the key of an account a reload removed", () => {
+    process.env.ACME_SUCCESSOR_KEY_B = "sk-b";
+    process.env.ACME_SUCCESSOR_KEY_C = "sk-c";
+    setOpencodeAccountKeyEnv(["ACME_SUCCESSOR_KEY_B", "ACME_SUCCESSOR_KEY_C"]);
+    setOpencodeAccountKeyEnv(["ACME_SUCCESSOR_KEY_B"]);
+    try {
+      const env = buildGatewayChildEnv({ gateway: { port: 7851, host: "127.0.0.1" }, engines: { default: "claude" } } as any);
+      expect(env.ACME_SUCCESSOR_KEY_B).toBe("sk-b");
+      expect(env.ACME_SUCCESSOR_KEY_C).toBeUndefined();
+    } finally {
+      resetOpencodeAccountKeysForTest();
+      delete process.env.ACME_SUCCESSOR_KEY_B;
+      delete process.env.ACME_SUCCESSOR_KEY_C;
+    }
   });
 });

@@ -790,6 +790,8 @@ export interface ModelInfo {
   /** Model is in the engine's featured set — shown by default in the picker
    *  before the "More models…" expansion. Config-driven (engines.<name>.featuredModels). */
   featured?: boolean;
+  /** opencode only: the declared account (`engines.opencode.accounts`) this model belongs to. Set on the `<provider>/<model>` entries an account adds; absent on opencode's own catalogue. */
+  account?: string;
 }
 
 /** Resolved per-engine registry entry. */

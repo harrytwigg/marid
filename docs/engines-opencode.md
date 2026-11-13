@@ -147,12 +147,44 @@ engines:
 
 Take the numbers from the Go pricing table for the models you use. A model that matches no key is not metered: pay-per-token providers such as OpenRouter have no window to run out of.
 
-With that set, the Limits page and `jinn limits` show opencode's windows for the engine's default model. `jinn limits` (and `GET /api/engine-limits`) also list a bucket per metered model; the Limits page does not render buckets yet. If the default model matches no key, opencode reads as unsupported with the reason, because nothing configured can speak for the engine. When a window is fully spent, opencode is recorded as **exhausted until the moment the ledger says it reopens**. That is the same record a spent Claude window writes, and it is read the same way:
+With that set, the Limits page and `jinn limits` show opencode's windows for the engine's default model. `jinn limits` (and `GET /api/engine-limits`) also list a bucket per metered model; the Limits page does not render buckets yet. If the default model matches no allowance, opencode reads as unsupported with the reason, because nothing configured can speak for the engine's default; other metered models still count (below).
 
-- A new session whose engine is only a preference (an employee's configured `engine: opencode`, not one named in the request) starts on the first healthy engine in `engines.opencode.fallback`.
-- A mid-turn rate-limit fallback from another engine (for example `engines.claude.fallback: [opencode]`) skips opencode for the next healthy member of its chain.
+**Exhaustion is per provider.** When a window of **any** metered model is fully spent, the meter records `opencode/<provider>` as **exhausted until the moment the ledger says it reopens**, stamped with the model that spent it. When several models or windows of one provider are spent, the latest reopening applies. The meter never writes the engine-wide `opencode` key: one provider running dry must not mark every other provider out. The top-level `windows` of the engine's snapshot stay the default model's, for display only. The record is the same kind a spent Claude window writes, and it is read the same way:
 
-Every one of those is routing through a fallback chain, so the record only moves work where there is somewhere else to go. **Nothing is refused**: if no healthy alternative is left, the turn runs on opencode anyway, exactly as before. To make an exhausted opencode route away from itself, give it a chain: `engines.opencode.fallback: [pi]`, say.
+- A new session whose engine is only a preference (an employee's configured `engine: opencode`, not one named in the request) starts on the first healthy link of its chain. An employee who pins no model is keyed by the provider of `engines.opencode.model`, which is the model its session runs on; the session's own model stays unpinned.
+- A mid-turn rate-limit fallback from another engine (for example `engines.claude.fallback: [opencode]`) skips an exhausted opencode link for the next healthy member of its chain.
+
+**A provider's own refusal outranks the meter.** The ledger does not see the provider's own meter. If a refusal recorded from the provider itself (a quota, sign-in or model-access failure) already holds `opencode/<provider>`, the meter neither clears nor shortens it. It replaces only a record it wrote itself, a degraded one, or a quota refusal that ends sooner than the reopening it computed.
+
+### Limits per account
+
+A declared account (`engines.opencode.accounts`, see [the design](design/opencode-accounts.md)) names its provider, so it has an allowance and an exhaustion of its own:
+
+```yaml
+engines:
+  opencode:
+    usageLimits:
+      monthlyUsd:
+        opencode-go/*: 60              # the stock provider, and the base's allowance for accounts with no limits
+    accounts:
+      go-b:
+        provider: opencode-go-b
+        base: opencode-go
+        keyEnv: OPENCODE_GO_B_API_KEY
+        usageLimits:
+          monthlyUsd: { "*": 100, mimo-v2.6-pro: 15 }   # model ids without the provider; an exact id beats *
+      go-c:
+        provider: opencode-go-c
+        base: opencode-go
+        keyEnv: GO_C_API_KEY                   # no usageLimits: inherits opencode-go/* above
+```
+
+- An account's `monthlyUsd` meters `<provider>/<model>`: an exact model beats `*`.
+- An account with no `usageLimits` inherits the engine-level `<base>/<model>` key, then `<base>/*`.
+- The engine-level keys still meter any provider directly, an account's alias included (`opencode-go-b/*: 100` works too).
+- Spend is already recorded as `provider/model`, so the ledger separates accounts as it is, and a spent window of one account records `opencode/<its provider>` and no other.
+
+`GET /api/engine-limits` carries `accounts.opencode`, one entry per declared account (built-in providers included): its label, provider, `base`, the key variable's **name** (`keyEnv`, never its value) and whether it is set (`keySet`), a bucket per metered model with its 5h/7d/30d windows, the employees whose own model is on that provider, `exhausted` while health holds the provider, `nextTryAt` (the record's `recheckAt`, else its `until`), and `problems`. `jinn limits` prints a card for each, Claude's accounts included.
 
 The reading refreshes with the engine-health refresh (every 15 minutes) and whenever the Limits page or `jinn limits` reads it.
 
@@ -163,7 +195,35 @@ What the meter does not see:
 - **Session titles.** The one short call opencode makes to title a new session is not on a message, so it is not in the ledger.
 - **Which model opencode picked for itself.** A turn is charged to the model jinn handed opencode, fixed when the turn is recorded, so changing `engines.opencode.model` later does not move old spend. A turn run with no model at all (neither the session nor `engines.opencode.model` names one, so opencode used its own default) is charged to whatever the default is when it is read.
 - **The provider's own clock.** Windows are treated as trailing. That is exact if Go's windows roll, and conservative if they are anchored at first use.
-- **A per-model engine record.** Engine health has one record per engine, so only the **default model's** windows can mark opencode out. A spent pinned model shows in its bucket, and its next refusal is handled reactively, as before.
+- **A per-model health record.** Health is one record per provider, not per model. A spent window of one model marks its whole provider out, although the provider's other models may still have allowance: Go meters each model, and routing is per provider.
+
+### Accounts
+
+Several subscriptions to one opencode provider (two OpenCode Go workspaces, say) are declared as named accounts. Each account becomes its own opencode provider id, so a chain link or a session can name `opencode-go-b/deepseek-v4.1-flash` beside `opencode-go/deepseek-v4.1-flash` and each is billed to its own key. Design and the findings behind it: [design/opencode-accounts.md](design/opencode-accounts.md).
+
+```yaml
+engines:
+  opencode:
+    accounts:
+      go-b:                                  # a name: [A-Za-z0-9][A-Za-z0-9._-]*
+        provider: opencode-go-b              # the provider id chains name: opencode-go-b/<model>
+        base: opencode-go                    # clone this provider's endpoints, SDKs, prices and limits
+        keyEnv: OPENCODE_GO_B_API_KEY        # the variable holding this account's key, in the gateway's environment
+        label: Go (second workspace)         # optional display name
+        models: [deepseek-v4.1-flash]        # optional subset of the base's models; default all
+```
+
+- **No key in config.** `keyEnv` names a variable; an inline `apiKey`, `key` or `token` is refused. Put the key in the gateway's environment (the service unit, or the shell that starts it). A `keyEnv` is refused at load when it is a variable the gateway or opencode reads (`OPENCODE`, `OPENCODE_API_KEY`, `OPENCODE_PID`, `OPENCODE_CONFIG*`, `OPENCODE_PURE`, `OPENCODE_SERVER_*`, `OPENCODE_DISABLE_*`, `JINN_*`, `MARID_*`, the loader, XDG and ssh families, common process variables), a provider's standard key variable (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and the like), or one that config.yaml expands elsewhere as `${VAR}`: the gateway removes an account's key variable from every other process, so those would be withheld from their readers.
+- **How the key reaches opencode.** The staged opencode config holds only `{env:<keyEnv>}`. A local process is started with the variable set from the gateway's environment; a remote host gets it through a 0600 `account-keys.sh` of its own in the session's staged home, sourced only by the remote `run` and `serve` commands (never by the terminal view's `opencode attach`, which holds no key), and never on the `ssh` command line. In server mode the warm server restarts when an account's key, provider id or model list changes (its fingerprint holds a short hash of the key, never the key). If the variable is unset the block is still staged and the turn fails as an authentication error, so the chain moves on; `jinn doctor` names the variable.
+- **No other process sees the key.** When the config loads, the gateway moves each declared account's `keyEnv` out of its own environment and keeps the value in memory. No process it starts inherits the variable: other engines (claude, codex, pi and the rest), model discovery and limit probes, MCP and tool children, hooks, `ssh`, `git`, `gh`, the `opencode --version` probe and opencode's own discovery. Only the opencode processes that serve a session's reachable accounts are given the key, and a gateway that starts its own successor (`jinn start`, `jinn restart`) hands the keys on to it. An account a config reload removes is forgotten: its key reaches no process, the successor included. `jinn restart` run where the key is in neither the shell's environment nor the gateway's memory (from inside a session, say) warns that the restarted gateway will run without it; restart with `POST /api/system/restart` (the running gateway keeps its keys) or from the operator's shell instead.
+- **opencode's MCP servers do not get it either.** opencode hands its whole environment to each MCP server it launches, so the gateway sets `JINN_SCRUB_ENV` (a comma list of every declared `keyEnv`, names only) on every opencode process it starts, local or remote, and the launchers a staged MCP server goes through (`scrub-entry.js` for third-party servers, `server-entry.js` for the built-in jinn server) delete those names, and the list itself, before they run. Two limits are inherent. The session's own shell tool runs as opencode does, so a command a model runs there can read the key (opencode needs it to call the provider). And `/proc/<gateway pid>/environ` shows the gateway's start environment, the keys included, to every process of the same OS user, as for every gateway secret. The child-env deny list drops the same names as a second guard. A key is read once at startup, so a rotated key needs a gateway restart; `jinn doctor` and `jinn limits` read their own environment. `keyEnv` cannot name a variable another process needs, since the gateway removes an account's key variable from every other process it starts. The config is refused at load for a common process variable (`PATH`, `HOME`, `USER`, `SHELL`, `LANG`, `TERM`, `TMPDIR`, `PWD`, `NODE_OPTIONS`, `NODE_PATH`, or anything starting `LD_`, `DYLD_`, `XDG_` or `SSH_`), a name opencode or the gateway reads itself (`OPENCODE`, `OPENCODE_PID`, `OPENCODE_API_KEY`, `OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR`, `OPENCODE_CONFIG_CONTENT`, `OPENCODE_PURE`, anything starting `OPENCODE_SERVER_` or `OPENCODE_DISABLE_`, and any `JINN_*` or `MARID_*` name), a provider's standard key variable (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `DEEPSEEK_API_KEY`, `XAI_API_KEY`, `MISTRAL_API_KEY`, `GROQ_API_KEY`) and a variable config.yaml expands elsewhere as `${VAR}` or `$VAR`. Give each account a variable of its own, such as `OPENCODE_GO_B_API_KEY`.
+- **Where models come from.** Discovery keeps each base model's SDK, endpoint, price, limits and effort variants (never a credential), and the account's models are the base's, cut to `models` when given. They appear in the model pickers and chains as `<provider>/<model>` with the base's label, context window and effort levels. `GET /api/engines` marks them with `account`. A built-in provider declared without `base` adds no models of its own. An account added to config is cloned at the next model refresh (a config reload starts one).
+- **Cost is carried over.** Without a `cost` an alias turn is recorded at $0, so the staged block gives each model the base's price (`input`, `output`, `cache_read`, `cache_write`, in USD per million tokens). If the base lists tiered prices only the first tier is used.
+- **The 1.x limit.** OpenCode 1.x sends every model of a provider to the provider's one endpoint, ignoring a per-model endpoint, while Go serves models on several (openai-compatible, anthropic, google). On a 1.x binary (local, or on a remote host) an account therefore serves only the models on its main endpoint (the one most of its models use); the others are left out of the staged block. When the local binary is 1.x, they are also left out of the model registry: pickers do not offer them and a chain link to one is skipped as `model-not-served`. A turn whose own model is one of them (the session's model, or a remote host's 1.x) fails before opencode is launched, saying `<model> is not served by account "<name>" on OpenCode 1.x (models on another endpoint need OpenCode 2)`, instead of the `UnknownError: Unexpected server error` OpenCode 1.19 gives after a few seconds. That failure is read as model access: the turn hops to the next link of its chain, and that model alone is held out for the re-probe interval (other models of the account are still tried). OpenCode 2.x honours a per-model SDK and endpoint, so every model is served. `jinn doctor` lists the models a 1.x local binary leaves out.
+- **`jinn doctor`** also prints each account's problems that need the catalogue or the environment (the base missing from opencode's catalogue, a provider id that collides with one in it, a `models` entry that is not the base's, `keyEnv` unset), and every chain link that names a model its account does not serve, an account with no key, or a provider that is neither an account's nor in opencode's catalogue. `GET /api/fallback-chains` reports the same under each chain's `problems`. These are advisory: the catalogue is not known when the config loads, so a chain is never refused for them.
+- **`jinn doctor` reads its own environment.** It checks `keyEnv` against the environment of the shell running `jinn doctor`, not the gateway's, so a key that lives only in the gateway's service unit shows as unset there. `/api/fallback-chains` checks the gateway's own.
+- **A session gets only the accounts its chain reaches.** Each key belongs to its own workspace, so a session's opencode processes (and a remote host's keys file) get the block and key of an account only when that account's provider is the provider of the session's own model, of a model on an opencode link in its resolved chain (its employee's, its account's or its engine's chain, or a stored per-session fallback target), or of the model the turn runs on. A session whose chain reaches no account gets no account block and no key. A server's fingerprint carries the accounts it was started with, so a chain change that adds an account restarts the server at the next turn.
+- **Conversations carry over.** All accounts share one opencode data directory, so a hop from `opencode-go/x` to `opencode-go-b/x` is the same thread on another model.
 
 ### Failure classes
 
@@ -188,6 +248,11 @@ engines:
 ```
 
 A signed-out provider is held until its stored credential is replaced, not for a time, or until a turn the provider serves shows the key works again. The gateway notes an opaque identity of the credential (never the key) with the record and compares it on every read; a changed or unreadable credential ends the hold. Where the credential cannot be read (a turn on a remote host, or no stored credential found) the hold lasts 24 hours, so a wrong verdict heals by itself. A bare `Forbidden` does not say whether the key or the model is refused, so it is held against the model: if the key is in fact dead, each of the provider's models is held in turn, each for the re-probe interval, rather than the whole provider being held until the key changes.
+
+**Accounts.** The classes above apply to a declared account as to any provider, under its own provider id (`opencode/opencode-go-b`, `opencode/opencode-go-b/<model>`):
+- **Which accounts are subscriptions.** An account counts as a subscription provider when its `base` is one (`go-b` with `base: opencode-go` is, with no extra setting), and a built-in account is its own provider, so the list answers for it. An alias of a pay-as-you-go base is not: its 402 keeps its billing handling.
+- **A dead key clears when the key changes.** An alias account's `auth` record carries a short sha256 of the key the gateway holds for it (never the key), compared on every read. Putting a different key in the account's variable and restarting the gateway reads the record as cleared. Only a process that holds the key variable can compare it: `jinn limits` and `jinn doctor` run from a shell without the variable keep showing the hold, and the gateway's reading decides. A failure recorded while the key variable was unset has no identity to compare and is held for 24 hours; after setting the key, run `jinn limits --clear opencode/<provider>` to end it at once. A built-in account is compared by opencode's stored credential, as above.
+- **The account's card says why it is out.** `GET /api/engine-limits` gives each entry of `accounts.opencode` a `lastFailure` (`{class, at, reason?}`, the class being `quota`, `auth` or `model-access`) taken from the newest hold in force on the account's provider or one of its models that the gateway's own sessions see (a hold another machine's turn recorded is not shown), next to `exhausted` and `nextTryAt`. It is absent when nothing holds the account, and it never carries the credential's identity. `jinn limits` and the Limits page show it.
 
 Every hold is about the machine whose turn hit it, the gateway included: each host signs opencode in with its own key, so its allowance, its key and the models its account may use are its own. A hold names its host and is read only by sessions that run there, so a dead key, a spent allowance or a refused model on the gateway does not hold a remote employee off the provider, and one on a remote host does not hold the gateway's sessions off it. A served turn ends a hold only on the machine it is about: a turn served on a remote host ends that host's holds and none of the gateway's. A remote host's dead key is otherwise held for its full 24 hours, since the gateway cannot read that host's credential. One provider (or model) has one record, so the newest machine's hold replaces another machine's on the same key. `jinn limits --clear opencode/<provider>` (or `opencode/<provider>/<model>`) ends any hold at once, and `jinn doctor` lists a signed-out provider as an action to take.
 

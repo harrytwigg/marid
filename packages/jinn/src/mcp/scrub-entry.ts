@@ -19,6 +19,7 @@
 import { spawn } from "node:child_process";
 import { createMcpTempSandbox } from "./temp-sandbox.js";
 import { envAliases } from "../shared/codename-env.js";
+import { scrubListedEnv } from "./scrub-list-env.js";
 
 const [realCommand, ...realArgs] = process.argv.slice(2);
 
@@ -30,6 +31,9 @@ if (!realCommand) {
 // First security boundary: strip the gateway bearer before the untrusted child runs.
 // Under every spelling: a token inherited from an older gateway sits under the older name.
 for (const name of envAliases("GATEWAY_TOKEN")) delete process.env[name];
+
+// And every opencode account key an opencode parent listed (JINN_SCRUB_ENV): opencode holds them for its own provider calls, not for a server it launches.
+scrubListedEnv(process.env);
 
 // External MCPs also get a launcher-owned temp root. Browser drivers can leak
 // launch artifacts when setup fails before their cleanup hook is registered;

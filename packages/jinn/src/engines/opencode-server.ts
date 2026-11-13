@@ -45,6 +45,7 @@ import {
 } from "./opencode-version.js";
 import { v2AbortTurn, v2Prompt, v2RunningSessions, v2WaitMcpReady } from "./opencode-v2-api.js";
 import { ServerHolds, type HoldKind } from "./opencode-server-holds.js";
+import type { OpencodeAccountsReader, OpencodeAccountStaging } from "./opencode-accounts.js";
 
 /**
  * opencode server mode: one `opencode serve` per Jinn session.
@@ -80,6 +81,8 @@ export interface OpencodeServerSpec extends RemoteTarget {
   /** `engines.opencode.bin`. Local servers only: a remote host's binary is the
    *  one its facts probe found, exactly as for a remote `run` turn. */
   bin?: string;
+  /** The model the turn runs on. Not part of what a server is started with; it only tells which accounts the session may use when no session record says. */
+  model?: string;
   resolvedMcp?: ResolvedMcpConfig;
 }
 
@@ -141,6 +144,9 @@ export interface OpencodeServerPoolDeps {
   /** `engines.opencode.commandTimeoutMs`, resolved, read per spawn; absent or
    *  0: no ceiling (see opencode-command-timeout.ts). */
   commandTimeoutMs?: () => number;
+  /** The declared opencode accounts, read per spawn and per acquire: a server
+   *  starts with their provider blocks, and a changed account or key replaces it. */
+  accounts?: OpencodeAccountsReader;
 }
 
 /**
@@ -197,12 +203,30 @@ export function idleCapForHost(limits: OpencodeServerConfig | undefined, hostKey
 /** Which server a spec needs. Covers everything the server is STARTED with:
  *  where it runs, which binary, and the MCP set (with the session's identity in
  *  it). Model and prompt are per turn and are not part of it. */
-export function serverFingerprint(spec: OpencodeServerSpec): string {
+export function serverFingerprint(spec: OpencodeServerSpec, accounts?: OpencodeAccountStaging): string {
   const where = isRemoteTarget(spec)
     ? { host: spec.remoteHost, user: spec.remoteUser ?? "", cwd: spec.remoteCwd ?? "" }
     : { cwd: spec.cwd, bin: resolveBin("opencode", spec.bin) };
   const mcp = buildOpencodeSessionConfig(spec.resolvedMcp) ?? null;
-  return crypto.createHash("sha256").update(JSON.stringify({ where, mcp })).digest("hex");
+  // The accounts' provider ids, model lists and a short hash of each key, so a rotated key restarts the warm server. Added only when there are accounts, so a server with none keeps its fingerprint.
+  const staged = accounts ? { accounts: accounts.fingerprint } : {};
+  return crypto.createHash("sha256").update(JSON.stringify({ where, mcp, ...staged })).digest("hex");
+}
+
+/** What a local server starts with: the gateway's scrubbed environment, the server's password, the staged config's path and each account's key variable. The last is set explicitly, since the staged config names it as `{env:<keyEnv>}`. */
+function localServerEnv(
+  sessionId: string,
+  processOptions: OpencodeProcessOptions,
+  password: string,
+  configHandle: OpencodeConfigHandle,
+  accounts: OpencodeAccountStaging | undefined,
+): Record<string, string> {
+  return {
+    ...cleanEnv(sessionId, processOptions),
+    ...(accounts?.env ?? {}),
+    OPENCODE_SERVER_PASSWORD: password,
+    ...(configHandle.staged ? { OPENCODE_CONFIG: configHandle.configPath } : {}),
+  };
 }
 
 /** Compare dotted numeric versions: negative when a < b. A pre-release or build
@@ -416,7 +440,7 @@ export class OpencodeServerPool {
     kind: HoldKind,
     signal?: AbortSignal,
   ): Promise<OpencodeServer> {
-    const fingerprint = serverFingerprint(spec);
+    const fingerprint = serverFingerprint(spec, this.deps.accounts?.({ sessionId, ...(spec.model ? { model: spec.model } : {}) }));
     const fits = (server: OpencodeServer) => kind === "view" || server.fingerprint === fingerprint;
     for (;;) {
       const found = await this.fittingServer(sessionId, fits);
@@ -706,6 +730,21 @@ export class OpencodeServerPool {
     return { disableFff: this.disableFff(), ...(commandTimeoutMs > 0 ? { commandTimeoutMs } : {}) };
   }
 
+  /** What takes every account's key variable out of a process's inherited environment. */
+  private scrubOpts(sessionId: string, spec: OpencodeServerSpec): { accounts?: OpencodeAccountStaging } {
+    const accounts = this.deps.accounts?.({ sessionId, ...(spec.model ? { model: spec.model } : {}) });
+    return accounts ? { accounts } : {};
+  }
+
+  /** The staging options a remote server adds to a remote `run` turn's: the accounts (their keys go in a 0600 file of their own, sourced by the remote `serve` and `run` only) and the command-timeout plugin. */
+  private accountsOpts(sessionId: string, spec: OpencodeServerSpec): { opencodeAccounts?: OpencodeAccountStaging; opencodeCommandTimeout?: boolean } {
+    const accounts = this.deps.accounts?.({ sessionId, ...(spec.model ? { model: spec.model } : {}) });
+    return {
+      ...(accounts ? { opencodeAccounts: accounts } : {}),
+      ...((this.deps.commandTimeoutMs?.() ?? 0) > 0 ? { opencodeCommandTimeout: true } : {}),
+    };
+  }
+
   private async spawnLocal(
     sessionId: string,
     spec: OpencodeServerSpec,
@@ -721,12 +760,9 @@ export class OpencodeServerPool {
     const api = knownApi ?? opencodeApiOf(await localOpencodeVersion(bin));
     const processOptions = this.processOptions();
     const plugins = localCommandTimeoutPlugins(api, processOptions.commandTimeoutMs ?? 0);
-    const configHandle = writeOpencodeSessionConfig(spec.resolvedMcp, `${sessionId}.server`, api, plugins);
-    const env = {
-      ...cleanEnv(sessionId, processOptions),
-      OPENCODE_SERVER_PASSWORD: password,
-      ...(configHandle.staged ? { OPENCODE_CONFIG: configHandle.configPath } : {}),
-    };
+    const accounts = this.deps.accounts?.({ sessionId, ...(spec.model ? { model: spec.model } : {}) });
+    const configHandle = writeOpencodeSessionConfig(spec.resolvedMcp, `${sessionId}.server`, api, plugins, accounts);
+    const env = localServerEnv(sessionId, { ...processOptions, ...(accounts ? { accounts } : {}) }, password, configHandle, accounts);
     logger.info(`opencode server starting for session ${sessionId}: ${bin} serve on 127.0.0.1:${port} (jinn tools: ${configHandle.staged ? "on" : "off"})`);
     const proc = spawn(bin, buildOpencodeServeArgs(port), {
       cwd: spec.cwd,
@@ -776,7 +812,8 @@ export class OpencodeServerPool {
 
     const serverPort = await probeFreePort(staging.destination, facts);
     const localPort = await freeLocalPort();
-    const processOptions = this.processOptions();
+    // With the accounts: the remote serve lists the key variables its MCP children drop, and the ssh client holds none of them.
+    const processOptions = { ...this.processOptions(), ...this.scrubOpts(sessionId, spec) };
     const args = remoteServeSshArgs({ sessionId, spec, staging, facts, bin, gatewayPort, serverPort, localPort, pidFile: handle.pidFile, processOptions });
     logger.info(
       `opencode server starting REMOTE for session ${sessionId} on ${staging.destination}:${spec.remoteCwd} `
@@ -829,7 +866,7 @@ export class OpencodeServerPool {
       gatewayPort,
       ...(spec.resolvedMcp ? { resolvedMcp: spec.resolvedMcp } : {}),
       sessionEnv: { OPENCODE_SERVER_PASSWORD: password },
-      ...((this.deps.commandTimeoutMs?.() ?? 0) > 0 ? { opencodeCommandTimeout: true } : {}),
+      ...this.accountsOpts(sessionId, spec),
     });
     return { staging, facts: readiness.facts, gatewayPort };
   }
@@ -1057,6 +1094,7 @@ function remoteServeSshArgs(o: {
       ...(o.staging.opencodeConfigPath ? { OPENCODE_CONFIG: o.staging.opencodeConfigPath } : {}),
     },
     envFile: o.staging.envFilePath,
+    ...(o.staging.accountKeysFilePath ? { extraEnvFile: o.staging.accountKeysFilePath } : {}),
     unsetRemoteEnv: REMOTE_ENV_DENY,
     pathPrepend: [remoteNodeDir(o.facts), remoteSessionBinDir(o.staging.sessionHome)],
     bin: o.bin,

@@ -9,7 +9,8 @@ import {
 } from "./engine-health-store.js";
 import { clearContradictedHealth } from "./engine-health-clear.js";
 import { isRemoteTarget } from "./remote-target.js";
-import type { EngineLimitEngineSnapshot, EngineLimitWindow, ModelRegistry, RemoteTarget } from "./types.js";
+import { bindingHealthRecord, engineReadKeys } from "./engine-health-keys.js";
+import type { EngineLimitEngineSnapshot, EngineLimitWindow, JinnConfig, ModelRegistry, RemoteTarget } from "./types.js";
 
 // Re-exported so the store split is invisible to callers: every consumer of this
 // module reads a record and asks a question about it in the same breath.
@@ -230,14 +231,23 @@ export function noteLimitReading(engine: string, snapshot: Pick<EngineLimitEngin
   clearContradictedHealth(engine, snapshot.windows, Date.parse(snapshot.refreshedAt));
 }
 
+/** The record an engine reads as: its own key's, and for opencode the provider key's when that one is out. */
+function engineRecord(health: EngineHealthReading, name: string, config: Pick<JinnConfig, "engines"> | undefined): EngineHealth {
+  const records = engineReadKeys(name, config).flatMap((key) => health[key] ?? []);
+  const binding = bindingHealthRecord(records);
+  return binding !== undefined && binding.state !== "ok" ? binding : health[name] ?? { state: "ok" as const };
+}
+
 /** The registry as an API consumer reads it: installed availability from the
- *  registry, the live reading beside it. */
+ *  registry, the live reading beside it. With `config`, opencode reads out when
+ *  the provider of its configured model is (health is kept per provider). */
 export function withEngineHealth(
   registry: ModelRegistry,
+  config?: Pick<JinnConfig, "engines">,
 ): Record<string, ModelRegistry[string] & { health: EngineHealth }> {
   const health = readEngineHealth();
   return Object.fromEntries(Object.entries(registry).map(([name, entry]) => [
     name,
-    { ...entry, health: health[name] ?? { state: "ok" as const } },
+    { ...entry, health: engineRecord(health, name, config) },
   ]));
 }

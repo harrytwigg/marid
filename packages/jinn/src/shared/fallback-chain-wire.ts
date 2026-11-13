@@ -84,6 +84,10 @@ export interface ResolvedFallbackLink extends FallbackLink {
    *  for a session on a remote host, which host lacks the engine's CLI. */
   skipDetail?: string;
   health?: FallbackLinkHealth;
+  /** An opencode link naming no model: the provider its turns run on (the engine's configured model's), so
+   *  health is read under `opencode/<provider>`. Set on a session's or employee's own link only, and never
+   *  pins the session's model. */
+  healthProvider?: string;
 }
 
 /** A link a hop passed over. */
@@ -238,6 +242,27 @@ export function fallbackLinkLabel(link: FallbackLink): string {
   return [link.engine, link.profile, link.model].filter(Boolean).join(" · ");
 }
 
+/** An opencode account as a chain link's validation sees it (`engines.opencode.accounts`). */
+export interface FallbackOpencodeAccount {
+  name: string;
+  /** The provider id links name: `<provider>/<model>`. */
+  provider: string;
+  /** The model ids the account serves, without the provider. Absent: not known (a built-in provider, or the catalogue is not). */
+  models?: readonly string[];
+  keyEnv?: string;
+  /** The gateway's environment has no value for `keyEnv`. Set only where an environment is known (never in the web). */
+  keyMissing?: boolean;
+  /** The account's base has models but its endpoint records have not loaded, so its staged block would be empty. */
+  unstaged?: boolean;
+}
+
+/** What chain validation knows of opencode's models and accounts. */
+export interface FallbackOpencodeContext {
+  accounts: readonly FallbackOpencodeAccount[];
+  /** The provider ids of opencode's catalogue. Absent or empty: the catalogue is not known, so no provider is called unknown. */
+  providers?: ReadonlySet<string>;
+}
+
 /** What the validator needs to know about the instance. */
 export interface FallbackChainContext {
   /** Every engine name this build knows. */
@@ -251,6 +276,9 @@ export interface FallbackChainContext {
   /** Asked about each duplicate; returning true tolerates it (the first entry stays and
    *  no problem is reported). The loader tolerates what the legacy validator accepted. */
   onDuplicate?: (duplicate: FallbackChainDuplicate) => boolean;
+  /** opencode's accounts and catalogue, where they are known: an opencode link is then
+   *  checked against them. Absent (a config load, which has no catalogue): nothing is. */
+  opencode?: FallbackOpencodeContext;
 }
 
 /** A chain entry that repeats an earlier one, as {@link FallbackChainContext.onDuplicate} sees it. */
@@ -274,11 +302,37 @@ function modelProblems(where: string, entry: unknown): string[] {
   return typeof model === "string" && model.trim() && !CONTROL_CHARACTER_RE.test(model) ? [] : [`${where}.model must be a model id`];
 }
 
+/**
+ * What is wrong with an opencode link `provider/model` given what is known of the
+ * accounts and the catalogue: a model its account does not serve, an account whose
+ * key variable is unset (server side only), a provider that is neither an account's
+ * nor in the catalogue (only when the catalogue is known). Advisory: the catalogue
+ * is not known at config load, so a chain is never refused for these.
+ */
+export function opencodeLinkProblems(where: string, link: FallbackLink, opencode: FallbackOpencodeContext | undefined): string[] {
+  if (!opencode || link.engine !== "opencode" || link.model === undefined) return [];
+  const slash = link.model.indexOf("/");
+  if (slash <= 0) return [];
+  const provider = link.model.slice(0, slash);
+  const account = opencode.accounts.find((a) => a.provider === provider);
+  if (account) return accountLinkProblems(where, link.model, link.model.slice(slash + 1), account);
+  const known = opencode.providers;
+  return known && known.size > 0 && !known.has(provider) ? [`${where}: provider "${provider}" is not in opencode's catalogue or engines.opencode.accounts`] : [];
+}
+
+function accountLinkProblems(where: string, id: string, model: string, account: FallbackOpencodeAccount): string[] {
+  return [
+    ...(account.models !== undefined && !account.models.includes(model) ? [`${where}: model "${id}" is not served by account "${account.name}"`] : []),
+    ...(account.unstaged ? [`${where}: account "${account.name}": the base's endpoints are not known yet (model details have not loaded)`] : []),
+    ...(account.keyMissing && account.keyEnv ? [`${where}: account "${account.name}" has no key: ${account.keyEnv} is not set`] : []),
+  ];
+}
+
 function entryProblems(where: string, entry: unknown, ctx: FallbackChainContext): string[] {
   const link = fallbackLinkOf(entry);
   if (!link) return [`${where} must be an engine name or a mapping with engine, profile and model`];
   const engine = ctx.engines.includes(link.engine) ? [] : [`${where}: "${link.engine}" is not a known engine (${ctx.engines.join(", ")})`];
-  return [...engine, ...profileProblems(where, link, ctx), ...modelProblems(where, entry)];
+  return [...engine, ...profileProblems(where, link, ctx), ...modelProblems(where, entry), ...opencodeLinkProblems(where, link, ctx.opencode)];
 }
 
 /**

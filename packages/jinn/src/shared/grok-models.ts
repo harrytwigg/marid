@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import type { ModelInfo } from "./types.js";
 import { logger } from "./logger.js";
+import { buildEngineChildEnv } from "./child-env.js";
 
 export const GROK_EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"];
 
@@ -83,7 +84,7 @@ export async function discoverGrokModels(bin: string): Promise<GrokModelDiscover
     };
 
     try {
-      const proc = spawn(bin, ["models"], { stdio: ["ignore", "pipe", "pipe"] });
+      const proc = spawn(bin, ["models"], { env: buildEngineChildEnv(process.env), stdio: ["ignore", "pipe", "pipe"] });
       proc.stdout.on("data", (d: Buffer) => (out += d.toString()));
       proc.stderr.on("data", (d: Buffer) => (out += d.toString()));
 

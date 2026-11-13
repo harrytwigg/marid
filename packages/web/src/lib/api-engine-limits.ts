@@ -19,6 +19,20 @@ export interface EngineLimitAccountSnapshot extends EngineLimitEngineSnapshot {
   hostUnreachable?: true
   /** Health recorded this account at its limit; `until` is the ISO reset. */
   exhausted?: { until?: string }
+  /** opencode accounts only (the fields below): the provider id chains name, `<provider>/<model>`. */
+  provider?: string
+  /** The provider this account clones; absent for a built-in provider declared for a name. */
+  base?: string
+  /** The variable's name, never its value. */
+  keyEnv?: string
+  /** With `base`: whether `keyEnv` is set in the gateway's environment. */
+  keySet?: boolean
+  /** The provider's last refusal; arrives with failure classification. */
+  lastFailure?: { class: "quota" | "auth" | "model-access"; at: string; reason?: string }
+  /** When health stops holding the provider: `recheckAt`, else `until`. */
+  nextTryAt?: string
+  /** The account's doctor problems. */
+  problems?: string[]
 }
 
 export interface EngineLimitsResponse {

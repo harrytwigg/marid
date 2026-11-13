@@ -1,6 +1,8 @@
 import { initDb } from '../shared/db.js';
 import { classifyEngineFailureText, hasEngineFailureClass } from '../shared/engine-failure.js';
 import { readEngineHealth } from '../shared/engine-health.js';
+import { bindingHealthRecord, engineReadKeys } from '../shared/engine-health-keys.js';
+import type { JinnConfig } from '../shared/types.js';
 import { logger } from '../shared/logger.js';
 import { isBlockDeclared, listWorkItemEvents } from './event-log.js';
 import {
@@ -82,6 +84,8 @@ export interface AvailabilityResumeDeps {
    * `gateway/`.
    */
   rearm(workItemId: string): AvailabilityRearmResult;
+  /** The gateway's config, for the model an opencode session with none runs on (health is kept per provider). */
+  config?: () => JinnConfig;
   /** Test seam. */
   now?: () => Date;
 }
@@ -107,7 +111,7 @@ export function sweepAvailabilityResumes(deps: AvailabilityResumeDeps): number {
   let resumed = 0;
   for (const item of CANDIDATE_STATUSES.flatMap((status) => listWorkItems({ status }))) {
     if (!isClockRestartable(item)) continue;
-    const due = dueForResume(item.id, now);
+    const due = dueForResume(item.id, now, deps);
     if (due === undefined) continue;
     // The sweep has already answered the question `rate_limit_cooldown` asks, and
     // from a more specific source than its generic 30 minutes, so letting it
@@ -125,14 +129,14 @@ export function sweepAvailabilityResumes(deps: AvailabilityResumeDeps): number {
 /** Whether this Todo is waiting on a provider that has come back, and on whose
  *  word that was decided. Undefined for every Todo this sweep has no business
  *  touching, which is nearly all of them. */
-function dueForResume(workItemId: string, now: Date): DueResume | undefined {
+function dueForResume(workItemId: string, now: Date, deps: AvailabilityResumeDeps): DueResume | undefined {
   const attempts = listWorkItemAttemptRuns(workItemId);
   // An attempt is still going: whatever it is doing outranks a clock.
   if (attempts.some((attempt) => attempt.endedAt === null)) return undefined;
   const run = lastSettledRun(attempts);
   if (!run || !isAvailabilityFailure(run)) return undefined;
   if (alreadyResumed(workItemId, run.id)) return undefined;
-  const reset = resolveReset(run, now);
+  const reset = resolveReset(run, now, deps);
   const named = reset.source === "stated" || reset.source === "engine-health";
   const ageFrom = named ? reset.at : Date.parse(run.endedAt);
   if (now.getTime() - ageFrom > MAX_RESUMABLE_AGE_MS) return undefined;
@@ -146,7 +150,7 @@ const declinedRuns = new Set<string>();
 
 /** Hand the Todo to the port and, if it landed, write the resume down. */
 function resumeOne(workItemId: string, due: DueResume, deps: AvailabilityResumeDeps): boolean {
-  const engine = engineOf(due.run);
+  const engine = servedBy(due.run)?.engine;
   const landed = deps.rearm(workItemId);
   if ('unavailable' in landed) {
     // The sweep asks again every interval for up to a day; say so once per run.
@@ -209,11 +213,11 @@ function isAvailabilityFailure(run: SettledRun): boolean {
  * window. The last is a floor rather than a fact — it exists so a failure that
  * named no reopening still comes back rather than waiting for a human.
  */
-function resolveReset(run: SettledRun, now: Date): Reset {
+function resolveReset(run: SettledRun, now: Date, deps: AvailabilityResumeDeps): Reset {
   const stated = classifyEngineFailureText(run.error).resetsAt;
   if (stated !== undefined) return { at: stated * 1000, source: 'stated' };
-  const engine = engineOf(run);
-  const health = engine === undefined ? undefined : engineReset(engine, now);
+  const served = servedBy(run);
+  const health = served === undefined ? undefined : engineReset(served, now, deps.config?.());
   if (health !== undefined) return { at: health, source: 'engine-health' };
   return { at: Date.parse(run.endedAt) + RESPAWN_RATE_LIMIT_COOLDOWN_MS, source: 'cooldown' };
 }
@@ -228,20 +232,28 @@ function resolveReset(run: SettledRun, now: Date): Reset {
  * is the engine saying the window it named has closed. A live record that named
  * no window says nothing, so the caller falls through to the cooldown floor.
  */
-function engineReset(engine: string, now: Date): number | undefined {
-  const record = readEngineHealth(now)[engine];
+function engineReset(served: ServedBy, now: Date, config: JinnConfig | undefined): number | undefined {
+  const health = readEngineHealth(now);
+  // opencode's health is per provider: its provider's record first, then the engine's.
+  const records = engineReadKeys(served.engine, config, served.model).flatMap((key) => health[key] ?? []);
+  const record = bindingHealthRecord(records);
   if (record === undefined) return undefined;
   if (record.until !== undefined) return Date.parse(record.until);
   return record.state === 'ok' ? now.getTime() : undefined;
 }
 
-/** Which engine served the attempt, read off the session that ran it. The run
- *  ledger does not carry one, and without it engine health cannot be asked. */
-function engineOf(run: SettledRun): string | undefined {
+interface ServedBy {
+  engine: string;
+  model?: string;
+}
+
+/** Which engine (and model) served the attempt, read off the session that ran it. The run
+ *  ledger does not carry either, and without them engine health cannot be asked. */
+function servedBy(run: SettledRun): ServedBy | undefined {
   const row = initDb()
-    .prepare('SELECT engine FROM sessions WHERE id = ?')
-    .get(run.sessionId) as { engine: string | null } | undefined;
-  return row?.engine ?? undefined;
+    .prepare('SELECT engine, model FROM sessions WHERE id = ?')
+    .get(run.sessionId) as { engine: string | null; model: string | null } | undefined;
+  return row?.engine ? { engine: row.engine, ...(row.model ? { model: row.model } : {}) } : undefined;
 }
 
 /** One resume per failure. The settled run's id is the failure's identity, and

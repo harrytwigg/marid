@@ -3,6 +3,7 @@ import type { EngineLimitBucket, EngineLimitEngineSnapshot, EngineLimitWindow, J
 import { baseSnapshot, isoFromSeconds, nowIso } from "./engine-limits-util.js";
 import { initDb } from "./db.js";
 import { readEngineSpend, type EngineSpendRow } from "../sessions/engine-spend.js";
+import { declaredOpencodeAccounts, opencodeAccountByProvider } from "./opencode-accounts-config.js";
 
 /**
  * opencode's limits, metered from jinn's own turn ledger.
@@ -34,19 +35,59 @@ export const OPENCODE_GO_WINDOWS: readonly WindowShape[] = [
 
 const LONGEST_WINDOW_MS = Math.max(...OPENCODE_GO_WINDOWS.map((window) => window.minutes)) * 60_000;
 
+function positiveLimit(table: Record<string, number> | undefined, key: string): number | undefined {
+  if (!table || typeof table !== "object") return undefined;
+  const value = table[key];
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
 /** The monthly allowance that meters `model`, or undefined when none does. An
  *  exact key beats its provider's `provider/*` key; a non-positive or
  *  non-numeric value meters nothing rather than dividing by it. */
 export function monthlyLimitFor(model: string, limits: OpencodeUsageLimitsConfig | undefined): number | undefined {
   const table = limits?.monthlyUsd;
-  if (!table || typeof table !== "object") return undefined;
   const slash = model.indexOf("/");
   const candidates = slash > 0 ? [model, `${model.slice(0, slash)}/*`] : [model];
   for (const key of candidates) {
-    const value = table[key];
-    if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
+    const value = positiveLimit(table, key);
+    if (value !== undefined) return value;
   }
   return undefined;
+}
+
+/**
+ * The monthly allowance that meters `<provider>/<model>`, accounts included
+ * (docs/design/opencode-accounts.md, "Metering and health"):
+ *
+ * 1. a declared account's own `usageLimits.monthlyUsd` for its provider: the
+ *    exact model beats `*`;
+ * 2. the engine-level `usageLimits` key naming the provider directly
+ *    (`<provider>/<model>`, then `<provider>/*`), which still meters any
+ *    provider, an account's included;
+ * 3. an account that declares no limits of its own and has a `base`: the
+ *    engine-level keys of its base, with the same exact-then-`*` order.
+ *
+ * Undefined meters nothing.
+ */
+export function meteredLimitFor(config: JinnConfig, model: string): number | undefined {
+  const engineLimits = config.engines.opencode?.usageLimits;
+  const slash = model.indexOf("/");
+  const account = slash > 0 ? opencodeAccountByProvider(config, model.slice(0, slash)) : undefined;
+  if (!account) return monthlyLimitFor(model, engineLimits);
+  const bare = model.slice(slash + 1);
+  const own = positiveLimit(account.monthlyUsd, bare) ?? positiveLimit(account.monthlyUsd, "*");
+  if (own !== undefined) return own;
+  const direct = monthlyLimitFor(model, engineLimits);
+  if (direct !== undefined || account.monthlyUsd !== undefined || account.base === undefined) return direct;
+  return monthlyLimitFor(`${account.base}/${bare}`, engineLimits);
+}
+
+/** The providers' own model ids an account's limits name outright, so a model with no spend yet still shows its windows. */
+function accountModels(config: JinnConfig): string[] {
+  return declaredOpencodeAccounts(config).flatMap((account) => {
+    const named = [...(account.models ?? []), ...Object.keys(account.monthlyUsd ?? {}).filter((key) => key !== "*")];
+    return account.monthlyUsd === undefined ? [] : named.map((model) => `${account.provider}/${model}`);
+  });
 }
 
 export interface MeteredWindow {
@@ -108,7 +149,7 @@ export interface OpencodeLimitsDeps {
 
 export const OPENCODE_UNMETERED_REASON =
   "OpenCode exposes no account quota endpoint, and no allowance is configured to meter jinn's own opencode spend against. "
-  + "Set engines.opencode.usageLimits.monthlyUsd to meter it (docs/engines-opencode.md).";
+  + "Set engines.opencode.usageLimits.monthlyUsd (or an account's usageLimits) to meter it (docs/engines-opencode.md).";
 
 /** The ledger grouped by the model each row was charged to, with what the
  *  whole engine spent. Rows name the model the turn ran on, resolved when it
@@ -116,8 +157,13 @@ export const OPENCODE_UNMETERED_REASON =
  *  opencode picked its own) is charged to today's default as the best guess.
  *  The default always has a group, even an empty one, so an engine that has
  *  spent nothing yet still shows its windows at zero. */
-function spendByModel(rows: readonly EngineSpendRow[], defaultModel: string | undefined): { byModel: Map<string, EngineSpendRow[]>; costUsd: number } {
+function spendByModel(
+  rows: readonly EngineSpendRow[],
+  defaultModel: string | undefined,
+  alsoShown: readonly string[] = [],
+): { byModel: Map<string, EngineSpendRow[]>; costUsd: number } {
   const byModel = new Map<string, EngineSpendRow[]>(defaultModel ? [[defaultModel, []]] : []);
+  for (const model of alsoShown) if (!byModel.has(model)) byModel.set(model, []);
   let costUsd = 0;
   for (const row of rows) {
     costUsd += row.cost;
@@ -130,10 +176,10 @@ function spendByModel(rows: readonly EngineSpendRow[], defaultModel: string | un
 }
 
 /** One bucket per model an allowance meters, in model order. */
-function meteredBuckets(byModel: Map<string, EngineSpendRow[]>, limits: OpencodeUsageLimitsConfig, nowMs: number): EngineLimitBucket[] {
+function meteredBuckets(byModel: Map<string, EngineSpendRow[]>, config: JinnConfig, nowMs: number): EngineLimitBucket[] {
   const buckets: EngineLimitBucket[] = [];
   for (const [model, rows] of [...byModel].sort(([a], [b]) => a.localeCompare(b))) {
-    const monthlyUsd = monthlyLimitFor(model, limits);
+    const monthlyUsd = meteredLimitFor(config, model);
     if (monthlyUsd === undefined) continue;
     buckets.push({ id: model, name: model, planType: `${money(monthlyUsd)}/month`, windows: modelWindows(rows, monthlyUsd, nowMs) });
   }
@@ -144,44 +190,44 @@ function meteredBuckets(byModel: Map<string, EngineSpendRow[]>, limits: Opencode
 function unmeteredNote(available: boolean, defaultModel: string | undefined, defaultBucket: EngineLimitBucket | undefined): string | undefined {
   if (!available) return "opencode CLI is not installed.";
   if (defaultBucket) return undefined;
-  return `The engine default model${defaultModel ? ` ${defaultModel}` : ""} matches no engines.opencode.usageLimits.monthlyUsd key, so no window can mark opencode out.`;
+  return `The engine default model${defaultModel ? ` ${defaultModel}` : ""} matches no allowance, so no window is shown for it here. A spent window of any other metered model still marks that model's provider out.`;
 }
 
 /**
  * The opencode snapshot, or undefined when nothing is configured to meter — so
  * the caller keeps its plain "unsupported" answer for an unconfigured engine.
  *
- * `windows` are the engine default model's: that is the model a session with no
- * pin runs on, and engine health — which the windows feed — is one record per
- * engine, not per model. Every metered model, the default included, is also a
- * bucket, so a pinned model's allowance is visible in `jinn limits` and the API
- * even though it cannot mark the whole engine out. (The Limits page renders
- * top-level windows only.)
+ * `windows` are the engine default model's, for display: that is the model a
+ * session with no pin runs on. Health is not fed from them: it is one record
+ * per provider (`opencode/<provider>`), written from every bucket by
+ * `recordMeteredExhaustion`. Every metered model, the default included, is a
+ * bucket, so a pinned model's allowance is visible in `jinn limits` and the API.
+ * (The Limits page renders top-level windows only.)
  */
 export function collectOpencodeLimits(config: JinnConfig, deps: OpencodeLimitsDeps = {}): EngineLimitEngineSnapshot | undefined {
-  const limits = configuredLimits(config);
-  if (!limits) return undefined;
+  if (!meteringConfigured(config)) return undefined;
   const snap = baseSnapshot(config, "opencode");
   const nowMs = (deps.now ?? Date.now)();
   const readSpend = deps.readSpend ?? ((sinceMs: number) => readEngineSpend(initDb(), "opencode", sinceMs));
-  return meteredSnapshot(snap, config.engines.opencode?.model ?? snap.defaultModel, readSpend(nowMs - LONGEST_WINDOW_MS), limits, nowMs);
+  return meteredSnapshot(snap, config, config.engines.opencode?.model ?? snap.defaultModel, readSpend(nowMs - LONGEST_WINDOW_MS), nowMs);
 }
 
-/** The allowance table, when there is one with anything in it. */
-function configuredLimits(config: JinnConfig): OpencodeUsageLimitsConfig | undefined {
-  const limits = config.engines.opencode?.usageLimits;
-  return limits?.monthlyUsd && Object.keys(limits.monthlyUsd).length > 0 ? limits : undefined;
+/** Whether the engine-level table or any account's own table meters something. */
+export function meteringConfigured(config: JinnConfig): boolean {
+  const engineLimits = config.engines.opencode?.usageLimits?.monthlyUsd;
+  if (engineLimits && Object.keys(engineLimits).length > 0) return true;
+  return declaredOpencodeAccounts(config).some((account) => account.monthlyUsd !== undefined && Object.keys(account.monthlyUsd).length > 0);
 }
 
 function meteredSnapshot(
   snap: EngineLimitEngineSnapshot,
+  config: JinnConfig,
   defaultModel: string | undefined,
   rows: readonly EngineSpendRow[],
-  limits: OpencodeUsageLimitsConfig,
   nowMs: number,
 ): EngineLimitEngineSnapshot {
-  const { byModel, costUsd } = spendByModel(rows, defaultModel);
-  const buckets = meteredBuckets(byModel, limits, nowMs);
+  const { byModel, costUsd } = spendByModel(rows, defaultModel, accountModels(config));
+  const buckets = meteredBuckets(byModel, config, nowMs);
   const defaultBucket = buckets.find((bucket) => bucket.id === defaultModel);
   const note = unmeteredNote(snap.available, defaultModel, defaultBucket);
   return {

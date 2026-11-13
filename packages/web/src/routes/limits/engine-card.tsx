@@ -2,6 +2,7 @@ import { AlertTriangle } from "@/components/ui/icon"
 import type { EngineLimitAccountSnapshot, EngineLimitEngineSnapshot, EngineLimitWindow } from "@/lib/api"
 import { engineDisplayName } from "@/lib/engine-names"
 import { accountStatus } from "./account-status"
+import { AccountFacts, isOpencodeAccount, ModelBuckets } from "./opencode-account-parts"
 import { agoLabel, barColor, clampPercent, resetLabel, windowLabel } from "./format"
 import { deriveFreshness, type FreshnessKind } from "./use-engine-limits"
 
@@ -21,7 +22,7 @@ function badge(kind: FreshnessKind, engine: EngineLimitEngineSnapshot, now: numb
     case "unavailable":
       return { color: "var(--text-tertiary)", label: "Unavailable" }
     case "unsupported":
-      return { color: "var(--text-quaternary)", label: "Unsupported" }
+      return { color: "var(--text-quaternary)", label: "Not metered" }
     default:
       return { color: "var(--text-quaternary)", label: "No data" }
   }
@@ -141,12 +142,12 @@ function CardHeader({ engine, account, title, tone }: {
   )
 }
 
-function Windows({ engine, now }: { engine: EngineLimitEngineSnapshot; now: number }) {
+function Windows({ engine, now, emptyNote }: { engine: EngineLimitEngineSnapshot; now: number; emptyNote?: string }) {
   const windows = engine.windows || []
   if (windows.length === 0) {
     return (
       <div className="mt-[var(--space-6)] text-[length:var(--text-footnote)] text-[var(--text-tertiary)]">
-        No quota windows observed yet.
+        {emptyNote ?? "No quota windows observed yet."}
       </div>
     )
   }
@@ -162,12 +163,16 @@ function Windows({ engine, now }: { engine: EngineLimitEngineSnapshot; now: numb
 /** One configured agent: an engine, or an account (engine + profile) when the
  *  engine reports several. `account` carries the per-account state and `title`
  *  its name. */
-export function EngineCard({ engine, now, account, title }: {
+export interface EngineCardProps {
   engine: EngineLimitEngineSnapshot
   now: number
   account?: EngineLimitAccountSnapshot
   title?: string
-}) {
+  /** What a card with no windows of its own says instead of "No quota windows observed yet." */
+  emptyNote?: string
+}
+
+export function EngineCard({ engine, now, account, title, emptyNote }: EngineCardProps) {
   const { tone, note } = toneAndNote(engine, account, now)
   const creditLabel = creditLabelFor(engine)
 
@@ -185,7 +190,16 @@ export function EngineCard({ engine, now, account, title }: {
       )}
 
       <div className="flex-1">
-        <Windows engine={engine} now={now} />
+        {isOpencodeAccount(account) ? (
+          <>
+            <ModelBuckets buckets={account.buckets} provider={account.provider} now={now} />
+            <AccountFacts account={account} now={now} />
+          </>
+        ) : engine.name === "opencode" && engine.buckets?.some((b) => (b.windows?.length ?? 0) + (b.primary ? 1 : 0) > 0) ? (
+          <ModelBuckets buckets={engine.buckets} now={now} />
+        ) : (
+          <Windows engine={engine} now={now} emptyNote={emptyNote} />
+        )}
       </div>
 
       {creditLabel && (

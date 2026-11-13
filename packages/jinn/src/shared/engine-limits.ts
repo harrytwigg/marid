@@ -18,7 +18,9 @@ import { resolveBin } from "./resolve-bin.js";
 import { collectClaudeLimits } from "./engine-limits-claude.js";
 import { collectFreebuffLimits } from "./engine-limits-freebuff.js";
 import { collectMusecodeLimits } from "./engine-limits-musecode.js";
-import { collectOpencodeLimits, OPENCODE_UNMETERED_REASON } from "./engine-limits-opencode.js";
+import { collectOpencodeLimits, meteringConfigured, OPENCODE_UNMETERED_REASON } from "./engine-limits-opencode.js";
+import { collectOpencodeAccounts } from "./engine-limits-opencode-accounts.js";
+import { recordMeteredExhaustion } from "./engine-health-meter.js";
 import {
   baseSnapshot,
   isoFromSeconds,
@@ -29,6 +31,7 @@ import {
   str,
   type JsonRecord,
 } from "./engine-limits-util.js";
+import { buildEngineChildEnv } from "./child-env.js";
 
 export interface CollectEngineLimitsOptions {
   engine?: string;
@@ -80,7 +83,7 @@ async function readCodexRateLimits(config: JinnConfig): Promise<JsonRecord> {
     // Same .cmd constraint as above. Codex usage limits were unavailable on
     // Windows entirely because this threw EINVAL and the error was swallowed.
     const appServer = spawnableCommand(bin, ["app-server", "--stdio"]);
-    const child = spawn(appServer.command, appServer.args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true, ...appServer.options });
+    const child = spawn(appServer.command, appServer.args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true, env: buildEngineChildEnv(process.env), ...appServer.options });
     let stdout = "";
     let stderr = "";
     let settled = false;
@@ -347,7 +350,7 @@ export async function collectEngineLimits(
       engines[name] = await collectClaudeLimits(config);
     } else if (name === "codex") {
       engines[name] = await collectCodexLimits(config);
-    } else if (name === "opencode" && config.engines.opencode?.usageLimits) {
+    } else if (name === "opencode" && meteringConfigured(config)) {
       engines[name] = collectOpencodeLimits(config)
         ?? collectUnsupported(config, name, UNSUPPORTED_REASONS.opencode);
     } else if (name === "musecode") {
@@ -372,12 +375,17 @@ export async function collectEngineLimits(
     if (!LIVE_LIMIT_ENGINES.has(name) && engines[name].status === "live") engines[name].status = "snapshot";
     // Only a Claude reading carries every bucket the account is limited on (codex's leaves out all but its main
     // bucket), so only it may clear a record; the others record a spent window and nothing more.
+    // opencode's readings are metered per provider and recorded under `opencode/<provider>`, never the engine's own key.
     if (name === "claude") noteLimitReading(name, engines[name]);
+    else if (name === "opencode") recordMeteredExhaustion(engines[name].buckets);
     else recordExhaustedWindows(name, engines[name].windows);
   }
 
   // Every other Claude account, beside the default one (FR-073). Omitted with a
   // single account, so that response is unchanged (FR-078).
   const claudeAccounts = engines.claude ? await collectClaudeAccounts(config, engines.claude) : undefined;
-  return { generatedAt, default: config.engines.default, engines, ...(claudeAccounts ? { accounts: { claude: claudeAccounts } } : {}) };
+  // And each declared opencode account, read after the meter has written its health.
+  const opencodeAccounts = engines.opencode ? collectOpencodeAccounts(config, engines.opencode) : undefined;
+  const accounts = { ...(claudeAccounts ? { claude: claudeAccounts } : {}), ...(opencodeAccounts ? { opencode: opencodeAccounts } : {}) };
+  return { generatedAt, default: config.engines.default, engines, ...(Object.keys(accounts).length > 0 ? { accounts } : {}) };
 }

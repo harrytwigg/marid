@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -16,11 +16,13 @@ const restartRequest = vi.hoisted(() => ({
 
 vi.mock("../../gateway/lifecycle.js", () => lifecycle);
 vi.mock("../restart-request.js", () => restartRequest);
+const loaded = vi.hoisted(() => ({ config: { gateway: { host: "127.0.0.1", port: 21877 }, engines: { default: "claude" } } as Record<string, unknown> }));
 vi.mock("../../shared/config.js", () => ({
-  loadConfig: () => ({ gateway: { host: "127.0.0.1", port: 21877 }, engines: { default: "claude" } }),
+  loadConfig: () => loaded.config,
 }));
 
 const { runRestart } = await import("../restart.js");
+const { resetOpencodeAccountKeysForTest, setOpencodeAccountKeyEnv } = await import("../../shared/child-env.js");
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -50,5 +52,50 @@ describe("runRestart", () => {
     await runRestart({ takePort: true });
 
     expect(lifecycle.restartDetached).toHaveBeenCalledWith({ takePort: true, port: 21877 });
+  });
+
+  describe("account keys", () => {
+    const withAccount = (): void => {
+      loaded.config = {
+        gateway: { host: "127.0.0.1", port: 21877 },
+        engines: { default: "claude", opencode: { accounts: { acme: { provider: "acme-go", base: "opencode-go", keyEnv: "ACME_RESTART_KEY" } } } },
+      };
+    };
+
+    afterEach(() => {
+      loaded.config = { gateway: { host: "127.0.0.1", port: 21877 }, engines: { default: "claude" } };
+      resetOpencodeAccountKeysForTest();
+    });
+
+    it("warns, before the detached restart, that a declared account's key is in neither the vault nor the environment", async () => {
+      withAccount();
+      restartRequest.requestRestartFromGateway.mockResolvedValueOnce(false);
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        await runRestart();
+        const text = errors.mock.calls.map((call) => String(call[0])).join("\n");
+        expect(text).toContain("acme (ACME_RESTART_KEY)");
+        expect(text).toContain("will run without it");
+        expect(text).toContain("POST /api/system/restart");
+        expect(lifecycle.restartDetached).toHaveBeenCalledTimes(1);
+      } finally {
+        errors.mockRestore();
+      }
+    });
+
+    it("stays quiet when the key is in the vault, and when the running gateway does the restart", async () => {
+      withAccount();
+      process.env.ACME_RESTART_KEY = "sk-restart";
+      setOpencodeAccountKeyEnv(["ACME_RESTART_KEY"]);
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        restartRequest.requestRestartFromGateway.mockResolvedValueOnce(false);
+        await runRestart();
+        await runRestart();
+        expect(errors).not.toHaveBeenCalled();
+      } finally {
+        errors.mockRestore();
+      }
+    });
   });
 });

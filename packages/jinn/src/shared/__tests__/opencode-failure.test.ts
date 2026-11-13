@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { classifyOpencodeFailure, isOpencodeRefusal } from "../opencode-failure.js";
+import { unservedModelError } from "../opencode-accounts.js";
+import { linkFailure } from "../../sessions/fallback-link-run.js";
 
 /** opencode's `{type, message, status}` as both transports put it into a turn's error text. */
 
@@ -50,5 +52,22 @@ describe("isOpencodeRefusal", () => {
     expect(isOpencodeRefusal("provider.auth: Model access is disabled (HTTP 403)")).toBe(true);
     expect(isOpencodeRefusal("provider.quota: Insufficient account funds (HTTP 402)")).toBe(false);
     expect(isOpencodeRefusal("provider.quota: Go usage limit exceeded (HTTP 429)")).toBe(false);
+  });
+});
+
+describe("an account model this host's opencode cannot serve", () => {
+  const error = unservedModelError("opencode-go-b/qwen3.8-max", "go-b");
+
+  it("is model access, a refusal: the turn hops and only that model is held", () => {
+    expect(classifyOpencodeFailure(error)).toEqual({ kind: "model-access" });
+    expect(isOpencodeRefusal(error)).toBe(true);
+  });
+
+  it("fails a chain link as an invalid model, so the walk moves on", () => {
+    expect(linkFailure({ result: "", error } as never, "opencode")).toMatchObject({ reason: "invalid-model" });
+  });
+
+  it("does not catch other prose that mentions an account", () => {
+    expect(classifyOpencodeFailure('model "x" is not served by account "go-b"')).toBeUndefined();
   });
 });

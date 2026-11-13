@@ -15,6 +15,7 @@ import { settleBeforeRestart } from "./restart-settle.js";
 import { stopAndWait, startDaemon, waitForDashboardReady, waitForPortFree, waitForPortListening } from "./lifecycle.js";
 import { closeLogger, configureLogger, logger } from "../shared/logger.js";
 import { restartEntryOptionsFromArgv } from "./restart-entry-options.js";
+import { withOpencodeAccountKeys } from "../shared/child-env.js";
 
 // stdio is ignored in detached mode — surface crashes to the log file instead of
 // letting them vanish.
@@ -31,7 +32,7 @@ async function continuesFromMovedHome(env: NodeJS.ProcessEnv = process.env): Pro
   const settled = await settleBeforeRestart(env, JINN_HOME, { log: (message) => logger.info(message) });
   if (!settled.respawn) return false;
   logger.info("restart-entry: the home moved; continuing from its new location…");
-  spawn(process.execPath, process.argv.slice(1), { detached: true, stdio: "ignore", env }).unref();
+  spawn(process.execPath, process.argv.slice(1), { detached: true, stdio: "ignore", env: withOpencodeAccountKeys(env) }).unref();
   return true;
 }
 

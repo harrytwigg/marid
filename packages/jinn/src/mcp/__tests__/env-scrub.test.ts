@@ -172,6 +172,27 @@ process.exit(0);`);
     expect(dumped.keep).toBe("yes");            // unrelated env kept
   }, 20_000);
 
+  it("strips the account key variables an opencode parent lists in JINN_SCRUB_ENV, and the list, from the child env", async () => {
+    const outFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "scrub-list-")), "env.json");
+    const dumpScript = path.join(path.dirname(outFile), "dump.mjs");
+    fs.writeFileSync(dumpScript, `import fs from "node:fs";
+fs.writeFileSync(${JSON.stringify(outFile)}, JSON.stringify({
+  a: process.env.ACME_LISTED_KEY_A ?? null,
+  b: process.env.ACME_LISTED_KEY_B ?? null,
+  list: process.env.JINN_SCRUB_ENV ?? null,
+  keep: process.env.ACME_UNLISTED ?? null,
+}));`);
+    const code = await new Promise<number>((resolve) => {
+      const child = spawn(process.execPath, [DIST_SCRUB, process.execPath, dumpScript], {
+        env: { ...process.env, ACME_LISTED_KEY_A: "sk-a", ACME_LISTED_KEY_B: "sk-b", JINN_SCRUB_ENV: "ACME_LISTED_KEY_A,ACME_LISTED_KEY_B", ACME_UNLISTED: "yes" },
+        stdio: "ignore",
+      });
+      child.on("exit", (c) => resolve(c ?? -1));
+    });
+    expect(code).toBe(0);
+    expect(JSON.parse(fs.readFileSync(outFile, "utf-8"))).toEqual({ a: null, b: null, list: null, keep: "yes" });
+  }, 20_000);
+
   it("propagates a non-zero child exit code", async () => {
     const script = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "scrub-")), "fail.mjs");
     fs.writeFileSync(script, "process.exit(42);");

@@ -7,6 +7,8 @@ import { JINN_HOME } from "../shared/paths.js";
 import { findBuiltinMcp } from "../mcp/builtin-name.js";
 import { LEGACY_CODENAME } from "../shared/codename.js";
 import type { OpencodeApi } from "./opencode-version.js";
+import type { OpencodeProviderBlock } from "../shared/opencode-accounts.js";
+import type { OpencodeAccountStaging } from "./opencode-accounts.js";
 
 /**
  * The company toolset, as opencode takes it.
@@ -102,6 +104,8 @@ export interface OpencodeSessionConfig {
   plugin?: string[];
   /** Only for a purpose-built toolset session: the confined agent below. */
   agent?: Record<string, OpencodeConfinedAgent>;
+  /** One block per declared opencode account that has a base (opencode-accounts.ts). */
+  provider?: Record<string, OpencodeProviderBlock>;
 }
 
 /** The confined agent an opencode toolset session runs as. */
@@ -207,6 +211,8 @@ export interface OpencodeV2SessionConfig {
   mcp: { servers: Record<string, Omit<OpencodeMcpServer, "enabled"> & { codemode: false }> };
   plugins?: string[];
   agents?: Record<string, { mode: "primary"; permissions: OpencodeV2PermissionRule[] }>;
+  /** The same `provider` blocks as 1.x's: OpenCode 2 reads them in this shape too. */
+  provider?: Record<string, OpencodeProviderBlock>;
 }
 
 /** The 1.x config, as OpenCode 2 takes it: each server kept a tool server
@@ -225,19 +231,29 @@ export function toOpencodeV2SessionConfig(config: OpencodeSessionConfig): Openco
     mcp: { servers },
     ...(config.plugin?.length ? { plugins: config.plugin } : {}),
     ...(agents ? { agents } : {}),
+    ...(config.provider ? { provider: config.provider } : {}),
   };
 }
 
+/** The accounts' `provider` blocks for a binary of this API, or undefined when there are none. */
+function accountProviders(accounts: OpencodeAccountStaging | undefined, api: OpencodeApi): Record<string, OpencodeProviderBlock> | undefined {
+  const providers = accounts?.providers(api);
+  return providers && Object.keys(providers).length > 0 ? providers : undefined;
+}
+
 /** The config file for a session in the shape its binary's API reads, with
- *  `plugins` added to the operator's own (staged even without MCP servers). */
+ *  `plugins` added to the operator's own and one `provider` block per account
+ *  (staged even without MCP servers). */
 export function buildOpencodeSessionConfigFor(
   resolvedMcp: ResolvedMcpConfig | undefined,
   api: OpencodeApi,
   plugins: string[] = [],
+  accounts?: OpencodeAccountStaging,
 ): OpencodeSessionConfig | OpencodeV2SessionConfig | undefined {
-  const base = buildOpencodeSessionConfig(resolvedMcp) ?? (plugins.length ? { $schema: OPENCODE_CONFIG_SCHEMA, mcp: {} } : undefined);
+  const provider = accountProviders(accounts, api);
+  const base = buildOpencodeSessionConfig(resolvedMcp) ?? (plugins.length || provider ? { $schema: OPENCODE_CONFIG_SCHEMA, mcp: {} } : undefined);
   if (!base) return undefined;
-  const config = plugins.length ? { ...base, plugin: plugins } : base;
+  const config = { ...base, ...(plugins.length ? { plugin: plugins } : {}), ...(provider ? { provider } : {}) };
   return api === 2 ? toOpencodeV2SessionConfig(config) : config;
 }
 
@@ -252,8 +268,9 @@ export function writeOpencodeSessionConfig(
   sessionId: string,
   api: OpencodeApi = 1,
   plugins: string[] = [],
+  accounts?: OpencodeAccountStaging,
 ): OpencodeConfigHandle {
-  const config = buildOpencodeSessionConfigFor(resolvedMcp, api, plugins);
+  const config = buildOpencodeSessionConfigFor(resolvedMcp, api, plugins, accounts);
   if (!config) return { staged: false };
 
   const configDir = path.join(JINN_HOME, "tmp", "opencode", safeSessionId(sessionId));
