@@ -165,8 +165,10 @@ same on 1.x and 2.x:
   `model-not-served` and the pickers do not offer it. A turn whose own model is
   one of them (on the local binary or a remote host's facts) fails before
   opencode is launched, with `<model> is not served by account "<name>" on
-  OpenCode 1.x (models on another endpoint need OpenCode 2)`. `jinn doctor`
-  reports such models for the local binary.
+  OpenCode 1.x (models on another endpoint need OpenCode 2)`. That error reads
+  as model access (`opencode-failure.ts`): the turn, or the chain link, hops to
+  the next link, and only `opencode/<provider>/<model>` is held, for the
+  re-probe interval. `jinn doctor` reports such models for the local binary.
 - **A session gets only the accounts its chain reaches.** An account's block and
   key are staged for a session only when its provider is the provider of the
   session's own model, of an opencode link in its resolved chain (the same
