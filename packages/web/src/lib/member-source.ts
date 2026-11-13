@@ -168,11 +168,24 @@ async function placeOf(id: string): Promise<TodoPlace | null> {
 /** The board a sub-board's Todos are read on: the one the anchor Todo's root is on, which is the board the gateway
  *  scopes a member's board reads by. A sub-Todo can name another department than its root, so the anchor's own is
  *  not the answer. Null where the anchor, or its root, is not one the member may read. */
-async function boardOfAnchor(anchor: string): Promise<string | null> {
+async function resolveBoardOfAnchor(anchor: string): Promise<string | null> {
   const place = await placeOf(anchor)
   if (!place) return null
   if (!place.rootId || place.rootId === place.id) return place.department
   return (await placeOf(place.rootId))?.department ?? null
+}
+
+/** The lookups under way, one per anchor: a sub-board asks for each of its columns at once, and they all wait on the one
+ *  answer instead of each reading the Todo and its root again. An answer is held only while it is in flight, so the next
+ *  read (a refetch, a reopened board) looks again and never sees a board a Todo has since left. */
+const boardLookups = new Map<string, Promise<string | null>>()
+
+function boardOfAnchor(anchor: string): Promise<string | null> {
+  const under = boardLookups.get(anchor)
+  if (under) return under
+  const lookup = resolveBoardOfAnchor(anchor).finally(() => boardLookups.delete(anchor))
+  boardLookups.set(anchor, lookup)
+  return lookup
 }
 
 async function readSubBoard(params: URLSearchParams, anchor: string, init: RequestInit): Promise<Response> {

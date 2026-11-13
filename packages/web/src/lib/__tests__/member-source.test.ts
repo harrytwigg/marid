@@ -43,6 +43,36 @@ describe("member request source", () => {
     ])
   })
 
+  it("resolves the board once for the columns it asks for at once, and looks again for the next read", async () => {
+    request.mockImplementation(async (path: string) => {
+      if (path === "/api/member/todos/C-1") return ok({ workItem: { id: "C-1", department: "design", rootId: "R-1" } })
+      if (path === "/api/member/todos/R-1") return ok({ workItem: { id: "R-1", department: "ops", rootId: "R-1" } })
+      return ok({ workItems: [], total: 0 })
+    })
+    const statuses = ["backlog", "executing", "in_review", "blocked", "done", "cancelled"]
+    await Promise.all(statuses.map((status) => source(`/api/work-items?descendantOf=C-1&status=${status}&limit=20`, { method: "GET" })))
+    const lookups = () => calls().map((c) => c.path).filter((path) => path.startsWith("/api/member/todos/"))
+    // The Todo and its root, read once for all six columns (not twelve reads).
+    expect(lookups().sort()).toEqual(["/api/member/todos/C-1", "/api/member/todos/R-1"])
+    expect(calls().filter((c) => c.path.startsWith("/api/member/boards/ops/todos"))).toHaveLength(6)
+    request.mockClear()
+    await source("/api/work-items?descendantOf=C-1&status=backlog", { method: "GET" })
+    expect(lookups().sort()).toEqual(["/api/member/todos/C-1", "/api/member/todos/R-1"])
+  })
+
+  it("does not remember a failed lookup: the next read asks again", async () => {
+    let anchorOk = false
+    request.mockImplementation(async (path: string) => {
+      if (path === "/api/member/todos/A-1") return anchorOk ? ok({ workItem: { id: "A-1", department: "platform" } }) : ok({}, 404)
+      return ok({ workItems: [], total: 0 })
+    })
+    const first = await source("/api/work-items?descendantOf=A-1&status=backlog", { method: "GET" })
+    expect(((await first.json()) as { total: number }).total).toBe(0)
+    anchorOk = true
+    await source("/api/work-items?descendantOf=A-1&status=backlog", { method: "GET" })
+    expect(calls().some((c) => c.path.startsWith("/api/member/boards/platform/todos"))).toBe(true)
+  })
+
   it("reads a sub-board on its anchor's root's board, not the anchor's own department", async () => {
     request.mockImplementation(async (path: string) => {
       if (path === "/api/member/todos/C-1") return ok({ workItem: { id: "C-1", department: "design", rootId: "R-1" } })

@@ -1,7 +1,8 @@
 import { parseSelectedSession } from '@/components/chat/chat-route-helpers'
 import { focusedGroup, groupsOf, openDocTab, paneSessionForTab, workingSetFromLayout, type SplitLayout } from './split-layout'
+import { openPinnedDocTab } from './pinned-tabs'
 import { loadSplitLayout } from './split-layout-storage'
-import { isChatTabId, isTodosTabId, TODOS_TAB_ID } from './tab-kind'
+import { isChatTabId, isTodosTabId, TODOS_TAB_ID, todoBoardTabId } from './tab-kind'
 
 /** What the page asks of the layout about the Todos board's tab (tab-kind.ts). */
 
@@ -27,9 +28,19 @@ export function isChatlessLayout(layout: SplitLayout): boolean {
  * with the tab in a pane of its own beside chats, the layout's own chat (the route must name one, or the page
  * draws its composer beside them); else none (a layout of standalone tabs alone). */
 export function routeChatForTodosOpen(layout: SplitLayout): string | null {
-  const next = openDocTab(layout, null, TODOS_TAB_ID)
+  return routeChatFor(openDocTab(layout, null, TODOS_TAB_ID), TODOS_TAB_ID)
+}
+
+/** The same for a Todo's sub-board pinned as a tab: a board tab is no chat's, so a route left on no chat has the
+ * page draw its composer over the tab until it is moved to the chat the layout keeps beside it. */
+export function routeChatForTodoBoardOpen(layout: SplitLayout, todoId: string): string | null {
+  const tabId = todoBoardTabId(todoId)
+  return routeChatFor(openPinnedDocTab(layout, tabId), tabId)
+}
+
+function routeChatFor(next: SplitLayout, tabId: string): string | null {
   const { focusedId, sessionIds } = workingSetFromLayout(next)
-  return paneSessionForTab(next, TODOS_TAB_ID) ?? focusedId ?? sessionIds.at(-1) ?? null
+  return paneSessionForTab(next, tabId) ?? focusedId ?? sessionIds.at(-1) ?? null
 }
 
 /**

@@ -15,8 +15,9 @@ import { useSubBoardView } from "../task-page/use-sub-board-view"
 /* A Todo's sub-board as a pinned tab, and as a pop-up at the Todo's route: the stored variant of the sub-board
  * location, the tab's calm "not available" state, the pop-up's Pin as tab, and the `?view=board` address. */
 
+let principal: { kind: "operator" } | { kind: "member"; user: { id: string; email: string; displayName: string }; boards: { department: string; role: "viewer" | "collaborator" | "owner" }[] } = { kind: "operator" }
 vi.mock("@/routes/auth-provider", () => ({
-  useAuthOptional: () => ({ principal: { kind: "operator" }, authState: { accountsEnabled: true, hasAccounts: true, principal: { kind: "operator" } } }),
+  useAuthOptional: () => ({ principal, authState: { accountsEnabled: true, hasAccounts: true, principal } }),
 }))
 vi.mock("@/components/page-layout", () => ({ PageLayout: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
 vi.mock("@/routes/settings-provider", () => ({ useSettings: () => ({ settings: { employeeOverrides: {} } }) }))
@@ -66,10 +67,10 @@ function serve(params: ListParams) {
 
 function Where() {
   const location = useLocation()
-  return <span data-testid="where">{location.pathname}{location.search}</span>
+  return <><span data-testid="where">{location.pathname}{location.search}</span><span data-testid="state">{JSON.stringify(location.state)}</span></>
 }
 
-function mount(entry: string, routes: RouteObject[]) {
+function mount(entry: string | { pathname: string; state: unknown }, routes: RouteObject[]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   const router = createMemoryRouter(routes, { initialEntries: [entry] })
   render(
@@ -81,6 +82,7 @@ function mount(entry: string, routes: RouteObject[]) {
 }
 
 const where = () => screen.getByTestId("where").textContent
+const stateOf = () => JSON.parse(screen.getByTestId("state").textContent || "null")
 const tabRoutes = (todoId = "TSK-1"): RouteObject[] => [
   { path: "/", element: <><SubBoardTabView todoId={todoId} /><Where /></> },
   { path: "/todos/:todoId", element: <Where /> },
@@ -101,6 +103,7 @@ function phone(matches: boolean) {
 }
 
 beforeEach(() => {
+  principal = { kind: "operator" }
   rootMissing = false
   vi.clearAllMocks()
   clearBoardScrollCache()
@@ -196,6 +199,15 @@ describe("the pop-up's Pin as tab", () => {
     expect(router.state.historyAction).toBe("PUSH")
   })
 
+  it("is not offered to a board member, who has no chat layout to pin to: the Todo page and the pop-up stay", async () => {
+    principal = { kind: "member", user: { id: "me", email: "me@example.test", displayName: "Mia Member" }, boards: [{ department: "platform", role: "owner" }] }
+    mount("/todos/TSK-1?view=board", popupRoutes())
+    await screen.findByTestId("board-card-TSK-2")
+    expect(screen.queryByTestId("sub-board-pin")).toBeNull()
+    // Nor from a layout that offers the pin: the member has no such layout, but the action is not theirs either way.
+    expect(where()).toBe("/todos/TSK-1?view=board")
+  })
+
   it("is not offered on a phone, where the full-screen pop-up is the board", async () => {
     phone(true)
     mount("/todos/TSK-1?view=board", popupRoutes())
@@ -268,6 +280,30 @@ describe("the pop-up as an address (?view=board)", () => {
     expect(where()).toBe("/todos/TSK-1?tab=activity&view=board")
     fireEvent.keyDown(screen.getByTestId("sub-board-dialog"), { key: "Escape" })
     await waitFor(() => expect(where()).toBe("/todos/TSK-1?tab=activity"))
+  })
+
+  it("keeps the page's route state when it opens and when it closes (where it was opened from, its Back target)", async () => {
+    const opened = { fromBoard: "subtree:TSK-9", returnBack: true }
+    const router = mount({ pathname: "/todos/TSK-1", state: opened }, routes)
+    expect(stateOf()).toEqual(opened)
+    fireEvent.click(screen.getByTestId("open"))
+    await screen.findByTestId("sub-board-dialog")
+    expect(where()).toBe("/todos/TSK-1?view=board")
+    expect(stateOf()).toEqual(opened)
+    fireEvent.keyDown(screen.getByTestId("sub-board-dialog"), { key: "Escape" })
+    await waitFor(() => expect(where()).toBe("/todos/TSK-1"))
+    expect(stateOf()).toEqual(opened)
+    expect(router.state.historyAction).toBe("REPLACE")
+  })
+
+  it("keeps the route state when it opens from a link and closes", async () => {
+    const opened = { fromBoard: "platform" }
+    mount({ pathname: "/todos/TSK-1", state: opened }, routes)
+    fireEvent.click(screen.getByTestId("open"))
+    await screen.findByTestId("sub-board-dialog")
+    await act(async () => { fireEvent.keyDown(screen.getByTestId("sub-board-dialog"), { key: "Escape" }) })
+    await waitFor(() => expect(screen.queryByTestId("sub-board-dialog")).toBeNull())
+    expect(stateOf()).toEqual(opened)
   })
 
   it("a card opens its Todo by the one move, and Back returns to the board still open", async () => {

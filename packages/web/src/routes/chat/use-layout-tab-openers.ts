@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { hasTodosOpenIntent, todoBoardOpenIntent, withoutOpenIntent } from '@/lib/todos-tab-entry'
+import { hasTodoBoardOpenParam, hasTodosOpenIntent, todoBoardOpenIntent, withoutOpenIntent } from '@/lib/todos-tab-entry'
 import { todoPath } from '@/lib/todo-id'
 import type { Message } from '@/lib/conversations'
 import { resolveDeepLink } from '@/components/chat/chat-route-helpers'
@@ -106,15 +106,22 @@ export function useTodosOpenIntent(open: () => boolean, ready: boolean) {
 
 /**
  * The `?open=todo-board:<id>` link (lib/todos-tab-entry.ts): an intent to pin that Todo's sub-board as a tab, consumed
- * the same way. A phone has no tab to put it in, so it takes the intent to the Todo's page with the board pop-up open,
- * which is full-screen there; the intent is dropped from the address by that very move (a replace), never replayed.
+ * the same way: `open` says whether it moved the route itself (to the chat the tab opened beside), which leaves the
+ * address as it set it. A phone has no tab to put it in, so it takes the intent to the Todo's page with the board pop-up
+ * open, which is full-screen there; the intent is dropped from the address by that very move (a replace), never replayed.
+ * A link naming no valid Todo opens nothing and is dropped from the address all the same.
  */
-export function useTodoBoardOpenIntent({ open, ready, mobile }: { open: (todoId: string) => void; ready: boolean; mobile: boolean }) {
+export function useTodoBoardOpenIntent({ open, ready, mobile }: { open: (todoId: string) => boolean; ready: boolean; mobile: boolean }) {
   const location = useLocation()
   const navigate = useNavigate()
   const consumed = useRef<string | null>(null)
   const todoId = todoBoardOpenIntent(location.search)
+  const stray = todoId === null && hasTodoBoardOpenParam(location.search)
   useEffect(() => {
+    if (stray) {
+      void navigate({ pathname: location.pathname, search: withoutOpenIntent(location.search), hash: location.hash }, { replace: true, state: location.state })
+      return
+    }
     if (!todoId) consumed.current = null
     if (!todoId || consumed.current === todoId) return
     if (mobile) {
@@ -124,16 +131,16 @@ export function useTodoBoardOpenIntent({ open, ready, mobile }: { open: (todoId:
     }
     if (!ready) return
     consumed.current = todoId
-    open(todoId)
+    if (open(todoId)) return
     void navigate({ pathname: location.pathname, search: withoutOpenIntent(location.search), hash: location.hash }, { replace: true, state: location.state })
-  }, [location.hash, location.pathname, location.search, location.state, mobile, navigate, open, ready, todoId])
+  }, [location.hash, location.pathname, location.search, location.state, mobile, navigate, open, ready, stray, todoId])
 }
 
 /**
  * A Todo's sub-board pinned as a tab: the page's opener for the board pop-up's "Pin as tab", and the `?open=` link that asks
  * for the same. False on a phone, which has no tab to pin it in.
  */
-export function useTodoBoardTabPinner(pinTodoBoard: SplitWorkingSet['pinTodoBoard'], { mobile, hydrated }: { mobile: boolean; hydrated: boolean }): PinTodoBoardTab {
+export function useTodoBoardTabPinner(pinTodoBoard: (todoId: string) => boolean, { mobile, hydrated }: { mobile: boolean; hydrated: boolean }): PinTodoBoardTab {
   useTodoBoardOpenIntent({ open: pinTodoBoard, ready: hydrated, mobile })
   return useCallback((todoId) => {
     if (mobile) return false

@@ -30,7 +30,7 @@ import { deriveChatGridIds } from './grid-placement'
 import { usePaneIdentity } from './pane-identity'
 import { useChatPaneState } from './use-chat-pane-state'
 import { historyRecord, parseHistoryPreview } from './chat-history'
-import { SplitChatGrid, SplitDropOverlay, SplitGridContext, TODOS_TAB_ID, canCloseTab, closeAllUnpinned, focusedGroupTabs, hasTabbedGroup, hasUnpinnedTabs, holdsAfterClose, isChatTabId, isChatlessLayout, isPinned, loadsChatless, pinnedChats, selectTab, todosTabFocused, todosTabOpen, workingSetFromLayout, useSplitGridAdd, useSplitGridWorkspace } from './layout'
+import { SplitChatGrid, SplitDropOverlay, SplitGridContext, TODOS_TAB_ID, canCloseTab, closeAllUnpinned, focusedGroupTabs, hasTabbedGroup, hasUnpinnedTabs, holdsAfterClose, isChatTabId, isChatlessLayout, isPinned, loadsChatless, pinnedChats, routeChatForTodoBoardOpen, selectTab, todosTabFocused, todosTabOpen, workingSetFromLayout, useSplitGridAdd, useSplitGridWorkspace } from './layout'
 import { ChatPageHeader } from './chat-page-header'
 import { SidebarColumn } from './sidebar-column'
 import { formatMessage } from '@/components/chat/chat-messages'
@@ -471,7 +471,15 @@ function ChatPage() {
   }, [chatTabs, viewport.mobile, workingSet])
   const openTodo = useTodoTabOpener(workingSet.openTodo, viewport.mobile)
   const openSubagent = useSubagentTabOpener(workingSet.openSubagent, viewport.mobile)
-  const pinTodoBoard = useTodoBoardTabPinner(workingSet.pinTodoBoard, { mobile: viewport.mobile, hydrated: workingSet.hydrated })
+  // A sub-board pinned as a tab: the route follows to the chat of the pane that takes it, as it does for the Todos tab, or the page draws its composer over the tab.
+  const pinTodoBoardTab = useCallback((todoId: string): boolean => {
+    const chat = routeChatForTodoBoardOpen(workingSet.split.layout, todoId)
+    workingSet.pinTodoBoard(todoId)
+    const moved = chat !== null && chat !== selectedIdRef.current
+    if (moved) handleSelect(chat, { replace: true, navigateMobile: false })
+    return moved
+  }, [handleSelect, workingSet])
+  const pinTodoBoard = useTodoBoardTabPinner(pinTodoBoardTab, { mobile: viewport.mobile, hydrated: workingSet.hydrated })
   // The Todos tab: opened or shown, the way back to a chat from it, and the phone's close of it.
   const newestChatId = useCallback(() => newestVisibleSessionId(sessionsQuery.data), [sessionsQuery.data])
   const { openTodosTab, showChat, closePhoneTodos } = useTodosTabPage({ workingSet, selectedIdRef, handleSelect, newestChatId, mobile: viewport.mobile, setMobileView, setPhoneTodos })

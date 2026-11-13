@@ -29,6 +29,12 @@ export function todoBoardOpenIntent(search: string): string | null {
   return isTodoId(todoId) ? todoId : null
 }
 
+/** Whether the query string carries a sub-board open link at all, valid or not: a link naming no valid Todo is still
+ * an intent the page consumes (drops from the address), though it opens nothing. */
+export function hasTodoBoardOpenParam(search: string): boolean {
+  return new URLSearchParams(search).get(OPEN_PARAM)?.startsWith(OPEN_TODO_BOARD_PREFIX) ?? false
+}
+
 /** Whether the query string asks for the Todos tab. */
 export function hasTodosOpenIntent(search: string): boolean {
   return new URLSearchParams(search).get(OPEN_PARAM) === OPEN_TODOS
