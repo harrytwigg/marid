@@ -8,6 +8,7 @@ import type { BoardRole } from "@/lib/accounts-api"
 import { BOARD_FILTERS_STORAGE_KEY } from "@/lib/todos"
 import { TodoBoard } from "../board/board-page"
 import { clearBoardScrollCache } from "../board/board-route"
+import SubBoardDialog from "../board/sub-board-dialog"
 import { SubBoardLocationProvider } from "../board/sub-board-location"
 
 /* A Todo's sub-Todos as a board: the same board over the sub-board location, scoped to one Todo, its own header in
@@ -155,6 +156,24 @@ describe("the sub-board's data", () => {
 })
 
 describe("the sub-board's chrome", () => {
+  it("opens as a wide dialog: its width is not capped by the base dialog's sm:max-w-lg", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/page"]}>
+          <Routes>
+            <Route path="/page" element={<SubBoardDialog rootId="TSK-1" onClose={onClose} />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    const box = await screen.findByTestId("sub-board-dialog")
+    // A responsive max-width in the base classes outranks a bare max-w-none, so the wide dialog names its own at sm.
+    expect(box.className).toContain("sm:max-w-none")
+    expect(box.className).toContain("w-[min(1280px,calc(100vw-32px))]")
+    await screen.findByTestId("board-card-TSK-2")
+  })
+
   it("is headed by the root Todo, with no board switcher, quick capture or New Todo button", async () => {
     renderSubBoard()
     await screen.findByTestId("board-card-TSK-2")
