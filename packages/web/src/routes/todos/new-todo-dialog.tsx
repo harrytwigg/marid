@@ -44,6 +44,8 @@ export function NewTodoDialog({
     /** Seeds the title, so a create started from the palette keeps its words. */
     title?: string
     department?: string
+    /** Files the Todo under this one: a sub-board's "+ New". The sub-Todo takes its department from its parent, so none is seeded. */
+    parentId?: string
     askAssignee?: boolean
     employees?: Employee[]
     departments?: DepartmentSummaryWire[]
@@ -53,8 +55,9 @@ export function NewTodoDialog({
   const mobile = useIsCreateMobile()
   const [title, setTitle] = useState(defaults?.title ?? "")
   const [body, setBody] = useState("")
-  const [parentId, setParentId] = useState("")
-  const seededDepartment = creatableDepartment(defaults?.departments ?? [], defaults?.department)
+  const seededParent = defaults?.parentId ?? ""
+  const [parentId, setParentId] = useState(seededParent)
+  const seededDepartment = seededParent ? null : creatableDepartment(defaults?.departments ?? [], defaults?.department)
   const [department, setDepartment] = useState<string | null>(seededDepartment)
   const [assignee, setAssignee] = useState<string | null>(null)
   const [person, setPerson] = useState<string | null>(null)
@@ -85,14 +88,14 @@ export function NewTodoDialog({
     labels: selectedLabels,
   }), [title, department, assignee, person, priority, dueAt, selectedLabels])
   const dirty = Boolean(
-    title.trim() || body.trim() || parentId.trim() || assignee || person
+    title.trim() || body.trim() || parentId.trim() !== seededParent || assignee || person
     || priority || dueAt || labelIds.length || department !== seededDepartment,
   )
 
   const reset = useCallback(() => {
     setTitle("")
     setBody("")
-    setParentId("")
+    setParentId(seededParent)
     setDepartment(seededDepartment)
     setAssignee(null)
     setPerson(null)
@@ -102,7 +105,7 @@ export function NewTodoDialog({
     setPicker(null)
     setShowParent(false)
     setError(null)
-  }, [seededDepartment])
+  }, [seededDepartment, seededParent])
 
   /** A board member is a person only on a board they can reach, so moving the draft to another board lets them go. */
   const commitDepartment = useCallback((next: string | null) => {

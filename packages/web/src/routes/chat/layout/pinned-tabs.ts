@@ -1,5 +1,7 @@
 import {
   closeSession,
+  openDocTab,
+  showTab,
   emptySplitLayout,
   groupOfSession,
   groupsOf,
@@ -45,6 +47,15 @@ export function pinTab(layout: SplitLayout, tabId: string): SplitLayout {
   const tabs = [...rest.filter((id) => isPinned(layout, id)), tabId, ...rest.filter((id) => !isPinned(layout, id))]
   const group = reorderedGroup(owner, tabs, tabId)
   return { ...layout, pinned: [...layout.pinned, tabId], root: mapNodes(layout.root, (node) => (node === owner ? group : node)) }
+}
+
+/** Opens a document tab (or shows it where it is open) and pins it, so it stays until the user unpins it. A tab not yet
+ * open is pinned as it opens: on a layout with no pane, an unpinned document has nothing to keep it open and would be
+ * normalised away before it could be pinned. */
+export function openPinnedDocTab(layout: SplitLayout, docTabId: string): SplitLayout {
+  if (groupOfSession(layout, docTabId)) return pinTab(showTab(layout, docTabId), docTabId)
+  const opened = openDocTab({ ...layout, pinned: [...layout.pinned, docTabId] }, null, docTabId)
+  return groupOfSession(opened, docTabId) ? opened : layout
 }
 
 /** Unpins a tab, to the start of its group's unpinned run. A layout the tab alone kept open (a pinned

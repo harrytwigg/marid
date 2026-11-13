@@ -15,6 +15,8 @@ export interface BoardLocation {
   navigationType: NavigationType
   /** Opens a Todo from a card: the Todo's page, or a Todo tab where the layout can take one. */
   openTodo: (id: string, state?: Record<string, unknown>) => void
+  /** Pins this board as a chat layout tab. Only a sub-board in a pop-up has one, and only where a tab can be pinned. */
+  pinAsTab?: () => void
 }
 
 export const BoardLocationContext = createContext<BoardLocation | null>(null)

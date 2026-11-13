@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { isTabLayoutWidth } from '@/lib/tab-layout-width'
 
 export interface ChatViewport {
   width: number
@@ -9,7 +10,7 @@ export interface ChatViewport {
 function readViewport(): ChatViewport {
   const width = typeof window === 'undefined' ? 1440 : window.innerWidth
   const height = typeof window === 'undefined' ? 900 : window.innerHeight
-  return { width, height, mobile: width < 1024 }
+  return { width, height, mobile: !isTabLayoutWidth(width) }
 }
 
 export function useChatViewport(): ChatViewport {

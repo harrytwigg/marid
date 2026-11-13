@@ -37,7 +37,7 @@ export function LazyNewTodoDialog({ onFailed, ...props }: ComponentProps<typeof 
     <LoadBoundary what="The new Todo dialog" onFailed={onFailed}>
       <Suspense fallback={<LoadingScrim testId="todo-new-loading" />}>
         {member && department
-          ? <MemberNewTodoDialog department={department} onClose={props.onClose} onCreated={props.onCreated} />
+          ? <MemberNewTodoDialog department={department} parentId={props.defaults?.parentId} onClose={props.onClose} onCreated={props.onCreated} />
           : <NewTodoDialog {...props} />}
       </Suspense>
     </LoadBoundary>

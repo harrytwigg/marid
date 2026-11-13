@@ -6,6 +6,8 @@ import { workItemNode } from "./fixtures/task-wire"
 import { SubTasksSection } from "../task-page/subtasks"
 import { PENDING_SUBTASK_PREFIX } from "../task-page/use-subtask-mutations"
 
+vi.mock("../board/sub-board-dialog-lazy", () => ({ SUB_BOARD_PRELOAD: {} }))
+
 /** The collapsible sub-tasks group and its inline add field, driven
  *  bare with stub callbacks. The optimistic insert itself lives a level up, in
  *  subtask-optimistic.test.tsx, because it is the query cache that carries it. */
@@ -14,6 +16,7 @@ const child = (id: string, status: WorkItemStatusWire = "executing") => workItem
 
 function renderSection(children: WorkItemTreeNodeWire[], parentDepth = 0) {
   const onAddSubTask = vi.fn()
+  const onViewBoard = vi.fn()
   render(
     <SubTasksSection
       node={{ ...child("TSK-12"), depth: 0, parentId: null, children }}
@@ -25,9 +28,10 @@ function renderSection(children: WorkItemTreeNodeWire[], parentDepth = 0) {
       onChildStatus={vi.fn()}
       onChildAssign={vi.fn()}
       onAddSubTask={onAddSubTask}
+      onViewBoard={onViewBoard}
     />,
   )
-  return { onAddSubTask }
+  return { onAddSubTask, onViewBoard }
 }
 
 describe("sub-tasks group", () => {
@@ -130,5 +134,17 @@ describe("sub-tasks group", () => {
     const pending = screen.getByTestId("subtask-pending-row")
     expect(pending.textContent).toContain("In flight")
     expect(screen.queryByTestId(`subtask-open-${PENDING_SUBTASK_PREFIX}1`)).toBeNull()
+  })
+
+  it("offers View as board only for a Todo that has sub-tasks, and asks the page to open its board", () => {
+    const { onViewBoard } = renderSection([child("TSK-13")])
+    expect(onViewBoard).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByTestId("subtasks-view-board"))
+    expect(onViewBoard).toHaveBeenCalledTimes(1)
+  })
+
+  it("has no View as board on a Todo with no sub-tasks", () => {
+    renderSection([])
+    expect(screen.queryByTestId("subtasks-view-board")).toBeNull()
   })
 })

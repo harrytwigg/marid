@@ -589,7 +589,7 @@ export interface LinkedSessionWire {
 }
 
 /** Todo list params that pass straight through as a same-named query param. */
-const TODO_LIST_PARAMS = ["status", "assignee", "humanAssignee", "department", "source", "needsAttentionFor", "since", "until", "q", "createdBy", "label", "sprint", "order", "offset"] as const
+const TODO_LIST_PARAMS = ["status", "assignee", "humanAssignee", "department", "source", "needsAttentionFor", "since", "until", "q", "createdBy", "label", "sprint", "order", "offset", "parent", "descendantOf"] as const
 
 export const api = {
   listWorkspaces: () => get<WorkspaceInfo[]>('/api/instances'),
@@ -746,6 +746,10 @@ export const api = {
     limit?: number
     createdBy?: string
     rootsOnly?: boolean
+    /** Only the direct children of this Todo. */
+    parent?: string
+    /** Every Todo strictly below this one, the Todo itself left out. */
+    descendantOf?: string
     label?: string
     /** A sprint id or name, `active`, or `none`. */
     sprint?: string

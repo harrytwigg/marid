@@ -138,7 +138,7 @@ const readTextFilter: FilterReader = (url, filter) => {
 };
 
 const readTreeFilters: FilterReader = (url, filter) => {
-  for (const [name, key] of [['parent', 'parentId'], ['root', 'rootId']] as const) {
+  for (const [name, key] of [['parent', 'parentId'], ['root', 'rootId'], ['descendantOf', 'descendantOf']] as const) {
     const value = readCleanSearchParam(url, name);
     if (!value) continue;
     try {

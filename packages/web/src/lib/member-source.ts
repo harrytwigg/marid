@@ -155,9 +155,57 @@ async function readTrees(path: string): Promise<Response> {
   return json({ trees })
 }
 
+type TodoPlace = { id: string; department: string | null; rootId: string | null }
+
+/** Where a Todo sits (its department and its root), or null where the member may not read it. */
+async function placeOf(id: string): Promise<TodoPlace | null> {
+  const res = await gatewayTransport().request(mine(enc(id)), { method: "GET" })
+  if (!res.ok) return null
+  const { workItem } = (await res.json()) as { workItem?: { id?: string; department?: string | null; rootId?: string } }
+  return { id: workItem?.id ?? id, department: workItem?.department ?? null, rootId: workItem?.rootId ?? null }
+}
+
+/** The board a sub-board's Todos are read on: the one the anchor Todo's root is on, which is the board the gateway
+ *  scopes a member's board reads by. A sub-Todo can name another department than its root, so the anchor's own is
+ *  not the answer. Null where the anchor, or its root, is not one the member may read. */
+async function resolveBoardOfAnchor(anchor: string): Promise<string | null> {
+  const place = await placeOf(anchor)
+  if (!place) return null
+  if (!place.rootId || place.rootId === place.id) return place.department
+  return (await placeOf(place.rootId))?.department ?? null
+}
+
+/** The lookups under way, one per anchor: a sub-board asks for each of its columns at once, and they all wait on the one
+ *  answer instead of each reading the Todo and its root again. An answer is held only while it is in flight, so the next
+ *  read (a refetch, a reopened board) looks again and never sees a board a Todo has since left. */
+const boardLookups = new Map<string, Promise<string | null>>()
+
+function boardOfAnchor(anchor: string): Promise<string | null> {
+  const under = boardLookups.get(anchor)
+  if (under) return under
+  const lookup = resolveBoardOfAnchor(anchor).finally(() => boardLookups.delete(anchor))
+  boardLookups.set(anchor, lookup)
+  return lookup
+}
+
+async function readSubBoard(params: URLSearchParams, anchor: string, init: RequestInit): Promise<Response> {
+  const department = await boardOfAnchor(anchor)
+  if (!department) return json(EMPTY_LIST)
+  const rest = params.toString()
+  return forward(`/api/member/boards/${enc(department)}/todos${rest ? `?${rest}` : ""}`, init)
+}
+
+/** A sub-board names no department: it is the sub-Todos of one Todo, read on the board that Todo is on. */
+function subBoardAnchor(params: URLSearchParams): string | null {
+  if (params.has("ids") || params.has("movedOff")) return null
+  return params.get("descendantOf") ?? params.get("parent")
+}
+
 function readBoard(path: string, init: RequestInit): Promise<Response> | Response {
   const params = query(path)
   const department = params.get("department")
+  const anchor = subBoardAnchor(params)
+  if (!department && anchor) return readSubBoard(params, anchor, init)
   // A list that names ids, or no board, has nothing to read from: members read a board at a time.
   // The Todos a member filed on this board that have left their boards are their own list, not the board's.
   if (params.has("movedOff")) return department ? forward(`/api/member/boards/${enc(department)}/moved`, init) : json(EMPTY_LIST)

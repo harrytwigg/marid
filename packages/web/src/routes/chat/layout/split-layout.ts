@@ -1,5 +1,5 @@
 import type { ChatWorkingSet } from '../working-set'
-import { isChatTabId, isDocTabId, isTodosTabId, newChatTabId, parseNewChatTabId } from './tab-kind'
+import { isChatTabId, isDocTabId, isTodoBoardTabId, isTodosTabId, newChatTabId, parseNewChatTabId } from './tab-kind'
 import { evictionVictim, isStandaloneTab, normalizeGroup, pinnedAfterReplace, pinnedFirst } from './pinned-order'
 
 /**
@@ -430,7 +430,7 @@ function focusGroupOn(layout: SplitLayout, owner: LayoutGroup, activeTab: string
  * Opens a document (a file preview, a Todo) as a tab beside a chat: in the group holding
  * `ownerSessionId`, else the focused group, just after its shown tab, and shows it. A document
  * already open anywhere is shown where it is. With no group to hold it the layout is returned
- * unchanged, except for the Todos board, which makes a group of its own.
+ * unchanged, except for the Todos board and a Todo's sub-board, which make a group of their own.
  */
 export function openDocTab(layout: SplitLayout, ownerSessionId: string | null, docTabId: string): SplitLayout {
   if (!isDocTabId(docTabId)) return layout
@@ -439,8 +439,8 @@ export function openDocTab(layout: SplitLayout, ownerSessionId: string | null, d
   const base = ownerSessionId && groupOfSession(layout, ownerSessionId) ? showTab(layout, ownerSessionId) : layout
   const owner = focusedGroup(base) ?? groupsOf(base).at(-1)
   if (owner) return placeTab(base, owner.id, docTabId)
-  // The Todos board needs no chat to sit beside: it opens a layout of its own.
-  return isTodosTabId(docTabId) ? appendGroup(layout, docTabId) : layout
+  // The Todos board and a Todo's sub-board need no chat to sit beside: they open a layout of their own.
+  return isTodosTabId(docTabId) || isTodoBoardTabId(docTabId) ? appendGroup(layout, docTabId) : layout
 }
 
 /**

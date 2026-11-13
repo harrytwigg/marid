@@ -1,11 +1,12 @@
 import { useState } from "react"
-import { ChevronDown, Plus } from "@/components/ui/icon"
+import { ChevronDown, Layers, Plus } from "@/components/ui/icon"
 import { Button } from "@/components/ui/button"
 import type { Employee, WorkItemStatusWire, WorkItemTreeNodeWire } from "@/lib/api"
 import { PendingSubTaskRow, SubTaskRow } from "./subtask-row"
 import { PENDING_SUBTASK_PREFIX } from "./use-subtask-mutations"
 import type { OpenTodoFromClick } from "./task-frame"
 import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
+import { SUB_BOARD_PRELOAD } from "../board/sub-board-dialog-lazy"
 
 /* Todos v2 slice 6 — the task page's sub-tasks section (design-doc §7.2.8,
  * mock task-detail.html). The group takes Linear's shape: the header
@@ -40,6 +41,7 @@ export function SubTasksSection({
   onChildStatus,
   onChildAssign,
   onAddSubTask,
+  onViewBoard,
 }: {
   node: WorkItemTreeNodeWire | undefined
   parentDepth: number
@@ -50,6 +52,8 @@ export function SubTasksSection({
   onChildStatus: (childId: string, status: WorkItemStatusWire, cascade?: boolean) => void
   onChildAssign: (childId: string, assignee: string) => void
   onAddSubTask: (title: string) => void
+  /** Opens the sub-Todos as a board pop-up, which the page holds (task-page.tsx), so a link can open it too. */
+  onViewBoard: () => void
 }) {
   const children = node?.children ?? []
   // Counts cover the whole SUBTREE (the board's 2/5 roll-up counts descendants
@@ -115,6 +119,20 @@ export function SubTasksSection({
             </span>
           )}
         </button>
+        {children.length > 0 && node && (
+          <Button
+            variant="ghost"
+            size="sm"
+            data-testid="subtasks-view-board"
+            aria-label="View sub-tasks as a board"
+            onClick={onViewBoard}
+            {...SUB_BOARD_PRELOAD}
+            className="ml-auto h-8 flex-none gap-1.5 rounded-full px-3 text-[12px] font-medium text-[var(--text-tertiary)]"
+          >
+            <Layers size={14} aria-hidden />
+            View as board
+          </Button>
+        )}
         {!atCap && canCreate && (
           <Button
             variant="ghost"

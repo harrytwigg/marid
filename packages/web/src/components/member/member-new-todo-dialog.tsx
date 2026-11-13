@@ -7,17 +7,17 @@ import { Textarea } from "@/components/ui/textarea"
 import { api } from "@/lib/api"
 import { operatorSafeTodoError } from "@/lib/todos"
 
-/** A member's new Todo: a title and an optional description, filed on the board they are looking at.
- *  Nothing here assigns, schedules or starts anyone: the Todo lands unassigned in To do. */
-export function MemberNewTodoDialog({
-  department,
-  onClose,
-  onCreated,
-}: {
+interface MemberNewTodoDialogProps {
   department: string
+  /** Files the Todo under this one: a sub-board's "+ New". */
+  parentId?: string
   onClose: () => void
   onCreated: () => void
-}) {
+}
+
+/** A member's new Todo: a title and an optional description, filed on the board they are looking at.
+ *  Nothing here assigns, schedules or starts anyone: the Todo lands unassigned in To do. */
+export function MemberNewTodoDialog({ department, parentId, onClose, onCreated }: MemberNewTodoDialogProps) {
   const qc = useQueryClient()
   const [title, setTitle] = useState("")
   const [body, setBody] = useState("")
@@ -31,7 +31,7 @@ export function MemberNewTodoDialog({
     setBusy(true)
     setError(null)
     try {
-      await api.createWorkItem({ title: text, department, ...(body.trim() ? { body: body.trim() } : {}) })
+      await api.createWorkItem({ title: text, department, ...(parentId ? { parentId } : {}), ...(body.trim() ? { body: body.trim() } : {}) })
       await qc.invalidateQueries({ queryKey: ["work-items"] })
       onCreated()
     } catch (caught) {

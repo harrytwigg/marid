@@ -1,10 +1,10 @@
-import { Bot, FileText, ListChecks, ListTodo, SquarePen, type IconComponent } from '@/components/ui/icon'
+import { Bot, FileText, Layers, ListChecks, ListTodo, SquarePen, type IconComponent } from '@/components/ui/icon'
 import { useTodoPreview } from '@/lib/todo-preview'
 import type { PaneTabKind } from './tab-kind'
 
 type KindOfTab = Exclude<PaneTabKind, 'chat'>
 
-const ICONS: Record<KindOfTab, IconComponent> = { file: FileText, todo: ListTodo, 'new-chat': SquarePen, subagent: Bot, todos: ListChecks }
+const ICONS: Record<KindOfTab, IconComponent> = { file: FileText, todo: ListTodo, 'new-chat': SquarePen, subagent: Bot, todos: ListChecks, 'todo-board': Layers }
 
 /** The label of a tab that is no chat: its kind's glyph and its title (a file's basename in code type,
  * a Todo's id, then its title once the preview cache has it). */
@@ -14,7 +14,7 @@ export function PaneKindTabLabel({ kind, title, active }: { kind: KindOfTab; tit
     <>
       <Icon size={12} aria-hidden className={`shrink-0 ${active ? 'opacity-100' : 'opacity-50'}`} />
       <span data-pane-tab-title className={`min-w-0 flex-1 truncate ${kind === 'file' ? 'font-[family-name:var(--font-code)]' : ''}`}>
-        {kind === 'todo' ? <TodoTabTitle todoId={title} /> : title}
+        {kind === 'todo' ? <TodoTabTitle todoId={title} /> : kind === 'todo-board' ? <TodoBoardTabTitle todoId={title} /> : title}
       </span>
     </>
   )
@@ -28,4 +28,10 @@ function TodoTabTitle({ todoId }: { todoId: string }) {
       {title ? ` ${title}` : null}
     </>
   )
+}
+
+/** "Board · <title>": the Todo's title from the same preview cache, else its id while that has not landed or the Todo is not readable. */
+function TodoBoardTabTitle({ todoId }: { todoId: string }) {
+  const title = useTodoPreview(todoId).data?.workItem.title
+  return <>Board · {title || todoId}</>
 }

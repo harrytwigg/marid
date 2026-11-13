@@ -2,11 +2,17 @@
 // Pure helpers: the /todos/b/:board param ⇄ BoardId mapping and the per-board
 // scroll cache the board restores on POP/breadcrumb return. No React in here.
 
-/** The three board kinds the switcher serves (design-doc §1.1). */
+/** The board kinds. The first three are the ones the switcher serves (design-doc §1.1) and the URL can name.
+ *  A subtree is one Todo's sub-Todos as a board: only a location that holds it in memory or in a tab's own
+ *  state can ask for it, so `parseBoardParam` never produces one and no route addresses it. */
 export type BoardId =
   | { kind: "attention" }
   | { kind: "everything" }
   | { kind: "department"; slug: string }
+  | { kind: "subtree"; rootId: string; depth: SubBoardDepth }
+
+/** `children`: the Todo's direct sub-Todos, each carrying its own tray. `all`: every level, flattened. */
+export type SubBoardDepth = "children" | "all"
 
 export const DEFAULT_BOARD_PATH = "/todos/b/everything"
 
@@ -23,12 +29,23 @@ export function parseBoardParam(param: string | undefined | null): BoardId {
   return { kind: "department", slug: value }
 }
 
-/** The canonical key a BoardId serializes to in the URL (and cache keys). */
+/** The canonical key a BoardId serializes to: the URL for the route boards, and the cache keys, scroll memory and
+ *  optimistic-move tag of every board. A subtree's key can never be a department slug (it holds a colon). */
 export function boardKey(id: BoardId): string {
-  return id.kind === "department" ? id.slug : id.kind
+  if (id.kind === "department") return id.slug
+  if (id.kind === "subtree") return `sub:${id.rootId}:${id.depth}`
+  return id.kind
 }
 
+/** The root Todo of a sub-board key (`fromBoard` on a card's route state), or null for any other key. */
+export function subBoardRootOf(key: string | undefined): string | null {
+  const match = /^sub:([A-Za-z0-9]+-[1-9][0-9]*):(?:children|all)$/.exec(key ?? "")
+  return match ? match[1] : null
+}
+
+/** The route of a board. A subtree has none: asking for it lands on the default board. */
 export function boardPath(id: BoardId): string {
+  if (id.kind === "subtree") return DEFAULT_BOARD_PATH
   return `/todos/b/${encodeURIComponent(boardKey(id))}`
 }
 

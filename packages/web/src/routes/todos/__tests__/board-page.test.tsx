@@ -279,6 +279,10 @@ describe("boardScopeParams — the board data wiring", () => {
   it("Everything = roots only, no board-scope filter", () => {
     expect(boardScopeParams({ kind: "everything" })).toEqual({ rootsOnly: true })
   })
+  it("a sub-board reads one Todo's children, or every level below it, and is neither roots-only nor in a department", () => {
+    expect(boardScopeParams({ kind: "subtree", rootId: "TSK-4", depth: "children" })).toEqual({ parent: "TSK-4" })
+    expect(boardScopeParams({ kind: "subtree", rootId: "TSK-4", depth: "all" })).toEqual({ descendantOf: "TSK-4" })
+  })
 })
 
 describe("the board surface", () => {
