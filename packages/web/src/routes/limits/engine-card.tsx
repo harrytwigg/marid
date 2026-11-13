@@ -142,12 +142,12 @@ function CardHeader({ engine, account, title, tone }: {
   )
 }
 
-function Windows({ engine, now }: { engine: EngineLimitEngineSnapshot; now: number }) {
+function Windows({ engine, now, emptyNote }: { engine: EngineLimitEngineSnapshot; now: number; emptyNote?: string }) {
   const windows = engine.windows || []
   if (windows.length === 0) {
     return (
       <div className="mt-[var(--space-6)] text-[length:var(--text-footnote)] text-[var(--text-tertiary)]">
-        No quota windows observed yet.
+        {emptyNote ?? "No quota windows observed yet."}
       </div>
     )
   }
@@ -163,12 +163,16 @@ function Windows({ engine, now }: { engine: EngineLimitEngineSnapshot; now: numb
 /** One configured agent: an engine, or an account (engine + profile) when the
  *  engine reports several. `account` carries the per-account state and `title`
  *  its name. */
-export function EngineCard({ engine, now, account, title }: {
+export interface EngineCardProps {
   engine: EngineLimitEngineSnapshot
   now: number
   account?: EngineLimitAccountSnapshot
   title?: string
-}) {
+  /** What a card with no windows of its own says instead of "No quota windows observed yet." */
+  emptyNote?: string
+}
+
+export function EngineCard({ engine, now, account, title, emptyNote }: EngineCardProps) {
   const { tone, note } = toneAndNote(engine, account, now)
   const creditLabel = creditLabelFor(engine)
 
@@ -194,7 +198,7 @@ export function EngineCard({ engine, now, account, title }: {
         ) : engine.name === "opencode" && engine.buckets?.some((b) => (b.windows?.length ?? 0) + (b.primary ? 1 : 0) > 0) ? (
           <ModelBuckets buckets={engine.buckets} now={now} />
         ) : (
-          <Windows engine={engine} now={now} />
+          <Windows engine={engine} now={now} emptyNote={emptyNote} />
         )}
       </div>
 

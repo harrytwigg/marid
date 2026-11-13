@@ -137,6 +137,27 @@ describe("LimitsPage — opencode accounts", () => {
     expect(within(own).getByRole("heading", { level: 2 }).textContent).toBe("opencode")
   })
 
+  it("shows no figures on the engine card when every metered bucket is an account's", () => {
+    state = {
+      phase: "ready", refreshing: false, error: null, now, refresh: () => {},
+      data: { generatedAt: iso(0), default: "claude", accounts: { opencode: [GO_A, GO_B] }, engines: { opencode: engine("opencode", {
+        accountPlan: "opencode-go-b/mimo-v2.6-pro · $0.30/month",
+        windows: [win("30d", 43200, 2999)],
+        buckets: [
+          { id: "opencode-go/*", windows: [win("30d", 43200, 1)] },
+          { id: "opencode-go-b/mimo-v2.6-pro", windows: [win("30d", 43200, 2999)] },
+        ],
+      }) } },
+    }
+    render(<LimitsPage />)
+    const own = screen.getAllByTestId("engine-card")[0]
+    expect(within(own).getByRole("heading", { level: 2 }).textContent).toBe("opencode")
+    expect(own.querySelectorAll("[data-bucket]")).toHaveLength(0)
+    expect(own.textContent).toContain("Nothing metered outside the accounts.")
+    expect(own.textContent).not.toContain("2999")
+    expect(own.textContent).not.toContain("$0.30/month")
+  })
+
   it("reads a card with nothing metered as Not metered", () => {
     state = {
       phase: "ready", refreshing: false, error: null, now, refresh: () => {},
