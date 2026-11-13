@@ -36,6 +36,8 @@ import { useMemberCreator } from "@/hooks/use-member-creator-keeps"
 import { useTaskPickers } from "./use-task-pickers"
 import { BodyEditor } from "./body-editor"
 import { SubTasksSection } from "./subtasks"
+import { useSubBoardView } from "./use-sub-board-view"
+import { LazySubBoardDialog } from "../board/sub-board-dialog-lazy"
 import { useSubTaskMutations } from "./use-subtask-mutations"
 import { AttachmentDropSurface, AttachmentsSection } from "./attachments"
 import { useTaskAttachments } from "./use-task-attachments"
@@ -84,6 +86,8 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
     return theme !== "light"
   }, [theme])
 
+  // The sub-board pop-up: a query parameter at the route (`?view=board`, so it can be linked and Back closes it), state in a layout tab.
+  const subBoard = useSubBoardView(embedded)
   const detailQuery = useTodoById(id)
   const detail = detailQuery.data ?? undefined
   const item = detail?.workItem
@@ -416,7 +420,9 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
                     onChildStatus={(childId, status, cascade) => childStatus.mutate({ childId, status, cascade })}
                     onChildAssign={(childId, assignee) => childAssign.mutate({ childId, assignee })}
                     onAddSubTask={(nextTitle) => addSubTask.mutate(nextTitle)}
+                    onViewBoard={subBoard.show}
                   />
+                  {subBoard.open && <LazySubBoardDialog rootId={item.id} onClose={subBoard.hide} closeOnOpenTodo={embedded} />}
                 </>
               )}
 

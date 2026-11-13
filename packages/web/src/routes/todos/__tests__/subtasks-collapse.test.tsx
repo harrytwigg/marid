@@ -6,12 +6,7 @@ import { workItemNode } from "./fixtures/task-wire"
 import { SubTasksSection } from "../task-page/subtasks"
 import { PENDING_SUBTASK_PREFIX } from "../task-page/use-subtask-mutations"
 
-vi.mock("../board/sub-board-dialog-lazy", () => ({
-  SUB_BOARD_PRELOAD: {},
-  LazySubBoardDialog: ({ rootId, onClose }: { rootId: string; onClose: () => void }) => (
-    <div data-testid="sub-board-stub"><span>{rootId}</span><button type="button" onClick={onClose}>close</button></div>
-  ),
-}))
+vi.mock("../board/sub-board-dialog-lazy", () => ({ SUB_BOARD_PRELOAD: {} }))
 
 /** The collapsible sub-tasks group and its inline add field, driven
  *  bare with stub callbacks. The optimistic insert itself lives a level up, in
@@ -21,6 +16,7 @@ const child = (id: string, status: WorkItemStatusWire = "executing") => workItem
 
 function renderSection(children: WorkItemTreeNodeWire[], parentDepth = 0) {
   const onAddSubTask = vi.fn()
+  const onViewBoard = vi.fn()
   render(
     <SubTasksSection
       node={{ ...child("TSK-12"), depth: 0, parentId: null, children }}
@@ -32,9 +28,10 @@ function renderSection(children: WorkItemTreeNodeWire[], parentDepth = 0) {
       onChildStatus={vi.fn()}
       onChildAssign={vi.fn()}
       onAddSubTask={onAddSubTask}
+      onViewBoard={onViewBoard}
     />,
   )
-  return { onAddSubTask }
+  return { onAddSubTask, onViewBoard }
 }
 
 describe("sub-tasks group", () => {
@@ -139,13 +136,11 @@ describe("sub-tasks group", () => {
     expect(screen.queryByTestId(`subtask-open-${PENDING_SUBTASK_PREFIX}1`)).toBeNull()
   })
 
-  it("offers View as board only for a Todo that has sub-tasks, and opens that Todo's board", () => {
-    renderSection([child("TSK-13")])
-    expect(screen.queryByTestId("sub-board-stub")).toBeNull()
+  it("offers View as board only for a Todo that has sub-tasks, and asks the page to open its board", () => {
+    const { onViewBoard } = renderSection([child("TSK-13")])
+    expect(onViewBoard).not.toHaveBeenCalled()
     fireEvent.click(screen.getByTestId("subtasks-view-board"))
-    expect(screen.getByTestId("sub-board-stub").textContent).toContain("TSK-12")
-    fireEvent.click(screen.getByText("close"))
-    expect(screen.queryByTestId("sub-board-stub")).toBeNull()
+    expect(onViewBoard).toHaveBeenCalledTimes(1)
   })
 
   it("has no View as board on a Todo with no sub-tasks", () => {

@@ -1,4 +1,5 @@
-import { ExternalLink } from "@/components/ui/icon"
+import type { ReactNode } from "react"
+import { ExternalLink, Pin } from "@/components/ui/icon"
 import type { WorkItemTreeWire } from "@/lib/api"
 import { stateKeyOf } from "@/lib/todos"
 import { StateCircle } from "../state-glyph"
@@ -44,11 +45,25 @@ function DepthToggle({ value, onChange }: { value: SubBoardDepth; onChange: (dep
   )
 }
 
-function RootLine({ rootId, tree, missing, onOpenRoot }: {
+function HeaderAction({ testId, onClick, children }: { testId: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={testId}
+      className="focus-outline flex h-8 flex-none items-center gap-1.5 rounded-full px-2.5 text-[calc(12px*var(--text-scale))] font-medium text-[var(--text-secondary)] outline-none transition-colors hover:bg-[var(--fill-tertiary)]"
+    >
+      {children}
+    </button>
+  )
+}
+
+function RootLine({ rootId, tree, missing, onOpenRoot, onPin }: {
   rootId: string
   tree: WorkItemTreeWire | undefined
   missing: boolean
   onOpenRoot: () => void
+  onPin?: () => void
 }) {
   const root = tree?.root
   const rollup = rollupOf(tree, root?.status ?? "backlog")
@@ -73,15 +88,16 @@ function RootLine({ rootId, tree, missing, onOpenRoot }: {
           {rollup.closed}/{rollup.total} done
         </span>
       )}
-      <button
-        type="button"
-        onClick={onOpenRoot}
-        data-testid="sub-board-open-root"
-        className="focus-outline flex h-8 flex-none items-center gap-1.5 rounded-full px-2.5 text-[calc(12px*var(--text-scale))] font-medium text-[var(--text-secondary)] outline-none transition-colors hover:bg-[var(--fill-tertiary)]"
-      >
+      <HeaderAction testId="sub-board-open-root" onClick={onOpenRoot}>
         <ExternalLink size={13} aria-hidden />
         Open
-      </button>
+      </HeaderAction>
+      {onPin && (
+        <HeaderAction testId="sub-board-pin" onClick={onPin}>
+          <Pin size={13} aria-hidden />
+          Pin as tab
+        </HeaderAction>
+      )}
     </div>
   )
 }
@@ -98,6 +114,8 @@ export function SubBoardHeader({
   depth: SubBoardDepth
   onDepth: (depth: SubBoardDepth) => void
   onOpenRoot: () => void
+  /** Pins this board as a chat layout tab; absent where it cannot be (a phone, or the tab itself). */
+  onPin?: () => void
 }) {
   return (
     <div data-testid="sub-board-header" className="flex flex-wrap items-center gap-x-4 gap-y-2 pr-10 max-[700px]:pr-12">

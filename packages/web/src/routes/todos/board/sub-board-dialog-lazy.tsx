@@ -20,11 +20,11 @@ export const SUB_BOARD_PRELOAD = {
   onTouchStart: preloadSubBoardDialog,
 } as const
 
-export function LazySubBoardDialog({ rootId, onClose }: { rootId: string; onClose: () => void }) {
+export function LazySubBoardDialog({ rootId, onClose, closeOnOpenTodo }: { rootId: string; onClose: () => void; closeOnOpenTodo?: boolean }) {
   return (
     <LoadBoundary what="The sub-board" onFailed={onClose}>
       <Suspense fallback={<LoadingScrim testId="sub-board-loading" />}>
-        <SubBoardDialog rootId={rootId} onClose={onClose} />
+        <SubBoardDialog rootId={rootId} onClose={onClose} closeOnOpenTodo={closeOnOpenTodo} />
       </Suspense>
     </LoadBoundary>
   )

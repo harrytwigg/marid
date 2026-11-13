@@ -7,6 +7,8 @@ const SubagentChatView = lazy(() => import('@/components/chat/subagent-chat-view
 const TaskView = lazy(() => import('@/routes/todos/task-page/task-page').then((m) => ({ default: m.TaskView })))
 // The Todos board's own chunk, for the same reason.
 const TodosTabView = lazy(() => import('@/routes/todos/board/todos-tab-view'))
+// A Todo's sub-board tab is the board again, in a chunk of its own: the chat's initial path never takes it.
+const SubBoardTabView = lazy(() => import('@/routes/todos/board/sub-board-tab-view'))
 
 /** A document tab's body, wherever it is shown: over its group's chat, or in a pane of its own. A Todo
  *  is the full Todo, as its page shows it. */
@@ -17,6 +19,7 @@ export function DocView({ doc }: { doc: DocTabRef }) {
     <DocErrorBoundary key={key} kind={doc.kind}>
       <Suspense fallback={<div className="flex-1" />}>
         {doc.kind === 'todos' ? <TodosTabView /> : null}
+        {doc.kind === 'todo-board' ? <SubBoardTabView todoId={doc.todoId} /> : null}
         {doc.kind === 'todo' ? <TaskView todoId={doc.todoId} embedded /> : null}
         {doc.kind === 'file' ? <FileView path={doc.file.path} sessionId={doc.file.sessionId} embedded /> : null}
         {doc.kind === 'subagent' ? <SubagentChatView sessionId={doc.subagent.sessionId} agent={{ id: doc.subagent.agentId, description: doc.subagent.description, agentType: doc.subagent.agentType }} /> : null}
@@ -28,11 +31,12 @@ export function DocView({ doc }: { doc: DocTabRef }) {
 function docKey(doc: DocTabRef): string {
   if (doc.kind === 'todos') return 'todos'
   if (doc.kind === 'todo') return `todo:${doc.todoId}`
+  if (doc.kind === 'todo-board') return `todo-board:${doc.todoId}`
   if (doc.kind === 'subagent') return `subagent:${doc.subagent.sessionId}:${doc.subagent.agentId}`
   return `file:${doc.file.sessionId}:${doc.file.path}`
 }
 
-const DOC_NOUNS: Record<DocTabRef['kind'], string> = { file: 'file', todo: 'Todo', subagent: 'sub-agent', todos: 'Todos board' }
+const DOC_NOUNS: Record<DocTabRef['kind'], string> = { file: 'file', todo: 'Todo', subagent: 'sub-agent', todos: 'Todos board', 'todo-board': 'Todo board' }
 
 /** A document that fails to load or render — a chunk gone stale after a deploy, or a throw in the
  *  view — fails in its own tab, and the chat beside it stays up. */

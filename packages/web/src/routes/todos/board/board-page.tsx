@@ -97,7 +97,7 @@ export default function TodoBoardPage() {
 /** The board over whatever location it is given (board-location.tsx). `embedded` is the chat layout
  *  tab: its pane supplies the chrome, so the route's shell is left out. */
 export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
-  const { board, setBoard, searchParams, setSearchParams, navigationType, openTodo } = useBoardLocation()
+  const { board, setBoard, searchParams, setSearchParams, navigationType, openTodo, pinAsTab } = useBoardLocation()
   const key = boardKey(board)
   const Frame = embedded ? TAB_FRAME : ROUTE_FRAME
   const isAttention = board.kind === "attention"
@@ -574,6 +574,7 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
             depth={subtree.depth}
             onDepth={(depth) => setBoard({ ...subtree, depth })}
             onOpenRoot={() => openTodo(subtree.rootId, { fromBoard: key })}
+            onPin={pinAsTab}
           />
         ) : (
           <BoardHeader

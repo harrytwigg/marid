@@ -1,4 +1,5 @@
 import { isFileTabId, parseFileTabId, type FileTabRef } from './file-tab'
+import { isTodoId } from '@/lib/todo-id'
 import { isSubagentTabId, parseSubagentTabId, type SubagentTabRef } from './subagent-tab'
 
 /**
@@ -12,11 +13,14 @@ import { isSubagentTabId, parseSubagentTabId, type SubagentTabRef } from './suba
  * - a document (file-tab.ts `file:`, `todo:`, subagent-tab.ts `subagent:`): something read beside a chat. It is shown over its
  *   group's chat, which stays mounted under it, or, dragged out, in a pane of its own;
  * - the Todos board (`todos:`): one tab at most, the board the Todos screen shows. It is drawn as a
- *   document is, but belongs to no chat: it is opened on its own, not from a link in one.
+ *   document is, but belongs to no chat: it is opened on its own, not from a link in one;
+ * - a Todo's sub-board (`todo-board:`): one Todo's sub-Todos as a board, pinned beside the chat. One tab per
+ *   Todo; it keeps its own depth and filters (routes/todos/board/sub-board-tab-state.ts).
  */
-export type PaneTabKind = 'chat' | 'new-chat' | 'file' | 'todo' | 'subagent' | 'todos'
+export type PaneTabKind = 'chat' | 'new-chat' | 'file' | 'todo' | 'subagent' | 'todos' | 'todo-board'
 
 const TODO_TAB_PREFIX = 'todo:'
+const TODO_BOARD_TAB_PREFIX = 'todo-board:'
 const NEW_CHAT_TAB_PREFIX = 'new:'
 
 /** The Todos board's tab. There is only ever one, so its id is fixed: opening it again shows it. */
@@ -33,13 +37,17 @@ export function isTodosTabId(tabId: string): boolean {
   return tabId === TODOS_TAB_ID
 }
 
+export function isTodoBoardTabId(tabId: string): boolean {
+  return tabId.startsWith(TODO_BOARD_TAB_PREFIX)
+}
+
 export function isNewChatTabId(tabId: string): boolean {
   return tabId.startsWith(NEW_CHAT_TAB_PREFIX)
 }
 
-/** A file, a Todo, a sub-agent or the Todos board: a tab shown over its group's chat rather than a pane of its own. */
+/** A file, a Todo, a sub-agent, the Todos board or a Todo's sub-board: a tab shown over its group's chat rather than a pane of its own. */
 export function isDocTabId(tabId: string): boolean {
-  return isFileTabId(tabId) || isTodoTabId(tabId) || isSubagentTabId(tabId) || isTodosTabId(tabId)
+  return isFileTabId(tabId) || isTodoTabId(tabId) || isSubagentTabId(tabId) || isTodosTabId(tabId) || isTodoBoardTabId(tabId)
 }
 
 /** A session: the only kind the route, the URL and the working set know. */
@@ -50,6 +58,7 @@ export function isChatTabId(tabId: string): boolean {
 export function paneTabKind(tabId: string): PaneTabKind {
   if (isFileTabId(tabId)) return 'file'
   if (isTodoTabId(tabId)) return 'todo'
+  if (isTodoBoardTabId(tabId)) return 'todo-board'
   if (isSubagentTabId(tabId)) return 'subagent'
   if (isTodosTabId(tabId)) return 'todos'
   return isNewChatTabId(tabId) ? 'new-chat' : 'chat'
@@ -61,6 +70,17 @@ export function todoTabId(todoId: string): string {
 
 export function parseTodoTabId(tabId: string): string | null {
   return isTodoTabId(tabId) ? tabId.slice(TODO_TAB_PREFIX.length) || null : null
+}
+
+export function todoBoardTabId(todoId: string): string {
+  return `${TODO_BOARD_TAB_PREFIX}${todoId}`
+}
+
+/** The Todo a sub-board tab shows, or null for any other id and for one that names no valid Todo id. */
+export function parseTodoBoardTabId(tabId: string): string | null {
+  if (!isTodoBoardTabId(tabId)) return null
+  const todoId = tabId.slice(TODO_BOARD_TAB_PREFIX.length)
+  return isTodoId(todoId) ? todoId : null
 }
 
 /** A new chat's tab: `serial` keeps two blank composers apart; `employee` is who it is addressed to. */
@@ -83,7 +103,7 @@ export function parseNewChatTabId(tabId: string): NewChatTabRef | null {
 }
 
 /** What a document tab shows. */
-export type DocTabRef = { kind: 'file'; file: FileTabRef } | { kind: 'todo'; todoId: string } | { kind: 'subagent'; subagent: SubagentTabRef } | { kind: 'todos' }
+export type DocTabRef = { kind: 'file'; file: FileTabRef } | { kind: 'todo'; todoId: string } | { kind: 'subagent'; subagent: SubagentTabRef } | { kind: 'todos' } | { kind: 'todo-board'; todoId: string }
 
 export function parseDocTabId(tabId: string): DocTabRef | null {
   if (isTodosTabId(tabId)) return { kind: 'todos' }
@@ -91,6 +111,8 @@ export function parseDocTabId(tabId: string): DocTabRef | null {
   if (file) return { kind: 'file', file }
   const todoId = parseTodoTabId(tabId)
   if (todoId) return { kind: 'todo', todoId }
+  const boardOf = parseTodoBoardTabId(tabId)
+  if (boardOf) return { kind: 'todo-board', todoId: boardOf }
   const subagent = parseSubagentTabId(tabId)
   return subagent ? { kind: 'subagent', subagent } : null
 }

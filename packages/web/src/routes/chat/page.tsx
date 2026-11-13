@@ -48,7 +48,7 @@ const FileView = lazy(() =>
   import('@/components/chat/file-view').then((m) => ({ default: m.FileView })),
 )
 import { LayoutOpenProviders, type OpenFile } from '@/components/chat/file-open-context'
-import { useEmployeeDeepLink, useNewChatTabHandlers, useNewChatTabOpener, useSubagentTabOpener, useTodoTabOpener } from './use-layout-tab-openers'
+import { useEmployeeDeepLink, useNewChatTabHandlers, useNewChatTabOpener, useSubagentTabOpener, useTodoBoardTabPinner, useTodoTabOpener } from './use-layout-tab-openers'
 import { restoresPhoneTodos, usePhoneTodosHistory, useTodosTabPage } from './use-todos-tab-page'
 import { fileBackPlan } from './file-back'
 import { ShortcutOverlay } from '@/components/chat/shortcut-overlay'
@@ -69,7 +69,7 @@ import { buildFreshChatParams, effectivePrimaryProfile, startableProfileNames } 
 import { fetchFallbackChains } from '@/lib/api-fallback-chains'
 import { buildContinuationPrompt } from '@/lib/stale-chat'
 import { PRODUCT_NAME } from "@/lib/brand"
-import { hasTodosOpenIntent } from '@/lib/todos-tab-entry'
+import { hasTodosOpenIntent, todoBoardOpenIntent } from '@/lib/todos-tab-entry'
 import { setTodosTabFocused } from '@/lib/todos-tab-focus'
 import { NavSurfaceProvider } from '@/components/nav-surface'
 import { DocView } from '@/components/chat/doc-view'
@@ -134,8 +134,8 @@ function ChatPage() {
   // Also the state of a page that opens on standalone tabs alone (the Todos tab), which has no chat to
   // auto-select: the newest chat stays closed, as it does once the last chat is closed beside that tab.
   const newChatIntentRef = useRef(loadsChatless(location.search, typeof window === 'undefined' ? null : window.localStorage))
-  // A link to the Todos tab names no chat, and nothing the page would select belongs in front of it.
-  if (!selectedId && hasTodosOpenIntent(location.search)) newChatIntentRef.current = true
+  // A link to the Todos tab, or to a Todo's sub-board as a tab, names no chat, and nothing the page would select belongs in front of it.
+  if (!selectedId && (hasTodosOpenIntent(location.search) || todoBoardOpenIntent(location.search))) newChatIntentRef.current = true
   const [systemPrimedId, setSystemPrimedId] = useState<string | null>(null)
   // Employee to preselect for a brand-new chat (contacting a session-less
   // employee from the sidebar, or via an ?employee= deep-link). Null = none.
@@ -470,6 +470,7 @@ function ChatPage() {
   }, [chatTabs, viewport.mobile, workingSet])
   const openTodo = useTodoTabOpener(workingSet.openTodo, viewport.mobile)
   const openSubagent = useSubagentTabOpener(workingSet.openSubagent, viewport.mobile)
+  const pinTodoBoard = useTodoBoardTabPinner(workingSet.pinTodoBoard, { mobile: viewport.mobile, hydrated: workingSet.hydrated })
   // The Todos tab: opened or shown, the way back to a chat from it, and the phone's close of it.
   const newestChatId = useCallback(() => newestVisibleSessionId(sessionsQuery.data), [sessionsQuery.data])
   const { openTodosTab, showChat, closePhoneTodos } = useTodosTabPage({ workingSet, selectedIdRef, handleSelect, newestChatId, mobile: viewport.mobile, setMobileView, setPhoneTodos })
@@ -988,7 +989,7 @@ function ChatPage() {
   const chatless = !viewport.mobile && !committedId && isChatlessLayout(workingSet.split.layout)
   const desktopMultiPane = chatTabs.activeTab?.kind !== 'file' && !awaitingOpen && !viewport.mobile && (chatless || deriveChatGridIds({ sessionIds: gridPaneKeys, primaryPaneKey: paneKey, primarySessionId: committedId, pickerPaneKey: pickerPane?.paneKey }).length > 1 || hasTabbedGroup(workingSet.split.layout))
   return (
-    <LayoutOpenProviders file={openFile} todo={openTodo} subagent={openSubagent} session={handleOpenChat} todos={openTodosTab}>
+    <LayoutOpenProviders file={openFile} todo={openTodo} subagent={openSubagent} session={handleOpenChat} todos={openTodosTab} todoBoard={pinTodoBoard}>
     <NavSurfaceProvider surface={todosFocused ? 'todos' : 'chat'} onShowChat={showChat}>
     <PageLayout chromeless>
       <div className="flex overflow-hidden h-full">

@@ -2,7 +2,7 @@ import type { PaneTabItem, PaneTabStripProps } from './pane-tab-strip'
 import { findGroup, paneSessionForTab, placeTab, type LayoutGroup, type SplitLayout } from './split-layout'
 import { fileTabTitle, parseFileTabId } from './file-tab'
 import { parseSubagentTabId, subagentTabTitle } from './subagent-tab'
-import { isNewChatTabId, isTodosTabId, parseTodoTabId, TODOS_TAB_TITLE } from './tab-kind'
+import { isNewChatTabId, isTodosTabId, parseTodoBoardTabId, parseTodoTabId, TODOS_TAB_TITLE } from './tab-kind'
 
 /** What the strip shows for one session; supplied by whoever knows the session list. */
 export interface PaneTabSession {
@@ -40,6 +40,9 @@ function paneTabItemsOf(group: LayoutGroup, lookup: PaneTabSessionLookup): PaneT
     // The label reads the Todo's title from the mention preview cache (pane-kind-tab-label.tsx).
     const todoId = parseTodoTabId(sessionId)
     if (todoId) return { id: sessionId, kind: 'todo', title: todoId }
+    // Its label reads the same title, and puts "Board ·" before it.
+    const boardOf = parseTodoBoardTabId(sessionId)
+    if (boardOf) return { id: sessionId, kind: 'todo-board', title: boardOf }
     const subagent = parseSubagentTabId(sessionId)
     if (subagent) return { id: sessionId, kind: 'subagent', title: subagentTabTitle(subagent) }
     if (isTodosTabId(sessionId)) return { id: sessionId, kind: 'todos', title: TODOS_TAB_TITLE }

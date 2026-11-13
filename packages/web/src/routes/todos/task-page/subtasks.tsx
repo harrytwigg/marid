@@ -6,7 +6,7 @@ import { PendingSubTaskRow, SubTaskRow } from "./subtask-row"
 import { PENDING_SUBTASK_PREFIX } from "./use-subtask-mutations"
 import type { OpenTodoFromClick } from "./task-frame"
 import { useTodoCapabilities } from "@/hooks/use-todo-capabilities"
-import { LazySubBoardDialog, SUB_BOARD_PRELOAD } from "../board/sub-board-dialog-lazy"
+import { SUB_BOARD_PRELOAD } from "../board/sub-board-dialog-lazy"
 
 /* Todos v2 slice 6 — the task page's sub-tasks section (design-doc §7.2.8,
  * mock task-detail.html). The group takes Linear's shape: the header
@@ -41,6 +41,7 @@ export function SubTasksSection({
   onChildStatus,
   onChildAssign,
   onAddSubTask,
+  onViewBoard,
 }: {
   node: WorkItemTreeNodeWire | undefined
   parentDepth: number
@@ -51,6 +52,8 @@ export function SubTasksSection({
   onChildStatus: (childId: string, status: WorkItemStatusWire, cascade?: boolean) => void
   onChildAssign: (childId: string, assignee: string) => void
   onAddSubTask: (title: string) => void
+  /** Opens the sub-Todos as a board pop-up, which the page holds (task-page.tsx), so a link can open it too. */
+  onViewBoard: () => void
 }) {
   const children = node?.children ?? []
   // Counts cover the whole SUBTREE (the board's 2/5 roll-up counts descendants
@@ -62,7 +65,6 @@ export function SubTasksSection({
   const [adding, setAdding] = useState(false)
   const [title, setTitle] = useState("")
   const [openFor, setOpenFor] = useState<{ id: string; kind: "status" | "assign" } | null>(null)
-  const [boardOpen, setBoardOpen] = useState(false)
 
   // At the cap an empty group can offer nothing at all, so it stays out of the
   // document entirely rather than heading a list nobody can add to.
@@ -123,7 +125,7 @@ export function SubTasksSection({
             size="sm"
             data-testid="subtasks-view-board"
             aria-label="View sub-tasks as a board"
-            onClick={() => setBoardOpen(true)}
+            onClick={onViewBoard}
             {...SUB_BOARD_PRELOAD}
             className="ml-auto h-8 flex-none gap-1.5 rounded-full px-3 text-[12px] font-medium text-[var(--text-tertiary)]"
           >
@@ -212,7 +214,6 @@ export function SubTasksSection({
           )}
         </>
       )}
-      {boardOpen && node && <LazySubBoardDialog rootId={node.id} onClose={() => setBoardOpen(false)} />}
     </section>
   )
 }

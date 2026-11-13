@@ -32,7 +32,7 @@ export function DocPane({ doc, header, active }: { doc: DocTabRef; header: React
 function docTitle(doc: DocTabRef): string {
   if (doc.kind === 'file') return fileTabTitle(doc.file.path)
   if (doc.kind === 'todos') return TODOS_TAB_TITLE
-  return doc.kind === 'todo' ? doc.todoId : subagentTabTitle(doc.subagent)
+  return doc.kind === 'todo' || doc.kind === 'todo-board' ? doc.todoId : subagentTabTitle(doc.subagent)
 }
 
 /** A lone document's title bar: its glyph and title, dragged like its tab would be, a close button (its
