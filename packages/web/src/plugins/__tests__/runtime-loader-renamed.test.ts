@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 
-// A build whose codename says "acme": its own package name is `@acme/plugin-sdk`, and the plugins already
+// A build whose codename says "acme": the SDK's package name is the organisation's, `@hundredfoldhq/plugin-sdk`, and the plugins already
 // installed on disk were written against `@jinn/plugin-sdk`.
 vi.mock('@hundredfold/codename', () => ({ CODENAME: 'acme' }))
 
@@ -38,7 +38,7 @@ export default {
 }
 
 describe('a disk plugin after the codename changes', () => {
-  it.each(['@jinn/plugin-sdk', '@acme/plugin-sdk'])('still loads when it imports the SDK as %s, onto the app’s own SDK and React', async (specifier) => {
+  it.each(['@jinn/plugin-sdk', '@hundredfoldhq/plugin-sdk'])('still loads when it imports the SDK as %s, onto the app’s own SDK and React', async (specifier) => {
     const { id, area } = fresh()
 
     expect(await loadRuntimePlugin(pluginImporting(specifier, id, area), id)).toBe(id)

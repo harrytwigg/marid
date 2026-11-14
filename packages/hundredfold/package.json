@@ -1,6 +1,6 @@
 {
   "name": "hundredfold",
-  "version": "0.33.3",
+  "version": "0.34.0",
   "description": "Lightweight AI gateway daemon orchestrating Claude Code, Codex, Grok, and Antigravity CLI",
   "license": "MIT",
   "type": "module",

@@ -9,7 +9,7 @@
  * `jsxs` takes an array of them.
  *
  * The three imports below are the complete list a disk plugin may write:
- * `@hundredfold/plugin-sdk`, `react`, and `react/jsx-runtime`. Anything else is
+ * `@hundredfoldhq/plugin-sdk`, `react`, and `react/jsx-runtime`. Anything else is
  * rejected by the loader with a named error, and React in particular has to come
  * from here rather than from a copy of its own, or every hook would throw.
  */
@@ -30,7 +30,7 @@ import {
   host,
   jsx,
   jsxs,
-} from '@hundredfold/plugin-sdk'
+} from '@hundredfoldhq/plugin-sdk'
 
 /** The badge variant each state reads as, so a plugin's chip and the app's own
  *  say the same thing the same way. */

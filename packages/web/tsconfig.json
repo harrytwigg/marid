@@ -16,7 +16,7 @@
       "@/*": [
         "./src/*"
       ],
-      "@hundredfold/plugin-sdk": [
+      "@hundredfoldhq/plugin-sdk": [
         "./src/plugins/sdk/index.ts"
       ],
       "@hundredfold/fallback-map-wire": [

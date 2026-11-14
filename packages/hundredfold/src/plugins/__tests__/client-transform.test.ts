@@ -27,7 +27,7 @@ function client(source: string): { id: string; file: string } {
 
 describe("pluginClientModule", () => {
   it("leaves plain ESM to be served as its own bytes", async () => {
-    const { id, file } = client("import { jsx } from '@hundredfold/plugin-sdk'\nexport default { id: 'x', render: () => jsx('p', {}) }\n");
+    const { id, file } = client("import { jsx } from '@hundredfoldhq/plugin-sdk'\nexport default { id: 'x', render: () => jsx('p', {}) }\n");
     expect(await pluginClientModule(id, file)).toEqual({ kind: "raw" });
   });
 

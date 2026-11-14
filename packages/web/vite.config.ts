@@ -168,7 +168,7 @@ export default defineConfig(() => {
         // The plugin SDK is a specifier, not a package: a real package would
         // need its own build and its own React peer, and the singleton the SDK
         // exists to guarantee is exactly what a second React copy would break.
-        '@hundredfold/plugin-sdk': path.resolve(__dirname, 'src/plugins/sdk/index.ts'),
+        '@hundredfoldhq/plugin-sdk': path.resolve(__dirname, 'src/plugins/sdk/index.ts'),
         // This one resolves at build time: the module is runtime code the bundle
         // really carries. It is a pure leaf with an empty import list, which is
         // what keeps that safe with no polyfills.

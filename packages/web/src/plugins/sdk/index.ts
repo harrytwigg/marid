@@ -1,5 +1,5 @@
 /**
- * `@hundredfold/plugin-sdk` — the one module a Hundredfold plugin imports.
+ * `@hundredfoldhq/plugin-sdk` — the one module a Hundredfold plugin imports.
  *
  * Everything here is the app's own instance, never a copy. React in particular
  * is the mechanism and not a convenience: a plugin that resolved a second React

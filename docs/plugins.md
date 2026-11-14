@@ -62,7 +62,7 @@ Two constraints come with it:
 A file that will not parse is not served as a blank module. The route answers `422` with the file, the line and the reason, and the plugin keeps its place in Settings › Plugins carrying that message on its row — so a typo shows up as something to fix rather than as a plugin that vanished.
 
 ```jsx
-import { AREAS, Card, CardContent, CardHeader, CardTitle, React } from '@hundredfold/plugin-sdk'
+import { AREAS, Card, CardContent, CardHeader, CardTitle, React } from '@hundredfoldhq/plugin-sdk'
 
 function InboxPage() {
   const [count] = React.useState(0)
@@ -91,10 +91,10 @@ export default {
 
 ### Calling the runtime by hand
 
-The form JSX compiles to is still first-class, and a file written this way takes the byte-for-byte path — no compile, and nothing between your file and the browser. `jsx`, `jsxs`, and `Fragment` are re-exported from `@hundredfold/plugin-sdk` for it: `jsx(type, props)` for an element with zero or one child, `jsxs(type, props)` when `props.children` is an array, and `Fragment` when you need to return siblings without a wrapper element.
+The form JSX compiles to is still first-class, and a file written this way takes the byte-for-byte path — no compile, and nothing between your file and the browser. `jsx`, `jsxs`, and `Fragment` are re-exported from `@hundredfoldhq/plugin-sdk` for it: `jsx(type, props)` for an element with zero or one child, `jsxs(type, props)` when `props.children` is an array, and `Fragment` when you need to return siblings without a wrapper element.
 
 ```js
-import { AREAS, Card, CardContent, CardHeader, CardTitle, React, jsx, jsxs } from '@hundredfold/plugin-sdk'
+import { AREAS, Card, CardContent, CardHeader, CardTitle, React, jsx, jsxs } from '@hundredfoldhq/plugin-sdk'
 
 function InboxPage() {
   const [count, setCount] = React.useState(0)
@@ -127,7 +127,7 @@ The default export is checked field by field before anything is registered. `id`
 
 ## The SDK surface
 
-`@hundredfold/plugin-sdk` is the app's own live namespace, not a copy that happens to look alike. That matters most for React: a plugin that resolved a second React instance would get a second dispatcher, and every hook it called would throw. The loader installs the running instances on globals and rewrites the plugin's import specifiers to small shim modules that read them back, so the bundled path and the disk path land on the same objects.
+`@hundredfoldhq/plugin-sdk` is the app's own live namespace, not a copy that happens to look alike. That matters most for React: a plugin that resolved a second React instance would get a second dispatcher, and every hook it called would throw. The loader installs the running instances on globals and rewrites the plugin's import specifiers to small shim modules that read them back, so the bundled path and the disk path land on the same objects.
 
 What the module exports:
 
@@ -207,7 +207,7 @@ Inside the page, `useRouteParams()` returns what the path captured, keyed by the
 
 ### Only three specifiers resolve
 
-A disk plugin may import `@hundredfold/plugin-sdk`, `react`, and `react/jsx-runtime`, and nothing else. Relative paths and full URLs resolve normally against the plugin's own module, but any other bare specifier is rejected **before evaluation**, with a named `PluginLoadError` that lists the offending specifiers and the three that are allowed. Failing up front is the point: the alternative is a cryptic native "Failed to resolve module specifier" arriving from inside a blob import, after the module has already started running.
+A disk plugin may import `@hundredfoldhq/plugin-sdk`, `react`, and `react/jsx-runtime`, and nothing else. Relative paths and full URLs resolve normally against the plugin's own module, but any other bare specifier is rejected **before evaluation**, with a named `PluginLoadError` that lists the offending specifiers and the three that are allowed. Failing up front is the point: the alternative is a cryptic native "Failed to resolve module specifier" arriving from inside a blob import, after the module has already started running.
 
 The rewrite is anchored to import and export syntax and runs over a comment-masked copy of the source, so a string literal that merely reads `'react'` is never touched.
 

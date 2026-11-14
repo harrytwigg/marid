@@ -23,7 +23,7 @@ vi.mock("esbuild", async (importOriginal) => {
 
 /** A client half written the way it would be by hand, with formatting esbuild
  *  would not have chosen. Serving it back byte for byte is the claim. */
-const HAND_WRITTEN = `import { jsx, jsxs } from '@hundredfold/plugin-sdk'
+const HAND_WRITTEN = `import { jsx, jsxs } from '@hundredfoldhq/plugin-sdk'
 
 export default {
   id: 'calls',
@@ -47,7 +47,7 @@ export default {
 
 /** The shape every real plugin has: JSX and the SDK together. What it must not
  *  compile to is a fourth specifier, which the loader would reject. */
-const WITH_JSX_AND_SDK = `import { AREAS, React } from '@hundredfold/plugin-sdk'
+const WITH_JSX_AND_SDK = `import { AREAS, React } from '@hundredfoldhq/plugin-sdk'
 
 export function Panel() {
   const [count] = React.useState(0)
@@ -100,7 +100,7 @@ describe("GET /api/plugins/:id/client with JSX", () => {
     const served = await call("GET", "/api/plugins/both/client");
 
     expect(served.status).toBe(200);
-    expect(bareImports(served.bodyText).sort()).toEqual(["@hundredfold/plugin-sdk", "react/jsx-runtime"]);
+    expect(bareImports(served.bodyText).sort()).toEqual(["@hundredfoldhq/plugin-sdk", "react/jsx-runtime"]);
   });
 
   it("serves a hand-written jsx() client half byte for byte", async () => {
