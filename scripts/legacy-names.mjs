@@ -44,6 +44,8 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     for (const prefix of LEGACY.envPrefixes) {
       for (const [key, value] of Object.entries(process.env)) {
         if (!key.startsWith(`${prefix}_`) || value === undefined) continue
+        // Only names a shell can export: `eval` of anything else would stop the container from starting.
+        if (!/^[A-Z0-9_]+$/.test(key)) continue
         const current = `HUNDREDFOLD_${key.slice(prefix.length + 1)}`
         if (process.env[current] === undefined) console.log(`export ${current}=${quote(value)}`)
       }

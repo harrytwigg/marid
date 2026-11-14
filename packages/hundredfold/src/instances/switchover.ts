@@ -83,7 +83,7 @@ function readText(file: string): string | undefined {
   }
 }
 
-/** `mcp__hundredfold__<tool>` and a bare `mcp__hundredfold` (every tool of the server) in an allow-list, a prompt or a skill. */
+/** `mcp__<old>__<tool>` and a bare `mcp__<old>` (every tool of the server), `<old>` being the name before the rename, in an allow-list, a prompt or a skill. */
 function toolTokenEdit(file: string, text: string, names: Names): Edit | undefined {
   const pattern = new RegExp(`\\bmcp__${LEGACY_CODENAME}(?=__|\\b)`, "g");
   const count = text.match(pattern)?.length ?? 0;

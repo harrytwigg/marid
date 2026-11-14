@@ -27,6 +27,8 @@ COPY packages/hundredfold/package.json ./packages/hundredfold/
 COPY packages/hundredfold/scripts/fix-node-pty-permissions.mjs ./packages/hundredfold/scripts/
 COPY packages/web/package.json ./packages/web/
 COPY packages/shell/package.json ./packages/shell/
+# `patchedDependencies` names this file, and pnpm reads it during the install.
+COPY patches ./patches/
 
 # The base image is already the Node pin. Honouring `use-node-version` would compile
 # better-sqlite3/node-pty under a second Node fetched from nodejs.org while the runtime

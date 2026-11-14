@@ -395,7 +395,7 @@ A product rename would be decided and sequenced separately from these
 slices. The identity here takes the name from one place (`lib/brand.ts`), so
 no slice waits on it.
 
-If a name is chosen, the rename replaces every "Hundredfold" and "Hundredfold" reference
+If a name is chosen, the rename replaces every earlier-name reference
 in the repository, the internal codename included. Some things are kept:
 
 - the fork attribution in `LICENSE`/`NOTICE`, which the MIT licence requires;

@@ -64,12 +64,12 @@ export function isToolCallMarker(value: unknown, names: Names = NAMES): boolean 
   return typeof value === "string" && nameAliases(toolCallMarker, names).includes(value);
 }
 
-/** `hundredfoldMcp` in the org YAML, and its current spelling. */
+/** The org YAML key that opts an employee out of the built-in server: `<codename>Mcp`. An older install's key is `<old>Mcp`. */
 export function orgMcpKey(names: Names = NAMES): string {
   return `${names.codename}Mcp`;
 }
 
-/** `--hundredfold-session-id`: the flag the gateway puts on the MCP server it launches. */
+/** `--<codename>-<suffix>` (for example `--<codename>-session-id`): the flag the gateway puts on the MCP server it launches. */
 export function mcpFlag(suffix: string, names: Names = NAMES): string {
   return `--${names.codename}-${suffix}`;
 }
@@ -79,7 +79,7 @@ export function mcpFlagAliases(suffix: string, names: Names = NAMES): string[] {
   return nameAliases((n) => mcpFlag(suffix, n), names);
 }
 
-/** `hundredfoldSessionId` in the hook body, and its current spelling. */
+/** The session id's field in the hook body: `<codename>SessionId`. A relay an older gateway staged sends `<old>SessionId`. */
 export function hookSessionIdKey(names: Names = NAMES): string {
   return `${names.codename}SessionId`;
 }
