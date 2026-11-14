@@ -46,7 +46,7 @@ export function hashKeyNames(suffix: string, codename: string = CODENAME): strin
 }
 
 /** The npm scope the public plugin SDK is published under. It is the organisation's, not the codename's. */
-export const PLUGIN_SDK_SCOPE = "hundredfoldhq"
+export const PLUGIN_SDK_SCOPE = "hundredfold"
 
 /** The specifiers a plugin may import the SDK by: the current package name and the legacy one third parties wrote. */
 export function pluginSdkSpecifiers(scope: string = PLUGIN_SDK_SCOPE): string[] {

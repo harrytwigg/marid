@@ -33,6 +33,6 @@ describe("browser-side codename names", () => {
   it("accepts a plugin's import of the SDK by either package name", () => {
     expect(pluginSdkSpecifiers("acme")).toEqual(["@acme/plugin-sdk", "@jinn/plugin-sdk"])
     expect(pluginSdkSpecifiers("jinn")).toEqual(["@jinn/plugin-sdk"])
-    expect(pluginSdkSpecifiers()).toEqual(["@hundredfoldhq/plugin-sdk", "@jinn/plugin-sdk"])
+    expect(pluginSdkSpecifiers()).toEqual(["@hundredfold/plugin-sdk", "@jinn/plugin-sdk"])
   })
 })

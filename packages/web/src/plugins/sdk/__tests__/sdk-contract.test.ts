@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import * as sdk from '@hundredfoldhq/plugin-sdk'
+import * as sdk from '@hundredfold/plugin-sdk'
 import { ICONS } from '@/components/ui/icon'
 import { SDK_CONTRACT_VERSION } from '../version'
 

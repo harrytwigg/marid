@@ -177,7 +177,7 @@ This is the whole of the isolation story, and §9 is blunt about what it does no
 
 ## 4. The SDK import surface
 
-One module, `@hundredfoldhq/plugin-sdk`, is the only thing a plugin may import. It re-exports:
+One module, `@hundredfold/plugin-sdk`, is the only thing a plugin may import. It re-exports:
 
 - React and the jsx runtime, **the app's instances**. A second React would break hooks, so this
   is not a convenience re-export, it is the mechanism.
@@ -195,7 +195,7 @@ Two delivery modes resolve to the same object:
    drift from what the SDK actually exports.
 
 The loader rejects unsupported bare specifiers **up front, with a named error**, before
-evaluating anything. Only `@hundredfoldhq/plugin-sdk`, `react`, and `react/jsx-runtime` resolve. The
+evaluating anything. Only `@hundredfold/plugin-sdk`, `react`, and `react/jsx-runtime` resolve. The
 specifier rewrite is anchored to import and export syntax so a matching string literal inside
 the plugin is never touched. A lint fence keeps bundled plugins to the same list, so the two
 modes cannot diverge into "works bundled, fails on disk".
@@ -521,7 +521,7 @@ Each slice is graded against its section.
 | Slice | Section | Deliverable |
 | --- | --- | --- |
 | Registry | §3 | Contribution registry, area-scoped invalidation, `Slot`, error boundaries, and the status bar host |
-| SDK | §4, §5 | `@hundredfoldhq/plugin-sdk`: the single import surface and the hand-authored `.d.ts` |
+| SDK | §4, §5 | `@hundredfold/plugin-sdk`: the single import surface and the hand-authored `.d.ts` |
 | Loader | §4 | Runtime loader: specifier rejection, shims, blob import, validation, hot reload |
 | Discovery and assets | §2, §6, §8, §9 | Discovery, manifest validation, `GET /api/plugins`, asset route with the three guards, config lists |
 | Backend mount | §6, §8, §9 | Backend mount, hot reload, runtime enable gate after auth, per-plugin error isolation |

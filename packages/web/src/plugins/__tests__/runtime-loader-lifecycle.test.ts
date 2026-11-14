@@ -25,7 +25,7 @@ function fresh(): { id: string; area: string } {
 /** A plugin that contributes one chip, written the way a disk plugin is: plain
  *  ESM, no JSX, importing nothing but the SDK. */
 function chipPlugin(id: string, area: string, local = 'chip'): string {
-  return `import { SDK_CONTRACT_VERSION, React } from '@hundredfoldhq/plugin-sdk';
+  return `import { SDK_CONTRACT_VERSION, React } from '@hundredfold/plugin-sdk';
 export default {
   id: ${JSON.stringify(id)},
   name: 'Chip',

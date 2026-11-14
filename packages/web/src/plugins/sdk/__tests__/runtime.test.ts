@@ -49,10 +49,10 @@ describe('sdkImportMap before installPluginSdk', () => {
 })
 
 describe('installPluginSdk', () => {
-  it('names the @hundredfoldhq/plugin-sdk alias dynamically so a broken mapping fails this build', () => {
+  it('names the @hundredfold/plugin-sdk alias dynamically so a broken mapping fails this build', () => {
     const source = readFileSync('src/plugins/sdk/runtime.ts', 'utf8')
-    expect(source).toMatch(/import\(['"]@hundredfoldhq\/plugin-sdk['"]\)/)
-    expect(source).not.toMatch(/\bimport\s+['"]@hundredfoldhq\/plugin-sdk['"]/)
+    expect(source).toMatch(/import\(['"]@hundredfold\/plugin-sdk['"]\)/)
+    expect(source).not.toMatch(/\bimport\s+['"]@hundredfold\/plugin-sdk['"]/)
   })
 
   it('puts the app’s own SDK and React on the globals the shims read', async () => {
@@ -75,7 +75,7 @@ describe('sdkImportMap', () => {
 
   it('maps exactly the supported specifiers: the SDK under its current and its old name, react and its JSX runtime', () => {
     expect(Object.keys(sdkImportMap()).sort()).toEqual([
-      '@hundredfoldhq/plugin-sdk',
+      '@hundredfold/plugin-sdk',
       '@jinn/plugin-sdk', // rename:keep: plugins installed before the rename import the SDK by its old name
       'react',
       'react/jsx-runtime',

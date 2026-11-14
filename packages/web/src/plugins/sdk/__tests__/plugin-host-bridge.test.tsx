@@ -107,7 +107,7 @@ it('leaves every other frame out of the notification sink', () => {
 it('does not statically import the plugin SDK barrel onto the first paint', () => {
   // Vitest runs from the package root, so this is the file the host ships as.
   const source = readFileSync('src/plugins/sdk/plugin-host-bridge.tsx', 'utf8')
-  expect(source).not.toMatch(/\bimport\s+['"]@hundredfoldhq\/plugin-sdk['"]/)
+  expect(source).not.toMatch(/\bimport\s+['"]@hundredfold\/plugin-sdk['"]/)
 })
 
 it('logs a notice it cannot show rather than throwing into the socket', () => {

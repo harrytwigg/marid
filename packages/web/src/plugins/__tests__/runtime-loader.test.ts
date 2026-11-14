@@ -100,7 +100,7 @@ describe('unsupported specifiers', () => {
   })
 
   it.each([
-    ['@hundredfoldhq/plugin-sdk', `import { AREAS } from '@hundredfoldhq/plugin-sdk';`],
+    ['@hundredfold/plugin-sdk', `import { AREAS } from '@hundredfold/plugin-sdk';`],
     ['react', `import React from 'react';`],
     ['react/jsx-runtime', `import { jsx } from 'react/jsx-runtime';`],
     ['a relative path', `import './helper.js';`],
@@ -136,7 +136,7 @@ describe('specifier rewriting', () => {
   it('rewrites real specifiers and leaves string literals alone', async () => {
     const id = freshId()
     const source =
-      `import { host } from '@hundredfoldhq/plugin-sdk';\n` +
+      `import { host } from '@hundredfold/plugin-sdk';\n` +
       `const label = 'react';\n` +
       `host.notify('react');\n` +
       `export default { id: ${JSON.stringify(id)}, name: label, register() {} };\n`
@@ -145,7 +145,7 @@ describe('specifier rewriting', () => {
 
     const rewritten = urls.created.at(-1) ?? ''
     expect(rewritten).toContain(`import { host } from 'data:text/javascript,`)
-    expect(rewritten).not.toContain(`from '@hundredfoldhq/plugin-sdk'`)
+    expect(rewritten).not.toContain(`from '@hundredfold/plugin-sdk'`)
     // The two forms a plugin can spell `react` in without meaning an import.
     expect(rewritten).toContain(`const label = 'react';`)
     expect(rewritten).toContain(`host.notify('react');`)
@@ -156,7 +156,7 @@ describe('specifier rewriting', () => {
     const source =
       `// docs from 'react'\n` +
       `/* see import { jsx } from 'react/jsx-runtime' */\n` +
-      `import { host } from '@hundredfoldhq/plugin-sdk';\n` +
+      `import { host } from '@hundredfold/plugin-sdk';\n` +
       `export default { id: ${JSON.stringify(id)}, name: host ? 'a' : 'b', register() {} };\n`
 
     await loadRuntimePlugin(source, id)
