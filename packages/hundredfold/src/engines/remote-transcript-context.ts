@@ -21,15 +21,19 @@ import { shq, sshRun, SSH_CONNECTION_FAILED } from "./remote-stage.js";
 export const REMOTE_TRANSCRIPT_TAIL_BYTES = 1024 * 1024;
 const REMOTE_TAIL_TIMEOUT_MS = 20_000;
 
+/** The input-context size a usage record reports: input plus cache-read plus cache-creation tokens. */
+function contextTokensOfUsage(usage: Record<string, unknown>): number | undefined {
+  const tokens = [usage.input_tokens, usage.cache_read_input_tokens, usage.cache_creation_input_tokens].reduce<number>((sum, n) => sum + Number(n ?? 0), 0);
+  return Number.isFinite(tokens) && tokens > 0 ? tokens : undefined;
+}
+
 /** The context size one transcript line reports, or undefined when it is not an assistant entry with usage. */
 function contextTokensOfLine(line: string): number | undefined {
   if (!line.includes('"usage"')) return undefined;
   let entry: { type?: unknown; message?: { usage?: Record<string, unknown> } };
   try { entry = JSON.parse(line); } catch { return undefined; }
   const usage = entry.type === "assistant" ? entry.message?.usage : undefined;
-  if (!usage) return undefined;
-  const tokens = Number(usage.input_tokens ?? 0) + Number(usage.cache_read_input_tokens ?? 0) + Number(usage.cache_creation_input_tokens ?? 0);
-  return Number.isFinite(tokens) && tokens > 0 ? tokens : undefined;
+  return usage ? contextTokensOfUsage(usage) : undefined;
 }
 
 /** The input-context size (input + cache-read + cache-creation tokens) of the newest assistant request in `text`, or undefined when it has none. A first line cut by the tail does not parse and is skipped. */
