@@ -5,12 +5,13 @@ import {
   materializeTemplateBytes,
   materializeTemplateContent,
 } from "../template-materialization.js"
+import { OLD } from "../legacy-names.js";
 
 describe("template materialization", () => {
-  it("derives the default Jinn replacements", () => {
+  it(`derives the default ${OLD.portalName} replacements`, () => {
     expect(deriveTemplateMaterializationInputs({})).toEqual({
-      portalName: "Jinn",
-      portalSlug: "jinn",
+      portalName: OLD.portalName,
+      portalSlug: OLD.codename,
     })
   })
 
@@ -47,7 +48,7 @@ describe("template materialization", () => {
       deriveTemplateMaterializationInputs({}),
     )
 
-    expect(materialized).toBe("name: Jinn\nunknown: {{futureValue}}\n")
+    expect(materialized).toBe(`name: ${OLD.portalName}\nunknown: {{futureValue}}\n`)
     expect(findUnresolvedTemplatePlaceholders(materialized)).toEqual(["{{futureValue}}"])
   })
 

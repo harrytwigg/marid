@@ -5,10 +5,10 @@ import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The store freezes its path from HUNDREDFOLD_HOME at import.
-const TEST_HOME = path.join(os.tmpdir(), "jinn-engine-health-opencode-test");
+const TEST_HOME = path.join(os.tmpdir(), "hundredfold-engine-health-opencode-test");
 vi.mock("../paths.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../paths.js")>()),
-  JINN_HOME: path.join(os.tmpdir(), "jinn-engine-health-opencode-test"),
+  HUNDREDFOLD_HOME: path.join(os.tmpdir(), "hundredfold-engine-health-opencode-test"),
 }));
 
 import type { HundredfoldConfig } from "../config-types.js";

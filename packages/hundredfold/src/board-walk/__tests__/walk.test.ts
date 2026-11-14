@@ -29,8 +29,8 @@ vi.mock("../../gateway/todo-dispatch.js", () => ({
   },
 }));
 
-const home = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-board-walk-"));
-process.env.JINN_HOME = home;
+const home = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-board-walk-"));
+process.env.HUNDREDFOLD_HOME = home;
 
 const TEMPLATE = fs.readFileSync(path.resolve(__dirname, "..", "..", "..", "template", "board-walk.md"), "utf-8");
 const NOW = Date.parse("2026-10-02T12:00:00Z");

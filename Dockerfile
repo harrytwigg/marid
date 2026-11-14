@@ -100,11 +100,6 @@ COPY --from=builder --chown=root:node /src/scripts/docker-configure.mjs /opt/hun
 # is rewritten at publish time, so depending on it would couple us to packaging.
 RUN printf '#!/bin/sh\nexec node /opt/hundredfold/packages/hundredfold/dist/bin/hundredfold.js "$@"\n' > /usr/local/bin/hundredfold \
   && chmod 0755 /usr/local/bin/hundredfold
-# The old command, for scripts and habit: it says the name has changed, then runs the current binary.
-# rename:keep-begin
-RUN printf '#!/bin/sh\nexec node /opt/hundredfold/packages/hundredfold/dist/bin/legacy-forwarder.js "$@"\n' > /usr/local/bin/jinn \
-  && chmod 0755 /usr/local/bin/jinn
-# rename:keep-end
 
 COPY docker-entrypoint.sh /usr/local/bin/hundredfold-entrypoint
 COPY docker-healthcheck.sh /usr/local/bin/hundredfold-healthcheck
@@ -116,7 +111,7 @@ RUN chmod 0755 /usr/local/bin/hundredfold-entrypoint /usr/local/bin/hundredfold-
 # The symlink is the net under CLAUDE_CONFIG_DIR below — a release that stops honouring
 # it writes ~/.claude.json, which the next rebuild discards. Linked after the chown and
 # chowned with -h, because the target does not exist until Claude Code first runs.
-RUN mkdir -p /home/node/.jinn /home/node/.claude /home/node/.codex /work \
+RUN mkdir -p /home/node/.hundredfold /home/node/.claude /home/node/.codex /work \
   && chown -R node:node /home/node /work \
   && ln -s /home/node/.claude/.claude.json /home/node/.claude.json \
   && chown -h node:node /home/node/.claude.json
@@ -126,10 +121,10 @@ ENV HOME=/home/node
 ENV HUNDREDFOLD_CONTAINER=1
 # The home stays where the volume is mounted: a volume's mount point is not renamed, and a gateway
 # that looked for `~/.hundredfold` would start empty beside the data.
-ENV HUNDREDFOLD_HOME=/home/node/.jinn
-ENV HUNDREDFOLD_CONTAINER_PRIMARY_HOME=/home/node/.jinn
-ENV HUNDREDFOLD_STT_SETTINGS=/home/node/.jinn/stt.json
-ENV HUNDREDFOLD_STT_MODELS_DIR=/home/node/.jinn/models/whisper
+ENV HUNDREDFOLD_HOME=/home/node/.hundredfold
+ENV HUNDREDFOLD_CONTAINER_PRIMARY_HOME=/home/node/.hundredfold
+ENV HUNDREDFOLD_STT_SETTINGS=/home/node/.hundredfold/stt.json
+ENV HUNDREDFOLD_STT_MODELS_DIR=/home/node/.hundredfold/models/whisper
 WORKDIR /home/node
 
 # Keep Claude Code's config inside the volume. It otherwise writes ~/.claude.json,
@@ -150,4 +145,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
   CMD ["/usr/local/bin/hundredfold-healthcheck"]
 
 ENTRYPOINT ["/usr/local/bin/hundredfold-entrypoint"]
-CMD ["__jinn_service_start__"]
+CMD ["__hundredfold_service_start__"]

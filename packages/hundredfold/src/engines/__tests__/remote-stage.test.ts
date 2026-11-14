@@ -501,7 +501,7 @@ describe.skipIf(process.platform === "win32")("FACTS_SCRIPT node resolution", ()
     fs.chmodSync(hundredfold, 0o755);
 
     const reported = runFacts(`${binDir}:/usr/bin:/bin`).hundredfoldversion;
-    expect(reported).toBe("Hundredfold 0.33.3 (built on Jinn)");
+    expect(reported).toBe("Hundredfold 0.33.3");
     expect(assertRemoteVersion("build-box", reported, "0.33.3")).toBe("0.33.3");
   });
 
@@ -1444,7 +1444,7 @@ describe("assertRemoteVersion", () => {
   });
 
   it("refuses output that is not a version, quoting it with the install hint", () => {
-    for (const line of ["", "hundredfold: command not found", "Hundredfold 0.33 (built on Jinn)"]) {
+    for (const line of ["", "hundredfold: command not found", "Hundredfold 0.33"]) {
       expect(() => assertRemoteVersion("build-box", line, "0.33.3"))
         .toThrow(`unrecognised \`hundredfold --version\` output: ${JSON.stringify(line)}`);
       expect(() => assertRemoteVersion("build-box", line, "0.33.3"))

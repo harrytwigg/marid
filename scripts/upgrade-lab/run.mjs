@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { LEGACY, legacyEnv, legacyHomeName } from "../legacy-names.mjs"
 import crypto from "node:crypto"
 import fs from "node:fs"
 import net from "node:net"
@@ -57,7 +58,7 @@ export function createLabRoot(explicitRoot) {
 
 export function assertIsolatedLayout(rootInput) {
   // The live instance is at the current default home or, until it has been moved, at the one an older build used.
-  const liveHomes = [".hundredfold", ".jinn"].map((name) => { // rename:keep
+  const liveHomes = [".hundredfold", legacyHomeName].map((name) => {
     const livePath = path.resolve(os.homedir(), name)
     return fs.existsSync(livePath) ? fs.realpathSync(livePath) : livePath
   })
@@ -114,7 +115,9 @@ export function buildMinimalEnvironment(layout, base = {}) {
     HUNDREDFOLD_NO_OPEN: "1",
   }
   // A baseline build from before the rename reads the old names; the candidate adopts them and prefers the new.
-  for (const key of Object.keys(env)) if (key.startsWith("HUNDREDFOLD_")) env[`JINN_${key.slice("HUNDREDFOLD_".length)}`] = env[key] // rename:keep
+  for (const key of Object.keys(env)) {
+    if (key.startsWith("HUNDREDFOLD_")) for (const old of legacyEnv(key.slice("HUNDREDFOLD_".length))) env[old] = env[key]
+  }
   for (const [key, value] of Object.entries(env)) if (value === undefined) delete env[key]
   return env
 }
@@ -482,7 +485,7 @@ function packCandidate(repo, cache, env) {
 
 // The published package a candidate is measured against: the last release before the rename, which is what an install
 // being upgraded is running. Switch to the new name once it has a release of its own.
-const BASELINE_PACKAGE = "jinn-cli" // rename:keep
+const BASELINE_PACKAGE = LEGACY.package
 
 // Where a global install put the package: under the new name, or under the old one for the baseline.
 const installedPackageRoot = (prefix) =>
@@ -509,7 +512,7 @@ function installTarball(tarball, prefix, env) {
   run("npm", ["install", "--global", "--prefix", prefix, "--ignore-scripts", "--no-audit", "--no-fund", tarball], { env: { ...env, npm_config_prefix: prefix } })
   const packageRoot = installedPackageRoot(prefix)
   // `hundredfold.js`, or the old name in a release from before the rename.
-  const cli = ["hundredfold.js", "jinn.js" /* rename:keep */].map((name) => path.join(packageRoot, "dist", "bin", name)).find((file) => fs.existsSync(file))
+  const cli = ["hundredfold.js", `${LEGACY.codename}.js`].map((name) => path.join(packageRoot, "dist", "bin", name)).find((file) => fs.existsSync(file))
   if (!cli) throw new Error(`Installed package has no CLI under ${packageRoot}/dist/bin`)
   const rebuild = buildNativeDependencyRebuild(packageRoot)
   run(rebuild.command, rebuild.args, { env: { ...env, npm_config_prefix: prefix, npm_config_ignore_scripts: "false" } })
@@ -860,7 +863,7 @@ async function executeScenario({ scenario, candidateTarball, baselineTarball, ro
   let allocationReleased = false
   const env = buildMinimalEnvironment(layout, { PATH: process.env.PATH ?? "" })
   const liveBefore = liveSentinelMetadata()
-  const legacyLiveBefore = liveSentinelMetadata(path.resolve(os.homedir(), ".jinn")) // rename:keep: an instance not yet moved
+  const legacyLiveBefore = liveSentinelMetadata(path.resolve(os.homedir(), legacyHomeName)) // an instance not yet moved
   const summary = { schemaVersion: 1, scenario, port: allocation.port, contactedPorts: [], candidateSha256: null, baselineSha256: null, checks: {}, screenshots: [], artifacts: layout.artifacts }
   let primaryError
   try {
@@ -1075,7 +1078,7 @@ async function executeScenario({ scenario, candidateTarball, baselineTarball, ro
     const liveResolved = fs.existsSync(livePath) ? fs.realpathSync(livePath) : livePath
     summary.checks.liveInstanceUnaddressable = inside(liveResolved, layout.home) ? "FAIL" : "PASS"
     const liveAfter = liveSentinelMetadata()
-    const legacyLiveAfter = liveSentinelMetadata(path.resolve(os.homedir(), ".jinn")) // rename:keep
+    const legacyLiveAfter = liveSentinelMetadata(path.resolve(os.homedir(), legacyHomeName))
     if (liveBefore.digest !== liveAfter.digest || legacyLiveBefore.digest !== legacyLiveAfter.digest) throw new Error("live instance sentinel metadata changed during the lab")
     summary.liveSentinels = { before: liveBefore.digest, after: liveAfter.digest, unchanged: true }
     summary.checks.liveInstanceSentinelsUnchanged = "PASS"

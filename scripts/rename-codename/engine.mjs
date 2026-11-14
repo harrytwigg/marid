@@ -16,34 +16,14 @@ export function mapWord(word) {
   throw new Error(`no case mapping for "${word}"`);
 }
 
-const KEEP_LINE = /rename:keep(?!-)/;
-const KEEP_BEGIN = /rename:keep-begin/;
-const KEEP_END = /rename:keep-end/;
-
 /**
- * Rewrite one text. `keep` is a list of regexes whose matches are left as they are. A line carrying
- * `rename:keep` is left whole, and so is everything from a `rename:keep-begin` line to the next
- * `rename:keep-end` line. Returns the new text and what was left, so a guard can say what is allowed to remain.
+ * Rewrite one text. `keep` is a list of regexes whose matches are left as they are (the attribution the licence asks
+ * for). Returns the new text and what was left, so a guard can say what is allowed to remain.
  */
 export function renameText(text, keep) {
   const lines = text.split("\n");
   const left = [];
-  let inBlock = false;
   const out = lines.map((line, index) => {
-    if (inBlock) {
-      if (KEEP_END.test(line)) inBlock = false;
-      if (WORD.test(line)) left.push({ line: index + 1, text: line, why: "block" });
-      WORD.lastIndex = 0;
-      return line;
-    }
-    if (KEEP_BEGIN.test(line)) {
-      inBlock = true;
-      return line;
-    }
-    if (KEEP_LINE.test(line)) {
-      if (/jinn|marid/i.test(line.replace(KEEP_LINE, ""))) left.push({ line: index + 1, text: line, why: "line" });
-      return line;
-    }
     const held = [];
     let work = line;
     for (const pattern of keep) {

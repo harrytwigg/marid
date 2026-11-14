@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { Database as DatabaseType } from "better-sqlite3";
 import { formatTodoId, parseTodoIdPrefix, resolveTodoIdPrefix } from "./id.js";
 import { LEGACY_PORTAL_NAME } from "../shared/brand.js";
+import { LEGACY_SQL_FUNCTIONS } from "../shared/legacy-names.js";
 
 /**
  * Todo id allocation: burn an ordinal, hand back a one-time claim, and let the
@@ -24,11 +25,11 @@ function claimDigest(rawClaim: string): string {
 
 export function registerWorkItemIdentityFunctions(db: DatabaseType): void {
   if (registeredDatabases.has(db)) return;
-  db.function("jinn_work_item_claim_digest", () => {
+  db.function(LEGACY_SQL_FUNCTIONS.claimDigest, () => {
     const claim = activeClaims.get(db);
     return claim ? claimDigest(claim) : null;
   });
-  db.function("jinn_work_item_claim_prefix", () => activeClaimPrefixes.get(db) ?? null);
+  db.function(LEGACY_SQL_FUNCTIONS.claimPrefix, () => activeClaimPrefixes.get(db) ?? null);
   registeredDatabases.add(db);
 }
 

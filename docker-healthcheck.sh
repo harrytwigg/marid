@@ -7,16 +7,6 @@
 # reported, not restarted.
 set -eu
 
-# A compose file or `docker run` written for an older build sets variables under the old prefix.
-# Give each one the current name, unless the current name is set: the gateway does the same for itself.
-for legacy_name in $(env | sed -n 's/^\(JINN_[A-Za-z0-9_]*\)=.*/\1/p'); do # rename:keep
-  current_name="HUNDREDFOLD_${legacy_name#JINN_}" # rename:keep
-  if [ -z "$(eval "printf %s \"\${$current_name+set}\"")" ]; then
-    eval "$current_name=\${$legacy_name}"
-    export "$current_name"
-  fi
-done
-
 # Mirrors resolveHundredfoldHome() in shared/home.ts, absolutization included: a probe that
 # disagrees about the home finds no gateway.json and reports a healthy container sick.
 HUNDREDFOLD_HOME="${HUNDREDFOLD_HOME:-$HOME/.${HUNDREDFOLD_INSTANCE:-hundredfold}}"

@@ -1,4 +1,5 @@
 import crypto from "node:crypto"
+import { LEGACY } from "./legacy-names.mjs"
 import fs from "node:fs"
 import net from "node:net"
 import os from "node:os"
@@ -13,12 +14,12 @@ const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, mil
 
 // The binary an installed package carries: `hundredfold.js`, or the old name in a release from before the rename.
 const installedCli = (packageRoot) =>
-  ["hundredfold.js", "jinn.js" /* rename:keep */].map((name) => path.join(packageRoot, "dist", "bin", name)).find((file) => fs.existsSync(file)) ??
+  ["hundredfold.js", `${LEGACY.codename}.js`].map((name) => path.join(packageRoot, "dist", "bin", name)).find((file) => fs.existsSync(file)) ??
   path.join(packageRoot, "dist", "bin", "hundredfold.js")
 
 // The published package a candidate is measured against: the last release before the rename, which is what an install
 // being upgraded is running. Switch to the new name once it has a release of its own.
-export const BASELINE_PACKAGE = "jinn-cli" // rename:keep
+export const BASELINE_PACKAGE = LEGACY.package
 
 // Where a global install put the package: under the new name, or under the old one for the baseline.
 const installedPackageRoot = (prefix) =>
@@ -176,9 +177,9 @@ function expectedTemplateBytes(file, portalName) {
 
 function instancePortalName(home) {
   const config = path.join(home, "config.yaml")
-  if (!fs.existsSync(config)) return "Jinn" // rename:keep
+  if (!fs.existsSync(config)) return LEGACY.portalName
   const match = /^\s+portalName:\s*["']?([^"'\n]+?)["']?\s*$/m.exec(fs.readFileSync(config, "utf8"))
-  return match?.[1] ?? "Jinn" // rename:keep
+  return match?.[1] ?? LEGACY.portalName
 }
 
 export function assertShippedSkillsConverged(home, candidateRoot, candidateSkills) {

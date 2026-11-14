@@ -21,7 +21,7 @@ import { registerFallbackCommand } from "../src/cli/opencode-fallback-command.js
 const program = new Command();
 program
   .name("hundredfold")
-  .description(`${PRODUCT_NAME} - lightweight AI gateway daemon (built on Jinn)`)
+  .description(`${PRODUCT_NAME} - lightweight AI gateway daemon`)
   .version(productBanner(pkg.version))
   .option("-i, --instance <name>", "Target a specific instance (default: hundredfold)");
 

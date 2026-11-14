@@ -1,6 +1,6 @@
 # Hundredfold Fork Constitution
 
-This document governs **`hundredfoldhq/hundredfold`**, a permanent fork of `hristo2612/jinn`.
+This document governs **`hundredfoldhq/hundredfold`**, a permanent fork of the project credited in NOTICE.
 It is the ratified statement of what this fork is for and how work is proposed, reviewed, and
 accepted here.
 
@@ -13,7 +13,7 @@ it rather than restating it.
 
 ### I. This fork does not return upstream (NON-NEGOTIABLE)
 
-**No change made in this repository is ever submitted to `hristo2612/jinn`.** There is no
+**No change made in this repository is ever submitted to the upstream project.** There is no
 upstreaming plan, no eventual pull request, no "keep it clean so it can go back later." The
 `upstream` remote is a **read-only** source of changes to merge *in*; it is never a push or
 pull-request target.

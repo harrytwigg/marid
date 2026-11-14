@@ -17,11 +17,12 @@
 
 import path from "node:path";
 import { CODENAME } from "./codename-constant.js";
+import { LEGACY_CODENAME } from "./legacy-names.js";
 
 export { CODENAME };
 
 /** The name every install made before a rename carries. Never changes. */
-export const LEGACY_CODENAME = "jinn"; // rename:keep
+export { LEGACY_CODENAME };
 
 export interface Names {
   /** The lower-case form: `hundredfold`, a header segment, an instance name. */

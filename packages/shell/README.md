@@ -52,7 +52,7 @@ and a real credential-store backend before release.
 
 ## Retained desktop behavior
 
-The native menu, icon, restored window geometry, `jinn://` deep links, and the
-opt-in refresh-rate probe from the desktop spike remain. `jinn://org` and other
+The native menu, icon, restored window geometry, `hundredfold://` deep links, and the
+opt-in refresh-rate probe from the desktop spike remain. `hundredfold://org` and other
 custom-scheme routes resolve inside bundled assets. Set `HUNDREDFOLD_SHELL_PROBE=1`
 when launching the shell to open the local probe window.

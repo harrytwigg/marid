@@ -32,7 +32,7 @@ and sandbox data are not retained.
 | 8 | A→B changes HTTP, WS, cache, auth, identity; route remains `/todos` | Verified | Switching A→B in the bundled app left the Todos Home route in place and moved all traffic: B's access log grew while A's grew by zero bytes, and the switcher then named QA Beta the current workspace. Switching back reversed both. Generation isolation for cache and sockets is covered by the focused manager suite |
 | 9 | Delayed A REST and WS after switch are discarded | Verified | Focused manager test delivers an A REST resolution and an A WebSocket frame after committing B: the REST promise rejects as `StaleGatewayGenerationError`, the frame callback never runs, and B stays active |
 | 10 | B→A, remove B, restore A, honest unreachable state (10a/10b/10c) | Verified | B→A moved every request back to A and left B's log untouched. Removing QA Beta deleted only its exact-origin Keychain account and left A's intact. **10a** — with A stopped, Cmd+R rendered the app's own screen: "Cannot reach QA Alpha", both paired gateways with Retry/Use/Remove, the origin and pair-code fields, and "Gateway is unreachable" — never the browser Pair This Browser screen. **10b** — with A unreachable, a `Use` on QA Beta failed and the heading still read "Cannot reach QA Alpha"; with both gateways restarted, `Retry` on QA Alpha's row grew A's access log by 69 bytes and B's by zero, and the app recovered into A on its previous route. **10c** — removing QA Beta right after its selection failed cleared the stale failure, and the next `Retry` reached A and recovered into it with no `Unknown native gateway profile` throw |
-| 11 | `jinn://org` and `jinn://settings` stay in-app; HTTPS opens outside | Verified | Both deep links were opened against the unsigned bundle and rendered the in-app Organization and Settings routes in the app window; the Rust navigation suite pins HTTPS to the external opener |
+| 11 | `hundredfold://org` and `hundredfold://settings` stay in-app; HTTPS opens outside | Verified | Both deep links were opened against the unsigned bundle and rendered the in-app Organization and Settings routes in the app window; the Rust navigation suite pins HTTPS to the external opener |
 | 12 | Unsupported, denied, and failed remain distinct | Verified | Platform contract suite, which now also boots `@/main` for real to prove no permission prompt is raised on the startup path |
 | 13 | Remote/LAN pages cannot invoke native; web bundle has no Tauri or Capacitor dependencies | Verified | Rust caller/origin suites, the product-boundary test, zero `@capacitor/*` lockfile entries, and a scan of all 367 emitted chunks in the gateway-served bundle finding no `__TAURI__`, `@tauri-apps/api` or `Capacitor`; only the shell bundle carries the lazily split `tauri-*.js` adapter |
 | 14 | Full gates, unsigned macOS build, mobile initialization | Verified with named gaps | Full gate green; Apple/Android projects generated; details below |
@@ -93,7 +93,7 @@ or 390×844. They contain only generic sandbox identities (`QA Alpha`, `QA Beta`
 
 Both sandbox gateways were stopped, their disposable homes deleted, ports 7814
 and 7815 confirmed free, the two QA Keychain accounts removed, the bundled app
-instance started by this run quit, and the pre-existing `run.jinn.shell`
+instance started by this run quit, and the pre-existing `run.hundredfold.shell`
 application state restored from the backup taken before the run.
 
 ## Landed-surface re-confirmation — 2026-08-24

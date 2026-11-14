@@ -8,6 +8,7 @@ import {
   todoIdOrdinal,
   todoIdPrefix,
 } from "../id.js";
+import { OLD } from "../../shared/legacy-names.js";
 
 describe("company-derived Todo identity", () => {
   it("uses intuitive word initials and single-word letter prefixes", () => {
@@ -15,7 +16,7 @@ describe("company-derived Todo identity", () => {
     expect(deriveTodoIdPrefix("Build Sprint Labs")).toBe("BSL");
     expect(deriveTodoIdPrefix("Acme Corp")).toBe("ACM");
     expect(deriveTodoIdPrefix("A Company")).toBe("ACO");
-    expect(deriveTodoIdPrefix("Jinn")).toBe("JIN");
+    expect(deriveTodoIdPrefix(OLD.portalName)).toBe("JIN");
     expect(deriveTodoIdPrefix("Yorio")).toBe("YOR");
     expect(deriveTodoIdPrefix("Éclair Works")).toBe("ECL");
     expect(deriveTodoIdPrefix("  one.two  ")).toBe("ONE");
@@ -25,8 +26,8 @@ describe("company-derived Todo identity", () => {
     expect(deriveTodoIdPrefix("Build/Sprint&Labs")).toBe("BSL");
     expect(resolveTodoIdPrefix("Build Sprint Labs", "JNN")).toBe("JNN");
     expect(resolveTodoIdPrefix("Build Sprint Labs", undefined)).toBe("BSL");
-    for (const override of ["JN", "JINN", "jin", "J1N", " JNN ", 42]) {
-      expect(() => resolveTodoIdPrefix("Jinn", override)).toThrow(/prefix/i);
+    for (const override of ["JN", OLD.upper, "jin", "J1N", " JNN ", 42]) {
+      expect(() => resolveTodoIdPrefix(OLD.portalName, override)).toThrow(/prefix/i);
     }
   });
 

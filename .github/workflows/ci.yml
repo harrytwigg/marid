@@ -267,7 +267,7 @@ jobs:
           # A leftover gateway.pid names a number the next container has recycled, and it
           # answers kill(pid, 0) as an unrelated process — `hundredfold start` then detaches and
           # exits PID 1 into a restart loop. The boot has to clear it.
-          docker exec hundredfold-smoke sh -c 'echo 1 > /home/node/.jinn/gateway.pid'
+          docker exec hundredfold-smoke sh -c 'echo 1 > /home/node/.hundredfold/gateway.pid'
           docker restart hundredfold-smoke >/dev/null
           wait_for_status || give_up "gateway did not come back after a restart with a stale gateway.pid"
 

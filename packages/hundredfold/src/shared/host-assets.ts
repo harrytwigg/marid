@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { NAMES, type Names } from "./codename.js";
+import { LEGACY_CODENAME } from "./legacy-names.js";
 
 /**
  * The hook relay runs outside this package (beside the home, and staged onto remote hosts),
@@ -8,6 +9,7 @@ import { NAMES, type Names } from "./codename.js";
  * which is how a remote host's older copy is recognised as stale and staged again.
  */
 const PLACEHOLDER = /__CODENAME__/g;
+const LEGACY_PLACEHOLDER = /__LEGACY_CODENAME__/g;
 
 /** `// codename: hundredfold`, the line a rendered relay carries. */
 export function hostAssetStamp(names: Names = NAMES): string {
@@ -16,7 +18,7 @@ export function hostAssetStamp(names: Names = NAMES): string {
 
 /** The asset's source with the codename in place. */
 export function renderHostAsset(source: string, names: Names = NAMES): string {
-  return source.replace(PLACEHOLDER, names.codename);
+  return source.replace(LEGACY_PLACEHOLDER, LEGACY_CODENAME).replace(PLACEHOLDER, names.codename);
 }
 
 /** Read a shipped asset from `file` and render it for `names`. */

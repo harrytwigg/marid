@@ -6,6 +6,7 @@ vi.mock("../../shared/codename-constant.js", () => ({ CODENAME: "acme" }));
 import type { Employee, HundredfoldConfig } from "../../shared/types.js";
 import { setHundredfoldAttachGate } from "../../mcp/attachment.js";
 import { resolveEngineRunMcp } from "../engine-run-mcp.js";
+import { OLD } from "../../shared/legacy-names.js";
 
 /** What the engine run is handed: the built-in server under the name the instance records, whichever path
  *  chose it (the belt, or a purpose-built toolset). */
@@ -18,7 +19,7 @@ afterEach(() => setHundredfoldAttachGate(null));
 
 describe("resolveEngineRunMcp under a per-instance server name", () => {
   it("registers the belt under the legacy name until the instance records its own", () => {
-    expect(serversOf(resolveEngineRunMcp({ config: config({}), employee: employee(), engine: "codex", sessionId: "s1" }))).toEqual(["jinn"]);
+    expect(serversOf(resolveEngineRunMcp({ config: config({}), employee: employee(), engine: "codex", sessionId: "s1" }))).toEqual([OLD.codename]);
   });
 
   it("registers the belt under the name the instance's block records", () => {
@@ -28,7 +29,7 @@ describe("resolveEngineRunMcp under a per-instance server name", () => {
 
   it("registers a purpose-built toolset under the same name, as the session's only server", () => {
     const toolset = employee({ toolset: "board-walk" as never });
-    expect(Object.keys(resolveEngineRunMcp({ config: config({ jinn: { mcpServerName: "acme" } }), employee: toolset, engine: "codex", sessionId: "s1" }).resolvedMcp!.mcpServers)).toEqual(["acme"]);
-    expect(Object.keys(resolveEngineRunMcp({ config: config({}), employee: toolset, engine: "codex", sessionId: "s1" }).resolvedMcp!.mcpServers)).toEqual(["jinn"]);
+    expect(Object.keys(resolveEngineRunMcp({ config: config({ [OLD.codename]: { mcpServerName: "acme" } }), employee: toolset, engine: "codex", sessionId: "s1" }).resolvedMcp!.mcpServers)).toEqual(["acme"]);
+    expect(Object.keys(resolveEngineRunMcp({ config: config({}), employee: toolset, engine: "codex", sessionId: "s1" }).resolvedMcp!.mcpServers)).toEqual([OLD.codename]);
   });
 });

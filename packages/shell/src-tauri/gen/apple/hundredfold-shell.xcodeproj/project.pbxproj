@@ -25,7 +25,7 @@
 		04BE9471A2CBC302C58CCCCB /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
 		0EBDDD95C14F1D7C1C400A25 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		11E41EF0C4371D611F3F154B /* main.rs */ = {isa = PBXFileReference; path = main.rs; sourceTree = "<group>"; };
-		4001EA5D679A3A52402307F4 /* jinn-shell_iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "jinn-shell_iOS.entitlements"; sourceTree = "<group>"; };
+		4001EA5D679A3A52402307F4 /* hundredfold-shell_iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "hundredfold-shell_iOS.entitlements"; sourceTree = "<group>"; };
 		415E13D02D21B59ED1E0C7FC /* commands.rs */ = {isa = PBXFileReference; path = commands.rs; sourceTree = "<group>"; };
 		43F7F74A4FA2746ECD01FF9E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		44871940E1F928858BCB21FE /* origin.rs */ = {isa = PBXFileReference; path = origin.rs; sourceTree = "<group>"; };
@@ -48,7 +48,7 @@
 		E394FD25B22E87230E3FBFEF /* menu.rs */ = {isa = PBXFileReference; path = menu.rs; sourceTree = "<group>"; };
 		E8240FA00F7D58218A3A9258 /* stream.rs */ = {isa = PBXFileReference; path = stream.rs; sourceTree = "<group>"; };
 		EF617CEDA87FF28EF3EC2D4F /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
-		F807AF03873FD725F72F75F4 /* jinn-shell_iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "jinn-shell_iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		F807AF03873FD725F72F75F4 /* hundredfold-shell_iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "hundredfold-shell_iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -80,7 +80,7 @@
 		65349FCAF597E897F1853CEF /* Sources */ = {
 			isa = PBXGroup;
 			children = (
-				EA0CB2C90AAA4FDD04082E99 /* jinn-shell */,
+				EA0CB2C90AAA4FDD04082E99 /* hundredfold-shell */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -111,7 +111,7 @@
 				43F7F74A4FA2746ECD01FF9E /* Assets.xcassets */,
 				530C3B3E8E89BFF4BAF95732 /* LaunchScreen.storyboard */,
 				1CF9EC1F530316F53497E1AA /* Externals */,
-				E2538426FF4C8B25D51B5E72 /* jinn-shell_iOS */,
+				E2538426FF4C8B25D51B5E72 /* hundredfold-shell_iOS */,
 				65349FCAF597E897F1853CEF /* Sources */,
 				8C3DF1C1482EEA774B8B5134 /* src */,
 				E3D3C4A8AD46E453CAACDD0F /* Frameworks */,
@@ -127,13 +127,13 @@
 			path = bindings;
 			sourceTree = "<group>";
 		};
-		E2538426FF4C8B25D51B5E72 /* jinn-shell_iOS */ = {
+		E2538426FF4C8B25D51B5E72 /* hundredfold-shell_iOS */ = {
 			isa = PBXGroup;
 			children = (
 				0EBDDD95C14F1D7C1C400A25 /* Info.plist */,
-				4001EA5D679A3A52402307F4 /* jinn-shell_iOS.entitlements */,
+				4001EA5D679A3A52402307F4 /* hundredfold-shell_iOS.entitlements */,
 			);
-			path = "jinn-shell_iOS";
+			path = "hundredfold-shell_iOS";
 			sourceTree = "<group>";
 		};
 		E3D3C4A8AD46E453CAACDD0F /* Frameworks */ = {
@@ -154,26 +154,26 @@
 		E4B637238D9FF49FF30CC45B /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				F807AF03873FD725F72F75F4 /* jinn-shell_iOS.app */,
+				F807AF03873FD725F72F75F4 /* hundredfold-shell_iOS.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		EA0CB2C90AAA4FDD04082E99 /* jinn-shell */ = {
+		EA0CB2C90AAA4FDD04082E99 /* hundredfold-shell */ = {
 			isa = PBXGroup;
 			children = (
 				71C6C4D35D584912593B5BBB /* main.mm */,
 				DDE3730086B5E1F53B89A818 /* bindings */,
 			);
-			path = "jinn-shell";
+			path = "hundredfold-shell";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		EFEC266C935EB11CD7BC07FB /* jinn-shell_iOS */ = {
+		EFEC266C935EB11CD7BC07FB /* hundredfold-shell_iOS */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 6FB942D323712D6807BC7275 /* Build configuration list for PBXNativeTarget "jinn-shell_iOS" */;
+			buildConfigurationList = 6FB942D323712D6807BC7275 /* Build configuration list for PBXNativeTarget "hundredfold-shell_iOS" */;
 			buildPhases = (
 				31E976B6AD88A7F996E1C0A9 /* Build Rust Code */,
 				5938E8352A90DB5A9F11DBCD /* Sources */,
@@ -184,11 +184,11 @@
 			);
 			dependencies = (
 			);
-			name = "jinn-shell_iOS";
+			name = "hundredfold-shell_iOS";
 			packageProductDependencies = (
 			);
-			productName = "jinn-shell_iOS";
-			productReference = F807AF03873FD725F72F75F4 /* jinn-shell_iOS.app */;
+			productName = "hundredfold-shell_iOS";
+			productReference = F807AF03873FD725F72F75F4 /* hundredfold-shell_iOS.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -202,7 +202,7 @@
 				TargetAttributes = {
 				};
 			};
-			buildConfigurationList = 13F2B2742A6B91DB17B105CC /* Build configuration list for PBXProject "jinn-shell" */;
+			buildConfigurationList = 13F2B2742A6B91DB17B105CC /* Build configuration list for PBXProject "hundredfold-shell" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -216,7 +216,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				EFEC266C935EB11CD7BC07FB /* jinn-shell_iOS */,
+				EFEC266C935EB11CD7BC07FB /* hundredfold-shell_iOS */,
 			);
 		};
 /* End PBXProject section */
@@ -278,7 +278,7 @@
 					arm64,
 				);
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = "jinn-shell_iOS/jinn-shell_iOS.entitlements";
+				CODE_SIGN_ENTITLEMENTS = "hundredfold-shell_iOS/hundredfold-shell_iOS.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				ENABLE_BITCODE = NO;
 				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
@@ -286,14 +286,14 @@
 					"$(inherited)",
 					"\".\"",
 				);
-				INFOPLIST_FILE = "jinn-shell_iOS/Info.plist";
+				INFOPLIST_FILE = "hundredfold-shell_iOS/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
-				PRODUCT_BUNDLE_IDENTIFIER = run.jinn.shell;
+				PRODUCT_BUNDLE_IDENTIFIER = run.hundredfold.shell;
 				PRODUCT_NAME = Hundredfold;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -428,7 +428,7 @@
 					arm64,
 				);
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = "jinn-shell_iOS/jinn-shell_iOS.entitlements";
+				CODE_SIGN_ENTITLEMENTS = "hundredfold-shell_iOS/hundredfold-shell_iOS.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				ENABLE_BITCODE = NO;
 				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
@@ -436,14 +436,14 @@
 					"$(inherited)",
 					"\".\"",
 				);
-				INFOPLIST_FILE = "jinn-shell_iOS/Info.plist";
+				INFOPLIST_FILE = "hundredfold-shell_iOS/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
-				PRODUCT_BUNDLE_IDENTIFIER = run.jinn.shell;
+				PRODUCT_BUNDLE_IDENTIFIER = run.hundredfold.shell;
 				PRODUCT_NAME = Hundredfold;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -454,7 +454,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		13F2B2742A6B91DB17B105CC /* Build configuration list for PBXProject "jinn-shell" */ = {
+		13F2B2742A6B91DB17B105CC /* Build configuration list for PBXProject "hundredfold-shell" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				B570ED9C41F161CF97B387D5 /* debug */,
@@ -463,7 +463,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = debug;
 		};
-		6FB942D323712D6807BC7275 /* Build configuration list for PBXNativeTarget "jinn-shell_iOS" */ = {
+		6FB942D323712D6807BC7275 /* Build configuration list for PBXNativeTarget "hundredfold-shell_iOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				C70AC68F3A5C453036B68A1C /* debug */,

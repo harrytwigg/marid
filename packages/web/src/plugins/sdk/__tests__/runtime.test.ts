@@ -76,7 +76,7 @@ describe('sdkImportMap', () => {
   it('maps exactly the supported specifiers: the SDK under its current and its old name, react and its JSX runtime', () => {
     expect(Object.keys(sdkImportMap()).sort()).toEqual([
       '@hundredfold/plugin-sdk',
-      '@jinn/plugin-sdk', // rename:keep: plugins installed before the rename import the SDK by its old name
+      '@hundredfold/plugin-sdk', // rename:keep: plugins installed before the rename import the SDK by its old name
       'react',
       'react/jsx-runtime',
     ])

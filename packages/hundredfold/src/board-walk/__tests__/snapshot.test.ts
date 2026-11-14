@@ -100,7 +100,7 @@ describe("capacity snapshot", () => {
 
 describe("the interactive-CLI operator signal", () => {
   it("counts a statusline snapshot only when its session is one the operator drives", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-statusline-"));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-statusline-"));
     const write = (id: string, at: number) => {
       fs.writeFileSync(path.join(dir, `${id}.json`), "{}");
       fs.utimesSync(path.join(dir, `${id}.json`), at / 1000, at / 1000);

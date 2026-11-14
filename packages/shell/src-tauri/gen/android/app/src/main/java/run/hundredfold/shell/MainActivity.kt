@@ -1,4 +1,4 @@
-package run.jinn.shell
+package run.hundredfold.shell
 
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge

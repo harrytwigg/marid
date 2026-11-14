@@ -1,3 +1,4 @@
+import { LEGACY_ENV_PREFIXES } from './src/shared/legacy-names.js';
 import {
   assertIsolatedClaudeConfigDir,
   assertIsolatedTestHome,
@@ -60,7 +61,9 @@ const LEAKY_ENV_VARS = [
 for (const name of LEAKY_ENV_VARS) delete process.env[name];
 // The same variables under the name an older build exports them by: a session started before an upgrade still carries those.
 for (const name of LEAKY_ENV_VARS) {
-  if (name.startsWith('HUNDREDFOLD_')) delete process.env[`JINN_${name.slice('HUNDREDFOLD_'.length)}`]; // rename:keep
+  if (name.startsWith('HUNDREDFOLD_')) {
+    for (const prefix of LEGACY_ENV_PREFIXES) delete process.env[`${prefix}_${name.slice('HUNDREDFOLD_'.length)}`];
+  }
 }
 
 /**

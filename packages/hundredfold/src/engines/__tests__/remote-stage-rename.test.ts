@@ -14,6 +14,7 @@ import { LEGACY_REMOTE_STAGE_DIR_NAME, REMOTE_STAGE_DIR_NAME, validateRemoteTarg
 import { isRemoteStagedHome } from "../../shared/local-db-guard.js";
 import { evaluateWritePathPolicy } from "../../shared/command-policy.js";
 import { claudeProjectSlug } from "../../shared/claude-project-slug.js";
+import { OLD } from "../../shared/legacy-names.js";
 
 let root: string;
 beforeEach(() => { root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "remote-rename-"))); });
@@ -25,11 +26,11 @@ const run = (...args: string[]): string => execFileSync("sh", ["-c", STAGE_RENAM
 describe("the names a host's directories carry", () => {
   it("are the current codename's, with the legacy ones known", () => {
     expect(REMOTE_DEPARTMENTS_DIR).toBe(".acme-departments");
-    expect(LEGACY_REMOTE_DEPARTMENTS_DIR).toBe(".jinn-departments");
+    expect(LEGACY_REMOTE_DEPARTMENTS_DIR).toBe(`.${OLD.codename}-departments`);
     expect(REMOTE_STAGE_MARKER).toBe(".acme-remote-stage");
-    expect(LEGACY_REMOTE_STAGE_MARKER).toBe(".jinn-remote-stage");
+    expect(LEGACY_REMOTE_STAGE_MARKER).toBe(`.${OLD.codename}-remote-stage`);
     expect(REMOTE_STAGE_DIR_NAME).toBe(".acme-remote-stage");
-    expect(remoteDepartmentsRoots("/srv/work")).toEqual(["/srv/work/.acme-departments", "/srv/work/.jinn-departments"]);
+    expect(remoteDepartmentsRoots("/srv/work")).toEqual(["/srv/work/.acme-departments", `/srv/work/.${OLD.codename}-departments`]);
   });
 
   it("keep recognising what an older gateway staged: its marker, its stage root, its stage directories", () => {
@@ -61,19 +62,19 @@ describe("moving a host's stage directories", () => {
   const config = () => path.join(root, "claude");
 
   it("moves the container and the conversations filed under each stage directory, once", () => {
-    touch(path.join(root, ".jinn-departments", "ops", "CLAUDE.md"));
-    touch(path.join(root, ".jinn-departments", "dev", "CLAUDE.md"));
-    touch(path.join(config(), "projects", claudeProjectSlug(path.join(root, ".jinn-departments", "ops")), "a.jsonl"));
-    const out = run(path.join(root, ".jinn-departments"), path.join(root, ".acme-departments"), config(), path.join(root, "unused"));
+    touch(path.join(root, `.${OLD.codename}-departments`, "ops", "CLAUDE.md"));
+    touch(path.join(root, `.${OLD.codename}-departments`, "dev", "CLAUDE.md"));
+    touch(path.join(config(), "projects", claudeProjectSlug(path.join(root, `.${OLD.codename}-departments`, "ops")), "a.jsonl"));
+    const out = run(path.join(root, `.${OLD.codename}-departments`), path.join(root, ".acme-departments"), config(), path.join(root, "unused"));
     expect(out).toContain("transcripts=1");
-    expect(fs.existsSync(path.join(root, ".jinn-departments"))).toBe(false);
+    expect(fs.existsSync(path.join(root, `.${OLD.codename}-departments`))).toBe(false);
     expect(fs.existsSync(path.join(root, ".acme-departments", "dev", "CLAUDE.md"))).toBe(true);
     expect(fs.existsSync(path.join(config(), "projects", claudeProjectSlug(path.join(root, ".acme-departments", "ops")), "a.jsonl"))).toBe(true);
-    expect(run(path.join(root, ".jinn-departments"), path.join(root, ".acme-departments"), config())).toBe("");
+    expect(run(path.join(root, `.${OLD.codename}-departments`), path.join(root, ".acme-departments"), config())).toBe("");
   });
 
   it.runIf(fs.existsSync("/proc/self"))("moves what is idle, leaves a stage directory a process works in, and finishes once that process has ended", async () => {
-    const [oldRoot, newRoot] = [path.join(root, ".jinn-departments"), path.join(root, ".acme-departments")];
+    const [oldRoot, newRoot] = [path.join(root, `.${OLD.codename}-departments`), path.join(root, ".acme-departments")];
     touch(path.join(oldRoot, "ops", "CLAUDE.md"));
     touch(path.join(oldRoot, "dev", "CLAUDE.md"));
     touch(path.join(config(), "projects", claudeProjectSlug(path.join(oldRoot, "ops")), "a.jsonl"));
@@ -97,7 +98,7 @@ describe("moving a host's stage directories", () => {
   });
 
   it("finishes a stage directory whose conversations moved before the connection dropped", () => {
-    const [oldRoot, newRoot] = [path.join(root, ".jinn-departments"), path.join(root, ".acme-departments")];
+    const [oldRoot, newRoot] = [path.join(root, `.${OLD.codename}-departments`), path.join(root, ".acme-departments")];
     touch(path.join(oldRoot, "ops", "CLAUDE.md"));
     // The state after a drop between the two moves: the conversations under the new key, the directory still in the old container.
     touch(path.join(config(), "projects", claudeProjectSlug(path.join(newRoot, "ops")), "a.jsonl"));
@@ -108,11 +109,11 @@ describe("moving a host's stage directories", () => {
   });
 
   it("leaves a stage directory that exists in both containers as it is, and still moves the rest", () => {
-    touch(path.join(root, ".jinn-departments", "ops", "old"));
-    touch(path.join(root, ".jinn-departments", "dev", "old"));
+    touch(path.join(root, `.${OLD.codename}-departments`, "ops", "old"));
+    touch(path.join(root, `.${OLD.codename}-departments`, "dev", "old"));
     touch(path.join(root, ".acme-departments", "ops", "new"));
-    expect(run(path.join(root, ".jinn-departments"), path.join(root, ".acme-departments"), config())).toContain("renamed=");
-    expect(fs.existsSync(path.join(root, ".jinn-departments", "ops", "old"))).toBe(true);
+    expect(run(path.join(root, `.${OLD.codename}-departments`), path.join(root, ".acme-departments"), config())).toContain("renamed=");
+    expect(fs.existsSync(path.join(root, `.${OLD.codename}-departments`, "ops", "old"))).toBe(true);
     expect(fs.existsSync(path.join(root, ".acme-departments", "ops", "new"))).toBe(true);
     expect(fs.existsSync(path.join(root, ".acme-departments", "dev", "old"))).toBe(true);
   });

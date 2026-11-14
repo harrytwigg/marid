@@ -9,6 +9,8 @@
  * the config loads.
  */
 import type { OpencodeAccountConfig } from "./config-types.js";
+import { NAMES } from "./codename.js";
+import { LEGACY_ENV_PREFIXES } from "./legacy-names.js";
 
 export type { OpencodeAccountConfig } from "./config-types.js";
 
@@ -21,8 +23,12 @@ const RESERVED_KEY_ENV: ReadonlySet<string> = new Set([
   // Common process variables: an account's key must never overwrite or stand in for one.
   "PATH", "HOME", "USER", "SHELL", "LANG", "TERM", "TMPDIR", "PWD", "NODE_OPTIONS", "NODE_PATH",
 ]);
-/** Prefixes of the variables the gateway or opencode itself reads: the program's own (`HUNDREDFOLD_*`, and the `JINN_*` and `MARID_*` it was called before), opencode's server and switch families (`OPENCODE_SERVER_*`, `OPENCODE_DISABLE_*`) and the loader, XDG and ssh families. */ // rename:keep
-const RESERVED_KEY_ENV_PREFIXES = ["HUNDREDFOLD_", "JINN_", "MARID_", "OPENCODE_SERVER_", "OPENCODE_DISABLE_", "LD_", "DYLD_", "XDG_", "SSH_"] as const; // rename:keep
+/** Prefixes of the variables the gateway or opencode itself reads: the program's own (under its name and under the names it was called before), opencode's server and switch families (`OPENCODE_SERVER_*`, `OPENCODE_DISABLE_*`) and the loader, XDG and ssh families. */
+const RESERVED_KEY_ENV_PREFIXES: readonly string[] = [
+  `${NAMES.upper}_`,
+  ...LEGACY_ENV_PREFIXES.map((prefix) => `${prefix}_`),
+  "OPENCODE_SERVER_", "OPENCODE_DISABLE_", "LD_", "DYLD_", "XDG_", "SSH_",
+];
 /** The standard key variables of the common providers. Other tools, and opencode's own providers, read these; a key moved out of the gateway's environment for an account would be withheld from them. */
 const PROVIDER_KEY_ENV: ReadonlySet<string> = new Set([
   "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY",

@@ -11,6 +11,7 @@ vi.mock("../../shared/codename-constant.js", () => ({ CODENAME: "acme" }));
 import { handleApiRequest, type ApiContext } from "../api.js";
 import { authCookieName, authDeviceCookieName, createAuthSession } from "../auth.js";
 import { enforceOwnerOnlyDirectory } from "../../shared/owner-only.js";
+import { OLD } from "../../shared/legacy-names.js";
 
 /** A browser paired by a build before the codename changed, asking a renamed build who it is. The route is the
  *  one that moves its cookies onto the new names; what a unit of the cookie helpers proves is not that it runs. */
@@ -43,19 +44,19 @@ const pair = (home: string) => createAuthSession(home, { headers: { "user-agent"
 
 describe("GET /api/auth/state for a browser paired before the rename", () => {
   it("keeps a browser of the default home that is still at its old path signed in, and moves its cookies to the new names", async () => {
-    const home = path.join(root, ".jinn");
+    const home = path.join(root, `.${OLD.codename}`);
     fs.mkdirSync(home);
     enforceOwnerOnlyDirectory(home);
     const session = pair(home);
     // Under the old build the default home had the bare names, and the renamed build keeps bare names for it.
     expect(authCookieName(home)).toBe("acme_auth");
-    const answered = await stateRequest(home, `jinn_auth=${session.secret}; jinn_device=${session.device.id}`);
+    const answered = await stateRequest(home, `${OLD.codename}_auth=${session.secret}; ${OLD.codename}_device=${session.device.id}`);
     expect(answered.body.authenticated).toBe(true);
     const headers = answered.setCookie as string[];
     expect(headers).toHaveLength(4);
     expect(headers[0]).toMatch(new RegExp(`^acme_auth=${session.secret};`));
     expect(headers[1]).toMatch(new RegExp(`^acme_device=${session.device.id};`));
-    expect(headers.slice(2)).toEqual([expect.stringMatching(/^jinn_auth=; .*Max-Age=0/), expect.stringMatching(/^jinn_device=; .*Max-Age=0/)]);
+    expect(headers.slice(2)).toEqual([expect.stringMatching(new RegExp(String.raw`^${OLD.codename}_auth=; .*Max-Age=0`, "")), expect.stringMatching(new RegExp(String.raw`^${OLD.codename}_device=; .*Max-Age=0`, ""))]);
   });
 
   it("does the same for a named instance, by its old and new namespaces", async () => {
@@ -63,7 +64,7 @@ describe("GET /api/auth/state for a browser paired before the rename", () => {
     fs.mkdirSync(home);
     enforceOwnerOnlyDirectory(home);
     const session = pair(home);
-    const answered = await stateRequest(home, `jinn_auth_jinn-john=${session.secret}; jinn_device_jinn-john=${session.device.id}`);
+    const answered = await stateRequest(home, `${OLD.codename}_auth_${OLD.codename}-john=${session.secret}; ${OLD.codename}_device_${OLD.codename}-john=${session.device.id}`);
     expect(answered.body.authenticated).toBe(true);
     expect((answered.setCookie as string[])[0]).toMatch(new RegExp(`^${authCookieName(home)}=${session.secret};`));
     expect((answered.setCookie as string[])[1]).toMatch(new RegExp(`^${authDeviceCookieName(home)}=`));

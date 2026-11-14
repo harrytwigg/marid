@@ -4,16 +4,6 @@
 # that into a stopped container rather than an unreachable gateway.
 set -eu
 
-# A compose file or `docker run` written for an older build sets variables under the old prefix.
-# Give each one the current name, unless the current name is set: the gateway does the same for itself.
-for legacy_name in $(env | sed -n 's/^\(JINN_[A-Za-z0-9_]*\)=.*/\1/p'); do # rename:keep
-  current_name="HUNDREDFOLD_${legacy_name#JINN_}" # rename:keep
-  if [ -z "$(eval "printf %s \"\${$current_name+set}\"")" ]; then
-    eval "$current_name=\${$legacy_name}"
-    export "$current_name"
-  fi
-done
-
 # Mirrors resolveHundredfoldHome() in packages/hundredfold/src/shared/home.ts. Resolved to an
 # absolute path so the shell and the two Node consumers agree.
 HUNDREDFOLD_HOME="${HUNDREDFOLD_HOME:-$HOME/.${HUNDREDFOLD_INSTANCE:-hundredfold}}"
@@ -93,7 +83,7 @@ start_gateway() {
 # the same volume, rewriting gateway.json under the live one. A leading flag is
 # still meant for the gateway, but none is safe against the shared container home.
 case "${1:-}" in
-  __jinn_service_start__)
+  __hundredfold_service_start__)
     if [ "$#" -ne 1 ]; then
       echo "hundredfold-entrypoint: the private service-start marker does not accept arguments." >&2
       exit 64
@@ -118,7 +108,7 @@ case "${1:-}" in
         -i*|--instance|--instance=*)
           # Program-level (bin/hundredfold.ts), and HUNDREDFOLD_HOME above already came from
           # HUNDREDFOLD_INSTANCE — so this would boot on a home the entrypoint never prepared.
-          echo "hundredfold-entrypoint: secondary Hundredfold instances are not supported in this container. Run each instance in its own container with dedicated jinn-home and jinn-claude volumes and a separately published port." >&2
+          echo "hundredfold-entrypoint: secondary Hundredfold instances are not supported in this container. Run each instance in its own container with dedicated hundredfold-home and hundredfold-claude volumes and a separately published port." >&2
           exit 64
           ;;
         -p*|--port|--port=*)
@@ -141,7 +131,7 @@ case "${1:-}" in
     done
     exit 64
     ;;
-  hundredfold|jinn) # rename:keep
+  hundredfold)
     case "${2:-}" in
       setup|start|restart)
         echo "hundredfold-entrypoint: refusing one-off \`hundredfold ${2}\` against the shared service volumes. Use \`docker compose up -d\` for service startup and \`docker compose restart hundredfold\` for restart." >&2

@@ -29,6 +29,7 @@ vi.mock("../../shared/logger.js", () => ({
 
 import { DISPATCHER, EDGES, PERSONA, SHAPER, WORKER, home, seedHome } from "./domain-router-home.js";
 import { call } from "./domain-router-harness.js";
+import { OLD } from "../../shared/legacy-names.js";
 
 beforeEach(() => {
   seedHome();
@@ -50,7 +51,7 @@ describe("org routes still answer identically through handleOrgApi", () => {
       ],
       hierarchy: { root: null, sorted: ["worker", "todo-dispatcher", "todo-shaper"], warnings: [] },
       // No executive, so the portal is the root, under the default portal name.
-      virtualRoot: { name: "Jinn", mention: "jinn" },
+      virtualRoot: { name: OLD.portalName, mention: OLD.codename },
     });
   });
 

@@ -18,11 +18,11 @@
 
 > **You bring the engines. Hundredfold runs the company.**
 
-## Built on Jinn
+## Credit
 
 Hundredfold is a fork of [Jinn](https://github.com/hristo2612/jinn) by hristo2612 and contributors (MIT). Most of the code here is theirs: the gateway, the org, Todos, the web dashboard and the engine adapters. Hundredfold has its own name and release line and adds features on top of it - see [What Hundredfold adds](#what-hundredfold-adds). The original copyright is preserved in [LICENSE](LICENSE) and the credit is repeated in [NOTICE](NOTICE).
 
-An install made before the rename keeps working: the first start moves its `~/.jinn` home to `~/.hundredfold` (a link is left at the old path), the old `JINN_*` variables are still read, and the old `jinn` command forwards to `hundredfold` with a notice. [`docs/codename-compatibility.md`](docs/codename-compatibility.md) says what moves, when, and how to roll back. <!-- rename:keep -->
+An install made before the rename keeps working: its first start moves the old home directory to `~/.hundredfold` (a link is left at the old path, after a snapshot), the old environment variables, headers and browser storage keys are still read, and the old command name forwards to `hundredfold` with a notice. [`docs/codename-compatibility.md`](docs/codename-compatibility.md) says what moves, when, and how to roll back.
 
 ---
 
@@ -41,9 +41,9 @@ Agent CLIs are powerful alone. Hundredfold gives them shared structure, ownershi
 
 ## What Hundredfold adds
 
-Everything in upstream Jinn still applies. On top of it, Hundredfold adds:
+Everything in the upstream project still applies. On top of it, Hundredfold adds:
 
-| Area | Hundredfold | Jinn upstream |
+| Area | Hundredfold | Upstream |
 |---|---|---|
 | Workspace | VS Code-style split panes you can resize, per-pane tabs with preview and pinned tabs, drag a chat from the sidebar to split, mobile session tabs, teal theme | auto-arranged chat grid, single tab list, no resizing |
 | Terminal / CLI mode | type straight into the engine's TUI (stdin, paste, mouse, scroll); standalone shells on the gateway or a remote host in the sidebar | display-only CLI view with a composer and key bar |
@@ -327,7 +327,7 @@ Everything is human-readable and yours to edit. After upgrading, the gateway re-
 
 ## Roadmap
 
-Hundredfold is in active beta. Shipped recently in upstream Jinn:
+Hundredfold is in active beta. Shipped recently in the upstream project:
 
 - **Collaborative Todo hierarchy** with sub-tasks, roll-up gates, labels, comments, links, attachments, provenance, and approval history.
 - **Isolated workspaces** with separate homes, ports, access settings, and authentication.
@@ -631,7 +631,7 @@ Everything is human-readable and yours to edit. After upgrading, the gateway re-
 
 ## Roadmap
 
-Hundredfold is in active beta. Shipped recently in upstream Jinn:
+Hundredfold is in active beta. Shipped recently in the upstream project:
 
 - **Collaborative Todo hierarchy** with sub-tasks, roll-up gates, labels, comments, links, attachments, provenance, and approval history.
 - **Isolated workspaces** with separate homes, ports, access settings, and authentication.

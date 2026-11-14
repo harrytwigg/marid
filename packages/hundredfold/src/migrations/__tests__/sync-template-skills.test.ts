@@ -4,6 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 import { syncTemplateSkills } from "../sync-template-skills.js"
+import { OLD } from "../../shared/legacy-names.js";
 
 const roots: string[] = []
 const hash = (value: Buffer | string) => crypto.createHash("sha256").update(value).digest("hex")
@@ -53,7 +54,7 @@ describe("syncTemplateSkills: shipped skills", () => {
 
     const result = sync(home, templateDir)
 
-    expect(fs.readFileSync(path.join(home, "skills/cron-manager/SKILL.md"), "utf8")).toBe("# Cron Manager\nshipped by Jinn\n") // rename:keep: the name a config with no portalName has always had
+    expect(fs.readFileSync(path.join(home, "skills/cron-manager/SKILL.md"), "utf8")).toBe(`# Cron Manager\nshipped by ${OLD.portalName}\n`) // rename:keep: the name a config with no portalName has always had
     expect(fs.readFileSync(path.join(home, "skills/notes/SKILL.md"), "utf8")).toBe("# Notes\n")
     expect(fs.readFileSync(path.join(home, "skills/notes/reference.md"), "utf8")).toBe("durable knowledge\n")
     expect(result.added).toEqual(["notes"])
@@ -207,7 +208,7 @@ describe("syncTemplateSkills: path safety", () => {
 
     const destination = path.join(home, "skills/cron-manager/SKILL.md")
     expect(fs.lstatSync(destination).isSymbolicLink()).toBe(false)
-    expect(fs.readFileSync(destination, "utf8")).toBe("# Cron Manager\nshipped by Jinn\n") // rename:keep: the name a config with no portalName has always had
+    expect(fs.readFileSync(destination, "utf8")).toBe(`# Cron Manager\nshipped by ${OLD.portalName}\n`) // rename:keep: the name a config with no portalName has always had
     expect(fs.readFileSync(target, "utf8")).toBe("link target\n")
   })
 

@@ -1,16 +1,16 @@
-# Hundredfold vs upstream Jinn
+# Hundredfold vs upstream
 
 Hundredfold is a fork of [Jinn](https://github.com/hristo2612/jinn) by hristo2612 and contributors, released under the MIT License. Most of the code here is theirs: the gateway, the org model, Todos, the web dashboard and most of the engine adapters. Hundredfold keeps the internal codename ("Hundredfold": the `hundredfold` command, `hundredfold`, `~/.hundredfold`, `HUNDREDFOLD_*`) so upstream fixes can still be merged. See [`NOTICE`](../NOTICE) and the [README](../README.md#built-on-hundredfold).
 
 This page lists the headline features Hundredfold has that upstream does not, and is just as plain about where upstream already has the feature. It is not an exhaustive changelog; smaller fixes and hardening are in [`CHANGELOG.md`](../CHANGELOG.md).
 
-**Compared:** Hundredfold `main` (built on upstream v0.33.3) against upstream Jinn `main` at v0.33.4. Upstream's v0.33.4 fixes are not in Hundredfold yet. Every row was checked against the code on both sides.
+**Compared:** Hundredfold `main` (built on upstream v0.33.3) against the upstream project's `main` at v0.33.4. Upstream's v0.33.4 fixes are not in Hundredfold yet. Every row was checked against the code on both sides.
 
 **Key:** ✅ supported. ❌ not present. partial = some of it exists; the Notes column says which part.
 
 ## Workspace UI
 
-| Feature | Hundredfold | Jinn upstream | Notes |
+| Feature | Hundredfold | Upstream | Notes |
 |---|---|---|---|
 | Multi-chat grid with drag-to-place | ✅ | ✅ | Upstream lays chats out on an auto grid and lets you drop a chat on the left, right, top or bottom of a pane. Hundredfold keeps that grid until you first split or resize, so an unarranged workspace behaves as upstream. |
 | VS Code-style split panes | ✅ | partial | Hundredfold's layout is a tree of row and column splits (`routes/chat/layout/split-layout.ts`, `split-chat-grid.tsx`). Upstream computes columns and rows from the pane count and viewport (`grid-layout.ts`); you cannot choose the split. |
@@ -24,7 +24,7 @@ This page lists the headline features Hundredfold has that upstream does not, an
 
 ## Terminal and CLI mode
 
-| Feature | Hundredfold | Jinn upstream | Notes |
+| Feature | Hundredfold | Upstream | Notes |
 |---|---|---|---|
 | CLI view of the engine's TUI | ✅ | ✅ | Both stream the engine's terminal into the chat pane, with a composer and a key bar. |
 | Warm PTY sessions | ✅ | ✅ | Upstream feature (`hasWarmPty` in the PTY socket and the Claude engine). Hundredfold did not add it. |
@@ -35,7 +35,7 @@ This page lists the headline features Hundredfold has that upstream does not, an
 
 ## Engines
 
-| Feature | Hundredfold | Jinn upstream | Notes |
+| Feature | Hundredfold | Upstream | Notes |
 |---|---|---|---|
 | Claude, Codex, Grok, Hermes, Antigravity, Pi | ✅ | ✅ | Same adapters. |
 | opencode engine | ✅ | ❌ | `engines/opencode*.ts`; models are in the model registry. Local or on a remote host. See [`engines-opencode.md`](engines-opencode.md). |
@@ -44,7 +44,7 @@ This page lists the headline features Hundredfold has that upstream does not, an
 
 ## Remote
 
-| Feature | Hundredfold | Jinn upstream | Notes |
+| Feature | Hundredfold | Upstream | Notes |
 |---|---|---|---|
 | Employees on a remote host over SSH (Claude) | ✅ | ❌ | An employee with `remoteHost` runs its turns on another machine; repositories, builds and tests stay there. Needs a `remote` block in `config.yaml` and fails closed without one. Manage with `hundredfold remote status\|wake`. See [`remote-execution.md`](remote-execution.md). |
 | Remote Pi employees | ✅ | ❌ | Pi runs headless over `ssh -T` and streams normally. Claude loses token-by-token streaming remotely. |
@@ -57,7 +57,7 @@ This page lists the headline features Hundredfold has that upstream does not, an
 
 ## Sessions
 
-| Feature | Hundredfold | Jinn upstream | Notes |
+| Feature | Hundredfold | Upstream | Notes |
 |---|---|---|---|
 | Self-compaction | ✅ | ❌ | The `compact_session` MCP tool lets an agent compact its own context and carry on from a handoff (`sessions/self-compaction.ts`). Claude, and opencode in server mode. |
 | `/compact` from the chat | ✅ | partial | Upstream recognises Claude Code's own `/compact` typed to a Claude session. Hundredfold routes `/compact` per engine (Claude's native command, opencode's summarize) from the web chat, the CLI composer or a connector, and says so when an engine cannot. |
@@ -69,7 +69,7 @@ This page lists the headline features Hundredfold has that upstream does not, an
 
 ## Todos and dispatch
 
-| Feature | Hundredfold | Jinn upstream | Notes |
+| Feature | Hundredfold | Upstream | Notes |
 |---|---|---|---|
 | Closed Todo departments | ✅ | ❌ | `gateway.todoDepartments` makes the department list one the operator owns. Unset, any name still becomes a department, as upstream. |
 | Department scope | partial | ❌ | A department can say `scope: scoped` or `dedicated` in `org/<slug>/department.yaml` (or from its panel on the org page), shown as a badge on the board switcher and the org tree. The gateway holds a scoped employee's sessions to its department through the hundredfold tools, and only permitted employees may hold its Todos. A scoped session runs in a generated directory beside the instance home that holds only the department's instructions as its `CLAUDE.md` and copies of the skills it allows, and its Notes and state are `knowledge/departments/<slug>/`. A scoped employee may also run on a remote host, in a copy of that directory synced there before every session, with a session home that links nothing from the instance home. |

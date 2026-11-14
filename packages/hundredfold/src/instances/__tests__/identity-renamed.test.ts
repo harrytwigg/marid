@@ -20,6 +20,7 @@ import { normalizeWorkspaceName, resolveInstanceHome } from "../create.js";
 import { isDefaultHome, resolveHundredfoldInstance, resolveHomeIdentity } from "../../shared/home.js";
 import { assertContainerPrimaryCommand } from "../../cli/container-contract.js";
 import { formatPairingInstructions } from "../../cli/pair.js";
+import { OLD } from "../../shared/legacy-names.js";
 
 let root: string;
 beforeEach(() => { root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "identity-"))); });
@@ -31,17 +32,17 @@ describe("the host registry's place", () => {
   it("is named for the codename on each platform, and the legacy place is known", () => {
     expect(resolveHostDataDir({ platform: "darwin", home: "/h", env: {} })).toBe("/h/Library/Application Support/Acme");
     expect(resolveHostDataDir({ platform: "linux", home: "/h", env: {} })).toBe("/h/.config/acme");
-    expect(resolvePreviousInstancesRegistryPath({ platform: "linux", home: "/h", env: {} })).toBe("/h/.config/jinn/instances.json");
-    expect(resolvePreviousInstancesRegistryPath({ platform: "linux", home: "/h", env: { JINN_INSTANCES_REGISTRY: "/x/i.json" } })).toBeNull();
-    expect(resolveInstancesRegistryPath({ platform: "linux", home: "/h", env: { JINN_INSTANCES_REGISTRY: "/x/i.json" } })).toBe("/x/i.json");
+    expect(resolvePreviousInstancesRegistryPath({ platform: "linux", home: "/h", env: {} })).toBe(`/h/.config/${OLD.codename}/instances.json`);
+    expect(resolvePreviousInstancesRegistryPath({ platform: "linux", home: "/h", env: { [`${OLD.upper}_INSTANCES_REGISTRY`]: "/x/i.json" } })).toBeNull();
+    expect(resolveInstancesRegistryPath({ platform: "linux", home: "/h", env: { [`${OLD.upper}_INSTANCES_REGISTRY`]: "/x/i.json" } })).toBe("/x/i.json");
   });
 
   it("carries an earlier codename's registry forward the first time it is read", () => {
     const previous = path.join(root, "old", "instances.json");
     const current = path.join(root, "new", "instances.json");
-    saveInstances([entry("jinn", "/h/.jinn"), entry("jinn-john", "/h/.jinn-john", 7001)], { registryPath: previous });
+    saveInstances([entry(OLD.codename, `/h/.${OLD.codename}`), entry(`${OLD.codename}-john`, `/h/.${OLD.codename}-john`, 7001)], { registryPath: previous });
     const loaded = loadInstances({ registryPath: current, previousRegistryPath: previous, legacyRegistryPath: path.join(root, "none.json") });
-    expect(loaded.map((instance) => instance.name)).toEqual(["jinn", "jinn-john"]);
+    expect(loaded.map((instance) => instance.name)).toEqual([OLD.codename, `${OLD.codename}-john`]);
     expect(fs.existsSync(current)).toBe(true);
     // The old file is left for rollback, and the new one is read from now on.
     expect(fs.existsSync(previous)).toBe(true);
@@ -53,20 +54,20 @@ describe("the host registry's place", () => {
 describe("one identity per instance", () => {
   it("finds an instance by either spelling of its name", () => {
     const options = { registryPath: path.join(root, "r.json") };
-    saveInstances([entry("jinn-john", "/h/.jinn-john")], options);
-    vi.stubEnv("JINN_INSTANCES_REGISTRY", options.registryPath);
-    expect(findInstance("jinn-john")?.home).toBe("/h/.jinn-john");
-    expect(findInstance("acme-john")?.home).toBe("/h/.jinn-john");
+    saveInstances([entry(`${OLD.codename}-john`, `/h/.${OLD.codename}-john`)], options);
+    vi.stubEnv(`${OLD.upper}_INSTANCES_REGISTRY`, options.registryPath);
+    expect(findInstance(`${OLD.codename}-john`)?.home).toBe(`/h/.${OLD.codename}-john`);
+    expect(findInstance("acme-john")?.home).toBe(`/h/.${OLD.codename}-john`);
     expect(findInstance("acme-other")).toBeUndefined();
     vi.unstubAllEnvs();
   });
 
   it("does not add a second default instance beside one an earlier codename registered", () => {
     const registryPath = path.join(root, "r.json");
-    saveInstances([entry("jinn", path.join(root, ".jinn"))], { registryPath });
-    vi.stubEnv("JINN_INSTANCES_REGISTRY", registryPath);
+    saveInstances([entry(OLD.codename, path.join(root, `.${OLD.codename}`))], { registryPath });
+    vi.stubEnv(`${OLD.upper}_INSTANCES_REGISTRY`, registryPath);
     ensureDefaultInstance();
-    expect(loadInstances({ registryPath }).map((instance) => instance.name)).toEqual(["jinn"]);
+    expect(loadInstances({ registryPath }).map((instance) => instance.name)).toEqual([OLD.codename]);
     fs.rmSync(registryPath);
     ensureDefaultInstance();
     expect(loadInstances({ registryPath }).map((instance) => instance.name)).toEqual(["acme"]);
@@ -75,35 +76,35 @@ describe("one identity per instance", () => {
 
   it("records a moved home under the new name and path, and only once", () => {
     const options = { registryPath: path.join(root, "r.json") };
-    saveInstances([entry("jinn-john", "/h/.jinn-john"), entry("jinn-other", "/h/.jinn-other", 7002)], options);
-    expect(recordInstanceRenamed({ fromHome: "/h/.jinn-john", toHome: "/h/.acme-john" }, options)).toBe(true);
-    expect(recordInstanceRenamed({ fromHome: "/h/.jinn-john", toHome: "/h/.acme-john" }, options)).toBe(false);
+    saveInstances([entry(`${OLD.codename}-john`, `/h/.${OLD.codename}-john`), entry(`${OLD.codename}-other`, `/h/.${OLD.codename}-other`, 7002)], options);
+    expect(recordInstanceRenamed({ fromHome: `/h/.${OLD.codename}-john`, toHome: "/h/.acme-john" }, options)).toBe(true);
+    expect(recordInstanceRenamed({ fromHome: `/h/.${OLD.codename}-john`, toHome: "/h/.acme-john" }, options)).toBe(false);
     expect(loadInstances(options).map((instance) => [instance.name, instance.home])).toEqual([
       ["acme-john", "/h/.acme-john"],
-      ["jinn-other", "/h/.jinn-other"],
+      [`${OLD.codename}-other`, `/h/.${OLD.codename}-other`],
     ]);
   });
 
   it("resolves `-i` in either spelling, with or without the prefix, to the registered home", () => {
-    const instances = [entry("jinn-john", "/h/.jinn-john")].map((value) => ({ ...value, id: "x" }));
-    for (const selector of ["john", "jinn-john", "acme-john"]) expect(resolveInstanceHome(selector, instances, "/h")).toBe("/h/.jinn-john");
-    expect(resolveInstanceHome("jinn", instances, "/h")).toBe("/h/.acme");
+    const instances = [entry(`${OLD.codename}-john`, `/h/.${OLD.codename}-john`)].map((value) => ({ ...value, id: "x" }));
+    for (const selector of ["john", `${OLD.codename}-john`, "acme-john"]) expect(resolveInstanceHome(selector, instances, "/h")).toBe(`/h/.${OLD.codename}-john`);
+    expect(resolveInstanceHome(OLD.codename, instances, "/h")).toBe("/h/.acme");
     expect(resolveInstanceHome("acme", instances, "/h")).toBe("/h/.acme");
-    expect(resolveInstanceHome("jinn-new", [], "/h")).toBe("/h/.acme-new");
+    expect(resolveInstanceHome(`${OLD.codename}-new`, [], "/h")).toBe("/h/.acme-new");
   });
 
   it("names a new workspace after the current codename and refuses either default name", () => {
-    expect(normalizeWorkspaceName("jinn-Yorio")).toMatchObject({ slug: "yorio", instanceName: "acme-yorio", homeName: ".acme-yorio" });
+    expect(normalizeWorkspaceName(`${OLD.codename}-Yorio`)).toMatchObject({ slug: "yorio", instanceName: "acme-yorio", homeName: ".acme-yorio" });
     expect(normalizeWorkspaceName("acme-Yorio")).toMatchObject({ slug: "yorio", instanceName: "acme-yorio" });
-    expect(() => normalizeWorkspaceName("jinn")).toThrow();
+    expect(() => normalizeWorkspaceName(OLD.codename)).toThrow();
     expect(() => normalizeWorkspaceName("acme")).toThrow();
   });
 
   it("names an instance by its current name whichever the home or the variable says", () => {
-    expect(resolveHundredfoldInstance("/h/.jinn-john")).toBe("acme-john");
+    expect(resolveHundredfoldInstance(`/h/.${OLD.codename}-john`)).toBe("acme-john");
     expect(resolveHundredfoldInstance("/h/.acme-john")).toBe("acme-john");
-    expect(resolveHundredfoldInstance("/h/.jinn")).toBe("acme");
-    vi.stubEnv("JINN_INSTANCE", "jinn-john");
+    expect(resolveHundredfoldInstance(`/h/.${OLD.codename}`)).toBe("acme");
+    vi.stubEnv(`${OLD.upper}_INSTANCE`, `${OLD.codename}-john`);
     expect(resolveHundredfoldInstance()).toBe("acme-john");
     vi.unstubAllEnvs();
   });
@@ -111,20 +112,20 @@ describe("one identity per instance", () => {
   it("calls both default paths the default home, a link left at the old one included", () => {
     vi.spyOn(os, "homedir").mockReturnValue(root);
     fs.mkdirSync(path.join(root, ".acme"));
-    fs.symlinkSync(path.join(root, ".acme"), path.join(root, ".jinn"), "dir");
+    fs.symlinkSync(path.join(root, ".acme"), path.join(root, `.${OLD.codename}`), "dir");
     expect(isDefaultHome(path.join(root, ".acme"))).toBe(true);
-    expect(isDefaultHome(path.join(root, ".jinn"))).toBe(true);
-    expect(resolveHomeIdentity(path.join(root, ".jinn"))).toBe(path.join(root, ".acme"));
+    expect(isDefaultHome(path.join(root, `.${OLD.codename}`))).toBe(true);
+    expect(resolveHomeIdentity(path.join(root, `.${OLD.codename}`))).toBe(path.join(root, ".acme"));
     expect(isDefaultHome(path.join(root, ".acme-john"))).toBe(false);
   });
 
   it("accepts a container's primary home under the old path and the old name", () => {
-    const home = path.join(root, ".jinn");
+    const home = path.join(root, `.${OLD.codename}`);
     fs.mkdirSync(home);
-    const env = { JINN_CONTAINER: "1", _JINN_CONTAINER_SERVICE_START: "1", JINN_CONTAINER_PRIMARY_HOME: home, JINN_HOME: home, JINN_INSTANCE: "jinn" };
+    const env = { [`${OLD.upper}_CONTAINER`]: "1", [`_${OLD.upper}_CONTAINER_SERVICE_START`]: "1", [`${OLD.upper}_CONTAINER_PRIMARY_HOME`]: home, [`${OLD.upper}_HOME`]: home, [`${OLD.upper}_INSTANCE`]: "hundredfold" };
     expect(() => assertContainerPrimaryCommand("start", undefined, env)).not.toThrow();
-    expect(() => assertContainerPrimaryCommand("start", undefined, { ...env, JINN_INSTANCE: "acme" })).not.toThrow();
-    expect(() => assertContainerPrimaryCommand("start", undefined, { ...env, JINN_INSTANCE: "jinn-other" })).toThrow(/one Hundredfold instance/);
+    expect(() => assertContainerPrimaryCommand("start", undefined, { ...env, [`${OLD.upper}_INSTANCE`]: "acme" })).not.toThrow();
+    expect(() => assertContainerPrimaryCommand("start", undefined, { ...env, [`${OLD.upper}_INSTANCE`]: "hundredfold-other" })).toThrow(/one Hundredfold instance/);
   });
 
   it("hints the pairing command by the current codename", () => {

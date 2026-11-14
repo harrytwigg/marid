@@ -26,6 +26,7 @@ import { rejectNonOperatorPtyUpgradeCaller, rejectUnverifiedIdentifiedUpgradeCal
 import { WRITE_ORIGIN_HEADER, readWriteOrigin } from "../../work-items/origin.js";
 import { CALLER_SESSION_HEADER, TOOL_CALL_HEADER, TOOL_CALL_HEADER_VALUE } from "../../mcp/identity.js";
 import { isToolCallMarker } from "../../shared/wire-names.js";
+import { OLD } from "../../shared/legacy-names.js";
 
 type Headers = Record<string, string | string[] | undefined>;
 const request = (headers: Headers, remote = "100.64.1.2"): Pick<IncomingMessage, "headers" | "socket"> =>
@@ -43,12 +44,12 @@ describe("what an upgraded gateway writes", () => {
   it("lets a browser on either build read the config revision, and be sent both in the CORS lists", () => {
     const sent: Record<string, string> = {};
     setConfigRevisionHeaders({ setHeader: (name, value) => { sent[name] = value; } }, "rev1");
-    expect(sent).toEqual({ "X-Acme-Config-Revision": "rev1", "X-Jinn-Config-Revision": "rev1" });
-    expect(CONFIG_REVISION_RESPONSE_HEADERS).toEqual(["X-Acme-Config-Revision", "X-Jinn-Config-Revision"]);
-    for (const name of ["X-Acme-Bootstrap-Grant", "X-Jinn-Bootstrap-Grant", "X-Acme-Config-Revision", "X-Jinn-Config-Revision"]) {
+    expect(sent).toEqual({ "X-Acme-Config-Revision": "rev1", [`X-${OLD.title}-Config-Revision`]: "rev1" });
+    expect(CONFIG_REVISION_RESPONSE_HEADERS).toEqual(["X-Acme-Config-Revision", `X-${OLD.title}-Config-Revision`]);
+    for (const name of ["X-Acme-Bootstrap-Grant", `X-${OLD.title}-Bootstrap-Grant`, "X-Acme-Config-Revision", `X-${OLD.title}-Config-Revision`]) {
       expect(CORS_ALLOWED_REQUEST_HEADERS).toContain(name);
     }
-    expect(CORS_EXPOSED_RESPONSE_HEADERS).toBe("X-Acme-Config-Revision, X-Jinn-Config-Revision");
+    expect(CORS_EXPOSED_RESPONSE_HEADERS).toBe(`X-Acme-Config-Revision, X-${OLD.title}-Config-Revision`);
   });
 });
 
@@ -65,11 +66,11 @@ describe("what an upgraded gateway accepts from a peer that has not upgraded", (
 
   it("gives every legacy-named request header its current name before any route reads it", () => {
     const headers: Headers = {
-      "x-jinn-caller-session": "sess-1",
-      "x-jinn-session-capability": "cap",
-      "x-jinn-tool-call": "jinn-mcp",
-      "x-jinn-origin": "talk",
-      "x-jinn-config-revision": "rev1",
+      [`x-${OLD.codename}-caller-session`]: "sess-1",
+      [`x-${OLD.codename}-session-capability`]: "cap",
+      [`x-${OLD.codename}-tool-call`]: `${OLD.codename}-mcp`,
+      [`x-${OLD.codename}-origin`]: "talk",
+      [`x-${OLD.codename}-config-revision`]: "rev1",
       origin: undefined,
     };
     const res = { setHeader: noop, writeHead: noop, end: noop } as never;
@@ -83,7 +84,7 @@ describe("what an upgraded gateway accepts from a peer that has not upgraded", (
   });
 
   it("recognises an older MCP server's tool-call marker", () => {
-    expect(isToolCallMarker("jinn-mcp")).toBe(true);
+    expect(isToolCallMarker(`${OLD.codename}-mcp`)).toBe(true);
     expect(isToolCallMarker("acme-mcp")).toBe(true);
   });
 
@@ -105,18 +106,18 @@ describe("what an upgraded gateway accepts from a peer that has not upgraded", (
 
 describe("a browser paired before the rename", () => {
   let home: string;
-  // The old build derived the cookie namespace from its own name for the same instance: `acme-x` was `jinn-x`.
+  // The old build derived the cookie namespace from its own name for the same instance: `acme-x` was `<old>-x`.
   let legacyNs: string;
   beforeEach(() => {
     home = fs.mkdtempSync(path.join(os.tmpdir(), "acme-auth-"));
-    legacyNs = path.basename(home).replace(/^acme-/, "jinn-");
+    legacyNs = path.basename(home).replace(/^acme-/, `${OLD.codename}-`);
   });
   afterEach(() => { fs.rmSync(home, { recursive: true, force: true }); });
 
   it("stays signed in on the old cookie names and is moved onto the new ones", () => {
     const session = createAuthSession(home, request({ "user-agent": "Mozilla/5.0" }));
     expect(authCookieName(home)).toMatch(/^acme_auth_/);
-    const legacy = `jinn_auth_${legacyNs}=${session.secret}; jinn_device_${legacyNs}=${session.device.id}`;
+    const legacy = `${OLD.codename}_auth_${legacyNs}=${session.secret}; ${OLD.codename}_device_${legacyNs}=${session.device.id}`;
     expect(authenticateGatewayRequest(request({ cookie: legacy }), "tok", home).ok).toBe(true);
     expect(currentAuthDeviceId({ cookie: legacy }, home)).toBe(session.device.id);
 
@@ -132,15 +133,15 @@ describe("a browser paired before the rename", () => {
     const current = `${authCookieName(home)}=${session.secret}; ${authDeviceCookieName(home)}=${session.device.id}`;
     expect(authenticateGatewayRequest(request({ cookie: current }), "tok", home).ok).toBe(true);
     expect(legacyAuthCookieMigration({ cookie: current }, home)).toEqual([]);
-    const wrong = `jinn_auth_${legacyNs}=nope; jinn_device_${legacyNs}=${session.device.id}`;
+    const wrong = `${OLD.codename}_auth_${legacyNs}=nope; ${OLD.codename}_device_${legacyNs}=${session.device.id}`;
     expect(authenticateGatewayRequest(request({ cookie: wrong }), "tok", home).ok).toBe(false);
   });
 
   it("clears the cookies of both builds on sign-out", () => {
     const cleared = clearAuthCookieHeaders(home).map((header) => header.split("=")[0]);
     expect(cleared).toContain(authCookieName(home));
-    expect(cleared).toContain(`jinn_auth_${legacyNs}`);
-    expect(cleared).toContain(`jinn_device_${legacyNs}`);
+    expect(cleared).toContain(`${OLD.codename}_auth_${legacyNs}`);
+    expect(cleared).toContain(`${OLD.codename}_device_${legacyNs}`);
   });
 });
 
@@ -151,7 +152,7 @@ describe("a WebSocket upgrade from an MCP server that has not upgraded", () => {
   it("is refused as an unidentified tool call, not served as an operator's", () => {
     for (const guard of [rejectUnverifiedIdentifiedUpgradeCaller, rejectNonOperatorPtyUpgradeCaller]) {
       const sink = socket();
-      expect(guard(upgrade({ "x-jinn-tool-call": "jinn-mcp" }), sink, { sessionExists: () => true })).toBe(true);
+      expect(guard(upgrade({ [`x-${OLD.codename}-tool-call`]: `${OLD.codename}-mcp` }), sink, { sessionExists: () => true })).toBe(true);
       expect(sink.writes.join("")).toContain("403 Forbidden");
     }
     expect(rejectUnverifiedIdentifiedUpgradeCaller(upgrade({}), socket(), { sessionExists: () => true })).toBe(false);

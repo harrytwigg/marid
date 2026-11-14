@@ -1,20 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { deleteLegacyShellCache, migrateLegacyStorage } from "../legacy-storage"
+import { OLD } from "@hundredfold/legacy-names";
 
 /** What a browser that used the app before a rename really holds: plain keys, the dotted and colon forms the
  *  desktop app and the notes editor use, and dynamic tails (a session id, an origin, a note path). */
 const REAL_SHAPED: Record<string, string> = {
-  "jinn-settings": '{"theme":"dark"}',
-  "jinn-theme": "dark",
-  "jinn-onboarded": "true",
-  "jinn-chat-tabs": '["s1"]',
-  "jinn-view-mode-4f1c": "terminal",
-  "jinn-chat-draft:https://gw.example:": "half a message",
-  "jinn.native.gateway-profiles.v1": '{"profiles":[{"id":"a","origin":"https://gw.example"}],"activeId":"a"}',
-  "jinn.native.active-origin": "https://gw.example",
-  "jinn.plugin.notes.collapsed": "1",
-  "jinn:note-draft:v1:knowledge/plan.md": "# unsaved",
-  "jinn:notes:last-location:v1": "knowledge/plan.md",
+  [`${OLD.codename}-settings`]: '{"theme":"dark"}',
+  [`${OLD.codename}-theme`]: "dark",
+  [`${OLD.codename}-onboarded`]: "true",
+  [`${OLD.codename}-chat-tabs`]: '["s1"]',
+  [`${OLD.codename}-view-mode-4f1c`]: "terminal",
+  [`${OLD.codename}-chat-draft:https://gw.example:`]: "half a message",
+  [`${OLD.codename}.native.gateway-profiles.v1`]: '{"profiles":[{"id":"a","origin":"https://gw.example"}],"activeId":"a"}',
+  [`${OLD.codename}.native.active-origin`]: "https://gw.example",
+  [`${OLD.codename}.plugin.notes.collapsed`]: "1",
+  [`${OLD.codename}:note-draft:v1:knowledge/plan.md`]: "# unsaved",
+  [`${OLD.codename}:notes:last-location:v1`]: "knowledge/plan.md",
   "theme-other-app": "kept",
 }
 
@@ -32,7 +33,7 @@ describe("migrateLegacyStorage", () => {
     expect(storage.getItem("acme-settings")).toBe('{"theme":"dark"}')
     expect(storage.getItem("acme-view-mode-4f1c")).toBe("terminal")
     expect(storage.getItem("acme-chat-draft:https://gw.example:")).toBe("half a message")
-    expect(storage.getItem("acme.native.gateway-profiles.v1")).toBe(REAL_SHAPED["jinn.native.gateway-profiles.v1"])
+    expect(storage.getItem("acme.native.gateway-profiles.v1")).toBe(REAL_SHAPED[`${OLD.codename}.native.gateway-profiles.v1`])
     expect(storage.getItem("acme.native.active-origin")).toBe("https://gw.example")
     expect(storage.getItem("acme.plugin.notes.collapsed")).toBe("1")
     expect(storage.getItem("acme:note-draft:v1:knowledge/plan.md")).toBe("# unsaved")
@@ -48,7 +49,7 @@ describe("migrateLegacyStorage", () => {
   it("copies once: a later change under the old key is not copied over a newer value", () => {
     migrateLegacyStorage(storage, "acme")
     storage.setItem("acme-theme", "light")
-    storage.setItem("jinn-theme", "sepia")
+    storage.setItem(`${OLD.codename}-theme`, "sepia")
     expect(migrateLegacyStorage(storage, "acme")).toBe(0)
     expect(storage.getItem("acme-theme")).toBe("light")
   })
@@ -61,7 +62,7 @@ describe("migrateLegacyStorage", () => {
   })
 
   it("does nothing while the codename is unchanged", () => {
-    expect(migrateLegacyStorage(storage, "jinn")).toBe(0)
+    expect(migrateLegacyStorage(storage, OLD.codename)).toBe(0)
     expect(storage.length).toBe(Object.keys(REAL_SHAPED).length)
   })
 
@@ -75,12 +76,12 @@ describe("deleteLegacyShellCache", () => {
   it("deletes the orphaned service-worker cache once the name has changed", async () => {
     const cacheStorage = { delete: vi.fn(async () => true) }
     expect(await deleteLegacyShellCache(cacheStorage, "acme")).toBe(true)
-    expect(cacheStorage.delete).toHaveBeenCalledWith("jinn-app-shell")
+    expect(cacheStorage.delete).toHaveBeenCalledWith(`${OLD.codename}-app-shell`)
   })
 
   it("leaves the cache alone while it is this build's own, and when there is no cache storage", async () => {
     const cacheStorage = { delete: vi.fn(async () => true) }
-    expect(await deleteLegacyShellCache(cacheStorage, "jinn")).toBe(false)
+    expect(await deleteLegacyShellCache(cacheStorage, OLD.codename)).toBe(false)
     expect(cacheStorage.delete).not.toHaveBeenCalled()
     expect(await deleteLegacyShellCache(undefined, "acme")).toBe(false)
   })

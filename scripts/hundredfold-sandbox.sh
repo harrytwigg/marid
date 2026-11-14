@@ -46,10 +46,7 @@ die() { echo "hundredfold-sandbox: $1" >&2; exit "${2:-2}"; }
 unset HUNDREDFOLD_HOME HUNDREDFOLD_PORT HUNDREDFOLD_HOST HUNDREDFOLD_INSTANCE HUNDREDFOLD_GATEWAY_URL HUNDREDFOLD_GATEWAY_TOKEN HUNDREDFOLD_SESSION_ID \
   HUNDREDFOLD_SESSION_CAPABILITY HUNDREDFOLD_TAKE_PORT HUNDREDFOLD_BINDING_HOME HUNDREDFOLD_HOME_IDENTITY CLAUDE_CONFIG_DIR
 # A shell started by an older build exports the old names, and a new build adopts them.
-# rename:keep-begin
-unset JINN_HOME JINN_PORT JINN_HOST JINN_INSTANCE JINN_GATEWAY_URL JINN_GATEWAY_TOKEN JINN_SESSION_ID \
-  JINN_SESSION_CAPABILITY JINN_TAKE_PORT JINN_BINDING_HOME JINN_HOME_IDENTITY
-# rename:keep-end
+eval "$(node "$(dirname "${BASH_SOURCE[0]}")/legacy-names.mjs" unset HOME PORT HOST INSTANCE GATEWAY_URL GATEWAY_TOKEN SESSION_ID SESSION_CAPABILITY TAKE_PORT BINDING_HOME HOME_IDENTITY)"
 
 SCRIPT_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO="${HUNDREDFOLD_REPO:-$SCRIPT_REPO}"
@@ -78,10 +75,10 @@ ACCOUNT_HOME="$("$NODE_BIN" -e 'process.stdout.write(require("node:os").userInfo
 # The real home, and anything inside an operator instance home (~/.hundredfold, ~/.hundredfold-*, or the names an older build gave them), is not a
 # sandbox host: create would write ~/.hundredfold/.hundredfold-<instance> and setup its caches there. Matched
 # without regard to case as well, so a case-sensitive volume can only over-refuse.
+OLD_HOME_NAME="$("$NODE_BIN" "$(dirname "${BASH_SOURCE[0]}")/legacy-names.mjs" home-name)"
 shopt -s nocasematch
 case "$HOST_HOME" in
-  "$ACCOUNT_HOME"|"$ACCOUNT_HOME"/.hundredfold|"$ACCOUNT_HOME"/.hundredfold/*|"$ACCOUNT_HOME"/.hundredfold-*|"$ACCOUNT_HOME"/.hundredfold-*/*|"$ACCOUNT_HOME"/.jinn|"$ACCOUNT_HOME"/.jinn/*|"$ACCOUNT_HOME"/.jinn-*|"$ACCOUNT_HOME"/.jinn-*/*) # rename:keep: a home an older build named
-
+  "$ACCOUNT_HOME"|"$ACCOUNT_HOME"/.hundredfold|"$ACCOUNT_HOME"/.hundredfold/*|"$ACCOUNT_HOME"/.hundredfold-*|"$ACCOUNT_HOME"/.hundredfold-*/*|"$ACCOUNT_HOME/$OLD_HOME_NAME"|"$ACCOUNT_HOME/$OLD_HOME_NAME"/*|"$ACCOUNT_HOME/$OLD_HOME_NAME"-*|"$ACCOUNT_HOME/$OLD_HOME_NAME"-*/*)
     die "refusing HOME=$HOST_HOME: it is the operator's real home or inside an operator instance; pass a throwaway HOME" ;;
 esac
 shopt -u nocasematch

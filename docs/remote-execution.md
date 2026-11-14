@@ -119,7 +119,7 @@ remote:
   wakeMac: "aa:bb:cc:dd:ee:ff"
   # wakeCommand: "smartplug on workstation"
   # Run on the remote once it is reachable, to bring the mount back after a boot.
-  remountCommand: "systemctl --user start jinn-home.mount"
+  remountCommand: "systemctl --user start hundredfold-home.mount"
   # Which Claude Code profile remote sessions run as. Omit for the remote
   # user's default. An employee's remoteClaudeConfigDir overrides it.
   claudeConfigDir: /home/<user>/.claude-profiles/personal

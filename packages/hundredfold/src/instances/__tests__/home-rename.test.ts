@@ -14,6 +14,7 @@ import { HOME_MOVE_RECEIPT, readHomeMoveReceipt, renameHomeIfNeeded, type HomeRe
 import { inspectHome } from "../home-state.js";
 import { HOME_MOVE_PENDING, writePendingMove } from "../home-pending.js";
 import { settleInstanceEnv } from "../canonical-env.js";
+import { OLD } from "../../shared/legacy-names.js";
 
 /** A real-shaped host: an older build's home with a sessions database, an attachment, a department stage
  *  directory beside it, Claude conversations filed under both working directories, a registry entry and
@@ -24,7 +25,7 @@ let registryPath: string;
 let deps: HomeRenameDeps;
 const backups: Array<{ name: string; home: string }> = [];
 
-const legacyHome = (name = "jinn-john") => path.join(root, `.${name}`);
+const legacyHome = (name = `${OLD.codename}-john`) => path.join(root, `.${name}`);
 const currentHome = (name = "acme-john") => path.join(root, `.${name}`);
 const projectDir = (cwd: string) => path.join(claudeDir, "projects", claudeProjectSlug(cwd));
 
@@ -35,13 +36,13 @@ function seedHome(home: string): void {
   db.close();
   fs.mkdirSync(path.join(home, "attachments"), { recursive: true });
   fs.writeFileSync(path.join(home, "attachments", "note.txt"), "attached");
-  fs.writeFileSync(path.join(home, "config.yaml"), 'jinn:\n  version: "0.33.3"\ngateway:\n  port: 8099\n');
+  fs.writeFileSync(path.join(home, "config.yaml"), `${OLD.codename}:\n  version: "0.33.3"\ngateway:\n  port: 8099\n`);
   fs.mkdirSync(path.join(home, "org"), { recursive: true });
   fs.writeFileSync(path.join(home, "gateway.json"), JSON.stringify({ port: 8099, secret: "s", pid: 999999, home: fs.realpathSync(home) }));
 }
 
 function seedStage(instance: string): { stageDir: string } {
-  const stageDir = path.join(root, ".jinn-departments", ".instances", instance, "ops");
+  const stageDir = path.join(root, `.${OLD.codename}-departments`, ".instances", instance, "ops");
   fs.mkdirSync(stageDir, { recursive: true });
   fs.writeFileSync(path.join(stageDir, "CLAUDE.md"), "stage");
   return { stageDir };
@@ -67,22 +68,22 @@ beforeEach(() => {
     backup: async (name, home) => { backups.push({ name, home }); return path.join(root, "Backups", `${name}-snapshot`); },
     lockTimeoutMs: 2_000,
   };
-  saveInstances([{ id: "i1", name: "jinn-john", port: 8099, home: legacyHome(), createdAt: "2026-01-01T00:00:00.000Z" }], { registryPath });
+  saveInstances([{ id: "i1", name: `${OLD.codename}-john`, port: 8099, home: legacyHome(), createdAt: "2026-01-01T00:00:00.000Z" }], { registryPath });
 });
 afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 
 describe("moving an older build's home", () => {
   it("moves a real-shaped home, leaves a link, and carries every conversation, the stage root, the registry and the snapshots with it", async () => {
     seedHome(legacyHome());
-    const { stageDir } = seedStage(".jinn-john");
+    const { stageDir } = seedStage(`.${OLD.codename}-john`);
     const homeConversation = seedConversation(legacyHome(), "home-session");
     const stageConversation = seedConversation(stageDir, "stage-session");
-    fs.mkdirSync(path.join(root, "Backups", "jinn-homes", "jinn-john", "2026-10-01"), { recursive: true });
+    fs.mkdirSync(path.join(root, "Backups", `${OLD.codename}-homes`, `${OLD.codename}-john`, "2026-10-01"), { recursive: true });
 
     const outcome = await renameHomeIfNeeded(legacyHome(), deps);
 
     expect(outcome).toMatchObject({ kind: "moved", home: currentHome() });
-    expect(backups).toEqual([{ name: "jinn-john", home: legacyHome() }]);
+    expect(backups).toEqual([{ name: `${OLD.codename}-john`, home: legacyHome() }]);
     // The home is the same directory under its new name; the old path is a link to it.
     expect(fs.lstatSync(legacyHome()).isSymbolicLink()).toBe(true);
     expect(fs.realpathSync(legacyHome())).toBe(currentHome());
@@ -98,14 +99,14 @@ describe("moving an older build's home", () => {
     expect(fs.existsSync(stageConversation)).toBe(false);
     expect(fs.existsSync(path.join(projectDir(newStage), "stage-session.jsonl"))).toBe(true);
     expect(fs.readFileSync(path.join(newStage, "CLAUDE.md"), "utf-8")).toBe("stage");
-    expect(fs.existsSync(path.join(root, ".jinn-departments"))).toBe(false);
+    expect(fs.existsSync(path.join(root, `.${OLD.codename}-departments`))).toBe(false);
     // The registry says the new name and path, once.
     expect(loadInstances(deps.registry)).toEqual([expect.objectContaining({ id: "i1", name: "acme-john", home: currentHome(), port: 8099 })]);
     // Snapshots follow under the new root and name.
     expect(fs.existsSync(path.join(root, "Backups", "acme-homes", "acme-john", "2026-10-01"))).toBe(true);
-    expect(fs.existsSync(path.join(root, "Backups", "jinn-homes"))).toBe(false);
+    expect(fs.existsSync(path.join(root, "Backups", `${OLD.codename}-homes`))).toBe(false);
     // And it says so afterwards.
-    expect(readHomeMoveReceipt(currentHome())).toMatchObject({ from: legacyHome(), to: currentHome(), transcripts: 2, backup: path.join(root, "Backups", "acme-homes", "acme-john", "jinn-john-snapshot") });
+    expect(readHomeMoveReceipt(currentHome())).toMatchObject({ from: legacyHome(), to: currentHome(), transcripts: 2, backup: path.join(root, "Backups", "acme-homes", "acme-john", `${OLD.codename}-john-snapshot`) });
     expect(fs.existsSync(path.join(currentHome(), HOME_MOVE_RECEIPT))).toBe(true);
   });
 
@@ -130,11 +131,11 @@ describe("moving an older build's home", () => {
 
   it("finishes a move whose process died right after the rename", async () => {
     seedHome(legacyHome());
-    const { stageDir } = seedStage(".jinn-john");
+    const { stageDir } = seedStage(`.${OLD.codename}-john`);
     const homeConversation = seedConversation(legacyHome(), "home-session");
     const stageConversation = seedConversation(stageDir, "stage-session");
     // What a kill between the rename and the follow-up steps leaves: the note, the moved home, no link, nothing else.
-    writePendingMove(legacyHome(), { legacy: legacyHome(), current: currentHome(), instance: "jinn-john", physicalLegacy: legacyHome(), configDirs: [claudeDir], at: "2026-10-01T00:00:00.000Z" });
+    writePendingMove(legacyHome(), { legacy: legacyHome(), current: currentHome(), instance: `${OLD.codename}-john`, physicalLegacy: legacyHome(), configDirs: [claudeDir], at: "2026-10-01T00:00:00.000Z" });
     fs.renameSync(legacyHome(), currentHome());
     expect(fs.existsSync(legacyHome())).toBe(false);
 
@@ -165,9 +166,9 @@ describe("moving an older build's home", () => {
   });
 
   it("moves the default home, whose name is the codename alone", async () => {
-    seedHome(legacyHome("jinn"));
-    saveInstances([{ id: "d", name: "jinn", port: 7000, home: legacyHome("jinn"), createdAt: "2026-01-01T00:00:00.000Z" }], { registryPath });
-    expect(await renameHomeIfNeeded(legacyHome("jinn"), deps)).toMatchObject({ kind: "moved", home: currentHome("acme") });
+    seedHome(legacyHome(OLD.codename));
+    saveInstances([{ id: "d", name: OLD.codename, port: 7000, home: legacyHome(OLD.codename), createdAt: "2026-01-01T00:00:00.000Z" }], { registryPath });
+    expect(await renameHomeIfNeeded(legacyHome(OLD.codename), deps)).toMatchObject({ kind: "moved", home: currentHome("acme") });
     expect(loadInstances(deps.registry)).toEqual([expect.objectContaining({ name: "acme", home: currentHome("acme") })]);
   });
 });
@@ -190,9 +191,9 @@ describe("leaving a home where it is", () => {
   });
 
   it("never moves a mount point, such as a container's volume", async () => {
-    seedHome(legacyHome("jinn"));
-    const outcome = await renameHomeIfNeeded(legacyHome("jinn"), { ...deps, isMountPoint: () => true });
-    expect(outcome).toMatchObject({ kind: "kept", home: legacyHome("jinn"), reason: expect.stringContaining("mount point") });
+    seedHome(legacyHome(OLD.codename));
+    const outcome = await renameHomeIfNeeded(legacyHome(OLD.codename), { ...deps, isMountPoint: () => true });
+    expect(outcome).toMatchObject({ kind: "kept", home: legacyHome(OLD.codename), reason: expect.stringContaining("mount point") });
   });
 
   it("refuses to choose between two homes that both exist", async () => {
@@ -212,31 +213,31 @@ describe("leaving a home where it is", () => {
   });
 
   it("starts a fresh instance where this build would create one", async () => {
-    expect(await renameHomeIfNeeded(legacyHome("jinn-new"), deps)).toEqual({ kind: "nothing", home: currentHome("acme-new") });
-    expect(inspectHome(legacyHome("jinn-new")).state).toBe("absent");
+    expect(await renameHomeIfNeeded(legacyHome(`${OLD.codename}-new`), deps)).toEqual({ kind: "nothing", home: currentHome("acme-new") });
+    expect(inspectHome(legacyHome(`${OLD.codename}-new`)).state).toBe("absent");
   });
 });
 
 describe("settling the environment", () => {
   it("rewrites an old home and instance name to the moved home, under every spelling", async () => {
     seedHome(legacyHome());
-    const env: NodeJS.ProcessEnv = { JINN_HOME: legacyHome(), JINN_INSTANCE: "jinn-john" };
+    const env: NodeJS.ProcessEnv = { [`${OLD.upper}_HOME`]: legacyHome(), [`${OLD.upper}_INSTANCE`]: "hundredfold-john" };
     const outcome = await settleInstanceEnv(env, deps);
     expect(outcome.kind).toBe("moved");
-    expect(env).toMatchObject({ ACME_HOME: currentHome(), JINN_HOME: currentHome(), ACME_INSTANCE: "acme-john", JINN_INSTANCE: "acme-john" });
+    expect(env).toMatchObject({ ACME_HOME: currentHome(), [`${OLD.upper}_HOME`]: currentHome(), ACME_INSTANCE: "acme-john", [`${OLD.upper}_INSTANCE`]: "acme-john" });
   });
 
   it("reads an old home reached through the link a move left as the one directory it is", async () => {
     seedHome(legacyHome());
     await renameHomeIfNeeded(legacyHome(), deps);
-    const env: NodeJS.ProcessEnv = { JINN_HOME: legacyHome() };
+    const env: NodeJS.ProcessEnv = { [`${OLD.upper}_HOME`]: legacyHome() };
     expect((await settleInstanceEnv(env, deps)).kind).toBe("nothing");
     expect(env.ACME_HOME).toBe(currentHome());
   });
 
   it("points the environment at the old path when the home had to stay there", async () => {
     seedHome(legacyHome());
-    const env: NodeJS.ProcessEnv = { JINN_INSTANCE: "jinn-john" };
+    const env: NodeJS.ProcessEnv = { [`${OLD.upper}_INSTANCE`]: "hundredfold-john" };
     const home = vi.spyOn(os, "homedir").mockReturnValue(root);
     try {
       const outcome = await settleInstanceEnv(env, { ...deps, gatewayRunning: () => true });

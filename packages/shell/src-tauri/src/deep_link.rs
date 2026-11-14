@@ -1,5 +1,4 @@
-//! `hundredfold://` URLs (and the `jinn://` links older installs registered), translated into routes
-//! inside the bundled dashboard.
+//! `hundredfold://` URLs, translated into routes inside the bundled dashboard.
 
 use tauri::{AppHandle, Runtime, Url, WebviewWindow};
 use tauri_plugin_deep_link::DeepLinkExt;
@@ -38,7 +37,7 @@ fn navigate<R: Runtime>(window: &WebviewWindow<R>, urls: &[Url]) {
     }
 }
 
-/// `jinn://todos/ABC-1` on `tauri://localhost/chat` becomes
+/// `hundredfold://todos/ABC-1` on `tauri://localhost/chat` becomes
 /// `tauri://localhost/todos/ABC-1`.
 ///
 /// A custom scheme has no meaningful authority, so the first segment after
@@ -65,14 +64,6 @@ mod tests {
     #[test]
     fn a_bare_route_becomes_a_path() {
         assert_eq!(
-            route("jinn://org").as_deref(),
-            Some("tauri://localhost/org")
-        );
-    }
-
-    #[test]
-    fn the_new_scheme_routes() {
-        assert_eq!(
             route("hundredfold://org").as_deref(),
             Some("tauri://localhost/org")
         );
@@ -81,7 +72,7 @@ mod tests {
     #[test]
     fn a_nested_route_keeps_its_segments() {
         assert_eq!(
-            route("jinn://todos/ISS-1").as_deref(),
+            route("hundredfold://todos/ISS-1").as_deref(),
             Some("tauri://localhost/todos/ISS-1")
         );
     }
@@ -89,13 +80,13 @@ mod tests {
     #[test]
     fn a_query_survives() {
         assert_eq!(
-            route("jinn://logs?level=error").as_deref(),
+            route("hundredfold://logs?level=error").as_deref(),
             Some("tauri://localhost/logs?level=error")
         );
     }
 
     #[test]
     fn a_link_with_no_route_is_rejected_rather_than_sent_to_the_default() {
-        assert_eq!(route("jinn://"), None);
+        assert_eq!(route("hundredfold://"), None);
     }
 }

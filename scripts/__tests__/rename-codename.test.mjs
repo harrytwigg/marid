@@ -24,25 +24,15 @@ test("an identifier, an environment variable and a path all follow the name", ()
   assert.equal(text, "import { resolveHundredfoldHome } from './home'; const x = process.env.HUNDREDFOLD_HOME + '/.hundredfold-x'")
 })
 
-test("the attribution, the upstream links and the app identity are left as they are, and the rest of the line is not", () => {
-  const line = "Hundredfold is a fork of [Jinn](https://github.com/hristo2612/jinn) by hristo2612; open jinn:// links in run.jinn.shell and the jinn app"
+test("the attribution is left as it is, and the rest of the line is not", () => {
+  const line = "Hundredfold is a fork of [Jinn](https://github.com/hristo2612/jinn) by hristo2612; Copyright (c) 2026 Jinn Contributors; the jinn app"
   const { text } = renameText(line, KEEP_PATTERNS)
-  assert.equal(text, "Hundredfold is a fork of [Jinn](https://github.com/hristo2612/jinn) by hristo2612; open jinn:// links in run.jinn.shell and the hundredfold app")
+  assert.equal(text, "Hundredfold is a fork of [Jinn](https://github.com/hristo2612/jinn) by hristo2612; Copyright (c) 2026 Jinn Contributors; the hundredfold app")
 })
 
-test("names a database schema refers to are kept", () => {
-  const { text } = renameText("CHECK (x = jinn_callback_identity(x)) AND jinn_work_item_claim_digest(y) AND jinn_other", KEEP_PATTERNS)
-  assert.equal(text, "CHECK (x = jinn_callback_identity(x)) AND jinn_work_item_claim_digest(y) AND hundredfold_other")
-})
-
-test("a docker volume is kept, a flag or a path that merely contains its name is not", () => {
-  assert.equal(renameText("- jinn-home:/home/node/.jinn", KEEP_PATTERNS).text, "- jinn-home:/home/node/.jinn")
-  assert.equal(renameText("--jinn-home /mnt/jinn-home jinn-home-x", KEEP_PATTERNS).text, "--hundredfold-home /mnt/hundredfold-home hundredfold-home-x")
-})
-
-test("a marked line, and a marked block, are kept whole", () => {
-  const source = ["a jinn", "b jinn // rename:keep", "# rename:keep-begin", "c jinn", "d jinn", "# rename:keep-end", "e jinn"].join("\n")
-  assert.equal(renameText(source, KEEP_PATTERNS).text, ["a hundredfold", "b jinn // rename:keep", "# rename:keep-begin", "c jinn", "d jinn", "# rename:keep-end", "e hundredfold"].join("\n"))
+test("everything else is renamed: bundle ids, schemes, database function names and volume names", () => {
+  const line = "run.jinn.shell jinn:// jinn_callback_identity jinn-home /home/node/.jinn __jinn_service_start__"
+  assert.equal(renameText(line, KEEP_PATTERNS).text, "run.hundredfold.shell hundredfold:// hundredfold_callback_identity hundredfold-home /home/node/.hundredfold __hundredfold_service_start__")
 })
 
 test("the old package name becomes the new one, not a name with a suffix", () => {
@@ -57,7 +47,7 @@ test("a path moves with the package, and what a released bundle holds does not",
     renamePath("packages/jinn/template/migrations/0.30.0/files/base/skills/jinn-sandbox/SKILL.md", FROZEN_SUBTREES),
     "packages/hundredfold/template/migrations/0.30.0/files/base/skills/jinn-sandbox/SKILL.md",
   )
-  assert.equal(renamePath("packages/shell/src-tauri/gen/apple/jinn-shell.xcodeproj/x", FROZEN_SUBTREES), "packages/shell/src-tauri/gen/apple/jinn-shell.xcodeproj/x")
+  assert.equal(renamePath("packages/shell/src-tauri/gen/apple/jinn-shell.xcodeproj/x", FROZEN_SUBTREES), "packages/shell/src-tauri/gen/apple/hundredfold-shell.xcodeproj/x")
 })
 
 test("the repository has nothing left to rename outside the allowed places", () => {

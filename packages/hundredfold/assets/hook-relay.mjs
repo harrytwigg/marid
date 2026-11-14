@@ -4,14 +4,14 @@
 // Reads hook JSON on stdin, POSTs to the gateway's /api/internal/hook.
 // Most relay failures exit 0 so Claude is not interrupted; policy hard-blocks exit non-zero.
 //
-// The gateway writes this file with __CODENAME__ replaced (shared/host-assets.ts). A session
+// The gateway writes this file with __CODENAME__ and __LEGACY_CODENAME__ replaced (shared/host-assets.ts). A session
 // started by an older gateway still carries the older name's variables, so both are read.
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
 const CODENAME = "__CODENAME__";
-const LEGACY_CODENAME = "jinn"; // rename:keep
+const LEGACY_CODENAME = "__LEGACY_CODENAME__";
 const env = (suffix) => process.env[`${CODENAME.toUpperCase()}_${suffix}`] ?? process.env[`${LEGACY_CODENAME.toUpperCase()}_${suffix}`];
 
 const sessionId = process.argv[2];

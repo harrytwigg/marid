@@ -5,6 +5,7 @@ import os from "node:os"
 import path from "node:path"
 import test from "node:test"
 import { fileURLToPath } from "node:url"
+import { OLD } from "../legacy-names.mjs";
 
 // Spawned with a temp repository as its cwd, so the path has to be absolute.
 const CHECKER = fileURLToPath(new URL("../check-footguns.mjs", import.meta.url))
@@ -68,10 +69,10 @@ const RULE_CASES = [
   {
     rule: "personal-path",
     triggers: {
-      "packages/hundredfold/src/thing.ts": 'export const cache = "/Users/someone/.cache/jinn";\n',
+      "packages/hundredfold/src/thing.ts": `export const cache = "/Users/someone/.cache/${OLD.codename}";\n`,
     },
     passes: {
-      "packages/hundredfold/template/migrations/0001-initial/notes.md": "Wrote /Users/someone/.jinn/config.yaml\n",
+      "packages/hundredfold/template/migrations/0001-initial/notes.md": `Wrote /Users/someone/.${OLD.codename}/config.yaml\n`,
     },
     passesBecause: "frozen release migrations record what an older version wrote",
   },
@@ -107,7 +108,7 @@ const RULE_CASES = [
   },
   {
     rule: "scattered-env",
-    triggers: { "packages/hundredfold/src/gateway/probe.ts": "const home = process.env.JINN_HOME;\n" },
+    triggers: { "packages/hundredfold/src/gateway/probe.ts": `const home = process.env.${OLD.upper}_HOME;\n` },
     passes: {
       "packages/hundredfold/src/gateway/seam.ts":
         "export function childEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {\n" +
@@ -217,7 +218,7 @@ test("removed-ui-library judges only the lines a change adds", () => {
 test("a frozen migration excuses the historical path, never a live leak", () => {
   const root = repoWith({
     "packages/hundredfold/template/migrations/0001-initial/notes.md":
-      "Wrote /Users/someone/.jinn/config.yaml\nContact dev@acme-widgets.io\n",
+      `Wrote /Users/someone/.${OLD.codename}/config.yaml\nContact dev@acme-widgets.io\n`,
   })
 
   const { status, stdout } = check(root, "--all")

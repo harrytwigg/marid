@@ -1,9 +1,16 @@
 import { describe, it, expect } from "vitest";
 import { parseVersionOutput, productBanner } from "../brand.js";
+import { OLD } from "../legacy-names.js";
+
+const olderBanner = (version: string): string => `${OLD.productName} ${version} (built on ${OLD.upstreamName})`;
 
 describe("parseVersionOutput", () => {
   it("reads the version out of the current banner", () => {
-    expect(parseVersionOutput("Hundredfold 0.33.3 (built on Jinn)")).toBe("0.33.3");
+    expect(parseVersionOutput("Hundredfold 0.34.0")).toBe("0.34.0");
+  });
+
+  it("reads the banner builds from before the rename print", () => {
+    expect(parseVersionOutput(olderBanner("0.33.3"))).toBe("0.33.3");
   });
 
   it("round-trips whatever productBanner prints", () => {
@@ -18,8 +25,8 @@ describe("parseVersionOutput", () => {
   });
 
   it("tolerates surrounding whitespace", () => {
-    expect(parseVersionOutput("  Hundredfold 0.33.3 (built on Jinn)\r")).toBe("0.33.3");
-    expect(parseVersionOutput("Hundredfold 0.33.3 (built on Jinn)")).toBe("0.33.3");
+    expect(parseVersionOutput("  Hundredfold 0.33.3\r")).toBe("0.33.3");
+    expect(parseVersionOutput(`  ${olderBanner("0.33.3")}\r`)).toBe("0.33.3");
     expect(parseVersionOutput("0.33.3\n")).toBe("0.33.3");
   });
 
@@ -28,11 +35,11 @@ describe("parseVersionOutput", () => {
       "",
       "   ",
       "Hundredfold",
-      "Hundredfold (built on Jinn)",
-      "Hundredfold 0.33 (built on Jinn)",
-      "Hundredfold 0.33.3",
-      "Hundredfold 0.33.3 (built on Jinn) extra",
-      "Other 0.33.3 (built on Jinn)",
+      `Hundredfold (built on ${OLD.upstreamName})`,
+      "Hundredfold 0.33",
+      "Hundredfold 0.33.3 extra",
+      `${olderBanner("0.33.3")} extra`,
+      `Other 0.33.3 (built on ${OLD.upstreamName})`,
       "hundredfold: command not found",
       "v0.33.3",
       "0.33",

@@ -4,7 +4,7 @@ import { parseSearchQuery, type SearchVocabulary } from "../query-grammar.js";
 /** A vocabulary small enough to reason about, real enough to be representative. */
 const VOCABULARY: SearchVocabulary = {
   statuses: ["backlog", "executing", "in_review", "done", "blocked", "cancelled"],
-  assignees: ["jinn-dev", "seo-specialist"],
+  assignees: ["hundredfold-dev", "seo-specialist"],
   departments: ["platform", "marketing"],
   labels: ["build", "urgent"],
 };
@@ -17,10 +17,10 @@ function parse(input: string, literal = false) {
 
 describe("parseSearchQuery", () => {
   it("infers status and assignee from plain words and drops the connectives around them", () => {
-    const parsed = parse("everything blocked on jinn-dev");
+    const parsed = parse("everything blocked on hundredfold-dev");
     expect(parsed.facets).toEqual([
       { kind: "status", value: "blocked", origin: "inferred", span: { start: 11, end: 18, text: "blocked" } },
-      { kind: "assignee", value: "jinn-dev", origin: "inferred", span: { start: 22, end: 30, text: "jinn-dev" } },
+      { kind: "assignee", value: "hundredfold-dev", origin: "inferred", span: { start: 22, end: 30, text: "hundredfold-dev" } },
     ]);
     // `everything` and `on` are connectives; ANDing them into the index is what
     // makes this query return nothing.
@@ -28,16 +28,16 @@ describe("parseSearchQuery", () => {
   });
 
   it("reports the span of every facet against the original characters", () => {
-    const input = "everything blocked on jinn-dev";
+    const input = "everything blocked on hundredfold-dev";
     for (const facet of parse(input).facets) {
       expect(input.slice(facet.span.start, facet.span.end)).toBe(facet.span.text);
     }
   });
 
   it("commits explicit tokens as facets and consumes them from the free text", () => {
-    const parsed = parse("@jinn-dev is:executing");
+    const parsed = parse("@hundredfold-dev is:executing");
     expect(parsed.facets).toEqual([
-      { kind: "assignee", value: "jinn-dev", origin: "token", span: { start: 0, end: 9, text: "@jinn-dev" } },
+      { kind: "assignee", value: "hundredfold-dev", origin: "token", span: { start: 0, end: 9, text: "@hundredfold-dev" } },
       { kind: "status", value: "executing", origin: "token", span: { start: 10, end: 22, text: "is:executing" } },
     ]);
     expect(parsed.freeText).toBe("");
@@ -78,8 +78,8 @@ describe("parseSearchQuery", () => {
   });
 
   it("matches the vocabulary case-insensitively and reports the canonical value", () => {
-    const parsed = parse("is:BLOCKED @JINN-DEV");
-    expect(parsed.facets.map((facet) => facet.value)).toEqual(["blocked", "jinn-dev"]);
+    const parsed = parse("is:BLOCKED @HUNDREDFOLD-DEV");
+    expect(parsed.facets.map((facet) => facet.value)).toEqual(["blocked", "hundredfold-dev"]);
   });
 
   it("rejects an explicit token whose value is not in the vocabulary, naming the token", () => {
@@ -107,9 +107,9 @@ describe("parseSearchQuery", () => {
   });
 
   it("literal=true produces zero facets and the whole raw string as free text", () => {
-    const parsed = parse("everything blocked on jinn-dev @jinn-dev is:executing", true);
+    const parsed = parse("everything blocked on hundredfold-dev @hundredfold-dev is:executing", true);
     expect(parsed.facets).toEqual([]);
-    expect(parsed.freeText).toBe("everything blocked on jinn-dev @jinn-dev is:executing");
+    expect(parsed.freeText).toBe("everything blocked on hundredfold-dev @hundredfold-dev is:executing");
     expect(parsed.literal).toBe(true);
   });
 

@@ -54,7 +54,7 @@ export interface CreateInstanceDependencies extends DirectoryOptions {
 export function assertSecondaryInstancesSupported(env: NodeJS.ProcessEnv = process.env): void {
   if (env.HUNDREDFOLD_CONTAINER !== "1") return;
   throw new Error(
-    "The Docker image supports one Hundredfold instance. Run each additional instance in its own container with dedicated jinn-home and jinn-claude volumes and a separately published port.",
+    "The Docker image supports one Hundredfold instance. Run each additional instance in its own container with dedicated hundredfold-home and hundredfold-claude volumes and a separately published port.",
   );
 }
 

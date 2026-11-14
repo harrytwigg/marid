@@ -13,43 +13,44 @@ import {
   wireHeaderDisplay,
   wireHeaderDisplayAliases,
 } from "../wire-names.js";
+import { OLD } from "../legacy-names.js";
 
 const acme = namesFor("acme");
-const same = namesFor("jinn");
+const same = namesFor(OLD.codename);
 
 describe("wire header names", () => {
   it("writes the current name and reads both, in the lower case Node hands over and in the form a CORS list prints", () => {
     expect(wireHeader("caller-session", acme)).toBe("x-acme-caller-session");
-    expect(wireHeaderAliases("caller-session", acme)).toEqual(["x-acme-caller-session", "x-jinn-caller-session"]);
+    expect(wireHeaderAliases("caller-session", acme)).toEqual(["x-acme-caller-session", `x-${OLD.codename}-caller-session`]);
     expect(wireHeaderDisplay("config-revision", acme)).toBe("X-Acme-Config-Revision");
-    expect(wireHeaderDisplayAliases("config-revision", acme)).toEqual(["X-Acme-Config-Revision", "X-Jinn-Config-Revision"]);
-    expect(wireHeaderAliases("origin", same)).toEqual(["x-jinn-origin"]);
+    expect(wireHeaderDisplayAliases("config-revision", acme)).toEqual(["X-Acme-Config-Revision", `X-${OLD.title}-Config-Revision`]);
+    expect(wireHeaderAliases("origin", same)).toEqual([`x-${OLD.codename}-origin`]);
   });
 
   it("gives a legacy header sent by an older peer its current-named twin and leaves the rest alone", () => {
     const headers: Record<string, string | string[] | undefined> = {
-      "x-jinn-session-capability": "cap",
-      "x-jinn-tool-call": "jinn-mcp",
+      [`x-${OLD.codename}-session-capability`]: "cap",
+      [`x-${OLD.codename}-tool-call`]: `${OLD.codename}-mcp`,
       "x-forwarded-proto": "https",
-      "x-jinnx-other": "1",
+      [`x-${OLD.codename}x-other`]: "1",
     };
     adoptLegacyHeaders(headers, acme);
     expect(headers["x-acme-session-capability"]).toBe("cap");
-    expect(headers["x-acme-tool-call"]).toBe("jinn-mcp");
+    expect(headers["x-acme-tool-call"]).toBe(`${OLD.codename}-mcp`);
     expect(headers["x-acme-other"]).toBeUndefined();
-    expect(headers["x-jinn-session-capability"]).toBe("cap");
+    expect(headers[`x-${OLD.codename}-session-capability`]).toBe("cap");
   });
 
   it("keeps the value of a header sent under both names", () => {
-    const headers: Record<string, string | string[] | undefined> = { "x-jinn-origin": "old", "x-acme-origin": "talk" };
+    const headers: Record<string, string | string[] | undefined> = { [`x-${OLD.codename}-origin`]: "old", "x-acme-origin": "talk" };
     adoptLegacyHeaders(headers, acme);
     expect(headers["x-acme-origin"]).toBe("talk");
   });
 
   it("does nothing while the codename is unchanged", () => {
-    const headers: Record<string, string | string[] | undefined> = { "x-jinn-origin": "talk" };
+    const headers: Record<string, string | string[] | undefined> = { [`x-${OLD.codename}-origin`]: "talk" };
     adoptLegacyHeaders(headers, same);
-    expect(Object.keys(headers)).toEqual(["x-jinn-origin"]);
+    expect(Object.keys(headers)).toEqual([`x-${OLD.codename}-origin`]);
   });
 });
 
@@ -57,7 +58,7 @@ describe("tool-call marker", () => {
   it("accepts the marker of this build and of an older one, and nothing else", () => {
     expect(toolCallMarker(acme)).toBe("acme-mcp");
     expect(isToolCallMarker("acme-mcp", acme)).toBe(true);
-    expect(isToolCallMarker("jinn-mcp", acme)).toBe(true);
+    expect(isToolCallMarker(`${OLD.codename}-mcp`, acme)).toBe(true);
     expect(isToolCallMarker("other-mcp", acme)).toBe(false);
     expect(isToolCallMarker(undefined, acme)).toBe(false);
     expect(isToolCallMarker("acme-mcp", same)).toBe(false);
@@ -66,7 +67,7 @@ describe("tool-call marker", () => {
 
 describe("launch flags, org key and hook body", () => {
   it("names the launch flag under both codenames", () => {
-    expect(mcpFlagAliases("session-id", acme)).toEqual(["--acme-session-id", "--jinn-session-id"]);
+    expect(mcpFlagAliases("session-id", acme)).toEqual(["--acme-session-id", `--${OLD.codename}-session-id`]);
   });
 
   it("names the org key and the hook field after the codename", () => {

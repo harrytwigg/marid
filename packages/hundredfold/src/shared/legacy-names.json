@@ -1,0 +1,18 @@
+{
+  "codename": "jinn",
+  "portalName": "Jinn",
+  "productName": "Marid",
+  "upstreamName": "Jinn",
+  "package": "jinn-cli",
+  "envPrefixes": ["JINN", "MARID"],
+  "sqlFunctions": {
+    "callbackIdentity": "jinn_callback_identity",
+    "claimDigest": "jinn_work_item_claim_digest",
+    "claimPrefix": "jinn_work_item_claim_prefix"
+  },
+  "storageKeys": {
+    "pinnedSessions": "jinn-pinned-sessions",
+    "activeOrigin": "jinn.native.active-origin"
+  },
+  "_about": "Every name an install made before the rename carries, in one place: the compatibility layer reads old installs through these and nothing else spells them, so removing the layer is deleting this file and what imports it."
+}

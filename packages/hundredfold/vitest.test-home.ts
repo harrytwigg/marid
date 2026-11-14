@@ -1,14 +1,15 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { LEGACY_CODENAME, LEGACY_ENV_PREFIXES } from './src/shared/legacy-names.js';
 
 // The default home under the current name and under the one an older build gave it: neither is a test home.
-const PROD_HOMES = [path.join(os.homedir(), '.hundredfold'), path.join(os.homedir(), '.jinn')]; // rename:keep
+const PROD_HOMES = [path.join(os.homedir(), '.hundredfold'), path.join(os.homedir(), `.${LEGACY_CODENAME}`)];
 
 /** The home variable under both names: a test that mocks another codename reads the old one, so both point at the test home. */
 function setHome(env: NodeJS.ProcessEnv, home: string): void {
   env.HUNDREDFOLD_HOME = home;
-  env.JINN_HOME = home; // rename:keep
+  for (const prefix of LEGACY_ENV_PREFIXES) env[`${prefix}_HOME`] = home;
 }
 // Global setup redirects the workers' generic temp variables beneath HUNDREDFOLD_HOME.
 // Keep the pre-redirect OS root for the safety check so HUNDREDFOLD_HOME remains a

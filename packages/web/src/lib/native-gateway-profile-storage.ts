@@ -1,7 +1,8 @@
 import type { GatewayProfile } from "./gateway-transport"
+import { LEGACY_STORAGE_KEYS } from "@hundredfold/legacy-names"
 
 const STORAGE_KEY = "hundredfold.native.gateway-profiles.v1"
-const LEGACY_ACTIVE_ORIGIN_KEY = "jinn.native.active-origin" // rename:keep
+const LEGACY_ACTIVE_ORIGIN_KEY = LEGACY_STORAGE_KEYS.activeOrigin
 
 export interface NativeGatewayProfile extends GatewayProfile {
   name: string

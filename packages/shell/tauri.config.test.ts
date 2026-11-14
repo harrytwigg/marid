@@ -54,9 +54,9 @@ describe("bundled Tauri shell", () => {
     expect(library).toContain("#[cfg_attr(mobile, tauri::mobile_entry_point)]")
     expect(existsSync(resolve(here, "src-tauri/gen/apple/project.yml"))).toBe(true)
     expect(existsSync(resolve(here, "src-tauri/gen/android/settings.gradle"))).toBe(true)
-    expect(tauriConfig.identifier).toBe("run.jinn.shell")
-    expect(tauriConfig.plugins["deep-link"].desktop.schemes).toEqual(["hundredfold", "jinn"]) // rename:keep: the old scheme stays registered
-    expect(tauriConfig.plugins["deep-link"].mobile[0]?.scheme).toEqual(["hundredfold", "jinn"]) // rename:keep
+    expect(tauriConfig.identifier).toBe("run.hundredfold.shell")
+    expect(tauriConfig.plugins["deep-link"].desktop.schemes).toEqual(["hundredfold"])
+    expect(tauriConfig.plugins["deep-link"].mobile[0]?.scheme).toEqual(["hundredfold"])
   })
 
   it("keeps main and probe capabilities local, separate, and narrow", () => {

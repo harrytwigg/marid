@@ -1,3 +1,4 @@
+import { legacyHomeName } from "./legacy-names.mjs"
 import os from "node:os"
 import path from "node:path"
 
@@ -75,7 +76,7 @@ export function mergeById(existing, owned) {
 
 /** @param {string} home @param {{ gateway?: { port?: number } }} config */
 export function assertDisposableHome(home, config) {
-  const PRODUCTION_HOME_NAMES = [".hundredfold", ".jinn"] // rename:keep: the current name and the one an older build gave it
+  const PRODUCTION_HOME_NAMES = [".hundredfold", legacyHomeName] // the current name and the one an older build gave it
   if (PRODUCTION_HOME_NAMES.some((name) => path.resolve(home) === path.join(os.homedir(), name) || path.basename(home) === name)) {
     throw new Error(`${home} is the production instance home; use a throwaway sandbox home`)
   }

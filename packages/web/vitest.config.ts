@@ -27,6 +27,7 @@ export default defineConfig({
       '@hundredfold/fallback-chain-wire': path.resolve(__dirname, '../hundredfold/src/shared/fallback-chain-wire.ts'),
       '@hundredfold/model-id': path.resolve(__dirname, '../hundredfold/src/shared/model-id.ts'),
       '@hundredfold/codename': path.resolve(__dirname, '../hundredfold/src/shared/codename-constant.ts'),
+      '@hundredfold/legacy-names': path.resolve(__dirname, '../hundredfold/src/shared/legacy-names.ts'),
     },
   },
 })

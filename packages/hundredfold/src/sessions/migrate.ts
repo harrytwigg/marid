@@ -5,6 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import Database from 'better-sqlite3';
 import type { SessionDelivery, SessionDeliveryIdentity, SessionDeliveryPayload } from '../shared/types.js';
+import { LEGACY_SQL_FUNCTIONS } from "../shared/legacy-names.js";
 
 export const CREATE_TABLE = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -146,13 +147,13 @@ function callbackDeliveriesTableSql(tableName = 'callback_deliveries'): string {
   return `
 CREATE TABLE ${tableName} (
   id TEXT PRIMARY KEY,
-  target_session_id TEXT NOT NULL CHECK (length(target_session_id) > 0 AND target_session_id = jinn_callback_identity(target_session_id)),
+  target_session_id TEXT NOT NULL CHECK (length(target_session_id) > 0 AND target_session_id = ${LEGACY_SQL_FUNCTIONS.callbackIdentity}(target_session_id)),
   source_kind TEXT NOT NULL CHECK (source_kind IN ('session', 'workflow-run', 'heartbeat', 'work-item')),
-  source_id TEXT NOT NULL CHECK (length(source_id) > 0 AND source_id = jinn_callback_identity(source_id)),
-  source_attempt TEXT NOT NULL CHECK (length(source_attempt) > 0 AND source_attempt = jinn_callback_identity(source_attempt)),
-  source_outcome TEXT NOT NULL CHECK (length(source_outcome) > 0 AND source_outcome = jinn_callback_identity(source_outcome)),
+  source_id TEXT NOT NULL CHECK (length(source_id) > 0 AND source_id = ${LEGACY_SQL_FUNCTIONS.callbackIdentity}(source_id)),
+  source_attempt TEXT NOT NULL CHECK (length(source_attempt) > 0 AND source_attempt = ${LEGACY_SQL_FUNCTIONS.callbackIdentity}(source_attempt)),
+  source_outcome TEXT NOT NULL CHECK (length(source_outcome) > 0 AND source_outcome = ${LEGACY_SQL_FUNCTIONS.callbackIdentity}(source_outcome)),
   source_version INTEGER NOT NULL CHECK (source_version >= 1),
-  delivery_kind TEXT NOT NULL CHECK (length(delivery_kind) > 0 AND delivery_kind = jinn_callback_identity(delivery_kind)),
+  delivery_kind TEXT NOT NULL CHECK (length(delivery_kind) > 0 AND delivery_kind = ${LEGACY_SQL_FUNCTIONS.callbackIdentity}(delivery_kind)),
   payload TEXT NOT NULL CHECK (
     json_valid(payload)
     AND json_type(payload) = 'object'
@@ -439,7 +440,7 @@ function hasSessionDeliveryConstraints(sql: string): boolean {
     'delivery_kind',
   ];
   return canonicalColumns.every((column) =>
-    normalized.includes(`length(${column}) > 0 and ${column} = jinn_callback_identity(${column})`),
+    normalized.includes(`length(${column}) > 0 and ${column} = ${LEGACY_SQL_FUNCTIONS.callbackIdentity}(${column})`),
   )
     && normalized.includes("source_kind in ('session', 'workflow-run', 'heartbeat', 'work-item')")
     && normalized.includes('source_version >= 1')
@@ -456,7 +457,7 @@ function hasSessionDeliveryConstraints(sql: string): boolean {
  * from this migration is rolled back as one unit. */
 export function migrateCallbackDeliveriesSchema(database: Database.Database): void {
   database.pragma('busy_timeout = 10000');
-  database.function('jinn_callback_identity', { deterministic: true }, canonicalCallbackIdentityText);
+  database.function(LEGACY_SQL_FUNCTIONS.callbackIdentity, { deterministic: true }, canonicalCallbackIdentityText);
   const migrate = database.transaction(() => {
     const existing = database.prepare(`
       SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'callback_deliveries'

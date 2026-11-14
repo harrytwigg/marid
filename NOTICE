@@ -2,12 +2,10 @@ Hundredfold
 Copyright (c) 2026 Hundredfold contributors
 
 Hundredfold is a fork of Jinn (https://github.com/hristo2612/jinn), created by
-hristo2612 and Jinn Contributors and released under the MIT License.
-
-Most of the code in this repository originates from Jinn and remains
-Copyright (c) 2026 Jinn Contributors. The Hundredfold fork adds features and
-changes the name and branding on top of that work; those modifications
-are released under the same MIT License. See LICENSE for the full text.
+hristo2612 and Jinn Contributors and released under the MIT License. Most of the
+code in this repository originates from that project and remains
+Copyright (c) 2026 Jinn Contributors; the changes made in this fork are released
+under the same MIT License. See LICENSE for the full text.
 
 Third-party components keep their own licenses; see the NOTICE.md files in
 the directories that vendor them.

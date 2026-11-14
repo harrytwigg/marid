@@ -15,6 +15,7 @@
 // in YAML and shell). A suppression with no reason still suppresses, but the run
 // lists it as unaudited — otherwise `git grep 'footgun: ok'` stops being worth
 // reading, which is the only thing that makes inline suppression safe.
+import { LEGACY } from "./legacy-names.mjs"
 import { execFileSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import path from "node:path"
@@ -92,7 +93,7 @@ const RULES = [
       matchingLines(
         text,
         // The current name and the one an older build used: a home hardcoded under either reads the wrong instance.
-        /(?:(?:os\.)?homedir\(\)|process\.env\.(?:HOME|USERPROFILE))[^\n]*["'`]\.(?:hundredfold|jinn)[\w-]*["'`]/, // rename:keep
+        new RegExp(String.raw`(?:(?:os\.)?homedir\(\)|process\.env\.(?:HOME|USERPROFILE))[^\n]*["'\x60]\.(?:hundredfold|${LEGACY.codename})[\w-]*["'\x60]`),
       ),
   },
   {

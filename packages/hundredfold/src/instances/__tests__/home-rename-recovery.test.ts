@@ -14,6 +14,7 @@ import { HOME_MOVE_PENDING, writePendingMove } from "../home-pending.js";
 import { settleInstanceEnv } from "../canonical-env.js";
 import { settleBeforeRestart } from "../../gateway/restart-settle.js";
 import { departmentStageRoot } from "../../gateway/department-workdirs.js";
+import { OLD } from "../../shared/legacy-names.js";
 
 /** Moves that die half way, race a gateway, or fail a step, and a home that has to stay put. A real-shaped host: an older build's home with a sessions database, an attachment, a department stage
  *  directory beside it, Claude conversations filed under both working directories, a registry entry and
@@ -24,7 +25,7 @@ let registryPath: string;
 let deps: HomeRenameDeps;
 const backups: Array<{ name: string; home: string }> = [];
 
-const legacyHome = (name = "jinn-john") => path.join(root, `.${name}`);
+const legacyHome = (name = `${OLD.codename}-john`) => path.join(root, `.${name}`);
 const currentHome = (name = "acme-john") => path.join(root, `.${name}`);
 const projectDir = (cwd: string) => path.join(claudeDir, "projects", claudeProjectSlug(cwd));
 
@@ -35,13 +36,13 @@ function seedHome(home: string): void {
   db.close();
   fs.mkdirSync(path.join(home, "attachments"), { recursive: true });
   fs.writeFileSync(path.join(home, "attachments", "note.txt"), "attached");
-  fs.writeFileSync(path.join(home, "config.yaml"), 'jinn:\n  version: "0.33.3"\ngateway:\n  port: 8099\n');
+  fs.writeFileSync(path.join(home, "config.yaml"), `${OLD.codename}:\n  version: "0.33.3"\ngateway:\n  port: 8099\n`);
   fs.mkdirSync(path.join(home, "org"), { recursive: true });
   fs.writeFileSync(path.join(home, "gateway.json"), JSON.stringify({ port: 8099, secret: "s", pid: 999999, home: fs.realpathSync(home) }));
 }
 
 function seedStage(instance: string): { stageDir: string } {
-  const stageDir = path.join(root, ".jinn-departments", ".instances", instance, "ops");
+  const stageDir = path.join(root, `.${OLD.codename}-departments`, ".instances", instance, "ops");
   fs.mkdirSync(stageDir, { recursive: true });
   fs.writeFileSync(path.join(stageDir, "CLAUDE.md"), "stage");
   return { stageDir };
@@ -67,7 +68,7 @@ beforeEach(() => {
     backup: async (name, home) => { backups.push({ name, home }); return path.join(root, "Backups", `${name}-snapshot`); },
     lockTimeoutMs: 2_000,
   };
-  saveInstances([{ id: "i1", name: "jinn-john", port: 8099, home: legacyHome(), createdAt: "2026-01-01T00:00:00.000Z" }], { registryPath });
+  saveInstances([{ id: "i1", name: `${OLD.codename}-john`, port: 8099, home: legacyHome(), createdAt: "2026-01-01T00:00:00.000Z" }], { registryPath });
 });
 afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 
@@ -75,13 +76,13 @@ afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 describe("a move that does not go cleanly", () => {
   it("finishes the department conversations of a move that died between the stage-root rename and their move", async () => {
     seedHome(legacyHome());
-    const { stageDir } = seedStage(".jinn-john");
+    const { stageDir } = seedStage(`.${OLD.codename}-john`);
     const stageConversation = seedConversation(stageDir, "stage-session");
-    writePendingMove(legacyHome(), { legacy: legacyHome(), current: currentHome(), instance: "jinn-john", physicalLegacy: legacyHome(), configDirs: [claudeDir], at: "2026-10-01T00:00:00.000Z" });
+    writePendingMove(legacyHome(), { legacy: legacyHome(), current: currentHome(), instance: `${OLD.codename}-john`, physicalLegacy: legacyHome(), configDirs: [claudeDir], at: "2026-10-01T00:00:00.000Z" });
     fs.renameSync(legacyHome(), currentHome());
     const newRoot = path.join(root, ".acme-departments", ".instances", ".acme-john");
     fs.mkdirSync(path.dirname(newRoot), { recursive: true });
-    fs.renameSync(path.join(root, ".jinn-departments", ".instances", ".jinn-john"), newRoot);
+    fs.renameSync(path.join(root, `.${OLD.codename}-departments`, ".instances", `.${OLD.codename}-john`), newRoot);
     expect(fs.existsSync(stageConversation)).toBe(true);
 
     await renameHomeIfNeeded(legacyHome(), deps);
@@ -128,14 +129,14 @@ describe("a move that does not go cleanly", () => {
 describe("a home that has to stay at its old path", () => {
   it("keeps its department conversations where the later move looks for them", async () => {
     seedHome(legacyHome());
-    const env: NodeJS.ProcessEnv = { JINN_HOME: legacyHome() };
+    const env: NodeJS.ProcessEnv = { [`${OLD.upper}_HOME`]: legacyHome() };
     const kept = await settleInstanceEnv(env, { ...deps, gatewayRunning: () => true });
     expect(kept.kind).toBe("kept");
     const saved = { ...process.env };
     Object.assign(process.env, env);
     let keptRoot: string;
     try { keptRoot = departmentStageRoot(); } finally { process.env = saved; }
-    expect(path.relative(root, keptRoot)).toBe(path.join(".jinn-departments", ".instances", ".jinn-john"));
+    expect(path.relative(root, keptRoot)).toBe(path.join(`.${OLD.codename}-departments`, ".instances", `.${OLD.codename}-john`));
     fs.mkdirSync(path.join(keptRoot, "ops"), { recursive: true });
     const during = seedConversation(path.join(keptRoot, "ops"), "during-kept");
 
@@ -152,7 +153,7 @@ describe("a restart over a gateway that was running at an older build's home", (
   it("moves the home once that gateway is down and sends the helper on from the new location", async () => {
     seedHome(legacyHome());
     seedConversation(legacyHome(), "home-session");
-    const env: NodeJS.ProcessEnv = { JINN_HOME: legacyHome(), JINN_HOME_IDENTITY: "stale", ACME_HOME_IDENTITY: "stale", JINN_BINDING_HOME: "stale" };
+    const env: NodeJS.ProcessEnv = { [`${OLD.upper}_HOME`]: legacyHome(), [`${OLD.upper}_HOME_IDENTITY`]: "stale", ACME_HOME_IDENTITY: "stale", [`${OLD.upper}_BINDING_HOME`]: "stale" };
     // The command that asked for the restart found a gateway running, so it left the home where it was.
     expect((await settleInstanceEnv({ ...env }, { ...deps, gatewayRunning: () => true })).kind).toBe("kept");
 
@@ -160,10 +161,10 @@ describe("a restart over a gateway that was running at an older build's home", (
 
     expect(settled.respawn).toBe(true);
     expect(env.ACME_HOME).toBe(currentHome());
-    expect(env.JINN_HOME).toBe(currentHome());
-    expect(env.JINN_HOME_IDENTITY).toBeUndefined();
+    expect(env.HUNDREDFOLD_HOME).toBe(currentHome());
+    expect(env.HUNDREDFOLD_HOME_IDENTITY).toBeUndefined();
     expect(env.ACME_HOME_IDENTITY).toBeUndefined();
-    expect(env.JINN_BINDING_HOME).toBeUndefined();
+    expect(env.HUNDREDFOLD_BINDING_HOME).toBeUndefined();
     expect(fs.existsSync(path.join(projectDir(currentHome()), "home-session.jsonl"))).toBe(true);
     // The helper that starts over has loaded the settled home: nothing more to do.
     expect((await settleBeforeRestart(env, currentHome(), deps)).respawn).toBe(false);
@@ -172,25 +173,25 @@ describe("a restart over a gateway that was running at an older build's home", (
   it("carries on at the loaded home, and starts nothing elsewhere, when both homes exist", async () => {
     seedHome(currentHome());
     seedHome(legacyHome());
-    const env: NodeJS.ProcessEnv = { ACME_HOME: currentHome(), JINN_HOME: currentHome() };
+    const env: NodeJS.ProcessEnv = { ACME_HOME: currentHome(), [`${OLD.upper}_HOME`]: currentHome() };
     const logged: string[] = [];
     expect((await settleBeforeRestart(env, currentHome(), { ...deps, log: (message) => logged.push(message) })).respawn).toBe(false);
-    expect(env).toEqual({ ACME_HOME: currentHome(), JINN_HOME: currentHome() });
+    expect(env).toEqual({ ACME_HOME: currentHome(), [`${OLD.upper}_HOME`]: currentHome() });
     expect(logged.join(" ")).toContain("carrying on at");
   });
 
   it("carries on at the loaded home when another process is mid-move", async () => {
     seedHome(legacyHome());
     fs.writeFileSync(path.join(root, ".acme-home-move.lock"), String(process.pid));
-    const env: NodeJS.ProcessEnv = { JINN_HOME: legacyHome() };
+    const env: NodeJS.ProcessEnv = { [`${OLD.upper}_HOME`]: legacyHome() };
     expect((await settleBeforeRestart(env, legacyHome(), { ...deps, lockTimeoutMs: 100 })).respawn).toBe(false);
-    expect(env).toEqual({ JINN_HOME: legacyHome() });
+    expect(env).toEqual({ [`${OLD.upper}_HOME`]: legacyHome() });
     expect(fs.lstatSync(legacyHome()).isDirectory()).toBe(true);
   });
 
   it("carries on in place when the home had to stay", async () => {
     seedHome(legacyHome());
-    const env: NodeJS.ProcessEnv = { JINN_HOME: legacyHome() };
+    const env: NodeJS.ProcessEnv = { [`${OLD.upper}_HOME`]: legacyHome() };
     expect((await settleBeforeRestart(env, legacyHome(), { ...deps, gatewayRunning: () => true })).respawn).toBe(false);
   });
 });

@@ -15,6 +15,7 @@ import {
   installTarball,
   run,
 } from "../upgrade-verify-lib.mjs"
+import { OLD } from "../legacy-names.mjs";
 
 const entrypoint = fileURLToPath(new URL("../upgrade-verify.mjs", import.meta.url))
 
@@ -54,17 +55,17 @@ test("tarball installs run lifecycle scripts even when the caller disables them"
   const source = path.join(root, "source")
   fs.mkdirSync(source)
   fs.writeFileSync(path.join(source, "package.json"), JSON.stringify({
-    name: "jinn-cli", version: "1.0.0",
+    name: `${OLD.codename}-cli`, version: "1.0.0",
     scripts: { install: "node install.cjs" },
   }))
   fs.writeFileSync(path.join(source, "install.cjs"), `
     const fs = require('node:fs');
     fs.mkdirSync('dist/bin', { recursive: true });
-    fs.writeFileSync('dist/bin/jinn.js', 'console.log("lifecycle artifact loaded")');
+    fs.writeFileSync('dist/bin/${OLD.codename}.js', 'console.log("lifecycle artifact loaded")');
   `)
   const layout = buildEnvironment(root, "lifecycle", 23456)
   run("npm", ["pack", source, "--pack-destination", root], { env: layout.env })
-  const installed = installTarball(path.join(root, "jinn-cli-1.0.0.tgz"), layout.prefix, {
+  const installed = installTarball(path.join(root, `${OLD.codename}-cli-1.0.0.tgz`), layout.prefix, {
     ...layout.env, npm_config_ignore_scripts: "true",
   })
   assert.equal(run(process.execPath, [installed.cli], { env: layout.env }), "lifecycle artifact loaded")
@@ -97,7 +98,7 @@ test("candidate template comparison proves exact convergence", (t) => {
   fs.mkdirSync(template, { recursive: true })
   fs.mkdirSync(installed, { recursive: true })
   fs.writeFileSync(path.join(template, "SKILL.md"), "# {{portalName}}\nslug={{portalSlug}}\n")
-  fs.writeFileSync(path.join(installed, "SKILL.md"), "# Jinn\nslug=jinn\n")
+  fs.writeFileSync(path.join(installed, "SKILL.md"), `# ${OLD.title}\nslug=${OLD.codename}\n`)
   assert.doesNotThrow(() => assertShippedSkillsConverged(path.join(root, "home"), path.join(root, "candidate"), ["example"]))
   fs.writeFileSync(path.join(installed, "SKILL.md"), "stale\n")
   assert.throws(
@@ -108,7 +109,7 @@ test("candidate template comparison proves exact convergence", (t) => {
 
 test("idempotency surface includes skills, receipt, version, and backups", (t) => {
   const home = temporaryRoot(t)
-  for (const file of ["skills/example/SKILL.md", ".jinn-template-skills.json", "config.yaml", ".migration-backups/run/config.yaml"]) {
+  for (const file of ["skills/example/SKILL.md", `.${OLD.codename}-template-skills.json`, "config.yaml", ".migration-backups/run/config.yaml"]) {
     fs.mkdirSync(path.dirname(path.join(home, file)), { recursive: true })
     fs.writeFileSync(path.join(home, file), `${file}\n`)
   }

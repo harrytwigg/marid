@@ -33,6 +33,9 @@
       ],
       "@hundredfold/codename": [
         "../hundredfold/src/shared/codename-constant.ts"
+      ],
+      "@hundredfold/legacy-names": [
+        "../hundredfold/src/shared/legacy-names.ts"
       ]
     }
   },

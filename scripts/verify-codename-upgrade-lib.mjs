@@ -1,6 +1,11 @@
 // Helpers for scripts/verify-codename-upgrade.mjs: its arguments and preflight, the scratch host, the
 // stand-in `claude`, the gateway calls and the old instance's seeding. Importing it parses the arguments,
 // refuses a port a live gateway could own, and makes the scratch host.
+import { LEGACY } from "./legacy-names.mjs"
+
+/** The old codename, and its environment-variable form. */
+export const OLD = LEGACY.codename;
+export const OLDUP = OLD.toUpperCase();
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
@@ -15,16 +20,16 @@ export const oldRepo = args.old && path.resolve(String(args.old));
 export const newRepo = args.new && path.resolve(String(args.new));
 export const codename = String(args.codename ?? "");
 export const port = Number(args.port);
-if (!oldRepo || !newRepo || !/^[a-z][a-z0-9]*$/.test(codename) || codename === "jinn") fail("usage: --old <repo> --new <repo> --codename <word, not jinn> --port <port>");
+if (!oldRepo || !newRepo || !/^[a-z][a-z0-9]*$/.test(codename) || codename === OLD) fail(`usage: --old <repo> --new <repo> --codename <word, not ${OLD}> --port <port>`);
 if (!Number.isInteger(port) || port < 8060 || port > 65535 || [7777, 7788].includes(port)) fail("--port must be an integer from 8060, never 7777 or 7788"); // footgun: ok the refusal set itself
-// A checkout from before the product was renamed keeps the package at packages/jinn and the binary as jinn.js.
-export const pkgDir = (repo) => (fs.existsSync(path.join(repo, "packages/hundredfold")) ? "packages/hundredfold" : "packages/jinn");
-export const bin = (repo) => path.join(repo, pkgDir(repo), "dist/bin", pkgDir(repo) === "packages/jinn" ? "jinn.js" : "hundredfold.js");
+// A checkout from before the product was renamed keeps the package and the binary under the old name.
+export const pkgDir = (repo) => (fs.existsSync(path.join(repo, "packages/hundredfold")) ? "packages/hundredfold" : `packages/${OLD}`);
+export const bin = (repo) => path.join(repo, pkgDir(repo), "dist/bin", pkgDir(repo) === `packages/${OLD}` ? `${OLD}.js` : "hundredfold.js");
 for (const repo of [oldRepo, newRepo]) if (!fs.existsSync(bin(repo))) fail(`not built: ${repo}`);
 // A build from before the constant existed is the oldest install there is: it has no file to check.
 export const constantFile = (repo) => path.join(repo, pkgDir(repo), "dist/src/shared/codename-constant.js");
-export const constantOf = (repo) => (fs.existsSync(constantFile(repo)) ? /CODENAME = "([a-z0-9]+)"/.exec(fs.readFileSync(constantFile(repo), "utf8"))?.[1] : "jinn");
-if (constantOf(oldRepo) !== "jinn") fail(`--old must be built with the legacy codename (it says ${constantOf(oldRepo)})`);
+export const constantOf = (repo) => (fs.existsSync(constantFile(repo)) ? /CODENAME = "([a-z0-9]+)"/.exec(fs.readFileSync(constantFile(repo), "utf8"))?.[1] : OLD);
+if (constantOf(oldRepo) !== OLD) fail(`--old must be built with the legacy codename (it says ${constantOf(oldRepo)})`);
 if (constantOf(newRepo) !== codename) fail(`--new must be built with codename "${codename}" (it says ${constantOf(newRepo)})`);
 
 export const NODE = process.execPath;
@@ -32,12 +37,12 @@ export const host = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "coden
 export const claudeProfile = path.join(host, "claude-profile");
 export const standIn = path.join(host, "bin", "claude");
 export const instance = "up";
-export const oldHome = path.join(host, `.jinn-${instance}`);
+export const oldHome = path.join(host, `.${OLD}-${instance}`);
 export const newHome = path.join(host, `.${codename}-${instance}`);
 export const log = path.join(claudeProfile, "stand-in.log");
 export const results = [];
 export const live = { started: null };
-export const baseEnv = () => ({ PATH: `${path.dirname(NODE)}:/usr/bin:/bin`, HOME: host, LANG: "C.UTF-8", CLAUDE_CONFIG_DIR: claudeProfile, JINN_NO_OPEN: "1" });
+export const baseEnv = () => ({ PATH: `${path.dirname(NODE)}:/usr/bin:/bin`, HOME: host, LANG: "C.UTF-8", CLAUDE_CONFIG_DIR: claudeProfile, [`${OLDUP}_NO_OPEN`]: "1" });
 export const slug = (value) => value.replace(/[^a-zA-Z0-9]/g, "-");
 
 export function check(name, ok, detail = "") {
@@ -97,8 +102,8 @@ export async function stopGateway(repo, env) {
 export function readJson(file) { return JSON.parse(fs.readFileSync(file, "utf8")); }
 
 export function seedOld() {
-  const helper = path.join(oldRepo, "scripts/jinn-sandbox.sh");
-  const created = run("bash", [helper, "create", instance, "--port", String(port), "--seed"], { env: { PATH: baseEnv().PATH, HOME: host, JINN_REPO: oldRepo } });
+  const helper = path.join(oldRepo, `scripts/${OLD}-sandbox.sh`);
+  const created = run("bash", [helper, "create", instance, "--port", String(port), "--seed"], { env: { PATH: baseEnv().PATH, HOME: host, [`${OLDUP}_REPO`]: oldRepo } });
   if (created.status !== 0) fail(`could not create the old instance:\n${created.out}`, 1);
   const seeded = run(NODE, [path.join(oldRepo, "scripts/seed-departments.mjs"), oldHome], { env: baseEnv() });
   if (seeded.status !== 0) fail(`could not seed departments:\n${seeded.out}`, 1);
@@ -109,9 +114,9 @@ export function seedOld() {
   fs.writeFileSync(path.join(oldHome, "attachments", "2026-10", "note.txt"), "an attachment from before the move");
   // What an operator wrote that names the built-in server's tools.
   fs.mkdirSync(path.join(oldHome, "skills", "triage"), { recursive: true });
-  fs.writeFileSync(path.join(oldHome, "skills", "triage", "SKILL.md"), "---\nname: triage\ndescription: Triage.\n---\nCall mcp__jinn__list_employees first.\n");
+  fs.writeFileSync(path.join(oldHome, "skills", "triage", "SKILL.md"), `---\nname: triage\ndescription: Triage.\n---\nCall mcp__${OLD}__list_employees first.\n`);
   fs.mkdirSync(path.join(oldHome, ".claude"), { recursive: true });
-  fs.writeFileSync(path.join(oldHome, ".claude", "settings.json"), '{"permissions":{"allow":["mcp__jinn__*"]}}\n');
+  fs.writeFileSync(path.join(oldHome, ".claude", "settings.json"), `{"permissions":{"allow":["mcp__${OLD}__*"]}}\n`);
   const configFile = path.join(oldHome, "config.yaml");
   fs.writeFileSync(configFile, fs.readFileSync(configFile, "utf8").replace(/^(\s+)bin: claude$/m, `$1bin: ${standIn}`));
 }
@@ -122,7 +127,7 @@ export async function seedOldState(oldEnv, options = {}) {
     import path from "node:path";
     import { pathToFileURL } from "node:url";
     const directory = await import(pathToFileURL(path.join(${JSON.stringify(oldRepo)}, "${pkgDir(oldRepo)}/dist/src/instances/directory.js")).href);
-    directory.saveInstances([{ name: "jinn-${instance}", home: process.env.JINN_HOME, port: ${port}, createdAt: new Date().toISOString(), kind: "workspace", pinned: true }]);
+    directory.saveInstances([{ name: "${OLD}-${instance}", home: process.env.${OLDUP}_HOME, port: ${port}, createdAt: new Date().toISOString(), kind: "workspace", pinned: true }]);
   `], { env: { ...baseEnv(), ...oldEnv } });
   if (record.status !== 0) fail(`could not register the old instance:\n${record.out}`, 1);
 
@@ -145,7 +150,7 @@ export async function seedOldState(oldEnv, options = {}) {
   }
   const scopedSession = (await api("GET", `/api/sessions/${created.scoped}`)).json;
   check("the old build bound the second session to its department", scopedSession.scopeDepartment === "side-project", String(scopedSession.scopeDepartment));
-  const stageDir = fs.realpathSync(path.join(host, ".jinn-departments", ".instances", `.jinn-${instance}`, "side-project"));
+  const stageDir = fs.realpathSync(path.join(host, `.${OLD}-departments`, ".instances", `.${OLD}-${instance}`, "side-project"));
   const file = (cwd, id) => path.join(claudeProfile, "projects", slug(fs.realpathSync(cwd)), `${id}.jsonl`);
   check("the old build filed both conversations under their physical directories", fs.existsSync(file(oldHome, conversations.plain)) && fs.existsSync(file(stageDir, conversations.scoped)));
   if (!options.leaveRunning) await stopGateway(oldRepo, oldEnv);
@@ -169,5 +174,5 @@ export async function sendAndAwait(sessionId, message, marker) {
 export const exists = (...segments) => fs.existsSync(path.join(...segments));
 export const awaitStatus = (what) => until(async () => (await api("GET", "/api/status")).status === 200, what);
 // The service unit's environment still names the old path and the old instance.
-export const newEnv = { JINN_HOME: oldHome, JINN_INSTANCE: `jinn-${instance}` };
+export const newEnv = { [`${OLDUP}_HOME`]: oldHome, [`${OLDUP}_INSTANCE`]: `${OLD}-${instance}` };
 

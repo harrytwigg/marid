@@ -9,10 +9,11 @@ import {
   normalizeWorkspaceName,
   resolveInstanceHome,
 } from "./create.js";
+import { OLD } from "../shared/legacy-names.js";
 
 const scratch: string[] = [];
 function tempDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-create-instance-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `${OLD.codename}-create-instance-`));
   scratch.push(dir);
   return dir;
 }
@@ -26,33 +27,33 @@ describe("workspace naming", () => {
     expect(normalizeWorkspaceName("John")).toEqual({
       displayName: "John",
       slug: "john",
-      instanceName: "jinn-john",
-      homeName: ".jinn-john",
+      instanceName: `${OLD.codename}-john`,
+      homeName: `.${OLD.codename}-john`,
     });
-    expect(normalizeWorkspaceName("Acme Studio").instanceName).toBe("jinn-acme-studio");
+    expect(normalizeWorkspaceName("Acme Studio").instanceName).toBe(`${OLD.codename}-acme-studio`);
   });
 
   it("rejects empty, traversal, numeric-only, and reserved names", () => {
-    for (const name of ["", "../other", "123", "jinn"]) {
+    for (const name of ["", "../other", "123", OLD.codename]) {
       expect(() => normalizeWorkspaceName(name)).toThrow(/workspace name/i);
     }
   });
 
   it("resolves legacy and prefixed selectors through registered homes", () => {
-    const instances = [{ id: "id", name: "jinn-john", displayName: "John", port: 7788, home: "/custom/john", createdAt: "now" }];
+    const instances = [{ id: "id", name: `${OLD.codename}-john`, displayName: "John", port: 7788, home: "/custom/john", createdAt: "now" }];
     // A registered home is returned verbatim, so it stays exactly as stored.
     expect(resolveInstanceHome("john", instances, "/home/operator")).toBe("/custom/john");
-    expect(resolveInstanceHome("jinn-john", instances, "/home/operator")).toBe("/custom/john");
+    expect(resolveInstanceHome(`${OLD.codename}-john`, instances, "/home/operator")).toBe("/custom/john");
     // An unregistered selector is derived with path.join, which correctly yields
     // native separators — backslashes on Windows. Build the expectation the same
     // way rather than hard-coding a POSIX path.
-    expect(resolveInstanceHome("newco", [], "/home/operator")).toBe(path.join("/home/operator", ".jinn-newco"));
+    expect(resolveInstanceHome("newco", [], "/home/operator")).toBe(path.join("/home/operator", `.${OLD.codename}-newco`));
   });
 });
 
 describe("workspace creation", () => {
   it("rejects secondary workspace creation in the single-instance Docker image", async () => {
-    vi.stubEnv("JINN_CONTAINER", "1");
+    vi.stubEnv(`${OLD.upper}_CONTAINER`, "1");
     const root = tempDir();
     const execFile = vi.fn(async () => ({ stdout: "", stderr: "" }));
 
@@ -74,7 +75,7 @@ describe("workspace creation", () => {
     const execFile = vi.fn(async (_file: string, args: string[], options?: { env?: NodeJS.ProcessEnv }) => {
       calls.push({ args, env: options?.env });
       if (args[1] === "setup") {
-        const home = options?.env?.JINN_HOME as string;
+        const home = options?.env?.HUNDREDFOLD_HOME as string;
         fs.mkdirSync(home, { recursive: true });
         fs.writeFileSync(path.join(home, "config.yaml"), "gateway:\n  port: 7777\nportal:\n  companyName: Hundredfold\n");
       }
@@ -90,7 +91,7 @@ describe("workspace creation", () => {
       homeDir: root,
       registryPath,
       legacyRegistryPath,
-      cliEntry: "/package/dist/bin/jinn.js",
+      cliEntry: `/package/dist/bin/${OLD.codename}.js`,
       execFile,
       isPortAvailable: async () => true,
       waitForHealth: async () => true,
@@ -99,26 +100,26 @@ describe("workspace creation", () => {
     });
 
     expect(result.instance).toMatchObject({
-      name: "jinn-john",
+      name: `${OLD.codename}-john`,
       displayName: "John",
       port: 7778,
-      home: path.join(root, ".jinn-john"),
+      home: path.join(root, `.${OLD.codename}-john`),
       accessUrls: { remote: "https://machine.example.ts.net:7778" },
     });
     expect(result.warning).toBeUndefined();
     expect(calls.map((call) => call.args)).toEqual([
-      ["/package/dist/bin/jinn.js", "setup"],
-      ["/package/dist/bin/jinn.js", "start", "--daemon"],
+      [`/package/dist/bin/${OLD.codename}.js`, "setup"],
+      [`/package/dist/bin/${OLD.codename}.js`, "start", "--daemon"],
     ]);
     expect(calls[0].env).toMatchObject({
-      JINN_HOME: path.join(root, ".jinn-john"),
-      JINN_INSTANCE: "jinn-john",
-      JINN_SETUP_NAME: "John",
+      [`${OLD.upper}_HOME`]: path.join(root, `.${OLD.codename}-john`),
+      [`${OLD.upper}_INSTANCE`]: "hundredfold-john",
+      [`${OLD.upper}_SETUP_NAME`]: "John",
     });
-    expect(fs.readFileSync(path.join(root, ".jinn-john", "config.yaml"), "utf8")).toContain("port: 7778");
-    expect(fs.readFileSync(path.join(root, ".jinn-john", "config.yaml"), "utf8")).toContain("host: 0.0.0.0");
-    expect(fs.readFileSync(path.join(root, ".jinn-john", "config.yaml"), "utf8")).toContain("authRequired: true");
-    const gatewayPath = path.join(root, ".jinn-john", "gateway.json");
+    expect(fs.readFileSync(path.join(root, `.${OLD.codename}-john`, "config.yaml"), "utf8")).toContain("port: 7778");
+    expect(fs.readFileSync(path.join(root, `.${OLD.codename}-john`, "config.yaml"), "utf8")).toContain("host: 0.0.0.0");
+    expect(fs.readFileSync(path.join(root, `.${OLD.codename}-john`, "config.yaml"), "utf8")).toContain("authRequired: true");
+    const gatewayPath = path.join(root, `.${OLD.codename}-john`, "gateway.json");
     const gateway = JSON.parse(fs.readFileSync(gatewayPath, "utf8")) as { token?: string };
     expect(gateway.token?.length).toBeGreaterThanOrEqual(32);
     expectPosixMode(fs.statSync(gatewayPath), 0o600);
@@ -126,16 +127,16 @@ describe("workspace creation", () => {
   });
 
   it("bootstraps the new workspace without the parent instance's gateway session", async () => {
-    vi.stubEnv("JINN_GATEWAY_URL", "http://127.0.0.1:7802");
-    vi.stubEnv("JINN_GATEWAY_TOKEN", "parent-token");
-    vi.stubEnv("JINN_SESSION_ID", "parent-session");
-    vi.stubEnv("JINN_SESSION_CAPABILITY", "parent-capability");
+    vi.stubEnv(`${OLD.upper}_GATEWAY_URL`, "http://127.0.0.1:7802");
+    vi.stubEnv(`${OLD.upper}_GATEWAY_TOKEN`, "parent-token");
+    vi.stubEnv(`${OLD.upper}_SESSION_ID`, "parent-session");
+    vi.stubEnv(`${OLD.upper}_SESSION_CAPABILITY`, "parent-capability");
     const root = tempDir();
     const calls: Array<{ args: string[]; env?: NodeJS.ProcessEnv }> = [];
     const execFile = vi.fn(async (_file: string, args: string[], options?: { env?: NodeJS.ProcessEnv }) => {
       calls.push({ args, env: options?.env });
       if (args[1] === "setup") {
-        const home = options?.env?.JINN_HOME as string;
+        const home = options?.env?.HUNDREDFOLD_HOME as string;
         fs.mkdirSync(home, { recursive: true });
         fs.writeFileSync(path.join(home, "config.yaml"), "gateway:\n  port: 7802\n");
       }
@@ -146,7 +147,7 @@ describe("workspace creation", () => {
       homeDir: root,
       registryPath: path.join(root, "host", "instances.json"),
       legacyRegistryPath: path.join(root, "missing.json"),
-      cliEntry: "/package/dist/bin/jinn.js",
+      cliEntry: `/package/dist/bin/${OLD.codename}.js`,
       execFile,
       isPortAvailable: async () => true,
       waitForHealth: async () => true,
@@ -155,12 +156,12 @@ describe("workspace creation", () => {
 
     expect(calls).toHaveLength(2);
     for (const call of calls) {
-      expect(call.env?.JINN_GATEWAY_URL).toBeUndefined();
-      expect(call.env?.JINN_GATEWAY_TOKEN).toBeUndefined();
-      expect(call.env?.JINN_SESSION_ID).toBeUndefined();
-      expect(call.env?.JINN_SESSION_CAPABILITY).toBeUndefined();
-      expect(call.env?.JINN_HOME).toBe(path.join(root, ".jinn-john"));
-      expect(call.env?.JINN_INSTANCE).toBe("jinn-john");
+      expect(call.env?.HUNDREDFOLD_GATEWAY_URL).toBeUndefined();
+      expect(call.env?.HUNDREDFOLD_GATEWAY_TOKEN).toBeUndefined();
+      expect(call.env?.HUNDREDFOLD_SESSION_ID).toBeUndefined();
+      expect(call.env?.HUNDREDFOLD_SESSION_CAPABILITY).toBeUndefined();
+      expect(call.env?.HUNDREDFOLD_HOME).toBe(path.join(root, `.${OLD.codename}-john`));
+      expect(call.env?.HUNDREDFOLD_INSTANCE).toBe(`${OLD.codename}-john`);
     }
   });
 
@@ -169,14 +170,14 @@ describe("workspace creation", () => {
     const registryPath = path.join(root, "host", "instances.json");
     const legacyRegistryPath = path.join(root, "missing.json");
     saveInstances([{
-      name: "jinn-main",
+      name: `${OLD.codename}-main`,
       port: 7777,
-      home: path.join(root, ".jinn-main"),
+      home: path.join(root, `.${OLD.codename}-main`),
       createdAt: "2026-01-01T00:00:00.000Z",
     }], { registryPath });
     const checked: number[] = [];
     const execFile = vi.fn(async (_file: string, _args: string[], options?: { env?: NodeJS.ProcessEnv }) => {
-      const home = options?.env?.JINN_HOME as string;
+      const home = options?.env?.HUNDREDFOLD_HOME as string;
       fs.mkdirSync(home, { recursive: true });
       throw new Error("setup failed");
     });
@@ -185,7 +186,7 @@ describe("workspace creation", () => {
       homeDir: root,
       registryPath,
       legacyRegistryPath,
-      cliEntry: "/package/dist/bin/jinn.js",
+      cliEntry: `/package/dist/bin/${OLD.codename}.js`,
       execFile,
       isPortAvailable: async (port) => { checked.push(port); return port !== 7778; },
       waitForHealth: async () => false,
@@ -193,7 +194,7 @@ describe("workspace creation", () => {
     })).rejects.toThrow("setup failed");
 
     expect(checked).toEqual([7778, 7779]);
-    expect(fs.existsSync(path.join(root, ".jinn-john"))).toBe(false);
+    expect(fs.existsSync(path.join(root, `.${OLD.codename}-john`))).toBe(false);
     expect(loadInstances({ registryPath, legacyRegistryPath })).toHaveLength(1);
   });
 });

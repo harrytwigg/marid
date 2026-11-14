@@ -1,4 +1,5 @@
 import { CODENAME } from "@hundredfold/codename"
+import { LEGACY_CODENAME } from "@hundredfold/legacy-names"
 
 /**
  * The codename, as the browser sees it: the same word the gateway builds its names from
@@ -10,7 +11,7 @@ import { CODENAME } from "@hundredfold/codename"
 export { CODENAME }
 
 /** The name every browser that used an earlier build holds its state under. Never changes. */
-export const LEGACY_CODENAME = "jinn" // rename:keep
+export { LEGACY_CODENAME }
 
 /** Whether this build's name differs from the legacy one, so legacy spellings exist. */
 export function isRenamed(codename: string = CODENAME): boolean {

@@ -3,8 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-restart-test-"));
-process.env.JINN_HOME = tmpHome;
+const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-restart-test-"));
+process.env.HUNDREDFOLD_HOME = tmpHome;
 
 const lifecycle = vi.hoisted(() => ({
   assertPortTakeoverAllowed: vi.fn(),

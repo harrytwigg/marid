@@ -8,6 +8,7 @@
 // Runs between `hundredfold-sandbox.sh create` and `start`, because the transcript store
 // is the home's sqlite registry and the gateway holds it open once it is running.
 
+import { legacyHomeName } from "./legacy-names.mjs"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -18,7 +19,7 @@ import { createRequire } from "node:module"
 // the config and inserts rows.
 const PROTECTED_PORTS = new Set([7777, 7788])
 // The default home under the current name and under the one an older build gave it.
-const PRODUCTION_HOME_NAMES = [".hundredfold", ".jinn"] // rename:keep
+const PRODUCTION_HOME_NAMES = [".hundredfold", legacyHomeName]
 
 const SESSION_ID = "device-scroll-check"
 const EXCHANGES = 110

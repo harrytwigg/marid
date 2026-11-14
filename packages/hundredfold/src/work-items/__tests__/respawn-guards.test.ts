@@ -5,8 +5,8 @@ import path from "node:path";
 
 // Point the registry DB at a throwaway dir BEFORE importing it (SESSIONS_DB is
 // resolved from HUNDREDFOLD_HOME at module load). This keeps the suite off the live DB.
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-wi-respawn-"));
-process.env.JINN_HOME = tmp;
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-wi-respawn-"));
+process.env.HUNDREDFOLD_HOME = tmp;
 
 type Store = typeof import("../store.js");
 type Comments = typeof import("../comments.js");

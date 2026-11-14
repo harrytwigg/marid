@@ -9,17 +9,18 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
+import { LEGACY, legacyEnv, legacyHomeName, legacyTitle } from "../legacy-names.mjs"
 import { isThrowawayHome } from "./gateways.mjs"
 
 const DEFAULT_PROTECTED_PORTS = "7777 7788"
 
 // What an install made before the rename calls things. A live instance may still be running under them, and the
 // sweep protects what is live: so every place that names the live home or its registry names both.
-const LEGACY_HOME_NAME = ".jinn" // rename:keep
-const LEGACY_DATA_NAME = "jinn" // rename:keep
+const LEGACY_HOME_NAME = legacyHomeName
+const LEGACY_DATA_NAME = LEGACY.codename
 
 export function resolveDefaultHome(env) {
-  const explicit = env.HUNDREDFOLD_HOME || env.JINN_HOME // rename:keep
+  const explicit = env.HUNDREDFOLD_HOME || legacyEnv("HOME").map((key) => env[key]).find(Boolean)
   return explicit ? path.resolve(explicit) : path.join(os.homedir(), ".hundredfold")
 }
 
@@ -46,7 +47,7 @@ function hostDataDirs(env, names = ["Hundredfold", "hundredfold"]) {
 }
 
 const hostDataDir = (env) => hostDataDirs(env)
-const legacyHostDataDir = (env) => hostDataDirs(env, [LEGACY_DATA_NAME[0].toUpperCase() + LEGACY_DATA_NAME.slice(1), LEGACY_DATA_NAME])
+const legacyHostDataDir = (env) => hostDataDirs(env, [legacyTitle, LEGACY_DATA_NAME])
 
 /**
  * Every file that could hold the instance directory, most authoritative first:
@@ -58,7 +59,7 @@ const legacyHostDataDir = (env) => hostDataDirs(env, [LEGACY_DATA_NAME[0].toUppe
 export function instancesRegistryPaths(defaultHome, env) {
   return [
     env.HUNDREDFOLD_INSTANCES_REGISTRY,
-    env.JINN_INSTANCES_REGISTRY, // rename:keep
+    ...legacyEnv("INSTANCES_REGISTRY").map((key) => env[key]),
     path.join(hostDataDir(env), "instances.json"),
     path.join(legacyHostDataDir(env), "instances.json"),
     path.join(defaultHome, "instances.json"),
@@ -138,7 +139,7 @@ export function mapPidsToHomes(homes) {
  * it empty to disable live probing, and `:-` would silently restore the defaults.
  */
 export function protectedPortOwners(registered, env) {
-  const configured = (env.HUNDREDFOLD_REAP_PROTECTED_PORTS ?? env.JINN_REAP_PROTECTED_PORTS ?? DEFAULT_PROTECTED_PORTS) // rename:keep
+  const configured = (env.HUNDREDFOLD_REAP_PROTECTED_PORTS ?? legacyEnv("REAP_PROTECTED_PORTS").map((key) => env[key]).find((value) => value !== undefined) ?? DEFAULT_PROTECTED_PORTS)
     .split(/\s+/).filter(Boolean)
   const ports = new Set([...configured, ...registered.map((entry) => String(entry.port)).filter(Boolean)])
   const owners = new Set()

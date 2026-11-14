@@ -60,7 +60,7 @@ const BLOCKED_TERMS = [
 // while still scanning the rest of the tree, and the rest of that same file.
 const UPSTREAM_OWNER = ["hris", "to", "2612"].join("");
 const ALLOWED_ATTRIBUTION = [
-  `github.com/${UPSTREAM_OWNER}/jinn`, // rename:keep: the upstream project keeps its name
+  `github.com/${UPSTREAM_OWNER}/hundredfold`, // rename:keep: the upstream project keeps its name
   `by ${UPSTREAM_OWNER}`,
 ];
 
@@ -127,7 +127,7 @@ describe("privacy guard", () => {
       writeFileSync(
         file,
         [
-          `Hundredfold is a fork of [Jinn](https://github.com/${UPSTREAM_OWNER}/jinn) by ${UPSTREAM_OWNER} and contributors.`, // rename:keep
+          `Hundredfold is a fork of [Jinn](https://github.com/${UPSTREAM_OWNER}/hundredfold) by ${UPSTREAM_OWNER} and contributors.`, // rename:keep
           `Same file, outside the attribution: ${BLOCKED_TERMS[0]}.`,
         ].join("\n"),
       );

@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 vi.mock("../../shared/codename-constant.js", () => ({ CODENAME: "acme" }))
 
 import { syncTemplateSkills } from "../sync-template-skills.js"
+import { OLD } from "../../shared/legacy-names.js";
 
 const roots: string[] = []
 afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }) })
@@ -19,7 +20,7 @@ function instance() {
   roots.push(root)
   const home = path.join(root, "home")
   const templateDir = path.join(root, "template")
-  write(path.join(home, "config.yaml"), 'jinn:\n  version: "0.30.0"\n')
+  write(path.join(home, "config.yaml"), `${OLD.codename}:\n  version: "0.30.0"\n`)
   write(path.join(home, "skills", "retired", "SKILL.md"), "# Retired\n")
   write(path.join(home, "skills", "mine", "SKILL.md"), "# Written by the operator\n")
   write(path.join(templateDir, "skills", "notes", "SKILL.md"), "# Notes\n")
@@ -30,7 +31,7 @@ function instance() {
 describe("the template-skills receipt across a codename change", () => {
   it("reads the receipt the old name wrote, so a retired skill is still told from the operator's own", () => {
     const { home, templateDir } = instance()
-    write(path.join(home, ".jinn-template-skills.json"), JSON.stringify({ version: "0.30.0", skills: ["retired"] }))
+    write(path.join(home, `.${OLD.codename}-template-skills.json`), JSON.stringify({ version: "0.30.0", skills: ["retired"] }))
 
     const result = syncTemplateSkills({ instanceHome: home, templateDir, packageVersion: "0.31.0" })
 
@@ -42,7 +43,7 @@ describe("the template-skills receipt across a codename change", () => {
 
   it("prefers the receipt under the current name once there is one", () => {
     const { home, templateDir } = instance()
-    write(path.join(home, ".jinn-template-skills.json"), JSON.stringify({ version: "0.30.0", skills: ["retired"] }))
+    write(path.join(home, `.${OLD.codename}-template-skills.json`), JSON.stringify({ version: "0.30.0", skills: ["retired"] }))
     write(path.join(home, ".acme-template-skills.json"), JSON.stringify({ version: "0.31.0", skills: [] }))
 
     const result = syncTemplateSkills({ instanceHome: home, templateDir, packageVersion: "0.31.0" })

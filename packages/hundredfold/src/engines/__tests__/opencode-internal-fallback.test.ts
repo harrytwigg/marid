@@ -134,7 +134,7 @@ describe("reporting", () => {
     warnOpencodeInternalFallback(() => found);
     expect(vi.mocked(logger.warn)).toHaveBeenCalledOnce();
     expect(String(vi.mocked(logger.warn).mock.calls[0]![0])).toBe(
-      "opencode internal fallback detected on local: run `jinn doctor` for the files to change, then `jinn fallback migrate-opencode`",
+      "opencode internal fallback detected on local: run `hundredfold doctor` for the files to change, then `hundredfold fallback migrate-opencode`",
     );
     expect(String(vi.mocked(logger.warn).mock.calls[0]![0])).not.toContain("/operator/path");
     expect(String(vi.mocked(logger.debug).mock.calls[0]![0])).toContain("/operator/path");

@@ -9,7 +9,7 @@ const entrypoint = fileURLToPath(new URL("../../../../../docker-entrypoint.sh", 
 const dockerConfigure = fileURLToPath(new URL("../../../../../scripts/docker-configure.mjs", import.meta.url));
 const dockerfile = fileURLToPath(new URL("../../../../../Dockerfile", import.meta.url));
 const composeFile = fileURLToPath(new URL("../../../../../docker-compose.yml", import.meta.url));
-const serviceMarker = "__jinn_service_start__";
+const serviceMarker = "__hundredfold_service_start__";
 const dirs: string[] = [];
 const children: ChildProcess[] = [];
 
@@ -144,8 +144,8 @@ describe.skipIf(process.platform === "win32")("Docker entrypoint runtime cleanup
   it("keeps shared STT state inside the persisted Hundredfold home volume", () => {
     const source = fs.readFileSync(dockerfile, "utf-8");
 
-    expect(source).toContain("ENV HUNDREDFOLD_STT_SETTINGS=/home/node/.jinn/stt.json");
-    expect(source).toContain("ENV HUNDREDFOLD_STT_MODELS_DIR=/home/node/.jinn/models/whisper");
+    expect(source).toContain("ENV HUNDREDFOLD_STT_SETTINGS=/home/node/.hundredfold/stt.json");
+    expect(source).toContain("ENV HUNDREDFOLD_STT_MODELS_DIR=/home/node/.hundredfold/models/whisper");
   });
 
   it("keeps Codex auth state inside its persisted volume", () => {
@@ -154,8 +154,8 @@ describe.skipIf(process.platform === "win32")("Docker entrypoint runtime cleanup
 
     expect(source).toMatch(/RUN mkdir -p [^\n]*\/home\/node\/\.codex[^\n]*\/work/);
     expect(source).toContain("ENV CODEX_HOME=/home/node/.codex");
-    expect(compose).toContain("- jinn-codex:/home/node/.codex");
-    expect(compose).toContain("  jinn-codex:");
+    expect(compose).toContain("- hundredfold-codex:/home/node/.codex");
+    expect(compose).toContain("  hundredfold-codex:");
   });
 
   it("holds an exclusive shared-volume lock before cleanup and releases it on process death", async () => {

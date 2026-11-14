@@ -30,6 +30,7 @@ import {
   workItemCreateReceiptRowsAreSound,
   workItemDispatchRowsAreSound,
 } from "./dispatch-schema.js";
+import { LEGACY_SQL_FUNCTIONS } from "../shared/legacy-names.js";
 import {
   CANONICAL_ID_SQL,
   PRERELEASE_WORK_ITEMS_TABLE_SQL,
@@ -326,13 +327,13 @@ BEGIN SELECT RAISE(ABORT, 'Todo allocator is immutable'); END`,
 BEFORE UPDATE ON work_item_id_allocator
 WHEN NEW.singleton != OLD.singleton
   OR NEW.high_water != OLD.high_water + 1
-  OR jinn_work_item_claim_prefix() IS NULL
-  OR NEW.prefix != COALESCE(OLD.prefix, jinn_work_item_claim_prefix())
+  OR ${LEGACY_SQL_FUNCTIONS.claimPrefix}() IS NULL
+  OR NEW.prefix != COALESCE(OLD.prefix, ${LEGACY_SQL_FUNCTIONS.claimPrefix}())
   OR (OLD.prefix IS NOT NULL AND NEW.prefix != OLD.prefix)
-  OR jinn_work_item_claim_digest() IS NULL
+  OR ${LEGACY_SQL_FUNCTIONS.claimDigest}() IS NULL
   OR NOT EXISTS (
     SELECT 1 FROM work_item_id_burns
-    WHERE ordinal = NEW.high_water AND claim_digest = jinn_work_item_claim_digest()
+    WHERE ordinal = NEW.high_water AND claim_digest = ${LEGACY_SQL_FUNCTIONS.claimDigest}()
   )
 BEGIN SELECT RAISE(ABORT, 'Todo allocator mutation refused'); END`,
   `CREATE TRIGGER IF NOT EXISTS work_item_allocator_no_delete
@@ -341,8 +342,8 @@ BEGIN SELECT RAISE(ABORT, 'Todo allocator is immutable'); END`,
   `CREATE TRIGGER IF NOT EXISTS work_item_burn_guard_insert
 BEFORE INSERT ON work_item_id_burns
 WHEN NEW.ordinal != (SELECT high_water + 1 FROM work_item_id_allocator WHERE singleton = 1)
-  OR jinn_work_item_claim_digest() IS NULL
-  OR NEW.claim_digest != jinn_work_item_claim_digest()
+  OR ${LEGACY_SQL_FUNCTIONS.claimDigest}() IS NULL
+  OR NEW.claim_digest != ${LEGACY_SQL_FUNCTIONS.claimDigest}()
 BEGIN SELECT RAISE(ABORT, 'Todo burn claim refused'); END`,
   `CREATE TRIGGER IF NOT EXISTS work_item_burn_no_update
 BEFORE UPDATE ON work_item_id_burns
@@ -352,11 +353,11 @@ BEFORE DELETE ON work_item_id_burns
 BEGIN SELECT RAISE(ABORT, 'Todo burn ledger is append-only'); END`,
   `CREATE TRIGGER IF NOT EXISTS work_item_issuance_guard_insert
 BEFORE INSERT ON work_item_id_issuances
-WHEN jinn_work_item_claim_digest() IS NULL
+WHEN ${LEGACY_SQL_FUNCTIONS.claimDigest}() IS NULL
   OR NOT EXISTS (
     SELECT 1 FROM work_item_id_burns b
     JOIN work_items w ON CAST(substr(w.id, 5) AS INTEGER) = b.ordinal
-    WHERE b.ordinal = NEW.ordinal AND b.claim_digest = jinn_work_item_claim_digest()
+    WHERE b.ordinal = NEW.ordinal AND b.claim_digest = ${LEGACY_SQL_FUNCTIONS.claimDigest}()
   )
 BEGIN SELECT RAISE(ABORT, 'Todo issuance claim refused'); END`,
   `CREATE TRIGGER IF NOT EXISTS work_item_issuance_no_update
@@ -368,14 +369,14 @@ BEGIN SELECT RAISE(ABORT, 'Todo issuance ledger is append-only'); END`,
   WORK_ITEM_ID_IMMUTABLE_TRIGGER_SQL,
   `CREATE TRIGGER IF NOT EXISTS work_items_claim_required
 BEFORE INSERT ON work_items
-WHEN jinn_work_item_claim_digest() IS NULL
-  OR jinn_work_item_claim_prefix() IS NULL
+WHEN ${LEGACY_SQL_FUNCTIONS.claimDigest}() IS NULL
+  OR ${LEGACY_SQL_FUNCTIONS.claimPrefix}() IS NULL
   OR substr(NEW.id, 1, 3) != (SELECT prefix FROM work_item_id_allocator WHERE singleton = 1)
-  OR substr(NEW.id, 1, 3) != jinn_work_item_claim_prefix()
+  OR substr(NEW.id, 1, 3) != ${LEGACY_SQL_FUNCTIONS.claimPrefix}()
   OR NOT EXISTS (
     SELECT 1 FROM work_item_id_burns b
     WHERE b.ordinal = CAST(substr(NEW.id, 5) AS INTEGER)
-      AND b.claim_digest = jinn_work_item_claim_digest()
+      AND b.claim_digest = ${LEGACY_SQL_FUNCTIONS.claimDigest}()
   )
   OR EXISTS (
     SELECT 1 FROM work_item_id_issuances i
@@ -404,13 +405,13 @@ BEGIN SELECT RAISE(ABORT, 'Todo allocator namespaces start at zero'); END`,
 BEFORE UPDATE ON work_item_id_allocator
 WHEN NEW.prefix != OLD.prefix
   OR NEW.high_water != OLD.high_water + 1
-  OR jinn_work_item_claim_prefix() IS NULL
-  OR NEW.prefix != jinn_work_item_claim_prefix()
-  OR jinn_work_item_claim_digest() IS NULL
+  OR ${LEGACY_SQL_FUNCTIONS.claimPrefix}() IS NULL
+  OR NEW.prefix != ${LEGACY_SQL_FUNCTIONS.claimPrefix}()
+  OR ${LEGACY_SQL_FUNCTIONS.claimDigest}() IS NULL
   OR NOT EXISTS (
     SELECT 1 FROM work_item_id_burns
     WHERE prefix = NEW.prefix AND ordinal = NEW.high_water
-      AND claim_digest = jinn_work_item_claim_digest()
+      AND claim_digest = ${LEGACY_SQL_FUNCTIONS.claimDigest}()
   )
 BEGIN SELECT RAISE(ABORT, 'Todo allocator mutation refused'); END`,
   `CREATE TRIGGER IF NOT EXISTS work_item_allocator_no_delete
@@ -419,10 +420,10 @@ BEGIN SELECT RAISE(ABORT, 'Todo allocator is immutable'); END`,
   `CREATE TRIGGER IF NOT EXISTS work_item_burn_guard_insert
 BEFORE INSERT ON work_item_id_burns
 WHEN NEW.ordinal IS NOT (SELECT high_water + 1 FROM work_item_id_allocator WHERE prefix = NEW.prefix)
-  OR jinn_work_item_claim_digest() IS NULL
-  OR NEW.claim_digest != jinn_work_item_claim_digest()
-  OR jinn_work_item_claim_prefix() IS NULL
-  OR NEW.prefix != jinn_work_item_claim_prefix()
+  OR ${LEGACY_SQL_FUNCTIONS.claimDigest}() IS NULL
+  OR NEW.claim_digest != ${LEGACY_SQL_FUNCTIONS.claimDigest}()
+  OR ${LEGACY_SQL_FUNCTIONS.claimPrefix}() IS NULL
+  OR NEW.prefix != ${LEGACY_SQL_FUNCTIONS.claimPrefix}()
 BEGIN SELECT RAISE(ABORT, 'Todo burn claim refused'); END`,
   `CREATE TRIGGER IF NOT EXISTS work_item_burn_no_update
 BEFORE UPDATE ON work_item_id_burns
@@ -432,12 +433,12 @@ BEFORE DELETE ON work_item_id_burns
 BEGIN SELECT RAISE(ABORT, 'Todo burn ledger is append-only'); END`,
   `CREATE TRIGGER IF NOT EXISTS work_item_issuance_guard_insert
 BEFORE INSERT ON work_item_id_issuances
-WHEN jinn_work_item_claim_digest() IS NULL
+WHEN ${LEGACY_SQL_FUNCTIONS.claimDigest}() IS NULL
   OR NOT EXISTS (
     SELECT 1 FROM work_item_id_burns b
     JOIN work_items w ON w.id = NEW.prefix || '-' || NEW.ordinal
     WHERE b.prefix = NEW.prefix AND b.ordinal = NEW.ordinal
-      AND b.claim_digest = jinn_work_item_claim_digest()
+      AND b.claim_digest = ${LEGACY_SQL_FUNCTIONS.claimDigest}()
   )
 BEGIN SELECT RAISE(ABORT, 'Todo issuance claim refused'); END`,
   `CREATE TRIGGER IF NOT EXISTS work_item_issuance_no_update
@@ -449,14 +450,14 @@ BEGIN SELECT RAISE(ABORT, 'Todo issuance ledger is append-only'); END`,
   WORK_ITEM_ID_IMMUTABLE_TRIGGER_SQL,
   `CREATE TRIGGER IF NOT EXISTS work_items_claim_required
 BEFORE INSERT ON work_items
-WHEN jinn_work_item_claim_digest() IS NULL
-  OR jinn_work_item_claim_prefix() IS NULL
-  OR substr(NEW.id, 1, 3) != jinn_work_item_claim_prefix()
+WHEN ${LEGACY_SQL_FUNCTIONS.claimDigest}() IS NULL
+  OR ${LEGACY_SQL_FUNCTIONS.claimPrefix}() IS NULL
+  OR substr(NEW.id, 1, 3) != ${LEGACY_SQL_FUNCTIONS.claimPrefix}()
   OR NOT EXISTS (
     SELECT 1 FROM work_item_id_burns b
     WHERE b.prefix = substr(NEW.id, 1, 3)
       AND b.ordinal = CAST(substr(NEW.id, 5) AS INTEGER)
-      AND b.claim_digest = jinn_work_item_claim_digest()
+      AND b.claim_digest = ${LEGACY_SQL_FUNCTIONS.claimDigest}()
   )
   OR EXISTS (
     SELECT 1 FROM work_item_id_issuances i

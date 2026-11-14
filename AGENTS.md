@@ -8,7 +8,7 @@ Hundredfold is a pnpm + turbo monorepo: a gateway daemon and CLI (`packages/hund
 dashboard (`packages/web`), and a shared event contract (`packages/gateway-events`).
 
 **This is a permanent fork. Nothing here goes back upstream.** `hundredfoldhq/hundredfold` diverges from
-`hristo2612/jinn` on purpose and forever: there is no upstreaming plan and no eventual pull
+the upstream project (credited in NOTICE) on purpose and forever: there is no upstreaming plan and no eventual pull
 request. The upstream project is unmaintained and nothing is merged in from it any more; if a
 `upstream` remote exists it is read-only, never a push or pull-request target. Divergence from upstream
 is therefore not a defect and not a finding.

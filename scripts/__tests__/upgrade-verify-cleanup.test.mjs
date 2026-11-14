@@ -189,7 +189,7 @@ function runCliWithLeak(t, assertionFailure) {
 test("a green CLI exits zero with both PASS results and reports a guarded leak by path", (t) => {
   const child = runCliWithLeak(t, false)
   assert.equal(child.status, 0, child.stdout + child.stderr)
-  assert.match(child.stdout, /PASS published jinn-cli@1.0.0 -> candidate hundredfold@1.0.1/) // rename:keep: the baseline is the release from before the rename
+  assert.match(child.stdout, /PASS published hundredfold@1.0.0 -> candidate hundredfold@1.0.1/) // rename:keep: the baseline is the release from before the rename
   assert.match(child.stdout, /PASS stock /)
   assert.match(child.stdout, /PASS customized /)
   assert.match(child.stderr, /CLEANUP LEAK: disposable root .*ENOTEMPTY.*verification result unchanged/)

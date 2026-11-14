@@ -1,20 +1,25 @@
 # Surviving a change of codename
 
-The codename is the lower-case word that names an instance's home (`~/.jinn`), its instance name (`jinn-<slug>`),
-its environment variables (`JINN_*`), its wire headers (`x-jinn-*`), its cookies, its stage directories, the
-built-in MCP server (`mcp__jinn__*`) and a browser's stored keys. `packages/hundredfold/src/shared/codename-constant.ts`
+The codename is the lower-case word that names an instance's home (`~/.hundredfold`), its instance name (`hundredfold-<slug>`),
+its environment variables (`HUNDREDFOLD_*`), its wire headers (`x-hundredfold-*`), its cookies, its stage directories, the
+built-in MCP server (`mcp__hundredfold__*`) and a browser's stored keys. `packages/hundredfold/src/shared/codename-constant.ts`
 holds it as one literal, and everything else is built from that.
+
+Throughout this page `<old>` is the codename an install was made under before the rename (and `<OLD>` its upper-case
+form for variables). The names a build reads from older installs are written in exactly one file,
+`packages/hundredfold/src/shared/legacy-names.json`; the compatibility layer is whatever imports it, and removing the
+layer is deleting that file and its importers.
 
 An install made before a change carries the old word in all of those places. The compatibility layer is the
 code that lets such an install keep working under a build whose literal has changed, and then moves it over.
-While the literal is unchanged every alias collapses to a single name and none of this does anything.
+While the codename equals the old one every alias collapses to a single name and none of this does anything.
 
 ## What a build with a new codename does to an old install
 
 | Stage | What happens | Who triggers it |
 |---|---|---|
 | Names | It reads the old spelling wherever an old peer or file can still carry it (environment, headers, flags, cookies, config key, roster key, plugin SDK specifier, browser storage) and writes the new one. A variable set only under the old name is adopted once, with one warning per name. | Automatic, every start |
-| Home | The home is renamed (`~/.jinn-x` to `~/.<new>-x`), not copied, and a link is left at the old path. Claude Code files conversations by the physical working directory, so the project directories for the home and for each department stage directory move with it, in every profile. The host registry entry, the stage root, the snapshots and `gateway.json` follow. | The first command or start that finds the old home with nothing running at it, after a snapshot, under a lock |
+| Home | The home is renamed (`~/.<old>-x` to `~/.hundredfold-x`), not copied, and a link is left at the old path. Claude Code files conversations by the physical working directory, so the project directories for the home and for each department stage directory move with it, in every profile. The host registry entry, the stage root, the snapshots and `gateway.json` follow. | The first command or start that finds the old home with nothing running at it, after a snapshot, under a lock |
 | MCP name | The built-in server keeps its old registered name on an upgraded instance, so no prompt, skill or permission list changes underfoot. | Per instance, at the switch-over |
 | Switch-over | Skills, cron prompts, the instance's own permission lists and rosters that say `mcp__<old>__*` or `<old>Mcp` are rewritten, the instance block in `config.yaml` is keyed by the new name, and the registered name flips, last. A Claude profile's settings, which every instance on the host shares, get the new tool names added beside the old ones. | You: `doctor --rename --apply`, gateway stopped |
 
@@ -50,17 +55,17 @@ ignores the new ones. What it cannot do is find conversations, which now sit und
 
 - **Before the home moved**: nothing to undo for the home. An instance with remote departments is the exception: the
   stage directories on a remote host move at the next department spawn whether or not the home has, so the old build
-  would find `.jinn-departments` gone there. Move `<remote root>/.<new>-departments/<department>` back to
-  `<remote root>/.jinn-departments/<department>` on that host, and each `projects/<slug of the new path>` under the
+  would find `.<old>-departments` gone there. Move `<remote root>/.hundredfold-departments/<department>` back to
+  `<remote root>/.<old>-departments/<department>` on that host, and each `projects/<slug of the new path>` under the
   Claude profile there back to `projects/<slug of the old path>`, then stay on, or return to, the old build.
 - **After the home moved, before the switch-over**:
   1. Stop the gateway.
-  2. Remove the link at the old path and rename the directory back (`~/.<new>-x` to `~/.jinn-x`).
+  2. Remove the link at the old path and rename the directory back (`~/.hundredfold-x` to `~/.<old>-x`).
   3. Move each Claude project directory back: `projects/<slug of the new path>` to `projects/<slug of the old path>`, in
      every profile. The move's receipt, `state/home-move.json`, names the home and the stage directories it moved.
-  4. Move the stage root back (`.<new>-departments/.instances/.<new>-x` to `.jinn-departments/.instances/.jinn-x`) and
+  4. Move the stage root back (`.hundredfold-departments/.instances/.hundredfold-x` to `.<old>-departments/.instances/.<old>-x`) and
      rename the snapshot directories likewise.
-  5. Set the registry entry's name and home back (`~/.config/<new>/instances.json`). The old registry file is left in
+  5. Set the registry entry's name and home back (`~/.config/hundredfold/instances.json`). The old registry file is left in
      place, but it is not updated after the move: copy back only the entry's name and home, and keep anything the
      new build changed in the new file.
   6. If the instance has remote departments, move their stage directories and conversations back as described above.
@@ -78,7 +83,7 @@ the first start of a new build: the move takes one of its own, and so does the s
 
 Two things are never renamed because renaming them would invalidate stored data: the domain-separation strings that
 key capabilities, auth sessions and bootstrap grants, and the SQLite function names a database's schema refers to
-(`jinn_callback_identity`, `jinn_work_item_claim_*`). The `.claude.json` backup and lock suffixes and the mount sentinel
+(the callback and Todo-claim functions). The `.claude.json` backup and lock suffixes and the mount sentinel
 stay as they are too: the first is a one-time backup, the second is regenerated.
 
 ## Checking an upgrade

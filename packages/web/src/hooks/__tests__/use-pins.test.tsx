@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, type PinsResponse } from "@/lib/api";
 import { usePins, useTogglePin } from "../use-pins";
 
-const LEGACY_KEY = "jinn-pinned-sessions"; // rename:keep: the key a browser used before the product had its name
+const LEGACY_KEY = "hundredfold-pinned-sessions"; // rename:keep: the key a browser used before the product had its name
 
 function setup() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });

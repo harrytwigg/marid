@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "EFEC266C935EB11CD7BC07FB"
-               BuildableName = "jinn-shell_iOS.app"
-               BlueprintName = "jinn-shell_iOS"
-               ReferencedContainer = "container:jinn-shell.xcodeproj">
+               BuildableName = "hundredfold-shell_iOS.app"
+               BlueprintName = "hundredfold-shell_iOS"
+               ReferencedContainer = "container:hundredfold-shell.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -33,9 +33,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "EFEC266C935EB11CD7BC07FB"
-            BuildableName = "jinn-shell_iOS.app"
-            BlueprintName = "jinn-shell_iOS"
-            ReferencedContainer = "container:jinn-shell.xcodeproj">
+            BuildableName = "hundredfold-shell_iOS.app"
+            BlueprintName = "hundredfold-shell_iOS"
+            ReferencedContainer = "container:hundredfold-shell.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
       <Testables>
@@ -70,9 +70,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "EFEC266C935EB11CD7BC07FB"
-            BuildableName = "jinn-shell_iOS.app"
-            BlueprintName = "jinn-shell_iOS"
-            ReferencedContainer = "container:jinn-shell.xcodeproj">
+            BuildableName = "hundredfold-shell_iOS.app"
+            BlueprintName = "hundredfold-shell_iOS"
+            ReferencedContainer = "container:hundredfold-shell.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
       <CommandLineArguments>
@@ -101,9 +101,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "EFEC266C935EB11CD7BC07FB"
-            BuildableName = "jinn-shell_iOS.app"
-            BlueprintName = "jinn-shell_iOS"
-            ReferencedContainer = "container:jinn-shell.xcodeproj">
+            BuildableName = "hundredfold-shell_iOS.app"
+            BlueprintName = "hundredfold-shell_iOS"
+            ReferencedContainer = "container:hundredfold-shell.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
       <CommandLineArguments>

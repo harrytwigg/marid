@@ -14,7 +14,7 @@ still at 0.33.3. The one open item is F1 in tasks.md, instance
 work outside this repository. The operator's decisions are recorded below and folded into
 the text.
 
-**Input**: Hundredfold issue #90 (upstream proposal hristo2612/jinn#81). The operator wants a scope
+**Input**: Hundredfold issue #90 (an upstream proposal). The operator wants a scope
 for a set of employees and their work:
 
 - Todos are raised inside the scope, with their own board and numbering.

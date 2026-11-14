@@ -92,13 +92,11 @@ Version lives in **one place**: `packages/hundredfold/package.json`.
 
 ## The first release under the new name
 
-<!-- rename:keep-begin -->
-The package used to be published as `jinn-cli`. Before the first release of `hundredfold`, in this order:
+The package used to be published under another name (the previous package; check `git log` for it). Before the first release of `hundredfold`, in this order:
 
 1. The npm name `hundredfold` is reserved (a placeholder version) and the npm organisation exists. Confirm with `npm view hundredfold name`.
 2. npm Trusted Publishing for `hundredfold` is configured for this repository and the `publish-npm.yml` workflow (the publish job refuses a package whose repository field is not this one).
-3. Release as usual. The package carries both binaries: `hundredfold` and `jinn`, the latter a forwarder that says the command has been renamed and then runs `hundredfold`.
+3. Release as usual. The package installs the `hundredfold` binary and a second binary under the previous command name: a forwarder that says the command has been renamed and then runs `hundredfold`.
 4. `Formula/hundredfold.rb` still names the pre-release version and checksum until the bump workflow has run once against the first published version; do not point anyone at `brew install hundredfold` before that.
-5. After the first release is on the registry, deprecate the old package so installers learn of the move: `npm deprecate jinn-cli "Renamed to hundredfold: npm install -g hundredfold"`. This is not reversible in spirit (it is a public notice on someone's install page), so it is a decision for the operator, made when the release is out.
+5. After the first release is on the registry, deprecate the previous package so installers learn of the move: `npm deprecate <previous package> "Renamed to hundredfold: npm install -g hundredfold"`. This is a public notice on someone's install page, so it is a decision for the operator, made when the release is out.
 6. An installed instance keeps working under its old names; its operator runs `hundredfold doctor --rename --apply` when ready (see `docs/codename-compatibility.md`). The compatibility names are removed two minor releases after this one.
-<!-- rename:keep-end -->

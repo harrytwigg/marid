@@ -18,7 +18,7 @@
 set -euo pipefail
 
 unset HUNDREDFOLD_HOME HUNDREDFOLD_PORT HUNDREDFOLD_HOST HUNDREDFOLD_INSTANCE HUNDREDFOLD_GATEWAY_URL HUNDREDFOLD_GATEWAY_TOKEN HUNDREDFOLD_SESSION_ID
-unset JINN_HOME JINN_PORT JINN_HOST JINN_INSTANCE JINN_GATEWAY_URL JINN_GATEWAY_TOKEN JINN_SESSION_ID # rename:keep: a shell started by an older build exports the old names, and a new build adopts them
+eval "$(node "$(dirname "${BASH_SOURCE[0]}")/legacy-names.mjs" unset HOME PORT HOST INSTANCE GATEWAY_URL GATEWAY_TOKEN SESSION_ID)" # an older build's shell exports the old names, and a new build adopts them
 
 SCRIPT_REPO="$(cd "$(dirname "$0")/.." && pwd)"
 REPO="$(cd "${HUNDREDFOLD_CAPTURE_REPO:-$SCRIPT_REPO}" && pwd)"

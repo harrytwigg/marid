@@ -1,13 +1,14 @@
 import { beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 
 // A build whose codename says "acme": the SDK's package name is the organisation's, `@hundredfold/plugin-sdk`, and the plugins already
-// installed on disk were written against `@jinn/plugin-sdk`.
+// installed on disk were written against `@<old>/plugin-sdk`.
 vi.mock('@hundredfold/codename', () => ({ CODENAME: 'acme' }))
 
 import * as sdk from '@/plugins/sdk'
 import { contributions } from '@/contrib/registry'
 import { loadRuntimePlugin, unloadRuntimePlugin } from '../runtime-loader'
 import { useDataUrlModules } from './data-url-modules'
+import { OLD } from "@hundredfold/legacy-names";
 
 beforeAll(() => {
   useDataUrlModules()
@@ -38,7 +39,7 @@ export default {
 }
 
 describe('a disk plugin after the codename changes', () => {
-  it.each(['@jinn/plugin-sdk', '@hundredfold/plugin-sdk'])('still loads when it imports the SDK as %s, onto the app’s own SDK and React', async (specifier) => {
+  it.each([`@${OLD.codename}/plugin-sdk`, '@hundredfold/plugin-sdk'])('still loads when it imports the SDK as %s, onto the app’s own SDK and React', async (specifier) => {
     const { id, area } = fresh()
 
     expect(await loadRuntimePlugin(pluginImporting(specifier, id, area), id)).toBe(id)

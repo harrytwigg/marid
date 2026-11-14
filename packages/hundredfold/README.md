@@ -3,11 +3,11 @@
 > Run your AI agents as a company. Hundredfold is a bus, not a brain.
 
 [![npm version](https://img.shields.io/npm/v/hundredfold.svg)](https://www.npmjs.com/package/hundredfold)
-[![license: MIT](https://img.shields.io/npm/l/hundredfold.svg)](https://github.com/hristo2612/jinn)
-[![node](https://img.shields.io/node/v/hundredfold.svg)](https://github.com/hristo2612/jinn)
+[![license: MIT](https://img.shields.io/npm/l/hundredfold.svg)](https://github.com/hundredfoldhq/hundredfold)
+[![node](https://img.shields.io/node/v/hundredfold.svg)](https://github.com/hundredfoldhq/hundredfold)
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/hristo2612/jinn/main/assets/hundredfold-showcase.gif" alt="Hundredfold web dashboard" width="800" />
+  <img src="https://raw.githubusercontent.com/hundredfoldhq/hundredfold/main/assets/chat.png" alt="Hundredfold web dashboard" width="800" />
 </p>
 
 Hundredfold turns installed agent CLIs into a persistent AI company: named employees, a Todo ledger, reusable Workflows, and one chat and dashboard. It delegates to the official CLIs instead of replacing them.
@@ -47,7 +47,7 @@ hundredfold start
 Or install via Homebrew:
 
 ```bash
-brew tap hristo2612/jinn https://github.com/hristo2612/jinn
+brew tap hundredfoldhq/hundredfold https://github.com/hundredfoldhq/hundredfold
 brew install hundredfold
 hundredfold setup && hundredfold start
 ```
@@ -65,12 +65,12 @@ Then open [http://localhost:7777](http://localhost:7777).
 
 ## How it runs
 
-One local gateway dispatches work, persists company state, and serves the dashboard. Claude runs through its interactive CLI inside a PTY, so eligible turns use your subscription. Hermes is provider-metered; see the [Hermes engine guide](https://github.com/hristo2612/jinn/blob/main/docs/engines-hermes.md).
+One local gateway dispatches work, persists company state, and serves the dashboard. Claude runs through its interactive CLI inside a PTY, so eligible turns use your subscription. Hermes is provider-metered; see the [Hermes engine guide](https://github.com/hundredfoldhq/hundredfold/blob/main/docs/engines-hermes.md).
 
 ## Documentation
 
-Read the [full README](https://github.com/hristo2612/jinn), [changelog](https://github.com/hristo2612/jinn/blob/main/CHANGELOG.md), and [contributing guide](https://github.com/hristo2612/jinn/blob/main/.github/CONTRIBUTING.md).
+Read the [full README](https://github.com/hundredfoldhq/hundredfold), [changelog](https://github.com/hundredfoldhq/hundredfold/blob/main/CHANGELOG.md), and [contributing guide](https://github.com/hundredfoldhq/hundredfold/blob/main/.github/CONTRIBUTING.md).
 
 ## License
 
-[MIT](https://github.com/hristo2612/jinn/blob/main/LICENSE)
+[MIT](https://github.com/hundredfoldhq/hundredfold/blob/main/LICENSE)

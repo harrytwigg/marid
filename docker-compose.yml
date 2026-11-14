@@ -1,6 +1,4 @@
-# The project name prefixes the volumes below, so it keeps the name they were created under: a new one would start
-# with empty volumes beside the old ones.
-name: jinn # rename:keep
+name: hundredfold
 
 services:
   hundredfold:
@@ -9,7 +7,7 @@ services:
     image: hundredfold:local
     # Private image/entrypoint handshake. `docker compose run ... <command>` replaces
     # this value, so one-off commands cannot accidentally enter the service boot path.
-    command: ["__jinn_service_start__"]
+    command: ["__hundredfold_service_start__"]
 
     # Each session spawns a PTY that spawns its own children; without an init
     # process those accumulate as zombies.
@@ -20,27 +18,27 @@ services:
     # permission gate disabled — to the whole network. Both sides read HUNDREDFOLD_PORT, and so
     # does the gateway; set it in a .env file beside this one to move them together.
     ports:
-      - "127.0.0.1:${HUNDREDFOLD_PORT:-${JINN_PORT:-7777}}:${HUNDREDFOLD_PORT:-${JINN_PORT:-7777}}" # rename:keep: an .env file written for an older release
+      - "127.0.0.1:${HUNDREDFOLD_PORT:-7777}:${HUNDREDFOLD_PORT:-7777}"
 
     environment:
       # The container is UTC. Shells do not normally export TZ, so set it here or in
       # a .env file beside this one; a cron job with no explicit timezone fires in
       # the container's zone, not yours.
       TZ: ${TZ:-UTC}
-      HUNDREDFOLD_PORT: ${HUNDREDFOLD_PORT:-${JINN_PORT:-7777}} # rename:keep
+      HUNDREDFOLD_PORT: ${HUNDREDFOLD_PORT:-7777}
 
     volumes:
       # Writable blast radius: config, secrets, OAuth-adjacent connector state,
       # session registry/transcripts, paired browsers, cron, workflows and skills.
-      - jinn-home:/home/node/.jinn
+      - hundredfold-home:/home/node/.hundredfold
 
       # Writable blast radius: Claude OAuth credentials, sessions/history, plugins,
       # MCP configuration, skills, agents, commands and .claude.json. The CLI refreshes
       # its OAuth token in place, so this volume cannot be read-only.
-      - jinn-claude:/home/node/.claude
+      - hundredfold-claude:/home/node/.claude
 
       # Writable Codex device-auth state; keep it separate from Hundredfold and Claude state.
-      - jinn-codex:/home/node/.codex
+      - hundredfold-codex:/home/node/.codex
 
       # Project mounts. THIS LIST IS THE BLAST RADIUS. At least one is required, or
       # /work is empty and agents have nothing to work on. Anything here can be
@@ -59,6 +57,6 @@ services:
     stop_grace_period: 30s
 
 volumes:
-  jinn-home:
-  jinn-claude:
-  jinn-codex:
+  hundredfold-home:
+  hundredfold-claude:
+  hundredfold-codex:

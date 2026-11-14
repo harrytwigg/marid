@@ -7,6 +7,7 @@ import {
   nameAliases,
   namesFor,
 } from "../codename.js";
+import { OLD } from "../legacy-names.js";
 
 const acme = namesFor("acme");
 const same = namesFor(LEGACY_CODENAME);
@@ -22,30 +23,30 @@ describe("codename names", () => {
   });
 
   it("lists the current spelling first, and a single one while nothing is renamed", () => {
-    expect(nameAliases((n) => `x-${n.codename}`, acme)).toEqual(["x-acme", "x-jinn"]);
-    expect(nameAliases((n) => `x-${n.codename}`, same)).toEqual(["x-jinn"]);
+    expect(nameAliases((n) => `x-${n.codename}`, acme)).toEqual(["x-acme", `x-${OLD.codename}`]);
+    expect(nameAliases((n) => `x-${n.codename}`, same)).toEqual([`x-${OLD.codename}`]);
   });
 });
 
 describe("instance names", () => {
   it("maps the default instance and every named one, and leaves a name that never carried the codename", () => {
-    expect(currentInstanceName("jinn", acme)).toBe("acme");
-    expect(currentInstanceName("jinn-yorio", acme)).toBe("acme-yorio");
+    expect(currentInstanceName(OLD.codename, acme)).toBe("acme");
+    expect(currentInstanceName(`${OLD.codename}-yorio`, acme)).toBe("acme-yorio");
     expect(currentInstanceName("sandbox", acme)).toBe("sandbox");
-    expect(currentInstanceName("jinnova", acme)).toBe("jinnova");
+    expect(currentInstanceName(`${OLD.codename}ova`, acme)).toBe(`${OLD.codename}ova`);
   });
 
   it("maps back, so an old `-i` name and a new one resolve to the same instance", () => {
-    expect(legacyInstanceName("acme", acme)).toBe("jinn");
-    expect(legacyInstanceName("acme-yorio", acme)).toBe("jinn-yorio");
+    expect(legacyInstanceName("acme", acme)).toBe(OLD.codename);
+    expect(legacyInstanceName("acme-yorio", acme)).toBe(`${OLD.codename}-yorio`);
     expect(legacyInstanceName("acmeology", acme)).toBe("acmeology");
-    for (const name of ["jinn", "jinn-a", "jinn-a-b", "other"]) {
+    for (const name of [OLD.codename, `${OLD.codename}-a`, `${OLD.codename}-a-b`, "other"]) {
       expect(legacyInstanceName(currentInstanceName(name, acme), acme)).toBe(name);
     }
   });
 
   it("is the identity while no rename is in effect", () => {
-    for (const name of ["jinn", "jinn-a", "other"]) {
+    for (const name of [OLD.codename, `${OLD.codename}-a`, "other"]) {
       expect(currentInstanceName(name, same)).toBe(name);
       expect(legacyInstanceName(name, same)).toBe(name);
     }
