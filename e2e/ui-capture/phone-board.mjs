@@ -2,7 +2,7 @@
 //
 //   node phone-board.mjs <sandbox-home> <base-url> <out-dir>
 //
-// Runs in the browser JINN_CAPTURE_BROWSER names (Firefox by default) and exits non-zero when a check
+// Runs in the browser HUNDREDFOLD_CAPTURE_BROWSER names (Firefox by default) and exits non-zero when a check
 // fails. Checks: the board is the default view, one column fills the screen with the next peeking in,
 // a swipe settles on a column and the dots follow it, "Move to..." changes a card's status by taps and
 // the gateway agrees, a long press does not lift a card (Chromium only: it needs raw touch input), back from a card returns to the column the strip was on,
@@ -17,7 +17,7 @@ const [sandboxHome, baseUrl, outDir] = process.argv.slice(2)
 if (!sandboxHome || !baseUrl || !outDir) throw new Error('usage: phone-board.mjs <sandbox-home> <base-url> <out-dir>')
 const headers = authHeaders(sandboxHome)
 fs.mkdirSync(outDir, { recursive: true })
-const isChromium = process.env.JINN_CAPTURE_BROWSER === 'chromium'
+const isChromium = process.env.HUNDREDFOLD_CAPTURE_BROWSER === 'chromium'
 const browser = await (isChromium ? chromium : firefox).launch()
 const VIEWPORT = { width: 390, height: 844 }
 
@@ -40,7 +40,7 @@ function assert(condition, message) {
 
 async function open(extra = {}) {
   const context = await browser.newContext({ viewport: VIEWPORT, hasTouch: true, extraHTTPHeaders: headers, colorScheme: 'light', ...extra })
-  await context.addInitScript(() => { localStorage.setItem('jinn-onboarded', 'true') })
+  await context.addInitScript(() => { localStorage.setItem('hundredfold-onboarded', 'true') })
   const page = await context.newPage()
   const errors = []
   page.on('pageerror', (e) => errors.push(e.message))
@@ -223,7 +223,7 @@ console.log(`phone board checks (${isChromium ? 'Chromium' : 'Firefox'}, ${VIEWP
 const BOARDS = [['phone', VIEWPORT, true], ['desktop', { width: 1440, height: 900 }, false]]
 for (const [label, viewport, touch] of BOARDS) {
   const context = await browser.newContext({ viewport, hasTouch: touch, extraHTTPHeaders: headers })
-  await context.addInitScript(() => { localStorage.setItem('jinn-onboarded', 'true') })
+  await context.addInitScript(() => { localStorage.setItem('hundredfold-onboarded', 'true') })
   const page = await context.newPage()
   await page.goto(`${baseUrl}/todos`, { waitUntil: 'networkidle' })
   await page.getByText('Draft the release checklist').locator('visible=true').first().waitFor({ timeout: 15_000 })

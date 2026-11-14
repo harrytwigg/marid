@@ -1,5 +1,5 @@
 import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
-import type { GatewayEventListener } from '@jinn/gateway-events'
+import type { GatewayEventListener } from '@hundredfold/gateway-events'
 import { api, type QueueItem } from '@/lib/api'
 
 /* A session's parked messages, addressed the way the transcript addresses them.

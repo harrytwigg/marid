@@ -7,9 +7,9 @@ import {
   type SplitLayout,
 } from './split-layout'
 
-/** Its own key: the upstream working set keeps `jinn-chat-working-set`, which this layout also
+/** Its own key: the upstream working set keeps `hundredfold-chat-working-set`, which this layout also
  * writes (as its projection) so the two never disagree about membership. */
-export const SPLIT_LAYOUT_STORAGE_KEY = 'jinn-chat-split-layout'
+export const SPLIT_LAYOUT_STORAGE_KEY = 'hundredfold-chat-split-layout'
 
 interface PersistedSplitLayout extends SplitLayout {
   version: 1

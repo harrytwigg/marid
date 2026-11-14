@@ -47,7 +47,7 @@ const SURFACE_LABEL: Record<PageKind, string> = {
 }
 
 const PREAMBLE =
-  "What the operator is looking at right now, in their Jinn web UI. "
+  "What the operator is looking at right now, in their Hundredfold web UI. "
   + "This is live page context: it is replaced whenever they move, and it is not something they said to you. "
   + "Speak titles, people, topics, and relative time; speak names, not identifiers unless explicitly asked."
 
@@ -143,7 +143,7 @@ function semanticLines(screen: TalkScreenContext): string[] {
   return lines
 }
 
-/** The lines that are never traded away for room: which Jinn, which page, which
+/** The lines that are never traded away for room: which Hundredfold, which page, which
  *  filters, what is selected. */
 function fixedLines(snapshot: PageSnapshot, instance: InstanceIdentity): string[] {
   const lines = [

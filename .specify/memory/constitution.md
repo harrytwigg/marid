@@ -1,6 +1,6 @@
-# Jinn Fork Constitution
+# Hundredfold Fork Constitution
 
-This document governs **`harrytwigg/marid`**, a permanent fork of `hristo2612/jinn`.
+This document governs **`hundredfoldhq/hundredfold`**, a permanent fork of the project credited in NOTICE.
 It is the ratified statement of what this fork is for and how work is proposed, reviewed, and
 accepted here.
 
@@ -13,7 +13,7 @@ it rather than restating it.
 
 ### I. This fork does not return upstream (NON-NEGOTIABLE)
 
-**No change made in this repository is ever submitted to `hristo2612/jinn`.** There is no
+**No change made in this repository is ever submitted to the upstream project.** There is no
 upstreaming plan, no eventual pull request, no "keep it clean so it can go back later." The
 `upstream` remote is a **read-only** source of changes to merge *in*; it is never a push or
 pull-request target.
@@ -41,7 +41,7 @@ the wrong repository. Say what is right for this fork — which is Principle II.
 
 Principle I says what this fork is not. This says what it is for.
 
-Upstream Jinn is an org that a person operates: the human decides what runs, when it runs, and
+Upstream Hundredfold is an org that a person operates: the human decides what runs, when it runs, and
 what it costs. **This fork is aimed at an org that operates itself** — one that picks up work,
 decides when to do it, and manages what it spends doing it, with the human setting policy
 rather than pressing start. The centre of gravity is autonomous development: agents doing the
@@ -70,13 +70,13 @@ the commit that amended this document:
 
 | `path:line` | What it is |
 | --- | --- |
-| `packages/jinn/src/shared/engine-limits.ts:310` | `collectEngineLimits` — per-engine windows, credits, and buckets |
-| `packages/jinn/src/shared/engine-reset-times.ts:55` | `claudeResetsAtSeconds` — when a window reopens, best-effort by construction |
-| `packages/jinn/src/shared/engine-health.ts` | `recordExhaustedWindows` — exhaustion is already durable state |
-| `packages/jinn/src/cron/scheduler.ts:24` | `startScheduler` — a real scheduler, wall-clock only (`node-cron`, `:1`) |
-| `packages/jinn/src/heartbeats/scheduler.ts:71` | `startHeartbeatScheduler` — durable timers with claim/advance/disarm |
-| `packages/jinn/src/workflows/trigger-service.ts` | work started by condition rather than by hand |
-| `packages/jinn/src/plugins/runtime.ts:17` | `startPluginRuntime`, started from `gateway/server.ts:80` — a permissioned host for out-of-tree behaviour |
+| `packages/hundredfold/src/shared/engine-limits.ts:310` | `collectEngineLimits` — per-engine windows, credits, and buckets |
+| `packages/hundredfold/src/shared/engine-reset-times.ts:55` | `claudeResetsAtSeconds` — when a window reopens, best-effort by construction |
+| `packages/hundredfold/src/shared/engine-health.ts` | `recordExhaustedWindows` — exhaustion is already durable state |
+| `packages/hundredfold/src/cron/scheduler.ts:24` | `startScheduler` — a real scheduler, wall-clock only (`node-cron`, `:1`) |
+| `packages/hundredfold/src/heartbeats/scheduler.ts:71` | `startHeartbeatScheduler` — durable timers with claim/advance/disarm |
+| `packages/hundredfold/src/workflows/trigger-service.ts` | work started by condition rather than by hand |
+| `packages/hundredfold/src/plugins/runtime.ts:17` | `startPluginRuntime`, started from `gateway/server.ts:80` — a permissioned host for out-of-tree behaviour |
 
 The gap is the join. Every consumer of `collectEngineLimits` outside `shared/` is display or
 refresh — `cli/limits.ts`, `gateway/api.ts`, `gateway/background-refresh.ts`. The cron
@@ -87,8 +87,8 @@ and say in the plan's `file:line` table which of the rows above you are joining.
 
 **What this de-prioritises.** Measurement for its own sake is upstream's interest, not this
 fork's. The experiment subsystem is the concrete case: six core MCP tools
-(`packages/jinn/src/mcp/experiment-tools.ts:62,98,121,131,153,176`) shipped unconditionally to
-every session at `packages/jinn/src/mcp/server.ts:125`. It is maintained where it already
+(`packages/hundredfold/src/mcp/experiment-tools.ts:62,98,121,131,153,176`) shipped unconditionally to
+every session at `packages/hundredfold/src/mcp/server.ts:125`. It is maintained where it already
 exists and it is not extended. When manifest budget blocks direction work, it is the first
 place to look for the tokens — gate it behind a config key (rung 3) or remove it. Principle I
 means neither needs upstream's agreement.
@@ -117,14 +117,14 @@ right — record the finding and leave the line. See `AGENTS.md` §1.
 
 Every core MCP tool ships its name, description, and full input schema to the model on every
 call, for every employee, forever. That budget is enforced by
-`packages/jinn/src/mcp/__tests__/tool-manifest-budget.test.ts` (`MAX_MANIFEST_TOKENS`, and a
+`packages/hundredfold/src/mcp/__tests__/tool-manifest-budget.test.ts` (`MAX_MANIFEST_TOKENS`, and a
 pinned tool count), and the manifest sits close enough to the ceiling that a verbose
 description turns the suite red rather than warning.
 
 Take the lowest rung that solves the problem: (1) extend something that exists, (2) a CLI
 command or a Markdown skill — both cost zero context, (3) a gated MCP tool, (4) an
 out-of-process MCP server under `mcp.custom`, or the in-repo plugin host at
-`packages/jinn/src/plugins/`, (5) a new core tool. Rung 5 is the last resort and the only rung
+`packages/hundredfold/src/plugins/`, (5) a new core tool. Rung 5 is the last resort and the only rung
 that taxes every session in the company; taking it requires the token arithmetic against the
 current budget **read from the test file, not quoted from memory**, and an argument for why
 rungs 1–4 fail. `context-diet.test.ts` states the bar: a read tool that shrinks no prompt does
@@ -189,11 +189,11 @@ reporting it ships a lie. See `AGENTS.md` §6.
 ## Hard Constraints
 
 **This repository is public and publishes to npm.** Everything under `packages/**` reaches
-strangers, including `packages/jinn/template/**` and test files, which compile into `dist/` and
+strangers, including `packages/hundredfold/template/**` and test files, which compile into `dist/` and
 ship in the tarball. No real names, client names, emails, API keys, chat workspace IDs, or
 absolute home-directory paths go anywhere in this tree. Anything personal is read at runtime
 from the instance home, never hardcoded.
-`packages/jinn/src/shared/__tests__/privacy-guard.test.ts` scans the shipped trees and fails the
+`packages/hundredfold/src/shared/__tests__/privacy-guard.test.ts` scans the shipped trees and fails the
 build on a match. **Principle I does not relax this** — a fork that never upstreams is still a
 public repository that publishes.
 

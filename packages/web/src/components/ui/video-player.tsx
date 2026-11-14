@@ -12,7 +12,7 @@ interface PlaybackSnapshot {
 function sourceWith(src: string, params: Record<string, string | null>): string {
   if (/^(?:blob:|data:)/.test(src)) return src
   const absolute = /^[a-z][a-z\d+.-]*:/i.test(src)
-  const url = new URL(src, "http://jinn.local")
+  const url = new URL(src, "http://hundredfold.local")
   for (const [key, value] of Object.entries(params)) {
     if (value === null) url.searchParams.delete(key)
     else url.searchParams.set(key, value)

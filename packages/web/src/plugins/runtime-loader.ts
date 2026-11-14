@@ -21,7 +21,7 @@
  * it is exactly why a remote source may not reuse this pipeline as it stands.
  */
 import { installPluginSdk, sdkImportMap } from './sdk/runtime'
-import { createPluginContext, type JinnPlugin } from './plugin-context'
+import { createPluginContext, type HundredfoldPlugin } from './plugin-context'
 
 /** Every failure this loader raises, named so a caller can tell a rejected
  *  plugin from a bug in the loader itself. */
@@ -169,7 +169,7 @@ async function evaluate(source: string): Promise<unknown> {
 
 /** The default export, checked field by field. Everything downstream treats the
  *  result as a plugin, so this is the only place its shape is in doubt. */
-function validate(module: unknown, origin: string): JinnPlugin {
+function validate(module: unknown, origin: string): HundredfoldPlugin {
   const reject = (problem: string) => new PluginLoadError(`${origin}: ${problem}`)
   const exported: unknown = (module as { default?: unknown }).default
 
@@ -189,11 +189,11 @@ function validate(module: unknown, origin: string): JinnPlugin {
   // The three checks above are what make this cast true; `register` needs it
   // because `typeof x === 'function'` narrows to `Function`, which is not callable
   // with the context type.
-  return { id, name, register: register as JinnPlugin['register'] }
+  return { id, name, register: register as HundredfoldPlugin['register'] }
 }
 
 /** Register the plugin, disposing whatever it is replacing. */
-function activate(plugin: JinnPlugin): void {
+function activate(plugin: HundredfoldPlugin): void {
   // A reload disposes the previous incarnation before the new one registers.
   // Registering first would leave the old disposers holding entries that the
   // new registration has already replaced.

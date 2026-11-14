@@ -10,23 +10,23 @@
 
 ## Global Constraints
 
-- Work only in `/private/tmp/jinn-bug2`, based on current `main` with `29df488` in its ancestry.
+- Work only in `/private/tmp/hundredfold-bug2`, based on current `main` with `29df488` in its ancestry.
 - Do not touch the TLS proxy warning path.
 - Use Node `24.13.0` and pnpm.
 - Keep snapshots between 1,000-2,000 lines and no larger than 256-512 KiB.
 - Persist with debounced atomic replacement beneath the active instance home.
 - Delete durable state on session reset/delete.
-- Never touch the production gateway on ports `7777`/`7788` or the production `~/.jinn` state.
+- Never touch the production gateway on ports `7777`/`7788` or the production `~/.hundredfold` state.
 
 ---
 
 ### Task 1: Headless xterm snapshot and durable store
 
 **Files:**
-- Create: `packages/jinn/src/engines/pty-snapshot.ts`
-- Create: `packages/jinn/src/engines/__tests__/pty-snapshot.test.ts`
-- Modify: `packages/jinn/src/shared/paths.ts`
-- Modify: `packages/jinn/package.json`
+- Create: `packages/hundredfold/src/engines/pty-snapshot.ts`
+- Create: `packages/hundredfold/src/engines/__tests__/pty-snapshot.test.ts`
+- Modify: `packages/hundredfold/src/shared/paths.ts`
+- Modify: `packages/hundredfold/package.json`
 - Modify: `pnpm-lock.yaml`
 
 **Interfaces:**
@@ -40,7 +40,7 @@
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-  Run: `pnpm --filter jinn-cli exec vitest run src/engines/__tests__/pty-snapshot.test.ts`
+  Run: `pnpm --filter hundredfold exec vitest run src/engines/__tests__/pty-snapshot.test.ts`
 
   Expected: fail because `pty-snapshot.ts` and its exports do not exist.
 
@@ -55,9 +55,9 @@
 ### Task 2: Atomic stream subscription and lifecycle protocol
 
 **Files:**
-- Modify: `packages/jinn/src/engines/pty-view-engine.ts`
-- Modify: `packages/jinn/src/engines/pty-stream.ts`
-- Modify: `packages/jinn/src/engines/__tests__/pty-stream.test.ts`
+- Modify: `packages/hundredfold/src/engines/pty-view-engine.ts`
+- Modify: `packages/hundredfold/src/engines/pty-stream.ts`
+- Modify: `packages/hundredfold/src/engines/__tests__/pty-stream.test.ts`
 
 **Interfaces:**
 - Replaces `subscribeOutput` + `getScrollback` with `subscribeWithSnapshot(sessionId, onData, onControl)` returning `{ snapshot, start, unsubscribe }`.
@@ -70,7 +70,7 @@
 
 - [ ] **Step 2: Run focused tests and verify RED**
 
-  Run: `pnpm --filter jinn-cli exec vitest run src/engines/__tests__/pty-stream.test.ts`
+  Run: `pnpm --filter hundredfold exec vitest run src/engines/__tests__/pty-stream.test.ts`
 
   Expected: fail because the atomic subscription and structured lifecycle events are absent.
 
@@ -85,12 +85,12 @@
 ### Task 3: Engine contract migration and explicit failure reporting
 
 **Files:**
-- Modify: `packages/jinn/src/engines/claude-interactive.ts`
-- Modify: `packages/jinn/src/engines/codex-interactive.ts`
-- Modify: `packages/jinn/src/engines/grok-interactive.ts`
-- Modify: `packages/jinn/src/engines/hermes-interactive.ts`
-- Modify: `packages/jinn/src/engines/antigravity.ts`
-- Modify: matching interactive-engine tests under `packages/jinn/src/engines/__tests__/`
+- Modify: `packages/hundredfold/src/engines/claude-interactive.ts`
+- Modify: `packages/hundredfold/src/engines/codex-interactive.ts`
+- Modify: `packages/hundredfold/src/engines/grok-interactive.ts`
+- Modify: `packages/hundredfold/src/engines/hermes-interactive.ts`
+- Modify: `packages/hundredfold/src/engines/antigravity.ts`
+- Modify: matching interactive-engine tests under `packages/hundredfold/src/engines/__tests__/`
 
 **Interfaces:**
 - Every `PtyViewEngine` delegates `subscribeWithSnapshot` to `PtyStreamManager`.
@@ -114,8 +114,8 @@
 ### Task 4: Snapshot-first WebSocket framing and resume deadline
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/pty-ws.ts`
-- Create: `packages/jinn/src/gateway/__tests__/pty-ws.test.ts`
+- Modify: `packages/hundredfold/src/gateway/pty-ws.ts`
+- Create: `packages/hundredfold/src/gateway/__tests__/pty-ws.test.ts`
 
 **Interfaces:**
 - On attach: await the atomic snapshot, send JSON `reset`, JSON `snapshot`, optional JSON `ready`, call `start()`, then forward binary deltas.
@@ -128,7 +128,7 @@
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-  Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/pty-ws.test.ts`
+  Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/pty-ws.test.ts`
 
 - [ ] **Step 3: Implement framing/deadline/restart**
 
@@ -139,8 +139,8 @@
 ### Task 5: Durable cleanup on reset/delete
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/registry.ts`
-- Modify: `packages/jinn/src/sessions/__tests__/registry-delete-queue-items.test.ts`
+- Modify: `packages/hundredfold/src/sessions/registry.ts`
+- Modify: `packages/hundredfold/src/sessions/__tests__/registry-delete-queue-items.test.ts`
 
 **Interfaces:**
 - A successful `deleteSession` or each successful member of `deleteSessions` removes its persisted PTY snapshot.
@@ -173,7 +173,7 @@
 
 - [ ] **Step 2: Run the focused web test and verify RED**
 
-  Run: `pnpm --filter @jinn/web exec vitest run src/components/__tests__/cli-terminal.test.tsx`
+  Run: `pnpm --filter @hundredfold/web exec vitest run src/components/__tests__/cli-terminal.test.tsx`
 
 - [ ] **Step 3: Implement the protocol-driven UI**
 

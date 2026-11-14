@@ -10,7 +10,7 @@ import { authHeaders } from './sandbox-auth.mjs'
 const [sandboxHome, baseUrl] = process.argv.slice(2)
 const headers = authHeaders(sandboxHome)
 const fixtures = JSON.parse(fs.readFileSync(path.join(sandboxHome, 'ui-capture-fixtures.json'), 'utf8'))
-const browser = await (process.env.JINN_CAPTURE_BROWSER === 'chromium' ? chromium : firefox).launch()
+const browser = await (process.env.HUNDREDFOLD_CAPTURE_BROWSER === 'chromium' ? chromium : firefox).launch()
 
 const ROUTES = [
   { name: 'chat (model menu)', url: `/?session=${fixtures.chatSession}`, open: (page) => page.getByRole('button', { name: /Opus/ }).first() },
@@ -18,7 +18,7 @@ const ROUTES = [
 ]
 for (const route of ROUTES) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, extraHTTPHeaders: headers })
-  await context.addInitScript(() => { localStorage.setItem('jinn-onboarded', 'true') })
+  await context.addInitScript(() => { localStorage.setItem('hundredfold-onboarded', 'true') })
   const page = await context.newPage()
   await page.goto(`${baseUrl}${route.url}`, { waitUntil: 'networkidle' })
   await page.waitForTimeout(1500)

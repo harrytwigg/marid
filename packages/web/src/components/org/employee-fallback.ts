@@ -7,7 +7,7 @@ import {
   type FallbackChainsResponse,
   type FallbackLink,
   type FallbackProfileOption,
-} from "@jinn/fallback-chain-wire"
+} from "@hundredfold/fallback-chain-wire"
 import type { Employee } from "@/lib/api"
 import { engineDisplayName } from "@/lib/engine-names"
 import type { EnginesResponse } from "@/lib/api"

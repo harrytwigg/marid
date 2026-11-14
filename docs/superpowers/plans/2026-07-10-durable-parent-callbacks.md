@@ -11,8 +11,8 @@
 ## Global Constraints
 
 - Build from `main` HEAD `45b38fdae3c7cd5e8cdca089e7fc512c9c820928` in the isolated callback-reliability worktree.
-- Use `JINN_HOME=$HOME/.jinn-cbrel` and port `7889` for live testing only.
-- Never access the production gateway on port `7777`, the instance on `7788`, or write to the production Jinn home.
+- Use `HUNDREDFOLD_HOME=$HOME/.hundredfold-cbrel` and port `7889` for live testing only.
+- Never access the production gateway on port `7777`, the instance on `7788`, or write to the production Hundredfold home.
 - Preserve unrelated files and production work items; no `Co-Authored-By` trailer.
 - Run with Node.js `24.13.0` and pnpm.
 
@@ -21,8 +21,8 @@
 ### Task 1: Durable internal queue rows
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/registry.ts`
-- Modify: `packages/jinn/src/sessions/registry.test.ts`
+- Modify: `packages/hundredfold/src/sessions/registry.ts`
+- Modify: `packages/hundredfold/src/sessions/registry.test.ts`
 
 **Interfaces:**
 - Consumes: the existing `queue_items` table and queue-item CRUD helpers.
@@ -43,7 +43,7 @@ test("migrateQueueItemsSchema adds an internal flag to legacy queue tables", () 
 
 - [ ] **Step 2: Run the focused registry test and verify RED**
 
-Run: `PATH=~/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter jinn-cli exec vitest run src/sessions/registry.test.ts`
+Run: `PATH=~/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter hundredfold exec vitest run src/sessions/registry.test.ts`
 
 Expected: FAIL because `migrateQueueItemsSchema` and the internal option do not exist.
 
@@ -62,15 +62,15 @@ Call the migration after creating `queue_items`; write `internal=1` for callback
 
 - [ ] **Step 4: Run the focused registry test and verify GREEN**
 
-Run: `PATH=~/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter jinn-cli exec vitest run src/sessions/registry.test.ts`
+Run: `PATH=~/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter hundredfold exec vitest run src/sessions/registry.test.ts`
 
 Expected: PASS.
 
 ### Task 2: Persist callback dispatch and prove concurrency/restart behavior
 
 **Files:**
-- Create: `packages/jinn/src/gateway/__tests__/callback-reliability.test.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
+- Create: `packages/hundredfold/src/gateway/__tests__/callback-reliability.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
 
 **Interfaces:**
 - Consumes: `enqueueQueueItem(..., { internal: true })`, `dispatchWebSessionRun`, `resumePendingWebQueueItems`, and `SessionQueue`.
@@ -100,7 +100,7 @@ it("delivers two rapid child callbacks exactly once each", async () => {
 
 - [ ] **Step 2: Run the callback reliability test and verify RED**
 
-Run: `PATH=~/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/callback-reliability.test.ts`
+Run: `PATH=~/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter hundredfold exec vitest run src/gateway/__tests__/callback-reliability.test.ts`
 
 Expected: the restart test fails because notification-role messages have no durable `queue_items` row.
 
@@ -117,7 +117,7 @@ Keep notification banners/messages unchanged, keep notification turns non-interr
 
 - [ ] **Step 4: Run callback, sessions, and gateway tests and verify GREEN**
 
-Run: `PATH=~/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/callback-reliability.test.ts src/sessions/__tests__/callbacks.test.ts src/sessions/queue.test.ts src/gateway/__tests__/workflow-queue-replay.test.ts`
+Run: `PATH=~/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter hundredfold exec vitest run src/gateway/__tests__/callback-reliability.test.ts src/sessions/__tests__/callbacks.test.ts src/sessions/queue.test.ts src/gateway/__tests__/workflow-queue-replay.test.ts`
 
 Expected: PASS with both callback prompts observed once and the pending callback replayed.
 
@@ -127,12 +127,12 @@ Expected: PASS with both callback prompts observed once and the pending callback
 - No production-source additions beyond Tasks 1–2.
 
 **Interfaces:**
-- Consumes: built Jinn CLI, throwaway `JINN_HOME`, gateway REST API, git worktree.
+- Consumes: built Hundredfold CLI, throwaway `HUNDREDFOLD_HOME`, gateway REST API, git worktree.
 - Produces: live evidence, full-suite tails, one leak-clean commit fast-forwarded to `main`, and no remaining task worktree.
 
 - [ ] **Step 1: Build and run the isolated gateway**
 
-Run the built CLI with `JINN_HOME=$HOME/.jinn-cbrel`, port `7889`, and owned PID tracking; create a parent plus two child callbacks, post the completions near-simultaneously, and assert the parent stores/consumes each callback once.
+Run the built CLI with `HUNDREDFOLD_HOME=$HOME/.hundredfold-cbrel`, port `7889`, and owned PID tracking; create a parent plus two child callbacks, post the completions near-simultaneously, and assert the parent stores/consumes each callback once.
 
 - [ ] **Step 2: Simulate restart with one unconsumed callback**
 
@@ -148,4 +148,4 @@ Stage only intended files, run the required staged-diff leak grep, and commit wi
 
 - [ ] **Step 5: Fast-forward main, confirm ancestry/state, and remove worktree**
 
-Fast-forward `main` to the task commit, prove `git merge-base --is-ancestor <commit> main`, verify the production `work_items` fingerprint is unchanged, remove `$HOME/.jinn-cbrel`, stop only owned port-7889 processes, and remove the worktree.
+Fast-forward `main` to the task commit, prove `git merge-base --is-ancestor <commit> main`, verify the production `work_items` fingerprint is unchanged, remove `$HOME/.hundredfold-cbrel`, stop only owned port-7889 processes, and remove the worktree.

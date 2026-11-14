@@ -1,6 +1,6 @@
 # Prerelease Todo converter
 
-This root-only tool inventories the operator's unsupported prerelease `wi_*` Todo data before a separately authorized offline conversion. It is not part of `jinn-cli`, has no installed command, has no instance default paths, and must never be imported from `packages/`.
+This root-only tool inventories the operator's unsupported prerelease `wi_*` Todo data before a separately authorized offline conversion. It is not part of `hundredfold`, has no installed command, has no instance default paths, and must never be imported from `packages/`.
 
 Current boundary: **dry run only**. There is deliberately no apply or rewrite entry point.
 
@@ -41,4 +41,4 @@ The manifest has no default roots:
 
 Every listed root is a closed allowlist. The reviewed native helper opens roots and leaves descriptor-relative with no symlink following, bounds file count/depth/size, and refuses unexpected entries. Reports contain only counts, safe locators, and SHA-256 evidence—not the legacy IDs, mapping, or filesystem paths.
 
-Never point this tool at the live `~/.jinn` database. Live conversion, gateway restart, first start, deployment, release, and publication each require separate explicit authorization.
+Never point this tool at the live `~/.hundredfold` database. Live conversion, gateway restart, first start, deployment, release, and publication each require separate explicit authorization.

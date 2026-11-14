@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { FallbackChainsResponse } from "@jinn/fallback-chain-wire"
+import type { FallbackChainsResponse } from "@hundredfold/fallback-chain-wire"
 import type { Employee } from "@/lib/api"
 
 const registry = vi.hoisted(() => ({ current: undefined as unknown }))

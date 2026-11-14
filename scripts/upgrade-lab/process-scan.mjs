@@ -33,7 +33,7 @@ export function buildLabProcessScanPipeline(labHome) {
       command: "awk",
       args: [
         "-v",
-        `needle=JINN_HOME=${expected}`,
+        `needle=HUNDREDFOLD_HOME=${expected}`,
         '{ for (i = 2; i <= NF; i++) if ($i == needle) { print $1; break } }',
       ],
     },

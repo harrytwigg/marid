@@ -73,7 +73,7 @@ const signedIn = () => {
 };
 const ledger = (row) => appendLedger({
   engine: "claude", profileDir: configDir, profile, model, resume: resume ?? null, cwd,
-  jinnSession: process.env.JINN_SESSION_ID ?? null, ...row,
+  hundredfoldSession: process.env.HUNDREDFOLD_SESSION_ID ?? null, ...row,
 });
 
 if (!signedIn()) {

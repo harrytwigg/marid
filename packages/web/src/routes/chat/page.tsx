@@ -64,7 +64,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
 import type { ViewMode } from '@/lib/view-mode'
-import type { GatewayEvent } from '@jinn/gateway-events'
+import type { GatewayEvent } from '@hundredfold/gateway-events'
 import { shareDebugLog, clearDebugLog } from '@/lib/debug-log'
 import { buildFreshChatParams, effectivePrimaryProfile, startableProfileNames } from '@/components/chat/new-chat-helpers'
 import { fetchFallbackChains } from '@/lib/api-fallback-chains'
@@ -100,7 +100,7 @@ function ChatPage() {
   // (`/?session=<id>`) — selecting is a navigation, so browser back/forward
   // walk the session trail, refresh restores the thread, and links carry it.
   // A thread drill-in's history entry also carries its origin (the back chip);
-  // Jinn ships in chrome-less Tauri shells, so every drill-in needs an in-app
+  // Hundredfold ships in chrome-less Tauri shells, so every drill-in needs an in-app
   // way back while browser back keeps working on the web.
   const location = useLocation()
   const navigate = useNavigate()
@@ -152,10 +152,10 @@ function ChatPage() {
   // list folds. The ribbon's top toggle drives listOpen (persisted), so nav
   // never leaves the rail. There is no list⇄nav swap any more.
   const [listOpen, setListOpen] = useState<boolean>(() => {
-    try { return localStorage.getItem('jinn-chat-list-open') !== 'false' } catch { return true }
+    try { return localStorage.getItem('hundredfold-chat-list-open') !== 'false' } catch { return true }
   })
   const persistListOpen = useCallback((next: boolean) => {
-    try { localStorage.setItem('jinn-chat-list-open', String(next)) } catch { /* ignore */ }
+    try { localStorage.setItem('hundredfold-chat-list-open', String(next)) } catch { /* ignore */ }
   }, [])
   const toggleList = useCallback(() => {
     setListOpen((prev) => { const next = !prev; persistListOpen(next); return next })

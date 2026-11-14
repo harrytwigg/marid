@@ -234,7 +234,7 @@ function MobileThreadFrame({ paneId, children }: { paneId: string; children: Rea
   return (
     <div
       data-mobile-thread-pane={paneId}
-      className={`flex min-h-0 flex-1 overflow-hidden ${byTabSwitch ? '' : 'animate-[jinn-mobile-chat-crossfade_var(--duration-base)_var(--ease-smooth)] motion-reduce:animate-none'}`}
+      className={`flex min-h-0 flex-1 overflow-hidden ${byTabSwitch ? '' : 'animate-[hundredfold-mobile-chat-crossfade_var(--duration-base)_var(--ease-smooth)] motion-reduce:animate-none'}`}
     >
       {children}
     </div>

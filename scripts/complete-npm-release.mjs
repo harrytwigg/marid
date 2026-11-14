@@ -5,15 +5,15 @@ import { awaitNpmVersion, poll } from "./await-npm-version.mjs"
 import { awaitRun, ensureRelease, gh, verifyRemoteTag } from "./release-github.mjs"
 
 async function formulaMatches(version, checksum, run) {
-  const file = JSON.parse(await run(["api", "repos/{owner}/{repo}/contents/Formula/jinn.rb?ref=main"]))
+  const file = JSON.parse(await run(["api", "repos/{owner}/{repo}/contents/Formula/hundredfold.rb?ref=main"]))
   const formula = Buffer.from(file.content, "base64").toString("utf8")
-  return formula.includes(`url "https://registry.npmjs.org/jinn-cli/-/jinn-cli-${version}.tgz"`)
+  return formula.includes(`url "https://registry.npmjs.org/hundredfold/-/hundredfold-${version}.tgz"`)
     && formula.includes(`sha256 "${checksum}"`)
 }
 
 async function tarballChecksum(version) {
   return poll(async (remaining) => {
-    const response = await fetch(`https://registry.npmjs.org/jinn-cli/-/jinn-cli-${version}.tgz?release-check=${Date.now()}`, {
+    const response = await fetch(`https://registry.npmjs.org/hundredfold/-/hundredfold-${version}.tgz?release-check=${Date.now()}`, {
       cache: "no-store", headers: { "Cache-Control": "no-cache" },
       signal: AbortSignal.timeout(Math.min(60000, remaining)),
     })

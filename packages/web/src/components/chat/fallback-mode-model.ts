@@ -1,4 +1,4 @@
-import type { SessionFallbackChainView } from '@jinn/fallback-chain-wire'
+import type { SessionFallbackChainView } from '@hundredfold/fallback-chain-wire'
 
 export type SessionFallbackMode = 'fallback' | 'fallback-children' | 'auto-resume'
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Add a centralized keyboard shortcut system to the Jinn web dashboard chat page, with a Linear-style hint overlay. All shortcuts go through a single registry that handles event binding, input-field safety, and modal detection.
+Add a centralized keyboard shortcut system to the Hundredfold web dashboard chat page, with a Linear-style hint overlay. All shortcuts go through a single registry that handles event binding, input-field safety, and modal detection.
 
 ## Architecture
 

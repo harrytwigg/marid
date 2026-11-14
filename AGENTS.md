@@ -4,13 +4,14 @@ The review rubric for this repository. It applies to humans and to agents; a rev
 fault a change against a rule written here, and an author may push back on a finding that
 cites nothing here and no stated requirement.
 
-Jinn is a pnpm + turbo monorepo: a gateway daemon and CLI (`packages/jinn`), a React web
+Hundredfold is a pnpm + turbo monorepo: a gateway daemon and CLI (`packages/hundredfold`), a React web
 dashboard (`packages/web`), and a shared event contract (`packages/gateway-events`).
 
-**This is a permanent fork. Nothing here goes back upstream.** `harrytwigg/marid` diverges from
-`hristo2612/jinn` on purpose and forever: there is no upstreaming plan and no eventual pull
-request. The `upstream` remote is read-only — a source of changes to merge *in*, never a push
-or pull-request target. Divergence from upstream is therefore not a defect and not a finding.
+**This is a permanent fork. Nothing here goes back upstream.** `hundredfoldhq/hundredfold` diverges from
+the upstream project (credited in NOTICE) on purpose and forever: there is no upstreaming plan and no eventual pull
+request. The upstream project is unmaintained and nothing is merged in from it any more; if a
+`upstream` remote exists it is read-only, never a push or pull-request target. Divergence from upstream
+is therefore not a defect and not a finding.
 Do not argue a change down to what upstream would accept; argue it against the rules below.
 What it is aimed at instead is Principle II: an org that operates itself — work that starts
 without a human starting it, and capacity spent by the system rather than watched by the
@@ -18,11 +19,11 @@ operator. The full statement of both is
 [`.specify/memory/constitution.md`](.specify/memory/constitution.md).
 
 **This repository is public and publishes to npm.** Everything under `packages/**` reaches
-strangers, including `packages/jinn/template/**` (the files that seed a new user's instance
+strangers, including `packages/hundredfold/template/**` (the files that seed a new user's instance
 home) and test files (they compile into `dist/` and ship in the tarball). No real names,
 client names, emails, API keys, chat workspace IDs, or absolute home-directory paths go
 anywhere in this tree. Anything that must be personal is read at runtime from the instance
-home, never hardcoded. `packages/jinn/src/shared/__tests__/privacy-guard.test.ts:9` scans the
+home, never hardcoded. `packages/hundredfold/src/shared/__tests__/privacy-guard.test.ts:9` scans the
 shipped trees and fails the build on a match.
 
 Four commands gate a change, and each one is a CI job in `.github/workflows/ci.yml`:
@@ -70,14 +71,14 @@ Every core MCP tool ships its name, description, and full input schema to the mo
 single call, for every employee, forever. That is the cost this ladder exists to protect, and
 it is enforced, not aspirational:
 
-- `packages/jinn/src/mcp/__tests__/tool-manifest-budget.test.ts:297` — `toHaveLength(69)`.
+- `packages/hundredfold/src/mcp/__tests__/tool-manifest-budget.test.ts:297` — `toHaveLength(69)`.
   Sixty-nine core tools, each pinned by name.
 - Same file `:10` — `MAX_MANIFEST_TOKENS = 5477`, a fixed provider ceiling.
 - Same file `:58-60` — the attested measurements: `rpc: 4996`, `pi: 5472`, `openai: 5189`.
   **Pi sits five tokens under the ceiling.** A verbose description on a new tool does not get
   a warning; it turns the suite red.
 - A default install ships **65** of the 69: Notes is off out of the box
-  (`packages/jinn/src/cli/setup.ts:239`, `notesEnabled: false`).
+  (`packages/hundredfold/src/cli/setup.ts:239`, `notesEnabled: false`).
 
 So: climb from the bottom. Take the lowest rung that actually solves the problem.
 
@@ -86,33 +87,33 @@ new value in an existing enum, a new branch in an existing handler. Cost: a few 
 none. This is the right answer far more often than it feels like it is.
 
 **Rung 2 — a CLI command, or a skill.** Both cost zero context.
-A command goes in `packages/jinn/bin/jinn.ts`; every handler is lazily `import()`ed inside its
+A command goes in `packages/hundredfold/bin/hundredfold.ts`; every handler is lazily `import()`ed inside its
 action (`:79`), so adding one loads nothing until it runs.
-A skill is a Markdown file at `packages/jinn/template/skills/<name>/SKILL.md` — 12 ship today.
-`packages/jinn/src/cli/setup.ts:622` copies them into the instance home and
-`packages/jinn/src/gateway/watcher.ts:28` symlinks them where engines look. There is no
+A skill is a Markdown file at `packages/hundredfold/template/skills/<name>/SKILL.md` — 12 ship today.
+`packages/hundredfold/src/cli/setup.ts:622` copies them into the instance home and
+`packages/hundredfold/src/gateway/watcher.ts:28` symlinks them where engines look. There is no
 runtime and no loader: the engine reads the file when it needs it, so an unused skill costs
 nothing.
 
 **Rung 3 — a gated MCP tool.** Ships only when something turns it on. The precedent is a config key:
 
-- *Config key.* `packages/jinn/src/mcp/server.ts:125` — `notesEnabled ? buildNoteTools() : []`,
+- *Config key.* `packages/hundredfold/src/mcp/server.ts:125` — `notesEnabled ? buildNoteTools() : []`,
   resolved at startup by `notesEnabledFromConfig` (`:139`), typed at
-  `packages/jinn/src/shared/types.ts:911`.
+  `packages/hundredfold/src/shared/types.ts:911`.
 
 **Rung 4 — a custom, out-of-process MCP server.** Declared under `mcp.custom` in the instance
 `config.yaml` and scoped per employee by the persona's `mcp` field
-(`packages/jinn/src/shared/types.ts:565`), which `packages/jinn/src/mcp/resolver.ts:30`
+(`packages/hundredfold/src/shared/types.ts:565`), which `packages/hundredfold/src/mcp/resolver.ts:30`
 (`resolveMcpServers`) reads: `mcp: false` drops every server, an `mcp:` list keeps only the
 ids it names (`:58`). Know which way the default falls before you add one — an employee with
 no `mcp` field gets every configured server (`:77`), so a new custom server reaches the whole
 company until personas scope it out. Documented in
-`packages/jinn/template/docs/mcp.md:27`. Either way it costs this repo nothing: the server
+`packages/hundredfold/template/docs/mcp.md:27`. Either way it costs this repo nothing: the server
 lives outside it entirely.
 
 *Plugins now exist, but this ladder has no rung for them.* An enabled directory under
-`~/.jinn/plugins/` adds dashboard pages, sidebar rows and status chips, and may mount gateway
-routes and a supervised background task (`packages/jinn/src/plugins/`,
+`~/.hundredfold/plugins/` adds dashboard pages, sidebar rows and status chips, and may mount gateway
+routes and a supervised background task (`packages/hundredfold/src/plugins/`,
 [`docs/plugins.md`](docs/plugins.md)); the design is `.plans/plugins.md`. Skills are still
 Markdown with no plugin API. Whether a plugin belongs on this ladder is rubric policy, not
 something to decide in a change: until it is written here, `mcp.custom` is the extension point
@@ -121,15 +122,15 @@ the ladder names.
 **Rung 5 — a new core MCP tool.** The last resort, and the only rung that taxes every session
 in the company. To take it, show the token arithmetic against the budget above, and show why
 rungs 1 through 4 do not work. The bar is already written into the code:
-`packages/jinn/src/mcp/__tests__/context-diet.test.ts:9` — *"a read tool that shrinks no
+`packages/hundredfold/src/mcp/__tests__/context-diet.test.ts:9` — *"a read tool that shrinks no
 prompt does not ship."* A tool earns its schema by removing more prose from the prompt than it
 adds, the way the knowledge index did when it collapsed into a two-line manifest
-(`packages/jinn/src/sessions/context.ts:873-880`). The restraint note at
-`packages/jinn/src/mcp/server.ts:111-116` is the standing statement of this policy — read it
+(`packages/hundredfold/src/sessions/context.ts:873-880`). The restraint note at
+`packages/hundredfold/src/mcp/server.ts:111-116` is the standing statement of this policy — read it
 before proposing rung 5.
 
 Note that the whole toolset attaches all-or-nothing per session
-(`packages/jinn/src/mcp/attachment.ts:126`, default on at `:53`). There is no "just for this
+(`packages/hundredfold/src/mcp/attachment.ts:126`, default on at `:53`). There is no "just for this
 one employee" for a core tool. That is what rungs 3 and 4 are for.
 
 ---
@@ -164,8 +165,8 @@ only knows what it currently says. Every one is a tax on the next refactor.
 
 The specimens in this repo, so you can recognise the shape:
 
-- `packages/jinn/src/mcp/__tests__/attachment.test.ts:45-49` — an entire `describe` whose body
-  is `expect(JINN_ATTACH_DEFAULT).toBe(true)`. It restates a constant. The `describe` directly
+- `packages/hundredfold/src/mcp/__tests__/attachment.test.ts:45-49` — an entire `describe` whose body
+  is `expect(HUNDREDFOLD_ATTACH_DEFAULT).toBe(true)`. It restates a constant. The `describe` directly
   below it at `:51` tests what the default actually *does*, across every engine, and would
   catch a real flip.
 - `packages/web/src/lib/__tests__/nav.test.ts:35-43` — a hand-copied, order-sensitive array of
@@ -173,8 +174,8 @@ The specimens in this repo, so you can recognise the shape:
   literally titled *"derived, not a second hardcoded list"*. The first one exists only to be
   updated.
 - A constant restatement riding inside an otherwise good test still counts:
-  `packages/jinn/src/gateway/__tests__/session-comm-guards.test.ts:129` and
-  `packages/jinn/src/mcp/__tests__/session-tools.test.ts:281` are single lines that assert a
+  `packages/hundredfold/src/gateway/__tests__/session-comm-guards.test.ts:129` and
+  `packages/hundredfold/src/mcp/__tests__/session-tools.test.ts:281` are single lines that assert a
   number equals itself, at the end of tests that already prove the behaviour.
 
 Ask of every assertion: *if this fails, have I learned that something is broken, or only that
@@ -195,7 +196,7 @@ text of a committed repo file, 12 of them reading `.ts`/`.tsx` sources.**
 
 Done right:
 
-- `packages/jinn/src/shared/__tests__/privacy-guard.test.ts:9` — walks the shipped trees and
+- `packages/hundredfold/src/shared/__tests__/privacy-guard.test.ts:9` — walks the shipped trees and
   fails on a blocked term. No runtime behaviour could ever express this.
 
 The boundary — a source-reading test is legitimate only when **all three** hold:
@@ -208,11 +209,11 @@ The boundary — a source-reading test is legitimate only when **all three** hol
 
 Failing those, the same two files show what it looks like:
 
-- `packages/jinn/src/gateway/__tests__/server-boot-ordering.test.ts:19-25` compares
+- `packages/hundredfold/src/gateway/__tests__/server-boot-ordering.test.ts:19-25` compares
   `String.indexOf` offsets in `server.ts` to assert call order, and `:37` pins the exact
   formatting of an arrow function. Moving a call into a helper breaks it without changing boot
   order at all.
-- `packages/jinn/src/cli/__tests__/config-seed.test.ts:17` regexes an exact multi-line YAML
+- `packages/hundredfold/src/cli/__tests__/config-seed.test.ts:17` regexes an exact multi-line YAML
   literal, indentation included, out of `setup.ts` — instead of calling the seeding function
   and parsing what it produced.
 
@@ -220,13 +221,13 @@ Failing those, the same two files show what it looks like:
 
 Branching logic, parsing, state transitions, and boundary conditions get tests. Glue and
 pass-through wrappers do not. Coverage is a floor against regression, not a target
-(`packages/jinn/vitest.config.ts:60-65`).
+(`packages/hundredfold/vitest.config.ts:60-65`).
 
-Both packages run Vitest — `packages/jinn/vitest.config.ts:32` (node, `pool: 'forks'` at
+Both packages run Vitest — `packages/hundredfold/vitest.config.ts:32` (node, `pool: 'forks'` at
 `:37`) and `packages/web/vitest.config.ts:9` (jsdom). Windows is a required CI leg
 (`.github/workflows/ci.yml:97`), and it is not decorative: a timed-out *hook* marks that
 file's tests SKIPPED rather than failed, so a slow suite disappears while the run stays green.
-The comment at `packages/jinn/vitest.config.ts:16-25` records the run where roughly 180 tests
+The comment at `packages/hundredfold/vitest.config.ts:16-25` records the run where roughly 180 tests
 went missing that way.
 
 ---
@@ -267,7 +268,7 @@ reader find the whole story:
   reconciliation pass, and what the patch alone cannot prove.
 - `packages/web/src/lib/query-keys.ts:4` — why these surfaces refetch on mount: an
   invalidation arriving while a surface is unmounted must not survive its next mount.
-- `packages/jinn/src/work-items/migrate.ts:138` and `:304` — a frozen recognizer for a shape
+- `packages/hundredfold/src/work-items/migrate.ts:138` and `:304` — a frozen recognizer for a shape
   that predates a migration, and the storage ownership rule that replaced it.
 
 Each one answers a question the code cannot: *why is this here, and what breaks if I remove
@@ -290,14 +291,14 @@ change to how it looks is faulted against these rules.
 **One stylesheet root, one palette.**
 
 - `packages/web/src/routes/app.css` is the only stylesheet `main.tsx` loads before the identity,
-  so Tailwind compiles one tree and HeroUI's component CSS can `@apply` Marid's theme.
+  so Tailwind compiles one tree and HeroUI's component CSS can `@apply` Hundredfold's theme.
 - The palette is written once per token in `routes/glass-identity.css`, as `light-dark(<light>,
   <dark>)`; the root's `color-scheme` picks the side. Only what `light-dark()` cannot take
   (shadows, gradients) keeps a block per theme. `globals.css` holds no colour.
 - A token that script reads back (`getComputedStyle`: the Talk orb, the title bar's `--bg`) is
   registered with `@property` in `globals.css`, or it reads back as the literal `light-dark(...)`.
 - HeroUI's own default theme and variants file are not imported. `routes/heroui-bridge.css` defines
-  every variable HeroUI components read from Marid's tokens, so a theme or accent change moves a
+  every variable HeroUI components read from Hundredfold's tokens, so a theme or accent change moves a
   HeroUI control and a legacy one together.
 
 **Adapters.**

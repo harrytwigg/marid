@@ -12,7 +12,7 @@
     "typecheck": {
       "dependsOn": ["^build"]
     },
-    // Type-aware lint reads `@jinn/gateway-events`'s emitted declarations: without
+    // Type-aware lint reads `@hundredfold/gateway-events`'s emitted declarations: without
     // them `act(() => emit(...))` in the web tests widens to a thenable and eleven
     // phantom no-floating-promises errors appear. The root `lint` script builds
     // that one package in its own turbo run rather than putting `^build` here, so
@@ -27,20 +27,20 @@
       ]
     },
     // CLAUDE_CONFIG_DIR passes through so a direct vitest run and `pnpm test` see the
-    // same environment: packages/jinn's test setup replaces it with a temp dir in every
+    // same environment: packages/hundredfold's test setup replaces it with a temp dir in every
     // worker either way. Stripping it here only changed which real profile a test reached.
     "test": {
       "dependsOn": ["^build"],
-      // JINN_TEST_NICE is the caller's escape hatch back to normal priority and
-      // JINN_TEST_LOW_PRIORITY is what low-priority.mjs sets on the way in;
+      // HUNDREDFOLD_TEST_NICE is the caller's escape hatch back to normal priority and
+      // HUNDREDFOLD_TEST_LOW_PRIORITY is what low-priority.mjs sets on the way in;
       // strict env mode would strip both, and a suite that cannot see the second
       // one keeps the 5s timeouts it was told to widen.
       "passThroughEnv": [
-        "JINN_TEST_GLOBAL_CORES",
-        "JINN_TEST_RUN_CORES",
-        "JINN_TEST_RESERVED_CORES",
-        "JINN_TEST_NICE",
-        "JINN_TEST_LOW_PRIORITY",
+        "HUNDREDFOLD_TEST_GLOBAL_CORES",
+        "HUNDREDFOLD_TEST_RUN_CORES",
+        "HUNDREDFOLD_TEST_RESERVED_CORES",
+        "HUNDREDFOLD_TEST_NICE",
+        "HUNDREDFOLD_TEST_LOW_PRIORITY",
         "CLAUDE_CONFIG_DIR"
       ],
       "cache": false

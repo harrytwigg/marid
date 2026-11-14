@@ -29,7 +29,7 @@ export function tabKey(t: ChatTab): string {
   return t.sessionId ? `file:${t.sessionId}:${t.path}` : `file:${t.path}`
 }
 
-const STORAGE_KEY = 'jinn-chat-tabs'
+const STORAGE_KEY = 'hundredfold-chat-tabs'
 const MAX_TABS = 12
 
 interface TabState {

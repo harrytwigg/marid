@@ -1,6 +1,6 @@
 import { act, render, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { DEFAULTS, type JinnSettings } from "@/lib/settings"
+import { DEFAULTS, type HundredfoldSettings } from "@/lib/settings"
 import { TalkOrbOverlay } from "../talk-orb-overlay"
 import { clearResumableTalkSession, setTalkSessionId } from "../talk-session-store"
 
@@ -18,7 +18,7 @@ vi.mock("../talk-orb", () => {
   } }
 })
 
-const stored = vi.hoisted(() => ({ settings: {} as JinnSettings }))
+const stored = vi.hoisted(() => ({ settings: {} as HundredfoldSettings }))
 
 vi.mock("@/routes/settings-provider", () => ({
   useSettings: () => ({ settings: stored.settings }),

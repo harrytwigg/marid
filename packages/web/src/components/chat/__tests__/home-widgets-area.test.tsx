@@ -6,7 +6,7 @@ import { AREAS } from '@/contrib/types'
 import { contributeProbes, describeHostedArea } from '@/contrib/__tests__/hosted-area'
 import { ChatSidebar } from '@/components/chat/chat-sidebar'
 
-/* The chat sidebar hosts `home.widgets`. Jinn has no dashboard route:
+/* The chat sidebar hosts `home.widgets`. Hundredfold has no dashboard route:
  * `/` is Chat, so the home surface is this rail — the desktop list and, at
  * `variant="mobile"`, the phone's home screen. Widgets sit below the control
  * band and above the chats, so one never pushes search off the top. */
@@ -35,7 +35,7 @@ vi.mock('@/lib/api', () => ({
 }))
 
 vi.mock('@/routes/settings-provider', () => ({
-  useSettings: () => ({ settings: { portalName: 'Jinn', employeeOverrides: {} } }),
+  useSettings: () => ({ settings: { portalName: 'Hundredfold', employeeOverrides: {} } }),
 }))
 
 function renderSidebar(variant: 'desktop' | 'mobile') {

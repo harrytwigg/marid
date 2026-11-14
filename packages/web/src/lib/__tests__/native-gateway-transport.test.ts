@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest"
-import type { JinnNativeBridge, NativeStreamEvent } from "@/platform/native-bridge"
+import type { HundredfoldNativeBridge, NativeStreamEvent } from "@/platform/native-bridge"
 import { GATEWAY_SOCKET_CLOSED, GATEWAY_SOCKET_OPEN } from "../gateway-transport"
 import { createNativeGatewayTransport, pairNativeGateway } from "../native-gateway-transport"
 
-function fakeBridge(): JinnNativeBridge & { request: ReturnType<typeof vi.fn>; stream: ReturnType<typeof vi.fn> } {
+function fakeBridge(): HundredfoldNativeBridge & { request: ReturnType<typeof vi.fn>; stream: ReturnType<typeof vi.fn> } {
   return {
     runtime: "tauri",
     pair: vi.fn(async ({ target }) => ({ origin: target.origin, device: { id: "device-a", name: "Mac app" } })),

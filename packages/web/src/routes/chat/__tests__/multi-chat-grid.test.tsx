@@ -211,7 +211,7 @@ describe('mobile transcript cross-fade', () => {
     const wrapper = crossfade()
     expect(wrapper).toBeTruthy()
     expect(wrapper!.className).toContain(
-      'animate-[jinn-mobile-chat-crossfade_var(--duration-base)_var(--ease-smooth)]',
+      'animate-[hundredfold-mobile-chat-crossfade_var(--duration-base)_var(--ease-smooth)]',
     )
     expect(wrapper!.className).toContain('motion-reduce:animate-none')
     // A slide would fight the strip, which does not move.

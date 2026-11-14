@@ -10,12 +10,12 @@
 
 ## Global Constraints
 
-- Build from `main` HEAD `149dd005f4127cbbd88e93aed1630a1de7879821` in the isolated `/private/tmp/jinn-mgraware` worktree.
+- Build from `main` HEAD `149dd005f4127cbbd88e93aed1630a1de7879821` in the isolated `/private/tmp/hundredfold-mgraware` worktree.
 - Skip-level delegation remains allowed and dispatches to the originally requested employee.
 - Emit at most one manager-visibility signal per new delegation; idempotent delegation replays emit none.
 - Direct-report and same-manager delegations emit no manager-visibility signal.
 - Visibility failures never block, reroute, or change the delegation response.
-- Never access gateway ports 7777 or 7788, and never write to an installed Jinn home.
+- Never access gateway ports 7777 or 7788, and never write to an installed Hundredfold home.
 - Keep all shipped fixtures and documentation generic; no personal names, projects, paths, identifiers, or credentials.
 - Use Node.js 24.13.0 and pnpm; do not add `Co-Authored-By` trailers.
 
@@ -24,8 +24,8 @@
 ### Task 1: Resolve and surface manager visibility
 
 **Files:**
-- Create: `packages/jinn/src/gateway/manager-visibility.ts`
-- Test: `packages/jinn/src/gateway/__tests__/manager-visibility.test.ts`
+- Create: `packages/hundredfold/src/gateway/manager-visibility.ts`
+- Test: `packages/hundredfold/src/gateway/__tests__/manager-visibility.test.ts`
 
 **Interfaces:**
 - Consumes: `resolveOrgHierarchy(roster)`, `searchSessionsFiltered({ employee })`, `notifyManagerVisibility`, and `appendWorkItemEvent`.
@@ -52,7 +52,7 @@ it("does not notify for a direct report or same-manager delegation", () => {
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/manager-visibility.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/manager-visibility.test.ts`
 
 Expected: FAIL because `manager-visibility.ts` does not exist.
 
@@ -105,17 +105,17 @@ export function surfaceManagerVisibility(input: ManagerVisibilityInput): void {
 
 - [ ] **Step 4: Run the focused test and verify GREEN**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/manager-visibility.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/manager-visibility.test.ts`
 
 Expected: PASS with skip-level, direct-report, same-manager, no-session fallback, and failure-open cases covered.
 
 ### Task 2: Send visibility through the durable notification route
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/callbacks.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/sessions/__tests__/callbacks.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/delegations-route.test.ts`
+- Modify: `packages/hundredfold/src/sessions/callbacks.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/sessions/__tests__/callbacks.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/delegations-route.test.ts`
 
 **Interfaces:**
 - Consumes: `_sendRaw(sessionId, message, displayMessage, structured)` and the delegation's resolved roster, child session, Todo, and delegator session.
@@ -143,7 +143,7 @@ it("dispatches a skip-level delegation to the requested IC and notifies its mana
 
 - [ ] **Step 2: Run both focused suites and verify RED**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/sessions/__tests__/callbacks.test.ts src/gateway/__tests__/delegations-route.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/sessions/__tests__/callbacks.test.ts src/gateway/__tests__/delegations-route.test.ts`
 
 Expected: FAIL because the callback sender and route hook are missing.
 
@@ -166,14 +166,14 @@ The visibility hook is after dispatch and catches every error internally, so the
 
 - [ ] **Step 4: Run delegation and sessions scope and verify GREEN**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/delegations-route.test.ts src/gateway/__tests__/manager-visibility.test.ts src/sessions/__tests__/callbacks.test.ts src/gateway/__tests__/callback-reliability.test.ts src/sessions/registry.test.ts src/sessions/queue.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/delegations-route.test.ts src/gateway/__tests__/manager-visibility.test.ts src/sessions/__tests__/callbacks.test.ts src/gateway/__tests__/callback-reliability.test.ts src/sessions/registry.test.ts src/sessions/queue.test.ts`
 
 Expected: PASS with one skip-level signal, no direct-report signal, unchanged employee dispatch, and restart-safe notification coverage.
 
 ### Task 3: Update doctrine and integrate
 
 **Files:**
-- Modify: `packages/jinn/template/CLAUDE.md`
+- Modify: `packages/hundredfold/template/CLAUDE.md`
 
 **Interfaces:**
 - Consumes: the existing Delegation doctrine section.
@@ -204,14 +204,14 @@ Expected: the full workspace suite passes.
 
 ```bash
 git commit -m "feat(delegation): surface skip-level work to managers"
-git -C ~/Projects/jinn merge --ff-only feat/manager-aware-routing
-git -C ~/Projects/jinn merge-base --is-ancestor <commit> main
+git -C ~/Projects/hundredfold merge --ff-only feat/manager-aware-routing
+git -C ~/Projects/hundredfold merge-base --is-ancestor <commit> main
 ```
 
 Expected: `main` points at the feature commit and the ancestry command exits 0.
 
 - [ ] **Step 4: Remove the worktree**
 
-Run: `git -C ~/Projects/jinn worktree remove /private/tmp/jinn-mgraware && git -C ~/Projects/jinn branch -d feat/manager-aware-routing`
+Run: `git -C ~/Projects/hundredfold worktree remove /private/tmp/hundredfold-mgraware && git -C ~/Projects/hundredfold branch -d feat/manager-aware-routing`
 
 Expected: the worktree path and temporary branch are gone while the commit remains on `main`.

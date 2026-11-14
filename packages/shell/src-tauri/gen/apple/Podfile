@@ -1,13 +1,13 @@
 # Uncomment the next line to define a global platform for your project
 
-target 'jinn-shell_iOS' do
+target 'hundredfold-shell_iOS' do
 platform :ios, '14.0'
-  # Pods for jinn-shell_iOS
+  # Pods for hundredfold-shell_iOS
 end
 
-target 'jinn-shell_macOS' do
+target 'hundredfold-shell_macOS' do
 platform :osx, '11.0'
-  # Pods for jinn-shell_macOS
+  # Pods for hundredfold-shell_macOS
 end
 
 # Delete the deployment target for iOS and macOS, causing it to be inherited from the Podfile

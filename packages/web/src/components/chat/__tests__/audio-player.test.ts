@@ -1,5 +1,5 @@
 /**
- * Jinn Talk — TalkAudioPlayer tests (turn-boundary re-arm + suspended-context resume).
+ * Hundredfold Talk — TalkAudioPlayer tests (turn-boundary re-arm + suspended-context resume).
  *
  * jsdom has no WebAudio, so we install a minimal fake AudioContext that records
  * scheduled buffer sources and resume() calls.

@@ -12,7 +12,7 @@
  * place to read, and one place to get wrong.
  */
 
-/** Structurally the gateway's `RealtimeUsage` (packages/jinn/src/shared/voice.ts).
+/** Structurally the gateway's `RealtimeUsage` (packages/hundredfold/src/shared/voice.ts).
  *  The web package has no import path into the gateway, so it is declared here,
  *  as `tool-spec.ts` does for `RealtimeTool`. */
 export interface TalkUsage {

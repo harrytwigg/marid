@@ -23,7 +23,7 @@ const harnessRoot = arg("harness-root");
 const mode = arg("mode");
 if (mode !== "run" && mode !== "server") throw new Error(`seed.mjs: --mode is run or server, not ${mode}`);
 
-// The instance home is a child of the temporary host home, the way jinn-sandbox.sh lays it out.
+// The instance home is a child of the temporary host home, the way hundredfold-sandbox.sh lays it out.
 if (path.dirname(sandboxHome) !== hostHome) throw new Error(`seed.mjs: ${sandboxHome} is not directly inside the temporary host home ${hostHome}`);
 
 /** own, x, y: the model the opencode employee runs on, and the two a chain hops through. */
@@ -38,7 +38,7 @@ export const LAYOUT = {
   defaultProfile: path.join(sandboxHome, ".claude-sandbox"),
   bins: {
     claude: path.join(harnessRoot, "scripts/fake-providers/fake-claude.mjs"),
-    opencode: path.join(harnessRoot, "packages/jinn/src/engines/__tests__/fixtures/fake-opencode.mjs"),
+    opencode: path.join(harnessRoot, "packages/hundredfold/src/engines/__tests__/fixtures/fake-opencode.mjs"),
   },
   // The opencode models the scenarios use: the session's own, and the two a chain hops through.
   // From the script (FAKE_PROVIDER_OPENCODE_MODELS), which also hands them to the fake `opencode models`.
@@ -62,7 +62,7 @@ function employee(name, extra) {
 }
 
 async function patchConfig() {
-  const dist = path.join(gatewayRepo, "packages/jinn/dist/src");
+  const dist = path.join(gatewayRepo, "packages/hundredfold/dist/src");
   const { patchConfigFile } = await import(pathToFileURL(path.join(dist, "shared/config-document.js")).href);
   const { opencodeModels, bins, profiles } = LAYOUT;
   patchConfigFile(path.join(sandboxHome, "config.yaml"), [

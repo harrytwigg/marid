@@ -4,7 +4,7 @@
 
 **Goal:** Prevent every disposable v0.25 upgrade-lab run and self-restart from targeting a live or foreign gateway process.
 
-**Architecture:** Persist the nonce-derived high loopback port into the disposable instance configuration immediately after v0.25 setup. Separate start and restart preflights: starts require an unoccupied configured port, while restarts require the configured port to be owned by the expected disposable PID whose `JINN_HOME` resolves to the lab home. All signaling remains behind the ownership assertion.
+**Architecture:** Persist the nonce-derived high loopback port into the disposable instance configuration immediately after v0.25 setup. Separate start and restart preflights: starts require an unoccupied configured port, while restarts require the configured port to be owned by the expected disposable PID whose `HUNDREDFOLD_HOME` resolves to the lab home. All signaling remains behind the ownership assertion.
 
 **Tech Stack:** Node.js ES modules, Node native test runner, loopback TCP inspection, YAML-preserving text update.
 
@@ -30,7 +30,7 @@
 
 - [ ] **Step 1: Write the failing foreign-owner regression**
 
-Add a test that supplies a listener PID whose reported `JINN_HOME` is outside the lab, invokes the restart handoff, and asserts both that it throws and that neither the restart callback nor signal callback runs.
+Add a test that supplies a listener PID whose reported `HUNDREDFOLD_HOME` is outside the lab, invokes the restart handoff, and asserts both that it throws and that neither the restart callback nor signal callback runs.
 
 - [ ] **Step 2: Run the focused test to verify RED**
 

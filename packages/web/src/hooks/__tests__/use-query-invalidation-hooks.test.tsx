@@ -4,7 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { useQueryInvalidation } from '../use-query-invalidation'
 import { queryKeys } from '@/lib/query-keys'
-import type { GatewayEvent, GatewayEventListener } from '@jinn/gateway-events'
+import type { GatewayEvent, GatewayEventListener } from '@hundredfold/gateway-events'
 
 let listener: ((event: string, payload: unknown) => void) | undefined
 

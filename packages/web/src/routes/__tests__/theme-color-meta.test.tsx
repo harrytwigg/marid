@@ -5,7 +5,7 @@ import { ThemeProvider } from "../providers"
 describe("the theme-color metas", () => {
   beforeEach(() => {
     vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} }))
-    localStorage.setItem("jinn-theme", "light")
+    localStorage.setItem("hundredfold-theme", "light")
     document.documentElement.style.setProperty("--bg", "#F6FAFE")
     document.head.innerHTML =
       '<meta name="theme-color" content="#111111" media="(prefers-color-scheme: light)">' +

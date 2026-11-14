@@ -7,7 +7,7 @@ export interface AuthState {
   authenticated: boolean
   canBootstrapLocal: boolean
   networkExposed: boolean
-  /** Instance name serving this page, so pairing hints can name `jinn -i <instance> pair`. */
+  /** Instance name serving this page, so pairing hints can name `hundredfold -i <instance> pair`. */
   instance?: string
   /** Gateway auth is on, so accounts can exist. Absent from an older gateway. */
   accountsEnabled?: boolean
@@ -95,7 +95,7 @@ export async function getAuthState(): Promise<AuthState> {
 }
 
 /** The instance name the gateway last reported, for the surfaces that have to
- *  name which Jinn they are on without waiting on a request. Null until the
+ *  name which Hundredfold they are on without waiting on a request. Null until the
  *  app's first auth-state read has landed. */
 export function lastKnownInstance(): string | null {
   return knownInstance

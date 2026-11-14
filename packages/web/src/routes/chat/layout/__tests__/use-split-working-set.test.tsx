@@ -136,7 +136,7 @@ describe('a new chat tab that leaves the layout', () => {
     const fresh = groupsOf(result.current.split.layout).flatMap((group) => group.tabs).find((id) => id.startsWith('new:'))!
     const key = Object.keys(window.sessionStorage).find((k) => k.endsWith(fresh))
     expect(key).toBeUndefined()
-    const scoped = `jinn-chat-draft:${window.location.origin}:${fresh}`
+    const scoped = `hundredfold-chat-draft:${window.location.origin}:${fresh}`
     window.sessionStorage.setItem(scoped, 'abandoned')
     act(() => result.current.split.close(fresh))
     expect(Object.keys(window.sessionStorage).some((k) => k.endsWith(fresh))).toBe(false)

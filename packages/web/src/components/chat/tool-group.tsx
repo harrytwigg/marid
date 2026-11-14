@@ -214,7 +214,7 @@ function ToolGroupPill({ count, running, expanded, onToggle, entering, arrival }
         {`${count} tool${count !== 1 ? 's' : ''}${running ? ' running…' : ''}`}
       </span>
       {running && (
-        <span className="w-1.5 h-1.5 rounded-full bg-[var(--system-blue)] animate-[jinn-pulse_1.4s_infinite]" />
+        <span className="w-1.5 h-1.5 rounded-full bg-[var(--system-blue)] animate-[hundredfold-pulse_1.4s_infinite]" />
       )}
       <ChevronDown size={14} className={`ml-0.5 shrink-0 text-[var(--text-quaternary)] transition-transform duration-150 ease-[var(--ease-smooth)] ${expanded ? 'rotate-180' : 'rotate-0'}`} />
     </button>

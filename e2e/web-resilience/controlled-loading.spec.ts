@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import fs from 'node:fs'
 
 test('controlled mobile loading and transcript interaction', async ({ browser, browserName }, testInfo) => {
-  test.skip(!process.env.JINN_PERF_SESSION || browserName !== 'chromium', 'Opt-in measurement against a fixed synthetic transcript')
+  test.skip(!process.env.HUNDREDFOLD_PERF_SESSION || browserName !== 'chromium', 'Opt-in measurement against a fixed synthetic transcript')
   test.setTimeout(180_000)
   const samples = []
   for (let sample = -1; sample < 3; sample++) {
@@ -29,7 +29,7 @@ test('controlled mobile loading and transcript interaction', async ({ browser, b
       const index = responseIds.get(requestId)
       if (index !== undefined) responses[index].bytes = encodedDataLength
     })
-    await page.goto(`/?session=${process.env.JINN_PERF_SESSION}`)
+    await page.goto(`/?session=${process.env.HUNDREDFOLD_PERF_SESSION}`)
     const composer = page.locator('#chat-textarea')
     await expect(composer).toBeEditable()
     await composer.fill('Unsent performance probe')
@@ -60,6 +60,6 @@ test('controlled mobile loading and transcript interaction', async ({ browser, b
     await context.close()
   }
   const output = { conditions: { samples: 3, cpuSlowdown: 4, latencyMs: 80, downloadBytesPerSecond: 1_250_000, uploadBytesPerSecond: 625_000, browserCache: 'disabled', serviceWorker: 'blocked', viewport: '390x844', server: 'built gateway with negotiated compression' }, samples }
-  if (process.env.JINN_PERF_OUTPUT) fs.writeFileSync(process.env.JINN_PERF_OUTPUT, JSON.stringify(output, null, 2))
+  if (process.env.HUNDREDFOLD_PERF_OUTPUT) fs.writeFileSync(process.env.HUNDREDFOLD_PERF_OUTPUT, JSON.stringify(output, null, 2))
   await testInfo.attach('controlled-loading', { body: JSON.stringify(output), contentType: 'application/json' })
 })

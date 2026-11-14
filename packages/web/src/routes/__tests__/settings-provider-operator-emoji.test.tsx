@@ -21,7 +21,7 @@ beforeEach(() => {
 
 describe("SettingsProvider operator emoji", () => {
   it("prefers the configured emoji over a stale localStorage value", async () => {
-    localStorage.setItem("jinn-settings", JSON.stringify({ operatorEmoji: "🐼" }))
+    localStorage.setItem("hundredfold-settings", JSON.stringify({ operatorEmoji: "🐼" }))
     useOnboarding.mockReturnValue({ data: { operatorEmoji: "🦊" } })
 
     render(
@@ -31,11 +31,11 @@ describe("SettingsProvider operator emoji", () => {
     )
 
     await waitFor(() => expect(screen.getByTestId("operator-emoji").textContent).toBe("🦊"))
-    expect(JSON.parse(localStorage.getItem("jinn-settings")!).operatorEmoji).toBe("🦊")
+    expect(JSON.parse(localStorage.getItem("hundredfold-settings")!).operatorEmoji).toBe("🦊")
   })
 
   it("clears a stale stored emoji when the backend reports none", async () => {
-    localStorage.setItem("jinn-settings", JSON.stringify({ operatorEmoji: "🐼" }))
+    localStorage.setItem("hundredfold-settings", JSON.stringify({ operatorEmoji: "🐼" }))
     useOnboarding.mockReturnValue({ data: { operatorEmoji: null, operatorName: "Operator" } })
 
     render(
@@ -45,11 +45,11 @@ describe("SettingsProvider operator emoji", () => {
     )
 
     await waitFor(() => expect(screen.getByTestId("operator-emoji").textContent).toBe("none"))
-    expect(JSON.parse(localStorage.getItem("jinn-settings")!).operatorEmoji).toBeNull()
+    expect(JSON.parse(localStorage.getItem("hundredfold-settings")!).operatorEmoji).toBeNull()
   })
 
   it("leaves the stored emoji alone until the onboarding query resolves", async () => {
-    localStorage.setItem("jinn-settings", JSON.stringify({ operatorEmoji: "🐼" }))
+    localStorage.setItem("hundredfold-settings", JSON.stringify({ operatorEmoji: "🐼" }))
     useOnboarding.mockReturnValue({ data: undefined })
 
     render(

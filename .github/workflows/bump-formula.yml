@@ -35,7 +35,7 @@ jobs:
           for i in {1..30}; do
             if curl --fail --silent --show-error --head --max-time 5 \
               -H 'Cache-Control: no-cache' \
-              "https://registry.npmjs.org/jinn-cli/-/jinn-cli-${VERSION}.tgz?release-check=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${i}" >/dev/null; then
+              "https://registry.npmjs.org/hundredfold/-/hundredfold-${VERSION}.tgz?release-check=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${i}" >/dev/null; then
               echo "Tarball available"
               exit 0
             fi
@@ -48,15 +48,15 @@ jobs:
       - name: Update formula
         shell: bash
         run: |
-          SHA=$(curl --fail --show-error --silent --location --max-time 60 "https://registry.npmjs.org/jinn-cli/-/jinn-cli-${VERSION}.tgz" | shasum -a 256 | cut -d' ' -f1)
-          sed -i "s|jinn-cli-.*\.tgz|jinn-cli-${VERSION}.tgz|" Formula/jinn.rb
-          sed -i "s|sha256 \".*\"|sha256 \"${SHA}\"|" Formula/jinn.rb
+          SHA=$(curl --fail --show-error --silent --location --max-time 60 "https://registry.npmjs.org/hundredfold/-/hundredfold-${VERSION}.tgz" | shasum -a 256 | cut -d' ' -f1)
+          sed -i "s|hundredfold-.*\.tgz|hundredfold-${VERSION}.tgz|" Formula/hundredfold.rb
+          sed -i "s|sha256 \".*\"|sha256 \"${SHA}\"|" Formula/hundredfold.rb
 
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/jinn.rb
+          git add Formula/hundredfold.rb
           git diff --cached --quiet && echo "No changes" && exit 0
           git commit -m "formula: bump to v${VERSION}"
           git push origin HEAD:main

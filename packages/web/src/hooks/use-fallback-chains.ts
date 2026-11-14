@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import type { FallbackChainSubject } from '@jinn/fallback-chain-wire'
+import type { FallbackChainSubject } from '@hundredfold/fallback-chain-wire'
 import { fetchFallbackChains } from '@/lib/api-fallback-chains'
 import { queryClient } from '@/lib/query-client'
 import { queryKeys } from '@/lib/query-keys'

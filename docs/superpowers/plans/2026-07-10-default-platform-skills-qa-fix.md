@@ -20,8 +20,8 @@
 ### Task 1: Lock the corrected platform contract
 
 **Files:**
-- Modify: `packages/jinn/src/shared/__tests__/template-company-doctrine.test.ts`
-- Test: `packages/jinn/src/shared/__tests__/template-company-doctrine.test.ts`
+- Modify: `packages/hundredfold/src/shared/__tests__/template-company-doctrine.test.ts`
+- Test: `packages/hundredfold/src/shared/__tests__/template-company-doctrine.test.ts`
 
 **Interfaces:**
 - Consumes: the three default `SKILL.md` playbooks.
@@ -33,14 +33,14 @@ Require `request_work_item_approval`, `decide_work_item_approval`, and `escalate
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run `pnpm --filter jinn-cli exec vitest run src/shared/__tests__/template-company-doctrine.test.ts` and confirm failure on missing approval-tool/attachment prose.
+Run `pnpm --filter hundredfold exec vitest run src/shared/__tests__/template-company-doctrine.test.ts` and confirm failure on missing approval-tool/attachment prose.
 
 ### Task 2: Correct the three playbooks
 
 **Files:**
-- Modify: `packages/jinn/template/skills/workflow/SKILL.md`
-- Modify: `packages/jinn/template/skills/todo-handling/SKILL.md`
-- Modify: `packages/jinn/template/skills/delegation/SKILL.md`
+- Modify: `packages/hundredfold/template/skills/workflow/SKILL.md`
+- Modify: `packages/hundredfold/template/skills/todo-handling/SKILL.md`
+- Modify: `packages/hundredfold/template/skills/delegation/SKILL.md`
 
 **Interfaces:**
 - Consumes: `approval-tools.ts`, approval authority and consequence code, workflow Todo mirror code, and delegation attachment validation.

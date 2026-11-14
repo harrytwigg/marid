@@ -21,8 +21,8 @@
 ### Task 1: Terminal Manager Session Selection
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/__tests__/manager-visibility.test.ts`
-- Modify: `packages/jinn/src/gateway/manager-visibility.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/manager-visibility.test.ts`
+- Modify: `packages/hundredfold/src/gateway/manager-visibility.ts`
 
 **Interfaces:**
 - Consumes: `Session.status`, `surfaceManagerVisibility(input, deps)`
@@ -34,7 +34,7 @@ Add table-driven cases where `findManagerSession` returns `idle`/`succeeded`, `i
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `pnpm --filter jinn-cli test -- packages/jinn/src/gateway/__tests__/manager-visibility.test.ts`
+Run: `pnpm --filter hundredfold test -- packages/hundredfold/src/gateway/__tests__/manager-visibility.test.ts`
 
 Expected: terminal-session cases fail because `surfaceManagerVisibility` currently accepts any injected session and the default finder only excludes `error`.
 
@@ -49,9 +49,9 @@ Run the same command and expect all manager-visibility tests to pass.
 ### Task 2: Durable Manager-Visibility Identity
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/__tests__/callbacks.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/callback-reliability.test.ts`
-- Modify: `packages/jinn/src/sessions/callbacks.ts`
+- Modify: `packages/hundredfold/src/sessions/__tests__/callbacks.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/callback-reliability.test.ts`
+- Modify: `packages/hundredfold/src/sessions/callbacks.ts`
 
 **Interfaces:**
 - Consumes: `claimCallbackDelivery(input)`, `_deliverClaimedCallback(deliveryId)`
@@ -63,7 +63,7 @@ Call `notifyManagerVisibility` repeatedly with identical details. Assert every c
 
 - [ ] **Step 2: Run the focused tests and verify RED**
 
-Run: `pnpm --filter jinn-cli test -- packages/jinn/src/sessions/__tests__/callbacks.test.ts packages/jinn/src/gateway/__tests__/callback-reliability.test.ts`
+Run: `pnpm --filter hundredfold test -- packages/hundredfold/src/sessions/__tests__/callbacks.test.ts packages/hundredfold/src/gateway/__tests__/callback-reliability.test.ts`
 
 Expected: manager visibility performs repeated raw posts without `callbackDeliveryId`, creating no stable outbox receipt.
 
@@ -78,9 +78,9 @@ Run the same callback test command and expect one durable acceptance and one del
 ### Task 3: Blank Completion and Rate-Limit Replay Guards
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/__tests__/callbacks.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/callback-reliability.test.ts`
-- Modify: `packages/jinn/src/sessions/callbacks.ts`
+- Modify: `packages/hundredfold/src/sessions/__tests__/callbacks.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/callback-reliability.test.ts`
+- Modify: `packages/hundredfold/src/sessions/callbacks.ts`
 
 **Interfaces:**
 - Consumes: `notifyParentSession(child, result)`, rate-limit callback kinds
@@ -117,7 +117,7 @@ Run manager visibility, delegations route, callback reliability, callback delive
 
 - [ ] **Step 2: Run repository verification**
 
-Run `pnpm typecheck`, the relevant `packages/jinn` test suite, and lint. Investigate any failure before claiming completion.
+Run `pnpm typecheck`, the relevant `packages/hundredfold` test suite, and lint. Investigate any failure before claiming completion.
 
 - [ ] **Step 3: Review diff and privacy boundary**
 

@@ -1,7 +1,7 @@
 import type { SplitHandle } from './layout/split-geometry'
 
 /** The desktop chat list's width: how wide, what it may be dragged to, and where it is kept. */
-export const SIDEBAR_WIDTH_STORAGE_KEY = 'jinn-chat-sidebar-width'
+export const SIDEBAR_WIDTH_STORAGE_KEY = 'hundredfold-chat-sidebar-width'
 export const DEFAULT_SIDEBAR_WIDTH = 280
 /** The narrowest the list may sit while open. The control row (view switch, new, search, select)
  * needs about 265px on one line; below that it wraps its actions to a second line rather than

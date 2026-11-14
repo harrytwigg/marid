@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react"
 import { useGateway } from "@/hooks/use-gateway"
-import type { GatewayEvent, TalkProactiveCuePayload } from "@jinn/gateway-events"
+import type { GatewayEvent, TalkProactiveCuePayload } from "@hundredfold/gateway-events"
 import { applyTalkUiEffect, type TalkUiEffect } from "./ui-effects"
 import { acknowledgeTalkProactiveCue, getTalkSession } from "./session-client"
 

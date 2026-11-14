@@ -9,13 +9,13 @@ import { fileURLToPath } from "node:url";
 
 import { rehearseRestore, verifyExternalBackup } from "../backup.mjs";
 
-const requireFromJinn = createRequire(new URL("../../../packages/jinn/package.json", import.meta.url));
-const Database = requireFromJinn("better-sqlite3");
+const requireFromHundredfold = createRequire(new URL("../../../packages/hundredfold/package.json", import.meta.url));
+const Database = requireFromHundredfold("better-sqlite3");
 
 function databaseFixture() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-prerelease-backup-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-prerelease-backup-"));
   const source = path.join(root, "source.db");
-  const external = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-prerelease-external-"));
+  const external = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-prerelease-external-"));
   const backup = path.join(external, "backup.db");
   const db = new Database(source);
   db.exec("CREATE TABLE evidence (id INTEGER PRIMARY KEY, value TEXT NOT NULL); INSERT INTO evidence VALUES (1, 'generic')");
@@ -67,8 +67,8 @@ test("refuses same-file, changed, WAL-bearing, and pre-existing restore targets"
 });
 
 test("the executable is dry-run-only, has no instance defaults, and emits deterministic digest evidence", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-prerelease-cli-"));
-  const external = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-prerelease-cli-external-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-prerelease-cli-"));
+  const external = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-prerelease-cli-external-"));
   try {
     const source = path.join(root, "source.db");
     const backup = path.join(external, "backup.db");

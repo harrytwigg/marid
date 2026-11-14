@@ -14,7 +14,7 @@ import { authFetch } from '@/lib/auth'
 import { gatewayTransport } from '@/lib/gateway-transport'
 import type { KVStore } from '@/lib/view-mode'
 
-/** Namespaced JSON persistence. Keys live under `jinn.plugin.<id>.`, so one
+/** Namespaced JSON persistence. Keys live under `hundredfold.plugin.<id>.`, so one
  *  plugin can neither read nor clobber another's. */
 export interface PluginStorage {
   get<T>(key: string, fallback: T): T
@@ -138,7 +138,7 @@ function subscribeToPluginEvents(
 }
 
 /** What a plugin's `client.js` default-exports. */
-export interface JinnPlugin {
+export interface HundredfoldPlugin {
   /** Stable slug. It becomes the `plugin:<id>` source and the id namespace. */
   id: string
   /** Human name. Checked for type when present; `/settings/plugins` labels a
@@ -153,7 +153,7 @@ function defaultStore(): KVStore | null {
 }
 
 function createPluginStorage(pluginId: string, store: KVStore | null): PluginStorage {
-  const scoped = (key: string) => `jinn.plugin.${pluginId}.${key}`
+  const scoped = (key: string) => `hundredfold.plugin.${pluginId}.${key}`
 
   return {
     get(key, fallback) {

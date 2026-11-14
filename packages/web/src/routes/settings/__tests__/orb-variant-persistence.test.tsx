@@ -39,13 +39,13 @@ describe("the persisted Talk orb variant setting", () => {
   })
 
   it("hydrates, changes, and reloads the selected variant", async () => {
-    localStorage.setItem("jinn-settings", JSON.stringify({ talkOrbVariant: "ring" }))
+    localStorage.setItem("hundredfold-settings", JSON.stringify({ talkOrbVariant: "ring" }))
     const first = mountProvider()
     const picker = await screen.findByRole("button", { name: "ring" })
 
     fireEvent.click(picker)
     await waitFor(() => expect(picker.textContent).toBe("pulse"))
-    expect(JSON.parse(localStorage.getItem("jinn-settings") ?? "{}").talkOrbVariant).toBe("pulse")
+    expect(JSON.parse(localStorage.getItem("hundredfold-settings") ?? "{}").talkOrbVariant).toBe("pulse")
 
     first.unmount()
     mountProvider()
@@ -53,7 +53,7 @@ describe("the persisted Talk orb variant setting", () => {
   })
 
   it("falls back to Mist when stored data names no shipped style", async () => {
-    localStorage.setItem("jinn-settings", JSON.stringify({ talkOrbVariant: "marble" }))
+    localStorage.setItem("hundredfold-settings", JSON.stringify({ talkOrbVariant: "marble" }))
 
     mountProvider()
 

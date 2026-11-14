@@ -27,7 +27,7 @@ export function PairingScreen({ authState, pairing, error, onPair, onSignIn }: P
   // instance it carries `-i <instance>`, so a multi-instance operator doesn't
   // pair the wrong one — the single most common cause of "invalid code".
   const instance = authState?.instance
-  const pairCommand = instance && instance !== "jinn" ? `jinn -i ${instance} pair` : "jinn pair"
+  const pairCommand = instance && instance !== "hundredfold" ? `hundredfold -i ${instance} pair` : "hundredfold pair"
   const visibleError = useMemo(() => {
     if (!error) return null
     if (/expired|invalid/i.test(error) && mode === "token") {
@@ -37,7 +37,7 @@ export function PairingScreen({ authState, pairing, error, onPair, onSignIn }: P
       ? `${error}. Codes only work on the instance that created them — create one on this instance with "${pairCommand}", then enter it within a few minutes.`
       : error
   }, [error, mode, pairCommand])
-  const errorId = visibleError ? "jinn-pairing-error" : undefined
+  const errorId = visibleError ? "hundredfold-pairing-error" : undefined
 
   function submit(e: FormEvent) {
     e.preventDefault()
@@ -90,11 +90,11 @@ export function PairingScreen({ authState, pairing, error, onPair, onSignIn }: P
               active={flow === "cli"}
               icon={<Terminal size={16} />}
               title={`Pair with ${PRODUCT_NAME} CLI`}
-              controls="jinn-pair-cli-flow"
+              controls="hundredfold-pair-cli-flow"
               onClick={() => toggleFlow("cli")}
             />
             {flow === "cli" && (
-              <div id="jinn-pair-cli-flow" className="animate-auth-reveal rounded-[var(--radius-md)] bg-[var(--fill-tertiary)] px-[var(--space-3)] py-[var(--space-3)] shadow-[inset_0_0_0_1px_var(--separator)] text-[length:var(--text-footnote)] leading-[var(--leading-relaxed)] text-[var(--text-secondary)]">
+              <div id="hundredfold-pair-cli-flow" className="animate-auth-reveal rounded-[var(--radius-md)] bg-[var(--fill-tertiary)] px-[var(--space-3)] py-[var(--space-3)] shadow-[inset_0_0_0_1px_var(--separator)] text-[length:var(--text-footnote)] leading-[var(--leading-relaxed)] text-[var(--text-secondary)]">
                 <ol className="flex flex-col gap-1.5 text-pretty">
                   <li>1. Run this on the computer where {PRODUCT_NAME} is running.</li>
                   <li>
@@ -109,11 +109,11 @@ export function PairingScreen({ authState, pairing, error, onPair, onSignIn }: P
               active={flow === "web"}
               icon={<Settings size={16} />}
               title="Pair from Web Settings"
-              controls="jinn-pair-web-flow"
+              controls="hundredfold-pair-web-flow"
               onClick={() => toggleFlow("web")}
             />
             {flow === "web" && (
-              <div id="jinn-pair-web-flow" className="animate-auth-reveal rounded-[var(--radius-md)] bg-[var(--fill-tertiary)] px-[var(--space-3)] py-[var(--space-3)] shadow-[inset_0_0_0_1px_var(--separator)] text-[length:var(--text-footnote)] leading-[var(--leading-relaxed)] text-[var(--text-secondary)]">
+              <div id="hundredfold-pair-web-flow" className="animate-auth-reveal rounded-[var(--radius-md)] bg-[var(--fill-tertiary)] px-[var(--space-3)] py-[var(--space-3)] shadow-[inset_0_0_0_1px_var(--separator)] text-[length:var(--text-footnote)] leading-[var(--leading-relaxed)] text-[var(--text-secondary)]">
                 <ol className="flex flex-col gap-1.5 text-pretty">
                   <li>1. Open the already-paired local dashboard on the computer running {PRODUCT_NAME}.</li>
                   <li>2. Go to Settings &gt; Pairing and press Create pairing code.</li>
@@ -128,13 +128,13 @@ export function PairingScreen({ authState, pairing, error, onPair, onSignIn }: P
         </div>
 
         <form onSubmit={submit} className="flex flex-col gap-[var(--space-3)] rounded-[var(--radius-lg)] bg-[var(--fill-quaternary)] p-[var(--space-4)]">
-          <label className="text-[length:var(--text-caption1)] font-[var(--weight-semibold)] text-[var(--text-tertiary)]" htmlFor="jinn-pairing-code">
+          <label className="text-[length:var(--text-caption1)] font-[var(--weight-semibold)] text-[var(--text-tertiary)]" htmlFor="hundredfold-pairing-code">
             {mode === "code" ? "Remote access code" : "Setup token"}
           </label>
           <div className="flex h-12 w-full items-center gap-2 rounded-[var(--radius-md)] bg-[var(--fill-tertiary)] px-3 shadow-[inset_0_0_0_1px_var(--separator)] transition-[box-shadow] duration-150 [transition-timing-function:var(--ease-smooth)] focus-within:shadow-[inset_0_0_0_1px_var(--accent),0_0_0_4px_var(--accent-fill)] sm:h-11">
             <KeyRound size={16} className="shrink-0 text-[var(--text-tertiary)]" />
             <input
-              id="jinn-pairing-code"
+              id="hundredfold-pairing-code"
               value={code}
               onChange={(e) => setCode(e.target.value)}
               type={mode === "token" ? "password" : "text"}

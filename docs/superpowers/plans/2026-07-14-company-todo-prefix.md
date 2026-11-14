@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give each Jinn company a stable three-letter Todo prefix derived from its company name, so `AC-MEDIA` creates `ACM-1`, `ACM-2`, and so on.
+**Goal:** Give each Hundredfold company a stable three-letter Todo prefix derived from its company name, so `AC-MEDIA` creates `ACM-1`, `ACM-2`, and so on.
 
 **Architecture:** Add dedicated `portal.companyName` and optional `portal.companyPrefix` settings rather than reusing the assistant-facing Portal Name. Derive the human-intuitive default from word initials or a single word, let an explicit canonical override win, and freeze the chosen prefix inside the Todo allocator on its first allocation. Todo parsing accepts the public `<AAA>-N` grammar, while the database allocator and insert guards ensure one instance cannot issue a second prefix after initialization.
 
@@ -12,7 +12,7 @@
 
 - Work directly on `main` and preserve the unrelated Chat Archive working-tree changes.
 - `portalName` continues to name the assistant/portal; `companyName` names the operator's company.
-- Normalize with Unicode NFKD, uppercase, and discard non-ASCII letters. Hyphens, dots, slashes, ampersands, and whitespace separate word-ish parts. Three or more parts use initials (`Build Sprint Labs` → `BSL`); one part uses its first three letters (`Jinn` → `JIN`); two parts fall back to the first word, with a short leading acronym completed by the next part (`Acme Corp` → `ACM`, `AC-MEDIA` → `ACM`). Reject names that cannot produce three letters.
+- Normalize with Unicode NFKD, uppercase, and discard non-ASCII letters. Hyphens, dots, slashes, ampersands, and whitespace separate word-ish parts. Three or more parts use initials (`Build Sprint Labs` → `BSL`); one part uses its first three letters (`Hundredfold` → `JIN`); two parts fall back to the first word, with a short leading acronym completed by the next part (`Acme Corp` → `ACM`, `AC-MEDIA` → `ACM`). Reject names that cannot produce three letters.
 - `portal.companyPrefix`, when present, wins over derivation and must match `^[A-Z]{3}$` exactly.
 - Before the first allocation, onboarding/settings show a concrete sequence such as `ACM-1, ACM-2, ...` and warn that the choice is permanent. Once frozen, settings show the allocator's actual prefix and do not offer a second one.
 - A company prefix is frozen by the first committed Todo allocation. Renaming the company never rewrites existing IDs and never changes the allocator prefix.
@@ -25,8 +25,8 @@
 ### Task 1: Define the public company-prefix grammar
 
 **Files:**
-- Modify: `packages/jinn/src/work-items/id.ts`
-- Test: `packages/jinn/src/work-items/__tests__/phase-a-identity.test.ts`
+- Modify: `packages/hundredfold/src/work-items/id.ts`
+- Test: `packages/hundredfold/src/work-items/__tests__/phase-a-identity.test.ts`
 - Modify: `packages/web/src/lib/todo-id.ts`
 - Test: `packages/web/src/routes/todos/__tests__/todo-public-state.test.ts`
 
@@ -36,15 +36,15 @@
 
 - [ ] **Step 1: Write failing backend and web tests**
 
-Test `AC-MEDIA → ACM`, `Build Sprint Labs → BSL`, `Acme Corp → ACM`, `Jinn → JIN`, separator variants, accented Latin normalization, override precedence/validation, fewer than three-letter refusal, canonical parsing, and malformed/lowercase/unsafe-integer rejection.
+Test `AC-MEDIA → ACM`, `Build Sprint Labs → BSL`, `Acme Corp → ACM`, `Hundredfold → JIN`, separator variants, accented Latin normalization, override precedence/validation, fewer than three-letter refusal, canonical parsing, and malformed/lowercase/unsafe-integer rejection.
 
 - [ ] **Step 2: Run the focused tests and verify RED**
 
 Run:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/work-items/__tests__/phase-a-identity.test.ts
-pnpm --filter @jinn/web exec vitest run src/routes/todos/__tests__/todo-public-state.test.ts
+pnpm --filter hundredfold exec vitest run src/work-items/__tests__/phase-a-identity.test.ts
+pnpm --filter @hundredfold/web exec vitest run src/routes/todos/__tests__/todo-public-state.test.ts
 ```
 
 Expected: failures because the implementation still hard-codes `JIN` and has no company-prefix derivation.
@@ -60,11 +60,11 @@ Expected: both focused files pass without warnings.
 ### Task 2: Freeze the prefix in the durable allocator
 
 **Files:**
-- Modify: `packages/jinn/src/work-items/migrate.ts`
-- Modify: `packages/jinn/src/work-items/store.ts`
-- Test: `packages/jinn/src/work-items/__tests__/identity-schema.test.ts`
-- Test: `packages/jinn/src/work-items/__tests__/migrate.test.ts`
-- Test: `packages/jinn/src/work-items/__tests__/store.test.ts`
+- Modify: `packages/hundredfold/src/work-items/migrate.ts`
+- Modify: `packages/hundredfold/src/work-items/store.ts`
+- Test: `packages/hundredfold/src/work-items/__tests__/identity-schema.test.ts`
+- Test: `packages/hundredfold/src/work-items/__tests__/migrate.test.ts`
+- Test: `packages/hundredfold/src/work-items/__tests__/store.test.ts`
 
 **Interfaces:**
 - Consumes: `resolveTodoIdPrefix(loadConfig().portal.companyName, loadConfig().portal.companyPrefix)` on the first allocation.
@@ -79,7 +79,7 @@ Cover first allocation `AC-MEDIA -> ACM-1`, continued allocation after a config 
 Run:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/work-items/__tests__/identity-schema.test.ts src/work-items/__tests__/migrate.test.ts src/work-items/__tests__/store.test.ts
+pnpm --filter hundredfold exec vitest run src/work-items/__tests__/identity-schema.test.ts src/work-items/__tests__/migrate.test.ts src/work-items/__tests__/store.test.ts
 ```
 
 Expected: failures because the allocator has no prefix column and still formats fixed `JIN-N` IDs.
@@ -95,15 +95,15 @@ Expected: all focused allocator/store tests pass.
 ### Task 3: Capture Company Name during setup and onboarding
 
 **Files:**
-- Modify: `packages/jinn/src/shared/types.ts`
-- Modify: `packages/jinn/src/cli/setup.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/shared/types.ts`
+- Modify: `packages/hundredfold/src/cli/setup.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
 - Modify: `packages/web/src/lib/api.ts`
 - Modify: `packages/web/src/lib/settings.ts`
 - Modify: `packages/web/src/routes/settings-provider.tsx`
 - Modify: `packages/web/src/components/onboarding-wizard.tsx`
 - Modify: `packages/web/src/routes/settings/page.tsx`
-- Test: `packages/jinn/src/gateway/__tests__/onboarding.test.ts`
+- Test: `packages/hundredfold/src/gateway/__tests__/onboarding.test.ts`
 - Test: `packages/web/src/components/__tests__/onboarding-wizard.test.tsx`
 
 **Interfaces:**
@@ -119,8 +119,8 @@ Require a valid derivation or explicit override during first-run completion, per
 Run:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/onboarding.test.ts
-pnpm --filter @jinn/web exec vitest run src/components/__tests__/onboarding-wizard.test.tsx
+pnpm --filter hundredfold exec vitest run src/gateway/__tests__/onboarding.test.ts
+pnpm --filter @hundredfold/web exec vitest run src/components/__tests__/onboarding-wizard.test.tsx
 ```
 
 Expected: failures because `companyName` is not accepted or rendered.
@@ -138,8 +138,8 @@ Expected: backend and web onboarding tests pass.
 **Files:**
 - Modify: `tools/prerelease-todo-converter/inventory.mjs`
 - Test: `tools/prerelease-todo-converter/__tests__/inventory.test.mjs`
-- Modify: `docs/superpowers/plans/2026-07-14-jinn-sole-todo-identifier.md`
-- Update affected JIN-specific comments/copy/tests under `packages/jinn/src/**` and `packages/web/src/**` only where they assert a fixed prefix.
+- Modify: `docs/superpowers/plans/2026-07-14-hundredfold-sole-todo-identifier.md`
+- Update affected JIN-specific comments/copy/tests under `packages/hundredfold/src/**` and `packages/web/src/**` only where they assert a fixed prefix.
 
 **Interfaces:**
 - Consumes: an explicit company name/prefix for offline dry-run mapping.
@@ -184,8 +184,8 @@ Run the Todo identity, store, API/MCP, Workflow Todo ingress, onboarding, Todo w
 - [ ] **Step 2: Run broad gates**
 
 ```bash
-pnpm --filter jinn-cli typecheck
-pnpm --filter @jinn/web typecheck
+pnpm --filter hundredfold typecheck
+pnpm --filter @hundredfold/web typecheck
 pnpm exec turbo build --force
 ```
 

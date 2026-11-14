@@ -8,9 +8,9 @@
 
 **Tech Stack:** React 18 + TypeScript (NO semicolons in packages/web), plain CSS files co-located per component, vitest, existing `motion.ts` spring (`useSpringValue`).
 
-**Repo/branch:** `<worktree>`, branch `talk-conversation-first`. Run web tests with `pnpm --filter @jinn/web test -- --run`, typecheck with `pnpm --filter @jinn/web exec tsc --noEmit`, build with `pnpm --filter @jinn/web build` (NEVER `--force`).
+**Repo/branch:** `<worktree>`, branch `talk-conversation-first`. Run web tests with `pnpm --filter @hundredfold/web test -- --run`, typecheck with `pnpm --filter @hundredfold/web exec tsc --noEmit`, build with `pnpm --filter @hundredfold/web build` (NEVER `--force`).
 
-**Hard rules:** Do not touch backend (`packages/jinn`) except nothing — this is presentation-only. Do not rename exported APIs used by tests. Repo is public: no real names/PII in code or commits. No `Co-Authored-By` lines in commits.
+**Hard rules:** Do not touch backend (`packages/hundredfold`) except nothing — this is presentation-only. Do not rename exported APIs used by tests. Repo is public: no real names/PII in code or commits. No `Co-Authored-By` lines in commits.
 
 ---
 
@@ -27,7 +27,7 @@ No unit tests (pure CSS); verification is typecheck + build + later tasks.
 
 ```css
 /**
- * Jinn Talk — design tokens (stage redesign).
+ * Hundredfold Talk — design tokens (stage redesign).
  *
  * Single source for z-index layering, spacing, and motion durations/easings on
  * the /talk surface. Components must reference these instead of literals so the
@@ -65,7 +65,7 @@ No unit tests (pure CSS); verification is typecheck + build + later tasks.
 
 ```css
 /**
- * Jinn Talk — stage layout (stage redesign).
+ * Hundredfold Talk — stage layout (stage redesign).
  *
  * The /talk page is ONE grid of flow rows. No region computes its own insets;
  * space is allocated by the grid, so banner/cards/input growth reflows the
@@ -228,7 +228,7 @@ import "./talk-layout.css"
 
 - [ ] **Step 4: Verify**
 
-Run: `pnpm --filter @jinn/web exec tsc --noEmit && pnpm --filter @jinn/web build`
+Run: `pnpm --filter @hundredfold/web exec tsc --noEmit && pnpm --filter @hundredfold/web build`
 Expected: both succeed.
 
 - [ ] **Step 5: Commit**
@@ -304,14 +304,14 @@ describe("orb sizing", () => {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `pnpm --filter @jinn/web test -- --run src/routes/talk/__tests__/stage.test.ts`
+Run: `pnpm --filter @hundredfold/web test -- --run src/routes/talk/__tests__/stage.test.ts`
 Expected: FAIL — module `../stage` not found.
 
 - [ ] **Step 3: Implement `stage.ts`**
 
 ```ts
 /**
- * Jinn Talk — stage state machine (stage redesign).
+ * Hundredfold Talk — stage state machine (stage redesign).
  *
  * One derived mode decides who owns the centre of the screen:
  *   hero       — nothing to show; the orb is the hero (idle/listening, empty).
@@ -382,7 +382,7 @@ export function useStageMode(input: StageInput): StageMode {
 
 - [ ] **Step 4: Run tests**
 
-Run: `pnpm --filter @jinn/web test -- --run src/routes/talk/__tests__/stage.test.ts`
+Run: `pnpm --filter @hundredfold/web test -- --run src/routes/talk/__tests__/stage.test.ts`
 Expected: PASS (all).
 
 - [ ] **Step 5: Commit**
@@ -568,7 +568,7 @@ return (
 
 - [ ] **Step 5: Typecheck + full web tests + build**
 
-Run: `pnpm --filter @jinn/web exec tsc --noEmit && pnpm --filter @jinn/web test -- --run && pnpm --filter @jinn/web build`
+Run: `pnpm --filter @hundredfold/web exec tsc --noEmit && pnpm --filter @hundredfold/web test -- --run && pnpm --filter @hundredfold/web build`
 Expected: all green. (`use-conversation` and other suites are pure-logic and unaffected.)
 
 - [ ] **Step 6: Commit**
@@ -601,7 +601,7 @@ git commit -m "feat(talk): grid stage layout — all regions become flow rows"
 
 ```tsx
 /**
- * Jinn Talk — OrbLayer (stage redesign).
+ * Hundredfold Talk — OrbLayer (stage redesign).
  *
  * ONE persistent orb that morphs between two measured anchors instead of
  * unmount/remount: the stage cell centre (hero) and the 56px dock anchor in the
@@ -737,7 +737,7 @@ And DELETE the `.talk-orb-shell`, `.talk-orb-shell--conversing` blocks and their
 
 - [ ] **Step 5: Typecheck + tests + build**
 
-Run: `pnpm --filter @jinn/web exec tsc --noEmit && pnpm --filter @jinn/web test -- --run && pnpm --filter @jinn/web build`
+Run: `pnpm --filter @hundredfold/web exec tsc --noEmit && pnpm --filter @hundredfold/web test -- --run && pnpm --filter @hundredfold/web build`
 Expected: green.
 
 - [ ] **Step 6: Commit**
@@ -764,11 +764,11 @@ git commit -m "feat(talk): persistent OrbLayer — spring morph between hero and
 
 (i.e., DELETE the `.cstream[data-state="idle"]` rule; the `content`-mode dim lives in `talk-layout.css` keyed on `data-stage`.)
 
-- [ ] **Step 2: Manual sanity via dev server (optional)** — `pnpm --filter @jinn/web dev`, open /talk, confirm: empty surface → big centered orb; after a row exists the orb docks top; a pinned approval dims the stream and rings the card.
+- [ ] **Step 2: Manual sanity via dev server (optional)** — `pnpm --filter @hundredfold/web dev`, open /talk, confirm: empty surface → big centered orb; after a row exists the orb docks top; a pinned approval dims the stream and rings the card.
 
 - [ ] **Step 3: Tests + build**
 
-Run: `pnpm --filter @jinn/web test -- --run && pnpm --filter @jinn/web build`
+Run: `pnpm --filter @hundredfold/web test -- --run && pnpm --filter @hundredfold/web build`
 Expected: green.
 
 - [ ] **Step 4: Commit**
@@ -794,8 +794,8 @@ git commit -m "feat(talk): content-stage focus — card focal ring, transcript d
 
 - [ ] **Step 4: Full gates**
 
-Run: `pnpm --filter @jinn/web exec tsc --noEmit && pnpm --filter @jinn/web test -- --run && pnpm --filter @jinn/web build && pnpm --filter jinn-cli test -- --run`
-Expected: all green (jinn-cli untouched; `messages-partial.test.ts` is a known pre-existing flake — rerun isolated if it trips).
+Run: `pnpm --filter @hundredfold/web exec tsc --noEmit && pnpm --filter @hundredfold/web test -- --run && pnpm --filter @hundredfold/web build && pnpm --filter hundredfold test -- --run`
+Expected: all green (hundredfold untouched; `messages-partial.test.ts` is a known pre-existing flake — rerun isolated if it trips).
 
 - [ ] **Step 5: Commit**
 
@@ -808,4 +808,4 @@ git commit -m "chore(talk): stage redesign cleanup — dead rules, reduced-motio
 
 ### Task 7: Browser verification on an isolated gateway + screenshots
 
-Not a code task — executed by the controller (Wave 4). Recipe: isolated `JINN_HOME` (mktemp) + fresh port (7880) + seeded mock sessions, Playwright in the isolated temp dir, scenarios: (1) idle hero orb, (2) first turn — orb docks on thinking BEFORE any text, (3) conversation karaoke with docked orb, (4) delegation chips + WorkDock rail, (5) pinned approval → content stage (dim + ring), (6) type-to-talk open (grid reflow, no overlap), (7) attach banner row, (8) light theme, (9) 390×844 mobile viewport (rail overlay, no collisions). Capture screenshots, attach to chat session, verify zero console errors.
+Not a code task — executed by the controller (Wave 4). Recipe: isolated `HUNDREDFOLD_HOME` (mktemp) + fresh port (7880) + seeded mock sessions, Playwright in the isolated temp dir, scenarios: (1) idle hero orb, (2) first turn — orb docks on thinking BEFORE any text, (3) conversation karaoke with docked orb, (4) delegation chips + WorkDock rail, (5) pinned approval → content stage (dim + ring), (6) type-to-talk open (grid reflow, no overlap), (7) attach banner row, (8) light theme, (9) 390×844 mobile viewport (rail overlay, no collisions). Capture screenshots, attach to chat session, verify zero console errors.

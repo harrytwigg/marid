@@ -48,7 +48,7 @@ function Activity({ data }: { data: SubagentTranscriptResponse | undefined }) {
     <span data-testid="subagent-activity" data-live={live} className="flex shrink-0 items-center gap-1.5 text-[length:var(--text-caption2)] text-[var(--text-tertiary)]">
       <span
         aria-hidden="true"
-        className={live ? 'h-1.5 w-1.5 rounded-full bg-[var(--system-orange)] animate-[jinn-pulse_1.4s_infinite] motion-reduce:animate-none' : 'h-1.5 w-1.5 rounded-full bg-[var(--text-tertiary)]'}
+        className={live ? 'h-1.5 w-1.5 rounded-full bg-[var(--system-orange)] animate-[hundredfold-pulse_1.4s_infinite] motion-reduce:animate-none' : 'h-1.5 w-1.5 rounded-full bg-[var(--text-tertiary)]'}
       />
       {live ? 'Working' : data.entries.at(-1)?.kind === 'text' ? 'Finished' : `Quiet for ${formatElapsed(quiet)}`}
     </span>

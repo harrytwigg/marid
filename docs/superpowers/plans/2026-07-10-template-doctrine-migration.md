@@ -4,13 +4,13 @@
 
 **Goal:** Make the shipped operating manual fully MCP/Todo/Workflow/Trigger-first and make the 0.26.0 autonomy migration reachable and accurate without overwriting a customized live instance.
 
-**Architecture:** Keep the canonical fresh-install doctrine in `template/CLAUDE.md`; setup continues to expose the same content to Codex through the `AGENTS.md` symlink/copy path. Keep version-range migration mechanics unchanged, but align `jinn-cli`'s package version with the already-staged 0.26.0 migration so `(instance, package]` scanning reaches it. Strengthen release-facing tests against real template and package files, and place the operator-specific proposed reconciliation outside the public repository.
+**Architecture:** Keep the canonical fresh-install doctrine in `template/CLAUDE.md`; setup continues to expose the same content to Codex through the `AGENTS.md` symlink/copy path. Keep version-range migration mechanics unchanged, but align `hundredfold`'s package version with the already-staged 0.26.0 migration so `(instance, package]` scanning reaches it. Strengthen release-facing tests against real template and package files, and place the operator-specific proposed reconciliation outside the public repository.
 
 **Tech Stack:** TypeScript, Vitest, Markdown templates, pnpm, Node.js 24.13.0
 
 ## Global Constraints
 
-- Never write the live `~/.jinn/CLAUDE.md` or its `AGENTS.md` alias.
+- Never write the live `~/.hundredfold/CLAUDE.md` or its `AGENTS.md` alias.
 - Public repository content must stay generic and contain no personal names, projects, credentials, Slack IDs, emails, or absolute user-home paths.
 - Use MCP as the primary company-state surface; Todos are the live ledger; Workflows are reusable HOW; Triggers wake Workflows.
 - Remove stale board-first, raw-HTTP-first, and unimplemented service-routing claims.
@@ -21,8 +21,8 @@
 ### Task 1: Lock current template doctrine in tests
 
 **Files:**
-- Modify: `packages/jinn/src/shared/__tests__/template-company-doctrine.test.ts`
-- Modify: `packages/jinn/template/CLAUDE.md`
+- Modify: `packages/hundredfold/src/shared/__tests__/template-company-doctrine.test.ts`
+- Modify: `packages/hundredfold/template/CLAUDE.md`
 
 **Interfaces:**
 - Consumes: the canonical shipped Markdown template.
@@ -34,7 +34,7 @@ Add expectations that `CLAUDE.md` contains a dedicated `### Triggers` section wi
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `pnpm --filter jinn-cli test -- src/shared/__tests__/template-company-doctrine.test.ts`
+Run: `pnpm --filter hundredfold test -- src/shared/__tests__/template-company-doctrine.test.ts`
 
 Expected: FAIL because the dedicated Trigger doctrine is absent and stale service-routing claims remain.
 
@@ -55,9 +55,9 @@ Run the same focused Vitest command. Expected: PASS.
 ### Task 2: Make the 0.26.0 migration reachable and complete
 
 **Files:**
-- Modify: `packages/jinn/src/cli/__tests__/migrate-prompt.test.ts`
-- Modify: `packages/jinn/package.json`
-- Modify: `packages/jinn/template/migrations/0.26.0/MIGRATION.md`
+- Modify: `packages/hundredfold/src/cli/__tests__/migrate-prompt.test.ts`
+- Modify: `packages/hundredfold/package.json`
+- Modify: `packages/hundredfold/template/migrations/0.26.0/MIGRATION.md`
 
 **Interfaces:**
 - Consumes: `scanMigrationPrompts()`'s existing `(fromVersion, packageVersion]` contract and the real package version.
@@ -65,17 +65,17 @@ Run the same focused Vitest command. Expected: PASS.
 
 - [ ] **Step 1: Write failing real-package reachability/composition tests**
 
-Read `packages/jinn/package.json`, scan the real template migrations from `0.25.0` to that version, and assert that `0.26.0` is reachable rather than future. Compose it and assert the prompt covers MCP, Todos, Workflows, Triggers, manager-visible skip-level delegation, board/raw-HTTP replacement, preservation of custom content, CLAUDE/AGENTS consistency, and the correct 0.26.0 marker.
+Read `packages/hundredfold/package.json`, scan the real template migrations from `0.25.0` to that version, and assert that `0.26.0` is reachable rather than future. Compose it and assert the prompt covers MCP, Todos, Workflows, Triggers, manager-visible skip-level delegation, board/raw-HTTP replacement, preservation of custom content, CLAUDE/AGENTS consistency, and the correct 0.26.0 marker.
 
 - [ ] **Step 2: Run the focused migration test and verify RED**
 
-Run: `pnpm --filter jinn-cli test -- src/cli/__tests__/migrate-prompt.test.ts`
+Run: `pnpm --filter hundredfold test -- src/cli/__tests__/migrate-prompt.test.ts`
 
 Expected: FAIL because package `0.25.0` cannot reach migration `0.26.0` and the prompt lacks some reconciliation clauses.
 
 - [ ] **Step 3: Align the package and migration**
 
-Set `packages/jinn/package.json` to `0.26.0`. Update `MIGRATION.md` so its exact release marker is no longer conditional; explicitly replace board/raw-HTTP-first doctrine, add Trigger and manager-visible skip-level wording, preserve local customizations, handle canonical/symlinked AGENTS safely, and remove obsolete service-menu claims. Reference shipped source paths only where the prompt provides a resolvable location.
+Set `packages/hundredfold/package.json` to `0.26.0`. Update `MIGRATION.md` so its exact release marker is no longer conditional; explicitly replace board/raw-HTTP-first doctrine, add Trigger and manager-visible skip-level wording, preserve local customizations, handle canonical/symlinked AGENTS safely, and remove obsolete service-menu claims. Reference shipped source paths only where the prompt provides a resolvable location.
 
 - [ ] **Step 4: Run the focused migration test and verify GREEN**
 
@@ -84,10 +84,10 @@ Run the same focused Vitest command. Expected: PASS.
 ### Task 3: Produce the operator reconciliation artifact
 
 **Files:**
-- Create outside repo: `~/.jinn-audits/prod-claude-md-reconciliation.md`
+- Create outside repo: `~/.hundredfold-audits/prod-claude-md-reconciliation.md`
 
 **Interfaces:**
-- Consumes: read-only live `~/.jinn/CLAUDE.md` line anchors and the current shipped template doctrine.
+- Consumes: read-only live `~/.hundredfold/CLAUDE.md` line anchors and the current shipped template doctrine.
 - Produces: a reviewable, manually applicable replacement plan that preserves all custom/operator sections.
 
 - [ ] **Step 1: Write exact replacements**

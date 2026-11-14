@@ -21,11 +21,11 @@ describe('resolveDeepLink', () => {
   })
 
   it('maps ?employee=<name> to an employee deep-link', () => {
-    expect(link('employee=jinn-dev')).toEqual({ kind: 'employee', name: 'jinn-dev' })
+    expect(link('employee=hundredfold-dev')).toEqual({ kind: 'employee', name: 'hundredfold-dev' })
   })
 
   it('gives session precedence when both params are present', () => {
-    expect(link('session=abc&employee=jinn-dev')).toEqual({ kind: 'session', id: 'abc' })
+    expect(link('session=abc&employee=hundredfold-dev')).toEqual({ kind: 'session', id: 'abc' })
   })
 
   it('returns null when neither param is present', () => {
@@ -108,7 +108,7 @@ describe('initialMobileView', () => {
     expect(initialMobileView('')).toBe('sidebar')
     expect(initialMobileView('?session=')).toBe('sidebar')
     expect(initialMobileView('?session=%20%20')).toBe('sidebar')
-    expect(initialMobileView('?employee=jinn-dev')).toBe('sidebar')
+    expect(initialMobileView('?employee=hundredfold-dev')).toBe('sidebar')
   })
 })
 
@@ -137,8 +137,8 @@ describe('parseThreadOrigin', () => {
 
 describe('threadOriginLabel', () => {
   it('display-cases an employee slug', () => {
-    expect(threadOriginLabel('jinn-dev', 'Jinn')).toBe('Jinn Dev')
-    expect(threadOriginLabel('content_lead', 'Jinn')).toBe('Content Lead')
+    expect(threadOriginLabel('hundredfold-dev', 'Hundredfold')).toBe('Hundredfold Dev')
+    expect(threadOriginLabel('content_lead', 'Hundredfold')).toBe('Content Lead')
   })
 
   it('falls back to the portal name for direct (COO) sessions', () => {

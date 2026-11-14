@@ -7,7 +7,7 @@ const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../")
 const routesRoot = join(webRoot, "src/routes")
 const shellRoot = join(webRoot, "src/components/shell")
 
-const HATCH = /\/\/\s*jinn-shell:\s*ok\b[ \t]+\S/
+const HATCH = /\/\/\s*hundredfold-shell:\s*ok\b[ \t]+\S/
 const LARGE_TITLE = /--text-large-title/
 const ACCENT_BUTTON = /bg-\[var\(--accent\)\]/
 const ACCENT_CONTRAST = /text-\[var\(--accent-contrast\)\]/
@@ -160,20 +160,20 @@ export function sheetHits(source: string, relPath: string): string[] {
   return found
 }
 
-describe("jinn shell contract", () => {
+describe("hundredfold shell contract", () => {
   it("rule 1 goes red on a hand-rolled large title and green with a reasoned hatch", () => {
     const violation = `<h1 className="md:text-[length:var(--text-large-title)]">Title</h1>`
     expect(largeTitleViolations(violation, "src/routes/fake.tsx")).toEqual([
       "src/routes/fake.tsx:1 --text-large-title",
     ])
-    const hatched = `<h1 className="md:text-[length:var(--text-large-title)]">Title</h1> // jinn-shell: ok fixture`
+    const hatched = `<h1 className="md:text-[length:var(--text-large-title)]">Title</h1> // hundredfold-shell: ok fixture`
     expect(largeTitleViolations(hatched, "src/routes/fake.tsx")).toEqual([])
   })
 
   it("rule 2 goes red on a hand-rolled page-level accent button and green with a reasoned hatch", () => {
     const violation = `className="rounded-full bg-[var(--accent)] text-[var(--accent-contrast)]"`
     expect(accentButtonViolations(violation, "src/routes/fake.tsx")).toHaveLength(1)
-    const hatched = `className="rounded-full bg-[var(--accent)] text-[var(--accent-contrast)]" // jinn-shell: ok dialog submit`
+    const hatched = `className="rounded-full bg-[var(--accent)] text-[var(--accent-contrast)]" // hundredfold-shell: ok dialog submit`
     expect(accentButtonViolations(hatched, "src/routes/fake.tsx")).toEqual([])
   })
 
@@ -190,7 +190,7 @@ describe("jinn shell contract", () => {
       'src/routes/fake.tsx:3 "rounded-full bg-[var(--accent)]",',
     ])
     // A hatch answers for the span it sits in, so it goes on the offending line.
-    const hatched = wrapped.replace('bg-[var(--accent)]",', 'bg-[var(--accent)]", // jinn-shell: ok fixture')
+    const hatched = wrapped.replace('bg-[var(--accent)]",', 'bg-[var(--accent)]", // hundredfold-shell: ok fixture')
     expect(accentButtonViolations(hatched, "src/routes/fake.tsx")).toEqual([])
   })
 
@@ -210,7 +210,7 @@ describe("jinn shell contract", () => {
   })
 
   it("rule 3 lets one hatch answer for one of two sheets sharing a line, not for both", () => {
-    const source = `<div className="animate-sheet-in" /><aside className="rounded-t-[18px]" /> // jinn-shell: ok the enumerated picker`
+    const source = `<div className="animate-sheet-in" /><aside className="rounded-t-[18px]" /> // hundredfold-shell: ok the enumerated picker`
     expect(sheetHits(source, "src/routes/new-sheet.tsx")).toEqual(["src/routes/new-sheet.tsx"])
   })
 
@@ -228,7 +228,7 @@ describe("jinn shell contract", () => {
 
   it("rule 3 goes red on a second, unhatched sheet in a file that already hatched one", () => {
     const source = [
-      'const known = "animate-sheet-in" // jinn-shell: ok the enumerated picker',
+      'const known = "animate-sheet-in" // hundredfold-shell: ok the enumerated picker',
       'const fresh = "rounded-t-[18px]"',
     ].join("\n")
     expect(sheetHits(source, "src/routes/new-sheet.tsx")).toEqual(["src/routes/new-sheet.tsx"])

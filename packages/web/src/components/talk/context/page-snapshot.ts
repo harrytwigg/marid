@@ -1,7 +1,7 @@
 /**
  * Where the operator is, read straight off the URL.
  *
- * Almost every Jinn surface already keeps "what you are looking at" in the
+ * Almost every Hundredfold surface already keeps "what you are looking at" in the
  * location — the board and its filters, the open Todo, the
  * selected chat session — so the orb can be told without asking the page
  * anything. This is `tools/nav-paths.ts` in reverse, and it holds to the same

@@ -3,7 +3,7 @@ import type { GatewayContextValue } from "@/hooks/use-gateway"
 
 // Compile lock for the browser-consumer side of the gateway protocol. If the
 // subscription API is widened back to string/unknown, these directives become
-// unused and `pnpm --filter @jinn/web typecheck` fails.
+// unused and `pnpm --filter @hundredfold/web typecheck` fails.
 type SubscribeListener = Parameters<GatewayContextValue["subscribe"]>[0]
 
 const consumer: SubscribeListener = (frame) => {

@@ -23,7 +23,7 @@ A remote employee is a full employee, not a degraded one:
 
 | | Where it runs |
 |---|---|
-| Todos, Notes, work items, delegation, knowledge reads | The gateway, via the built-in `jinn` MCP server over the tunnel |
+| Todos, Notes, work items, delegation, knowledge reads | The gateway, via the built-in `hundredfold` MCP server over the tunnel |
 | Skills, `docs/`, `knowledge/`, `org/`, `secrets/` | The gateway, via the mounted instance home |
 | Hooks (turn completion, tool events, safety prompts) | Delivered to the gateway over the reverse tunnel |
 | The dashboard's live terminal view | Attached to the remote PTY (`claude`; Pi has no terminal view anywhere) |
@@ -43,7 +43,7 @@ locally.
    runs Pi employees needs no Claude Code, and vice versa.
    - `claude`: **Claude Code**, installed and signed in on the same plan the
      gateway uses. If the host uses a profile manager, see *Choosing a Claude
-     Code profile* below — do not point Jinn at the wrapper script.
+     Code profile* below — do not point Hundredfold at the wrapper script.
    - `pi`: **the Pi CLI**, with its providers configured in that host's
      `~/.pi/agent/models.json`. See *Running Pi remotely* below.
    - `opencode`: **the opencode CLI**, signed in there with
@@ -52,14 +52,14 @@ locally.
      See *Running Muse Code remotely* below.
 2. **Node.js**. Note the PATH caveat below — this is the single most likely
    thing to bite you.
-3. **`jinn-cli` at the gateway's exact version**, installed globally:
-   `npm install -g jinn-cli@<version>`. It is never started as a daemon there —
+3. **`hundredfold` at the gateway's exact version**, installed globally:
+   `npm install -g hundredfold@<version>`. It is never started as a daemon there —
    it supplies the MCP server entrypoints, which are absolute paths that must
    exist on that machine. A version mismatch is refused at spawn with the
    command that fixes it.
 4. **The gateway's instance home, sshfs-mounted.** For example:
    ```
-   sshfs gateway-host:/home/<gateway-user>/.jinn /mnt/jinn-home -o reconnect,ServerAliveInterval=15
+   sshfs gateway-host:/home/<gateway-user>/.hundredfold /mnt/hundredfold-home -o reconnect,ServerAliveInterval=15
    ```
    Mount it from `/etc/fstab` or a systemd automount so it survives a reboot,
    and set `remote.remountCommand` so the gateway can re-establish it after a
@@ -76,25 +76,25 @@ ssh build-box                        # ...but node works fine once logged in
 ```
 
 This matters twice over. The obvious half is that the preflight cannot find
-`node` or `jinn`. The dangerous half is that Claude Code invokes **every hook**
+`node` or `hundredfold`. The dangerous half is that Claude Code invokes **every hook**
 as bare `node`, so without a resolvable `node` no hook could start — no `Stop`
 would ever arrive and the turn would hang forever with nothing reported.
 
-Jinn resolves nvm's layout directly rather than sourcing `nvm.sh` (which is
+Hundredfold resolves nvm's layout directly rather than sourcing `nvm.sh` (which is
 bash-only, and `/bin/sh` is `dash` on Debian-family systems including Raspberry
-Pi OS), honouring nvm's `default` alias — a global `jinn-cli` lives under one
-version's tree, so taking the newest version instead would report jinn missing
+Pi OS), honouring nvm's `default` alias — a global `hundredfold` lives under one
+version's tree, so taking the newest version instead would report hundredfold missing
 on a host where it is installed perfectly well. The resolved directory is then
 prepended to the session's PATH so the hook relay runs.
 
-If your host uses something Jinn cannot resolve, the fix is one symlink onto the
+If your host uses something Hundredfold cannot resolve, the fix is one symlink onto the
 default PATH:
 
 ```bash
 ln -s "$(command -v node)" ~/.local/bin/node
 ```
 
-Verify with `ssh <host> 'command -v node jinn'`, plus `claude`, `pi`,
+Verify with `ssh <host> 'command -v node hundredfold'`, plus `claude`, `pi`,
 `opencode` or `muse` for the engine that employee runs — each must print. `pi` needs this
 as much as Claude Code does: it is an npm-installed CLI, so its shebang resolves
 `node` through PATH, and a version-managed host gives a non-interactive ssh
@@ -102,7 +102,7 @@ none.
 
 5. **Key-only SSH from the gateway.** Sessions run with `BatchMode=yes`, so a
    passphrase-locked key with no agent will simply fail. The host key must
-   already be in the gateway's `known_hosts` — Jinn will not accept a new host
+   already be in the gateway's `known_hosts` — Hundredfold will not accept a new host
    key on your behalf.
 
 ## Configuration
@@ -114,12 +114,12 @@ remote:
   # Every remoteCwd must resolve under this prefix on the remote host.
   root: /srv/agents
   # Where the gateway's own instance home is sshfs-mounted over there.
-  mount: /mnt/jinn-home
+  mount: /mnt/hundredfold-home
   # Optional. Bring a sleeping host up. wakeCommand wins over wakeMac.
   wakeMac: "aa:bb:cc:dd:ee:ff"
   # wakeCommand: "smartplug on workstation"
   # Run on the remote once it is reachable, to bring the mount back after a boot.
-  remountCommand: "systemctl --user start jinn-home.mount"
+  remountCommand: "systemctl --user start hundredfold-home.mount"
   # Which Claude Code profile remote sessions run as. Omit for the remote
   # user's default. An employee's remoteClaudeConfigDir overrides it.
   claudeConfigDir: /home/<user>/.claude-profiles/personal
@@ -145,7 +145,7 @@ rank: senior
 engine: claude
 model: opus
 remoteHost: build-box
-remoteUser: jinn
+remoteUser: hundredfold
 remoteCwd: /srv/agents/main
 persona: |
   You are Builder. You work on the main repository checked out at your
@@ -190,11 +190,11 @@ rate-limit retry and the dashboard terminal. A local employee names its profile
 with `claudeConfigDir` instead (see the shipped `docs/org.md`, "Claude
 profiles"). The two fields cannot be combined on one employee.
 
-**Do not point Jinn at a profile-manager wrapper instead.** Those wrappers set
+**Do not point Hundredfold at a profile-manager wrapper instead.** Those wrappers set
 `CLAUDE_CONFIG_DIR` and then `unset` every `CLAUDE_*` and `ANTHROPIC_*` variable
 before exec. That strips the three a session depends on — and losing
 `CLAUDE_CODE_RESUME_TOKEN_THRESHOLD` lets the "resume from summary?" picker
-appear in front of a PTY with nobody at the keyboard, which hangs the turn. Jinn
+appear in front of a PTY with nobody at the keyboard, which hangs the turn. Hundredfold
 sets the variable itself and runs the plain binary, getting the profile without
 the collateral damage.
 
@@ -242,7 +242,7 @@ When no profile is configured, `CLAUDE_CONFIG_DIR` is actively *unset* for the
 session, so a stray value in the remote environment cannot silently choose the
 credentials and trust state a session runs with.
 
-`jinn remote status` prints the resolved profile per employee. None of this
+`hundredfold remote status` prints the resolved profile per employee. None of this
 applies to a Pi employee: Pi has no profile of its own to be signed out of, so
 the profile checks are skipped for it rather than refusing a host over a Claude
 Code install it never touches.
@@ -284,7 +284,7 @@ department: engineering
 engine: pi
 model: ollama/gemma4:12b   # the provider/id the REMOTE host serves
 remoteHost: build-box
-remoteUser: jinn
+remoteUser: hundredfold
 remoteCwd: /srv/agents/main
 ```
 
@@ -306,9 +306,9 @@ session, all of them consequences of Pi being a batch engine rather than a TUI:
   and it has no first-run dialog to pre-empt. The reverse tunnel is still opened,
   because the company toolset needs it (below).
 - **The company toolset arrives as a generated extension, not an
-  `--mcp-config`.** Pi loads the built-in `jinn` server as a module running
+  `--mcp-config`.** Pi loads the built-in `hundredfold` server as a module running
   in-process, and that module's imports are absolute paths. The remote copy is
-  regenerated against the remote install's own `jinn-cli` — which is why the
+  regenerated against the remote install's own `hundredfold` — which is why the
   version match is enforced there too — and reaches the gateway over the same
   reverse tunnel. The bearer *and* this session's capability are staged into a
   0600 file the remote command sources, never put on the command line, which is
@@ -337,7 +337,7 @@ department: engineering
 engine: opencode
 model: anthropic/claude-sonnet-5   # opencode's provider/model, as that host resolves it
 remoteHost: build-box
-remoteUser: jinn
+remoteUser: hundredfold
 remoteCwd: /srv/agents/main
 ```
 
@@ -352,7 +352,7 @@ Two things are staged, and one deliberately is not:
   session's resolved server set is re-pointed at the remote install exactly as
   Claude's is and written as opencode's own `mcp` block. Mode 0600, because the
   projected `environment` carries this session's capability. The bearer still
-  comes from `<JINN_HOME>/gateway.json` over the reverse tunnel.
+  comes from `<HUNDREDFOLD_HOME>/gateway.json` over the reverse tunnel.
 - **`OPENCODE_DISABLE_AUTOUPDATE=1`**, so a self-upgrade between two turns of one
   session cannot swap the binary under a conversation opencode is still holding.
 - **Nothing relocates opencode's data directory.** There is no opencode
@@ -381,7 +381,7 @@ department: engineering
 engine: musecode
 model: muse-spark-1.3
 remoteHost: build-box
-remoteUser: jinn
+remoteUser: hundredfold
 remoteCwd: /srv/agents/main
 ```
 
@@ -395,9 +395,9 @@ What is staged, and what is not:
 - **The company toolset is not a file.** Muse takes its MCP servers per session
   in `session/start` and `session/resume`, so the session's resolved set is
   re-pointed at the remote install and the reverse tunnel exactly as Claude's
-  is, and then sent over the ssh channel's stdin. The capability in the jinn
+  is, and then sent over the ssh channel's stdin. The capability in the hundredfold
   server's environment is never written to that host's disk or command line.
-  The bearer comes from `<JINN_HOME>/gateway.json`, as for every engine.
+  The bearer comes from `<HUNDREDFOLD_HOME>/gateway.json`, as for every engine.
 - **Workspace trust needs nothing staged.** Every host is started with
   `--trust-workspace`, which trusts the working directory for that run only, so
   no first-run question can block an unattended turn and nothing is saved in
@@ -458,7 +458,7 @@ client then closes on the gateway's own signal the kill runs once more; and a
 client that drops on its own (ssh exit 255, a network blip) has the remote
 agent killed before the turn is allowed to settle.
 
-One more guard covers a gateway that died without shutting down. `jinn
+One more guard covers a gateway that died without shutting down. `hundredfold
 restart` kills live turns on the way out, but a crash does not, and the
 restart-resume path would then start a fresh turn beside the survivor. So every
 remote batch turn first reaps whatever the session's pid file still names —
@@ -505,8 +505,8 @@ Four things this gets right that are easy to get wrong:
   is respawned rather than resumed, so the remote target — host, user, working
   directory *and* Claude profile — is restated; otherwise the fallback turn would
   quietly come back on the gateway, or come back under the wrong profile.
-- **Each engine stages its own `$JINN_HOME` on the remote host**, under
-  `~/.jinn-remote-stage/sessions/<session>__<engine>`. The substituted-from
+- **Each engine stages its own `$HUNDREDFOLD_HOME` on the remote host**, under
+  `~/.hundredfold-remote-stage/sessions/<session>__<engine>`. The substituted-from
   engine's session is not torn down — a remote Claude PTY stays warm and takes
   its next turn through the same connection — and its hook relay re-reads
   `gateway.json` on every hook. A shared directory would have the substitute's
@@ -529,7 +529,7 @@ A local employee reads `CLAUDE.md` for free: its working directory *is* the
 gateway's instance home, so Claude Code finds it there. A remote session's
 working directory is the workspace instead, so the rules would simply be absent.
 
-Jinn links them in: on every spawn, `<remoteCwd>/CLAUDE.md` becomes a symlink to
+Hundredfold links them in: on every spawn, `<remoteCwd>/CLAUDE.md` becomes a symlink to
 the mounted `CLAUDE.md`. Two guards, because this writes into a directory the
 operator owns:
 
@@ -561,10 +561,10 @@ An employee in a `scoped` or `dedicated` department (see the instance's
 `CLAUDE.md` above would hand it the whole company home:
 
 - **Its working directory is its department's stage directory on the host**,
-  `<remote.root>/.jinn-departments/<slug>/`: the department's generated
+  `<remote.root>/.hundredfold-departments/<slug>/`: the department's generated
   `CLAUDE.md` and the skills it allows, the same content as the local stage
   directory. Before every scoped spawn the gateway sends the file set as a tar
-  stream over ssh into `.jinn-departments/.<slug>.incoming-<random>/` and a
+  stream over ssh into `.hundredfold-departments/.<slug>.incoming-<random>/` and a
   script applies it file by file: changed files are renamed over the old ones,
   directories are made and never renamed over one that exists, extras go, and
   incoming directories older than an hour are reaped. The directory itself is
@@ -590,17 +590,17 @@ An employee in a `scoped` or `dedicated` department (see the instance's
   Claude profile configured and `remote.root` under the remote user's home, that
   user's `~/.claude/CLAUDE.md` and `~/.claude/rules/` are skipped as well; a
   profile's own `CLAUDE.md` lives in the profile and still loads. No remote employee, scoped or not, may have a `remoteCwd`
-  in `<remote.root>/.jinn-departments`.
+  in `<remote.root>/.hundredfold-departments`.
 - **Its own `remoteCwd` is its work area**, named in the session's prompt and
   created on the host if it is missing. It
-  must not be, contain or lie inside `<remote.root>/.jinn-departments` or
+  must not be, contain or lie inside `<remote.root>/.hundredfold-departments` or
   `remote.mount`, and the mount must not overlap the departments directory; the
   employee is refused at load otherwise. At spawn the work area and the stage
   directory must also stay clear of the host's own stage directory
-  (`~/.jinn-remote-stage`), which holds every session's gateway token; if that is
+  (`~/.hundredfold-remote-stage`), which holds every session's gateway token; if that is
   not known, the spawn is refused.
 - **The scope is the gateway's**, exactly as for a local scoped session. The
-  environment file carries `JINN_DEPARTMENT`, and the jinn MCP server on the
+  environment file carries `HUNDREDFOLD_DEPARTMENT`, and the hundredfold MCP server on the
   host attaches files only from the work area and the stage directory.
 
 This is the same guardrail as locally, not a sandbox: the session's shell can
@@ -633,8 +633,8 @@ is started with `ExitOnForwardFailure=yes`. If something claimed the port in
 between, `ssh` exits at once instead of running a session whose hooks could
 never arrive — a fast, visible failure rather than a turn that hangs forever.
 
-Each session gets its **own** `$JINN_HOME` on the remote host, at
-`~/.jinn-remote-stage/sessions/<session id>`: a directory of symlinks into the
+Each session gets its **own** `$HUNDREDFOLD_HOME` on the remote host, at
+`~/.hundredfold-remote-stage/sessions/<session id>`: a directory of symlinks into the
 mount, rebuilt on every spawn, with two exceptions — `gateway.json` (staged for
 real, naming that session's forwarded port) and `tmp/` (a real local directory,
 because per-session files churn there and a network filesystem is the wrong
@@ -649,14 +649,14 @@ anywhere. Stale session directories are reaped after seven days by the same
 script that rebuilds the farm.
 
 `hook-relay.mjs` and `remote-trust-seed.mjs` are staged as real copies at
-`~/.jinn-remote-stage/` itself — deliberately outside every session's farm, so
+`~/.hundredfold-remote-stage/` itself — deliberately outside every session's farm, so
 the farm rebuild cannot turn them back into symlinks into the mount. Hooks fire
 many times a turn, and a relay that cannot run because the mount blipped would
 take the turn's completion signal with it. Their presence is re-checked on every
 spawn (the farm script reports it, at no extra cost), so a wiped stage restages
 itself rather than staying broken until the gateway restarts.
 
-`JINN_GATEWAY_URL` (pointing at the tunnel) and `JINN_GATEWAY_TOKEN` are written
+`HUNDREDFOLD_GATEWAY_URL` (pointing at the tunnel) and `HUNDREDFOLD_GATEWAY_TOKEN` are written
 into a 0600 shell fragment under the session's `tmp/` and sourced by the remote
 command. The system prompt tells every session both are already exported, and
 every documented `curl` in it — delegation included — depends on that being
@@ -720,8 +720,8 @@ Two deliberate asymmetries:
   unavailable" because one desktop is asleep would hold back every local
   employee's turns too.
 
-`jinn remote status` reports what a turn would find right now, without waking
-anything. `jinn remote wake <employee>` brings a host up without queueing work
+`hundredfold remote status` reports what a turn would find right now, without waking
+anything. `hundredfold remote wake <employee>` brings a host up without queueing work
 into it. Neither is on the turn path — a turn wakes and verifies its own host,
 because making that depend on somebody remembering to run a command would put
 "the session silently never started" back on the table.
@@ -752,7 +752,7 @@ because making that depend on somebody remembering to run a command would put
   for a rule of this kind.
 - **Only the `claude`, `pi`, `opencode` and `musecode` engines can go remote.** Every other
   engine ignores `remoteHost`, so a remote employee configured with one has its turns
-  refused rather than silently run on the gateway. `jinn remote status` says so
+  refused rather than silently run on the gateway. `hundredfold remote status` says so
   per employee.
 - **A remote Pi turn has no dashboard terminal view**, because a Pi turn has none
   locally either: it is a headless JSON run, not a TUI. A remote Muse Code

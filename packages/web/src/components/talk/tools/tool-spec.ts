@@ -2,7 +2,7 @@
  * The shape of a tool the Talk orb can execute client-side.
  *
  * A tool's `{ name, description, parameters }` triple is structurally the
- * gateway's `RealtimeTool` (packages/jinn/src/shared/types.ts), so the transport
+ * gateway's `RealtimeTool` (packages/hundredfold/src/shared/types.ts), so the transport
  * can hand `toolDefinitions()` to a provider unchanged. The web package has no
  * import path into the gateway package, so the shape is declared here and pinned
  * by a test instead of imported.

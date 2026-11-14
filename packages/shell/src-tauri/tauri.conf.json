@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Jinn",
+  "productName": "Hundredfold",
   "version": "0.1.0",
-  "identifier": "run.jinn.shell",
+  "identifier": "run.hundredfold.shell",
   "build": {
     "frontendDist": "../dist/web"
   },
@@ -21,11 +21,11 @@
   "plugins": {
     "deep-link": {
       "desktop": {
-        "schemes": ["jinn"]
+        "schemes": ["hundredfold"]
       },
       "mobile": [
         {
-          "scheme": ["jinn"],
+          "scheme": ["hundredfold"],
           "appLink": false
         }
       ]

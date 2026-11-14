@@ -1013,7 +1013,7 @@ export default function SettingsPage() {
                     onChange={(v) =>
                       updateConfig(["connectors", "whatsapp", "authDir"], v.trim() || undefined)
                     }
-                    placeholder="Default: ~/.jinn/.whatsapp-auth"
+                    placeholder="Default: ~/.hundredfold/.whatsapp-auth"
                   />
                 </FieldRow>
                 <FieldRow label="Allow From">
@@ -1256,7 +1256,7 @@ export default function SettingsPage() {
                               instances[idx] = { ...instances[idx], authDir: v.trim() || undefined }
                               updateConfig(["connectors", "instances"], instances)
                             }}
-                            placeholder="Default: ~/.jinn/.whatsapp-auth"
+                            placeholder="Default: ~/.hundredfold/.whatsapp-auth"
                           />
                         </FieldRow>
                         <FieldRow label="Allow From">

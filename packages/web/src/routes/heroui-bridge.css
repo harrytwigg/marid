@@ -1,9 +1,9 @@
 /*
- * HeroUI v3 on Marid tokens.
+ * HeroUI v3 on Hundredfold tokens.
  *
  * HeroUI's own theme (themes/default/variables.css) is deliberately not
  * imported: these declarations give every variable its components read a
- * value from the Marid token set, so a HeroUI control and a legacy control
+ * value from the Hundredfold token set, so a HeroUI control and a legacy control
  * side by side draw from the same palette, and a theme or accent change moves
  * both. The derived values copy HeroUI's own formulas, in its dark form (the
  * soft tints differ by theme) with the light form restated at the end.
@@ -100,7 +100,7 @@
 }
 
 /* HeroUI mixes its soft tints differently on a light page. The block above is
-   the dark side, because Marid's :root is dark, so light restates them. */
+   the dark side, because Hundredfold's :root is dark, so light restates them. */
 [data-theme="light"] {
   --accent-soft-foreground: color-mix(in oklab, var(--accent) 70%, var(--foreground) 30%);
   --accent-soft-hover: color-mix(in oklab, var(--accent) 20%, transparent);

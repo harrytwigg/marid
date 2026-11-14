@@ -75,7 +75,7 @@ import {
 import { chatSessionDragProps } from "@/routes/chat/chat-session-dnd"
 import { TreeCollapsedCount, TreeLead, TreeMarker, treeRowPadding, type HiddenTreeSignal, type TreeRowMeta } from "@/components/chat/session-tree-row"
 import type { ChatSidebarProps } from "@/components/chat/chat-sidebar-types"
-import { PRODUCT_NAME } from "@/lib/brand"
+import { PRODUCT_NAME, LEGACY_PORTAL_NAME } from "@/lib/brand"
 
 export type { SidebarOrder } from "@/components/chat/chat-sidebar-types"
 
@@ -107,9 +107,9 @@ const DIRECT_GROUP = "__direct__"
 const CRON_GROUP = "__cron__"
 const TERMINAL_GROUP = "__terminal__"
 
-const OLDER_EXPANDED_STORAGE_KEY = "jinn-sidebar-older-expanded"
-const PINNED_EXPANDED_STORAGE_KEY = "jinn-sidebar-pinned-expanded"
-const FOCUS_MODE_STORAGE_KEY = "jinn-sidebar-focus-mode"
+const OLDER_EXPANDED_STORAGE_KEY = "hundredfold-sidebar-older-expanded"
+const PINNED_EXPANDED_STORAGE_KEY = "hundredfold-sidebar-pinned-expanded"
+const FOCUS_MODE_STORAGE_KEY = "hundredfold-sidebar-focus-mode"
 const EMPTY_PINNED_SESSIONS = new Set<string>()
 
 /** Pinned rows shown before the section folds behind "N more pinned" — a long
@@ -871,7 +871,7 @@ export function ChatSidebar({
   const { settings } = useSettings()
   const portalName = settings.portalName ?? PRODUCT_NAME
   // The slug matches session.employee, so it keeps the internal codename.
-  const portalSlug = (settings.portalName ?? "Jinn").toLowerCase()
+  const portalSlug = (settings.portalName ?? LEGACY_PORTAL_NAME).toLowerCase()
 
   const qc = useQueryClient()
   const { data: rawSessions, isLoading: loading } = useSessions()
@@ -1496,8 +1496,8 @@ export function ChatSidebar({
 
   const fixTitleCb = useCallback((title: string | undefined, employee: string | undefined) => {
     if (!title) return employee || portalName
-    if (portalName !== "Jinn" && title.startsWith("Jinn - ")) {
-      return portalName + title.slice(4)
+    if (portalName !== LEGACY_PORTAL_NAME && title.startsWith(`${LEGACY_PORTAL_NAME} - `)) {
+      return portalName + title.slice(LEGACY_PORTAL_NAME.length)
     }
     return title
   }, [portalName])

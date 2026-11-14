@@ -13,7 +13,7 @@ import {
 describe('isFilePath', () => {
   const shouldLink = [
     'docs/superpowers/specs/2026-05-31-support-design.md',
-    '~/Projects/jinn/packages/web/src/main.tsx',
+    '~/Projects/hundredfold/packages/web/src/main.tsx',
     '/etc/hosts.conf',
     'skills/foo/SKILL.md',
     'files/nested dir/report.txt',

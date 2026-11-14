@@ -5,7 +5,7 @@ The board walk is a scheduled pass over the Todo board. It ships on by default, 
 1. **What is ready.** A Todo's gates are usually written in prose: "not before the 10th", "after #18 merges", a `blocks` relation. The walk releases a `blocked` Todo whose gates are met, parks a Todo whose only gate is a plain date, and flags a stuck Todo once.
 2. **What to start.** It reads the account's usage, reset times and predictions, then decides whether spare capacity should start a ready backlog Todo, and which one. It starts it through the same Todo Dispatcher the board's dispatch button uses.
 
-It replaced the numeric idle-capacity loop (`gateway.idleCapacity`) and is the only timer that starts work. What it does is ruled by one file the operator edits, `$JINN_HOME/board-walk.md`. When it runs is an ordinary cron job, `board-walk`, so it is listed, run, rescheduled and switched off from the normal cron controls.
+It replaced the numeric idle-capacity loop (`gateway.idleCapacity`) and is the only timer that starts work. What it does is ruled by one file the operator edits, `$HUNDREDFOLD_HOME/board-walk.md`. When it runs is an ordinary cron job, `board-walk`, so it is listed, run, rescheduled and switched off from the normal cron controls.
 
 ## Why a model turn, when this used to be a code loop
 
@@ -19,7 +19,7 @@ The question is no longer numeric. Gates are prose, and the operator wants to sa
 
 ## The schedule: the `board-walk` cron job
 
-Every installation has a cron job in `$JINN_HOME/cron/jobs.json`:
+Every installation has a cron job in `$HUNDREDFOLD_HOME/cron/jobs.json`:
 
 ```json
 { "id": "board-walk", "name": "Board walk", "enabled": true, "schedule": "0 * * * *", "prompt": "", "action": "board-walk" }
@@ -33,11 +33,11 @@ Every installation has a cron job in `$JINN_HOME/cron/jobs.json`:
 - **It never ticks twice.** Only one job may carry the action: the cron API refuses a second one and refuses changing a job's action, and the scheduler skips a hand-edited duplicate. A fire that lands while a tick is still running is logged as `busy` and skipped.
 - **Each fire is a cron run** in the job's run history, with the walk turn's session. A failed or invalid-rules tick is an error run; an idle or skipped tick is a success. The walk's own tick log keeps the detail. No Todo is minted per fire, and the cron failure alert is not sent.
 
-The job is added on `jinn setup` and at gateway boot when it has never been seeded. On a fresh install it is hourly and enabled.
+The job is added on `hundredfold setup` and at gateway boot when it has never been seeded. On a fresh install it is hourly and enabled.
 
 ## The rules file
 
-`board-walk.md` is seeded from the template on `jinn setup` and at every gateway boot when it is missing. It is **never overwritten** (the one-time move of the schedule, below, is the only edit the gateway makes to it). It is re-read on every tick, so edits take effect without a restart.
+`board-walk.md` is seeded from the template on `hundredfold setup` and at every gateway boot when it is missing. It is **never overwritten** (the one-time move of the schedule, below, is the only edit the gateway makes to it). It is re-read on every tick, so edits take effect without a restart.
 
 The **frontmatter** holds the mechanical settings:
 
@@ -94,7 +94,7 @@ Before the cron job, the frontmatter carried `enabled`, `schedule` and `timezone
 
 1. **Read** `board-walk.md`. Stop if it is switched off or broken.
 2. **Build the capacity snapshot** (below).
-3. **Run the walk's turn.** One turn, routed as a session to the configured employee on the configured engine, **on the gateway, with the walk's tools and nothing else**. Its only MCP server is the jinn server serving the `board-walk` toolset, in place of the company toolset and every resolved custom server. The surface is clamped per engine: on Claude the built-ins are switched off (`--tools ""`, `--strict-mcp-config`, and `--no-chrome`, without which the engine's Chrome integration brings its browser tools back); on opencode, whose server mode ignores those flags, the turn runs as a purpose-built agent that allows exactly the board-walk tool names and denies every other tool (`--agent`). On opencode the operator's own MCP servers still load — opencode reads its config and the staged one only merges in — but each of their tools is denied, so none is reachable. Only engines that can be clamped this way may be named. The employee's own engine, host and flags are set aside, and a rate-limited walk turn is never handed to a fallback engine. If the walk's engine is not installed, or is recorded as exhausted, the whole tick is skipped without a turn, readiness included: nothing is released, parked or flagged until it is back, and the reason is logged. The session's key starts with `board-walk:`, and it is visible in Chats like any other session. A walk turn cut off by a gateway restart is not resumed; the next tick replaces it.
+3. **Run the walk's turn.** One turn, routed as a session to the configured employee on the configured engine, **on the gateway, with the walk's tools and nothing else**. Its only MCP server is the hundredfold server serving the `board-walk` toolset, in place of the company toolset and every resolved custom server. The surface is clamped per engine: on Claude the built-ins are switched off (`--tools ""`, `--strict-mcp-config`, and `--no-chrome`, without which the engine's Chrome integration brings its browser tools back); on opencode, whose server mode ignores those flags, the turn runs as a purpose-built agent that allows exactly the board-walk tool names and denies every other tool (`--agent`). On opencode the operator's own MCP servers still load — opencode reads its config and the staged one only merges in — but each of their tools is denied, so none is reachable. Only engines that can be clamped this way may be named. The employee's own engine, host and flags are set aside, and a rate-limited walk turn is never handed to a fallback engine. If the walk's engine is not installed, or is recorded as exhausted, the whole tick is skipped without a turn, readiness included: nothing is released, parked or flagged until it is back, and the reason is logged. The session's key starts with `board-walk:`, and it is visible in Chats like any other session. A walk turn cut off by a gateway restart is not resumed; the next tick replaces it.
 
    The prompt carries the rules, the snapshot and how to use the tools. The board is not in it: the model reads it, one Todo at a time, through its tools.
    - `walk_board` lists the open Todos, one line each, highest priority first, with what this tick has already decided. A Todo whose start date is still ahead says so on its line (`not before its start date …`).
@@ -126,8 +126,8 @@ The prompt carries one structure with readings and predictions, and no verdict:
 - **Predictions for the Claude windows.** These come from the retained readings (`tmp/engine-limits/claude-usage-history.json`): the rate, the share expected at the reset, the share expected to lapse unused, and the exhaustion time if it comes before the reset. A prediction needs three readings, over half an hour for the five-hour window and six hours for a weekly one. Otherwise it says why it has none.
 - **The operator-activity signals.** These are given as times and deltas, not as a verdict:
   - when the newest activity was on a session the operator drives (top-level, not cron, not a system employee);
-  - when a Jinn Claude session the operator drives last wrote its statusline. Every Jinn Claude session writes one, including the walk's own turn and delegated work, so only the operator's own sessions count;
-  - how much the Claude five-hour usage has risen since the previous tick's reading, and whether any Jinn session ran in between.
+  - when a Hundredfold Claude session the operator drives last wrote its statusline. Every Hundredfold Claude session writes one, including the walk's own turn and delegated work, so only the operator's own sessions count;
+  - how much the Claude five-hour usage has risen since the previous tick's reading, and whether any Hundredfold session ran in between.
 
   The previous reading is taken after the walk's own turn, so the walk's own spend is not counted as the operator's. Whether all of this means "the operator is live" is the rules file's call.
 - **Every Claude account, when there is more than one** (`accounts`): a local named profile or a remote host's login beside the operator's own (see `docs/org.md`, "Claude accounts"). Each has its label and where it runs, its employees, its windows and predictions from its own history, whether it is recorded as exhausted, `noReading` when there is no live reading (an expired token on an idle profile, or a remote host asleep), the sessions on it holding capacity, the starts on it in its own five-hour window, and its usage since the previous tick. A start the walk made counts on the account of the Todo it started, not on the Dispatcher's. With one account the key is absent and the snapshot is exactly as before.

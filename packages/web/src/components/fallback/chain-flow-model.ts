@@ -1,6 +1,6 @@
 import dagre from "@dagrejs/dagre"
 import type { Edge, Node } from "@xyflow/react"
-import type { FallbackLinkHealth, FallbackSkipReason, ResolvedFallbackLink } from "@jinn/fallback-chain-wire"
+import type { FallbackLinkHealth, FallbackSkipReason, ResolvedFallbackLink } from "@hundredfold/fallback-chain-wire"
 import { formatReset, formatUsed, skipText } from "@/lib/fallback-format"
 
 /* The chain diagram's data and layout, apart from the component that draws it. */

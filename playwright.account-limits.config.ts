@@ -1,8 +1,8 @@
 import path from 'node:path'
 import { defineConfig } from '@playwright/test'
 
-const baseURL = process.env.JINN_VERIFY_BASE_URL ?? 'http://127.0.0.1:8061'
-const artifacts = process.env.JINN_VERIFY_ARTIFACTS ?? path.join('/tmp', 'jinn-account-limits-artifacts')
+const baseURL = process.env.HUNDREDFOLD_VERIFY_BASE_URL ?? 'http://127.0.0.1:8061'
+const artifacts = process.env.HUNDREDFOLD_VERIFY_ARTIFACTS ?? path.join('/tmp', 'hundredfold-account-limits-artifacts')
 
 export default defineConfig({
   testDir: './e2e/account-limits',

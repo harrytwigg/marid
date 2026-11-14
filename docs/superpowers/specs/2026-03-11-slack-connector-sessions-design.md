@@ -28,19 +28,19 @@ This makes `shareSessionInChannel` obsolete - remove it.
 
 ### Files changed
 
-- `packages/jinn/src/connectors/slack/threads.ts`
+- `packages/hundredfold/src/connectors/slack/threads.ts`
   - `deriveSessionKey()`: For non-DM, non-thread messages, return `slack:${channel}:${ts}` instead of `slack:${channel}`
   - Remove `SlackThreadOptions` interface and `shareSessionInChannel` logic
   - `buildReplyContext()`: For channel root messages (not DMs), set `thread: ts` so the bot's reply starts a thread under the root message. Currently `thread` is only set for thread replies - change to always set it for channel messages so the first response threads correctly. DMs must NOT set `thread` (DMs don't support threading the same way).
 
-- `packages/jinn/src/connectors/slack/index.ts`
+- `packages/hundredfold/src/connectors/slack/index.ts`
   - Remove `shareSessionInChannel` property and constructor logic
   - Remove `shareSessionInChannel` from `deriveSessionKey()` call
 
-- `packages/jinn/src/shared/types.ts`
+- `packages/hundredfold/src/shared/types.ts`
   - Remove `shareSessionInChannel` from `SlackConnectorConfig` if present
 
-- `packages/jinn/src/connectors/slack/threads.test.ts`
+- `packages/hundredfold/src/connectors/slack/threads.test.ts`
   - Update tests to reflect new key format
 
 ### Behavior
@@ -63,18 +63,18 @@ Call `conversations.info` to resolve channel names. Cache results per channel ID
 
 ### Files changed
 
-- `packages/jinn/src/connectors/slack/index.ts`
+- `packages/hundredfold/src/connectors/slack/index.ts`
   - Add `private channelNameCache: Map<string, string>`
   - Add `private async resolveChannelName(channelId: string): Promise<string>` method
   - In the message handler, resolve channel name before building `IncomingMessage`
   - Add `channelName` to `transportMeta`
 
-- `packages/jinn/src/sessions/context.ts`
+- `packages/hundredfold/src/sessions/context.ts`
   - Add `channelName?: string` to the `buildContext` opts interface
   - Thread it through to `buildSessionContext()`
   - Display as `#general (C0ABC123XYZ)` when available, raw ID as fallback
 
-- `packages/jinn/src/sessions/manager.ts`
+- `packages/hundredfold/src/sessions/manager.ts`
   - Pass `channelName` from `msg.transportMeta.channelName` into `buildContext()` opts
 
 ### Channel name format in context
@@ -101,7 +101,7 @@ Listen for `reaction_added` events. When a user reacts to a bot message, create 
 
 ### Files changed
 
-- `packages/jinn/src/connectors/slack/index.ts`
+- `packages/hundredfold/src/connectors/slack/index.ts`
   - Add `this.app.event('reaction_added', ...)` handler in `start()`
   - Filter: only process reactions from allowed users, skip bot self-reactions (use `auth.test` at startup to get bot user ID, compare against `event.user`)
   - Fetch the reacted-to message text: use `conversations.history` with `latest: item.ts`, `oldest: item.ts`, `inclusive: true`, `limit: 1` for root messages; use `conversations.replies` with `ts: thread_ts` for threaded messages

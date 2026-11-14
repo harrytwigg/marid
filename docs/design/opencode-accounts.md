@@ -109,7 +109,7 @@ mistake):
   provider prefix. Values are positive numbers.
 
 These checks need the catalogue, so they run in chain problems and in
-`jinn doctor` rather than at load time:
+`hundredfold doctor` rather than at load time:
 
 - `base` is not in the catalogue on the gateway host;
 - `provider` collides with a provider in the catalogue (only when `base` is
@@ -135,7 +135,7 @@ effort levels, and with `account: "<name>"` on the `ModelInfo`. Chain
 validation, `modelNotServed`, the model pickers and the chain editor therefore
 all see the account models with no further change. When the base is not in
 the catalogue, the account has no models and the reason shows in chain
-problems and `jinn doctor`.
+problems and `hundredfold doctor`.
 
 ## Staging
 
@@ -168,7 +168,7 @@ same on 1.x and 2.x:
   OpenCode 1.x (models on another endpoint need OpenCode 2)`. That error reads
   as model access (`opencode-failure.ts`): the turn, or the chain link, hops to
   the next link, and only `opencode/<provider>/<model>` is held, for the
-  re-probe interval. `jinn doctor` reports such models for the local binary.
+  re-probe interval. `hundredfold doctor` reports such models for the local binary.
 - **A session gets only the accounts its chain reaches.** An account's block and
   key are staged for a session only when its provider is the provider of the
   session's own model, of an opencode link in its resolved chain (the same
@@ -187,8 +187,8 @@ same on 1.x and 2.x:
   forgets its key.
 - **opencode's MCP children do not inherit it.** opencode passes its whole
   environment to the MCP servers it launches. Every opencode process the
-  gateway starts (run, serve, local and remote) carries `JINN_SCRUB_ENV`, the
-  names of every declared `keyEnv`, and `mcp/scrub-entry.ts` and the jinn MCP
+  gateway starts (run, serve, local and remote) carries `HUNDREDFOLD_SCRUB_ENV`, the
+  names of every declared `keyEnv`, and `mcp/scrub-entry.ts` and the hundredfold MCP
   `server-entry` delete those names and the list before launching or serving.
   Inherent: the session's own shell tool can read the key (opencode needs it),
   and `/proc/<gateway pid>/environ` shows the gateway's start environment to
@@ -222,7 +222,7 @@ same on 1.x and 2.x:
 
 An opencode link whose provider is neither an account nor in the catalogue
 gives `provider "<p>" is not in opencode's catalogue or engines.opencode.accounts`
-when the catalogue is known (non-empty). `jinn doctor` prints every chain
+when the catalogue is known (non-empty). `hundredfold doctor` prints every chain
 problem and every account problem above.
 
 ## Metering and health
@@ -274,9 +274,9 @@ interface OpencodeAccountLimitSnapshot extends EngineLimitAccountSnapshot {
 ```
 
 `accounts.opencode` is present whenever at least one account is declared;
-`accounts.claude` is unchanged. A `jinn limits` card per account prints
+`accounts.claude` is unchanged. A `hundredfold limits` card per account prints
 the label, provider, key state, each bucket's windows, the last failure and
-the next try. Claude accounts get the same treatment, which `jinn limits`
+the next try. Claude accounts get the same treatment, which `hundredfold limits`
 does not print today.
 
 `GET /api/engines`: account models on the opencode entry, with `account` set

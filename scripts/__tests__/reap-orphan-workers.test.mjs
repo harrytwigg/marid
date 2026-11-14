@@ -11,14 +11,14 @@ import { planProcessReap } from "../reap/gateways.mjs"
 
 const TEMP = os.tmpdir()
 const WORKTREES_ROOT = path.join(TEMP, "reap-orphan-fixture", ".worktrees")
-const REMOVED_TREE = path.join(WORKTREES_ROOT, "jinn-build-TEST-1")
-const ACTIVE_TREE = path.join(WORKTREES_ROOT, "jinn-build-ACTIVE")
+const REMOVED_TREE = path.join(WORKTREES_ROOT, "hundredfold-build-TEST-1")
+const ACTIVE_TREE = path.join(WORKTREES_ROOT, "hundredfold-build-ACTIVE")
 
 const workerIn = (tree) => `node ${path.join(tree, "node_modules", "vitest", "dist", "worker.js")}`
 
 function context(pruningWorktrees, overrides = {}) {
   return {
-    defaultHome: path.join(TEMP, "reap-orphan-fixture", ".jinn"),
+    defaultHome: path.join(TEMP, "reap-orphan-fixture", ".hundredfold"),
     registeredHomes: [],
     homeByPid: {},
     protectedPortPids: [],
@@ -53,12 +53,12 @@ test("a worker that names a removed tree but runs somewhere else is spared", () 
 test("a worker running inside a tree this run removes is reaped", () => {
   const inside = runningIn(orphan(9303, "node ./vitest-worker.js"), REMOVED_TREE)
   assert.deepEqual(orphanTargets([inside], [REMOVED_TREE]), [9303])
-  const nested = runningIn(inside, path.join(REMOVED_TREE, "packages", "jinn"))
+  const nested = runningIn(inside, path.join(REMOVED_TREE, "packages", "hundredfold"))
   assert.deepEqual(orphanTargets([nested], [REMOVED_TREE]), [9303])
 })
 
 test("a sibling tree whose name merely starts with a removed one's is spared", () => {
-  const sibling = path.join(WORKTREES_ROOT, "jinn-build-TEST-12")
+  const sibling = path.join(WORKTREES_ROOT, "hundredfold-build-TEST-12")
   assert.deepEqual(orphanTargets([runningIn(orphan(9304, workerIn(sibling)), sibling)], [REMOVED_TREE]), [])
 })
 

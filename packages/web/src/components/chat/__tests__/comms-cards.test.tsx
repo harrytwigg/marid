@@ -36,10 +36,10 @@ describe('agent relays', () => {
     const parsed = parseAgentRelay({
       id: 'r3',
       role: 'notification',
-      content: '📨 Message from session abc-123 (jinn-dev) [hop 3/12]:\n\nTypecheck is green.\n\nTo reply: send_to_session { sessionId: "abc-123" }. If this exchange is going in circles, stop.',
+      content: '📨 Message from session abc-123 (hundredfold-dev) [hop 3/12]:\n\nTypecheck is green.\n\nTo reply: send_to_session { sessionId: "abc-123" }. If this exchange is going in circles, stop.',
       timestamp: 1,
     })
-    expect(parsed).toMatchObject({ fromLabel: 'jinn-dev', hops: 3, text: 'Typecheck is green.' })
+    expect(parsed).toMatchObject({ fromLabel: 'hundredfold-dev', hops: 3, text: 'Typecheck is green.' })
   })
 
   it('does not claim ordinary notifications or user messages', () => {
@@ -150,7 +150,7 @@ describe('dispatch rows', () => {
   it('lifts send_to_session tool calls out of the tool group as a generic dispatch row', () => {
     const messages: Message[] = [
       { id: 't1', role: 'assistant', content: 'Used file_read', timestamp: 100, toolCall: 'file_read' },
-      { id: 't2', role: 'assistant', content: 'Used send_to_session', timestamp: 101, toolCall: 'mcp__jinn__send_to_session' },
+      { id: 't2', role: 'assistant', content: 'Used send_to_session', timestamp: 101, toolCall: 'mcp__hundredfold__send_to_session' },
       { id: 't3', role: 'assistant', content: 'Used file_edit', timestamp: 102, toolCall: 'file_edit' },
     ]
 
@@ -179,8 +179,8 @@ describe('dispatch rows', () => {
           status: 'done',
           payload: {
             targetSessionId: 'child-9',
-            employee: 'jinn-dev',
-            employeeDisplay: 'Jinn Dev',
+            employee: 'hundredfold-dev',
+            employeeDisplay: 'Hundredfold Dev',
             preview: 'Also check the mobile breakpoint.',
             sentAt: 101,
           },
@@ -197,7 +197,7 @@ describe('dispatch rows', () => {
     const linked = container.querySelector('[data-dispatch="linked"]')
     expect(linked).toBeTruthy()
     expect(linked!.textContent).toContain('Followed up')
-    expect(linked!.textContent).toContain('Jinn Dev')
+    expect(linked!.textContent).toContain('Hundredfold Dev')
     expect(linked!.textContent).toContain('Also check the mobile breakpoint.')
     fireEvent.click(linked as HTMLElement)
     expect(onPeek).toHaveBeenCalledWith(expect.objectContaining({ kind: 'dispatch', sessionId: 'child-9' }))

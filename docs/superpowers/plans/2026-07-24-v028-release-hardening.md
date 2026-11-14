@@ -22,8 +22,8 @@
 ### Task 1: Make the migration prompt self-contained
 
 **Files:**
-- Modify: `packages/jinn/src/migrations/__tests__/service.test.ts`
-- Modify: `packages/jinn/src/migrations/service.ts`
+- Modify: `packages/hundredfold/src/migrations/__tests__/service.test.ts`
+- Modify: `packages/hundredfold/src/migrations/service.ts`
 
 **Interfaces:**
 - Consumes: `composePrompt()` migration key, snapshot root, and changed-file list.
@@ -47,7 +47,7 @@ expect(first.prompt).toContain('"verifiedAt"')
 Run:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/migrations/__tests__/service.test.ts
+pnpm --filter hundredfold exec vitest run src/migrations/__tests__/service.test.ts
 ```
 
 Expected: failure because the current prompt only says “completion receipt” without the filename or schema.
@@ -71,7 +71,7 @@ The prompt must show this contract with the live migration key:
 Run:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run \
+pnpm --filter hundredfold exec vitest run \
   src/migrations/__tests__/service.test.ts \
   src/migrations/__tests__/snapshot.test.ts \
   src/migrations/__tests__/completion.test.ts
@@ -82,16 +82,16 @@ Expected: all migration tests pass.
 - [ ] **Step 5: Commit the scoped prompt fix**
 
 ```bash
-git add -- packages/jinn/src/migrations/service.ts packages/jinn/src/migrations/__tests__/service.test.ts
+git add -- packages/hundredfold/src/migrations/service.ts packages/hundredfold/src/migrations/__tests__/service.test.ts
 git commit -m "fix(migrations): specify completion receipt contract"
 ```
 
 ### Task 2: Make legacy Workflow conversion conservative and auditable
 
 **Files:**
-- Modify: `packages/jinn/src/workflows/__tests__/import-v1.test.ts`
-- Modify: `packages/jinn/src/workflows/import-v1.ts`
-- Modify: `packages/jinn/template/skills/workflow/SKILL.md`
+- Modify: `packages/hundredfold/src/workflows/__tests__/import-v1.test.ts`
+- Modify: `packages/hundredfold/src/workflows/import-v1.ts`
+- Modify: `packages/hundredfold/template/skills/workflow/SKILL.md`
 - Modify: `CHANGELOG.md`
 
 **Interfaces:**
@@ -111,7 +111,7 @@ The report must include schema version, source path, SHA-256 for every source de
 Run:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/workflows/__tests__/import-v1.test.ts
+pnpm --filter hundredfold exec vitest run src/workflows/__tests__/import-v1.test.ts
 ```
 
 Expected: current code imports conditional/loop edges lossily and writes no report.
@@ -133,7 +133,7 @@ State that imported drafts are disabled, unsupported definitions and legacy run 
 Run:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run \
+pnpm --filter hundredfold exec vitest run \
   src/workflows/__tests__/import-v1.test.ts \
   src/workflows/__tests__/repository-migrations.test.ts \
   src/workflows/__tests__/workflow-recovery.test.ts
@@ -145,9 +145,9 @@ Expected: all pass; no lossy legacy conversion remains.
 
 ```bash
 git add -- \
-  packages/jinn/src/workflows/import-v1.ts \
-  packages/jinn/src/workflows/__tests__/import-v1.test.ts \
-  packages/jinn/template/skills/workflow/SKILL.md \
+  packages/hundredfold/src/workflows/import-v1.ts \
+  packages/hundredfold/src/workflows/__tests__/import-v1.test.ts \
+  packages/hundredfold/template/skills/workflow/SKILL.md \
   CHANGELOG.md
 git commit -m "fix(workflows): preserve legacy semantics during v2 import"
 ```
@@ -214,9 +214,9 @@ git commit -m "test(upgrade): cover v0.26 and v0.27 to v0.28"
 ### Task 4: Regenerate and validate the v0.28 release artifact
 
 **Files:**
-- Preserve/modify: `packages/jinn/package.json`
+- Preserve/modify: `packages/hundredfold/package.json`
 - Preserve/modify: `CHANGELOG.md`
-- Regenerate: `packages/jinn/template/migrations/0.28.0/**`
+- Regenerate: `packages/hundredfold/template/migrations/0.28.0/**`
 
 **Interfaces:**
 - Consumes: `v0.27.0`, the current instance template, and all release-hardening commits.
@@ -225,15 +225,15 @@ git commit -m "test(upgrade): cover v0.26 and v0.27 to v0.28"
 - [ ] **Step 1: Regenerate and check the migration bundle**
 
 ```bash
-pnpm --filter jinn-cli migration:generate -- --base-ref v0.27.0 --version 0.28.0
-pnpm --filter jinn-cli migration:check -- --base-ref v0.27.0 --version 0.28.0
+pnpm --filter hundredfold migration:generate -- --base-ref v0.27.0 --version 0.28.0
+pnpm --filter hundredfold migration:check -- --base-ref v0.27.0 --version 0.28.0
 ```
 
 - [ ] **Step 2: Build once and pack the exact candidate**
 
 ```bash
 pnpm build
-cd packages/jinn
+cd packages/hundredfold
 npm pack --dry-run
 npm pack --pack-destination <nonce-owned-temp-directory>
 ```
@@ -256,7 +256,7 @@ Expected: all packages pass.
 
 - [ ] **Step 5: Inspect package contents and staged release scope**
 
-Confirm `npm pack --dry-run` includes the manifest, every base/target payload, Workflow import/report code, and current frontend assets. Stage only `packages/jinn/package.json`, `CHANGELOG.md`, and `packages/jinn/template/migrations/0.28.0`.
+Confirm `npm pack --dry-run` includes the manifest, every base/target payload, Workflow import/report code, and current frontend assets. Stage only `packages/hundredfold/package.json`, `CHANGELOG.md`, and `packages/hundredfold/template/migrations/0.28.0`.
 
 - [ ] **Step 6: Create the local release commit**
 

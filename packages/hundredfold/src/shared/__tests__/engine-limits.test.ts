@@ -1,0 +1,504 @@
+/**
+ * Engine-limits collector guards (server side of the Limits-page freshness fix).
+ *
+ * The collector is stateless: it reads the freshest CLI-written snapshot off
+ * disk on every call. These tests prove the properties the honest UI depends
+ * on — the fetched-at timestamp is the provider *capture* time (never
+ * fabricated to "now"), staleness tracks the snapshot's real age, malformed or
+ * unavailable providers degrade without leaking raw diagnostics, and a restart
+ * (a fresh process re-reading the same disk) recovers identical data. Codex
+ * precedence tests drive a local app-server protocol stub; all other
+ * provider state comes from fake snapshot files + fs.utimes.
+ */
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import type { HundredfoldConfig, EngineLimitsResponse } from "../types.js";
+
+let HUNDREDFOLD_HOME_TMP: string;
+let CODEX_HOME_TMP: string;
+let CLAUDE_DIR: string;
+let TEST_ROOT_TMP: string;
+let collectEngineLimits: (c: HundredfoldConfig, o?: { engine?: string }) => Promise<EngineLimitsResponse>;
+let invalidateModelRegistry: () => void;
+
+const NODE = process.execPath; // always an executable absolute path → engineAvailable=true
+
+function cfg(engineOverrides: Record<string, unknown> = {}): HundredfoldConfig {
+  return {
+    gateway: { port: 7799, host: "127.0.0.1" },
+    engines: {
+      default: "claude",
+      claude: { bin: NODE, model: "opus" },
+      codex: { bin: NODE, model: "gpt-5.5" },
+      ...engineOverrides,
+    },
+    models: {
+      claude: { default: "opus", models: [{ id: "opus", supportsEffort: true, effortLevels: ["low"] }] },
+      codex: { default: "gpt-5.5", models: [{ id: "gpt-5.5", supportsEffort: true, effortLevels: ["low"] }] },
+    },
+    connectors: {},
+  } as unknown as HundredfoldConfig;
+}
+
+const MISSING_BIN = path.join(os.tmpdir(), "definitely-not-a-real-cli-xyz");
+
+function writeClaudeSnapshot(name: string, body: string, ageMs: number): string {
+  const file = path.join(CLAUDE_DIR, name);
+  fs.writeFileSync(file, body);
+  const when = (Date.now() - ageMs) / 1000;
+  fs.utimesSync(file, when, when);
+  return file;
+}
+
+function writeCodexRollout(timestampIso: string, usedPercent: number): void {
+  const day = path.join(CODEX_HOME_TMP, "sessions", "2026", "07", "13");
+  fs.mkdirSync(day, { recursive: true });
+  const line = JSON.stringify({
+    timestamp: timestampIso,
+    payload: { rate_limits: { primary: { used_percent: usedPercent, window_minutes: 300 } } },
+  });
+  fs.writeFileSync(path.join(day, "rollout-2026-07-13T00-00-00.jsonl"), `${line}\n`);
+}
+
+function writeCodexAppServerStub(
+  name: string,
+  result?: Record<string, unknown>,
+): { bin: string; startedFile: string } {
+  const bin = path.join(path.dirname(CODEX_HOME_TMP), name);
+  const startedFile = `${bin}.started`;
+  const behavior = result
+    ? [
+        'process.stdin.setEncoding("utf8");',
+        'let input = "";',
+        "let responded = false;",
+        'process.stdin.on("data", (chunk) => {',
+        "  input += chunk;",
+        '  if (!responded && input.includes(\'"id":2\')) {',
+        "    responded = true;",
+        `    process.stdout.write(JSON.stringify(${JSON.stringify({ id: 2, result })}) + "\\n");`,
+        "  }",
+        "});",
+      ].join("\n")
+    : "process.exit(1);";
+  const body = `import fs from "node:fs";\nfs.writeFileSync(${JSON.stringify(startedFile)}, "started");\n${behavior}\n`;
+
+  // Windows has neither a shebang nor an executable bit, so the POSIX stub is
+  // inert there and these cases used to be skipped. A .cmd is not merely a
+  // workaround: it is exactly the shape npm installs a CLI in on Windows, so
+  // this now exercises the .cmd spawn path in engine-limits rather than
+  // pretending the platform cannot be tested.
+  if (process.platform === "win32") {
+    const script = `${bin}.mjs`;
+    fs.writeFileSync(script, body);
+    const shim = `${bin}.cmd`;
+    fs.writeFileSync(shim, `@echo off\r\nnode "%~dp0${path.basename(script)}" %*\r\n`);
+    return { bin: shim, startedFile };
+  }
+
+  fs.writeFileSync(bin, `#!/usr/bin/env node\n${body}`);
+  fs.chmodSync(bin, 0o755);
+  return { bin, startedFile };
+}
+
+beforeAll(async () => {
+  TEST_ROOT_TMP = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-limits-"));
+  HUNDREDFOLD_HOME_TMP = path.join(TEST_ROOT_TMP, "home");
+  CODEX_HOME_TMP = path.join(TEST_ROOT_TMP, "codex");
+  CLAUDE_DIR = path.join(HUNDREDFOLD_HOME_TMP, "tmp", "engine-limits", "claude");
+  fs.mkdirSync(CLAUDE_DIR, { recursive: true });
+  process.env.HUNDREDFOLD_HOME = HUNDREDFOLD_HOME_TMP; // frozen into paths.ts at first import below
+  process.env.CODEX_HOME = CODEX_HOME_TMP; // read per-call by the collector
+  // Keep the collector off the live OAuth usage API (keychain + network) so
+  // these tests stay deterministic and exercise the statusline-snapshot path.
+  process.env.HUNDREDFOLD_CLAUDE_USAGE_API = "off";
+  ({ collectEngineLimits } = await import("../engine-limits.js"));
+  ({ invalidateModelRegistry } = await import("../models.js"));
+});
+
+afterAll(() => {
+  delete process.env.HUNDREDFOLD_HOME;
+  delete process.env.CODEX_HOME;
+  delete process.env.HUNDREDFOLD_CLAUDE_USAGE_API;
+  fs.rmSync(TEST_ROOT_TMP, { recursive: true, force: true });
+});
+
+beforeEach(() => {
+  for (const f of fs.readdirSync(CLAUDE_DIR)) fs.rmSync(path.join(CLAUDE_DIR, f));
+  fs.rmSync(path.join(HUNDREDFOLD_HOME_TMP, "tmp", "engine-health.json"), { force: true });
+  invalidateModelRegistry();
+});
+
+describe("collectEngineLimits — claude statusline snapshot", () => {
+  it("uses the snapshot capture time as fetched-at, not now", async () => {
+    const capturedAt = new Date(Date.now() - 19 * 60 * 60_000).toISOString();
+    writeClaudeSnapshot(
+      "s.json",
+      JSON.stringify({ captured_at: capturedAt, rate_limits: { five_hour: { used_percentage: 33, resets_at: 0 } } }),
+      19 * 60 * 60_000,
+    );
+    const out = await collectEngineLimits(cfg(), { engine: "claude" });
+    const claude = out.engines.claude;
+    expect(claude.status).toBe("snapshot");
+    expect(claude.refreshedAt).toBe(capturedAt);
+    expect(claude.windows?.[0]?.usedPercent).toBe(33);
+  });
+
+  it("marks a >30min-old snapshot stale and a fresh one not stale", async () => {
+    writeClaudeSnapshot(
+      "old.json",
+      JSON.stringify({ captured_at: new Date().toISOString(), rate_limits: { five_hour: { used_percentage: 10 } } }),
+      45 * 60_000,
+    );
+    let out = await collectEngineLimits(cfg(), { engine: "claude" });
+    expect(out.engines.claude.stale).toBe(true);
+
+    fs.rmSync(path.join(CLAUDE_DIR, "old.json"));
+    writeClaudeSnapshot(
+      "new.json",
+      JSON.stringify({ captured_at: new Date().toISOString(), rate_limits: { five_hour: { used_percentage: 10 } } }),
+      60_000,
+    );
+    out = await collectEngineLimits(cfg(), { engine: "claude" });
+    expect(out.engines.claude.stale).toBeFalsy();
+  });
+
+  describe("a limit recorded before the snapshot was taken", () => {
+    const bothWindows = (capturedAt: string) => JSON.stringify({
+      captured_at: capturedAt,
+      rate_limits: { five_hour: { used_percentage: 0, resets_at: 4_000_000_000 }, seven_day: { used_percentage: 2, resets_at: 4_000_000_000 } },
+    });
+    const spentMinutesAgo = async (minutes: number) => {
+      const { recordEngineUnavailable } = await import("../engine-health.js");
+      recordEngineUnavailable("claude", "usage limit", Date.now() / 1000 + 4 * 24 * 3600, new Date(Date.now() - minutes * 60_000), { window: "7d" });
+    };
+    const health = async () => (await import("../engine-health.js")).readEngineHealth().claude;
+
+    it("is not cleared by a fresh snapshot either: the status line never sees per-model buckets", async () => {
+      await spentMinutesAgo(10);
+      writeClaudeSnapshot("fresh.json", bothWindows(new Date(Date.now() - 2 * 60_000).toISOString()), 2 * 60_000);
+
+      const out = await collectEngineLimits(cfg(), { engine: "claude" });
+
+      expect(out.engines.claude).toMatchObject({ status: "snapshot" });
+      expect(out.engines.claude.stale).toBeFalsy();
+      expect((await health())?.state).toBe("exhausted");
+    });
+
+    it("is not cleared by a stale snapshot taken after the limit", async () => {
+      await spentMinutesAgo(60);
+      writeClaudeSnapshot("stale.json", bothWindows(new Date(Date.now() - 45 * 60_000).toISOString()), 45 * 60_000);
+
+      const out = await collectEngineLimits(cfg(), { engine: "claude" });
+
+      expect(out.engines.claude.stale).toBe(true);
+      expect((await health())?.state).toBe("exhausted");
+    });
+
+    it("is not cleared by a snapshot taken before the limit was recorded", async () => {
+      await spentMinutesAgo(1);
+      writeClaudeSnapshot("old.json", bothWindows(new Date(Date.now() - 5 * 60_000).toISOString()), 5 * 60_000);
+
+      await collectEngineLimits(cfg(), { engine: "claude" });
+
+      expect((await health())?.state).toBe("exhausted");
+    });
+  });
+
+  it("degrades a malformed snapshot to fixed copy, leaking neither payload nor parser detail", async () => {
+    // Content BEGINS with a sensitive marker and is invalid JSON — the projection
+    // must expose neither the marker nor any parser diagnostic (position, token…).
+    const marker = "SENSITIVE-SNAPSHOT-MARKER-a1b2c3";
+    writeClaudeSnapshot("bad.json", `${marker} {"rate_limits": broken}`, 60_000);
+    const out = await collectEngineLimits(cfg(), { engine: "claude" });
+    const claude = out.engines.claude;
+    expect(claude.status).toBe("error");
+    expect(claude.error).toBeTruthy(); // fixed operator-safe copy is present…
+
+    const projected = JSON.stringify(claude);
+    expect(projected).not.toContain(marker); // …but no payload fragment…
+    for (const diag of ["position", "Unexpected", "Expected", "in JSON", "SyntaxError"]) {
+      expect(projected).not.toContain(diag); // …and no raw parser diagnostic.
+    }
+  });
+});
+
+// These ran on POSIX only until #103: the stubs were `#!/usr/bin/env node` files
+// made executable with chmod, and Windows has neither a shebang nor an
+// executable bit, so `spawn(bin, …)` never started them.
+//
+// They now run on both. writeCodexAppServerStub emits a `.cmd` on Windows —
+// the shape npm actually installs a CLI in — so these exercise the shim spawn
+// path in engine-limits rather than asserting around it, and they fail without
+// that fix.
+describe("collectEngineLimits — codex session rollout", () => {
+  it("prefers a successful live app-server response over an older rollout snapshot", async () => {
+    const ts = new Date(Date.now() - 5 * 60_000).toISOString();
+    writeCodexRollout(ts, 72);
+    const live = writeCodexAppServerStub("codex-live-stub", {
+      rateLimitsByLimitId: {
+        codex: {
+          limitId: "codex",
+          planType: "pro",
+          primary: { usedPercent: 33, windowDurationMins: 300 },
+        },
+      },
+    });
+
+    const out = await collectEngineLimits(
+      cfg({ codex: { bin: live.bin, model: "gpt-5.5" } }),
+      { engine: "codex" },
+    );
+    const codex = out.engines.codex;
+    expect(codex.status).toBe("live");
+    expect(codex.windows?.[0]?.usedPercent).toBe(33);
+    expect(fs.existsSync(live.startedFile)).toBe(true);
+  });
+
+  it("does not clear a codex record from a live reading: it carries the main bucket only, not every bucket codex limits on", async () => {
+    const { recordEngineUnavailable, readEngineHealth } = await import("../engine-health.js");
+    recordEngineUnavailable("codex", "usage limit", Date.now() / 1000 + 4 * 24 * 3600, new Date(Date.now() - 30 * 60_000), { model: "gpt-5.3-codex-spark" });
+    const live = writeCodexAppServerStub("codex-live-headroom-stub", {
+      rateLimitsByLimitId: {
+        codex: { limitId: "codex", planType: "pro", primary: { usedPercent: 20, windowDurationMins: 300 }, secondary: { usedPercent: 30, windowDurationMins: 10_080 } },
+      },
+    });
+
+    const out = await collectEngineLimits(cfg({ codex: { bin: live.bin, model: "gpt-5.5" } }), { engine: "codex" });
+
+    expect(out.engines.codex.status).toBe("live");
+    expect(readEngineHealth().codex?.state).toBe("exhausted");
+  });
+
+  it("falls back to the rollout snapshot with its original timestamp when the live app-server fails", async () => {
+    const ts = new Date(Date.now() - 5 * 60_000).toISOString();
+    writeCodexRollout(ts, 72);
+    const failed = writeCodexAppServerStub("codex-failed-stub");
+
+    const out = await collectEngineLimits(
+      cfg({ codex: { bin: failed.bin, model: "gpt-5.5" } }),
+      { engine: "codex" },
+    );
+    const codex = out.engines.codex;
+    expect(fs.existsSync(failed.startedFile)).toBe(true);
+    expect(codex.status).toBe("snapshot");
+    expect(codex.refreshedAt).toBe(ts);
+    expect(codex.windows?.[0]?.usedPercent).toBe(72);
+  });
+
+  it("falls back to the rollout snapshot when the live app-server returns no buckets", async () => {
+    const ts = new Date(Date.now() - 5 * 60_000).toISOString();
+    writeCodexRollout(ts, 72);
+    const empty = writeCodexAppServerStub("codex-empty-stub", { rateLimitsByLimitId: {} });
+
+    const out = await collectEngineLimits(
+      cfg({ codex: { bin: empty.bin, model: "gpt-5.5" } }),
+      { engine: "codex" },
+    );
+    const codex = out.engines.codex;
+    expect(fs.existsSync(empty.startedFile)).toBe(true);
+    expect(codex.status).toBe("snapshot");
+    expect(codex.refreshedAt).toBe(ts);
+    expect(codex.windows?.[0]?.usedPercent).toBe(72);
+  });
+});
+
+describe("collectEngineLimits — recovery + unsupported", () => {
+  it("recovers identical data across a simulated restart (stateless re-read)", async () => {
+    const capturedAt = new Date().toISOString();
+    writeClaudeSnapshot(
+      "s.json",
+      JSON.stringify({ captured_at: capturedAt, rate_limits: { five_hour: { used_percentage: 55 } } }),
+      60_000,
+    );
+    const a = await collectEngineLimits(cfg(), { engine: "claude" });
+    invalidateModelRegistry(); // fresh process would rebuild the registry
+    const b = await collectEngineLimits(cfg(), { engine: "claude" });
+    expect(b.engines.claude.refreshedAt).toBe(a.engines.claude.refreshedAt);
+    expect(b.engines.claude.windows?.[0]?.usedPercent).toBe(55);
+  });
+
+  it("reports an installed engine with no local quota endpoint as unsupported", async () => {
+    const out = await collectEngineLimits(cfg({ grok: { bin: NODE } }), { engine: "grok" });
+    expect(out.engines.grok.status).toBe("unsupported");
+    expect(out.engines.grok.unsupportedReason).toBeTruthy();
+  });
+
+  it("distinguishes a not-installed CLI (unavailable) from an unsupported one", async () => {
+    // Grok CLI missing → temporarily unavailable, not durably unsupported.
+    const grok = await collectEngineLimits(cfg({ grok: { bin: MISSING_BIN } }), { engine: "grok" });
+    expect(grok.engines.grok.status).toBe("unavailable");
+    expect(grok.engines.grok.unsupportedReason).toBeTruthy();
+
+    // A first-class engine whose CLI is missing is unavailable, not unsupported.
+    invalidateModelRegistry(); // each config change rebuilds the registry (as a fresh process would)
+    const claude = await collectEngineLimits(cfg({ claude: { bin: MISSING_BIN } }), { engine: "claude" });
+    expect(claude.engines.claude.status).toBe("unavailable");
+  });
+});
+
+describe("windowsFromClaudeUsage — OAuth usage-API bucket mapping", () => {
+  let windowsFromClaudeUsage: (usage: Record<string, unknown>, options?: { planHasNoFiveHour?: boolean }) => Array<{
+    name: string; usedPercent?: number; windowDurationMins?: number; resetsAt?: number; resetsAtIso?: string;
+  }>;
+  beforeAll(async () => {
+    ({ windowsFromClaudeUsage } = await import("../engine-limits-claude.js"));
+  });
+
+  it("maps every limits[] entry generically, including per-model scoped buckets (Fable)", () => {
+    const windows = windowsFromClaudeUsage({
+      five_hour: { utilization: 9, resets_at: "2026-07-19T05:00:00Z" },
+      seven_day: { utilization: 25, resets_at: "2026-07-25T08:00:00Z" },
+      limits: [
+        { kind: "session", group: "session", percent: 9, resets_at: "2026-07-19T05:00:00Z", scope: null },
+        { kind: "weekly_all", group: "weekly", percent: 25, resets_at: "2026-07-25T08:00:00Z", scope: null },
+        {
+          kind: "weekly_scoped",
+          group: "weekly",
+          percent: 50,
+          resets_at: "2026-07-25T08:00:00Z",
+          scope: { model: { id: null, display_name: "Fable" }, surface: null },
+          is_active: true,
+        },
+      ],
+    });
+    expect(windows.map((w) => w.name)).toEqual(["5h", "7d", "7d Fable"]);
+    expect(windows[0]).toMatchObject({ usedPercent: 9, windowDurationMins: 300 });
+    expect(windows[1]).toMatchObject({ usedPercent: 25, windowDurationMins: 10_080 });
+    // Scoped bucket: no duration (the UI must label it by name, not "7d") and
+    // a real epoch-seconds reset time derived from the ISO string.
+    expect(windows[2].windowDurationMins).toBeUndefined();
+    expect(windows[2].usedPercent).toBe(50);
+    expect(windows[2].resetsAt).toBe(Math.floor(Date.parse("2026-07-25T08:00:00Z") / 1000));
+  });
+
+  it("keeps unknown future bucket kinds instead of dropping them", () => {
+    const windows = windowsFromClaudeUsage({
+      limits: [
+        { kind: "session", percent: 1, resets_at: "2026-07-19T05:00:00Z" },
+        { kind: "monthly_mystery", percent: 42, resets_at: "2026-08-01T00:00:00Z" },
+      ],
+    });
+    expect(windows.map((w) => w.name)).toEqual(["5h", "monthly_mystery"]);
+    expect(windows[1].usedPercent).toBe(42);
+  });
+
+  it("falls back to top-level named buckets when limits[] is absent", () => {
+    const windows = windowsFromClaudeUsage({
+      five_hour: { utilization: 12.4, resets_at: "2026-07-19T05:00:00Z" },
+      seven_day: { utilization: 80, resets_at: "2026-07-25T08:00:00Z" },
+      seven_day_opus: { utilization: 5, resets_at: "2026-07-25T08:00:00Z" },
+      seven_day_sonnet: null,
+      extra_usage: { is_enabled: false, utilization: null },
+    });
+    expect(windows.map((w) => w.name)).toEqual(["5h", "7d", "7d opus"]);
+    expect(windows[0].usedPercent).toBe(12); // rounded
+  });
+
+  describe("a five-hour bucket the plan does not have", () => {
+    const weekly = { kind: "weekly_all", group: "weekly", percent: 37, resets_at: "2026-11-12T09:00:00Z", scope: null };
+    const session = (percent: number, extra: Record<string, unknown> = {}) =>
+      ({ kind: "session", group: "session", percent, resets_at: "2026-11-06T16:59:59Z", scope: null, ...extra });
+    const names = (usage: Record<string, unknown>) => windowsFromClaudeUsage(usage).map((w) => w.name);
+
+    it("leaves out a zeroed session entry the payload marks inactive", () => {
+      expect(names({ limits: [session(0, { is_active: false }), weekly] })).toEqual(["7d"]);
+    });
+
+    it("leaves out a zeroed session entry when the named buckets have a weekly reading and no five-hour one", () => {
+      const usage = { five_hour: null, seven_day: { utilization: 37, resets_at: "2026-11-12T09:00:00Z" }, limits: [session(0), weekly] };
+      expect(names(usage)).toEqual(["7d"]);
+    });
+
+    it("shows no five-hour window when limits[] has no session entry", () => {
+      expect(names({ limits: [weekly] })).toEqual(["7d"]);
+    });
+
+    it("keeps a real session entry at 0% straight after a reset", () => {
+      const fresh = windowsFromClaudeUsage({
+        five_hour: { utilization: 0, resets_at: null },
+        seven_day: { utilization: 37, resets_at: "2026-11-12T09:00:00Z" },
+        limits: [session(0, { is_active: true, resets_at: null }), weekly],
+      });
+      expect(fresh[0]).toMatchObject({ name: "5h", usedPercent: 0, windowDurationMins: 300 });
+      // limits[] alone, with nothing saying the bucket is absent: a zero is a zero.
+      expect(names({ limits: [session(0), weekly] })).toEqual(["5h", "7d"]);
+    });
+
+    it("keeps an exhausted session limit at 100% with its reset whatever else the payload says", () => {
+      const usage = { five_hour: null, seven_day: { utilization: 37 }, limits: [session(100, { is_active: false }), weekly] };
+      expect(windowsFromClaudeUsage(usage)[0]).toMatchObject({
+        name: "5h",
+        usedPercent: 100,
+        resetsAt: Math.floor(Date.parse("2026-11-06T16:59:59Z") / 1000),
+      });
+    });
+
+    it("shows no five-hour window from the named-bucket fallback when five_hour is absent", () => {
+      expect(names({ seven_day: { utilization: 37, resets_at: "2026-11-12T09:00:00Z" } })).toEqual(["7d"]);
+      expect(names({ five_hour: null, seven_day: { utilization: 37, resets_at: "2026-11-12T09:00:00Z" } })).toEqual(["7d"]);
+    });
+
+    describe("when the account's snapshot shows the plan has no five-hour limit", () => {
+      const noFiveHour = { planHasNoFiveHour: true };
+      const namesFor = (usage: Record<string, unknown>) => windowsFromClaudeUsage(usage, noFiveHour).map((w) => w.name);
+
+      it("leaves out a zeroed session entry the payload says nothing about", () => {
+        expect(namesFor({ limits: [session(0), weekly] })).toEqual(["7d"]);
+      });
+
+      it("leaves out a zeroed five_hour bucket from the named-bucket fallback", () => {
+        expect(namesFor({ five_hour: { utilization: 0 }, seven_day: { utilization: 37 } })).toEqual(["7d"]);
+      });
+
+      it("keeps any reading above zero, however small, in limits[] and in the fallback", () => {
+        expect(namesFor({ limits: [session(0.4), weekly] })).toEqual(["5h", "7d"]);
+        expect(namesFor({ five_hour: { utilization: 0.4 }, seven_day: { utilization: 37 } })).toEqual(["5h", "7d"]);
+      });
+    });
+
+    it("keeps a reading above zero that the payload itself marks inactive", () => {
+      expect(names({ limits: [session(0.4, { is_active: false }), weekly] })).toEqual(["5h", "7d"]);
+    });
+  });
+
+  describe("statuslineShowsNoFiveHour", () => {
+    let statuslineShowsNoFiveHour: (rateLimits: unknown) => boolean;
+    beforeAll(async () => {
+      ({ statuslineShowsNoFiveHour } = await import("../engine-limits-claude-usage.js"));
+    });
+    const sevenDay = { used_percentage: 37, resets_at: 1789102800 };
+
+    it("is true for a weekly reading with no five_hour key", () => {
+      expect(statuslineShowsNoFiveHour({ seven_day: sevenDay })).toBe(true);
+    });
+
+    it("is false for any five_hour entry, including an empty or null one", () => {
+      expect(statuslineShowsNoFiveHour({ seven_day: sevenDay, five_hour: { used_percentage: 0, resets_at: 1789000000 } })).toBe(false);
+      expect(statuslineShowsNoFiveHour({ seven_day: sevenDay, five_hour: {} })).toBe(false);
+      expect(statuslineShowsNoFiveHour({ seven_day: sevenDay, five_hour: { used_percentage: null, resets_at: null } })).toBe(false);
+      expect(statuslineShowsNoFiveHour({ seven_day: sevenDay, five_hour: null })).toBe(false);
+    });
+
+    it("is false with no weekly reading to go on", () => {
+      expect(statuslineShowsNoFiveHour({})).toBe(false);
+      expect(statuslineShowsNoFiveHour(undefined)).toBe(false);
+    });
+  });
+
+  it("tolerates malformed entries and bad reset timestamps", () => {
+    const windows = windowsFromClaudeUsage({
+      limits: [
+        null,
+        "junk",
+        { kind: "session" }, // no percent → dropped
+        { kind: "weekly_all", percent: 30, resets_at: "not-a-date" },
+      ],
+    });
+    expect(windows).toHaveLength(1);
+    expect(windows[0]).toMatchObject({ name: "7d", usedPercent: 30 });
+    expect(windows[0].resetsAt).toBeUndefined();
+    expect(windows[0].resetsAtIso).toBeUndefined();
+  });
+});

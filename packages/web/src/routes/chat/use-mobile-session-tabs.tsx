@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { GatewayEventListener } from '@jinn/gateway-events'
+import type { GatewayEventListener } from '@hundredfold/gateway-events'
 import { splitTitleId } from '@/components/chat/chat-tabs'
 import { isChatTabId, TODOS_TAB_ID, TODOS_TAB_TITLE } from './layout/tab-kind'
 import { useMobileWorkingSetActivity, type MobileWorkingSetActivity } from './mobile-working-set-activity'

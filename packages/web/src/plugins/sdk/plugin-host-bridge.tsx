@@ -1,12 +1,12 @@
 import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
-import type { GatewayEvent } from '@jinn/gateway-events'
+import type { GatewayEvent } from '@hundredfold/gateway-events'
 import { parseSelectedSession } from '@/components/chat/chat-route-helpers'
 import { useGateway } from '@/hooks/use-gateway'
 import { hostNotificationSink } from './host-bridge'
 import { dispatchHostEvent } from './host-events'
 import { publishHostState } from './host-state'
-// The `@jinn/plugin-sdk` barrel is named from `installPluginSdk()` as a
+// The `@hundredfold/plugin-sdk` barrel is named from `installPluginSdk()` as a
 // dynamic import, not here. A static import put Select/Menu and the floating
 // layer back on every dashboard's first paint.
 

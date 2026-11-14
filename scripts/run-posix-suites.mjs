@@ -18,7 +18,7 @@ import { spawnSync } from "node:child_process";
 const SUITES = [
   "scripts/__tests__/deliverable-evidence.test.mjs",
   "scripts/__tests__/device-scroll-fixture.test.mjs",
-  "scripts/__tests__/jinn-sandbox.test.mjs",
+  "scripts/__tests__/hundredfold-sandbox.test.mjs",
   "scripts/__tests__/reap-worktrees.test.mjs",
   "scripts/upgrade-lab/__tests__/guards.test.mjs",
   "scripts/upgrade-lab/__tests__/workflow-state.test.mjs",

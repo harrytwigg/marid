@@ -4,7 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
-import { CODENAME } from '../jinn/src/shared/codename-constant'
+import { CODENAME } from '../hundredfold/src/shared/codename-constant'
 
 /**
  * The service worker's warm-up script, written with the codename in its cache name. It cannot live in
@@ -13,7 +13,7 @@ import { CODENAME } from '../jinn/src/shared/codename-constant'
  */
 function shellWarmScript(): Plugin {
   return {
-    name: 'jinn-shell-warm-script',
+    name: 'hundredfold-shell-warm-script',
     apply: 'build',
     generateBundle() {
       const template = fs.readFileSync(path.resolve(__dirname, 'sw-shell-warm.template.js'), 'utf8')
@@ -45,7 +45,7 @@ const herouiThemeMap = path.join(
 function preloadUiFont(): Plugin {
   const uiFont = /^assets\/geist-latin-var-[^/]+\.woff2$/
   return {
-    name: 'jinn-preload-ui-font',
+    name: 'hundredfold-preload-ui-font',
     apply: 'build',
     transformIndexHtml: {
       order: 'post',
@@ -53,7 +53,7 @@ function preloadUiFont(): Plugin {
         const emitted = Object.keys(ctx.bundle ?? {}).find((name) => uiFont.test(name))
         if (!emitted) {
           throw new Error(
-            'jinn-preload-ui-font: no geist-latin-var woff2 in the bundle. ' +
+            'hundredfold-preload-ui-font: no geist-latin-var woff2 in the bundle. ' +
               'If the file was renamed, update the pattern; if the face was dropped, drop this plugin.',
           )
         }
@@ -168,20 +168,21 @@ export default defineConfig(() => {
         // The plugin SDK is a specifier, not a package: a real package would
         // need its own build and its own React peer, and the singleton the SDK
         // exists to guarantee is exactly what a second React copy would break.
-        '@jinn/plugin-sdk': path.resolve(__dirname, 'src/plugins/sdk/index.ts'),
+        '@hundredfold/plugin-sdk': path.resolve(__dirname, 'src/plugins/sdk/index.ts'),
         // This one resolves at build time: the module is runtime code the bundle
         // really carries. It is a pure leaf with an empty import list, which is
         // what keeps that safe with no polyfills.
-        '@jinn/fallback-map-wire': path.resolve(__dirname, '../jinn/src/shared/fallback-map-wire.ts'),
+        '@hundredfold/fallback-map-wire': path.resolve(__dirname, '../hundredfold/src/shared/fallback-map-wire.ts'),
         // Another pure leaf: the chain editor refuses a chain in the config loader's words.
-        '@jinn/fallback-chain-wire': path.resolve(__dirname, '../jinn/src/shared/fallback-chain-wire.ts'),
+        '@hundredfold/fallback-chain-wire': path.resolve(__dirname, '../hundredfold/src/shared/fallback-chain-wire.ts'),
         // The same leaf treatment as the line above, and for the same reason: the
         // editor has to judge a model id by the rule the config loader judges it
         // by, and a second copy of that rule is a second answer waiting to drift.
-        '@jinn/model-id': path.resolve(__dirname, '../jinn/src/shared/model-id.ts'),
+        '@hundredfold/model-id': path.resolve(__dirname, '../hundredfold/src/shared/model-id.ts'),
         // The codename is one literal for the whole repo: the gateway's names and the
         // browser's are built from the same line, so they cannot disagree.
-        '@jinn/codename': path.resolve(__dirname, '../jinn/src/shared/codename-constant.ts'),
+        '@hundredfold/codename': path.resolve(__dirname, '../hundredfold/src/shared/codename-constant.ts'),
+        '@hundredfold/legacy-names': path.resolve(__dirname, '../hundredfold/src/shared/legacy/names.ts'),
       },
     },
     build: {

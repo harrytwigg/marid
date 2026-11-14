@@ -2,7 +2,7 @@
 
 > **For agentic workers:** Execute this plan task-by-task under strict RED → GREEN TDD. Steps use checkbox syntax for tracking.
 
-**Goal:** Remediate all eight findings in `/tmp/jinn-workflow-layout-review-report.md` without weakening layout authority, execution safety, approval routing, SPA navigation safety, responsive framing, or the MCP authoring contract.
+**Goal:** Remediate all eight findings in `/tmp/hundredfold-workflow-layout-review-report.md` without weakening layout authority, execution safety, approval routing, SPA navigation safety, responsive framing, or the MCP authoring contract.
 
 **Architecture:** Geometry intent is inferred only from node identity/positions and edge identity/endpoints; execution metadata is orthogonal. Structural validation becomes the shared fail-fast boundary for graph complexity and non-loop DAG safety, while the layout evaluator uses bounded port-to-port segment analysis. Run reads project caller-specific approval capability without persisting it. The web moves to React Router's data-router API so a single blocked-navigation dialog can preserve the intended destination across Save, Discard, and Stay. Canvas framing observes only meaningful breakpoint/orientation class changes, preserving user viewport ownership between those changes.
 
@@ -13,7 +13,7 @@
 - Work only in the existing isolated workflow-layout worktree on `feat/wi-c239479ad914-workflow-layout`.
 - Preserve the existing 25-commit range and add scoped remediation commits.
 - No merge, deploy, push, or production `:7777` access/mutation/restart/test.
-- Final sandbox must use a fresh sanitized `JINN_HOME` and a pinned free port `7920+`.
+- Final sandbox must use a fresh sanitized `HUNDREDFOLD_HOME` and a pinned free port `7920+`.
 - Every production change requires a targeted test observed failing for the expected reason first.
 - Keep public repo content generic; no private names, paths, credentials, or customer/project data.
 - No `Co-Authored-By` trailers.
@@ -23,8 +23,8 @@
 ### Task 1: Make geometry authority independent from execution properties
 
 **Files:**
-- Modify: `packages/jinn/src/workflows/definition-store.ts`
-- Modify: `packages/jinn/src/workflows/__tests__/definition-store.test.ts`
+- Modify: `packages/hundredfold/src/workflows/definition-store.ts`
+- Modify: `packages/hundredfold/src/workflows/__tests__/definition-store.test.ts`
 - Modify: `packages/web/src/routes/workflow/__tests__/edit-graph.test.tsx`
 
 **Interfaces:**
@@ -50,7 +50,7 @@ for (const mutate of PROPERTY_ONLY_MUTATIONS) {
 
 Run:
 ```bash
-pnpm --filter jinn-cli test -- src/workflows/__tests__/definition-store.test.ts \
+pnpm --filter hundredfold test -- src/workflows/__tests__/definition-store.test.ts \
   > /tmp/workflow-layout-remediation-manual-red.txt 2>&1
 ```
 Expected: lane/kind mutations return normalized coordinates/provenance.
@@ -69,12 +69,12 @@ git commit -m "fix(workflows): separate layout authority from execution config"
 ### Task 2: Reject non-loop cycles and bound graph complexity before layout
 
 **Files:**
-- Modify: `packages/jinn/src/workflows/definition.ts`
-- Modify: `packages/jinn/src/workflows/authoring.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/workflows/__tests__/definition.test.ts`
-- Create: `packages/jinn/src/workflows/__tests__/complexity.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/workflow-definitions-route.test.ts`
+- Modify: `packages/hundredfold/src/workflows/definition.ts`
+- Modify: `packages/hundredfold/src/workflows/authoring.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/workflows/__tests__/definition.test.ts`
+- Create: `packages/hundredfold/src/workflows/__tests__/complexity.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/workflow-definitions-route.test.ts`
 
 **Interfaces:**
 - Export `MAX_WORKFLOW_NODES = 96`, `MAX_WORKFLOW_EDGES = 384`, `MAX_WORKFLOW_EDGES_PER_NODE = 4`, and `MAX_WORKFLOW_DEFINITION_BYTES = 256 * 1024`.
@@ -107,7 +107,7 @@ expect(timerDelay).toBeLessThan(500)
 - [ ] **Step 3: Run and retain RED**
 
 ```bash
-pnpm --filter jinn-cli test -- \
+pnpm --filter hundredfold test -- \
   src/workflows/__tests__/definition.test.ts \
   src/workflows/__tests__/complexity.test.ts \
   src/gateway/__tests__/workflow-definitions-route.test.ts \
@@ -128,8 +128,8 @@ git commit -m "fix(workflows): bound and validate executable graphs"
 ### Task 3: Detect all bounded non-loop segment crossings
 
 **Files:**
-- Modify: `packages/jinn/src/workflows/layout.ts`
-- Modify: `packages/jinn/src/workflows/__tests__/layout.test.ts`
+- Modify: `packages/hundredfold/src/workflows/layout.ts`
+- Modify: `packages/hundredfold/src/workflows/__tests__/layout.test.ts`
 
 **Interfaces:**
 - Port segment: source expanded-envelope right-center → target expanded-envelope left-center.
@@ -147,7 +147,7 @@ expect(evaluateWorkflowLayout(sharedEndpointFanout()).reasons.map((r) => r.code)
 - [ ] **Step 2: Run RED and retain evidence**
 
 ```bash
-pnpm --filter jinn-cli test -- src/workflows/__tests__/layout.test.ts \
+pnpm --filter hundredfold test -- src/workflows/__tests__/layout.test.ts \
   > /tmp/workflow-layout-remediation-crossing-red.txt 2>&1
 ```
 
@@ -164,9 +164,9 @@ git commit -m "fix(workflows): validate bounded edge intersections"
 ### Task 4: Publish caller-specific approval capability and render honest controls
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/workflow-definitions-route.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/work-item-approval-route.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/workflow-definitions-route.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/work-item-approval-route.test.ts`
 - Modify: `packages/web/src/lib/api.ts`
 - Modify: `packages/web/src/routes/workflow/run-view.tsx`
 - Modify: `packages/web/src/routes/workflow/__tests__/run-view.test.tsx`
@@ -186,9 +186,9 @@ Authorized parked runs render Approve/Reject. Unauthorized runs render no active
 - [ ] **Step 3: Run RED and retain evidence**
 
 ```bash
-pnpm --filter jinn-cli test -- src/gateway/__tests__/workflow-definitions-route.test.ts src/gateway/__tests__/work-item-approval-route.test.ts \
+pnpm --filter hundredfold test -- src/gateway/__tests__/workflow-definitions-route.test.ts src/gateway/__tests__/work-item-approval-route.test.ts \
   > /tmp/workflow-layout-remediation-approval-server-red.txt 2>&1
-pnpm --filter @jinn/web test -- src/routes/workflow/__tests__/run-view.test.tsx \
+pnpm --filter @hundredfold/web test -- src/routes/workflow/__tests__/run-view.test.tsx \
   > /tmp/workflow-layout-remediation-approval-web-red.txt 2>&1
 ```
 
@@ -223,7 +223,7 @@ Use a real `createMemoryRouter` to exercise Link/sidebar, breadcrumb, global-sea
 - [ ] **Step 2: Run RED and retain evidence**
 
 ```bash
-pnpm --filter @jinn/web test -- src/routes/workflow/__tests__/page.test.tsx src/routes/workflow/__tests__/edit-graph.test.tsx \
+pnpm --filter @hundredfold/web test -- src/routes/workflow/__tests__/page.test.tsx src/routes/workflow/__tests__/edit-graph.test.tsx \
   > /tmp/workflow-layout-remediation-navigation-red.txt 2>&1
 ```
 
@@ -257,7 +257,7 @@ Mock `ResizeObserver`, emit controlled dimensions, and assert exactly one refram
 - [ ] **Step 2: Run RED and retain evidence**
 
 ```bash
-pnpm --filter @jinn/web test -- src/routes/workflow/__tests__/canvas-model.test.ts src/routes/workflow/__tests__/canvas.test.tsx \
+pnpm --filter @hundredfold/web test -- src/routes/workflow/__tests__/canvas-model.test.ts src/routes/workflow/__tests__/canvas.test.tsx \
   > /tmp/workflow-layout-remediation-framing-red.txt 2>&1
 ```
 
@@ -274,9 +274,9 @@ git commit -m "fix(web): reframe workflows on viewport class changes"
 ### Task 7: Reuse closed authoring schemas on every MCP write tool
 
 **Files:**
-- Modify: `packages/jinn/src/mcp/workflow-tools.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/workflow-tools.test.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/tool-manifest-budget.test.ts`
+- Modify: `packages/hundredfold/src/mcp/workflow-tools.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/workflow-tools.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/tool-manifest-budget.test.ts`
 
 **Interfaces:**
 - Shared closed SOP schema for plan/validate/create/update.
@@ -290,7 +290,7 @@ For all four authoring tools assert closed nested options/session/retry/gate/con
 - [ ] **Step 2: Run RED and retain evidence**
 
 ```bash
-pnpm --filter jinn-cli test -- src/mcp/__tests__/workflow-tools.test.ts src/mcp/__tests__/tool-manifest-budget.test.ts \
+pnpm --filter hundredfold test -- src/mcp/__tests__/workflow-tools.test.ts src/mcp/__tests__/tool-manifest-budget.test.ts \
   > /tmp/workflow-layout-remediation-schema-red.txt 2>&1
 ```
 
@@ -309,8 +309,8 @@ git commit -m "fix(mcp): close every workflow authoring schema"
 - [ ] **Step 1: Run focused suites, both typechecks, and both builds**
 
 ```bash
-pnpm --filter jinn-cli test -- src/workflows src/gateway/__tests__/workflow-definitions-route.test.ts src/gateway/__tests__/work-item-approval-route.test.ts src/mcp/__tests__/workflow-tools.test.ts
-pnpm --filter @jinn/web test -- src/routes/workflow
+pnpm --filter hundredfold test -- src/workflows src/gateway/__tests__/workflow-definitions-route.test.ts src/gateway/__tests__/work-item-approval-route.test.ts src/mcp/__tests__/workflow-tools.test.ts
+pnpm --filter @hundredfold/web test -- src/routes/workflow
 pnpm typecheck --force
 pnpm build --force
 ```
@@ -318,7 +318,7 @@ pnpm build --force
 - [ ] **Step 2: Run five fresh GPT-5.5-low authors and the new browser matrix on 7920**
 
 ```bash
-JINN_VERIFY_PORT=7920 JINN_IMPLEMENTATION_GREEN=1 \
+HUNDREDFOLD_VERIFY_PORT=7920 HUNDREDFOLD_IMPLEMENTATION_GREEN=1 \
   ./scripts/verify-workflow-layout.sh --with-authors \
   > /tmp/workflow-layout-remediation-browser-final.txt 2>&1
 ```
@@ -328,13 +328,13 @@ Required browser additions: authorized/unauthorized approval, Needs-you guidance
 - [ ] **Step 3: Run full suites and audits**
 
 ```bash
-pnpm --filter jinn-cli test
-pnpm --filter @jinn/web test
+pnpm --filter hundredfold test
+pnpm --filter @hundredfold/web test
 pnpm typecheck --force
 pnpm build --force
 git diff --check main...HEAD
 git log --format=%B main..HEAD | grep -i 'Co-Authored-By'
-pnpm --filter jinn-cli test -- src/shared/__tests__/privacy-guard.test.ts
+pnpm --filter hundredfold test -- src/shared/__tests__/privacy-guard.test.ts
 ```
 
 - [ ] **Step 4: Re-run exact integration analysis**

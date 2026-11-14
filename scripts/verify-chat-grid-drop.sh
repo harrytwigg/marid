@@ -1,33 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# The caller's shell usually carries its own live instance: a Jinn session exports
-# JINN_HOME, JINN_PORT, JINN_HOST, JINN_INSTANCE and the gateway URL/token/session id.
-# Those are not inert here. resolveJinnHome() (packages/jinn/src/shared/home.ts) returns
-# $JINN_HOME outright and otherwise names the directory after $JINN_INSTANCE, so setting
+# The caller's shell usually carries its own live instance: a Hundredfold session exports
+# HUNDREDFOLD_HOME, HUNDREDFOLD_PORT, HUNDREDFOLD_HOST, HUNDREDFOLD_INSTANCE and the gateway URL/token/session id.
+# Those are not inert here. resolveHundredfoldHome() (packages/hundredfold/src/shared/home.ts) returns
+# $HUNDREDFOLD_HOME outright and otherwise names the directory after $HUNDREDFOLD_INSTANCE, so setting
 # HOME below is not enough on its own; applyGatewayEnvOverrides()
-# (packages/jinn/src/shared/config.ts) then replaces whatever port the sandbox's own
-# config.yaml declares with $JINN_PORT. Inherited, they aim this script's
+# (packages/hundredfold/src/shared/config.ts) then replaces whatever port the sandbox's own
+# config.yaml declares with $HUNDREDFOLD_PORT. Inherited, they aim this script's
 # create/start/stop/destroy cycle at the operator's gateway on 7777 instead of the
 # throwaway sandbox. Scrub them before anything reads them. The script's own inputs --
-# JINN_VERIFY_* and JINN_SANDBOX_HELPER -- are deliberately kept, and JINN_REPO is
+# HUNDREDFOLD_VERIFY_* and HUNDREDFOLD_SANDBOX_HELPER -- are deliberately kept, and HUNDREDFOLD_REPO is
 # exported per-command below rather than inherited.
-unset JINN_HOME JINN_PORT JINN_HOST JINN_INSTANCE JINN_GATEWAY_URL JINN_GATEWAY_TOKEN JINN_SESSION_ID
+unset HUNDREDFOLD_HOME HUNDREDFOLD_PORT HUNDREDFOLD_HOST HUNDREDFOLD_INSTANCE HUNDREDFOLD_GATEWAY_URL HUNDREDFOLD_GATEWAY_TOKEN HUNDREDFOLD_SESSION_ID
+eval "$(node "$(dirname "${BASH_SOURCE[0]}")/legacy-names.mjs" unset HOME PORT HOST INSTANCE GATEWAY_URL GATEWAY_TOKEN SESSION_ID)" # an older build's shell exports the old names, and a new build adopts them
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-HELPER="${JINN_SANDBOX_HELPER:-$REPO/scripts/jinn-sandbox.sh}"
-PORT="${JINN_VERIFY_PORT:-8060}"
-TMP_BASE="${JINN_VERIFY_TMP_ROOT:-/tmp}"
+HELPER="${HUNDREDFOLD_SANDBOX_HELPER:-$REPO/scripts/hundredfold-sandbox.sh}"
+PORT="${HUNDREDFOLD_VERIFY_PORT:-8060}"
+TMP_BASE="${HUNDREDFOLD_VERIFY_TMP_ROOT:-/tmp}"
 INSTANCE="chat-grid-drop-verification"
 
 PNPM_BIN="$(command -v pnpm || true)"
 if [[ -z "$PNPM_BIN" ]]; then echo "pnpm is required" >&2; exit 2; fi
-NODE_BIN="${JINN_VERIFY_NODE_BIN:-$(dirname "$PNPM_BIN")/node}"
+NODE_BIN="${HUNDREDFOLD_VERIFY_NODE_BIN:-$(dirname "$PNPM_BIN")/node}"
 if [[ ! -x "$NODE_BIN" ]]; then echo "Node beside pnpm not found: $NODE_BIN" >&2; exit 2; fi
 export PATH="$(dirname "$NODE_BIN"):$PATH"
 
 if [[ ! "$PORT" =~ ^[0-9]+$ ]] || (( PORT < 8060 )) || [[ "$PORT" == "7777" || "$PORT" == "7788" ]]; then
-  echo "JINN_VERIFY_PORT must be an integer at or above 8060 and cannot be 7777 or 7788" >&2
+  echo "HUNDREDFOLD_VERIFY_PORT must be an integer at or above 8060 and cannot be 7777 or 7788" >&2
   exit 2
 fi
 if [[ ! -x "$HELPER" ]]; then echo "Sandbox helper not found: $HELPER" >&2; exit 2; fi
@@ -40,11 +41,11 @@ fi
 # here means the browser journey below could have been aimed at the operator's instance.
 ( cd "$REPO" && "$NODE_BIN" --test e2e/chat-grid-drop/*.test.mjs )
 
-VERIFY_ROOT="$(mktemp -d "$TMP_BASE/jinn-chat-grid-drop.XXXXXX")"
+VERIFY_ROOT="$(mktemp -d "$TMP_BASE/hundredfold-chat-grid-drop.XXXXXX")"
 HOST_HOME="$VERIFY_ROOT/host"
-SANDBOX_HOME="$HOST_HOME/.jinn-$INSTANCE"
+SANDBOX_HOME="$HOST_HOME/.hundredfold-$INSTANCE"
 ARTIFACTS="$SANDBOX_HOME/sandbox-artifacts/chat-grid-drop"
-RETAIN_DIR="${JINN_VERIFY_RETAIN_DIR:-}"
+RETAIN_DIR="${HUNDREDFOLD_VERIFY_RETAIN_DIR:-}"
 BASE_URL="http://127.0.0.1:$PORT"
 STARTED=0
 
@@ -56,7 +57,7 @@ cleanup() {
     cp -R "$ARTIFACTS"/. "$RETAIN_DIR"/
   fi
   if [[ "$STARTED" -eq 1 ]]; then
-    env HOME="$HOST_HOME" JINN_REPO="$REPO" "$HELPER" stop "$INSTANCE" >/dev/null 2>&1 || status=3
+    env HOME="$HOST_HOME" HUNDREDFOLD_REPO="$REPO" "$HELPER" stop "$INSTANCE" >/dev/null 2>&1 || status=3
     for _ in {1..20}; do
       if ! lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t >/dev/null 2>&1; then break; fi
       sleep 0.25
@@ -65,9 +66,9 @@ cleanup() {
       echo "Sandbox listener remains on port $PORT" >&2
       status=3
     fi
-    env HOME="$HOST_HOME" JINN_REPO="$REPO" "$HELPER" destroy "$INSTANCE" --yes >/dev/null 2>&1 || status=3
+    env HOME="$HOST_HOME" HUNDREDFOLD_REPO="$REPO" "$HELPER" destroy "$INSTANCE" --yes >/dev/null 2>&1 || status=3
   fi
-  if [[ "$VERIFY_ROOT" == "$TMP_BASE"/jinn-chat-grid-drop.* && -d "$VERIFY_ROOT" ]]; then
+  if [[ "$VERIFY_ROOT" == "$TMP_BASE"/hundredfold-chat-grid-drop.* && -d "$VERIFY_ROOT" ]]; then
     rm -rf "$VERIFY_ROOT"
   else
     echo "Refusing cleanup outside the current verification root: $VERIFY_ROOT" >&2
@@ -80,10 +81,10 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 mkdir -p "$HOST_HOME"
-env HOME="$HOST_HOME" JINN_REPO="$REPO" "$HELPER" create "$INSTANCE" --port "$PORT" --build --seed
+env HOME="$HOST_HOME" HUNDREDFOLD_REPO="$REPO" "$HELPER" create "$INSTANCE" --port "$PORT" --build --seed
 "$NODE_BIN" "$REPO/scripts/seed-chat-grid-drop.mjs" "$SANDBOX_HOME" "$REPO"
 # The sandbox must be bound by its own config.yaml, checked before the daemon reads it. This
-# is the other half of the scrub at the top: if an inherited JINN_PORT ever slips past it,
+# is the other half of the scrub at the top: if an inherited HUNDREDFOLD_PORT ever slips past it,
 # applyGatewayEnvOverrides() would silently rebind the gateway away from $PORT and the run
 # would be aimed somewhere nobody chose.
 CONFIGURED_PORT="$(SANDBOX_CONFIG="$SANDBOX_HOME/config.yaml" "$NODE_BIN" -e '
@@ -103,11 +104,11 @@ fi
 echo "Sandbox config.yaml declares gateway port $CONFIGURED_PORT before start"
 
 STARTED=1
-env HOME="$HOST_HOME" JINN_REPO="$REPO" "$HELPER" start "$INSTANCE"
+env HOME="$HOST_HOME" HUNDREDFOLD_REPO="$REPO" "$HELPER" start "$INSTANCE"
 
-export JINN_VERIFY_HOME="$SANDBOX_HOME"
-export JINN_VERIFY_BASE_URL="$BASE_URL"
-export JINN_VERIFY_ARTIFACTS="$ARTIFACTS"
+export HUNDREDFOLD_VERIFY_HOME="$SANDBOX_HOME"
+export HUNDREDFOLD_VERIFY_BASE_URL="$BASE_URL"
+export HUNDREDFOLD_VERIFY_ARTIFACTS="$ARTIFACTS"
 mkdir -p "$ARTIFACTS"
 
 cd "$REPO"

@@ -15,7 +15,7 @@ export function ThinkingIndicator({ prevRole }: { prevRole: Message['role'] }) {
           edge of assistant prose. */}
       <div className="assistant-msg-row">
         <div className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-[jinn-pulse_1.4s_infinite] shrink-0" />
+          <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-[hundredfold-pulse_1.4s_infinite] shrink-0" />
           <span className="text-[length:var(--text-caption1)] text-[var(--text-tertiary)] font-[var(--weight-medium)]">
             Thinking
           </span>

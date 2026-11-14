@@ -66,7 +66,7 @@ const NOOP = () => {}
 const ROUTE_FRAME: ComponentType<{ children: ReactNode }> = PageLayout
 const TAB_FRAME: ComponentType<{ children: ReactNode }> = Fragment
 
-const TREE_OPEN_KEY = "jinn-board-tree-open"
+const TREE_OPEN_KEY = "hundredfold-board-tree-open"
 
 function loadExpandedTrees(): Set<string> {
   try {
@@ -656,7 +656,7 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
             onScroll={onBoardScroll}
             data-testid="todo-board-scroll"
             data-scrollable
-            className="min-h-0 flex-1 overflow-y-auto px-5 pb-[var(--jinn-scaffold-bottom)] pt-5 md:px-10 lg:pb-10"
+            className="min-h-0 flex-1 overflow-y-auto px-5 pb-[var(--hundredfold-scaffold-bottom)] pt-5 md:px-10 lg:pb-10"
           >
             <div className="max-w-[680px]">
               {needs.isLoading ? (
@@ -685,7 +685,7 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
             hidden={!mobile || mobileView !== "list"}
             data-testid="todo-list-scroll"
             data-scrollable
-            className="min-h-0 flex-1 overflow-y-auto pb-[var(--jinn-scaffold-bottom)] lg:pb-10"
+            className="min-h-0 flex-1 overflow-y-auto pb-[var(--hundredfold-scaffold-bottom)] lg:pb-10"
           >
             {data.isError ? (
               <BoardErrorCard error={data.error} testId="todo-list-error" />
@@ -722,7 +722,7 @@ export function TodoBoard({ embedded = false }: { embedded?: boolean }) {
             data-testid="todo-board-scroll"
             data-board-glass={subtree ? undefined : embedded ? "tab" : ""}
             data-scrollable
-            className="min-h-0 flex-1 overflow-auto pb-[var(--jinn-scaffold-bottom)] max-[700px]:snap-x max-[700px]:snap-mandatory max-[700px]:scroll-px-4 lg:pb-10"
+            className="min-h-0 flex-1 overflow-auto pb-[var(--hundredfold-scaffold-bottom)] max-[700px]:snap-x max-[700px]:snap-mandatory max-[700px]:scroll-px-4 lg:pb-10"
           >
             {data.isError ? (
               <BoardErrorCard error={data.error} />

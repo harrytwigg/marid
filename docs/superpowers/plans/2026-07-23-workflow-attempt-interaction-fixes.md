@@ -10,12 +10,12 @@
 
 ## Global Constraints
 
-- Work only in the dedicated `jinn-wf-interaction-fix` worktree; do not modify the main working tree.
+- Work only in the dedicated `hundredfold-wf-interaction-fix` worktree; do not modify the main working tree.
 - Do not start or restart a gateway.
-- Do not use any personal Jinn instance as `JINN_HOME`.
+- Do not use any personal Hundredfold instance as `HUNDREDFOLD_HOME`.
 - Do not bind ports 7777, 7788, 7801, 7850, or 7910.
 - Do not kill any process that this test run did not start.
-- Turn-end never completes a workflow Employee node; only `workflow_submit_output` or a valid `jinn-output` fenced block completes it.
+- Turn-end never completes a workflow Employee node; only `workflow_submit_output` or a valid `hundredfold-output` fenced block completes it.
 - Commit Bug A and Bug B separately, with their regression tests in the same commit as each fix.
 - After the final edit, run the complete backend and web test suites and retain their verbatim output tails.
 
@@ -24,10 +24,10 @@
 ### Task 1: Persist Workflow-Dispatched Streaming Activity
 
 **Files:**
-- Create: `packages/jinn/src/sessions/partial-stream.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/sessions/manager.ts`
-- Test: `packages/jinn/src/sessions/__tests__/workflow-attempt-turns.test.ts`
+- Create: `packages/hundredfold/src/sessions/partial-stream.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/sessions/manager.ts`
+- Test: `packages/hundredfold/src/sessions/__tests__/workflow-attempt-turns.test.ts`
 
 **Interfaces:**
 - Consumes: `StreamDelta`, registry partial-message primitives, and block-envelope validation.
@@ -52,7 +52,7 @@ Resolve the turn and assert that the retained activity rows are non-partial and 
 Run:
 
 ```bash
-pnpm --filter jinn-cli test -- src/sessions/__tests__/workflow-attempt-turns.test.ts
+pnpm --filter hundredfold test -- src/sessions/__tests__/workflow-attempt-turns.test.ts
 ```
 
 Expected: FAIL because `runs[0].onStream` is undefined and no partial rows exist.
@@ -88,7 +88,7 @@ In `SessionManager.runSession`, normalize each engine delta, update context/last
 Run:
 
 ```bash
-pnpm --filter jinn-cli test -- src/sessions/__tests__/workflow-attempt-turns.test.ts src/gateway/__tests__/block-finalize.test.ts src/gateway/__tests__/streamed-turn-settlement.test.ts
+pnpm --filter hundredfold test -- src/sessions/__tests__/workflow-attempt-turns.test.ts src/gateway/__tests__/block-finalize.test.ts src/gateway/__tests__/streamed-turn-settlement.test.ts
 ```
 
 Expected: all selected tests PASS.
@@ -97,10 +97,10 @@ Expected: all selected tests PASS.
 
 ```bash
 git add docs/superpowers/plans/2026-07-23-workflow-attempt-interaction-fixes.md \
-  packages/jinn/src/sessions/partial-stream.ts \
-  packages/jinn/src/gateway/api.ts \
-  packages/jinn/src/sessions/manager.ts \
-  packages/jinn/src/sessions/__tests__/workflow-attempt-turns.test.ts
+  packages/hundredfold/src/sessions/partial-stream.ts \
+  packages/hundredfold/src/gateway/api.ts \
+  packages/hundredfold/src/sessions/manager.ts \
+  packages/hundredfold/src/sessions/__tests__/workflow-attempt-turns.test.ts
 git commit -m "fix(workflows): persist live attempt activity"
 ```
 
@@ -109,14 +109,14 @@ git commit -m "fix(workflows): persist live attempt activity"
 ### Task 2: Preserve Attempts Across User-Message Interruptions
 
 **Files:**
-- Create: `packages/jinn/src/sessions/workflow-interruptions.ts`
-- Modify: `packages/jinn/src/shared/types.ts`
-- Modify: `packages/jinn/src/sessions/manager.ts`
-- Modify: `packages/jinn/src/workflows/session-executor.ts`
-- Modify: `packages/jinn/src/workflows/runner.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Test: `packages/jinn/src/workflows/__tests__/reminder-ladder.test.ts`
-- Test: `packages/jinn/src/workflows/__tests__/workflow-vertical.test.ts`
+- Create: `packages/hundredfold/src/sessions/workflow-interruptions.ts`
+- Modify: `packages/hundredfold/src/shared/types.ts`
+- Modify: `packages/hundredfold/src/sessions/manager.ts`
+- Modify: `packages/hundredfold/src/workflows/session-executor.ts`
+- Modify: `packages/hundredfold/src/workflows/runner.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Test: `packages/hundredfold/src/workflows/__tests__/reminder-ladder.test.ts`
+- Test: `packages/hundredfold/src/workflows/__tests__/workflow-vertical.test.ts`
 
 **Interfaces:**
 - Consumes: the durable session attempt receipt (`attemptTurn`, `attemptTerminalVersion`, `attemptOutcome`) and the existing run `cancelRequestedAt` marker.
@@ -162,7 +162,7 @@ Exercise B1, B2, and B5 through the actual `/api/sessions/:id/message` route and
 Run:
 
 ```bash
-pnpm --filter jinn-cli test -- src/workflows/__tests__/reminder-ladder.test.ts src/workflows/__tests__/workflow-vertical.test.ts
+pnpm --filter hundredfold test -- src/workflows/__tests__/reminder-ladder.test.ts src/workflows/__tests__/workflow-vertical.test.ts
 ```
 
 Expected: user-message interruption settles the attempt/run instead of scheduling the ladder, and API follow-up turns do not advance `lastProcessedTurn`.
@@ -218,7 +218,7 @@ to `resolveEngineRunMcp` so user follow-up turns retain `workflow_submit_output`
 Run:
 
 ```bash
-pnpm --filter jinn-cli test -- src/workflows/__tests__/reminder-ladder.test.ts src/workflows/__tests__/workflow-vertical.test.ts src/sessions/__tests__/workflow-attempt-turns.test.ts
+pnpm --filter hundredfold test -- src/workflows/__tests__/reminder-ladder.test.ts src/workflows/__tests__/workflow-vertical.test.ts src/sessions/__tests__/workflow-attempt-turns.test.ts
 ```
 
 Expected: all selected tests PASS, including B1-B5.
@@ -226,14 +226,14 @@ Expected: all selected tests PASS, including B1-B5.
 - [ ] **Step 7: Commit Bug B**
 
 ```bash
-git add packages/jinn/src/shared/types.ts \
-  packages/jinn/src/sessions/workflow-interruptions.ts \
-  packages/jinn/src/sessions/manager.ts \
-  packages/jinn/src/workflows/session-executor.ts \
-  packages/jinn/src/workflows/runner.ts \
-  packages/jinn/src/gateway/api.ts \
-  packages/jinn/src/workflows/__tests__/reminder-ladder.test.ts \
-  packages/jinn/src/workflows/__tests__/workflow-vertical.test.ts
+git add packages/hundredfold/src/shared/types.ts \
+  packages/hundredfold/src/sessions/workflow-interruptions.ts \
+  packages/hundredfold/src/sessions/manager.ts \
+  packages/hundredfold/src/workflows/session-executor.ts \
+  packages/hundredfold/src/workflows/runner.ts \
+  packages/hundredfold/src/gateway/api.ts \
+  packages/hundredfold/src/workflows/__tests__/reminder-ladder.test.ts \
+  packages/hundredfold/src/workflows/__tests__/workflow-vertical.test.ts
 git commit -m "fix(workflows): keep attempts alive across user turns"
 ```
 
@@ -256,13 +256,13 @@ pnpm build
 - [ ] **Step 2: Run the complete backend suite**
 
 ```bash
-pnpm --filter jinn-cli test
+pnpm --filter hundredfold test
 ```
 
 - [ ] **Step 3: Run the complete web suite**
 
 ```bash
-pnpm --filter @jinn/web test
+pnpm --filter @hundredfold/web test
 ```
 
 Use the actual package name reported by `packages/web/package.json` if it differs.
@@ -274,7 +274,7 @@ git status --short
 git log --oneline main..HEAD
 git diff --stat main...HEAD
 git diff main...HEAD --check
-pnpm --filter jinn-cli exec vitest run src/shared/__tests__/privacy-guard.test.ts
+pnpm --filter hundredfold exec vitest run src/shared/__tests__/privacy-guard.test.ts
 ```
 
 Expected: no committed diff contains any personal identifier or path.

@@ -9,13 +9,13 @@ import {
   targetNotAModelIdProblem,
   unservedTargetProblem,
   unservedTargetWarning,
-} from '@jinn/fallback-map-wire'
+} from '@hundredfold/fallback-map-wire'
 import { mapPairProblem, type ServedModels } from '@/routes/settings/engines/model-map-model'
 
 /* The bundle reaches the gateway's own problem strings, byte for byte.
  *
  * The sentences are pinned to hard-coded literals rather than to a call back into
- * the module, and that is the whole point: `packages/jinn`'s engine-fallback.test.ts
+ * the module, and that is the whole point: `packages/hundredfold`'s engine-fallback.test.ts
  * hard-codes the same sentences against the config loader. Both suites passing is
  * what proves the editor refuses a map entry in the words the loader would use. If
  * one side ever drifts, exactly one of the two suites goes red.

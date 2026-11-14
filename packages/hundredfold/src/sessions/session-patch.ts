@@ -1,0 +1,256 @@
+import type { HundredfoldConfig } from "../shared/types.js";
+import { getModelRegistry, effortLevelsForModel, hasDynamicModelCatalog, isKnownEngine } from "../shared/models.js";
+import { effortLevelsPending } from "../shared/opencode-catalogue.js";
+import { readEngineHealth } from "../shared/engine-health.js";
+import { availabilityRegistry } from "./availability-registry.js";
+import { rerouteAtCreation } from "./fallback-reroute.js";
+import type { SessionReroute } from "./engine-override-window.js";
+import { logger } from "../shared/logger.js";
+import { resolveEmployeeClaudeProfile } from "../shared/claude-profile.js";
+import { orgRegistry } from "../gateway/org-registry.js";
+import { runsOnlyOnClaude, scopedEngineRefusal } from "./scoped-engine.js";
+import { startsOnPreferredEngine } from "./session-fallback.js";
+import type { SessionFallbackMode } from "../shared/session-fallback-config.js";
+
+/**
+ * Validate a mid-chat model/effort change for an existing session.
+ *
+ * An engine switch is validated by `validateNewSessionSelection`; this only
+ * handles `model` and `effortLevel`, validated against the registry for the
+ * session's current engine. The change applies from the NEXT turn — the SessionManager
+ * reads session.model / session.effortLevel fresh on every turn and passes them
+ * (with resumeSessionId) to the engine, which our spike confirmed honors a
+ * changed --model in place (no fork needed). Antigravity supports --model; if
+ * its CLI is already warm, the new model applies on the next cold spawn/resume.
+ */
+
+export interface SessionPatchResult {
+  ok: boolean;
+  updates?: { model?: string; effortLevel?: string };
+  error?: string;
+}
+
+export interface NewSessionSelectionResult {
+  ok: boolean;
+  engine?: string;
+  model?: string;
+  effortLevel?: string;
+  /** Set when a spent allowance moved the session off the engine it preferred:
+   *  the caller folds it into the new session's transport meta with
+   *  `reroutedSessionMeta`, so the session goes back once the window passes. */
+  reroute?: SessionReroute;
+  error?: string;
+}
+
+export interface SessionPatchContext {
+  engineSessionId?: string | null;
+  defaultModel?: string | null;
+}
+
+export function validateNewSessionSelection(
+  config: HundredfoldConfig,
+  body: { engine?: unknown; model?: unknown; effortLevel?: unknown },
+  defaults: { engine?: string; model?: string; effortLevel?: string; employee?: string; fallbackMode?: SessionFallbackMode } = {},
+): NewSessionSelectionResult {
+  const registry = getModelRegistry(config);
+  let engine: string = defaults.engine?.trim() || config.engines.default;
+
+  if (body.engine !== undefined) {
+    if (typeof body.engine !== "string" || !body.engine.trim()) {
+      return { ok: false, error: "engine must be a non-empty string" };
+    }
+    engine = body.engine.trim();
+  }
+
+  if (!registry[engine]) return { ok: false, error: `unknown engine "${engine}"` };
+  // Refused here, before anything is created: a scoped session's first turn on
+  // another engine would fail, and the failed attempt would strand its Todo.
+  const scopedRefusal = scopedEngineRefusal(defaults.employee, engine);
+  if (scopedRefusal) return { ok: false, error: scopedRefusal };
+
+  // Nothing named this engine outright — it came from the config default or an
+  // employee's YAML — so an engine whose allowance is spent may be reordered out
+  // of the way. A named engine wins, and so does a named model, which belongs to
+  // exactly one engine. Advisory only: a chain with nothing healthy left in it
+  // hands the preference back and the session starts where it would have.
+  let defaultModel = defaults.model;
+  let defaultEffortLevel = defaults.effortLevel;
+  let reroute: SessionReroute | undefined;
+  // A local named Claude profile is its own account (FR-056): never reordered off the default account's health.
+  // Nor is a department-scoped employee, which runs only on claude.
+  const ownAccount = engine === "claude" && Boolean(defaults.employee)
+    && resolveEmployeeClaudeProfile(orgRegistry().get(defaults.employee!)) !== null;
+  // Nor is a session whose fallback mode is `auto-resume` (`defaults.fallbackMode`, else the config's):
+  // it starts where it prefers and waits out a spent allowance.
+  if (body.engine === undefined && body.model === undefined && isKnownEngine(engine) && !ownAccount
+    && !runsOnlyOnClaude(defaults.employee) && !startsOnPreferredEngine(config, defaults.fallbackMode)) {
+    // NOT scoped by host, unlike the other two engine-choosing paths: `defaults`
+    // carries the employee's NAME, not its record, so this cannot tell whether
+    // the session runs here or on another machine. Until the Employee is
+    // threaded through this path's four callers it also cannot apply the
+    // remote-capability filter `newSessionEngineSelection` has — the same
+    // missing argument, and the same fix.
+    const health = readEngineHealth();
+    const employee = defaults.employee ? orgRegistry().get(defaults.employee) : undefined;
+    const choice = rerouteAtCreation({
+      config, employee, engine, model: defaultModel, health, scope: { scoped: false, remote: false },
+      registry: availabilityRegistry(registry, (candidate) => registry[candidate]?.available === true),
+    });
+    if (choice) {
+      reroute = choice.reroute;
+      logger.info(
+        `Engine "${engine}" is out of allowance — starting this session on "${choice.engine}" instead, `
+        + `until ${reroute.until.toISOString()}`,
+      );
+      engine = choice.engine;
+      // The model and effort level came with the engine we just moved off and
+      // mean nothing on this one; the substitute runs on its own configured
+      // defaults (or the model its chain link names), the way a mid-turn fallback already does.
+      defaultModel = choice.model;
+      defaultEffortLevel = undefined;
+    }
+  }
+
+  const entry = registry[engine]!;
+
+  let model: string | undefined;
+  // Track whether the model came from an explicit caller override (body) or an
+  // employee's configured default — the error phrasing differs (GRS-017f).
+  const modelFromBody = body.model !== undefined;
+  const requestedModel = modelFromBody ? body.model : defaultModel;
+  if (requestedModel !== undefined) {
+    if (typeof requestedModel !== "string" || !requestedModel.trim()) {
+      return { ok: false, error: "model must be a non-empty string" };
+    }
+    model = requestedModel.trim();
+    if (!entry.models.some((m) => m.id === model)) {
+      if (hasDynamicModelCatalog(engine)) {
+        // Discovered-only catalog; tolerate an id the snapshot hasn't caught yet
+        // (e.g. just after a restart, before discovery completes).
+        logger.warn(`${engine} model "${model}" not in discovered set yet — allowing`);
+      } else {
+        const known = entry.models.map((m) => m.id).join(", ");
+        // GRS-017f: when the unknown model is an EMPLOYEE'S CONFIGURED DEFAULT
+        // (not an explicit caller override), the bare engine string ("unknown
+        // model X for engine Y") gives the agent no hint the culprit is the
+        // employee YAML. Name the employee, its configured model, the known set,
+        // AND the two-way fix — so delegate/spawn/workflow all fail actionably
+        // instead of silently running a different model or emitting a cryptic
+        // engine error.
+        if (!modelFromBody && defaults.employee) {
+          const suggested = entry.models[0]?.id;
+          return {
+            ok: false,
+            error:
+              `employee "${defaults.employee}" is configured with model "${model}", which engine "${engine}" does not know ` +
+              `(known: ${known || "none"}). Fix: set a known model${suggested ? ` (e.g. model: ${suggested})` : ""} in the employee's ` +
+              `org YAML (org/${defaults.employee}.yaml), or register "${model}" for engine "${engine}" in config.yaml.`,
+          };
+        }
+        return { ok: false, error: `unknown model "${model}" for engine "${engine}" (known: ${known || "none"})` };
+      }
+    }
+  }
+
+  let effortLevel: string | undefined;
+  const effortFromBody = body.effortLevel !== undefined;
+  const requestedEffortLevel = effortFromBody ? body.effortLevel : defaultEffortLevel;
+  if (requestedEffortLevel !== undefined) {
+    if (typeof requestedEffortLevel !== "string" || !requestedEffortLevel.trim()) {
+      return { ok: false, error: "effortLevel must be a non-empty string" };
+    }
+    effortLevel = requestedEffortLevel.trim();
+    const effectiveModel = model ?? undefined;
+    const valid = effortLevelsForModel(config, engine, effectiveModel);
+    // Levels not discovered yet are unknown, not absent: the level is kept, and
+    // the turn checks it once they are known.
+    const unknown = effortLevelsPending(engine, effectiveModel);
+    if (valid.length === 0 && !unknown) {
+      if (!effortFromBody) {
+        logger.warn(
+          `Ignoring employee default effortLevel "${effortLevel}" for engine "${engine}"` +
+          `${effectiveModel ? ` model "${effectiveModel}"` : ""}` +
+          `${defaults.employee ? ` on employee "${defaults.employee}"` : ""}: model does not support effort levels`,
+        );
+        effortLevel = undefined;
+      } else {
+        return { ok: false, error: `engine "${engine}"${effectiveModel ? ` model "${effectiveModel}"` : ""} does not support effort levels` };
+      }
+    }
+    if (effortLevel !== undefined && !unknown && !valid.includes(effortLevel)) {
+      if (!effortFromBody) {
+        logger.warn(
+          `Ignoring invalid employee default effortLevel "${effortLevel}" for engine "${engine}"` +
+          `${effectiveModel ? ` model "${effectiveModel}"` : ""}` +
+          `${defaults.employee ? ` on employee "${defaults.employee}"` : ""} (valid: ${valid.join(", ")})`,
+        );
+        effortLevel = undefined;
+      } else {
+        return { ok: false, error: `invalid effortLevel "${effortLevel}" (valid: ${valid.join(", ")})` };
+      }
+    }
+  }
+
+  return { ok: true, engine, model, effortLevel, ...(reroute ? { reroute } : {}) };
+}
+
+export function validateSessionPatch(
+  config: HundredfoldConfig,
+  engine: string,
+  currentModel: string | null | undefined,
+  body: { model?: unknown; effortLevel?: unknown },
+  context: SessionPatchContext = {},
+): SessionPatchResult {
+  const updates: { model?: string; effortLevel?: string } = {};
+
+  const entry = getModelRegistry(config)[engine];
+
+  // --- model ---
+  if (body.model !== undefined) {
+    if (typeof body.model !== "string" || !body.model.trim()) {
+      return { ok: false, error: "model must be a non-empty string" };
+    }
+    const modelId = body.model.trim();
+    if (entry && !entry.models.some((m) => m.id === modelId)) {
+      if (hasDynamicModelCatalog(engine)) {
+        // Discovered-only catalog; tolerate an id the snapshot hasn't caught yet
+        // (e.g. just after a restart, before discovery completes).
+        logger.warn(`${engine} model "${modelId}" not in discovered set yet — allowing`);
+      } else {
+        const known = entry.models.map((m) => m.id).join(", ");
+        return { ok: false, error: `unknown model "${modelId}" for engine "${engine}" (known: ${known || "none"})` };
+      }
+    }
+    const effectiveCurrentModel = currentModel ?? context.defaultModel ?? undefined;
+    if (engine === "grok" && context.engineSessionId && effectiveCurrentModel && modelId !== effectiveCurrentModel) {
+      return {
+        ok: false,
+        error: "Grok model changes require a new session because Grok binds existing transcripts to a model-specific agent.",
+      };
+    }
+    updates.model = modelId;
+  }
+
+  // --- effortLevel (validated against the *resulting* model) ---
+  if (body.effortLevel !== undefined) {
+    if (typeof body.effortLevel !== "string" || !body.effortLevel.trim()) {
+      return { ok: false, error: "effortLevel must be a non-empty string" };
+    }
+    const level = body.effortLevel.trim();
+    const effectiveModel = updates.model ?? currentModel ?? undefined;
+    const valid = effortLevelsForModel(config, engine, effectiveModel);
+    const unknown = effortLevelsPending(engine, effectiveModel); // not discovered yet: kept, and checked at the turn
+    if (valid.length === 0 && !unknown) {
+      return { ok: false, error: `engine "${engine}"${effectiveModel ? ` model "${effectiveModel}"` : ""} does not support effort levels` };
+    }
+    if (!unknown && !valid.includes(level)) {
+      return { ok: false, error: `invalid effortLevel "${level}" (valid: ${valid.join(", ")})` };
+    }
+    updates.effortLevel = level;
+  }
+
+  if (updates.model === undefined && updates.effortLevel === undefined) {
+    return { ok: false, error: "no valid fields to update (expected model and/or effortLevel)" };
+  }
+  return { ok: true, updates };
+}

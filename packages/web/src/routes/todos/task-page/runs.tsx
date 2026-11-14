@@ -45,7 +45,7 @@ export function RunStartLine({ run }: { run: WorkItemRunWire }) {
       at={run.startedAt}
       disc={
         inFlight ? (
-          <span className="size-1.5 rounded-full bg-[var(--system-blue)] animate-[jinn-pulse_1.4s_infinite] motion-reduce:animate-none" />
+          <span className="size-1.5 rounded-full bg-[var(--system-blue)] animate-[hundredfold-pulse_1.4s_infinite] motion-reduce:animate-none" />
         ) : (
           <span className="size-1.5 rounded-full bg-[var(--fill-primary)]" />
         )

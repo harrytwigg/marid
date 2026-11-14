@@ -1,5 +1,5 @@
 {
-  "name": "@jinn/gateway-events",
+  "name": "@hundredfold/gateway-events",
   "version": "0.1.0",
   "private": true,
   "type": "module",

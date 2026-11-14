@@ -1,15 +1,15 @@
 ---
 name: showcase-video-capture
-description: Create polished Jinn product showcase videos, GIFs, and README demo assets from isolated mock or sandbox instances. Use when asked to record a Jinn web UI walkthrough, update the README showcase GIF, build a mock gateway or clean test instance, script UI animations, capture Playwright video, convert WebM to MP4/GIF, or document video-capture gotchas for the Jinn platform.
+description: Create polished Hundredfold product showcase videos, GIFs, and README demo assets from isolated mock or sandbox instances. Use when asked to record a Hundredfold web UI walkthrough, update the README showcase GIF, build a mock gateway or clean test instance, script UI animations, capture Playwright video, convert WebM to MP4/GIF, or document video-capture gotchas for the Hundredfold platform.
 ---
 
 # Showcase Video Capture
 
-Use this skill to produce deterministic Jinn showcase media without touching a live operator instance. The goal is a short, readable product story: a believable org, visible work state, live chat streaming, and a clean final GIF/MP4 suitable for GitHub.
+Use this skill to produce deterministic Hundredfold showcase media without touching a live operator instance. The goal is a short, readable product story: a believable org, visible work state, live chat streaming, and a clean final GIF/MP4 suitable for GitHub.
 
 ## Core Rules
 
-- Keep the live gateway safe. Do not use port `7777` or the operator's real `~/.jinn` unless the user explicitly asks for live-instance work.
+- Keep the live gateway safe. Do not use port `7777` or the operator's real `~/.hundredfold` unless the user explicitly asks for live-instance work.
 - Prefer a mock gateway for README/demo captures. It is deterministic, fast, and avoids real engines, connectors, credentials, sessions, cron, and private data.
 - Keep all committed fixtures generic. Do not commit personal paths, private project names, real customer data, tokens, or machine-specific paths.
 - Stage only the intended media asset when replacing the README GIF. Leave capture scripts, raw videos, and scratch outputs untracked unless the user asks to keep them.
@@ -18,10 +18,10 @@ Use this skill to produce deterministic Jinn showcase media without touching a l
 ## Recommended Flow
 
 1. Confirm the target asset and story.
-   - README asset is usually `assets/jinn-showcase.gif`.
+   - README asset is usually `assets/showcase.gif`.
 
 2. Create an isolated capture sandbox.
-   - Use a separate directory such as `/tmp/jinn-showcase-*` or a repo-external scratch directory.
+   - Use a separate directory such as `/tmp/hundredfold-showcase-*` or a repo-external scratch directory.
    - Use a non-live port such as `7788`.
    - Verify the port is free before and after:
      ```bash
@@ -30,7 +30,7 @@ Use this skill to produce deterministic Jinn showcase media without touching a l
    - Do not run against the live gateway unless the user specifically requests it.
 
 3. Build a mock gateway for deterministic captures.
-   - Serve the built web bundle from `packages/jinn/dist/web`.
+   - Serve the built web bundle from `packages/hundredfold/dist/web`.
    - Implement just enough API surface for the UI path being captured.
    - Provide mock WebSocket events for chat streaming.
    - Add a manual trigger endpoint for the demo stream, for example `/api/showcase/start-demo`, so navigation can happen first and the chat stream can be last.
@@ -54,7 +54,7 @@ Use this skill to produce deterministic Jinn showcase media without touching a l
 For a capture-only sandbox, a small Node server is usually enough:
 
 - Static files:
-  - Serve `packages/jinn/dist/web`.
+  - Serve `packages/hundredfold/dist/web`.
   - Fallback unknown paths to `index.html` so client routes load.
 
 - REST endpoints commonly needed by the web UI:
@@ -112,9 +112,9 @@ const context = await browser.newContext({
 
 await context.addInitScript(() => {
   localStorage.clear();
-  localStorage.setItem("jinn-theme", "dark");
-  localStorage.setItem("jinn-sidebar-focus-mode", "all");
-  localStorage.setItem("jinn-sidebar-older-expanded", "true");
+  localStorage.setItem("hundredfold-theme", "dark");
+  localStorage.setItem("hundredfold-sidebar-focus-mode", "all");
+  localStorage.setItem("hundredfold-sidebar-older-expanded", "true");
 });
 ```
 
@@ -220,22 +220,22 @@ When the user asks to replace the existing showcase:
 
 1. Locate the README asset reference:
    ```bash
-   rg -n "showcase|\\.gif|assets/" README.md packages/jinn/README.md
+   rg -n "showcase|\\.gif|assets/" README.md packages/hundredfold/README.md
    ```
 
 2. Replace only the tracked asset:
    ```bash
-   cp /path/to/new-showcase.gif assets/jinn-showcase.gif
+   cp /path/to/new-showcase.gif assets/hundredfold-showcase.gif
    ```
 
 3. Stage only that file:
    ```bash
-   git add assets/jinn-showcase.gif
+   git add assets/hundredfold-showcase.gif
    git diff --cached --stat
    git diff --cached --name-only
    ```
 
-4. Run the public-repo leak grep from the Jinn platform instructions. A binary-only GIF replacement should produce no textual hits.
+4. Run the public-repo leak grep from the Hundredfold platform instructions. A binary-only GIF replacement should produce no textual hits.
 
 5. Commit without co-author trailers:
    ```bash

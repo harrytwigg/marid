@@ -1,4 +1,4 @@
-# Jinn Talk — "Mission Control" Redesign
+# Hundredfold Talk — "Mission Control" Redesign
 
 **Date:** 2026-06-10 · **Branch:** `talk-mission-control` · **Status:** Approved direction (operator-approved, 2026-06-10)
 
@@ -79,7 +79,7 @@ New module `talk/graph.ts`:
 ### 8. Model + persona
 
 - `DEFAULT_TALK_MODEL` haiku → **sonnet** (`talk/routes.ts:33`).
-- Rewrite `DEFAULT_ORCHESTRATOR_PERSONA` + `template/talk/orchestrator-persona.md`: delegate via `/api/talk/delegate` only (no raw `/api/sessions` curl), roster-aware reuse/new rules, link-card rule, updated card catalogue. **Do not modify the live `~/.jinn/talk/orchestrator-persona.md` during development** (hot-reloads into the production 7777 gateway); replacing it is a deploy step.
+- Rewrite `DEFAULT_ORCHESTRATOR_PERSONA` + `template/talk/orchestrator-persona.md`: delegate via `/api/talk/delegate` only (no raw `/api/sessions` curl), roster-aware reuse/new rules, link-card rule, updated card catalogue. **Do not modify the live `~/.hundredfold/talk/orchestrator-persona.md` during development** (hot-reloads into the production 7777 gateway); replacing it is a deploy step.
 
 ## Error handling
 
@@ -91,7 +91,7 @@ New module `talk/graph.ts`:
 ## Testing
 
 - **Unit (vitest):** graph membership/snapshot/delta logic; delegate endpoint (new/continue/bad-id); card validator widening; sentence-boundary splitter + seq contract; roster section rendering; frontend graph-store reducer; constellation depth layout helpers; linkify.
-- **Integration:** isolated gateway — worktree build, `JINN_HOME=/tmp/jinn-mc-test`, port **7878** (live 7777 untouched). Script: create talk session → delegate two threads → spawn a grandchild under one COO → assert `GET /api/talk/graph` shape and WS `talk:graph` events.
+- **Integration:** isolated gateway — worktree build, `HUNDREDFOLD_HOME=/tmp/hundredfold-mc-test`, port **7878** (live 7777 untouched). Script: create talk session → delegate two threads → spawn a grandchild under one COO → assert `GET /api/talk/graph` shape and WS `talk:graph` events.
 - **Browser:** Chrome against `http://localhost:7878/talk` — type-to-talk a delegation, verify roster-driven reuse, multi-level constellation rendering, dimmed-idle (no vanish), link card tap, history rail.
 
 ## Out of scope

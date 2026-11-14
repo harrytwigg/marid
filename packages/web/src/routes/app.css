@@ -1,16 +1,16 @@
 /*
  * The one stylesheet main.tsx loads, so Tailwind compiles a single tree:
- * HeroUI's component CSS @applies Marid's theme and HeroUI's utilities, which
+ * HeroUI's component CSS @applies Hundredfold's theme and HeroUI's utilities, which
  * only resolve inside the same compile.
  *
  * Order matters. HeroUI's theme map comes after globals.css so its colour names
- * (accent, muted …) win; the Marid call sites that meant something else by them
+ * (accent, muted …) win; the Hundredfold call sites that meant something else by them
  * were renamed to the fill tokens first. Its radius names would win too and move
  * every rounded corner, so they are put back straight after it.
  *
  * Not imported, on purpose:
  *  - HeroUI's default theme variables: heroui-bridge.css defines every variable
- *    its components read from Marid's tokens instead.
+ *    its components read from Hundredfold's tokens instead.
  *  - HeroUI's variants file: its dark variant falls back to prefers-color-scheme
  *    even when the app is set to light. globals.css keeps the data-theme one.
  */
@@ -48,7 +48,7 @@
 @import "@heroui/styles/components/list-box-section.css" layer(components);
 @import "./heroui-glass.css";
 
-/* base.css gives every element's border the --border colour. Marid's borders
+/* base.css gives every element's border the --border colour. Hundredfold's borders
    that name no colour have always drawn in the text colour (a red error box
    with a bare `border` is red on purpose), so the default goes back to that
    until a slice moves them to tokens. A HeroUI control sets its own. This

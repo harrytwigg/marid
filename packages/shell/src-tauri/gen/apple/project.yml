@@ -1,6 +1,6 @@
-name: jinn-shell
+name: hundredfold-shell
 options:
-  bundleIdPrefix: run.jinn.shell
+  bundleIdPrefix: run.hundredfold.shell
   deploymentTarget:
     iOS: 14.0
 fileGroups: [../../src]
@@ -10,8 +10,8 @@ configs:
 settingGroups:
   app:
     base:
-      PRODUCT_NAME: Jinn
-      PRODUCT_BUNDLE_IDENTIFIER: run.jinn.shell
+      PRODUCT_NAME: Hundredfold
+      PRODUCT_BUNDLE_IDENTIFIER: run.hundredfold.shell
 targetTemplates:
   app:
     type: application
@@ -24,20 +24,20 @@ targetTemplates:
     settings:
       groups: [app]
 targets:
-  jinn-shell_iOS:
+  hundredfold-shell_iOS:
     type: application
     platform: iOS
     sources:
       - path: Sources
       - path: Assets.xcassets
       - path: Externals
-      - path: jinn-shell_iOS
+      - path: hundredfold-shell_iOS
       - path: assets
         buildPhase: resources
         type: folder
       - path: LaunchScreen.storyboard
     info:
-      path: jinn-shell_iOS/Info.plist
+      path: hundredfold-shell_iOS/Info.plist
       properties:
         LSRequiresIPhoneOS: true
         UILaunchStoryboardName: LaunchScreen
@@ -54,7 +54,7 @@ targets:
         CFBundleShortVersionString: 0.1.0
         CFBundleVersion: "0.1.0"
     entitlements:
-      path: jinn-shell_iOS/jinn-shell_iOS.entitlements
+      path: hundredfold-shell_iOS/hundredfold-shell_iOS.entitlements
     scheme:
       environmentVariables:
         RUST_BACKTRACE: full

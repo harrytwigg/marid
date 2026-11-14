@@ -128,7 +128,7 @@ async function main(check) {
   const stale = staleFiles(wanted, have)
   if (check) {
     if (stale.length === 0) return
-    console.error(`Generated icons are stale (${stale.join(", ")}). Run: pnpm --filter @jinn/web icons`)
+    console.error(`Generated icons are stale (${stale.join(", ")}). Run: pnpm --filter @hundredfold/web icons`)
     process.exitCode = 1
     return
   }

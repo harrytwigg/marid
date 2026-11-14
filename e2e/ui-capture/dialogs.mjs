@@ -2,7 +2,7 @@
 //
 //   node dialogs.mjs <sandbox-home> <base-url> <out-dir>
 //
-// Runs in the browser JINN_CAPTURE_BROWSER names (Firefox by default) and exits non-zero when a check
+// Runs in the browser HUNDREDFOLD_CAPTURE_BROWSER names (Firefox by default) and exits non-zero when a check
 // fails. Checks, on the real routes: the new-Todo dialog (focus in, Escape, return of focus, a dirty draft
 // asking before it goes, a press on the scrim), the phone's sheet and the picker sheet nested over it, the
 // sprint planner opened from a menu and from the filter sheet, the lightbox keyboard (arrows, Escape), the
@@ -17,7 +17,7 @@ const [sandboxHome, baseUrl, outDir] = process.argv.slice(2)
 if (!sandboxHome || !baseUrl || !outDir) throw new Error('usage: dialogs.mjs <sandbox-home> <base-url> <out-dir>')
 fs.mkdirSync(outDir, { recursive: true })
 const fixtures = JSON.parse(fs.readFileSync(path.join(sandboxHome, 'ui-capture-fixtures.json'), 'utf8'))
-const browser = await (process.env.JINN_CAPTURE_BROWSER === 'chromium' ? chromium : firefox).launch()
+const browser = await (process.env.HUNDREDFOLD_CAPTURE_BROWSER === 'chromium' ? chromium : firefox).launch()
 const { results, check, assert, open, focusedLabel } = createKit({ browser, headers: authHeaders(sandboxHome), baseUrl })
 
 const DESKTOP = { width: 1440, height: 900 }

@@ -1,6 +1,6 @@
 # Session statuses
 
-Every session has one stored `status` — `Session["status"]` in `packages/jinn/src/shared/types.ts` — with five values: `idle`, `running`, `error`, `waiting` and `interrupted`. The session list, the session API, the MCP session tools and the web UI report it, with one exception: a retry against a limit that is still up is stored `running` but reported `waiting` until it shows output (see below).
+Every session has one stored `status` — `Session["status"]` in `packages/hundredfold/src/shared/types.ts` — with five values: `idle`, `running`, `error`, `waiting` and `interrupted`. The session list, the session API, the MCP session tools and the web UI report it, with one exception: a retry against a limit that is still up is stored `running` but reported `waiting` until it shows output (see below).
 
 ## The five statuses
 

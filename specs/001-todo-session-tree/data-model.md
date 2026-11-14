@@ -16,16 +16,16 @@ returns and where each field comes from.
 | `employee` | `sessions.employee` | Node identity (FR-004) |
 | `status` | `sessions.status` | Node state (FR-004) |
 | `title` | `sessions.title` | Node label |
-| `parentSessionId` | `packages/jinn/src/sessions/registry.ts:145` | **The tree edge** (FR-003) |
+| `parentSessionId` | `packages/hundredfold/src/sessions/registry.ts:145` | **The tree edge** (FR-003) |
 | `workItemId` | `sessions.work_item_id` | The Todo a node tracks (FR-004, FR-005) |
-| `workItemRole` | `packages/jinn/src/sessions/registry.ts:136` | Review vs execute (FR-006) |
+| `workItemRole` | `packages/hundredfold/src/sessions/registry.ts:136` | Review vs execute (FR-006) |
 | `archivedAt` | `sessions.archived_at` | Archived marker (FR-010) |
 | `lastActivity` | `sessions.last_activity` | Sibling ordering |
-| `workflowProvenance` | `sessions.workflow_provenance` | Phase sessions, per `isExecutionAttempt` (`packages/jinn/src/work-items/link-role.ts:36`) |
+| `workflowProvenance` | `sessions.workflow_provenance` | Phase sessions, per `isExecutionAttempt` (`packages/hundredfold/src/work-items/link-role.ts:36`) |
 
-Indexes relied on: `idx_sessions_parent` (`packages/jinn/src/sessions/migrate.ts:87`) and
+Indexes relied on: `idx_sessions_parent` (`packages/hundredfold/src/sessions/migrate.ts:87`) and
 `idx_sessions_work_item` (named in the doc comment at
-`packages/jinn/src/sessions/registry.ts:1418`).
+`packages/hundredfold/src/sessions/registry.ts:1418`).
 
 ---
 

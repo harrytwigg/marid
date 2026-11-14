@@ -41,18 +41,18 @@ function runProbe(mode, packageRoot, layout, env) {
 
 /** The built package with a stand-in Workflow module, so the probe sees a baseline that still ships one. */
 function writeWorkflowBearingPackage(root) {
-  const sourceModules = path.resolve("packages/jinn/dist/src")
+  const sourceModules = path.resolve("packages/hundredfold/dist/src")
   const modules = path.join(root, "dist", "src")
   fs.mkdirSync(path.join(modules, "workflows"), { recursive: true })
   for (const entry of fs.readdirSync(sourceModules)) fs.symlinkSync(path.join(sourceModules, entry), path.join(modules, entry))
-  const sqlite = pathToFileURL(path.resolve("packages/jinn/package.json")).href
+  const sqlite = pathToFileURL(path.resolve("packages/hundredfold/package.json")).href
   fs.writeFileSync(path.join(modules, "workflows", "repository-migrations.js"), `
 import fs from "node:fs"
 import path from "node:path"
 import { createRequire } from "node:module"
 const Database = createRequire(${JSON.stringify(sqlite)})("better-sqlite3")
 export function openWorkflowDatabase() {
-  const file = path.join(process.env.JINN_HOME, "workflows", "workflows.db")
+  const file = path.join(process.env.HUNDREDFOLD_HOME, "workflows", "workflows.db")
   fs.mkdirSync(path.dirname(file), { recursive: true })
   const database = new Database(file)
   database.exec("CREATE TABLE IF NOT EXISTS workflow_definitions (id TEXT PRIMARY KEY, title TEXT, revision INTEGER, enabled INTEGER)")
@@ -75,7 +75,7 @@ test("state probing records a non-module snapshot when the package ships no Work
     const layout = assertIsolatedLayout(root)
     writeProbeHome(layout)
     const env = buildMinimalEnvironment(layout, { PATH: process.env.PATH ?? "" })
-    const packageRoot = path.resolve("packages/jinn")
+    const packageRoot = path.resolve("packages/hundredfold")
 
     const seeded = runProbe("seed-old", packageRoot, layout, env)
     assert.deepEqual(seeded.workflow, { storage: "none" })
@@ -101,7 +101,7 @@ test("state probing seeds a Workflow only through a package that ships the modul
     writeProbeHome(layout)
     const env = buildMinimalEnvironment(layout, { PATH: process.env.PATH ?? "" })
     const baselineRoot = writeWorkflowBearingPackage(path.join(root, "baseline-package"))
-    const candidateRoot = path.resolve("packages/jinn")
+    const candidateRoot = path.resolve("packages/hundredfold")
     const database = path.join(layout.home, "workflows", "workflows.db")
 
     const seeded = runProbe("seed-old", baselineRoot, layout, env)
@@ -174,7 +174,7 @@ test("a candidate without a Workflow module must leave the baseline's workflows.
 })
 
 test("the retired workflow skill must be gone after the first boot, and a surviving copy is named as unmodified or modified", () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-upgrade-skill-"))
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-upgrade-skill-"))
   try {
     const key = "skills/workflow/SKILL.md"
     assert.doesNotThrow(() => assertWorkflowSkillRetired({ home, baselineTree: { [key]: "aaa" }, finalTree: {} }))
@@ -187,7 +187,7 @@ test("the retired workflow skill must be gone after the first boot, and a surviv
     )
     assert.throws(
       () => assertWorkflowSkillRetired({ home, baselineTree: { [key]: "aaa" }, finalTree: { [key]: "bbb" } }),
-      /still present because its copy was modified.*skills\/workflow\/SKILL\.md.*no \.jinn-template-skills\.json receipt/,
+      /still present because its copy was modified.*skills\/workflow\/SKILL\.md.*no \.hundredfold-template-skills\.json receipt/,
     )
   } finally {
     fs.rmSync(home, { recursive: true, force: true })

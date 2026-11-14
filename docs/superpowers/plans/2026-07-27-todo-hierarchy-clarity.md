@@ -6,7 +6,7 @@
 
 **Architecture:** Preserve the existing normalized Todo tree and audit rows. Enrich server-authored Todo activity blocks and MCP compact summaries with `parentId`, `rootId`, and `depth`; let the web transcript compose consecutive same-root creation receipts into one grouped collection; and strengthen shipped/live doctrine so hierarchy is chosen intentionally.
 
-**Tech Stack:** TypeScript, React 19, React Router, Tailwind CSS 4, Vitest, Testing Library, SQLite-backed Jinn Todo APIs.
+**Tech Stack:** TypeScript, React 19, React Router, Tailwind CSS 4, Vitest, Testing Library, SQLite-backed Hundredfold Todo APIs.
 
 ## Global Constraints
 
@@ -21,8 +21,8 @@
 ### Task 1: Hierarchy-aware Todo activity receipts
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/chat-activity.ts`
-- Create: `packages/jinn/src/gateway/__tests__/chat-activity.test.ts`
+- Modify: `packages/hundredfold/src/gateway/chat-activity.ts`
+- Create: `packages/hundredfold/src/gateway/__tests__/chat-activity.test.ts`
 
 **Interfaces:**
 - Consumes: `WorkItem.parentId`, `WorkItem.rootId`, and `WorkItem.depth`.
@@ -42,7 +42,7 @@ expect(block.payload).toMatchObject({
 
 - [ ] **Step 2: Run the test and confirm it fails because the hierarchy fields are absent**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/chat-activity.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/chat-activity.test.ts`
 
 Expected: FAIL with a payload mismatch naming `parentId`, `rootId`, or `depth`.
 
@@ -64,7 +64,7 @@ payload: {
 
 - [ ] **Step 4: Run the focused test and confirm it passes**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/chat-activity.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/chat-activity.test.ts`
 
 Expected: PASS.
 
@@ -93,7 +93,7 @@ Also assert a standalone child receipt says `Sub-task · JIN-2` and exposes `Par
 
 - [ ] **Step 2: Run the two focused web suites and confirm the new assertions fail**
 
-Run: `pnpm --filter @jinn/web exec vitest run src/components/chat/__tests__/chat-messages-tool-group.test.tsx src/components/chat/__tests__/company-activity-card.test.tsx`
+Run: `pnpm --filter @hundredfold/web exec vitest run src/components/chat/__tests__/chat-messages-tool-group.test.tsx src/components/chat/__tests__/company-activity-card.test.tsx`
 
 Expected: FAIL because receipts remain independent and the card has no parent treatment.
 
@@ -111,16 +111,16 @@ For `todo-activity` blocks with a non-null `parentId`, change the noun from `Tod
 
 - [ ] **Step 6: Run focused web tests**
 
-Run: `pnpm --filter @jinn/web exec vitest run src/components/chat/__tests__/chat-messages-tool-group.test.tsx src/components/chat/__tests__/company-activity-card.test.tsx`
+Run: `pnpm --filter @hundredfold/web exec vitest run src/components/chat/__tests__/chat-messages-tool-group.test.tsx src/components/chat/__tests__/company-activity-card.test.tsx`
 
 Expected: PASS.
 
 ### Task 3: MCP hierarchy summaries and filters
 
 **Files:**
-- Modify: `packages/jinn/src/mcp/work-item-tools.ts`
-- Test: `packages/jinn/src/mcp/__tests__/work-item-tools.test.ts`
-- Test: `packages/jinn/src/mcp/__tests__/tool-manifest-budget.test.ts`
+- Modify: `packages/hundredfold/src/mcp/work-item-tools.ts`
+- Test: `packages/hundredfold/src/mcp/__tests__/work-item-tools.test.ts`
+- Test: `packages/hundredfold/src/mcp/__tests__/tool-manifest-budget.test.ts`
 
 **Interfaces:**
 - Consumes: gateway compact rows containing `parentId`, `rootId`, and `depth`; existing `/api/work-items` `parent` and `root` query parameters.
@@ -142,7 +142,7 @@ expect(calls[0].url).toContain("root=JIN-1");
 
 - [ ] **Step 2: Run focused MCP tests and confirm they fail for missing schema/summary fields**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/mcp/__tests__/work-item-tools.test.ts src/mcp/__tests__/tool-manifest-budget.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/mcp/__tests__/work-item-tools.test.ts src/mcp/__tests__/tool-manifest-budget.test.ts`
 
 Expected: FAIL on absent hierarchy properties.
 
@@ -152,19 +152,19 @@ Add `parentId`, `rootId`, and `depth` to `summarize`. Add canonical `parentId` a
 
 - [ ] **Step 4: Run focused MCP tests**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/mcp/__tests__/work-item-tools.test.ts src/mcp/__tests__/tool-manifest-budget.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/mcp/__tests__/work-item-tools.test.ts src/mcp/__tests__/tool-manifest-budget.test.ts`
 
 Expected: PASS.
 
 ### Task 4: Agent doctrine
 
 **Files:**
-- Modify: `packages/jinn/template/CLAUDE.md`
-- Modify: `packages/jinn/template/skills/todo-handling/SKILL.md`
-- Modify: `~/.jinn/CLAUDE.md`
-- Modify: `~/.jinn/skills/todo-handling/SKILL.md`
-- Test: `packages/jinn/src/mcp/__tests__/work-item-tools.test.ts`
-- Test: `packages/jinn/src/shared/__tests__/template-company-doctrine.test.ts`
+- Modify: `packages/hundredfold/template/CLAUDE.md`
+- Modify: `packages/hundredfold/template/skills/todo-handling/SKILL.md`
+- Modify: `~/.hundredfold/CLAUDE.md`
+- Modify: `~/.hundredfold/skills/todo-handling/SKILL.md`
+- Test: `packages/hundredfold/src/mcp/__tests__/work-item-tools.test.ts`
+- Test: `packages/hundredfold/src/shared/__tests__/template-company-doctrine.test.ts`
 
 **Interfaces:**
 - Produces: one-root-per-outcome doctrine, an explicit parent-first creation recipe, and a rule that procedural checklist steps remain body/checklist/activity unless independently owned or reviewed.
@@ -179,7 +179,7 @@ expect(todoSkill).toContain('"parentId": "ACM-42"');
 
 - [ ] **Step 2: Run the focused doctrine suites and confirm the copy assertions fail**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/mcp/__tests__/work-item-tools.test.ts src/shared/__tests__/template-company-doctrine.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/mcp/__tests__/work-item-tools.test.ts src/shared/__tests__/template-company-doctrine.test.ts`
 
 Expected: FAIL because the current doctrine says one Todo per durable sub-task and has no parent-first example.
 
@@ -193,7 +193,7 @@ Patch the live `CLAUDE.md` and `skills/todo-handling/SKILL.md` without copying a
 
 - [ ] **Step 5: Run focused doctrine suites**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/mcp/__tests__/work-item-tools.test.ts src/shared/__tests__/template-company-doctrine.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/mcp/__tests__/work-item-tools.test.ts src/shared/__tests__/template-company-doctrine.test.ts`
 
 Expected: PASS.
 
@@ -223,6 +223,6 @@ Use a fixture gateway with `authRequired:false`, start Vite on a scratch port, a
 
 Run: `git diff --check`
 
-Run: `git diff -- packages/jinn/src/gateway/chat-activity.ts packages/jinn/src/gateway/__tests__/chat-activity.test.ts packages/jinn/src/mcp/work-item-tools.ts packages/jinn/src/mcp/__tests__/work-item-tools.test.ts packages/web/src/components/chat/chat-messages.tsx packages/web/src/components/chat/todo-activity-burst.tsx packages/web/src/components/chat/company-activity-card.tsx packages/web/src/components/chat/__tests__/chat-messages-tool-group.test.tsx packages/web/src/components/chat/__tests__/company-activity-card.test.tsx packages/jinn/template/CLAUDE.md packages/jinn/template/skills/todo-handling/SKILL.md`
+Run: `git diff -- packages/hundredfold/src/gateway/chat-activity.ts packages/hundredfold/src/gateway/__tests__/chat-activity.test.ts packages/hundredfold/src/mcp/work-item-tools.ts packages/hundredfold/src/mcp/__tests__/work-item-tools.test.ts packages/web/src/components/chat/chat-messages.tsx packages/web/src/components/chat/todo-activity-burst.tsx packages/web/src/components/chat/company-activity-card.tsx packages/web/src/components/chat/__tests__/chat-messages-tool-group.test.tsx packages/web/src/components/chat/__tests__/company-activity-card.test.tsx packages/hundredfold/template/CLAUDE.md packages/hundredfold/template/skills/todo-handling/SKILL.md`
 
 Leak scan the scoped diff for personal names, projects, emails, Slack IDs, and absolute home paths.

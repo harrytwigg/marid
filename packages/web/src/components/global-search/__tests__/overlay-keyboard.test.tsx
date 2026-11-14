@@ -8,7 +8,7 @@ vi.mock("@/lib/search-api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/search-api")>()
   return { ...actual, searchGlobal: mocks.searchGlobal }
 })
-vi.mock("@/routes/settings-provider", () => ({ useSettings: () => ({ settings: { portalName: "Jinn" } }) }))
+vi.mock("@/routes/settings-provider", () => ({ useSettings: () => ({ settings: { portalName: "Hundredfold" } }) }))
 
 import { renderOverlay, searchField } from "./harness"
 import { searchResponse, searchResult } from "./fixtures"
@@ -65,7 +65,7 @@ describe("the overlay, driven from the keyboard alone", () => {
     fireEvent.keyDown(searchField(), { key: "Enter" })
 
     await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/todos/AAA-2"))
-    expect(JSON.parse(localStorage.getItem("jinn-command-recent") ?? "[]")).toEqual([
+    expect(JSON.parse(localStorage.getItem("hundredfold-command-recent") ?? "[]")).toEqual([
       { id: "todo-AAA-2", label: "AAA-2 row", href: "/todos/AAA-2", type: "todo" },
     ])
   })

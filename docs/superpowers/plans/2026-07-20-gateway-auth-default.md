@@ -4,18 +4,18 @@
 
 **Goal:** Make fresh gateways authentication-enabled without adding localhost friction, route proxy-caused scoped-write failures to an actionable error, and remove the speculative Claude capability fallback.
 
-**Architecture:** Keep caller classification unchanged and add one refusal-message classifier at the API boundary: only an unauthenticated, forwarded request on an auth-disabled/not-required gateway receives the proxy diagnosis; tool-marked identity loss keeps the existing MCP error. Fresh setup config enables auth, `jinn create` finalization materializes the existing owner-only gateway token, and the existing single-use URL-fragment bootstrap remains the only automatic localhost browser pairing path.
+**Architecture:** Keep caller classification unchanged and add one refusal-message classifier at the API boundary: only an unauthenticated, forwarded request on an auth-disabled/not-required gateway receives the proxy diagnosis; tool-marked identity loss keeps the existing MCP error. Fresh setup config enables auth, `hundredfold create` finalization materializes the existing owner-only gateway token, and the existing single-use URL-fragment bootstrap remains the only automatic localhost browser pairing path.
 
 **Tech Stack:** TypeScript ES2022, Node HTTP, YAML configuration, React browser auth client, Vitest, pnpm/Turborepo.
 
 ## Global Constraints
 
-- Work only in the dedicated `jinn-wt-gateway-auth` worktree based on `origin/main`; do not alter the canonical checkout.
+- Work only in the dedicated `hundredfold-wt-gateway-auth` worktree based on `origin/main`; do not alter the canonical checkout.
 - Do not use or restart ports 7777, 7850, 7788.
 - Existing instances receive no migration or config rewrite.
 - Local auto-pair must require the CLI-authored, single-use, 60-second URL-fragment grant; loopback address alone is not operator identity.
 - Forwarded requests without configured auth fail closed with HTTP 403 and an actionable proxy/auth message.
-- Genuine tool identity loss retains `UNIDENTIFIED_TOOL_CALL_ERROR` and its `JINN_SESSION_ID` / `JINN_SESSION_CAPABILITY` guidance.
+- Genuine tool identity loss retains `UNIDENTIFIED_TOOL_CALL_ERROR` and its `HUNDREDFOLD_SESSION_ID` / `HUNDREDFOLD_SESSION_CAPABILITY` guidance.
 - Public shipped source, tests, templates, and docs remain generic and contain no operator-specific data.
 - Git commits use the repository-configured maintainer identity and no co-author trailer.
 - Full build, typecheck, test, and lint must pass before pushing and fast-forwarding `origin/main`.
@@ -25,8 +25,8 @@
 ### Task 1: Cause-aware scoped-write refusal
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Test: `packages/jinn/src/gateway/__tests__/browser-operator-authorization.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Test: `packages/hundredfold/src/gateway/__tests__/browser-operator-authorization.test.ts`
 
 **Interfaces:**
 - Consumes: `resolveScopedWriteCallerIdentity(req, context)`, `shouldRequireGatewayAuth(config)`, `FORWARDED_REQUEST_HEADERS`, and `requestHeaderValues(req, name)`.
@@ -34,13 +34,13 @@
 
 - [ ] **Step 1: Write failing proxy-cause tests**
 
-Add a real HTTP `POST /api/sessions` test with same-origin browser metadata plus `x-forwarded-for`. Assert status 403, assert the body explains forwarded headers, no configured gateway auth, `gateway.authRequired: true`, and pairing, and assert it does not mention `JINN_SESSION_ID` or `JINN_SESSION_CAPABILITY`.
+Add a real HTTP `POST /api/sessions` test with same-origin browser metadata plus `x-forwarded-for`. Assert status 403, assert the body explains forwarded headers, no configured gateway auth, `gateway.authRequired: true`, and pairing, and assert it does not mention `HUNDREDFOLD_SESSION_ID` or `HUNDREDFOLD_SESSION_CAPABILITY`.
 
-Add a second test with the same forwarded header plus `x-jinn-tool-call: jinn-mcp`. Assert status 403 and the unchanged MCP identity-loss message containing both environment variable names. This pins cause precedence.
+Add a second test with the same forwarded header plus `x-hundredfold-tool-call: hundredfold-mcp`. Assert status 403 and the unchanged MCP identity-loss message containing both environment variable names. This pins cause precedence.
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/browser-operator-authorization.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/browser-operator-authorization.test.ts`
 
 Expected: the proxied browser request returns the current `caller identity unavailable` MCP error, so the actionable proxy-message assertions fail.
 
@@ -59,26 +59,26 @@ Add a helper that returns this constant only when all conditions hold: caller ki
 
 - [ ] **Step 4: Run the focused test and verify GREEN**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/browser-operator-authorization.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/browser-operator-authorization.test.ts`
 
 Expected: all browser authorization tests pass, including the two new cause-routing cases.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/api.ts packages/jinn/src/gateway/__tests__/browser-operator-authorization.test.ts
+git add packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/gateway/__tests__/browser-operator-authorization.test.ts
 git commit -m "fix(auth): diagnose proxied operator failures"
 ```
 
 ### Task 2: Auth-enabled fresh instances with local auto-pair
 
 **Files:**
-- Modify: `packages/jinn/src/cli/setup.ts`
-- Modify: `packages/jinn/src/cli/create.ts`
-- Test: `packages/jinn/src/cli/__tests__/config-seed.test.ts`
-- Test: `packages/jinn/src/cli/__tests__/create-verify.test.ts`
-- Test: `packages/jinn/src/cli/__tests__/start.test.ts`
-- Test: `packages/jinn/src/gateway/__tests__/auth-ux-api.test.ts`
+- Modify: `packages/hundredfold/src/cli/setup.ts`
+- Modify: `packages/hundredfold/src/cli/create.ts`
+- Test: `packages/hundredfold/src/cli/__tests__/config-seed.test.ts`
+- Test: `packages/hundredfold/src/cli/__tests__/create-verify.test.ts`
+- Test: `packages/hundredfold/src/cli/__tests__/start.test.ts`
+- Test: `packages/hundredfold/src/gateway/__tests__/auth-ux-api.test.ts`
 
 **Interfaces:**
 - Consumes: `ensureGatewayAuthToken(home)`, the fresh-install `DEFAULT_CONFIG`, `issueLocalBootstrapGrant()`, and `POST /api/auth/bootstrap`.
@@ -92,7 +92,7 @@ In `create-verify.test.ts`, write a representative setup-created config to a tem
 
 - [ ] **Step 2: Run the focused CLI tests and verify RED**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/cli/__tests__/config-seed.test.ts src/cli/__tests__/create-verify.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/cli/__tests__/config-seed.test.ts src/cli/__tests__/create-verify.test.ts`
 
 Expected: the default-auth assertion fails and `finalizeCreatedInstance` is not exported.
 
@@ -106,23 +106,23 @@ Change the `start.test.ts` config fixture to `authRequired: true` and keep the e
 
 - [ ] **Step 5: Run focused auth tests and verify GREEN**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/cli/__tests__/config-seed.test.ts src/cli/__tests__/create-verify.test.ts src/cli/__tests__/start.test.ts src/gateway/__tests__/auth-security.test.ts src/gateway/__tests__/auth-ux-api.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/cli/__tests__/config-seed.test.ts src/cli/__tests__/create-verify.test.ts src/cli/__tests__/start.test.ts src/gateway/__tests__/auth-security.test.ts src/gateway/__tests__/auth-ux-api.test.ts`
 
 Expected: all tests pass and `validateGatewayExposure` coverage remains green.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/jinn/src/cli/setup.ts packages/jinn/src/cli/create.ts packages/jinn/src/cli/__tests__/config-seed.test.ts packages/jinn/src/cli/__tests__/create-verify.test.ts packages/jinn/src/cli/__tests__/start.test.ts packages/jinn/src/gateway/__tests__/auth-ux-api.test.ts
+git add packages/hundredfold/src/cli/setup.ts packages/hundredfold/src/cli/create.ts packages/hundredfold/src/cli/__tests__/config-seed.test.ts packages/hundredfold/src/cli/__tests__/create-verify.test.ts packages/hundredfold/src/cli/__tests__/start.test.ts packages/hundredfold/src/gateway/__tests__/auth-ux-api.test.ts
 git commit -m "feat(auth): secure new gateways by default"
 ```
 
 ### Task 3: Remove the unproven Claude parent-env fallback
 
 **Files:**
-- Revert: `packages/jinn/src/engines/claude-interactive.ts`
-- Revert: `packages/jinn/src/mcp/__tests__/engine-wiring.test.ts`
-- Verify: `packages/jinn/src/mcp/__tests__/server-bootstrap.test.ts`
+- Revert: `packages/hundredfold/src/engines/claude-interactive.ts`
+- Revert: `packages/hundredfold/src/mcp/__tests__/engine-wiring.test.ts`
+- Verify: `packages/hundredfold/src/mcp/__tests__/server-bootstrap.test.ts`
 
 **Interfaces:**
 - Consumes: per-session non-secret argv from `attachSessionIdentity` and capability derivation in `resolveMcpServerBootstrap`.
@@ -130,7 +130,7 @@ git commit -m "feat(auth): secure new gateways by default"
 
 - [ ] **Step 1: Record reachability verdict**
 
-Trace the Claude production launch from `resolveEngineRunMcp` through `attachSessionIdentity`, `--mcp-config`, and `server-entry`. Confirm the child receives `--jinn-session-id`, `--jinn-home`, and `--jinn-gateway-url`, and derives its bound capability from the per-instance key even when server env is stripped. Since no reachable launch path was found that loses those arguments while preserving only the PTY parent env, classify `f49f8df4` as speculative.
+Trace the Claude production launch from `resolveEngineRunMcp` through `attachSessionIdentity`, `--mcp-config`, and `server-entry`. Confirm the child receives `--hundredfold-session-id`, `--hundredfold-home`, and `--hundredfold-gateway-url`, and derives its bound capability from the per-instance key even when server env is stripped. Since no reachable launch path was found that loses those arguments while preserving only the PTY parent env, classify `f49f8df4` as speculative.
 
 - [ ] **Step 2: Revert the commit**
 
@@ -140,7 +140,7 @@ Expected: the `ResolvedMcpConfig`/identity-env additions disappear from `claude-
 
 - [ ] **Step 3: Verify the supported fallback**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/mcp/__tests__/server-bootstrap.test.ts src/mcp/__tests__/engine-wiring.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/mcp/__tests__/server-bootstrap.test.ts src/mcp/__tests__/engine-wiring.test.ts`
 
 Expected: both suites pass without copying a capability into the parent PTY environment.
 
@@ -172,7 +172,7 @@ Review `git diff origin/main...HEAD`, `git diff --check`, and run the required s
 
 - [ ] **Step 3: Create an isolated throwaway instance**
 
-Use a `mktemp -d` HOME and a verified-free port in 7800-7899 excluding 7850, 7788, and 7777. Build first, then run the built `jinn create jinn-authtest --port <port>`. Assert its config contains `authRequired: true`, `gateway.json` already contains an owner-only token, and `validateGatewayExposure` permits the loopback config.
+Use a `mktemp -d` HOME and a verified-free port in 7800-7899 excluding 7850, 7788, and 7777. Build first, then run the built `hundredfold create hundredfold-authtest --port <port>`. Assert its config contains `authRequired: true`, `gateway.json` already contains an owner-only token, and `validateGatewayExposure` permits the loopback config.
 
 - [ ] **Step 4: Verify local bootstrap and proxied behavior**
 

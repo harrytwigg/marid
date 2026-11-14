@@ -28,7 +28,7 @@ export interface SituationClip {
 }
 
 /** A live thing in this instance, resolved through the normal query layer. */
-export type JinnObjectRef =
+export type HundredfoldObjectRef =
   | { type: "todo"; id: string }
   | { type: "session"; id: string }
 
@@ -37,7 +37,7 @@ export type SituationPayload =
   | { kind: "options"; options: SituationOption[] }
   | { kind: "images"; images: SituationImage[] }
   | { kind: "video"; clips: SituationClip[] }
-  | { kind: "object"; object: JinnObjectRef }
+  | { kind: "object"; object: HundredfoldObjectRef }
   /** Voice has no provider that would work yet. `providers` is what this gateway
    *  implements, so the card can only offer a choice that would actually run. */
   | { kind: "voice-setup"; providers: string[] }

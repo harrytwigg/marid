@@ -24,7 +24,7 @@ loopback — a literal loopback address or the name `localhost`; every other
 gateway requires HTTPS. Commands verify the
 calling window and bundled document. Capabilities contain no remote grants.
 
-External HTTP(S) navigation opens outside the application. `jinn://` links are
+External HTTP(S) navigation opens outside the application. `hundredfold://` links are
 translated to bundled in-app routes.
 
 ## Consequences

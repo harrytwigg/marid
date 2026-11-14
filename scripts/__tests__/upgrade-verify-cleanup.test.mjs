@@ -6,6 +6,7 @@ import os from "node:os"
 import path from "node:path"
 import test from "node:test"
 import { fileURLToPath, pathToFileURL } from "node:url"
+import { LEGACY } from "../legacy-names.mjs"
 import { createDisposableRoot, NONCE_FILE, removeDisposableRoot, stopGateway } from "../upgrade-verify-lib.mjs"
 
 const library = new URL("../upgrade-verify-lib.mjs", import.meta.url).href
@@ -163,8 +164,8 @@ function runCliWithLeak(t, assertionFailure) {
     // Fail cleanup with a real ENOTEMPTY, including on the pre-fix sync path.
     const original = fs.rmSync;
     fs.rmSync = function(directory, options) {
-      if (path.basename(String(directory)).startsWith('jinn-upgrade-verify-')) {
-        fs.unlinkSync(path.join(directory, '.jinn-upgrade-verify-nonce'));
+      if (path.basename(String(directory)).startsWith('hundredfold-upgrade-verify-')) {
+        fs.unlinkSync(path.join(directory, '.hundredfold-upgrade-verify-nonce'));
         fs.writeFileSync(path.join(directory, 'late-file'), 'late');
         return fs.rmdirSync(directory);
       }
@@ -176,12 +177,12 @@ function runCliWithLeak(t, assertionFailure) {
       return rmdir(directory);
     };
   `)
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("JINN_")))
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("HUNDREDFOLD_")))
   if (assertionFailure) env.UPGRADE_TEST_ASSERTION_FAILURE = String(assertionFailure)
   const child = spawnSync(process.execPath, ["--import", pathToFileURL(preload).href, fileURLToPath(entrypoint), "--candidate-tarball", tarball], {
     env, encoding: "utf8", timeout: 30_000,
   })
-  const leaked = /disposable root ([^;\n]+)/.exec(child.stderr)?.[1] ?? /'(.*jinn-upgrade-verify-[^']*)'/.exec(child.stderr)?.[1]
+  const leaked = /disposable root ([^;\n]+)/.exec(child.stderr)?.[1] ?? /'(.*hundredfold-upgrade-verify-[^']*)'/.exec(child.stderr)?.[1]
   if (leaked) t.after(() => fs.rmSync(leaked, { recursive: true, force: true }))
   return { ...child, leaked }
 }
@@ -189,7 +190,7 @@ function runCliWithLeak(t, assertionFailure) {
 test("a green CLI exits zero with both PASS results and reports a guarded leak by path", (t) => {
   const child = runCliWithLeak(t, false)
   assert.equal(child.status, 0, child.stdout + child.stderr)
-  assert.match(child.stdout, /PASS published jinn-cli@1.0.0 -> candidate jinn-cli@1.0.1/)
+  assert.ok(child.stdout.includes(`PASS published ${LEGACY.package}@1.0.0 -> candidate hundredfold@1.0.1`), child.stdout) // the baseline is the release from before the rename
   assert.match(child.stdout, /PASS stock /)
   assert.match(child.stdout, /PASS customized /)
   assert.match(child.stderr, /CLEANUP LEAK: disposable root .*ENOTEMPTY.*verification result unchanged/)

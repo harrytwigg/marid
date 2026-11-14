@@ -90,10 +90,10 @@ animation of any kind. The only enter choreography in the transcript belongs to 
 
 ```css
 .user-msg-bubble[data-msg-enter] {
-  animation: jinn-msg-send-in var(--duration-base) var(--ease-smooth) backwards;
+  animation: hundredfold-msg-send-in var(--duration-base) var(--ease-smooth) backwards;
   transform-origin: 100% 100%;
 }
-@keyframes jinn-msg-send-in {
+@keyframes hundredfold-msg-send-in {
   from { opacity: 0; transform: translateY(6px) scale(0.96); }
   to   { opacity: 1; transform: none; }
 }
@@ -106,7 +106,7 @@ animation of any kind. The only enter choreography in the transcript belongs to 
   composer the text came from. The scale therefore reads as growing out of the send control, not
   as inflating in place.
 - **Distance** `6px` of rise, `0.96` of scale. Both chosen against the shipped neighbours:
-  `jinn-comm-rise` uses `4px` (`web/routes/globals.css:820`), `jinn-pop-in` uses `0.96`
+  `hundredfold-comm-rise` uses `4px` (`web/routes/globals.css:820`), `hundredfold-pop-in` uses `0.96`
   (`web/routes/globals.css:759`). The user's own message is the one row that should read slightly
   more emphatic than a comms row, hence 6px rather than 4px; the scale matches the system exactly.
 - **Fill** `backwards`, so the bubble is invisible in the frame before the animation starts
@@ -121,7 +121,7 @@ animation of any kind. The only enter choreography in the transcript belongs to 
   not re-run on that swap. This is already guaranteed by the id-preserving reconcile; the send-motion slice
   asserts it rather than adding a guard.
 
-**Reduced motion.** `animation: none`. The end state of `jinn-msg-send-in` is the resting state,
+**Reduced motion.** `animation: none`. The end state of `hundredfold-msg-send-in` is the resting state,
 so suppressing it leaves the bubble exactly where it belongs on the submit frame. The optimistic
 insert itself is not motion and still happens — the bubble is on screen in the same frame in both
 modes.
@@ -200,7 +200,7 @@ removes the synthetic assistant row. Shipping both would give one event two cues
 
 | File | Change |
 | --- | --- |
-| `web/routes/globals.css` | `--danger-fill` in both theme blocks; `jinn-msg-send-in` keyframes; `.user-msg-bubble[data-msg-enter]` and the three `[data-send-state]` rules; the reduced-motion `animation: none`. |
+| `web/routes/globals.css` | `--danger-fill` in both theme blocks; `hundredfold-msg-send-in` keyframes; `.user-msg-bubble[data-msg-enter]` and the three `[data-send-state]` rules; the reduced-motion `animation: none`. |
 | `web/components/chat/chat-messages.tsx:1018` | Add `data-send-state` / `data-msg-enter` attributes. Attribute-only — no net lines. |
 | `web/hooks/use-live-session.ts:1315,1330` | `beginSend` marks `pending`; `failSend` marks the user message `failed` instead of appending an assistant row. Net-negative lines. |
 | **new** `web/components/chat/message-send-state.ts` | ≤300 lines. Owns the `pending | sent | failed` derivation from `(message, pendingUserMessageRef, lastError)` and the retry dispatch. Where the tests live. |
@@ -219,9 +219,9 @@ Operator defect 2's other half, and the streaming behaviour behind defect 3. Own
 
 ```css
 .assistant-transcript[data-msg-enter] {
-  animation: jinn-msg-receive-in var(--duration-slow) var(--ease-smooth) backwards;
+  animation: hundredfold-msg-receive-in var(--duration-slow) var(--ease-smooth) backwards;
 }
-@keyframes jinn-msg-receive-in {
+@keyframes hundredfold-msg-receive-in {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: none; }
 }
@@ -229,10 +229,10 @@ Operator defect 2's other half, and the streaming behaviour behind defect 3. Own
 
 - **Duration** `var(--duration-slow)` = `260ms`. Slower than the send's `180ms` on purpose: the
   send is a response to the reader's own action and must feel immediate; the reply is something
-  arriving, and arriving is allowed to take longer. It matches `jinn-comm-rise` at `240ms`
+  arriving, and arriving is allowed to take longer. It matches `hundredfold-comm-rise` at `240ms`
   (`web/routes/globals.css:806`) within a frame.
 - **Easing** `var(--ease-smooth)`.
-- **Distance** `4px`, no scale. This is the same figure and the same shape as `jinn-comm-rise`
+- **Distance** `4px`, no scale. This is the same figure and the same shape as `hundredfold-comm-rise`
   (`web/routes/globals.css:820`); the assistant column is left-aligned prose with no bubble
   chrome, and a scale on a full-width text block reads as a glitch.
 - **Transform origin** not set. The animation has no scale, so origin has no effect; declaring one
@@ -322,7 +322,7 @@ buffer re-formats per token.
 
 | File | Change |
 | --- | --- |
-| `web/routes/globals.css` | `jinn-msg-receive-in` keyframes, `.assistant-transcript[data-msg-enter]`, its reduced-motion rule. |
+| `web/routes/globals.css` | `hundredfold-msg-receive-in` keyframes, `.assistant-transcript[data-msg-enter]`, its reduced-motion rule. |
 | `web/components/chat/chat-messages.tsx:794` | `data-msg-enter` on the transcript div. Attribute-only. |
 | `web/hooks/use-stick-to-bottom.ts` | No change expected. If Invariant S needs enforcement it goes here, and this file is **not** in the size baseline, so it has room. |
 | **new** `web/components/chat/message-arrival.ts` | ≤300 lines. Owns "did this row arrive live, and was it preceded by a stream" for §1 and §2 both, extracted from the `arrivalsRef` block at `web/components/chat/chat-messages.tsx:1285-1309`. Extracting it is what pays for §1's attribute lines in that capped file. |
@@ -345,12 +345,12 @@ target, not its fix.
 | --- | --- | --- |
 | `t = 0`, layout effect, before paint | The mount snap runs: `scrollTop = scrollHeight`. The bottom anchor becomes authoritative **here** — `followRef` is `true` from this instant, so every later growth commit pins. | `web/hooks/use-stick-to-bottom.ts:213-223` (`useLayoutEffect`) |
 | `t = 0`, first paint | The transcript paints **already at the bottom**. Not scrolled there — painted there. | as above |
-| `t = 0 → 180ms` | The pane fades and rises in: `jinn-chat-open`, `opacity 0 → 1` with `translateY(4px) → 0`, `var(--duration-base)` = `180ms`, `var(--ease-smooth)`. Opacity and transform only, so nothing reflows and the paint above is not delayed by it. | new rule, `web/routes/globals.css` |
+| `t = 0 → 180ms` | The pane fades and rises in: `hundredfold-chat-open`, `opacity 0 → 1` with `translateY(4px) → 0`, `var(--duration-base)` = `180ms`, `var(--ease-smooth)`. Opacity and transform only, so nothing reflows and the paint above is not delayed by it. | new rule, `web/routes/globals.css` |
 | `t = 0` → settle | Late row measurements re-pin to the bottom. Some of these land after the opening paint: the content `ResizeObserver` is a `useEffect` (`web/hooks/use-stick-to-bottom.ts:256-267`), so it fires after a paint, not before one. They are allowed only as §3.2's settle exception — pinned-only, bottom-only, bounded. The window closes at the first commit where `virtualizer.getTotalSize()` is unchanged from the previous commit, or at `400ms` from `t = 0`, whichever comes first. | §3.2, over `web/components/chat/transcript-virtualizer.ts` + `web/hooks/use-stick-to-bottom.ts:256-267` |
 | after settle | **The chat-open transition owns no further writes.** The transcript's standing rules resume and govern alone: a growth commit pins or holds under Invariant S, and the down-arrow scrolls on command. §3 is done. | §2.2, §4 |
 
 On mobile (`<1024px`) the list→pane switch is a `hidden` / `flex` class toggle today with no
-transition at all (`web/routes/chat/page.tsx:1101,1122`). `jinn-chat-open` applies there too, on
+transition at all (`web/routes/chat/page.tsx:1101,1122`). `hundredfold-chat-open` applies there too, on
 the same `180ms`. The list does not animate out — it is display-toggled, and cross-fading two
 full-height panes on a phone costs a compositor layer for a transition nobody asked for.
 
@@ -486,7 +486,7 @@ with that: the requirement is that nothing unmounts, not that the spinner is sup
 
 ### 3.5 Reduced motion
 
-`jinn-chat-open` → `animation: none`. Its end state is the resting state, so the pane is simply
+`hundredfold-chat-open` → `animation: none`. Its end state is the resting state, so the pane is simply
 present on the first frame. Everything else in this section is scroll positioning, not motion: the
 pin has always been an instant `scrollTop` write and is byte-identical in both modes. `scrollToEnd`
 is called with `behavior` — on the open path it is always `'auto'`, never `'smooth'`, in both
@@ -497,7 +497,7 @@ modes. The reduced-motion reset already forces `scroll-behavior: auto` globally
 
 | File | Change |
 | --- | --- |
-| `web/routes/globals.css` | `jinn-chat-open` keyframes + rule + reduced-motion `animation: none`. |
+| `web/routes/globals.css` | `hundredfold-chat-open` keyframes + rule + reduced-motion `animation: none`. |
 | `web/components/chat/chat-pane.tsx:503-515,605,630` | Spinner becomes a 250ms threshold; `onContentReady`'s `rAF` removed. Net-negative lines. |
 | `web/routes/chat/page.tsx:698-703` | Remembered-scroll restore moves out of its `rAF`. Net-negative lines. |
 | `web/components/chat/chat-messages.tsx:1206` | Open path targets `scrollToEnd`. |
@@ -588,8 +588,8 @@ and this separates them.
 
 | | Value | Source |
 | --- | --- | --- |
-| Enter | `jinn-jump-in` `160ms` `var(--ease-smooth)`, `opacity 0→1`, `translateY(8px)→0`, `scale(0.96)→1` | `web/components/chat/jump-to-latest.tsx:64`, keyframes at `web/components/chat/chat-messages.tsx:1516-1523` |
-| Exit | `jinn-jump-out` `140ms` `var(--ease-snappy)`, `opacity 1→0`, `translateY(0)→6px`, `scale(1)→0.98` | same |
+| Enter | `hundredfold-jump-in` `160ms` `var(--ease-smooth)`, `opacity 0→1`, `translateY(8px)→0`, `scale(0.96)→1` | `web/components/chat/jump-to-latest.tsx:64`, keyframes at `web/components/chat/chat-messages.tsx:1516-1523` |
+| Exit | `hundredfold-jump-out` `140ms` `var(--ease-snappy)`, `opacity 1→0`, `translateY(0)→6px`, `scale(1)→0.98` | same |
 | Unmount delay | `JUMP_EXIT_MS = 140` | `web/components/chat/jump-to-latest.tsx:4` |
 
 **No change.** The pair already follows the system's "each exit is quicker than its entrance" rule

@@ -9,7 +9,7 @@
 import { act, render, screen, waitFor } from "@testing-library/react"
 import { StrictMode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { DEFAULTS, type JinnSettings } from "@/lib/settings"
+import { DEFAULTS, type HundredfoldSettings } from "@/lib/settings"
 
 vi.mock("@/hooks/use-gateway", () => ({ useGateway: () => ({ subscribe: () => () => {} }) }))
 
@@ -25,7 +25,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
   return { ...original, api: { ...original.api, addWorkItemComment: (...args: unknown[]) => addWorkItemComment(...args) } }
 })
 
-const stored = vi.hoisted(() => ({ settings: {} as JinnSettings }))
+const stored = vi.hoisted(() => ({ settings: {} as HundredfoldSettings }))
 vi.mock("@/routes/settings-provider", () => ({ useSettings: () => ({ settings: stored.settings }) }))
 
 // jsdom has no compositor and no pointer capture, and the sphere is a canvas

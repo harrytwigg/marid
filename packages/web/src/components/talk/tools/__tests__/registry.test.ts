@@ -50,7 +50,7 @@ describe("the registered set", () => {
   })
 
   it("emits definitions a realtime provider can take unchanged", () => {
-    // Structurally `RealtimeTool` from packages/jinn/src/shared/types.ts: the web
+    // Structurally `RealtimeTool` from packages/hundredfold/src/shared/types.ts: the web
     // package cannot import it, so the shape is pinned here instead.
     for (const definition of toolDefinitions()) {
       expect(Object.keys(definition).sort()).toEqual(["description", "name", "parameters"])
@@ -186,8 +186,8 @@ describe("bad input fails honestly, never fatally", () => {
 
 describe("the catch-all", () => {
   it("refuses out loud when it has nowhere to record the ask", async () => {
-    expect(findTool("jinn_action")).toBeDefined()
-    const result = await executeToolCall("jinn_action", '{"intent":"comment on Todo 59"}')
+    expect(findTool("hundredfold_action")).toBeDefined()
+    const result = await executeToolCall("hundredfold_action", '{"intent":"comment on Todo 59"}')
     expect(result.ok).toBe(false)
     expect(result).toEqual({ ok: false, error: expect.stringContaining("has no tool for") })
   })

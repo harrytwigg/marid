@@ -21,17 +21,17 @@ import path from "node:path";
  * It is a no-op in three cases, each for its own reason:
  *   - CI. The runner is dedicated to the job, so there is nothing to yield to,
  *     and the worker caps there are deliberate.
- *   - JINN_TEST_NICE=0. The escape hatch for a run that has to have normal
+ *   - HUNDREDFOLD_TEST_NICE=0. The escape hatch for a run that has to have normal
  *     priority, and the switch the tests use to prove the no-op path.
  *   - Windows, which has neither nice(1) nor ionice(1).
  *
- * JINN_TEST_LOW_PRIORITY=1 rides along on the child's environment so
- * packages/jinn/vitest.config.ts can widen its timeouts: 5s is generous on an
+ * HUNDREDFOLD_TEST_LOW_PRIORITY=1 rides along on the child's environment so
+ * packages/hundredfold/vitest.config.ts can widen its timeouts: 5s is generous on an
  * idle core and is not on a loaded one, and a false red at nice 19 is worse than
  * a slow green.
  */
 
-export const LOW_PRIORITY_ENV = "JINN_TEST_LOW_PRIORITY";
+export const LOW_PRIORITY_ENV = "HUNDREDFOLD_TEST_LOW_PRIORITY";
 export const NICE_LEVEL = 19;
 export const IONICE_CLASS = 3;
 
@@ -41,7 +41,7 @@ export const IONICE_CLASS = 3;
  */
 export function lowPriorityEnabled({ env = process.env, platform = process.platform } = {}) {
   if (env.CI) return false;
-  if (env.JINN_TEST_NICE === "0") return false;
+  if (env.HUNDREDFOLD_TEST_NICE === "0") return false;
   return platform !== "win32";
 }
 

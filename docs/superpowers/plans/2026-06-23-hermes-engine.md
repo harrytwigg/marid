@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add Hermes Agent (`hermes` CLI) as a first-class, version-agnostic Jinn engine with real token streaming (ACP Chat Mode) and a live terminal view (PTY CLI Mode).
+**Goal:** Add Hermes Agent (`hermes` CLI) as a first-class, version-agnostic Hundredfold engine with real token streaming (ACP Chat Mode) and a live terminal view (PTY CLI Mode).
 
 **Architecture:** Two engines mirroring the Codex/Grok dual pattern. `HermesAcpEngine` drives a warm, per-session `hermes acp` subprocess over ndjson JSON-RPC 2.0 (the Agent Client Protocol), streaming `text`/`tool_use`/`tool_result`/`context` deltas and resolving on `session/prompt`'s `stop_reason`. `HermesInteractiveEngine` spawns the real `hermes` TUI in `node-pty` for the dashboard xterm tab. Models are discovered live from the CLI's ACP handshake; effort is unsupported (Hermes has no effort knob).
 
@@ -15,7 +15,7 @@
 - **Reasoning text never leaks** into the answer bubble (`agent_thought_chunk` dropped from `text`).
 - **ESM imports** must use the `.js` suffix (e.g. `from "../shared/types.js"`).
 - **Engine name** is the literal string `"hermes"` everywhere.
-- **Test runner:** `npx vitest run <file>` from `packages/jinn`. **Typecheck:** `npm -C packages/jinn run typecheck`.
+- **Test runner:** `npx vitest run <file>` from `packages/hundredfold`. **Typecheck:** `npm -C packages/hundredfold run typecheck`.
 - **Commits:** no `Co-Authored-By` trailers (repo rule). Frequent, one per task minimum.
 - **Branch:** `feat/hermes-engine` (already created).
 - Wire mapping (reference snapshot, local v0.17.0): models are `provider:model` strings (`openai-codex:gpt-5.5`); `session/new` returns `{sessionId, models:{availableModels:[{modelId,name,description}],currentModelId}, modes, _meta}`; turn updates are `session/update` notifications with `update.sessionUpdate` ∈ `agent_message_chunk|agent_thought_chunk|tool_call|tool_call_update|plan|usage_update|available_commands_update` (older builds may also emit `agent_message_text`-style shapes — the mapper tolerates both).
@@ -26,27 +26,27 @@
 
 | File | Responsibility |
 |---|---|
-| `packages/jinn/src/shared/hermes-models.ts` | Pure model parsing (`parseHermesModels`, `knownHermesModels`) + self-contained live discovery (`discoverHermesModels`) via a lightweight ACP handshake. Lives in `shared/` so `models.ts` can import it without a layer inversion. |
-| `packages/jinn/src/engines/hermes-protocol.ts` | PURE: JSON-RPC request builders + `session/update` → `StreamDelta` mappers + `provider:model` helpers. No I/O. |
-| `packages/jinn/src/engines/hermes-jsonrpc.ts` | Minimal ndjson JSON-RPC client over a child stdio pair: line-buffered reader, id→promise map, notification dispatch, server→client request handler. |
-| `packages/jinn/src/engines/hermes-acp.ts` | `HermesAcpEngine` (`InterruptibleEngine`): warm per-session `hermes acp` pool; `run()` orchestration; kill/isAlive/killAll/killIdle. |
-| `packages/jinn/src/engines/hermes-interactive.ts` | `HermesInteractiveEngine` (`PtyViewEngine`): `hermes` TUI in node-pty for the xterm view. |
-| `packages/jinn/src/shared/models.ts` | MODIFY: register `"hermes"` in `ENGINE_NAMES` + maps; add `refreshHermesModels` + `buildHermesEntry`. |
-| `packages/jinn/src/shared/types.ts` | MODIFY: add `"hermes"` to `engines.default` union + `engines.hermes?` block. |
-| `packages/jinn/src/gateway/server.ts` | MODIFY: instantiate + register both engines; boot discovery; killIdle/killAll. |
-| `packages/jinn/src/gateway/api.ts`, `cli/limits.ts` | MODIFY: `refreshHermesModels` on reload / limits. |
-| `packages/jinn/src/shared/engine-limits.ts` | MODIFY: register hermes as unsupported-quota. |
-| `packages/jinn/src/cli/setup.ts`, `talk/routes.ts` | MODIFY: default config template, doctor, SetupEngine union, talk valid-engine list. |
+| `packages/hundredfold/src/shared/hermes-models.ts` | Pure model parsing (`parseHermesModels`, `knownHermesModels`) + self-contained live discovery (`discoverHermesModels`) via a lightweight ACP handshake. Lives in `shared/` so `models.ts` can import it without a layer inversion. |
+| `packages/hundredfold/src/engines/hermes-protocol.ts` | PURE: JSON-RPC request builders + `session/update` → `StreamDelta` mappers + `provider:model` helpers. No I/O. |
+| `packages/hundredfold/src/engines/hermes-jsonrpc.ts` | Minimal ndjson JSON-RPC client over a child stdio pair: line-buffered reader, id→promise map, notification dispatch, server→client request handler. |
+| `packages/hundredfold/src/engines/hermes-acp.ts` | `HermesAcpEngine` (`InterruptibleEngine`): warm per-session `hermes acp` pool; `run()` orchestration; kill/isAlive/killAll/killIdle. |
+| `packages/hundredfold/src/engines/hermes-interactive.ts` | `HermesInteractiveEngine` (`PtyViewEngine`): `hermes` TUI in node-pty for the xterm view. |
+| `packages/hundredfold/src/shared/models.ts` | MODIFY: register `"hermes"` in `ENGINE_NAMES` + maps; add `refreshHermesModels` + `buildHermesEntry`. |
+| `packages/hundredfold/src/shared/types.ts` | MODIFY: add `"hermes"` to `engines.default` union + `engines.hermes?` block. |
+| `packages/hundredfold/src/gateway/server.ts` | MODIFY: instantiate + register both engines; boot discovery; killIdle/killAll. |
+| `packages/hundredfold/src/gateway/api.ts`, `cli/limits.ts` | MODIFY: `refreshHermesModels` on reload / limits. |
+| `packages/hundredfold/src/shared/engine-limits.ts` | MODIFY: register hermes as unsupported-quota. |
+| `packages/hundredfold/src/cli/setup.ts`, `talk/routes.ts` | MODIFY: default config template, doctor, SetupEngine union, talk valid-engine list. |
 | `scripts/hermes-acp-smoke.mjs` | Live integration test script (real binary). |
-| `README.md`, `docs/engines-hermes.md`, `~/.jinn/org/platform/hermes-operator.yaml` | Docs + opt-in persona. |
+| `README.md`, `docs/engines-hermes.md`, `~/.hundredfold/org/platform/hermes-operator.yaml` | Docs + opt-in persona. |
 
 ---
 
 ## Task 1: Pure protocol module (`hermes-protocol.ts`)
 
 **Files:**
-- Create: `packages/jinn/src/engines/hermes-protocol.ts`
-- Test: `packages/jinn/src/engines/__tests__/hermes-protocol.test.ts`
+- Create: `packages/hundredfold/src/engines/hermes-protocol.ts`
+- Test: `packages/hundredfold/src/engines/__tests__/hermes-protocol.test.ts`
 
 **Interfaces:**
 - Produces:
@@ -61,7 +61,7 @@
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// packages/jinn/src/engines/__tests__/hermes-protocol.test.ts
+// packages/hundredfold/src/engines/__tests__/hermes-protocol.test.ts
 import { describe, it, expect } from "vitest";
 import {
   encodeModelChoice, splitModelChoice, rpcRequest, mapSessionUpdate,
@@ -106,13 +106,13 @@ describe("mapSessionUpdate", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd packages/jinn && npx vitest run src/engines/__tests__/hermes-protocol.test.ts`
+Run: `cd packages/hundredfold && npx vitest run src/engines/__tests__/hermes-protocol.test.ts`
 Expected: FAIL — `Cannot find module '../hermes-protocol.js'`.
 
 - [ ] **Step 3: Write the implementation**
 
 ```ts
-// packages/jinn/src/engines/hermes-protocol.ts
+// packages/hundredfold/src/engines/hermes-protocol.ts
 import type { StreamDelta } from "../shared/types.js";
 
 export function encodeModelChoice(provider: string | undefined, model: string): string {
@@ -205,13 +205,13 @@ export function extractPromptText(prompt: string): { type: "text"; text: string 
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd packages/jinn && npx vitest run src/engines/__tests__/hermes-protocol.test.ts`
+Run: `cd packages/hundredfold && npx vitest run src/engines/__tests__/hermes-protocol.test.ts`
 Expected: PASS (all cases).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/engines/hermes-protocol.ts packages/jinn/src/engines/__tests__/hermes-protocol.test.ts
+git add packages/hundredfold/src/engines/hermes-protocol.ts packages/hundredfold/src/engines/__tests__/hermes-protocol.test.ts
 git commit -m "feat(hermes): pure ACP protocol helpers (rpc builders + update→delta mappers)"
 ```
 
@@ -220,8 +220,8 @@ git commit -m "feat(hermes): pure ACP protocol helpers (rpc builders + update→
 ## Task 2: Model parsing + discovery (`hermes-models.ts`)
 
 **Files:**
-- Create: `packages/jinn/src/shared/hermes-models.ts`
-- Test: `packages/jinn/src/shared/__tests__/hermes-models.test.ts`
+- Create: `packages/hundredfold/src/shared/hermes-models.ts`
+- Test: `packages/hundredfold/src/shared/__tests__/hermes-models.test.ts`
 
 **Interfaces:**
 - Consumes: `ModelInfo` (`./types.js`), `encodeModelChoice` (`../engines/hermes-protocol.js`).
@@ -235,7 +235,7 @@ git commit -m "feat(hermes): pure ACP protocol helpers (rpc builders + update→
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// packages/jinn/src/shared/__tests__/hermes-models.test.ts
+// packages/hundredfold/src/shared/__tests__/hermes-models.test.ts
 import { describe, it, expect } from "vitest";
 import { parseHermesModels, knownHermesModels } from "../hermes-models.js";
 
@@ -274,13 +274,13 @@ describe("knownHermesModels", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd packages/jinn && npx vitest run src/shared/__tests__/hermes-models.test.ts`
+Run: `cd packages/hundredfold && npx vitest run src/shared/__tests__/hermes-models.test.ts`
 Expected: FAIL — module not found.
 
 - [ ] **Step 3: Write the implementation**
 
 ```ts
-// packages/jinn/src/shared/hermes-models.ts
+// packages/hundredfold/src/shared/hermes-models.ts
 import { spawn } from "node:child_process";
 import type { ModelInfo } from "./types.js";
 import { logger } from "./logger.js";
@@ -361,13 +361,13 @@ export async function discoverHermesModels(bin: string): Promise<HermesModelDisc
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd packages/jinn && npx vitest run src/shared/__tests__/hermes-models.test.ts`
+Run: `cd packages/hundredfold && npx vitest run src/shared/__tests__/hermes-models.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/shared/hermes-models.ts packages/jinn/src/shared/__tests__/hermes-models.test.ts
+git add packages/hundredfold/src/shared/hermes-models.ts packages/hundredfold/src/shared/__tests__/hermes-models.test.ts
 git commit -m "feat(hermes): model parsing + live ACP discovery with static fallback"
 ```
 
@@ -376,8 +376,8 @@ git commit -m "feat(hermes): model parsing + live ACP discovery with static fall
 ## Task 3: ndjson JSON-RPC client (`hermes-jsonrpc.ts`)
 
 **Files:**
-- Create: `packages/jinn/src/engines/hermes-jsonrpc.ts`
-- Test: `packages/jinn/src/engines/__tests__/hermes-jsonrpc.test.ts`
+- Create: `packages/hundredfold/src/engines/hermes-jsonrpc.ts`
+- Test: `packages/hundredfold/src/engines/__tests__/hermes-jsonrpc.test.ts`
 
 **Interfaces:**
 - Consumes: a `Writable` stdin + `Readable` stdout (so tests inject `stream.PassThrough`).
@@ -393,7 +393,7 @@ git commit -m "feat(hermes): model parsing + live ACP discovery with static fall
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// packages/jinn/src/engines/__tests__/hermes-jsonrpc.test.ts
+// packages/hundredfold/src/engines/__tests__/hermes-jsonrpc.test.ts
 import { describe, it, expect } from "vitest";
 import { PassThrough } from "node:stream";
 import { HermesRpc } from "../hermes-jsonrpc.js";
@@ -444,13 +444,13 @@ describe("HermesRpc", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd packages/jinn && npx vitest run src/engines/__tests__/hermes-jsonrpc.test.ts`
+Run: `cd packages/hundredfold && npx vitest run src/engines/__tests__/hermes-jsonrpc.test.ts`
 Expected: FAIL — module not found.
 
 - [ ] **Step 3: Write the implementation**
 
 ```ts
-// packages/jinn/src/engines/hermes-jsonrpc.ts
+// packages/hundredfold/src/engines/hermes-jsonrpc.ts
 import type { Writable, Readable } from "node:stream";
 
 type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void };
@@ -528,13 +528,13 @@ export class HermesRpc {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd packages/jinn && npx vitest run src/engines/__tests__/hermes-jsonrpc.test.ts`
+Run: `cd packages/hundredfold && npx vitest run src/engines/__tests__/hermes-jsonrpc.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/engines/hermes-jsonrpc.ts packages/jinn/src/engines/__tests__/hermes-jsonrpc.test.ts
+git add packages/hundredfold/src/engines/hermes-jsonrpc.ts packages/hundredfold/src/engines/__tests__/hermes-jsonrpc.test.ts
 git commit -m "feat(hermes): minimal ndjson JSON-RPC client (requests, notifications, server-req auto-answer)"
 ```
 
@@ -543,15 +543,15 @@ git commit -m "feat(hermes): minimal ndjson JSON-RPC client (requests, notificat
 ## Task 4: `HermesAcpEngine` (Chat Mode)
 
 **Files:**
-- Create: `packages/jinn/src/engines/hermes-acp.ts`
-- Test: `packages/jinn/src/engines/__tests__/hermes-acp.test.ts`
+- Create: `packages/hundredfold/src/engines/hermes-acp.ts`
+- Test: `packages/hundredfold/src/engines/__tests__/hermes-acp.test.ts`
 
 **Interfaces:**
 - Consumes: `HermesRpc` (`./hermes-jsonrpc.js`), `mapSessionUpdate`/`extractPromptText` (`./hermes-protocol.js`), `resolveBin` (`../shared/resolve-bin.js`), `InterruptibleEngine`/`EngineRunOpts`/`EngineResult` (`../shared/types.js`).
 - Produces: `class HermesAcpEngine implements InterruptibleEngine` with `name = "hermes"`, `run`, `kill`, `isAlive`, `killAll`, `killIdle` (no-op). Plus an injectable seam for tests: a protected `spawnProc(bin, cwd)` returning `{ rpc, kill, isAlive, onExit }` so the test can substitute a fake instead of a real process.
 
 **Design notes (implement exactly):**
-- Maintain `Map<jinnSessionId, HermesProc>` where `HermesProc = { rpc, killProc, alive, hermesSessionId?, initialized: Promise<void> }`.
+- Maintain `Map<hundredfoldSessionId, HermesProc>` where `HermesProc = { rpc, killProc, alive, hermesSessionId?, initialized: Promise<void> }`.
 - `run(opts)`:
   1. `bin = resolveBin("hermes", opts.bin)`. Get-or-spawn the per-session proc (env `HERMES_YOLO_MODE=1`, `HERMES_ACCEPT_HOOKS=1`, cwd `opts.cwd`). On first spawn: `await rpc.request("initialize", { protocolVersion: 1, clientCapabilities: {} })`, register `rpc.onServerRequest(() => ({ outcome: { outcome: "selected", optionId: "allow_always" } }))`.
   2. Session: if `opts.resumeSessionId` and we don't yet hold a live hermesSessionId → `rpc.request("session/load", { sessionId: opts.resumeSessionId, cwd, mcpServers: [] })`; else `const ns = await rpc.request("session/new", { cwd, mcpServers: [] })` and store `hermesSessionId = ns.sessionId`. After new/load: `rpc.request("session/set_mode", { sessionId, modeId: "dont_ask" }).catch(()=>{})`.
@@ -564,7 +564,7 @@ git commit -m "feat(hermes): minimal ndjson JSON-RPC client (requests, notificat
 - [ ] **Step 1: Write the failing test** (fake proc seam — no real binary)
 
 ```ts
-// packages/jinn/src/engines/__tests__/hermes-acp.test.ts
+// packages/hundredfold/src/engines/__tests__/hermes-acp.test.ts
 import { describe, it, expect } from "vitest";
 import { PassThrough } from "node:stream";
 import { HermesRpc } from "../hermes-jsonrpc.js";
@@ -606,24 +606,24 @@ describe("HermesAcpEngine.run", () => {
   it("streams text + context and returns the hermes session id", async () => {
     const eng = new TestEngine();
     const deltas: any[] = [];
-    const r = await eng.run({ prompt: "hi", cwd: "/tmp", sessionId: "jinn-1", onStream: (d) => deltas.push(d) });
+    const r = await eng.run({ prompt: "hi", cwd: "/tmp", sessionId: "hundredfold-1", onStream: (d) => deltas.push(d) });
     expect(r.sessionId).toBe("S1");
     expect(r.result).toBe("ok");
     expect(r.contextTokens).toBe(42);
     expect(deltas).toContainEqual({ type: "text", content: "ok" });
-    expect(eng.isAlive("jinn-1")).toBe(true);
+    expect(eng.isAlive("hundredfold-1")).toBe(true);
   });
 });
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd packages/jinn && npx vitest run src/engines/__tests__/hermes-acp.test.ts`
+Run: `cd packages/hundredfold && npx vitest run src/engines/__tests__/hermes-acp.test.ts`
 Expected: FAIL — module not found.
 
 - [ ] **Step 3: Write the implementation**
 
-Implement `packages/jinn/src/engines/hermes-acp.ts` exactly per the Design notes above. Key structure:
+Implement `packages/hundredfold/src/engines/hermes-acp.ts` exactly per the Design notes above. Key structure:
 
 ```ts
 import { spawn, type ChildProcess } from "node:child_process";
@@ -660,8 +660,8 @@ export class HermesAcpEngine implements InterruptibleEngine {
     };
   }
 
-  private getOrSpawn(jinnId: string, bin: string, cwd: string): HermesProc {
-    let p = this.procs.get(jinnId);
+  private getOrSpawn(hundredfoldId: string, bin: string, cwd: string): HermesProc {
+    let p = this.procs.get(hundredfoldId);
     if (p && p.alive) return p;
     const handle = this.spawnProc(bin, cwd);
     handle.rpc.onServerRequest(() => ALLOW_ALWAYS);
@@ -670,14 +670,14 @@ export class HermesAcpEngine implements InterruptibleEngine {
       initialized: handle.rpc.request("initialize", { protocolVersion: 1, clientCapabilities: {} }).then(() => {}),
     };
     handle.onExit(() => { entry.alive = false; handle.rpc.rejectAll(new Error("hermes acp exited")); });
-    this.procs.set(jinnId, entry);
+    this.procs.set(hundredfoldId, entry);
     return entry;
   }
 
   async run(opts: EngineRunOpts): Promise<EngineResult> {
-    const jinnId = opts.sessionId || opts.resumeSessionId || "default";
+    const hundredfoldId = opts.sessionId || opts.resumeSessionId || "default";
     const bin = resolveBin("hermes", opts.bin);
-    const p = this.getOrSpawn(jinnId, bin, opts.cwd);
+    const p = this.getOrSpawn(hundredfoldId, bin, opts.cwd);
     const { rpc } = p.handle;
     await p.initialized;
 
@@ -734,14 +734,14 @@ export class HermesAcpEngine implements InterruptibleEngine {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd packages/jinn && npx vitest run src/engines/__tests__/hermes-acp.test.ts`
+Run: `cd packages/hundredfold && npx vitest run src/engines/__tests__/hermes-acp.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Typecheck + commit**
 
 ```bash
-cd packages/jinn && npm run typecheck && cd ../..
-git add packages/jinn/src/engines/hermes-acp.ts packages/jinn/src/engines/__tests__/hermes-acp.test.ts
+cd packages/hundredfold && npm run typecheck && cd ../..
+git add packages/hundredfold/src/engines/hermes-acp.ts packages/hundredfold/src/engines/__tests__/hermes-acp.test.ts
 git commit -m "feat(hermes): HermesAcpEngine — warm per-session ACP process, streaming run()"
 ```
 
@@ -750,17 +750,17 @@ git commit -m "feat(hermes): HermesAcpEngine — warm per-session ACP process, s
 ## Task 5: Registry + types wiring
 
 **Files:**
-- Modify: `packages/jinn/src/shared/models.ts` (lines 34, 38-44, 46-52, 57-65, 86-92, 100-103, ~205-215; add `refreshHermesModels` + `buildHermesEntry`)
-- Modify: `packages/jinn/src/shared/types.ts:417`-region (no new mechanism), `:546` union, `:561` config block
-- Test: `packages/jinn/src/shared/__tests__/models.test.ts` (extend existing)
+- Modify: `packages/hundredfold/src/shared/models.ts` (lines 34, 38-44, 46-52, 57-65, 86-92, 100-103, ~205-215; add `refreshHermesModels` + `buildHermesEntry`)
+- Modify: `packages/hundredfold/src/shared/types.ts:417`-region (no new mechanism), `:546` union, `:561` config block
+- Test: `packages/hundredfold/src/shared/__tests__/models.test.ts` (extend existing)
 
 **Interfaces:**
-- Produces: `refreshHermesModels(config: JinnConfig): Promise<void>`; registry entry under key `"hermes"` with `effortMechanism: "none"`.
+- Produces: `refreshHermesModels(config: HundredfoldConfig): Promise<void>`; registry entry under key `"hermes"` with `effortMechanism: "none"`.
 
 - [ ] **Step 1: Add the failing test** (append to existing models test or new file)
 
 ```ts
-// packages/jinn/src/shared/__tests__/hermes-registry.test.ts
+// packages/hundredfold/src/shared/__tests__/hermes-registry.test.ts
 import { describe, it, expect } from "vitest";
 import { buildRegistry } from "../models.js";
 
@@ -781,7 +781,7 @@ describe("hermes registry entry", () => {
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `cd packages/jinn && npx vitest run src/shared/__tests__/hermes-registry.test.ts`
+Run: `cd packages/hundredfold && npx vitest run src/shared/__tests__/hermes-registry.test.ts`
 Expected: FAIL — `reg.hermes` is undefined (engine not registered).
 
 - [ ] **Step 3: Edit `models.ts`**
@@ -804,7 +804,7 @@ let discoveredHermesModels: HermesModelDiscovery | null = null;
 ```
 3h. Add `refreshHermesModels` (after `refreshGrokModels`, ~line 149):
 ```ts
-export async function refreshHermesModels(config: JinnConfig): Promise<void> {
+export async function refreshHermesModels(config: HundredfoldConfig): Promise<void> {
   if (!engineAvailable(config, "hermes")) { discoveredHermesModels = null; invalidateModelRegistry(); return; }
   try {
     const bin = resolveBin("hermes", engineBinOverride(config, "hermes"));
@@ -823,7 +823,7 @@ export async function refreshHermesModels(config: JinnConfig): Promise<void> {
 3j. Add `buildHermesEntry` (after `buildGrokEntry`):
 ```ts
 function buildHermesEntry(
-  config: JinnConfig,
+  config: HundredfoldConfig,
   hermesBlock: EngineModelsConfig | undefined,
   synthEntry: EngineRegistryEntry,
   available: boolean,
@@ -855,13 +855,13 @@ function buildHermesEntry(
 
 - [ ] **Step 5: Run to verify it passes + typecheck**
 
-Run: `cd packages/jinn && npx vitest run src/shared/__tests__/hermes-registry.test.ts && npm run typecheck`
+Run: `cd packages/hundredfold && npx vitest run src/shared/__tests__/hermes-registry.test.ts && npm run typecheck`
 Expected: PASS, typecheck clean (no remaining `Record<EngineName,…>` errors).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/jinn/src/shared/models.ts packages/jinn/src/shared/types.ts packages/jinn/src/shared/__tests__/hermes-registry.test.ts
+git add packages/hundredfold/src/shared/models.ts packages/hundredfold/src/shared/types.ts packages/hundredfold/src/shared/__tests__/hermes-registry.test.ts
 git commit -m "feat(hermes): register engine in model registry + config types (effort: none)"
 ```
 
@@ -870,8 +870,8 @@ git commit -m "feat(hermes): register engine in model registry + config types (e
 ## Task 6: `HermesInteractiveEngine` (CLI Mode / PTY view)
 
 **Files:**
-- Create: `packages/jinn/src/engines/hermes-interactive.ts`
-- Test: `packages/jinn/src/engines/__tests__/hermes-interactive.test.ts`
+- Create: `packages/hundredfold/src/engines/hermes-interactive.ts`
+- Test: `packages/hundredfold/src/engines/__tests__/hermes-interactive.test.ts`
 
 **Interfaces:**
 - Consumes: `PtyLifecycleManager` (`./pty-lifecycle.js`), `PtyViewEngine`/`PtyIdleSpawnOpts` (`./pty-view-engine.js`), `resolveBin`.
@@ -880,12 +880,12 @@ git commit -m "feat(hermes): register engine in model registry + config types (e
   - `isHermesTuiReady(output: string): boolean` (pure) → true when the REPL prompt is visible.
   - `class HermesInteractiveEngine implements InterruptibleEngine, PtyViewEngine` (constructed with a `PtyLifecycleManager`). For v1 the engine backs the xterm **view only**; `run()` returns a clear "use Chat Mode" error so it is never accidentally used for work turns (work turns go through `HermesAcpEngine`).
 
-**Note:** Model the PTY plumbing on `grok-interactive.ts` (same `PtyLifecycleManager`, `PtyStreamManager`, `subscribeOutput`/`getScrollback`/`writeStdin`/`resizePty`). v1 does **not** sync CLI-typed turns into the Jinn DB (out of scope per spec).
+**Note:** Model the PTY plumbing on `grok-interactive.ts` (same `PtyLifecycleManager`, `PtyStreamManager`, `subscribeOutput`/`getScrollback`/`writeStdin`/`resizePty`). v1 does **not** sync CLI-typed turns into the Hundredfold DB (out of scope per spec).
 
 - [ ] **Step 1: Write the failing test** (pure helpers only — PTY I/O is covered by the live :7788 check in Task 9)
 
 ```ts
-// packages/jinn/src/engines/__tests__/hermes-interactive.test.ts
+// packages/hundredfold/src/engines/__tests__/hermes-interactive.test.ts
 import { describe, it, expect } from "vitest";
 import { buildHermesInteractiveArgs, isHermesTuiReady } from "../hermes-interactive.js";
 
@@ -905,7 +905,7 @@ describe("isHermesTuiReady", () => {
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `cd packages/jinn && npx vitest run src/engines/__tests__/hermes-interactive.test.ts`
+Run: `cd packages/hundredfold && npx vitest run src/engines/__tests__/hermes-interactive.test.ts`
 Expected: FAIL — module not found.
 
 - [ ] **Step 3: Implement** `hermes-interactive.ts`
@@ -945,13 +945,13 @@ Then flesh out the `PtyViewEngine` methods by copying the corresponding bodies f
 
 - [ ] **Step 4: Run to verify it passes + typecheck**
 
-Run: `cd packages/jinn && npx vitest run src/engines/__tests__/hermes-interactive.test.ts && npm run typecheck`
+Run: `cd packages/hundredfold && npx vitest run src/engines/__tests__/hermes-interactive.test.ts && npm run typecheck`
 Expected: PASS, typecheck clean.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/engines/hermes-interactive.ts packages/jinn/src/engines/__tests__/hermes-interactive.test.ts
+git add packages/hundredfold/src/engines/hermes-interactive.ts packages/hundredfold/src/engines/__tests__/hermes-interactive.test.ts
 git commit -m "feat(hermes): HermesInteractiveEngine — hermes TUI in node-pty for CLI Mode view"
 ```
 
@@ -960,10 +960,10 @@ git commit -m "feat(hermes): HermesInteractiveEngine — hermes TUI in node-pty 
 ## Task 7: Gateway wiring (`server.ts`, `api.ts`, `cli/limits.ts`, `engine-limits.ts`)
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/server.ts` (imports ~21; instantiation ~325-335; `engines.set` ~345; `ptyViewEngines` ~349-354; boot discovery near other `refresh*Models`; killIdle/killAll wiring)
-- Modify: `packages/jinn/src/gateway/api.ts` (config-reload `refresh*Models` call site)
-- Modify: `packages/jinn/src/cli/limits.ts` (limits path `refresh*Models`)
-- Modify: `packages/jinn/src/shared/engine-limits.ts` (register hermes unsupported)
+- Modify: `packages/hundredfold/src/gateway/server.ts` (imports ~21; instantiation ~325-335; `engines.set` ~345; `ptyViewEngines` ~349-354; boot discovery near other `refresh*Models`; killIdle/killAll wiring)
+- Modify: `packages/hundredfold/src/gateway/api.ts` (config-reload `refresh*Models` call site)
+- Modify: `packages/hundredfold/src/cli/limits.ts` (limits path `refresh*Models`)
+- Modify: `packages/hundredfold/src/shared/engine-limits.ts` (register hermes unsupported)
 
 **Interfaces:**
 - Consumes: `HermesAcpEngine`, `HermesInteractiveEngine`, `refreshHermesModels`.
@@ -1008,13 +1008,13 @@ Register `hermes` in the same place `grok` is registered as `collectUnsupported`
 
 - [ ] **Step 4: Typecheck + build**
 
-Run: `cd packages/jinn && npm run typecheck`
+Run: `cd packages/hundredfold && npm run typecheck`
 Expected: clean.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/server.ts packages/jinn/src/gateway/api.ts packages/jinn/src/cli/limits.ts packages/jinn/src/shared/engine-limits.ts
+git add packages/hundredfold/src/gateway/server.ts packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/cli/limits.ts packages/hundredfold/src/shared/engine-limits.ts
 git commit -m "feat(hermes): wire engines into gateway (register, ptyView, boot discovery, limits)"
 ```
 
@@ -1023,9 +1023,9 @@ git commit -m "feat(hermes): wire engines into gateway (register, ptyView, boot 
 ## Task 8: Config template, setup doctor, talk routes
 
 **Files:**
-- Modify: `packages/jinn/src/cli/setup.ts` (default config template `engines.hermes`; doctor binary check; `SetupEngine` union)
-- Modify: `packages/jinn/src/talk/routes.ts` (valid-engine list)
-- Modify: `~/.jinn/config.yaml` (live config — add `engines.hermes`)
+- Modify: `packages/hundredfold/src/cli/setup.ts` (default config template `engines.hermes`; doctor binary check; `SetupEngine` union)
+- Modify: `packages/hundredfold/src/talk/routes.ts` (valid-engine list)
+- Modify: `~/.hundredfold/config.yaml` (live config — add `engines.hermes`)
 
 - [ ] **Step 1: `setup.ts`**
 
@@ -1041,7 +1041,7 @@ git commit -m "feat(hermes): wire engines into gateway (register, ptyView, boot 
 
 Add `"hermes"` to the valid-engine list (search where `"grok"` appears in the talk valid-engine set).
 
-- [ ] **Step 3: Live `~/.jinn/config.yaml`**
+- [ ] **Step 3: Live `~/.hundredfold/config.yaml`**
 
 Add under `engines:`:
 ```yaml
@@ -1054,11 +1054,11 @@ Add under `engines:`:
 - [ ] **Step 4: Typecheck + commit**
 
 ```bash
-cd packages/jinn && npm run typecheck && cd ../..
-git add packages/jinn/src/cli/setup.ts packages/jinn/src/talk/routes.ts
+cd packages/hundredfold && npm run typecheck && cd ../..
+git add packages/hundredfold/src/cli/setup.ts packages/hundredfold/src/talk/routes.ts
 git commit -m "feat(hermes): setup template, doctor check, talk valid-engine list"
 ```
-(The `~/.jinn/config.yaml` edit is in a different repo — commit it there separately if that dir is version-controlled.)
+(The `~/.hundredfold/config.yaml` edit is in a different repo — commit it there separately if that dir is version-controlled.)
 
 ---
 
@@ -1126,15 +1126,15 @@ git commit -m "test(hermes): live ACP smoke script (handshake, stream, resume)"
 
 - [ ] **Step 1: Build**
 
-Run: `cd ~/Projects/jinn && npm run -w packages/jinn build` (or the repo's build script). Expected: dist emitted, no errors.
+Run: `cd ~/Projects/hundredfold && npm run -w packages/hundredfold build` (or the repo's build script). Expected: dist emitted, no errors.
 
 - [ ] **Step 2: Launch an isolated instance on :7788**
 
 Use an isolated home + port so it never collides with live :7777:
 ```bash
-JINN_HOME=/tmp/jinn-7788-home PORT=7788 node ~/Projects/jinn/packages/jinn/dist/cli/index.js start --daemon 2>&1 | tail -5
+HUNDREDFOLD_HOME=/tmp/hundredfold-7788-home PORT=7788 node ~/Projects/hundredfold/packages/hundredfold/dist/cli/index.js start --daemon 2>&1 | tail -5
 ```
-(If a seed config is needed, run the `setup`/`postinstall` path first, or copy `~/.jinn/config.yaml` into `/tmp/jinn-7788-home` and ensure `engines.hermes` + valid credentials in `~/.hermes/.env` are reachable.) Confirm: `curl -s localhost:7788/api/status` returns ok and `curl -s localhost:7788/api/engines | jq '.engines.hermes'` shows the hermes entry with models.
+(If a seed config is needed, run the `setup`/`postinstall` path first, or copy `~/.hundredfold/config.yaml` into `/tmp/hundredfold-7788-home` and ensure `engines.hermes` + valid credentials in `~/.hermes/.env` are reachable.) Confirm: `curl -s localhost:7788/api/status` returns ok and `curl -s localhost:7788/api/engines | jq '.engines.hermes'` shows the hermes entry with models.
 
 - [ ] **Step 3: Create a Hermes session + smoke a turn via API**
 
@@ -1156,8 +1156,8 @@ Record findings; save the GIF to `/tmp/hermes-7788-verify.gif`.
 - [ ] **Step 5: Tear down + note results**
 
 ```bash
-# stop the isolated daemon (find PID via /api/status or the daemon file under JINN_HOME)
-kill <pid>; rm -rf /tmp/jinn-7788-home
+# stop the isolated daemon (find PID via /api/status or the daemon file under HUNDREDFOLD_HOME)
+kill <pid>; rm -rf /tmp/hundredfold-7788-home
 ```
 Write a short PASS/FAIL note (with the GIF path) into the PR description / run log. No code commit unless a bug was found and fixed (then commit the fix with a test).
 
@@ -1166,9 +1166,9 @@ Write a short PASS/FAIL note (with the GIF path) into the PR description / run l
 ## Task 11: Docs, README, and opt-in persona
 
 **Files:**
-- Modify: `README.md` (engines table) and/or `packages/jinn/README.md`
+- Modify: `README.md` (engines table) and/or `packages/hundredfold/README.md`
 - Create: `docs/engines-hermes.md`
-- Create: `~/.jinn/org/platform/hermes-operator.yaml`
+- Create: `~/.hundredfold/org/platform/hermes-operator.yaml`
 
 - [ ] **Step 1: README engines table**
 
@@ -1187,7 +1187,7 @@ department: platform
 rank: senior
 engine: hermes
 model: openai-codex:gpt-5.5
-reportsTo: jinn-dev
+reportsTo: hundredfold-dev
 persona: |
   You are the Hermes Operator. You run tasks on the Hermes engine (NousResearch
   self-improving agent) — useful for jobs that benefit from Hermes's own tool
@@ -1200,10 +1200,10 @@ oversight: VERIFY
 - [ ] **Step 4: Commit**
 
 ```bash
-git add README.md packages/jinn/README.md docs/engines-hermes.md
+git add README.md packages/hundredfold/README.md docs/engines-hermes.md
 git commit -m "docs(hermes): engines table, reference doc"
-# persona lives in ~/.jinn (separate repo) — commit there if versioned:
-#   (cd ~/.jinn && git add org/platform/hermes-operator.yaml && git commit -m "feat(org): hermes-operator employee")
+# persona lives in ~/.hundredfold (separate repo) — commit there if versioned:
+#   (cd ~/.hundredfold && git add org/platform/hermes-operator.yaml && git commit -m "feat(org): hermes-operator employee")
 ```
 
 ---
@@ -1212,7 +1212,7 @@ git commit -m "docs(hermes): engines table, reference doc"
 
 - [ ] **Step 1: Full local gate**
 
-Run: `cd packages/jinn && npm run typecheck && npx vitest run`
+Run: `cd packages/hundredfold && npm run typecheck && npx vitest run`
 Expected: all green. Fix any failures before review.
 
 - [ ] **Step 2: Spawn the `code-reviewer` employee** (Codex GPT-5.5 xhigh) on the branch diff (`git diff main...feat/hermes-engine`). Brief it on: the ACP wire contract, the auto-approve requirement, the warm-per-session lifecycle, and the version-agnostic constraint. Loop rounds until all CRITICAL/HIGH (and chosen MEDIUM) findings are fixed, each fix with a regression test where applicable.

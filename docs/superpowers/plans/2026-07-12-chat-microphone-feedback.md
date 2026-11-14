@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Use Codex GPT-5.6-sol xhigh only; do not delegate.
-- Use a fresh sanitized `JINN_HOME` and non-7777 ports; never browse, mutate, restart, or test production `:7777`.
+- Use a fresh sanitized `HUNDREDFOLD_HOME` and non-7777 ports; never browse, mutate, restart, or test production `:7777`.
 - Write failing tests first and implement the smallest coherent fix.
 - Verify quick tap, press-hold, stop, permission delay/denial, first-use model modal, rapid repeat, 390px mobile, desktop, dark/light themes, and reduced motion.
 - Do not deploy or restart production.
@@ -146,7 +146,7 @@ expect(screen.queryByRole("button", { name: "Stop recording" })).toBeNull()
 
 - [ ] **Step 4: Run the focused tests and confirm RED**
 
-Run: `pnpm --filter @jinn/web test -- src/hooks/__tests__/use-stt.test.ts src/components/chat/__tests__/chat-input-mic-state.test.tsx`
+Run: `pnpm --filter @hundredfold/web test -- src/hooks/__tests__/use-stt.test.ts src/components/chat/__tests__/chat-input-mic-state.test.tsx`
 
 Expected: failures because `starting` does not exist, repeated calls are not locked, late permission can still start recording, denial falls back silently to idle, and `ChatInput` still renders idle.
 
@@ -224,7 +224,7 @@ function microphoneStartError(error: unknown): string {
 
 - [ ] **Step 6: Run hook tests and confirm GREEN**
 
-Run: `pnpm --filter @jinn/web test -- src/hooks/__tests__/use-stt.test.ts`
+Run: `pnpm --filter @hundredfold/web test -- src/hooks/__tests__/use-stt.test.ts`
 
 Expected: all hook tests pass with no unhandled promises or React act warnings.
 
@@ -305,14 +305,14 @@ function handleMicPointerCancel() {
 
 - [ ] **Step 4: Run chat mic tests and confirm GREEN**
 
-Run: `pnpm --filter @jinn/web test -- src/components/chat/__tests__/chat-input-mic-state.test.tsx src/components/chat/__tests__/mic-gesture.test.ts`
+Run: `pnpm --filter @hundredfold/web test -- src/components/chat/__tests__/chat-input-mic-state.test.tsx src/components/chat/__tests__/mic-gesture.test.ts`
 
 Expected: starting renders immediately and honestly; quick-tap/hold classification remains unchanged.
 
 ### Task 4: Sandbox interaction matrix and repository gates
 
 **Files:**
-- Create outside repo: `~/.jinn-mic-feedback/sandbox-artifacts/<timestamp>/verify-mic-feedback.mjs`
+- Create outside repo: `~/.hundredfold-mic-feedback/sandbox-artifacts/<timestamp>/verify-mic-feedback.mjs`
 - Create outside repo: sandbox screenshots, traces, and a verification report.
 
 **Interfaces:**
@@ -322,14 +322,14 @@ Expected: starting renders immediately and honestly; quick-tap/hold classificati
 - [ ] **Step 1: Run focused and complete web tests**
 
 ```bash
-pnpm --filter @jinn/web test -- src/hooks/__tests__/use-stt.test.ts src/components/chat/__tests__/chat-input-mic-state.test.tsx src/components/chat/__tests__/mic-gesture.test.ts
-pnpm --filter @jinn/web test
+pnpm --filter @hundredfold/web test -- src/hooks/__tests__/use-stt.test.ts src/components/chat/__tests__/chat-input-mic-state.test.tsx src/components/chat/__tests__/mic-gesture.test.ts
+pnpm --filter @hundredfold/web test
 ```
 
 - [ ] **Step 2: Run static and build gates**
 
 ```bash
-pnpm --filter @jinn/web typecheck
+pnpm --filter @hundredfold/web typecheck
 pnpm typecheck
 pnpm build
 ```
@@ -343,7 +343,7 @@ Use Playwright against the sandbox only. For each scenario, wait on `data-state`
 ```bash
 git add packages/web/src/hooks/use-stt.ts packages/web/src/hooks/__tests__/use-stt.test.ts packages/web/src/components/chat/chat-input.tsx packages/web/src/components/chat/__tests__/chat-input-mic-state.test.tsx packages/web/src/components/chat/__tests__/mic-gesture.test.ts docs/superpowers/plans/2026-07-12-chat-microphone-feedback.md
 git diff --cached --check
-git diff --cached | grep -iE '<privacy-firewall blocked terms — see packages/jinn/src/shared/__tests__/privacy-guard.test.ts>'
+git diff --cached | grep -iE '<privacy-firewall blocked terms — see packages/hundredfold/src/shared/__tests__/privacy-guard.test.ts>'
 ```
 
 Expected: `git diff --cached --check` exits 0; leak grep has no output.

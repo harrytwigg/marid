@@ -17,14 +17,14 @@ import { FileView } from "@/components/chat/file-view";
  * required to beat react-syntax-highlighter's inline styles.
  */
 const codeSurfaceOverride = `
-.jinn-file-view pre[class*="language-"],
-.jinn-file-view pre[style] {
+.hundredfold-file-view pre[class*="language-"],
+.hundredfold-file-view pre[style] {
   background: var(--code-bg) !important;
   color: var(--code-text) !important;
   font-family: var(--font-code) !important;
 }
-.jinn-file-view pre[class*="language-"] code,
-.jinn-file-view pre[style] > code {
+.hundredfold-file-view pre[class*="language-"] code,
+.hundredfold-file-view pre[style] > code {
   background: transparent !important;
   font-family: var(--font-code) !important;
 }
@@ -35,7 +35,7 @@ export default function FilePage() {
   const path = sp.get("path") ?? "";
   const sessionId = sp.get("session");
   return (
-    <div className="jinn-file-view">
+    <div className="hundredfold-file-view">
       <style>{codeSurfaceOverride}</style>
       <FileView path={path} sessionId={sessionId} />
     </div>

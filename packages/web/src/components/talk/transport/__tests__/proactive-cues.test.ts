@@ -1,4 +1,4 @@
-import type { GatewayEvent } from "@jinn/gateway-events"
+import type { GatewayEvent } from "@hundredfold/gateway-events"
 import { describe, expect, it, vi } from "vitest"
 import { createProactiveCueReceiver } from "../proactive-cues"
 

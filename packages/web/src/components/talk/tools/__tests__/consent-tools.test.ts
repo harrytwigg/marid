@@ -19,7 +19,7 @@ const mocked = vi.mocked(api)
  *  not reach until an answer comes back. */
 const ASKED: Array<{ tool: string; args: string; reaches: keyof typeof mocked }> = [
   { tool: "talk_send_to_session", args: '{"id":"s-1","message":"ship it"}', reaches: "sendMessage" },
-  { tool: "jinn_action", args: '{"intent":"note that we shipped","subject":"ABC-59"}', reaches: "addWorkItemComment" },
+  { tool: "hundredfold_action", args: '{"intent":"note that we shipped","subject":"ABC-59"}', reaches: "addWorkItemComment" },
 ]
 
 beforeEach(() => {
@@ -81,7 +81,7 @@ describe("nothing outward-facing happens before the operator answers", () => {
 
 describe("the catch-all", () => {
   it("refuses outright when it has nowhere to record the ask, and asks for nothing", async () => {
-    const result = await executeToolCall("jinn_action", '{"intent":"reorganise the board"}')
+    const result = await executeToolCall("hundredfold_action", '{"intent":"reorganise the board"}')
 
     expect(mocked.addWorkItemComment).not.toHaveBeenCalled()
     expect(result.ok).toBe(false)
@@ -93,7 +93,7 @@ describe("the catch-all", () => {
   })
 
   it("records the operator's words against the Todo once they agree", async () => {
-    const pending = executeToolCall("jinn_action", '{"intent":"chase the vendor","subject":"ABC-59","detail":"they went quiet"}')
+    const pending = executeToolCall("hundredfold_action", '{"intent":"chase the vendor","subject":"ABC-59","detail":"they went quiet"}')
     answerSituation("go")
     await pending
 

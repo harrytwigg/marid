@@ -4,7 +4,7 @@ import type { SelectorValue } from '@/components/chat/model-selector-row'
 // between visits. Reading it back is defensive on purpose: the value is
 // operator-editable storage, so a field that is not a string is treated as
 // absent rather than handed on as one.
-const NEW_SESSION_SELECTOR_KEY = 'jinn-chat-new-session-selector'
+const NEW_SESSION_SELECTOR_KEY = 'hundredfold-chat-new-session-selector'
 
 export function readNewSessionSelector(): SelectorValue {
   if (typeof window === 'undefined') return {}

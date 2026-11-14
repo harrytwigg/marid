@@ -1,9 +1,9 @@
 # Plan: migrate Claude work turns from `claude -p` (headless) to interactive PTY
 
-**Date:** 2026-06-01 · **Author:** Jinn Dev · **Status:** PLAN - awaiting CEO review, NOT implemented · **Risk: HIGH**
+**Date:** 2026-06-01 · **Author:** Hundredfold Dev · **Status:** PLAN - awaiting CEO review, NOT implemented · **Risk: HIGH**
 
 ## Why (motivation)
-Anthropic stops subsidizing `claude -p` (headless one-shot) under the Max subscription on **2026-06-15** - only the interactive TUI keeps billing as `cc_entrypoint=cli`. Today Jinn runs **all** Claude work turns through the **headless** `ClaudeEngine` (`claude -p`); after Jun 15 those turns start drawing on API credits. The directive: drive **interactive `claude`** for every turn (chat, connectors, cron, employees, child sessions) so the whole org stays on the flat Max plan.
+Anthropic stops subsidizing `claude -p` (headless one-shot) under the Max subscription on **2026-06-15** - only the interactive TUI keeps billing as `cc_entrypoint=cli`. Today Hundredfold runs **all** Claude work turns through the **headless** `ClaudeEngine` (`claude -p`); after Jun 15 those turns start drawing on API credits. The directive: drive **interactive `claude`** for every turn (chat, connectors, cron, employees, child sessions) so the whole org stays on the flat Max plan.
 
 ## Current architecture (verified)
 - `manager.run()` → `this.engines.get(session.engine)`. For `"claude"` that's the **headless `ClaudeEngine`** (`claude.ts`, `spawn("claude", ["-p","--output-format","stream-json",...])`). Used by **everything that isn't the xterm view**: web chat (default), Slack/connectors, **all 34 cron jobs**, employee delegations, child sessions, `/doctor`-style internals.

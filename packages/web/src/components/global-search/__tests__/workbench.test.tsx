@@ -22,7 +22,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
   return { ...actual, api: { ...actual.api, ...mocks } }
 })
 vi.mock("@/routes/settings-provider", () => ({
-  useSettings: () => ({ settings: { portalName: "Jinn", employeeOverrides: {} } }),
+  useSettings: () => ({ settings: { portalName: "Hundredfold", employeeOverrides: {} } }),
 }))
 
 import { ApiError, type WorkItemStatusWire } from "@/lib/api"
@@ -278,7 +278,7 @@ describe("the search workbench", () => {
   })
 
   it("gives a recent row no write control either", async () => {
-    localStorage.setItem("jinn-command-recent", JSON.stringify([
+    localStorage.setItem("hundredfold-command-recent", JSON.stringify([
       { id: `todo-${TODO_ID}`, label: "A row", href: `/todos/${TODO_ID}`, type: "todo" },
     ]))
     renderOverlay()

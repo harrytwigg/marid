@@ -1193,15 +1193,15 @@ export function ChatMessages({
 
       {/* Keyframe animations + responsive bubble widths */}
       <style>{`
-        @keyframes jinn-pulse {
+        @keyframes hundredfold-pulse {
           0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
           40% { opacity: 1; transform: scale(1); }
         }
-        @keyframes jinn-jump-in {
+        @keyframes hundredfold-jump-in {
           from { opacity: 0; transform: translateY(8px) scale(0.96); }
           to { opacity: 1; transform: translateY(0) scale(1); }
         }
-        @keyframes jinn-jump-out {
+        @keyframes hundredfold-jump-out {
           from { opacity: 1; transform: translateY(0) scale(1); }
           to { opacity: 0; transform: translateY(6px) scale(0.98); }
         }
@@ -1224,9 +1224,9 @@ export function ChatMessages({
           background: currentColor;
           border-radius: 1px;
           opacity: 0.55;
-          animation: jinn-caret 1.05s steps(1) infinite;
+          animation: hundredfold-caret 1.05s steps(1) infinite;
         }
-        @keyframes jinn-caret { 0%, 50% { opacity: 0.55; } 50.01%, 100% { opacity: 0; } }
+        @keyframes hundredfold-caret { 0%, 50% { opacity: 0.55; } 50.01%, 100% { opacity: 0; } }
         /* Message actions — always visible by default (touch). On hover-capable
            pointers, hide at rest and reveal on row hover/focus. No !important. */
         .msg-actions { opacity: 1; transition: opacity 150ms ease; }

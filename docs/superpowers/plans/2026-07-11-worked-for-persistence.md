@@ -21,8 +21,8 @@
 ### Task 1: Gateway settlement contract regression
 
 **Files:**
-- Create: `packages/jinn/src/gateway/__tests__/streamed-turn-settlement.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/streamed-blocks.test.ts`
+- Create: `packages/hundredfold/src/gateway/__tests__/streamed-turn-settlement.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/streamed-blocks.test.ts`
 
 **Interfaces:**
 - Consumes: real `handleApiRequest`, engine `onStream`, session registry reads, and GET-session reload serialization.
@@ -38,15 +38,15 @@ Assert a single exact streamed result row is removed before the canonical final 
 
 - [ ] **Step 3: Run focused tests to verify RED**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/streamed-turn-settlement.test.ts src/gateway/__tests__/streamed-blocks.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/streamed-turn-settlement.test.ts src/gateway/__tests__/streamed-blocks.test.ts`
 
 Expected: completed-evidence and concatenated-fragment assertions fail because `shouldPreserveStreamedBlocks()` returns `false`; safety cases remain green.
 
 ### Task 2: Selective partial-row settlement
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/registry.ts`
-- Modify: `packages/jinn/src/sessions/__tests__/messages-partial.test.ts`
+- Modify: `packages/hundredfold/src/sessions/registry.ts`
+- Modify: `packages/hundredfold/src/sessions/__tests__/messages-partial.test.ts`
 
 **Interfaces:**
 - Consumes: `sessionId` and an ordered set of message ids selected for preservation.
@@ -58,7 +58,7 @@ Insert prose, tool, and transient rows; settle with only prose/tool ids; assert 
 
 - [ ] **Step 2: Run the registry test to verify RED**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/sessions/__tests__/messages-partial.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/sessions/__tests__/messages-partial.test.ts`
 
 Expected: FAIL because `settlePartialMessages` does not exist.
 
@@ -73,9 +73,9 @@ Run the same focused registry command and expect all tests to pass.
 ### Task 3: Live-parity gateway settlement
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/streamed-blocks.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/block-finalize.test.ts` only if the obsolete transient blocks-only expectation conflicts with the accepted final-boundary contract.
+- Modify: `packages/hundredfold/src/gateway/streamed-blocks.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/block-finalize.test.ts` only if the obsolete transient blocks-only expectation conflicts with the accepted final-boundary contract.
 
 **Interfaces:**
 - Consumes: streamed `SessionMessage` rows plus `quietPreempted`, rate-limit detection, terminal result, and terminal error.
@@ -94,8 +94,8 @@ Detect rate limiting before partial settlement, selectively settle preserved evi
 Run:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/streamed-turn-settlement.test.ts src/gateway/__tests__/streamed-blocks.test.ts src/sessions/__tests__/messages-partial.test.ts src/gateway/__tests__/block-finalize.test.ts
-pnpm --filter @jinn/web exec vitest run src/hooks/__tests__/use-live-session.test.ts src/components/chat/__tests__/comms-v2.test.tsx
+pnpm --filter hundredfold exec vitest run src/gateway/__tests__/streamed-turn-settlement.test.ts src/gateway/__tests__/streamed-blocks.test.ts src/sessions/__tests__/messages-partial.test.ts src/gateway/__tests__/block-finalize.test.ts
+pnpm --filter @hundredfold/web exec vitest run src/hooks/__tests__/use-live-session.test.ts src/components/chat/__tests__/comms-v2.test.tsx
 ```
 
 Expected: all focused tests pass; reload rows match the existing live completion expectations.

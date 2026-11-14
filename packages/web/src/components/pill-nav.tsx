@@ -71,7 +71,7 @@ export { isNavItemActive } from "@/components/nav-surface"
 // (desktop only). Icons-only at rest; the rail NEVER widens, so the chat list is
 // never covered. Hovering/focusing a single icon springs ONLY that icon's label
 // out as a small frosted pill to its right — a per-key "piano" reveal — while the
-// icon itself lifts a touch (Dock-style). The top slot shows the Jinn logo at
+// icon itself lifts a touch (Dock-style). The top slot shows the Hundredfold logo at
 // rest and cross-fades to the sidebar toggle on hover (ChatGPT-style). Active
 // item = soft --fill-secondary, NEVER --accent.
 // ---------------------------------------------------------------------------
@@ -220,9 +220,9 @@ export function NavRibbon({
     <div className="relative hidden h-full w-14 shrink-0 lg:block">
       {/* Named so a route change snapshots the rail apart from the page — globals.css. */}
       <nav aria-label="Primary"
-        className="absolute inset-y-0 left-0 z-30 flex w-14 flex-col items-center gap-0.5 px-1.5 pb-2.5 pt-3.5 [view-transition-name:jinn-nav-rail]"
+        className="absolute inset-y-0 left-0 z-30 flex w-14 flex-col items-center gap-0.5 px-1.5 pb-2.5 pt-3.5 [view-transition-name:hundredfold-nav-rail]"
       >
-        {/* Top slot — a plain, button-sized Jinn brand mark that fills the rail
+        {/* Top slot — a plain, button-sized Hundredfold brand mark that fills the rail
             top (no frosted-pill chrome). It morphs to the sidebar.left toggle
             while the pointer is anywhere over the LEFT region — the rail AND the
             chat-list column (ChatGPT-style, via group/sidebar on the region

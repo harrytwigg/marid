@@ -110,7 +110,7 @@ employee('workshop', 'shop-lead', 'manager')
 // starts an engine turn: every row is idle, and the sandbox never runs one.
 //   side-dev's are bound to side-project (the badge); eng-dev's is not (no badge).
 // The spec links the first bound one to a Todo once the Todo exists, so it shows on the Todo page tree.
-const Database = createRequire(path.join(import.meta.dirname, '..', 'packages', 'jinn', 'package.json'))('better-sqlite3')
+const Database = createRequire(path.join(import.meta.dirname, '..', 'packages', 'hundredfold', 'package.json'))('better-sqlite3')
 const db = new Database(path.join(sandboxHome, 'sessions', 'registry.db'))
 const now = Date.now()
 const insert = db.prepare(`
@@ -135,7 +135,7 @@ db.close()
 
 // A stage directory as an earlier build made it, at the old path (before each instance had its own
 // stage root). The gateway moves it at boot; its inode is recorded so the run can show it was a rename.
-const legacyStage = path.join(path.dirname(sandboxHome), '.jinn-departments', 'side-project')
+const legacyStage = path.join(path.dirname(sandboxHome), '.hundredfold-departments', 'side-project')
 write(path.join(legacyStage, 'CLAUDE.md'), ['An earlier build generated this file.'])
 write(path.join(legacyStage, '.claude', 'skills', 'management', 'SKILL.md'), ['---', 'name: management', 'description: stale copy', '---'])
 const legacyStageIno = fs.statSync(legacyStage).ino

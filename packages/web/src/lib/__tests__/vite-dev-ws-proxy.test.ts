@@ -40,7 +40,7 @@ describe('Vite dev /ws proxy', () => {
   })
 
   it('keeps an X-Forwarded-Host an outer proxy already set', () => {
-    expect(forward({ host: 'localhost:5173' }, { 'x-forwarded-host': 'jinn.example.com' }).get('x-forwarded-host')).toBe('jinn.example.com')
+    expect(forward({ host: 'localhost:5173' }, { 'x-forwarded-host': 'hundredfold.example.com' }).get('x-forwarded-host')).toBe('hundredfold.example.com')
   })
 })
 

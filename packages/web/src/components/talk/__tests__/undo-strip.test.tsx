@@ -99,7 +99,7 @@ describe("reduced motion", () => {
 
     offer(COMMENTED, vi.fn(async () => {}))
 
-    expect(strip()!.style.animation).toContain("jinn-undo-rise")
+    expect(strip()!.style.animation).toContain("hundredfold-undo-rise")
   })
 })
 

@@ -15,8 +15,8 @@
 ### Task 1: Add types to `types.ts`
 
 **Files:**
-- Modify: `packages/jinn/src/shared/types.ts:195-215` (Employee interface)
-- Modify: `packages/jinn/src/shared/types.ts` (append new interfaces)
+- Modify: `packages/hundredfold/src/shared/types.ts:195-215` (Employee interface)
+- Modify: `packages/hundredfold/src/shared/types.ts` (append new interfaces)
 
 - [ ] **Step 1: Add `reportsTo` field to Employee interface**
 
@@ -69,13 +69,13 @@ export interface OrgHierarchy {
 
 - [ ] **Step 3: Run typecheck**
 
-Run: `cd ~/Projects/jinn && pnpm typecheck`
+Run: `cd ~/Projects/hundredfold && pnpm typecheck`
 Expected: PASS (new types are additive, no consumers yet)
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/jinn/src/shared/types.ts
+git add packages/hundredfold/src/shared/types.ts
 git commit -m "feat(org): add reportsTo field and hierarchy types to Employee interface"
 ```
 
@@ -84,7 +84,7 @@ git commit -m "feat(org): add reportsTo field and hierarchy types to Employee in
 ### Task 2: Parse `reportsTo` in scanner
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/org.ts:28-41` (inside scanOrg YAML extraction)
+- Modify: `packages/hundredfold/src/gateway/org.ts:28-41` (inside scanOrg YAML extraction)
 
 - [ ] **Step 1: Add `reportsTo` extraction to `scanOrg()`**
 
@@ -100,13 +100,13 @@ Check if `mcp` is parsed - it's in the Employee interface but may be missing fro
 
 - [ ] **Step 3: Run typecheck**
 
-Run: `cd ~/Projects/jinn && pnpm typecheck`
+Run: `cd ~/Projects/hundredfold && pnpm typecheck`
 Expected: PASS
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/org.ts
+git add packages/hundredfold/src/gateway/org.ts
 git commit -m "feat(org): parse reportsTo field from employee YAML in scanOrg"
 ```
 
@@ -115,7 +115,7 @@ git commit -m "feat(org): parse reportsTo field from employee YAML in scanOrg"
 ### Task 3: Write failing tests for `org-hierarchy.ts`
 
 **Files:**
-- Create: `packages/jinn/src/gateway/__tests__/org-hierarchy.test.ts`
+- Create: `packages/hundredfold/src/gateway/__tests__/org-hierarchy.test.ts`
 
 - [ ] **Step 1: Create test file with all test cases**
 
@@ -410,13 +410,13 @@ describe("resolveOrgHierarchy", () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/Projects/jinn && pnpm --filter jinn-cli test -- --run src/gateway/__tests__/org-hierarchy.test.ts`
+Run: `cd ~/Projects/hundredfold && pnpm --filter hundredfold test -- --run src/gateway/__tests__/org-hierarchy.test.ts`
 Expected: FAIL - module `../org-hierarchy.js` does not exist
 
 - [ ] **Step 3: Commit failing tests**
 
 ```bash
-git add packages/jinn/src/gateway/__tests__/org-hierarchy.test.ts
+git add packages/hundredfold/src/gateway/__tests__/org-hierarchy.test.ts
 git commit -m "test(org): add failing tests for org hierarchy resolver"
 ```
 
@@ -425,7 +425,7 @@ git commit -m "test(org): add failing tests for org hierarchy resolver"
 ### Task 4: Implement `org-hierarchy.ts`
 
 **Files:**
-- Create: `packages/jinn/src/gateway/org-hierarchy.ts`
+- Create: `packages/hundredfold/src/gateway/org-hierarchy.ts`
 
 - [ ] **Step 1: Create the module with all exports**
 
@@ -686,18 +686,18 @@ export function resolveOrgHierarchy(
 
 - [ ] **Step 2: Run tests to verify they pass**
 
-Run: `cd ~/Projects/jinn && pnpm --filter jinn-cli test -- --run src/gateway/__tests__/org-hierarchy.test.ts`
+Run: `cd ~/Projects/hundredfold && pnpm --filter hundredfold test -- --run src/gateway/__tests__/org-hierarchy.test.ts`
 Expected: ALL PASS
 
 - [ ] **Step 3: Run full typecheck**
 
-Run: `cd ~/Projects/jinn && pnpm typecheck`
+Run: `cd ~/Projects/hundredfold && pnpm typecheck`
 Expected: PASS
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/org-hierarchy.ts
+git add packages/hundredfold/src/gateway/org-hierarchy.ts
 git commit -m "feat(org): implement hierarchy resolver with smart defaults, cycle detection, and warnings"
 ```
 
@@ -708,7 +708,7 @@ git commit -m "feat(org): implement hierarchy resolver with smart defaults, cycl
 ### Task 5: Update `GET /api/org` to return enriched response
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts:891-924` (GET /api/org handler)
+- Modify: `packages/hundredfold/src/gateway/api.ts:891-924` (GET /api/org handler)
 
 - [ ] **Step 1: Replace filename-scanning with scanOrg + resolver**
 
@@ -760,13 +760,13 @@ The handler uses dynamic imports already (`await import("./org.js")`), so the `r
 
 - [ ] **Step 3: Run typecheck**
 
-Run: `cd ~/Projects/jinn && pnpm typecheck`
+Run: `cd ~/Projects/hundredfold && pnpm typecheck`
 Expected: PASS
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/api.ts
+git add packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(api): enrich GET /api/org with hierarchy data and inline employee objects"
 ```
 
@@ -775,7 +775,7 @@ git commit -m "feat(api): enrich GET /api/org with hierarchy data and inline emp
 ### Task 6: Update `GET /api/org/employees/:name` with hierarchy fields
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts:927-948` (GET /api/org/employees/:name handler)
+- Modify: `packages/hundredfold/src/gateway/api.ts:927-948` (GET /api/org/employees/:name handler)
 
 - [ ] **Step 1: Replace raw YAML return with enriched response**
 
@@ -804,13 +804,13 @@ if (method === "GET" && params) {
 
 - [ ] **Step 2: Run typecheck**
 
-Run: `cd ~/Projects/jinn && pnpm typecheck`
+Run: `cd ~/Projects/hundredfold && pnpm typecheck`
 Expected: PASS
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/api.ts
+git add packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(api): add hierarchy fields to GET /api/org/employees/:name"
 ```
 
@@ -819,9 +819,9 @@ git commit -m "feat(api): add hierarchy fields to GET /api/org/employees/:name"
 ### Task 7: Update context builder - `buildOrgContext` with hierarchy
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/context.ts:44-57` (buildContext signature + org section)
-- Modify: `packages/jinn/src/sessions/context.ts:319-360` (buildOrgContext function)
-- Modify: `packages/jinn/src/sessions/context.ts:206-238` (buildEmployeeIdentity function)
+- Modify: `packages/hundredfold/src/sessions/context.ts:44-57` (buildContext signature + org section)
+- Modify: `packages/hundredfold/src/sessions/context.ts:319-360` (buildOrgContext function)
+- Modify: `packages/hundredfold/src/sessions/context.ts:206-238` (buildEmployeeIdentity function)
 
 - [ ] **Step 1: Add `hierarchy` to buildContext opts**
 
@@ -999,13 +999,13 @@ content: buildEmployeeIdentity(
 
 - [ ] **Step 6: Run typecheck**
 
-Run: `cd ~/Projects/jinn && pnpm typecheck`
+Run: `cd ~/Projects/hundredfold && pnpm typecheck`
 Expected: PASS
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/jinn/src/sessions/context.ts
+git add packages/hundredfold/src/sessions/context.ts
 git commit -m "feat(context): render org as indented tree, add reporting info to employee identity"
 ```
 
@@ -1014,8 +1014,8 @@ git commit -m "feat(context): render org as indented tree, add reporting info to
 ### Task 8: Pass hierarchy through session manager and API streaming
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/manager.ts:242-252` (buildContext call)
-- Modify: `packages/jinn/src/gateway/api.ts:1900-1919` (web streaming buildContext call)
+- Modify: `packages/hundredfold/src/sessions/manager.ts:242-252` (buildContext call)
+- Modify: `packages/hundredfold/src/gateway/api.ts:1900-1919` (web streaming buildContext call)
 
 - [ ] **Step 1: Update manager.ts to resolve hierarchy and pass it**
 
@@ -1093,13 +1093,13 @@ Note: `registry` is already available from the `scanOrg()` call at line 1905.
 
 - [ ] **Step 3: Run typecheck**
 
-Run: `cd ~/Projects/jinn && pnpm typecheck`
+Run: `cd ~/Projects/hundredfold && pnpm typecheck`
 Expected: PASS
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/jinn/src/sessions/manager.ts packages/jinn/src/gateway/api.ts
+git add packages/hundredfold/src/sessions/manager.ts packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(context): pass resolved hierarchy to context builder from manager and API"
 ```
 
@@ -1154,7 +1154,7 @@ export interface OrgData {
 
 - [ ] **Step 2: Run typecheck**
 
-Run: `cd ~/Projects/jinn && pnpm typecheck`
+Run: `cd ~/Projects/hundredfold && pnpm typecheck`
 Expected: There will be type errors in consumers that still treat `employees` as `string[]` - these will be fixed in subsequent tasks.
 
 - [ ] **Step 3: Commit**
@@ -1183,8 +1183,8 @@ const loadData = useCallback(() => {
     .getOrg()
     .then((data: OrgData) => {
       const coo: Employee = {
-        name: (settings.portalName ?? "Jinn").toLowerCase(),
-        displayName: settings.portalName ?? "Jinn",
+        name: (settings.portalName ?? "Hundredfold").toLowerCase(),
+        displayName: settings.portalName ?? "Hundredfold",
         department: "",
         rank: "executive",
         engine: "claude",
@@ -1400,7 +1400,7 @@ git commit -m "fix(web): update global search to extract employee names from obj
 
 However, verify that all consumers of `useOrg()` handle the new shape. The main consumer is `global-search.tsx` (fixed in Task 16). Run a grep to find any other consumers:
 
-Run: `cd ~/Projects/jinn && grep -r "useOrg\(\)" packages/web/src/ --include="*.tsx" --include="*.ts"`
+Run: `cd ~/Projects/hundredfold && grep -r "useOrg\(\)" packages/web/src/ --include="*.tsx" --include="*.ts"`
 
 Fix any other consumers that treat `employees` as `string[]`.
 
@@ -1855,17 +1855,17 @@ git commit -m "feat(web): add direct reports count badge to employee node"
 
 - [ ] **Step 1: Run full typecheck**
 
-Run: `cd ~/Projects/jinn && pnpm typecheck`
+Run: `cd ~/Projects/hundredfold && pnpm typecheck`
 Expected: PASS
 
 - [ ] **Step 2: Run full build**
 
-Run: `cd ~/Projects/jinn && pnpm build`
+Run: `cd ~/Projects/hundredfold && pnpm build`
 Expected: PASS
 
 - [ ] **Step 3: Run tests**
 
-Run: `cd ~/Projects/jinn && pnpm test`
+Run: `cd ~/Projects/hundredfold && pnpm test`
 Expected: ALL PASS (including org-hierarchy tests from Phase 1)
 
 - [ ] **Step 4: Commit build verification**
@@ -1879,7 +1879,7 @@ No commit needed - build verification is a check, not a code change.
 ### Task 21: Update management skill with hierarchy operations
 
 **Files:**
-- Modify: `~/.jinn/skills/management/SKILL.md`
+- Modify: `~/.hundredfold/skills/management/SKILL.md`
 
 - [ ] **Step 1: Add reportsTo logic to hiring section**
 
@@ -1936,7 +1936,7 @@ When moving an employee to a different department:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add ~/.jinn/skills/management/SKILL.md
+git add ~/.hundredfold/skills/management/SKILL.md
 git commit -m "feat(skill): add hierarchy-aware hiring, firing, promotion to management skill"
 ```
 
@@ -1945,7 +1945,7 @@ git commit -m "feat(skill): add hierarchy-aware hiring, firing, promotion to man
 ### Task 22: Write MIGRATION.md
 
 **Files:**
-- Create: `~/.jinn/migrations/hierarchical-org/MIGRATION.md` (per spec convention)
+- Create: `~/.hundredfold/migrations/hierarchical-org/MIGRATION.md` (per spec convention)
 
 - [ ] **Step 1: Create migration document**
 
@@ -1954,7 +1954,7 @@ Use the content from the spec's Section 8 (already written in the spec). Copy it
 - [ ] **Step 2: Commit**
 
 ```bash
-git add ~/.jinn/migrations/hierarchical-org/MIGRATION.md
+git add ~/.hundredfold/migrations/hierarchical-org/MIGRATION.md
 git commit -m "docs: add migration guide for hierarchical org system"
 ```
 
@@ -1963,7 +1963,7 @@ git commit -m "docs: add migration guide for hierarchical org system"
 ### Task 23: Optionally add `reportsTo` to existing employee YAMLs
 
 **Files:**
-- Modify: `~/.jinn/org/**/*.yaml` (existing employee files)
+- Modify: `~/.hundredfold/org/**/*.yaml` (existing employee files)
 
 - [ ] **Step 1: Add reportsTo to employees with clear reporting lines**
 
@@ -1987,7 +1987,7 @@ Expected: Empty array or only informational warnings
 - [ ] **Step 3: Commit**
 
 ```bash
-git add ~/.jinn/org/
+git add ~/.hundredfold/org/
 git commit -m "chore(org): add explicit reportsTo fields to existing employee YAMLs"
 ```
 
@@ -1997,12 +1997,12 @@ git commit -m "chore(org): add explicit reportsTo fields to existing employee YA
 
 - [ ] **Step 1: Run full build**
 
-Run: `cd ~/Projects/jinn && pnpm build`
+Run: `cd ~/Projects/hundredfold && pnpm build`
 Expected: PASS
 
 - [ ] **Step 2: Run all tests**
 
-Run: `cd ~/Projects/jinn && pnpm test`
+Run: `cd ~/Projects/hundredfold && pnpm test`
 Expected: ALL PASS
 
 - [ ] **Step 3: Verify API response**

@@ -61,7 +61,7 @@ export function JumpToLatestButton({
 
   const motionClass = reducedMotion
     ? 'data-[state=exiting]:opacity-0 data-[state=visible]:opacity-100'
-    : 'data-[state=exiting]:animate-[jinn-jump-out_140ms_var(--ease-snappy)_both] data-[state=visible]:animate-[jinn-jump-in_160ms_var(--ease-smooth)_both]'
+    : 'data-[state=exiting]:animate-[hundredfold-jump-out_140ms_var(--ease-snappy)_both] data-[state=visible]:animate-[hundredfold-jump-in_160ms_var(--ease-smooth)_both]'
 
   return (
     <button

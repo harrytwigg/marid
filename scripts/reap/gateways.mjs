@@ -5,15 +5,16 @@
 // looks like a sandbox. Two PIDs that read exactly like 2-day-old strays turned
 // out to be live instance gateways, so a PID nothing claims is spared rather
 // than reaped. Unidentified means untouchable.
+import { LEGACY } from "../legacy-names.mjs"
 import path from "node:path"
 
-const GATEWAY_ENTRY = /packages\/jinn\/dist\/src\/gateway\//
+const GATEWAY_ENTRY = new RegExp(`packages/(?:hundredfold|${LEGACY.codename})/dist/src/gateway/`) // a checkout from before the rename keeps the old package directory
 const TEST_WORKER = /\b(?:vitest|jest|mocha)\b/
 
 // A home is throwaway when it sits under a temp root, or when its own name says
 // so. Both halves are needed: the upgrade lab builds homes under the temp dir,
 // while a sandbox run can be pointed anywhere.
-const THROWAWAY_NAME = /^\.?(?:jinn-sandbox|jinn-home|upgrade-lab|jinn-upgrade-lab)-/
+const THROWAWAY_NAME = new RegExp(`^\\.?(?:hundredfold-sandbox|${LEGACY.codename}-sandbox|${LEGACY.codename}-home|upgrade-lab|hundredfold-upgrade-lab|${LEGACY.codename}-upgrade-lab)-`)
 
 // Below this, a PID belongs to the system rather than to anything we started.
 const LOWEST_SIGNALLABLE_PID = 500

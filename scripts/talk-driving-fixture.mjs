@@ -18,13 +18,13 @@ import {
 export { FIXTURE_CLOCK, TALK_SESSION_ID, assertDisposableHome, fixtureTopics, mergeById } from "./talk-driving-fixture-data.mjs"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const requireFromJinn = createRequire(path.join(repoRoot, "packages/jinn/package.json"))
-const YAML = requireFromJinn("yaml")
+const requireFromHundredfold = createRequire(path.join(repoRoot, "packages/hundredfold/package.json"))
+const YAML = requireFromHundredfold("yaml")
 
 /** @param {string[]} argv */
 function parseArgs(argv) {
   const index = argv.indexOf("--home")
-  if (index < 0 || !argv[index + 1]) throw new Error("--home <throwaway JINN_HOME> is required")
+  if (index < 0 || !argv[index + 1]) throw new Error("--home <throwaway HUNDREDFOLD_HOME> is required")
   return path.resolve(argv[index + 1].replace(/^~(?=$|\/)/, os.homedir()))
 }
 
@@ -55,9 +55,9 @@ function assertStopped(home) {
 
 /** @param {string} home */
 async function loadRuntime(home) {
-  process.env.JINN_HOME = home
-  process.env.JINN_INSTANCE = path.basename(home).replace(/^\./, "")
-  const moduleAt = (relative) => import(pathToFileURL(path.join(repoRoot, "packages/jinn/dist/src", relative)).href)
+  process.env.HUNDREDFOLD_HOME = home
+  process.env.HUNDREDFOLD_INSTANCE = path.basename(home).replace(/^\./, "")
+  const moduleAt = (relative) => import(pathToFileURL(path.join(repoRoot, "packages/hundredfold/dist/src", relative)).href)
   const [db, todos, comments, relations, sessions, talkSessions, topics, proactive, policy, tools] = await Promise.all([
     moduleAt("shared/db.js"), moduleAt("work-items/store.js"), moduleAt("work-items/comments.js"),
     moduleAt("work-items/relations.js"), moduleAt("sessions/registry.js"),

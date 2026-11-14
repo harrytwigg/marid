@@ -13,7 +13,7 @@
 - Preserve the current pinned-session array response without modification.
 - Accept the legacy session-list envelope during rolling build/restart version skew.
 - Do not encode any instance-specific names, ports, paths, or data in shipped source or tests.
-- Restart affected gateways with `jinn restart` only after the repository checks pass.
+- Restart affected gateways with `hundredfold restart` only after the repository checks pass.
 
 ---
 
@@ -44,7 +44,7 @@ it("unwraps the legacy sessions envelope for pinned-session version skew", async
 
 - [ ] **Step 2: Run the focused test to verify RED**
 
-Run: `pnpm --filter @jinn/web test -- src/lib/__tests__/api-errors.test.ts`
+Run: `pnpm --filter @hundredfold/web test -- src/lib/__tests__/api-errors.test.ts`
 
 Expected: FAIL because the current client returns the non-iterable envelope unchanged instead of its `sessions` array.
 
@@ -63,7 +63,7 @@ getPinnedSessions: async () => {
 
 - [ ] **Step 4: Run the focused test to verify GREEN**
 
-Run: `pnpm --filter @jinn/web test -- src/lib/__tests__/api-errors.test.ts`
+Run: `pnpm --filter @hundredfold/web test -- src/lib/__tests__/api-errors.test.ts`
 
 Expected: PASS.
 
@@ -72,9 +72,9 @@ Expected: PASS.
 Run:
 
 ```bash
-pnpm --filter @jinn/web typecheck
-pnpm --filter @jinn/web test
-pnpm --filter @jinn/web build
+pnpm --filter @hundredfold/web typecheck
+pnpm --filter @hundredfold/web test
+pnpm --filter @hundredfold/web build
 pnpm typecheck
 pnpm test
 pnpm lint
@@ -90,16 +90,16 @@ Expected: all commands exit 0.
 - Test: live gateway status endpoints and browser console/error inspection
 
 **Interfaces:**
-- Consumes: the built `packages/jinn/dist/web` assets and the running instance inventory.
+- Consumes: the built `packages/hundredfold/dist/web` assets and the running instance inventory.
 - Produces: compatible daemon/API state and a crash-free chat dashboard on every affected running instance.
 
 - [ ] **Step 1: Reconfirm the read-only process inventory**
 
-Run `jinn list`, inspect gateway command lines/listening ports, and compare daemon start times with the backend feature commit/build timestamps.
+Run `hundredfold list`, inspect gateway command lines/listening ports, and compare daemon start times with the backend feature commit/build timestamps.
 
 - [ ] **Step 2: Restart only affected gateways**
 
-Run `jinn restart` with each affected instance home selected through the CLI's supported instance mechanism. Never use stop/start.
+Run `hundredfold restart` with each affected instance home selected through the CLI's supported instance mechanism. Never use stop/start.
 
 - [ ] **Step 3: Health-check APIs and dashboards**
 

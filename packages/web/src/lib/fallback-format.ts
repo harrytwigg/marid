@@ -1,4 +1,4 @@
-import type { FallbackSkipReason } from "@jinn/fallback-chain-wire"
+import type { FallbackSkipReason } from "@hundredfold/fallback-chain-wire"
 
 /* How a chain's facts read, in one place so the diagram, the hop card and the
  * editor say the same thing. */

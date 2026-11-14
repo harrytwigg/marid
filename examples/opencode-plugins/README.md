@@ -1,4 +1,4 @@
-# OpenCode 2 plugin for a Marid host
+# OpenCode 2 plugin for a Hundredfold host
 
 One opencode plugin for hosts that run OpenCode 2 (2.0.28 or later): a plain ES
 module with no dependencies, because OpenCode 2 supplies `@opencode/plugin` to
@@ -10,7 +10,7 @@ starts, but without them.
 
 | File | Replaces (1.x) | What it does |
 |---|---|---|
-| `error-retry.js` | a 1.x `error-retry.js` built on `auth.loader` | Retries a pre-stream HTTP 400 whose body is exactly `{"model":"<id>"}` in place, up to `maxRetries` times with exponential backoff. It acts on one provider (`providerID`, default `opencode-go`). The step never fails, so Marid's turn only sees it take longer. Any other 400, and every other status, is left alone. |
+| `error-retry.js` | a 1.x `error-retry.js` built on `auth.loader` | Retries a pre-stream HTTP 400 whose body is exactly `{"model":"<id>"}` in place, up to `maxRetries` times with exponential backoff. It acts on one provider (`providerID`, default `opencode-go`). The step never fails, so Hundredfold's turn only sees it take longer. Any other 400, and every other status, is left alone. |
 
 ## Model fallback is not a plugin any more
 
@@ -20,8 +20,8 @@ along its [fallback chain](../../docs/fallback-chains.md), which can cross
 models, providers, engines and Claude profiles. There is no fallback plugin in
 this directory. A host that still runs one (`opencode-rate-limit` on 1.x, or an
 older copy of this directory's `model-fallback.js`) would fall back twice, so
-`jinn doctor`, the gateway's start-up log and the opencode entry of
-`/api/engines` report it. `jinn fallback migrate-opencode` prints the chain
+`hundredfold doctor`, the gateway's start-up log and the opencode entry of
+`/api/engines` report it. `hundredfold fallback migrate-opencode` prints the chain
 equivalent to its `rate-limit-fallback.json`; see
 [Migrating a host](../../docs/fallback-chains.md#migrating-a-host).
 

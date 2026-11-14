@@ -14,7 +14,7 @@ interface PersistedTouchOrder {
   sessionIds: string[]
 }
 
-export const TOUCH_ORDER_STORAGE_KEY = 'jinn-chat-touch-order'
+export const TOUCH_ORDER_STORAGE_KEY = 'hundredfold-chat-touch-order'
 
 /** Deep enough that pruning closed sessions still leaves candidates for the
  *  four mobile slots, shallow enough to stay a cheap write on every open. */

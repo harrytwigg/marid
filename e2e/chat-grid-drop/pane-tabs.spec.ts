@@ -28,8 +28,8 @@ async function openWithChat(browser: Browser, options: { video?: boolean; theme?
   await context.addInitScript((first: string) => {
     if (sessionStorage.getItem('pane-tabs-seeded')) return
     sessionStorage.setItem('pane-tabs-seeded', '1')
-    localStorage.removeItem('jinn-chat-split-layout')
-    localStorage.setItem('jinn-chat-working-set', JSON.stringify({ version: 1, sessionIds: [first], focusedId: first, focusHistory: [first] }))
+    localStorage.removeItem('hundredfold-chat-split-layout')
+    localStorage.setItem('hundredfold-chat-working-set', JSON.stringify({ version: 1, sessionIds: [first], focusedId: first, focusHistory: [first] }))
   }, ids[0])
   const page = await context.newPage()
   // Playwright dismisses dialogs on its own, which would hide a stray confirm(); record them instead.

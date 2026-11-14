@@ -7,7 +7,7 @@ export interface KVStore {
 }
 
 export function viewModeKey(sessionId: string): string {
-  return `jinn-view-mode-${sessionId}`;
+  return `hundredfold-view-mode-${sessionId}`;
 }
 
 function defaultStore(): KVStore | null {

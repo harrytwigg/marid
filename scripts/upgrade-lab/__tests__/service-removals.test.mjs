@@ -10,7 +10,7 @@ import * as upgradeLab from "../run.mjs"
 // removal path. These lock the lab's merge to that contract.
 
 test("materialized merge leaves a removal to the service and never claims it", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-service-removal-"))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-service-removal-"))
   try {
     const bundle = path.join(root, "materialized", "0.29.1")
     fs.mkdirSync(path.join(bundle, "files/base"), { recursive: true })
@@ -34,7 +34,7 @@ test("materialized merge leaves a removal to the service and never claims it", (
 })
 
 test("service-owned removals are proven gone after completion", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-removal-assert-"))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-removal-assert-"))
   try {
     fs.mkdirSync(path.join(root, "talk"), { recursive: true })
     assert.doesNotThrow(() => upgradeLab.assertServiceOwnedRemovalsApplied({

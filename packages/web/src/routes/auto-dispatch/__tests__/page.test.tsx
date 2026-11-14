@@ -29,7 +29,7 @@ vi.mock("@/hooks/use-gateway", () => ({ useGateway: () => ({ connectionSeq: 1, c
 import AutoDispatchPage from "../page"
 
 const status: BoardWalkStatus = {
-  path: "/home/op/.jinn/board-walk.md",
+  path: "/home/op/.hundredfold/board-walk.md",
   exists: true,
   settings: {
     employee: "assistant", model: "sonnet",

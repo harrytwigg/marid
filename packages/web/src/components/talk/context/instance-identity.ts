@@ -1,5 +1,5 @@
 /**
- * Which Jinn this page is, so the orb never has to guess.
+ * Which Hundredfold this page is, so the orb never has to guess.
  *
  * Several instances run side by side on one machine and they all look alike in
  * a browser tab. The gateway names itself in the auth state the app already

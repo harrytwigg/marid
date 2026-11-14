@@ -22,11 +22,11 @@ describe("member-only trees", () => {
 
   it("fails on one Todo the operator or an employee made, however deep", () => {
     expect(isMemberOnlyTree(node({ id: "A-1" }, [node({ id: "A-2" }, [node({ id: "A-3", createdBy: "operator" })])]))).toBe(false)
-    expect(isMemberOnlyTree(node({ id: "A-1", createdBy: "marid-dev" }))).toBe(false)
+    expect(isMemberOnlyTree(node({ id: "A-1", createdBy: "hundredfold-dev" }))).toBe(false)
   })
 
   it("fails on an assignee anywhere in the tree", () => {
-    expect(isMemberOnlyTree(node({ id: "A-1" }, [node({ id: "A-2", assignee: "marid-dev" })]))).toBe(false)
+    expect(isMemberOnlyTree(node({ id: "A-1" }, [node({ id: "A-2", assignee: "hundredfold-dev" })]))).toBe(false)
   })
 
   it("fails once an agent has reached the Todo (a status only agents move it to)", () => {
@@ -82,7 +82,7 @@ describe("capabilities", () => {
 
   it("keeps the operator's comment powers as they were", () => {
     expect(commentPowers(OPERATOR_CAPABILITIES, { author: "operator", authorKind: "operator" }, null)).toEqual({ reply: true, edit: true, remove: true })
-    expect(commentPowers(OPERATOR_CAPABILITIES, { author: "marid-dev", authorKind: "employee" }, null)).toEqual({ reply: true, edit: false, remove: true })
+    expect(commentPowers(OPERATOR_CAPABILITIES, { author: "hundredfold-dev", authorKind: "employee" }, null)).toEqual({ reply: true, edit: false, remove: true })
   })
 })
 

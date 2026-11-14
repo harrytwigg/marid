@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { type JinnSettings, hexToAccentFill, hexToContrastText } from '@/lib/settings'
+import { type HundredfoldSettings, hexToAccentFill, hexToContrastText } from '@/lib/settings'
 
 /** Publishes the settings the stylesheet reads as custom properties on <html>.
  *  They are set inline so they beat the :root defaults in globals.css, and
@@ -7,7 +7,7 @@ import { type JinnSettings, hexToAccentFill, hexToContrastText } from '@/lib/set
  *  before first paint — this is what keeps it in step once React takes over.
  *  data-transparency is the same story: an attribute the stylesheet keys on,
  *  written by the bootstrap first and kept here. */
-export function useRootCssVariables(settings: JinnSettings): void {
+export function useRootCssVariables(settings: HundredfoldSettings): void {
   useEffect(() => {
     const el = document.documentElement.style
     if (settings.accentColor) {

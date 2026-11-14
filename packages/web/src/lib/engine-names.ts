@@ -2,7 +2,7 @@
  * Human-facing names for engine keys.
  *
  * The gateway has the same idea for rate-limit state in
- * `packages/jinn/src/shared/rateLimit.ts` (`RATE_LIMIT_ENGINE_LABELS`), and that
+ * `packages/hundredfold/src/shared/rateLimit.ts` (`RATE_LIMIT_ENGINE_LABELS`), and that
  * is where "opencode" is lowercase on purpose — it is how the project spells its
  * own name. It is not literally the same map: the gateway's also carries pi and
  * hermes. Anything unmapped falls back to a title-cased key, so a new engine

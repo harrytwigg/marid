@@ -6,12 +6,12 @@
 
 **Architecture:** Keep explicit bearer/cookie authentication unchanged. For the browser-only fallback, validate one strict Host authority and complete browser Fetch Metadata, reject proxy/forwarding evidence, and require both ends of the actual socket to be loopback with the authority port matching the listener port. Parse API request targets against a fixed internal base only after authority validation so raw Host can never throw through the server.
 
-**Tech Stack:** Node.js HTTP/raw TCP, TypeScript strict mode, Vitest, existing Jinn gateway authorization helpers.
+**Tech Stack:** Node.js HTTP/raw TCP, TypeScript strict mode, Vitest, existing Hundredfold gateway authorization helpers.
 
 ## Global Constraints
 
 - Work directly on `main`; path-stage only scoped files and preserve unrelated dirty/untracked work.
-- Use disposable `JINN_HOME` directories and ephemeral non-production ports; never access or restart `:7777`.
+- Use disposable `HUNDREDFOLD_HOME` directories and ephemeral non-production ports; never access or restart `:7777`.
 - Strict RED→GREEN TDD: deterministic failing real-network tests precede production edits.
 - Do not add proxy trust or touch Todo/Workflow lifecycle semantics, approvals, or unrelated UI.
 - Keep public repository content generic and add no commit co-author trailer.
@@ -21,7 +21,7 @@
 ### Task 1: Real-network defect reproductions
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/__tests__/browser-operator-authorization.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/browser-operator-authorization.test.ts`
 
 **Interfaces:**
 - Consumes: `handleApiRequest(req, res, context)` through a real ephemeral HTTP listener.
@@ -31,14 +31,14 @@
 - [ ] Add a proxy-shaped Origin-less request with same-origin Fetch Metadata and rewritten loopback Host; expect fixed 403.
 - [ ] Add a malformed Host request; expect fixed non-reflective 400, no handler rejection, and a healthy follow-up request.
 - [ ] Add the fail-closed matrix for missing/invalid metadata, forwarding headers, wrong listener port, duplicate/ambiguous Host, DNS-rebinding-style Host, and auth-enabled anonymous access.
-- [ ] Run `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/browser-operator-authorization.test.ts` and record the expected authorization 200-vs-403 and malformed-authority 500/rejection-vs-400 failures.
+- [ ] Run `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/browser-operator-authorization.test.ts` and record the expected authorization 200-vs-403 and malformed-authority 500/rejection-vs-400 failures.
 
 ### Task 2: Request-bound browser authorization
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/gateway/server.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/upgrade-identity-guard.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/gateway/server.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/upgrade-identity-guard.test.ts`
 
 **Interfaces:**
 - Consumes: `IncomingMessage.headers`, `rawHeaders`, `socket.remoteAddress`, `socket.localAddress`, and `socket.localPort`.

@@ -21,9 +21,9 @@
 ### Task 1: Pin and correct the shipped wording
 
 **Files:**
-- Modify: `packages/jinn/src/shared/__tests__/template-company-doctrine.test.ts`
-- Modify: `packages/jinn/template/skills/workflow/SKILL.md`
-- Modify: `packages/jinn/template/skills/todo-handling/SKILL.md`
+- Modify: `packages/hundredfold/src/shared/__tests__/template-company-doctrine.test.ts`
+- Modify: `packages/hundredfold/template/skills/workflow/SKILL.md`
+- Modify: `packages/hundredfold/template/skills/todo-handling/SKILL.md`
 
 **Interfaces:**
 - Consumes: `resolveApprovalDecisionAuthority`, whose owner check exempts an employee hierarchy root and does not inspect linked execution sessions.
@@ -35,7 +35,7 @@ Replace the universal no-self-approval string expectation with assertions requir
 
 - [ ] **Step 2: Run the focused test to verify RED**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/shared/__tests__/template-company-doctrine.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/shared/__tests__/template-company-doctrine.test.ts`
 
 Expected: FAIL because the current playbooks do not contain the corrected contract wording.
 

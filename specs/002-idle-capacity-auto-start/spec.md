@@ -20,7 +20,7 @@ session" definition, and an OpenCode investigation.
 Rung **1** of Principle II's ranking: work starts without a human starting it, on spare
 capacity. This is the specific waste the constitution names — *"a backlog of low-priority work
 and hours of unspent quota, and does neither because nobody typed a command"* — closed for the
-one engine whose quota Jinn can actually read.
+one engine whose quota Hundredfold can actually read.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -129,7 +129,7 @@ the operator-detection knobs in `config.yaml`, and the next tick uses them.
   spend Claude allowance and would spend another provider's money instead.
 - The Dispatcher already holds the Todo: not a second start; the next eligible Todo is tried.
 - The loop's own started session moving the usage number between ticks must not read as the
-  operator; usage rising while Jinn was quiet must.
+  operator; usage rising while Hundredfold was quiet must.
 - The operator watching `GET /api/idle-capacity` between two ticks must not shorten the
   interval the next tick's usage delta is measured over.
 - The operator mid-conversation with the COO, turn finished, reading and typing: live.
@@ -159,11 +159,11 @@ the operator-detection knobs in `config.yaml`, and the next tick uses them.
   midnight when asked); otherwise daytime.
 - **FR-006**: "The operator is live" MUST mean: within `operatorActivity.idleMinutes` of the
   latest of (a) activity on an operator-driven session — top-level, not cron/Workflow-started,
-  not a system employee's — (b) a Jinn interactive Claude session's statusline snapshot
+  not a system employee's — (b) a Hundredfold interactive Claude session's statusline snapshot
   write, or (c) the five-hour used share rising by at least
   `operatorActivity.usageDeltaPercent` between two ticks' readings of the same window while
-  no Jinn session was active in between. A preview MUST NOT advance signal (c)'s reference.
-- **FR-007**: "A session holds engine capacity" MUST mean a Jinn session that is mid-turn or
+  no Hundredfold session was active in between. A preview MUST NOT advance signal (c)'s reference.
+- **FR-007**: "A session holds engine capacity" MUST mean a Hundredfold session that is mid-turn or
   queued in transport, or parked on a gate (`waiting`), on any engine.
 - **FR-008**: The system MUST hold when the reading is unusable: unsupported/static/error
   status, stale, missing the five-hour or weekly window, or naming a reset not still ahead.
@@ -230,7 +230,7 @@ the operator-detection knobs in `config.yaml`, and the next tick uses them.
 ## Assumptions
 
 - The existing Claude collector's reading is authoritative for the account, including use from
-  Claude Code sessions outside Jinn (it is the OAuth usage API the CLI's `/usage` uses).
+  Claude Code sessions outside Hundredfold (it is the OAuth usage API the CLI's `/usage` uses).
 - Date-gated Todos are parked: moved to `blocked` (no `blockKind`, or any kind but `dependency`)
   with `parkedUntil`. A bare `parkedUntil` on a `backlog` Todo, or on a `dependency` block, cannot
   hold a park — the write that makes either deletes it — and the gateway refuses both. A park

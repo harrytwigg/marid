@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::{commands::NativeError, origin::CanonicalOrigin};
 
-const SERVICE: &str = "run.jinn.shell.gateway";
+const SERVICE: &str = "run.hundredfold.shell.gateway";
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct GatewayCredential {

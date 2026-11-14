@@ -1,7 +1,7 @@
 /**
  * The client half of `GET /api/search/global`.
  *
- * These shapes mirror `packages/jinn/src/search/types.ts` — the gateway owns the
+ * These shapes mirror `packages/hundredfold/src/search/types.ts` — the gateway owns the
  * contract and no shared package exports it, so a change there is a change here.
  */
 import { get } from "@/lib/api"

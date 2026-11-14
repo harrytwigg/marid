@@ -5,7 +5,7 @@ it at a real instance.
 
 ## Setup
 
-1. Build and create a sandbox: `scripts/jinn-sandbox.sh create <name> --port <free port> --build --seed`.
+1. Build and create a sandbox: `scripts/hundredfold-sandbox.sh create <name> --port <free port> --build --seed`.
 2. Declare two Claude profiles under `engines.claude.accounts` (`alpha`, `beta`), each a
    scratch config dir; point `engines.claude.bin` at `scripts/fake-providers/fake-claude.mjs`.
    It does not model compaction today; Part B extends it to answer `/compact` with a

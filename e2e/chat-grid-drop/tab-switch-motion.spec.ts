@@ -22,9 +22,9 @@ interface Motion {
 async function motionDuring(page: Page, action: () => Promise<unknown>): Promise<Motion> {
   // An open just before this one may still be finishing its entrance, and frames sampled through its
   // tail would read as this action's motion. Only the app's own entrances are waited for: a spinner
-  // elsewhere on the page, or a running chat's jinn-pulse, loops forever and never settles.
+  // elsewhere on the page, or a running chat's hundredfold-pulse, loops forever and never settles.
   await page.waitForFunction(() => !document.getAnimations().some((animation) => (
-    (animation as CSSAnimation).animationName?.startsWith('jinn-')
+    (animation as CSSAnimation).animationName?.startsWith('hundredfold-')
     && animation.playState === 'running'
     && animation.effect?.getTiming().iterations !== Infinity
   )))
@@ -57,7 +57,7 @@ async function motionDuring(page: Page, action: () => Promise<unknown>): Promise
   }))
   await action()
   const { minOpacity, maxShiftPx } = await frames
-  const animations = await page.evaluate(() => (window as unknown as { __started: string[] }).__started.filter((name) => name.startsWith('jinn-')))
+  const animations = await page.evaluate(() => (window as unknown as { __started: string[] }).__started.filter((name) => name.startsWith('hundredfold-')))
   return { animations, minOpacity, maxShiftPx }
 }
 
@@ -75,12 +75,12 @@ async function seededContext(browser: Browser, viewport: { width: number; height
     ...(touch ? { isMobile: true, hasTouch: true } : {}),
   })
   await context.addInitScript((entries: Record<string, unknown>) => {
-    localStorage.setItem('jinn-theme', 'light')
-    localStorage.setItem('jinn-onboarded', 'true')
-    localStorage.setItem('jinn-chat-list-open', 'true')
+    localStorage.setItem('hundredfold-theme', 'light')
+    localStorage.setItem('hundredfold-onboarded', 'true')
+    localStorage.setItem('hundredfold-chat-list-open', 'true')
     if (sessionStorage.getItem('tab-switch-seeded')) return
     sessionStorage.setItem('tab-switch-seeded', '1')
-    localStorage.removeItem('jinn-chat-split-layout')
+    localStorage.removeItem('hundredfold-chat-split-layout')
     for (const [key, value] of Object.entries(entries)) localStorage.setItem(key, JSON.stringify(value))
   }, storage)
   return context
@@ -102,14 +102,14 @@ async function open(context: BrowserContext, path: string): Promise<Page> {
 test('desktop: clicks, ⌘⌥number and ⌘⇧[ ] switch tabs instantly, while opening a chat still animates', async ({ browser }) => {
   const [a, b, c] = await firstThreeChats(browser)
   const workingSet = { version: 1, sessionIds: [a], focusedId: a, focusHistory: [a] }
-  const context = await seededContext(browser, { width: 1440, height: 900 }, { 'jinn-chat-working-set': workingSet })
+  const context = await seededContext(browser, { width: 1440, height: 900 }, { 'hundredfold-chat-working-set': workingSet })
   const page = await open(context, `/?session=${a}`)
   const tab = (id: string) => page.locator(`[data-pane-tab-id="${id}"]`)
   const shown = (id: string) => expect(page.locator(`[data-chat-pane-session="${id}"]`)).toBeVisible()
 
   // Control: a chat opened from the sidebar plays its entrance, so the observer sees motion.
   const opened = await motionDuring(page, () => page.locator(`[data-chat-session-row="${b}"]`).first().click())
-  expect(opened.animations).toContain('jinn-chat-open')
+  expect(opened.animations).toContain('hundredfold-chat-open')
   await tab(b).dblclick()
   await page.locator(`[data-chat-session-row="${c}"]`).first().click()
   await tab(c).dblclick()
@@ -142,8 +142,8 @@ test('desktop: clicks, ⌘⌥number and ⌘⇧[ ] switch tabs instantly, while o
 test('phone: tapping a session tab switches instantly, while opening from the chat list still fades', async ({ browser }) => {
   const [a, b, c] = await firstThreeChats(browser)
   const context = await seededContext(browser, PHONE, {
-    'jinn-mobile-session-tabs': { version: 1, sessionIds: [a, b, c] },
-    'jinn-chat-working-set': { version: 1, sessionIds: [a], focusedId: a, focusHistory: [a] },
+    'hundredfold-mobile-session-tabs': { version: 1, sessionIds: [a, b, c] },
+    'hundredfold-chat-working-set': { version: 1, sessionIds: [a], focusedId: a, focusHistory: [a] },
   }, true)
   const page = await open(context, `/?session=${a}`)
   // By role: the edge-back layer keeps a hidden copy of the strip that an attribute selector also matches.
@@ -163,7 +163,7 @@ test('phone: tapping a session tab switches instantly, while opening from the ch
   for (const name of ['Chat layout QA', 'Chat layout QA', 'Release notes']) {
     await page.getByRole('button', { name: 'Back to chats' }).tap()
     const opened = await motionDuring(page, () => fromList(name).tap())
-    expect(opened.animations, name).toContain('jinn-mobile-chat-crossfade')
+    expect(opened.animations, name).toContain('hundredfold-mobile-chat-crossfade')
   }
   await context.close()
 })

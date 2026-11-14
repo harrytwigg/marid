@@ -104,7 +104,7 @@ describe('plugin storage', () => {
 
     createPluginContext('inbox', undefined, store).storage.set('draft', { body: 'hi' })
 
-    expect(store.getItem('jinn.plugin.inbox.draft')).toBe('{"body":"hi"}')
+    expect(store.getItem('hundredfold.plugin.inbox.draft')).toBe('{"body":"hi"}')
   })
 
   it('round-trips a value', () => {
@@ -116,7 +116,7 @@ describe('plugin storage', () => {
   })
 
   it('cannot read another plugin’s key', () => {
-    const store = fakeStore({ 'jinn.plugin.inbox.secret': '"theirs"' })
+    const store = fakeStore({ 'hundredfold.plugin.inbox.secret': '"theirs"' })
 
     expect(createPluginContext('cost-meter', undefined, store).storage.get('secret', 'mine')).toBe(
       'mine',
@@ -127,7 +127,7 @@ describe('plugin storage', () => {
     ['absent', undefined],
     ['unparseable', '{not json'],
   ])('falls back when the stored value is %s', (_label, stored) => {
-    const store = fakeStore(stored === undefined ? {} : { 'jinn.plugin.inbox.k': stored })
+    const store = fakeStore(stored === undefined ? {} : { 'hundredfold.plugin.inbox.k': stored })
 
     expect(createPluginContext('inbox', undefined, store).storage.get('k', 'fallback')).toBe(
       'fallback',

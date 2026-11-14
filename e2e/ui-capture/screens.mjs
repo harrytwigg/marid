@@ -18,7 +18,7 @@ export const SCREENS = [
   },
   {
     // The chat over a long thread, scrolled to the middle so text passes under the glass chrome.
-    // Run with JINN_CAPTURE_MESSAGES=120 (seed.mjs pads the thread).
+    // Run with HUNDREDFOLD_CAPTURE_MESSAGES=120 (seed.mjs pads the thread).
     name: 'chat-long',
     longThread: true,
     title: 'Chat, long thread scrolled',

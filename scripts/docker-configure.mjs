@@ -9,33 +9,33 @@ import path from "node:path";
 // Through the package's declared `main`, not dist/src/** directly: that tree is
 // scripts/build.mjs output whose shape the package never promised, so a relative import
 // into it breaks at container boot and nowhere else.
-const packageJsonUrl = new URL("../packages/jinn/package.json", import.meta.url);
+const packageJsonUrl = new URL("../packages/hundredfold/package.json", import.meta.url);
 
 let loadConfig;
-let resolveJinnHome;
+let resolveHundredfoldHome;
 let claudeJsonPath;
 let isLoopbackHost;
 try {
   const pkg = JSON.parse(fs.readFileSync(packageJsonUrl, "utf-8"));
-  if (!pkg.main) throw new Error("packages/jinn/package.json declares no \"main\"");
-  ({ loadConfig, resolveJinnHome, claudeJsonPath, isLoopbackHost } = await import(
+  if (!pkg.main) throw new Error("packages/hundredfold/package.json declares no \"main\"");
+  ({ loadConfig, resolveHundredfoldHome, claudeJsonPath, isLoopbackHost } = await import(
     new URL(pkg.main, packageJsonUrl).href
   ));
 } catch (err) {
-  console.error(`docker-configure: cannot load the jinn package entry point (${err.message})`);
+  console.error(`docker-configure: cannot load the hundredfold package entry point (${err.message})`);
   process.exit(1);
 }
 
 const homeDir = os.homedir();
-const jinnHome = resolveJinnHome();
+const hundredfoldHome = resolveHundredfoldHome();
 
 let failed = false;
 
 /** Where the resolved bind address is left for docker-entrypoint.sh to export as
- *  JINN_HOST. A bare value, read — never sourced. Not config.yaml: that sits on a volume
+ *  HUNDREDFOLD_HOST. A bare value, read — never sourced. Not config.yaml: that sits on a volume
  *  outliving the container, and "bind every interface" is true only in here. Reaches the
  *  gateway's process tree, not a later `docker exec` session. */
-const BIND_HOST_FILE = path.join(jinnHome, "container-bind-host");
+const BIND_HOST_FILE = path.join(hundredfoldHome, "container-bind-host");
 
 function writeAtomic(file, contents, mode = 0o600) {
   const tmp = `${file}.docker-configure.tmp`;
@@ -88,7 +88,7 @@ function configureGatewayBinding() {
     config = loadConfig();
   } catch (err) {
     // Fatal, not "nothing to do": skipping the rebind silently produces a dead
-    // dashboard under a clean boot log. `jinn setup` has already run by here.
+    // dashboard under a clean boot log. `hundredfold setup` has already run by here.
     console.error(`docker-configure: cannot read the gateway config: ${err.message}`);
     failed = true;
     return;
@@ -104,7 +104,7 @@ function configureGatewayBinding() {
     console.error(
       `docker-configure: the gateway config sets gateway.authDisabled: true, which cannot be combined with ` +
       `the published port this container needs. Remove gateway.authDisabled (the dashboard authenticates ` +
-      `with the gateway token — run \`jinn pair\`), or set gateway.insecureAllowUnauthenticatedNetwork: true ` +
+      `with the gateway token — run \`hundredfold pair\`), or set gateway.insecureAllowUnauthenticatedNetwork: true ` +
       `if the published port is only reachable from a network you trust.`,
     );
     failed = true;
@@ -131,7 +131,7 @@ function configureGatewayBinding() {
     return;
   }
   console.log(
-    `docker-configure: gateway will bind 0.0.0.0 via JINN_HOST ` +
+    `docker-configure: gateway will bind 0.0.0.0 via HUNDREDFOLD_HOST ` +
     `(config says ${currentHost ? JSON.stringify(currentHost) : "nothing"}, which the published port cannot reach)`,
   );
 }
@@ -224,7 +224,7 @@ function acceptBypassPermissions() {
       if (parsed && typeof parsed === "object") data = parsed;
     } catch (err) {
       // Side-copy first: seedTrust() runs moments later and overwrites what it cannot
-      // parse, and its one-time .jinn-backup slot is taken by the second boot.
+      // parse, and its one-time .hundredfold-backup slot is taken by the second boot.
       const rescue = copyToFreeSlot(claudeJson, `${claudeJson}.corrupt`);
       console.warn(
         `docker-configure: WARNING — ${claudeJson} does not parse (${err.message}). ` +
@@ -248,14 +248,14 @@ function acceptBypassPermissions() {
 /**
  * Drop the pid state a previous container left on the volume. Nothing of ours runs yet,
  * and a container restarts pids from 1, so every recorded number now names an unrelated
- * live process — one that answers kill(pid, 0), making `jinn start` hand the restart to a
+ * live process — one that answers kill(pid, 0), making `hundredfold start` hand the restart to a
  * detached helper and return, which exits PID 1 into a restart loop that never serves.
  *
  * gateway.json is zeroed rather than deleted so its secret and bearer credential survive;
  * only process identifiers are invalid across the container boundary.
  */
 function clearStalePidState() {
-  const pidFile = path.join(jinnHome, "gateway.pid");
+  const pidFile = path.join(hundredfoldHome, "gateway.pid");
   try {
     fs.unlinkSync(pidFile);
     console.log("docker-configure: removed stale gateway.pid");
@@ -266,7 +266,7 @@ function clearStalePidState() {
     }
   }
 
-  const file = path.join(jinnHome, "gateway.json");
+  const file = path.join(hundredfoldHome, "gateway.json");
   let info;
   try {
     info = JSON.parse(fs.readFileSync(file, "utf-8"));

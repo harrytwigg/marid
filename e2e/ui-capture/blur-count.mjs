@@ -24,7 +24,7 @@ fs.mkdirSync(outDir, { recursive: true })
 
 const MAX_VISIBLE = 3
 const MAX_RADIUS = 32
-const isChromium = process.env.JINN_CAPTURE_BROWSER === 'chromium'
+const isChromium = process.env.HUNDREDFOLD_CAPTURE_BROWSER === 'chromium'
 const browser = await (isChromium ? chromium : firefox).launch()
 
 // Runs in the page. The label names an element by tag, glass class and data attributes only, so it
@@ -72,12 +72,12 @@ async function otherSession() {
 // What the page finds in storage before it starts: the theme, Reduced when the setting is on, and
 // for the other layouts a two-pane split or a CLI view of the chat.
 function storageFor({ theme, reduced, layout }, ids) {
-  const entries = { 'jinn-theme': theme, 'jinn-onboarded': 'true' }
-  if (reduced === 'setting') entries['jinn-settings'] = JSON.stringify({ transparency: 'reduced' })
-  if (layout === 'cli') entries[`jinn-view-mode-${ids.first}`] = 'cli'
+  const entries = { 'hundredfold-theme': theme, 'hundredfold-onboarded': 'true' }
+  if (reduced === 'setting') entries['hundredfold-settings'] = JSON.stringify({ transparency: 'reduced' })
+  if (layout === 'cli') entries[`hundredfold-view-mode-${ids.first}`] = 'cli'
   if (layout === 'panes') {
     const group = (id, tab) => ({ type: 'group', id, tabs: [tab], activeTab: tab })
-    entries['jinn-chat-split-layout'] = JSON.stringify({
+    entries['hundredfold-chat-split-layout'] = JSON.stringify({
       version: 1,
       root: { type: 'split', id: 's1', direction: 'row', children: [group('g1', ids.first), group('g2', ids.second)], sizes: [0.5, 0.5] },
       auto: false,

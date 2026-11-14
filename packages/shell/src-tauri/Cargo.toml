@@ -1,13 +1,13 @@
 [package]
-name = "jinn-shell"
+name = "hundredfold-shell"
 version = "0.1.0"
-description = "Desktop shell for the Jinn dashboard"
+description = "Desktop shell for the Hundredfold dashboard"
 edition = "2021"
 rust-version = "1.82"
 publish = false
 
 [lib]
-name = "jinn_shell_lib"
+name = "hundredfold_shell_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

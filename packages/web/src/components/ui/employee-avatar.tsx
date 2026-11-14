@@ -1,7 +1,7 @@
 
 import { useSettings } from "@/routes/settings-provider"
 import { emojiForName } from "@/lib/emoji-pool"
-import type { JinnSettings } from "@/lib/settings"
+import type { HundredfoldSettings } from "@/lib/settings"
 
 /** The operator's icon before they pick one in Settings. Every install has been
  *  showing this on its own comments, so it stays their default rather than the
@@ -22,7 +22,7 @@ interface EmployeeAvatarProps {
   onClick?: () => void
 }
 
-function emojiFor(name: string, fallback: string | undefined, settings: JinnSettings): string {
+function emojiFor(name: string, fallback: string | undefined, settings: HundredfoldSettings): string {
   // "operator" is the reserved actor kind on the wire, not an employee name, so
   // it resolves from the operator's own setting instead of the employee overrides.
   const chosen = name === "operator" ? settings.operatorEmoji : settings.employeeOverrides[name]?.emoji

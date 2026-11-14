@@ -26,7 +26,7 @@ describe('model-picker-prefs', () => {
   })
 
   it('tolerates corrupt storage without throwing', () => {
-    localStorage.setItem('jinn-model-picker-expanded', '{not json')
+    localStorage.setItem('hundredfold-model-picker-expanded', '{not json')
     expect(loadExpandedByEngine()).toEqual({})
     expect(isEngineExpanded('claude')).toBe(false)
   })

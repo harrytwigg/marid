@@ -287,7 +287,7 @@ describe('MessageMedia single-image reservation', () => {
 
 describe('stripAttachedFilesBlock', () => {
   it('removes the appended engine-only Attached files block', () => {
-    const text = 'Please analyze this\n\nAttached files:\n- /home/a/.jinn/uploads/2026-05-30/s/report.pdf'
+    const text = 'Please analyze this\n\nAttached files:\n- /home/a/.hundredfold/uploads/2026-05-30/s/report.pdf'
     expect(stripAttachedFilesBlock(text)).toBe('Please analyze this')
   })
   it('removes a multi-path block', () => {

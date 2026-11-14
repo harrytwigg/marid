@@ -12,7 +12,7 @@ import { EmployeeChip } from '@/components/ui/employee-chip'
  *
  * Arrival choreography (`arriving`): the thread makes room, the voice rises
  * in, the chip condenses from a blur, and a one-shot accent wash decays over
- * ~1.6s. Keyframes live in globals.css (`jinn-comm-*`); bursts stagger rows
+ * ~1.6s. Keyframes live in globals.css (`hundredfold-comm-*`); bursts stagger rows
  * via `--arrive-delay`.
  */
 

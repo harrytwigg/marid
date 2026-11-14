@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { GatewayEvent, GatewayEventListener } from '@jinn/gateway-events'
+import type { GatewayEvent, GatewayEventListener } from '@hundredfold/gateway-events'
 import { api } from '@/lib/api'
 import {
   __clearLiveSessionSnapshotCacheForTests,
@@ -103,7 +103,7 @@ describe('thread peek working state', () => {
     })
     expect(document.querySelector('[data-state-line="replied"]')).toBeNull()
     expect(screen.getByText(/Working · 5m/)).toBeTruthy()
-    expect(document.querySelector('[data-state-line="working"]')?.innerHTML).toContain('jinn-pulse')
+    expect(document.querySelector('[data-state-line="working"]')?.innerHTML).toContain('hundredfold-pulse')
   })
 
   it('re-renders live tool and text activity without reopening', async () => {

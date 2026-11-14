@@ -6,14 +6,14 @@
 
 **Architecture:** The gateway owns an immutable run invocation claim keyed by workflow, stable principal, and idempotency key. A canonical request fingerprint is claimed atomically before execution and replayed only on exact equality; mismatches surface one sanitized typed conflict through HTTP, MCP, and React. Workflow definition structure moves to one shared recursive schema consumed by runtime validation and the four authoring manifests. The web route derives its committed lens from workflow ID plus search state, uses the existing Radix dialog primitive for blocked navigation, and separates volatile run status from hard viewport identity while explicitly recording user viewport ownership.
 
-**Tech Stack:** TypeScript, Node file-backed stores, Vitest, Zod 4/shared JSON Schema, React 19, React Router, Radix Dialog, XyFlow, Tailwind/Ledger tokens, Playwright, pinned js-tiktoken o200k_base, Jinn sandbox gateway.
+**Tech Stack:** TypeScript, Node file-backed stores, Vitest, Zod 4/shared JSON Schema, React 19, React Router, Radix Dialog, XyFlow, Tailwind/Ledger tokens, Playwright, pinned js-tiktoken o200k_base, Hundredfold sandbox gateway.
 
 ## Global constraints
 
 - Use Codex GPT-5.6-sol xhigh only for implementation and review. The final five author probes alone use fresh GPT-5.5-low sandbox children.
 - Observe strict RED before production code for every finding and retain compact failing output under bounded /tmp evidence files.
 - Work only in this isolated Workflow worktree; preserve unrelated worktrees and scratch files.
-- Use fresh sanitized throwaway JINN_HOME instances and pinned ports 8060+. Never contact, inspect, mutate, restart, or test production :7777.
+- Use fresh sanitized throwaway HUNDREDFOLD_HOME instances and pinned ports 8060+. Never contact, inspect, mutate, restart, or test production :7777.
 - Do not merge, deploy, restart production, or add authorship/sign-off trailers.
 - Keep commits scoped: plan, idempotency, route/dialog, viewport, schema/token budget, sandbox verification evidence.
 - Before every commit run git diff --check, staged privacy/secret/port scans, and staged trailer scan.
@@ -50,13 +50,13 @@ Expected: one documentation commit, clean checkout, no service interaction.
 ## Task 1: RED — immutable run invocation claims and typed conflict parity
 
 **Files:**
-- Create: packages/jinn/src/workflows/__tests__/run-idempotency.test.ts
-- Modify: packages/jinn/src/workflows/__tests__/run-store.test.ts
-- Modify: packages/jinn/src/workflows/__tests__/run-reconciler.test.ts
-- Modify: packages/jinn/src/gateway/__tests__/workflow-definitions-route.test.ts
-- Modify: packages/jinn/src/gateway/__tests__/workflow-operation-authority-route.test.ts
-- Modify: packages/jinn/src/mcp/__tests__/workflow-tools.test.ts
-- Modify: packages/jinn/src/mcp/__tests__/server.test.ts
+- Create: packages/hundredfold/src/workflows/__tests__/run-idempotency.test.ts
+- Modify: packages/hundredfold/src/workflows/__tests__/run-store.test.ts
+- Modify: packages/hundredfold/src/workflows/__tests__/run-reconciler.test.ts
+- Modify: packages/hundredfold/src/gateway/__tests__/workflow-definitions-route.test.ts
+- Modify: packages/hundredfold/src/gateway/__tests__/workflow-operation-authority-route.test.ts
+- Modify: packages/hundredfold/src/mcp/__tests__/workflow-tools.test.ts
+- Modify: packages/hundredfold/src/mcp/__tests__/server.test.ts
 - Modify: packages/web/src/lib/__tests__/workflow-api.test.ts
 - Modify: packages/web/src/routes/workflow/__tests__/run-view.test.tsx
 
@@ -107,11 +107,11 @@ Expected RED: old mismatched replay/201 behavior, missing persisted claim, missi
 ## Task 2: GREEN — atomic canonical idempotency across store, gateway, MCP, and UI
 
 **Files:**
-- Create: packages/jinn/src/workflows/run-idempotency.ts
-- Modify: packages/jinn/src/workflows/run-store.ts
-- Modify: packages/jinn/src/workflows/run-reconciler.ts
-- Modify: packages/jinn/src/gateway/api.ts
-- Modify: packages/jinn/src/mcp/workflow-tools.ts
+- Create: packages/hundredfold/src/workflows/run-idempotency.ts
+- Modify: packages/hundredfold/src/workflows/run-store.ts
+- Modify: packages/hundredfold/src/workflows/run-reconciler.ts
+- Modify: packages/hundredfold/src/gateway/api.ts
+- Modify: packages/hundredfold/src/mcp/workflow-tools.ts
 - Modify: packages/web/src/lib/api.ts
 - Modify: packages/web/src/routes/workflow/run-view.tsx
 - Modify: tests from Task 1
@@ -180,13 +180,13 @@ Expected RED: retained old lens, focus behind overlay, volatile status refits, a
 ## Task 5: RED — one recursive runtime schema and real manifest tokenizer
 
 **Files:**
-- Create: packages/jinn/src/workflows/__tests__/schema.test.ts
-- Modify: packages/jinn/src/workflows/__tests__/definition-store.test.ts
-- Modify: packages/jinn/src/gateway/__tests__/workflow-definitions-route.test.ts
-- Modify: packages/jinn/src/gateway/__tests__/workflow-operation-authority-route.test.ts
-- Modify: packages/jinn/src/mcp/__tests__/workflow-tools.test.ts
-- Modify: packages/jinn/src/mcp/__tests__/server.test.ts
-- Modify: packages/jinn/src/mcp/__tests__/tool-manifest-budget.test.ts
+- Create: packages/hundredfold/src/workflows/__tests__/schema.test.ts
+- Modify: packages/hundredfold/src/workflows/__tests__/definition-store.test.ts
+- Modify: packages/hundredfold/src/gateway/__tests__/workflow-definitions-route.test.ts
+- Modify: packages/hundredfold/src/gateway/__tests__/workflow-operation-authority-route.test.ts
+- Modify: packages/hundredfold/src/mcp/__tests__/workflow-tools.test.ts
+- Modify: packages/hundredfold/src/mcp/__tests__/server.test.ts
+- Modify: packages/hundredfold/src/mcp/__tests__/tool-manifest-budget.test.ts
 
 **Wished-for interfaces:**
 
@@ -220,30 +220,30 @@ Expected RED: unknowns persist/call handlers, exact payload exceeds the 7000-tok
 ## Task 6: GREEN — shared strict schema, dispatcher enforcement, and <=7000-token manifest
 
 **Files:**
-- Create: packages/jinn/src/workflows/schema.ts
-- Create: packages/jinn/src/mcp/tool-manifest-budget.ts
-- Modify: packages/jinn/src/workflows/definition.ts
-- Modify: packages/jinn/src/workflows/definition-store.ts
-- Modify: packages/jinn/src/workflows/authoring.ts
-- Modify: packages/jinn/src/workflows/sop.ts
-- Modify: packages/jinn/src/gateway/api.ts
-- Modify: packages/jinn/src/mcp/toolkit.ts
-- Modify: packages/jinn/src/mcp/server.ts
-- Modify: packages/jinn/src/mcp/workflow-tools.ts
-- Modify: packages/jinn/src/engines/pi-mcp.ts
-- Modify: packages/jinn/package.json
+- Create: packages/hundredfold/src/workflows/schema.ts
+- Create: packages/hundredfold/src/mcp/tool-manifest-budget.ts
+- Modify: packages/hundredfold/src/workflows/definition.ts
+- Modify: packages/hundredfold/src/workflows/definition-store.ts
+- Modify: packages/hundredfold/src/workflows/authoring.ts
+- Modify: packages/hundredfold/src/workflows/sop.ts
+- Modify: packages/hundredfold/src/gateway/api.ts
+- Modify: packages/hundredfold/src/mcp/toolkit.ts
+- Modify: packages/hundredfold/src/mcp/server.ts
+- Modify: packages/hundredfold/src/mcp/workflow-tools.ts
+- Modify: packages/hundredfold/src/engines/pi-mcp.ts
+- Modify: packages/hundredfold/package.json
 - Modify: pnpm-lock.yaml
 - Modify: tests from Task 5
 
 - [ ] Define every recursive envelope once with z.strictObject and path-aware errors. Export runtime parsing and JSON Schema from the same Zod 4 module; do not keep a second MCP-only allowlist.
 - [ ] Parse and reject unknowns; never use default object stripping. Patches may omit root fields, but any supplied nested object remains strict.
 - [ ] Validate before compilation/normalization/authorization spreading/state capture/mutation at every raw route. Validate direct store inputs/candidates as defense in depth.
-- [ ] Extend JinnMcpTool with a runtime parser. Generic tools/call validates arguments before handler invocation; workflow handlers consume the validated shared type.
+- [ ] Extend HundredfoldMcpTool with a runtime parser. Generic tools/call validates arguments before handler invocation; workflow handlers consume the validated shared type.
 - [ ] Keep validateDefinition as semantic graph validation; structural parsing complements it.
 - [ ] Pin js-tiktoken 1.0.21 exactly, use bundled local o200k_base ranks, and document tokenizer/version/wrapper fixture in the budget helper.
 - [ ] Reduce the manifest below 7000 by deduplicating prose, using compact enums where equivalent, and reducing duplicated authoring declarations or safely consolidating aliases while preserving all committing-tool contracts. Do not weaken schema parity to hit budget.
 - [ ] Run Task 5 suites GREEN, then mutations opening nested additionalProperties, bypassing dispatcher validation, reverting a route to raw spread, replacing tokenizer with chars/4, and appending 310 characters. Each fails.
-- [ ] Run the full focused workflow gateway set and forced Jinn typecheck/build.
+- [ ] Run the full focused workflow gateway set and forced Hundredfold typecheck/build.
 - [ ] Commit schema enforcement and token-budget work separately.
 
 ---
@@ -271,7 +271,7 @@ Expected RED: unknowns persist/call handlers, exact payload exceeds the 7000-tok
 ## Task 8: Full gates, audits, ancestry, and reviewer handoff
 
 - [ ] Focused gateway/web suites from Tasks 1-6 GREEN.
-- [ ] Full gateway/Jinn and web suites GREEN with bounded reporters.
+- [ ] Full gateway/Hundredfold and web suites GREEN with bounded reporters.
 - [ ] Forced uncached typechecks and production builds for both packages GREEN.
 - [ ] Re-run all prior workflow property/mutation/performance gates, including near-limit timer-delay responsiveness.
 - [ ] Run whitespace, privacy, secrets, credential, :7777, Ledger/style, dependency, diff, and commit-trailer audits.

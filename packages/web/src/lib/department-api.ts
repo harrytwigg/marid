@@ -32,7 +32,7 @@ export interface DepartmentDefinitionWire {
   definitionError: string | null
   workdirs: string[]
   skills: string[]
-  /** Instance MCP servers the department's sessions get beside `jinn`. */
+  /** Instance MCP servers the department's sessions get beside `hundredfold`. */
   mcp: string[]
   sharedNotes: string[]
   instructions: "department" | "department+company"

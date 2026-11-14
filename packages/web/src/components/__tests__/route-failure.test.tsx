@@ -23,7 +23,7 @@ describe('route failure recovery', () => {
     render(<RouterProvider router={router} />)
     expect(await screen.findByRole('heading', { name: "You're offline" })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Refresh' }).hasAttribute('disabled')).toBe(true)
-    expect(sessionStorage.getItem('jinn:chunk-retry:offline-test:/')).toBeNull()
+    expect(sessionStorage.getItem('hundredfold:chunk-retry:offline-test:/')).toBeNull()
     connectivity.mockReturnValue(true)
     await act(async () => { window.dispatchEvent(new Event('online')) })
     expect(screen.getByRole('heading', { name: 'This page could not load' })).toBeTruthy()

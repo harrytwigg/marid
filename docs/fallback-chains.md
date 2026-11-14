@@ -20,7 +20,7 @@ particular opencode no longer switches models internally (see
 [opencode](#opencode-internal-fallback-is-removed)).
 
 The wire shapes, normalisation and validation sentences live in
-`packages/jinn/src/shared/fallback-chain-wire.ts`, shared by the config loader
+`packages/hundredfold/src/shared/fallback-chain-wire.ts`, shared by the config loader
 and the Settings editor.
 
 ## Config
@@ -69,7 +69,7 @@ A save (`PUT /api/config`, the employee `PATCH`) refuses a duplicate. A config
 that already repeats a target still loads, so an upgrade never stops a gateway
 starting: the repeat is warned about at startup (naming the config path and the
 target), the chain lists the target once, the chain's `problems` in
-`GET /api/fallback-chains` and `jinn doctor` report it, and an unrelated save
+`GET /api/fallback-chains` and `hundredfold doctor` report it, and an unrelated save
 leaves it untouched until that chain is edited. A link equal to the target the
 chain falls back from, an unknown engine, an undeclared profile and a bad model
 are still load errors; in an employee's YAML they drop that employee's chain
@@ -320,7 +320,7 @@ profile, and could not be seen or edited in the dashboard. It is removed:
   adopted a plugin's re-sent prompt is gone;
 - opencode model and provider hops are chain links:
   `{engine: opencode, model: openrouter/x}`;
-- a host still running a fallback plugin is reported by `jinn doctor`, at
+- a host still running a fallback plugin is reported by `hundredfold doctor`, at
   gateway start, and in Settings, so a double fallback is never silent.
 
 ### A configured plugin is reported, not neutralised
@@ -347,7 +347,7 @@ provider answers 429 and the plugin's fallback provider answers normally):
 |---|---|---|
 | 1.19.0 + `opencode-rate-limit@1.4.0` | server | The plugin aborts the turn and re-sends the prompt as a new message, which the gateway no longer adopts. The turn ends in about 5 s as a usage limit (`rateLimit: rejected`) whose error names the plugin, so the chain takes over. The re-sent copy has usually reached the fallback model by then (one request); the gateway aborts it, and its answer is never delivered. |
 | 1.19.0 + `opencode-rate-limit@1.4.0` | run | The plugin's abort ends the process with exit 0, no answer and no error of its own, before any re-send, so no request reaches the fallback model. The turn ends as a usage limit whose error names the plugin. |
-| 2.0.29 + `model-fallback.js` | server | The plugin switches the session's model inside the turn. The fallback model answers it in about 3 s. No hop is recorded and the chain is not walked, but the turn says so: a warning in the gateway log and one session notice, "Answered by <provider/model> through the host's opencode fallback plugin, not the gateway's chain. Run `jinn doctor` to remove it." |
+| 2.0.29 + `model-fallback.js` | server | The plugin switches the session's model inside the turn. The fallback model answers it in about 3 s. No hop is recorded and the chain is not walked, but the turn says so: a warning in the gateway log and one session notice, "Answered by <provider/model> through the host's opencode fallback plugin, not the gateway's chain. Run `hundredfold doctor` to remove it." |
 | 2.0.29 + `model-fallback.js` | run | The same answer from the fallback model, invisibly to the chain; the notice is posted only for a server turn, which sees which model each step ran on. |
 
 **How a 1.x turn's outcome is decided on a plugin host.** The plugin's abort
@@ -388,7 +388,7 @@ What is checked, and where:
 - the plugin in a `plugin` or `plugins` list of the operator's opencode config
   (`opencode.json`, `opencode.jsonc` or `config.json` in the config directory
   and `~/.opencode/`, `OPENCODE_CONFIG`, and `opencode.json` and `.opencode/`
-  in the directory the gateway (or `jinn doctor`) runs in, which stands for the
+  in the directory the gateway (or `hundredfold doctor`) runs in, which stands for the
   project: a session's own working directory is not read);
 - a `model-fallback` or `opencode-rate-limit` file or directory in a `plugin`
   or `plugins` directory of those;
@@ -402,7 +402,7 @@ What is checked, and where:
 "internalFallback": { "detected": true, "neutralised": false, "sources": ["…/rate-limit-fallback.json"] }
 ```
 
-`sources` are the operator's own paths: they are in `jinn doctor`'s output and
+`sources` are the operator's own paths: they are in `hundredfold doctor`'s output and
 at debug level in the log, never in an info-level line. Nothing is ever
 written to the operator's files.
 
@@ -418,7 +418,7 @@ remote host, since the host does not know which project a session will run in.
 
 ### Migrating a host
 
-1. Run `jinn fallback migrate-opencode` to print the chain equivalent of the
+1. Run `hundredfold fallback migrate-opencode` to print the chain equivalent of the
    host's `rate-limit-fallback.json` (`--write` adds it to the config).
    `fallbackModels: [a, b]` becomes
    `engines.opencode.fallback: [{engine: opencode, model: a}, {engine: opencode, model: b}]`;
@@ -427,12 +427,12 @@ remote host, since the host does not know which project a session will run in.
 2. Remove the plugin from the host's opencode config (`plugin` in
    `opencode.json`, or `model-fallback.js` from the plugin directory) and delete
    `rate-limit-fallback.json`.
-3. `jinn doctor` confirms no internal fallback is left.
+3. `hundredfold doctor` confirms no internal fallback is left.
 
 The plugin's `cooldownMs`, `circuitBreaker`, `fallbackMode`, `restoreModel`
 and `retryPolicy` have no setting of their own: engine health, the
 once-per-run rule (a chain's length bounds the hops) and the return to the
-session's own target at its reset cover them. `jinn fallback migrate-opencode`
+session's own target at its reset cover them. `hundredfold fallback migrate-opencode`
 lists each such key it finds, with this reason. `--write` merges only the
 engine default, and refuses when `engines.opencode.fallback` is already set. It goes through the atomic config save, so YAML comments in `config.yaml` are not kept, and an `engines.opencode` block is created when there is none.
 

@@ -55,7 +55,7 @@ describe("the persisted transparency setting", () => {
     const first = mountProvider()
     fireEvent.click(screen.getByRole("button", { name: "Reduced" }))
     await waitFor(() =>
-      expect(JSON.parse(localStorage.getItem("jinn-settings") ?? "{}").transparency).toBe("reduced"),
+      expect(JSON.parse(localStorage.getItem("hundredfold-settings") ?? "{}").transparency).toBe("reduced"),
     )
 
     first.unmount()
@@ -68,7 +68,7 @@ describe("the persisted transparency setting", () => {
 
   it("falls back to full when the stored value is junk", () => {
     for (const stored of ["clear", 1, null, undefined]) {
-      localStorage.setItem("jinn-settings", JSON.stringify({ transparency: stored }))
+      localStorage.setItem("hundredfold-settings", JSON.stringify({ transparency: stored }))
       expect(loadSettings().transparency).toBe("full")
     }
   })
@@ -84,7 +84,7 @@ describe("the blocking bootstrap in index.html", () => {
   })
 
   it("marks the root before React mounts when the stored choice is reduced", () => {
-    localStorage.setItem("jinn-settings", JSON.stringify({ transparency: "reduced", textScale: 1.1 }))
+    localStorage.setItem("hundredfold-settings", JSON.stringify({ transparency: "reduced", textScale: 1.1 }))
 
     new Function(script)()
 
@@ -102,7 +102,7 @@ describe("the blocking bootstrap in index.html", () => {
       null,
     ]) {
       localStorage.clear()
-      if (stored !== null) localStorage.setItem("jinn-settings", stored)
+      if (stored !== null) localStorage.setItem("hundredfold-settings", stored)
       new Function(script)()
       expect(root.hasAttribute("data-transparency")).toBe(false)
     }

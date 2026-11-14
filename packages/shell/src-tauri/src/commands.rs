@@ -451,11 +451,11 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.append(
             SET_COOKIE,
-            HeaderValue::from_static("jinn_auth=secret; Path=/; HttpOnly; SameSite=Lax"),
+            HeaderValue::from_static("hundredfold_auth=secret; Path=/; HttpOnly; SameSite=Lax"),
         );
         headers.append(
             SET_COOKIE,
-            HeaderValue::from_static("jinn_device=device-1; Path=/; HttpOnly; SameSite=Lax"),
+            HeaderValue::from_static("hundredfold_device=device-1; Path=/; HttpOnly; SameSite=Lax"),
         );
         let body = br#"{"device":{"id":"device-1","name":"Mac app"}}"#;
         let (credential, receipt) = parse_pair_parts(&headers, body).unwrap();

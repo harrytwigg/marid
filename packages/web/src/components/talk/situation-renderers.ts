@@ -1,7 +1,7 @@
 import type { ComponentType } from "react"
 import type { AnswerHandler, SituationPayload } from "./situation-payload"
 import { ImagesSituation, VideoSituation, imagesSpeech, videoSpeech } from "./renderers/media-set"
-import { ObjectSituation, objectSpeech } from "./renderers/jinn-object"
+import { ObjectSituation, objectSpeech } from "./renderers/hundredfold-object"
 import { OptionsSituation, optionsSpeech } from "./renderers/options"
 import { ProseSituation, proseSpeech } from "./renderers/prose"
 import { VoiceSetupSituation, voiceSetupSpeech } from "./renderers/voice-setup"

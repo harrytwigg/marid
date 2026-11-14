@@ -90,7 +90,7 @@ export interface Employee {
   remoteHost?: string; // set: the employee runs on this host (YAML only)
   remoteUser?: string;
   remoteClaudeConfigDir?: string; // the employee's Claude profile directory on that host
-  fallback?: import("@jinn/fallback-chain-wire").FallbackLink[]; // chain override; absent inherits, [] is none
+  fallback?: import("@hundredfold/fallback-chain-wire").FallbackLink[]; // chain override; absent inherits, [] is none
 }
 
 /** Editable employee fields accepted by PATCH /api/org/employees/:name; `name` is immutable and omitted. */
@@ -105,7 +105,7 @@ export interface EmployeeUpdate {
   reportsTo?: string | string[];
   cliFlags?: string[];
   alwaysNotify?: boolean;
-  fallback?: import("@jinn/fallback-chain-wire").FallbackLink[] | null; // null removes the override (inherit)
+  fallback?: import("@hundredfold/fallback-chain-wire").FallbackLink[] | null; // null removes the override (inherit)
 }
 
 export interface OrgWarning {

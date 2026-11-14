@@ -3,7 +3,7 @@
 //
 //   node sheet.mjs <before-dir> <after-dir> <out-dir>
 //
-// JINN_SHEET_LABELS="Firefox,Chromium" renames the two columns (default
+// HUNDREDFOLD_SHEET_LABELS="Firefox,Chromium" renames the two columns (default
 // "Before,After"), for comparing two browsers or two settings instead.
 //
 // Each sheet has a row per theme and viewport with before on the left and
@@ -17,10 +17,10 @@ const [beforeDir, afterDir, outDir] = process.argv.slice(2)
 if (!beforeDir || !afterDir || !outDir) throw new Error('usage: sheet.mjs <before-dir> <after-dir> <out-dir>')
 fs.mkdirSync(outDir, { recursive: true })
 const escapeHtml = (text) => text.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
-const [leftLabel, rightLabel] = (process.env.JINN_SHEET_LABELS ?? 'Before,After')
+const [leftLabel, rightLabel] = (process.env.HUNDREDFOLD_SHEET_LABELS ?? 'Before,After')
   .split(',')
   .map((label) => escapeHtml(label.trim()))
-if (!leftLabel || !rightLabel) throw new Error('JINN_SHEET_LABELS needs two comma-separated labels, e.g. "Firefox,Chromium"')
+if (!leftLabel || !rightLabel) throw new Error('HUNDREDFOLD_SHEET_LABELS needs two comma-separated labels, e.g. "Firefox,Chromium"')
 
 const img = (dir, file) => {
   const p = path.join(dir, file)

@@ -1,6 +1,6 @@
 # Analysis: Claude subscription billing × token streaming - does the `-p`→interactive migration make sense?
 
-**Date:** 2026-06-01 · **Author:** Jinn Dev (5-agent read-only analysis vs `~/Projects/free-code` CLI source + live binary 2.1.158 + our engines) · **Status:** ANALYSIS - verdict for CEO review, NO code changed.
+**Date:** 2026-06-01 · **Author:** Hundredfold Dev (5-agent read-only analysis vs `~/Projects/free-code` CLI source + live binary 2.1.158 + our engines) · **Status:** ANALYSIS - verdict for CEO review, NO code changed.
 
 ## TL;DR / VERDICT
 **Do NOT migrate Claude work turns to interactive/PTY.** The analysis overturns the premise:

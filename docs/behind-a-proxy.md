@@ -1,4 +1,4 @@
-# Running Marid behind a tunnel or reverse proxy
+# Running Hundredfold behind a tunnel or reverse proxy
 
 Sign-in is rate limited. How well that works when a tunnel or reverse proxy sits in front of the gateway
 depends on one setting, `gateway.trustedProxies`. This page says what happens with and without it, and how to
@@ -95,7 +95,7 @@ gateway:
 **Caddy on the same machine.** `reverse_proxy` adds `X-Forwarded-For` for the client it sees:
 
 ```caddyfile
-marid.example.test {
+hundredfold.example.test {
   reverse_proxy 127.0.0.1:7777
 }
 ```

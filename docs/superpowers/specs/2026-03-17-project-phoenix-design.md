@@ -1,4 +1,4 @@
-# Project Phoenix: Jinn Dashboard Overhaul
+# Project Phoenix: Hundredfold Dashboard Overhaul
 
 **Date**: 2026-03-17
 **Status**: Draft
@@ -6,7 +6,7 @@
 
 ## Background
 
-The Jinn web dashboard (`packages/web`) was recently modified by an external contributor. Several UX regressions exist in the chat interface (collapsed sidebar without expand, toolbar notification/more-button conflicts). Separately, a competitive analysis against Paperclip (github.com/paperclipai/paperclip) revealed that Jinn's UI would benefit from adopting several of Paperclip's patterns: shadcn/ui component library, cmdk command palette, TanStack React Query, breadcrumb navigation, and dark/light mode.
+The Hundredfold web dashboard (`packages/web`) was recently modified by an external contributor. Several UX regressions exist in the chat interface (collapsed sidebar without expand, toolbar notification/more-button conflicts). Separately, a competitive analysis against Paperclip (github.com/paperclipai/paperclip) revealed that Hundredfold's UI would benefit from adopting several of Paperclip's patterns: shadcn/ui component library, cmdk command palette, TanStack React Query, breadcrumb navigation, and dark/light mode.
 
 This spec defines a 5-phase overhaul that modernizes the dashboard while fixing current issues and adding new capabilities.
 
@@ -145,7 +145,7 @@ const queryClient = new QueryClient({
 - `providers.tsx` exports `ThemeProvider` with `useTheme()` hook
 - Themes applied via `data-theme` attribute on `<html>` (NOT `.dark` class)
 - `globals.css` has full CSS variable palettes for all 5 themes
-- Persisted to `localStorage` key `jinn-theme`
+- Persisted to `localStorage` key `hundredfold-theme`
 - System theme resolves OS preference to dark/light
 
 **Conflict**: shadcn/ui components use Tailwind's `dark:` prefix which expects a `.dark` class on `<html>`. The current system uses `data-theme` attribute instead.
@@ -251,7 +251,7 @@ const queryClient = new QueryClient({
 - Max 12 open tabs (configurable)
 - Draggable to reorder
 
-**State persistence**: Open tabs + active tab saved to localStorage key `jinn-chat-tabs`. Restored on page load.
+**State persistence**: Open tabs + active tab saved to localStorage key `hundredfold-chat-tabs`. Restored on page load.
 
 **Draft persistence**: Unsent message text per tab saved to localStorage. Restored when switching back to a tab.
 
@@ -375,7 +375,7 @@ const queryClient = new QueryClient({
 - Mounted in root layout (available on all pages)
 - Uses `useNavigate()` for page navigation
 - Dispatches custom events for actions (new chat, trigger cron)
-- Tracks recent items in localStorage key `jinn-command-recent`
+- Tracks recent items in localStorage key `hundredfold-command-recent`
 
 ### 3.2 Breadcrumb Navigation
 
@@ -443,7 +443,7 @@ CREATE TABLE goals (
 - Filter bar: by status, department, level
 
 **Kanban integration**:
-- Kanban boards are currently stored as JSON files (`board.json`) in each department's org directory (e.g., `~/.jinn/org/content/board.json`)
+- Kanban boards are currently stored as JSON files (`board.json`) in each department's org directory (e.g., `~/.hundredfold/org/content/board.json`)
 - Board JSON format: `{ todo: Task[], in_progress: Task[], done: Task[] }` where each Task has `{ id, title, description, assignee, ... }`
 - Add optional `goalId: string` field to the Task type
 - When rendering kanban cards, display linked goal as small badge (goal title, truncated)
@@ -467,7 +467,7 @@ CREATE TABLE goals (
 
 **Budget system** (new):
 
-Config in `~/.jinn/config.yaml`:
+Config in `~/.hundredfold/config.yaml`:
 ```yaml
 budgets:
   global:
@@ -516,7 +516,7 @@ CREATE TABLE budget_events (
 
 ### 5.1 Vitest (Unit Tests)
 
-**Backend** (`packages/jinn`):
+**Backend** (`packages/hundredfold`):
 - `vitest.config.ts` - ESM mode, coverage reporter
 - Test files: `src/**/*.test.ts`
 - Key test targets:
@@ -564,7 +564,7 @@ CREATE TABLE budget_events (
 - `@playwright/test` v1.x
 - `@testing-library/react` v16.x (React 19 support)
 
-**Turborepo integration**: Add `test` and `test:e2e` scripts to both `packages/jinn/package.json` and `packages/web/package.json`. Update `turbo.json` pipeline to include `test` task. Update root `package.json` `test` script to run both packages (currently only runs `jinn-cli`).
+**Turborepo integration**: Add `test` and `test:e2e` scripts to both `packages/hundredfold/package.json` and `packages/web/package.json`. Update `turbo.json` pipeline to include `test` task. Update root `package.json` `test` script to run both packages (currently only runs `hundredfold`).
 
 ### 5.3 GitHub Actions CI
 
@@ -650,11 +650,11 @@ jobs:
 - `packages/web/src/components/chat/chat-tabs.tsx` - tab bar
 - `packages/web/src/components/chat/chat-split.tsx` - split view container
 - `packages/web/src/app/goals/page.tsx` - goals page
-- `packages/jinn/src/gateway/goals.ts` - goals API routes
-- `packages/jinn/src/gateway/costs.ts` - cost aggregation API routes (new from scratch)
-- `packages/jinn/src/gateway/budgets.ts` - budget API routes
-- `packages/jinn/src/engines/mock.ts` - mock engine for E2E tests
-- `packages/jinn/vitest.config.ts`
+- `packages/hundredfold/src/gateway/goals.ts` - goals API routes
+- `packages/hundredfold/src/gateway/costs.ts` - cost aggregation API routes (new from scratch)
+- `packages/hundredfold/src/gateway/budgets.ts` - budget API routes
+- `packages/hundredfold/src/engines/mock.ts` - mock engine for E2E tests
+- `packages/hundredfold/vitest.config.ts`
 - `packages/web/vitest.config.ts`
 - `playwright.config.ts`
 - `e2e/` - E2E test directory
@@ -675,10 +675,10 @@ jobs:
 - `packages/web/src/app/providers.tsx` - existing ThemeProvider preserved, no changes needed
 - `packages/web/src/lib/api.ts` - wrap with React Query
 - `packages/web/package.json` - new dependencies
-- `packages/jinn/src/gateway/api.ts` - goals + budgets + cost aggregation routes
-- `packages/jinn/src/sessions/manager.ts` - budget enforcement before engine.run()
-- `packages/jinn/src/shared/types.ts` - goal + budget types
-- `packages/jinn/package.json` - vitest dependency
+- `packages/hundredfold/src/gateway/api.ts` - goals + budgets + cost aggregation routes
+- `packages/hundredfold/src/sessions/manager.ts` - budget enforcement before engine.run()
+- `packages/hundredfold/src/shared/types.ts` - goal + budget types
+- `packages/hundredfold/package.json` - vitest dependency
 - `turbo.json` - add `test` pipeline task
 - Root `package.json` - update test script to include both packages
 

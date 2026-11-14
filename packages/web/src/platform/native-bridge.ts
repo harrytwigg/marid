@@ -22,7 +22,7 @@ export type NativeStreamEvent =
   | { event: "closed"; streamId: string; code?: number; reason: string }
   | { event: "failed"; streamId: string; code: string; message: string }
 
-export interface JinnNativeBridge {
+export interface HundredfoldNativeBridge {
   readonly runtime: "tauri"
   pair(input: { target: NativeGatewayTarget; code: string }): Promise<{ origin: string; device: { id: string; name: string } }>
   request(input: NativeRequestInput): Promise<NativeResponsePayload>
@@ -31,9 +31,9 @@ export interface JinnNativeBridge {
 }
 
 declare global {
-  interface Window { __JINN_NATIVE__?: JinnNativeBridge }
+  interface Window { __HUNDREDFOLD_NATIVE__?: HundredfoldNativeBridge }
 }
 
-export function nativeBridge(): JinnNativeBridge | undefined {
-  return typeof window === "undefined" ? undefined : window.__JINN_NATIVE__
+export function nativeBridge(): HundredfoldNativeBridge | undefined {
+  return typeof window === "undefined" ? undefined : window.__HUNDREDFOLD_NATIVE__
 }

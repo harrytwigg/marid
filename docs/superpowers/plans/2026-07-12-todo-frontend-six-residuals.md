@@ -13,7 +13,7 @@
 - Do not edit gateway files or integrate backend CAS commits `3633f63`, `62f877f`, or `9fdf73e`.
 - Use strict RED→GREEN and run a direct mutation for every finding.
 - Preserve all prior Todo recovery, privacy, mobile-sheet, lifecycle, and filter contracts.
-- Verify only with a fresh sanitized `JINN_HOME` and ports `8040+`; never access port `7777`.
+- Verify only with a fresh sanitized `HUNDREDFOLD_HOME` and ports `8040+`; never access port `7777`.
 - Preserve unrelated scratch files and commit only scoped frontend changes.
 
 ---

@@ -1,5 +1,5 @@
 /**
- * The typed verb tier of `@jinn/plugin-sdk`, split out of `sdk.d.ts` and
+ * The typed verb tier of `@hundredfold/plugin-sdk`, split out of `sdk.d.ts` and
  * re-exported from it, so the one file a plugin author reads stays one file.
  *
  * Every payload below is spelled out rather than imported: the gateway's own

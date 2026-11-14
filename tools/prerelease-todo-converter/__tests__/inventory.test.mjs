@@ -7,11 +7,11 @@ import { createRequire } from "node:module";
 
 import { buildTodoMapping, inventoryDatabase } from "../inventory.mjs";
 
-const requireFromJinn = createRequire(new URL("../../../packages/jinn/package.json", import.meta.url));
-const Database = requireFromJinn("better-sqlite3");
+const requireFromHundredfold = createRequire(new URL("../../../packages/hundredfold/package.json", import.meta.url));
+const Database = requireFromHundredfold("better-sqlite3");
 
 function fixture() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-prerelease-converter-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-prerelease-converter-"));
   const databasePath = path.join(root, "sessions.db");
   const db = new Database(databasePath);
   db.exec(`

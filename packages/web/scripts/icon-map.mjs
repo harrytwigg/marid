@@ -7,7 +7,7 @@
  * a glyph (Lucide drew them apart; Phosphor does not), and each keeps its own
  * module so a route carries only the names it imports.
  *
- * Adding an icon: add a line here and run `pnpm --filter @jinn/web icons`.
+ * Adding an icon: add a line here and run `pnpm --filter @hundredfold/web icons`.
  *
  * Every icon is duotone unless it is named in `WEIGHT_OVERRIDES`.
  */

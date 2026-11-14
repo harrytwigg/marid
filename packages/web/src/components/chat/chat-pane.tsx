@@ -41,7 +41,7 @@ import { Slot } from '@/contrib/slot'
 import { AREAS } from '@/contrib/types'
 import type { EnginesResponse } from '@/lib/api'
 import type { Message, MediaAttachment } from '@/lib/conversations'
-import type { GatewayEvent, GatewayEventListener } from '@jinn/gateway-events'
+import type { GatewayEvent, GatewayEventListener } from '@hundredfold/gateway-events'
 import { PRODUCT_NAME } from "@/lib/brand"
 
 // The live read pipeline (load/WS/reconnect/watchdog) now lives in

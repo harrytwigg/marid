@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 
-const requireFromJinn = createRequire(new URL("../../packages/jinn/package.json", import.meta.url));
-const Database = requireFromJinn("better-sqlite3");
+const requireFromHundredfold = createRequire(new URL("../../packages/hundredfold/package.json", import.meta.url));
+const Database = requireFromHundredfold("better-sqlite3");
 
 const LEGACY_TODO_ID = /^wi_[0-9a-f]{12}$/;
 const LEGACY_TODO_TOKEN = /wi_[0-9a-f]{12}/g;

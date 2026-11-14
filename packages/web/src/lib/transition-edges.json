@@ -1,5 +1,5 @@
 {
-  "$comment": "Mirror of packages/jinn/src/work-items/transitions.ts — the declared status edges plus the rule constants legalTargets() derives from. The gateway module is the truth; packages/jinn/src/work-items/__tests__/board-legality-parity.test.ts probes transition() behaviorally against this file and fails on any drift, so this mirror can never rot silently. Edit transitions.ts first, then regenerate this file to match.",
+  "$comment": "Mirror of packages/hundredfold/src/work-items/transitions.ts — the declared status edges plus the rule constants legalTargets() derives from. The gateway module is the truth; packages/hundredfold/src/work-items/__tests__/board-legality-parity.test.ts probes transition() behaviorally against this file and fails on any drift, so this mirror can never rot silently. Edit transitions.ts first, then regenerate this file to match.",
   "edges": {
     "backlog": ["executing", "in_review", "blocked", "done", "cancelled"],
     "executing": ["backlog", "in_review", "blocked", "done", "cancelled"],

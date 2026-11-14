@@ -38,13 +38,13 @@ describe("the persisted text size setting", () => {
   })
 
   it("hydrates, changes, and reloads the selected step", async () => {
-    localStorage.setItem("jinn-settings", JSON.stringify({ textScale: 0.9 }))
+    localStorage.setItem("hundredfold-settings", JSON.stringify({ textScale: 0.9 }))
     const first = mountProvider()
     const probe = await screen.findByRole("button", { name: "0.9" })
 
     fireEvent.click(probe)
     await waitFor(() => expect(probe.textContent).toBe("1.25"))
-    expect(JSON.parse(localStorage.getItem("jinn-settings") ?? "{}").textScale).toBe(1.25)
+    expect(JSON.parse(localStorage.getItem("hundredfold-settings") ?? "{}").textScale).toBe(1.25)
 
     first.unmount()
     mountProvider()
@@ -52,7 +52,7 @@ describe("the persisted text size setting", () => {
   })
 
   it("publishes the step to the document root so the whole UI rescales", async () => {
-    localStorage.setItem("jinn-settings", JSON.stringify({ textScale: 1.1 }))
+    localStorage.setItem("hundredfold-settings", JSON.stringify({ textScale: 1.1 }))
 
     mountProvider()
 
@@ -62,7 +62,7 @@ describe("the persisted text size setting", () => {
   })
 
   it("never publishes the default over a persisted step while starting up", async () => {
-    localStorage.setItem("jinn-settings", JSON.stringify({ textScale: 1.25 }))
+    localStorage.setItem("hundredfold-settings", JSON.stringify({ textScale: 1.25 }))
     const style = document.documentElement.style
     const write = style.setProperty.bind(style)
     const written: string[] = []
@@ -82,7 +82,7 @@ describe("the persisted text size setting", () => {
 
   it("falls back to Default when the stored step is junk, absent or out of range", async () => {
     for (const stored of ["huge", 2, 0.1, null, undefined]) {
-      localStorage.setItem("jinn-settings", JSON.stringify({ textScale: stored }))
+      localStorage.setItem("hundredfold-settings", JSON.stringify({ textScale: stored }))
       const mounted = mountProvider()
 
       expect(await screen.findByRole("button", { name: "1" })).not.toBeNull()

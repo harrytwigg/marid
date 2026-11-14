@@ -165,7 +165,7 @@ export function PropsRail({
               railSessionWaiting
                 ? ""
                 : railSessionLive
-                  ? "bg-[var(--system-blue)] motion-safe:animate-[jinn-pulse_1.4s_ease-in-out_infinite]"
+                  ? "bg-[var(--system-blue)] motion-safe:animate-[hundredfold-pulse_1.4s_ease-in-out_infinite]"
                   : "bg-[var(--fill-primary)]"
             }`}
             style={railSessionWaiting ? { background: SESSION_WAITING_COLOR } : undefined}

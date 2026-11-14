@@ -28,7 +28,7 @@ export function consumeChunkReloadRetry(storage: Storage, key: string): boolean 
 
 function retryKey(routeName: string): string {
   const path = typeof window === 'undefined' ? routeName : window.location.pathname
-  return `jinn:chunk-retry:${routeName}:${path}`
+  return `hundredfold:chunk-retry:${routeName}:${path}`
 }
 
 export function lazyRoute<T extends ComponentType<any>>(
