@@ -8,8 +8,8 @@ import { orgMcpKey } from "../shared/wire-names.js";
  * Switching one instance over to this build's codename: the part of a rename that only the operator can
  * schedule, because it changes what the instance's agents are told their tools are called.
  *
- * An upgraded instance keeps registering its built-in MCP server as `hundredfold` (mcp/builtin-name.ts), so every
- * prompt, skill and permission allow-list that says `mcp__hundredfold__<tool>` keeps working. The switch-over
+ * An upgraded instance keeps registering its built-in MCP server under the name it had before the rename
+ * (mcp/builtin-name.ts), so every prompt, skill and permission allow-list that says `mcp__<old>__<tool>` keeps working. The switch-over
  * moves all of those to `mcp__<codename>__<tool>` and, last, flips the registered name, in one stopped
  * window, after a snapshot, keeping a copy of every file it edits. It reads the instance's own files and
  * the Claude profiles' settings; it never touches knowledge notes, sessions or logs.

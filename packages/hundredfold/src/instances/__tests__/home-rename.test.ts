@@ -190,10 +190,51 @@ describe("leaving a home where it is", () => {
     expect(fs.existsSync(currentHome())).toBe(false);
   });
 
+  it("re-keys the conversations of a home that arrives at its new path already, such as a container's copied volume", async () => {
+    // The old home's directory is gone (a volume copied to the new path), but the Claude profile still holds
+    // what ran under the old path and under the old stage root.
+    seedHome(currentHome());
+    const filed = (cwd: string, id: string) => {
+      const file = path.join(projectDir(cwd), `${id}.jsonl`);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, '{"type":"user"}\n');
+      return file;
+    };
+    const oldHomeFile = filed(legacyHome(), "home-session");
+    const oldStageFile = filed(path.join(root, `.${OLD.codename}-departments`, ".instances", `.${OLD.codename}-john`, "ops"), "stage-session");
+
+    const outcome = await renameHomeIfNeeded(currentHome(), deps);
+
+    expect(outcome).toEqual({ kind: "nothing", home: currentHome() });
+    expect(fs.existsSync(oldHomeFile)).toBe(false);
+    expect(fs.existsSync(oldStageFile)).toBe(false);
+    expect(fs.existsSync(path.join(projectDir(currentHome()), "home-session.jsonl"))).toBe(true);
+    expect(fs.existsSync(path.join(projectDir(path.join(root, ".acme-departments", ".instances", ".acme-john", "ops")), "stage-session.jsonl"))).toBe(true);
+    // Once: a conversation filed under the old key later is left alone.
+    const later = filed(legacyHome(), "later-session");
+    await renameHomeIfNeeded(currentHome(), deps);
+    expect(fs.existsSync(later)).toBe(true);
+  });
+
   it("never moves a mount point, such as a container's volume", async () => {
     seedHome(legacyHome(OLD.codename));
     const outcome = await renameHomeIfNeeded(legacyHome(OLD.codename), { ...deps, isMountPoint: () => true });
     expect(outcome).toMatchObject({ kind: "kept", home: legacyHome(OLD.codename), reason: expect.stringContaining("mount point") });
+  });
+
+  it("uses a home under its old name, without a backup, when its parent directory cannot be written to", async () => {
+    seedHome(legacyHome());
+    const parent = path.dirname(legacyHome());
+    const backup = vi.fn(async () => undefined);
+    fs.chmodSync(parent, 0o555);
+    try {
+      if (process.getuid?.() === 0) return; // root writes anywhere: nothing to show
+      const outcome = await renameHomeIfNeeded(legacyHome(), { ...deps, backup });
+      expect(outcome).toMatchObject({ kind: "kept", home: legacyHome(), reason: expect.stringContaining("not writable") });
+      expect(backup).not.toHaveBeenCalled();
+    } finally {
+      fs.chmodSync(parent, 0o755);
+    }
   });
 
   it("refuses to choose between two homes that both exist", async () => {

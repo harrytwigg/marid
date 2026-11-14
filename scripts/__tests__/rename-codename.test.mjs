@@ -4,8 +4,8 @@ import path from "node:path"
 import test from "node:test"
 import { fileURLToPath } from "node:url"
 
-import { mapWord, renamePath, renameText } from "../rename-codename/engine.mjs"
-import { FROZEN_SUBTREES, KEEP_PATTERNS } from "../rename-codename/rules.mjs"
+import { isBinary, mapWord, renamePath, renameText } from "../rename-codename/engine.mjs"
+import { FROZEN_SUBTREES, KEEP_PATTERNS, keepContent, keepPatternsFor } from "../rename-codename/rules.mjs"
 import { OLD } from "../legacy-names.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
@@ -54,4 +54,28 @@ test("a path moves with the package, and what a released bundle holds does not",
 test("the repository has nothing left to rename outside the allowed places", () => {
   const out = execFileSync("node", ["scripts/rename-codename.mjs", "--check"], { cwd: root, encoding: "utf8" })
   assert.match(out, /clean/)
+})
+
+test("the credit, the forwarder line and the portal default are kept only in the files that carry them", () => {
+  const credit = `fork of [${OLD.title}](https://github.com/hristo2612/${OLD.codename})`
+  assert.equal(renameText(credit, keepPatternsFor("README.md")).text, credit)
+  assert.equal(renameText(credit, keepPatternsFor("NOTICE")).text, credit)
+  assert.match(renameText(credit, keepPatternsFor("packages/web/src/x.ts")).text, /^fork of \[Hundredfold\]/)
+  const bin = `"${OLD.codename}": "./dist/bin/legacy-forwarder.js"`
+  assert.equal(renameText(bin, keepPatternsFor("packages/hundredfold/package.json")).text, bin)
+  assert.match(renameText(bin, keepPatternsFor("packages/web/package.json")).text, /"hundredfold"/)
+})
+
+test("a bundle of a released version is kept whole, and the bundle being built only in its base payload", () => {
+  assert.equal(keepContent("packages/hundredfold/template/migrations/0.33.3/MIGRATION.md"), true)
+  assert.equal(keepContent("packages/hundredfold/template/migrations/0.2.0/files/target/CLAUDE.md"), true)
+  assert.equal(keepContent("packages/hundredfold/template/migrations/0.34.0/files/base/CLAUDE.md"), true)
+  assert.equal(keepContent("packages/hundredfold/template/migrations/0.34.0/MIGRATION.md"), false)
+  assert.equal(keepContent("packages/hundredfold/template/migrations/0.34.0/files/target/CLAUDE.md"), false)
+  assert.equal(keepContent("packages/web/src/shared/legacy/names.json"), false)
+})
+
+test("only files that are not text are skipped, whatever bytes a text file holds", () => {
+  assert.equal(isBinary(Buffer.from("x\u0000y"), "docs/note.md"), false)
+  assert.equal(isBinary(Buffer.from("x"), "assets/shot.png"), true)
 })

@@ -29,6 +29,29 @@ export interface HomeLock {
   release(): void;
 }
 
+/**
+ * Clear a lock that looked stale. Two processes can both see it stale; removing it by name would let the second
+ * one delete the lock the first had just taken. The file is moved aside first and looked at again there: if what
+ * was moved is a live process's lock after all, it goes back and the caller does not take the lock.
+ */
+function takeOverStaleLock(lockFile: string): boolean {
+  const aside = `${lockFile}.stale-${process.pid}-${Date.now()}`;
+  try {
+    fs.renameSync(lockFile, aside);
+  } catch {
+    return true; // already gone: someone else cleared it, and the next attempt will see who holds it now
+  }
+  if (lockIsStale(aside)) {
+    fs.rmSync(aside, { force: true });
+    return true;
+  }
+  try {
+    fs.linkSync(aside, lockFile);
+  } catch { /* a newer lock has been taken meanwhile; the live one it replaced is no longer needed */ }
+  fs.rmSync(aside, { force: true });
+  return false;
+}
+
 /** Try to take the lock once. Undefined when another live process holds it. */
 export function tryAcquireHomeLock(lockFile: string): HomeLock | undefined {
   fs.mkdirSync(path.dirname(lockFile), { recursive: true });
@@ -39,7 +62,7 @@ export function tryAcquireHomeLock(lockFile: string): HomeLock | undefined {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       if (!lockIsStale(lockFile)) return undefined;
-      fs.rmSync(lockFile, { force: true });
+      if (!takeOverStaleLock(lockFile)) return undefined;
     }
   }
   return undefined;

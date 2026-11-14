@@ -5,4 +5,6 @@ import { forwarderNotice, forwardTarget } from "../src/cli/legacy-forwarder.js";
 
 const notice = forwarderNotice();
 if (notice) process.stderr.write(`${notice}\n`);
-await import(forwardTarget());
+// The current binary only runs its command line when it is the file node started, which it is not here.
+const { buildProgram } = (await import(forwardTarget())) as { buildProgram: () => { parseAsync: () => Promise<unknown> } };
+await buildProgram().parseAsync();

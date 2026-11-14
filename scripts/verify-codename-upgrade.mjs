@@ -176,10 +176,40 @@ async function restartOverTheRunningGateway() {
   await until(async () => exists(newHome, "sessions", "registry.db") && (await api("GET", "/api/status")).status === 200, "the gateway to come back from the moved home");
 }
 
+/**
+ * What an old install stored or handed out that a later build must still accept: a paired device, a member token
+ * and an MCP session capability, minted by the OLD build's own code and checked by the NEW build's.
+ */
+function mintOldCredentials() {
+  const script = `
+    const dist = (file) => import(process.argv[1] + "/dist/src/" + file);
+    const [{ createAuthSession }, { hashToken }, { ensureSessionCapability }] = await Promise.all([dist("gateway/auth.js"), dist("accounts/ids.js"), dist("mcp/identity.js")]);
+    const { secret, device } = createAuthSession(process.argv[2], { headers: {}, socket: { remoteAddress: "10.0.0.9" } }, { name: "rehearsal device", kind: "remote" });
+    console.log(JSON.stringify({ secret, deviceId: device.id, token: hashToken("member-token", "token"), capability: ensureSessionCapability("rehearsal-session", process.argv[3]) }));`;
+  const keyFile = path.join(host, "capability.key");
+  const minted = run(NODE, ["--input-type=module", "-e", script, path.join(oldRepo, pkgDir(oldRepo)), oldHome, keyFile], { env: { ...baseEnv(), [`${OLDUP}_HOME`]: oldHome } });
+  if (minted.status !== 0) fail(`could not mint credentials with the old build:\n${minted.out}`, 1);
+  return { ...JSON.parse(minted.out.trim().split("\n").pop()), keyFile };
+}
+
+function checkOldCredentials(minted) {
+  const script = `
+    const dist = (file) => import(process.argv[1] + "/dist/src/" + file);
+    const [{ verifyAuthSession }, { hashToken }, { verifySessionCapability }] = await Promise.all([dist("gateway/auth.js"), dist("accounts/ids.js"), dist("mcp/identity.js")]);
+    const [home, deviceId, secret, capability, keyFile] = process.argv.slice(2);
+    console.log(JSON.stringify({ device: verifyAuthSession(home, deviceId, secret), wrong: verifyAuthSession(home, deviceId, "not-the-secret"), token: hashToken("member-token", "token"), capability: verifySessionCapability("rehearsal-session", capability, keyFile) }));`;
+  const checked = run(NODE, ["--input-type=module", "-e", script, path.join(newRepo, pkgDir(newRepo)), newHome, minted.deviceId, minted.secret, minted.capability, minted.keyFile], { env: { ...baseEnv(), ...newEnv } });
+  const result = checked.status === 0 ? JSON.parse(checked.out.trim().split("\n").pop()) : {};
+  check("a device the old build paired is still recognised", result.device === true && result.wrong === false, checked.out.trim().split("\n").pop());
+  check("a member token the old build hashed still matches", result.token === minted.token);
+  check("an MCP capability the old build handed out still verifies", result.capability === true);
+}
+
 async function main() {
   console.log(`host ${host}`);
   seedOld();
   const state = await seedOldState({ [`${OLDUP}_HOME`]: oldHome, [`${OLDUP}_INSTANCE`]: `${OLD}-${instance}` }, { leaveRunning: Boolean(args.restart) });
+  const credentials = mintOldCredentials();
   console.log(`old home ${oldHome}\nscoped department stage ${state.stageDir}`);
   if (args.restart) {
     await restartOverTheRunningGateway();
@@ -192,6 +222,7 @@ async function main() {
   await awaitStatus("the new gateway");
   const newStage = path.join(host, `.${codename}-departments`, ".instances", `.${codename}-${instance}`, "side-project");
   await checkTheMove(state, newStage);
+  checkOldCredentials(credentials);
   await checkSessions(state, newStage);
   checkTheRest(state);
   await checkARestart(state);

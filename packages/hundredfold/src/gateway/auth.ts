@@ -8,6 +8,7 @@ import { resolveHundredfoldInstance } from "../shared/home.js";
 import { wireHeader } from "../shared/wire-names.js";
 import { parseCookieHeader, requestAuthCookies } from "./auth-cookies.js";
 import { isPublicAccountRoute } from "../accounts/public-paths.js";
+import { KEPT_DOMAINS } from "../shared/legacy/names.js";
 
 // The cookie names and headers moved to auth-cookies.ts; they are still exported from here.
 export {
@@ -120,7 +121,7 @@ export function createAuthToken(): string {
 }
 
 function hashLocalBootstrapGrant(grant: string): string {
-  return crypto.createHash("sha256").update(`hundredfold-local-bootstrap:${grant}`).digest("base64url");
+  return crypto.createHash("sha256").update(`${KEPT_DOMAINS.localBootstrap}:${grant}`).digest("base64url");
 }
 
 export function issueLocalBootstrapGrant(
@@ -344,7 +345,7 @@ function authDevicesPath(hundredfoldHome: string): string {
 }
 
 function authSessionHash(secret: string): string {
-  return crypto.createHash("sha256").update(`hundredfold-auth-session:${secret}`).digest("base64url");
+  return crypto.createHash("sha256").update(`${KEPT_DOMAINS.authSession}:${secret}`).digest("base64url");
 }
 
 function headerValue(headers: Record<string, string | string[] | undefined>, key: string): string | undefined {

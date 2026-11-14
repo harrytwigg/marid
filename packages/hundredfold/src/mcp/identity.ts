@@ -5,6 +5,7 @@ import type { ResolvedMcpConfig, McpServerStdioConfig } from "../shared/types.js
 import { resolveHundredfoldHome, resolveMcpSessionCapabilityKeyFile } from "../shared/home.js";
 import { mcpFlag, mcpFlagAliases, toolCallMarker, wireHeader } from "../shared/wire-names.js";
 import { findBuiltinMcp } from "./builtin-name.js";
+import { KEPT_DOMAINS } from "../shared/legacy/names.js";
 
 /** Names the toolset a hundredfold server serves in place of the company belt
  *  (toolsets.ts `toolsFor`). The gateway puts it on the server's spec; nothing
@@ -92,7 +93,7 @@ export const UNIDENTIFIED_TOOL_CALL_ERROR =
   "HUNDREDFOLD_SESSION_ID and HUNDREDFOLD_SESSION_CAPABILITY), or perform the operation as the operator via the web UI / HTTP API.";
 
 const SESSION_CAPABILITY_KEY_BYTES = 32;
-const SESSION_CAPABILITY_DOMAIN = "hundredfold:mcp-session-capability:v1\0";
+const SESSION_CAPABILITY_DOMAIN = KEPT_DOMAINS.sessionCapability;
 const BASE64URL_256_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 function decodeKey(raw: string, keyFile: string): Buffer {

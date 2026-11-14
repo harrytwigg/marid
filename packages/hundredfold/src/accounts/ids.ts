@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { KEPT_DOMAINS } from "../shared/legacy/names.js";
 
 /** `<prefix>_` plus 12 hex characters, the shape every account row id has. */
 export function newId(prefix: "usr" | "utk" | "uss"): string {
@@ -12,7 +13,7 @@ export function newRawToken(): string {
 
 /** Only this hash is stored, as the pairing code's is. */
 export function hashToken(raw: string, domain: "token" | "session"): string {
-  return crypto.createHash("sha256").update(`hundredfold-user-${domain}:${raw}`).digest("hex");
+  return crypto.createHash("sha256").update(`${KEPT_DOMAINS.userCredential}-${domain}:${raw}`).digest("hex");
 }
 
 export const isoNow = (now: number): string => new Date(now).toISOString();

@@ -21,6 +21,12 @@ export const LEGACY_SQL_FUNCTIONS: Readonly<{ callbackIdentity: string; claimDig
 /** Browser storage keys written before the rename that are read once and not copied by prefix. */
 export const LEGACY_STORAGE_KEYS: Readonly<{ pinnedSessions: string; activeOrigin: string }> = legacy.storageKeys;
 
+/**
+ * Domain-separation strings that key stored credential hashes and capabilities. They are kept for good, whatever the
+ * codename becomes: changing one makes every stored session, token and capability stop verifying.
+ */
+export const KEPT_DOMAINS: Readonly<{ userCredential: string; authSession: string; localBootstrap: string; sessionCapability: string }> = legacy.domains;
+
 /** The old name in each form a fixture needs, so a test of how an old install is read never spells it. */
 export const OLD = {
   codename: LEGACY_CODENAME,

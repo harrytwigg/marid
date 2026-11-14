@@ -6,7 +6,8 @@ import { renameHomeIfNeeded, type HomeRenameDeps, type HomeRenameOutcome } from 
 
 /**
  * Settle, once and early, which home and which instance name a process is. An older install names its
- * home by path (`HUNDREDFOLD_HOME=~/.hundredfold-x`) and its instance by `HUNDREDFOLD_INSTANCE=hundredfold-x`; this build names them
+ * home by path (`<OLD>_HOME=~/.<old>-x`) and its instance by `<OLD>_INSTANCE=<old>-x`, `<old>` being the name
+ * before the rename (names.json); this build names them
  * `~/.<codename>-x` and `<codename>-x`. The home is moved if it needs to be (home-rename.ts), the
  * environment is then rewritten to the canonical path and name under every spelling, and nothing after
  * this sees a second identity for the same directory: the stage root, the registry entry, the cookie

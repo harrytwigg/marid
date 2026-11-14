@@ -6,8 +6,8 @@ import { acquireHomeLock } from "./home-lock.js";
 import { decide, kindOf, linkToCurrent, pairFor } from "./home-state.js";
 import { clearPendingMove, readPendingMove, writePendingMove } from "./home-pending.js";
 import { claudeConfigDirsOf } from "./claude-profile-dirs.js";
-import { moveTranscripts } from "../shared/claude-transcript-move.js";
-import { renameStageRoot } from "./stage-rename.js";
+import { moveTranscripts, moveTranscriptsBelow } from "../shared/claude-transcript-move.js";
+import { renameStageRoot, stageRootFor } from "./stage-rename.js";
 import { recordInstanceRenamed, type DirectoryOptions } from "./directory.js";
 import { backupRootFor, renameBackupDirs } from "./backup-rename.js";
 
@@ -60,11 +60,33 @@ export type HomeRenameOutcome =
 /** Where the receipt of a move is kept, inside the moved home. */
 export const HOME_MOVE_RECEIPT = path.join("state", "home-move.json");
 
+/** The mount points the kernel lists for this process (Linux), or none where it does not say. */
+function listedMountPoints(): Set<string> {
+  try {
+    const points = fs.readFileSync("/proc/self/mountinfo", "utf-8").split("\n").map((line) => line.split(" ")[4]);
+    return new Set(points.filter((point): point is string => Boolean(point)).map((point) => point.replace(/\\([0-7]{3})/g, (_, octal: string) => String.fromCharCode(Number.parseInt(octal, 8)))));
+  } catch {
+    return new Set();
+  }
+}
+
 function defaultIsMountPoint(directory: string): boolean {
   try {
-    return fs.statSync(directory).dev !== fs.statSync(path.dirname(directory)).dev;
+    if (fs.statSync(directory).dev !== fs.statSync(path.dirname(directory)).dev) return true;
+    // A bind mount from the same device has the parent's device number; only the mount table gives it away.
+    return listedMountPoints().has(fs.realpathSync(directory));
   } catch {
     return false;
+  }
+}
+
+/** Why a home beside `directory` cannot be renamed there, or undefined when its parent can be written to. */
+function parentNotWritable(directory: string): string | undefined {
+  try {
+    fs.accessSync(path.dirname(directory), fs.constants.W_OK | fs.constants.X_OK);
+    return undefined;
+  } catch {
+    return `${path.dirname(directory)} is not writable here, so ${directory} cannot be renamed`;
   }
 }
 
@@ -125,8 +147,35 @@ export async function renameHomeIfNeeded(home: string, deps: HomeRenameDeps = {}
   const verdict = decide(legacy, current);
   if (verdict === "conflict") return { kind: "conflict", home: legacy, legacyHome: legacy, currentHome: current };
   if (verdict === "kept-link") return { kind: "kept", home: legacy, reason: `${legacy} is a link to somewhere else, so it was left alone` };
-  if (verdict === "nothing") return { kind: "nothing", home: current };
+  if (verdict === "nothing") {
+    if (kindOf(current) === "directory" && kindOf(legacy) === "absent") adoptOrphanedTranscripts(legacy, current, names, deps, log);
+    return { kind: "nothing", home: current };
+  }
   return moveHome(legacy, current, deps, names, log);
+}
+
+const TRANSCRIPTS_ADOPTED = path.join("state", "legacy-transcripts-checked");
+
+/**
+ * A home that arrives at its current path already (a container's volume copied from an older install's) still
+ * has its conversations filed under the old path's key in the Claude profile, and the department stage
+ * directories' under the old stage root's. Re-key them once, so a resume finds them; a note in the home
+ * says it was done, so a later command does not look again.
+ */
+function adoptOrphanedTranscripts(legacy: string, current: string, names: Names, deps: HomeRenameDeps, log: (message: string) => void): void {
+  const marker = path.join(current, TRANSCRIPTS_ADOPTED);
+  if (fs.existsSync(marker)) return;
+  try {
+    const configDirs = (deps.claudeConfigDirs ?? claudeConfigDirsOf)(current);
+    const warn = (message: string): void => log(message);
+    const home = moveTranscripts(legacy, current, configDirs, warn).length;
+    const stage = moveTranscriptsBelow(stageRootFor(legacy, names, true), stageRootFor(current, names, false), configDirs, warn).length;
+    fs.mkdirSync(path.dirname(marker), { recursive: true });
+    fs.writeFileSync(marker, `${new Date().toISOString()}\n`);
+    if (home + stage > 0) log(`Re-keyed ${home + stage} conversation director${home + stage === 1 ? "y" : "ies"} filed under ${legacy}, so sessions resume at ${current}.`);
+  } catch (error) {
+    log(`Could not look for conversations filed under ${legacy}: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 async function moveHome(
@@ -143,7 +192,14 @@ async function moveHome(
   if (gatewayRunningAt(legacy, deps, names)) {
     return kept(`a gateway is running at ${legacy}: stop it, then start it again to move the home to ${current}`);
   }
-  const lock = await acquireHomeLock(path.join(path.dirname(legacy), `.${names.codename}-home-move.lock`), deps.lockTimeoutMs);
+  const unwritable = parentNotWritable(legacy);
+  if (unwritable) return kept(unwritable);
+  let lock: Awaited<ReturnType<typeof acquireHomeLock>>;
+  try {
+    lock = await acquireHomeLock(path.join(path.dirname(legacy), `.${names.codename}-home-move.lock`), deps.lockTimeoutMs);
+  } catch (error) {
+    return kept(`it could not be moved because the lock could not be taken (${(error as NodeJS.ErrnoException).code ?? "error"})`);
+  }
   if (!lock) return { kind: "kept", home: legacy, reason: `another process is moving ${legacy}`, blocking: true };
   try {
     // Someone else may have finished the move while this one waited.

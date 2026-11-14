@@ -119,8 +119,11 @@ the gateway would start a fresh instance. Keep your data by doing one of these b
 - Or keep using the old volumes: declare them `external: true` in your Compose file under their old names and mount
   them where the new ones are mounted.
 
-Then `docker compose up -d`. The first start finds the old layout in the copied home and moves it over. A home that is
-a mount point is never moved, so the names change inside it and the path stays.
+Then `docker compose up -d`. The home in the container is a mount point, so it is never renamed: its path inside the
+container is the new one from the start, and the first command that runs there files the conversations that the Claude
+volume holds under the old home path and the old department stage directories under the new ones (once, noted in
+`state/legacy-transcripts-checked`), so sessions resume. Anything you wrote into a file of your own that names the old
+directory (`/home/node/.<old>`) has to be edited by hand.
 
 Variables in your `.env` file or `docker run` command that carry the old prefix are still honoured: the entrypoint
 gives each one the new prefix, unless the new name is already set. Moving to the new names is still the way to stop

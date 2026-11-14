@@ -14,7 +14,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { hasOldName, isBinary, renamePath, renameText } from "./rename-codename/engine.mjs";
-import { FROZEN_SUBTREES, KEEP_CONTENT_PATHS, KEEP_PATTERNS } from "./rename-codename/rules.mjs";
+import { FROZEN_SUBTREES, keepContent, keepPatternsFor } from "./rename-codename/rules.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = new Set(process.argv.slice(2));
@@ -34,20 +34,20 @@ const kept = [];
 for (const file of everything) {
   const target = tracked.has(file) ? renamePath(file, FROZEN_SUBTREES) : file;
   if (target !== file) moves.push([file, target]);
-  if (KEEP_CONTENT_PATHS.some((rule) => rule.test(file))) continue;
+  if (keepContent(file)) continue;
   const full = path.join(root, file);
   const stat = fs.lstatSync(full);
   if (!stat.isFile()) continue;
   const buffer = fs.readFileSync(full);
-  if (isBinary(buffer)) continue;
-  const result = renameText(buffer.toString("utf8"), KEEP_PATTERNS);
+  if (isBinary(buffer, file)) continue;
+  const result = renameText(buffer.toString("utf8"), keepPatternsFor(file));
   if (result.changed) rewrites.push([file, result.text]);
   if (result.left.length > 0) kept.push([file, result.left.length]);
 }
 
 if (residue) {
   const why = (file) => {
-    if (/^packages\/[^/]+\/template\/migrations\//.test(file)) return "released migration bundle (merge base, byte-identical)";
+    if (/^packages\/hundredfold\/template\/migrations\//.test(file)) return "released migration bundle (merge base, byte-identical)";
     if (/^(?:packages\/[^/]+\/)?(?:LICENSE|NOTICE)$/.test(file)) return "licence attribution";
     if (/^packages\/shell\/src-tauri\/gen\//.test(file)) return "generated app project (bundle id and crate names kept)";
     if (file === "CHANGELOG.md") return "released history";
@@ -60,7 +60,7 @@ if (residue) {
     const full = path.join(root, file);
     if (!fs.lstatSync(full).isFile()) continue;
     const buffer = fs.readFileSync(full);
-    if (isBinary(buffer)) continue;
+    if (isBinary(buffer, file)) continue;
     const n = buffer.toString("utf8").split("\n").filter((line) => hasOldName(line)).length;
     if (n > 0 || hasOldName(file)) {
       const key = why(file);

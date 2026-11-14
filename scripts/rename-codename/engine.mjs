@@ -62,8 +62,18 @@ export function renamePath(relPath, frozenSubtrees) {
   return renameSegment(relPath);
 }
 
-export function isBinary(buffer) {
-  return buffer.subarray(0, 8000).includes(0);
+// Files that are not text, by what they are called. A file of any other name is read as text whatever bytes it
+// holds, so a NUL byte cannot hide a name from the guard.
+const BINARY_EXTENSIONS = new Set([
+  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".ico", ".icns", ".bmp", ".tiff",
+  ".ttf", ".otf", ".woff", ".woff2", ".eot",
+  ".pdf", ".zip", ".gz", ".tgz", ".bz2", ".xz", ".7z", ".jar", ".aar",
+  ".mp3", ".mp4", ".m4a", ".mov", ".webm", ".wav", ".ogg", ".flac",
+  ".wasm", ".so", ".dylib", ".node", ".a", ".o", ".exe", ".dll", ".class", ".keystore", ".jks", ".car", ".nib", ".sqlite", ".db",
+]);
+
+export function isBinary(buffer, relPath) {
+  return BINARY_EXTENSIONS.has(path.extname(relPath).toLowerCase());
 }
 
 export function extensionOf(relPath) {
