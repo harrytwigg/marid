@@ -98,7 +98,7 @@ jinn setup && jinn start
 Docker needs Docker Engine or Docker Desktop with Compose v2, but it does **not** need Node.js or an agent CLI installed on the host. The image includes Claude Code. Containerising bounds the engine's permission-free access to the directories you explicitly mount instead of your whole home directory:
 
 ```bash
-git clone https://github.com/harrytwigg/marid.git
+git clone https://github.com/hundredfoldhq/hundredfold.git
 cd hundredfold
 
 # Edit docker-compose.yml and uncomment at least one "Project mounts" entry.
@@ -350,7 +350,7 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
 Hundredfold is a pnpm + turbo monorepo.
 
 ```bash
-git clone https://github.com/harrytwigg/marid.git
+git clone https://github.com/hundredfoldhq/hundredfold.git
 cd hundredfold
 pnpm install
 pnpm setup   # one-time: builds all packages and creates ~/.jinn
@@ -409,7 +409,7 @@ jinn setup && jinn start
 Docker needs Docker Engine or Docker Desktop with Compose v2, but it does **not** need Node.js or an agent CLI installed on the host. The image includes Claude Code. Containerising bounds the engine's permission-free access to the directories you explicitly mount instead of your whole home directory:
 
 ```bash
-git clone https://github.com/harrytwigg/marid.git
+git clone https://github.com/hundredfoldhq/hundredfold.git
 cd hundredfold
 
 # Edit docker-compose.yml and uncomment at least one "Project mounts" entry.
@@ -654,7 +654,7 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
 Hundredfold is a pnpm + turbo monorepo.
 
 ```bash
-git clone https://github.com/harrytwigg/marid.git
+git clone https://github.com/hundredfoldhq/hundredfold.git
 cd hundredfold
 pnpm install
 pnpm setup   # one-time: builds all packages and creates ~/.jinn
