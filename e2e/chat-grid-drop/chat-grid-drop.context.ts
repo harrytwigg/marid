@@ -29,8 +29,8 @@ export interface GridPageOptions {
 
 /** Where this run writes screenshots and video; the verify script creates it before Playwright starts. */
 export function artifactPath(...segments: string[]): string {
-  const artifacts = process.env.JINN_VERIFY_ARTIFACTS
-  if (!artifacts) throw new Error('JINN_VERIFY_ARTIFACTS is required')
+  const artifacts = process.env.HUNDREDFOLD_VERIFY_ARTIFACTS
+  if (!artifacts) throw new Error('HUNDREDFOLD_VERIFY_ARTIFACTS is required')
   return path.join(artifacts, ...segments)
 }
 
@@ -45,7 +45,7 @@ export function artifactPath(...segments: string[]): string {
 export async function openSeededGridPage(context: BrowserContext, sessionIds: string[]): Promise<Page> {
   const page = await context.newPage()
   await page.addInitScript((ids: string[]) => {
-    localStorage.setItem('jinn-chat-working-set', JSON.stringify({
+    localStorage.setItem('hundredfold-chat-working-set', JSON.stringify({
       version: 1,
       sessionIds: ids,
       focusedId: ids[0],
@@ -76,10 +76,10 @@ export async function openGridPage(
   // The theme has to be in localStorage before the app's first paint, not just on the context:
   // colorScheme alone leaves the app rendering its own stored preference.
   await context.addInitScript((settings: { theme: Theme; clearWorkingSet: boolean }) => {
-    localStorage.setItem('jinn-theme', settings.theme)
-    localStorage.setItem('jinn-onboarded', 'true')
-    localStorage.setItem('jinn-chat-list-open', 'true')
-    if (settings.clearWorkingSet) localStorage.removeItem('jinn-chat-working-set')
+    localStorage.setItem('hundredfold-theme', settings.theme)
+    localStorage.setItem('hundredfold-onboarded', 'true')
+    localStorage.setItem('hundredfold-chat-list-open', 'true')
+    if (settings.clearWorkingSet) localStorage.removeItem('hundredfold-chat-working-set')
   }, { theme, clearWorkingSet })
 
   const page = await context.newPage()

@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { GatewayEventListener } from "@jinn/gateway-events"
+import type { GatewayEventListener } from "@hundredfold/gateway-events"
 import type { TodoCaptureWire } from "@/lib/api"
 
 /**

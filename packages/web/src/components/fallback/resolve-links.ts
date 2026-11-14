@@ -4,7 +4,7 @@ import {
   type FallbackChainSubject,
   type FallbackLink,
   type ResolvedFallbackLink,
-} from "@jinn/fallback-chain-wire"
+} from "@hundredfold/fallback-chain-wire"
 
 /** A link with nothing the gateway said about it: what the diagram draws before a reading, or for an unsaved row. */
 export function plainResolved(link: FallbackLink, origin: ResolvedFallbackLink["origin"] = "config"): ResolvedFallbackLink {

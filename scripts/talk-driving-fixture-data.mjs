@@ -75,7 +75,8 @@ export function mergeById(existing, owned) {
 
 /** @param {string} home @param {{ gateway?: { port?: number } }} config */
 export function assertDisposableHome(home, config) {
-  if (path.resolve(home) === path.join(os.homedir(), ".jinn") || path.basename(home) === ".jinn") {
+  const PRODUCTION_HOME_NAMES = [".hundredfold", ".jinn"] // rename:keep: the current name and the one an older build gave it
+  if (PRODUCTION_HOME_NAMES.some((name) => path.resolve(home) === path.join(os.homedir(), name) || path.basename(home) === name)) {
     throw new Error(`${home} is the production instance home; use a throwaway sandbox home`)
   }
   const port = config.gateway?.port

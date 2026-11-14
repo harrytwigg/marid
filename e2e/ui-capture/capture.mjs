@@ -9,7 +9,7 @@
 //
 // Each capture also gets an axe accessibility pass. It only reports: the
 // summary goes to the console and to <out-dir>/axe.json, and violations never
-// fail the run. JINN_CAPTURE_TRANSPARENCY=reduced photographs with
+// fail the run. HUNDREDFOLD_CAPTURE_TRANSPARENCY=reduced photographs with
 // Reduced selected in the persisted settings, so the setting and the bootstrap in
 // index.html are what apply it; use a separate out-dir for it. Each capture also
 // asserts the attribute was already on <html> at DOMContentLoaded (before React
@@ -29,7 +29,7 @@ const fixtures = JSON.parse(fs.readFileSync(path.join(sandboxHome, 'ui-capture-f
 // A screen that needs the padded thread is only part of the default set when it was asked for.
 const screens = only.length
   ? SCREENS.filter((s) => only.includes(s.name))
-  : SCREENS.filter((s) => !s.longThread || process.env.JINN_CAPTURE_MESSAGES)
+  : SCREENS.filter((s) => !s.longThread || process.env.HUNDREDFOLD_CAPTURE_MESSAGES)
 fs.mkdirSync(outDir, { recursive: true })
 
 const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i
@@ -54,11 +54,11 @@ async function leaks(page) {
 }
 
 // Firefox by default. Headless Chromium hangs where /dev/dri blocks (see README); capture-ui.sh hides it.
-// JINN_CAPTURE_BROWSER=chromium switches; keep one browser for a before/after pair.
-const browserType = process.env.JINN_CAPTURE_BROWSER === 'chromium' ? chromium : firefox
+// HUNDREDFOLD_CAPTURE_BROWSER=chromium switches; keep one browser for a before/after pair.
+const browserType = process.env.HUNDREDFOLD_CAPTURE_BROWSER === 'chromium' ? chromium : firefox
 const browser = await browserType.launch()
 const failures = []
-const reduced = process.env.JINN_CAPTURE_TRANSPARENCY === 'reduced'
+const reduced = process.env.HUNDREDFOLD_CAPTURE_TRANSPARENCY === 'reduced'
 const axeReport = []
 // A screen can name the viewports it makes sense at (the rail and the hover glance are desktop only).
 const jobs = screens.flatMap((screen) => THEMES.flatMap((theme) => VIEWPORTS
@@ -109,9 +109,9 @@ async function openPage({ screen, theme, viewport }) {
     extraHTTPHeaders: { authorization: `Bearer ${token}` },
   })
   await context.addInitScript(([t, isReduced, onboarded]) => {
-    localStorage.setItem('jinn-theme', t)
-    if (onboarded) localStorage.setItem('jinn-onboarded', 'true')
-    if (isReduced) localStorage.setItem('jinn-settings', JSON.stringify({ transparency: 'reduced' }))
+    localStorage.setItem('hundredfold-theme', t)
+    if (onboarded) localStorage.setItem('hundredfold-onboarded', 'true')
+    if (isReduced) localStorage.setItem('hundredfold-settings', JSON.stringify({ transparency: 'reduced' }))
     document.addEventListener('DOMContentLoaded', () => {
       /** @type {RootMarkedWindow} */ (window).__rootAtParse = document.documentElement.getAttribute('data-transparency')
     })

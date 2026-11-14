@@ -86,7 +86,7 @@ describe('useChatTabs', () => {
 
     expect(result.current.tabs).toHaveLength(0)
     expect(result.current.activeTab).toBeNull()
-    expect(JSON.parse(localStorage.getItem('jinn-chat-tabs')!)).toEqual({ tabs: [], activeIndex: -1 })
+    expect(JSON.parse(localStorage.getItem('hundredfold-chat-tabs')!)).toEqual({ tabs: [], activeIndex: -1 })
     const reloaded = renderHook(() => useChatTabs())
     expect(reloaded.result.current.tabs).toHaveLength(0)
   })
@@ -100,7 +100,7 @@ describe('useChatTabs', () => {
 
     expect(result.current.tabs.map((tab) => tab.kind === 'session' && tab.sessionId)).toEqual(['s2'])
     expect(result.current.activeIndex).toBe(-1)
-    expect(JSON.parse(localStorage.getItem('jinn-chat-tabs')!).tabs).toHaveLength(1)
+    expect(JSON.parse(localStorage.getItem('hundredfold-chat-tabs')!).tabs).toHaveLength(1)
     // Nothing left to close beyond what is kept: the list keeps its own object.
     const before = result.current.tabs
     act(() => result.current.closeAllTabs(['s2']))

@@ -13,7 +13,7 @@ interface PersistedWorkingSet {
   focusHistory: string[]
 }
 
-export const WORKING_SET_STORAGE_KEY = 'jinn-chat-working-set'
+export const WORKING_SET_STORAGE_KEY = 'hundredfold-chat-working-set'
 
 type WorkingSetStorage = Pick<Storage, 'getItem' | 'setItem'>
 

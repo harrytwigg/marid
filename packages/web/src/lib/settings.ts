@@ -36,7 +36,7 @@ export function isTransparency(value: unknown): value is Transparency {
   return value === "full" || value === "reduced"
 }
 
-export interface JinnSettings {
+export interface HundredfoldSettings {
   accentColor: string | null
   companyName: string | null
   portalName: string | null
@@ -63,7 +63,7 @@ export interface JinnSettings {
   employeeOverrides: Record<string, EmployeeOverride>
 }
 
-export const DEFAULTS: JinnSettings = {
+export const DEFAULTS: HundredfoldSettings = {
   accentColor: null,
   companyName: null,
   portalName: null,
@@ -82,15 +82,15 @@ export const DEFAULTS: JinnSettings = {
   employeeOverrides: {},
 }
 
-const STORAGE_KEY = 'jinn-settings'
+const STORAGE_KEY = 'hundredfold-settings'
 
-export function loadSettings(): JinnSettings {
+export function loadSettings(): HundredfoldSettings {
   if (typeof window === 'undefined') return { ...DEFAULTS }
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return { ...DEFAULTS }
     const parsed = JSON.parse(raw)
-    const merged = { ...DEFAULTS, ...parsed } as JinnSettings
+    const merged = { ...DEFAULTS, ...parsed } as HundredfoldSettings
     // Retired: nothing writes it, and a saved copy would be written back for ever.
     delete (merged as { portalIcon?: unknown }).portalIcon
     if (!isOrbVariant(merged.talkOrbVariant)) merged.talkOrbVariant = DEFAULTS.talkOrbVariant
@@ -103,7 +103,7 @@ export function loadSettings(): JinnSettings {
   }
 }
 
-export function saveSettings(settings: JinnSettings): void {
+export function saveSettings(settings: HundredfoldSettings): void {
   if (typeof window === 'undefined') return
   localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
 }

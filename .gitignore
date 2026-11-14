@@ -8,7 +8,7 @@ test-results/
 .env
 .env.local
 # npm publish token (jinn-cli) — local only, never commit
-packages/jinn/.npmrc
+packages/hundredfold/.npmrc
 .worktrees/
 .DS_Store
 
@@ -18,10 +18,10 @@ packages/jinn/.npmrc
 # Hermes engine local scratch (session plans) — runtime residue, never product code
 .hermes/
 # Local sprint/evidence sandboxes and captured runtime artifacts — never commit
-.jinn-*-sprint/
+.hundredfold-*-sprint/
 # Per-run build evidence (deliverable-evidence.mjs). It names files in the
 # operator's workspace, so it belongs to the worktree and the Todo, never here.
-.jinn-build/
+.hundredfold-build/
 # Local one-off recording/capture harnesses (contain personal paths) — never commit
 .tmp-*
 

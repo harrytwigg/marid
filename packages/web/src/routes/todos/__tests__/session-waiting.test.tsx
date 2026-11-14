@@ -73,7 +73,7 @@ describe("a waiting session on the Todo page", () => {
 
     const dot = screen.getByLabelText("Working")
     expect(dot.getAttribute("style")).toBeNull()
-    expect(dot.className).toContain("animate-[jinn-pulse")
+    expect(dot.className).toContain("animate-[hundredfold-pulse")
   })
 
   it("reads a paused node as Waiting while a running one still reads Working", () => {

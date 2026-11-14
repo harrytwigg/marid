@@ -1,0 +1,238 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { Readable } from "node:stream";
+import type { ServerResponse } from "node:http";
+import yaml from "js-yaml";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { HundredfoldConfig } from "../../shared/types.js";
+
+const root = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-stt-settings-api-"));
+const hundredfoldHome = path.join(root, "instance");
+const settingsPath = path.join(root, "host", "stt.json");
+const modelsDir = path.join(root, "models");
+process.env.HUNDREDFOLD_HOME = hundredfoldHome;
+process.env.HUNDREDFOLD_STT_SETTINGS = settingsPath;
+process.env.HUNDREDFOLD_STT_MODELS_DIR = modelsDir;
+fs.mkdirSync(hundredfoldHome, { recursive: true });
+fs.mkdirSync(modelsDir, { recursive: true });
+
+type Api = typeof import("../api.js");
+type SettingsStore = typeof import("../../stt/settings-store.js");
+
+let api: Api;
+let settingsStore: SettingsStore;
+let currentConfig: HundredfoldConfig;
+const emit = vi.fn();
+
+function configWithoutStt(): HundredfoldConfig {
+  return {
+    gateway: {},
+    engines: { default: "codex", claude: {} },
+    connectors: {},
+    logging: { file: false, stdout: false, level: "info" },
+  } as HundredfoldConfig;
+}
+
+function writeLocalConfig(): void {
+  fs.writeFileSync(path.join(hundredfoldHome, "config.yaml"), yaml.dump(configWithoutStt()));
+}
+
+function makeResponse() {
+  let status = 200;
+  const chunks: Buffer[] = [];
+  const res = {
+    writeHead(nextStatus: number) {
+      status = nextStatus;
+      return this;
+    },
+    setHeader() {
+      return this;
+    },
+    end(chunk?: Buffer | string) {
+      if (chunk) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    },
+  } as unknown as ServerResponse;
+  return {
+    res,
+    get status() {
+      return status;
+    },
+    get body() {
+      const raw = Buffer.concat(chunks).toString("utf8");
+      return raw ? JSON.parse(raw) : null;
+    },
+  };
+}
+
+async function call(method: string, url: string, body?: unknown) {
+  const raw = body === undefined ? "" : JSON.stringify(body);
+  const req = Object.assign(Readable.from(raw ? [Buffer.from(raw)] : []), {
+    method,
+    url,
+    headers: {
+      host: "localhost",
+      authorization: "Bearer test-token",
+      ...(raw ? { "content-type": "application/json", "content-length": String(Buffer.byteLength(raw)) } : {}),
+    },
+    socket: { remoteAddress: "127.0.0.1" },
+  });
+  const capture = makeResponse();
+  await api.handleApiRequest(
+    req as unknown as Parameters<Api["handleApiRequest"]>[0],
+    capture.res,
+    {
+      gatewayAuthToken: "test-token",
+      hundredfoldHome,
+      getConfig: () => currentConfig,
+      connectors: new Map(),
+      startTime: Date.now(),
+      emit,
+      sessionManager: {
+        getEngines: () => new Map(),
+        getEngine: () => undefined,
+        getQueue: () => ({
+          getPendingCount: () => 0,
+          getTransportState: (_key: string, state: string) => state,
+        }),
+      },
+    } as unknown as import("../api.js").ApiContext,
+  );
+  return capture;
+}
+
+beforeAll(async () => {
+  api = await import("../api.js");
+  settingsStore = await import("../../stt/settings-store.js");
+}, 60_000);
+
+beforeEach(() => {
+  fs.rmSync(settingsPath, { force: true });
+  fs.writeFileSync(path.join(modelsDir, "ggml-small.bin"), "model");
+  fs.writeFileSync(path.join(modelsDir, "ggml-tiny.bin"), "model");
+  writeLocalConfig();
+  currentConfig = configWithoutStt();
+  emit.mockClear();
+});
+
+afterAll(() => {
+  try {
+    fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  } catch {}
+});
+
+describe("shared STT settings API", () => {
+  it("returns shared model and languages when the instance has no stt block", async () => {
+    settingsStore.writeSharedSttSettings(settingsPath, {
+      enabled: true,
+      model: "tiny",
+      languages: ["en", "bg"],
+    });
+
+    const response = await call("GET", "/api/stt/status");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      available: true,
+      model: "tiny",
+      languages: ["en", "bg"],
+    });
+  });
+
+  it("returns local settings instead of defaults when the shared file is malformed", async () => {
+    currentConfig = {
+      ...configWithoutStt(),
+      stt: { model: "tiny", languages: ["bg"] },
+    };
+    fs.writeFileSync(settingsPath, "{not-json");
+
+    const response = await call("GET", "/api/stt/status");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ model: "tiny", languages: ["bg"] });
+  });
+
+  it.runIf(process.platform !== "win32")("returns local settings instead of defaults when the shared file mode is 000", async () => {
+    currentConfig = {
+      ...configWithoutStt(),
+      stt: { model: "tiny", languages: ["bg"] },
+    };
+    fs.writeFileSync(settingsPath, "{}", { mode: 0o000 });
+
+    const response = await call("GET", "/api/stt/status");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ model: "tiny", languages: ["bg"] });
+  });
+
+  it("writes languages to the shared file and exposes them on the next GET", async () => {
+    settingsStore.writeSharedSttSettings(settingsPath, {
+      enabled: true,
+      model: "tiny",
+      languages: ["en"],
+    });
+
+    const update = await call("PUT", "/api/stt/config", { languages: ["en", "bg"] });
+    const nextStatus = await call("GET", "/api/stt/status");
+
+    expect(update.status).toBe(200);
+    expect(settingsStore.readSharedSttSettings(settingsPath)).toEqual({
+      state: "loaded",
+      settings: {
+        enabled: true,
+        model: "tiny",
+        languages: ["en", "bg"],
+      },
+    });
+    expect(nextStatus.body).toMatchObject({ model: "tiny", languages: ["en", "bg"] });
+  });
+
+  it("records a successful download in the shared file", async () => {
+    settingsStore.writeSharedSttSettings(settingsPath, {
+      model: "tiny",
+      languages: ["bg"],
+    });
+
+    const response = await call("POST", "/api/stt/download", {});
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ status: "downloading", model: "tiny" });
+    await vi.waitFor(() => {
+      expect(settingsStore.readSharedSttSettings(settingsPath)).toEqual({
+        state: "loaded",
+        settings: {
+          enabled: true,
+          model: "tiny",
+          languages: ["bg"],
+        },
+      });
+    });
+  });
+
+  it("resolves the same settings for the dashboard and for a connector whose local block diverges", async () => {
+    settingsStore.writeSharedSttSettings(settingsPath, { enabled: true, model: "tiny", languages: ["en"] });
+
+    const update = await call("PUT", "/api/stt/config", { languages: ["en", "bg"] });
+    const dashboard = await call("GET", "/api/stt/status");
+
+    expect(update.status).toBe(200);
+    expect(dashboard.body).toMatchObject({ model: "tiny", languages: ["en", "bg"] });
+    // The exact call the telegram connector makes, with a stale/divergent config.yaml block.
+    expect(settingsStore.getEffectiveSttSettings(
+      { enabled: false, model: "medium", language: "de" },
+      settingsPath,
+      vi.fn(),
+    )).toEqual({ enabled: true, model: "tiny", languages: ["en", "bg"] });
+  });
+
+  it("resolves a mistyped local block to defaults with one warning instead of throwing", () => {
+    const warn = vi.fn();
+
+    expect(settingsStore.getEffectiveSttSettings(
+      { enabled: "true" } as unknown as Parameters<SettingsStore["getEffectiveSttSettings"]>[0],
+      settingsPath,
+      warn,
+    )).toEqual({ model: "small", languages: ["en"] });
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+});

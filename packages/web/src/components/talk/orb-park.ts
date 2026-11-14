@@ -6,7 +6,7 @@ const CORNERS: readonly ParkCorner[] = ["top-left", "top-right", "bottom-left", 
 /** Thumb-side on a phone, out of the way of the composer on a desktop. */
 export const DEFAULT_PARK: ParkCorner = "bottom-right"
 
-export const PARK_STORAGE_KEY = "jinn-talk-orb-park"
+export const PARK_STORAGE_KEY = "hundredfold-talk-orb-park"
 
 /** The slice of `localStorage` the park position needs — satisfied by test fakes too. */
 export type OrbParkStore = Pick<Storage, "getItem" | "setItem">

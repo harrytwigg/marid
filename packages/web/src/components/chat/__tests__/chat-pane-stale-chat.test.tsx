@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import type React from 'react'
 import { ChatPane } from '../chat-pane'
-import type { GatewayEvent } from '@jinn/gateway-events'
+import type { GatewayEvent } from '@hundredfold/gateway-events'
 
 let featuresState = {
   notesEnabled: false,
@@ -149,7 +149,7 @@ describe('the stale-chat notice', () => {
     const first = render(<ChatPane {...paneProps} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }))
     expect(screen.queryByText('Start a fresh chat?')).toBeNull()
-    expect(localStorage.getItem('jinn-stale-chat-dismissals')).toBe(JSON.stringify(['s1']))
+    expect(localStorage.getItem('hundredfold-stale-chat-dismissals')).toBe(JSON.stringify(['s1']))
     first.unmount()
 
     render(<ChatPane {...paneProps} />)
@@ -159,7 +159,7 @@ describe('the stale-chat notice', () => {
   it('hides on a sent message, before the send resolves and without storing a dismissal', async () => {
     // A dismissal another session recorded earlier: a send must leave it alone.
     const otherSessionDismissals = JSON.stringify(['s0'])
-    localStorage.setItem('jinn-stale-chat-dismissals', otherSessionDismissals)
+    localStorage.setItem('hundredfold-stale-chat-dismissals', otherSessionDismissals)
     liveSessionState = staleSession(61)
 
     let resolveSend = () => {}
@@ -176,12 +176,12 @@ describe('the stale-chat notice', () => {
     // so hiding it never waited on the network.
     expect(apiMocks.sendMessage).toHaveBeenCalledTimes(1)
     expect(screen.queryByText('Start a fresh chat?')).toBeNull()
-    expect(localStorage.getItem('jinn-stale-chat-dismissals')).toBe(otherSessionDismissals)
+    expect(localStorage.getItem('hundredfold-stale-chat-dismissals')).toBe(otherSessionDismissals)
 
     await act(async () => { resolveSend() })
 
     expect(screen.queryByText('Start a fresh chat?')).toBeNull()
-    expect(localStorage.getItem('jinn-stale-chat-dismissals')).toBe(otherSessionDismissals)
+    expect(localStorage.getItem('hundredfold-stale-chat-dismissals')).toBe(otherSessionDismissals)
   })
 
   it('stays hidden after the turn ends, while session activity has not moved on', async () => {

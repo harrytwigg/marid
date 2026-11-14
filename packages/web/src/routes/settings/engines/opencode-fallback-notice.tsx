@@ -7,7 +7,7 @@ export const FALLBACK_MIGRATION_URL = "https://github.com/hundredfoldhq/hundredf
  * opencode on a host that still runs a fallback plugin would switch models by
  * itself, on top of the chain, with the gateway none the wiser. Said on the
  * opencode card when the gateway reports it, with the way out: the migration, and
- * `jinn doctor`, which says where the plugin is. The paths themselves are the
+ * `hundredfold doctor`, which says where the plugin is. The paths themselves are the
  * operator's own and are not shown. Neutralised (the gateway runs opencode with it
  * off) there is nothing to act on, so no link; the sentence stays, because the
  * host's files still carry it.
@@ -39,7 +39,7 @@ export function OpencodeFallbackNotice({ entry }: { entry: EngineRegistryEntry }
             Move it into the chain
           </a>
           {", then run "}
-          <code data-opencode-doctor>jinn doctor</code>
+          <code data-opencode-doctor>hundredfold doctor</code>
           {" to see where it is and confirm it is gone."}
         </>
       )}

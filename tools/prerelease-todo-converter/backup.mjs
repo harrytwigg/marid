@@ -3,8 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 
-const requireFromJinn = createRequire(new URL("../../packages/jinn/package.json", import.meta.url));
-const Database = requireFromJinn("better-sqlite3");
+const requireFromHundredfold = createRequire(new URL("../../packages/hundredfold/package.json", import.meta.url));
+const Database = requireFromHundredfold("better-sqlite3");
 
 function digestFile(file) {
   return createHash("sha256").update(fs.readFileSync(file)).digest("hex");

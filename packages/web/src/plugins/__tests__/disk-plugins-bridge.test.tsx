@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
-import type { GatewayEvent, GatewayEventListener } from '@jinn/gateway-events'
+import type { GatewayEvent, GatewayEventListener } from '@hundredfold/gateway-events'
 import { DiskPluginsBridge } from '../disk-plugins-bridge'
 
 /**

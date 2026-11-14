@@ -152,7 +152,7 @@ function RefState({ entry }: { entry: SessionDirectoryEntryWire | undefined }) {
   if (!LIVE.has(entry?.status ?? "")) return null
   return (
     <span
-      className="size-1.5 flex-none rounded-full bg-[var(--system-blue)] motion-safe:animate-[jinn-pulse_1.4s_ease-in-out_infinite]"
+      className="size-1.5 flex-none rounded-full bg-[var(--system-blue)] motion-safe:animate-[hundredfold-pulse_1.4s_ease-in-out_infinite]"
       aria-label="Working"
     />
   )

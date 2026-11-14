@@ -163,8 +163,8 @@ function runCliWithLeak(t, assertionFailure) {
     // Fail cleanup with a real ENOTEMPTY, including on the pre-fix sync path.
     const original = fs.rmSync;
     fs.rmSync = function(directory, options) {
-      if (path.basename(String(directory)).startsWith('jinn-upgrade-verify-')) {
-        fs.unlinkSync(path.join(directory, '.jinn-upgrade-verify-nonce'));
+      if (path.basename(String(directory)).startsWith('hundredfold-upgrade-verify-')) {
+        fs.unlinkSync(path.join(directory, '.hundredfold-upgrade-verify-nonce'));
         fs.writeFileSync(path.join(directory, 'late-file'), 'late');
         return fs.rmdirSync(directory);
       }
@@ -176,12 +176,12 @@ function runCliWithLeak(t, assertionFailure) {
       return rmdir(directory);
     };
   `)
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("JINN_")))
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("HUNDREDFOLD_")))
   if (assertionFailure) env.UPGRADE_TEST_ASSERTION_FAILURE = String(assertionFailure)
   const child = spawnSync(process.execPath, ["--import", pathToFileURL(preload).href, fileURLToPath(entrypoint), "--candidate-tarball", tarball], {
     env, encoding: "utf8", timeout: 30_000,
   })
-  const leaked = /disposable root ([^;\n]+)/.exec(child.stderr)?.[1] ?? /'(.*jinn-upgrade-verify-[^']*)'/.exec(child.stderr)?.[1]
+  const leaked = /disposable root ([^;\n]+)/.exec(child.stderr)?.[1] ?? /'(.*hundredfold-upgrade-verify-[^']*)'/.exec(child.stderr)?.[1]
   if (leaked) t.after(() => fs.rmSync(leaked, { recursive: true, force: true }))
   return { ...child, leaked }
 }

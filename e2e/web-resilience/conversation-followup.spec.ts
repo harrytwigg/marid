@@ -2,8 +2,8 @@ import { test, expect } from '@playwright/test'
 
 test.use({ serviceWorkers: 'block' })
 
-const session = process.env.JINN_QA_SESSION
-const other = process.env.JINN_QA_OTHER_SESSION
+const session = process.env.HUNDREDFOLD_QA_SESSION
+const other = process.env.HUNDREDFOLD_QA_OTHER_SESSION
 
 test.beforeEach(() => test.skip(!session || !other, 'Requires two synthetic conversations in an isolated gateway'))
 

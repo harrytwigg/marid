@@ -1,5 +1,5 @@
 {
-  "name": "@jinn/shell",
+  "name": "@hundredfold/shell",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,13 +10,13 @@
     "test": "vitest run --passWithNoTests && pnpm run prepare:frontend && node scripts/test-native.mjs",
     "clean": "node scripts/clean.mjs",
     "prepare:frontend": "node scripts/prepare-frontend.mjs",
-    "desktop:dev": "pnpm --filter @jinn/web build && pnpm run prepare:frontend && cargo tauri dev --config src-tauri/tauri.conf.json",
-    "desktop:build": "pnpm --filter @jinn/web build && pnpm run prepare:frontend && cargo tauri build --config src-tauri/tauri.conf.json --bundles app",
+    "desktop:dev": "pnpm --filter @hundredfold/web build && pnpm run prepare:frontend && cargo tauri dev --config src-tauri/tauri.conf.json",
+    "desktop:build": "pnpm --filter @hundredfold/web build && pnpm run prepare:frontend && cargo tauri build --config src-tauri/tauri.conf.json --bundles app",
     "ios:init": "cargo tauri ios init --ci --config src-tauri/tauri.conf.json",
     "android:init": "cargo tauri android init --ci --config src-tauri/tauri.conf.json"
   },
   "dependencies": {
-    "@jinn/web": "workspace:*"
+    "@hundredfold/web": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

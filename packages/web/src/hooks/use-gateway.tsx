@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { createGatewaySocket } from "@/lib/ws";
-import type { GatewayEvent, GatewayEventListener, GatewayEventName } from "@jinn/gateway-events";
+import type { GatewayEvent, GatewayEventListener, GatewayEventName } from "@hundredfold/gateway-events";
 
 export interface GatewayContextValue {
   events: GatewayEvent[];

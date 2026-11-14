@@ -1,0 +1,367 @@
+import { reportingParentSessionId } from "../work-items/employee-session-delegation.js";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { UNIDENTIFIED_TOOL_CALL_ERROR } from "../mcp/identity.js";
+import { readJsonBody } from "./http-helpers.js";
+import { json, type ParsedRoute } from "./route-helpers.js";
+import type { CallerIdentity } from "./session-comm-guards.js";
+import { internalGatewayConnection, internalGatewayHeaders } from "../sessions/callback-connection.js";
+import { deliverClaimedSessionDelivery } from "../sessions/callbacks.js";
+import {
+  claimSelfCompaction,
+  claimSessionDelivery,
+  consumeChildReportedToParent,
+  getSession,
+  getSessionDelivery,
+  recordChildReportedToParent,
+  releaseSelfCompaction,
+} from "../sessions/registry.js";
+import {
+  buildCompactCommand,
+  buildResumeMessage,
+  COMPACTION_TURN_DISPLAY,
+  parseCompactionHandoff,
+  RESUME_TURN_DISPLAY,
+  SELF_COMPACTION_COOLDOWN_MS,
+  selfCompactionRefusal,
+} from "../sessions/self-compaction.js";
+import { listPendingQueueItemIdsForSession } from "../sessions/queue-item-registry.js";
+import { isStoppedByUser } from "../sessions/stopped-marker.js";
+import { removePendingSwitch, writePendingSwitch, type PendingSwitch } from "../sessions/pending-switch.js";
+import { buildPendingSwitch, scheduledSwitchBody, switchRefusalBody, switchRequestOf } from "../sessions/switch-request.js";
+import { resolveSwitchTarget, type SwitchRequest } from "../sessions/switch-target.js";
+import { isTerminalSession } from "../terminals/session.js";
+import { logger } from "../shared/logger.js";
+import type { HundredfoldConfig, Session } from "../shared/types.js";
+
+/**
+ * `POST /api/compactions` — a session asks to compact its own context and be
+ * resumed from a handoff (the `compact_session` tool). See
+ * `sessions/self-compaction.ts` for the design; this is only the route.
+ *
+ * Ordering is the whole contract: the compaction turn must reach the session's
+ * queue before the resume turn, and both behind the turn that asked. So the
+ * compaction turn is queued synchronously — if it cannot be, nothing was
+ * scheduled and the caller is told so — and only then is the resume turn put
+ * through the durable session outbox, whose retries can only ever land it
+ * later, never earlier.
+ */
+export type ResumeDelivery = "accepted" | "retrying" | "stopped";
+
+export interface SelfCompactionApiOptions {
+  /** The gateway's verified view of who is calling. */
+  resolveCaller: () => CallerIdentity;
+  /** `engines.opencode.mode`, read live. */
+  opencodeMode: () => string | undefined;
+  /** The live config: a session's own switch is judged against it (installed engines, declared profiles, models). */
+  getConfig: () => HundredfoldConfig;
+  /** Queue a notification-role turn on a session. Defaults to the same
+   *  internal message route parent callbacks use. */
+  enqueueTurn?: (sessionId: string, message: string, displayMessage: string) => Promise<void>;
+  /** Queue the resume turn durably. Returns whether it is already accepted, will
+   *  be retried, or was refused for good because the session was stopped. */
+  deliverResume?: (session: Session, claimedAt: number, message: string) => Promise<ResumeDelivery>;
+  now?: () => number;
+}
+
+const send = (res: ServerResponse, status: number, body: unknown): void => json(res, body, status);
+
+export const STOPPED_SESSION_COMPACT_REFUSAL = "This session was stopped. Start it again with a message first, then compact.";
+
+/** The message route refused the compaction turn because the session was
+ *  stopped while it was on its way: nothing was queued and the stop stands. */
+export class CompactionTurnRefusedAsStopped extends Error {
+  constructor() {
+    super(STOPPED_SESSION_COMPACT_REFUSAL);
+    this.name = "CompactionTurnRefusedAsStopped";
+  }
+}
+
+/** Queue the compaction turn through the message route, as a notification: the
+ *  route refuses it on a stopped session, so a stop that lands while this call
+ *  is on its way is kept rather than lifted. */
+export async function enqueueViaMessageRoute(sessionId: string, message: string, displayMessage: string): Promise<void> {
+  const gateway = internalGatewayConnection();
+  const response = await fetch(`${gateway.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/message`, {
+    method: "POST",
+    headers: internalGatewayHeaders(gateway),
+    body: JSON.stringify({ message, role: "notification", displayMessage }),
+  });
+  if (response.ok) return;
+  const text = await response.text().catch(() => "");
+  if (response.status === 409 && isNotDelivered(text)) throw new CompactionTurnRefusedAsStopped();
+  throw new Error(`the session refused the compaction turn (${response.status}${text ? `: ${text.slice(0, 200)}` : ""})`);
+}
+
+function isNotDelivered(text: string): boolean {
+  try {
+    return (JSON.parse(text) as { status?: unknown }).status === "not_delivered";
+  } catch {
+    return false;
+  }
+}
+
+async function deliverResumeViaOutbox(session: Session, claimedAt: number, message: string): Promise<ResumeDelivery> {
+  const { delivery } = claimSessionDelivery({
+    targetSessionId: session.id,
+    // A session delivering to itself. "session" is the closest existing source
+    // kind (the column is CHECK-constrained); deliveryKind keeps it apart from
+    // parent callbacks, which are the only kind the completion batcher merges.
+    sourceKind: "session",
+    sourceId: session.id,
+    sourceAttempt: `self-compaction:${claimedAt}`,
+    sourceOutcome: "compaction-requested",
+    sourceVersion: 1,
+    deliveryKind: "self-compaction-resume",
+    payload: { message, displayMessage: RESUME_TURN_DISPLAY },
+  });
+  if (delivery.status === "accepted") return "accepted";
+  if ((await deliverClaimedSessionDelivery(delivery.id)) === "accepted") return "accepted";
+  // The message route dead-letters a resume for a stopped session and never
+  // retries it: nothing will arrive, so it must not be reported as on its way.
+  return getSessionDelivery(delivery.id)?.status === "dead_letter" ? "stopped" : "retrying";
+}
+
+/** The caller's session when it can be asked to compact or switch at all; otherwise answers why not. The engine's own
+ *  ability to compact is not judged here: a plain compaction needs it, a switch does not (see `engineCompactionRefusal`). */
+function compactableSession(res: ServerResponse, callerId: string): Session | undefined {
+  const session = getSession(callerId);
+  if (!session) {
+    send(res, 404, { error: `unknown session "${callerId}"` });
+    return undefined;
+  }
+  // The operator stopped this session while its compact_session call was on its
+  // way. The compaction and the resume would each start it again.
+  if (isStoppedByUser(session)) {
+    send(res, 409, STOPPED_REFUSAL);
+    return undefined;
+  }
+  if (isTerminalSession(session)) {
+    send(res, 409, { error: "a terminal session has no model context to compact" });
+    return undefined;
+  }
+  return session;
+}
+
+/** A plain compaction of an engine Hundredfold cannot compact is refused; answers false when it did. */
+function engineCompactionRefusal(res: ServerResponse, session: Session, options: SelfCompactionApiOptions): boolean {
+  const refusal = selfCompactionRefusal(session.engine, options.opencodeMode());
+  if (refusal) send(res, 409, { error: refusal });
+  return Boolean(refusal);
+}
+
+const STOPPED_REFUSAL = {
+  code: "stopped",
+  error: "this session was stopped, so nothing was scheduled. End your turn; whoever stopped it decides when it runs again.",
+};
+
+function queuedRefusal(count: number): string {
+  return `${count} message${count === 1 ? " is" : "s are"} already queued for this session and would run between this turn `
+    + "and the compaction, so your handoff would be out of date by the time you resume. Nothing was scheduled. "
+    + "End your turn, handle what is queued, then call compact_session again.";
+}
+
+function cooldownRefusal(previousAt: number): { error: string; retryAt: number } {
+  const retryAt = previousAt + SELF_COMPACTION_COOLDOWN_MS;
+  return {
+    // The claim is shared with the operator's meter compaction, so the earlier
+    // one may not have been this session's own request.
+    error: `this session was compacted, or a compaction was requested, at ${new Date(previousAt).toISOString()}; `
+      + `the next is allowed from ${new Date(retryAt).toISOString()}.`,
+    retryAt,
+  };
+}
+
+/** Queue the compaction turn. False (and answered) when it could not be, with
+ *  the claim given back so the session can try again. */
+async function queueCompactionTurn(
+  res: ServerResponse,
+  session: Session,
+  claimedAt: number,
+  command: string,
+  options: SelfCompactionApiOptions,
+): Promise<boolean> {
+  try {
+    await (options.enqueueTurn ?? enqueueViaMessageRoute)(session.id, command, COMPACTION_TURN_DISPLAY);
+    return true;
+  } catch (error) {
+    releaseSelfCompaction(session.id, claimedAt);
+    const reason = error instanceof Error ? error.message : String(error);
+    logger.warn(`[self-compaction] ${session.id}: compaction turn not queued: ${reason}`);
+    if (error instanceof CompactionTurnRefusedAsStopped) {
+      send(res, 409, STOPPED_REFUSAL);
+      return false;
+    }
+    send(res, 502, { error: `nothing was scheduled: ${reason}. Carry on without compacting.` });
+    return false;
+  }
+}
+
+async function requestCompaction(
+  req: IncomingMessage,
+  res: ServerResponse,
+  callerId: string,
+  options: SelfCompactionApiOptions,
+): Promise<void> {
+  if (!compactableSession(res, callerId)) return;
+  const parsed = await readJsonBody(req, res);
+  if (!parsed.ok) return;
+  // Judge the session as it is now: a stop can land while the body streams in.
+  const session = compactableSession(res, callerId);
+  if (!session) return;
+  const target = switchRequestOf(parsed.body);
+  if (target) return await requestSwitch(res, session, parsed.body, target, options);
+  if (engineCompactionRefusal(res, session, options)) return;
+  const handoff = parseCompactionHandoff(parsed.body);
+  if (!handoff.ok) return send(res, 400, { error: handoff.error });
+
+  const claim = claimWithQueueCheck(res, session, options);
+  if (!claim) return;
+  if (!await queueCompactionTurn(res, session, claim.at, buildCompactCommand(handoff.handoff), options)) return;
+  const suppressed = suppressStopgapCallback(session);
+  await scheduleResume(res, session, { claimedAt: claim.at, message: buildResumeMessage(handoff.handoff), suppressed }, options);
+}
+
+/** Claim the session's compaction slot and refuse when messages are already queued. Answers and returns undefined on a refusal. */
+function claimWithQueueCheck(res: ServerResponse, session: Session, options: SelfCompactionApiOptions): { at: number } | undefined {
+  const claim = claimSelfCompaction(session.id, (options.now ?? Date.now)(), SELF_COMPACTION_COOLDOWN_MS);
+  if (!claim.claimed) {
+    send(res, 429, cooldownRefusal(claim.previousAt));
+    return undefined;
+  }
+  // Anything already queued would run as a full turn AFTER the asking turn and
+  // BEFORE the compaction — work the handoff, written earlier, knows nothing
+  // about. Refuse rather than let a stale handoff steer the resume: handling
+  // those messages first costs one turn, and a message arriving after this
+  // check queues behind the resume, where it belongs.
+  const queued = listPendingQueueItemIdsForSession(session.id).length;
+  if (queued > 0) {
+    releaseSelfCompaction(session.id, claim.at);
+    send(res, 409, { error: queuedRefusal(queued) });
+    return undefined;
+  }
+  return { at: claim.at };
+}
+
+/**
+ * A session asking to move itself (a body naming an engine, profile or model). The target is
+ * judged first, and a refusal carries the list of valid targets and takes no claim; then the
+ * handoff, the claim, the queue check, the pending switch the resume will apply, the native
+ * compaction when the engine has one, and the durable resume.
+ */
+async function requestSwitch(
+  res: ServerResponse,
+  session: Session,
+  body: unknown,
+  target: SwitchRequest,
+  options: SelfCompactionApiOptions,
+): Promise<void> {
+  const config = options.getConfig();
+  const resolved = resolveSwitchTarget(config, session, target, { caller: "session" });
+  if (!resolved.ok) {
+    const refusal = switchRefusalBody(config, session, resolved, target);
+    return send(res, refusal.status, refusal.body);
+  }
+  const handoff = parseCompactionHandoff(body);
+  if (!handoff.ok) return send(res, 400, { error: handoff.error });
+  const claim = claimWithQueueCheck(res, session, options);
+  if (!claim) return;
+  const pending = buildPendingSwitch(config, session, resolved, { claimedAt: claim.at, handoff: handoff.handoff, opencodeMode: options.opencodeMode() });
+  if (!writePendingSwitch(session.id, pending)) {
+    releaseSelfCompaction(session.id, claim.at);
+    return send(res, 404, { error: `unknown session "${session.id}"` });
+  }
+  if (pending.compactionQueued && !await queueCompactionTurn(res, session, claim.at, buildCompactCommand(handoff.handoff), options)) {
+    removePendingSwitch(session.id, claim.at);
+    return;
+  }
+  const suppressed = suppressStopgapCallback(session);
+  await scheduleResume(res, session, { claimedAt: claim.at, message: buildResumeMessage(handoff.handoff), suppressed, pending }, options);
+}
+
+/**
+ * The turn that asked is ending on a stopgap ("compacting now"), not a result.
+ * A parent waiting on this child must not take it for the final report, so that
+ * one callback is suppressed exactly as for a child that already reported up
+ * with send_to_session: per attempt, consumed by the settle it matches, and
+ * self-expiring with the attempt. Returns the attempt when this call set the
+ * marker, so a compaction withdrawn by a stop can undo exactly that.
+ */
+function suppressStopgapCallback(session: Session): string | undefined {
+  if (!reportingParentSessionId(session) || !session.attemptToken || session.status !== "running") return undefined;
+  // A send_to_session relay earlier in this attempt already suppresses that
+  // callback; the marker is then the relay's, not this route's to undo.
+  if (getSession(session.id)?.transportMeta?.reportedToParentAttempt === session.attemptToken) return undefined;
+  recordChildReportedToParent(session.id, session.attemptToken);
+  return session.attemptToken;
+}
+
+/** The compaction this call claimed and queued: the claim, the resume turn's
+ *  message, and the attempt whose stopgap callback it suppressed, if it did. */
+interface QueuedCompaction {
+  claimedAt: number;
+  message: string;
+  suppressed: string | undefined;
+  /** The switch this request left for the resume to apply, when it asked for one. */
+  pending?: PendingSwitch;
+}
+
+async function scheduleResume(
+  res: ServerResponse,
+  session: Session,
+  { claimedAt, message, suppressed, pending }: QueuedCompaction,
+  options: SelfCompactionApiOptions,
+): Promise<void> {
+  let resume: ResumeDelivery;
+  try {
+    resume = await (options.deliverResume ?? deliverResumeViaOutbox)(session, claimedAt, message);
+  } catch (error) {
+    // The outbox row was not even written. The compaction is queued and will
+    // run; without the resume the session would stop after it. Say so plainly
+    // rather than pretend: the agent can still put the handoff in its reply.
+    const reason = error instanceof Error ? error.message : String(error);
+    logger.error(`[self-compaction] ${session.id}: compaction queued but resume not recorded: ${reason}`);
+    // The claim stays, as for a compaction: whatever was queued still runs. The switch it was to carry does not.
+    if (pending) removePendingSwitch(session.id, claimedAt);
+    return send(res, 500, {
+      error: pending
+        ? `the compaction is queued and will run, but the resume could not be recorded, so no switch was scheduled (${reason}). `
+          + "End your turn with the handoff written out in your reply."
+        : `the compaction is queued but the resume turn could not be recorded (${reason}). `
+          + "End your turn with the handoff written out in your reply, so it is in the transcript the compaction summarizes.",
+    });
+  }
+  if (resume === "stopped") {
+    // The stop withdrew the queued compaction and refused the resume for good,
+    // so nothing was scheduled after all: give the claim back and say so. The
+    // stopgap suppression goes with it, so the parent is not left waiting on a
+    // report that will never come.
+    releaseSelfCompaction(session.id, claimedAt);
+    if (pending) removePendingSwitch(session.id, claimedAt);
+    if (suppressed) consumeChildReportedToParent(session.id, suppressed);
+    logger.info(`[self-compaction] ${session.id}: stopped before the resume was delivered; compaction withdrawn`);
+    return send(res, 409, STOPPED_REFUSAL);
+  }
+  logger.info(`[self-compaction] ${session.id} (${session.engine}) scheduled compaction + resume (resume ${resume})`);
+  send(res, 202, {
+    status: "scheduled", sessionId: session.id, engine: session.engine, resume,
+    ...(pending ? { switch: scheduledSwitchBody(pending) } : {}),
+  });
+}
+
+export async function handleSelfCompactionApi(
+  req: IncomingMessage,
+  res: ServerResponse,
+  route: ParsedRoute,
+  options: SelfCompactionApiOptions,
+): Promise<boolean> {
+  if (route.method !== "POST" || route.pathname !== "/api/compactions") return false;
+  // Only a session can compact, and only itself: the target is never an
+  // argument. The operator has no context to compact — it types /compact.
+  const identity = options.resolveCaller();
+  if (identity.kind !== "session") {
+    send(res, 403, { error: UNIDENTIFIED_TOOL_CALL_ERROR });
+    return true;
+  }
+  await requestCompaction(req, res, identity.callerId, options);
+  return true;
+}

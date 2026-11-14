@@ -12,9 +12,9 @@ import { FRIEND, engineLimits, startedSessions, usage, type LimitsState } from '
  * pages read are answered with the wire fixtures in `fixtures.ts`.
  */
 
-const home = process.env.JINN_VERIFY_HOME
-const artifacts = process.env.JINN_VERIFY_ARTIFACTS
-if (!home || !artifacts) throw new Error('JINN_VERIFY_HOME and JINN_VERIFY_ARTIFACTS are required')
+const home = process.env.HUNDREDFOLD_VERIFY_HOME
+const artifacts = process.env.HUNDREDFOLD_VERIFY_ARTIFACTS
+if (!home || !artifacts) throw new Error('HUNDREDFOLD_VERIFY_HOME and HUNDREDFOLD_VERIFY_ARTIFACTS are required')
 const token = (JSON.parse(fs.readFileSync(path.join(home, 'gateway.json'), 'utf8')) as { token: string }).token
 
 const THEMES = ['light', 'dark'] as const
@@ -40,8 +40,8 @@ async function open(browser: Browser, theme: Theme, viewport: Viewport): Promise
     extraHTTPHeaders: { authorization: `Bearer ${token}` },
   })
   await context.addInitScript((t: string) => {
-    localStorage.setItem('jinn-theme', t)
-    localStorage.setItem('jinn-onboarded', 'true')
+    localStorage.setItem('hundredfold-theme', t)
+    localStorage.setItem('hundredfold-onboarded', 'true')
   }, theme)
   return context.newPage()
 }

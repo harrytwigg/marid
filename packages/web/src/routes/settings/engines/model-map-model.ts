@@ -5,8 +5,8 @@ import {
   modelMapEntryPath,
   targetNotAModelIdProblem,
   unservedTargetProblem,
-} from "@jinn/fallback-map-wire"
-import { isSpellableModelId } from "@jinn/model-id"
+} from "@hundredfold/fallback-map-wire"
+import { isSpellableModelId } from "@hundredfold/model-id"
 import { chainSaveBlocker } from "./chain-problems"
 import { modelMapFor, substituteChainFor, type EnginesConfig } from "./chain-model"
 

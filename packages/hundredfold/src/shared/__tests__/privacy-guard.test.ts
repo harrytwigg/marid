@@ -1,0 +1,163 @@
+import { describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, extname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const PKG = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+const REPO = join(PKG, "..", "..");
+
+const SCAN_PATHS = [
+  "CHANGELOG.md",
+  "LICENSE",
+  "docs",
+  "packages/hundredfold/template",
+  "packages/hundredfold/src",
+  "packages/web/src",
+];
+
+const TEXT_EXTENSIONS = new Set([
+  ".css",
+  ".js",
+  ".json",
+  ".md",
+  ".mjs",
+  ".ts",
+  ".tsx",
+  ".txt",
+  ".yaml",
+  ".yml",
+]);
+
+const BLOCKED_TERMS = [
+  ["hris", "to"].join(""),
+  ["jim", "my"].join(""),
+  ["jim", "my", "english"].join(""),
+  ["prav", "ko"].join(""),
+  ["move", "kit"].join(""),
+  ["sql", "noir"].join(""),
+  ["ho", "my"].join(""),
+  ["spy", "cam"].join(""),
+  ["aso", "maniac"].join(""),
+  ["kiwi", "labs"].join(""),
+  ["kiwi", " labs"].join(""),
+  ["tucker", "@"].join(""),
+  ["/", "Users", "/", "jim", "my", "english"].join(""),
+];
+
+// The fork must keep its MIT attribution to the upstream project, which names
+// the upstream author's handle both in the repository link and in the "by ..."
+// credit (see docs/hundredfold-vs-jinn.md). That handle is also one of the personal
+// terms the guard blocks, so allow exactly those two attribution forms through
+// while still scanning the rest of the tree, and the rest of that same file.
+const UPSTREAM_OWNER = ["hris", "to", "2612"].join("");
+const ALLOWED_ATTRIBUTION = [
+  `github.com/${UPSTREAM_OWNER}/jinn`, // rename:keep: the upstream project keeps its name
+  `by ${UPSTREAM_OWNER}`,
+];
+
+function maskAllowedAttribution(text: string): string {
+  let masked = text;
+  for (const allowed of ALLOWED_ATTRIBUTION) {
+    const escaped = allowed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    masked = masked.replace(new RegExp(escaped, "gi"), (match) =>
+      "x".repeat(match.length),
+    );
+  }
+  return masked;
+}
+
+function listTrackedTextFiles(repo: string, scanPaths: string[]): string[] {
+  const tracked = execFileSync("git", ["ls-files", "-z", "--", ...scanPaths], {
+    cwd: repo,
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  return tracked
+    .split("\0")
+    .filter((path) => path.length > 0 && TEXT_EXTENSIONS.has(extname(path)))
+    .map((path) => join(repo, path));
+}
+
+function findBlockedTerms(files: string[], root: string): string[] {
+  const findings: string[] = [];
+
+  for (const file of files) {
+    const text = maskAllowedAttribution(readFileSync(file, "utf-8"));
+    const lower = text.toLowerCase();
+    for (const term of BLOCKED_TERMS) {
+      const index = lower.indexOf(term.toLowerCase());
+      if (index === -1) continue;
+      const line = text.slice(0, index).split(/\r?\n/).length;
+      findings.push(`${relative(root, file)}:${line} contains "${term}"`);
+    }
+  }
+
+  return findings;
+}
+
+describe("privacy guard", () => {
+  it("keeps local sprint/evidence sandboxes out of the repository", () => {
+    const localSprintDirs = readdirSync(REPO, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .filter((name) => /^\.hundredfold-.*-sprint$/.test(name));
+
+    expect(localSprintDirs).toEqual([]);
+  });
+
+  it("keeps shipped templates and public source fixtures generic", () => {
+    expect(findBlockedTerms(listTrackedTextFiles(REPO, SCAN_PATHS), REPO)).toEqual([]);
+  });
+
+  it("allows the upstream attribution but still blocks the handle elsewhere", () => {
+    const repo = mkdtempSync(join(tmpdir(), "hundredfold-privacy-guard-"));
+    try {
+      mkdirSync(join(repo, "docs"));
+      const file = join(repo, "docs", "hundredfold-vs-jinn.md"); // rename:keep: the upstream comparison page
+      writeFileSync(
+        file,
+        [
+          `Hundredfold is a fork of [Jinn](https://github.com/${UPSTREAM_OWNER}/jinn) by ${UPSTREAM_OWNER} and contributors.`, // rename:keep
+          `Same file, outside the attribution: ${BLOCKED_TERMS[0]}.`,
+        ].join("\n"),
+      );
+
+      const findings = findBlockedTerms([file], repo);
+      expect(findings).toHaveLength(1);
+      expect(findings[0]).toContain(`${join("docs", "hundredfold-vs-jinn.md")}:2 contains`); // rename:keep: the upstream comparison page
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("ignores an untracked personal path but catches it once tracked", () => {
+    const repo = mkdtempSync(join(tmpdir(), "hundredfold-privacy-guard-"));
+    try {
+      execFileSync("git", ["init", "--quiet"], { cwd: repo, stdio: "ignore" });
+      mkdirSync(join(repo, "docs"));
+      const scratch = join(repo, "docs", "scratch.md");
+      writeFileSync(scratch, `local path: ${BLOCKED_TERMS.at(-1)}/scratch\n`);
+
+      expect(findBlockedTerms(listTrackedTextFiles(repo, ["docs"]), repo)).toEqual([]);
+
+      execFileSync("git", ["add", "--", "docs/scratch.md"], { cwd: repo, stdio: "ignore" });
+      const findings = findBlockedTerms(listTrackedTextFiles(repo, ["docs"]), repo);
+      expect(findings).not.toEqual([]);
+      expect(findings).toEqual(
+        expect.arrayContaining([expect.stringContaining(`${join("docs", "scratch.md")}:1 contains`)]),
+      );
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+});

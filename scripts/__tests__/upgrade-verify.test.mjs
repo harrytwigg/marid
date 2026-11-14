@@ -60,7 +60,7 @@ test("tarball installs run lifecycle scripts even when the caller disables them"
   fs.writeFileSync(path.join(source, "install.cjs"), `
     const fs = require('node:fs');
     fs.mkdirSync('dist/bin', { recursive: true });
-    fs.writeFileSync('dist/bin/jinn.js', 'console.log("lifecycle artifact loaded")');
+    fs.writeFileSync('dist/bin/hundredfold.js', 'console.log("lifecycle artifact loaded")');
   `)
   const layout = buildEnvironment(root, "lifecycle", 23456)
   run("npm", ["pack", source, "--pack-destination", root], { env: layout.env })
@@ -97,7 +97,7 @@ test("candidate template comparison proves exact convergence", (t) => {
   fs.mkdirSync(template, { recursive: true })
   fs.mkdirSync(installed, { recursive: true })
   fs.writeFileSync(path.join(template, "SKILL.md"), "# {{portalName}}\nslug={{portalSlug}}\n")
-  fs.writeFileSync(path.join(installed, "SKILL.md"), "# Jinn\nslug=jinn\n")
+  fs.writeFileSync(path.join(installed, "SKILL.md"), "# Hundredfold\nslug=hundredfold\n")
   assert.doesNotThrow(() => assertShippedSkillsConverged(path.join(root, "home"), path.join(root, "candidate"), ["example"]))
   fs.writeFileSync(path.join(installed, "SKILL.md"), "stale\n")
   assert.throws(
@@ -108,7 +108,7 @@ test("candidate template comparison proves exact convergence", (t) => {
 
 test("idempotency surface includes skills, receipt, version, and backups", (t) => {
   const home = temporaryRoot(t)
-  for (const file of ["skills/example/SKILL.md", ".jinn-template-skills.json", "config.yaml", ".migration-backups/run/config.yaml"]) {
+  for (const file of ["skills/example/SKILL.md", ".hundredfold-template-skills.json", "config.yaml", ".migration-backups/run/config.yaml"]) {
     fs.mkdirSync(path.dirname(path.join(home, file)), { recursive: true })
     fs.writeFileSync(path.join(home, file), `${file}\n`)
   }

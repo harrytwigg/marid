@@ -29,7 +29,7 @@ const noNice = process.platform === "win32" ? "no nice(1) on Windows" : false;
  */
 function cleanEnv(overrides = {}) {
   const env = { ...process.env, ...overrides };
-  for (const key of ["CI", "JINN_TEST_NICE", LOW_PRIORITY_ENV]) {
+  for (const key of ["CI", "HUNDREDFOLD_TEST_NICE", LOW_PRIORITY_ENV]) {
     if (!(key in overrides)) delete env[key];
   }
   return env;
@@ -46,11 +46,11 @@ function runWrapper(args, env, stdio = "ignore") {
   return spawnSync(process.execPath, [scriptPath, ...args], { env, stdio });
 }
 
-test("the low-priority path is on locally and off for CI, JINN_TEST_NICE=0 and Windows", () => {
+test("the low-priority path is on locally and off for CI, HUNDREDFOLD_TEST_NICE=0 and Windows", () => {
   assert.equal(lowPriorityEnabled({ env: {}, platform: "linux" }), true);
   assert.equal(lowPriorityEnabled({ env: {}, platform: "darwin" }), true);
   assert.equal(lowPriorityEnabled({ env: { CI: "true" }, platform: "linux" }), false);
-  assert.equal(lowPriorityEnabled({ env: { JINN_TEST_NICE: "0" }, platform: "linux" }), false);
+  assert.equal(lowPriorityEnabled({ env: { HUNDREDFOLD_TEST_NICE: "0" }, platform: "linux" }), false);
   assert.equal(lowPriorityEnabled({ env: {}, platform: "win32" }), false);
 });
 
@@ -79,8 +79,8 @@ test("findExecutable finds a file on PATH and ignores one that is not there", { 
   assert.equal(findExecutable("marker-tool", { env: { PATH: os.tmpdir() }, platform: "linux" }), null);
 });
 
-test("CI and JINN_TEST_NICE=0 run the command unchanged, with no low-priority marker", () => {
-  for (const env of [cleanEnv({ CI: "true" }), cleanEnv({ JINN_TEST_NICE: "0" })]) {
+test("CI and HUNDREDFOLD_TEST_NICE=0 run the command unchanged, with no low-priority marker", () => {
+  for (const env of [cleanEnv({ CI: "true" }), cleanEnv({ HUNDREDFOLD_TEST_NICE: "0" })]) {
     const result = spawnLowPriority(
       [process.execPath, "-p", `process.env[${JSON.stringify(LOW_PRIORITY_ENV)}] ?? "unset"`],
       { env, stdio: ["ignore", "pipe", "inherit"] },
@@ -109,7 +109,7 @@ test("the local path really runs the command at nice 19", { skip: noNice }, () =
 });
 
 test("the wrapper propagates the exit code down every path", () => {
-  const envs = [cleanEnv(), cleanEnv({ CI: "true" }), cleanEnv({ JINN_TEST_NICE: "0" })];
+  const envs = [cleanEnv(), cleanEnv({ CI: "true" }), cleanEnv({ HUNDREDFOLD_TEST_NICE: "0" })];
   for (const env of envs) {
     assert.equal(runWrapper([process.execPath, "-e", "process.exit(7)"], env).status, 7);
   }

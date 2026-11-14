@@ -6,7 +6,7 @@ afterEach(() => localStorage.clear())
 
 describe("loadSettings", () => {
   it("drops the retired portalIcon from a saved copy and keeps the portal emoji", () => {
-    localStorage.setItem("jinn-settings", JSON.stringify({ portalIcon: "★", portalEmoji: "🦊" }))
+    localStorage.setItem("hundredfold-settings", JSON.stringify({ portalIcon: "★", portalEmoji: "🦊" }))
 
     const settings = loadSettings()
 

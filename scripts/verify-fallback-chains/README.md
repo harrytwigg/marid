@@ -12,7 +12,7 @@ scripts/verify-fallback-chains.sh --only a,f         # some scenarios
 scripts/verify-fallback-chains.sh --mode server      # one opencode mode
 ```
 
-Put the pinned Node first on `PATH` (or set `JINN_VERIFY_NODE_BIN`), as for the other verify
+Put the pinned Node first on `PATH` (or set `HUNDREDFOLD_VERIFY_NODE_BIN`), as for the other verify
 scripts. Exit status is 0 unless a scenario that is not pending fails.
 
 ## What is real and what is fake
@@ -20,13 +20,13 @@ scripts. Exit status is 0 unless a scenario that is not pending fails.
 | | |
 |---|---|
 | Real | the gateway build, its config loader and `PUT /api/config`, the interactive Claude engine (PTY, `--settings` hooks, transcripts), the opencode adapter in `run` and `server` mode, the chain runtime, the web app |
-| Fake | `claude` (`scripts/fake-providers/fake-claude.mjs`) and `opencode` (`packages/jinn/src/engines/__tests__/fixtures/fake-opencode.mjs`), both steered by one scenario file and both appending to one ledger |
+| Fake | `claude` (`scripts/fake-providers/fake-claude.mjs`) and `opencode` (`packages/hundredfold/src/engines/__tests__/fixtures/fake-opencode.mjs`), both steered by one scenario file and both appending to one ledger |
 
-The instance runs under `env -i` with a temporary `JINN_HOME`, `HOME` and XDG directories, two
+The instance runs under `env -i` with a temporary `HUNDREDFOLD_HOME`, `HOME` and XDG directories, two
 fake Claude profile directories (`profile-a`, `profile-b`) declared under
 `engines.claude.accounts`, the stubs as absolute `engines.<engine>.bin`, no codex, grok or
 hermes, and the browser MCP server switched off (it is an `npx` fetch). `npx` and `npm` are
-stubs that do nothing, and `JINN_CLAUDE_USAGE_API=off` stops the usage lookup that would send
+stubs that do nothing, and `HUNDREDFOLD_CLAUDE_USAGE_API=off` stops the usage lookup that would send
 a token to the real service. A guard preloaded into every Node process refuses, and logs to
 `network-refusals.jsonl`, any connection that is not loopback; a scenario fails if the log is
 not empty.
@@ -51,7 +51,7 @@ inside an operator home. It tears everything down on exit.
 | h | an opencode provider hop X → Y within one opencode session |
 | i | the own target serves again from the first turn after its limit reopens (a real wall-clock reset a few seconds out), and not before |
 | j | an own target still limited at the reset is probed once; the next turns, inside the new window, do not probe it again |
-| k | a stand-in held by a window an hour out returns to its own target at the next turn once `jinn limits --clear` clears that target |
+| k | a stand-in held by a window an hour out returns to its own target at the next turn once `hundredfold limits --clear` clears that target |
 | l | a session whose chain ran out on its stand-in, waiting for the stand-in's reset, hands back to its own target within a minute of that target being cleared |
 
 Every scenario runs and counts. `--pending a,b` marks scenarios that wait on runtime work not
@@ -60,7 +60,7 @@ failed; one that passes is reported as "pending but passing", and `--strict` fai
 it. Drop an id from the default list in `verify-fallback-chains.sh` when its work lands.
 
 To check the gateway of another checkout against this harness's fakes and scenarios (for
-instance `main`, to confirm scenario e passes there too), set `JINN_VERIFY_GATEWAY_REPO`.
+instance `main`, to confirm scenario e passes there too), set `HUNDREDFOLD_VERIFY_GATEWAY_REPO`.
 
 ## The ledger proves who served each hop
 
@@ -135,4 +135,4 @@ logs.
 3. If it needs runtime work that is not merged, add its id to `--pending` in the script's
    default.
 4. A new outcome or key shape goes in `scripts/fake-providers/scenario.mjs` and is covered by
-   `packages/jinn/src/engines/__tests__/fake-providers.test.ts`.
+   `packages/hundredfold/src/engines/__tests__/fake-providers.test.ts`.

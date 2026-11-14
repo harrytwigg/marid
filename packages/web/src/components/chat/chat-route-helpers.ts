@@ -112,7 +112,7 @@ export function parseThreadOrigin(state: unknown): ThreadOrigin | null {
 
 /**
  * The back chip's label: the parent session's voice. Employee sessions read as
- * the employee's display-cased name ("jinn-dev" → "Hundredfold Dev"); direct sessions
+ * the employee's display-cased name ("hundredfold-dev" → "Hundredfold Dev"); direct sessions
  * belong to the portal persona (COO), so they read as the portal name.
  */
 export function threadOriginLabel(employee: string | null | undefined, portalName: string): string {
@@ -221,7 +221,7 @@ export function summarizeOlder(
 // ---------------------------------------------------------------------------
 // "Focused" filter — only the conversations the operator personally started.
 //
-// Verified against the live Session shape (packages/jinn/src/shared/types.ts +
+// Verified against the live Session shape (packages/hundredfold/src/shared/types.ts +
 // the /api/sessions payload via rowToSession): the reliable discriminators are
 // `source`, `sourceRef` (cron marker) and `parentSessionId`. `userId` is null on
 // single-user installs, so it is NOT used. A session is "focused" iff:

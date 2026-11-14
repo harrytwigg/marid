@@ -7,6 +7,6 @@ RUN apt-get update \
 RUN corepack enable
 ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 WORKDIR /workspace
-COPY docker-entrypoint.sh /usr/local/bin/jinn-upgrade-lab
-RUN chmod 0755 /usr/local/bin/jinn-upgrade-lab
-ENTRYPOINT ["/usr/local/bin/jinn-upgrade-lab"]
+COPY docker-entrypoint.sh /usr/local/bin/hundredfold-upgrade-lab
+RUN chmod 0755 /usr/local/bin/hundredfold-upgrade-lab
+ENTRYPOINT ["/usr/local/bin/hundredfold-upgrade-lab"]

@@ -17,10 +17,12 @@ export const codename = String(args.codename ?? "");
 export const port = Number(args.port);
 if (!oldRepo || !newRepo || !/^[a-z][a-z0-9]*$/.test(codename) || codename === "jinn") fail("usage: --old <repo> --new <repo> --codename <word, not jinn> --port <port>");
 if (!Number.isInteger(port) || port < 8060 || port > 65535 || [7777, 7788].includes(port)) fail("--port must be an integer from 8060, never 7777 or 7788"); // footgun: ok the refusal set itself
-export const bin = (repo) => path.join(repo, "packages/jinn/dist/bin/jinn.js");
+// A checkout from before the product was renamed keeps the package at packages/jinn and the binary as jinn.js.
+export const pkgDir = (repo) => (fs.existsSync(path.join(repo, "packages/hundredfold")) ? "packages/hundredfold" : "packages/jinn");
+export const bin = (repo) => path.join(repo, pkgDir(repo), "dist/bin", pkgDir(repo) === "packages/jinn" ? "jinn.js" : "hundredfold.js");
 for (const repo of [oldRepo, newRepo]) if (!fs.existsSync(bin(repo))) fail(`not built: ${repo}`);
 // A build from before the constant existed is the oldest install there is: it has no file to check.
-export const constantFile = (repo) => path.join(repo, "packages/jinn/dist/src/shared/codename-constant.js");
+export const constantFile = (repo) => path.join(repo, pkgDir(repo), "dist/src/shared/codename-constant.js");
 export const constantOf = (repo) => (fs.existsSync(constantFile(repo)) ? /CODENAME = "([a-z0-9]+)"/.exec(fs.readFileSync(constantFile(repo), "utf8"))?.[1] : "jinn");
 if (constantOf(oldRepo) !== "jinn") fail(`--old must be built with the legacy codename (it says ${constantOf(oldRepo)})`);
 if (constantOf(newRepo) !== codename) fail(`--new must be built with codename "${codename}" (it says ${constantOf(newRepo)})`);
@@ -119,7 +121,7 @@ export async function seedOldState(oldEnv, options = {}) {
   const record = run(NODE, ["--input-type=module", "-e", `
     import path from "node:path";
     import { pathToFileURL } from "node:url";
-    const directory = await import(pathToFileURL(path.join(${JSON.stringify(oldRepo)}, "packages/jinn/dist/src/instances/directory.js")).href);
+    const directory = await import(pathToFileURL(path.join(${JSON.stringify(oldRepo)}, "${pkgDir(oldRepo)}/dist/src/instances/directory.js")).href);
     directory.saveInstances([{ name: "jinn-${instance}", home: process.env.JINN_HOME, port: ${port}, createdAt: new Date().toISOString(), kind: "workspace", pinned: true }]);
   `], { env: { ...baseEnv(), ...oldEnv } });
   if (record.status !== 0) fail(`could not register the old instance:\n${record.out}`, 1);

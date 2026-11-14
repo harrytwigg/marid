@@ -49,10 +49,10 @@ describe('sdkImportMap before installPluginSdk', () => {
 })
 
 describe('installPluginSdk', () => {
-  it('names the @jinn/plugin-sdk alias dynamically so a broken mapping fails this build', () => {
+  it('names the @hundredfold/plugin-sdk alias dynamically so a broken mapping fails this build', () => {
     const source = readFileSync('src/plugins/sdk/runtime.ts', 'utf8')
-    expect(source).toMatch(/import\(['"]@jinn\/plugin-sdk['"]\)/)
-    expect(source).not.toMatch(/\bimport\s+['"]@jinn\/plugin-sdk['"]/)
+    expect(source).toMatch(/import\(['"]@hundredfold\/plugin-sdk['"]\)/)
+    expect(source).not.toMatch(/\bimport\s+['"]@hundredfold\/plugin-sdk['"]/)
   })
 
   it('puts the app’s own SDK and React on the globals the shims read', async () => {
@@ -62,9 +62,9 @@ describe('installPluginSdk', () => {
     const sdk = await import('../index')
     const react = await import('react')
 
-    expect(globals.__JINN_PLUGIN_SDK__).toBe(sdk)
-    expect(globals.__JINN_REACT__).toBe(react)
-    expect(globals.__JINN_REACT_JSX__).toBe(await import('react/jsx-runtime'))
+    expect(globals.__HUNDREDFOLD_PLUGIN_SDK__).toBe(sdk)
+    expect(globals.__HUNDREDFOLD_REACT__).toBe(react)
+    expect(globals.__HUNDREDFOLD_REACT_JSX__).toBe(await import('react/jsx-runtime'))
   })
 })
 
@@ -73,9 +73,10 @@ describe('sdkImportMap', () => {
     await installPluginSdk()
   })
 
-  it('maps exactly the three supported specifiers', () => {
+  it('maps exactly the supported specifiers: the SDK under its current and its old name, react and its JSX runtime', () => {
     expect(Object.keys(sdkImportMap()).sort()).toEqual([
-      '@jinn/plugin-sdk',
+      '@hundredfold/plugin-sdk',
+      '@jinn/plugin-sdk', // rename:keep: plugins installed before the rename import the SDK by its old name
       'react',
       'react/jsx-runtime',
     ])
@@ -94,7 +95,7 @@ describe('sdkImportMap', () => {
     const sdk = await import('../index')
 
     const names = /export const \{ (.+) \} = m;/
-      .exec(shimSource('__JINN_PLUGIN_SDK__', sdk))?.[1]
+      .exec(shimSource('__HUNDREDFOLD_PLUGIN_SDK__', sdk))?.[1]
       ?.split(', ')
 
     expect(names).toEqual(

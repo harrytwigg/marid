@@ -107,7 +107,7 @@ for (const theme of THEMES) {
 
       test('session badge: the chat sidebar tree view', async ({ browser }) => {
         const { context, page } = await openPage(browser, theme, size, '/', { chatListOpen: true })
-        await page.evaluate(() => localStorage.setItem('jinn-sidebar-focus-mode', 'tree'))
+        await page.evaluate(() => localStorage.setItem('hundredfold-sidebar-focus-mode', 'tree'))
         await page.goto('/', { waitUntil: 'networkidle' })
         await expect(page.getByTestId('session-department-badge')).toHaveCount(2)
         await expect(page.getByTestId('session-department-badge').first()).toBeVisible()

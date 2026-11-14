@@ -13,7 +13,7 @@ export interface FreshChatSuggestionInput {
   dismissed: boolean
 }
 
-const DISMISSALS_KEY = 'jinn-stale-chat-dismissals'
+const DISMISSALS_KEY = 'hundredfold-stale-chat-dismissals'
 const MAX_DISMISSALS = 100
 
 function dismissalStorage(): Storage | null {

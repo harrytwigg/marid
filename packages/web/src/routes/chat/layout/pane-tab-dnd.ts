@@ -3,7 +3,7 @@ import { clearChatSessionDrag, writeChatSessionDrag } from '../chat-session-dnd'
 import { isChatTabId } from './tab-kind'
 
 /** Carries a tab being dragged between (or within) pane tab strips. */
-export const PANE_TAB_DND_MIME = 'application/x-jinn-pane-tab'
+export const PANE_TAB_DND_MIME = 'application/x-hundredfold-pane-tab'
 
 export interface PaneTabDragPayload {
   groupId: string

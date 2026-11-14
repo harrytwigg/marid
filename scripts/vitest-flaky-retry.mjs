@@ -20,7 +20,7 @@ export { formatFlakySummary } from "./vitest-flaky-report.mjs";
  * and a collection throw produces no assertion results at all. Three failed
  * suites, one failed test. Per-test retry would miss two of the three, and it
  * would retry inside a worker whose state is already polluted — which is
- * exactly the mode packages/jinn/vitest.config.ts documents on Windows.
+ * exactly the mode packages/hundredfold/vitest.config.ts documents on Windows.
  *
  * Outside CI this is a pass-through: no reporters added, no retry. A retry
  * locally doubles the wait on a genuinely broken test and hides a red during
@@ -150,7 +150,7 @@ function resolveVitestBin(packageDir) {
 
 function runVitest(vitestBin, args, packageDir) {
   // Idle priority, so a package's suite run on its own is as polite as the
-  // monorepo-wide one. No-op in CI and under JINN_TEST_NICE=0.
+  // monorepo-wide one. No-op in CI and under HUNDREDFOLD_TEST_NICE=0.
   const result = spawnLowPriority([process.execPath, vitestBin, ...args], { cwd: packageDir });
   if (result.error) {
     console.error(`${LABEL}: could not start vitest — ${result.error.message}`);

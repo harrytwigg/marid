@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkItemCompactWire } from "@/lib/api"
 import { MovedOffBoard } from "../board/moved-off-board"
 import { useQueryInvalidation } from "@/hooks/use-query-invalidation"
-import { decodeGatewayEvent, type GatewayEventListener } from "@jinn/gateway-events"
+import { decodeGatewayEvent, type GatewayEventListener } from "@hundredfold/gateway-events"
 
 // The live feed a board member holds: the gateway tells them, in one `removed` frame, that a Todo left what they can read.
 // `lib/ws.ts` decodes every frame before a listener sees it and drops what does not decode, so the test sends the raw frame

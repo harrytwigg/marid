@@ -106,7 +106,7 @@ function fileTransfer(files: File[]): DataTransfer {
 
 /** What a sub-task reorder puts on the wire: a payload, and no files. */
 function reorderTransfer(): DataTransfer {
-  return { types: ["application/x-jinn-todo"], files: [] } as unknown as DataTransfer
+  return { types: ["application/x-hundredfold-todo"], files: [] } as unknown as DataTransfer
 }
 
 function fireDrag(

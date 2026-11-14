@@ -81,8 +81,8 @@ export function MarkdownView({
     <div
       className={
         compact
-          ? "jinn-markdown min-w-0 max-w-full break-words [overflow-wrap:anywhere] text-subheadline leading-[1.55] text-[var(--text-secondary)]"
-          : "jinn-markdown min-w-0 max-w-full break-words [overflow-wrap:anywhere] text-body leading-[1.7] text-[var(--text-secondary)]"
+          ? "hundredfold-markdown min-w-0 max-w-full break-words [overflow-wrap:anywhere] text-subheadline leading-[1.55] text-[var(--text-secondary)]"
+          : "hundredfold-markdown min-w-0 max-w-full break-words [overflow-wrap:anywhere] text-body leading-[1.7] text-[var(--text-secondary)]"
       }
     >
       <ReactMarkdown

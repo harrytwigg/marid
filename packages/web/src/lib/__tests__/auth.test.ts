@@ -31,7 +31,7 @@ describe("web auth helpers", () => {
   })
 
   it("uses a one-time UI launch grant to bootstrap local auth before retrying", async () => {
-    window.history.replaceState(null, "", "/#jinn-bootstrap=launch-grant")
+    window.history.replaceState(null, "", "/#hundredfold-bootstrap=launch-grant")
     const fetchMock = vi.mocked(fetch)
     fetchMock
       .mockResolvedValueOnce(jsonResponse(401, { error: "Unauthorized" }))
@@ -60,7 +60,7 @@ describe("web auth helpers", () => {
     expect(localStorage.length).toBe(0)
     expect(window.location.hash).toBe("")
     expect((fetchMock.mock.calls[2][1] as RequestInit).headers).toMatchObject({
-      "X-Jinn-Bootstrap-Grant": "launch-grant",
+      "X-Hundredfold-Bootstrap-Grant": "launch-grant",
     })
   })
 
@@ -82,7 +82,7 @@ describe("web auth helpers", () => {
   })
 
   it("takes a one-time workspace pairing code from the fragment without disturbing onboarding", () => {
-    window.history.replaceState(null, "", "/?onboarding=1#jinn-pair=ABCD-EFGH-JKLM&view=chat")
+    window.history.replaceState(null, "", "/?onboarding=1#hundredfold-pair=ABCD-EFGH-JKLM&view=chat")
 
     expect(takeWorkspacePairingCode()).toBe("ABCD-EFGH-JKLM")
     expect(window.location.pathname + window.location.search + window.location.hash).toBe("/?onboarding=1#view=chat")

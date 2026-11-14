@@ -125,7 +125,7 @@ export function UndoStrip() {
       data-talk-undo-strip
       style={{
         ...orbGutter(),
-        ...(reduce ? {} : { animation: `jinn-undo-rise ${ENTRANCE_MS}ms var(--ease-smooth) both` }),
+        ...(reduce ? {} : { animation: `hundredfold-undo-rise ${ENTRANCE_MS}ms var(--ease-smooth) both` }),
       }}
       className={cn(
         "pointer-events-auto fixed inset-x-[var(--space-3)] z-[80]",

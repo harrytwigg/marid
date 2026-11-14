@@ -50,7 +50,7 @@ vi.mock('@/lib/api', () => ({
 }))
 
 vi.mock('@/routes/settings-provider', () => ({
-  useSettings: () => ({ settings: { portalName: 'Jinn', employeeOverrides: {} } }),
+  useSettings: () => ({ settings: { portalName: 'Hundredfold', employeeOverrides: {} } }),
 }))
 
 vi.mock('@/components/ui/context-menu', () => ({
@@ -186,7 +186,7 @@ describe('scheduled link-row', () => {
 describe('automated sessions and the Team directory', () => {
   const OWN = webSession('own-1', 'Talk Orb Refinement')
   const CHILD = webSession('child-1', 'IMPLEMENT PHASE — round 1', {
-    employee: 'jinn-dev',
+    employee: 'hundredfold-dev',
     parentSessionId: 'own-1',
   })
 
@@ -199,20 +199,20 @@ describe('automated sessions and the Team directory', () => {
     expect(screen.getByText('Talk Orb Refinement')).toBeTruthy()
     expect(screen.getByText('IMPLEMENT PHASE — round 1')).toBeTruthy()
     expect(screen.getByText('Team')).toBeTruthy()
-    expect(screen.getByText('Jinn Dev')).toBeTruthy()
+    expect(screen.getByText('Hundredfold Dev')).toBeTruthy()
   })
 
   it('hides delegated children and the Team directory in Focused mode', () => {
-    localStorage.setItem('jinn-sidebar-focus-mode', 'focused')
+    localStorage.setItem('hundredfold-sidebar-focus-mode', 'focused')
     sidebarData.sessions = [OWN, CHILD]
 
     renderSidebar()
     expect(screen.getByText('Talk Orb Refinement')).toBeTruthy()
     expect(screen.queryByText('IMPLEMENT PHASE — round 1')).toBeNull()
-    expect(screen.queryByText('Jinn Dev')).toBeNull()
+    expect(screen.queryByText('Hundredfold Dev')).toBeNull()
   })
 
-  const WF_RUN = { id: 'wf-1', title: 'Nightly digest run', source: 'workflow', sourceRef: 'wfrun:x', employee: 'jinn-dev', lastActivity: NOW }
+  const WF_RUN = { id: 'wf-1', title: 'Nightly digest run', source: 'workflow', sourceRef: 'wfrun:x', employee: 'hundredfold-dev', lastActivity: NOW }
 
   it('surfaces workflow runs as first-class rows in All mode', () => {
     sidebarData.sessions = [OWN, WF_RUN]
@@ -222,7 +222,7 @@ describe('automated sessions and the Team directory', () => {
   })
 
   it('keeps workflow runs out of Focused mode, like every automated session', () => {
-    localStorage.setItem('jinn-sidebar-focus-mode', 'focused')
+    localStorage.setItem('hundredfold-sidebar-focus-mode', 'focused')
     sidebarData.sessions = [OWN, WF_RUN]
 
     renderSidebar()
@@ -233,11 +233,11 @@ describe('automated sessions and the Team directory', () => {
     sidebarData.sessions = [
       OWN,
       CHILD,
-      webSession('child-2', 'PLAN PHASE — planning only', { employee: 'jinn-dev', parentSessionId: 'own-1' }),
+      webSession('child-2', 'PLAN PHASE — planning only', { employee: 'hundredfold-dev', parentSessionId: 'own-1' }),
     ]
 
     renderSidebar()
-    fireEvent.click(screen.getByText('Jinn Dev'))
+    fireEvent.click(screen.getByText('Hundredfold Dev'))
     // Each child now also renders as a flat All-mode row, so the expanded
     // group makes it a second match.
     expect(screen.getAllByText('IMPLEMENT PHASE — round 1').length).toBeGreaterThan(0)
@@ -537,7 +537,7 @@ describe('Tree view', () => {
     expect(screen.getByRole('button', { name: 'Focused' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'All' })).toBeTruthy()
     fireEvent.click(tree)
-    expect(localStorage.getItem('jinn-sidebar-focus-mode')).toBe('tree')
+    expect(localStorage.getItem('hundredfold-sidebar-focus-mode')).toBe('tree')
     unmount()
 
     renderSidebar()
@@ -546,7 +546,7 @@ describe('Tree view', () => {
   })
 
   it('nests children under the session that spawned them, as deep as the data goes', () => {
-    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    localStorage.setItem('hundredfold-sidebar-focus-mode', 'tree')
     sidebarData.sessions = [QA, SOLO, DEV, COO]
     renderSidebar()
 
@@ -562,7 +562,7 @@ describe('Tree view', () => {
   })
 
   it('collapses a parent to its nested count and expands it again, persisting the fold', () => {
-    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    localStorage.setItem('hundredfold-sidebar-focus-mode', 'tree')
     sidebarData.sessions = [COO, DEV, QA]
     const { unmount } = renderSidebar()
 
@@ -572,7 +572,7 @@ describe('Tree view', () => {
     expect(document.querySelector('[data-chat-session-row="dev"]')).toBeNull()
     expect(document.querySelector('[data-chat-session-row="qa"]')).toBeNull()
     expect(treeRow('coo').querySelector('[data-tree-count]')?.textContent).toBe('2')
-    expect(JSON.parse(localStorage.getItem('jinn-sidebar-tree-collapsed') ?? '[]')).toEqual(['coo'])
+    expect(JSON.parse(localStorage.getItem('hundredfold-sidebar-tree-collapsed') ?? '[]')).toEqual(['coo'])
     unmount()
 
     renderSidebar()
@@ -583,15 +583,15 @@ describe('Tree view', () => {
   })
 
   it('tints a folded parent whose hidden child is still running', () => {
-    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
-    localStorage.setItem('jinn-sidebar-tree-collapsed', JSON.stringify(['coo']))
+    localStorage.setItem('hundredfold-sidebar-focus-mode', 'tree')
+    localStorage.setItem('hundredfold-sidebar-tree-collapsed', JSON.stringify(['coo']))
     sidebarData.sessions = [COO, { ...DEV, status: 'running' }]
     renderSidebar()
     expect(treeRow('coo').querySelector('[data-tree-count]')?.getAttribute('title')).toBe('1 nested session hidden, one still working')
   })
 
   it('shows a child whose parent is not loaded as an orphaned root', () => {
-    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    localStorage.setItem('hundredfold-sidebar-focus-mode', 'tree')
     sidebarData.sessions = [DEV, QA]
     renderSidebar()
     expect(treeRow('dev').dataset.treeDepth).toBe('0')
@@ -601,7 +601,7 @@ describe('Tree view', () => {
   })
 
   it('does not call a child of a Scheduled run an orphan', () => {
-    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    localStorage.setItem('hundredfold-sidebar-focus-mode', 'tree')
     sidebarData.sessions = [
       { id: 'cron-1', title: 'Nightly', source: 'cron', sourceRef: 'cron:nightly', lastActivity: minutesAgo(5) },
       webSession('from-cron', 'Spawned by cron', { employee: 'assistant', parentSessionId: 'cron-1', lastActivity: minutesAgo(4) }),
@@ -611,7 +611,7 @@ describe('Tree view', () => {
   })
 
   it('renders a parent cycle once, broken into a marked root', () => {
-    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    localStorage.setItem('hundredfold-sidebar-focus-mode', 'tree')
     sidebarData.sessions = [
       webSession('loop-a', 'Loop A', { parentSessionId: 'loop-b', lastActivity: minutesAgo(2) }),
       webSession('loop-b', 'Loop B', { parentSessionId: 'loop-a', lastActivity: minutesAgo(1) }),
@@ -624,7 +624,7 @@ describe('Tree view', () => {
   })
 
   it('caps the indent of a very deep chain and labels the true depth', () => {
-    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    localStorage.setItem('hundredfold-sidebar-focus-mode', 'tree')
     sidebarData.sessions = Array.from({ length: 10 }, (_, i) =>
       webSession(`deep-${i}`, `Deep ${i}`, { parentSessionId: i === 0 ? null : `deep-${i - 1}`, lastActivity: minutesAgo(10 - i) }),
     )
@@ -637,7 +637,7 @@ describe('Tree view', () => {
   })
 
   it('marks a top-level session nobody typed into as started automatically', () => {
-    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    localStorage.setItem('hundredfold-sidebar-focus-mode', 'tree')
     sidebarData.sessions = [
       COO,
       { id: 'plugin-1', title: 'Plugin run', source: 'plugin', employee: 'assistant', lastActivity: minutesAgo(1) },
@@ -648,7 +648,7 @@ describe('Tree view', () => {
   })
 
   it('keeps a pinned parent in the tree (its children stay nested) but not a pinned leaf', () => {
-    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    localStorage.setItem('hundredfold-sidebar-focus-mode', 'tree')
     sidebarData.pins = new Set(['coo', 'solo'])
     sidebarData.sessions = [COO, DEV, SOLO]
     renderSidebar()
@@ -659,7 +659,7 @@ describe('Tree view', () => {
   })
 
   it('selects nested rows in selection mode, ranging over the visible tree order', () => {
-    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    localStorage.setItem('hundredfold-sidebar-focus-mode', 'tree')
     sidebarData.sessions = [COO, DEV, QA, SOLO]
     renderSidebar()
     fireEvent.click(screen.getByRole('button', { name: 'Select chats' }))
@@ -670,7 +670,7 @@ describe('Tree view', () => {
   })
 
   it('keeps the Team directory (and its load-more) in Tree view', () => {
-    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    localStorage.setItem('hundredfold-sidebar-focus-mode', 'tree')
     sidebarData.sessions = [COO, DEV]
     sidebarData.counts = { 'builder': 5 }
     renderSidebar()
@@ -679,7 +679,7 @@ describe('Tree view', () => {
   })
 
   it('renders the same tree on mobile with a fold toggle per parent', () => {
-    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    localStorage.setItem('hundredfold-sidebar-focus-mode', 'tree')
     sidebarData.sessions = [COO, DEV, QA]
     renderSidebar('mobile')
     const rows = document.querySelectorAll('[data-row="mobile"]')
@@ -692,8 +692,8 @@ describe('Tree view', () => {
 
 describe('Tree view: selection over a twice-rendered pinned parent', () => {
   it('ranges from the copy that was clicked, not the Pinned copy above it', () => {
-    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
-    localStorage.setItem('jinn-sidebar-older-expanded', 'true')
+    localStorage.setItem('hundredfold-sidebar-focus-mode', 'tree')
+    localStorage.setItem('hundredfold-sidebar-older-expanded', 'true')
     sidebarData.pins = new Set(['coo'])
     sidebarData.sessions = [
       webSession('coo', 'Plan the release', { lastActivity: daysAgo(4) }),
@@ -716,7 +716,7 @@ describe('Tree view: selection over a twice-rendered pinned parent', () => {
   })
 
   it('still ranges from the Pinned copy when that is the one clicked', () => {
-    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    localStorage.setItem('hundredfold-sidebar-focus-mode', 'tree')
     sidebarData.pins = new Set(['coo'])
     sidebarData.sessions = [
       webSession('coo', 'Plan the release', { lastActivity: minutesAgo(5) }),
@@ -735,7 +735,7 @@ describe('Tree view: selection over a twice-rendered pinned parent', () => {
 
 describe('Tree view: which roots were started automatically', () => {
   it('marks a gateway-dispatched root, which the gateway records with source "web"', () => {
-    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    localStorage.setItem('hundredfold-sidebar-focus-mode', 'tree')
     sidebarData.sessions = [
       // The payload a Todo dispatch really produces.
       { id: 'dispatch-1', title: 'Dispatch ABC-1', source: 'web', employee: 'todo-dispatcher', sourceRef: 'todo-dispatcher:ABC-1:7b0c6f7e-1d2a-4c55-9d1e-0f4b2a9c8e11', connector: 'web', lastActivity: minutesAgo(2) },

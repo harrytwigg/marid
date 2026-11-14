@@ -1,10 +1,10 @@
 import { useEffect } from 'react'
-import { GATEWAY_EVENTS } from '@jinn/gateway-events'
+import { GATEWAY_EVENTS } from '@hundredfold/gateway-events'
 import { useGateway } from '@/hooks/use-gateway'
 import { scanDiskPlugins } from './disk-plugins'
 
 /**
- * Renders nothing; keeps the loaded plugins in step with `~/.jinn/plugins/`.
+ * Renders nothing; keeps the loaded plugins in step with `~/.hundredfold/plugins/`.
  *
  * The gateway watches the directory and emits `plugins:changed`, so a saved
  * edit reloads the plugin without a refresh. Every reconnect rescans as well,

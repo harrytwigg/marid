@@ -10,7 +10,7 @@ export interface TranscriptInsertion {
   selection: number
 }
 
-const DRAFT_PREFIX = "jinn:note-draft:v1:"
+const DRAFT_PREFIX = "hundredfold:note-draft:v1:"
 
 export function noteDraftKey(path: string): string {
   return `${DRAFT_PREFIX}${encodeURIComponent(path)}`

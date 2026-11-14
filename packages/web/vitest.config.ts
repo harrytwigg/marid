@@ -22,11 +22,11 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src'),
       // Kept in step with vite.config.ts: a suite that resolved the SDK by a
       // different route would prove nothing about what the app ships.
-      '@jinn/plugin-sdk': path.resolve(__dirname, 'src/plugins/sdk/index.ts'),
-      '@jinn/fallback-map-wire': path.resolve(__dirname, '../jinn/src/shared/fallback-map-wire.ts'),
-      '@jinn/fallback-chain-wire': path.resolve(__dirname, '../jinn/src/shared/fallback-chain-wire.ts'),
-      '@jinn/model-id': path.resolve(__dirname, '../jinn/src/shared/model-id.ts'),
-      '@jinn/codename': path.resolve(__dirname, '../jinn/src/shared/codename-constant.ts'),
+      '@hundredfold/plugin-sdk': path.resolve(__dirname, 'src/plugins/sdk/index.ts'),
+      '@hundredfold/fallback-map-wire': path.resolve(__dirname, '../hundredfold/src/shared/fallback-map-wire.ts'),
+      '@hundredfold/fallback-chain-wire': path.resolve(__dirname, '../hundredfold/src/shared/fallback-chain-wire.ts'),
+      '@hundredfold/model-id': path.resolve(__dirname, '../hundredfold/src/shared/model-id.ts'),
+      '@hundredfold/codename': path.resolve(__dirname, '../hundredfold/src/shared/codename-constant.ts'),
     },
   },
 })

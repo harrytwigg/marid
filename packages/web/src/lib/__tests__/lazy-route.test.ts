@@ -37,8 +37,8 @@ describe('consumeChunkReloadRetry', () => {
       get length() { return storage.size },
     } as Storage
 
-    expect(consumeChunkReloadRetry(adapter, 'jinn:chunk-retry:/limits')).toBe(true)
-    expect(consumeChunkReloadRetry(adapter, 'jinn:chunk-retry:/limits')).toBe(false)
+    expect(consumeChunkReloadRetry(adapter, 'hundredfold:chunk-retry:/limits')).toBe(true)
+    expect(consumeChunkReloadRetry(adapter, 'hundredfold:chunk-retry:/limits')).toBe(false)
   })
 })
 

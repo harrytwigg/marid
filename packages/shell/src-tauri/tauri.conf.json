@@ -21,11 +21,11 @@
   "plugins": {
     "deep-link": {
       "desktop": {
-        "schemes": ["jinn"]
+        "schemes": ["hundredfold", "jinn"]
       },
       "mobile": [
         {
-          "scheme": ["jinn"],
+          "scheme": ["hundredfold", "jinn"],
           "appLink": false
         }
       ]

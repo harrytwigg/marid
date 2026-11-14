@@ -5,10 +5,10 @@ import { expect, type Page } from '@playwright/test'
 export type Rect = { left: number; top: number; width: number; height: number }
 export type DropRegion = 'left' | 'right' | 'top' | 'bottom' | 'between' | 'end'
 
-const home = process.env.JINN_VERIFY_HOME
-const baseUrl = process.env.JINN_VERIFY_BASE_URL
+const home = process.env.HUNDREDFOLD_VERIFY_HOME
+const baseUrl = process.env.HUNDREDFOLD_VERIFY_BASE_URL
 
-if (!home || !baseUrl) throw new Error('JINN_VERIFY_HOME and JINN_VERIFY_BASE_URL are required')
+if (!home || !baseUrl) throw new Error('HUNDREDFOLD_VERIFY_HOME and HUNDREDFOLD_VERIFY_BASE_URL are required')
 
 export function gatewayToken(): string {
   const gateway = JSON.parse(fs.readFileSync(path.join(home!, 'gateway.json'), 'utf8')) as { token?: unknown }
@@ -122,7 +122,7 @@ export async function dragSession(
 
 export async function setWorkingSet(page: Page, sessionIds: string[]): Promise<void> {
   await page.evaluate(({ ids }) => {
-    localStorage.setItem('jinn-chat-working-set', JSON.stringify({
+    localStorage.setItem('hundredfold-chat-working-set', JSON.stringify({
       version: 1,
       sessionIds: ids,
       focusedId: ids[0],

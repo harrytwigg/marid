@@ -52,7 +52,7 @@ function RouteLocation() {
   return <output data-testid="route-location">{location.pathname}{location.search}</output>
 }
 const routeLocation = () => screen.getAllByTestId('route-location')[0].textContent
-const savedTabs = () => JSON.parse(localStorage.getItem('jinn-chat-tabs') || '{}') as { tabs?: Array<{ sessionId?: string }>; activeIndex?: number }
+const savedTabs = () => JSON.parse(localStorage.getItem('hundredfold-chat-tabs') || '{}') as { tabs?: Array<{ sessionId?: string }>; activeIndex?: number }
 
 function renderChatPage(entry: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -63,7 +63,7 @@ function renderChatPage(entry: string) {
 describe('the chat page opened on a warm chat list', () => {
   beforeEach(() => {
     localStorage.clear()
-    localStorage.setItem('jinn-chat-tabs', JSON.stringify({
+    localStorage.setItem('hundredfold-chat-tabs', JSON.stringify({
       tabs: [{ kind: 'session', sessionId: 'saved', label: 'saved', status: 'idle', unread: false, pinned: true }],
       activeIndex: 0,
     }))

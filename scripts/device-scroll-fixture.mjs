@@ -5,7 +5,7 @@
 // run them, so the only way to see the real behaviour is a real phone, and the
 // only way a phone reaches a loopback sandbox is a bind it can route to.
 //
-// Runs between `jinn-sandbox.sh create` and `start`, because the transcript store
+// Runs between `hundredfold-sandbox.sh create` and `start`, because the transcript store
 // is the home's sqlite registry and the gateway holds it open once it is running.
 
 import fs from "node:fs"
@@ -17,14 +17,15 @@ import { createRequire } from "node:module"
 // either is not disposable no matter what it is called, and this script rewrites
 // the config and inserts rows.
 const PROTECTED_PORTS = new Set([7777, 7788])
-const PRODUCTION_HOME_NAME = ".jinn"
+// The default home under the current name and under the one an older build gave it.
+const PRODUCTION_HOME_NAMES = [".hundredfold", ".jinn"] // rename:keep
 
 const SESSION_ID = "device-scroll-check"
 const EXCHANGES = 110
 
 const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..")
-const requireFromJinn = createRequire(path.join(repoRoot, "packages/jinn/package.json"))
-const YAML = requireFromJinn("yaml")
+const requireFromHundredfold = createRequire(path.join(repoRoot, "packages/hundredfold/package.json"))
+const YAML = requireFromHundredfold("yaml")
 
 // The Node this checkout's native addons are compiled against. Read rather than
 // written down so it cannot drift from the version pnpm actually enforces.
@@ -35,7 +36,7 @@ function parseArgs(argv) {
   const args = new Map()
   for (let i = 2; i < argv.length; i += 2) args.set(argv[i], argv[i + 1])
   const home = args.get("--home")
-  if (!home) throw new Error("--home <sandbox home> is required, e.g. --home ~/.jinn-qa-flick")
+  if (!home) throw new Error("--home <sandbox home> is required, e.g. --home ~/.hundredfold-qa-flick")
   return { home: path.resolve(home.replace(/^~(?=$|\/)/, os.homedir())) }
 }
 
@@ -46,7 +47,7 @@ function parseArgs(argv) {
  * @param {{ gateway?: { port?: number } }} config
  */
 export function assertDisposableHome(home, config) {
-  if (path.basename(home) === PRODUCTION_HOME_NAME) {
+  if (PRODUCTION_HOME_NAMES.includes(path.basename(home))) {
     throw new Error(`${home} is the production instance home; pass a throwaway sandbox home instead`)
   }
   const port = config.gateway?.port
@@ -162,7 +163,7 @@ function report(home, port, seeded) {
   }
   for (const address of addresses) console.log(`  http://${address}:${port}/?session=${SESSION_ID}`)
   console.log("\nA non-loopback bind always requires auth. Pair the phone with the code from:")
-  console.log(`  jinn -i ${instance} pair`)
+  console.log(`  hundredfold -i ${instance} pair`)
 }
 
 /**
@@ -223,7 +224,7 @@ export function prepareSandbox(home, openDatabase) {
 
 function main() {
   const { home } = parseArgs(process.argv)
-  const Database = requireFromJinn("better-sqlite3")
+  const Database = requireFromHundredfold("better-sqlite3")
   const { seeded, port } = prepareSandbox(home, (file) => new Database(file))
   report(home, port, seeded)
 }

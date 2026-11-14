@@ -1,9 +1,9 @@
 // Todos v2 slice 6 — the ONE client-side legality map (design-doc §5, §7.3).
-// Mirrors packages/jinn/src/work-items/transitions.ts for a MANUAL move made on
+// Mirrors packages/hundredfold/src/work-items/transitions.ts for a MANUAL move made on
 // the operator (human) surface: board drag, the status pickers, and keyboard
 // moves all consume this module — never their own edge lists. The data lives in
 // transition-edges.json; the gateway parity test
-// (packages/jinn/src/work-items/__tests__/board-legality-parity.test.ts) probes
+// (packages/hundredfold/src/work-items/__tests__/board-legality-parity.test.ts) probes
 // the real transition() against that file, so drift fails a build, not a user.
 //
 // The UI pre-checks; the server stays the authority. A runtime refusal (version

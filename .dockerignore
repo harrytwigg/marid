@@ -38,11 +38,11 @@ coverage
 # whatever a maintainer has lying around into the image.
 .env
 .env.local
-packages/jinn/.npmrc
+packages/hundredfold/.npmrc
 .worktrees/
 .superpowers/
 .hermes/
-.jinn-*-sprint/
+.hundredfold-*-sprint/
 .tmp-*
 
 # Container definitions do not belong in their own build context; the override

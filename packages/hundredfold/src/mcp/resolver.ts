@@ -1,0 +1,289 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import type { McpGlobalConfig, McpServerConfig, McpServerStdioConfig, McpServerUrlConfig, Employee, HundredfoldToolset, ResolvedMcpConfig } from "../shared/types.js";
+import { HUNDREDFOLD_HOME } from "../shared/paths.js";
+import { logger } from "../shared/logger.js";
+import { resolveEnvVar } from "../shared/env-ref.js";
+import { wrapServersWithScrub } from "./env-scrub.js";
+import { decideHundredfoldAttachment } from "./attachment.js";
+import { MCP_TOOLSET_ARG } from "./identity.js";
+import { isBuiltinMcpName } from "./builtin-name.js";
+import { NAMES } from "../shared/codename.js";
+
+export type { ResolvedMcpConfig } from "../shared/types.js";
+
+// The capability set lives in mcp/attachment.ts (the attachment decision
+// consults it; keeping it there avoids an import cycle) and is re-exported
+// here so existing importers (sessions/manager, gateway/api, engine adapters,
+// tests) keep their single accustomed source.
+export { MCP_CAPABLE_ENGINES, isMcpCapableEngine } from "./attachment.js";
+
+/**
+ * Resolve the MCP servers that should be available for a given employee
+ * based on global config and employee-level overrides.
+ *
+ * GRS-017e: membership of the built-in `hundredfold` server is decided in exactly ONE
+ * place — `decideHundredfoldAttachment` (mcp/attachment.ts), composing the master
+ * flag × engine capability × per-engine opt-out × per-employee override × the
+ * authed-smoke gate. `engine` is optional for backward compatibility: when
+ * omitted, the caller has already gated on `isMcpCapableEngine` (both
+ * production call sites do) and per-engine opt-outs cannot apply.
+ */
+export function resolveMcpServers(
+  globalMcp: McpGlobalConfig | undefined,
+  employee?: Employee,
+  engine?: string,
+  /** The name the instance registers the built-in server under (mcp/builtin-name.ts). */
+  builtin: string = NAMES.codename,
+): ResolvedMcpConfig {
+  const servers: Record<string, McpServerConfig> = {};
+  const hundredfoldDecision = decideHundredfoldAttachment({ globalMcp, employee, engine });
+
+  if (!globalMcp) {
+    // No `mcp:` section at all. A per-employee force-on (hundredfoldMcp: true) still
+    // attaches the builtin — the pilot needs no other MCP config — otherwise
+    // today's empty set, byte-identical.
+    if (hundredfoldDecision.attach) servers[builtin] = buildHundredfoldServerSpec();
+    return { mcpServers: servers };
+  }
+
+  // Build the full set of available MCP servers from global config
+  const available = buildAvailableServers(globalMcp, hundredfoldDecision.attach ? builtin : undefined);
+
+  // Determine which servers this employee gets
+  const employeeMcp = employee?.mcp;
+
+  if (employeeMcp === false) {
+    // Employee explicitly opted out of all MCP servers. hundredfoldMcp: true is more
+    // specific and wins for the builtin only (decided above).
+    return { mcpServers: hundredfoldDecision.attach ? { [builtin]: available[builtin] ?? buildHundredfoldServerSpec() } : {} };
+  }
+
+  if (Array.isArray(employeeMcp)) {
+    // Employee wants only specific servers
+    for (const name of employeeMcp) {
+      if (isBuiltinMcpName(name)) {
+        // The builtin is governed by the attachment decision, not availability;
+        // copying here (list order) keeps the pre-017e set shape when attached.
+        // Either reserved name asks for it: the list may predate the instance's switch-over.
+        if (hundredfoldDecision.attach) servers[builtin] = available[builtin] ?? buildHundredfoldServerSpec();
+        else logger.warn(`Employee ${employee?.name} requests MCP server "${name}" but it is not attached: ${hundredfoldDecision.reason}`);
+        continue;
+      }
+      if (available[name]) {
+        servers[name] = available[name];
+      } else {
+        logger.warn(`Employee ${employee?.name} requests MCP server "${name}" but it's not configured`);
+      }
+    }
+    // Force-on (hundredfoldMcp: true) attaches even when the allowlist omits "hundredfold".
+    if (hundredfoldDecision.attach && !servers[builtin]) servers[builtin] = available[builtin] ?? buildHundredfoldServerSpec();
+  } else {
+    // Employee gets all enabled servers (default behavior, or mcp: true)
+    Object.assign(servers, available);
+  }
+
+  return { mcpServers: servers };
+}
+
+/**
+ * The names of the instance MCP servers `mcp:` in the config enables, beside the built-in
+ * `hundredfold`: what a department's `mcp` allow-list can match. Nothing is configured without an
+ * `mcp:` section.
+ */
+export function configuredMcpServerNames(globalMcp: McpGlobalConfig | undefined): string[] {
+  if (!globalMcp) return [];
+  return Object.keys(buildAvailableServers(globalMcp, undefined));
+}
+
+/**
+ * The built-in `hundredfold` MCP server spec — command = the same node running the
+ * gateway; args = the compiled entry that sits next to this module in dist
+ * (`import.meta.url` resolves it robustly across worktree/dist without a
+ * hardcoded path). REQUIRED non-secret env (GRS-018 unified model):
+ *   - HUNDREDFOLD_GATEWAY_URL: so a non-default sandbox port is reachable.
+ *   - HUNDREDFOLD_HOME: so the server can fall back to reading its bearer from the
+ *     0600 <HUNDREDFOLD_HOME>/gateway.json when the engine gives MCP subprocesses a
+ *     CLEAN env (codex does — probe-verified) and the token therefore cannot
+ *     arrive by inheritance. Same-uid trust boundary the token already lives
+ *     in; the token itself is still NEVER serialized into a config file or
+ *     CLI arg (design doc §3, Codex [Major]).
+ *   - HUNDREDFOLD_SESSION_ID joins this set per session via attachSessionIdentity
+ *     (mcp/identity.ts), not here — the resolver output is session-agnostic.
+ */
+export function buildHundredfoldServerSpec(toolset?: HundredfoldToolset): McpServerStdioConfig {
+  const entry = fileURLToPath(new URL("./server-entry.js", import.meta.url));
+  const server: McpServerStdioConfig = { command: process.execPath, args: toolset ? [entry, MCP_TOOLSET_ARG, toolset] : [entry] };
+  const url = process.env.HUNDREDFOLD_GATEWAY_URL;
+  server.env = { ...(url ? { HUNDREDFOLD_GATEWAY_URL: url } : {}), HUNDREDFOLD_HOME };
+  return server;
+}
+
+/**
+ * Build the map of all available (enabled) MCP servers from global config.
+ * `attachHundredfold` is the GRS-017e attachment decision (decideHundredfoldAttachment) —
+ * hundredfold membership is decided there, never here; this function only places the
+ * spec at its pre-017e position so attached sets keep their exact shape.
+ */
+function buildAvailableServers(config: McpGlobalConfig, attachHundredfold: string | undefined): Record<string, McpServerConfig> {
+  const servers: Record<string, McpServerConfig> = {};
+
+  // Browser automation via Playwright
+  // NOTE: these must be REAL npm packages. The previous specs pointed at
+  // @anthropic-ai/mcp-server-{playwright,puppeteer}, which do not exist on
+  // npm — the server never attached, and worse, engine adapters serialized the
+  // dead spec as a per-session override that SHADOWED a working browser MCP in
+  // the engine's own user config (found via FitBot QA browser-hands test,
+  // 2026-07-11). @playwright/mcp is the official Playwright MCP server.
+  if (config.browser?.enabled !== false) {
+    const provider = config.browser?.provider || "playwright";
+    if (provider === "playwright") {
+      servers.browser = {
+        command: "npx",
+        args: ["-y", "@playwright/mcp@latest"],
+      };
+    } else if (provider === "puppeteer") {
+      servers.browser = {
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-puppeteer"],
+      };
+    }
+  }
+
+  // Web search via Brave
+  if (config.search?.enabled) {
+    const apiKey = resolveEnvVar(config.search.apiKey);
+    if (apiKey) {
+      servers.search = {
+        command: "npx",
+        args: ["-y", "brave-search-mcp"],
+        env: { BRAVE_API_KEY: apiKey },
+      };
+    } else {
+      logger.warn("MCP search enabled but no API key configured (set mcp.search.apiKey or BRAVE_API_KEY env var)");
+    }
+  }
+
+  // Web fetch (content extraction)
+  // NOTE: the official reference fetch server (mcp-server-fetch) is a Python
+  // package run via uvx; the previous @anthropic-ai/mcp-server-fetch npm spec
+  // does not exist on npm and never attached (same class of bug as browser
+  // above). Requires uv to be installed (https://docs.astral.sh/uv/).
+  if (config.fetch?.enabled) {
+    servers.fetch = {
+      command: "uvx",
+      args: ["mcp-server-fetch"],
+    };
+  }
+
+  // Built-in `hundredfold` MCP server — exposes company primitives (org, sessions,
+  // work items, workflows, …) to MCP-capable engines as a thin HTTP client to
+  // the local gateway (GRS-012b). Membership was decided by
+  // decideHundredfoldAttachment (GRS-017e): v0.26 defaults the built-in belt ON for
+  // upgraded instances with no new MCP block. `mcp.gateway.enabled: false`
+  // remains the explicit kill switch.
+  if (attachHundredfold) {
+    servers[attachHundredfold] = buildHundredfoldServerSpec();
+  }
+
+  // Custom user-defined MCP servers
+  if (config.custom) {
+    for (const [name, serverConfig] of Object.entries(config.custom)) {
+      if (serverConfig.enabled === false) continue;
+      // Both codenames are RESERVED names for the built-in gateway server, whichever one the
+      // instance registers it under. A custom server must never override it — otherwise engine adapters that treat `hundredfold` as the
+      // trusted built-in (e.g. the grok/codex MCP wiring, which assume it carries no
+      // secret in command/args) could serialize a user-controlled spec's secret args
+      // to disk/argv. Skip a custom `hundredfold` with a warning (GRS-012c, Codex review).
+      if (isBuiltinMcpName(name)) {
+        logger.warn(`Ignoring custom MCP server "${name}": that name is reserved for the built-in gateway server.`);
+        continue;
+      }
+      const { enabled, ...rest } = serverConfig;
+
+      // URL-based MCP server (HTTP/SSE transport)
+      // Claude Code requires "type": "sse" for URL-based servers
+      if ("url" in rest && (rest as McpServerUrlConfig).url) {
+        servers[name] = { type: "sse", ...rest } as McpServerConfig;
+        continue;
+      }
+
+      // Stdio-based MCP server — resolve env vars into a FRESH object. The
+      // `...rest` spread is shallow, so `rest.env` still aliases the shared config's
+      // nested env; mutating it in place would permanently expand `${SECRET}` into
+      // the live config (and, now that this resolver runs for every MCP-capable
+      // engine per session, do so repeatedly on shared state). Build a new map so
+      // the resolver stays pure and idempotent.
+      if ("env" in rest && rest.env) {
+        const resolvedEnv: Record<string, string> = {};
+        for (const [key, value] of Object.entries(rest.env)) {
+          resolvedEnv[key] = resolveEnvVar(value) || value;
+        }
+        (rest as McpServerStdioConfig).env = resolvedEnv;
+      }
+      servers[name] = rest as McpServerConfig;
+    }
+  }
+
+  // GRS-018 hardening (§3a): wrap every NON-builtin stdio server's command in
+  // the env-scrub launcher so the vendor CLI cannot forward HUNDREDFOLD_GATEWAY_TOKEN
+  // to the third-party server subprocess it spawns. The builtin `hundredfold` server
+  // is exempt (its inherited token is the proven auth path); URL servers have
+  // no command to wrap. Applied here — the single choke point every engine's
+  // resolved set flows through — so the guarantee is engine-independent.
+  return wrapServersWithScrub(servers);
+}
+
+/**
+ * Write a resolved MCP config to a temp file and return the path.
+ * Claude Code reads this via --mcp-config <path>.
+ */
+export function writeMcpConfigFile(config: ResolvedMcpConfig, sessionId: string): string {
+  const safeSessionId = sessionId.replace(/[^A-Za-z0-9_.-]/g, "_");
+  const tmpDir = path.join(HUNDREDFOLD_HOME, "tmp", "mcp", safeSessionId);
+  fs.mkdirSync(tmpDir, { recursive: true, mode: 0o700 });
+  try { fs.chmodSync(tmpDir, 0o700); } catch { /* best effort on filesystems without POSIX modes */ }
+  const filePath = path.join(tmpDir, "config.json");
+  fs.writeFileSync(filePath, JSON.stringify(config, null, 2), { mode: 0o600 });
+  try { fs.chmodSync(filePath, 0o600); } catch { /* best effort on filesystems without POSIX modes */ }
+  return filePath;
+}
+
+/**
+ * Clean up a temp MCP config file.
+ */
+export function cleanupMcpConfigFile(sessionId: string): void {
+  const safeSessionId = sessionId.replace(/[^A-Za-z0-9_.-]/g, "_");
+  const dirPath = path.join(HUNDREDFOLD_HOME, "tmp", "mcp", safeSessionId);
+  const filePath = path.join(dirPath, "config.json");
+  try {
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    fs.rmdirSync(dirPath);
+  } catch {
+    // Ignore cleanup errors
+  }
+}
+
+/**
+ * Sweep temp MCP config dirs left behind by sessions the gateway no longer knows
+ * about. Their lifetime is owned by the PTY, so a hard kill can orphan them.
+ * Returns the number of directories removed.
+ */
+export function sweepOrphanMcpConfigFiles(liveSessionIds: string[]): number {
+  const root = path.join(HUNDREDFOLD_HOME, "tmp", "mcp");
+  if (!fs.existsSync(root)) return 0;
+  const keep = new Set(liveSessionIds.map((id) => id.replace(/[^A-Za-z0-9_.-]/g, "_")));
+  let removed = 0;
+  for (const entry of fs.readdirSync(root)) {
+    if (keep.has(entry)) continue;
+    try {
+      fs.rmSync(path.join(root, entry), { recursive: true, force: true });
+      removed++;
+    } catch {
+      // Ignore — best effort
+    }
+  }
+  return removed;
+}
+

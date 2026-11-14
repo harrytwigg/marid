@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import type React from 'react'
 import { ChatPane } from '../chat-pane'
-import type { GatewayEvent } from '@jinn/gateway-events'
+import type { GatewayEvent } from '@hundredfold/gateway-events'
 import { CHAT_SESSION_DND_MIME } from '@/routes/chat/chat-session-dnd'
 
 let featuresState = {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import fixtureJson from "../../../../jinn/src/shared/__tests__/fixtures/company-activity-blocks.json"
+import fixtureJson from "../../../../hundredfold/src/shared/__tests__/fixtures/company-activity-blocks.json"
 import {
   applyBlockEnvelopeToMessages,
   blockFallbackContent,

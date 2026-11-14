@@ -9,7 +9,7 @@
  * A measured rate on its own cannot answer that, because a 60Hz display and a
  * webview pinned to 60 read identically. So the probe refuses to guess: it
  * compares its reading against the display's own maximum, which the shell
- * publishes as `window.__jinnDisplayHz` (see src-tauri/src/display.rs), and says
+ * publishes as `window.__hundredfoldDisplayHz` (see src-tauri/src/display.rs), and says
  * `indeterminate` whenever the two cannot be told apart.
  *
  * This is not `scripts/frame-probe.js`. That one asks whether a
@@ -115,7 +115,7 @@
     marker.remove()
 
     const measuredHz = (intervals.length / elapsed) * 1000
-    const displayHz = typeof window.__jinnDisplayHz === 'number' ? window.__jinnDisplayHz : null
+    const displayHz = typeof window.__hundredfoldDisplayHz === 'number' ? window.__hundredfoldDisplayHz : null
     const sorted = intervals.slice().sort((a, b) => a - b)
     const { verdict, reason } = judge(measuredHz, displayHz)
 

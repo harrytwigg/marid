@@ -2,7 +2,7 @@
 // The incidents this repo keeps re-living, as a check. Every rule below is
 // something that actually broke: a personal path published to npm, a sandbox
 // served on the production port, a home derived from a literal that ignored
-// JINN_HOME, an env read that drifted away from the config layer, a spawn whose
+// HUNDREDFOLD_HOME, an env read that drifted away from the config layer, a spawn whose
 // unread pipe deadlocked once the child filled it.
 //
 // The gate is diff-scoped on purpose. Tree-wide these rules match hundreds of
@@ -71,27 +71,27 @@ const RULES = [
   {
     name: "personal-path",
     message: "an absolute /Users/ path — this repo is published to npm, and the path names its author's machine",
-    fix: "Derive the path at runtime — resolveJinnHome(), os.homedir(), or mkdtempSync(os.tmpdir()) in a fixture — or write a neutral placeholder.",
+    fix: "Derive the path at runtime — resolveHundredfoldHome(), os.homedir(), or mkdtempSync(os.tmpdir()) in a fixture — or write a neutral placeholder.",
     scans: (relPath) => extensionIn(relPath, TEXT_EXTENSIONS) && !FROZEN_MIGRATIONS.test(relPath),
     find: (text) => matchingLines(text, /\/Users\//),
   },
   {
     name: "hardcoded-home",
-    message: "a .jinn home built from the user's home directory — it ignores JINN_HOME and JINN_INSTANCE, so it reads the wrong instance",
-    fix: "Call resolveJinnHome() from src/shared/home.ts, which honours JINN_HOME first and JINN_INSTANCE second.",
+    message: "a .hundredfold home built from the user's home directory — it ignores HUNDREDFOLD_HOME and HUNDREDFOLD_INSTANCE, so it reads the wrong instance",
+    fix: "Call resolveHundredfoldHome() from src/shared/home.ts, which honours HUNDREDFOLD_HOME first and HUNDREDFOLD_INSTANCE second.",
     allow: new Set([
-      "packages/jinn/src/shared/home.ts",
-      "packages/jinn/src/shared/paths.ts",
-      "packages/jinn/src/instances/directory.ts",
+      "packages/hundredfold/src/shared/home.ts",
+      "packages/hundredfold/src/shared/paths.ts",
+      "packages/hundredfold/src/instances/directory.ts",
     ]),
     scans: (relPath) => underPackages(relPath) && extensionIn(relPath, CODE_EXTENSIONS),
     // Both halves must be on one line: the home call, and a literal that names a
-    // `.jinn` directory. Other tools' homes (".codex", ".grok", ".gemini") are
+    // `.hundredfold` directory. Other tools' homes (".codex", ".grok", ".gemini") are
     // ours to hardcode — they are those tools' contracts, not our instance root.
     find: (text) =>
       matchingLines(
         text,
-        /(?:(?:os\.)?homedir\(\)|process\.env\.(?:HOME|USERPROFILE))[^\n]*["'`]\.jinn[\w-]*["'`]/,
+        /(?:(?:os\.)?homedir\(\)|process\.env\.(?:HOME|USERPROFILE))[^\n]*["'`]\.hundredfold[\w-]*["'`]/,
       ),
   },
   {
@@ -106,10 +106,10 @@ const RULES = [
     message: "a literal gateway port — 7777 is the production gateway and 7788 the operator's demo instance, and whatever owns that port gets killed by the lifecycle",
     fix: "Read the port from the loaded config or take it as a parameter. DEFAULT_CONFIG in src/cli/setup.ts is the one place the literal belongs.",
     allow: new Set([
-      "packages/jinn/src/shared/config.ts",
-      "packages/jinn/src/cli/setup.ts",
-      "packages/jinn/src/instances/directory.ts",
-      "packages/jinn/src/instances/create.ts",
+      "packages/hundredfold/src/shared/config.ts",
+      "packages/hundredfold/src/cli/setup.ts",
+      "packages/hundredfold/src/instances/directory.ts",
+      "packages/hundredfold/src/instances/create.ts",
       "packages/web/vite.config.ts",
     ]),
     scans: (relPath) => underPackages(relPath) && extensionIn(relPath, CODE_EXTENSIONS),
@@ -118,19 +118,19 @@ const RULES = [
   {
     name: "scattered-env",
     // Scoped to packages/*/src: the CLI entry, the Vitest harness and the Vite
-    // config all read env by definition, and tests set JINN_HOME to isolate
+    // config all read env by definition, and tests set HUNDREDFOLD_HOME to isolate
     // themselves, which is the behaviour we want rather than a footgun.
-    message: "a process.env read outside the config layer — env handling spread across modules is how JINN_HOME drifts between the gateway and the children it spawns",
-    fix: "Read it through loadConfig() or resolveJinnHome(), or thread it in as a parameter (`env: NodeJS.ProcessEnv = process.env`) so a caller can override it.",
+    message: "a process.env read outside the config layer — env handling spread across modules is how HUNDREDFOLD_HOME drifts between the gateway and the children it spawns",
+    fix: "Read it through loadConfig() or resolveHundredfoldHome(), or thread it in as a parameter (`env: NodeJS.ProcessEnv = process.env`) so a caller can override it.",
     allow: new Set([
-      "packages/jinn/src/shared/config.ts",
-      "packages/jinn/src/shared/home.ts",
-      "packages/jinn/src/shared/paths.ts",
-      "packages/jinn/src/shared/child-env.ts",
-      "packages/jinn/src/mcp/env-scrub.ts",
-      "packages/jinn/src/mcp/scrub-entry.ts",
-      "packages/jinn/src/mcp/server-entry.ts",
-      "packages/jinn/src/cli/container-contract.ts",
+      "packages/hundredfold/src/shared/config.ts",
+      "packages/hundredfold/src/shared/home.ts",
+      "packages/hundredfold/src/shared/paths.ts",
+      "packages/hundredfold/src/shared/child-env.ts",
+      "packages/hundredfold/src/mcp/env-scrub.ts",
+      "packages/hundredfold/src/mcp/scrub-entry.ts",
+      "packages/hundredfold/src/mcp/server-entry.ts",
+      "packages/hundredfold/src/cli/container-contract.ts",
     ]),
     scans: (relPath) =>
       /^packages\/[^/]+\/src\//.test(relPath) && extensionIn(relPath, CODE_EXTENSIONS) && !isTest(relPath),

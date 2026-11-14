@@ -4,7 +4,7 @@
 
 export type SendDelivery = 'queue' | 'now'
 
-export const SEND_DELIVERY_STORAGE_KEY = 'jinn.chatSendDelivery'
+export const SEND_DELIVERY_STORAGE_KEY = 'hundredfold.chatSendDelivery'
 
 /** The remembered choice, defaulting to queue: not interrupting is the
  *  non-destructive arrival, and send-now stays one toggle (or Alt+Enter) away. */

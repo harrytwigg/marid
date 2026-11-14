@@ -13,10 +13,10 @@ import { gatewayToken, openPage, sandboxFile, screenshotPath, SIZES, tallerFor, 
  */
 
 const hostHome = path.dirname(sandboxFile())
-const stageRoot = path.join(hostHome, '.jinn-departments', '.instances', path.basename(sandboxFile()))
+const stageRoot = path.join(hostHome, '.hundredfold-departments', '.instances', path.basename(sandboxFile()))
 const stage = path.join(stageRoot, 'side-project')
 const knowledge = (...segments: string[]) => sandboxFile('knowledge', 'departments', 'side-project', ...segments)
-const artifactsDir = process.env.JINN_VERIFY_ARTIFACTS!
+const artifactsDir = process.env.HUNDREDFOLD_VERIFY_ARTIFACTS!
 const seed = JSON.parse(fs.readFileSync(sandboxFile('departments-seed.json'), 'utf8')) as { sessions: Record<string, string>; legacyStage: string; legacyStageIno: number }
 
 function tree(dir: string, prefix = ''): string[] {
@@ -28,15 +28,15 @@ function tree(dir: string, prefix = ''): string[] {
 
 function scopedHeaders(sessionId: string): Record<string, string> {
   const capability = execFileSync(process.execPath, [path.join(process.cwd(), 'scripts', 'mint-session-capability.mjs'), sessionId], {
-    env: { ...process.env, JINN_HOME: sandboxFile() },
+    env: { ...process.env, HUNDREDFOLD_HOME: sandboxFile() },
     encoding: 'utf8',
   }).trim()
   return {
     authorization: `Bearer ${gatewayToken()}`,
     'content-type': 'application/json',
-    'x-jinn-tool-call': 'jinn-mcp',
-    'x-jinn-caller-session': sessionId,
-    'x-jinn-session-capability': capability,
+    'x-hundredfold-tool-call': 'hundredfold-mcp',
+    'x-hundredfold-caller-session': sessionId,
+    'x-hundredfold-session-capability': capability,
   }
 }
 
@@ -56,7 +56,7 @@ test.describe.configure({ mode: 'serial' })
 
 test('a stage directory made at the old path is moved to the instance\'s own stage root at boot, keeping its inode', async () => {
   await eventually(() => (fs.existsSync(path.join(stage, 'CLAUDE.md')) ? true : undefined), 'the stage directory')
-  expect(stage).toBe(path.join(hostHome, '.jinn-departments', '.instances', path.basename(sandboxFile()), 'side-project'))
+  expect(stage).toBe(path.join(hostHome, '.hundredfold-departments', '.instances', path.basename(sandboxFile()), 'side-project'))
   expect(fs.existsSync(seed.legacyStage)).toBe(false)
   expect(fs.statSync(stage).ino).toBe(seed.legacyStageIno)
   // The old file was replaced by the generated one, in place.

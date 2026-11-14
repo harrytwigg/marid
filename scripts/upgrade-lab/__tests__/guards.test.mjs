@@ -77,7 +77,7 @@ test("creates a nonce-owned disposable layout outside the live instance", () => 
   const root = createLabRoot()
   try {
     const layout = assertIsolatedLayout(root)
-    assert.ok(fs.existsSync(path.join(root, ".jinn-upgrade-lab-nonce")))
+    assert.ok(fs.existsSync(path.join(root, ".hundredfold-upgrade-lab-nonce")))
     assert.ok(layout.home.startsWith(`${root}${path.sep}`))
     assert.ok(Object.values(layout).every((value) => value.startsWith(root)))
   } finally {
@@ -87,7 +87,7 @@ test("creates a nonce-owned disposable layout outside the live instance", () => 
 })
 
 test("live sentinels ignore volatile session writes but detect stable instance changes", () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-live-sentinel-"))
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-live-sentinel-"))
   try {
     fs.mkdirSync(path.join(home, "sessions"), { recursive: true })
     fs.mkdirSync(path.join(home, "cron"), { recursive: true })
@@ -109,7 +109,7 @@ test("live sentinels ignore volatile session writes but detect stable instance c
 })
 
 test("rejects the real instance, nested paths, unsafe cleanup, and protected gateway ports", async () => {
-  const live = path.resolve(os.homedir(), ".jinn")
+  const live = path.resolve(os.homedir(), ".hundredfold")
   assert.throws(() => assertIsolatedLayout(live), /live instance/i)
   assert.throws(() => assertIsolatedLayout(path.join(live, "lab")), /live instance/i)
   const ordinary = fs.mkdtempSync(path.join(os.tmpdir(), "not-owned-"))
@@ -149,7 +149,7 @@ test("persists the chosen lab port into setup's config before gateway startup", 
   try {
     const layout = assertIsolatedLayout(root)
     const configPath = path.join(layout.home, "config.yaml")
-    fs.writeFileSync(configPath, "jinn:\n  version: 0.25.0\ngateway:\n  port: 7777 # setup default\n  host: 127.0.0.1\n")
+    fs.writeFileSync(configPath, "hundredfold:\n  version: 0.25.0\ngateway:\n  port: 7777 # setup default\n  host: 127.0.0.1\n")
 
     persistLabGatewayPort(layout.home, 21877)
 
@@ -185,7 +185,7 @@ test("start preflight refuses an occupied port owned by a foreign home", async (
         {
           probePortAvailable: async () => { throw new Error("EADDRINUSE") },
           lookupListeningPid: () => 4242,
-          readProcessJinnHome: () => path.join(root, "foreign-home"),
+          readProcessHundredfoldHome: () => path.join(root, "foreign-home"),
         },
       ),
       /foreign process.*4242.*refusing to start or restart/i,
@@ -214,10 +214,10 @@ test("self-restart preflight never invokes a restart against a PID outside the l
         },
         {
           lookupListeningPid: () => 4242,
-          readProcessJinnHome: () => foreignHome,
+          readProcessHundredfoldHome: () => foreignHome,
         },
       ),
-      /foreign.*JINN_HOME/i,
+      /foreign.*HUNDREDFOLD_HOME/i,
     )
     assert.deepEqual(restarts, [])
   } finally {
@@ -245,7 +245,7 @@ process.on("SIGTERM", () => server.close(() => process.exit(0)))
     listener = spawn(process.execPath, ["-e", source], {
       env: {
         PATH: process.env.PATH ?? "/usr/bin:/bin",
-        JINN_HOME: foreignHome,
+        HUNDREDFOLD_HOME: foreignHome,
         LAB_TEST_PORT: String(port),
       },
       stdio: ["ignore", "ignore", "inherit", "ipc"],
@@ -269,7 +269,7 @@ process.on("SIGTERM", () => server.close(() => process.exit(0)))
           },
         },
       ),
-      /foreign.*JINN_HOME/i,
+      /foreign.*HUNDREDFOLD_HOME/i,
     )
     assert.equal(restartInvoked, false)
     process.kill(listener.pid, 0)
@@ -292,11 +292,11 @@ process.on("SIGTERM", () => server.close(() => process.exit(0)))
   }
 })
 
-test("signal guard requires both disposable port ownership and disposable JINN_HOME", () => {
+test("signal guard requires both disposable port ownership and disposable HUNDREDFOLD_HOME", () => {
   const labHome = path.resolve(os.tmpdir(), "owned-upgrade-lab-home")
   const dependencies = {
     lookupListeningPid: () => 4242,
-    readProcessJinnHome: () => labHome,
+    readProcessHundredfoldHome: () => labHome,
   }
 
   assert.doesNotThrow(() => assertLabProcessTarget({ pid: 4242, port: 21877, labHome }, dependencies))
@@ -321,7 +321,7 @@ test("verified self-restart invokes the handoff only for the configured lab-owne
       },
       {
         lookupListeningPid: () => 4242,
-        readProcessJinnHome: () => layout.home,
+        readProcessHundredfoldHome: () => layout.home,
       },
     )
 
@@ -337,7 +337,7 @@ test("builds a minimal child environment rooted entirely in the lab", () => {
   try {
     const layout = assertIsolatedLayout(root)
     const env = buildMinimalEnvironment(layout, { PATH: process.env.PATH ?? "" })
-    for (const key of ["HOME", "JINN_HOME", "npm_config_prefix", "npm_config_cache", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "JINN_REGISTRY_PATH", "JINN_LOG_DIR", "JINN_ATTACHMENTS_DIR"]) {
+    for (const key of ["HOME", "HUNDREDFOLD_HOME", "npm_config_prefix", "npm_config_cache", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "HUNDREDFOLD_REGISTRY_PATH", "HUNDREDFOLD_LOG_DIR", "HUNDREDFOLD_ATTACHMENTS_DIR"]) {
       assert.ok(path.resolve(env[key]).startsWith(root), key)
     }
     assert.equal(env.OPENAI_API_KEY, undefined)
@@ -350,7 +350,7 @@ test("builds a minimal child environment rooted entirely in the lab", () => {
 
 test("waits past model discovery until the stub records the migration prompt", async () => {
   assert.equal(typeof upgradeLab.waitForJsonlRecord, "function")
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-upgrade-lab-jsonl-"))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-upgrade-lab-jsonl-"))
   const record = path.join(root, "stub-engine-invocations.jsonl")
   try {
     fs.writeFileSync(record, `${JSON.stringify({ argv: ["debug", "models"] })}\n`)
@@ -372,7 +372,7 @@ test("waits past model discovery until the stub records the migration prompt", a
 })
 
 test("native dependency rebuild enables scripts only for better-sqlite3 inside the installed package", () => {
-  const packageRoot = path.join(os.tmpdir(), "disposable-jinn-package")
+  const packageRoot = path.join(os.tmpdir(), "disposable-hundredfold-package")
   assert.deepEqual(buildNativeDependencyRebuild(packageRoot), {
     command: "npm",
     args: [
@@ -397,7 +397,7 @@ test("accepts pnpm's argument separator for the documented dry-run command", ext
 
 test("derives baseline and candidate versions instead of hard-coding an obsolete release pair", () => {
   assert.equal(typeof upgradeLab.readInstalledPackageVersion, "function")
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-upgrade-version-"))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-upgrade-version-"))
   try {
     fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "jinn-cli", version: "0.28.0" }))
     assert.equal(upgradeLab.readInstalledPackageVersion(root), "0.28.0")
@@ -453,7 +453,7 @@ test("migration handoff follows the candidate service result, except for the exp
 })
 
 test("three-way merge preserves a non-conflicting user append and target changes", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-merge-file-"))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-merge-file-"))
   try {
     const base = path.join(root, "base.md")
     const user = path.join(root, "user.md")
@@ -472,7 +472,7 @@ test("three-way merge preserves a non-conflicting user append and target changes
 
 test("stock verification uses materialized base and target hashes", () => {
   assert.equal(typeof upgradeLab.assertStockBundleApplied, "function")
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-stock-verification-"))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-stock-verification-"))
   try {
     const bundle = path.join(root, "materialized", "0.26.0")
     fs.mkdirSync(path.join(bundle, "files/base"), { recursive: true })
@@ -503,7 +503,7 @@ test("stock verification uses materialized base and target hashes", () => {
 
 test("materialized three-way merge preserves a genuine edit on top of personalization", () => {
   assert.equal(typeof upgradeLab.mergeBundle, "function")
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-materialized-merge-"))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-materialized-merge-"))
   try {
     const bundle = path.join(root, "materialized", "0.26.0")
     fs.mkdirSync(path.join(bundle, "files/base"), { recursive: true })
@@ -526,7 +526,7 @@ test("materialized three-way merge preserves a genuine edit on top of personaliz
 
 test("materialized migration chains apply every structured bundle in version order", () => {
   assert.equal(typeof upgradeLab.mergeMigrationChain, "function")
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-materialized-chain-"))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-materialized-chain-"))
   try {
     const migrations = path.join(root, "migrations")
     const snapshot = path.join(root, "snapshot")
@@ -577,7 +577,7 @@ test("materialized migration chains apply every structured bundle in version ord
 })
 
 test("materialized merge refuses unresolved placeholders", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-unresolved-merge-"))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-unresolved-merge-"))
   try {
     const bundle = path.join(root, "materialized", "0.26.0")
     fs.mkdirSync(path.join(bundle, "files/base"), { recursive: true })
@@ -598,7 +598,7 @@ test("materialized merge refuses unresolved placeholders", () => {
 })
 
 test("materialized merge carries an existing unresolved placeholder only for an untouched file", () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-carried-placeholder-"))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-carried-placeholder-"))
   try {
     const bundle = path.join(root, "materialized", "0.26.0")
     fs.mkdirSync(path.join(bundle, "files/base"), { recursive: true })
@@ -623,12 +623,12 @@ test("materialized merge carries an existing unresolved placeholder only for an 
 test("Docker invocation is network-isolated and mounts no host home", () => {
   const root = createLabRoot()
   try {
-    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-repo-fixture-"))
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-repo-fixture-"))
     const candidate = path.join(root, "candidate.tgz")
     const baseline = path.join(root, "v025.tgz")
     fs.writeFileSync(candidate, "candidate")
     fs.writeFileSync(baseline, "baseline")
-    const invocation = buildDockerInvocation({ repo, root, scenario: "stock", candidateTarball: candidate, baselineTarball: baseline, image: "jinn-upgrade-lab:test" })
+    const invocation = buildDockerInvocation({ repo, root, scenario: "stock", candidateTarball: candidate, baselineTarball: baseline, image: "hundredfold-upgrade-lab:test" })
     assert.equal(invocation.command, "docker")
     assert.ok(invocation.args.includes("none"))
     assert.ok(invocation.args.some((value) => value.includes(`src=${repo},dst=/workspace,readonly`)))
@@ -704,7 +704,7 @@ test("process cleanup filters to lab-owned PIDs before Node receives the process
       args: ["axeww", "-o", "pid=,command="],
     })
     assert.equal(pipeline.filter.command, "awk")
-    assert.ok(pipeline.filter.args.includes(`needle=JINN_HOME=${layout.home}`))
+    assert.ok(pipeline.filter.args.includes(`needle=HUNDREDFOLD_HOME=${layout.home}`))
     assert.match(pipeline.filter.args.at(-1), /print \$1/)
   } finally {
     removeLabRoot(root)
@@ -732,7 +732,7 @@ test("primary scenario failure wins when cleanup also fails", async () => {
 
 test("explicit Docker mode dispatches build and run without invoking the local scenario", async () => {
   const root = createLabRoot()
-  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-docker-repo-"))
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-docker-repo-"))
   try {
     const candidate = path.join(root, "candidate.tgz")
     const baseline = path.join(root, "baseline.tgz")

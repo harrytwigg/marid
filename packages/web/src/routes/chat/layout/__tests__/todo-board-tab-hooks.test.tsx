@@ -34,7 +34,7 @@ describe('a sub-board tab\'s stored state goes with the tab', () => {
 
     expect(tabsOf(result.current.layout)).not.toContain(board)
     expect(readSubBoardTabState('ACM-7')).toEqual({ depth: 'children', search: '' })
-    expect(localStorage.getItem('jinn-sub-board-tab:ACM-7')).toBeNull()
+    expect(localStorage.getItem('hundredfold-sub-board-tab:ACM-7')).toBeNull()
   })
 
   it('keeps it when the chat beside a pinned board closes', () => {

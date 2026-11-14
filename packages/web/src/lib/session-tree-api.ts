@@ -4,7 +4,7 @@ import { get, type BackgroundActivity, type DelegatedActivity } from "./api"
  * The tree a Todo caused, as the gateway serves it.
  *
  * These types live outside `lib/api.ts` to keep that file from growing further.
- * They mirror `packages/jinn/src/sessions/session-tree.ts` — change both.
+ * They mirror `packages/hundredfold/src/sessions/session-tree.ts` — change both.
  *
  * `LinkedSessionWire` is deliberately left alone: `parentSessionId`,
  * `workItemId` and `workItemRole` already arrive on it through its index

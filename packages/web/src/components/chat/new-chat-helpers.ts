@@ -1,4 +1,4 @@
-import type { FallbackChainsResponse } from '@jinn/fallback-chain-wire'
+import type { FallbackChainsResponse } from '@hundredfold/fallback-chain-wire'
 
 export interface NewSessionSelectorValue {
   engine?: string

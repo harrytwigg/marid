@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import type { FallbackHop } from '@jinn/fallback-chain-wire'
+import type { FallbackHop } from '@hundredfold/fallback-chain-wire'
 import type { Message } from '@/lib/conversations'
 import { ChatMessages } from '../chat-messages'
 import { FallbackHopCard, hopSentence, labelOfLinkKey, parseFallbackHop } from '../fallback-hop'

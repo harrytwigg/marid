@@ -69,7 +69,7 @@ export function FoldSummaryLine({ summary, closed, arriving, onToggle }: FoldSum
         <button
           type="button"
           data-fold-summary
-          style={arriving ? { animation: 'jinn-comm-rise 260ms var(--ease-smooth) 140ms both' } : undefined}
+          style={arriving ? { animation: 'hundredfold-comm-rise 260ms var(--ease-smooth) 140ms both' } : undefined}
           aria-expanded={!closed}
           aria-label={`${words.join(', ')}. ${closed ? 'Show the work' : 'Hide the work'}.`}
           onClick={onToggle}

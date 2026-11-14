@@ -1,4 +1,5 @@
-//! `jinn://` URLs, translated into routes inside the bundled dashboard.
+//! `hundredfold://` URLs (and the `jinn://` links older installs registered), translated into routes
+//! inside the bundled dashboard.
 
 use tauri::{AppHandle, Runtime, Url, WebviewWindow};
 use tauri_plugin_deep_link::DeepLinkExt;
@@ -28,7 +29,7 @@ fn navigate<R: Runtime>(window: &WebviewWindow<R>, urls: &[Url]) {
     };
 
     let Some(target) = route_on(&current, link) else {
-        eprintln!("{link} names no route — expected jinn://<route>, e.g. jinn://org");
+        eprintln!("{link} names no route — expected hundredfold://<route>, e.g. hundredfold://org");
         return;
     };
 
@@ -65,6 +66,14 @@ mod tests {
     fn a_bare_route_becomes_a_path() {
         assert_eq!(
             route("jinn://org").as_deref(),
+            Some("tauri://localhost/org")
+        );
+    }
+
+    #[test]
+    fn the_new_scheme_routes() {
+        assert_eq!(
+            route("hundredfold://org").as_deref(),
             Some("tauri://localhost/org")
         );
     }

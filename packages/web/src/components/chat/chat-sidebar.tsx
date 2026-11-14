@@ -107,9 +107,9 @@ const DIRECT_GROUP = "__direct__"
 const CRON_GROUP = "__cron__"
 const TERMINAL_GROUP = "__terminal__"
 
-const OLDER_EXPANDED_STORAGE_KEY = "jinn-sidebar-older-expanded"
-const PINNED_EXPANDED_STORAGE_KEY = "jinn-sidebar-pinned-expanded"
-const FOCUS_MODE_STORAGE_KEY = "jinn-sidebar-focus-mode"
+const OLDER_EXPANDED_STORAGE_KEY = "hundredfold-sidebar-older-expanded"
+const PINNED_EXPANDED_STORAGE_KEY = "hundredfold-sidebar-pinned-expanded"
+const FOCUS_MODE_STORAGE_KEY = "hundredfold-sidebar-focus-mode"
 const EMPTY_PINNED_SESSIONS = new Set<string>()
 
 /** Pinned rows shown before the section folds behind "N more pinned" — a long

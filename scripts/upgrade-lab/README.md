@@ -1,4 +1,4 @@
-# Jinn upgrade lab
+# Hundredfold upgrade lab
 
 This harness tests one exact candidate package against a real `jinn-cli@0.25.0`
 install in a nonce-owned disposable home. It refuses the live instance tree,
@@ -22,10 +22,10 @@ container, mount only the repository read-only and a new disposable output
 directory, and run the container with `--network none`. Never mount a host home.
 
 ```bash
-docker build -t jinn-upgrade-lab scripts/upgrade-lab
+docker build -t hundredfold-upgrade-lab scripts/upgrade-lab
 docker run --rm --network none \
   --mount type=bind,src="$PWD",dst=/workspace,readonly \
-  jinn-upgrade-lab --scenario stock --candidate-tarball /artifacts/jinn-cli-0.26.0.tgz
+  hundredfold-upgrade-lab --scenario stock --candidate-tarball /artifacts/jinn-cli-0.26.0.tgz
 ```
 
 Explicit `--docker` fails clearly when Docker is unavailable; omit the flag to

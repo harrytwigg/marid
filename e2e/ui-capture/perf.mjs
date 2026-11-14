@@ -8,8 +8,8 @@
 // Writes <out-dir>/perf.json (every frame gap per
 // run (`gaps`), so runs from separate launches can be pooled) and prints one summary line per run.
 //
-// Environment: JINN_PERF_RUNS (measured runs per variant, default 3), JINN_PERF_THROTTLE (CPU
-// slowdown, default 4), JINN_PERF_VARIANTS (comma list of theme-width, default all four).
+// Environment: HUNDREDFOLD_PERF_RUNS (measured runs per variant, default 3), HUNDREDFOLD_PERF_THROTTLE (CPU
+// slowdown, default 4), HUNDREDFOLD_PERF_VARIANTS (comma list of theme-width, default all four).
 //
 // This is software raster when /dev/dri is hidden (see README): a blur costs more there than on a
 // GPU, so compare the two builds with each other, never against a target.
@@ -21,9 +21,9 @@ import { THEMES, VIEWPORTS } from './screens.mjs'
 const [sandboxHome, baseUrl, outDir] = process.argv.slice(2)
 if (!sandboxHome || !baseUrl || !outDir) throw new Error('usage: perf.mjs <sandbox-home> <base-url> <out-dir>')
 
-const RUNS = Number(process.env.JINN_PERF_RUNS ?? 3)
-const THROTTLE = Number(process.env.JINN_PERF_THROTTLE ?? 4)
-const WANTED = process.env.JINN_PERF_VARIANTS?.split(',')
+const RUNS = Number(process.env.HUNDREDFOLD_PERF_RUNS ?? 3)
+const THROTTLE = Number(process.env.HUNDREDFOLD_PERF_THROTTLE ?? 4)
+const WANTED = process.env.HUNDREDFOLD_PERF_VARIANTS?.split(',')
 const { token } = JSON.parse(fs.readFileSync(path.join(sandboxHome, 'gateway.json'), 'utf8'))
 const fixtures = JSON.parse(fs.readFileSync(path.join(sandboxHome, 'ui-capture-fixtures.json'), 'utf8'))
 fs.mkdirSync(outDir, { recursive: true })
@@ -87,8 +87,8 @@ async function runVariant(browser, { theme, viewport }) {
     extraHTTPHeaders: { authorization: `Bearer ${token}` },
   })
   await context.addInitScript((t) => {
-    localStorage.setItem('jinn-theme', t)
-    localStorage.setItem('jinn-onboarded', 'true')
+    localStorage.setItem('hundredfold-theme', t)
+    localStorage.setItem('hundredfold-onboarded', 'true')
   }, theme)
   const page = await context.newPage()
   await page.goto(baseUrl + `/?session=${fixtures.chatSession}`, { waitUntil: 'networkidle' })
@@ -99,7 +99,7 @@ async function runVariant(browser, { theme, viewport }) {
     const s = document.querySelector('.chat-messages-scroll')
     return s ? s.scrollHeight - s.clientHeight : 0
   })
-  if (scrollable < DISTANCE * 2) throw new Error(`the transcript scrolls only ${scrollable}px; seed it with JINN_CAPTURE_MESSAGES`)
+  if (scrollable < DISTANCE * 2) throw new Error(`the transcript scrolls only ${scrollable}px; seed it with HUNDREDFOLD_CAPTURE_MESSAGES`)
   const client = await context.newCDPSession(page)
   await client.send('Emulation.setCPUThrottlingRate', { rate: THROTTLE })
   await scrollRun(client, page, viewport) // warm-up, discarded

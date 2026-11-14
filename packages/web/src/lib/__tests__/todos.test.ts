@@ -167,7 +167,7 @@ describe("manual rank (design-todos §4.5/§7.3)", () => {
 
 describe("filters (design-todos §4.3)", () => {
   it("round-trips through URL search params", () => {
-    const f: TodoFilters = { status: "done", person: "@operator", agent: "jinn-dev", department: "platform", source: "cron", date: "week", label: "infra", due: "overdue", q: "digest" }
+    const f: TodoFilters = { status: "done", person: "@operator", agent: "hundredfold-dev", department: "platform", source: "cron", date: "week", label: "infra", due: "overdue", q: "digest" }
     expect(filtersFromSearchParams(filtersToSearchParams(f))).toEqual(f)
     expect(filtersFromSearchParams(new URLSearchParams("due=nonsense"))).toEqual({ status: "open" })
     // Defaults serialize to an empty string (clean URLs).

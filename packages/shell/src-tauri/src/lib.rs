@@ -26,7 +26,7 @@ const MAIN_WINDOW: &str = "main";
 const BRIDGE_SCRIPT: &str = r#"
 (() => {
   const internals = window.__TAURI_INTERNALS__;
-  if (!internals || window.__JINN_NATIVE__) return;
+  if (!internals || window.__HUNDREDFOLD_NATIVE__) return;
   class Channel {
     constructor(onmessage) {
       this.id = internals.transformCallback((event) => {
@@ -37,7 +37,7 @@ const BRIDGE_SCRIPT: &str = r#"
     toJSON() { return `__CHANNEL__:${this.id}`; }
   }
   const invoke = (command, input) => internals.invoke(command, { input });
-  Object.defineProperty(window, '__JINN_NATIVE__', {
+  Object.defineProperty(window, '__HUNDREDFOLD_NATIVE__', {
     configurable: false,
     enumerable: false,
     writable: false,

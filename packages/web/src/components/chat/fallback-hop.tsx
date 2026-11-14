@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { fallbackLinkLabel, type FallbackHop, type FallbackHopNoticeMeta, type FallbackHopReason } from '@jinn/fallback-chain-wire'
+import { fallbackLinkLabel, type FallbackHop, type FallbackHopNoticeMeta, type FallbackHopReason } from '@hundredfold/fallback-chain-wire'
 import { ArrowRightLeftIcon, ChevronDown, ChevronRight } from '@/components/ui/icon'
 import { formatReset, skipText } from '@/lib/fallback-format'
 import type { Message } from '@/lib/conversations'

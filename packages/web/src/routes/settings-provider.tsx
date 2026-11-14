@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import {
-  type JinnSettings,
+  type HundredfoldSettings,
   type EmployeeOverride,
   DEFAULTS,
   loadSettings,
@@ -17,7 +17,7 @@ interface EmployeeDisplay {
 }
 
 interface SettingsContextValue {
-  settings: JinnSettings
+  settings: HundredfoldSettings
   setAccentColor: (color: string | null) => void
   setCompanyName: (name: string | null) => void
   setPortalName: (name: string | null) => void
@@ -29,10 +29,10 @@ interface SettingsContextValue {
   setOperatorEmoji: (emoji: string | null) => void
   setLanguage: (language: string) => void
   setTalkOrb: (enabled: boolean) => void
-  setTalkOrbVariant: (variant: JinnSettings["talkOrbVariant"]) => void
-  setTalkOrbIntensity: (intensity: JinnSettings["talkOrbIntensity"]) => void
-  setTextScale: (textScale: JinnSettings["textScale"]) => void
-  setTransparency: (transparency: JinnSettings["transparency"]) => void
+  setTalkOrbVariant: (variant: HundredfoldSettings["talkOrbVariant"]) => void
+  setTalkOrbIntensity: (intensity: HundredfoldSettings["talkOrbIntensity"]) => void
+  setTextScale: (textScale: HundredfoldSettings["textScale"]) => void
+  setTransparency: (transparency: HundredfoldSettings["transparency"]) => void
   setEmployeeOverride: (employeeId: string, override: EmployeeOverride) => void
   clearEmployeeOverride: (employeeId: string) => void
   getEmployeeDisplay: (employee: { name: string; emoji: string; id: string }) => EmployeeDisplay
@@ -62,14 +62,14 @@ const SettingsContext = createContext<SettingsContextValue>({
   resetAll: () => {},
 })
 
-type SettingsUpdate = (next: (prev: JinnSettings) => JinnSettings) => void
+type SettingsUpdate = (next: (prev: HundredfoldSettings) => HundredfoldSettings) => void
 
 /** One field, set as itself. For knobs whose value needs no coercion. */
-function useField<K extends keyof JinnSettings>(
+function useField<K extends keyof HundredfoldSettings>(
   update: SettingsUpdate,
   key: K,
-): (value: JinnSettings[K]) => void {
-  return useCallback((value: JinnSettings[K]) => {
+): (value: HundredfoldSettings[K]) => void {
+  return useCallback((value: HundredfoldSettings[K]) => {
     update((prev) => ({ ...prev, [key]: value }))
   }, [update, key])
 }
@@ -82,7 +82,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   // no server render to mismatch: main.tsx mounts with createRoot into the
   // empty #root that index.html ships. loadSettings() returns the defaults when
   // window is absent, so a non-browser render still gets them.
-  const [settings, setSettings] = useState<JinnSettings>(loadSettings)
+  const [settings, setSettings] = useState<HundredfoldSettings>(loadSettings)
 
   // Onboarding status/names come from the shared react-query key so the whole
   // app fires exactly one /api/onboarding request (the wizard consumes it too).
@@ -119,7 +119,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
   useRootCssVariables(settings)
 
-  const update = useCallback((updater: (prev: JinnSettings) => JinnSettings) => {
+  const update = useCallback((updater: (prev: HundredfoldSettings) => HundredfoldSettings) => {
     setSettings((prev) => {
       const next = updater(prev)
       saveSettings(next)
@@ -195,7 +195,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const setTransparency = useField(update, "transparency")
 
   const setTextScale = useCallback(
-    (textScale: JinnSettings["textScale"]) => {
+    (textScale: HundredfoldSettings["textScale"]) => {
       update((prev) => ({ ...prev, textScale }))
     },
     [update],

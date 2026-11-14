@@ -34,6 +34,7 @@ import {
   awaitStatus,
   baseEnv,
   bin,
+  pkgDir,
   check,
   claudeProfile,
   codename,
@@ -98,7 +99,7 @@ async function checkSessions(state, newStage) {
 function checkTheRest(state) {
   // A relay an older gateway staged names its home, its header and its field the old way; a blocked command
   // (exit 2, the policy's own answer) proves the new gateway read all three.
-  const relay = path.join(oldRepo, "packages/jinn/assets/hook-relay.mjs");
+  const relay = path.join(oldRepo, pkgDir(oldRepo), "assets/hook-relay.mjs");
   const payload = { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "rm -rf ~" } };
   const blocked = spawnSync(NODE, [relay, state.plain], { input: JSON.stringify(payload), encoding: "utf8", env: { PATH: baseEnv().PATH, HOME: host, JINN_HOME: oldHome } });
   check("a hook relay staged by the old build is still obeyed by the new gateway", blocked.status === 2 && /destructive/i.test(blocked.stderr), `exit ${blocked.status}: ${blocked.stderr.trim().slice(0, 80)}`);
@@ -163,7 +164,7 @@ async function checkTheSwitchover(state) {
 
 /** The new build's restart helper, run over the old build's live gateway: it stops it, settles the home, and starts the new one. */
 async function restartOverTheRunningGateway() {
-  const helper = path.join(newRepo, "packages/jinn/dist/src/gateway/restart-entry.js");
+  const helper = path.join(newRepo, pkgDir(newRepo), "dist/src/gateway/restart-entry.js");
   const started = run(NODE, [helper, "--port", String(port)], { env: { ...baseEnv(), ...newEnv } });
   console.log(started.out.trim());
   check("the restart helper ran", started.status === 0, started.out.trim().split("\n").pop());

@@ -193,7 +193,7 @@ describe("the Todos board on a phone", () => {
     expect(screen.getByTestId("todo-list-group-backlog")).toBeTruthy()
     expect(screen.getByTestId("todo-list-group-closed")).toBeTruthy()
     expect(screen.queryByTestId("todo-list-row-TSK-2")).toBeNull()
-    expect(localStorage.getItem("jinn-board-phone-view")).toBe("list")
+    expect(localStorage.getItem("hundredfold-board-phone-view")).toBe("list")
 
     // A new visit on the same device opens on the list.
     first.unmount()

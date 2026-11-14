@@ -40,7 +40,7 @@ function WorkingSetChip({
           {item.title}
         </span>
       ) : null}
-      <span key={item.revision} data-mobile-working-set-preview className="sr-only motion-safe:animate-[jinn-mobile-preview-in_var(--duration-base)_var(--ease-smooth)]">
+      <span key={item.revision} data-mobile-working-set-preview className="sr-only motion-safe:animate-[hundredfold-mobile-preview-in_var(--duration-base)_var(--ease-smooth)]">
         {item.preview}
       </span>
       {item.moved ? (

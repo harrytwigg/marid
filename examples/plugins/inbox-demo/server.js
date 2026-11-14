@@ -34,7 +34,7 @@ export function inboxDirectory(settings) {
   const configured = settings?.inboxDir;
   return typeof configured === "string" && configured.trim()
     ? path.resolve(configured.trim())
-    : path.join(os.tmpdir(), "jinn-inbox-demo");
+    : path.join(os.tmpdir(), "hundredfold-inbox-demo");
 }
 
 function sendJson(res, status, body) {

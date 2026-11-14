@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, type CSSProperties } from "react"
-import type { FallbackLink } from "@jinn/fallback-chain-wire"
+import type { FallbackLink } from "@hundredfold/fallback-chain-wire"
 import { Plus } from "@/components/ui/icon"
 import { Button } from "@/components/ui/button"
 import { engineDisplayName } from "@/lib/engine-names"

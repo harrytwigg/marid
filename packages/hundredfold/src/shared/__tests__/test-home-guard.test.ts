@@ -1,0 +1,293 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import Database from 'better-sqlite3';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  assertIsolatedClaudeConfigDir,
+  assertIsolatedTestHome,
+  canonicalPath,
+  createIsolatedTestFileHome,
+  ensureIsolatedTestHome,
+  isTempPath,
+} from '../../../vitest.test-home.js';
+import vitestConfig from '../../../vitest.config.js';
+import setupVitest from '../../../vitest.global-setup.js';
+import { HUNDREDFOLD_HOME, SESSIONS_DB, assertTestRunIsIsolated } from '../paths.js';
+import { assertNotProductionGateway } from '../sandbox-env.js';
+import { initDb } from '../db.js';
+import { claudeProjectsDirFor } from '../claude-profile.js';
+import { readClaudeCredentialStatus } from '../claude-auth.js';
+import { createWorkItem } from '../../work-items/store.js';
+
+const createdHomes: string[] = [];
+
+afterEach(() => {
+  for (const home of createdHomes.splice(0)) {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+describe('Vitest HUNDREDFOLD_HOME guard', () => {
+  it('runs both the pre-worker redirect and the per-worker assertion', () => {
+    const config = vitestConfig as { test?: { globalSetup?: string; setupFiles?: string[] } };
+
+    expect(config.test?.globalSetup).toBe('./vitest.global-setup.ts');
+    expect(config.test?.setupFiles).toEqual(['./vitest.setup.ts']);
+  });
+
+  it('loudly rejects the default production home', () => {
+    expect(() => assertIsolatedTestHome(path.join(os.homedir(), '.hundredfold')))
+      .toThrow('refusing to run tests against prod HUNDREDFOLD_HOME=~/.hundredfold');
+  });
+
+  it('redirects the default production home before workers launch', () => {
+    const env: NodeJS.ProcessEnv = {
+      HUNDREDFOLD_HOME: path.join(os.homedir(), '.hundredfold'),
+    };
+
+    const result = ensureIsolatedTestHome(env);
+    createdHomes.push(result.home);
+
+    expect(result.created).toBe(true);
+    expect(env.HUNDREDFOLD_HOME).toBe(result.home);
+    expect(isTempPath(result.home)).toBe(true);
+  });
+
+  it('redirects an unset home to a fresh directory under the OS temp root', () => {
+    const env: NodeJS.ProcessEnv = {};
+
+    const result = ensureIsolatedTestHome(env);
+    createdHomes.push(result.home);
+
+    expect(result.created).toBe(true);
+    expect(env.HUNDREDFOLD_HOME).toBe(result.home);
+    expect(isTempPath(result.home)).toBe(true);
+  });
+
+  it('redirects a non-temp home instead of trusting it', () => {
+    const env: NodeJS.ProcessEnv = {
+      HUNDREDFOLD_HOME: path.join(os.homedir(), '.hundredfold-test-unsafe'),
+    };
+
+    const result = ensureIsolatedTestHome(env);
+    createdHomes.push(result.home);
+
+    expect(result.created).toBe(true);
+    expect(env.HUNDREDFOLD_HOME).toBe(result.home);
+    expect(isTempPath(result.home)).toBe(true);
+  });
+
+  it('opens a file-owned registry instead of the inherited run registry', () => {
+    const runHome = process.env.HUNDREDFOLD_VITEST_RUN_HOME!;
+    expect(runHome).toBeTruthy();
+    expect(HUNDREDFOLD_HOME).not.toBe(runHome);
+    expect(initDb().name).not.toBe(path.join(runHome, 'sessions', 'registry.db'));
+  });
+
+  it('isolates registry state even when files inherit the same run environment', () => {
+    const inherited = { ...process.env };
+    const first = createIsolatedTestFileHome({ ...inherited });
+    const second = createIsolatedTestFileHome({ ...inherited });
+    createdHomes.push(first, second);
+    const writer = new Database(path.join(first, 'registry.db'));
+    const reader = new Database(path.join(second, 'registry.db'));
+    try {
+      writer.exec("CREATE TABLE fixture_state (value TEXT); INSERT INTO fixture_state VALUES ('first')");
+      expect(reader.prepare("SELECT name FROM sqlite_master WHERE name = 'fixture_state'").get())
+        .toBeUndefined();
+      expect(initDb().name).toBe(path.join(process.env.HUNDREDFOLD_HOME!, 'sessions', 'registry.db'));
+    } finally {
+      writer.close();
+      reader.close();
+    }
+  });
+
+  it('routes generic test temp fixtures beneath the cleanup-owned home', () => {
+    const relative = path.relative(
+      canonicalPath(process.env.HUNDREDFOLD_HOME!),
+      canonicalPath(os.tmpdir()),
+    );
+
+    expect(relative).not.toBe('');
+    expect(relative).not.toBe('..');
+    expect(relative.startsWith(`..${path.sep}`)).toBe(false);
+    expect(path.isAbsolute(relative)).toBe(false);
+  });
+
+  it('removes read-only fixture directories during run cleanup', () => {
+    const previousSystemTempRoot = process.env.HUNDREDFOLD_VITEST_SYSTEM_TEMP_ROOT;
+    const teardown = setupVitest();
+    const runTempRoot = os.tmpdir();
+    const lockedDir = path.join(runTempRoot, 'locked-fixture');
+    const lockedFile = path.join(lockedDir, 'artifact');
+    fs.mkdirSync(lockedDir);
+    fs.writeFileSync(lockedFile, 'fixture');
+    fs.chmodSync(lockedFile, 0o500);
+    fs.chmodSync(lockedDir, 0o500);
+
+    try {
+      expect(() => teardown()).not.toThrow();
+      expect(process.env.HUNDREDFOLD_VITEST_SYSTEM_TEMP_ROOT).toBe(previousSystemTempRoot);
+    } finally {
+      if (fs.existsSync(lockedDir)) fs.chmodSync(lockedDir, 0o700);
+      fs.rmSync(runTempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('routes a real work-item write to the guarded temp registry', () => {
+    expect(isTempPath(HUNDREDFOLD_HOME)).toBe(true);
+    expect(SESSIONS_DB).toBe(path.join(HUNDREDFOLD_HOME, 'sessions', 'registry.db'));
+    expect(SESSIONS_DB).not.toBe(
+      path.join(os.homedir(), '.hundredfold', 'sessions', 'registry.db'),
+    );
+
+    const item = createWorkItem({ title: 'test-home guard integration' });
+    const row = initDb()
+      .prepare('SELECT title FROM work_items WHERE id = ?')
+      .get(item.id);
+
+    expect(row).toEqual({ title: 'test-home guard integration' });
+    expect(fs.existsSync(SESSIONS_DB)).toBe(true);
+  });
+});
+
+/**
+ * Claude Code keeps every transcript under `CLAUDE_CONFIG_DIR/projects` (else
+ * `~/.claude/projects`). A test that cleared its fixtures there by removing the
+ * whole directory deleted every conversation on the machine that ran the suite,
+ * and turbo's strict env mode strips CLAUDE_CONFIG_DIR, so `pnpm test` always
+ * reached `~/.claude`. Each worker now gets its own, whatever it was launched with.
+ */
+describe('Vitest CLAUDE_CONFIG_DIR guard', () => {
+  it('points the worker at a temp config dir beside its own home', () => {
+    const configDir = process.env.CLAUDE_CONFIG_DIR!;
+
+    expect(assertIsolatedClaudeConfigDir(configDir)).toBe(canonicalPath(configDir));
+    expect(path.dirname(configDir)).toBe(path.dirname(process.env.HUNDREDFOLD_HOME!));
+    expect(claudeProjectsDirFor(null)).toBe(path.join(configDir, 'projects'));
+  });
+
+  it('does not depend on whether the machine running the suite is signed in', () => {
+    expect(readClaudeCredentialStatus({ env: {} })).toEqual({
+      state: 'unknown',
+      path: path.join(process.env.CLAUDE_CONFIG_DIR!, '.credentials.json'),
+    });
+  });
+
+  it('replaces an inherited config dir with a fresh one of its own', () => {
+    const inherited = fs.mkdtempSync(path.join(os.tmpdir(), 'inherited-claude-'));
+    fs.mkdirSync(path.join(inherited, 'projects', '-sentinel'), { recursive: true });
+    const env: NodeJS.ProcessEnv = { ...process.env, CLAUDE_CONFIG_DIR: inherited };
+
+    createdHomes.push(createIsolatedTestFileHome(env), inherited);
+
+    expect(env.CLAUDE_CONFIG_DIR).not.toBe(inherited);
+    expect(fs.readdirSync(env.CLAUDE_CONFIG_DIR!)).toEqual(['.credentials.json']);
+    expect(fs.existsSync(path.join(inherited, 'projects', '-sentinel'))).toBe(true);
+  });
+
+  it.each(['.claude', '.claude-friend', path.join('.claude', 'projects')])(
+    'loudly rejects the real home\'s ~/%s',
+    (dir) => {
+      expect(() => assertIsolatedClaudeConfigDir(path.join(os.homedir(), dir)))
+        .toThrow(/refusing to run tests against the real Claude config dir/);
+    },
+  );
+
+  it('loudly rejects an unset or non-temp config dir', () => {
+    expect(() => assertIsolatedClaudeConfigDir(undefined))
+      .toThrow('refusing to run tests with an unset CLAUDE_CONFIG_DIR');
+    expect(() => assertIsolatedClaudeConfigDir(path.join(os.homedir(), 'claude-profile')))
+      .toThrow(/refusing to run tests against non-temp CLAUDE_CONFIG_DIR/);
+  });
+});
+
+describe('worker gateway-binding scrub', () => {
+  // Reproduce by running the suite from inside a live gateway session, which exports
+  // the gateway's own HUNDREDFOLD_PORT/HUNDREDFOLD_HOST into every child: without the vitest.setup.ts
+  // scrub they land in each worker, and HUNDREDFOLD_PORT outranks the config.yaml of whatever
+  // fixture home a test just wrote.
+  it.each(['HUNDREDFOLD_PORT', 'HUNDREDFOLD_HOST', 'HUNDREDFOLD_INSTANCE'])('leaves no ambient %s in the worker', (name) => {
+    expect(process.env[name]).toBeUndefined();
+  });
+
+  it('refuses to run a worker that still resolves the default instance home', () => {
+    // Fabricated under the temp root, so the assertion never names this machine's home.
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hundredfold-default-home-'));
+    createdHomes.push(homeDir);
+    vi.spyOn(os, 'homedir').mockReturnValue(homeDir);
+
+    expect(() => assertNotProductionGateway({ home: path.join(homeDir, '.hundredfold') }))
+      .toThrow(/default instance home/);
+    expect(() => assertNotProductionGateway({ home: process.env.HUNDREDFOLD_HOME })).not.toThrow();
+
+    vi.restoreAllMocks();
+  });
+});
+
+/**
+ * The layer-1 guard above (globalSetup + setupFiles) only arms when Vitest
+ * loads packages/hundredfold/vitest.config.ts. Running `npx vitest` from the repo ROOT
+ * finds no config, so Vitest uses defaults and NONE of it runs — an ambient
+ * HUNDREDFOLD_HOME=~/.hundredfold then reaches every suite and the tests write into the live
+ * gateway registry. That happened 2026-07-06, and again 4x larger on
+ * 2026-07-25, burning sixteen Todo IDs out of an append-only allocator.
+ *
+ * paths.ts therefore re-asserts at the boundary that every registry-touching
+ * module imports, so no cwd/config/runner choice can bypass it.
+ */
+describe('paths.ts boundary guard (layer 2, config-independent)', () => {
+  const PROD = path.join(os.homedir(), '.hundredfold');
+  const underVitest = (over: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv =>
+    ({ VITEST: 'true', ...over });
+
+  it('refuses the production home', () => {
+    expect(() => assertTestRunIsIsolated(PROD, underVitest()))
+      .toThrow(/Refusing to run tests against a non-temp HUNDREDFOLD_HOME/);
+  });
+
+  it('names the correct command in the error, so the next person does not repeat it', () => {
+    expect(() => assertTestRunIsIsolated(PROD, underVitest())).toThrow(/pnpm/);
+  });
+
+  it('refuses any non-temp home, not just ~/.hundredfold', () => {
+    expect(() => assertTestRunIsIsolated(path.join(os.homedir(), '.hundredfold-elsewhere'), underVitest()))
+      .toThrow(/Refusing to run tests against a non-temp HUNDREDFOLD_HOME/);
+  });
+
+  it('allows a temp home', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'hundredfold-guard-ok-'));
+    createdHomes.push(home);
+    expect(() => assertTestRunIsIsolated(home, underVitest())).not.toThrow();
+  });
+
+  it('honours HUNDREDFOLD_VITEST_SYSTEM_TEMP_ROOT when global setup has repointed temp', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hundredfold-guard-root-'));
+    const home = path.join(root, 'worker-home');
+    fs.mkdirSync(home);
+    createdHomes.push(root);
+    expect(() => assertTestRunIsIsolated(home, underVitest({ HUNDREDFOLD_VITEST_SYSTEM_TEMP_ROOT: root })))
+      .not.toThrow();
+  });
+
+  it('fires for a worker that only has VITEST_WORKER_ID', () => {
+    expect(() => assertTestRunIsIsolated(PROD, { VITEST_WORKER_ID: '3' }))
+      .toThrow(/Refusing to run tests/);
+  });
+
+  it('stays inert outside Vitest so the gateway resolves its real home', () => {
+    // The single most important negative case: production must be unaffected.
+    expect(() => assertTestRunIsIsolated(PROD, {})).not.toThrow();
+  });
+
+  it('guards the home this very suite resolved', () => {
+    // End-to-end, with the REAL worker env. Global setup repoints os.tmpdir()
+    // beneath HUNDREDFOLD_HOME and records the pre-redirect OS root in
+    // HUNDREDFOLD_VITEST_SYSTEM_TEMP_ROOT, so the guard must read that rather than
+    // calling os.tmpdir() blind — otherwise it would reject its own safe home.
+    expect(process.env.HUNDREDFOLD_VITEST_SYSTEM_TEMP_ROOT).toBeTruthy();
+    expect(() => assertTestRunIsIsolated(HUNDREDFOLD_HOME, process.env)).not.toThrow();
+    expect(isTempPath(HUNDREDFOLD_HOME)).toBe(true);
+  });
+});

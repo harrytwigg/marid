@@ -20,7 +20,7 @@ const CALLS: Array<{ label: string; tool: string; args: string }> = [
   { label: "open Todo 59", tool: "open_todo", args: '{"id":"59"}' },
   { label: "show the disabled jobs", tool: "open_cron", args: '{"filter":"disabled"}' },
   { label: "highlight the second row", tool: "focus_element", args: '{"target":"bench-row-2"}' },
-  { label: "something we cannot do yet", tool: "jinn_action", args: '{"intent":"reorganise the board"}' },
+  { label: "something we cannot do yet", tool: "hundredfold_action", args: '{"intent":"reorganise the board"}' },
 ]
 
 /** Writes are kept apart on the bench for the same reason they are kept off the

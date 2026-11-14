@@ -12,13 +12,13 @@ const CLOSED_TODO_STATUSES = new Set(["done", "cancelled"])
 
 /**
  * Only a directory that is *directly* under the worktrees root and named
- * `jinn-*`. The repo checkout and every path inside a worktree are structurally
+ * `hundredfold-*`. The repo checkout and every path inside a worktree are structurally
  * unreachable, which is what keeps a bug here from deleting the checkout.
  */
 export function isEligibleWorktree(candidatePath, worktreesRoot) {
   const resolved = path.resolve(candidatePath)
   if (path.dirname(resolved) !== path.resolve(worktreesRoot)) return false
-  return path.basename(resolved).startsWith("jinn-")
+  return path.basename(resolved).startsWith("hundredfold-")
 }
 
 /** The Todo a worktree was cut for, read out of its directory name. */

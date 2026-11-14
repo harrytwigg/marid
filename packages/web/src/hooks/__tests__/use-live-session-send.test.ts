@@ -15,7 +15,7 @@ vi.mock("@/lib/api", () => ({
 }))
 
 import { __clearLiveSessionSnapshotCacheForTests, useLiveSession } from "../use-live-session"
-import type { GatewayEvent, GatewayEventListener } from "@jinn/gateway-events"
+import type { GatewayEvent, GatewayEventListener } from "@hundredfold/gateway-events"
 
 /** A manual gateway subscribe that lets the test emit WS events. */
 function makeBus() {

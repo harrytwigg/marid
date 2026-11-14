@@ -332,7 +332,7 @@ export function filtersFromSearchParams(p: URLSearchParams): TodoFilters {
 // the board's mount: the URL wins whenever it names a filter, the stored set is
 // the fallback when it does not.
 
-export const BOARD_FILTERS_STORAGE_KEY = "jinn-board-filters"
+export const BOARD_FILTERS_STORAGE_KEY = "hundredfold-board-filters"
 
 /** The dimensions the board filters on — the params a filtered URL carries.
  *  Key-based on purpose: `?status=open` is an explicit request for the default

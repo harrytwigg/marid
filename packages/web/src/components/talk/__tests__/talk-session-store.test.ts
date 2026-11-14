@@ -15,7 +15,7 @@ describe("the resumable Talk session", () => {
     rememberResumableTalkSession("talk-12")
 
     expect(readResumableTalkSession()).toBe("talk-12")
-    expect(sessionStorage.getItem(`jinn-talk-resumable:${browserInstanceId()}`)).toBe("talk-12")
+    expect(sessionStorage.getItem(`hundredfold-talk-resumable:${browserInstanceId()}`)).toBe("talk-12")
   })
 
   it("only clears the candidate it was asked to forget", () => {

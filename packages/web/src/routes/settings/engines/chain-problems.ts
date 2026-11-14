@@ -2,7 +2,7 @@ import {
   fallbackChainProblems,
   type FallbackChainContext,
   type FallbackLink,
-} from "@jinn/fallback-chain-wire"
+} from "@hundredfold/fallback-chain-wire"
 import { accountEntriesFor, accountNames, allAccountNames, chainEntriesFor, type EnginesConfig } from "./chain-model"
 import type { ChainContext } from "./chain-links"
 

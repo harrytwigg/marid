@@ -1,0 +1,1004 @@
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { Readable } from "node:stream";
+import type { ServerResponse } from "node:http";
+import {
+  buildSessionTools,
+  READ_LAST_DEFAULT,
+  LIST_LIMIT_MAX,
+} from "../session-tools.js";
+import { buildTools } from "../server.js";
+import {
+  attachSessionIdentity,
+  ensureSessionCapability,
+  HUNDREDFOLD_SESSION_CAPABILITY_ENV,
+  HUNDREDFOLD_SESSION_ID_ENV,
+  CALLER_SESSION_CAPABILITY_HEADER,
+  CALLER_SESSION_HEADER,
+  TOOL_CALL_HEADER,
+  TOOL_CALL_HEADER_VALUE,
+} from "../identity.js";
+import { HundredfoldMcpToolError, type HundredfoldMcpContext, type HundredfoldMcpTool } from "../toolkit.js";
+import { sessionCommGuards, LATERAL_MAX_HOPS } from "../../gateway/session-comm-guards.js";
+import type { ResolvedMcpConfig } from "../../shared/types.js";
+
+/**
+ * GRS-017a — the sessions MCP tool group + the caller-identity seam.
+ *
+ * Three tiers:
+ *   1. UNIT — every tool against a stub fetch: exact route/method/body/header,
+ *      read controls, scope refusals, local self-message refusal,
+ *      decision-shaped hints, structured error mapping (400/403/404/429).
+ *   2. IDENTITY SEAM — attachSessionIdentity purity + the header contract
+ *      (present when ctx has callerSessionId, absent otherwise).
+ *   3. INTEGRATION — the tools drive the REAL gateway session routes + registry
+ *      (temp HUNDREDFOLD_HOME): spawn→auto-parent-link→list children→read→lateral
+ *      send→stop, plus the substrate guards provoked for real (self-message,
+ *      hop-budget exhaustion, non-descendant stop refusal) and
+ *      the operator paths (no header) unchanged.
+ */
+
+// Isolated registry DB for the integration tier. Set BEFORE the dynamic api import.
+process.env.HUNDREDFOLD_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-mcp-sess-home-"));
+
+/* ── Unit-tier stub fetch ───────────────────────────────────────────────────── */
+
+interface SeenCall {
+  url: string;
+  method: string;
+  body?: unknown;
+  headers: Record<string, string>;
+}
+
+function stub(
+  responder: (call: SeenCall) => { status: number; body: unknown },
+  callerSessionId?: string,
+  sessionCapability = callerSessionId ? "cap-test" : undefined,
+) {
+  const calls: SeenCall[] = [];
+  const fetchFn = (async (input: string | URL, init?: RequestInit) => {
+    const call: SeenCall = {
+      url: typeof input === "string" ? input : input.toString(),
+      method: init?.method ?? "GET",
+      body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined,
+      headers: (init?.headers as Record<string, string>) ?? {},
+    };
+    calls.push(call);
+    const { status, body } = responder(call);
+    return { status, text: async () => (typeof body === "string" ? body : JSON.stringify(body)) } as unknown as Response;
+  }) as unknown as typeof fetch;
+  const ctx: HundredfoldMcpContext = {
+    gatewayUrl: "http://127.0.0.1:7777",
+    fetchFn,
+    callerSessionId,
+    sessionCapability,
+  };
+  return { calls, ctx };
+}
+
+function tool(name: string): HundredfoldMcpTool {
+  const t = buildSessionTools().find((t) => t.name === name);
+  if (!t) throw new Error(`no tool ${name}`);
+  return t;
+}
+
+describe("session tools — registry + schemas", () => {
+  it("exposes the 6 session tools with flat object schemas and required args", () => {
+    const tools = buildSessionTools();
+    expect(tools.map((t) => t.name)).toEqual([
+      "spawn_session",
+      "send_to_session",
+      "read_session",
+      "list_sessions",
+      "stop_session",
+      "compact_session",
+    ]);
+    expect(tool("spawn_session").inputSchema.required).toEqual(["prompt"]);
+    expect(tool("send_to_session").inputSchema.required).toEqual(["sessionId", "message"]);
+    expect(tool("read_session").inputSchema.required).toEqual(["sessionId"]);
+    expect(tool("list_sessions").inputSchema.required).toBeUndefined();
+    expect(tool("stop_session").inputSchema.required).toEqual(["sessionId"]);
+    expect(tool("compact_session").inputSchema.required).toEqual(["goal", "done", "next"]);
+  });
+
+  it("the full belt registers the sessions group and still has NO delete tool (human-only authority)", () => {
+    const names = buildTools().map((t) => t.name);
+    expect(names).toContain("spawn_session");
+    expect(names).not.toContain("hundredfold_delete_session");
+  });
+
+  it("the protocol teaching (end turn, callback, no polling loops) lives on the spawn tool", () => {
+    expect(tool("spawn_session").description).toMatch(/END YOUR TURN/);
+    expect(tool("spawn_session").description).toMatch(/never poll/i);
+  });
+
+  it("positions spawn as the quick untracked session verb, distinct from delegate_task", () => {
+    expect(tool("spawn_session").description).toMatch(/quick untracked/i);
+    expect(tool("spawn_session").description).toMatch(/tracked company work.*delegate_task/i);
+  });
+
+  it("teaches employee selection in the compact employee schema field", () => {
+    const props = tool("spawn_session").inputSchema.properties as Record<string, { description?: string }>;
+    expect(props.employee.description).toBe("Employee slug; choose by role/persona fit from list_employees/find_employees. Omit for a plain session or if no employee fits.");
+  });
+});
+
+describe("spawn_session — a Claude profile rides the engine string", () => {
+  it("forwards `claude:<name>` to the gateway untouched, and relays the gateway's refusal", async () => {
+    const { calls, ctx } = stub((call) => (
+      (call.body as { engine?: string }).engine === "claude:friend"
+        ? { status: 201, body: { id: "child-1", engine: "claude", status: "running" } }
+        : { status: 400, body: { error: 'unknown Claude profile "nobody" — declared profiles: friend' } }
+    ), "me");
+    const ok = (await tool("spawn_session").handler({ prompt: "hi", engine: "claude:friend" }, ctx)) as Record<string, unknown>;
+    expect(calls[0]!.body).toMatchObject({ prompt: "hi", engine: "claude:friend" });
+    expect(ok.sessionId).toBe("child-1");
+    await expect(tool("spawn_session").handler({ prompt: "hi", engine: "claude:nobody" }, ctx)).rejects.toThrow(/declared profiles: friend/);
+  });
+});
+
+describe("compact_session — unit (stub gateway)", () => {
+  it("POSTs the handoff to the self-compaction route, never a target session, and tells the agent to end its turn", async () => {
+    const { calls, ctx } = stub(() => ({ status: 202, body: { status: "scheduled", sessionId: "me", engine: "claude", resume: "accepted" } }), "me");
+    const out = (await tool("compact_session").handler(
+      { goal: "ship TASK-1", done: "tests pass", next: "open PR", waitingOn: "child-7: review" },
+      ctx,
+    )) as Record<string, unknown>;
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      url: "http://127.0.0.1:7777/api/compactions",
+      method: "POST",
+      body: { goal: "ship TASK-1", done: "tests pass", next: "open PR", waitingOn: "child-7: review" },
+    });
+    expect(calls[0].body).not.toHaveProperty("context");
+    expect(calls[0].body).not.toHaveProperty("sessionId");
+    expect(calls[0].headers["x-hundredfold-caller-session"]).toBe("me");
+    expect(out.status).toBe("scheduled");
+    expect(String(out.hint)).toMatch(/END YOUR TURN/);
+  });
+
+  it("forwards the target fields when present (profile \"\" is own login) and sends none when absent", async () => {
+    const { calls, ctx } = stub(() => ({ status: 202, body: { status: "scheduled", sessionId: "me", engine: "claude", resume: "accepted", switch: {} } }), "me");
+    await tool("compact_session").handler({ goal: "g", done: "d", next: "n", engine: "claude", profile: "", model: "sonnet" }, ctx);
+    expect(calls[0].body).toMatchObject({ engine: "claude", profile: "", model: "sonnet" });
+    await tool("compact_session").handler({ goal: "g", done: "d", next: "n", model: "haiku" }, ctx);
+    expect(calls[1].body).toMatchObject({ model: "haiku" });
+    expect(calls[1].body).not.toHaveProperty("engine");
+    expect(calls[1].body).not.toHaveProperty("profile");
+    const schema = tool("compact_session").inputSchema as { properties: Record<string, unknown> };
+    expect(Object.keys(schema.properties)).toEqual(expect.arrayContaining(["engine", "profile", "model"]));
+  });
+
+  it("a refused target reaches the tool error with the rendered list of valid targets intact", async () => {
+    const list = [
+      "unknown engine \"?\" — call again with one of these. Now: Claude · own login · Opus.",
+      "claude: profiles \"\" (own login), work (exhausted until 2026-11-12T15:00Z); models opus, sonnet, haiku.",
+      "opencode: models provider/a, provider/b, … +40 more (call with engine \"opencode\", model \"?\" for its list).",
+    ].join("\n");
+    const { ctx } = stub(() => ({ status: 400, body: { code: "invalid-target", error: list, targets: { engines: [] } } }), "me");
+    const failure = await tool("compact_session").handler({ goal: "g", done: "d", next: "n", engine: "?" }, ctx).catch((error: Error) => error);
+    expect(failure).toBeInstanceOf(HundredfoldMcpToolError);
+    expect((failure as Error).message).toContain(list);
+    expect((failure as Error).message).toMatch(/rejected \(400\)/);
+  });
+
+  it("passes the gateway's refusal through readable (cooldown, unsupported engine)", async () => {
+    const cooldown = stub(() => ({ status: 429, body: { error: "this session already requested a compaction" } }), "me");
+    await expect(tool("compact_session").handler({ goal: "g", done: "d", next: "n" }, cooldown.ctx))
+      .rejects.toThrow(/429.*already requested a compaction/);
+    const unsupported = stub(() => ({ status: 409, body: { error: "the codex engine has no native compaction" } }), "me");
+    await expect(tool("compact_session").handler({ goal: "g", done: "d", next: "n" }, unsupported.ctx))
+      .rejects.toThrow(/409.*codex engine has no native compaction/);
+  });
+});
+
+describe("session tools — unit (stub gateway)", () => {
+  it("spawn_session POSTs the create route with only the provided fields and hints the callback protocol", async () => {
+    const { calls, ctx } = stub(
+      () => ({ status: 201, body: { id: "child-1", employee: "worker", engine: "codex", status: "running" } }),
+      "parent-1",
+    );
+    const out = (await tool("spawn_session").handler({ prompt: "do X", employee: "worker" }, ctx)) as Record<string, unknown>;
+    expect(calls[0]).toMatchObject({
+      url: "http://127.0.0.1:7777/api/sessions",
+      method: "POST",
+      body: { prompt: "do X", employee: "worker" },
+    });
+    expect(calls[0].body).not.toHaveProperty("engine");
+    expect(calls[0].body).not.toHaveProperty("parentSessionId"); // linkage is header-side, never body-side
+    expect(out.sessionId).toBe("child-1");
+    expect(String(out.hint)).toMatch(/linked to you as a child/);
+    expect(String(out.hint)).toMatch(/END YOUR TURN/);
+  });
+
+  it("spawn/send/stop REFUSE locally when the server has no caller identity — fail closed, no round trip (GRS-017 finding 2)", async () => {
+    const { calls, ctx } = stub(() => ({ status: 200, body: {} }));
+    const cases: Array<[string, Record<string, unknown>]> = [
+      ["spawn_session", { prompt: "p" }],
+      ["send_to_session", { sessionId: "b", message: "hi" }],
+      ["stop_session", { sessionId: "b" }],
+      ["compact_session", { goal: "g", done: "d", next: "n" }],
+    ];
+    for (const [name, args] of cases) {
+      await expect(tool(name).handler(args, ctx)).rejects.toThrow(/caller identity unavailable.*HUNDREDFOLD_SESSION_ID/is);
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it("spawn_session passes a structured 400 (unknown employee/engine/model) through readable", async () => {
+    const { ctx } = stub(() => ({ status: 400, body: { error: 'unknown engine "warp"' } }), "p");
+    await expect(tool("spawn_session").handler({ prompt: "p", engine: "warp" }, ctx)).rejects.toThrow(
+      /rejected \(400\).*unknown engine/,
+    );
+  });
+
+  it("send_to_session POSTs the message route; a refusal and a hop-budget 400 come back readable", async () => {
+    const ok = stub(() => ({ status: 200, body: { status: "queued", sessionId: "b" } }), "a");
+    const out = (await tool("send_to_session").handler({ sessionId: "b", message: "hi" }, ok.ctx)) as Record<string, unknown>;
+    expect(ok.calls[0]).toMatchObject({ url: "http://127.0.0.1:7777/api/sessions/b/message", method: "POST", body: { message: "hi" } });
+    expect(out.status).toBe("queued");
+
+    const busy = stub(() => ({ status: 429, body: { error: "too many requests" } }), "a");
+    await expect(tool("send_to_session").handler({ sessionId: "b", message: "hi" }, busy.ctx)).rejects.toThrow(
+      /refused \(429\).*too many requests/,
+    );
+
+    const hopped = stub(() => ({ status: 400, body: { error: "hop budget exhausted: relay hop 5 (max 4)" } }), "a");
+    await expect(tool("send_to_session").handler({ sessionId: "b", message: "hi" }, hopped.ctx)).rejects.toThrow(
+      /rejected \(400\).*hop budget/,
+    );
+  });
+
+  it("send_to_session refuses a self-message locally — no round trip", async () => {
+    const { calls, ctx } = stub(() => ({ status: 200, body: {} }), "me");
+    await expect(tool("send_to_session").handler({ sessionId: "me", message: "hi" }, ctx)).rejects.toThrow(/own session/i);
+    expect(calls).toHaveLength(0);
+  });
+
+  it(`read_session defaults last=${READ_LAST_DEFAULT} and returns 50,000-char messages byte-identically`, async () => {
+    const long = "y".repeat(50_000);
+    const { calls, ctx } = stub(() => ({
+      status: 200,
+      body: { id: "s", engine: "codex", status: "idle", messages: [{ role: "assistant", content: long, timestamp: 5 }] },
+    }), "reader");
+    const out = (await tool("read_session").handler({ sessionId: "s" }, ctx)) as {
+      messages: Array<{ content: string }>;
+      hint: string;
+    };
+    expect(calls[0].url).toBe(`http://127.0.0.1:7777/api/sessions/s?last=${READ_LAST_DEFAULT}`);
+    expect(Buffer.from(out.messages[0].content).equals(Buffer.from(long))).toBe(true);
+    expect(out.messages[0].content).not.toContain("…[truncated");
+    expect(out.hint).toMatch(/idle/i);
+  });
+
+  it("read_session forwards last=200 and last=0 without clamping", async () => {
+    const { calls, ctx } = stub(() => ({ status: 200, body: { id: "s", status: "idle", messages: [] } }), "reader");
+    await tool("read_session").handler({ sessionId: "s", last: 200 }, ctx);
+    expect(calls[0].url).toBe("http://127.0.0.1:7777/api/sessions/s?last=200");
+    await tool("read_session").handler({ sessionId: "s", last: 0 }, ctx);
+    expect(calls[1].url).toBe("http://127.0.0.1:7777/api/sessions/s?last=0");
+  });
+
+  it.each([-1, 1.5])("read_session rejects invalid last=%s as a non-negative integer before the gateway call", async (last) => {
+    const { calls, ctx } = stub(() => ({ status: 200, body: {} }), "reader");
+    const failure = await tool("read_session").handler({ sessionId: "s", last }, ctx).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(HundredfoldMcpToolError);
+    expect(failure).toHaveProperty("message", expect.stringMatching(/last must be a non-negative integer/));
+    expect(calls).toHaveLength(0);
+  });
+
+  it("read_session hints are decision-shaped per status (running → end turn / wake; error → surfaces lastError)", async () => {
+    const running = stub(() => ({ status: 200, body: { id: "s", status: "running", messages: [] } }), "reader");
+    const r1 = (await tool("read_session").handler({ sessionId: "s" }, running.ctx)) as { hint: string };
+    expect(r1.hint).toMatch(/END YOUR TURN/);
+    expect(r1.hint).toMatch(/never poll/i);
+    expect(r1.hint.length).toBeLessThanOrEqual(80);
+
+    const errored = stub(() => ({ status: 200, body: { id: "s", status: "error", lastError: "engine exploded", messages: [] } }), "reader");
+    const r2 = (await tool("read_session").handler({ sessionId: "s" }, errored.ctx)) as { hint: string };
+    expect(r2.hint).toContain("engine exploded");
+    expect(r2.hint.length).toBeLessThanOrEqual(80);
+  });
+
+  it("read_session tells a caller a session paused on a usage limit needs no action", async () => {
+    const waiting = stub(
+      () => ({ status: 200, body: { id: "s", status: "waiting", lastError: "Claude usage limit — waiting for reset", messages: [] } }),
+      "reader",
+    );
+    const out = (await tool("read_session").handler({ sessionId: "s" }, waiting.ctx)) as { status: string; hint: string };
+    expect(out.status).toBe("waiting");
+    expect(out.hint).toMatch(/^Waiting on limit/);
+    expect(out.hint).toMatch(/no action/i);
+    expect(out.hint.length).toBeLessThanOrEqual(80);
+  });
+
+  it("read_session maps 404 to a discovery hint", async () => {
+    const { ctx } = stub(() => ({ status: 404, body: { error: "not found" } }), "reader");
+    await expect(tool("read_session").handler({ sessionId: "ghost" }, ctx)).rejects.toThrow(/404.*list_sessions/);
+  });
+
+  it("list_sessions: children scope hits /children with the caller id and returns summaries WITHOUT message bodies", async () => {
+    const { calls, ctx } = stub(
+      () => ({
+        status: 200,
+        body: [
+          { id: "c1", employee: "w", engine: "codex", status: "idle", parentSessionId: "p", messages: [{ role: "user", content: "SECRET" }] },
+        ],
+      }),
+      "p",
+    );
+    const out = (await tool("list_sessions").handler({}, ctx)) as { scope: string; sessions: Array<Record<string, unknown>> };
+    expect(calls[0].url).toBe("http://127.0.0.1:7777/api/sessions/p/children");
+    expect(out.scope).toBe("children");
+    expect(out.sessions[0].id).toBe("c1");
+    expect(JSON.stringify(out.sessions)).not.toContain("SECRET");
+  });
+
+  it("list_sessions: children scope without identity refuses with a scope suggestion", async () => {
+    const { calls, ctx } = stub(() => ({ status: 200, body: [] }));
+    await expect(tool("list_sessions").handler({ scope: "children" }, ctx)).rejects.toThrow(/caller identity unavailable/i);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("list_sessions: employee scope requires the employee arg and hits the group route; recent unwraps {sessions}", async () => {
+    const emp = stub(() => ({ status: 200, body: [{ id: "e1", employee: "worker" }] }), "p");
+    await expect(tool("list_sessions").handler({ scope: "employee" }, emp.ctx)).rejects.toThrow(/employee is required/);
+    const out = (await tool("list_sessions").handler({ scope: "employee", employee: "worker", limit: 7 }, emp.ctx)) as {
+      sessions: unknown[];
+    };
+    expect(emp.calls[0].url).toBe("http://127.0.0.1:7777/api/sessions?group=worker&limit=7");
+    expect(out.sessions).toHaveLength(1);
+
+    const rec = stub(() => ({ status: 200, body: { sessions: [{ id: "r1" }, { id: "r2" }], counts: {} } }), "p");
+    const recent = (await tool("list_sessions").handler({ scope: "recent", limit: 1 }, rec.ctx)) as { sessions: unknown[] };
+    expect(rec.calls[0].url).toBe("http://127.0.0.1:7777/api/sessions");
+    expect(recent.sessions).toHaveLength(1); // limit applied tool-side
+
+    expect(LIST_LIMIT_MAX).toBe(50);
+  });
+
+  it("list_sessions: pinned scope uses the pinned session route and unknown scopes list every valid choice", async () => {
+    const pinned = stub(() => ({ status: 200, body: [{ id: "p1" }, { id: "p2" }] }), "parent");
+    const out = (await tool("list_sessions").handler({ scope: "pinned" }, pinned.ctx)) as { sessions: unknown[] };
+
+    expect(pinned.calls[0].url).toBe("http://127.0.0.1:7777/api/sessions?pinned=1");
+    expect(out.sessions).toHaveLength(2);
+    await expect(tool("list_sessions").handler({ scope: "unknown" }, pinned.ctx)).rejects.toThrow(
+      'unknown scope "unknown" — use children, employee, recent, or pinned',
+    );
+  });
+
+  it("stop_session POSTs the stop route; a 403 non-descendant refusal passes through readable", async () => {
+    const ok = stub(() => ({ status: 200, body: { status: "stopped", sessionId: "c" } }), "p");
+    const out = (await tool("stop_session").handler({ sessionId: "c" }, ok.ctx)) as Record<string, unknown>;
+    expect(ok.calls[0]).toMatchObject({ url: "http://127.0.0.1:7777/api/sessions/c/stop", method: "POST" });
+    // GRS-017f: the return is an ACTION RESULT (`action`), not a `status` field
+    // that would collide with the session's persistent state (read shows `idle`).
+    expect(out.action).toBe("stopped");
+    expect(out.status).toBeUndefined();
+    expect(String(out.hint)).toMatch(/recoverable/i);
+    expect(out.droppedMessages).toBeUndefined();
+
+    const withParked = stub(() => ({ status: 200, body: { status: "stopped", sessionId: "c", cancelledMessages: 2 } }), "p");
+    const dropped = (await tool("stop_session").handler({ sessionId: "c" }, withParked.ctx)) as Record<string, unknown>;
+    expect(dropped.droppedMessages).toBe(2);
+
+    const noop = stub(() => ({ status: 200, body: { status: "stopped", sessionId: "c", noop: true, cancelledMessages: 0 } }), "p");
+    const nothing = (await tool("stop_session").handler({ sessionId: "c" }, noop.ctx)) as Record<string, unknown>;
+    expect(nothing.action).toBe("already-stopped");
+
+    const idle = stub(() => ({ status: 200, body: { status: "stopped", sessionId: "c", noop: false, wasRunning: false, cancelledMessages: 0 } }), "p");
+    const held = (await tool("stop_session").handler({ sessionId: "c" }, idle.ctx)) as Record<string, unknown>;
+    expect(held.action).toBe("stopped");
+    expect(String(held.hint)).toMatch(/not running; it is now held stopped/);
+
+    const denied = stub(() => ({ status: 403, body: { error: "not a descendant of your session" } }), "p");
+    await expect(tool("stop_session").handler({ sessionId: "x" }, denied.ctx)).rejects.toThrow(/403.*descendant/);
+  });
+
+  it("missing required args fail fast with the arg name (no gateway call)", async () => {
+    const { calls, ctx } = stub(() => ({ status: 200, body: {} }), "p");
+    await expect(tool("spawn_session").handler({}, ctx)).rejects.toThrow(/prompt is required/);
+    await expect(tool("send_to_session").handler({ sessionId: "s" }, ctx)).rejects.toThrow(/message is required/);
+    await expect(tool("read_session").handler({}, ctx)).rejects.toThrow(/sessionId is required/);
+    await expect(tool("stop_session").handler({}, ctx)).rejects.toThrow(/sessionId is required/);
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe("the identity seam", () => {
+  it(`attachSessionIdentity stamps ${HUNDREDFOLD_SESSION_ID_ENV} + ${HUNDREDFOLD_SESSION_CAPABILITY_ENV} on the hundredfold server env — input untouched`, () => {
+    const resolved: ResolvedMcpConfig = {
+      mcpServers: {
+        hundredfold: { command: "node", args: ["server-entry.js"], env: { HUNDREDFOLD_GATEWAY_URL: "http://127.0.0.1:7788" } },
+        other: { command: "npx", args: ["x"] },
+      },
+    };
+    const out = attachSessionIdentity(resolved, "sess-42");
+    const hundredfold = out.mcpServers.hundredfold as { args?: string[]; env?: Record<string, string> };
+    expect(hundredfold.env).toEqual({
+      HUNDREDFOLD_GATEWAY_URL: "http://127.0.0.1:7788",
+      [HUNDREDFOLD_SESSION_ID_ENV]: "sess-42",
+      [HUNDREDFOLD_SESSION_CAPABILITY_ENV]: expect.any(String),
+    });
+    expect(hundredfold.args).toEqual([
+      "server-entry.js",
+      "--hundredfold-session-id", "sess-42",
+      "--hundredfold-home", expect.any(String),
+      "--hundredfold-gateway-url", "http://127.0.0.1:7788",
+    ]);
+    expect(hundredfold.args?.join(" ")).not.toContain(hundredfold.env?.[HUNDREDFOLD_SESSION_CAPABILITY_ENV]);
+    // purity: the input object was not mutated
+    expect((resolved.mcpServers.hundredfold as { env?: Record<string, string> }).env).toEqual({ HUNDREDFOLD_GATEWAY_URL: "http://127.0.0.1:7788" });
+    // other servers pass through by reference-equality (no gratuitous copies)
+    expect(out.mcpServers.other).toBe(resolved.mcpServers.other);
+  });
+
+  it("attachSessionIdentity is a no-op without a hundredfold stdio server", () => {
+    const noHundredfold: ResolvedMcpConfig = { mcpServers: { browser: { command: "npx" } } };
+    expect(attachSessionIdentity(noHundredfold, "s")).toBe(noHundredfold);
+  });
+
+  it(`every gateway call carries ${CALLER_SESSION_HEADER} and ${CALLER_SESSION_CAPABILITY_HEADER} when the ctx has a bound identity`, async () => {
+    const withId = stub(() => ({ status: 200, body: { id: "s", messages: [] } }), "sess-42");
+    await tool("read_session").handler({ sessionId: "s" }, withId.ctx);
+    expect(withId.calls[0].headers[CALLER_SESSION_HEADER]).toBe("sess-42");
+    expect(withId.calls[0].headers[CALLER_SESSION_CAPABILITY_HEADER]).toBe("cap-test");
+  });
+
+  it(`read calls without identity fail locally before sending ${TOOL_CALL_HEADER}`, async () => {
+    const without = stub(() => ({ status: 200, body: { id: "s", messages: [] } }));
+    await expect(tool("read_session").handler({ sessionId: "s" }, without.ctx)).rejects.toThrow(/caller identity unavailable/i);
+    expect(without.calls).toHaveLength(0);
+  });
+
+  it(`every gateway call carries the tool-origin marker ${TOOL_CALL_HEADER} with a bound identity so routes can tell a tool call from the operator (GRS-017 finding 2)`, async () => {
+    const withId = stub(() => ({ status: 200, body: { id: "s", messages: [] } }), "sess-42");
+    await tool("read_session").handler({ sessionId: "s" }, withId.ctx);
+    expect(withId.calls[0].headers[TOOL_CALL_HEADER]).toBe(TOOL_CALL_HEADER_VALUE);
+  });
+});
+
+/* ── Integration: the tools drive the REAL session routes + registry ────────── */
+
+type Api = typeof import("../../gateway/api.js");
+let api: Api;
+type Registry = typeof import("../../sessions/registry.js");
+let registry: Registry;
+type WorkItemStore = typeof import("../../work-items/store.js");
+type WorkItemReconcile = typeof import("../../work-items/reconcile.js");
+let workItems: WorkItemStore;
+let workItemReconcile: WorkItemReconcile;
+
+function makeRes() {
+  let status = 200;
+  const chunks: Buffer[] = [];
+  const res = {
+    writeHead(s: number) {
+      status = s;
+      return this;
+    },
+    setHeader() {
+      return this;
+    },
+    end(buf?: Buffer | string) {
+      if (buf) chunks.push(Buffer.isBuffer(buf) ? buf : Buffer.from(buf));
+    },
+  } as unknown as ServerResponse;
+  return {
+    res,
+    get status() {
+      return status;
+    },
+    get text() {
+      return Buffer.concat(chunks).toString("utf-8");
+    },
+  };
+}
+
+// A queue stub that never runs enqueued turns (engine dispatch is out of scope —
+// GRS-015 pattern: the routes + stores are real, the engine is not).
+const queueStub = {
+  enqueue: async () => {},
+  clearCancelled: () => {},
+  clearQueue: () => {},
+  pauseQueue: () => {},
+  resumeQueue: () => {},
+  getPendingCount: () => 0, getRowlessWaitingCount: () => 0,
+  getTransportState: (_key: string, status: string) => status,
+};
+const engineStub = {
+  name: "stub",
+  run: async () => ({ result: "ok" }),
+  isAlive: () => false,
+  kill: () => {},
+  killAll: () => {},
+};
+const apiCtx = {
+  getConfig: () => ({ gateway: {}, engines: { default: "codex" }, sessions: {} }),
+  connectors: new Map(),
+  startTime: Date.now(),
+  gatewayAuthToken: "test-token",
+  emit: () => {},
+  sessionManager: {
+    getEngines: () => new Map(),
+    getEngine: () => engineStub,
+    getQueue: () => queueStub,
+  },
+} as unknown as import("../../gateway/api.js").ApiContext;
+
+/** A fetch that dispatches into handleApiRequest with HEADERS FORWARDED — the
+ *  identity seam is the thing under test. */
+function apiFetch(): typeof fetch {
+  return (async (input: string | URL, init?: RequestInit) => {
+    const url = new URL(typeof input === "string" ? input : input.toString());
+    const body = typeof init?.body === "string" ? [Buffer.from(init.body)] : [];
+    const headers: Record<string, string> = { host: url.host };
+    for (const [k, v] of Object.entries((init?.headers as Record<string, string>) ?? {})) {
+      headers[k.toLowerCase()] = v;
+    }
+    const req = Object.assign(Readable.from(body), {
+      method: init?.method ?? "GET",
+      url: url.pathname + url.search,
+      headers,
+    });
+    const cap = makeRes();
+    await api.handleApiRequest(req as unknown as Parameters<Api["handleApiRequest"]>[0], cap.res, apiCtx);
+    return { status: cap.status, text: async () => cap.text } as unknown as Response;
+  }) as unknown as typeof fetch;
+}
+
+function ctxFor(callerSessionId?: string): HundredfoldMcpContext {
+  return {
+    gatewayUrl: "http://gateway.test",
+    fetchFn: apiFetch(),
+    callerSessionId,
+    sessionCapability: callerSessionId ? ensureSessionCapability(callerSessionId) : undefined,
+  };
+}
+
+/** Create a session the operator way (no header) and return its id. */
+async function createOperatorSession(prompt: string): Promise<string> {
+  const resp = await apiFetch()("http://gateway.test/api/sessions", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: "Bearer test-token" },
+    body: JSON.stringify({ prompt, engine: "codex" }),
+  });
+  expect(resp.status).toBe(201);
+  return (JSON.parse(await resp.text()) as { id: string }).id;
+}
+
+beforeAll(async () => {
+  api = await import("../../gateway/api.js");
+  registry = await import("../../sessions/registry.js");
+  workItems = await import("../../work-items/store.js");
+  workItemReconcile = await import("../../work-items/reconcile.js");
+}, 60_000);
+
+beforeEach(() => {
+  sessionCommGuards.reset();
+  sessionCommGuards.setMaxHops(LATERAL_MAX_HOPS); // restore the default cap between tests
+});
+
+describe("session tools — integration against the real routes/registry", () => {
+  it("read_session last=0 returns a complete 200-message transcript with its 50,000-char latest message intact", async () => {
+    const sessionId = await createOperatorSession("message 0");
+    const existing = registry.getMessages(sessionId).length;
+    const latest = "y".repeat(50_000);
+    for (let i = existing; i < 200; i++) {
+      registry.insertMessage(sessionId, "assistant", i === 199 ? latest : `message ${i}`);
+    }
+
+    const read = (await tool("read_session").handler({ sessionId, last: 0 }, ctxFor(sessionId))) as {
+      messages: Array<{ content: string }>;
+    };
+    expect(read.messages).toHaveLength(200);
+    expect(read.messages[0].content).toBe("message 0");
+    expect(Buffer.from(read.messages[199].content).equals(Buffer.from(latest))).toBe(true);
+    expect(read.messages[199].content).not.toContain("…[truncated");
+  });
+
+  it("refuses to erase a linked attempt and preserves its spend while interrupting unfinished work", async () => {
+    const sessionId = await createOperatorSession("costly unfinished attempt");
+    const item = workItems.createWorkItem({
+      title: "Preserve attempt evidence",
+      status: "executing",
+      source: "cron",
+    });
+    workItems.linkSession(item.id, sessionId);
+    registry.accumulateSessionCost(sessionId, 4.25, 3);
+    registry.updateSession(sessionId, { status: "running" });
+
+    const response = await apiFetch()(`http://gateway.test/api/sessions/${sessionId}`, {
+      method: "DELETE",
+      headers: { authorization: "Bearer test-token" },
+    });
+    expect(response.status).toBe(409);
+    expect(JSON.parse(await response.text())).toMatchObject({ preserved: true, workItemId: item.id });
+    expect(registry.getSession(sessionId)).toMatchObject({
+      totalCost: 4.25,
+      totalTurns: 3,
+      status: "interrupted",
+      attemptOutcome: "interrupted",
+      workItemId: item.id,
+    });
+    expect(workItems.getWorkItem(item.id)?.status).toBe("blocked");
+  });
+
+  it.each(["stop", "reset"])("%s records interruption so linked unfinished TRUST work cannot reconcile to done", async (action) => {
+    const sessionId = await createOperatorSession(`unfinished ${action}`);
+    const item = workItems.createWorkItem({
+      title: `Unfinished ${action}`,
+      status: "executing",
+      source: "cron",
+    });
+    workItems.linkSession(item.id, sessionId);
+    registry.updateSession(sessionId, { status: "running" });
+
+    const response = await apiFetch()(`http://gateway.test/api/sessions/${sessionId}/${action}`, {
+      method: "POST",
+      headers: { authorization: "Bearer test-token" },
+    });
+    expect(response.status).toBe(200);
+    expect(registry.getSession(sessionId)).toMatchObject({ status: "interrupted", attemptOutcome: "interrupted" });
+
+    const reconciled = workItemReconcile.reconcileWorkItem(item.id);
+    expect(reconciled?.item.status).toBe("blocked");
+    expect(workItems.getWorkItem(item.id)?.status).not.toBe("done");
+  });
+
+  it("the headline loop: spawn (auto parent link) → list children → read → lateral send (sender-tagged, wakes) → stop", async () => {
+    const parentId = await createOperatorSession("I am the COO");
+    const ctx = ctxFor(parentId);
+
+    // 1. Spawn via MCP: parent linkage comes from the header, not the body.
+    const spawned = (await tool("spawn_session").handler({ prompt: "child task", engine: "codex" }, ctx)) as {
+      sessionId: string;
+      hint: string;
+    };
+    expect(spawned.hint).toContain("linked to you as a child");
+    const child = registry.getSession(spawned.sessionId)!;
+    expect(child.parentSessionId).toBe(parentId);
+
+    // 2. The child shows up under scope=children.
+    const listed = (await tool("list_sessions").handler({}, ctx)) as { sessions: Array<{ id: string }> };
+    expect(listed.sessions.map((s) => s.id)).toContain(spawned.sessionId);
+
+    // 3. Read: the requested recent window is returned.
+    for (let i = 0; i < 30; i++) registry.insertMessage(spawned.sessionId, "assistant", `filler ${i}`);
+    const read = (await tool("read_session").handler({ sessionId: spawned.sessionId, last: 30 }, ctx)) as {
+      messages: Array<{ content: string }>;
+      parentSessionId: string;
+    };
+    expect(read.messages.length).toBe(30);
+    expect(read.parentSessionId).toBe(parentId);
+
+    // 4. Lateral/child send: persisted as a sender-tagged notification banner.
+    await tool("send_to_session").handler({ sessionId: spawned.sessionId, message: "status update please" }, ctx);
+    const messages = registry.getMessages(spawned.sessionId);
+    const banner = messages[messages.length - 1];
+    expect(banner.role).toBe("notification");
+    expect(banner.content).toContain("📨");
+    expect(banner.content).toContain("status update please");
+
+    // 5. Stop the child (own descendant → allowed); the record survives.
+    const stopped = (await tool("stop_session").handler({ sessionId: spawned.sessionId }, ctx)) as { action: string };
+    expect(stopped.action).toBe("stopped");
+    expect(registry.getSession(spawned.sessionId)).toMatchObject({ status: "interrupted", attemptOutcome: "interrupted" });
+  });
+
+  it("an operator-authenticated relay (role:notification + from) lands as a 📨 relay banner, not a user message", async () => {
+    const target = await createOperatorSession("REPS division top");
+    // A COO routes a message between divisions via the operator API once the
+    // lateral hop budget between them is spent. Before the fix this landed as a
+    // bare `user` message that masqueraded as the operator typing.
+    const relay = await apiFetch()(`http://gateway.test/api/sessions/${target}/message`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer test-token" },
+      body: JSON.stringify({
+        role: "notification",
+        from: "yorio-lead",
+        message: "GREEN-LIGHT: clear to merge reps/workspace-conversion.",
+      }),
+    });
+    expect(relay.status).toBe(200);
+
+    const messages = registry.getMessages(target);
+    const banner = messages[messages.length - 1];
+    expect(banner.role).toBe("notification");
+    expect(banner.content).toContain("📨");
+    expect(banner.content).toContain("GREEN-LIGHT: clear to merge");
+    const meta = typeof banner.meta === "string" ? JSON.parse(banner.meta) : banner.meta;
+    expect(meta).toMatchObject({ kind: "agent-relay", fromLabel: "yorio-lead", hops: 1 });
+    expect(meta.fromSessionId).toBeUndefined();
+  });
+
+  it("an operator message WITHOUT role:notification is still a plain user message (unchanged)", async () => {
+    const target = await createOperatorSession("a division top");
+    const op = await apiFetch()(`http://gateway.test/api/sessions/${target}/message`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer test-token" },
+      body: JSON.stringify({ message: "operator says: wrap up" }),
+    });
+    expect(op.status).toBe(200);
+    const messages = registry.getMessages(target);
+    const last = messages[messages.length - 1];
+    expect(last.role).toBe("user");
+    expect(last.content).toBe("operator says: wrap up");
+  });
+
+  it("a tool spawn that lost identity or claims an unknown caller id is refused at the route", async () => {
+    // Marker without identity → the route refuses even if a (buggy/old) tool build skipped the local check.
+    const lost = await apiFetch()("http://gateway.test/api/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", [TOOL_CALL_HEADER]: TOOL_CALL_HEADER_VALUE },
+      body: JSON.stringify({ prompt: "p", engine: "codex" }),
+    });
+    expect(lost.status).toBe(403);
+    expect(await lost.text()).toMatch(/caller identity unavailable/i);
+
+    await expect(tool("spawn_session").handler({ prompt: "p", engine: "codex" }, ctxFor("no-such-session"))).rejects.toThrow(
+      /caller identity unavailable/i,
+    );
+  });
+
+  it("an explicit body parentSessionId wins over the header (internal callers unchanged)", async () => {
+    const a = await createOperatorSession("a");
+    const b = await createOperatorSession("b");
+    const resp = await apiFetch()("http://gateway.test/api/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", [CALLER_SESSION_HEADER]: a, [CALLER_SESSION_CAPABILITY_HEADER]: ensureSessionCapability(a) },
+      body: JSON.stringify({ prompt: "explicit", engine: "codex", parentSessionId: b }),
+    });
+    expect(resp.status).toBe(201);
+    const created = JSON.parse(await resp.text()) as { id: string };
+    expect(registry.getSession(created.id)!.parentSessionId).toBe(b);
+  });
+
+  it("self-message is refused at the route too (curl parity), and an unknown tool caller is a readable 403", async () => {
+    const a = await createOperatorSession("a");
+    const self = await apiFetch()(`http://gateway.test/api/sessions/${a}/message`, {
+      method: "POST",
+      headers: { "content-type": "application/json", [CALLER_SESSION_HEADER]: a, [CALLER_SESSION_CAPABILITY_HEADER]: ensureSessionCapability(a) },
+      body: JSON.stringify({ message: "hi me" }),
+    });
+    expect(self.status).toBe(400);
+    expect(await self.text()).toMatch(/own session/i);
+
+    const ghost = await apiFetch()(`http://gateway.test/api/sessions/${a}/message`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-hundredfold-caller-session": "ghost" },
+      body: JSON.stringify({ message: "hi" }),
+    });
+    expect(ghost.status).toBe(403);
+    expect(await ghost.text()).toMatch(/caller identity unavailable/i);
+  });
+
+  it("there is no send-rate cap: 30 lateral sends to distinct sessions in a row all succeed", async () => {
+    const a = await createOperatorSession("sender");
+    const ctx = ctxFor(a);
+    for (let i = 0; i < 30; i++) {
+      const target = await createOperatorSession(`target ${i}`);
+      const res = (await tool("send_to_session").handler({ sessionId: target, message: `m${i}` }, ctx)) as { status: string };
+      expect(res.status).toBe("queued");
+    }
+  });
+
+  it(`a two-agent ping-pong dies on the hop budget (cap pinned to 4) at relay 5, and an operator message resets the chain`, async () => {
+    // The default cap is now 12; pin it to 4 so this stays a compact 5-hop test.
+    sessionCommGuards.setMaxHops(4);
+    const a = await createOperatorSession("agent A");
+    const b = await createOperatorSession("agent B");
+    const ctxA = ctxFor(a);
+    const ctxB = ctxFor(b);
+
+    await tool("send_to_session").handler({ sessionId: b, message: "hop1" }, ctxA);
+    await tool("send_to_session").handler({ sessionId: a, message: "hop2" }, ctxB);
+    await tool("send_to_session").handler({ sessionId: b, message: "hop3" }, ctxA);
+    await tool("send_to_session").handler({ sessionId: a, message: "hop4" }, ctxB);
+    // A's next relay would be hop 5 → substrate refusal, no doctrine involved.
+    await expect(tool("send_to_session").handler({ sessionId: b, message: "hop5" }, ctxA)).rejects.toThrow(
+      /400.*hop budget/is,
+    );
+    // hop tags rode the delivered banners
+    const hop4 = registry.getMessages(a).at(-1)!;
+    expect(hop4.content).toContain(`hop 4/4`);
+
+    // A genuine operator message to A resets its chain — A can send again.
+    const op = await apiFetch()(`http://gateway.test/api/sessions/${a}/message`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer test-token" },
+      body: JSON.stringify({ message: "operator says: wrap up" }),
+    });
+    expect(op.status).toBe(200);
+    const again = (await tool("send_to_session").handler({ sessionId: b, message: "fresh chain" }, ctxFor(a))) as {
+      status: string;
+    };
+    expect(again.status).toBe("queued");
+  });
+
+  it("a spawned session starts a fresh chain: its first send is hop 1 even when the spawner is at the cap, and its reply to the spawner is delivered", async () => {
+    sessionCommGuards.setMaxHops(4);
+    const a = await createOperatorSession("producer");
+    const b = await createOperatorSession("peer");
+    const ctxA = ctxFor(a);
+    const ctxB = ctxFor(b);
+    // Ping-pong A <-> B until A has no budget left.
+    await tool("send_to_session").handler({ sessionId: b, message: "hop1" }, ctxA);
+    await tool("send_to_session").handler({ sessionId: a, message: "hop2" }, ctxB);
+    await tool("send_to_session").handler({ sessionId: b, message: "hop3" }, ctxA);
+    await tool("send_to_session").handler({ sessionId: a, message: "hop4" }, ctxB);
+    await expect(tool("send_to_session").handler({ sessionId: b, message: "hop5" }, ctxA)).rejects.toThrow(/hop budget/);
+
+    // A spawns a reviewer and briefs it by message: the brief is not a relay hop.
+    const child = (await tool("spawn_session").handler({ prompt: "review", engine: "codex" }, ctxA)) as { sessionId: string };
+    await tool("send_to_session").handler({ sessionId: child.sessionId, message: "round 2 please" }, ctxA);
+    const ctxC = ctxFor(child.sessionId);
+
+    // The reviewer replies to the requester at the cap: delivered.
+    await tool("send_to_session").handler({ sessionId: a, message: "verdict" }, ctxC);
+    const reply = registry.getMessages(a).at(-1)!;
+    expect(reply.content).toContain("verdict");
+    const replyMeta = typeof reply.meta === "string" ? JSON.parse(reply.meta) : reply.meta;
+    expect(replyMeta).toMatchObject({ kind: "agent-relay", hops: 2 }); // second message of the pair
+
+    // The reviewer's own first send to a non-parent is hop 1, not the spawner's chain.
+    await tool("send_to_session").handler({ sessionId: b, message: "fyi" }, ctxC);
+    const fyi = registry.getMessages(b).at(-1)!;
+    const fyiMeta = typeof fyi.meta === "string" ? JSON.parse(fyi.meta) : fyi.meta;
+    expect(fyiMeta).toMatchObject({ kind: "agent-relay", hops: 1 });
+
+    // A non-parent at the cap is still refused, and the refusal names the way out.
+    await expect(tool("send_to_session").handler({ sessionId: b, message: "hop5" }, ctxA)).rejects.toThrow(
+      /comment on the Todo/i,
+    );
+  });
+
+  it("a long parent/child exchange is eventually refused (pair budget 4x the cap), and an operator message resets it", async () => {
+    sessionCommGuards.setMaxHops(2); // pair budget 8
+    const a = await createOperatorSession("parent");
+    const child = (await tool("spawn_session").handler({ prompt: "c", engine: "codex" }, ctxFor(a))) as { sessionId: string };
+    const ctxA = ctxFor(a);
+    const ctxC = ctxFor(child.sessionId);
+    for (let i = 1; i <= 8; i++) {
+      const sender = i % 2 ? ctxA : ctxC;
+      const target = i % 2 ? child.sessionId : a;
+      await tool("send_to_session").handler({ sessionId: target, message: `m${i}` }, sender);
+    }
+    await expect(tool("send_to_session").handler({ sessionId: a, message: "m9" }, ctxC)).rejects.toThrow(
+      /400.*hop budget.*parent\/child/is,
+    );
+    const op = await apiFetch()(`http://gateway.test/api/sessions/${a}/message`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer test-token" },
+      body: JSON.stringify({ message: "operator says: go on" }),
+    });
+    expect(op.status).toBe(200);
+    const again = (await tool("send_to_session").handler({ sessionId: a, message: "m9" }, ctxC)) as { status: string };
+    expect(again.status).toBe("queued");
+  });
+
+  it("messaging a child does not launder the relay chain: A->C->B->A at the cap is refused", async () => {
+    sessionCommGuards.setMaxHops(4);
+    const a = await createOperatorSession("A");
+    const b = await createOperatorSession("B");
+    const ctxA = ctxFor(a);
+    const ctxB = ctxFor(b);
+    const child = (await tool("spawn_session").handler({ prompt: "c", engine: "codex" }, ctxA)) as { sessionId: string };
+    const ctxC = ctxFor(child.sessionId);
+    await tool("send_to_session").handler({ sessionId: b, message: "hop1" }, ctxA);
+    await tool("send_to_session").handler({ sessionId: a, message: "hop2" }, ctxB);
+    await tool("send_to_session").handler({ sessionId: b, message: "hop3" }, ctxA);
+    await tool("send_to_session").handler({ sessionId: a, message: "hop4" }, ctxB);
+    // Drive the A -> C -> B -> A loop; it must die within the pair budget (16), never run on.
+    let refused = false;
+    for (let round = 0; round < 40 && !refused; round++) {
+      try {
+        await tool("send_to_session").handler({ sessionId: child.sessionId, message: "relay" }, ctxA);
+        await tool("send_to_session").handler({ sessionId: b, message: "relay" }, ctxC);
+        await tool("send_to_session").handler({ sessionId: a, message: "relay" }, ctxB);
+      } catch (err) {
+        refused = /hop budget/.test(String(err));
+        if (!refused) throw err;
+      }
+    }
+    expect(refused).toBe(true);
+  });
+
+  it("stop is scoped to descendants for agents: grandchild ok, peer 403, bearer operator unrestricted", async () => {
+    const root = await createOperatorSession("root");
+    const rootCtx = ctxFor(root);
+    const child = (await tool("spawn_session").handler({ prompt: "c", engine: "codex" }, rootCtx)) as { sessionId: string };
+    const grandchild = (await tool("spawn_session").handler({ prompt: "g", engine: "codex" }, ctxFor(child.sessionId))) as {
+      sessionId: string;
+    };
+    const peer = await createOperatorSession("peer");
+
+    // transitive descendant → allowed
+    const ok = (await tool("stop_session").handler({ sessionId: grandchild.sessionId }, rootCtx)) as { action: string };
+    expect(ok.action).toBe("stopped");
+
+    // a peer is not root's descendant → 403 through the tool, readable
+    await expect(tool("stop_session").handler({ sessionId: peer }, rootCtx)).rejects.toThrow(/403.*descendant/is);
+
+    // authenticated operator authority keeps full access
+    const op = await apiFetch()(`http://gateway.test/api/sessions/${peer}/stop`, {
+      method: "POST",
+      headers: { authorization: "Bearer test-token" },
+    });
+    expect(op.status).toBe(200);
+  });
+});
+
+/* ── GRS-017 finding 2 — fail-closed session-tool authority at the routes ────── */
+
+describe("fail-closed session-tool authority (codex review finding 2 regression)", () => {
+  it("REVIEW REPRO: a tool-marked stop with NO caller identity is REFUSED and stops nothing — it must never fall through to the unrestricted operator route", async () => {
+    const victim = await createOperatorSession("victim");
+    registry.updateSession(victim, { status: "running" });
+    const resp = await apiFetch()(`http://gateway.test/api/sessions/${victim}/stop`, {
+      method: "POST",
+      headers: { [TOOL_CALL_HEADER]: TOOL_CALL_HEADER_VALUE },
+    });
+    expect(resp.status).toBe(403);
+    expect(await resp.text()).toMatch(/caller identity unavailable/i);
+    // The review's proof of fail-open was {"status":"stopped"} + target idle. Now: untouched.
+    expect(registry.getSession(victim)!.status).toBe("running");
+  });
+
+  it("a tool-marked message with NO caller identity is REFUSED — it must not become an unguarded, unprefixed user message", async () => {
+    const target = await createOperatorSession("target");
+    const before = registry.getMessages(target).length;
+    const resp = await apiFetch()(`http://gateway.test/api/sessions/${target}/message`, {
+      method: "POST",
+      headers: { "content-type": "application/json", [TOOL_CALL_HEADER]: TOOL_CALL_HEADER_VALUE },
+      body: JSON.stringify({ message: "smuggled instruction" }),
+    });
+    expect(resp.status).toBe(403);
+    expect(await resp.text()).toMatch(/caller identity unavailable/i);
+    expect(registry.getMessages(target).length).toBe(before);
+  });
+
+  it("bearer operator requests keep parentless spawn, plain message, and unrestricted stop working", async () => {
+    const anon = await apiFetch()("http://gateway.test/api/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer test-token" },
+      body: JSON.stringify({ prompt: "operator spawn", engine: "codex" }),
+    });
+    expect(anon.status).toBe(201);
+    const anonId = (JSON.parse(await anon.text()) as { id: string }).id;
+    expect(registry.getSession(anonId)!.parentSessionId).toBeFalsy();
+
+    const msg = await apiFetch()(`http://gateway.test/api/sessions/${anonId}/message`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer test-token" },
+      body: JSON.stringify({ message: "operator note" }),
+    });
+    expect(msg.status).toBe(200);
+
+    const stop = await apiFetch()(`http://gateway.test/api/sessions/${anonId}/stop`, {
+      method: "POST",
+      headers: { authorization: "Bearer test-token" },
+    });
+    expect(stop.status).toBe(200);
+    expect((JSON.parse(await stop.text()) as { status: string }).status).toBe("stopped");
+  });
+
+  it("marker + VALID identity keeps working and stays scoped: child spawn linked, peer stop refused, own child stop allowed", async () => {
+    const parent = await createOperatorSession("scoped parent");
+    const ctx = ctxFor(parent); // the tools now always send the marker alongside the identity
+    const child = (await tool("spawn_session").handler({ prompt: "c", engine: "codex" }, ctx)) as { sessionId: string };
+    expect(registry.getSession(child.sessionId)!.parentSessionId).toBe(parent);
+
+    const peer = await createOperatorSession("scoped peer");
+    await expect(tool("stop_session").handler({ sessionId: peer }, ctx)).rejects.toThrow(/403.*descendant/is);
+
+    const ok = (await tool("stop_session").handler({ sessionId: child.sessionId }, ctx)) as { action: string };
+    expect(ok.action).toBe("stopped");
+  });
+});

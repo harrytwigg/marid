@@ -20,7 +20,7 @@ function storeRecents(count: number) {
   const items = Array.from({ length: count }, (_, index) => ({
     id: `todo-AAA-${index}`, label: `Row ${index}`, href: `/todos/AAA-${index}`, type: "todo",
   }))
-  localStorage.setItem("jinn-command-recent", JSON.stringify(items))
+  localStorage.setItem("hundredfold-command-recent", JSON.stringify(items))
 }
 
 describe("the overlay's states", () => {
@@ -97,6 +97,6 @@ describe("the overlay's states", () => {
     fireEvent.click(await screen.findByTestId("search-row-note:n-1"))
 
     await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/note/n-1"))
-    expect(JSON.parse(localStorage.getItem("jinn-command-recent") ?? "[]")[0]).toMatchObject({ id: "note-n-1" })
+    expect(JSON.parse(localStorage.getItem("hundredfold-command-recent") ?? "[]")[0]).toMatchObject({ id: "note-n-1" })
   })
 })

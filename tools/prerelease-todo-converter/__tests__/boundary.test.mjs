@@ -15,12 +15,12 @@ function filesBelow(root) {
 }
 
 test("the converter is root-only, unshipped, and has no apply entry point", () => {
-  const packageJson = JSON.parse(fs.readFileSync(path.join(repositoryRoot, "packages/jinn/package.json"), "utf8"));
+  const packageJson = JSON.parse(fs.readFileSync(path.join(repositoryRoot, "packages/hundredfold/package.json"), "utf8"));
   // The published set is free to grow; the point of this assertion is that the converter
   // never joins it, not that the list never grows.
   assert.ok(
     Array.isArray(packageJson.files) && packageJson.files.every((entry) => !entry.includes("prerelease-todo-converter")),
-    `packages/jinn/package.json "files" must not publish the converter, got ${JSON.stringify(packageJson.files)}`,
+    `packages/hundredfold/package.json "files" must not publish the converter, got ${JSON.stringify(packageJson.files)}`,
   );
 
   for (const file of filesBelow(path.join(repositoryRoot, "packages"))) {

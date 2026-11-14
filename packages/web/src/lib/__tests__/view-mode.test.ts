@@ -8,7 +8,7 @@ function memStore(): KVStore {
 
 describe("view-mode", () => {
   it("viewModeKey is namespaced per session id", () => {
-    expect(viewModeKey("s1")).toBe("jinn-view-mode-s1");
+    expect(viewModeKey("s1")).toBe("hundredfold-view-mode-s1");
   });
 
   it("readViewMode defaults to chat for an unknown session", () => {

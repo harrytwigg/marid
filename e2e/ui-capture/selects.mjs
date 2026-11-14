@@ -2,7 +2,7 @@
 //
 //   node selects.mjs <sandbox-home> <base-url> <out-dir>
 //
-// Runs in the browser JINN_CAPTURE_BROWSER names (Firefox by default) and exits non-zero when a check
+// Runs in the browser HUNDREDFOLD_CAPTURE_BROWSER names (Firefox by default) and exits non-zero when a check
 // fails. The selects are the ones in the employee editor (Rank, Department, Reports to); the same
 // script runs against a build before and after a change to them. Checks: opens on a click and on the
 // keyboard, typeahead, a disabled option is skipped and cannot be chosen, Escape closes and focus
@@ -37,7 +37,7 @@ employee('engineering', 'eng-lead', 'manager')
 employee('engineering', 'eng-dev', 'employee', ['reportsTo: eng-lead'])
 employee('side-project', 'side-lead', 'manager')
 
-const browser = await (process.env.JINN_CAPTURE_BROWSER === 'chromium' ? chromium : firefox).launch()
+const browser = await (process.env.HUNDREDFOLD_CAPTURE_BROWSER === 'chromium' ? chromium : firefox).launch()
 const results = []
 async function check(name, body) {
   try {
@@ -55,8 +55,8 @@ function assert(condition, message) {
 
 async function open(viewport) {
   const phone = viewport.width < 600
-  const context = await browser.newContext({ viewport, hasTouch: phone, isMobile: phone && process.env.JINN_CAPTURE_BROWSER === 'chromium', extraHTTPHeaders: headers })
-  await context.addInitScript(() => { localStorage.setItem('jinn-onboarded', 'true') })
+  const context = await browser.newContext({ viewport, hasTouch: phone, isMobile: phone && process.env.HUNDREDFOLD_CAPTURE_BROWSER === 'chromium', extraHTTPHeaders: headers })
+  await context.addInitScript(() => { localStorage.setItem('hundredfold-onboarded', 'true') })
   const page = await context.newPage()
   const errors = []
   page.on('pageerror', (e) => errors.push(e.message))
@@ -190,7 +190,7 @@ for (const theme of ['light', 'dark']) {
   const viewports = [['desktop', { width: 1440, height: 900 }], ['phone', { width: 390, height: 844 }]]
   for (const [name, viewport] of viewports) {
     const context = await browser.newContext({ viewport, extraHTTPHeaders: headers })
-    await context.addInitScript(() => { localStorage.setItem('jinn-onboarded', 'true') })
+    await context.addInitScript(() => { localStorage.setItem('hundredfold-onboarded', 'true') })
     const page = await context.newPage()
     await page.goto(`${baseUrl}/settings`, { waitUntil: 'networkidle' })
     await page.waitForTimeout(1000)

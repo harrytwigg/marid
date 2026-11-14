@@ -6,9 +6,9 @@ import { test, expect, type Page } from '@playwright/test'
 // Never point this at the live gateway: it owns port 7777, and the Vite dev
 // server proxies its API and HMR socket straight back to whatever gateway port
 // it is given. Stand up a throwaway instance instead and drive that:
-//   ~/.jinn/skills/jinn-sandbox/scripts/jinn-sandbox.sh up qa-scroll --build --seed
+//   ~/.hundredfold/skills/hundredfold-sandbox/scripts/hundredfold-sandbox.sh up qa-scroll --build --seed
 // then run:  SCROLL_E2E_URL=http://localhost:<sandbox-port> SCROLL_E2E_SESSION=<id> pnpm test:e2e scroll
-// and `jinn-sandbox.sh destroy qa-scroll --yes` afterwards, pass or fail.
+// and `hundredfold-sandbox.sh destroy qa-scroll --yes` afterwards, pass or fail.
 // Falls back to the e2e baseURL (:7779) and skips gracefully if no thread is loaded.
 
 const BASE = process.env.SCROLL_E2E_URL || 'http://localhost:7779'

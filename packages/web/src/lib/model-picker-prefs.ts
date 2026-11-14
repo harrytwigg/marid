@@ -3,7 +3,7 @@
  * shows an engine's featured models by default; expanding to the full list is a
  * deliberate action we remember so an operator who wants the long list keeps it.
  */
-const STORAGE_KEY = 'jinn-model-picker-expanded'
+const STORAGE_KEY = 'hundredfold-model-picker-expanded'
 
 function load(): Record<string, boolean> {
   if (typeof window === 'undefined') return {}

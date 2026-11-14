@@ -2,7 +2,7 @@
 //!
 //! The probe prints through `console.log`, which needs the Web Inspector
 //! attached to read — fine for a person sitting in front of it, useless as a
-//! repeatable measurement. When `JINN_SHELL_PROBE` is set the shell opens a
+//! repeatable measurement. When `HUNDREDFOLD_SHELL_PROBE` is set the shell opens a
 //! second window, runs the probe in it, prints what the probe printed to
 //! stdout, and quits.
 //!
@@ -14,7 +14,7 @@
 
 use tauri::{AppHandle, Runtime, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-const ENV_VAR: &str = "JINN_SHELL_PROBE";
+const ENV_VAR: &str = "HUNDREDFOLD_SHELL_PROBE";
 
 pub const LABEL: &str = "probe";
 

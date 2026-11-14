@@ -128,7 +128,7 @@ function CommentBlock({
           ) : collapsible && !expanded ? (
             <div
               data-testid={`activity-preview-${comment.id}`}
-              className="line-clamp-3 break-words text-[var(--text-tertiary)] [&_.jinn-markdown]:text-[var(--text-tertiary)] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+              className="line-clamp-3 break-words text-[var(--text-tertiary)] [&_.hundredfold-markdown]:text-[var(--text-tertiary)] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
             >
               <MarkdownView content={stripCommentMarkers(comment.body)} isDark={isDark} density="compact" mentions employees={byName} />
             </div>

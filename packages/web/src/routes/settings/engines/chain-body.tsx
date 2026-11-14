@@ -1,4 +1,4 @@
-import type { FallbackChainEntry, FallbackChainSubject, FallbackLink } from "@jinn/fallback-chain-wire"
+import type { FallbackChainEntry, FallbackChainSubject, FallbackLink } from "@hundredfold/fallback-chain-wire"
 import { ChainFlowDisclosure } from "@/components/fallback/chain-flow-disclosure"
 import { resolveForFlow } from "@/components/fallback/resolve-links"
 import { subjectProblems } from "@/hooks/use-fallback-chains"

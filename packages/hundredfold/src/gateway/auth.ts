@@ -1,0 +1,606 @@
+import crypto from "node:crypto";
+import fs from "node:fs";
+import { isIP } from "node:net";
+import path from "node:path";
+import type { IncomingMessage } from "node:http";
+import type { HundredfoldConfig } from "../shared/types.js";
+import { resolveHundredfoldInstance } from "../shared/home.js";
+import { wireHeader } from "../shared/wire-names.js";
+import { parseCookieHeader, requestAuthCookies } from "./auth-cookies.js";
+import { isPublicAccountRoute } from "../accounts/public-paths.js";
+
+// The cookie names and headers moved to auth-cookies.ts; they are still exported from here.
+export {
+  AUTH_COOKIE,
+  AUTH_DEVICE_COOKIE,
+  authCookieHeader,
+  authCookieHeaders,
+  authCookieName,
+  authDeviceCookieHeader,
+  authDeviceCookieName,
+  clearAuthCookieHeader,
+  clearAuthCookieHeaders,
+  clearAuthDeviceCookieHeader,
+  legacyAuthCookieMigration,
+  parseCookieHeader,
+} from "./auth-cookies.js";
+export const LOCAL_BOOTSTRAP_GRANT_HEADER = wireHeader("bootstrap-grant");
+export const LOCAL_BOOTSTRAP_GRANT_TTL_MS = 60_000;
+const PAIRING_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+export const PAIRING_CODE_TTL_MS = 5 * 60 * 1000;
+export const AUTOMATED_AUTH_SESSION_TTL_MS = 60 * 60 * 1000;
+// touchAuthSession persists lastSeenAt at most once per window per device to
+// avoid a disk write on every authenticated request.
+export const AUTH_SESSION_TOUCH_THROTTLE_MS = 60 * 1000;
+
+export interface PairingCodeEntry {
+  expiresAt: number;
+}
+
+/**
+ * Minimal store surface shared by the in-memory Map (tests, default) and the
+ * durable file-backed store used in production. A plain Map satisfies it.
+ */
+export interface PairingCodeStore {
+  get(hash: string): PairingCodeEntry | undefined;
+  set(hash: string, entry: PairingCodeEntry): void;
+  delete(hash: string): void;
+  entries(): IterableIterator<[string, PairingCodeEntry]>;
+}
+
+const pairingCodes: PairingCodeStore = new Map();
+
+/**
+ * Persist pairing codes under HUNDREDFOLD_HOME so a gateway restart within the 5-minute
+ * TTL no longer silently invalidates an outstanding code. Only salted hashes and
+ * expiries are stored (never the raw code), at mode 0600, and always per-instance
+ * (each instance has its own HUNDREDFOLD_HOME) — a code still only pairs the instance
+ * that minted it, which is the intended boundary.
+ */
+export function createFilePairingCodeStore(hundredfoldHome: string): PairingCodeStore {
+  const file = path.join(hundredfoldHome, "pairing-codes.json");
+  const load = (): Map<string, PairingCodeEntry> => {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(file, "utf-8")) as Record<string, { expiresAt?: unknown }>;
+      const map = new Map<string, PairingCodeEntry>();
+      for (const [hash, entry] of Object.entries(parsed)) {
+        if (entry && typeof entry.expiresAt === "number") map.set(hash, { expiresAt: entry.expiresAt });
+      }
+      return map;
+    } catch {
+      return new Map();
+    }
+  };
+  const save = (map: Map<string, PairingCodeEntry>): void => {
+    const obj: Record<string, PairingCodeEntry> = {};
+    for (const [hash, entry] of map) obj[hash] = { expiresAt: entry.expiresAt };
+    fs.writeFileSync(file, JSON.stringify(obj), { mode: 0o600 });
+  };
+  return {
+    get: (hash) => load().get(hash),
+    set: (hash, entry) => { const map = load(); map.set(hash, entry); save(map); },
+    delete: (hash) => { const map = load(); map.delete(hash); save(map); },
+    entries: () => load().entries(),
+  };
+}
+
+export interface LocalBootstrapGrantEntry {
+  expiresAt: number;
+}
+
+export type LocalBootstrapGrantStore = Map<string, LocalBootstrapGrantEntry>;
+
+const localBootstrapGrants: LocalBootstrapGrantStore = new Map();
+
+/** `password` is an instance owner who signed in with email and password; its device carries their `userId`. */
+export type AuthSessionKind = "local" | "remote" | "token" | "password";
+
+export interface AuthSessionDevice {
+  id: string;
+  name: string;
+  kind: AuthSessionKind;
+  createdAt: string;
+  lastSeenAt: string;
+  lastIp?: string;
+  userAgent?: string;
+  /** The account an owner sign-in belongs to. Absent on every paired device. */
+  userId?: string;
+}
+
+interface StoredAuthSessionDevice extends AuthSessionDevice {
+  tokenHash: string;
+}
+
+export interface PublicAuthSessionDevice extends AuthSessionDevice {
+  current: boolean;
+}
+
+export function createAuthToken(): string {
+  return crypto.randomBytes(32).toString("base64url");
+}
+
+function hashLocalBootstrapGrant(grant: string): string {
+  return crypto.createHash("sha256").update(`hundredfold-local-bootstrap:${grant}`).digest("base64url");
+}
+
+export function issueLocalBootstrapGrant(
+  store: LocalBootstrapGrantStore = localBootstrapGrants,
+  now = Date.now(),
+  grantFactory: () => string = createAuthToken,
+): string {
+  cleanupExpiredLocalBootstrapGrants(store, now);
+  const grant = grantFactory();
+  store.set(hashLocalBootstrapGrant(grant), { expiresAt: now + LOCAL_BOOTSTRAP_GRANT_TTL_MS });
+  return grant;
+}
+
+export function consumeLocalBootstrapGrant(
+  rawGrant: string | undefined | null,
+  store: LocalBootstrapGrantStore = localBootstrapGrants,
+  now = Date.now(),
+): boolean {
+  if (typeof rawGrant !== "string" || rawGrant.length < 16) return false;
+  const hash = hashLocalBootstrapGrant(rawGrant);
+  const entry = store.get(hash);
+  if (!entry) return false;
+  store.delete(hash);
+  return entry.expiresAt >= now;
+}
+
+export function cleanupExpiredLocalBootstrapGrants(
+  store: LocalBootstrapGrantStore = localBootstrapGrants,
+  now = Date.now(),
+): void {
+  for (const [hash, entry] of store.entries()) {
+    if (entry.expiresAt < now) store.delete(hash);
+  }
+}
+
+export function ensureGatewayAuthToken(hundredfoldHome: string): string {
+  fs.mkdirSync(hundredfoldHome, { recursive: true });
+  const file = path.join(hundredfoldHome, "gateway.json");
+  let existing: Record<string, unknown> = {};
+  try {
+    existing = JSON.parse(fs.readFileSync(file, "utf-8"));
+  } catch {
+    existing = {};
+  }
+  if (typeof existing.token === "string" && existing.token.length >= 32) {
+    try { fs.chmodSync(file, 0o600); } catch {}
+    return existing.token;
+  }
+  const token = createAuthToken();
+  const next = { ...existing, token };
+  const tmp = `${file}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, JSON.stringify(next, null, 2), { mode: 0o600 });
+  fs.renameSync(tmp, file);
+  fs.chmodSync(file, 0o600);
+  return token;
+}
+
+function safeEqual(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
+}
+
+export function matchesGatewayAuthToken(candidate: string | undefined, expectedToken: string | undefined): boolean {
+  return typeof candidate === "string" && typeof expectedToken === "string" && safeEqual(candidate, expectedToken);
+}
+
+export function verifyGatewayAuth(
+  headers: Record<string, string | string[] | undefined>,
+  expectedToken: string | undefined,
+  hundredfoldHome?: string,
+): boolean {
+  if (!expectedToken) return false;
+  if (hasGatewayBearerAuth(headers, expectedToken)) return true;
+  const cookieRaw = headers.cookie;
+  const cookie = Array.isArray(cookieRaw) ? cookieRaw[0] : cookieRaw;
+  const parsed = parseCookieHeader(cookie);
+  const { secret: token, deviceId } = requestAuthCookies(parsed, hundredfoldHome);
+  if (hundredfoldHome && typeof token === "string" && typeof deviceId === "string" && verifyAuthSession(hundredfoldHome, deviceId, token)) {
+    return true;
+  }
+  return false;
+}
+
+export function hasGatewayBearerAuth(
+  headers: Record<string, string | string[] | undefined>,
+  expectedToken: string | undefined,
+): boolean {
+  if (!expectedToken) return false;
+  const authHeaderRaw = headers.authorization;
+  const authHeader = Array.isArray(authHeaderRaw) ? authHeaderRaw[0] : authHeaderRaw;
+  if (typeof authHeader !== "string") return false;
+  const [scheme, ...rest] = authHeader.trim().split(/\s+/);
+  return scheme?.toLowerCase() === "bearer" && safeEqual(rest.join(" "), expectedToken);
+}
+
+export function authenticateGatewayRequest(
+  req: Pick<IncomingMessage, "headers" | "socket">,
+  expectedToken: string | undefined,
+  hundredfoldHome?: string,
+): { ok: boolean; reason?: string } {
+  if (!expectedToken) return { ok: false, reason: "Gateway auth token is not configured" };
+  return verifyGatewayAuth(req.headers, expectedToken, hundredfoldHome)
+    ? { ok: true }
+    : { ok: false, reason: "Missing or invalid gateway auth token" };
+}
+
+export function isLoopbackHost(host: string | undefined): boolean {
+  if (!host) return true;
+  const raw = host.trim().toLowerCase();
+  const h = raw.startsWith("[")
+    ? raw.slice(1, raw.indexOf("]") >= 0 ? raw.indexOf("]") : undefined)
+    : isIP(raw) > 0 ? raw : raw.replace(/:\d+$/, "");
+  return h === "localhost"
+    || h.endsWith(".localhost")
+    || h === "127.0.0.1"
+    || h === "::1"
+    || h === "0:0:0:0:0:0:0:1";
+}
+
+export function isNetworkHost(host: string | undefined): boolean {
+  if (!host) return false;
+  const h = host.trim().toLowerCase().replace(/^\[|\]$/g, "");
+  return h === "0.0.0.0" || !isLoopbackHost(h);
+}
+
+export function authRequiredForRequest(method: string | undefined, pathname: string): boolean {
+  if (pathname === "/api/status") return false;
+  if (pathname === "/api/auth/state" && (method || "GET").toUpperCase() === "GET") return false;
+  if (pathname === "/api/auth/bootstrap" && (method || "GET").toUpperCase() === "POST") return false;
+  if (pathname === "/api/auth/pairing-challenges" && (method || "GET").toUpperCase() === "POST") return false;
+  if (pathname === "/api/auth/pairing-codes" && (method || "GET").toUpperCase() === "POST") return false;
+  if (pathname === "/api/auth/pair" && (method || "GET").toUpperCase() === "POST") return false;
+  if (pathname === "/api/auth/logout" && (method || "GET").toUpperCase() === "POST") return false;
+  if (pathname === "/api/internal/hook" && (method || "GET").toUpperCase() === "POST") return false;
+  if (isPublicAccountRoute(method, pathname)) return false;
+  if (pathname.startsWith("/api/")) return true;
+  if (pathname === "/ws" || pathname.startsWith("/ws/pty/")) return true;
+  return false;
+}
+
+export function shouldRequireGatewayAuth(config: Pick<HundredfoldConfig, "gateway">): boolean {
+  const gateway = config.gateway as HundredfoldConfig["gateway"] & {
+    authRequired?: boolean;
+    authDisabled?: boolean;
+  };
+  if (gateway.authDisabled === true) return false;
+  if (gateway.authRequired === true) return true;
+  return isNetworkHost(gateway.host);
+}
+
+export function validateGatewayExposure(config: Pick<HundredfoldConfig, "gateway">): { ok: true } | { ok: false; error: string } {
+  const gateway = config.gateway as HundredfoldConfig["gateway"] & {
+    authDisabled?: boolean;
+    insecureAllowUnauthenticatedNetwork?: boolean;
+  };
+  if (isNetworkHost(gateway.host) && gateway.authDisabled === true && gateway.insecureAllowUnauthenticatedNetwork !== true) {
+    return { ok: false, error: "Refusing network-exposed gateway without auth. Set gateway.insecureAllowUnauthenticatedNetwork=true to override." };
+  }
+  return { ok: true };
+}
+
+/**
+ * True when the request reached us over HTTPS — either directly, or through a
+ * reverse proxy that terminated TLS and said so.
+ *
+ * `x-forwarded-proto` is attacker-controllable in general, which is why the
+ * rest of this file treats forwarded headers as a reason to distrust a request.
+ * It is safe *here* because the only thing it decides is whether to add the
+ * `Secure` attribute to a cookie we are already issuing: lying yields a cookie
+ * the liar's own browser will then refuse to send over plaintext. It cannot
+ * grant access, and it cannot strip `Secure` from an honest HTTPS session.
+ */
+export function requestArrivedOverHttps(
+  req: Pick<IncomingMessage, "headers" | "socket">,
+): boolean {
+  if ((req.socket as { encrypted?: boolean }).encrypted === true) return true;
+  const raw = req.headers["x-forwarded-proto"];
+  const proto = Array.isArray(raw) ? raw[0] : raw;
+  return typeof proto === "string" && proto.split(",")[0]!.trim().toLowerCase() === "https";
+}
+
+export function createAuthState(
+  config: Pick<HundredfoldConfig, "gateway">,
+  req: Pick<IncomingMessage, "headers" | "socket">,
+  expectedToken: string | undefined,
+  hundredfoldHome?: string,
+): {
+  authRequired: boolean;
+  authenticated: boolean;
+  canBootstrapLocal: boolean;
+  networkExposed: boolean;
+  instance: string;
+} {
+  const authRequired = shouldRequireGatewayAuth(config);
+  const authenticated = authRequired ? verifyGatewayAuth(req.headers, expectedToken, hundredfoldHome) : true;
+  return {
+    authRequired,
+    authenticated,
+    canBootstrapLocal: Boolean(expectedToken && isLoopbackAddress(req.socket.remoteAddress) && isLoopbackHost(headerValue(req.headers, "host"))),
+    networkExposed: isNetworkHost(config.gateway.host),
+    // Lets the browser show the exact `hundredfold -i <instance> pair` command for the
+    // gateway it is actually talking to, so multi-instance operators mint on the
+    // right one instead of the default.
+    instance: resolveHundredfoldInstance(hundredfoldHome),
+  };
+}
+
+function isLoopbackAddress(addr: string | undefined): boolean {
+  if (!addr) return false;
+  let a = addr.trim().toLowerCase();
+  if (a.startsWith("::ffff:")) a = a.slice("::ffff:".length);
+  if (a === "::1") return true;
+  const m = /^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(a);
+  return m !== null && m.slice(1).every((octet) => Number(octet) <= 255);
+}
+
+function authDevicesPath(hundredfoldHome: string): string {
+  return path.join(hundredfoldHome, "auth-devices.json");
+}
+
+function authSessionHash(secret: string): string {
+  return crypto.createHash("sha256").update(`hundredfold-auth-session:${secret}`).digest("base64url");
+}
+
+function headerValue(headers: Record<string, string | string[] | undefined>, key: string): string | undefined {
+  const raw = headers[key] ?? headers[key.toLowerCase()];
+  return Array.isArray(raw) ? raw[0] : raw;
+}
+
+function loadStoredAuthSessions(hundredfoldHome: string): StoredAuthSessionDevice[] {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(authDevicesPath(hundredfoldHome), "utf-8")) as { devices?: unknown };
+    if (!Array.isArray(parsed.devices)) return [];
+    return parsed.devices.filter((device): device is StoredAuthSessionDevice => {
+      if (!device || typeof device !== "object") return false;
+      const d = device as Record<string, unknown>;
+      return typeof d.id === "string"
+        && typeof d.name === "string"
+        && typeof d.kind === "string"
+        && typeof d.createdAt === "string"
+        && typeof d.lastSeenAt === "string"
+        && typeof d.tokenHash === "string";
+    });
+  } catch {
+    return [];
+  }
+}
+
+function saveStoredAuthSessions(hundredfoldHome: string, devices: StoredAuthSessionDevice[]): void {
+  fs.mkdirSync(hundredfoldHome, { recursive: true });
+  const file = authDevicesPath(hundredfoldHome);
+  const tmp = `${file}.tmp-${process.pid}`;
+  try {
+    fs.writeFileSync(tmp, JSON.stringify({ devices }, null, 2), { mode: 0o600 });
+    fs.renameSync(tmp, file);
+    fs.chmodSync(file, 0o600);
+  } catch (err) {
+    // A failed write (e.g. ENOSPC) must not leave a half-written tmp behind for
+    // the same pid to trip over on the next attempt. Clean it up and rethrow so
+    // callers that require durability (createAuthSession) still see the failure;
+    // best-effort callers (touchAuthSession) swallow it.
+    try { fs.rmSync(tmp, { force: true }); } catch { /* ignore */ }
+    throw err;
+  }
+}
+
+function pruneStaleAutomatedAuthSessions(
+  hundredfoldHome: string,
+  devices: StoredAuthSessionDevice[],
+  now = Date.now(),
+): StoredAuthSessionDevice[] {
+  const next = devices.filter((device) => {
+    if (!/HeadlessChrome|Playwright/i.test(device.userAgent || "")) return true;
+    const lastSeenAt = Date.parse(device.lastSeenAt);
+    return !Number.isFinite(lastSeenAt) || now - lastSeenAt <= AUTOMATED_AUTH_SESSION_TTL_MS;
+  });
+  if (next.length !== devices.length) saveStoredAuthSessions(hundredfoldHome, next);
+  return next;
+}
+
+function inferAuthSessionName(req: Pick<IncomingMessage, "headers" | "socket">, kind: AuthSessionKind): string {
+  if (kind === "local") return "This Mac";
+  const ua = headerValue(req.headers, "user-agent") || "";
+  if (/iphone|ipad/i.test(ua)) return "iPhone or iPad browser";
+  if (/android/i.test(ua)) return "Android browser";
+  if (/macintosh|mac os/i.test(ua)) return "Mac browser";
+  if (/windows/i.test(ua)) return "Windows browser";
+  if (/linux/i.test(ua)) return "Linux browser";
+  return kind === "token" ? "Setup-token browser" : "Remote browser";
+}
+
+export function createAuthSession(
+  hundredfoldHome: string,
+  req: Pick<IncomingMessage, "headers" | "socket">,
+  opts: { name?: string; kind?: AuthSessionKind; now?: number; userId?: string } = {},
+): { secret: string; device: AuthSessionDevice } {
+  const now = opts.now ?? Date.now();
+  const kind = opts.kind ?? (isLoopbackAddress(req.socket.remoteAddress) ? "local" : "remote");
+  const secret = createAuthToken();
+  const userAgent = headerValue(req.headers, "user-agent");
+  const devices = pruneStaleAutomatedAuthSessions(hundredfoldHome, loadStoredAuthSessions(hundredfoldHome), now);
+  const device: AuthSessionDevice = {
+    id: `d_${crypto.randomBytes(12).toString("base64url")}`,
+    name: opts.name || inferAuthSessionName(req, kind),
+    kind,
+    createdAt: new Date(now).toISOString(),
+    lastSeenAt: new Date(now).toISOString(),
+    ...(req.socket.remoteAddress ? { lastIp: req.socket.remoteAddress } : {}),
+    ...(userAgent ? { userAgent } : {}),
+    ...(opts.userId ? { userId: opts.userId } : {}),
+  };
+  const stored: StoredAuthSessionDevice = { ...device, tokenHash: authSessionHash(secret) };
+  saveStoredAuthSessions(hundredfoldHome, [...devices.filter((existing) => existing.id !== stored.id), stored]);
+  return { secret, device };
+}
+
+export function verifyAuthSession(hundredfoldHome: string, deviceId: string | undefined, secret: string | undefined): boolean {
+  if (!deviceId || !secret) return false;
+  const device = loadStoredAuthSessions(hundredfoldHome).find((d) => d.id === deviceId);
+  if (!device) return false;
+  return safeEqual(device.tokenHash, authSessionHash(secret));
+}
+
+export function touchAuthSession(
+  hundredfoldHome: string,
+  req: Pick<IncomingMessage, "headers" | "socket">,
+  now = Date.now(),
+): AuthSessionDevice | null {
+  const cookieRaw = req.headers.cookie;
+  const cookie = Array.isArray(cookieRaw) ? cookieRaw[0] : cookieRaw;
+  const parsed = parseCookieHeader(cookie);
+  const { secret, deviceId } = requestAuthCookies(parsed, hundredfoldHome);
+  if (!verifyAuthSession(hundredfoldHome, deviceId, secret)) return null;
+  const devices = loadStoredAuthSessions(hundredfoldHome);
+  const idx = devices.findIndex((d) => d.id === deviceId);
+  if (idx < 0) return null;
+  const existing = devices[idx];
+  const nextIp = req.socket.remoteAddress;
+  const nextUa = headerValue(req.headers, "user-agent");
+  // Write-amplification guard: touchAuthSession runs on EVERY authenticated
+  // request. Persisting lastSeenAt each time hammers the disk (and, when the
+  // disk is full, floods the log with ENOSPC on the same tmp file). Only persist
+  // when a device attribute actually changed or the recorded lastSeenAt is stale
+  // beyond the throttle window.
+  const lastSeenMs = Date.parse(existing.lastSeenAt);
+  const stale = !Number.isFinite(lastSeenMs) || now - lastSeenMs >= AUTH_SESSION_TOUCH_THROTTLE_MS;
+  const attrsChanged = (nextIp !== undefined && nextIp !== existing.lastIp)
+    || (nextUa !== undefined && nextUa !== existing.userAgent);
+  const updated = {
+    ...existing,
+    lastSeenAt: new Date(now).toISOString(),
+    ...(nextIp ? { lastIp: nextIp } : {}),
+    ...(nextUa ? { userAgent: nextUa } : {}),
+  };
+  const { tokenHash: _tokenHash, ...device } = updated;
+  if (!stale && !attrsChanged) return device; // skip the write entirely
+  devices[idx] = updated;
+  // Best-effort: a lastSeenAt refresh must never fail the request it rode in on.
+  try { saveStoredAuthSessions(hundredfoldHome, devices); } catch { /* transient FS/ENOSPC — keep serving */ }
+  return device;
+}
+
+export function currentAuthDeviceId(
+  headers: Record<string, string | string[] | undefined>,
+  hundredfoldHome?: string,
+): string | undefined {
+  const cookieRaw = headers.cookie;
+  const cookie = Array.isArray(cookieRaw) ? cookieRaw[0] : cookieRaw;
+  return requestAuthCookies(parseCookieHeader(cookie), hundredfoldHome).deviceId;
+}
+
+/** The request's device id, only when its session cookie verifies against that device: a bare id cookie, or one that rides
+ *  along with another credential, names nobody. */
+export function verifiedAuthDeviceId(
+  headers: Record<string, string | string[] | undefined>,
+  hundredfoldHome: string,
+): string | undefined {
+  const cookieRaw = headers.cookie;
+  const cookie = Array.isArray(cookieRaw) ? cookieRaw[0] : cookieRaw;
+  const { secret, deviceId } = requestAuthCookies(parseCookieHeader(cookie), hundredfoldHome);
+  return verifyAuthSession(hundredfoldHome, deviceId, secret) ? deviceId : undefined;
+}
+
+export function listAuthSessions(hundredfoldHome: string, currentDeviceId?: string, now = Date.now()): PublicAuthSessionDevice[] {
+  return pruneStaleAutomatedAuthSessions(hundredfoldHome, loadStoredAuthSessions(hundredfoldHome), now)
+    .map(({ tokenHash: _tokenHash, ...device }) => ({
+      ...device,
+      current: Boolean(currentDeviceId && device.id === currentDeviceId),
+    }))
+    .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt));
+}
+
+export function revokeAuthSession(hundredfoldHome: string, deviceId: string): boolean {
+  const devices = loadStoredAuthSessions(hundredfoldHome);
+  const next = devices.filter((device) => device.id !== deviceId);
+  if (next.length === devices.length) return false;
+  saveStoredAuthSessions(hundredfoldHome, next);
+  return true;
+}
+
+/** Every operator device an account's password sign-in minted; paired devices carry no `userId` and never match. */
+export function listAuthSessionsForUser(hundredfoldHome: string, userId: string): AuthSessionDevice[] {
+  return loadStoredAuthSessions(hundredfoldHome)
+    .filter((device) => device.userId === userId)
+    .map(({ tokenHash: _tokenHash, ...device }) => device)
+    .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt));
+}
+
+/** Revoke an account's device sessions, all of them or all but `exceptDeviceId`. Returns how many went. */
+export function revokeAuthSessionsForUser(hundredfoldHome: string, userId: string, exceptDeviceId?: string): number {
+  const devices = loadStoredAuthSessions(hundredfoldHome);
+  const next = devices.filter((device) => device.userId !== userId || device.id === exceptDeviceId);
+  if (next.length === devices.length) return 0;
+  saveStoredAuthSessions(hundredfoldHome, next);
+  return devices.length - next.length;
+}
+
+/** Mark an existing device as an account's (the operator's "set up my sign-in"). False when no such device. */
+export function linkAuthSessionToUser(hundredfoldHome: string, deviceId: string, userId: string): boolean {
+  const devices = loadStoredAuthSessions(hundredfoldHome);
+  const idx = devices.findIndex((device) => device.id === deviceId);
+  if (idx < 0) return false;
+  devices[idx] = { ...devices[idx]!, userId };
+  saveStoredAuthSessions(hundredfoldHome, devices);
+  return true;
+}
+
+/** The account the request's device belongs to, if its device was signed in by one. */
+export function authSessionUserId(hundredfoldHome: string, deviceId: string | undefined): string | undefined {
+  if (!deviceId) return undefined;
+  return loadStoredAuthSessions(hundredfoldHome).find((device) => device.id === deviceId)?.userId;
+}
+
+function hashPairingCode(raw: string): string {
+  return crypto.createHash("sha256").update(normalizePairingCode(raw)).digest("base64url");
+}
+
+export function normalizePairingCode(raw: string): string {
+  return raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+export function createPairingCode(): string {
+  let raw = "";
+  for (let i = 0; i < 12; i++) {
+    raw += PAIRING_CODE_ALPHABET[crypto.randomInt(PAIRING_CODE_ALPHABET.length)];
+  }
+  return `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8)}`;
+}
+
+export function issuePairingCode(
+  store: PairingCodeStore = pairingCodes,
+  now = Date.now(),
+  codeFactory: () => string = createPairingCode,
+): { code: string; expiresAt: number } {
+  cleanupExpiredPairingCodes(store, now);
+  const code = codeFactory();
+  const expiresAt = now + PAIRING_CODE_TTL_MS;
+  store.set(hashPairingCode(code), { expiresAt });
+  return { code, expiresAt };
+}
+
+export function consumePairingCode(
+  store: PairingCodeStore = pairingCodes,
+  rawCode: string | undefined,
+  now = Date.now(),
+): boolean {
+  if (!rawCode) return false;
+  const normalized = normalizePairingCode(rawCode);
+  if (normalized.length === 0) return false;
+  const hash = hashPairingCode(normalized);
+  const entry = store.get(hash);
+  if (!entry) return false;
+  store.delete(hash);
+  return entry.expiresAt >= now;
+}
+
+export function cleanupExpiredPairingCodes(store: PairingCodeStore = pairingCodes, now = Date.now()): void {
+  for (const [hash, entry] of store.entries()) {
+    if (entry.expiresAt < now) store.delete(hash);
+  }
+}

@@ -355,7 +355,7 @@ export function NewTodoDialog({
             data-testid="todo-new-create"
             disabled={!title.trim() || busy}
             onClick={() => void create(false)}
-            className="focus-outline min-h-11 rounded-full bg-[var(--accent)] px-5 text-[length:var(--text-subheadline)] font-semibold text-[var(--accent-contrast)] outline-none transition-transform hover:scale-[0.98] disabled:opacity-40" // jinn-shell: ok dialog submit, not page chrome
+            className="focus-outline min-h-11 rounded-full bg-[var(--accent)] px-5 text-[length:var(--text-subheadline)] font-semibold text-[var(--accent-contrast)] outline-none transition-transform hover:scale-[0.98] disabled:opacity-40" // hundredfold-shell: ok dialog submit, not page chrome
           >
             {busy ? "Creating…" : "Create todo"}
           </button>

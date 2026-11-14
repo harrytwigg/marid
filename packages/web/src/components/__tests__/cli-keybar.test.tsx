@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { CliKeybar, CLI_KEYS } from '../chat/cli-keybar'
 
-// Mirror of the backend allowlist in packages/jinn/src/gateway/pty-ws.ts
+// Mirror of the backend allowlist in packages/hundredfold/src/gateway/pty-ws.ts
 // (RAW_KEY_INPUTS). Kept here as a parity guard: every sequence the keybar can
 // emit MUST be one the backend will accept, otherwise the keypress is silently
 // dropped at the WS boundary.

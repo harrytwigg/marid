@@ -7,12 +7,22 @@
 # reported, not restarted.
 set -eu
 
-# Mirrors resolveJinnHome() in shared/home.ts, absolutization included: a probe that
+# A compose file or `docker run` written for an older build sets variables under the old prefix.
+# Give each one the current name, unless the current name is set: the gateway does the same for itself.
+for legacy_name in $(env | sed -n 's/^\(JINN_[A-Za-z0-9_]*\)=.*/\1/p'); do # rename:keep
+  current_name="HUNDREDFOLD_${legacy_name#JINN_}" # rename:keep
+  if [ -z "$(eval "printf %s \"\${$current_name+set}\"")" ]; then
+    eval "$current_name=\${$legacy_name}"
+    export "$current_name"
+  fi
+done
+
+# Mirrors resolveHundredfoldHome() in shared/home.ts, absolutization included: a probe that
 # disagrees about the home finds no gateway.json and reports a healthy container sick.
-JINN_HOME="${JINN_HOME:-$HOME/.${JINN_INSTANCE:-jinn}}"
-case "$JINN_HOME" in
+HUNDREDFOLD_HOME="${HUNDREDFOLD_HOME:-$HOME/.${HUNDREDFOLD_INSTANCE:-hundredfold}}"
+case "$HUNDREDFOLD_HOME" in
   /*) ;;
-  *) JINN_HOME="$PWD/$JINN_HOME" ;;
+  *) HUNDREDFOLD_HOME="$PWD/$HUNDREDFOLD_HOME" ;;
 esac
 
 # The URL the gateway recorded for itself at boot — writeGatewayInfo() derives it from
@@ -20,9 +30,9 @@ esac
 # in a second implementation here. gateway.json is written with JSON.stringify(…, 2), so
 # the key sits alone on its line; the fallback covers the window before it exists.
 url=""
-if [ -f "$JINN_HOME/gateway.json" ]; then
-  url=$(sed -n 's/^[[:space:]]*"url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$JINN_HOME/gateway.json" | head -n 1)
+if [ -f "$HUNDREDFOLD_HOME/gateway.json" ]; then
+  url=$(sed -n 's/^[[:space:]]*"url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$HUNDREDFOLD_HOME/gateway.json" | head -n 1)
 fi
-[ -n "$url" ] || url="http://127.0.0.1:${JINN_PORT:-7777}"
+[ -n "$url" ] || url="http://127.0.0.1:${HUNDREDFOLD_PORT:-7777}"
 
 exec curl -fsS -m 5 -o /dev/null "$url/api/status"

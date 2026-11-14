@@ -17,7 +17,7 @@ const HEADER_GAP_CLASS = "mb-[22px]"
 
 function LargeTitle({ title }: { title: ReactNode }) {
   return (
-    <div className={cn("jinn-large-title", LARGE_TITLE_CLASS)}>
+    <div className={cn("hundredfold-large-title", LARGE_TITLE_CLASS)}>
       {typeof title === "string" ? <h1>{title}</h1> : title}
     </div>
   )
@@ -38,7 +38,7 @@ function TitleBar({ title, trailing }: { title: ReactNode; trailing: ReactNode }
   return (
     <div
       data-slot="large-title-bar"
-      className="jinn-title-bar sticky z-20 grid min-h-11 grid-cols-[1fr_minmax(0,auto)_1fr] items-center gap-2 bg-[var(--material-thick)]"
+      className="hundredfold-title-bar sticky z-20 grid min-h-11 grid-cols-[1fr_minmax(0,auto)_1fr] items-center gap-2 bg-[var(--material-thick)]"
     >
       {/* Three columns, and which of the two outer ones gives way decides where
           the title sits. While the title fits, both `1fr` tracks take an equal
@@ -53,7 +53,7 @@ function TitleBar({ title, trailing }: { title: ReactNode; trailing: ReactNode }
           so one line is all the title gets either way.
           `aria-hidden` because the real <h1> is still in the scroll flow above:
           announced, this copy would give the page a second heading. */}
-      <div aria-hidden="true" className={cn("jinn-inline-title pointer-events-none col-start-2 truncate text-center lg:hidden", INLINE_TITLE_CLASS)}>
+      <div aria-hidden="true" className={cn("hundredfold-inline-title pointer-events-none col-start-2 truncate text-center lg:hidden", INLINE_TITLE_CLASS)}>
         {typeof title === "string" ? title : null}
       </div>
       <div className="relative col-start-3 flex items-center gap-2 justify-self-end">{trailing}</div>

@@ -61,15 +61,15 @@ describe("browser gateway transport", () => {
     const { environment, navigate } = browserEnvironment()
     const transport = createBrowserGatewayTransport(environment)
 
-    transport.navigate("https://other.example:7782/todos#jinn-pair=PAIR-CODE")
+    transport.navigate("https://other.example:7782/todos#hundredfold-pair=PAIR-CODE")
 
-    expect(navigate).toHaveBeenCalledWith("https://other.example:7782/todos#jinn-pair=PAIR-CODE")
+    expect(navigate).toHaveBeenCalledWith("https://other.example:7782/todos#hundredfold-pair=PAIR-CODE")
   })
 
   it("passes a valid switch URL through without normalizing it", () => {
     const { environment, navigate } = browserEnvironment()
     const transport = createBrowserGatewayTransport(environment)
-    const switchUrl = "https://other.example:7782/a/../todos#jinn-pair=PAIR-CODE"
+    const switchUrl = "https://other.example:7782/a/../todos#hundredfold-pair=PAIR-CODE"
 
     transport.navigate(switchUrl)
 

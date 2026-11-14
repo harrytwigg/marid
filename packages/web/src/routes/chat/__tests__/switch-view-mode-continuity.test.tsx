@@ -141,8 +141,8 @@ async function settle(ms: number) {
 beforeEach(() => {
   vi.useFakeTimers()
   localStorage.clear()
-  localStorage.setItem('jinn-view-mode-a', 'chat')
-  localStorage.setItem('jinn-view-mode-b', 'cli')
+  localStorage.setItem('hundredfold-view-mode-a', 'chat')
+  localStorage.setItem('hundredfold-view-mode-b', 'cli')
   apiMocks.getSession.mockReset()
   apiMocks.getSession.mockImplementation((id: string) => (
     id === 'a'

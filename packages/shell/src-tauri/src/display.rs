@@ -12,7 +12,7 @@ use tauri::{Runtime, Webview};
 /// Read by the probe, written by nothing else. `null` when the platform
 /// declines to answer, which the probe reports as an unanswerable run rather
 /// than as a pass.
-const GLOBAL: &str = "__jinnDisplayHz";
+const GLOBAL: &str = "__hundredfoldDisplayHz";
 
 pub fn announce_refresh_rate<R: Runtime>(webview: &Webview<R>) {
     let value = match max_frames_per_second() {

@@ -61,7 +61,7 @@ beforeEach(() => {
 
 describe("PageLayout deferred shell widgets", () => {
   it("does not mount search, live stream, or onboarding during the initial render", () => {
-    localStorage.setItem("jinn-onboarded", "true")
+    localStorage.setItem("hundredfold-onboarded", "true")
 
     renderLayout()
 
@@ -73,7 +73,7 @@ describe("PageLayout deferred shell widgets", () => {
   })
 
   it("mounts the command palette opened on the first command-k press", async () => {
-    localStorage.setItem("jinn-onboarded", "true")
+    localStorage.setItem("hundredfold-onboarded", "true")
     renderLayout()
 
     fireEvent.keyDown(window, { key: "k", metaKey: true })
@@ -83,7 +83,7 @@ describe("PageLayout deferred shell widgets", () => {
   })
 
   it("mounts the palette opened, scoped and seeded when a page asks for it", async () => {
-    localStorage.setItem("jinn-onboarded", "true")
+    localStorage.setItem("hundredfold-onboarded", "true")
     renderLayout(<ScopedSearchOpener />)
 
     fireEvent.click(screen.getByRole("button", { name: "open scoped search" }))
@@ -97,7 +97,7 @@ describe("PageLayout deferred shell widgets", () => {
   it("mounts the live stream widget after the page finishes loading", async () => {
     vi.useFakeTimers()
     try {
-      localStorage.setItem("jinn-onboarded", "true")
+      localStorage.setItem("hundredfold-onboarded", "true")
       renderLayout()
 
       expect(screen.queryByTestId("live-stream-widget")).toBeNull()
@@ -128,7 +128,7 @@ describe("PageLayout deferred shell widgets", () => {
   })
 
   it("honors a fresh-workspace onboarding launch even if this origin has stale local state", async () => {
-    localStorage.setItem("jinn-onboarded", "true")
+    localStorage.setItem("hundredfold-onboarded", "true")
     window.history.replaceState(null, "", "/?onboarding=1")
     getOnboarding.mockResolvedValue({ onboarded: false, needed: true })
 
@@ -145,7 +145,7 @@ describe("PageLayout deferred shell widgets", () => {
 
     await waitFor(() => expect(getOnboarding).toHaveBeenCalledTimes(1))
     expect(screen.queryByTestId("onboarding-wizard")).toBeNull()
-    await waitFor(() => expect(localStorage.getItem("jinn-onboarded")).toBe("true"))
+    await waitFor(() => expect(localStorage.getItem("hundredfold-onboarded")).toBe("true"))
   })
 })
 
@@ -166,7 +166,7 @@ describe("PageLayout edge-back arming", () => {
   })
 
   it("never mounts the gesture for a fine pointer", () => {
-    localStorage.setItem("jinn-onboarded", "true")
+    localStorage.setItem("hundredfold-onboarded", "true")
     setPointer(false)
 
     // No router in the tree at all: with a fine pointer nothing in the shell
@@ -178,7 +178,7 @@ describe("PageLayout edge-back arming", () => {
   })
 
   it("mounts the gesture for a coarse pointer", () => {
-    localStorage.setItem("jinn-onboarded", "true")
+    localStorage.setItem("hundredfold-onboarded", "true")
     setPointer(true)
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 

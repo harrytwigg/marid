@@ -54,7 +54,7 @@ export function MobileTabBar() {
         "flex items-stretch",
         // Named so a route change snapshots the bar on its own rather than
         // cross-fading the one surface that is on both sides of every tap.
-        "[view-transition-name:jinn-tab-bar]",
+        "[view-transition-name:hundredfold-tab-bar]",
         // Floating glass: blurs the page that scrolls beneath it on a fine
         // pointer; a coarse pointer gets the same tint opaque.
         "glass-float-bar border-t-[0.5px]",

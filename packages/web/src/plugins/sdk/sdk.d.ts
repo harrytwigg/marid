@@ -1,5 +1,5 @@
 /**
- * The public type contract of `@jinn/plugin-sdk`, version 1.2.0.
+ * The public type contract of `@hundredfold/plugin-sdk`, version 1.2.0.
  *
  * Hand-authored, and deliberately never generated from `index.ts`. A derived
  * `.d.ts` inlines the app's own import paths into the public API, so renaming

@@ -43,7 +43,7 @@ function EmptyState() {
           No plugins installed
         </h3>
         <p className="mx-auto mt-2 max-w-[340px] text-[length:var(--text-subheadline)] leading-relaxed text-[var(--text-tertiary)]">
-          Drop a plugin folder into <code className="font-[family-name:var(--font-code)]">~/.jinn/plugins/</code> and
+          Drop a plugin folder into <code className="font-[family-name:var(--font-code)]">~/.hundredfold/plugins/</code> and
           rescan. Only the ones you enable here ever run.
         </p>
       </div>

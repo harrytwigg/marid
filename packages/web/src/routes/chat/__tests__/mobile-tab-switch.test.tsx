@@ -91,7 +91,7 @@ function Phone({ ignoreSelect = false, lateTitleFor }: PhoneProps) {
 }
 
 const thread = () => document.querySelector<HTMLElement>('[data-mobile-thread-pane]')!
-const fades = (el: HTMLElement) => el.className.includes('jinn-mobile-chat-crossfade')
+const fades = (el: HTMLElement) => el.className.includes('hundredfold-mobile-chat-crossfade')
 const titleEntering = () => document.querySelectorAll('[data-title-enter]').length
 const press = (name: string) => fireEvent.click(screen.getByRole('tab', { name }))
 

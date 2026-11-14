@@ -131,7 +131,7 @@ describe("the pinned sub-board tab", () => {
     fireEvent.click(screen.getByTestId("sub-board-depth-all").querySelector("input")!)
     await screen.findByTestId("board-card-TSK-4")
     expect(readSubBoardTabState("TSK-1").depth).toBe("all")
-    expect(JSON.parse(localStorage.getItem("jinn-sub-board-tab:TSK-1") ?? "{}")).toMatchObject({ version: 1, depth: "all" })
+    expect(JSON.parse(localStorage.getItem("hundredfold-sub-board-tab:TSK-1") ?? "{}")).toMatchObject({ version: 1, depth: "all" })
     first.dispose()
     document.body.innerHTML = ""
 

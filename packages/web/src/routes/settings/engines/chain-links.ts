@@ -4,7 +4,7 @@ import {
   fallbackLinkOf,
   type FallbackLink,
   type ResolvedFallbackLink,
-} from "@jinn/fallback-chain-wire"
+} from "@hundredfold/fallback-chain-wire"
 import { engineDisplayName } from "@/lib/engine-names"
 
 /* The chain editor's model: a chain is a list of object links, however config

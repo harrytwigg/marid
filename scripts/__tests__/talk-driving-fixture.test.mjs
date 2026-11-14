@@ -17,7 +17,7 @@ import {
 import { TALK_DRIVING_UTTERANCES, encodePcmWav } from "../talk-driving-audio.mjs"
 import { buildProbeScript, buildSpeakScript } from "../talk-driving-channel-probe.mjs"
 
-const disposable = path.join(os.tmpdir(), ".jinn-talk-driving-fixture")
+const disposable = path.join(os.tmpdir(), ".hundredfold-talk-driving-fixture")
 
 test("declares nine durable topics with stable unique identities", () => {
   const topics = fixtureTopics({
@@ -50,7 +50,7 @@ test("uses a fixed fixture clock so cold-reload ordering is reproducible", () =>
 
 test("refuses the installed home and protected gateway ports", () => {
   assert.throws(
-    () => assertDisposableHome(path.join(os.homedir(), ".jinn"), { gateway: { port: 7999 } }),
+    () => assertDisposableHome(path.join(os.homedir(), ".hundredfold"), { gateway: { port: 7999 } }),
     /production instance home/,
   )
   for (const port of [7777, 7788]) {
@@ -70,7 +70,7 @@ test("merges owned fixture records by id without deleting unrelated records", ()
 })
 
 test("seeding the same stopped home twice reuses every durable identity", async (t) => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-talk-driving-seed-"))
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-talk-driving-seed-"))
   t.after(() => fs.rmSync(home, { recursive: true, force: true }))
   fs.writeFileSync(path.join(home, "config.yaml"), "gateway:\n  port: 7799\nengines:\n  default: codex\n  claude: {}\n  codex:\n    model: gpt-5.5\nportal:\n  companyName: Sandbox Company\n  companyPrefix: SBX\n")
 
@@ -78,8 +78,8 @@ test("seeding the same stopped home twice reuses every durable identity", async 
   const second = await prepareSandbox(home)
   assert.deepEqual(second, first)
 
-  const requireFromJinn = createRequire(new URL("../../packages/jinn/package.json", import.meta.url))
-  const Database = requireFromJinn("better-sqlite3")
+  const requireFromHundredfold = createRequire(new URL("../../packages/hundredfold/package.json", import.meta.url))
+  const Database = requireFromHundredfold("better-sqlite3")
   const sessions = new Database(path.join(home, "sessions", "registry.db"), { readonly: true })
   assert.equal(sessions.prepare("SELECT COUNT(*) FROM work_items").pluck().get(), 3)
   assert.equal(sessions.prepare("SELECT COUNT(*) FROM talk_topics").pluck().get(), 9)

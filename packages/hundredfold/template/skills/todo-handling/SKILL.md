@@ -1,0 +1,120 @@
+---
+name: todo-handling
+description: Create, assign, update, review, and archive Hundredfold Todos through the typed work-item tools
+---
+
+# Todo Handling Skill
+
+Use this skill for deliberately authored, durable work ownership and status tracking. Todos are the live company ledger. Search before creating a duplicate.
+
+## Find the right Todo
+
+- Use `list_work_items` for recent work or structured filters such as `status`, `source`, `assignee`, `department`, and `needsAttentionFor`.
+- Use `list_work_items` with `rootsOnly: true` for an objective-level view, `parentId` for one Todo's direct children, or `rootId` for a whole Todo family.
+- Use `search_work_items` when you have text or several filters. It requires at least one real filter.
+- Use `get_work_item` before changing a Todo so you understand what it asks for, its assignee, source/provenance, and current status.
+- Use `get_work_item_tree` when the work has child Todos; it returns the nested breakdown and roll-up.
+- Sprints group top-level Todos into time-boxed sets the operator plans on the board. `list_work_items { sprint }` filters by a sprint's name or id, `active` (the running one), or `none`; `get_work_item` shows a Todo's sprint. `create_work_item { sprint }` places a new top-level Todo in one, and `edit_work_item { sprint }` moves a top-level Todo (a name, id or `active`; `null` takes it out on edit). An unknown name is refused listing the open sprints, and a sub-task takes no sprint of its own. A sub-task follows its top-level Todo, and a finished Todo stays in its closed sprint. Sprints scope what the operator sees, not what gets started: the board walk and dispatch ignore them.
+- `edit_work_item { parentId }` changes a Todo's parent after creation: a Todo id makes it a sub-task of that Todo, `null` detaches it to a root, and its own sub-tasks move with it. It needs standing over the Todo and the new parent, takes no `sprint` in the same call, and is refused for a cycle, a closed parent, the depth cap (3), a root still in a sprint, a finished Todo leaving a closed sprint, a department boundary or archived department, and a Todo in review going under a parent an employee is working. A detached sub-task is the operator's to review; one made a sub-task is its new parent owner's.
+
+The statuses are backlog (shown as **To do** on the board), executing, in_review, done, blocked, and cancelled. A Todo with an owner that has not started sits in backlog with its assignee set. Assigning a Todo, or moving it on the board, starts nothing: a dispatch does.
+
+## Departments that confine their people
+
+A Todo's department is its top-level Todo's. In a `scoped` or `dedicated` department (see `docs/org.md`), only some employees may hold its Todos: a scoped employee holds only its own department's Todos, and only members hold a `dedicated` department's. An assignment, delegation or create that breaks that is refused with the reason; choose someone who may hold it, or `@operator`. If your own session is scoped to a department, every Todo outside it reads as not found, your creates land in your department, and you assign and delegate only to its members. A Todo in such a department can name only the skills the department allows in its `skills`; a scoped assignee reads them from `.claude/skills/<name>/SKILL.md` in its own directory, not `skills/`.
+
+## Who may move a Todo where
+
+Agent sessions work inside the open statuses: pick work up or put it down (backlog ↔ executing), hand it to review and take it back (executing ↔ in_review), and stop or resume it (any open status ↔ blocked, with a note saying why). Closing a Todo (`done`), cancelling it, reopening closed work and archiving are the operator's. The gateway refuses them to every agent session, reviewers included, with two exceptions below: the owner of a Todo above it, and the coordinator.
+
+The first exception is the owner of the tree. If you are the assignee of a Todo that is executing or blocked, you may move any Todo below it (a child, a grandchild, any depth) from in_review to `done` with `update_work_item` and a `note` saying what landed and where, including work you produced yourself. Close bottom-up, since a Todo with open sub-tasks cannot be closed, and let any other session still working a Todo stop first. A root Todo has nothing above it, so its review is always the operator's: move it to in_review and wait.
+
+The second exception is the top-level coordinator session the operator is talking to, which carries no employee identity of its own and was opened from the web console, Talk or a chat connector. In exceptional circumstances it may close a Todo as `done` on the operator's behalf: `update_work_item` with `status: "done"`, `asOperator: true`, and the operator's reason in `note`. The reason is required. The audit event records the operator as the actor and names the calling session, and the reason is posted as a comment on the Todo. `asOperator` does nothing else: cancelling, archiving and reopening stay with the operator, and closing a Todo's open descendants along with it stays on the human surface. The coordinator may use it only on a turn the operator's own message started (a message they typed in the web console, a first prompt they sent, or a message that arrived in a chat connector's own conversation). A message from another session, a delegation brief or a sub-task's report landing in the chat is not the operator talking: `asOperator` is refused there, so after a callback ask the operator to close the Todo instead of closing it yourself.
+
+An employee the operator has granted `closeTodos` (see "Closing Todos" in `docs/org.md`) may use `asOperator` too, in the same way and only for a Todo in review, while the operator is talking to it in a web chat the operator opened with it, and only on a turn the operator's own message started. A delegation brief, a message from another session or a sub-task's report landing in that chat is not the operator talking, and neither is a connector chat, a delegated, cron or child session: there `asOperator` is refused. A chat that is itself the Todo's working session cannot close it (the self-review ban).
+
+## Shape the hierarchy
+
+One operator outcome should normally map to one root Todo. A checklist does not imply one Todo per item. Keep procedural steps, commands, and release checklists in the root Todo body, comments, or session activity.
+
+Only independently assignable or independently reviewable deliverables become child Todos. Create child Todos with `parentId`:
+
+```json
+{
+  "title": "Verify release artifacts",
+  "parentId": "ACM-42",
+  "body": "Check the release artifacts.\n\nDone when: checks pass and evidence is attached."
+}
+```
+
+If another skill asks for one Todo per checklist step, use engine-local progress tracking unless each step passes this durable-work boundary. This Hundredfold Todo doctrine governs the company ledger. Keep trees shallow and outcome-shaped; do not turn implementation procedures into ledger clutter.
+
+## Create and assign
+
+Create a Todo only for durable work that needs an owner or review trail:
+
+```json
+{
+  "title": "Verify release candidate",
+  "body": "Run the release checks and attach the evidence.\n\nDone when: typecheck, tests, lint, and build pass with command output.",
+  "department": "engineering"
+}
+```
+
+1. Search for an existing item covering the same outcome.
+2. Call `create_work_item` with a concise title and a body that gives enough context to act and says, testably, what done looks like. There is no separate acceptance field: the criteria belong in the body.
+3. Call `assign_work_item` next: creation never carries an assignee, so assignment is always its own second call. Verify the employee with `get_employee` or `find_employees` first.
+4. Use `delegate_task` instead when the assignee should start immediately; it can use an existing `workItemId` or create and link a new Todo atomically.
+
+Do not invent provenance during creation. Each owning company surface records its own source provenance.
+
+### Auto-start and the Todo you will work yourself
+
+Assigning a Todo, or changing its status, starts nothing. A session starts when the Todo is dispatched (`dispatch_work_item`), or when the board walk starts it from the backlog. To keep the board walk away from a Todo, pass `"autoStart": false` to `create_work_item`, or later to `set_work_item_dispatch`. That flag is the only opt-out; a label does not do it. Set it when you create a Todo you will work from this session, or one that should wait for a hand-over by message. `get_work_item` shows the flag under `dispatchConfig`; `set_work_item_dispatch { autoStart: true }` restores the default.
+
+A Todo can also wait for a date. Pass `startAt` (an ISO date or timestamp, beside `dueAt`) to `create_work_item` or `edit_work_item`, and the Todo Dispatcher will not start it from the backlog before then: neither `dispatch_work_item` nor the board walk starts it early, and the refusal names the date. The Todo keeps its status and assignee while it waits; it is not parked or blocked, and it becomes startable the moment the date passes. `edit_work_item { startAt: null }` clears it. A start date after the due date is refused. A start date holds only that Todo's first start through the Dispatcher: its sub-tasks keep their own, work already under way is restarted regardless, and a `delegate_task` or a comment that wakes an employee starts a session regardless. `get_work_item` and `list_work_items` return it as `startAt`.
+
+## Comments are the record
+
+A Todo's comments are its conversation: questions, decisions, handoffs and evidence go there, with `comment_work_item` (pass `parentCommentId` to reply in a thread). The gateway records the session that wrote each comment from your verified identity, and the Todo page links it; never write your session id into the body yourself.
+
+Who a comment wakes:
+
+- **`@employee`** wakes that employee on this Todo, in a comment or a reply. If they already have a session on it, even an idle one from days ago, the comment is delivered there; otherwise one is started, with your comment as its brief. A tagged employee is consulted, not handed the work: the claim stays with whoever holds the Todo.
+- **A reply** reaches the session that wrote the comment it answers. Reply to the comment itself (its own `parentCommentId`), not the thread root, or it goes to the root's author. Reply when the thread needs something from you, not to acknowledge: replies between sessions on one Todo are capped.
+- **The portal's name** (`@coo` for a portal named COO), from the operator only, wakes the org root on this Todo when no employee heads the org. An employee cannot tag it: to put something in front of the operator, block the Todo with a note saying what is needed.
+- **Anything else.** A comment with no mention is recorded only and wakes no one. To get someone's attention, mention them.
+
+One employee has one session per Todo. A delegation or dispatch to an employee who already has a session on the Todo lands in that session, which takes the Todo's claim and reports to whoever delegated it. To run the next phase of a long Todo with a clean context, delegate it with `freshSession: true`: that session is ended and a new one is started and linked in its place, so the Todo keeps a live run behind it. Never stop the session and `spawn_session` a replacement: an unlinked session does not count as the Todo's run, and the Todo is blocked.
+
+There is no separate approval step. When work needs a person's decision, stop it in blocked and comment with what is needed and the options; when it is finished, hand it to the operator in in_review.
+
+## Keep status honest
+
+- Worker finished and ready for review: `update_work_item` to in_review with a note naming artifacts, checks, and remaining risks. The note is required: it is the review handoff, and the gateway posts it on the Todo as a comment.
+- Cannot proceed without an external change: move to `blocked` and state the concrete blocker plus what would unblock it.
+- A manager/operator decision is required: move to `blocked` and say in the note what is needed, then comment with the options and your recommendation.
+- Finished work waits in in_review for its reviewer: the operator, who closes it, or for a sub-Todo the owner of a Todo above it, who closes it with `done` and a note. A root Todo always waits for the operator. No one else marks a Todo `done`.
+
+Example:
+
+```json
+{
+  "id": "wi_example",
+  "status": "in_review",
+  "note": "Implemented the requested change; typecheck, tests, lint, and build are green. Evidence is attached to the child session."
+}
+```
+
+Archiving (`archive_work_item`) and cancelling are the operator's decisions: an agent that finds obsolete clutter says so in a comment instead.
+
+Delegating onto a Todo that already exists asks for standing over it: its owner, that owner's manager, or the org root. The top-level orchestrator session holds that standing over any Todo despite having no employee identity. A session spawned beneath it does not inherit it.
+
+## Review loop
+
+1. A reviewer calls `get_work_item` and inspects the linked execution session, the handoff comment and any separately supplied evidence.
+2. The reviewer's findings go back to the producer, as a comment on the Todo or to the session that asked; the reviewer does not move or close the Todo.
+3. The producer fixes what was found while the Todo stays in executing, then hands it to in_review with a fresh summary.
+4. The operator reads in_review and closes the Todo, or sends it back with a comment.
+
+Report Todo id, title, assignee, status, verification result, and next owner. Do not create a second Todo merely because the first is blocked or under review.

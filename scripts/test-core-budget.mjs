@@ -30,8 +30,8 @@ import path from "node:path";
  * both stay: nice 19 makes a run yield to whatever else wants the CPU, the budget
  * bounds how much memory and how many ports all the runs hold at once.
  *
- * JINN_TEST_GLOBAL_CORES=0 disables the budget; JINN_TEST_RUN_CORES sets the
- * per-run ceiling; JINN_TEST_RESERVED_CORES the cores held back.
+ * HUNDREDFOLD_TEST_GLOBAL_CORES=0 disables the budget; HUNDREDFOLD_TEST_RUN_CORES sets the
+ * per-run ceiling; HUNDREDFOLD_TEST_RESERVED_CORES the cores held back.
  */
 
 export const RESERVED_CORES = 12;
@@ -60,22 +60,22 @@ export function poolSize(cpus, reserved = RESERVED_CORES) {
 }
 
 /**
- * The budget for this environment. `global` of 0 means "no budget". JINN_TEST_GLOBAL_CORES
- * pins the pool outright (0 disables it); JINN_TEST_RESERVED_CORES changes the reserve.
+ * The budget for this environment. `global` of 0 means "no budget". HUNDREDFOLD_TEST_GLOBAL_CORES
+ * pins the pool outright (0 disables it); HUNDREDFOLD_TEST_RESERVED_CORES changes the reserve.
  * Either way the pool never exceeds the machine's core count.
  */
 export function coreBudget(env = process.env, cpus = os.availableParallelism()) {
   if (env.CI) return { global: 0, perRun: 0 };
-  const pinned = positiveInt(env.JINN_TEST_GLOBAL_CORES, undefined, { allowZero: true });
+  const pinned = positiveInt(env.HUNDREDFOLD_TEST_GLOBAL_CORES, undefined, { allowZero: true });
   if (pinned === 0) return { global: 0, perRun: 0 };
-  const reserved = positiveInt(env.JINN_TEST_RESERVED_CORES, RESERVED_CORES, { allowZero: true });
+  const reserved = positiveInt(env.HUNDREDFOLD_TEST_RESERVED_CORES, RESERVED_CORES, { allowZero: true });
   const global = Math.max(1, Math.min(pinned ?? poolSize(cpus, reserved), cpus));
-  const perRun = Math.max(1, Math.min(positiveInt(env.JINN_TEST_RUN_CORES, DEFAULT_RUN_CORES), global));
+  const perRun = Math.max(1, Math.min(positiveInt(env.HUNDREDFOLD_TEST_RUN_CORES, DEFAULT_RUN_CORES), global));
   return { global, perRun };
 }
 
 export function defaultLeaseDir() {
-  return path.join(os.tmpdir(), "jinn-test-cores");
+  return path.join(os.tmpdir(), "hundredfold-test-cores");
 }
 
 function pidAlive(pid) {
@@ -183,7 +183,7 @@ export function acquireTestCores({
   while (lease === null) {
     if (waitedMs % WAIT_LOG_EVERY_MS === 0) {
       log(
-        `test-core-budget: all ${budget.global} machine test cores are leased; waiting so concurrent suites don't starve each other (JINN_TEST_GLOBAL_CORES=0 disables this).`,
+        `test-core-budget: all ${budget.global} machine test cores are leased; waiting so concurrent suites don't starve each other (HUNDREDFOLD_TEST_GLOBAL_CORES=0 disables this).`,
       );
     }
     sleepSync(POLL_MS);

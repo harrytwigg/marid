@@ -1,10 +1,10 @@
 import { render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { emojiForName } from "@/lib/emoji-pool"
-import type { JinnSettings } from "@/lib/settings"
+import type { HundredfoldSettings } from "@/lib/settings"
 import { DEFAULTS } from "@/lib/settings"
 
-const settings = { ...DEFAULTS } as JinnSettings
+const settings = { ...DEFAULTS } as HundredfoldSettings
 
 vi.mock("@/routes/settings-provider", () => ({
   useSettings: () => ({ settings }),
@@ -12,7 +12,7 @@ vi.mock("@/routes/settings-provider", () => ({
 
 import { EmployeeAvatar } from "../employee-avatar"
 
-function renderWith(overrides: Partial<JinnSettings>, name: string) {
+function renderWith(overrides: Partial<HundredfoldSettings>, name: string) {
   Object.assign(settings, DEFAULTS, overrides)
   render(<EmployeeAvatar name={name} />)
 }
@@ -31,8 +31,8 @@ describe("EmployeeAvatar", () => {
   })
 
   it("leaves an employee avatar alone when the operator has chosen an emoji", () => {
-    renderWith({ operatorEmoji: "🦊" }, "jinn-dev")
+    renderWith({ operatorEmoji: "🦊" }, "hundredfold-dev")
 
-    expect(screen.getByText(emojiForName("jinn-dev"))).toBeTruthy()
+    expect(screen.getByText(emojiForName("hundredfold-dev"))).toBeTruthy()
   })
 })

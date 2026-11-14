@@ -68,20 +68,20 @@ const RULE_CASES = [
   {
     rule: "personal-path",
     triggers: {
-      "packages/jinn/src/thing.ts": 'export const cache = "/Users/someone/.cache/jinn";\n',
+      "packages/hundredfold/src/thing.ts": 'export const cache = "/Users/someone/.cache/jinn";\n',
     },
     passes: {
-      "packages/jinn/template/migrations/0001-initial/notes.md": "Wrote /Users/someone/.jinn/config.yaml\n",
+      "packages/hundredfold/template/migrations/0001-initial/notes.md": "Wrote /Users/someone/.jinn/config.yaml\n",
     },
     passesBecause: "frozen release migrations record what an older version wrote",
   },
   {
     rule: "hardcoded-home",
     triggers: {
-      "packages/jinn/src/thing.ts": 'export const home = path.join(os.homedir(), ".jinn");\n',
+      "packages/hundredfold/src/thing.ts": 'export const home = path.join(os.homedir(), ".jinn");\n',
     },
     passes: {
-      "packages/jinn/src/engines/other.ts":
+      "packages/hundredfold/src/engines/other.ts":
         'export const codex = path.join(os.homedir(), ".codex", "sessions");\n' +
         'export const grok = path.join(os.homedir(), ".grok", "sessions");\n',
     },
@@ -99,17 +99,17 @@ const RULE_CASES = [
   },
   {
     rule: "hardcoded-port",
-    triggers: { "packages/jinn/src/gateway/probe.ts": "const url = `http://127.0.0.1:7777/api/status`;\n" },
+    triggers: { "packages/hundredfold/src/gateway/probe.ts": "const url = `http://127.0.0.1:7777/api/status`;\n" },
     passes: {
-      "packages/jinn/src/cli/setup.ts": "const DEFAULT_CONFIG = { gateway: { port: 7777, host: \"127.0.0.1\" } };\n",
+      "packages/hundredfold/src/cli/setup.ts": "const DEFAULT_CONFIG = { gateway: { port: 7777, host: \"127.0.0.1\" } };\n",
     },
     passesBecause: "DEFAULT_CONFIG is where the literal is defined",
   },
   {
     rule: "scattered-env",
-    triggers: { "packages/jinn/src/gateway/probe.ts": "const home = process.env.JINN_HOME;\n" },
+    triggers: { "packages/hundredfold/src/gateway/probe.ts": "const home = process.env.JINN_HOME;\n" },
     passes: {
-      "packages/jinn/src/gateway/seam.ts":
+      "packages/hundredfold/src/gateway/seam.ts":
         "export function childEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {\n" +
         "  return { ...env };\n}\n",
     },
@@ -124,7 +124,7 @@ const RULE_CASES = [
       // The token file owns the material, and a test may name a filter to assert it is gone.
       "packages/web/src/routes/glass-identity.css": ".glass-float { backdrop-filter: var(--glass-blur); }\n",
       "packages/web/src/components/__tests__/bar.test.tsx": 'expect(el.style.backdropFilter).toBe("")\n',
-      "packages/jinn/src/gateway/page.ts": 'const css = "backdrop-filter: blur(4px)";\n',
+      "packages/hundredfold/src/gateway/page.ts": 'const css = "backdrop-filter: blur(4px)";\n',
     },
     passesBecause: "the glass token file defines the material, tests assert on it, and only the web app is in scope",
   },
@@ -140,21 +140,21 @@ const RULE_CASES = [
         'import { Slot } from "./slot"\nimport { Search } from "@/components/ui/icon"\n' +
         'import { Command } from "cmdk-like"\nimport { useRadixThing } from "@/hooks/radix-ui-compat"\n',
       "packages/web/docs/notes.md": "Replaced `lucide-react` and `radix-ui`.\n",
-      "packages/jinn/src/other.ts": 'import { Search } from "lucide-react"\n',
+      "packages/hundredfold/src/other.ts": 'import { Search } from "lucide-react"\n',
     },
     passesBecause: "only the web app's code is in scope, and only the exact libraries count",
   },
   {
     rule: "spawn-without-stdio",
     triggers: {
-      "packages/jinn/src/download.ts":
+      "packages/hundredfold/src/download.ts":
         'import { spawn } from "node:child_process";\n' + 'const curl = spawn("curl", ["-L", "-o", target, url]);\n',
     },
     passes: {
       // Each of these would be reported the moment the rule went back to
       // grepping for `spawn(` and `exec(`: the two async calls take no options
       // object here, and node-pty's spawn is given one without stdio.
-      "packages/jinn/src/async-calls.ts":
+      "packages/hundredfold/src/async-calls.ts":
         'import { exec, execFile } from "node:child_process";\n' +
         'import pty from "node-pty";\n' +
         'const term = pty.spawn(bin, args, { cols: 80, rows: 24 });\n' +
@@ -216,7 +216,7 @@ test("removed-ui-library judges only the lines a change adds", () => {
 
 test("a frozen migration excuses the historical path, never a live leak", () => {
   const root = repoWith({
-    "packages/jinn/template/migrations/0001-initial/notes.md":
+    "packages/hundredfold/template/migrations/0001-initial/notes.md":
       "Wrote /Users/someone/.jinn/config.yaml\nContact dev@acme-widgets.io\n",
   })
 
@@ -278,7 +278,7 @@ test("the files that describe the rules are excluded from them", () => {
 
 test("`footgun: ok <reason>` suppresses across different rules", () => {
   const root = repoWith({
-    "packages/jinn/src/thing.ts":
+    "packages/hundredfold/src/thing.ts":
       'export const cache = "/Users/someone/.cache"; // footgun: ok fixture for a path-mangling test\n' +
       "const port = 7777; // footgun: ok asserts the documented default\n",
   })
@@ -290,7 +290,7 @@ test("`footgun: ok <reason>` suppresses across different rules", () => {
 })
 
 test("a suppression with no reason still suppresses, and is named as unaudited", () => {
-  const root = repoWith({ "packages/jinn/src/thing.ts": 'export const cache = "/Users/someone"; // footgun: ok\n' })
+  const root = repoWith({ "packages/hundredfold/src/thing.ts": 'export const cache = "/Users/someone"; // footgun: ok\n' })
 
   const { status, stdout } = check(root, "--all")
   assert.equal(totalViolations(stdout), 0, stdout)
@@ -302,10 +302,10 @@ test("a suppression with no reason still suppresses, and is named as unaudited",
 test("diff mode judges added lines only, never the debt already in the file", () => {
   const existing =
     'const a = "/Users/someone/one";\nconst b = "/Users/someone/two";\nconst c = "/Users/someone/three";\n'
-  const root = repoWith({ "packages/jinn/src/thing.ts": existing })
+  const root = repoWith({ "packages/hundredfold/src/thing.ts": existing })
   git(root, "commit", "-m", "existing debt")
   git(root, "checkout", "-b", "feature")
-  fs.writeFileSync(path.join(root, "packages/jinn/src/thing.ts"), `${existing}const d = "/Users/someone/four";\n`)
+  fs.writeFileSync(path.join(root, "packages/hundredfold/src/thing.ts"), `${existing}const d = "/Users/someone/four";\n`)
   git(root, "commit", "--all", "-m", "one more")
 
   const diffRun = check(root, "--diff", "main")

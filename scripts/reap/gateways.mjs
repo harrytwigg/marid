@@ -7,13 +7,13 @@
 // than reaped. Unidentified means untouchable.
 import path from "node:path"
 
-const GATEWAY_ENTRY = /packages\/jinn\/dist\/src\/gateway\//
+const GATEWAY_ENTRY = /packages\/(?:hundredfold|jinn)\/dist\/src\/gateway\// // rename:keep: a checkout from before the rename
 const TEST_WORKER = /\b(?:vitest|jest|mocha)\b/
 
 // A home is throwaway when it sits under a temp root, or when its own name says
 // so. Both halves are needed: the upgrade lab builds homes under the temp dir,
 // while a sandbox run can be pointed anywhere.
-const THROWAWAY_NAME = /^\.?(?:jinn-sandbox|jinn-home|upgrade-lab|jinn-upgrade-lab)-/
+const THROWAWAY_NAME = /^\.?(?:hundredfold-sandbox|jinn-sandbox|jinn-home|upgrade-lab|hundredfold-upgrade-lab|jinn-upgrade-lab)-/ // rename:keep
 
 // Below this, a PID belongs to the system rather than to anything we started.
 const LOWEST_SIGNALLABLE_PID = 500

@@ -28,12 +28,16 @@ const keepPatterns = skipDistribution ? [...KEEP_PATTERNS, ...DISTRIBUTION_PATTE
 /** This script and its rules name the old words to say what they are: they are the one place that may. */
 const SELF = /^scripts\/(?:rename-codename\.mjs|rename-codename\/|__tests__\/rename-codename\.test\.mjs)/;
 
-const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8", maxBuffer: 1 << 28 })
+const everything = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8", maxBuffer: 1 << 28 })
   .split("\0")
   .filter(Boolean)
-  .filter((file) => !SELF.test(file))
-  .filter((file) => !(skipDocs && DOCS_SCOPE.some((scope) => scope.test(file))))
-  .filter((file) => !(skipDistribution && DISTRIBUTION_PATHS.some((scope) => scope.test(file))));
+  .filter((file) => !SELF.test(file));
+/** The package directory moves whole, whatever step owns the files in it: half a package is not a package. */
+const MOVES_WHOLE = /^packages\/jinn\//;
+const outOfScope = (file) =>
+  (skipDocs && DOCS_SCOPE.some((scope) => scope.test(file))) ||
+  (skipDistribution && DISTRIBUTION_PATHS.some((scope) => scope.test(file)));
+const tracked = everything.filter((file) => MOVES_WHOLE.test(file) || !outOfScope(file));
 
 const rewrites = [];
 const moves = [];
@@ -41,7 +45,7 @@ const kept = [];
 for (const file of tracked) {
   const target = renamePath(file, FROZEN_SUBTREES);
   if (target !== file) moves.push([file, target]);
-  if (KEEP_CONTENT_PATHS.some((rule) => rule.test(file))) continue;
+  if (KEEP_CONTENT_PATHS.some((rule) => rule.test(file)) || outOfScope(file)) continue;
   const full = path.join(root, file);
   const stat = fs.lstatSync(full);
   if (!stat.isFile()) continue;

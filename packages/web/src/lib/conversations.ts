@@ -186,7 +186,7 @@ function unsyncedRows(current: Message[], base: Message[], now: number): Message
 
 // --- Intermediate message persistence (localStorage) ---
 
-const INTERMEDIATE_PREFIX = 'jinn-intermediate-'
+const INTERMEDIATE_PREFIX = 'hundredfold-intermediate-'
 
 export function clearIntermediateMessages(sessionId: string): void {
   if (typeof window === 'undefined') return

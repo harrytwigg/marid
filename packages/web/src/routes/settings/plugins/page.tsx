@@ -12,7 +12,7 @@ import {
   usePluginInventory,
 } from "./inventory"
 
-/* The operator's view of `~/.jinn/plugins/`. It renders the INVENTORY rather
+/* The operator's view of `~/.hundredfold/plugins/`. It renders the INVENTORY rather
  * than the enabled subset, so a disabled or broken plugin is still something
  * you can see and act on. Header, row, refresh control and skeleton ladder are
  * the Cron page's, because this is the same kind of list: things the company

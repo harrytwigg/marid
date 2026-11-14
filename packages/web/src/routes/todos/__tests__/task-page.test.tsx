@@ -383,7 +383,7 @@ describe("the task page", () => {
     const linked = await screen.findByTestId("rail-dispatch-session")
     expect(linked.textContent).toContain("todo-dispatcher working")
     const railDot = linked.querySelector("span[aria-hidden]")
-    expect(railDot?.className).toContain("animate-[jinn-pulse")
+    expect(railDot?.className).toContain("animate-[hundredfold-pulse")
 
     const chip = screen.getByTestId("chip-working")
     expect(chip.textContent).toContain("Working · ")

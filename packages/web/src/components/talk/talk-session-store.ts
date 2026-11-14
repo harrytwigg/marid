@@ -14,7 +14,7 @@ import { browserInstanceId } from "./context/browser-instance"
 
 let sessionId: string | null = null
 const listeners = new Set<() => void>()
-const RESUMABLE_KEY_PREFIX = "jinn-talk-resumable:"
+const RESUMABLE_KEY_PREFIX = "hundredfold-talk-resumable:"
 
 function resumableKey(): string {
   return `${RESUMABLE_KEY_PREFIX}${browserInstanceId()}`

@@ -94,7 +94,7 @@ function renderRoute(entry = '/?session=a') {
 }
 
 const location = () => screen.getByTestId('route-location').textContent
-const storedTabs = () => (JSON.parse(localStorage.getItem('jinn-chat-tabs') ?? '{"tabs":[]}') as { tabs: Array<{ sessionId?: string; label?: string; status?: string }> }).tabs
+const storedTabs = () => (JSON.parse(localStorage.getItem('hundredfold-chat-tabs') ?? '{"tabs":[]}') as { tabs: Array<{ sessionId?: string; label?: string; status?: string }> }).tabs
 const storedTabIds = () => storedTabs().map((tab) => tab.sessionId)
 
 async function refetchSessionList() {
@@ -143,7 +143,7 @@ describe('a chat the session list does not carry', () => {
   })
 
   it('keeps its tab on a reload that lands on it', async () => {
-    localStorage.setItem('jinn-chat-tabs', JSON.stringify({
+    localStorage.setItem('hundredfold-chat-tabs', JSON.stringify({
       tabs: [
         { kind: 'session', sessionId: 'a', label: 'A', status: 'idle', unread: false, pinned: true },
         { kind: 'session', sessionId: 'z', label: 'Z', status: 'idle', unread: false, pinned: true },
@@ -160,7 +160,7 @@ describe('a chat the session list does not carry', () => {
   })
 
   it('takes its title and status from the lookup when it is not the open chat', async () => {
-    localStorage.setItem('jinn-chat-tabs', JSON.stringify({
+    localStorage.setItem('hundredfold-chat-tabs', JSON.stringify({
       tabs: [
         { kind: 'session', sessionId: 'a', label: 'A', status: 'idle', unread: false, pinned: true },
         { kind: 'session', sessionId: 'z', label: 'Loading...', status: 'running', unread: false, pinned: true },
@@ -178,7 +178,7 @@ describe('a chat the session list does not carry', () => {
       if (id === 'gone') throw new ApiError(404, 'Session not found')
       return session(id)
     })
-    localStorage.setItem('jinn-chat-tabs', JSON.stringify({
+    localStorage.setItem('hundredfold-chat-tabs', JSON.stringify({
       tabs: [
         { kind: 'session', sessionId: 'a', label: 'A', status: 'idle', unread: false, pinned: true },
         { kind: 'session', sessionId: 'gone', label: 'Gone', status: 'idle', unread: false, pinned: true },
@@ -196,7 +196,7 @@ describe('a chat the session list does not carry', () => {
       if (id === 'z') throw new ApiError(503, 'Gateway unavailable')
       return session(id)
     })
-    localStorage.setItem('jinn-chat-tabs', JSON.stringify({
+    localStorage.setItem('hundredfold-chat-tabs', JSON.stringify({
       tabs: [
         { kind: 'session', sessionId: 'a', label: 'A', status: 'idle', unread: false, pinned: true },
         { kind: 'session', sessionId: 'z', label: 'Z', status: 'idle', unread: false, pinned: true },

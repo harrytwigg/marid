@@ -121,7 +121,7 @@ describe('chat grid add paths', () => {
     fireEvent(composer, blockedOver)
     expect(blockedOver.defaultPrevented).toBe(false)
     fireEvent.drop(composer, { dataTransfer: transfer(CHAT_SESSION_DND_MIME, 'c') })
-    fireEvent.drop(transcript, { dataTransfer: transfer('application/x-jinn-chat-message', 'message-a-1') })
+    fireEvent.drop(transcript, { dataTransfer: transfer('application/x-hundredfold-chat-message', 'message-a-1') })
     expect(action).not.toHaveBeenCalled()
     expect([...transcript.children]).toEqual(rows)
     expect(screen.getByTestId('working-set').textContent).toBe(JSON.stringify(createWorkingSet(['a', 'b'], 'a')))

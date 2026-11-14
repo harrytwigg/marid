@@ -11,14 +11,14 @@ describe("LargeTitleHeader", () => {
       </PageScaffold>,
     )
 
-    const large = document.querySelector(".jinn-large-title")
-    const inline = document.querySelector(".jinn-inline-title")
+    const large = document.querySelector(".hundredfold-large-title")
+    const inline = document.querySelector(".hundredfold-inline-title")
     expect(large).toBeTruthy()
     expect(inline).toBeTruthy()
     expect(large?.textContent).toContain("Settings")
     expect(inline?.textContent).toContain("Settings")
     expect(screen.getByText("Portal, gateway and connectors")).toBeTruthy()
-    expect(document.querySelector(".jinn-inline-title")?.contains(screen.getByText("Portal, gateway and connectors"))).toBe(false)
+    expect(document.querySelector(".hundredfold-inline-title")?.contains(screen.getByText("Portal, gateway and connectors"))).toBe(false)
   })
 
   it("accepts a node title so a control can occupy the title slot", () => {
@@ -26,7 +26,7 @@ describe("LargeTitleHeader", () => {
       <LargeTitleHeader title={<button type="button" data-testid="title-control">Home</button>} />,
     )
     expect(screen.getByTestId("title-control").textContent).toBe("Home")
-    expect(document.querySelector(".jinn-large-title")).toBeTruthy()
+    expect(document.querySelector(".hundredfold-large-title")).toBeTruthy()
   })
 
   it("renders trailing in the sticky bar", () => {
@@ -38,15 +38,15 @@ describe("LargeTitleHeader", () => {
 
   // Non-collapse is the rule for an externally scrolled route, not a shortfall
   // of one — see the `scroll="external"` clause in
-  // docs/design/jinn-shell-contract.md.
+  // docs/design/hundredfold-shell-contract.md.
   it("scroll=external keeps the large title: no inline bar, no scaffold scroll box", () => {
     const { container } = render(
       <PageScaffold scroll="external" header={<LargeTitleHeader title="Todos" />}>
         <div />
       </PageScaffold>,
     )
-    expect(document.querySelector(".jinn-large-title")).toBeTruthy()
-    expect(document.querySelector(".jinn-inline-title")).toBeNull()
+    expect(document.querySelector(".hundredfold-large-title")).toBeTruthy()
+    expect(document.querySelector(".hundredfold-inline-title")).toBeNull()
     expect(container.querySelector("[data-scrollable]")).toBeNull()
   })
 
@@ -71,7 +71,7 @@ describe("LargeTitleHeader", () => {
         </PageScaffold>,
       )
       expect(gapOf(screen.getByText("Engine usage"))).toBe(true)
-      expect(gapOf(document.querySelector(".jinn-large-title"))).toBeFalsy()
+      expect(gapOf(document.querySelector(".hundredfold-large-title"))).toBeFalsy()
     })
 
     it("uses a spacer outside the large title when there is no subtitle", () => {
@@ -80,7 +80,7 @@ describe("LargeTitleHeader", () => {
           <p>body</p>
         </PageScaffold>,
       )
-      const title = document.querySelector(".jinn-large-title")
+      const title = document.querySelector(".hundredfold-large-title")
       const spacer = document.querySelector("[data-slot='large-title-gap']")
       // The title is display:none under reduced motion, which would take its margin with it.
       expect(spacer).toBeTruthy()

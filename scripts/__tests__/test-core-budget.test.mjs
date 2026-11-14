@@ -40,16 +40,16 @@ test("the pool is the machine's cores minus the reserve, floored at the minimum"
 test("coreBudget: defaults, overrides, junk, and the CI and disabled no-ops", () => {
   assert.deepEqual(coreBudget({}, 64), { global: 52, perRun: DEFAULT_RUN_CORES });
   assert.deepEqual(coreBudget({}, 16), { global: 8, perRun: 8 });
-  assert.deepEqual(coreBudget({ JINN_TEST_GLOBAL_CORES: "20" }, 64), { global: 20, perRun: 8 });
-  assert.deepEqual(coreBudget({ JINN_TEST_GLOBAL_CORES: "200" }, 64), { global: 64, perRun: 8 });
-  assert.deepEqual(coreBudget({ JINN_TEST_RESERVED_CORES: "4" }, 64), { global: 60, perRun: 8 });
-  assert.deepEqual(coreBudget({ JINN_TEST_RUN_CORES: "4" }, 64), { global: 52, perRun: 4 });
-  assert.deepEqual(coreBudget({ JINN_TEST_GLOBAL_CORES: "6" }, 64), { global: 6, perRun: 6 });
-  assert.deepEqual(coreBudget({ JINN_TEST_GLOBAL_CORES: "off", JINN_TEST_RUN_CORES: "-3" }, 64), {
+  assert.deepEqual(coreBudget({ HUNDREDFOLD_TEST_GLOBAL_CORES: "20" }, 64), { global: 20, perRun: 8 });
+  assert.deepEqual(coreBudget({ HUNDREDFOLD_TEST_GLOBAL_CORES: "200" }, 64), { global: 64, perRun: 8 });
+  assert.deepEqual(coreBudget({ HUNDREDFOLD_TEST_RESERVED_CORES: "4" }, 64), { global: 60, perRun: 8 });
+  assert.deepEqual(coreBudget({ HUNDREDFOLD_TEST_RUN_CORES: "4" }, 64), { global: 52, perRun: 4 });
+  assert.deepEqual(coreBudget({ HUNDREDFOLD_TEST_GLOBAL_CORES: "6" }, 64), { global: 6, perRun: 6 });
+  assert.deepEqual(coreBudget({ HUNDREDFOLD_TEST_GLOBAL_CORES: "off", HUNDREDFOLD_TEST_RUN_CORES: "-3" }, 64), {
     global: 52,
     perRun: 8,
   });
-  assert.deepEqual(coreBudget({ JINN_TEST_GLOBAL_CORES: "0" }, 64), { global: 0, perRun: 0 });
+  assert.deepEqual(coreBudget({ HUNDREDFOLD_TEST_GLOBAL_CORES: "0" }, 64), { global: 0, perRun: 0 });
   assert.deepEqual(coreBudget({ CI: "true" }, 64), { global: 0, perRun: 0 });
 });
 

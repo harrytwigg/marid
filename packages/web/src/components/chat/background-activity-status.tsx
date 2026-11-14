@@ -179,7 +179,7 @@ export function BackgroundActivityStatus({
 
   const label = (
     <>
-      <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--system-orange)] animate-[jinn-pulse_1.4s_infinite] motion-reduce:animate-none" />
+      <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--system-orange)] animate-[hundredfold-pulse_1.4s_infinite] motion-reduce:animate-none" />
       <span className="hidden min-w-0 truncate @min-[480px]/composer:inline">{renderLabel(shownCopy.long)}</span>
       <span className="min-w-0 truncate @min-[480px]/composer:hidden">{renderLabel(shownCopy.short)}</span>
     </>

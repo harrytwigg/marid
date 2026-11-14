@@ -3,7 +3,7 @@ import { legalTargets, canDropOn, closeGateCounts } from "../legal-targets"
 import type { WorkItemStatusWire, WorkItemTreeNodeWire } from "../api"
 
 /* Slice 6 — the client legality map. The full matrix is pinned here; the
- * SERVER parity lives in packages/jinn/src/work-items/__tests__/
+ * SERVER parity lives in packages/hundredfold/src/work-items/__tests__/
  * board-legality-parity.test.ts, which probes transition() behaviorally
  * against the same transition-edges.json this module reads. */
 

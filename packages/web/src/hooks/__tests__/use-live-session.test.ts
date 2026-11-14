@@ -29,7 +29,7 @@ import {
   useLiveSession,
 } from "../use-live-session"
 import type { Message } from "@/lib/conversations"
-import type { GatewayEvent, GatewayEventListener } from "@jinn/gateway-events"
+import type { GatewayEvent, GatewayEventListener } from "@hundredfold/gateway-events"
 
 /** A manual gateway subscribe that lets the test emit WS events. */
 function makeBus() {
@@ -1938,7 +1938,7 @@ describe("resting-snapshot revisits", () => {
     messages: [{ id: "m1", role: "assistant" as const, content: "cached transcript", timestamp: 1 }],
     streamingText: "",
     loading: false,
-    session: { id, status: "idle", title: "Cached title", employee: "jinn-dev" },
+    session: { id, status: "idle", title: "Cached title", employee: "hundredfold-dev" },
     liveContextTokens: null,
     backgroundActivity: null,
     hasOlderMessages: false,
@@ -2066,7 +2066,7 @@ describe("resting-snapshot revisits", () => {
     expect(result.current.messages.map((m) => m.content)).toEqual(["cached transcript"])
     expect(result.current.hydrating).toBe(false)
     expect(getSession).not.toHaveBeenCalled()
-    expect(onMeta).toHaveBeenCalledWith(expect.objectContaining({ title: "Cached title", employee: "jinn-dev" }))
+    expect(onMeta).toHaveBeenCalledWith(expect.objectContaining({ title: "Cached title", employee: "hundredfold-dev" }))
   })
 
   it("still revalidates when the cached session was RUNNING", async () => {

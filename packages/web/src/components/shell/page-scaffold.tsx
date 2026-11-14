@@ -80,8 +80,8 @@ function OwnedScroll({
         data-scrollable
         style={padStyle}
         className={cn(
-          "jinn-scrollport min-h-0 flex-1 overflow-y-auto",
-          "pb-[var(--jinn-scaffold-bottom)] lg:pb-10",
+          "hundredfold-scrollport min-h-0 flex-1 overflow-y-auto",
+          "pb-[var(--hundredfold-scaffold-bottom)] lg:pb-10",
         )}
       >
         {header}
@@ -152,16 +152,16 @@ export function PageScaffold({
   const attachScroll = useCallback((node: HTMLDivElement | null) => setScrollEl(node), [])
   const chrome = useChrome(scroll !== "external", hideMobileTabBar, primaryAction)
   const padStyle = {
-    "--jinn-scaffold-bottom": scaffoldBottomPadding({
+    "--hundredfold-scaffold-bottom": scaffoldBottomPadding({
       hasPrimaryAction: Boolean(primaryAction),
       hideMobileTabBar,
     }),
-    ...(contentWidth ? { "--jinn-content-width": contentWidth } : {}),
+    ...(contentWidth ? { "--hundredfold-content-width": contentWidth } : {}),
   } as CSSProperties
   useLayoutEffect(() => {
     if (!scrollEl) return
-    const title = scrollEl.querySelector<HTMLElement>(".jinn-large-title")
-    if (title) scrollEl.style.setProperty("--jinn-collapse-distance", `${title.offsetHeight}px`)
+    const title = scrollEl.querySelector<HTMLElement>(".hundredfold-large-title")
+    if (title) scrollEl.style.setProperty("--hundredfold-collapse-distance", `${title.offsetHeight}px`)
   }, [scrollEl, header])
 
   return (
