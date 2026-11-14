@@ -292,11 +292,20 @@ function readDiffLine(line, state, byFile) {
     return
   }
   if (!state.lines) return
-  if (line.startsWith("-")) state.removed.add(renameText(line.slice(1), []).text)
+  if (line.startsWith("-")) state.removed.add(renamedOrSame(line.slice(1)))
   if (!line.startsWith("+")) return
   // A line that only changed because the product's name did was already there: it is not new.
   if (!state.removed.has(line.slice(1))) state.lines.add(state.lineNumber)
   state.lineNumber += 1
+}
+
+/** The line as the rename would write it, or as it is when it holds something the rename cannot map (a hash or a data URI that happens to spell a name). */
+function renamedOrSame(text) {
+  try {
+    return renameText(text, []).text
+  } catch {
+    return text
+  }
 }
 
 /** The header between `diff --git` and the first hunk: only its `+++` line says which file the hunks belong to. */

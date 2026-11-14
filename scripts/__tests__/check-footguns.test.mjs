@@ -373,3 +373,25 @@ test("CI runs the checker over the diff, and these tests ride the repository's n
   assert.match(pkg.scripts["test:node"], /scripts\/__tests__\/check-footguns\.test\.mjs/)
   assert.match(pkg.scripts.test, /pnpm test:node/)
 })
+
+test("diff mode does not count a line that only changed because the product was renamed", () => {
+  const before = `const note = "/Users/someone/${OLD.codename}";\n`
+  const root = repoWith({ "packages/hundredfold/src/thing.ts": before })
+  git(root, "commit", "-m", "before")
+  git(root, "checkout", "-b", "feature")
+  fs.writeFileSync(path.join(root, "packages/hundredfold/src/thing.ts"), 'const note = "/Users/someone/hundredfold";\n')
+  git(root, "commit", "--all", "-m", "rename")
+  assert.equal(totalViolations(check(root, "--diff", "main").stdout), 0)
+})
+
+test("a removed line that spells a name in mixed case does not stop the gate", () => {
+  const mixed = OLD.codename.split("").map((letter, index) => (index % 2 === 0 ? letter.toUpperCase() : letter)).join("")
+  const root = repoWith({ "pnpm-lock.yaml": `integrity: sha512-q9${mixed}Z0x==\n` })
+  git(root, "commit", "-m", "lock")
+  git(root, "checkout", "-b", "feature")
+  fs.writeFileSync(path.join(root, "pnpm-lock.yaml"), "integrity: sha512-other==\n")
+  git(root, "commit", "--all", "-m", "bump")
+  const run = check(root, "--diff", "main")
+  assert.equal(run.status, 0, run.stderr)
+  assert.equal(totalViolations(run.stdout), 0)
+})
