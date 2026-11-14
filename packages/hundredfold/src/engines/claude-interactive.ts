@@ -16,6 +16,7 @@ import { argumentLimitApplies, assertArgumentsFit } from "./argv-limit.js";
 import { PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
 import type { PtyControlEvent, PtyViewEngine, PtyIdleSpawnOpts, PtySnapshotSubscription } from "./pty-view-engine.js";
 import type { HookRegistry, HookPayload } from "../gateway/hook-registry.js";
+import { readRemoteContextTokens } from "./remote-transcript-context.js";
 import { SsePtyProxy, MAIN_AGENT_SENTINEL, type SseDataEvent, type UpstreamActivityInfo } from "./sse-pty-proxy.js";
 import { BackgroundTaskStore, launchedBackgroundTask, launchedSubagentId } from "./background-tasks.js";
 import { finishedTaskNotificationIds } from "./task-notifications.js";
@@ -2837,6 +2838,13 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       // headless claude.ts so interactive/CLI-view turns also populate the meter.
       const ctx = lastTurnContextTokens(transcriptPath, turnTranscriptFrom);
       if (ctx) result.contextTokens = ctx;
+    }
+    // A remote session's transcript is on its own host, so the read above found
+    // nothing and there is no live stream either: ask that host.
+    // (A confirmed /compact discards the figure below, so it is not read for one.)
+    if (transcriptPath && !result.error && !compactedBy && result.contextTokens === undefined && isRemoteTarget(opts)) {
+      const remoteCtx = await readRemoteContextTokens(sshDestination(opts), transcriptPath);
+      if (remoteCtx) result.contextTokens = remoteCtx;
     }
     // A `/compact` that Claude Code confirmed. The context meter takes the size
     // after it; the pre-compaction reading streamed during the summary is stale.
