@@ -1,0 +1,154 @@
+/*
+ * Hundredfold site: the app's glass identity (packages/web/src/routes/glass-identity.css)
+ * mapped onto VitePress's tokens. Sky blues and a little ion violet; deep navy at night.
+ * Blur is used on the top bar only; cards are tint, never blurred.
+ */
+:root {
+  --vp-font-family-base: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --vp-font-family-mono: 'Geist Mono', 'SF Mono', Menlo, monospace;
+  --hf-display: 'Sora', 'Geist', -apple-system, system-ui, sans-serif;
+
+  --hf-bg: #f6fafe;
+  --hf-text: #0c1a2b;
+  --hf-accent: #06659f;
+  --hf-glass: rgba(255, 255, 255, 0.64);
+  --hf-glass-chrome: rgba(255, 255, 255, 0.72);
+  --hf-edge: rgba(255, 255, 255, 0.78);
+  --hf-specular: rgba(255, 255, 255, 0.95);
+  --hf-shadow: rgba(20, 60, 110, 0.1);
+  --hf-sep: rgba(16, 52, 92, 0.12);
+  --hf-backdrop:
+    radial-gradient(55% 45% at 6% 0%, rgba(98, 198, 255, 0.45) 0%, transparent 72%),
+    radial-gradient(45% 40% at 100% 6%, rgba(150, 130, 240, 0.28) 0%, transparent 70%),
+    radial-gradient(65% 55% at 82% 104%, rgba(60, 200, 190, 0.26) 0%, transparent 72%);
+
+  --vp-c-bg: var(--hf-bg);
+  --vp-c-bg-alt: #eaf2fa;
+  --vp-c-bg-elv: #ffffff;
+  --vp-c-bg-soft: rgba(16, 52, 92, 0.05);
+  --vp-c-text-1: var(--hf-text);
+  --vp-c-text-2: rgba(12, 26, 43, 0.74);
+  --vp-c-text-3: rgba(12, 26, 43, 0.64);
+  --vp-c-divider: var(--hf-sep);
+  --vp-c-gutter: var(--hf-sep);
+  --vp-c-brand-1: var(--hf-accent);
+  --vp-c-brand-2: #0a74b4;
+  --vp-c-brand-3: #0a74b4;
+  --vp-c-brand-soft: rgba(6, 101, 159, 0.12);
+  --vp-button-brand-bg: #06659f;
+  --vp-button-brand-hover-bg: #0a74b4;
+  --vp-button-brand-active-bg: #05537f;
+  --vp-button-brand-text: #fff;
+  --vp-code-block-bg: rgba(16, 52, 92, 0.05);
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #06659f 20%, #5150c8 90%);
+  --vp-nav-bg-color: var(--hf-glass-chrome);
+}
+
+.dark {
+  --hf-bg: #0b1422;
+  --hf-text: #e8f1fb;
+  --hf-accent: #62c6ff;
+  --hf-glass: rgba(20, 34, 54, 0.62);
+  --hf-glass-chrome: rgba(14, 26, 44, 0.7);
+  --hf-edge: rgba(200, 228, 255, 0.12);
+  --hf-specular: rgba(255, 255, 255, 0.1);
+  --hf-shadow: rgba(0, 0, 0, 0.45);
+  --hf-sep: rgba(200, 228, 255, 0.1);
+  --hf-backdrop:
+    radial-gradient(55% 45% at 6% 0%, rgba(38, 128, 214, 0.42) 0%, transparent 72%),
+    radial-gradient(45% 40% at 100% 6%, rgba(112, 84, 214, 0.3) 0%, transparent 70%),
+    radial-gradient(65% 55% at 82% 104%, rgba(16, 168, 160, 0.28) 0%, transparent 72%);
+
+  --vp-c-bg: #0b1422;
+  --vp-c-bg-alt: #111c2d;
+  --vp-c-bg-elv: #172437;
+  --vp-c-bg-soft: rgba(200, 228, 255, 0.06);
+  --vp-c-text-1: #e8f1fb;
+  --vp-c-text-2: rgba(232, 241, 251, 0.78);
+  --vp-c-text-3: rgba(232, 241, 251, 0.62);
+  --vp-c-brand-1: #62c6ff;
+  --vp-c-brand-2: #8ad8ff;
+  --vp-c-brand-3: #4bb3ee;
+  --vp-c-brand-soft: rgba(98, 198, 255, 0.16);
+  --vp-button-brand-bg: #62c6ff;
+  --vp-button-brand-hover-bg: #8ad8ff;
+  --vp-button-brand-active-bg: #4bb3ee;
+  --vp-button-brand-text: #06223a;
+  --vp-code-block-bg: rgba(200, 228, 255, 0.06);
+  --vp-home-hero-name-background: linear-gradient(120deg, #8ad8ff 20%, #9c9bff 90%);
+}
+
+html { background: var(--hf-bg); }
+body {
+  background: var(--hf-backdrop) fixed, var(--hf-bg);
+  min-height: 100vh;
+}
+.VPDoc h1, .VPDoc h2, .VPHero .name, .VPHero .text, .hf-section h2 { font-family: var(--hf-display); letter-spacing: -0.01em; }
+
+/* Top bar: the one blurred surface. */
+.VPNav .VPNavBar:not(.home.top) .wrapper .container .content-body,
+.VPNavBar { background-color: var(--hf-glass-chrome); }
+.VPNavBar { -webkit-backdrop-filter: blur(12px) saturate(180%); backdrop-filter: blur(12px) saturate(180%); border-bottom: 1px solid var(--hf-edge); }
+.VPNavBar .divider-line { background-color: transparent; }
+.VPNavBar.home.top { background-color: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; border-bottom-color: transparent; }
+.VPNavBarTitle .title { font-family: var(--hf-display); font-weight: 600; }
+
+/* Sidebar and doc pane sit on the backdrop as tint. */
+.VPSidebar { background-color: var(--hf-glass-chrome); }
+.VPContent.has-sidebar, .VPContent { background: transparent; }
+.VPDoc .container .content-container { max-width: 820px; }
+.vp-doc table, .vp-doc tr, .vp-doc th, .vp-doc td { border-color: var(--hf-sep); }
+.vp-doc tr { background: transparent; }
+.vp-doc tr:nth-child(2n) { background: var(--vp-c-bg-soft); }
+.vp-doc div[class*='language-'] { border-radius: 11px; box-shadow: 0 0 0 1px var(--hf-edge); }
+.vp-doc img { border-radius: 11px; max-width: 100%; height: auto; }
+.vp-doc :not(pre) > code { border-radius: 7px; }
+
+/* Landing */
+.VPHome { padding-bottom: 32px; }
+.VPHero .tagline { max-width: 40rem; font-size: 1.05rem; line-height: 1.6; color: var(--vp-c-text-2); }
+.VPHero .image-src { max-width: 220px; max-height: 220px; filter: drop-shadow(0 12px 32px var(--hf-shadow)); }
+.VPFeature {
+  background: var(--hf-glass) !important;
+  border: 0 !important;
+  border-radius: 20px;
+  box-shadow: 0 0 0 1px var(--hf-edge), 0 1px 2px var(--hf-shadow), 0 8px 24px var(--hf-shadow), inset 0 1px 0 var(--hf-specular);
+}
+.VPFeature .title { font-family: var(--hf-display); font-weight: 600; }
+.VPFeature .details { color: var(--vp-c-text-2); }
+
+.hf-extras { max-width: 1152px; margin: 0 auto; padding: 8px 24px 0; }
+.hf-section { margin-top: 56px; }
+.hf-section h2 { margin: 0 0 16px; border: 0; padding: 0; font-size: 1.5rem; line-height: 1.3; font-weight: 600; }
+.hf-glass {
+  background: var(--hf-glass);
+  border-radius: 20px;
+  box-shadow: 0 0 0 1px var(--hf-edge), 0 1px 2px var(--hf-shadow), 0 8px 24px var(--hf-shadow), inset 0 1px 0 var(--hf-specular);
+}
+.hf-install { padding: 20px 24px; }
+.hf-install pre { margin: 0 0 12px; padding: 14px 16px; overflow-x: auto; border-radius: 11px; background: var(--vp-code-block-bg); box-shadow: 0 0 0 1px var(--hf-edge); }
+.hf-install code { font-family: var(--vp-font-family-mono); font-size: 0.95rem; }
+.hf-install p { margin: 0; color: var(--vp-c-text-2); line-height: 1.6; }
+.hf-shots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.hf-shot { margin: 0; padding: 10px; }
+.hf-shot img { display: block; width: 100%; height: auto; border-radius: 12px; }
+.hf-shot figcaption { padding: 10px 6px 2px; font-size: 0.9rem; color: var(--vp-c-text-2); }
+.hf-credit p { margin: 0 0 12px; line-height: 1.6; color: var(--vp-c-text-2); }
+.hf-links { display: flex; gap: 20px; font-weight: 500; }
+
+@media (max-width: 860px) {
+  .hf-shots { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .hf-extras { padding: 8px 16px 0; }
+  .VPHero .image-src { max-width: 140px; max-height: 140px; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .VPNavBar { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .VPNavBar, .VPSidebar { background-color: var(--vp-c-bg-alt); }
+  .hf-glass, .VPFeature { background: var(--vp-c-bg-elv) !important; }
+}
+
+/* The landing page carries its own credit section. */
+.Layout:has(.VPHome) .VPFooter { display: none; }
