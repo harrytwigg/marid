@@ -55,7 +55,7 @@ const BLOCKED_TERMS = [
 
 // The fork must keep its MIT attribution to the upstream project, which names
 // the upstream author's handle both in the repository link and in the "by ..."
-// credit (see docs/hundredfold-vs-jinn.md). That handle is also one of the personal
+// credit (see docs/hundredfold-vs-jinn.md). That handle is also one of the personal // rename:keep
 // terms the guard blocks, so allow exactly those two attribution forms through
 // while still scanning the rest of the tree, and the rest of that same file.
 const UPSTREAM_OWNER = ["hris", "to", "2612"].join("");
