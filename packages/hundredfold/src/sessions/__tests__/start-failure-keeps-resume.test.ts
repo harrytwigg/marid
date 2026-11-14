@@ -52,10 +52,11 @@ async function twoTurns(second: EngineResult, ...rest: EngineResult[]) {
   const manager = new ManagerClass(testConfig(), new Map([["claude", claude]]) as never, "start-failure-boot");
   const key = `stub:start-failure-${Math.random().toString(16).slice(2)}`;
   // route() resolves once the queued turn has settled.
-  const first = await manager.route(connectorMessage(key, "one"), connectorStub(), { employee: employee as never });
+  const connector = connectorStub();
+  const first = await manager.route(connectorMessage(key, "one"), connector, { employee: employee as never });
   const id = first!.sessionId;
-  await manager.route(connectorMessage(key, "two"), connectorStub(), { employee: employee as never });
-  return { session: registry.getSession(id)!, resumedWith, prompts, messages: registry.getMessages(id) };
+  await manager.route(connectorMessage(key, "two"), connector, { employee: employee as never });
+  return { session: registry.getSession(id)!, resumedWith, prompts, messages: registry.getMessages(id), replies: connector.replies };
 }
 
 describe("a resumed turn whose process never started its session", () => {
@@ -119,7 +120,7 @@ describe("a resumed turn whose process never started its session", () => {
 
   it("answers in a fresh conversation, given the session so far, when Claude Code no longer has the one it resumed", async () => {
     const error = processStartFailure("claude", { exitCode: 1, signal: 0 }, "No conversation found with session ID: native-1 Connection to build-box closed.");
-    const { session, resumedWith, prompts, messages } = await twoTurns(
+    const { session, resumedWith, prompts, messages, replies } = await twoTurns(
       engineResult({ sessionId: "native-1", error }),
       engineResult({ sessionId: "native-2", result: "answered afresh", cost: 0.01, numTurns: 1 }),
     );
@@ -135,6 +136,12 @@ describe("a resumed turn whose process never started its session", () => {
     expect(session.transportMeta?.["lostConversationEngine"]).toBeUndefined();
     expect(messages.map((message) => message.content)).toContain("answered afresh");
     expect(messages.some((message) => message.content.includes("did not start"))).toBe(false);
+    // The chat says plainly that the engine's context was rebuilt rather than resumed,
+    // once, and the history it already had is untouched.
+    const notices = replies.filter((reply) => reply.includes("could not be resumed"));
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toContain("Claude no longer has the conversation");
+    expect(messages.map((message) => message.content)).toEqual(expect.arrayContaining(["one", "hello", "two"]));
   });
 
   it("tries a fresh conversation only once, and hands the session's next message the transcript", async () => {

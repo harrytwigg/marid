@@ -2179,3 +2179,78 @@ describe("a switch made outside this view", () => {
     expect(getSession).not.toHaveBeenCalled()
   })
 })
+
+describe("a load that fails while the gateway restarts", () => {
+  const apiError = (status: number) => Object.assign(new Error(`API error: ${status}`), { status })
+
+  it("keeps the cached transcript, retries on its own, and shows the history once the gateway answers", async () => {
+    const history = [{ id: "m1", role: "user", content: "earlier question", timestamp: 1 }, { id: "m2", role: "assistant", content: "earlier answer", timestamp: 2 }]
+    __cacheLiveSessionSnapshotForTests("s-restart", {
+      messages: history as unknown as Message[],
+      session: { id: "s-restart", status: "interrupted" },
+    } as never)
+    vi.useFakeTimers()
+    getSession.mockRejectedValueOnce(new TypeError("Failed to fetch")).mockResolvedValue({ id: "s-restart", status: "idle", messages: history })
+    const bus = makeBus()
+    const { result } = renderHook(() => useLiveSession("s-restart", { subscribe: bus.subscribe }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    // The revalidate failed: the history is still on screen, and the failure is reported, not hidden.
+    expect(result.current.messages.map((m) => m.content)).toEqual(["earlier question", "earlier answer"])
+    expect(result.current.error).toBeInstanceOf(TypeError)
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(1100) })
+    expect(getSession).toHaveBeenCalledTimes(2)
+    expect(result.current.error).toBeNull()
+    expect(result.current.messages.map((m) => m.content)).toEqual(["earlier question", "earlier answer"])
+  })
+
+  it("loads an uncached session on retry after the first fetch hit a 502", async () => {
+    vi.useFakeTimers()
+    getSession
+      .mockRejectedValueOnce(apiError(502))
+      .mockRejectedValueOnce(apiError(502))
+      .mockResolvedValue({ id: "s-cold", status: "idle", messages: [{ id: "m1", role: "user", content: "hello again", timestamp: 1 }] })
+    const bus = makeBus()
+    const { result } = renderHook(() => useLiveSession("s-cold", { subscribe: bus.subscribe }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(result.current.messages).toHaveLength(0)
+    expect(result.current.error).not.toBeNull()
+
+    // Backoff doubles: 1s, then 2s.
+    await act(async () => { await vi.advanceTimersByTimeAsync(1100) })
+    expect(getSession).toHaveBeenCalledTimes(2)
+    await act(async () => { await vi.advanceTimersByTimeAsync(1900) })
+    expect(getSession).toHaveBeenCalledTimes(2)
+    await act(async () => { await vi.advanceTimersByTimeAsync(200) })
+    expect(getSession).toHaveBeenCalledTimes(3)
+    expect(result.current.error).toBeNull()
+    expect(result.current.messages.map((m) => m.content)).toEqual(["hello again"])
+  })
+
+  it("retries when the socket reconnects, ahead of the backoff", async () => {
+    vi.useFakeTimers()
+    getSession.mockRejectedValueOnce(apiError(503)).mockResolvedValue({ id: "s-recon", status: "idle", messages: [{ id: "m1", role: "user", content: "kept", timestamp: 1 }] })
+    const bus = makeBus()
+    const { result, rerender } = renderHook(({ seq }) => useLiveSession("s-recon", { subscribe: bus.subscribe, connectionSeq: seq }), { initialProps: { seq: 1 } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(result.current.error).not.toBeNull()
+    rerender({ seq: 2 })
+    await act(async () => { await vi.advanceTimersByTimeAsync(350) })
+    expect(getSession).toHaveBeenCalledTimes(2)
+    expect(result.current.messages.map((m) => m.content)).toEqual(["kept"])
+  })
+
+  it("empties the pane and does not retry when the session is gone (404)", async () => {
+    vi.useFakeTimers()
+    getSession.mockRejectedValue(apiError(404))
+    const bus = makeBus()
+    const { result } = renderHook(() => useLiveSession("s-gone", { subscribe: bus.subscribe }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(60000) })
+    expect(getSession).toHaveBeenCalledTimes(1)
+    expect(result.current.messages).toHaveLength(0)
+    expect(result.current.session).toBeNull()
+    expect(result.current.error).not.toBeNull()
+  })
+})

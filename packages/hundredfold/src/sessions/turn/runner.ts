@@ -1,5 +1,5 @@
 import { logger } from "../../shared/logger.js";
-import { detectRateLimit, isDeadSessionError, type RateLimitDetection } from "../../shared/rateLimit.js";
+import { detectRateLimit, isDeadSessionError, rateLimitEngineLabel, type RateLimitDetection } from "../../shared/rateLimit.js";
 import { observeClaudeTurnOutcome } from "../claude-auth-watch.js";
 import type { EngineResult, Session } from "../../shared/types.js";
 import { awaitEffortLevels } from "../../shared/effort-wait.js";
@@ -149,6 +149,12 @@ async function runEngineOrStartAfresh(run: TurnRun): Promise<{ attempt: EngineAt
   const lostId = run.plan.resumeSessionId;
   logger.warn(`Session ${sessionId}: ${run.plan.engineName} has no conversation ${lostId} to resume; starting a fresh one with the session's recent messages`);
   clearDeadEngineSession(sessionId, run.plan.engineName, { lostConversation: true });
+  // Say so in the chat: the engine now holds a rebuilt copy of the session, not the
+  // conversation it had, and the operator should not have to infer that from the
+  // answers. The messages above stay as they are.
+  await run.surface.notice(lostConversationNotice(run.plan.engineName)).catch((err: unknown) => {
+    logger.warn(`Session ${sessionId}: could not post the lost-conversation notice: ${err instanceof Error ? err.message : String(err)}`);
+  });
   deletePartialMessages(sessionId);
   updateSession(sessionId, { lastError: null });
   const session = getSession(sessionId) ?? run.input.session;
@@ -162,6 +168,13 @@ async function runEngineOrStartAfresh(run: TurnRun): Promise<{ attempt: EngineAt
     ...withLeftBackgroundNote(session, resolveTurnPrompt(session, run.plan.engineName, run.input.prompt, false)),
   };
   return await runEngineWithModelFallback(run);
+}
+
+/** What the chat says when the engine's own conversation could not be resumed and a new one was started in its place. */
+export function lostConversationNotice(engineName: string): string {
+  return `⚠️ ${rateLimitEngineLabel(engineName)} no longer has the conversation this chat was running, so it could not be resumed. `
+    + "A new one was started and given the most recent messages from this chat; anything older is not in its memory. "
+    + "Everything said here so far is still on this page.";
 }
 
 /**

@@ -43,6 +43,25 @@ import {
 import { beginSendMessages, clearPendingSend, markSendFailed } from '@/components/chat/message-send-state'
 import type { GatewayEvent, GatewayEventListener } from '@hundredfold/gateway-events'
 
+/** A session fetch that failed for a reason a later attempt can clear: the
+ *  gateway is down or restarting (a network error, a 5xx from the proxy in front
+ *  of it) or briefly overloaded. A 4xx names a request that will keep failing
+ *  (the session is gone, the caller is not signed in), so retrying it only
+ *  repeats the answer. */
+export function isRetryableLoadError(err: unknown): boolean {
+  // An ApiError carries the HTTP status; anything else (a fetch that never got an answer) is a network failure.
+  const status = (err as { status?: unknown } | null)?.status
+  if (typeof status !== 'number') return true
+  return status >= 500 || status === 408 || status === 429
+}
+
+/** Pause before re-fetching a session whose load failed, doubling per attempt. */
+export const LOAD_RETRY_BASE_MS = 1000
+export const LOAD_RETRY_MAX_MS = 15000
+export function loadRetryDelayMs(attempt: number): number {
+  return Math.min(LOAD_RETRY_BASE_MS * 2 ** attempt, LOAD_RETRY_MAX_MS)
+}
+
 /** After a reconnect, if a turn is still 'loading' but no delta has arrived for
  *  this long, assume the session:completed frame was dropped and reconcile from
  *  the server to clear a stuck spinner. */
@@ -513,6 +532,7 @@ export function useLiveSession(
   const [hydrating, setHydrating] = useState<boolean>(() => Boolean(sessionId && !opts.pendingUserMessage && !initialSnapshot))
   const loadingRef = useRef(loading)
   useEffect(() => { loadingRef.current = loading }, [loading])
+  const loadErrorRef = useRef<Error | null>(null)
   const lastDeltaAtRef = useRef<number>(0)
   const turnStartsRef = useRef(0) // bumped by every turn start, so a late refetch can tell it was overtaken
   const streamingTextRef = useRef(initialSnapshot?.streamingText ?? '')
@@ -526,6 +546,8 @@ export function useLiveSession(
   const statusMessageIdRef = useRef<string | null>(null)
   const [currentSession, setCurrentSession] = useState<Record<string, unknown> | null>(initialSnapshot?.session ?? null)
   const [loadError, setLoadError] = useState<Error | null>(null)
+  const loadRetryAttemptRef = useRef(0)
+  useEffect(() => { loadErrorRef.current = loadError }, [loadError])
   const sessionIdRef = useRef(sessionId)
   const justCompletedAtRef = useRef<number>(0)
   const loadTokenRef = useRef(0)
@@ -1033,7 +1055,6 @@ export function useLiveSession(
   // Load session data
   const loadSession = useCallback(async (id: string, options?: { suppressHydrating?: boolean }) => {
     const myToken = ++loadTokenRef.current
-    setLoadError(null) // fresh attempt
     if (!options?.suppressHydrating && !readLiveSessionSnapshot(id)) setHydrating(true)
     try {
       const session = (await api.getSession(id, { last: INITIAL_MESSAGE_PAGE_SIZE })) as Record<string, unknown>
@@ -1041,6 +1062,8 @@ export function useLiveSession(
         return
       }
       setHydrating(false)
+      setLoadError(null)
+      loadRetryAttemptRef.current = 0
       setCurrentSession(session)
       setHasOlderMessages(readHasOlderMessages(session))
       setOlderMessagesError(null)
@@ -1148,10 +1171,17 @@ export function useLiveSession(
     } catch (err) {
       if (myToken !== loadTokenRef.current) return
       setHydrating(false)
-      setMessages([])
-      setCurrentSession(null)
-      setHasOlderMessages(false)
-      intermediateStartRef.current = -1
+      // A gateway that is down or restarting says nothing about the session:
+      // keep what this pane already shows (a cached transcript, the session
+      // header) rather than blank a conversation that is still there, and let
+      // the retry below fetch it once the gateway answers. Only a failure that
+      // will not clear (the session is gone, the caller is refused) empties it.
+      if (!isRetryableLoadError(err)) {
+        setMessages([])
+        setCurrentSession(null)
+        setHasOlderMessages(false)
+        intermediateStartRef.current = -1
+      }
       setLoadError(err instanceof Error ? err : new Error("Failed to load session"))
     }
   }, [])
@@ -1280,12 +1310,28 @@ export function useLiveSession(
     // the server later), so a reconnect mid-turn would otherwise skip the backfill
     // and never recover the deltas missed while the socket was dead. Read via ref so
     // the effect still only re-runs on a real reconnect or status change.
-    if (st !== 'running' && st !== 'interrupted' && !loadingRef.current) return
+    // A load that failed while the gateway was away has nothing to refresh by
+    // status (there is no session to read one from): the socket coming back is
+    // the cue to try it again.
+    if (st !== 'running' && st !== 'interrupted' && !loadingRef.current && !loadErrorRef.current) return
     const handle = setTimeout(() => {
-      loadSession(sessionIdRef.current!)
+      loadSession(sessionIdRef.current!, { suppressHydrating: true })
     }, 300)
     return () => clearTimeout(handle)
   }, [connectionSeq, currentSession?.status]) // loadSession is stable; sessionIdRef.current is read at call time
+
+  // A failed load retries on its own, backing off, until the gateway answers or the
+  // failure is one a retry cannot clear. Without it a session opened (or revalidated)
+  // while the gateway restarts stayed on whatever the failure left behind until the
+  // operator reloaded the page.
+  useEffect(() => {
+    if (!loadError || !sessionId || !isRetryableLoadError(loadError)) return
+    const handle = setTimeout(() => {
+      loadRetryAttemptRef.current += 1
+      loadSession(sessionId, { suppressHydrating: true })
+    }, loadRetryDelayMs(loadRetryAttemptRef.current))
+    return () => clearTimeout(handle)
+  }, [loadError, sessionId]) // loadSession is stable
 
   // Completion watchdog — recover from a DROPPED session:completed frame.
   // session:completed is a single point of failure: if that one WS frame dies with

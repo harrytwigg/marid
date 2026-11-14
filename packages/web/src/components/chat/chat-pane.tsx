@@ -20,7 +20,8 @@ import { FallbackModeChip } from './fallback-mode-chip'
 import { parseFallbackView, servedByInfoLine } from './fallback-mode-model'
 import { newChatFallbackParams, useNewChatFallback } from './use-new-chat-fallback'
 import { ModelSelectorRow, type SelectorValue } from '@/components/chat/model-selector-row'
-import { useLiveSession } from '@/hooks/use-live-session'
+import { isRetryableLoadError, useLiveSession } from '@/hooks/use-live-session'
+import { SessionLoadNotice } from './session-load-notice'
 import type { Session } from '@/components/chat/session-signals'
 import { useStaleChatNotice, type FreshChatSourceSession } from '@/components/chat/use-stale-chat-notice'
 import { useFileDrop } from '@/hooks/use-file-drop'
@@ -165,6 +166,7 @@ export function ChatPane({
     appendLocal,
     reset: resetPane,
     reload: reloadSession,
+    error: loadError,
   } = live
   const sessionQueue = useSessionQueue(sessionId, subscribe)
   // A message cancelled out of the queue never ran: it leaves the transcript.
@@ -538,6 +540,9 @@ export function ChatPane({
           picker as its empty state (any view mode — the CLI terminal mounts once
           the first message has created the session). Mounting it up front is what
           lets the first message land in a node that was already on screen. */}
+      {loadError && sessionId && !terminalPane && (
+        <SessionLoadNotice retrying={isRetryableLoadError(loadError)} onRetry={() => void reloadSession(sessionId)} />
+      )}
       {terminalPane ? <TerminalPaneBody sessionId={terminalPane} /> : viewMode === 'cli' && sessionId ? (
         // Reserve flex space during lazy-chunk load so the ChatInput below stays
         // pinned to the bottom instead of flashing to the top for a frame.
