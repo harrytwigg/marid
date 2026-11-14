@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make every `packages/jinn` Vitest run establish a temporary `JINN_HOME` before test modules load, and prove work-item writes cannot reach the default production database.
+**Goal:** Make every `packages/hundredfold` Vitest run establish a temporary `JINN_HOME` before test modules load, and prove work-item writes cannot reach the default production database.
 
 **Architecture:** A pure package-root helper canonicalizes candidate paths, recognizes the default production home and the operating-system temp tree, redirects unsafe launch environments to one fresh per-run directory, and exposes a loud assertion. Vitest `globalSetup` performs the redirect before workers start; `setupFiles` reasserts safety inside each worker before its test module evaluates. Existing module-level path constants remain unchanged because the pre-worker environment closes the import race without a broad public-path refactor.
 
@@ -21,8 +21,8 @@
 ### Task 1: Specify the test-home guard
 
 **Files:**
-- Create: `packages/jinn/vitest.test-home.ts`
-- Test: `packages/jinn/src/shared/__tests__/test-home-guard.test.ts`
+- Create: `packages/hundredfold/vitest.test-home.ts`
+- Test: `packages/hundredfold/src/shared/__tests__/test-home-guard.test.ts`
 
 **Interfaces:**
 - Produces: `canonicalPath(pathname: string): string`, `isTempPath(pathname: string): boolean`, `assertIsolatedTestHome(home: string | undefined): string`, and `ensureIsolatedTestHome(env?: NodeJS.ProcessEnv): { home: string; created: boolean }`.
@@ -56,9 +56,9 @@ Expected: unit tests PASS.
 ### Task 2: Run the guard before every application import
 
 **Files:**
-- Create: `packages/jinn/vitest.global-setup.ts`
-- Create: `packages/jinn/vitest.setup.ts`
-- Modify: `packages/jinn/vitest.config.ts`
+- Create: `packages/hundredfold/vitest.global-setup.ts`
+- Create: `packages/hundredfold/vitest.setup.ts`
+- Modify: `packages/hundredfold/vitest.config.ts`
 
 **Interfaces:**
 - Consumes: `ensureIsolatedTestHome()` and `assertIsolatedTestHome()` from Task 1.
@@ -93,7 +93,7 @@ Expected: PASS.
 ### Task 3: Prove a real work-item write is isolated
 
 **Files:**
-- Modify: `packages/jinn/src/shared/__tests__/test-home-guard.test.ts`
+- Modify: `packages/hundredfold/src/shared/__tests__/test-home-guard.test.ts`
 
 **Interfaces:**
 - Consumes: the actual `JINN_HOME` and `SESSIONS_DB` constants plus `createWorkItem()` and `initDb()`.

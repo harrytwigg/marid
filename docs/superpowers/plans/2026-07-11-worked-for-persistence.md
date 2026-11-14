@@ -21,8 +21,8 @@
 ### Task 1: Gateway settlement contract regression
 
 **Files:**
-- Create: `packages/jinn/src/gateway/__tests__/streamed-turn-settlement.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/streamed-blocks.test.ts`
+- Create: `packages/hundredfold/src/gateway/__tests__/streamed-turn-settlement.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/streamed-blocks.test.ts`
 
 **Interfaces:**
 - Consumes: real `handleApiRequest`, engine `onStream`, session registry reads, and GET-session reload serialization.
@@ -45,8 +45,8 @@ Expected: completed-evidence and concatenated-fragment assertions fail because `
 ### Task 2: Selective partial-row settlement
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/registry.ts`
-- Modify: `packages/jinn/src/sessions/__tests__/messages-partial.test.ts`
+- Modify: `packages/hundredfold/src/sessions/registry.ts`
+- Modify: `packages/hundredfold/src/sessions/__tests__/messages-partial.test.ts`
 
 **Interfaces:**
 - Consumes: `sessionId` and an ordered set of message ids selected for preservation.
@@ -73,9 +73,9 @@ Run the same focused registry command and expect all tests to pass.
 ### Task 3: Live-parity gateway settlement
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/streamed-blocks.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/block-finalize.test.ts` only if the obsolete transient blocks-only expectation conflicts with the accepted final-boundary contract.
+- Modify: `packages/hundredfold/src/gateway/streamed-blocks.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/block-finalize.test.ts` only if the obsolete transient blocks-only expectation conflicts with the accepted final-boundary contract.
 
 **Interfaces:**
 - Consumes: streamed `SessionMessage` rows plus `quietPreempted`, rate-limit detection, terminal result, and terminal error.

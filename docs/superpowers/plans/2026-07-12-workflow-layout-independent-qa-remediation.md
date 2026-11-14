@@ -23,8 +23,8 @@
 ### Task 1: Make geometry authority independent from execution properties
 
 **Files:**
-- Modify: `packages/jinn/src/workflows/definition-store.ts`
-- Modify: `packages/jinn/src/workflows/__tests__/definition-store.test.ts`
+- Modify: `packages/hundredfold/src/workflows/definition-store.ts`
+- Modify: `packages/hundredfold/src/workflows/__tests__/definition-store.test.ts`
 - Modify: `packages/web/src/routes/workflow/__tests__/edit-graph.test.tsx`
 
 **Interfaces:**
@@ -69,12 +69,12 @@ git commit -m "fix(workflows): separate layout authority from execution config"
 ### Task 2: Reject non-loop cycles and bound graph complexity before layout
 
 **Files:**
-- Modify: `packages/jinn/src/workflows/definition.ts`
-- Modify: `packages/jinn/src/workflows/authoring.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/workflows/__tests__/definition.test.ts`
-- Create: `packages/jinn/src/workflows/__tests__/complexity.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/workflow-definitions-route.test.ts`
+- Modify: `packages/hundredfold/src/workflows/definition.ts`
+- Modify: `packages/hundredfold/src/workflows/authoring.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/workflows/__tests__/definition.test.ts`
+- Create: `packages/hundredfold/src/workflows/__tests__/complexity.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/workflow-definitions-route.test.ts`
 
 **Interfaces:**
 - Export `MAX_WORKFLOW_NODES = 96`, `MAX_WORKFLOW_EDGES = 384`, `MAX_WORKFLOW_EDGES_PER_NODE = 4`, and `MAX_WORKFLOW_DEFINITION_BYTES = 256 * 1024`.
@@ -128,8 +128,8 @@ git commit -m "fix(workflows): bound and validate executable graphs"
 ### Task 3: Detect all bounded non-loop segment crossings
 
 **Files:**
-- Modify: `packages/jinn/src/workflows/layout.ts`
-- Modify: `packages/jinn/src/workflows/__tests__/layout.test.ts`
+- Modify: `packages/hundredfold/src/workflows/layout.ts`
+- Modify: `packages/hundredfold/src/workflows/__tests__/layout.test.ts`
 
 **Interfaces:**
 - Port segment: source expanded-envelope right-center → target expanded-envelope left-center.
@@ -164,9 +164,9 @@ git commit -m "fix(workflows): validate bounded edge intersections"
 ### Task 4: Publish caller-specific approval capability and render honest controls
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/workflow-definitions-route.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/work-item-approval-route.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/workflow-definitions-route.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/work-item-approval-route.test.ts`
 - Modify: `packages/web/src/lib/api.ts`
 - Modify: `packages/web/src/routes/workflow/run-view.tsx`
 - Modify: `packages/web/src/routes/workflow/__tests__/run-view.test.tsx`
@@ -274,9 +274,9 @@ git commit -m "fix(web): reframe workflows on viewport class changes"
 ### Task 7: Reuse closed authoring schemas on every MCP write tool
 
 **Files:**
-- Modify: `packages/jinn/src/mcp/workflow-tools.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/workflow-tools.test.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/tool-manifest-budget.test.ts`
+- Modify: `packages/hundredfold/src/mcp/workflow-tools.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/workflow-tools.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/tool-manifest-budget.test.ts`
 
 **Interfaces:**
 - Shared closed SOP schema for plan/validate/create/update.

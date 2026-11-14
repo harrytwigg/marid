@@ -90,7 +90,7 @@ Expected: all commands exit 0.
 - Test: live gateway status endpoints and browser console/error inspection
 
 **Interfaces:**
-- Consumes: the built `packages/jinn/dist/web` assets and the running instance inventory.
+- Consumes: the built `packages/hundredfold/dist/web` assets and the running instance inventory.
 - Produces: compatible daemon/API state and a crash-free chat dashboard on every affected running instance.
 
 - [ ] **Step 1: Reconfirm the read-only process inventory**

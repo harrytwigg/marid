@@ -43,9 +43,9 @@
 ### Phase 4 - New files
 | File | Responsibility |
 |------|---------------|
-| `packages/jinn/src/gateway/costs.ts` | Cost aggregation API routes |
-| `packages/jinn/src/gateway/budgets.ts` | Budget CRUD + enforcement API routes |
-| `packages/jinn/src/gateway/goals.ts` | Goals CRUD API routes |
+| `packages/hundredfold/src/gateway/costs.ts` | Cost aggregation API routes |
+| `packages/hundredfold/src/gateway/budgets.ts` | Budget CRUD + enforcement API routes |
+| `packages/hundredfold/src/gateway/goals.ts` | Goals CRUD API routes |
 | `packages/web/src/hooks/use-costs.ts` | React Query hooks for costs/budgets API |
 | `packages/web/src/hooks/use-goals.ts` | React Query hooks for goals API |
 | `packages/web/src/app/goals/page.tsx` | Goals tree page |
@@ -53,9 +53,9 @@
 ### Phase 5 - New files
 | File | Responsibility |
 |------|---------------|
-| `packages/jinn/vitest.config.ts` | Backend vitest config (ESM, in-memory SQLite) |
+| `packages/hundredfold/vitest.config.ts` | Backend vitest config (ESM, in-memory SQLite) |
 | `packages/web/vitest.config.ts` | Frontend vitest config (jsdom, React testing library) |
-| `packages/jinn/src/engines/mock.ts` | Mock engine for E2E (canned responses + streaming sim) |
+| `packages/hundredfold/src/engines/mock.ts` | Mock engine for E2E (canned responses + streaming sim) |
 | `playwright.config.ts` | Playwright config (base URL, global setup) |
 | `e2e/global-setup.ts` | Start test gateway with mock engine |
 | `e2e/smoke.spec.ts` | Dashboard loads, nav links, no console errors |
@@ -1485,14 +1485,14 @@ git commit -m "feat(web): replace GlobalSearch with cmdk command palette - actio
 ### Task 14: Goals - backend SQLite table + API routes
 
 **Files:**
-- Create: `packages/jinn/src/gateway/goals.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/sessions/registry.ts`
-- Modify: `packages/jinn/src/shared/types.ts`
+- Create: `packages/hundredfold/src/gateway/goals.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/sessions/registry.ts`
+- Modify: `packages/hundredfold/src/shared/types.ts`
 
 - [ ] **Step 1: Add Goal type to types.ts**
 
-In `packages/jinn/src/shared/types.ts`:
+In `packages/hundredfold/src/shared/types.ts`:
 
 ```typescript
 export interface Goal {
@@ -1512,7 +1512,7 @@ export interface Goal {
 
 - [ ] **Step 2: Add goals table migration to registry.ts**
 
-In `packages/jinn/src/sessions/registry.ts`, add to the `initDb()` function (after sessions/messages/queue_items tables):
+In `packages/hundredfold/src/sessions/registry.ts`, add to the `initDb()` function (after sessions/messages/queue_items tables):
 
 ```typescript
 db.exec(`
@@ -1535,7 +1535,7 @@ db.exec(`
 
 - [ ] **Step 3: Create goals.ts with CRUD functions**
 
-Create `packages/jinn/src/gateway/goals.ts` with:
+Create `packages/hundredfold/src/gateway/goals.ts` with:
 - `listGoals(db, filters?)` → `Goal[]`
 - `getGoalTree(db)` → nested `Goal[]` (recursive parent→children)
 - `getGoal(db, id)` → `Goal | null`
@@ -1546,7 +1546,7 @@ Create `packages/jinn/src/gateway/goals.ts` with:
 
 - [ ] **Step 4: Register API routes in api.ts**
 
-Add to `packages/jinn/src/gateway/api.ts`:
+Add to `packages/hundredfold/src/gateway/api.ts`:
 - `GET /api/goals` → `listGoals()`
 - `GET /api/goals/tree` → `getGoalTree()`
 - `GET /api/goals/:id` → `getGoal()`
@@ -1566,7 +1566,7 @@ cd ~/Projects/jinn && pnpm build
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/goals.ts packages/jinn/src/gateway/api.ts packages/jinn/src/sessions/registry.ts packages/jinn/src/shared/types.ts
+git add packages/hundredfold/src/gateway/goals.ts packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/sessions/registry.ts packages/hundredfold/src/shared/types.ts
 git commit -m "feat(api): goals hierarchy - SQLite table, CRUD API routes, tree structure"
 ```
 
@@ -1626,12 +1626,12 @@ git commit -m "feat(web): goals page with tree view, inline detail panel, CRUD o
 ### Task 16: Cost aggregation API (backend)
 
 **Files:**
-- Create: `packages/jinn/src/gateway/costs.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
+- Create: `packages/hundredfold/src/gateway/costs.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
 
 - [ ] **Step 1: Create costs.ts with aggregation queries**
 
-Create `packages/jinn/src/gateway/costs.ts`:
+Create `packages/hundredfold/src/gateway/costs.ts`:
 
 ```typescript
 import { initDb } from '../sessions/registry.js';
@@ -1697,7 +1697,7 @@ export function getCostsByEmployee(period: 'month' | 'week' = 'month') {
 
 - [ ] **Step 2: Register cost routes in api.ts**
 
-Add to `packages/jinn/src/gateway/api.ts`:
+Add to `packages/hundredfold/src/gateway/api.ts`:
 - `GET /api/costs/summary?period=day|week|month` → `getCostSummary(period)`
 - `GET /api/costs/by-employee?period=month|week` → `getCostsByEmployee(period)`
 
@@ -1710,7 +1710,7 @@ cd ~/Projects/jinn && pnpm build
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/costs.ts packages/jinn/src/gateway/api.ts
+git add packages/hundredfold/src/gateway/costs.ts packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(api): cost aggregation API - summary by period, breakdown by employee"
 ```
 
@@ -1719,10 +1719,10 @@ git commit -m "feat(api): cost aggregation API - summary by period, breakdown by
 ### Task 17: Budget system (backend)
 
 **Files:**
-- Create: `packages/jinn/src/gateway/budgets.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/sessions/registry.ts`
-- Modify: `packages/jinn/src/sessions/manager.ts`
+- Create: `packages/hundredfold/src/gateway/budgets.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/sessions/registry.ts`
+- Modify: `packages/hundredfold/src/sessions/manager.ts`
 
 - [ ] **Step 1: Add budget_events table to registry.ts**
 
@@ -1751,7 +1751,7 @@ Functions:
 
 - [ ] **Step 3: Add budget enforcement to SessionManager.route()**
 
-In `packages/jinn/src/sessions/manager.ts`, in the `runSession()` method, BEFORE calling `engine.run()`:
+In `packages/hundredfold/src/sessions/manager.ts`, in the `runSession()` method, BEFORE calling `engine.run()`:
 
 ```typescript
 // Budget check
@@ -1785,7 +1785,7 @@ cd ~/Projects/jinn && pnpm build
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/budgets.ts packages/jinn/src/gateway/api.ts packages/jinn/src/sessions/registry.ts packages/jinn/src/sessions/manager.ts
+git add packages/hundredfold/src/gateway/budgets.ts packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/sessions/registry.ts packages/hundredfold/src/sessions/manager.ts
 git commit -m "feat(api): budget system - config-driven limits, enforcement before engine.run(), override support"
 ```
 
@@ -1842,20 +1842,20 @@ git commit -m "feat(web): working costs page with real data, budget progress bar
 ### Task 19: Vitest backend setup + first tests
 
 **Files:**
-- Create: `packages/jinn/vitest.config.ts`
-- Modify: `packages/jinn/package.json`
-- Create: `packages/jinn/src/gateway/__tests__/costs.test.ts`
+- Create: `packages/hundredfold/vitest.config.ts`
+- Modify: `packages/hundredfold/package.json`
+- Create: `packages/hundredfold/src/gateway/__tests__/costs.test.ts`
 
 - [ ] **Step 1: Install vitest**
 
 ```bash
-cd ~/Projects/jinn/packages/jinn
+cd ~/Projects/jinn/packages/hundredfold
 pnpm add -D vitest
 ```
 
 - [ ] **Step 2: Create vitest config**
 
-Create `packages/jinn/vitest.config.ts`:
+Create `packages/hundredfold/vitest.config.ts`:
 
 ```typescript
 import { defineConfig } from 'vitest/config'
@@ -1871,7 +1871,7 @@ export default defineConfig({
 
 - [ ] **Step 3: Add test script to package.json**
 
-In `packages/jinn/package.json`, add to scripts:
+In `packages/hundredfold/package.json`, add to scripts:
 ```json
 "test": "vitest run",
 "test:watch": "vitest"
@@ -1879,7 +1879,7 @@ In `packages/jinn/package.json`, add to scripts:
 
 - [ ] **Step 4: Write first test - cost aggregation**
 
-Create `packages/jinn/src/gateway/__tests__/costs.test.ts`:
+Create `packages/hundredfold/src/gateway/__tests__/costs.test.ts`:
 
 ```typescript
 import { describe, it, expect, beforeEach } from 'vitest'
@@ -1904,7 +1904,7 @@ describe('getCostSummary', () => {
 - [ ] **Step 5: Run tests**
 
 ```bash
-cd ~/Projects/jinn/packages/jinn && pnpm test
+cd ~/Projects/jinn/packages/hundredfold && pnpm test
 ```
 
 Expected: All tests pass.
@@ -1912,7 +1912,7 @@ Expected: All tests pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/jinn/vitest.config.ts packages/jinn/package.json packages/jinn/src/gateway/__tests__/
+git add packages/hundredfold/vitest.config.ts packages/hundredfold/package.json packages/hundredfold/src/gateway/__tests__/
 git commit -m "test(api): vitest setup + cost aggregation unit tests"
 ```
 
@@ -2048,7 +2048,7 @@ Change the root `test` script to:
 "test": "turbo run test"
 ```
 
-This runs tests in both packages/jinn and packages/web.
+This runs tests in both packages/hundredfold and packages/web.
 
 - [ ] **Step 3: Verify**
 
@@ -2070,11 +2070,11 @@ git commit -m "build: add test task to Turborepo pipeline, update root test scri
 ### Task 22: Mock engine for E2E tests
 
 **Files:**
-- Create: `packages/jinn/src/engines/mock.ts`
+- Create: `packages/hundredfold/src/engines/mock.ts`
 
 - [ ] **Step 1: Create MockEngine**
 
-Create `packages/jinn/src/engines/mock.ts`:
+Create `packages/hundredfold/src/engines/mock.ts`:
 
 ```typescript
 import { v4 as uuid } from 'uuid';
@@ -2119,7 +2119,7 @@ cd ~/Projects/jinn && pnpm build
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/jinn/src/engines/mock.ts
+git add packages/hundredfold/src/engines/mock.ts
 git commit -m "feat(api): mock engine for E2E tests - canned responses with simulated streaming"
 ```
 
@@ -2156,7 +2156,7 @@ export default defineConfig({
     headless: true,
   },
   webServer: {
-    command: 'JINN_TEST_MODE=1 JINN_PORT=7778 node packages/jinn/dist/bin/jinn.js start --foreground',
+    command: 'JINN_TEST_MODE=1 JINN_PORT=7778 node packages/hundredfold/dist/bin/jinn.js start --foreground',
     port: 7778,
     reuseExistingServer: !process.env.CI,
     timeout: 15_000,

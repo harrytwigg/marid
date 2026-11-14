@@ -31,8 +31,8 @@ Two consequences shape everything below:
 
 ## What the gateway does
 
-`packages/jinn/src/sessions/claude-auth-watch.ts` (side effects) over
-`packages/jinn/src/shared/claude-auth.ts` (reads the file) and
+`packages/hundredfold/src/sessions/claude-auth-watch.ts` (side effects) over
+`packages/hundredfold/src/shared/claude-auth.ts` (reads the file) and
 `claude-auth-outage.ts` (the ledger, at `$JINN_HOME/tmp/claude-auth-outage.json`).
 
 1. **Observe.** Every Claude turn reports how it ended. `authentication_failed`

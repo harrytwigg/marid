@@ -139,13 +139,13 @@ git commit -m "chore: initialize monorepo with pnpm + turborepo"
 ### Task 1.2: Create jinn-cli package scaffold
 
 **Files:**
-- Create: `packages/jinn/package.json`
-- Create: `packages/jinn/tsconfig.json`
-- Create: `packages/jinn/bin/jinn.ts`
-- Create: `packages/jinn/src/shared/types.ts`
-- Create: `packages/jinn/src/shared/paths.ts`
-- Create: `packages/jinn/src/shared/config.ts`
-- Create: `packages/jinn/src/shared/logger.ts`
+- Create: `packages/hundredfold/package.json`
+- Create: `packages/hundredfold/tsconfig.json`
+- Create: `packages/hundredfold/bin/jinn.ts`
+- Create: `packages/hundredfold/src/shared/types.ts`
+- Create: `packages/hundredfold/src/shared/paths.ts`
+- Create: `packages/hundredfold/src/shared/config.ts`
+- Create: `packages/hundredfold/src/shared/logger.ts`
 
 **Step 1: Create package.json**
 
@@ -328,7 +328,7 @@ program.parse();
 
 **Step 8: Build and verify**
 
-Run: `cd packages/jinn && pnpm build`
+Run: `cd packages/hundredfold && pnpm build`
 Expected: compiles to `dist/` without errors
 
 Run: `node dist/bin/jinn.js --help`
@@ -350,7 +350,7 @@ Build the core: SQLite session registry and both engine wrappers.
 ### Task 2.1: Session registry (SQLite)
 
 **Files:**
-- Create: `packages/jinn/src/sessions/registry.ts`
+- Create: `packages/hundredfold/src/sessions/registry.ts`
 
 **Step 1: Write registry module**
 
@@ -382,8 +382,8 @@ git commit -m "feat: add SQLite session registry"
 ### Task 2.2: Engine types and Claude engine
 
 **Files:**
-- Create: `packages/jinn/src/engines/types.ts` (extract from shared/types.ts if needed)
-- Create: `packages/jinn/src/engines/claude.ts`
+- Create: `packages/hundredfold/src/engines/types.ts` (extract from shared/types.ts if needed)
+- Create: `packages/hundredfold/src/engines/claude.ts`
 
 **Step 1: Write Claude engine**
 
@@ -469,7 +469,7 @@ git commit -m "feat: add Claude Code engine wrapper"
 ### Task 2.3: Codex engine
 
 **Files:**
-- Create: `packages/jinn/src/engines/codex.ts`
+- Create: `packages/hundredfold/src/engines/codex.ts`
 
 **Step 1: Write Codex engine**
 
@@ -536,9 +536,9 @@ git commit -m "feat: add Codex SDK engine wrapper"
 ### Task 2.4: Session manager
 
 **Files:**
-- Create: `packages/jinn/src/sessions/manager.ts`
-- Create: `packages/jinn/src/sessions/context.ts`
-- Create: `packages/jinn/src/sessions/queue.ts`
+- Create: `packages/hundredfold/src/sessions/manager.ts`
+- Create: `packages/hundredfold/src/sessions/context.ts`
+- Create: `packages/hundredfold/src/sessions/queue.ts`
 
 **Step 1: Write context builder (`context.ts`)**
 
@@ -613,10 +613,10 @@ Wire everything into a running process.
 ### Task 3.1: Gateway server
 
 **Files:**
-- Create: `packages/jinn/src/gateway/server.ts`
-- Create: `packages/jinn/src/gateway/api.ts`
-- Create: `packages/jinn/src/gateway/watcher.ts`
-- Create: `packages/jinn/src/gateway/lifecycle.ts`
+- Create: `packages/hundredfold/src/gateway/server.ts`
+- Create: `packages/hundredfold/src/gateway/api.ts`
+- Create: `packages/hundredfold/src/gateway/watcher.ts`
+- Create: `packages/hundredfold/src/gateway/lifecycle.ts`
 
 **Step 1: Write HTTP + WebSocket server (`server.ts`)**
 
@@ -682,11 +682,11 @@ git commit -m "feat: add gateway server with API, file watcher, and lifecycle ma
 ### Task 3.2: Wire CLI commands
 
 **Files:**
-- Modify: `packages/jinn/bin/jinn.ts`
-- Create: `packages/jinn/src/cli/setup.ts`
-- Create: `packages/jinn/src/cli/start.ts`
-- Create: `packages/jinn/src/cli/stop.ts`
-- Create: `packages/jinn/src/cli/status.ts`
+- Modify: `packages/hundredfold/bin/jinn.ts`
+- Create: `packages/hundredfold/src/cli/setup.ts`
+- Create: `packages/hundredfold/src/cli/start.ts`
+- Create: `packages/hundredfold/src/cli/stop.ts`
+- Create: `packages/hundredfold/src/cli/status.ts`
 
 **Step 1: Write setup command (`cli/setup.ts`)**
 
@@ -748,8 +748,8 @@ Create the brain - the files that make engines understand Jinn.
 ### Task 4.1: Write CLAUDE.md and AGENTS.md
 
 **Files:**
-- Create: `packages/jinn/template/CLAUDE.md`
-- Create: `packages/jinn/template/AGENTS.md`
+- Create: `packages/hundredfold/template/CLAUDE.md`
+- Create: `packages/hundredfold/template/AGENTS.md`
 
 **Step 1: Write CLAUDE.md**
 
@@ -781,11 +781,11 @@ git commit -m "feat: add CLAUDE.md and AGENTS.md template files"
 ### Task 4.2: Write pre-packaged skills
 
 **Files:**
-- Create: `packages/jinn/template/skills/management/SKILL.md`
-- Create: `packages/jinn/template/skills/cron-manager/SKILL.md`
-- Create: `packages/jinn/template/skills/skill-creator/SKILL.md`
-- Create: `packages/jinn/template/skills/self-heal/SKILL.md`
-- Create: `packages/jinn/template/skills/onboarding/SKILL.md`
+- Create: `packages/hundredfold/template/skills/management/SKILL.md`
+- Create: `packages/hundredfold/template/skills/cron-manager/SKILL.md`
+- Create: `packages/hundredfold/template/skills/skill-creator/SKILL.md`
+- Create: `packages/hundredfold/template/skills/self-heal/SKILL.md`
+- Create: `packages/hundredfold/template/skills/onboarding/SKILL.md`
 
 **Step 1: Write management skill**
 
@@ -819,13 +819,13 @@ git commit -m "feat: add pre-packaged skills (management, cron-manager, skill-cr
 ### Task 4.3: Write docs
 
 **Files:**
-- Create: `packages/jinn/template/docs/overview.md`
-- Create: `packages/jinn/template/docs/architecture.md`
-- Create: `packages/jinn/template/docs/skills.md`
-- Create: `packages/jinn/template/docs/cron.md`
-- Create: `packages/jinn/template/docs/connectors.md`
-- Create: `packages/jinn/template/docs/org.md`
-- Create: `packages/jinn/template/docs/self-modification.md`
+- Create: `packages/hundredfold/template/docs/overview.md`
+- Create: `packages/hundredfold/template/docs/architecture.md`
+- Create: `packages/hundredfold/template/docs/skills.md`
+- Create: `packages/hundredfold/template/docs/cron.md`
+- Create: `packages/hundredfold/template/docs/connectors.md`
+- Create: `packages/hundredfold/template/docs/org.md`
+- Create: `packages/hundredfold/template/docs/self-modification.md`
 
 **Step 1: Write each doc**
 
@@ -840,7 +840,7 @@ These are for Jinn's self-awareness. Each doc should be concise and technical:
 
 **Step 2: Write default config.yaml template**
 
-Create: `packages/jinn/template/config.default.yaml` with the config from the design doc.
+Create: `packages/hundredfold/template/config.default.yaml` with the config from the design doc.
 
 **Step 3: Commit**
 
@@ -856,9 +856,9 @@ git commit -m "feat: add docs and default config template"
 ### Task 5.1: Implement Slack connector
 
 **Files:**
-- Create: `packages/jinn/src/connectors/slack/index.ts`
-- Create: `packages/jinn/src/connectors/slack/threads.ts`
-- Create: `packages/jinn/src/connectors/slack/format.ts`
+- Create: `packages/hundredfold/src/connectors/slack/index.ts`
+- Create: `packages/hundredfold/src/connectors/slack/threads.ts`
+- Create: `packages/hundredfold/src/connectors/slack/format.ts`
 
 **Step 1: Write thread mapper (`threads.ts`)**
 
@@ -946,9 +946,9 @@ git commit -m "feat: add Slack connector with thread mapping and reactions"
 ### Task 6.1: Implement cron scheduler
 
 **Files:**
-- Create: `packages/jinn/src/cron/jobs.ts`
-- Create: `packages/jinn/src/cron/scheduler.ts`
-- Create: `packages/jinn/src/cron/runner.ts`
+- Create: `packages/hundredfold/src/cron/jobs.ts`
+- Create: `packages/hundredfold/src/cron/scheduler.ts`
+- Create: `packages/hundredfold/src/cron/runner.ts`
 
 **Step 1: Write job loader (`jobs.ts`)**
 
@@ -1001,7 +1001,7 @@ git commit -m "feat: add cron scheduler with job loader and runner"
 ### Task 7.1: Employee registry in gateway
 
 **Files:**
-- Create: `packages/jinn/src/gateway/org.ts`
+- Create: `packages/hundredfold/src/gateway/org.ts`
 
 **Step 1: Write org scanner**
 
@@ -1215,8 +1215,8 @@ git commit -m "feat: add cron, skills, logs, and settings pages"
 ### Task 8.6: Bundle web UI into CLI package
 
 **Files:**
-- Modify: `packages/jinn/package.json` (add build script that copies web output)
-- Modify: `packages/jinn/src/gateway/server.ts` (serve static files from bundled web)
+- Modify: `packages/hundredfold/package.json` (add build script that copies web output)
+- Modify: `packages/hundredfold/src/gateway/server.ts` (serve static files from bundled web)
 - Modify: `turbo.json` (ensure web builds before jinn-cli)
 
 **Step 1: Add build pipeline**

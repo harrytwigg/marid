@@ -7,7 +7,7 @@ description: "Tasks for engine and profile switching for a chat"
 **Input**: spec.md, plan.md, research.md, data-model.md, contracts/api.md, quickstart.md
 **Tests**: required. Every FR has a test; every refusal is tested to schedule nothing; every
 new guard is tested to fail without its line.
-**Paths**: `G/` = `packages/jinn/src/`, `W/` = `packages/web/src/`.
+**Paths**: `G/` = `packages/hundredfold/src/`, `W/` = `packages/web/src/`.
 
 Format: `[ID] [P?] [Part] [Story] Description`. Parts A/B/C are plan.md's delivery parts
 (each a child Todo and a PR into `feat/session-engine-switch`).
@@ -64,7 +64,7 @@ Format: `[ID] [P?] [Part] [Story] Description`. Parts A/B/C are plan.md's delive
 ## Phase 7: Polish
 
 - [ ] T060 [B] Manifest: buy back what dead prose allows in `G/mcp/session-tools.ts`, then rebase `MAX_MANIFEST_TOKENS`/`ATTESTED` in `tool-manifest-budget.test.ts` by the measured remainder with a paragraph; update `tool-manifest-expectations.ts` and `session-tools.test.ts`.
-- [ ] T061 [B] Template `packages/jinn/template/CLAUDE.md` "Long sessions": switching via `compact_session` (fields, `profile: ""`, `engine: "?"` for the list, compacts first); migration copy; regenerate the unreleased bundle (`migration:generate`, `packages/jinn/scripts/instance-migration-bundle.mjs`).
+- [ ] T061 [B] Template `packages/hundredfold/template/CLAUDE.md` "Long sessions": switching via `compact_session` (fields, `profile: ""`, `engine: "?"` for the list, compacts first); migration copy; regenerate the unreleased bundle (`migration:generate`, `packages/hundredfold/scripts/instance-migration-bundle.mjs`).
 - [ ] T062 [P] [B] Docs: `docs/session-fallback-mode.md` (profile no longer creation-only; "Switching a running session"); link from `docs/auto-compaction.md`.
 - [ ] T063 [—] Integration: merge A, C, B into `feat/session-engine-switch`; full gateway and web suites (clean env, capped workers); lint; quickstart.md run with screenshots; principal QA.
 

@@ -29,28 +29,28 @@
 
 ## File map and ownership
 
-- `packages/jinn/src/workflows/layout.ts`: pure layout envelopes, provenance/quality types, quality evaluator, deterministic normalizer, and write policy.
-- `packages/jinn/src/workflows/definition.ts`: persisted `layout` metadata and closed edge-field validation.
-- `packages/jinn/src/workflows/authoring.ts`, `sop.ts`: mark AI/SOP input generated and return layout diagnostics/preview.
-- `packages/jinn/src/workflows/definition-store.ts`: normalize generated/unknown writes inside the existing atomic transaction and reject invalid manual writes.
-- `packages/jinn/src/mcp/workflow-tools.ts`: closed nested raw-graph schema and accurate authoring recipe.
-- `packages/jinn/src/gateway/api.ts`: plan response and existing create/update routes consume the layout policy; run route remains execution authority.
+- `packages/hundredfold/src/workflows/layout.ts`: pure layout envelopes, provenance/quality types, quality evaluator, deterministic normalizer, and write policy.
+- `packages/hundredfold/src/workflows/definition.ts`: persisted `layout` metadata and closed edge-field validation.
+- `packages/hundredfold/src/workflows/authoring.ts`, `sop.ts`: mark AI/SOP input generated and return layout diagnostics/preview.
+- `packages/hundredfold/src/workflows/definition-store.ts`: normalize generated/unknown writes inside the existing atomic transaction and reject invalid manual writes.
+- `packages/hundredfold/src/mcp/workflow-tools.ts`: closed nested raw-graph schema and accurate authoring recipe.
+- `packages/hundredfold/src/gateway/api.ts`: plan response and existing create/update routes consume the layout policy; run route remains execution authority.
 - `packages/web/src/lib/api.ts`: layout wire types, plan API, and start-run API.
 - `packages/web/src/routes/workflow/edit.tsx`: mutable graph draft, topology/geometry operations, Tidy preview, Apply layout, save/discard/reload.
 - `packages/web/src/routes/workflow/canvas.tsx`, `canvas-view.tsx`, `canvas-model.ts`: editable React Flow gestures, readable framing, explicit Fit all, loop routing, progressive controls.
 - `packages/web/src/routes/workflow/run-view.tsx`: Run action with input/idempotency and existing evidence/approval preservation.
 - `packages/web/src/routes/workflow/page.tsx`: browser leave guard for every editor mutation.
-- `packages/jinn/src/workflows/__tests__/layout.test.ts`, `definition-store.test.ts`, `definition.test.ts`, `packages/jinn/src/mcp/__tests__/workflow-tools.test.ts`: server RED/GREEN proof.
+- `packages/hundredfold/src/workflows/__tests__/layout.test.ts`, `definition-store.test.ts`, `definition.test.ts`, `packages/hundredfold/src/mcp/__tests__/workflow-tools.test.ts`: server RED/GREEN proof.
 - `packages/web/src/routes/workflow/__tests__/edit-graph.test.tsx`, `canvas-model.test.ts`, `canvas.test.tsx`, `run-view.test.tsx`, `page.test.tsx`: client RED/GREEN proof.
 - `scripts/workflow-layout-sandbox/`: sanitized seed, five-child authoring runner, browser matrix, and geometry metrics; writes runtime output only under sandbox artifacts.
 
 ### Task 1: Server layout contract and RED property suite
 
 **Files:**
-- Create: `packages/jinn/src/workflows/__tests__/layout.test.ts`
-- Modify: `packages/jinn/src/workflows/__tests__/definition.test.ts`
-- Modify: `packages/jinn/src/workflows/__tests__/definition-store.test.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/workflow-tools.test.ts`
+- Create: `packages/hundredfold/src/workflows/__tests__/layout.test.ts`
+- Modify: `packages/hundredfold/src/workflows/__tests__/definition.test.ts`
+- Modify: `packages/hundredfold/src/workflows/__tests__/definition-store.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/workflow-tools.test.ts`
 
 **Interfaces:**
 - Produces the wished-for API `normalizeWorkflowLayout(def)`, `evaluateWorkflowLayout(def)`, `prepareWorkflowLayoutForWrite(def, intent)`, and `WorkflowLayoutDiagnostics` consumed by Task 2.
@@ -140,13 +140,13 @@ Expected: FAIL because `layout.ts`, `layout` metadata, unsupported edge-field va
 ### Task 2: Pure normalizer, provenance, quality gate, schema, and atomic persistence
 
 **Files:**
-- Create: `packages/jinn/src/workflows/layout.ts`
-- Modify: `packages/jinn/src/workflows/definition.ts`
-- Modify: `packages/jinn/src/workflows/authoring.ts`
-- Modify: `packages/jinn/src/workflows/sop.ts`
-- Modify: `packages/jinn/src/workflows/definition-store.ts`
-- Modify: `packages/jinn/src/mcp/workflow-tools.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
+- Create: `packages/hundredfold/src/workflows/layout.ts`
+- Modify: `packages/hundredfold/src/workflows/definition.ts`
+- Modify: `packages/hundredfold/src/workflows/authoring.ts`
+- Modify: `packages/hundredfold/src/workflows/sop.ts`
+- Modify: `packages/hundredfold/src/workflows/definition-store.ts`
+- Modify: `packages/hundredfold/src/mcp/workflow-tools.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
 
 **Interfaces:**
 - Produces:
@@ -254,7 +254,7 @@ Run:
 pnpm --filter jinn-cli test -- src/workflows/__tests__/layout.test.ts src/workflows/__tests__/definition.test.ts src/workflows/__tests__/definition-store.test.ts src/mcp/__tests__/workflow-tools.test.ts
 pnpm --filter jinn-cli typecheck
 git diff --check
-git add packages/jinn/src/workflows/layout.ts packages/jinn/src/workflows/definition.ts packages/jinn/src/workflows/authoring.ts packages/jinn/src/workflows/sop.ts packages/jinn/src/workflows/definition-store.ts packages/jinn/src/mcp/workflow-tools.ts packages/jinn/src/gateway/api.ts packages/jinn/src/workflows/__tests__/layout.test.ts packages/jinn/src/workflows/__tests__/definition.test.ts packages/jinn/src/workflows/__tests__/definition-store.test.ts packages/jinn/src/mcp/__tests__/workflow-tools.test.ts
+git add packages/hundredfold/src/workflows/layout.ts packages/hundredfold/src/workflows/definition.ts packages/hundredfold/src/workflows/authoring.ts packages/hundredfold/src/workflows/sop.ts packages/hundredfold/src/workflows/definition-store.ts packages/hundredfold/src/mcp/workflow-tools.ts packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/workflows/__tests__/layout.test.ts packages/hundredfold/src/workflows/__tests__/definition.test.ts packages/hundredfold/src/workflows/__tests__/definition-store.test.ts packages/hundredfold/src/mcp/__tests__/workflow-tools.test.ts
 test -n "$JINN_PUBLIC_LEAK_PATTERN"; git diff --cached | grep -iE "$JINN_PUBLIC_LEAK_PATTERN" && exit 1 || true
 git commit -m "feat(workflows): normalize generated graph layouts"
 ```
@@ -405,8 +405,8 @@ git commit -m "feat(web): make workflow graphs editable and runnable"
 ### Task 5: Integrated route/store tests and regression gates
 
 **Files:**
-- Modify: `packages/jinn/src/mcp/__tests__/workflow-tools.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/workflow-run-fanout-route.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/workflow-tools.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/workflow-run-fanout-route.test.ts`
 - Modify: `packages/web/src/routes/workflow/__tests__/edit-graph.test.tsx`
 - Modify: `packages/web/src/routes/workflow/__tests__/run-view.test.tsx`
 
@@ -430,7 +430,7 @@ Expected: PASS with no snapshots as the sole proof of geometry.
 - [x] **Step 4: Commit integration gates**
 
 ```bash
-git add packages/jinn/src/mcp/__tests__/workflow-tools.test.ts packages/jinn/src/gateway/__tests__/workflow-run-fanout-route.test.ts packages/web/src/routes/workflow/__tests__
+git add packages/hundredfold/src/mcp/__tests__/workflow-tools.test.ts packages/hundredfold/src/gateway/__tests__/workflow-run-fanout-route.test.ts packages/web/src/routes/workflow/__tests__
 test -n "$JINN_PUBLIC_LEAK_PATTERN"; git diff --cached | grep -iE "$JINN_PUBLIC_LEAK_PATTERN" && exit 1 || true
 git commit -m "test(workflows): gate layout editor and run integration"
 ```

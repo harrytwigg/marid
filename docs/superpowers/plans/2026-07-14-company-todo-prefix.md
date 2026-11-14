@@ -25,8 +25,8 @@
 ### Task 1: Define the public company-prefix grammar
 
 **Files:**
-- Modify: `packages/jinn/src/work-items/id.ts`
-- Test: `packages/jinn/src/work-items/__tests__/phase-a-identity.test.ts`
+- Modify: `packages/hundredfold/src/work-items/id.ts`
+- Test: `packages/hundredfold/src/work-items/__tests__/phase-a-identity.test.ts`
 - Modify: `packages/web/src/lib/todo-id.ts`
 - Test: `packages/web/src/routes/todos/__tests__/todo-public-state.test.ts`
 
@@ -60,11 +60,11 @@ Expected: both focused files pass without warnings.
 ### Task 2: Freeze the prefix in the durable allocator
 
 **Files:**
-- Modify: `packages/jinn/src/work-items/migrate.ts`
-- Modify: `packages/jinn/src/work-items/store.ts`
-- Test: `packages/jinn/src/work-items/__tests__/identity-schema.test.ts`
-- Test: `packages/jinn/src/work-items/__tests__/migrate.test.ts`
-- Test: `packages/jinn/src/work-items/__tests__/store.test.ts`
+- Modify: `packages/hundredfold/src/work-items/migrate.ts`
+- Modify: `packages/hundredfold/src/work-items/store.ts`
+- Test: `packages/hundredfold/src/work-items/__tests__/identity-schema.test.ts`
+- Test: `packages/hundredfold/src/work-items/__tests__/migrate.test.ts`
+- Test: `packages/hundredfold/src/work-items/__tests__/store.test.ts`
 
 **Interfaces:**
 - Consumes: `resolveTodoIdPrefix(loadConfig().portal.companyName, loadConfig().portal.companyPrefix)` on the first allocation.
@@ -95,15 +95,15 @@ Expected: all focused allocator/store tests pass.
 ### Task 3: Capture Company Name during setup and onboarding
 
 **Files:**
-- Modify: `packages/jinn/src/shared/types.ts`
-- Modify: `packages/jinn/src/cli/setup.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/shared/types.ts`
+- Modify: `packages/hundredfold/src/cli/setup.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
 - Modify: `packages/web/src/lib/api.ts`
 - Modify: `packages/web/src/lib/settings.ts`
 - Modify: `packages/web/src/routes/settings-provider.tsx`
 - Modify: `packages/web/src/components/onboarding-wizard.tsx`
 - Modify: `packages/web/src/routes/settings/page.tsx`
-- Test: `packages/jinn/src/gateway/__tests__/onboarding.test.ts`
+- Test: `packages/hundredfold/src/gateway/__tests__/onboarding.test.ts`
 - Test: `packages/web/src/components/__tests__/onboarding-wizard.test.tsx`
 
 **Interfaces:**
@@ -139,7 +139,7 @@ Expected: backend and web onboarding tests pass.
 - Modify: `tools/prerelease-todo-converter/inventory.mjs`
 - Test: `tools/prerelease-todo-converter/__tests__/inventory.test.mjs`
 - Modify: `docs/superpowers/plans/2026-07-14-jinn-sole-todo-identifier.md`
-- Update affected JIN-specific comments/copy/tests under `packages/jinn/src/**` and `packages/web/src/**` only where they assert a fixed prefix.
+- Update affected JIN-specific comments/copy/tests under `packages/hundredfold/src/**` and `packages/web/src/**` only where they assert a fixed prefix.
 
 **Interfaces:**
 - Consumes: an explicit company name/prefix for offline dry-run mapping.

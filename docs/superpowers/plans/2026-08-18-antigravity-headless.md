@@ -22,19 +22,19 @@
 
 | Path | Existing responsibility / decision |
 |---|---|
-| `packages/jinn/src/engines/antigravity.ts:31` | Current work adapter claims agy has no print mode/hooks and combines queued work with the dashboard PTY. This premise is stale in agy 1.1.14. |
-| `packages/jinn/src/engines/antigravity.ts:48` | Current hard timeout is fourteen days, so a missed terminal event falsely holds the queue for an operationally unbounded interval. |
-| `packages/jinn/src/engines/antigravity.ts:150` | Settlement requires a non-empty `latestAnswer`; terminal upstream errors and empty planner rows never arm completion. |
-| `packages/jinn/src/engines/antigravity.ts:176` | Current work completion is inferred from private disk transcript rows rather than the supported stdout protocol. |
-| `packages/jinn/src/engines/antigravity-protocol.ts:207` | Only a non-tool, non-empty planner `DONE` row is terminal; the incident's quota error plus empty planner rows are invisible. |
-| `packages/jinn/src/engines/antigravity-mcp.ts:69` | Existing per-process Jinn identity/capability environment builder is reusable by headless agy. |
-| `packages/jinn/src/engines/antigravity-mcp.ts:81` | Existing global Gemini MCP config attachment is guarded and reference-counted across concurrent processes. |
-| `packages/jinn/src/gateway/server.ts:659` | Codex already separates a headless work engine from an interactive PTY view; Antigravity should follow this proven seam. |
-| `packages/jinn/src/gateway/server.ts:667` | Antigravity currently creates one shared PTY engine and registers it for both work and terminal routing. |
-| `packages/jinn/src/engines/grok.ts:580` | Grok proves the explicit-terminal-event pattern: settle from protocol output instead of waiting indefinitely for process-pipe closure. |
-| `packages/jinn/src/engines/grok.ts:694` | Grok also has a process exit/close fallback and exactly-once settlement guard that the new adapter can mirror. |
-| `packages/jinn/src/engines/__tests__/antigravity.test.ts:13` | Existing Antigravity tests cover only the combined PTY adapter's shape, one optional live smoke, and PTY environment wiring. |
-| `packages/jinn/src/engines/__tests__/antigravity-startup-retry.test.ts:139` | Existing fake-PTY tests remain relevant to the dashboard terminal adapter and must stay green after the split. |
+| `packages/hundredfold/src/engines/antigravity.ts:31` | Current work adapter claims agy has no print mode/hooks and combines queued work with the dashboard PTY. This premise is stale in agy 1.1.14. |
+| `packages/hundredfold/src/engines/antigravity.ts:48` | Current hard timeout is fourteen days, so a missed terminal event falsely holds the queue for an operationally unbounded interval. |
+| `packages/hundredfold/src/engines/antigravity.ts:150` | Settlement requires a non-empty `latestAnswer`; terminal upstream errors and empty planner rows never arm completion. |
+| `packages/hundredfold/src/engines/antigravity.ts:176` | Current work completion is inferred from private disk transcript rows rather than the supported stdout protocol. |
+| `packages/hundredfold/src/engines/antigravity-protocol.ts:207` | Only a non-tool, non-empty planner `DONE` row is terminal; the incident's quota error plus empty planner rows are invisible. |
+| `packages/hundredfold/src/engines/antigravity-mcp.ts:69` | Existing per-process Jinn identity/capability environment builder is reusable by headless agy. |
+| `packages/hundredfold/src/engines/antigravity-mcp.ts:81` | Existing global Gemini MCP config attachment is guarded and reference-counted across concurrent processes. |
+| `packages/hundredfold/src/gateway/server.ts:659` | Codex already separates a headless work engine from an interactive PTY view; Antigravity should follow this proven seam. |
+| `packages/hundredfold/src/gateway/server.ts:667` | Antigravity currently creates one shared PTY engine and registers it for both work and terminal routing. |
+| `packages/hundredfold/src/engines/grok.ts:580` | Grok proves the explicit-terminal-event pattern: settle from protocol output instead of waiting indefinitely for process-pipe closure. |
+| `packages/hundredfold/src/engines/grok.ts:694` | Grok also has a process exit/close fallback and exactly-once settlement guard that the new adapter can mirror. |
+| `packages/hundredfold/src/engines/__tests__/antigravity.test.ts:13` | Existing Antigravity tests cover only the combined PTY adapter's shape, one optional live smoke, and PTY environment wiring. |
+| `packages/hundredfold/src/engines/__tests__/antigravity-startup-retry.test.ts:139` | Existing fake-PTY tests remain relevant to the dashboard terminal adapter and must stay green after the split. |
 
 Rejected alternatives:
 
@@ -47,8 +47,8 @@ Rejected alternatives:
 ### Task 1: Pin the supported agy stream protocol
 
 **Files:**
-- Create: `packages/jinn/src/engines/antigravity-headless.ts`
-- Create: `packages/jinn/src/engines/__tests__/antigravity-headless.test.ts`
+- Create: `packages/hundredfold/src/engines/antigravity-headless.ts`
+- Create: `packages/hundredfold/src/engines/__tests__/antigravity-headless.test.ts`
 
 **Interfaces:**
 - Consumes: `EngineRunOpts`, `StreamDelta`, `resolveBin`, `buildEngineChildEnv`, and the existing Antigravity MCP attachment helpers.
@@ -135,7 +135,7 @@ Run the same focused command. Expected: PASS.
 - [ ] **Step 5: Commit the protocol slice**
 
 ```bash
-git add packages/jinn/src/engines/antigravity-headless.ts packages/jinn/src/engines/__tests__/antigravity-headless.test.ts
+git add packages/hundredfold/src/engines/antigravity-headless.ts packages/hundredfold/src/engines/__tests__/antigravity-headless.test.ts
 git commit -m "fix(antigravity): parse terminal stream events"
 ```
 
@@ -144,8 +144,8 @@ git commit -m "fix(antigravity): parse terminal stream events"
 ### Task 2: Add exactly-once headless work-turn lifecycle
 
 **Files:**
-- Modify: `packages/jinn/src/engines/antigravity-headless.ts`
-- Modify: `packages/jinn/src/engines/__tests__/antigravity-headless.test.ts`
+- Modify: `packages/hundredfold/src/engines/antigravity-headless.ts`
+- Modify: `packages/hundredfold/src/engines/__tests__/antigravity-headless.test.ts`
 
 **Interfaces:**
 - Consumes: Task 1 parser/args plus `ensureAntigravityJinnMcpConfig`, `cleanupAntigravityJinnMcpConfig`, and `antigravityJinnSessionEnv`.
@@ -198,7 +198,7 @@ Expected: PASS with no warnings or leaked handles.
 - [ ] **Step 5: Commit the lifecycle slice**
 
 ```bash
-git add packages/jinn/src/engines/antigravity-headless.ts packages/jinn/src/engines/__tests__/antigravity-headless.test.ts
+git add packages/hundredfold/src/engines/antigravity-headless.ts packages/hundredfold/src/engines/__tests__/antigravity-headless.test.ts
 git commit -m "fix(antigravity): settle headless work turns"
 ```
 
@@ -207,8 +207,8 @@ git commit -m "fix(antigravity): settle headless work turns"
 ### Task 3: Split gateway work and terminal adapters
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/server.ts`
-- Modify: `packages/jinn/src/engines/__tests__/antigravity.test.ts`
+- Modify: `packages/hundredfold/src/gateway/server.ts`
+- Modify: `packages/hundredfold/src/engines/__tests__/antigravity.test.ts`
 
 **Interfaces:**
 - Consumes: `AntigravityHeadlessEngine` from Task 2 and existing `AntigravityEngine` PTY surface.
@@ -252,7 +252,7 @@ Expected: PASS; existing terminal-view retries and MCP wiring remain unchanged.
 - [ ] **Step 5: Commit gateway wiring**
 
 ```bash
-git add packages/jinn/src/gateway/server.ts packages/jinn/src/engines/__tests__/antigravity.test.ts
+git add packages/hundredfold/src/gateway/server.ts packages/hundredfold/src/engines/__tests__/antigravity.test.ts
 git commit -m "fix(antigravity): split work and terminal adapters"
 ```
 
@@ -299,7 +299,7 @@ Expected: all exit 0. If a pre-existing failure appears, record the exact comman
 git diff --check
 git status --short
 git diff --stat main...HEAD
-git diff main...HEAD -- packages/jinn/src/engines packages/jinn/src/gateway/server.ts
+git diff main...HEAD -- packages/hundredfold/src/engines packages/hundredfold/src/gateway/server.ts
 pnpm --filter jinn-cli exec vitest run src/shared/__tests__/privacy-guard.test.ts
 ```
 

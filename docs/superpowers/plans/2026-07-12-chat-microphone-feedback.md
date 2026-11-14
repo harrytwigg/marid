@@ -343,7 +343,7 @@ Use Playwright against the sandbox only. For each scenario, wait on `data-state`
 ```bash
 git add packages/web/src/hooks/use-stt.ts packages/web/src/hooks/__tests__/use-stt.test.ts packages/web/src/components/chat/chat-input.tsx packages/web/src/components/chat/__tests__/chat-input-mic-state.test.tsx packages/web/src/components/chat/__tests__/mic-gesture.test.ts docs/superpowers/plans/2026-07-12-chat-microphone-feedback.md
 git diff --cached --check
-git diff --cached | grep -iE '<privacy-firewall blocked terms — see packages/jinn/src/shared/__tests__/privacy-guard.test.ts>'
+git diff --cached | grep -iE '<privacy-firewall blocked terms — see packages/hundredfold/src/shared/__tests__/privacy-guard.test.ts>'
 ```
 
 Expected: `git diff --cached --check` exits 0; leak grep has no output.

@@ -20,7 +20,7 @@ particular opencode no longer switches models internally (see
 [opencode](#opencode-internal-fallback-is-removed)).
 
 The wire shapes, normalisation and validation sentences live in
-`packages/jinn/src/shared/fallback-chain-wire.ts`, shared by the config loader
+`packages/hundredfold/src/shared/fallback-chain-wire.ts`, shared by the config loader
 and the Settings editor.
 
 ## Config

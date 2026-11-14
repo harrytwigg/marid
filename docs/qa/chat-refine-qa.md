@@ -496,7 +496,7 @@ root (node:test)           tests 183   pass 183   fail 0
 
 $ pnpm build
  Tasks:    5 successful, 5 total
-synced packages/web/out -> packages/jinn/dist/web (pruned 150 stale files)
+synced packages/web/out -> packages/hundredfold/dist/web (pruned 150 stale files)
 
 $ pnpm ratchet --check
 size ratchet: 1586 files scanned, 379 baselined files, 119534 budgeted lines (limit 300)

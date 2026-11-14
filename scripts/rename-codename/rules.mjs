@@ -57,6 +57,8 @@ export const LEGACY_FIXTURE_TESTS = [
   "packages/hundredfold/src/gateway/__tests__/auth-state-legacy-cookie.test.ts",
   "packages/hundredfold/src/gateway/__tests__/codename-wire-renamed.test.ts",
   "packages/hundredfold/src/gateway/__tests__/org-router-contract.test.ts",
+  "packages/hundredfold/src/gateway/__tests__/search-global-route.test.ts",
+  "packages/hundredfold/src/gateway/__tests__/web-spawn-context-diet.test.ts",
   "packages/hundredfold/src/instances/create.test.ts",
   "packages/hundredfold/src/instances/__tests__/home-rename-recovery.test.ts",
   "packages/hundredfold/src/instances/__tests__/home-rename.test.ts",
@@ -64,7 +66,10 @@ export const LEGACY_FIXTURE_TESTS = [
   "packages/hundredfold/src/instances/__tests__/stage-rename.test.ts",
   "packages/hundredfold/src/instances/__tests__/switchover.test.ts",
   "packages/hundredfold/src/mcp/__tests__/builtin-name-renamed.test.ts",
+  "packages/hundredfold/src/migrations/__tests__/receiptless-retired-skills.test.ts",
+  "packages/hundredfold/src/migrations/__tests__/sync-template-skills-receiptless.test.ts",
   "packages/hundredfold/src/migrations/__tests__/sync-template-skills-renamed.test.ts",
+  "packages/hundredfold/src/migrations/__tests__/sync-template-skills.test.ts",
   "packages/hundredfold/src/search/__tests__/query-grammar.test.ts",
   "packages/hundredfold/src/sessions/__tests__/context.test.ts",
   "packages/hundredfold/src/sessions/__tests__/engine-run-mcp-renamed.test.ts",
@@ -74,7 +79,9 @@ export const LEGACY_FIXTURE_TESTS = [
   "packages/hundredfold/src/shared/__tests__/command-policy.test.ts",
   "packages/hundredfold/src/shared/__tests__/engine-health-opencode.test.ts",
   "packages/hundredfold/src/shared/__tests__/homebrew-formula.test.ts",
+  "packages/hundredfold/src/shared/__tests__/host-assets.test.ts",
   "packages/hundredfold/src/shared/__tests__/opencode-subscription.test.ts",
+  "packages/hundredfold/src/shared/__tests__/sandbox-env.test.ts",
   "packages/hundredfold/src/shared/__tests__/template-materialization.test.ts",
   "packages/hundredfold/src/shared/__tests__/wire-names.test.ts",
   "packages/hundredfold/src/talk/session/__tests__/brief.test.ts",
@@ -87,6 +94,8 @@ export const LEGACY_FIXTURE_TESTS = [
   "packages/web/src/lib/__tests__/legacy-storage.test.ts",
   "packages/web/src/plugins/__tests__/runtime-loader-renamed.test.ts",
   "scripts/__tests__/check-footguns.test.mjs",
+  "scripts/__tests__/publish-workflow.test.mjs",
+  "scripts/__tests__/upgrade-verify.test.mjs",
 ];
 
 /** Paths whose content is never rewritten (a path in this list is still allowed to hold the old name). */

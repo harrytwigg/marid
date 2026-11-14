@@ -1,6 +1,6 @@
 # Board members: user accounts, sign-in and shared boards
 
-Status: design, phased build. Applies to the gateway (`packages/jinn`) and the web UI (`packages/web`).
+Status: design, phased build. Applies to the gateway (`packages/hundredfold`) and the web UI (`packages/web`).
 
 ## Problem
 

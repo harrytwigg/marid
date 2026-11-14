@@ -310,7 +310,7 @@ mints one token per client works on both; a gateway that mints one token per
 user and caches it works only on OpenAI.
 
 The interface these facts feed is `RealtimeProvider` in
-`packages/jinn/src/shared/types.ts`. `packages/jinn/src/talk/realtime/README.md`
+`packages/hundredfold/src/shared/types.ts`. `packages/hundredfold/src/talk/realtime/README.md`
 works the Gemini side through that interface member by member.
 
 ---

@@ -25,7 +25,7 @@ Expected: completes without errors.
 
 - [ ] **Step 2: Baseline test run**
 
-Run: `pnpm -C packages/jinn test -- --run 2>&1 | tail -5 && pnpm -C packages/web test -- --run 2>&1 | tail -5`
+Run: `pnpm -C packages/hundredfold test -- --run 2>&1 | tail -5 && pnpm -C packages/web test -- --run 2>&1 | tail -5`
 Expected: all existing tests pass (jinn ~440+, web ~220+). If the invocation form is wrong, check `packages/*/package.json` scripts (`test` runs vitest) and adapt; record the working command for later steps.
 
 ---
@@ -33,8 +33,8 @@ Expected: all existing tests pass (jinn ~440+, web ~220+). If the invocation for
 ### Task 1: Widen the card validator to all 13 renderer types
 
 **Files:**
-- Modify: `packages/jinn/src/talk/card-validate.ts`
-- Test: `packages/jinn/src/talk/__tests__/card-validate.test.ts` (exists — extend)
+- Modify: `packages/hundredfold/src/talk/card-validate.ts`
+- Test: `packages/hundredfold/src/talk/__tests__/card-validate.test.ts` (exists — extend)
 
 The frontend renderer (`packages/web/src/routes/talk/cards/card-renderer.tsx`) supports 13 types; the validator currently rejects 8 of them via `DROPPED_VOICE_TYPES`. All per-field check helpers (`checkListItems`, `checkImages`, `checkComparisonRows`, `checkKeyValueRows`, `checkDiffHunks`) already exist — they're used by `validateCardPatch`.
 
@@ -74,7 +74,7 @@ describe("validateCard — restored rich types (mission control)", () => {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `pnpm -C packages/jinn test -- --run card-validate`
+Run: `pnpm -C packages/hundredfold test -- --run card-validate`
 Expected: new tests FAIL (`link cards aren't shown on the voice surface…` / `unknown card type`).
 
 - [ ] **Step 3: Implement**
@@ -136,13 +136,13 @@ In `card-validate.ts`:
 
 - [ ] **Step 4: Run tests**
 
-Run: `pnpm -C packages/jinn test -- --run card-validate`
+Run: `pnpm -C packages/hundredfold test -- --run card-validate`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/talk/card-validate.ts packages/jinn/src/talk/__tests__/card-validate.test.ts
+git add packages/hundredfold/src/talk/card-validate.ts packages/hundredfold/src/talk/__tests__/card-validate.test.ts
 git commit -m "feat(talk): accept all 13 card types on the voice surface"
 ```
 
@@ -151,15 +151,15 @@ git commit -m "feat(talk): accept all 13 card types on the voice surface"
 ### Task 2: `POST /api/talk/delegate` — server-owned spawn-vs-continue
 
 **Files:**
-- Create: `packages/jinn/src/talk/delegate.ts`
-- Create: `packages/jinn/src/talk/__tests__/delegate.test.ts`
-- Modify: `packages/jinn/src/talk/routes.ts` (new route)
+- Create: `packages/hundredfold/src/talk/delegate.ts`
+- Create: `packages/hundredfold/src/talk/__tests__/delegate.test.ts`
+- Modify: `packages/hundredfold/src/talk/routes.ts` (new route)
 
 Design: pure-ish core with injected deps so it unit-tests without HTTP. The route wires deps using internal HTTP to `POST /api/sessions` / `POST /api/sessions/:id/message` (same pattern as `sessions/callbacks.ts`) so queueing, `talk:focus`, and parent callbacks behave exactly as today.
 
 - [ ] **Step 1: Write failing tests**
 
-`packages/jinn/src/talk/__tests__/delegate.test.ts`:
+`packages/hundredfold/src/talk/__tests__/delegate.test.ts`:
 
 ```ts
 import { describe, it, expect, vi } from "vitest"
@@ -243,7 +243,7 @@ describe("delegateToThread", () => {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `pnpm -C packages/jinn test -- --run delegate`
+Run: `pnpm -C packages/hundredfold test -- --run delegate`
 Expected: FAIL — module not found.
 
 - [ ] **Step 3: Implement `delegate.ts`**
@@ -346,7 +346,7 @@ export async function delegateToThread(
 
 - [ ] **Step 4: Run unit tests**
 
-Run: `pnpm -C packages/jinn test -- --run delegate`
+Run: `pnpm -C packages/hundredfold test -- --run delegate`
 Expected: PASS.
 
 - [ ] **Step 5: Wire the route**
@@ -396,13 +396,13 @@ Note: `config.gateway.host` may be `0.0.0.0`; loopback `127.0.0.1` is correct fo
 
 - [ ] **Step 6: Typecheck + full jinn tests**
 
-Run: `pnpm -C packages/jinn exec tsc --noEmit && pnpm -C packages/jinn test -- --run`
+Run: `pnpm -C packages/hundredfold exec tsc --noEmit && pnpm -C packages/hundredfold test -- --run`
 Expected: clean.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/jinn/src/talk/delegate.ts packages/jinn/src/talk/__tests__/delegate.test.ts packages/jinn/src/talk/routes.ts
+git add packages/hundredfold/src/talk/delegate.ts packages/hundredfold/src/talk/__tests__/delegate.test.ts packages/hundredfold/src/talk/routes.ts
 git commit -m "feat(talk): POST /api/talk/delegate — server-owned spawn-vs-continue"
 ```
 
@@ -411,9 +411,9 @@ git commit -m "feat(talk): POST /api/talk/delegate — server-owned spawn-vs-con
 ### Task 3: Thread-roster injection into the talk context
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/context.ts`
-- Modify: `packages/jinn/src/gateway/api.ts` (~line 2165, the `buildContext` call)
-- Test: `packages/jinn/src/sessions/__tests__/context.test.ts` (check if exists; create if not, mirroring sibling test style)
+- Modify: `packages/hundredfold/src/sessions/context.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts` (~line 2165, the `buildContext` call)
+- Test: `packages/hundredfold/src/sessions/__tests__/context.test.ts` (check if exists; create if not, mirroring sibling test style)
 
 - [ ] **Step 1: Write failing test**
 
@@ -440,7 +440,7 @@ describe("buildTalkThreadsSection", () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify failure** — `pnpm -C packages/jinn test -- --run context`
+- [ ] **Step 2: Run to verify failure** — `pnpm -C packages/hundredfold test -- --run context`
 
 - [ ] **Step 3: Implement**
 
@@ -504,12 +504,12 @@ In `api.ts` (the `buildContext` call at ~2165), add (newest first, cap 12; `list
 
 (`listChildSessions` is already imported in api.ts for the children route — verify, add to the import if missing.)
 
-- [ ] **Step 4: Run tests + typecheck** — `pnpm -C packages/jinn exec tsc --noEmit && pnpm -C packages/jinn test -- --run`
+- [ ] **Step 4: Run tests + typecheck** — `pnpm -C packages/hundredfold exec tsc --noEmit && pnpm -C packages/hundredfold test -- --run`
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/sessions/context.ts packages/jinn/src/sessions/__tests__/context.test.ts packages/jinn/src/gateway/api.ts
+git add packages/hundredfold/src/sessions/context.ts packages/hundredfold/src/sessions/__tests__/context.test.ts packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(talk): inject live COO thread roster into every orchestrator turn"
 ```
 
@@ -518,15 +518,15 @@ git commit -m "feat(talk): inject live COO thread roster into every orchestrator
 ### Task 4: TalkGraph — server-authoritative session tree
 
 **Files:**
-- Create: `packages/jinn/src/talk/graph.ts`
-- Create: `packages/jinn/src/talk/__tests__/graph.test.ts`
-- Modify: `packages/jinn/src/talk/protocol.ts` (event name + payload type)
-- Modify: `packages/jinn/src/talk/routes.ts` (GET /api/talk/graph)
-- Modify: `packages/jinn/src/gateway/api.ts` (delta emission at lifecycle call sites)
+- Create: `packages/hundredfold/src/talk/graph.ts`
+- Create: `packages/hundredfold/src/talk/__tests__/graph.test.ts`
+- Modify: `packages/hundredfold/src/talk/protocol.ts` (event name + payload type)
+- Modify: `packages/hundredfold/src/talk/routes.ts` (GET /api/talk/graph)
+- Modify: `packages/hundredfold/src/gateway/api.ts` (delta emission at lifecycle call sites)
 
 - [ ] **Step 1: Write failing tests**
 
-`packages/jinn/src/talk/__tests__/graph.test.ts`:
+`packages/hundredfold/src/talk/__tests__/graph.test.ts`:
 
 ```ts
 import { describe, it, expect, vi } from "vitest"
@@ -609,7 +609,7 @@ describe("maybeEmitTalkGraph", () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify failure** — `pnpm -C packages/jinn test -- --run graph`
+- [ ] **Step 2: Run to verify failure** — `pnpm -C packages/hundredfold test -- --run graph`
 
 - [ ] **Step 3: Implement `graph.ts`**
 
@@ -749,7 +749,7 @@ export function maybeEmitTalkGraph(
 
 In `protocol.ts` add to `TALK_EVENTS`: `graph: "talk:graph",` and re-export the payload type via a comment pointing at graph.ts (or move `TalkGraphEvent` here — keep it in graph.ts and just add the event name to avoid an import cycle; graph.ts already imports protocol.ts).
 
-- [ ] **Step 4: Run unit tests** — `pnpm -C packages/jinn test -- --run graph` → PASS.
+- [ ] **Step 4: Run unit tests** — `pnpm -C packages/hundredfold test -- --run graph` → PASS.
 
 - [ ] **Step 5: Snapshot route**
 
@@ -802,10 +802,10 @@ Also in **manager.ts** (connector-sourced children, e.g. a COO spawned from Slac
 
 - [ ] **Step 7: Typecheck + full backend tests + commit**
 
-Run: `pnpm -C packages/jinn exec tsc --noEmit && pnpm -C packages/jinn test -- --run`
+Run: `pnpm -C packages/hundredfold exec tsc --noEmit && pnpm -C packages/hundredfold test -- --run`
 
 ```bash
-git add packages/jinn/src/talk/graph.ts packages/jinn/src/talk/__tests__/graph.test.ts packages/jinn/src/talk/protocol.ts packages/jinn/src/talk/routes.ts packages/jinn/src/gateway/api.ts
+git add packages/hundredfold/src/talk/graph.ts packages/hundredfold/src/talk/__tests__/graph.test.ts packages/hundredfold/src/talk/protocol.ts packages/hundredfold/src/talk/routes.ts packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(talk): TalkGraph — server-authoritative session tree + talk:graph deltas + snapshot route"
 ```
 
@@ -814,11 +814,11 @@ git commit -m "feat(talk): TalkGraph — server-authoritative session tree + tal
 ### Task 5: Per-sentence TTS streaming
 
 **Files:**
-- Modify: `packages/jinn/src/talk/kokoro.ts` (speak opts: seqStart/final)
-- Modify: `packages/jinn/src/talk/protocol.ts` (Tts interface)
-- Modify: `packages/jinn/src/talk/tts-stream.ts` (sentence-boundary streaming)
-- Modify: `packages/jinn/src/gateway/api.ts` (pass opts+emit to feedTalkText, ~line 2325)
-- Test: `packages/jinn/src/talk/__tests__/tts-stream.test.ts` (extend/create)
+- Modify: `packages/hundredfold/src/talk/kokoro.ts` (speak opts: seqStart/final)
+- Modify: `packages/hundredfold/src/talk/protocol.ts` (Tts interface)
+- Modify: `packages/hundredfold/src/talk/tts-stream.ts` (sentence-boundary streaming)
+- Modify: `packages/hundredfold/src/gateway/api.ts` (pass opts+emit to feedTalkText, ~line 2325)
+- Test: `packages/hundredfold/src/talk/__tests__/tts-stream.test.ts` (extend/create)
 
 Contract fix: `kokoro.speak()` currently resets `seq` to 0 per call and flags `last:true` on its final chunk. With per-sentence calls, tts-stream passes a per-turn monotonic `seqStart` and `final:false` for mid-turn sentences; only the turn-end flush carries `final:true`. (The web audio-player orders by `seq` and does not depend on `last` — verified in `use-talk.ts:527`; `last` stays best-effort protocol metadata.)
 
@@ -887,7 +887,7 @@ describe("per-sentence streaming", () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify failure** — `pnpm -C packages/jinn test -- --run tts-stream`
+- [ ] **Step 2: Run to verify failure** — `pnpm -C packages/hundredfold test -- --run tts-stream`
 
 - [ ] **Step 3: Implement**
 
@@ -1090,13 +1090,13 @@ export function discardTalkSpeech(sessionId: string): void {
 
 Also update the stale comment above it (it describes the one-Kokoro-call-at-completion design): `// Voice mode: stream the orchestrator's spoken text — complete sentences synthesize immediately (per-sentence streaming); the flush at completion speaks the remainder.`
 
-- [ ] **Step 4: Run tests** — `pnpm -C packages/jinn test -- --run tts-stream && pnpm -C packages/jinn test -- --run kokoro` → PASS (fix any kokoro test asserting the old `speak` signature/void return).
+- [ ] **Step 4: Run tests** — `pnpm -C packages/hundredfold test -- --run tts-stream && pnpm -C packages/hundredfold test -- --run kokoro` → PASS (fix any kokoro test asserting the old `speak` signature/void return).
 
 - [ ] **Step 5: Typecheck + commit**
 
 ```bash
-pnpm -C packages/jinn exec tsc --noEmit
-git add packages/jinn/src/talk/tts-stream.ts packages/jinn/src/talk/kokoro.ts packages/jinn/src/talk/protocol.ts packages/jinn/src/talk/__tests__/tts-stream.test.ts packages/jinn/src/gateway/api.ts
+pnpm -C packages/hundredfold exec tsc --noEmit
+git add packages/hundredfold/src/talk/tts-stream.ts packages/hundredfold/src/talk/kokoro.ts packages/hundredfold/src/talk/protocol.ts packages/hundredfold/src/talk/__tests__/tts-stream.test.ts packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(talk): per-sentence TTS streaming — kill the whole-turn dead air"
 ```
 
@@ -1105,16 +1105,16 @@ git commit -m "feat(talk): per-sentence TTS streaming — kill the whole-turn de
 ### Task 6: Sonnet default + persona/card-reference rewrite
 
 **Files:**
-- Modify: `packages/jinn/src/talk/routes.ts:34` (`DEFAULT_TALK_MODEL`)
-- Modify: `packages/jinn/src/talk/orchestrator-persona.ts` (DEFAULT persona)
-- Modify: `packages/jinn/template/talk/orchestrator-persona.md` (same text)
-- Modify: `packages/jinn/template/talk/card-reference.md` (restored card types + delegate endpoint)
+- Modify: `packages/hundredfold/src/talk/routes.ts:34` (`DEFAULT_TALK_MODEL`)
+- Modify: `packages/hundredfold/src/talk/orchestrator-persona.ts` (DEFAULT persona)
+- Modify: `packages/hundredfold/template/talk/orchestrator-persona.md` (same text)
+- Modify: `packages/hundredfold/template/talk/card-reference.md` (restored card types + delegate endpoint)
 
 ⚠️ Do NOT touch `~/.jinn/talk/orchestrator-persona.md` — it hot-reloads into the LIVE 7777 gateway. Swapping the live file is a deploy step for the operator.
 
 - [ ] **Step 1: Model default**
 
-In `routes.ts`: `const DEFAULT_TALK_MODEL = "sonnet";` and update its comment to `(capable enough to orchestrate; override via talk.orchestratorModel)`. Check `packages/jinn/src/talk/__tests__/` for a routes/engine test pinning `"haiku"` and update it.
+In `routes.ts`: `const DEFAULT_TALK_MODEL = "sonnet";` and update its comment to `(capable enough to orchestrate; override via talk.orchestratorModel)`. Check `packages/hundredfold/src/talk/__tests__/` for a routes/engine test pinning `"haiku"` and update it.
 
 - [ ] **Step 2: Rewrite the DEFAULT persona**
 
@@ -1175,17 +1175,17 @@ Stay terse. Speak the headline, card the detail, route the depth.
 
 - [ ] **Step 3: Mirror to the template + update card-reference**
 
-Copy the same markdown (unescaped) into `packages/jinn/template/talk/orchestrator-persona.md`. In `packages/jinn/template/talk/card-reference.md`: read it first; add the 8 restored card types with one JSON example each (copy shapes from `protocol.ts:21-60` — text/stat/list/image/image-grid/status/agent-activity/link/choice/comparison/approval/keyvalue/diff), document `POST /api/talk/delegate` (request/response/error-with-roster), and remove any "these types are not allowed on the voice surface" language.
+Copy the same markdown (unescaped) into `packages/hundredfold/template/talk/orchestrator-persona.md`. In `packages/hundredfold/template/talk/card-reference.md`: read it first; add the 8 restored card types with one JSON example each (copy shapes from `protocol.ts:21-60` — text/stat/list/image/image-grid/status/agent-activity/link/choice/comparison/approval/keyvalue/diff), document `POST /api/talk/delegate` (request/response/error-with-roster), and remove any "these types are not allowed on the voice surface" language.
 
 - [ ] **Step 4: Tests + typecheck**
 
-Run: `pnpm -C packages/jinn exec tsc --noEmit && pnpm -C packages/jinn test -- --run`
+Run: `pnpm -C packages/hundredfold exec tsc --noEmit && pnpm -C packages/hundredfold test -- --run`
 Expected: clean (fix any persona-content assertions in `__tests__` — grep for `orchestrator-persona`).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/talk/routes.ts packages/jinn/src/talk/orchestrator-persona.ts packages/jinn/template/talk/orchestrator-persona.md packages/jinn/template/talk/card-reference.md packages/jinn/src/talk/__tests__
+git add packages/hundredfold/src/talk/routes.ts packages/hundredfold/src/talk/orchestrator-persona.ts packages/hundredfold/template/talk/orchestrator-persona.md packages/hundredfold/template/talk/card-reference.md packages/hundredfold/src/talk/__tests__
 git commit -m "feat(talk): sonnet orchestrator default + delegate-first persona + restored card catalogue"
 ```
 
@@ -1868,7 +1868,7 @@ git commit -m "feat(talk-web): history rail with tappable links; finalize entrie
 ### Task 10: Full build + integration smoke on an isolated gateway (port 7878)
 
 **Files:**
-- Create: `packages/jinn/scripts/talk-graph-smoke.sh` (committed, reusable)
+- Create: `packages/hundredfold/scripts/talk-graph-smoke.sh` (committed, reusable)
 
 - [ ] **Step 1: Build the worktree**
 
@@ -1877,7 +1877,7 @@ Expected: clean. ⚠️ Never `pnpm --filter @jinn/web build --force` (vite reje
 
 - [ ] **Step 2: Write the smoke script**
 
-`packages/jinn/scripts/talk-graph-smoke.sh`:
+`packages/hundredfold/scripts/talk-graph-smoke.sh`:
 
 ```bash
 #!/usr/bin/env bash
@@ -1941,19 +1941,19 @@ python3 -c 'import json;d=json.load(open("/tmp/delegate-err.json"));assert d.get
 echo "SMOKE PASSED"
 ```
 
-`chmod +x packages/jinn/scripts/talk-graph-smoke.sh`
+`chmod +x packages/hundredfold/scripts/talk-graph-smoke.sh`
 
-Note: verify the env var names first — check how the gateway reads home/port (`grep -rn "JINN_HOME\|GATEWAY_PORT" packages/jinn/src/shared/paths.ts packages/jinn/src/bin packages/jinn/src/gateway/server.ts | head`). If the port comes only from config.yaml, pre-seed `${HOME_DIR}/config.yaml` with `gateway: { port: 7878 }` before starting instead of the env var. Also: a fresh JINN_HOME may trigger onboarding seeding — that's fine (it's template-seeded automatically on start).
+Note: verify the env var names first — check how the gateway reads home/port (`grep -rn "JINN_HOME\|GATEWAY_PORT" packages/hundredfold/src/shared/paths.ts packages/hundredfold/src/bin packages/hundredfold/src/gateway/server.ts | head`). If the port comes only from config.yaml, pre-seed `${HOME_DIR}/config.yaml` with `gateway: { port: 7878 }` before starting instead of the env var. Also: a fresh JINN_HOME may trigger onboarding seeding — that's fine (it's template-seeded automatically on start).
 
 - [ ] **Step 3: Run the smoke**
 
-Run: `bash packages/jinn/scripts/talk-graph-smoke.sh`
+Run: `bash packages/hundredfold/scripts/talk-graph-smoke.sh`
 Expected: `graph snapshot OK … delegate roster error OK … SMOKE PASSED`. The two COO sessions will actually run engine turns (claude CLI with the throwaway home) — they may error; the graph assertions don't depend on turn success. If `talk:focus`-dependent label timing makes a flake, the labels come from `updateSession(title)` synchronously in delegate — no race.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/jinn/scripts/talk-graph-smoke.sh
+git add packages/hundredfold/scripts/talk-graph-smoke.sh
 git commit -m "test(talk): isolated-gateway smoke for delegate + graph snapshot"
 ```
 
@@ -1967,7 +1967,7 @@ git commit -m "test(talk): isolated-gateway smoke for delegate + graph snapshot"
 
 ```bash
 HOME_DIR=$(mktemp -d /tmp/jinn-mc-ui.XXXXXX)
-JINN_HOME="${HOME_DIR}" GATEWAY_PORT=7878 node packages/jinn/dist/bin/jinn.js start &
+JINN_HOME="${HOME_DIR}" GATEWAY_PORT=7878 node packages/hundredfold/dist/bin/jinn.js start &
 ```
 
 (Same port-config caveat as Task 10. Rebuild first if any source changed: `pnpm build`.)
@@ -1985,7 +1985,7 @@ Verify, with screenshots:
 
 - [ ] **Step 3: Full final test sweep**
 
-Run: `pnpm -C packages/jinn exec tsc --noEmit && pnpm -C packages/web exec tsc --noEmit && pnpm -C packages/jinn test -- --run && pnpm -C packages/web test -- --run && pnpm build`
+Run: `pnpm -C packages/hundredfold exec tsc --noEmit && pnpm -C packages/web exec tsc --noEmit && pnpm -C packages/hundredfold test -- --run && pnpm -C packages/web test -- --run && pnpm build`
 Expected: everything green.
 
 - [ ] **Step 4: Kill the test gateway, clean tmp dirs**

@@ -97,7 +97,7 @@ would itself be the leak, so personal terms are read at run time from
 
 ## Project Layout
 
-- `packages/jinn` -- Core gateway daemon and CLI (package dir).
+- `packages/hundredfold` -- Core gateway daemon and CLI (package dir).
 - `packages/web` -- Web dashboard frontend.
 - `packages/gateway-events` -- Shared event contract between the gateway and the dashboard.
 

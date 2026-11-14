@@ -22,8 +22,8 @@
 ### Task 1: Challenge primitive
 
 **Files:**
-- Create: `packages/jinn/src/gateway/pairing-challenge.ts`
-- Create: `packages/jinn/src/gateway/__tests__/pairing-challenge.test.ts`
+- Create: `packages/hundredfold/src/gateway/pairing-challenge.ts`
+- Create: `packages/hundredfold/src/gateway/__tests__/pairing-challenge.test.ts`
 
 **Interfaces:**
 - Produces: `PAIRING_CHALLENGE_TTL_MS`, `PairingChallengeStore`, `issuePairingChallenge(jinnHome, store?, now?, idFactory?, nonceFactory?)`, and `consumePairingChallenge(jinnHome, challengeId, store?, now?)`.
@@ -66,10 +66,10 @@ Run the Task 1 Vitest command and expect all challenge primitive tests to pass.
 ### Task 2: Route security and lifecycle
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/auth.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/auth-security.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/auth-ux-api.test.ts`
+- Modify: `packages/hundredfold/src/gateway/auth.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/auth-security.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/auth-ux-api.test.ts`
 
 **Interfaces:**
 - Consumes: `issuePairingChallenge` and `consumePairingChallenge` from Task 1.
@@ -102,10 +102,10 @@ Run the Task 2 Vitest command and expect all auth security/UX tests to pass.
 ### Task 3: Restore CLI code minting and lock the cross-layer contract
 
 **Files:**
-- Modify: `packages/jinn/src/cli/pair.ts`
-- Modify: `packages/jinn/src/cli/__tests__/pair.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/auth-ux-api.test.ts`
-- Modify: `packages/jinn/bin/jinn.ts`
+- Modify: `packages/hundredfold/src/cli/pair.ts`
+- Modify: `packages/hundredfold/src/cli/__tests__/pair.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/auth-ux-api.test.ts`
+- Modify: `packages/hundredfold/bin/jinn.ts`
 
 **Interfaces:**
 - Consumes: the two routes from Task 2 and the server-returned proof-file path.

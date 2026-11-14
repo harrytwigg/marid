@@ -23,40 +23,40 @@ against `origin/main` at `3c032251`.
 
 | `path:line` | Used for |
 | --- | --- |
-| `packages/jinn/src/gateway/org-registry.ts:42` | `refreshOrg` / last-good roster: the shape for `department-registry.ts` |
-| `packages/jinn/src/gateway/org.ts:31` | The org walker skips `department.yaml`. It keeps doing so; the department registry reads it |
-| `packages/jinn/src/gateway/org.ts:81` | An employee's department: the field, else the directory |
-| `packages/jinn/src/gateway/org.ts:112` | Per-employee validation that skips a bad employee. The scope and profile checks go beside it |
-| `packages/jinn/src/gateway/watcher.ts:130` | The `org/` watcher, which already covers `department.yaml` |
-| `packages/jinn/src/work-items/assignment.ts:72` | `departmentAfterAssignment`: keeps a non-open department (FR-003) |
-| `packages/jinn/src/gateway/api.ts:2650` | The assign route passes `employee?.department ?? null`, so `@operator` nulls the department |
-| `packages/jinn/src/work-items/store.ts:324` | Create: the department comes from the input, then the parent, then the policy default |
-| `packages/jinn/src/work-items/departments.ts:80` | `listDepartmentsWithCounts`: the `GET /api/departments` rows, which gain the definition |
-| `packages/jinn/src/work-items/migrate.ts:520` | `V2_ADDITIVE_TABLES`: `department_scopes` is added here |
-| `packages/jinn/src/gateway/api.ts:1181` | The identified-caller gate. The scoped gate is one line beside it |
-| `packages/jinn/src/gateway/remote-mcp/rules.ts:25` | The allow-list table shape for `department-scope/rules.ts` |
-| `packages/jinn/src/gateway/remote-mcp/profile.ts:98` | The tool-profile filter shape |
-| `packages/jinn/src/work-items/store.ts:356` | `createWorkItem` insert: an `assignee` writer |
-| `packages/jinn/src/work-items/store.ts:797` / `:850` | The two dynamic update paths, followed by `releaseOnOwnerChange` |
-| `packages/jinn/src/work-items/assignment.ts:98` | `assignWorkItem`'s own `UPDATE`, which does not go through `releaseOnOwnerChange` |
-| `packages/jinn/src/gateway/api.ts:3450` / `:3501` | Delegation: create-already-assigned, and assignment onto an existing Todo |
-| `packages/jinn/src/plugins/host/todos.ts:31` | A plugin create with `draft.assignee` |
-| `packages/jinn/src/cron/runner.ts:101` | A cron-created Todo |
-| `packages/jinn/src/gateway/todo-assignee.ts:21` | `@operator` is a valid assignee |
-| `packages/jinn/src/gateway/spawn-session.ts:163` / `:188` | Session binding (FR-008). `parentSessionId` is the FR-013 requester |
-| `packages/jinn/src/gateway/server.ts:1035` | Upgrade handling: the scoped refusal goes in the upgrade guard |
-| `packages/jinn/src/gateway/api.ts:1207` | Note routes gated on `notesEnabled`. Scoped callers are served regardless (FR-028) |
-| `packages/jinn/src/notes/store.ts:613` | `SEARCH_ROOTS` becomes a parameter |
-| `packages/jinn/src/sessions/turn/engine-run.ts:46` | cwd becomes the stage dir for scoped sessions |
-| `packages/jinn/src/sessions/turn/preflight.ts:52` | `refuseTurn`: lost binding, wrong engine, profile not signed in |
-| `packages/jinn/src/gateway/watcher.ts:38` | `syncSkillSymlinks`: the regeneration trigger for stage dirs |
-| `packages/jinn/src/gateway/server.ts:565` | The only local trust seed today: boot-time, default profile, `$JINN_HOME` |
-| `packages/jinn/src/shared/home.ts:34` / `:42` | `resolveClaudeConfigDir` / `claudeJsonPath`: gain a profile argument |
-| `packages/jinn/src/shared/child-env.ts:41` | `buildEngineChildEnv`: the profile's `CLAUDE_CONFIG_DIR` goes in here |
-| `packages/jinn/src/shared/remote-target.ts:114` / `:230` | The remote profile's validation and precedence: the pattern for the local field |
-| `packages/jinn/src/engines/remote-stage.ts:658` | `verifyClaudeProfile`: the pattern for the local signed-in check |
-| `packages/jinn/src/shared/claude-auth-outage.ts:18` | `LOCAL_CLAUDE_AUTH_SCOPE`: gains a per-profile form |
-| `packages/jinn/src/shared/engine-health.ts:54` | `engineHealthForTarget`: gains a profile qualifier |
+| `packages/hundredfold/src/gateway/org-registry.ts:42` | `refreshOrg` / last-good roster: the shape for `department-registry.ts` |
+| `packages/hundredfold/src/gateway/org.ts:31` | The org walker skips `department.yaml`. It keeps doing so; the department registry reads it |
+| `packages/hundredfold/src/gateway/org.ts:81` | An employee's department: the field, else the directory |
+| `packages/hundredfold/src/gateway/org.ts:112` | Per-employee validation that skips a bad employee. The scope and profile checks go beside it |
+| `packages/hundredfold/src/gateway/watcher.ts:130` | The `org/` watcher, which already covers `department.yaml` |
+| `packages/hundredfold/src/work-items/assignment.ts:72` | `departmentAfterAssignment`: keeps a non-open department (FR-003) |
+| `packages/hundredfold/src/gateway/api.ts:2650` | The assign route passes `employee?.department ?? null`, so `@operator` nulls the department |
+| `packages/hundredfold/src/work-items/store.ts:324` | Create: the department comes from the input, then the parent, then the policy default |
+| `packages/hundredfold/src/work-items/departments.ts:80` | `listDepartmentsWithCounts`: the `GET /api/departments` rows, which gain the definition |
+| `packages/hundredfold/src/work-items/migrate.ts:520` | `V2_ADDITIVE_TABLES`: `department_scopes` is added here |
+| `packages/hundredfold/src/gateway/api.ts:1181` | The identified-caller gate. The scoped gate is one line beside it |
+| `packages/hundredfold/src/gateway/remote-mcp/rules.ts:25` | The allow-list table shape for `department-scope/rules.ts` |
+| `packages/hundredfold/src/gateway/remote-mcp/profile.ts:98` | The tool-profile filter shape |
+| `packages/hundredfold/src/work-items/store.ts:356` | `createWorkItem` insert: an `assignee` writer |
+| `packages/hundredfold/src/work-items/store.ts:797` / `:850` | The two dynamic update paths, followed by `releaseOnOwnerChange` |
+| `packages/hundredfold/src/work-items/assignment.ts:98` | `assignWorkItem`'s own `UPDATE`, which does not go through `releaseOnOwnerChange` |
+| `packages/hundredfold/src/gateway/api.ts:3450` / `:3501` | Delegation: create-already-assigned, and assignment onto an existing Todo |
+| `packages/hundredfold/src/plugins/host/todos.ts:31` | A plugin create with `draft.assignee` |
+| `packages/hundredfold/src/cron/runner.ts:101` | A cron-created Todo |
+| `packages/hundredfold/src/gateway/todo-assignee.ts:21` | `@operator` is a valid assignee |
+| `packages/hundredfold/src/gateway/spawn-session.ts:163` / `:188` | Session binding (FR-008). `parentSessionId` is the FR-013 requester |
+| `packages/hundredfold/src/gateway/server.ts:1035` | Upgrade handling: the scoped refusal goes in the upgrade guard |
+| `packages/hundredfold/src/gateway/api.ts:1207` | Note routes gated on `notesEnabled`. Scoped callers are served regardless (FR-028) |
+| `packages/hundredfold/src/notes/store.ts:613` | `SEARCH_ROOTS` becomes a parameter |
+| `packages/hundredfold/src/sessions/turn/engine-run.ts:46` | cwd becomes the stage dir for scoped sessions |
+| `packages/hundredfold/src/sessions/turn/preflight.ts:52` | `refuseTurn`: lost binding, wrong engine, profile not signed in |
+| `packages/hundredfold/src/gateway/watcher.ts:38` | `syncSkillSymlinks`: the regeneration trigger for stage dirs |
+| `packages/hundredfold/src/gateway/server.ts:565` | The only local trust seed today: boot-time, default profile, `$JINN_HOME` |
+| `packages/hundredfold/src/shared/home.ts:34` / `:42` | `resolveClaudeConfigDir` / `claudeJsonPath`: gain a profile argument |
+| `packages/hundredfold/src/shared/child-env.ts:41` | `buildEngineChildEnv`: the profile's `CLAUDE_CONFIG_DIR` goes in here |
+| `packages/hundredfold/src/shared/remote-target.ts:114` / `:230` | The remote profile's validation and precedence: the pattern for the local field |
+| `packages/hundredfold/src/engines/remote-stage.ts:658` | `verifyClaudeProfile`: the pattern for the local signed-in check |
+| `packages/hundredfold/src/shared/claude-auth-outage.ts:18` | `LOCAL_CLAUDE_AUTH_SCOPE`: gains a per-profile form |
+| `packages/hundredfold/src/shared/engine-health.ts:54` | `engineHealthForTarget`: gains a profile qualifier |
 
 ## Summary
 
@@ -180,7 +180,7 @@ PR (FR-043 to FR-045).
 **Who it applies to**: a capability-verified session whose employee is scoped. **D** is
 `sessions.scope_department`.
 
-**Where it lives**: `packages/jinn/src/gateway/department-scope/rules.ts`.
+**Where it lives**: `packages/hundredfold/src/gateway/department-scope/rules.ts`.
 
 **Default deny**: any unlisted route returns 403, "not available to a department-scoped
 session".

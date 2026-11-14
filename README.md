@@ -132,7 +132,7 @@ docker compose restart jinn       # restart safely
 docker compose down               # stop; named volumes remain intact
 ```
 
-After upgrading, the gateway re-syncs the skills Hundredfold ships on every boot; `jinn migrate` does the same on demand and prints what changed. An edit to a shipped skill is replaced then (the previous copy is kept in a backup), so customize by writing a skill of your own. An upgrade does not touch skills you wrote, your `CLAUDE.md`, `docs/`, `knowledge/` or `org/`, so to pick up new stock content, compare them with `packages/jinn/template/`.
+After upgrading, the gateway re-syncs the skills Hundredfold ships on every boot; `jinn migrate` does the same on demand and prints what changed. An edit to a shipped skill is replaced then (the previous copy is kept in a backup), so customize by writing a skill of your own. An upgrade does not touch skills you wrote, your `CLAUDE.md`, `docs/`, `knowledge/` or `org/`, so to pick up new stock content, compare them with `packages/hundredfold/template/`.
 
 ---
 
@@ -443,7 +443,7 @@ docker compose restart jinn       # restart safely
 docker compose down               # stop; named volumes remain intact
 ```
 
-After upgrading, the gateway re-syncs the skills Hundredfold ships on every boot; `jinn migrate` does the same on demand and prints what changed. An edit to a shipped skill is replaced then (the previous copy is kept in a backup), so customize by writing a skill of your own. An upgrade does not touch skills you wrote, your `CLAUDE.md`, `docs/`, `knowledge/` or `org/`, so to pick up new stock content, compare them with `packages/jinn/template/`.
+After upgrading, the gateway re-syncs the skills Hundredfold ships on every boot; `jinn migrate` does the same on demand and prints what changed. An edit to a shipped skill is replaced then (the previous copy is kept in a backup), so customize by writing a skill of your own. An upgrade does not touch skills you wrote, your `CLAUDE.md`, `docs/`, `knowledge/` or `org/`, so to pick up new stock content, compare them with `packages/hundredfold/template/`.
 
 ---
 

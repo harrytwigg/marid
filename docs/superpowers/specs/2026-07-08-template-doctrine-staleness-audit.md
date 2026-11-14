@@ -1,6 +1,6 @@
 # Template Doctrine Staleness Audit
 
-**Scope:** Active shipped template surface under `packages/jinn/template/`, with special attention to delegation doctrine, MCP-first operations, Todos/Workflows wording, placeholders, dead references, and bundled skill consistency.
+**Scope:** Active shipped template surface under `packages/hundredfold/template/`, with special attention to delegation doctrine, MCP-first operations, Todos/Workflows wording, placeholders, dead references, and bundled skill consistency.
 
 ## Findings
 

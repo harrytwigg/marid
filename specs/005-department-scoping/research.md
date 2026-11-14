@@ -2,7 +2,7 @@
 
 Read against `origin/main` at `60e675d6`, and re-verified at `3c032251` for every row spec.md
 and plan.md cite. The "Departments today", "Claude profiles" and "Remote targets" sections
-were read at `3c032251`. Paths are relative to `packages/jinn/src/` unless
+were read at `3c032251`. Paths are relative to `packages/hundredfold/src/` unless
 they start with `packages/`.
 
 **After the operator's decisions (2026-10-05):**
@@ -132,7 +132,7 @@ and the decision. This reading was matched by content in minified code, so Phase
 | `gateway/server.ts:1035` | Upgrades: `/ws` and plugin events refuse unidentified callers, then check auth. Only `/ws/pty` is operator-only | A token-holding session receives the company broadcast today |
 | `mcp/identity.ts:207` | Each jinn MCP server gets `JINN_SESSION_CAPABILITY` in its environment | Visible to `ps -E` from any same-user process. Seen on this host in 6 of 6 running MCP servers |
 | `gateway/server.ts:510` | `process.env.JINN_GATEWAY_TOKEN` is set in the gateway and inherited by every engine | Visible to `ps -E`. Seen on this host in 148 processes |
-| `packages/jinn/assets/hook-relay.mjs:10` | The hook relay resolves its home from `JINN_HOME` or `~/.jinn` | FR-025a | This instance runs `authRequired: true`. Deferred, not built: a contained shell would stop here |
+| `packages/hundredfold/assets/hook-relay.mjs:10` | The hook relay resolves its home from `JINN_HOME` or `~/.jinn` | FR-025a | This instance runs `authRequired: true`. Deferred, not built: a contained shell would stop here |
 | `gateway/auth.ts:264` | `shouldRequireGatewayAuth`: auth is off on loopback unless `gateway.authRequired` is set | Deferred to the sandbox work |
 | `gateway/api.ts:841` | `rejectUnverifiedIdentifiedApiCaller` lets unauthenticated `GET`s through when auth is off | Affects auth-off instances only |
 | `gateway/api.ts:796` | Same-origin browser inference, purely from headers | On an auth-off instance any local `curl` can forge it. Deferred to the sandbox work |
@@ -226,7 +226,7 @@ Read at `origin/main` 70419b04.
 | `shared/engine-health-store.ts:45` | One health record per engine; quota records carry no host | Per account (FR-055) |
 | `engines/remote-stage.ts:1378` | Remote sessions write no status-line snapshot to the gateway | The gateway reads remote accounts itself over SSH (FR-072) |
 | `board-walk/snapshot.ts:14`, `:224`, `:238` | No numeric thresholds in code; one Claude five-hour window; an unscoped exhausted flag | Per-account snapshot (FR-075) |
-| `packages/jinn/template/board-walk.md:98` | The thresholds, "hold, never guess", concurrency and "one start per tick" are prose about one Claude pool | Rewritten per account; the instance copy is the operator's (FR-077) |
+| `packages/hundredfold/template/board-walk.md:98` | The thresholds, "hold, never guess", concurrency and "one start per tick" are prose about one Claude pool | Rewritten per account; the instance copy is the operator's (FR-077) |
 | `board-walk/apply.ts:245` | `startTodo` checks only the switch, the status and the opt-out | Gains the exhausted-account gate (FR-075) |
 | `board-walk/walk.ts:142` | `dispatcherSuffix` passes a preferred engine to the Dispatcher as advice | Also lists exhausted accounts |
 | `board-walk/route-turn.ts:85` | The walk skips the tick when its runner engine is exhausted | FR-076 |

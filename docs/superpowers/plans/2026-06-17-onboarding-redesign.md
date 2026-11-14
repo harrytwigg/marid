@@ -6,14 +6,14 @@
 
 **Architecture:** `config.portal.onboarded` is the single source of truth. The web wizard (gate fixed, genie icon, engine/model/effort step) completes → persists prefs + global engine default → opens a COO chat. The gateway context builder, seeing `onboarded:false`, injects an operator-aware, second-person onboarding context that drives skippable beats. The genie flips `onboarded:true` at wrap.
 
-**Tech Stack:** TypeScript (gateway, `packages/jinn`), React 19 / Next 15 (web, `packages/web`), vitest (gateway tests), Markdown skill playbooks.
+**Tech Stack:** TypeScript (gateway, `packages/hundredfold`), React 19 / Next 15 (web, `packages/web`), vitest (gateway tests), Markdown skill playbooks.
 
 ## Global Constraints
 
 - **Never touch live `~/.jinn` or the `:7777` gateway.** Validate only on a throwaway instance (e.g. `~/.test-onboarding`) on a non-7777 port, started from a worktree build. Copied verbatim from spec §8.
 - **Privacy firewall:** repo code/templates must stay generic — no real names, project names, emails, keys, or `/Users/...` paths. `template/**` is most safety-critical.
 - **Node pinned to 24.13.0** for all pnpm/build/run (`.npmrc use-node-version`).
-- **Gateway tests use vitest** (`import { test, expect } from "vitest"`), co-located `*.test.ts`. Run: `cd packages/jinn && pnpm test`.
+- **Gateway tests use vitest** (`import { test, expect } from "vitest"`), co-located `*.test.ts`. Run: `cd packages/hundredfold && pnpm test`.
 - **No `Co-Authored-By` trailers** in commits.
 - Build before manual checks: `pnpm build` (turbo).
 - `config.portal.onboarded === true` must gate onboarding off (idempotent — never re-fire).
@@ -24,14 +24,14 @@
 
 | File | Responsibility | Action |
 |------|----------------|--------|
-| `packages/jinn/src/gateway/api.ts` | `needed` flag; `completeOnboarding` persists engine/model/effort | Modify |
-| `packages/jinn/src/sessions/context.ts` | second-person `buildIdentity`; `buildOnboardingContext` gated on `onboarded` | Modify |
-| `packages/jinn/src/sessions/context.test.ts` | unit tests for identity + onboarding context | Create |
-| `packages/jinn/src/gateway/__tests__/onboarding.test.ts` | unit tests for `needed` + completeOnboarding persistence | Create |
-| `packages/jinn/src/cli/create.ts` | verify setup populated home before success | Modify |
-| `packages/jinn/src/cli/setup.ts` | `prompt()` resolves on stdin EOF/close | Modify |
-| `packages/jinn/src/cli/__tests__/create-verify.test.ts` | unit test for the home-populated guard | Create |
-| `packages/jinn/template/skills/onboarding/SKILL.md` | gamified multi-beat playbook | Rewrite |
+| `packages/hundredfold/src/gateway/api.ts` | `needed` flag; `completeOnboarding` persists engine/model/effort | Modify |
+| `packages/hundredfold/src/sessions/context.ts` | second-person `buildIdentity`; `buildOnboardingContext` gated on `onboarded` | Modify |
+| `packages/hundredfold/src/sessions/context.test.ts` | unit tests for identity + onboarding context | Create |
+| `packages/hundredfold/src/gateway/__tests__/onboarding.test.ts` | unit tests for `needed` + completeOnboarding persistence | Create |
+| `packages/hundredfold/src/cli/create.ts` | verify setup populated home before success | Modify |
+| `packages/hundredfold/src/cli/setup.ts` | `prompt()` resolves on stdin EOF/close | Modify |
+| `packages/hundredfold/src/cli/__tests__/create-verify.test.ts` | unit test for the home-populated guard | Create |
+| `packages/hundredfold/template/skills/onboarding/SKILL.md` | gamified multi-beat playbook | Rewrite |
 | `packages/web/src/components/onboarding-wizard.tsx` | genie icon, engine/model/effort step, launch-into-chat | Modify |
 | `packages/web/src/lib/api.ts` | `completeOnboarding` accepts engine/model/effort | Modify |
 | `packages/web/src/components/chat/chat-sidebar.tsx` | default focus filter "all" | Modify |
@@ -41,15 +41,15 @@
 ## Task 1: Fix the onboarding gate (`needed`)
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts` (~1706)
-- Test: `packages/jinn/src/gateway/__tests__/onboarding.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts` (~1706)
+- Test: `packages/hundredfold/src/gateway/__tests__/onboarding.test.ts`
 
 **Interfaces:**
 - Produces: GET `/api/onboarding` returns `needed === !onboarded` (independent of employees/sessions).
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/jinn/src/gateway/__tests__/onboarding.test.ts`:
+Create `packages/hundredfold/src/gateway/__tests__/onboarding.test.ts`:
 
 ```ts
 import { test, expect } from "vitest";
@@ -70,7 +70,7 @@ test("onboarding is not needed once onboarded flag is set", () => {
 
 - [ ] **Step 2: Run test to verify it passes (policy lock)**
 
-Run: `cd packages/jinn && pnpm test onboarding`
+Run: `cd packages/hundredfold && pnpm test onboarding`
 Expected: PASS (this pins the intended rule; next step makes the server match it).
 
 - [ ] **Step 3: Change the server gate**
@@ -85,13 +85,13 @@ In `api.ts`, the GET `/api/onboarding` handler — replace the `needed` line:
 
 - [ ] **Step 4: Build + manual verify**
 
-Run: `cd packages/jinn && pnpm build` then start a throwaway instance and:
+Run: `cd packages/hundredfold && pnpm build` then start a throwaway instance and:
 `curl -s http://127.0.0.1:7788/api/onboarding` → `needed:true` on a fresh (employee-seeded, 0-session) instance.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/api.ts packages/jinn/src/gateway/__tests__/onboarding.test.ts
+git add packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/gateway/__tests__/onboarding.test.ts
 git commit -m "fix(onboarding): gate wizard on !onboarded only (was suppressed by seeded employee)"
 ```
 
@@ -100,8 +100,8 @@ git commit -m "fix(onboarding): gate wizard on !onboarded only (was suppressed b
 ## Task 2: Second-person identity (`buildIdentity`)
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/context.ts` (function `buildIdentity`, ~378)
-- Test: `packages/jinn/src/sessions/context.test.ts`
+- Modify: `packages/hundredfold/src/sessions/context.ts` (function `buildIdentity`, ~378)
+- Test: `packages/hundredfold/src/sessions/context.test.ts`
 
 **Interfaces:**
 - Consumes: `buildIdentity(portalName: string, operatorName?: string, language?: string): string`
@@ -109,7 +109,7 @@ git commit -m "fix(onboarding): gate wizard on !onboarded only (was suppressed b
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/jinn/src/sessions/context.test.ts`:
+Create `packages/hundredfold/src/sessions/context.test.ts`:
 
 ```ts
 import { test, expect } from "vitest";
@@ -133,7 +133,7 @@ test("identity adds a language directive only for non-English", () => {
 - [ ] **Step 2: Export `buildIdentity` and run test to verify it fails**
 
 If `buildIdentity` is not exported, add `export` to its declaration. Run:
-`cd packages/jinn && pnpm test context`
+`cd packages/hundredfold && pnpm test context`
 Expected: FAIL on the second-person assertions.
 
 - [ ] **Step 3: Rewrite `buildIdentity`**
@@ -155,13 +155,13 @@ You are ${portalName}, COO of ${operatorName ? `${operatorName}'s` : "the user's
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd packages/jinn && pnpm test context`
+Run: `cd packages/hundredfold && pnpm test context`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/sessions/context.ts packages/jinn/src/sessions/context.test.ts
+git add packages/hundredfold/src/sessions/context.ts packages/hundredfold/src/sessions/context.test.ts
 git commit -m "fix(context): address operator in second person in COO identity"
 ```
 
@@ -170,8 +170,8 @@ git commit -m "fix(context): address operator in second person in COO identity"
 ## Task 3: `buildOnboardingContext` gated on `onboarded`
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/context.ts` (replace `buildEvolutionContext` ~655; update call-site ~157)
-- Test: `packages/jinn/src/sessions/context.test.ts` (extend)
+- Modify: `packages/hundredfold/src/sessions/context.ts` (replace `buildEvolutionContext` ~655; update call-site ~157)
+- Test: `packages/hundredfold/src/sessions/context.test.ts` (extend)
 
 **Interfaces:**
 - Consumes: `buildOnboardingContext(opts: { portalName: string; operatorName?: string; onboarded: boolean }): string | null`
@@ -198,7 +198,7 @@ test("onboarding context greets by name and forbids re-asking it", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd packages/jinn && pnpm test context`
+Run: `cd packages/hundredfold && pnpm test context`
 Expected: FAIL ("buildOnboardingContext is not a function").
 
 - [ ] **Step 3: Replace `buildEvolutionContext` with `buildOnboardingContext`**
@@ -248,13 +248,13 @@ Replace the `buildEvolutionContext(portalName)` block:
 
 - [ ] **Step 5: Run tests + full suite**
 
-Run: `cd packages/jinn && pnpm test context` then `pnpm test`
+Run: `cd packages/hundredfold && pnpm test context` then `pnpm test`
 Expected: PASS (no other test referenced `buildEvolutionContext`; if any does, update it).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/jinn/src/sessions/context.ts packages/jinn/src/sessions/context.test.ts
+git add packages/hundredfold/src/sessions/context.ts packages/hundredfold/src/sessions/context.test.ts
 git commit -m "feat(context): operator-aware onboarding context gated on portal.onboarded"
 ```
 
@@ -263,8 +263,8 @@ git commit -m "feat(context): operator-aware onboarding context gated on portal.
 ## Task 4: Persist engine/model/effort in `completeOnboarding`
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts` (POST `/api/onboarding`, ~1716)
-- Test: `packages/jinn/src/gateway/__tests__/onboarding.test.ts` (extend)
+- Modify: `packages/hundredfold/src/gateway/api.ts` (POST `/api/onboarding`, ~1716)
+- Test: `packages/hundredfold/src/gateway/__tests__/onboarding.test.ts` (extend)
 
 **Interfaces:**
 - Consumes: POST body now also accepts `{ engine?: string; model?: string; effortLevel?: string }`.
@@ -299,7 +299,7 @@ test("engine choice sets default + per-engine model/effort", () => {
 
 - [ ] **Step 2: Run test to verify it passes (policy lock)**
 
-Run: `cd packages/jinn && pnpm test onboarding`
+Run: `cd packages/hundredfold && pnpm test onboarding`
 Expected: PASS.
 
 - [ ] **Step 3: Wire the helper into the POST handler**
@@ -338,7 +338,7 @@ In the POST `/api/onboarding` handler, extend body destructuring and the `update
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/api.ts packages/jinn/src/gateway/__tests__/onboarding.test.ts
+git add packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/gateway/__tests__/onboarding.test.ts
 git commit -m "feat(onboarding): completeOnboarding persists engine/model/effort as global default"
 ```
 
@@ -347,16 +347,16 @@ git commit -m "feat(onboarding): completeOnboarding persists engine/model/effort
 ## Task 5: `jinn create` success-verification + EOF-safe prompt
 
 **Files:**
-- Modify: `packages/jinn/src/cli/create.ts` (after `execFileSync(setup)`, before register/success)
-- Modify: `packages/jinn/src/cli/setup.ts` (`prompt()` resolves on stdin `close`)
-- Test: `packages/jinn/src/cli/__tests__/create-verify.test.ts`
+- Modify: `packages/hundredfold/src/cli/create.ts` (after `execFileSync(setup)`, before register/success)
+- Modify: `packages/hundredfold/src/cli/setup.ts` (`prompt()` resolves on stdin `close`)
+- Test: `packages/hundredfold/src/cli/__tests__/create-verify.test.ts`
 
 **Interfaces:**
 - Produces: `instanceHomeIsPopulated(home: string): boolean` — true iff `config.yaml` exists in `home`.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/jinn/src/cli/__tests__/create-verify.test.ts`:
+Create `packages/hundredfold/src/cli/__tests__/create-verify.test.ts`:
 
 ```ts
 import { test, expect } from "vitest";
@@ -376,7 +376,7 @@ test("empty/half-built home is not considered populated", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd packages/jinn && pnpm test create-verify`
+Run: `cd packages/hundredfold && pnpm test create-verify`
 Expected: FAIL ("instanceHomeIsPopulated is not exported").
 
 - [ ] **Step 3: Add the guard in `create.ts`**
@@ -418,13 +418,13 @@ function prompt(question: string, defaultValue?: string): Promise<string> {
 
 - [ ] **Step 5: Run test + manual EOF check**
 
-Run: `cd packages/jinn && pnpm test create-verify` → PASS.
+Run: `cd packages/hundredfold && pnpm test create-verify` → PASS.
 Manual: `printf '' | node dist/bin/jinn.js create eoftest` (after build) must NOT print "created successfully" with an empty home; clean up with `jinn nuke eoftest`.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/jinn/src/cli/create.ts packages/jinn/src/cli/setup.ts packages/jinn/src/cli/__tests__/create-verify.test.ts
+git add packages/hundredfold/src/cli/create.ts packages/hundredfold/src/cli/setup.ts packages/hundredfold/src/cli/__tests__/create-verify.test.ts
 git commit -m "fix(cli): verify setup populated home before declaring create success; EOF-safe prompt"
 ```
 
@@ -433,7 +433,7 @@ git commit -m "fix(cli): verify setup populated home before declaring create suc
 ## Task 6: Rewrite the onboarding skill (gamified playbook)
 
 **Files:**
-- Rewrite: `packages/jinn/template/skills/onboarding/SKILL.md`
+- Rewrite: `packages/hundredfold/template/skills/onboarding/SKILL.md`
 
 **Interfaces:** none (Markdown playbook the COO follows; acceptance is the E2E run in Task 10).
 
@@ -485,13 +485,13 @@ Recap what's set up (employee, skill, any cron), point them to where things live
 
 - [ ] **Step 2: Leak-grep the staged template change**
 
-Run: `cd packages/jinn && pnpm test privacy-guard` — the repo's privacy-guard test scans `template/` (and `docs/`, `src/`) for blocked private names and personal paths; it MUST pass. Also eyeball the staged `SKILL.md` for any real personal names or absolute home paths.
+Run: `cd packages/hundredfold && pnpm test privacy-guard` — the repo's privacy-guard test scans `template/` (and `docs/`, `src/`) for blocked private names and personal paths; it MUST pass. Also eyeball the staged `SKILL.md` for any real personal names or absolute home paths.
 Expected: privacy-guard test passes.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/jinn/template/skills/onboarding/SKILL.md
+git add packages/hundredfold/template/skills/onboarding/SKILL.md
 git commit -m "feat(onboarding): gamified multi-beat setup skill (hatch employee, demo delegation, first cron)"
 ```
 

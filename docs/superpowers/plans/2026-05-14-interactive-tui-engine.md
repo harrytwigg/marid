@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-05-14-interactive-tui-engine-design.md`
 
-**Test commands:** single file - `npx tsx --test packages/jinn/src/<path>.test.ts`; full daemon suite - `pnpm --filter @jinnjinn-cli test`; typecheck - `pnpm --filter @jinnjinn-cli typecheck`.
+**Test commands:** single file - `npx tsx --test packages/hundredfold/src/<path>.test.ts`; full daemon suite - `pnpm --filter @jinnjinn-cli test`; typecheck - `pnpm --filter @jinnjinn-cli typecheck`.
 
 > **Assumptions to revisit after Phase 0** are tagged **[SPIKE-DEP]**. If a Phase 0 finding contradicts an assumption, update the affected task before implementing it.
 
@@ -81,9 +81,9 @@ git commit -m "spike: identify cost and rate-limit data sources for interactive 
 ### Task 1.1: Extend config types + defaulting
 
 **Files:**
-- Modify: `packages/jinn/src/shared/types.ts:385-387` (the `engines` block) and `:384` (`gateway`)
-- Modify: `packages/jinn/src/shared/config.ts`
-- Test: `packages/jinn/src/shared/config.test.ts`
+- Modify: `packages/hundredfold/src/shared/types.ts:385-387` (the `engines` block) and `:384` (`gateway`)
+- Modify: `packages/hundredfold/src/shared/config.ts`
+- Test: `packages/hundredfold/src/shared/config.test.ts`
 
 - [ ] **Step 1: Extend the `JinnConfig` types.** In `types.ts`, change the `claude` engine type and add interactive knobs:
 
@@ -111,7 +111,7 @@ claude: {
 - [ ] **Step 2: Write the failing test** for a `normalizeConfig` helper:
 
 ```ts
-// packages/jinn/src/shared/config.test.ts
+// packages/hundredfold/src/shared/config.test.ts
 import test from "node:test";
 import assert from "node:assert/strict";
 import { normalizeClaudeEngineConfig } from "./config.js";
@@ -138,7 +138,7 @@ test("normalizeClaudeEngineConfig keeps a valid interactive mode and applies tim
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `npx tsx --test packages/jinn/src/shared/config.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/shared/config.test.ts`
 Expected: FAIL - `normalizeClaudeEngineConfig` not exported.
 
 - [ ] **Step 4: Implement `normalizeClaudeEngineConfig`** in `config.ts`:
@@ -164,7 +164,7 @@ export function normalizeClaudeEngineConfig(raw: ClaudeEngineConfig): Required<P
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `npx tsx --test packages/jinn/src/shared/config.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/shared/config.test.ts`
 Expected: PASS (3 tests).
 
 - [ ] **Step 6: Apply normalization in `loadConfig`.** In `config.ts`, after `yaml.load`, normalize the claude engine block:
@@ -188,14 +188,14 @@ Then update the two `engine.run({...})` call sites to pass it: `manager.ts` `run
 
 ```bash
 pnpm --filter @jinnjinn-cli typecheck
-git add packages/jinn/src/shared/types.ts packages/jinn/src/shared/config.ts packages/jinn/src/shared/config.test.ts packages/jinn/src/sessions/manager.ts packages/jinn/src/gateway/api.ts
+git add packages/hundredfold/src/shared/types.ts packages/hundredfold/src/shared/config.ts packages/hundredfold/src/shared/config.test.ts packages/hundredfold/src/sessions/manager.ts packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(config): interactive engine config keys + normalization + EngineRunOpts.source"
 ```
 
 ### Task 1.2: Add `mode: headless` to the setup default config
 
 **Files:**
-- Modify: `packages/jinn/src/cli/setup.ts` (the `DEFAULT_CONFIG` literal - search for `claude:` under `engines:`)
+- Modify: `packages/hundredfold/src/cli/setup.ts` (the `DEFAULT_CONFIG` literal - search for `claude:` under `engines:`)
 
 - [ ] **Step 1: Locate and update.** In `setup.ts`, find the `DEFAULT_CONFIG` YAML/object literal's `engines.claude` block and add `mode: headless` explicitly so new installs are unambiguous.
 
@@ -203,15 +203,15 @@ git commit -m "feat(config): interactive engine config keys + normalization + En
 
 ```bash
 pnpm --filter @jinnjinn-cli typecheck
-git add packages/jinn/src/cli/setup.ts
+git add packages/hundredfold/src/cli/setup.ts
 git commit -m "feat(setup): emit explicit engines.claude.mode in default config"
 ```
 
 ### Task 1.3: Add `node-pty` dependency + `gateway.json` paths
 
 **Files:**
-- Modify: `packages/jinn/package.json` (dependencies)
-- Modify: `packages/jinn/src/shared/paths.ts`
+- Modify: `packages/hundredfold/package.json` (dependencies)
+- Modify: `packages/hundredfold/src/shared/paths.ts`
 
 - [ ] **Step 1: Add dependency.** Run `pnpm --filter @jinnjinn-cli add node-pty`. Verify it installs a prebuild (no compiler error). Record the resolved version.
 
@@ -229,15 +229,15 @@ export const HOOK_RELAY_SCRIPT = path.join(JINN_HOME, "hook-relay.mjs");
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/jinn/package.json packages/jinn/pnpm-lock.yaml packages/jinn/src/shared/paths.ts pnpm-lock.yaml
+git add packages/hundredfold/package.json packages/hundredfold/pnpm-lock.yaml packages/hundredfold/src/shared/paths.ts pnpm-lock.yaml
 git commit -m "chore: add node-pty dependency and interactive-engine paths"
 ```
 
 ### Task 1.4: `gateway-info.ts` - write/read `gateway.json`
 
 **Files:**
-- Create: `packages/jinn/src/gateway/gateway-info.ts`
-- Test: `packages/jinn/src/gateway/gateway-info.test.ts`
+- Create: `packages/hundredfold/src/gateway/gateway-info.ts`
+- Test: `packages/hundredfold/src/gateway/gateway-info.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -268,7 +268,7 @@ test("readGatewayInfo returns null when the file is missing", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx tsx --test packages/jinn/src/gateway/gateway-info.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/gateway/gateway-info.test.ts`
 Expected: FAIL - module not found.
 
 - [ ] **Step 3: Implement**
@@ -312,13 +312,13 @@ export function updateGatewayPtyPids(file: string, ptyPids: number[]): void {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx tsx --test packages/jinn/src/gateway/gateway-info.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/gateway/gateway-info.test.ts`
 Expected: PASS (2 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/gateway-info.ts packages/jinn/src/gateway/gateway-info.test.ts
+git add packages/hundredfold/src/gateway/gateway-info.ts packages/hundredfold/src/gateway/gateway-info.test.ts
 git commit -m "feat(gateway): gateway.json writer/reader for hook-relay discovery"
 ```
 
@@ -329,8 +329,8 @@ git commit -m "feat(gateway): gateway.json writer/reader for hook-relay discover
 ### Task 2.1: `claude-settings.ts` - per-session settings file + trust seeding
 
 **Files:**
-- Create: `packages/jinn/src/shared/claude-settings.ts`
-- Test: `packages/jinn/src/shared/claude-settings.test.ts`
+- Create: `packages/hundredfold/src/shared/claude-settings.ts`
+- Test: `packages/hundredfold/src/shared/claude-settings.test.ts`
 
 **[SPIKE-DEP]** If Task 0.2 found ARG_MAX is real, `buildSessionSettings` must accept and embed `appendSystemPrompt`. The code below already supports it.
 
@@ -376,7 +376,7 @@ test("seedTrust is idempotent and uses the realpath", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx tsx --test packages/jinn/src/shared/claude-settings.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/shared/claude-settings.test.ts`
 Expected: FAIL - module not found.
 
 - [ ] **Step 3: Implement**
@@ -456,20 +456,20 @@ export function seedTrust(claudeJsonPath: string, projectDir: string): void {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx tsx --test packages/jinn/src/shared/claude-settings.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/shared/claude-settings.test.ts`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/shared/claude-settings.ts packages/jinn/src/shared/claude-settings.test.ts
+git add packages/hundredfold/src/shared/claude-settings.ts packages/hundredfold/src/shared/claude-settings.test.ts
 git commit -m "feat: per-session Claude settings file + trust seeding helpers"
 ```
 
 ### Task 2.2: The hook-relay script
 
 **Files:**
-- Create: `packages/jinn/assets/hook-relay.mjs` (source-of-truth, copied to `JINN_HOME` at boot)
+- Create: `packages/hundredfold/assets/hook-relay.mjs` (source-of-truth, copied to `JINN_HOME` at boot)
 
 - [ ] **Step 1: Write the relay script.** It is invoked by Claude Code as `node hook-relay.mjs <jinnSessionId>`, reads the hook JSON on stdin, and POSTs to the gateway. It must never throw (exit 0 always) and must not block Claude.
 
@@ -504,20 +504,20 @@ async function main() {
 main().catch(() => {}).finally(() => process.exit(0));
 ```
 
-- [ ] **Step 2: Manual smoke test.** `echo '{"hook_event_name":"Stop","session_id":"x"}' | JINN_HOME=/tmp node packages/jinn/assets/hook-relay.mjs jinn-test` - confirm it exits 0 cleanly even with no gateway running (the `fetch` rejection is swallowed).
+- [ ] **Step 2: Manual smoke test.** `echo '{"hook_event_name":"Stop","session_id":"x"}' | JINN_HOME=/tmp node packages/hundredfold/assets/hook-relay.mjs jinn-test` - confirm it exits 0 cleanly even with no gateway running (the `fetch` rejection is swallowed).
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/jinn/assets/hook-relay.mjs
+git add packages/hundredfold/assets/hook-relay.mjs
 git commit -m "feat: Claude Code hook-relay script"
 ```
 
 ### Task 2.3: Hook payload buffer + resolver registry
 
 **Files:**
-- Create: `packages/jinn/src/gateway/hook-registry.ts`
-- Test: `packages/jinn/src/gateway/hook-registry.test.ts`
+- Create: `packages/hundredfold/src/gateway/hook-registry.ts`
+- Test: `packages/hundredfold/src/gateway/hook-registry.test.ts`
 
 This module solves the hook-vs-`run()` race: it buffers hook payloads for sessions whose resolver isn't registered yet, and drains the buffer on registration.
 
@@ -566,7 +566,7 @@ test("HookRegistry drops buffered hooks past TTL", async () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx tsx --test packages/jinn/src/gateway/hook-registry.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/gateway/hook-registry.test.ts`
 Expected: FAIL - module not found.
 
 - [ ] **Step 3: Implement**
@@ -622,22 +622,22 @@ export class HookRegistry {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx tsx --test packages/jinn/src/gateway/hook-registry.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/gateway/hook-registry.test.ts`
 Expected: PASS (4 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/hook-registry.ts packages/jinn/src/gateway/hook-registry.test.ts
+git add packages/hundredfold/src/gateway/hook-registry.ts packages/hundredfold/src/gateway/hook-registry.test.ts
 git commit -m "feat(gateway): hook payload buffer + resolver registry (race-safe)"
 ```
 
 ### Task 2.4: `/api/internal/hook` endpoint
 
 **Files:**
-- Create: `packages/jinn/src/gateway/hook-endpoint.ts`
-- Modify: `packages/jinn/src/gateway/api.ts` (route registration in `handleApiRequest`)
-- Test: `packages/jinn/src/gateway/hook-endpoint.test.ts`
+- Create: `packages/hundredfold/src/gateway/hook-endpoint.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts` (route registration in `handleApiRequest`)
+- Test: `packages/hundredfold/src/gateway/hook-endpoint.test.ts`
 
 - [ ] **Step 1: Read `api.ts:285-340`** to confirm the `matchRoute` helper, `readJsonBody`, and where in the `if` chain to insert the new route. Note the `ApiContext` shape.
 
@@ -681,7 +681,7 @@ test("handleHookPost delivers a valid hook to the registry and returns 200", () 
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `npx tsx --test packages/jinn/src/gateway/hook-endpoint.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/gateway/hook-endpoint.test.ts`
 Expected: FAIL - module not found.
 
 - [ ] **Step 4: Implement `hook-endpoint.ts`**
@@ -718,7 +718,7 @@ export function handleHookPost(
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `npx tsx --test packages/jinn/src/gateway/hook-endpoint.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/gateway/hook-endpoint.test.ts`
 Expected: PASS (3 tests).
 
 - [ ] **Step 6: Wire the route into `api.ts`.** In `handleApiRequest`, near the other route blocks, add (using the `HookRegistry` instance and gateway secret which must be on `ApiContext` - add them there; populate at server boot in Task 6.x):
@@ -741,7 +741,7 @@ if (method === "POST" && pathname === "/api/internal/hook") {
 
 ```bash
 pnpm --filter @jinnjinn-cli typecheck
-git add packages/jinn/src/gateway/hook-endpoint.ts packages/jinn/src/gateway/hook-endpoint.test.ts packages/jinn/src/gateway/api.ts
+git add packages/hundredfold/src/gateway/hook-endpoint.ts packages/hundredfold/src/gateway/hook-endpoint.test.ts packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(gateway): /api/internal/hook endpoint with loopback+secret auth"
 ```
 
@@ -752,8 +752,8 @@ git commit -m "feat(gateway): /api/internal/hook endpoint with loopback+secret a
 ### Task 3.1: Lifecycle decision logic (pure)
 
 **Files:**
-- Create: `packages/jinn/src/engines/pty-lifecycle-policy.ts`
-- Test: `packages/jinn/src/engines/pty-lifecycle-policy.test.ts`
+- Create: `packages/hundredfold/src/engines/pty-lifecycle-policy.ts`
+- Test: `packages/hundredfold/src/engines/pty-lifecycle-policy.test.ts`
 
 Split the *decision* (pure, testable) from the *process management* (Task 3.2).
 
@@ -788,7 +788,7 @@ test("idle session with nothing set dies", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx tsx --test packages/jinn/src/engines/pty-lifecycle-policy.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/engines/pty-lifecycle-policy.test.ts`
 Expected: FAIL - module not found.
 
 - [ ] **Step 3: Implement**
@@ -813,21 +813,21 @@ export function shouldStayAlive(i: LifecycleInputs): boolean {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx tsx --test packages/jinn/src/engines/pty-lifecycle-policy.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/engines/pty-lifecycle-policy.test.ts`
 Expected: PASS (6 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/engines/pty-lifecycle-policy.ts packages/jinn/src/engines/pty-lifecycle-policy.test.ts
+git add packages/hundredfold/src/engines/pty-lifecycle-policy.ts packages/hundredfold/src/engines/pty-lifecycle-policy.test.ts
 git commit -m "feat(engine): pure PTY lifecycle decision policy"
 ```
 
 ### Task 3.2: `PtyLifecycleManager`
 
 **Files:**
-- Create: `packages/jinn/src/engines/pty-lifecycle.ts`
-- Test: `packages/jinn/src/engines/pty-lifecycle.test.ts`
+- Create: `packages/hundredfold/src/engines/pty-lifecycle.ts`
+- Test: `packages/hundredfold/src/engines/pty-lifecycle.test.ts`
 
 Owns live PTY handles **keyed by `session.id`**, the per-session `--settings` file lifetime, the idle/grace timers, and the global PTY cap. The actual `node-pty` spawn happens in the engine (Task 4); the manager stores an opaque handle and a `kill` callback.
 
@@ -909,7 +909,7 @@ test("killAll kills every live PTY", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx tsx --test packages/jinn/src/engines/pty-lifecycle.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/engines/pty-lifecycle.test.ts`
 Expected: FAIL - module not found.
 
 - [ ] **Step 3: Implement**
@@ -1037,13 +1037,13 @@ export class PtyLifecycleManager {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx tsx --test packages/jinn/src/engines/pty-lifecycle.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/engines/pty-lifecycle.test.ts`
 Expected: PASS (7 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/engines/pty-lifecycle.ts packages/jinn/src/engines/pty-lifecycle.test.ts
+git add packages/hundredfold/src/engines/pty-lifecycle.ts packages/hundredfold/src/engines/pty-lifecycle.test.ts
 git commit -m "feat(engine): PtyLifecycleManager keyed on session.id"
 ```
 
@@ -1054,8 +1054,8 @@ git commit -m "feat(engine): PtyLifecycleManager keyed on session.id"
 ### Task 4.1: Transcript tailer
 
 **Files:**
-- Create: `packages/jinn/src/engines/transcript-tail.ts`
-- Test: `packages/jinn/src/engines/transcript-tail.test.ts`
+- Create: `packages/hundredfold/src/engines/transcript-tail.ts`
+- Test: `packages/hundredfold/src/engines/transcript-tail.test.ts`
 
 Parses JSONL lines into `StreamDelta`. The tailer's *parsing* is pure and testable; the *file watching* wraps `fs.watch` + incremental read.
 
@@ -1104,7 +1104,7 @@ test("ignores metadata lines and unparseable lines", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx tsx --test packages/jinn/src/engines/transcript-tail.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/engines/transcript-tail.test.ts`
 Expected: FAIL - module not found.
 
 - [ ] **Step 3: Implement**
@@ -1201,21 +1201,21 @@ export function tailTranscript(filePath: string, onDelta: (d: StreamDelta) => vo
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx tsx --test packages/jinn/src/engines/transcript-tail.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/engines/transcript-tail.test.ts`
 Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/engines/transcript-tail.ts packages/jinn/src/engines/transcript-tail.test.ts
+git add packages/hundredfold/src/engines/transcript-tail.ts packages/hundredfold/src/engines/transcript-tail.test.ts
 git commit -m "feat(engine): transcript JSONL tailer + line parser"
 ```
 
 ### Task 4.2: Build the interactive `claude` arg list (pure)
 
 **Files:**
-- Create: `packages/jinn/src/engines/interactive-args.ts`
-- Test: `packages/jinn/src/engines/interactive-args.test.ts`
+- Create: `packages/hundredfold/src/engines/interactive-args.ts`
+- Test: `packages/hundredfold/src/engines/interactive-args.test.ts`
 
 **[SPIKE-DEP]** Adjust the flag list per Task 0.2 findings (`--effort`/`--chrome` interactive compatibility; system prompt via settings file vs argv).
 
@@ -1259,7 +1259,7 @@ test("attachments are appended to the prompt text", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx tsx --test packages/jinn/src/engines/interactive-args.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/engines/interactive-args.test.ts`
 Expected: FAIL - module not found.
 
 - [ ] **Step 3: Implement**
@@ -1299,25 +1299,25 @@ export function buildInteractiveArgs(o: InteractiveArgsOpts): string[] {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx tsx --test packages/jinn/src/engines/interactive-args.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/engines/interactive-args.test.ts`
 Expected: PASS (4 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/engines/interactive-args.ts packages/jinn/src/engines/interactive-args.test.ts
+git add packages/hundredfold/src/engines/interactive-args.ts packages/hundredfold/src/engines/interactive-args.test.ts
 git commit -m "feat(engine): interactive claude arg-list builder with flag parity"
 ```
 
 ### Task 4.3: `InteractiveClaudeEngine`
 
 **Files:**
-- Create: `packages/jinn/src/engines/claude-interactive.ts`
-- Test: `packages/jinn/src/engines/claude-interactive.test.ts`
+- Create: `packages/hundredfold/src/engines/claude-interactive.ts`
+- Test: `packages/hundredfold/src/engines/claude-interactive.test.ts`
 
 This is the integration core. It implements `InterruptibleEngine`. It is **constructed with** a `PtyLifecycleManager`, a `HookRegistry`, and config (timeouts, paths, hook secret indirectly via gateway.json). Real `node-pty` spawning makes parts of this manually-tested; the **turn-completion contract** (resolver state machine) is unit-tested with injected fakes.
 
-- [ ] **Step 1: Read `packages/jinn/src/engines/claude.ts:32-104` and `packages/jinn/src/shared/types.ts:10-58`** to confirm the `InterruptibleEngine` / `EngineRunOpts` / `EngineResult` shapes the new engine must satisfy.
+- [ ] **Step 1: Read `packages/hundredfold/src/engines/claude.ts:32-104` and `packages/hundredfold/src/shared/types.ts:10-58`** to confirm the `InterruptibleEngine` / `EngineRunOpts` / `EngineResult` shapes the new engine must satisfy.
 
 - [ ] **Step 2: Write the failing test** for the turn-completion state machine. Extract it as a testable class `TurnResolver`:
 
@@ -1374,7 +1374,7 @@ test("TurnResolver settles immediately on StopFailure (does not wait for Session
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `npx tsx --test packages/jinn/src/engines/claude-interactive.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/engines/claude-interactive.test.ts`
 Expected: FAIL - module/class not found.
 
 - [ ] **Step 4: Implement `TurnResolver` + `InteractiveClaudeEngine`.** Full file:
@@ -1628,14 +1628,14 @@ export class InteractiveClaudeEngine implements InterruptibleEngine {
 
 - [ ] **Step 5: Run the unit test to verify the `TurnResolver` tests pass**
 
-Run: `npx tsx --test packages/jinn/src/engines/claude-interactive.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/engines/claude-interactive.test.ts`
 Expected: PASS (4 `TurnResolver` tests). The engine itself is integration-tested in Task 6.5.
 
 - [ ] **Step 6: Typecheck + commit**
 
 ```bash
 pnpm --filter @jinnjinn-cli typecheck
-git add packages/jinn/src/engines/claude-interactive.ts packages/jinn/src/engines/claude-interactive.test.ts
+git add packages/hundredfold/src/engines/claude-interactive.ts packages/hundredfold/src/engines/claude-interactive.test.ts
 git commit -m "feat(engine): InteractiveClaudeEngine + TurnResolver completion contract"
 ```
 
@@ -1646,8 +1646,8 @@ git commit -m "feat(engine): InteractiveClaudeEngine + TurnResolver completion c
 ### Task 5.1: Interactive cost reconstruction
 
 **Files:**
-- Create: `packages/jinn/src/engines/interactive-cost.ts`
-- Test: `packages/jinn/src/engines/interactive-cost.test.ts`
+- Create: `packages/hundredfold/src/engines/interactive-cost.ts`
+- Test: `packages/hundredfold/src/engines/interactive-cost.test.ts`
 
 **[SPIKE-DEP]** Implementation depends on Task 0.3. The code below assumes transcript `assistant` lines carry `message.usage` with `input_tokens`/`output_tokens`/`cache_*`. If Task 0.3 found that unreliable, swap the source to `~/.claude.json` `lastCost`, OR if NO source is reliable: `computeInteractiveCost` returns `null` and a startup warning is logged (handled in Task 6.x) - and budget enforcement is documented as disabled in interactive mode.
 
@@ -1702,10 +1702,10 @@ test("computeInteractiveCost produces a non-negative cost from a real transcript
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx tsx --test packages/jinn/src/engines/interactive-cost.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/engines/interactive-cost.test.ts`
 Expected: FAIL - module not found.
 
-- [ ] **Step 3: Implement.** Read `packages/jinn/src/gateway/costs.ts` and look for an existing per-model price table; if one exists, import it. If not, define a minimal `MODEL_PRICES` map here (input/output $/Mtok) with a conservative default.
+- [ ] **Step 3: Implement.** Read `packages/hundredfold/src/gateway/costs.ts` and look for an existing per-model price table; if one exists, import it. If not, define a minimal `MODEL_PRICES` map here (input/output $/Mtok) with a conservative default.
 
 ```ts
 import fs from "node:fs";
@@ -1761,21 +1761,21 @@ export function computeInteractiveCost(transcriptPath: string, model?: string): 
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx tsx --test packages/jinn/src/engines/interactive-cost.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/engines/interactive-cost.test.ts`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/engines/interactive-cost.ts packages/jinn/src/engines/interactive-cost.test.ts
+git add packages/hundredfold/src/engines/interactive-cost.ts packages/hundredfold/src/engines/interactive-cost.test.ts
 git commit -m "feat(engine): reconstruct per-turn cost from the transcript"
 ```
 
 ### Task 5.2: Rate-limit mapping from the `StopFailure` hook
 
 **Files:**
-- Create: `packages/jinn/src/engines/interactive-ratelimit.ts`
-- Test: `packages/jinn/src/engines/interactive-ratelimit.test.ts`
+- Create: `packages/hundredfold/src/engines/interactive-ratelimit.ts`
+- Test: `packages/hundredfold/src/engines/interactive-ratelimit.test.ts`
 
 Phase 0 resolved the source: the rate-limit signal is the **`StopFailure` hook** payload's `error` enum (`rate_limit | authentication_failed | billing_error | invalid_request | server_error | max_output_tokens | unknown`) - `StopFailure` fires *instead of* `Stop` when an API error ends the turn. NOT transcript scanning. This module is a pure mapping from a `StopFailure` payload to `EngineRateLimitInfo`, shaped exactly like what `ClaudeEngine` produces from `rate_limit_event` JSON, so the existing `detectRateLimit` / wait-retry-fallback machinery in `manager.ts` and `api.ts` works unchanged. (`TurnResolver` already captures the `StopFailure` payload - Task 4.3; this maps it; Task 5.3 wires it into `run()`.)
 
@@ -1806,7 +1806,7 @@ test("rateLimitFromStopFailure returns null for non-StopFailure / missing error 
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx tsx --test packages/jinn/src/engines/interactive-ratelimit.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/engines/interactive-ratelimit.test.ts`
 Expected: FAIL - module not found.
 
 - [ ] **Step 3: Implement**
@@ -1832,20 +1832,20 @@ export function rateLimitFromStopFailure(payload: HookPayload | undefined): Engi
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx tsx --test packages/jinn/src/engines/interactive-ratelimit.test.ts`
+Run: `npx tsx --test packages/hundredfold/src/engines/interactive-ratelimit.test.ts`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/engines/interactive-ratelimit.ts packages/jinn/src/engines/interactive-ratelimit.test.ts
+git add packages/hundredfold/src/engines/interactive-ratelimit.ts packages/hundredfold/src/engines/interactive-ratelimit.test.ts
 git commit -m "feat(engine): map StopFailure hook to EngineRateLimitInfo"
 ```
 
 ### Task 5.3: Wire cost & rate-limit reconstruction into `InteractiveClaudeEngine`
 
 **Files:**
-- Modify: `packages/jinn/src/engines/claude-interactive.ts` (the import block + the end of `run()`)
+- Modify: `packages/hundredfold/src/engines/claude-interactive.ts` (the import block + the end of `run()`)
 
 - [ ] **Step 1: Add the imports.** In `claude-interactive.ts`, replace the `// NOTE: cost + rate-limit ...` comment with:
 
@@ -1873,12 +1873,12 @@ import { rateLimitFromStopFailure } from "./interactive-ratelimit.js";
 
 - [ ] **Step 3: Typecheck.** `pnpm --filter @jinnjinn-cli typecheck` - clean (the modules from 5.1/5.2 now resolve).
 
-- [ ] **Step 4: Run the engine's unit test** to confirm no regression: `npx tsx --test packages/jinn/src/engines/claude-interactive.test.ts` - PASS.
+- [ ] **Step 4: Run the engine's unit test** to confirm no regression: `npx tsx --test packages/hundredfold/src/engines/claude-interactive.test.ts` - PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/engines/claude-interactive.ts
+git add packages/hundredfold/src/engines/claude-interactive.ts
 git commit -m "feat(engine): wire cost + rate-limit reconstruction into run()"
 ```
 
@@ -1889,8 +1889,8 @@ git commit -m "feat(engine): wire cost + rate-limit reconstruction into run()"
 ### Task 6.1: Boot wiring - engine selection, gateway.json, hook relay, trust
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/server.ts` (engine construction ~`:133`, `ApiContext` ~`:157`, cleanup ~`:738-760`)
-- Modify: `packages/jinn/src/gateway/api.ts` (`ApiContext` type - add `hookRegistry`, `hookSecret`)
+- Modify: `packages/hundredfold/src/gateway/server.ts` (engine construction ~`:133`, `ApiContext` ~`:157`, cleanup ~`:738-760`)
+- Modify: `packages/hundredfold/src/gateway/api.ts` (`ApiContext` type - add `hookRegistry`, `hookSecret`)
 
 - [ ] **Step 1: Read `gateway/server.ts:120-200` and `:730-770`** to find where `ClaudeEngine` is constructed, where `ApiContext` is assembled, and the `cleanup()` shutdown closure.
 
@@ -1937,20 +1937,20 @@ if (claudeCfg.mode === "interactive") {
 
 - [ ] **Step 5: In `cleanup()`**, ensure `claudeEngine.killAll()` runs (it already does via the engines map - confirm the interactive engine is in that map) and delete `GATEWAY_INFO_FILE`.
 
-- [ ] **Step 6: Typecheck + manual boot test.** `pnpm --filter @jinnjinn-cli build && JINN_HOME=~/.jinn node packages/jinn/dist/bin/jinn.js start` with `engines.claude.mode: interactive` in config - confirm the log says "INTERACTIVE mode", `~/.jinn/gateway.json` exists with a `secret`, `~/.jinn/hook-relay.mjs` exists, and `~/.claude.json` has the JINN_HOME trust entry. Stop the gateway; confirm `gateway.json` is removed.
+- [ ] **Step 6: Typecheck + manual boot test.** `pnpm --filter @jinnjinn-cli build && JINN_HOME=~/.jinn node packages/hundredfold/dist/bin/jinn.js start` with `engines.claude.mode: interactive` in config - confirm the log says "INTERACTIVE mode", `~/.jinn/gateway.json` exists with a `secret`, `~/.jinn/hook-relay.mjs` exists, and `~/.claude.json` has the JINN_HOME trust entry. Stop the gateway; confirm `gateway.json` is removed.
 
 - [ ] **Step 7: Commit**
 
 ```bash
 pnpm --filter @jinnjinn-cli typecheck
-git add packages/jinn/src/gateway/server.ts packages/jinn/src/gateway/api.ts
+git add packages/hundredfold/src/gateway/server.ts packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(gateway): boot wiring for interactive engine (gateway.json, trust, relay)"
 ```
 
 ### Task 6.2: Hook endpoint → resolver delivery (verify integration)
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts` (the route block from Task 2.4 - confirm it reads `context.hookRegistry` / `context.hookSecret`)
+- Modify: `packages/hundredfold/src/gateway/api.ts` (the route block from Task 2.4 - confirm it reads `context.hookRegistry` / `context.hookSecret`)
 
 - [ ] **Step 1: Confirm the route block** added in Task 2.4 references the now-populated `context.hookRegistry` and `context.hookSecret`. Fix any reference.
 
@@ -1959,16 +1959,16 @@ git commit -m "feat(gateway): boot wiring for interactive engine (gateway.json, 
 - [ ] **Step 3: Commit** (only if Step 1 required a change)
 
 ```bash
-git add packages/jinn/src/gateway/api.ts
+git add packages/hundredfold/src/gateway/api.ts
 git commit -m "fix(gateway): wire hook endpoint to populated context"
 ```
 
 ### Task 6.3: `releaseSession` wiring - delete / reset / engine-change / org-change
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts` (`:446`, `:464`, `:479`, `:609`, `:777` - the `isAlive`→`kill` call sites)
-- Modify: `packages/jinn/src/sessions/manager.ts` (`resetSession` ~`:835`; the `engineOverride` swap ~`:40-101`)
-- Modify: `packages/jinn/src/gateway/server.ts` (`onOrgChange` handler)
+- Modify: `packages/hundredfold/src/gateway/api.ts` (`:446`, `:464`, `:479`, `:609`, `:777` - the `isAlive`→`kill` call sites)
+- Modify: `packages/hundredfold/src/sessions/manager.ts` (`resetSession` ~`:835`; the `engineOverride` swap ~`:40-101`)
+- Modify: `packages/hundredfold/src/gateway/server.ts` (`onOrgChange` handler)
 
 - [ ] **Step 1: Read each of the five `api.ts` call sites** that do `if (isInterruptibleEngine(engine) && engine.isAlive(id)) engine.kill(id)`. For DELETE / reset / batch-delete, change them to **always** call `engine.kill(id)` (the interactive `kill()` is a no-op-safe `releaseSession` + resolver-settle; the headless `kill()` already no-ops when not alive). For interrupt-on-new-message (`:777`), gate on `isTurnRunning` if the engine exposes it (feature-detect: `"isTurnRunning" in engine`), else fall back to `isAlive`.
 
@@ -1984,21 +1984,21 @@ git commit -m "fix(gateway): wire hook endpoint to populated context"
 
 ```bash
 pnpm --filter @jinnjinn-cli typecheck
-git add packages/jinn/src/gateway/api.ts packages/jinn/src/sessions/manager.ts packages/jinn/src/gateway/server.ts
+git add packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/sessions/manager.ts packages/hundredfold/src/gateway/server.ts
 git commit -m "feat: route session teardown through releaseSession; fix resetSession engine kill"
 ```
 
 ### Task 6.4: Settings-file lifecycle - stop cleaning it in `runSession` finally
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/manager.ts:746` (the `cleanupMcpConfigFile` call in `finally`)
+- Modify: `packages/hundredfold/src/sessions/manager.ts:746` (the `cleanupMcpConfigFile` call in `finally`)
 
 - [ ] **Step 1: Read `manager.ts:736-748`** (the `finally` block). The `--settings` file must NOT be cleaned here (a warm PTY needs it across turns). Confirm only `cleanupMcpConfigFile` is called here, not any settings-file cleanup. The interactive engine's settings file is cleaned by `PtyLifecycleManager.onCleanup` (wired in Task 6.1) - no change needed here unless a settings cleanup was mistakenly added. Add a code comment noting the settings file is PTY-lifetime, not turn-lifetime.
 
 - [ ] **Step 2: Commit** (if a comment/change was made)
 
 ```bash
-git add packages/jinn/src/sessions/manager.ts
+git add packages/hundredfold/src/sessions/manager.ts
 git commit -m "docs(manager): note --settings file is PTY-lifetime not turn-lifetime"
 ```
 
@@ -2031,8 +2031,8 @@ git commit -m "spike: confirm end-to-end interactive turn bills against interact
 ### Task 7.1: Dedicated `/ws/pty/:sessionId` channel
 
 **Files:**
-- Create: `packages/jinn/src/gateway/pty-ws.ts`
-- Modify: `packages/jinn/src/gateway/server.ts` (the `upgrade` handler ~`:631`)
+- Create: `packages/hundredfold/src/gateway/pty-ws.ts`
+- Modify: `packages/hundredfold/src/gateway/server.ts` (the `upgrade` handler ~`:631`)
 
 - [ ] **Step 1: Read `server.ts:540-640`** - the existing `WebSocketServer`, `wsClients` set, `emit()`, and the `upgrade` handler that accepts only `/ws`.
 
@@ -2074,7 +2074,7 @@ Implement the body fully: maintain a per-session ring buffer of recent PTY outpu
 
 ```bash
 pnpm --filter @jinnjinn-cli typecheck
-git add packages/jinn/src/gateway/pty-ws.ts packages/jinn/src/gateway/server.ts packages/jinn/src/engines/claude-interactive.ts
+git add packages/hundredfold/src/gateway/pty-ws.ts packages/hundredfold/src/gateway/server.ts packages/hundredfold/src/engines/claude-interactive.ts
 git commit -m "feat(gateway): dedicated /ws/pty channel + per-session scrollback buffer"
 ```
 
@@ -2301,8 +2301,8 @@ git commit -m "feat(web): keep recently-viewed chats mounted for snappy switchin
 
 **Files:**
 - Modify: `packages/web/src/app/chat/page.tsx` (toolbar) + a new `PUT /api/sessions/:id` field
-- Modify: `packages/jinn/src/gateway/api.ts` (the `PUT/PATCH /api/sessions/:id` handler)
-- Modify: `packages/jinn/src/sessions/registry.ts` (`UpdateSessionFields` - add `keepAlive`; the `Session` type already needs a `keepAlive` column - add a migration)
+- Modify: `packages/hundredfold/src/gateway/api.ts` (the `PUT/PATCH /api/sessions/:id` handler)
+- Modify: `packages/hundredfold/src/sessions/registry.ts` (`UpdateSessionFields` - add `keepAlive`; the `Session` type already needs a `keepAlive` column - add a migration)
 
 - [ ] **Step 1: Add a `keep_alive` column** to the `sessions` table via a migration (follow `migrateSessionsSchema` in `registry.ts:159`). Add `keepAlive: boolean` to the `Session` type and `UpdateSessionFields`.
 
@@ -2316,7 +2316,7 @@ git commit -m "feat(web): keep recently-viewed chats mounted for snappy switchin
 
 ```bash
 pnpm --filter @jinnjinn-cli typecheck
-git add packages/jinn/src/sessions/registry.ts packages/jinn/src/gateway/api.ts packages/jinn/src/engines/claude-interactive.ts packages/web/src/app/chat/page.tsx
+git add packages/hundredfold/src/sessions/registry.ts packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/engines/claude-interactive.ts packages/web/src/app/chat/page.tsx
 git commit -m "feat: per-session KEEP ALIVE control (DB column + API + web toggle)"
 ```
 
@@ -2327,7 +2327,7 @@ git commit -m "feat: per-session KEEP ALIVE control (DB column + API + web toggl
 ### Task 8.1: Route `forkClaudeSession` through the interactive engine
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/fork.ts`
+- Modify: `packages/hundredfold/src/sessions/fork.ts`
 
 - [ ] **Step 1: Read `fork.ts`** in full - note the current `claude --resume <id> --fork-session --print -p …` invocation (`:27`).
 
@@ -2341,7 +2341,7 @@ git commit -m "feat: per-session KEEP ALIVE control (DB column + API + web toggl
 
 ```bash
 pnpm --filter @jinnjinn-cli typecheck
-git add packages/jinn/src/sessions/fork.ts
+git add packages/hundredfold/src/sessions/fork.ts
 git commit -m "feat(fork): interactive-mode fork bills as cli and releases source PTY"
 ```
 
@@ -2352,7 +2352,7 @@ git commit -m "feat(fork): interactive-mode fork bills as cli and releases sourc
 ### Task 9.1: Orphan-PTY reaping on boot
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/server.ts` (boot sequence, near `recoverStaleSessions`)
+- Modify: `packages/hundredfold/src/gateway/server.ts` (boot sequence, near `recoverStaleSessions`)
 
 - [ ] **Step 1: On boot, before writing the fresh `gateway.json`**, read the *old* `gateway.json` if present. For each pid in `ptyPids` (and the old gateway `pid`), if the process is still alive and is a `claude`/relay process, `process.kill(pid, "SIGTERM")`. This reaps PTYs orphaned by a prior crash.
 
@@ -2363,7 +2363,7 @@ git commit -m "feat(fork): interactive-mode fork bills as cli and releases sourc
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/server.ts packages/jinn/src/engines/pty-lifecycle.ts
+git add packages/hundredfold/src/gateway/server.ts packages/hundredfold/src/engines/pty-lifecycle.ts
 git commit -m "feat(gateway): reap orphaned PTYs on boot via gateway.json pids"
 ```
 

@@ -78,7 +78,7 @@ const RULE_CASES = [
   {
     rule: "hardcoded-home",
     triggers: {
-      "packages/hundredfold/src/thing.ts": 'export const home = path.join(os.homedir(), ".jinn");\n',
+      "packages/hundredfold/src/thing.ts": 'export const home = path.join(os.homedir(), ".hundredfold");\n',
     },
     passes: {
       "packages/hundredfold/src/engines/other.ts":
@@ -296,7 +296,7 @@ test("a suppression with no reason still suppresses, and is named as unaudited",
   assert.equal(totalViolations(stdout), 0, stdout)
   assert.equal(status, 0)
   assert.match(stdout, /1 suppression \(1 unaudited\)/)
-  assert.match(stdout, /^ {2}packages\/jinn\/src\/thing\.ts:1 {2}personal-path$/m)
+  assert.match(stdout, /^ {2}packages\/hundredfold\/src\/thing\.ts:1 {2}personal-path$/m)
 })
 
 test("diff mode judges added lines only, never the debt already in the file", () => {
@@ -311,7 +311,7 @@ test("diff mode judges added lines only, never the debt already in the file", ()
   const diffRun = check(root, "--diff", "main")
   assert.equal(totalViolations(diffRun.stdout), 1, diffRun.stdout)
   assert.equal(diffRun.status, 1)
-  assert.match(diffRun.stdout, /^packages\/jinn\/src\/thing\.ts:4$/m)
+  assert.match(diffRun.stdout, /^packages\/hundredfold\/src\/thing\.ts:4$/m)
 
   // The three it ignored are violations, not lines the rule simply misses.
   assert.equal(totalViolations(check(root, "--all").stdout), 4)

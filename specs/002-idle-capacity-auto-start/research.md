@@ -5,7 +5,7 @@ Each entry: the question, what was found (with where), and the decision it led t
 ## R1. Is the Claude limits collector already callable outside the dashboard?
 
 **Found**: yes, three ways before this feature. `collectClaudeLimits`
-(`packages/jinn/src/shared/engine-limits-claude.ts:232`) is a plain async function; the CLI
+(`packages/hundredfold/src/shared/engine-limits-claude.ts:232`) is a plain async function; the CLI
 runs it as `jinn limits --json --engine claude` (`cli/limits.ts:78`); the gateway serves it at
 `GET /api/engine-limits` (`gateway/api.ts:4499`) and re-reads it every 15 minutes for the
 health store (`gateway/background-refresh.ts:41`). Each window carries `resetsAt` (unix

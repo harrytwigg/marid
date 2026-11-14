@@ -21,8 +21,8 @@
 ### Task 1: Lock current template doctrine in tests
 
 **Files:**
-- Modify: `packages/jinn/src/shared/__tests__/template-company-doctrine.test.ts`
-- Modify: `packages/jinn/template/CLAUDE.md`
+- Modify: `packages/hundredfold/src/shared/__tests__/template-company-doctrine.test.ts`
+- Modify: `packages/hundredfold/template/CLAUDE.md`
 
 **Interfaces:**
 - Consumes: the canonical shipped Markdown template.
@@ -55,9 +55,9 @@ Run the same focused Vitest command. Expected: PASS.
 ### Task 2: Make the 0.26.0 migration reachable and complete
 
 **Files:**
-- Modify: `packages/jinn/src/cli/__tests__/migrate-prompt.test.ts`
-- Modify: `packages/jinn/package.json`
-- Modify: `packages/jinn/template/migrations/0.26.0/MIGRATION.md`
+- Modify: `packages/hundredfold/src/cli/__tests__/migrate-prompt.test.ts`
+- Modify: `packages/hundredfold/package.json`
+- Modify: `packages/hundredfold/template/migrations/0.26.0/MIGRATION.md`
 
 **Interfaces:**
 - Consumes: `scanMigrationPrompts()`'s existing `(fromVersion, packageVersion]` contract and the real package version.
@@ -65,7 +65,7 @@ Run the same focused Vitest command. Expected: PASS.
 
 - [ ] **Step 1: Write failing real-package reachability/composition tests**
 
-Read `packages/jinn/package.json`, scan the real template migrations from `0.25.0` to that version, and assert that `0.26.0` is reachable rather than future. Compose it and assert the prompt covers MCP, Todos, Workflows, Triggers, manager-visible skip-level delegation, board/raw-HTTP replacement, preservation of custom content, CLAUDE/AGENTS consistency, and the correct 0.26.0 marker.
+Read `packages/hundredfold/package.json`, scan the real template migrations from `0.25.0` to that version, and assert that `0.26.0` is reachable rather than future. Compose it and assert the prompt covers MCP, Todos, Workflows, Triggers, manager-visible skip-level delegation, board/raw-HTTP replacement, preservation of custom content, CLAUDE/AGENTS consistency, and the correct 0.26.0 marker.
 
 - [ ] **Step 2: Run the focused migration test and verify RED**
 
@@ -75,7 +75,7 @@ Expected: FAIL because package `0.25.0` cannot reach migration `0.26.0` and the 
 
 - [ ] **Step 3: Align the package and migration**
 
-Set `packages/jinn/package.json` to `0.26.0`. Update `MIGRATION.md` so its exact release marker is no longer conditional; explicitly replace board/raw-HTTP-first doctrine, add Trigger and manager-visible skip-level wording, preserve local customizations, handle canonical/symlinked AGENTS safely, and remove obsolete service-menu claims. Reference shipped source paths only where the prompt provides a resolvable location.
+Set `packages/hundredfold/package.json` to `0.26.0`. Update `MIGRATION.md` so its exact release marker is no longer conditional; explicitly replace board/raw-HTTP-first doctrine, add Trigger and manager-visible skip-level wording, preserve local customizations, handle canonical/symlinked AGENTS safely, and remove obsolete service-menu claims. Reference shipped source paths only where the prompt provides a resolvable location.
 
 - [ ] **Step 4: Run the focused migration test and verify GREEN**
 

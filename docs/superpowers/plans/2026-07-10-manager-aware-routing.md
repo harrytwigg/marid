@@ -24,8 +24,8 @@
 ### Task 1: Resolve and surface manager visibility
 
 **Files:**
-- Create: `packages/jinn/src/gateway/manager-visibility.ts`
-- Test: `packages/jinn/src/gateway/__tests__/manager-visibility.test.ts`
+- Create: `packages/hundredfold/src/gateway/manager-visibility.ts`
+- Test: `packages/hundredfold/src/gateway/__tests__/manager-visibility.test.ts`
 
 **Interfaces:**
 - Consumes: `resolveOrgHierarchy(roster)`, `searchSessionsFiltered({ employee })`, `notifyManagerVisibility`, and `appendWorkItemEvent`.
@@ -112,10 +112,10 @@ Expected: PASS with skip-level, direct-report, same-manager, no-session fallback
 ### Task 2: Send visibility through the durable notification route
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/callbacks.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/sessions/__tests__/callbacks.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/delegations-route.test.ts`
+- Modify: `packages/hundredfold/src/sessions/callbacks.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/sessions/__tests__/callbacks.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/delegations-route.test.ts`
 
 **Interfaces:**
 - Consumes: `_sendRaw(sessionId, message, displayMessage, structured)` and the delegation's resolved roster, child session, Todo, and delegator session.
@@ -173,7 +173,7 @@ Expected: PASS with one skip-level signal, no direct-report signal, unchanged em
 ### Task 3: Update doctrine and integrate
 
 **Files:**
-- Modify: `packages/jinn/template/CLAUDE.md`
+- Modify: `packages/hundredfold/template/CLAUDE.md`
 
 **Interfaces:**
 - Consumes: the existing Delegation doctrine section.

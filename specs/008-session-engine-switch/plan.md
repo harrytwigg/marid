@@ -5,7 +5,7 @@
 
 ## What already exists (Principle VII)
 
-Lines verified against `origin/main` at `f5334300`. `G/` = `packages/jinn/src/`,
+Lines verified against `origin/main` at `f5334300`. `G/` = `packages/hundredfold/src/`,
 `W/` = `packages/web/src/`.
 
 | `path:line` | What it is | Used / rejected |
@@ -62,7 +62,7 @@ Lines verified against `origin/main` at `f5334300`. `G/` = `packages/jinn/src/`,
 | `W/components/chat/model-selector-row.tsx:230` | `profilesEnabled` only in `new` mode | lifted |
 | `W/components/chat/chat-pane.tsx:613`, `:615` | `allowProfiles={!sessionId}`, `employeeRemote={selectedEmployeeRemote}` (new-chat employee) | both changed for existing chats |
 | `W/lib/api.ts:669` | `updateSession` body type | gains `profile` |
-| `packages/jinn/template/CLAUDE.md:72` | "Long sessions: self-compaction" teaching | gains the switch |
+| `packages/hundredfold/template/CLAUDE.md:72` | "Long sessions: self-compaction" teaching | gains the switch |
 | `docs/session-fallback-mode.md:71` | "Starting on a chosen profile" (creation-only) | updated |
 
 ## Summary
@@ -79,7 +79,7 @@ selector gains profile choice for existing chats and an always-on engine/profile
 
 ## Technical Context
 
-**Language/Version**: TypeScript, Node 24 (gateway `packages/jinn`), React + Vite (web `packages/web`)
+**Language/Version**: TypeScript, Node 24 (gateway `packages/hundredfold`), React + Vite (web `packages/web`)
 **Primary Dependencies**: existing only
 **Storage**: SQLite `sessions` row and `transport_meta` JSON; no schema change
 **Testing**: vitest (gateway, web), Playwright e2e (`e2e/claude-profiles`), fake engines (`scripts/fake-providers/`)
@@ -237,7 +237,7 @@ runs and boot replay (`callback-queue-recovery.ts:85`) come through here.
 description clause; the handler forwards them. Template `CLAUDE.md:72` gains: how to switch
 (fields, `profile: ""` for own login, `engine: "?"` to get the list) and that the switch
 compacts first. The unreleased migration bundle is regenerated with the repo's
-`migration:generate` script (`packages/jinn/package.json:35`, `packages/jinn/scripts/instance-migration-bundle.mjs`).
+`migration:generate` script (`packages/hundredfold/package.json:35`, `packages/hundredfold/scripts/instance-migration-bundle.mjs`).
 
 ### D10. Web (`W/components/chat/*`)
 

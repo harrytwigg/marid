@@ -11,24 +11,24 @@ Verified against `origin/main` @ `11c3fc36`.
 
 | `path:line` | What it is | Use here |
 | --- | --- | --- |
-| `packages/jinn/src/mcp/server.ts:201` | `handleMcpRequest`: pure JSON-RPC dispatch for `initialize` / `ping` / `tools/list` / `tools/call`, with tool errors returned as results rather than protocol errors | **Reuse as is.** The HTTP transport is a new caller of this function, not a second implementation |
-| `packages/jinn/src/mcp/server.ts:117` | `buildTools`: the default 75-tool set (pinned by name at `packages/jinn/src/mcp/__tests__/server.test.ts:90`), plus two attempt-only Workflow tools | The remote profile (FR-010) is a filter over this list, so there is no second copy of any tool |
-| `packages/jinn/src/mcp/server.ts:273` | `runJinnMcpServer`: the stdio transport (newline-delimited JSON-RPC) | Stays as is. The HTTP transport sits beside it |
-| `packages/jinn/src/mcp/server.ts:96` | `DEFAULT_PROTOCOL_VERSION = "2025-06-18"`, echoing whatever version the client asks for | Streamable HTTP is defined from 2025-03-26 onwards. Claude's connectors build against 2025-11-25, and the current spec revision is 2026-07-28. Echoing an unknown version is a latent bug over HTTP (plan: negotiate against a supported list) |
-| `packages/jinn/src/mcp/server.ts:41` | `resolveServerToken`: the stdio server reads the **gateway bearer** from env or `gateway.json` | Must **not** be the remote credential (FR-004) |
-| `packages/jinn/src/mcp/identity.ts:73` | `TOOL_CALL_HEADER`: marks a gateway call as coming from an MCP tool | Remote calls carry it, so the gateway never treats them as the operator |
-| `packages/jinn/src/gateway/session-comm-guards.ts:333` | `resolveCallerIdentity`: operator / session / unidentified-tool / unauthenticated | Where the connector principal (FR-012) has to fit |
-| `packages/jinn/src/gateway/approval-authority.ts:228` | An **operator** caller may decide an `operatorOnly` approval | **Why FR-011 and FR-012 exist.** If the remote endpoint ran on the operator path, a model in a claude.ai chat could clear the gate that exists so no model clears it |
-| `packages/jinn/src/gateway/approval-authority.ts:242` | A **session** caller is refused on `operatorOnly`, ahead of every employee path | Covers **operator-only approvals only**. A session caller can still hold COO or manager authority, depending on its shape and rank (next section). This row does not make the principal safe by itself |
-| `packages/jinn/src/mcp/delegation-tools.ts:128` and `packages/jinn/src/mcp/session-tools.ts:281` | Delegation and own-children listing refuse a call with no caller session | FR-013: the connector needs a durable session anchor, or these tools must be left out |
-| `packages/jinn/src/mcp/identity.ts:156` and `packages/jinn/src/mcp/identity.ts:161` | `ensureSessionCapability` / `verifySessionCapability`: how a session's capability is minted and checked | The anchor for FR-013 is minted and verified here, like any session |
-| `packages/jinn/src/mcp/toolkit.ts:111` | `gatewayRequest` always stamps the tool-call marker, plus the caller session when one is set (`:112`) | The in-process hop keeps using the gateway bearer over loopback. FR-004 is about the *client's* credential, not this hop |
-| `packages/jinn/src/gateway/auth.ts:250` | `authRequiredForRequest`: public allow-list. Everything under `/api/` and `/ws` needs the gateway token | `/mcp` sits outside `/api/`, so it gets its own auth check and must fail closed on its own |
-| `packages/jinn/src/gateway/auth.ts:208` | `hasGatewayBearerAuth`: a constant-time bearer compare | The pattern for option B's connector token, not the token itself |
-| `packages/jinn/src/gateway/auth.ts:231` | `isLoopbackHost`: the loopback checks the tunnel defeats | `/mcp` must not depend on any of them |
-| `packages/jinn/src/gateway/request-handler.ts:105` | `/api/` dispatch. Everything else falls through to `serveWebUi` | `/mcp` needs its own branch **before** that fallthrough. Today an unknown path gets `200` with the SPA's `index.html` (`packages/jinn/src/gateway/server.ts:200`), which is why US3-1 specifies a `404` JSON |
-| `packages/jinn/src/gateway/request-handler.ts:91` | CORS/Origin refusal applies to `/api/` only | MCP streamable HTTP requires `Origin` validation (DNS-rebinding guard). `/mcp` needs it explicitly |
-| `packages/jinn/src/mcp/__tests__/tool-manifest-budget.test.ts:10` | `MAX_MANIFEST_TOKENS = 6133` for the **session** manifest | Unaffected: no tool is added. A remote-profile budget is not needed (claude.ai loads tools on demand) |
+| `packages/hundredfold/src/mcp/server.ts:201` | `handleMcpRequest`: pure JSON-RPC dispatch for `initialize` / `ping` / `tools/list` / `tools/call`, with tool errors returned as results rather than protocol errors | **Reuse as is.** The HTTP transport is a new caller of this function, not a second implementation |
+| `packages/hundredfold/src/mcp/server.ts:117` | `buildTools`: the default 75-tool set (pinned by name at `packages/hundredfold/src/mcp/__tests__/server.test.ts:90`), plus two attempt-only Workflow tools | The remote profile (FR-010) is a filter over this list, so there is no second copy of any tool |
+| `packages/hundredfold/src/mcp/server.ts:273` | `runJinnMcpServer`: the stdio transport (newline-delimited JSON-RPC) | Stays as is. The HTTP transport sits beside it |
+| `packages/hundredfold/src/mcp/server.ts:96` | `DEFAULT_PROTOCOL_VERSION = "2025-06-18"`, echoing whatever version the client asks for | Streamable HTTP is defined from 2025-03-26 onwards. Claude's connectors build against 2025-11-25, and the current spec revision is 2026-07-28. Echoing an unknown version is a latent bug over HTTP (plan: negotiate against a supported list) |
+| `packages/hundredfold/src/mcp/server.ts:41` | `resolveServerToken`: the stdio server reads the **gateway bearer** from env or `gateway.json` | Must **not** be the remote credential (FR-004) |
+| `packages/hundredfold/src/mcp/identity.ts:73` | `TOOL_CALL_HEADER`: marks a gateway call as coming from an MCP tool | Remote calls carry it, so the gateway never treats them as the operator |
+| `packages/hundredfold/src/gateway/session-comm-guards.ts:333` | `resolveCallerIdentity`: operator / session / unidentified-tool / unauthenticated | Where the connector principal (FR-012) has to fit |
+| `packages/hundredfold/src/gateway/approval-authority.ts:228` | An **operator** caller may decide an `operatorOnly` approval | **Why FR-011 and FR-012 exist.** If the remote endpoint ran on the operator path, a model in a claude.ai chat could clear the gate that exists so no model clears it |
+| `packages/hundredfold/src/gateway/approval-authority.ts:242` | A **session** caller is refused on `operatorOnly`, ahead of every employee path | Covers **operator-only approvals only**. A session caller can still hold COO or manager authority, depending on its shape and rank (next section). This row does not make the principal safe by itself |
+| `packages/hundredfold/src/mcp/delegation-tools.ts:128` and `packages/hundredfold/src/mcp/session-tools.ts:281` | Delegation and own-children listing refuse a call with no caller session | FR-013: the connector needs a durable session anchor, or these tools must be left out |
+| `packages/hundredfold/src/mcp/identity.ts:156` and `packages/hundredfold/src/mcp/identity.ts:161` | `ensureSessionCapability` / `verifySessionCapability`: how a session's capability is minted and checked | The anchor for FR-013 is minted and verified here, like any session |
+| `packages/hundredfold/src/mcp/toolkit.ts:111` | `gatewayRequest` always stamps the tool-call marker, plus the caller session when one is set (`:112`) | The in-process hop keeps using the gateway bearer over loopback. FR-004 is about the *client's* credential, not this hop |
+| `packages/hundredfold/src/gateway/auth.ts:250` | `authRequiredForRequest`: public allow-list. Everything under `/api/` and `/ws` needs the gateway token | `/mcp` sits outside `/api/`, so it gets its own auth check and must fail closed on its own |
+| `packages/hundredfold/src/gateway/auth.ts:208` | `hasGatewayBearerAuth`: a constant-time bearer compare | The pattern for option B's connector token, not the token itself |
+| `packages/hundredfold/src/gateway/auth.ts:231` | `isLoopbackHost`: the loopback checks the tunnel defeats | `/mcp` must not depend on any of them |
+| `packages/hundredfold/src/gateway/request-handler.ts:105` | `/api/` dispatch. Everything else falls through to `serveWebUi` | `/mcp` needs its own branch **before** that fallthrough. Today an unknown path gets `200` with the SPA's `index.html` (`packages/hundredfold/src/gateway/server.ts:200`), which is why US3-1 specifies a `404` JSON |
+| `packages/hundredfold/src/gateway/request-handler.ts:91` | CORS/Origin refusal applies to `/api/` only | MCP streamable HTTP requires `Origin` validation (DNS-rebinding guard). `/mcp` needs it explicitly |
+| `packages/hundredfold/src/mcp/__tests__/tool-manifest-budget.test.ts:10` | `MAX_MANIFEST_TOKENS = 6133` for the **session** manifest | Unaffected: no tool is added. A remote-profile budget is not needed (claude.ai loads tools on demand) |
 
 ### Authority the principal must not inherit (FR-011, FR-012)
 
@@ -37,13 +37,13 @@ workflow. That is exactly the shape the gateway treats as its own COO portal:
 
 | `path:line` | What that shape is granted |
 | --- | --- |
-| `packages/jinn/src/sessions/registry.ts:1254` | `isPortalAgentSession` = `!employee && !parentSessionId && !workflowProvenance` |
-| `packages/jinn/src/gateway/approval-authority.ts:252` | COO-decidable Todo approvals, decided as `kind: "operator"` |
-| `packages/jinn/src/gateway/approval-authority.ts:274` | Otherwise rank decides: a `manager` or `executive` employee gets routed approval powers |
-| `packages/jinn/src/gateway/workflow-decider-authority.ts:25` | COO-reserved Workflow gates |
-| `packages/jinn/src/gateway/work-item-authority.ts:47` | Owner authority over every Todo |
-| `packages/jinn/src/gateway/work-item-arming.ts:66` | Acting as the operator when arming |
-| `packages/jinn/src/gateway/api.ts:990` | States it directly: the parentless shape "carries operator-delegated authority" |
+| `packages/hundredfold/src/sessions/registry.ts:1254` | `isPortalAgentSession` = `!employee && !parentSessionId && !workflowProvenance` |
+| `packages/hundredfold/src/gateway/approval-authority.ts:252` | COO-decidable Todo approvals, decided as `kind: "operator"` |
+| `packages/hundredfold/src/gateway/approval-authority.ts:274` | Otherwise rank decides: a `manager` or `executive` employee gets routed approval powers |
+| `packages/hundredfold/src/gateway/workflow-decider-authority.ts:25` | COO-reserved Workflow gates |
+| `packages/hundredfold/src/gateway/work-item-authority.ts:47` | Owner authority over every Todo |
+| `packages/hundredfold/src/gateway/work-item-arming.ts:66` | Acting as the operator when arming |
+| `packages/hundredfold/src/gateway/api.ts:990` | States it directly: the parentless shape "carries operator-delegated authority" |
 
 So the connector principal can be neither portal-shaped nor a manager or executive
 employee. The plan has to choose a shape that satisfies the session guards (FR-013) and
@@ -53,13 +53,13 @@ fails every one of the checks above. SC-007 tests that it does.
 
 | `path:line` | What it does |
 | --- | --- |
-| `packages/jinn/src/work-items/store.ts:425` | A new Todo defaults to `backlog` |
-| `packages/jinn/src/gateway/idle-capacity-backlog.ts:35` | `skipReason`: idle-capacity auto-start passes over a backlog Todo only for the `no-auto-start` label, `autoStart:false`, a non-Claude engine override, or a pending approval. Anything else is eligible |
-| `packages/jinn/src/gateway/idle-capacity-backlog.ts:65` | Eligible Todos are started highest priority first, so a created Todo can jump the queue |
-| `packages/jinn/src/shared/idle-capacity-config.ts:59` | `IDLE_CAPACITY_OPT_OUT_LABEL = "no-auto-start"` |
-| `packages/jinn/src/mcp/label-tools.ts:25` | `label_work_item` has a `remove` mode, which could strip the opt-out label |
-| `packages/jinn/src/gateway/todo-comment-steering.ts:120` | `forwardToDelegatedSession`: a Todo comment is forwarded as a prompt into the newest live session delegated to that Todo |
-| `packages/jinn/src/gateway/todo-comment-steering.ts:129` | The only author it skips is the target itself (and system authors at `:128`). A connector author would steer |
+| `packages/hundredfold/src/work-items/store.ts:425` | A new Todo defaults to `backlog` |
+| `packages/hundredfold/src/gateway/idle-capacity-backlog.ts:35` | `skipReason`: idle-capacity auto-start passes over a backlog Todo only for the `no-auto-start` label, `autoStart:false`, a non-Claude engine override, or a pending approval. Anything else is eligible |
+| `packages/hundredfold/src/gateway/idle-capacity-backlog.ts:65` | Eligible Todos are started highest priority first, so a created Todo can jump the queue |
+| `packages/hundredfold/src/shared/idle-capacity-config.ts:59` | `IDLE_CAPACITY_OPT_OUT_LABEL = "no-auto-start"` |
+| `packages/hundredfold/src/mcp/label-tools.ts:25` | `label_work_item` has a `remove` mode, which could strip the opt-out label |
+| `packages/hundredfold/src/gateway/todo-comment-steering.ts:120` | `forwardToDelegatedSession`: a Todo comment is forwarded as a prompt into the newest live session delegated to that Todo |
+| `packages/hundredfold/src/gateway/todo-comment-steering.ts:129` | The only author it skips is the target itself (and system authors at `:128`). A connector author would steer |
 
 So a connector that can only "write to the ledger" can still start code (create a backlog
 Todo) and prompt a running shell session (comment). FR-013a closes both for the connector
@@ -69,12 +69,12 @@ principal, or class L leaves the profile.
 
 | `path:line` | What it is |
 | --- | --- |
-| `packages/jinn/src/notes/store.ts:729` | `readKnowledgeFile`: enforces a normalised relative path inside the instance home, and **nothing else**. There is no secrets deny-list, so the credential store under the instance's secrets directory and the gateway config file that holds the bearer are both readable. QA reproduced this against a temp home |
-| `packages/jinn/src/gateway/api.ts:1818` | `/api/knowledge/read` calls it directly. This is the route behind `read_knowledge` |
-| `packages/jinn/src/gateway/files.ts:453` | `assessFileRead`'s deny-list refuses the secrets directory, `.env*` and key/token files, but **not** the gateway config file holding the bearer, nor `config.yaml`. So parity with it would not be enough to re-admit `read_knowledge` (FR-010 now requires an allow-list) |
-| `packages/jinn/src/gateway/files.ts:536` | `read_file` is safe for another reason: `readManagedFile` resolves only under the managed `files/` and `uploads/` roots (`packages/jinn/src/shared/paths.ts:103`, `:108`). The capability-bound refusal at `files.ts:109` guards delete and path-attachment only (`:1130`, `:1364`), not reads. An earlier round said otherwise |
-| `packages/jinn/src/mcp/identity.ts:156` | The secrets directory also holds the key every session capability is derived from, so `read_knowledge` as it stands lets a caller **forge any session's identity**, including the portal's |
-| `packages/jinn/src/notes/store.ts:613` | `search_knowledge` covers only `knowledge/` and `docs/` |
+| `packages/hundredfold/src/notes/store.ts:729` | `readKnowledgeFile`: enforces a normalised relative path inside the instance home, and **nothing else**. There is no secrets deny-list, so the credential store under the instance's secrets directory and the gateway config file that holds the bearer are both readable. QA reproduced this against a temp home |
+| `packages/hundredfold/src/gateway/api.ts:1818` | `/api/knowledge/read` calls it directly. This is the route behind `read_knowledge` |
+| `packages/hundredfold/src/gateway/files.ts:453` | `assessFileRead`'s deny-list refuses the secrets directory, `.env*` and key/token files, but **not** the gateway config file holding the bearer, nor `config.yaml`. So parity with it would not be enough to re-admit `read_knowledge` (FR-010 now requires an allow-list) |
+| `packages/hundredfold/src/gateway/files.ts:536` | `read_file` is safe for another reason: `readManagedFile` resolves only under the managed `files/` and `uploads/` roots (`packages/hundredfold/src/shared/paths.ts:103`, `:108`). The capability-bound refusal at `files.ts:109` guards delete and path-attachment only (`:1130`, `:1364`), not reads. An earlier round said otherwise |
+| `packages/hundredfold/src/mcp/identity.ts:156` | The secrets directory also holds the key every session capability is derived from, so `read_knowledge` as it stands lets a caller **forge any session's identity**, including the portal's |
+| `packages/hundredfold/src/notes/store.ts:613` | `search_knowledge` covers only `knowledge/` and `docs/` |
 
 This is pre-existing and harmless for local engine sessions, which already have shell. It
 becomes an exposure only with a remote door, which is why FR-010 excludes `read_knowledge`
@@ -89,7 +89,7 @@ also records every side effect. Four read-only audits ran in parallel, and every
 non-SAFE row, plus `read_file`, was then re-read by hand. Handler lines are at `11c3fc36`.
 
 **Common fact**: reads are gated only by "is this a bound session?"
-(`packages/jinn/src/gateway/api.ts:887`), never by rank or ownership. Every R tool
+(`packages/hundredfold/src/gateway/api.ts:887`), never by rank or ownership. Every R tool
 therefore reads **company-wide**, with the same reach the dashboard has.
 `list_heartbeats` is the one exception: it is scoped to the caller.
 
@@ -97,7 +97,7 @@ therefore reads **company-wide**, with the same reach the dashboard has.
 | --- | --- | --- | --- | --- |
 | `list_work_items`, `get_work_item`, `search_work_items`, `get_work_item_tree`, `list_work_item_comments`, `list_work_item_attachments`, `list_departments`, `list_labels` | GET `/api/work-items*` `api.ts:2258`, `:2427`, `:2870`, `:2879`, `:3093`; `search-api.ts:151`; `api.ts:3322`, `:3315` | bound session | none. Attachments return metadata and path only | SAFE |
 | `list_sessions` | GET `/api/sessions` `api.ts:1854`; `…/children` `:2224` | bound session, company-wide | none | SAFE (metadata) |
-| `read_session` | GET `/api/sessions/:id` `api.ts:1898` | bound session, **any** session | may schedule a transcript backfill or tail sync (`api.ts:1918`, `:1924`). The tail sync can deliver a *real*, already-pending external reply to that session's parent (`packages/jinn/src/gateway/external-turns.ts:435`). The caller does not choose the content | **T**: raw transcript of any session, tool output included |
+| `read_session` | GET `/api/sessions/:id` `api.ts:1898` | bound session, **any** session | may schedule a transcript backfill or tail sync (`api.ts:1918`, `:1924`). The tail sync can deliver a *real*, already-pending external reply to that session's parent (`packages/hundredfold/src/gateway/external-turns.ts:435`). The caller does not choose the content | **T**: raw transcript of any session, tool output included |
 | `get_message_context` | GET `/api/sessions/:id/context` `api.ts:2236` | bound session, any session | none | **T**: raw messages, any role |
 | `search_messages` | GET `/api/search/messages` `search-api.ts:73` | bound session, company-wide | none | **T**: ≤300-char snippets of any message |
 | `search_sessions` | GET `/api/search/sessions` `search-api.ts:134` | bound session | none | SAFE (summaries) |
@@ -106,22 +106,22 @@ therefore reads **company-wide**, with the same reach the dashboard has.
 | `list_notes`, `read_note` | GET `/api/notes*` `api.ts:1721`, `:1729` | bound session | none. Confined to `knowledge/` | SAFE |
 | `search_knowledge` | GET `/api/knowledge/search` `api.ts:1792` | bound session | none. `knowledge/` and `docs/` snippets only | SAFE |
 | `list_files`, `read_file` | GET `/api/files*` `files.ts:1273`, `:1225` | bound session | none. Confined to `files/` and `uploads/` (`files.ts:536`) | SAFE. Uploads hold whatever was uploaded |
-| `list_experiments`, `get_experiment` | GET `/api/experiments*` `packages/jinn/src/gateway/experiments-api.ts:183` | bound session | none | SAFE |
-| `list_workflows`, `get_workflow`, `list_workflow_runs`, `get_workflow_run` | GET `/api/workflows*` `packages/jinn/src/gateway/workflow-api.ts:133`, `:139`, `:161`, `:171` | bound session | none. `view=full` adds prompt text and node outputs | SAFE. No secret fields in the schema |
-| `list_cron_jobs`, `get_cron_run_history` | GET `/api/cron*` `packages/jinn/src/gateway/cron-api.ts:153`, `:157` | bound session | none. Prompts are excluded server-side | SAFE |
+| `list_experiments`, `get_experiment` | GET `/api/experiments*` `packages/hundredfold/src/gateway/experiments-api.ts:183` | bound session | none | SAFE |
+| `list_workflows`, `get_workflow`, `list_workflow_runs`, `get_workflow_run` | GET `/api/workflows*` `packages/hundredfold/src/gateway/workflow-api.ts:133`, `:139`, `:161`, `:171` | bound session | none. `view=full` adds prompt text and node outputs | SAFE. No secret fields in the schema |
+| `list_cron_jobs`, `get_cron_run_history` | GET `/api/cron*` `packages/hundredfold/src/gateway/cron-api.ts:153`, `:157` | bound session | none. Prompts are excluded server-side | SAFE |
 | `cost_report` | GET `/api/cost/report` `api.ts:1697` | bound session | none. SQL aggregate, no CLI spawn | SAFE |
-| `list_heartbeats` | GET `/api/heartbeats` `packages/jinn/src/gateway/heartbeat-api.ts:74` | the caller's own only | none | SAFE |
+| `list_heartbeats` | GET `/api/heartbeats` `packages/hundredfold/src/gateway/heartbeat-api.ts:74` | the caller's own only | none | SAFE |
 | `read_knowledge` | GET `/api/knowledge/read` `api.ts:1805` | bound session | reads any file in the instance home | **SECRETS**: excluded (FR-010) |
 | `create_work_item` | POST `/api/work-items` `api.ts:2287` | bound session | creates a `backlog` Todo. Idle-capacity starts it unless opted out (`idle-capacity-backlog.ts:35`), and `todo-status` triggers see it (`api.ts:2334`) | **STARTS** unless FR-013a(i) |
-| `edit_work_item` | PATCH `/api/work-items/:id` `api.ts:2441` | content fields (title, body, acceptance, priority, due) open to **any** session on **any** Todo (`packages/jinn/src/gateway/todo-edit-authority.ts:16`) | rewrites the text a later session is started with | **STEERS** unless FR-013a(ii) |
+| `edit_work_item` | PATCH `/api/work-items/:id` `api.ts:2441` | content fields (title, body, acceptance, priority, due) open to **any** session on **any** Todo (`packages/hundredfold/src/gateway/todo-edit-authority.ts:16`) | rewrites the text a later session is started with | **STEERS** unless FR-013a(ii) |
 | `comment_work_item` | POST `/api/work-items/:id/comments` `api.ts:2902` | bound session, any Todo | forwarded as a prompt to the live session (`api.ts:2940` → `todo-comment-steering.ts:120`). Its `attachments` argument reads host files like `attach_to_work_item` | **STEERS** and **HOST-FILE** unless FR-013a(iii) |
-| `label_work_item` | PUT `/api/work-items/:id/labels` `api.ts:3285` | creator, assignee or operator only (`api.ts:3293`) | a label change re-drains pending `todo-status` triggers (`packages/jinn/src/gateway/server.ts:939`) | SAFE on the connector's own Todos under FR-013a(i)–(ii) |
+| `label_work_item` | PUT `/api/work-items/:id/labels` `api.ts:3285` | creator, assignee or operator only (`api.ts:3293`) | a label change re-drains pending `todo-status` triggers (`packages/hundredfold/src/gateway/server.ts:939`) | SAFE on the connector's own Todos under FR-013a(i)–(ii) |
 | `create_label` | POST `/api/labels` `api.ts:3328` | operator or manager only | none reached | refused for the connector, so it leaves the profile |
 | `link_work_items`, `unlink_work_items` | POST/DELETE `…/relations` `api.ts:3159`, `:3193` | bound session; unlink is creator-only, enforced in `removeRelation` via its actor/operator arguments (`api.ts:3214`) | a DAG edge only. No unblock or auto-start coupling | SAFE |
 | `attach_to_work_item` | POST `…/attachments` (JSON path branch) `api.ts:3053` | bound session, any Todo | reads **any host path** passing `assessFileRead`, including the bearer file and `config.yaml`, and copies it into attachment storage. The managed-files equivalent is operator-only (`files.ts:1130`) | **HOST-FILE**: excluded |
 | `create_note` | POST `/api/notes` `api.ts:1740` | no caller check | creates a new `.md` anywhere under `knowledge/`, including per-employee files | **INSTRUCTION-WRITE** unless FR-013a(iv) |
 | `update_note` | PUT `/api/notes` `api.ts:1759` | **no caller check at all** | rewrites any Note, including the always-in-context state file and per-employee files agents load as instructions | **INSTRUCTION-WRITE** unless FR-013a(iv) |
-| `create_experiment` | POST `/api/experiments` `experiments-api.ts:205` | bound session. Cron creation is operator-only (`api.ts:938`), this is not | a `checkIn` writes a **cron job** whose prompt embeds caller text (`packages/jinn/src/experiments/check-in.ts:35`, `:85`) and later runs as the named employee | **STARTS**: moved to X |
+| `create_experiment` | POST `/api/experiments` `experiments-api.ts:205` | bound session. Cron creation is operator-only (`api.ts:938`), this is not | a `checkIn` writes a **cron job** whose prompt embeds caller text (`packages/hundredfold/src/experiments/check-in.ts:35`, `:85`) and later runs as the named employee | **STARTS**: moved to X |
 | `update_experiment` | PATCH `/api/experiments/:id` `experiments-api.ts:210` | bound session | rewrites an existing check-in cron's prompt (`check-in.ts:146`) | **STEERS**: moved to X |
 | `record_reading`, `conclude_experiment` | POST `…/readings`, `…/conclude` `experiments-api.ts:153`, `:169` | bound session | a UI event only. Conclude *disarms* the check-in | SAFE |
 

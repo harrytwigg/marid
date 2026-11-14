@@ -22,9 +22,9 @@
 ### Task 1: Durable callback identity and schema
 
 **Files:**
-- Modify: `packages/jinn/src/shared/types.ts`
-- Modify: `packages/jinn/src/sessions/registry.ts`
-- Create: `packages/jinn/src/sessions/__tests__/callback-deliveries.test.ts`
+- Modify: `packages/hundredfold/src/shared/types.ts`
+- Modify: `packages/hundredfold/src/sessions/registry.ts`
+- Create: `packages/hundredfold/src/sessions/__tests__/callback-deliveries.test.ts`
 
 **Interfaces:**
 - Produces: `Session.attemptTerminalVersion: number`, `CallbackDeliveryIdentity`, `CallbackDeliveryPayload`, `claimCallbackDelivery`, `getCallbackDelivery`, `listPendingCallbackDeliveries`, and `acceptCallbackDelivery`.
@@ -53,9 +53,9 @@
 ### Task 2: Callback sender outbox and restart recovery
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/callbacks.ts`
-- Modify: `packages/jinn/src/sessions/__tests__/callbacks.test.ts`
-- Modify: `packages/jinn/src/gateway/server.ts`
+- Modify: `packages/hundredfold/src/sessions/callbacks.ts`
+- Modify: `packages/hundredfold/src/sessions/__tests__/callbacks.test.ts`
+- Modify: `packages/hundredfold/src/gateway/server.ts`
 
 **Interfaces:**
 - Consumes: Task 1 callback delivery claim/list APIs.
@@ -80,8 +80,8 @@
 ### Task 3: Transactional API acceptance and parent wake
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/callback-reliability.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/callback-reliability.test.ts`
 
 **Interfaces:**
 - Consumes: `acceptCallbackDelivery` and the stored callback payload.

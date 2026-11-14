@@ -146,7 +146,7 @@ The `host` object is three tiers of increasing authority: `host.state` (readonly
 
 #### The host verbs
 
-Sixteen verbs, spelled identically on both halves — `PLUGIN_HOST_VERBS` in `packages/web/src/plugins/sdk/host-permissions.ts` and in `packages/jinn/src/plugins/host/permissions.ts`, and a test fails if the two drift. The client half is one `authFetch` per verb against a route the dashboard already calls; the server half is the same verb over the gateway's own in-process functions.
+Sixteen verbs, spelled identically on both halves — `PLUGIN_HOST_VERBS` in `packages/web/src/plugins/sdk/host-permissions.ts` and in `packages/hundredfold/src/plugins/host/permissions.ts`, and a test fails if the two drift. The client half is one `authFetch` per verb against a route the dashboard already calls; the server half is the same verb over the gateway's own in-process functions.
 
 | Verb | R/W | Shape |
 |---|---|---|

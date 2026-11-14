@@ -12,16 +12,16 @@ Verified against the worktree on the date above. **References rot — re-verify 
 
 | `path:line` | What it is | How this plan uses it |
 | --- | --- | --- |
-| `packages/jinn/src/gateway/api.ts:2828` | `GET /api/work-items/:id/sessions` | Extended with `?tree=1`. No new route. |
-| `packages/jinn/src/gateway/api.ts:1159` | `serializeSessionList` — calls `listSessions()`, a **full session-table read, on every call** | The tree is an extra in-memory pass over an array this handler already builds. This is why R1 chose the server. |
-| `packages/jinn/src/gateway/api.ts:1128` | `serializeSession` returns `{ ...session }` | `parentSessionId` / `workItemRole` already reach the browser; nothing new goes on the wire. |
-| `packages/jinn/src/sessions/registry.ts:1422` | `listSessionsByWorkItem` | The tree roots. |
-| `packages/jinn/src/sessions/registry.ts:145` | `parentSessionId` off `parent_session_id` | The tree edge. |
-| `packages/jinn/src/sessions/registry.ts:136` | `workItemRole` off `work_item_role` | FR-006 — review is **already in the database**. |
-| `packages/jinn/src/work-items/link-role.ts:51` | `resolveDelegationLinkRole` | Where the review role is decided; nothing to add. |
-| `packages/jinn/src/work-items/link-role.ts:22` | `toWorkItemLinkRole` — NULL means `execute` | The node's `role` default. |
-| `packages/jinn/src/sessions/delegated-activity.ts:13` | `buildDelegatedActivityIndex` — *"graph cycles are contained"* | The cycle rule the tree walk reuses rather than re-inventing (FR-007). |
-| `packages/jinn/src/sessions/migrate.ts:87` | `idx_sessions_parent` | Makes the parent edge an indexed read if a query is ever preferred to the in-memory pass. |
+| `packages/hundredfold/src/gateway/api.ts:2828` | `GET /api/work-items/:id/sessions` | Extended with `?tree=1`. No new route. |
+| `packages/hundredfold/src/gateway/api.ts:1159` | `serializeSessionList` — calls `listSessions()`, a **full session-table read, on every call** | The tree is an extra in-memory pass over an array this handler already builds. This is why R1 chose the server. |
+| `packages/hundredfold/src/gateway/api.ts:1128` | `serializeSession` returns `{ ...session }` | `parentSessionId` / `workItemRole` already reach the browser; nothing new goes on the wire. |
+| `packages/hundredfold/src/sessions/registry.ts:1422` | `listSessionsByWorkItem` | The tree roots. |
+| `packages/hundredfold/src/sessions/registry.ts:145` | `parentSessionId` off `parent_session_id` | The tree edge. |
+| `packages/hundredfold/src/sessions/registry.ts:136` | `workItemRole` off `work_item_role` | FR-006 — review is **already in the database**. |
+| `packages/hundredfold/src/work-items/link-role.ts:51` | `resolveDelegationLinkRole` | Where the review role is decided; nothing to add. |
+| `packages/hundredfold/src/work-items/link-role.ts:22` | `toWorkItemLinkRole` — NULL means `execute` | The node's `role` default. |
+| `packages/hundredfold/src/sessions/delegated-activity.ts:13` | `buildDelegatedActivityIndex` — *"graph cycles are contained"* | The cycle rule the tree walk reuses rather than re-inventing (FR-007). |
+| `packages/hundredfold/src/sessions/migrate.ts:87` | `idx_sessions_parent` | Makes the parent edge an indexed read if a query is ever preferred to the in-memory pass. |
 | `packages/web/src/hooks/use-query-invalidation.ts:112` | `['work-item-sessions']` **prefix** invalidation, pushed by `session:started`/`created` (:174), `updated` (:181), `deleted` (:191) | **FR-009 costs no code** — a key under that prefix inherits live updates. |
 | `packages/web/src/routes/todos/task-page/task-page.tsx:477` | `navigate('/?session=<id>')` | The navigation every node reuses (FR-002). |
 | `packages/web/src/routes/todos/task-page/props-rail.tsx:196` | `rail-dispatch-session` | The affordance the tree sits beside; its behaviour is the model. |
@@ -31,9 +31,9 @@ Verified against the worktree on the date above. **References rot — re-verify 
 | `path:line` | What it is | Why not |
 | --- | --- | --- |
 | `packages/web/src/lib/api.ts:796` | `getSessionChildren` — plumbed to the browser, **zero callers in `packages/web/src`** | Walking the tree with it is one round trip per node, unbounded in depth (R1). It stays uncalled. |
-| `packages/jinn/src/gateway/api.ts:2216` | `GET /api/sessions/:id/children` | Same reason — it is the per-node route; the tree is assembled server-side in one pass instead. |
+| `packages/hundredfold/src/gateway/api.ts:2216` | `GET /api/sessions/:id/children` | Same reason — it is the per-node route; the tree is assembled server-side in one pass instead. |
 | `packages/web/src/components/peek/peek-stack.tsx` | stacked peek surface | The ask is to *switch* to the session; the rail already navigates (R10). |
-| `packages/jinn/src/mcp/delegation-tools.ts:26` | *"`jinn_request_review` is deliberately ABSENT"* | Confirms review arrives on the delegation edge — there is no second edge to traverse (R9). |
+| `packages/hundredfold/src/mcp/delegation-tools.ts:26` | *"`jinn_request_review` is deliberately ABSENT"* | Confirms review arrives on the delegation edge — there is no second edge to traverse (R9). |
 
 ### The finding that shapes the plan
 
@@ -47,7 +47,7 @@ Read from `size-baseline.json` (`"limit": 300`) and `node scripts/ratchet.mjs` o
 
 | File | Lines | Budget | Headroom |
 | --- | --- | --- | --- |
-| `packages/jinn/src/gateway/api.ts` | 5186 | 5114 | **−72 (already over)** |
+| `packages/hundredfold/src/gateway/api.ts` | 5186 | 5114 | **−72 (already over)** |
 | `packages/web/src/routes/todos/task-page/task-page.tsx` | 586 | 586 | **0** |
 | `packages/web/src/routes/todos/task-page/activity.tsx` | 556 | 556 | **0** |
 | `packages/web/src/routes/todos/task-page/props-rail.tsx` | 297 | 300 (limit) | **3** |
@@ -79,7 +79,7 @@ tree component whose query key inherits the existing live-invalidation prefix.
 
 **Target Platform**: local gateway + browser UI
 
-**Project Type**: pnpm/turbo monorepo — gateway (`packages/jinn`) + web (`packages/web`)
+**Project Type**: pnpm/turbo monorepo — gateway (`packages/hundredfold`) + web (`packages/web`)
 
 **Performance Goals**: a 50-node tree renders and expands without a perceived stall (SC-005); one HTTP request per Todo page load, not one per node
 
@@ -100,7 +100,7 @@ tree component whose query key inherits the existing live-invalidation prefix.
 | **V — no speculative infrastructure** | PASS | No config key, no hook, no extension point. The bounds in R4 are constants, not settings, precisely because nothing would set them. The `?tree=1` param has one named consumer: the Todo page. |
 | **VI — tests that can fail for a reason** | PASS | Cases are cycles, bounds, unresolvable references, and role defaulting — branching logic and boundaries. `quickstart.md` explicitly bans a snapshot of the tree and a hand-copied node fixture. A regression test pins that the un-parameterised response is unchanged; that can fail for a real reason (a broken existing caller). |
 | **VII — plan opens with a `file:line` table** | PASS | Above, with rejections included and numbers sourced. |
-| **VIII — comments explain why and stay true** | PASS (obligation) | Two comments become false if written carelessly: `packages/jinn/src/sessions/registry.ts:1418`'s "execution attempts" doc comment and `delegation-tools.ts:26`'s review note both remain true under this plan — verify at implementation time that nothing here falsifies them. |
+| **VIII — comments explain why and stay true** | PASS (obligation) | Two comments become false if written carelessly: `packages/hundredfold/src/sessions/registry.ts:1418`'s "execution attempts" doc comment and `delegation-tools.ts:26`'s review note both remain true under this plan — verify at implementation time that nothing here falsifies them. |
 | **Hard constraint — public repo** | PASS | No names, keys, or absolute home paths. Example ids in the contract are synthetic. |
 
 **No Complexity Tracking entries.** No violation requires justification.
@@ -126,7 +126,7 @@ specs/001-todo-session-tree/
 ### Source Code (repository root)
 
 ```text
-packages/jinn/src/
+packages/hundredfold/src/
 ├── sessions/
 │   ├── session-tree.ts                      # NEW — traversal, bounds, node + directory shaping (≤300 lines)
 │   ├── registry.ts                          # unchanged (already over budget)
@@ -149,7 +149,7 @@ packages/web/src/
     └── session-tree.test.tsx                # NEW — do not grow task-page.test.tsx (0 headroom)
 ```
 
-**Structure Decision**: the monorepo's existing split. Traversal lives in `packages/jinn/src/sessions/`
+**Structure Decision**: the monorepo's existing split. Traversal lives in `packages/hundredfold/src/sessions/`
 beside the `parentSessionId` mapping and the cycle rule it reuses — not in `gateway/`, which is a
 transport layer and whose file is over budget. UI lives in the Todo page's own directory beside
 `props-rail.tsx`. **Every file marked "net-neutral" must not grow**; where an edit would add

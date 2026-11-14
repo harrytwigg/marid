@@ -21,8 +21,8 @@
 ### Task 1: Durable internal queue rows
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/registry.ts`
-- Modify: `packages/jinn/src/sessions/registry.test.ts`
+- Modify: `packages/hundredfold/src/sessions/registry.ts`
+- Modify: `packages/hundredfold/src/sessions/registry.test.ts`
 
 **Interfaces:**
 - Consumes: the existing `queue_items` table and queue-item CRUD helpers.
@@ -69,8 +69,8 @@ Expected: PASS.
 ### Task 2: Persist callback dispatch and prove concurrency/restart behavior
 
 **Files:**
-- Create: `packages/jinn/src/gateway/__tests__/callback-reliability.test.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
+- Create: `packages/hundredfold/src/gateway/__tests__/callback-reliability.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
 
 **Interfaces:**
 - Consumes: `enqueueQueueItem(..., { internal: true })`, `dispatchWebSessionRun`, `resumePendingWebQueueItems`, and `SessionQueue`.

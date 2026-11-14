@@ -498,9 +498,10 @@ function packPublicBaseline(cache, env) {
 function installTarball(tarball, prefix, env) {
   fs.mkdirSync(prefix, { recursive: true })
   run("npm", ["install", "--global", "--prefix", prefix, "--ignore-scripts", "--no-audit", "--no-fund", tarball], { env: { ...env, npm_config_prefix: prefix } })
-  const cli = path.join(prefix, "lib", "node_modules", "jinn-cli", "dist", "bin", "hundredfold.js")
-  if (!fs.existsSync(cli)) throw new Error(`Installed package has no CLI: ${cli}`)
   const packageRoot = path.join(prefix, "lib", "node_modules", "jinn-cli")
+  // `hundredfold.js`, or the old name in a release from before the rename.
+  const cli = ["hundredfold.js", "jinn.js" /* rename:keep */].map((name) => path.join(packageRoot, "dist", "bin", name)).find((file) => fs.existsSync(file))
+  if (!cli) throw new Error(`Installed package has no CLI under ${packageRoot}/dist/bin`)
   const rebuild = buildNativeDependencyRebuild(packageRoot)
   run(rebuild.command, rebuild.args, { env: { ...env, npm_config_prefix: prefix, npm_config_ignore_scripts: "false" } })
   return { cli, packageRoot }

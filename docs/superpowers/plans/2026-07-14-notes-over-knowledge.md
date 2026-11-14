@@ -27,9 +27,9 @@
 ### Task 1: Filesystem Notes domain
 
 **Files:**
-- Create: `packages/jinn/src/notes/store.ts`
-- Create: `packages/jinn/src/notes/__tests__/store.test.ts`
-- Modify: `packages/jinn/src/shared/types.ts`
+- Create: `packages/hundredfold/src/notes/store.ts`
+- Create: `packages/hundredfold/src/notes/__tests__/store.test.ts`
+- Modify: `packages/hundredfold/src/shared/types.ts`
 
 **Interfaces:**
 - Produces:
@@ -113,18 +113,18 @@ Expected: PASS with no warnings.
 ### Task 2: Notes HTTP and MCP contracts
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/knowledge-routes.test.ts` or create `packages/jinn/src/gateway/__tests__/notes-routes.test.ts`
-- Create: `packages/jinn/src/mcp/note-tools.ts`
-- Create: `packages/jinn/src/mcp/__tests__/note-tools.test.ts`
-- Modify: `packages/jinn/src/mcp/server.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/server.test.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/tool-manifest-budget.test.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/context-diet.test.ts`
-- Modify: `packages/jinn/src/shared/__tests__/template-company-doctrine.test.ts`
-- Modify: `packages/jinn/template/CLAUDE.md`
-- Modify: `packages/jinn/template/AGENTS.md`
-- Modify: `packages/jinn/template/docs/company-doctrine.md`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/knowledge-routes.test.ts` or create `packages/hundredfold/src/gateway/__tests__/notes-routes.test.ts`
+- Create: `packages/hundredfold/src/mcp/note-tools.ts`
+- Create: `packages/hundredfold/src/mcp/__tests__/note-tools.test.ts`
+- Modify: `packages/hundredfold/src/mcp/server.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/server.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/tool-manifest-budget.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/context-diet.test.ts`
+- Modify: `packages/hundredfold/src/shared/__tests__/template-company-doctrine.test.ts`
+- Modify: `packages/hundredfold/template/CLAUDE.md`
+- Modify: `packages/hundredfold/template/AGENTS.md`
+- Modify: `packages/hundredfold/template/docs/company-doctrine.md`
 
 **Interfaces:**
 - Consumes: Task 1 store functions and records.
@@ -310,7 +310,7 @@ Expected: all commands exit 0.
 - [ ] **Step 5: Stage only scoped files and leak-grep**
 
 ```bash
-git add docs/superpowers/plans/2026-07-14-notes-over-knowledge.md packages/jinn/src/notes packages/jinn/src/gateway/api.ts packages/jinn/src/gateway/__tests__/notes-routes.test.ts packages/jinn/src/mcp packages/jinn/src/shared/types.ts packages/jinn/src/shared/__tests__/template-company-doctrine.test.ts packages/jinn/template packages/web/src
+git add docs/superpowers/plans/2026-07-14-notes-over-knowledge.md packages/hundredfold/src/notes packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/gateway/__tests__/notes-routes.test.ts packages/hundredfold/src/mcp packages/hundredfold/src/shared/types.ts packages/hundredfold/src/shared/__tests__/template-company-doctrine.test.ts packages/hundredfold/template packages/web/src
 git diff --cached --check
 pnpm --filter jinn test -- src/shared/__tests__/privacy-guard.test.ts
 ```

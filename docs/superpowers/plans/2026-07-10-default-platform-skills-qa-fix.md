@@ -20,8 +20,8 @@
 ### Task 1: Lock the corrected platform contract
 
 **Files:**
-- Modify: `packages/jinn/src/shared/__tests__/template-company-doctrine.test.ts`
-- Test: `packages/jinn/src/shared/__tests__/template-company-doctrine.test.ts`
+- Modify: `packages/hundredfold/src/shared/__tests__/template-company-doctrine.test.ts`
+- Test: `packages/hundredfold/src/shared/__tests__/template-company-doctrine.test.ts`
 
 **Interfaces:**
 - Consumes: the three default `SKILL.md` playbooks.
@@ -38,9 +38,9 @@ Run `pnpm --filter jinn-cli exec vitest run src/shared/__tests__/template-compan
 ### Task 2: Correct the three playbooks
 
 **Files:**
-- Modify: `packages/jinn/template/skills/workflow/SKILL.md`
-- Modify: `packages/jinn/template/skills/todo-handling/SKILL.md`
-- Modify: `packages/jinn/template/skills/delegation/SKILL.md`
+- Modify: `packages/hundredfold/template/skills/workflow/SKILL.md`
+- Modify: `packages/hundredfold/template/skills/todo-handling/SKILL.md`
+- Modify: `packages/hundredfold/template/skills/delegation/SKILL.md`
 
 **Interfaces:**
 - Consumes: `approval-tools.ts`, approval authority and consequence code, workflow Todo mirror code, and delegation attachment validation.

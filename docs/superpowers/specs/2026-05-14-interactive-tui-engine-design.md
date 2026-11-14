@@ -107,7 +107,7 @@ engine, same `--resume` id underneath.
 
 ### Component: `InteractiveClaudeEngine`
 
-New file `packages/jinn/src/engines/claude-interactive.ts`. Implements
+New file `packages/hundredfold/src/engines/claude-interactive.ts`. Implements
 `InterruptibleEngine` - same interface as today's `ClaudeEngine`.
 
 **Spawn model.** Uses `node-pty` instead of `child_process.spawn`. The PTY gives
@@ -267,7 +267,7 @@ is sound and unchanged.
 
 ### Component: transcript tailer
 
-`packages/jinn/src/engines/transcript-tail.ts`. Given a `transcript_path` (from
+`packages/hundredfold/src/engines/transcript-tail.ts`. Given a `transcript_path` (from
 the `SessionStart` hook), tails the JSONL and maps appended lines to `StreamDelta`,
 emitting **exactly the delta shapes the web Chat UI already consumes**
 (`chat-pane.tsx` handles `text`, `text_snapshot`, `tool_use`, `tool_result`):
@@ -285,7 +285,7 @@ tool-use UI and reactions. Stops on the `Stop` hook. CLI mode does not need it
 
 ### Component: PTY lifecycle manager
 
-`packages/jinn/src/engines/pty-lifecycle.ts`. Gateway-side. Owns every live
+`packages/hundredfold/src/engines/pty-lifecycle.ts`. Gateway-side. Owns every live
 `claude` PTY process **keyed by `session.id`**, and decides - on every relevant
 event - whether each PTY should stay alive or be killed. It also owns each
 session's `--settings` file lifetime.

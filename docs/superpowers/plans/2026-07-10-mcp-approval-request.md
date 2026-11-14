@@ -21,9 +21,9 @@
 ### Task 1: Specify the MCP request contract
 
 **Files:**
-- Modify: `packages/jinn/src/mcp/__tests__/work-item-tools.test.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/server.test.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/tool-manifest-budget.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/work-item-tools.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/server.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/tool-manifest-budget.test.ts`
 
 **Interfaces:**
 - Consumes: `buildApprovalTools()` and the existing MCP HTTP test stub.
@@ -53,7 +53,7 @@ Expected: FAIL because `request_work_item_approval` is not registered.
 ### Task 2: Specify route authority, routing, idempotency, and compatibility
 
 **Files:**
-- Modify: `packages/jinn/src/mcp/__tests__/work-item-tools.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/work-item-tools.test.ts`
 
 **Interfaces:**
 - Consumes: the real in-process gateway/API/store test harness and `listWorkItemEvents`.
@@ -83,10 +83,10 @@ Expected: FAIL because the request route/tool do not exist.
 ### Task 3: Implement the route and MCP adapter
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/mcp/approval-tools.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/server.test.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/tool-manifest-budget.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/mcp/approval-tools.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/server.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/tool-manifest-budget.test.ts`
 
 **Interfaces:**
 - Consumes: `requestApproval(id, { request, target?, actor })`, `ownsWorkItem`, `authorizeWorkItemOwnerManagerOrRoot`, `gatewayRequest`, and caller capability headers.

@@ -133,7 +133,7 @@ pnpm --filter jinn-cli exec vitest run src/shared/__tests__/privacy-guard.test.t
 - [ ] **Step 1: Restart through the Jinn CLI**
 
 ```bash
-node packages/jinn/dist/bin/jinn.js restart
+node packages/hundredfold/dist/bin/jinn.js restart
 ```
 
 - [ ] **Step 2: Verify the gateway returns**

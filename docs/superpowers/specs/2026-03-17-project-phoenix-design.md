@@ -516,7 +516,7 @@ CREATE TABLE budget_events (
 
 ### 5.1 Vitest (Unit Tests)
 
-**Backend** (`packages/jinn`):
+**Backend** (`packages/hundredfold`):
 - `vitest.config.ts` - ESM mode, coverage reporter
 - Test files: `src/**/*.test.ts`
 - Key test targets:
@@ -564,7 +564,7 @@ CREATE TABLE budget_events (
 - `@playwright/test` v1.x
 - `@testing-library/react` v16.x (React 19 support)
 
-**Turborepo integration**: Add `test` and `test:e2e` scripts to both `packages/jinn/package.json` and `packages/web/package.json`. Update `turbo.json` pipeline to include `test` task. Update root `package.json` `test` script to run both packages (currently only runs `jinn-cli`).
+**Turborepo integration**: Add `test` and `test:e2e` scripts to both `packages/hundredfold/package.json` and `packages/web/package.json`. Update `turbo.json` pipeline to include `test` task. Update root `package.json` `test` script to run both packages (currently only runs `jinn-cli`).
 
 ### 5.3 GitHub Actions CI
 
@@ -650,11 +650,11 @@ jobs:
 - `packages/web/src/components/chat/chat-tabs.tsx` - tab bar
 - `packages/web/src/components/chat/chat-split.tsx` - split view container
 - `packages/web/src/app/goals/page.tsx` - goals page
-- `packages/jinn/src/gateway/goals.ts` - goals API routes
-- `packages/jinn/src/gateway/costs.ts` - cost aggregation API routes (new from scratch)
-- `packages/jinn/src/gateway/budgets.ts` - budget API routes
-- `packages/jinn/src/engines/mock.ts` - mock engine for E2E tests
-- `packages/jinn/vitest.config.ts`
+- `packages/hundredfold/src/gateway/goals.ts` - goals API routes
+- `packages/hundredfold/src/gateway/costs.ts` - cost aggregation API routes (new from scratch)
+- `packages/hundredfold/src/gateway/budgets.ts` - budget API routes
+- `packages/hundredfold/src/engines/mock.ts` - mock engine for E2E tests
+- `packages/hundredfold/vitest.config.ts`
 - `packages/web/vitest.config.ts`
 - `playwright.config.ts`
 - `e2e/` - E2E test directory
@@ -675,10 +675,10 @@ jobs:
 - `packages/web/src/app/providers.tsx` - existing ThemeProvider preserved, no changes needed
 - `packages/web/src/lib/api.ts` - wrap with React Query
 - `packages/web/package.json` - new dependencies
-- `packages/jinn/src/gateway/api.ts` - goals + budgets + cost aggregation routes
-- `packages/jinn/src/sessions/manager.ts` - budget enforcement before engine.run()
-- `packages/jinn/src/shared/types.ts` - goal + budget types
-- `packages/jinn/package.json` - vitest dependency
+- `packages/hundredfold/src/gateway/api.ts` - goals + budgets + cost aggregation routes
+- `packages/hundredfold/src/sessions/manager.ts` - budget enforcement before engine.run()
+- `packages/hundredfold/src/shared/types.ts` - goal + budget types
+- `packages/hundredfold/package.json` - vitest dependency
 - `turbo.json` - add `test` pipeline task
 - Root `package.json` - update test script to include both packages
 

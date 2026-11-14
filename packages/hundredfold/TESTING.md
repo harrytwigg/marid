@@ -1,4 +1,4 @@
-# Testing `packages/jinn`
+# Testing `packages/hundredfold`
 
 ## Run the suite with the repo's own scripts
 
@@ -7,7 +7,7 @@ pnpm test                      # whole repo, via turbo
 pnpm --filter jinn-cli test    # just this package
 ```
 
-Both load `packages/jinn/vitest.config.ts`. **Do not run `npx vitest` from the repo
+Both load `packages/hundredfold/vitest.config.ts`. **Do not run `npx vitest` from the repo
 root.** The root has no Vitest config, so Vitest falls back to defaults — no
 `globalSetup`, no `setupFiles`, and therefore no isolation guard.
 

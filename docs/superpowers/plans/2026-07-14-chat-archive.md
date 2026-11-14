@@ -21,9 +21,9 @@
 ### Task 1: Persist and query the archive state
 
 **Files:**
-- Modify: `packages/jinn/src/shared/types.ts`
-- Modify: `packages/jinn/src/sessions/registry.ts`
-- Test: `packages/jinn/src/sessions/__tests__/registry-pagination.test.ts`
+- Modify: `packages/hundredfold/src/shared/types.ts`
+- Modify: `packages/hundredfold/src/sessions/registry.ts`
+- Test: `packages/hundredfold/src/sessions/__tests__/registry-pagination.test.ts`
 
 **Interfaces:**
 - Produces: `Session.archivedAt?: string | null` and `archiveSession(id): Session | undefined` / `unarchiveSession(id): Session | undefined`.
@@ -81,8 +81,8 @@ Expected: PASS.
 ### Task 2: Add reversible gateway routes
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Test: `packages/jinn/src/gateway/__tests__/codex-home-delete-cleanup.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Test: `packages/hundredfold/src/gateway/__tests__/codex-home-delete-cleanup.test.ts`
 
 **Interfaces:**
 - Consumes: `archiveSession(id)` and `unarchiveSession(id)` from the registry.

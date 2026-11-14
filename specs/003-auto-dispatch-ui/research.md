@@ -4,7 +4,7 @@ Each entry: the question, what was found (with where), and the decision it led t
 
 ## R1. Is there a config-mutation path the page can reuse, or does it need its own?
 
-**Found**: `PUT /api/config` (`packages/jinn/src/gateway/api.ts:4530`) accepts a **partial**
+**Found**: `PUT /api/config` (`packages/hundredfold/src/gateway/api.ts:4530`) accepts a **partial**
 body — "a PUT body is partial" is stated at the merge — deep-merges it into `config.yaml`
 (`config-payload.ts:98`), runs `validateConfigShape` on the merged result (`api.ts:4579`),
 which already includes `idleCapacityProblems` (`shared/config.ts:71`), writes atomically and

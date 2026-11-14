@@ -63,7 +63,7 @@ detached helper does - eliminating the race for both orderings.
 
 ## Components
 
-### 1. `restart-entry.ts` (new) - `packages/jinn/src/gateway/restart-entry.ts`
+### 1. `restart-entry.ts` (new) - `packages/hundredfold/src/gateway/restart-entry.ts`
 
 The detached helper's entry point, modeled on `daemon-entry.ts`. Runs in its own
 reparented process:
@@ -77,14 +77,14 @@ reparented process:
 
 Compiled to `dist/src/gateway/restart-entry.js` (tsc picks it up automatically).
 
-### 2. `restartDetached()` (new) - in `packages/jinn/src/gateway/lifecycle.ts`
+### 2. `restartDetached()` (new) - in `packages/hundredfold/src/gateway/lifecycle.ts`
 
 Mirrors `startDaemon()`: resolves `restart-entry.js` via the same
 candidate-path lookup, forks it detached with `stdio:"ignore"`,
 `disconnect()` + `unref()`, passing `JINN_HOME` through the env. Returns
 immediately.
 
-### 3. `runRestart()` (new) - `packages/jinn/src/cli/restart.ts`
+### 3. `runRestart()` (new) - `packages/hundredfold/src/cli/restart.ts`
 
 ```
 export async function runRestart(opts: { port?: number }): Promise<void> {
@@ -94,7 +94,7 @@ export async function runRestart(opts: { port?: number }): Promise<void> {
 }
 ```
 
-### 4. Command registration - `packages/jinn/bin/jinn.ts`
+### 4. Command registration - `packages/hundredfold/bin/jinn.ts`
 
 Add alongside `start`/`stop`:
 

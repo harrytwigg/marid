@@ -22,9 +22,9 @@
 ### Task 1: Shared Pure Template Materialization
 
 **Files:**
-- Create: `packages/jinn/src/shared/template-materialization.ts`
-- Create: `packages/jinn/src/shared/__tests__/template-materialization.test.ts`
-- Modify: `packages/jinn/src/cli/setup.ts`
+- Create: `packages/hundredfold/src/shared/template-materialization.ts`
+- Create: `packages/hundredfold/src/shared/__tests__/template-materialization.test.ts`
+- Modify: `packages/hundredfold/src/cli/setup.ts`
 
 **Interfaces:**
 - Produces: `deriveTemplateMaterialization(config)`, `materializeTemplateText(filePath, content, inputs)`, and `findUnresolvedTemplatePlaceholders(content)`.
@@ -38,14 +38,14 @@
 ### Task 2: Audited Materialized Migration Payloads
 
 **Files:**
-- Modify: `packages/jinn/src/migrations/service.ts`
-- Modify: `packages/jinn/src/migrations/snapshot.ts`
-- Modify: `packages/jinn/src/migrations/__tests__/service.test.ts`
-- Modify: `packages/jinn/src/migrations/__tests__/snapshot.test.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/instance-migration-api.test.ts`
-- Modify: `packages/jinn/template/skills/migrate/SKILL.md`
-- Regenerate: `packages/jinn/template/migrations/0.26.0/**`
+- Modify: `packages/hundredfold/src/migrations/service.ts`
+- Modify: `packages/hundredfold/src/migrations/snapshot.ts`
+- Modify: `packages/hundredfold/src/migrations/__tests__/service.test.ts`
+- Modify: `packages/hundredfold/src/migrations/__tests__/snapshot.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/instance-migration-api.test.ts`
+- Modify: `packages/hundredfold/template/skills/migrate/SKILL.md`
+- Regenerate: `packages/hundredfold/template/migrations/0.26.0/**`
 
 **Interfaces:**
 - Produces: `MigrationMaterializationPlan` containing the exact portal inputs, their SHA-256, manifest hashes, source payload paths, and planned snapshot-relative materialized paths.
@@ -77,12 +77,12 @@
 ### Task 4: Effective-Port Detached Restart
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/restart-entry-options.ts`
-- Modify: `packages/jinn/src/gateway/restart-entry.ts`
-- Modify: `packages/jinn/src/gateway/lifecycle.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/cli/start.ts`
-- Modify: `packages/jinn/src/cli/restart.ts`
+- Modify: `packages/hundredfold/src/gateway/restart-entry-options.ts`
+- Modify: `packages/hundredfold/src/gateway/restart-entry.ts`
+- Modify: `packages/hundredfold/src/gateway/lifecycle.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/cli/start.ts`
+- Modify: `packages/hundredfold/src/cli/restart.ts`
 - Modify: focused restart/lifecycle/API tests.
 
 **Interfaces:**

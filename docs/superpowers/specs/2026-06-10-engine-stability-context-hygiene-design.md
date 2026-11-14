@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-10
 **Status:** Approved
-**Scope:** `packages/jinn` (engines, gateway, sessions, template), `packages/web` (only if reconciler events need UI handling)
+**Scope:** `packages/hundredfold` (engines, gateway, sessions, template), `packages/web` (only if reconciler events need UI handling)
 
 ## Problem
 
@@ -128,7 +128,7 @@ The static file is restructured into:
    injected session context does not name an employee. Injected employee personas
    override it by construction.
 
-Applied to `packages/jinn/template/CLAUDE.md` (fresh installs) and, by hand, to the
+Applied to `packages/hundredfold/template/CLAUDE.md` (fresh installs) and, by hand, to the
 operator's live `~/.jinn/CLAUDE.md` (preserving instance-specific custom content).
 No automated migration of user-edited CLAUDE.md files — users own that file; the
 template change benefits new installs and the release notes describe the manual step.

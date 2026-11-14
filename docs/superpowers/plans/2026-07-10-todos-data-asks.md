@@ -23,8 +23,8 @@
 ### Task 1: Paginated, filterable query substrate with true totals
 
 **Files:**
-- Modify: `packages/jinn/src/work-items/store.ts`
-- Test: `packages/jinn/src/work-items/__tests__/list-limit.test.ts`
+- Modify: `packages/hundredfold/src/work-items/store.ts`
+- Test: `packages/hundredfold/src/work-items/__tests__/list-limit.test.ts`
 
 **Interfaces:**
 - Consumes: the existing `WorkItem`, `WorkItemStatus`, `WorkItemSource`, and SQLite `work_items` table.
@@ -99,17 +99,17 @@ Run the Step 3 command. Expected: all focused tests pass.
 - [ ] **Step 6: Commit the query substrate**
 
 ```bash
-git add packages/jinn/src/work-items/store.ts packages/jinn/src/work-items/__tests__/list-limit.test.ts
+git add packages/hundredfold/src/work-items/store.ts packages/hundredfold/src/work-items/__tests__/list-limit.test.ts
 git commit -m "feat(todos): add paginated filtered work-item queries"
 ```
 
 ### Task 2: Rank schema and persisted manual ordering
 
 **Files:**
-- Modify: `packages/jinn/src/work-items/migrate.ts`
-- Modify: `packages/jinn/src/work-items/store.ts`
-- Test: `packages/jinn/src/work-items/__tests__/migrate.test.ts`
-- Test: `packages/jinn/src/work-items/__tests__/store.test.ts`
+- Modify: `packages/hundredfold/src/work-items/migrate.ts`
+- Modify: `packages/hundredfold/src/work-items/store.ts`
+- Test: `packages/hundredfold/src/work-items/__tests__/migrate.test.ts`
+- Test: `packages/hundredfold/src/work-items/__tests__/store.test.ts`
 
 **Interfaces:**
 - Consumes: the query ordering from Task 1.
@@ -175,15 +175,15 @@ Run the Step 6 command. Expected: all focused tests pass.
 - [ ] **Step 9: Commit rank persistence**
 
 ```bash
-git add packages/jinn/src/work-items/migrate.ts packages/jinn/src/work-items/store.ts packages/jinn/src/work-items/__tests__/migrate.test.ts packages/jinn/src/work-items/__tests__/store.test.ts
+git add packages/hundredfold/src/work-items/migrate.ts packages/hundredfold/src/work-items/store.ts packages/hundredfold/src/work-items/__tests__/migrate.test.ts packages/hundredfold/src/work-items/__tests__/store.test.ts
 git commit -m "feat(todos): persist manual work-item rank"
 ```
 
 ### Task 3: Gateway list/search shapes and filters
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Test: `packages/jinn/src/gateway/__tests__/work-items-route.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Test: `packages/hundredfold/src/gateway/__tests__/work-items-route.test.ts`
 
 **Interfaces:**
 - Consumes: `queryWorkItems` from Task 1 and `WorkItem.rank` from Task 2.
@@ -232,15 +232,15 @@ Run the Step 2 command. Expected: route tests pass.
 - [ ] **Step 5: Commit the API query surface**
 
 ```bash
-git add packages/jinn/src/gateway/api.ts packages/jinn/src/gateway/__tests__/work-items-route.test.ts
+git add packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/gateway/__tests__/work-items-route.test.ts
 git commit -m "feat(todos): expose totals pagination and filters"
 ```
 
 ### Task 4: Operator-only Todo metadata PATCH
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Test: `packages/jinn/src/gateway/__tests__/work-items-route.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Test: `packages/hundredfold/src/gateway/__tests__/work-items-route.test.ts`
 
 **Interfaces:**
 - Consumes: `updateWorkItem` from Task 2 and existing scoped caller identity/auth logic.
@@ -273,7 +273,7 @@ Run the Step 3 command. Expected: route tests pass.
 - [ ] **Step 6: Commit operator editing**
 
 ```bash
-git add packages/jinn/src/gateway/api.ts packages/jinn/src/gateway/__tests__/work-items-route.test.ts
+git add packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/gateway/__tests__/work-items-route.test.ts
 git commit -m "feat(todos): add operator metadata editing"
 ```
 

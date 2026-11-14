@@ -104,6 +104,12 @@ jobs:
         env:
           BASE: ${{ github.base_ref && format('origin/{0}', github.base_ref) || '' }}
 
+      # The whole tree, not the diff: the old names (Jinn, Marid) may stay only where
+      # scripts/rename-codename/rules.mjs says why. The flags go as the docs and the
+      # install and publish names are renamed.
+      - name: No old name outside the allowed places
+        run: node scripts/rename-codename.mjs --check --skip-docs --skip-distribution
+
   unit-tests:
     name: unit-tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

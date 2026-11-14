@@ -23,7 +23,7 @@ test("publishes jinn-cli from an exact version tag through npm Trusted Publishin
 
   assert.match(workflow, /github\.ref_name/)
   assert.match(workflow, /packages\/hundredfold\/package\.json/)
-  assert.match(workflow, /git\+https:\/\/github\.com\/hristo2612\/hundredfold\.git/)
+  assert.match(workflow, /git\+https:\/\/github\.com\/hristo2612\/jinn\.git/)
   assert.match(workflow, /merge-base --is-ancestor "\$TAGGED_COMMIT" refs\/remotes\/origin\/main/)
   assert.match(workflow, /npm CLI 11\.5\.1 or newer/)
 

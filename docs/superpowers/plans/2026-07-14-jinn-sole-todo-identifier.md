@@ -26,7 +26,7 @@ The next public release is the first Todo release and creates the clean model di
 Verified on 2026-07-14:
 
 - `npm view jinn-cli version dist-tags` returns `0.25.0`/`latest`; `jinn-cli@0.25.0` reports Git head `16bce2738317311482a44ec3807eca7cc3ce5de4`, equal to local `v0.25.0`.
-- That tag has no `packages/jinn/src/work-items/`, `work_items` schema, Todo API/skill, or Todo workspace migration. Its npm tarball has no Todo implementation, and a scan of all 57 published versions through `0.25.0` found none.
+- That tag has no `packages/hundredfold/src/work-items/`, `work_items` schema, Todo API/skill, or Todo workspace migration. Its npm tarball has no Todo implementation, and a scan of all 57 published versions through `0.25.0` found none.
 - Commit `2478ab832fecaef46f67bbcf37229d2b5bf4af2c` first adds the `work_items` schema on 2026-07-08. It is not an ancestor of `v0.25.0`; the tag is its ancestor.
 - The repository's staged `0.26.0` package/changelog state is unpublished and untagged.
 
@@ -36,7 +36,7 @@ This proves the public registry/tag boundary, not manually installed untagged bu
 
 | Boundary | Location | Contents |
 |---|---|---|
-| **Public, shipped** | `packages/jinn/src/**`, `packages/web/src/**`, compiled `dist/` | Clean company-prefix schema, parser, allocator, routes/surfaces, authorization, legacy-input rejection, and read-only startup refusal for nonempty prerelease data |
+| **Public, shipped** | `packages/hundredfold/src/**`, `packages/web/src/**`, compiled `dist/` | Clean company-prefix schema, parser, allocator, routes/surfaces, authorization, legacy-input rejection, and read-only startup refusal for nonempty prerelease data |
 | **Private, disposable** | repository root `tools/prerelease-todo-converter/**` only | Generic offline inventory/conversion/rehearsal tool; excluded from package `files`, bins, templates, migrations, startup, and installed assets |
 
 No public module imports the converter. It has no `jinn` command, runtime hook, network/listen code, or installed migration. `npm pack --dry-run` must prove it is absent. After the separately authorized private conversion, remove it from the release branch or archive it outside the shipped repository artifact.
@@ -45,7 +45,7 @@ No public module imports the converter. It has no `jinn` command, runtime hook, 
 
 ### Identity, schema, and startup
 
-Add `packages/jinn/src/work-items/id.ts` as the sole strict parser/formatter. Todo store, REST, MCP, delegation/approval/session tools, search-by-ID, and typed Workflow Todo fields call it before lookup or mutation. There is no legacy-to-current parser.
+Add `packages/hundredfold/src/work-items/id.ts` as the sole strict parser/formatter. Todo store, REST, MCP, delegation/approval/session tools, search-by-ID, and typed Workflow Todo fields call it before lookup or mutation. There is no legacy-to-current parser.
 
 Before WAL mode or any schema write, startup opens the database read-only and classifies it:
 

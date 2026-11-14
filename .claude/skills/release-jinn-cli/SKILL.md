@@ -5,13 +5,13 @@ description: Use when cutting a new jinn-cli release for this repo - bumping the
 
 # Releasing jinn-cli
 
-The published npm package is **`jinn-cli`** (lives in `packages/jinn`). The root
+The published npm package is **`jinn-cli`** (lives in `packages/hundredfold`). The root
 package (`jinn`) is private; `packages/web` is internal (its version isn't shipped).
-Version lives in **one place**: `packages/jinn/package.json`.
+Version lives in **one place**: `packages/hundredfold/package.json`.
 
 ## How the pieces connect
 
-- **npm**: published manually with `npm publish` from `packages/jinn`. The package
+- **npm**: published manually with `npm publish` from `packages/hundredfold`. The package
   ships `dist/` and `template/` (see its `files`), so you MUST build first.
 - **GitHub release**: created for tag `vX.Y.Z`.
 - **Homebrew**: `.github/workflows/bump-formula.yml` fires on `release: published`.
@@ -33,7 +33,7 @@ Version lives in **one place**: `packages/jinn/package.json`.
 
 3. **Bump + commit** (no `Co-Authored-By: Claude` trailer - repo convention):
    ```bash
-   # edit packages/jinn/package.json "version"
+   # edit packages/hundredfold/package.json "version"
    git commit -am "chore(release): jinn-cli vX.Y.Z"
    ```
 
@@ -41,7 +41,7 @@ Version lives in **one place**: `packages/jinn/package.json`.
    release tag, then run:
    ```bash
    PREVIOUS_TAG="$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-*' HEAD^)"
-   VERSION="$(node -p "require('./packages/jinn/package.json').version")"
+   VERSION="$(node -p "require('./packages/hundredfold/package.json').version")"
    pnpm --filter jinn-cli migration:generate -- --base-ref "$PREVIOUS_TAG" --version "$VERSION"
    pnpm --filter jinn-cli migration:check -- --base-ref "$PREVIOUS_TAG" --version "$VERSION"
    ```
@@ -51,7 +51,7 @@ Version lives in **one place**: `packages/jinn/package.json`.
 
 5. **Build + verify** from repo root:
    ```bash
-   pnpm build      # turbo build + copies packages/web/out -> packages/jinn/dist/web
+   pnpm build      # turbo build + copies packages/web/out -> packages/hundredfold/dist/web
    pnpm typecheck && pnpm test
    ```
 
@@ -59,16 +59,16 @@ Version lives in **one place**: `packages/jinn/package.json`.
    `migration:check` or any required upgrade scenario fails.
 
 6. **Publish to npm.** A gitignored npm **automation token** lives at
-   **`packages/jinn/.npmrc`** (`//registry.npmjs.org/:_authToken=...`). npm reads
+   **`packages/hundredfold/.npmrc`** (`//registry.npmjs.org/:_authToken=...`). npm reads
    it automatically when publishing from that directory, so it bypasses the
    account's interactive login + 2FA OTP. Publish:
    ```bash
-   cd packages/jinn && npm publish && cd -
+   cd packages/hundredfold && npm publish && cd -
    ```
    - This is the irreversible step - confirm with the maintainer first.
    - If publish fails with `E401`/`EOTP`, the token file is missing or revoked.
      Recreate it at npmjs.com → Access Tokens → Classic → **Automation**, then
-     write `//registry.npmjs.org/:_authToken=<token>` to `packages/jinn/.npmrc`
+     write `//registry.npmjs.org/:_authToken=<token>` to `packages/hundredfold/.npmrc`
      (it's already in `.gitignore` - never commit it).
 
 7. **Tag + push:**
@@ -86,6 +86,6 @@ Version lives in **one place**: `packages/jinn/package.json`.
    (check the bump-formula workflow run), and `npm view jinn-cli version` is X.Y.Z.
 
 ## Notes
-- Don't bump `package.json` in the root or `packages/web` - only `packages/jinn`.
+- Don't bump `package.json` in the root or `packages/web` - only `packages/hundredfold`.
 - If the formula job fails, it's almost always the npm tarball not being live yet;
   re-run the workflow once `npm view jinn-cli@X.Y.Z` resolves.

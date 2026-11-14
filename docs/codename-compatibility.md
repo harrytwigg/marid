@@ -2,7 +2,7 @@
 
 The codename is the lower-case word that names an instance's home (`~/.jinn`), its instance name (`jinn-<slug>`),
 its environment variables (`JINN_*`), its wire headers (`x-jinn-*`), its cookies, its stage directories, the
-built-in MCP server (`mcp__jinn__*`) and a browser's stored keys. `packages/jinn/src/shared/codename-constant.ts`
+built-in MCP server (`mcp__jinn__*`) and a browser's stored keys. `packages/hundredfold/src/shared/codename-constant.ts`
 holds it as one literal, and everything else is built from that.
 
 An install made before a change carries the old word in all of those places. The compatibility layer is the

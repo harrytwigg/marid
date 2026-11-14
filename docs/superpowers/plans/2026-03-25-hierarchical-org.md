@@ -15,8 +15,8 @@
 ### Task 1: Add types to `types.ts`
 
 **Files:**
-- Modify: `packages/jinn/src/shared/types.ts:195-215` (Employee interface)
-- Modify: `packages/jinn/src/shared/types.ts` (append new interfaces)
+- Modify: `packages/hundredfold/src/shared/types.ts:195-215` (Employee interface)
+- Modify: `packages/hundredfold/src/shared/types.ts` (append new interfaces)
 
 - [ ] **Step 1: Add `reportsTo` field to Employee interface**
 
@@ -75,7 +75,7 @@ Expected: PASS (new types are additive, no consumers yet)
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/jinn/src/shared/types.ts
+git add packages/hundredfold/src/shared/types.ts
 git commit -m "feat(org): add reportsTo field and hierarchy types to Employee interface"
 ```
 
@@ -84,7 +84,7 @@ git commit -m "feat(org): add reportsTo field and hierarchy types to Employee in
 ### Task 2: Parse `reportsTo` in scanner
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/org.ts:28-41` (inside scanOrg YAML extraction)
+- Modify: `packages/hundredfold/src/gateway/org.ts:28-41` (inside scanOrg YAML extraction)
 
 - [ ] **Step 1: Add `reportsTo` extraction to `scanOrg()`**
 
@@ -106,7 +106,7 @@ Expected: PASS
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/org.ts
+git add packages/hundredfold/src/gateway/org.ts
 git commit -m "feat(org): parse reportsTo field from employee YAML in scanOrg"
 ```
 
@@ -115,7 +115,7 @@ git commit -m "feat(org): parse reportsTo field from employee YAML in scanOrg"
 ### Task 3: Write failing tests for `org-hierarchy.ts`
 
 **Files:**
-- Create: `packages/jinn/src/gateway/__tests__/org-hierarchy.test.ts`
+- Create: `packages/hundredfold/src/gateway/__tests__/org-hierarchy.test.ts`
 
 - [ ] **Step 1: Create test file with all test cases**
 
@@ -416,7 +416,7 @@ Expected: FAIL - module `../org-hierarchy.js` does not exist
 - [ ] **Step 3: Commit failing tests**
 
 ```bash
-git add packages/jinn/src/gateway/__tests__/org-hierarchy.test.ts
+git add packages/hundredfold/src/gateway/__tests__/org-hierarchy.test.ts
 git commit -m "test(org): add failing tests for org hierarchy resolver"
 ```
 
@@ -425,7 +425,7 @@ git commit -m "test(org): add failing tests for org hierarchy resolver"
 ### Task 4: Implement `org-hierarchy.ts`
 
 **Files:**
-- Create: `packages/jinn/src/gateway/org-hierarchy.ts`
+- Create: `packages/hundredfold/src/gateway/org-hierarchy.ts`
 
 - [ ] **Step 1: Create the module with all exports**
 
@@ -697,7 +697,7 @@ Expected: PASS
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/org-hierarchy.ts
+git add packages/hundredfold/src/gateway/org-hierarchy.ts
 git commit -m "feat(org): implement hierarchy resolver with smart defaults, cycle detection, and warnings"
 ```
 
@@ -708,7 +708,7 @@ git commit -m "feat(org): implement hierarchy resolver with smart defaults, cycl
 ### Task 5: Update `GET /api/org` to return enriched response
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts:891-924` (GET /api/org handler)
+- Modify: `packages/hundredfold/src/gateway/api.ts:891-924` (GET /api/org handler)
 
 - [ ] **Step 1: Replace filename-scanning with scanOrg + resolver**
 
@@ -766,7 +766,7 @@ Expected: PASS
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/api.ts
+git add packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(api): enrich GET /api/org with hierarchy data and inline employee objects"
 ```
 
@@ -775,7 +775,7 @@ git commit -m "feat(api): enrich GET /api/org with hierarchy data and inline emp
 ### Task 6: Update `GET /api/org/employees/:name` with hierarchy fields
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts:927-948` (GET /api/org/employees/:name handler)
+- Modify: `packages/hundredfold/src/gateway/api.ts:927-948` (GET /api/org/employees/:name handler)
 
 - [ ] **Step 1: Replace raw YAML return with enriched response**
 
@@ -810,7 +810,7 @@ Expected: PASS
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/api.ts
+git add packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(api): add hierarchy fields to GET /api/org/employees/:name"
 ```
 
@@ -819,9 +819,9 @@ git commit -m "feat(api): add hierarchy fields to GET /api/org/employees/:name"
 ### Task 7: Update context builder - `buildOrgContext` with hierarchy
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/context.ts:44-57` (buildContext signature + org section)
-- Modify: `packages/jinn/src/sessions/context.ts:319-360` (buildOrgContext function)
-- Modify: `packages/jinn/src/sessions/context.ts:206-238` (buildEmployeeIdentity function)
+- Modify: `packages/hundredfold/src/sessions/context.ts:44-57` (buildContext signature + org section)
+- Modify: `packages/hundredfold/src/sessions/context.ts:319-360` (buildOrgContext function)
+- Modify: `packages/hundredfold/src/sessions/context.ts:206-238` (buildEmployeeIdentity function)
 
 - [ ] **Step 1: Add `hierarchy` to buildContext opts**
 
@@ -1005,7 +1005,7 @@ Expected: PASS
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/jinn/src/sessions/context.ts
+git add packages/hundredfold/src/sessions/context.ts
 git commit -m "feat(context): render org as indented tree, add reporting info to employee identity"
 ```
 
@@ -1014,8 +1014,8 @@ git commit -m "feat(context): render org as indented tree, add reporting info to
 ### Task 8: Pass hierarchy through session manager and API streaming
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/manager.ts:242-252` (buildContext call)
-- Modify: `packages/jinn/src/gateway/api.ts:1900-1919` (web streaming buildContext call)
+- Modify: `packages/hundredfold/src/sessions/manager.ts:242-252` (buildContext call)
+- Modify: `packages/hundredfold/src/gateway/api.ts:1900-1919` (web streaming buildContext call)
 
 - [ ] **Step 1: Update manager.ts to resolve hierarchy and pass it**
 
@@ -1099,7 +1099,7 @@ Expected: PASS
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/jinn/src/sessions/manager.ts packages/jinn/src/gateway/api.ts
+git add packages/hundredfold/src/sessions/manager.ts packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(context): pass resolved hierarchy to context builder from manager and API"
 ```
 

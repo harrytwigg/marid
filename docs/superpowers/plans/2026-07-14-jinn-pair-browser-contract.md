@@ -20,8 +20,8 @@
 ### Task 1: Lock the CLI-to-route authentication contract
 
 **Files:**
-- Modify: `packages/jinn/src/cli/__tests__/pair.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/auth-ux-api.test.ts`
+- Modify: `packages/hundredfold/src/cli/__tests__/pair.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/auth-ux-api.test.ts`
 
 **Interfaces:**
 - Consumes: `pairingSetupResponse(port: number)` and `formatPairingSetupInstructions(setup)` from the CLI module.
@@ -43,7 +43,7 @@ Extend the gateway bearer-rejection test to assert the same helper selects `crea
 
 - [ ] **Step 2: Run tests to verify RED**
 
-Run: `pnpm --filter jinn-cli test -- --run packages/jinn/src/cli/__tests__/pair.test.ts packages/jinn/src/gateway/__tests__/auth-ux-api.test.ts`
+Run: `pnpm --filter jinn-cli test -- --run packages/hundredfold/src/cli/__tests__/pair.test.ts packages/hundredfold/src/gateway/__tests__/auth-ux-api.test.ts`
 
 Expected: FAIL because `pairingSetupResponse` and `formatPairingSetupInstructions` do not exist yet.
 
@@ -54,8 +54,8 @@ Stage only this ticket's test hunks together with the implementation in Task 2; 
 ### Task 2: Retire bearer pairing-code creation in the CLI
 
 **Files:**
-- Modify: `packages/jinn/src/cli/pair.ts`
-- Modify: `packages/jinn/bin/jinn.ts`
+- Modify: `packages/hundredfold/src/cli/pair.ts`
+- Modify: `packages/hundredfold/bin/jinn.ts`
 
 **Interfaces:**
 - Consumes: gateway port from the existing gateway-info/config lookup.

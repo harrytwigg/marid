@@ -44,7 +44,7 @@ Run that from a real terminal. `docker compose exec` allocates a TTY by default,
 
 Model discovery caches its result, so a `Claude model discovery returned 0 models` warning can linger in the log after a successful login. `docker compose restart` re-runs discovery and reports the real count.
 
-Do not try to pass a token via `CLAUDE_CODE_OAUTH_TOKEN`. `buildEngineChildEnv` strips every `CLAUDE_CODE_*` key when spawning the engine (`packages/jinn/src/shared/child-env.ts`), so it never reaches the CLI. That env var is read by the gateway for model discovery, not by the spawned session.
+Do not try to pass a token via `CLAUDE_CODE_OAUTH_TOKEN`. `buildEngineChildEnv` strips every `CLAUDE_CODE_*` key when spawning the engine (`packages/hundredfold/src/shared/child-env.ts`), so it never reaches the CLI. That env var is read by the gateway for model discovery, not by the spawned session.
 
 ## Mounts
 
@@ -178,6 +178,6 @@ After upgrading, run `jinn migrate` as you would on a host install.
 docker compose exec jinn node -e 'console.log(require(process.env.CLAUDE_CONFIG_DIR+"/.claude.json").bypassPermissionsModeAccepted)'
 ```
 
-**Model discovery returns 0 models.** Authentication, not the container. `readClaudeOAuthToken()` in `packages/jinn/src/shared/claude-models.ts` is the single reader for the whole codebase; on Linux it expects `~/.claude/.credentials.json`. Re-run `docker compose exec jinn claude` and `/login`.
+**Model discovery returns 0 models.** Authentication, not the container. `readClaudeOAuthToken()` in `packages/hundredfold/src/shared/claude-models.ts` is the single reader for the whole codebase; on Linux it expects `~/.claude/.credentials.json`. Re-run `docker compose exec jinn claude` and `/login`.
 
 **Agent can't see a project.** It isn't mounted, or the employee's working directory still points at a host path. Check `docker compose exec jinn ls /work`.

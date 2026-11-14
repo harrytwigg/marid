@@ -12,7 +12,7 @@
 
 - Never read from, write to, start, stop, or restart the operator's live `~/.jinn` instance or port `7777` during implementation or QA.
 - The only authorized personalized-instance write is the new reusable skill at `~/.jinn/skills/jinn-upgrade-lab/`; its test runs must use disposable homes outside `~/.jinn`.
-- Preserve the existing uncommitted edits in `.claude/skills/release-jinn-cli/SKILL.md` and `packages/jinn/package.json`; inspect and merge around them rather than reverting or overwriting them.
+- Preserve the existing uncommitted edits in `.claude/skills/release-jinn-cli/SKILL.md` and `packages/hundredfold/package.json`; inspect and merge around them rather than reverting or overwriting them.
 - Do not publish npm packages, create GitHub releases, push branches, restart the live gateway, or perform any other external/shared mutation.
 - The installed package is read-only. Migration may mutate only the selected instance home after an explicit `Open with COO` action or a user-approved terminal handoff.
 - A user customization always wins over a stock template default. No user file is deleted without an explicit migration instruction and a backup.
@@ -36,15 +36,15 @@
 
 **Files:**
 
-- Create: `packages/jinn/scripts/instance-migration-bundle.mjs`
-- Create: `packages/jinn/src/cli/__tests__/instance-migration-bundle.test.ts`
-- Modify: `packages/jinn/package.json`
+- Create: `packages/hundredfold/scripts/instance-migration-bundle.mjs`
+- Create: `packages/hundredfold/src/cli/__tests__/instance-migration-bundle.test.ts`
+- Modify: `packages/hundredfold/package.json`
 - Modify: `.claude/skills/release-jinn-cli/SKILL.md`
 - Modify: `~/.jinn/skills/release/SKILL.md`
-- Regenerate: `packages/jinn/template/migrations/0.26.0/manifest.json`
-- Regenerate: `packages/jinn/template/migrations/0.26.0/MIGRATION.md`
-- Create as needed: `packages/jinn/template/migrations/0.26.0/files/base/**`
-- Create as needed: `packages/jinn/template/migrations/0.26.0/files/target/**`
+- Regenerate: `packages/hundredfold/template/migrations/0.26.0/manifest.json`
+- Regenerate: `packages/hundredfold/template/migrations/0.26.0/MIGRATION.md`
+- Create as needed: `packages/hundredfold/template/migrations/0.26.0/files/base/**`
+- Create as needed: `packages/hundredfold/template/migrations/0.26.0/files/target/**`
 
 ### Step 1: Write failing bundle-generator tests
 
@@ -82,10 +82,10 @@ pnpm --filter jinn-cli test -- src/cli/__tests__/instance-migration-bundle.test.
 Implement two modes:
 
 ```bash
-node packages/jinn/scripts/instance-migration-bundle.mjs generate \
+node packages/hundredfold/scripts/instance-migration-bundle.mjs generate \
   --base-ref v0.25.0 --version 0.26.0
 
-node packages/jinn/scripts/instance-migration-bundle.mjs check \
+node packages/hundredfold/scripts/instance-migration-bundle.mjs check \
   --base-ref v0.25.0 --version 0.26.0
 ```
 
@@ -114,21 +114,21 @@ Generate from `v0.25.0` to the candidate v0.26 template. Specifically prove the 
 ```bash
 pnpm --filter jinn-cli migration:check -- --base-ref v0.25.0 --version 0.26.0
 pnpm --filter jinn-cli test -- src/cli/__tests__/instance-migration-bundle.test.ts
-cd packages/jinn && npm pack --dry-run && cd ../..
+cd packages/hundredfold && npm pack --dry-run && cd ../..
 ```
 
 ## Task 2: Centralize pending-migration detection, composition, and completion
 
 **Files:**
 
-- Create: `packages/jinn/src/migrations/service.ts`
-- Create: `packages/jinn/src/migrations/snapshot.ts`
-- Create: `packages/jinn/src/migrations/__tests__/service.test.ts`
-- Create: `packages/jinn/src/migrations/__tests__/snapshot.test.ts`
-- Modify: `packages/jinn/src/cli/migrate-prompt.ts`
-- Modify: `packages/jinn/src/cli/migrate.ts`
-- Modify: `packages/jinn/src/shared/version.ts`
-- Modify: `packages/jinn/src/shared/paths.ts`
+- Create: `packages/hundredfold/src/migrations/service.ts`
+- Create: `packages/hundredfold/src/migrations/snapshot.ts`
+- Create: `packages/hundredfold/src/migrations/__tests__/service.test.ts`
+- Create: `packages/hundredfold/src/migrations/__tests__/snapshot.test.ts`
+- Modify: `packages/hundredfold/src/cli/migrate-prompt.ts`
+- Modify: `packages/hundredfold/src/cli/migrate.ts`
+- Modify: `packages/hundredfold/src/shared/version.ts`
+- Modify: `packages/hundredfold/src/shared/paths.ts`
 
 ### Step 1: Write failing migration-service tests
 
@@ -182,11 +182,11 @@ pnpm --filter jinn-cli test -- src/migrations/__tests__/service.test.ts src/migr
 
 **Files:**
 
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Create: `packages/jinn/src/gateway/__tests__/instance-migration-api.test.ts`
-- Modify: `packages/jinn/src/mcp/attachment.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/attachment.test.ts`
-- Modify: `packages/jinn/src/mcp/resolver.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Create: `packages/hundredfold/src/gateway/__tests__/instance-migration-api.test.ts`
+- Modify: `packages/hundredfold/src/mcp/attachment.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/attachment.test.ts`
+- Modify: `packages/hundredfold/src/mcp/resolver.ts`
 
 ### Step 1: Write failing API/auth/idempotency tests
 
@@ -220,10 +220,10 @@ pnpm --filter jinn-cli test -- src/gateway/__tests__/instance-migration-api.test
 
 **Files:**
 
-- Create: `packages/jinn/src/cli/migration-notice.ts`
-- Create: `packages/jinn/src/cli/__tests__/migration-notice.test.ts`
-- Modify: `packages/jinn/src/cli/start.ts`
-- Modify: `packages/jinn/src/cli/migrate.ts`
+- Create: `packages/hundredfold/src/cli/migration-notice.ts`
+- Create: `packages/hundredfold/src/cli/__tests__/migration-notice.test.ts`
+- Modify: `packages/hundredfold/src/cli/start.ts`
+- Modify: `packages/hundredfold/src/cli/migrate.ts`
 
 ### Step 1: Write failing color and output tests
 

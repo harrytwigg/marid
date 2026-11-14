@@ -38,11 +38,11 @@
 
 | Entry path | Current implementation | Persisted invocation | Target reporting | Todo effect |
 |---|---|---|---|---|
-| MCP `start_workflow_run` | `packages/jinn/src/mcp/workflow-tools.ts` → `POST /api/workflow-definitions/:id/run` | Verified `x-jinn-caller-session` | `reportMode` defaults to `resume`; `silent` only suppresses resumption | None |
-| MCP `run_workflow_by_name` | `packages/jinn/src/mcp/workflow-tools.ts` → `POST /api/workflow-runs/by-name` | Verified `x-jinn-caller-session` | Same behavior as every other invoking Session | None |
+| MCP `start_workflow_run` | `packages/hundredfold/src/mcp/workflow-tools.ts` → `POST /api/workflow-definitions/:id/run` | Verified `x-jinn-caller-session` | `reportMode` defaults to `resume`; `silent` only suppresses resumption | None |
+| MCP `run_workflow_by_name` | `packages/hundredfold/src/mcp/workflow-tools.ts` → `POST /api/workflow-runs/by-name` | Verified `x-jinn-caller-session` | Same behavior as every other invoking Session | None |
 | Browser Run composer | `packages/web/src/routes/workflow/run-view.tsx` → definition run route | None; authenticated operator is not a Session | Durable run and visible UI result, no session callback | None |
-| CLI `jinn workflow run` | `packages/jinn/src/cli/workflow.ts` → by-name route | None | Durable run printed by CLI, no session callback | None |
-| Managed schedule tick | `packages/jinn/src/cron/runner.ts` → `workflowCronFireHandler` | None | Durable run only | None |
+| CLI `jinn workflow run` | `packages/hundredfold/src/cli/workflow.ts` → by-name route | None | Durable run printed by CLI, no session callback | None |
+| Managed schedule tick | `packages/hundredfold/src/cron/runner.ts` → `workflowCronFireHandler` | None | Durable run only | None |
 | Manual cron fire | `POST /api/cron/:id/trigger` → the same managed Workflow fire | None | Durable run only | None |
 | Webhook/event | `POST /api/workflow-events` → `fireWorkflowEvent` | None | Durable run only | None |
 | Poll | `startPollTriggerRunner` / `runPollTriggerOnce` | None | Durable run only | None |
@@ -56,7 +56,7 @@
 |---|---|---|
 | Workflow definition create/update/duplicate/retire | `POST /api/workflow-definitions`, `PUT /api/workflow-definitions/:id`, `POST /api/workflow-definitions/:id/duplicate`, `POST /api/workflow-definitions/:id/retire`; MCP `create_workflow`, `update_workflow`, `retire_workflow`; Workflow list/editor | Definition store commits first, then one definition activity receipt and one `company:changed`; read-only plan/validate/list/get stay generic-tool-only. |
 | Workflow run start | `runWorkflowDefinitionFromHttp`, `POST /api/workflow-definitions/:id/run`, `POST /api/workflow-runs/by-name`; MCP `start_workflow_run`/`run_workflow_by_name`; browser run composer; CLI `jinn workflow run` | One durable run. Verified Session caller writes `invocation`; browser/CLI do not. Replay returns the original run/relation and never creates a second episode or receipt row. |
-| Schedule/manual cron | `workflowCronFireHandler` in `packages/jinn/src/gateway/api.ts`, installed into the cron runner by `setWorkflowCronFire` in `gateway/server.ts`, and `POST /api/cron/:id/trigger` | Invocation-less independent run, no Todo. It updates run activity surfaces through `company:changed`, not a Session callback. |
+| Schedule/manual cron | `workflowCronFireHandler` in `packages/hundredfold/src/gateway/api.ts`, installed into the cron runner by `setWorkflowCronFire` in `gateway/server.ts`, and `POST /api/cron/:id/trigger` | Invocation-less independent run, no Todo. It updates run activity surfaces through `company:changed`, not a Session callback. |
 | Event/webhook | `POST /api/workflow-events` → `fireWorkflowEvent` | Invocation-less independent run keyed by existing event/fire reference; exact replay returns the existing run. |
 | Poll | `startPollTriggerRunner` → `runPollTriggerOnce` | Invocation-less independent run. Activation approval is stored on the trigger binding and never delegated to a Todo. |
 | User-authored Todo-status trigger | `fireTodoStatusChangeWorkflows` and `replayMissedTodoStatusChangeWorkflowFires` | Reads immutable Todo event provenance as an advanced one-way input. The resulting run has no Todo ownership/link/write capability; event-id replay is idempotent. |
@@ -149,18 +149,18 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 ### Task 1: Extend the persisted chat-block contract for company activity
 
 **Files:**
-- Modify: `packages/jinn/src/shared/types.ts`
-- Modify: `packages/jinn/src/shared/blocks.ts`
-- Modify: `packages/jinn/src/sessions/registry.ts`
+- Modify: `packages/hundredfold/src/shared/types.ts`
+- Modify: `packages/hundredfold/src/shared/blocks.ts`
+- Modify: `packages/hundredfold/src/sessions/registry.ts`
 - Modify: `packages/web/src/lib/blocks.ts`
-- Create: `packages/jinn/src/shared/__tests__/fixtures/company-activity-blocks.json`
-- Create: `packages/jinn/src/shared/__tests__/company-activity-blocks.test.ts`
+- Create: `packages/hundredfold/src/shared/__tests__/fixtures/company-activity-blocks.json`
+- Create: `packages/hundredfold/src/shared/__tests__/company-activity-blocks.test.ts`
 - Create: `packages/web/src/lib/__tests__/company-activity-blocks.test.ts`
-- Modify: `packages/jinn/src/sessions/__tests__/messages-partial.test.ts`
+- Modify: `packages/hundredfold/src/sessions/__tests__/messages-partial.test.ts`
 
 **Interfaces:**
 - Extend `ChatBlockType` with `"todo-activity"`, `"workflow-definition"`, and `"workflow-run"` in backend and web types.
-- Add typed payloads `TodoActivityPayload`, `WorkflowDefinitionActivityPayload`, and `WorkflowRunActivityPayload` to `packages/jinn/src/shared/types.ts`; mirror their wire shapes in `packages/web/src/lib/blocks.ts`.
+- Add typed payloads `TodoActivityPayload`, `WorkflowDefinitionActivityPayload`, and `WorkflowRunActivityPayload` to `packages/hundredfold/src/shared/types.ts`; mirror their wire shapes in `packages/web/src/lib/blocks.ts`.
 - Add optional `activityReceipt?: { id: string; operationId: string; toolName: string }` to the three activity payloads. `id` must equal the containing block id; `operationId` and `toolName` are server-authored only and bounded by the existing structured-message limits.
 - Keep `ChatBlockEnvelope` and `applyBlockEnvelope(sessionId, input, fallbackText?, options?)` signatures unchanged.
 - Make `mergeBlock(existing, patch)` ignore a patch whose `version` is lower than the existing block version; equal versions remain idempotently mergeable for current version-1 delegation patches.
@@ -244,20 +244,20 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 ### Task 2: Persist the invoking-Session relation and the single report mode
 
 **Files:**
-- Modify: `packages/jinn/src/workflows/run-store.ts`
-- Modify: `packages/jinn/src/workflows/advance.ts`
-- Modify: `packages/jinn/src/workflows/run-reconciler.ts`
-- Modify: `packages/jinn/src/workflows/run-idempotency.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/mcp/workflow-tools.ts`
+- Modify: `packages/hundredfold/src/workflows/run-store.ts`
+- Modify: `packages/hundredfold/src/workflows/advance.ts`
+- Modify: `packages/hundredfold/src/workflows/run-reconciler.ts`
+- Modify: `packages/hundredfold/src/workflows/run-idempotency.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/mcp/workflow-tools.ts`
 - Modify: `packages/web/src/lib/api.ts`
-- Modify: `packages/jinn/src/workflows/__tests__/run-store.test.ts`
-- Modify: `packages/jinn/src/workflows/__tests__/run-reconciler.test.ts`
-- Modify: `packages/jinn/src/workflows/__tests__/run-idempotency.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/workflow-definitions-route.test.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/workflow-tools.test.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/tool-manifest-budget.test.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/server.test.ts`
+- Modify: `packages/hundredfold/src/workflows/__tests__/run-store.test.ts`
+- Modify: `packages/hundredfold/src/workflows/__tests__/run-reconciler.test.ts`
+- Modify: `packages/hundredfold/src/workflows/__tests__/run-idempotency.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/workflow-definitions-route.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/workflow-tools.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/tool-manifest-budget.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/server.test.ts`
 
 **Interfaces:**
 - Bump `WORKFLOW_RUN_SCHEMA_VERSION` from 2 to 3.
@@ -355,36 +355,36 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 ### Task 3: Remove every Workflow–Todo write bridge and replace approval records natively
 
 **Files:**
-- Delete: `packages/jinn/src/work-items/workflow-bridge.ts`
-- Delete: `packages/jinn/src/workflows/__tests__/run-reconciler-todos.test.ts`
-- Delete: `packages/jinn/src/workflows/__tests__/run-reconciler-todo-transition.test.ts`
-- Modify: `packages/jinn/src/workflows/run-reconciler.ts`
-- Modify: `packages/jinn/src/workflows/run-store.ts`
-- Modify: `packages/jinn/src/workflows/definition.ts`
-- Modify: `packages/jinn/src/workflows/schema.ts`
-- Modify: `packages/jinn/src/workflows/sop.ts`
-- Modify: `packages/jinn/src/workflows/todo-status-trigger.ts`
-- Modify: `packages/jinn/src/workflows/custom-triggers.ts`
-- Modify: `packages/jinn/src/workflows/poll-trigger.ts`
-- Modify: `packages/jinn/src/work-items/approvals.ts`
-- Modify: `packages/jinn/src/work-items/reconcile.ts`
-- Modify: `packages/jinn/src/work-items/store.ts`
-- Modify: `packages/jinn/src/gateway/approval-authority.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/mcp/workflow-tools.ts`
+- Delete: `packages/hundredfold/src/work-items/workflow-bridge.ts`
+- Delete: `packages/hundredfold/src/workflows/__tests__/run-reconciler-todos.test.ts`
+- Delete: `packages/hundredfold/src/workflows/__tests__/run-reconciler-todo-transition.test.ts`
+- Modify: `packages/hundredfold/src/workflows/run-reconciler.ts`
+- Modify: `packages/hundredfold/src/workflows/run-store.ts`
+- Modify: `packages/hundredfold/src/workflows/definition.ts`
+- Modify: `packages/hundredfold/src/workflows/schema.ts`
+- Modify: `packages/hundredfold/src/workflows/sop.ts`
+- Modify: `packages/hundredfold/src/workflows/todo-status-trigger.ts`
+- Modify: `packages/hundredfold/src/workflows/custom-triggers.ts`
+- Modify: `packages/hundredfold/src/workflows/poll-trigger.ts`
+- Modify: `packages/hundredfold/src/work-items/approvals.ts`
+- Modify: `packages/hundredfold/src/work-items/reconcile.ts`
+- Modify: `packages/hundredfold/src/work-items/store.ts`
+- Modify: `packages/hundredfold/src/gateway/approval-authority.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/mcp/workflow-tools.ts`
 - Modify: `packages/web/src/lib/api.ts`
 - Modify: `packages/web/src/routes/workflow/edit.tsx`
-- Create: `packages/jinn/src/workflows/approval-authority.ts`
-- Create: `packages/jinn/src/workflows/__tests__/todo-decoupling.test.ts`
-- Create: `packages/jinn/src/workflows/__tests__/native-approvals.test.ts`
-- Modify: `packages/jinn/src/workflows/__tests__/definition.test.ts`
-- Modify: `packages/jinn/src/workflows/__tests__/schema.test.ts`
-- Modify: `packages/jinn/src/workflows/__tests__/todo-status-trigger.test.ts`
-- Modify: `packages/jinn/src/workflows/__tests__/todo-replay-watermark.test.ts`
-- Modify: `packages/jinn/src/workflows/__tests__/poll-trigger.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/work-item-approval-route.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/workflow-events-route.test.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/workflow-tools.test.ts`
+- Create: `packages/hundredfold/src/workflows/approval-authority.ts`
+- Create: `packages/hundredfold/src/workflows/__tests__/todo-decoupling.test.ts`
+- Create: `packages/hundredfold/src/workflows/__tests__/native-approvals.test.ts`
+- Modify: `packages/hundredfold/src/workflows/__tests__/definition.test.ts`
+- Modify: `packages/hundredfold/src/workflows/__tests__/schema.test.ts`
+- Modify: `packages/hundredfold/src/workflows/__tests__/todo-status-trigger.test.ts`
+- Modify: `packages/hundredfold/src/workflows/__tests__/todo-replay-watermark.test.ts`
+- Modify: `packages/hundredfold/src/workflows/__tests__/poll-trigger.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/work-item-approval-route.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/workflow-events-route.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/workflow-tools.test.ts`
 - Modify: `packages/web/src/routes/workflow/__tests__/edit.test.tsx`
 
 **Interfaces:**
@@ -418,7 +418,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 
 - [ ] **Step 3: Implement and verify native Workflow gate approval**
 
-  `packages/jinn/src/workflows/approval-authority.ts` owns a domain-neutral route shape:
+  `packages/hundredfold/src/workflows/approval-authority.ts` owns a domain-neutral route shape:
 
   ```ts
   export interface WorkflowApprovalRoute {
@@ -531,8 +531,8 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 
   ```bash
   pnpm --filter jinn-cli test -- src/workflows/__tests__/todo-decoupling.test.ts src/workflows/__tests__/native-approvals.test.ts src/workflows/__tests__/definition.test.ts src/workflows/__tests__/definition-store.test.ts src/workflows/__tests__/schema.test.ts src/workflows/__tests__/todo-status-trigger.test.ts src/workflows/__tests__/todo-replay-watermark.test.ts src/workflows/__tests__/poll-trigger.test.ts src/workflows/__tests__/event-trigger.test.ts src/gateway/__tests__/work-item-approval-route.test.ts src/gateway/__tests__/workflow-events-route.test.ts src/mcp/__tests__/workflow-tools.test.ts
-  rg -n "createWorkflowTodoBridge|WorkflowTodoBridge|todoTransition|approvalWorkItemId|workflow-gate:|applyTodoTransitions" packages/jinn/src packages/web/src
-  rg --pcre2 -n "^import(?! type\\b).*work-items/(store|transitions|approvals)" packages/jinn/src/workflows
+  rg -n "createWorkflowTodoBridge|WorkflowTodoBridge|todoTransition|approvalWorkItemId|workflow-gate:|applyTodoTransitions" packages/hundredfold/src packages/web/src
+  rg --pcre2 -n "^import(?! type\\b).*work-items/(store|transitions|approvals)" packages/hundredfold/src/workflows
   ```
 
   Expected GREEN: all named tests pass. The first `rg` may hit only explicitly labeled legacy migration fixtures/read adapters; the second must print no Workflow runtime value import. Type-only `WorkItemStatus`/`WorkItemSource` vocabulary for the deliberately authored Todo-status event is permitted and cannot mutate a Todo. Commit, report evidence against `wi_2f27e043fb11`, and stop for COO review:
@@ -546,24 +546,24 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 ### Task 4: Stop synthetic Workflow Sessions and preserve historical projections read-only
 
 **Files:**
-- Modify: `packages/jinn/src/shared/types.ts`
-- Modify: `packages/jinn/src/sessions/registry.ts`
-- Modify: `packages/jinn/src/sessions/callbacks.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/gateway/server.ts`
-- Modify: `packages/jinn/src/gateway/status-reconciler.ts`
-- Modify: `packages/jinn/src/gateway/manager-visibility.ts`
+- Modify: `packages/hundredfold/src/shared/types.ts`
+- Modify: `packages/hundredfold/src/sessions/registry.ts`
+- Modify: `packages/hundredfold/src/sessions/callbacks.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/gateway/server.ts`
+- Modify: `packages/hundredfold/src/gateway/status-reconciler.ts`
+- Modify: `packages/hundredfold/src/gateway/manager-visibility.ts`
 - Modify: `packages/web/src/lib/api.ts`
 - Modify: `packages/web/src/routes/chat/page.tsx`
 - Modify: `packages/web/src/components/chat/chat-route-helpers.ts`
-- Modify: `packages/jinn/src/sessions/__tests__/workflow-provenance.test.ts`
-- Modify: `packages/jinn/src/sessions/__tests__/callbacks.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/workflow-session-grouping.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/callback-reliability.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/status-reconciler.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/manager-visibility.test.ts`
+- Modify: `packages/hundredfold/src/sessions/__tests__/workflow-provenance.test.ts`
+- Modify: `packages/hundredfold/src/sessions/__tests__/callbacks.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/workflow-session-grouping.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/callback-reliability.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/status-reconciler.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/manager-visibility.test.ts`
 - Modify: `packages/web/src/components/chat/__tests__/chat-route-helpers.test.ts`
-- Create: `packages/jinn/src/sessions/__tests__/legacy-workflow-session-compat.test.ts`
+- Create: `packages/hundredfold/src/sessions/__tests__/legacy-workflow-session-compat.test.ts`
 - Create: `packages/web/src/routes/chat/__tests__/legacy-workflow-session-redirect.test.tsx`
 
 **Interfaces:**
@@ -644,7 +644,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
   ```bash
   pnpm --filter jinn-cli test -- src/sessions/__tests__/legacy-workflow-session-compat.test.ts src/sessions/__tests__/workflow-provenance.test.ts src/sessions/__tests__/callbacks.test.ts src/gateway/__tests__/workflow-session-grouping.test.ts src/gateway/__tests__/callback-reliability.test.ts src/gateway/__tests__/status-reconciler.test.ts src/gateway/__tests__/manager-visibility.test.ts
   pnpm --filter @jinn/web test -- src/routes/chat/__tests__/legacy-workflow-session-redirect.test.tsx src/components/chat/__tests__/chat-route-helpers.test.ts
-  rg -n "createSession\\(\\{[^}]*engine: ['\"]workflow|syncWorkflowRunSession|workflowRunParentSessionKey|legacy_workflow_run_session_aliases" packages/jinn/src packages/web/src
+  rg -n "createSession\\(\\{[^}]*engine: ['\"]workflow|syncWorkflowRunSession|workflowRunParentSessionKey|legacy_workflow_run_session_aliases" packages/hundredfold/src packages/web/src
   ```
 
   Expected GREEN: all tests pass; the grep prints no current synthetic creation/helper or alias-table name. Re-run the checksum fixture and require unchanged Session/message/queue/delivery rows. Commit, report evidence against `wi_069b54e2ea6c`, and stop for COO review:
@@ -658,17 +658,17 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 ### Task 5: Project Workflow activity and reuse the single session-delivery mechanism
 
 **Files:**
-- Modify: `packages/jinn/src/shared/types.ts`
-- Modify: `packages/jinn/src/sessions/registry.ts`
-- Modify: `packages/jinn/src/sessions/callbacks.ts`
-- Create: `packages/jinn/src/workflows/reporting.ts`
-- Create: `packages/jinn/src/workflows/__tests__/reporting.test.ts`
-- Modify: `packages/jinn/src/workflows/run-reconciler.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/gateway/server.ts`
-- Create: `packages/jinn/src/gateway/__tests__/workflow-report-reliability.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/server-boot-ordering.test.ts`
-- Modify: `packages/jinn/src/sessions/__tests__/callback-deliveries.test.ts`
+- Modify: `packages/hundredfold/src/shared/types.ts`
+- Modify: `packages/hundredfold/src/sessions/registry.ts`
+- Modify: `packages/hundredfold/src/sessions/callbacks.ts`
+- Create: `packages/hundredfold/src/workflows/reporting.ts`
+- Create: `packages/hundredfold/src/workflows/__tests__/reporting.test.ts`
+- Modify: `packages/hundredfold/src/workflows/run-reconciler.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/gateway/server.ts`
+- Create: `packages/hundredfold/src/gateway/__tests__/workflow-report-reliability.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/server-boot-ordering.test.ts`
+- Modify: `packages/hundredfold/src/sessions/__tests__/callback-deliveries.test.ts`
 
 **Interfaces:**
 - Generalize `CallbackDeliveryIdentity` to `SessionDeliveryIdentity { targetSessionId, sourceKind, sourceId, sourceAttempt, sourceOutcome, sourceVersion, deliveryKind }`; generalize the associated payload/delivery/dead-letter type names. `sourceKind` is `"session" | "workflow-run"` in this change: `"session"` covers every existing child-Session callback kind, including delegation completion, rate-limit, attachment, nudge, and manager-visibility deliveries.
@@ -795,7 +795,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
   Review save-before-project ordering, episode stability, delegation regression coverage, response-loss behavior, silent behavior, one recovery loop, and one dead-letter surface. Verify these forbidden additions are absent:
 
   ```bash
-  rg -n "workflow_run_report_deliveries|workflowReportDeliveryId|workflow-report-deliveries|claimWorkflowRunReport|recover.*Workflow.*Delivery" packages/jinn/src packages/web/src
+  rg -n "workflow_run_report_deliveries|workflowReportDeliveryId|workflow-report-deliveries|claimWorkflowRunReport|recover.*Workflow.*Delivery" packages/hundredfold/src packages/web/src
   ```
 
   Expected: no hits. Commit, report evidence against `wi_35edbe6160c1`, and stop for COO review:
@@ -809,20 +809,20 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 ### Task 6: Add native run cancellation across HTTP, MCP, CLI, and UI
 
 **Files:**
-- Modify: `packages/jinn/src/workflows/advance.ts`
-- Modify: `packages/jinn/src/workflows/run-reconciler.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/mcp/workflow-tools.ts`
-- Modify: `packages/jinn/src/cli/workflow.ts`
-- Modify: `packages/jinn/bin/jinn.ts`
+- Modify: `packages/hundredfold/src/workflows/advance.ts`
+- Modify: `packages/hundredfold/src/workflows/run-reconciler.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/mcp/workflow-tools.ts`
+- Modify: `packages/hundredfold/src/cli/workflow.ts`
+- Modify: `packages/hundredfold/bin/jinn.ts`
 - Modify: `packages/web/src/lib/api.ts`
 - Modify: `packages/web/src/routes/workflow/run-view.tsx`
-- Modify: `packages/jinn/src/workflows/__tests__/run-reconciler.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/workflow-definitions-route.test.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/workflow-tools.test.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/tool-manifest-budget.test.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/server.test.ts`
-- Modify: `packages/jinn/src/cli/__tests__/workflow.test.ts`
+- Modify: `packages/hundredfold/src/workflows/__tests__/run-reconciler.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/workflow-definitions-route.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/workflow-tools.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/tool-manifest-budget.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/server.test.ts`
+- Modify: `packages/hundredfold/src/cli/__tests__/workflow.test.ts`
 - Modify: `packages/web/src/routes/workflow/__tests__/run-view.test.tsx`
 
 **Interfaces:**
@@ -867,39 +867,39 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 ### Task 7: Project independent Todo and Workflow definition operation receipts
 
 **Files:**
-- Create: `packages/jinn/src/gateway/chat-activity.ts`
-- Create: `packages/jinn/src/shared/activity-receipts.ts`
-- Create: `packages/jinn/src/shared/__tests__/activity-receipts.test.ts`
-- Modify: `packages/jinn/src/shared/types.ts`
-- Modify: `packages/jinn/src/sessions/registry.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/workflows/reporting.ts`
-- Modify: `packages/jinn/src/workflows/run-reconciler.ts`
-- Modify: `packages/jinn/src/mcp/toolkit.ts`
-- Modify: `packages/jinn/src/mcp/server.ts`
-- Modify: `packages/jinn/src/mcp/work-item-tools.ts`
-- Modify: `packages/jinn/src/mcp/approval-tools.ts`
-- Modify: `packages/jinn/src/mcp/workflow-tools.ts`
-- Modify: `packages/jinn/src/engines/claude-interactive.ts`
-- Modify: `packages/jinn/src/engines/codex-interactive.ts`
-- Modify: `packages/jinn/src/engines/pi.ts`
-- Modify: `packages/jinn/src/engines/grok.ts`
-- Modify: `packages/jinn/src/engines/hermes-protocol.ts`
+- Create: `packages/hundredfold/src/gateway/chat-activity.ts`
+- Create: `packages/hundredfold/src/shared/activity-receipts.ts`
+- Create: `packages/hundredfold/src/shared/__tests__/activity-receipts.test.ts`
+- Modify: `packages/hundredfold/src/shared/types.ts`
+- Modify: `packages/hundredfold/src/sessions/registry.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/workflows/reporting.ts`
+- Modify: `packages/hundredfold/src/workflows/run-reconciler.ts`
+- Modify: `packages/hundredfold/src/mcp/toolkit.ts`
+- Modify: `packages/hundredfold/src/mcp/server.ts`
+- Modify: `packages/hundredfold/src/mcp/work-item-tools.ts`
+- Modify: `packages/hundredfold/src/mcp/approval-tools.ts`
+- Modify: `packages/hundredfold/src/mcp/workflow-tools.ts`
+- Modify: `packages/hundredfold/src/engines/claude-interactive.ts`
+- Modify: `packages/hundredfold/src/engines/codex-interactive.ts`
+- Modify: `packages/hundredfold/src/engines/pi.ts`
+- Modify: `packages/hundredfold/src/engines/grok.ts`
+- Modify: `packages/hundredfold/src/engines/hermes-protocol.ts`
 - Modify: `packages/web/src/hooks/use-live-session.ts`
-- Create: `packages/jinn/src/gateway/__tests__/chat-activity-route.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/streamed-turn-settlement.test.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/work-item-tools.test.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/workflow-tools.test.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/server.test.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/toolkit.test.ts`
-- Modify: `packages/jinn/src/engines/__tests__/claude-interactive.test.ts`
-- Modify: `packages/jinn/src/engines/__tests__/codex-interactive.test.ts`
-- Modify: `packages/jinn/src/engines/__tests__/pi.test.ts`
-- Modify: `packages/jinn/src/engines/__tests__/grok.test.ts`
-- Modify: `packages/jinn/src/engines/__tests__/hermes-protocol.test.ts`
+- Create: `packages/hundredfold/src/gateway/__tests__/chat-activity-route.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/streamed-turn-settlement.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/work-item-tools.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/workflow-tools.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/server.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/toolkit.test.ts`
+- Modify: `packages/hundredfold/src/engines/__tests__/claude-interactive.test.ts`
+- Modify: `packages/hundredfold/src/engines/__tests__/codex-interactive.test.ts`
+- Modify: `packages/hundredfold/src/engines/__tests__/pi.test.ts`
+- Modify: `packages/hundredfold/src/engines/__tests__/grok.test.ts`
+- Modify: `packages/hundredfold/src/engines/__tests__/hermes-protocol.test.ts`
 - Modify: `packages/web/src/hooks/__tests__/use-live-session.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/work-items-route.test.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/workflow-definitions-route.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/work-items-route.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/workflow-definitions-route.test.ts`
 
 **Interfaces:**
 - Add `persistAndEmitActivityBlock(context, sessionId, envelope)`.
@@ -1141,16 +1141,16 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 ### Task 9: Update doctrine, shipped skills, API guidance, and instance migration
 
 **Files:**
-- Modify: `packages/jinn/template/CLAUDE.md`
-- Modify: `packages/jinn/template/docs/company-doctrine.md`
-- Modify: `packages/jinn/template/docs/org.md`
-- Modify: `packages/jinn/template/skills/todo-handling/SKILL.md`
-- Modify: `packages/jinn/template/skills/workflow/SKILL.md`
-- Create: `packages/jinn/template/migrations/0.27.0/MIGRATION.md`
-- Modify: `packages/jinn/src/shared/__tests__/template-company-doctrine.test.ts`
-- Modify: `packages/jinn/src/cli/__tests__/migrate-prompt.test.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/context-diet.test.ts`
-- Modify: `packages/jinn/src/mcp/__tests__/template-diet-tranche.test.ts`
+- Modify: `packages/hundredfold/template/CLAUDE.md`
+- Modify: `packages/hundredfold/template/docs/company-doctrine.md`
+- Modify: `packages/hundredfold/template/docs/org.md`
+- Modify: `packages/hundredfold/template/skills/todo-handling/SKILL.md`
+- Modify: `packages/hundredfold/template/skills/workflow/SKILL.md`
+- Create: `packages/hundredfold/template/migrations/0.27.0/MIGRATION.md`
+- Modify: `packages/hundredfold/src/shared/__tests__/template-company-doctrine.test.ts`
+- Modify: `packages/hundredfold/src/cli/__tests__/migrate-prompt.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/context-diet.test.ts`
+- Modify: `packages/hundredfold/src/mcp/__tests__/template-diet-tranche.test.ts`
 
 **Interfaces:**
 - Shipped doctrine states that Todos are deliberately authored/tracked work and Workflows are reusable procedures whose invocations never create or mutate Todos.
@@ -1257,13 +1257,13 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 - [ ] **Step 5: Perform deletion-criteria and incomplete-text scans**
 
   ```bash
-  rg -n "createWorkflowTodoBridge|WorkflowTodoBridge|applyTodoTransitions|recordMirroredApprovalDecision|workflow-gate:|syncWorkflowRunSession|workflowRunParentSessionKey" packages/jinn/src packages/web/src
-  rg -n "approvalWorkItemId" packages/jinn/src packages/web/src
-  rg -n "workflow_run_report_deliveries|workflowReportDeliveryId|workflow-report-deliveries|claimWorkflowRunReport|legacy_workflow_run_session_aliases" packages/jinn/src packages/web/src
-  rg -n "engine: ['\"]workflow" packages/jinn/src packages/web/src
-  rg -n "todoTransition" packages/jinn/src packages/web/src packages/jinn/template
-  rg --pcre2 -n "^import(?! type\\b).*work-items/(store|transitions|approvals)" packages/jinn/src/workflows
-  rg -n 'T[B]D|FIXM[E]|X{3}|implement lat[e]r|same as abov[e]|similar t[o]|placehold[e]r' docs/superpowers/plans/2026-07-12-jinn-chat-workflow-todo-kiss.md packages/jinn/src packages/web/src packages/jinn/template
+  rg -n "createWorkflowTodoBridge|WorkflowTodoBridge|applyTodoTransitions|recordMirroredApprovalDecision|workflow-gate:|syncWorkflowRunSession|workflowRunParentSessionKey" packages/hundredfold/src packages/web/src
+  rg -n "approvalWorkItemId" packages/hundredfold/src packages/web/src
+  rg -n "workflow_run_report_deliveries|workflowReportDeliveryId|workflow-report-deliveries|claimWorkflowRunReport|legacy_workflow_run_session_aliases" packages/hundredfold/src packages/web/src
+  rg -n "engine: ['\"]workflow" packages/hundredfold/src packages/web/src
+  rg -n "todoTransition" packages/hundredfold/src packages/web/src packages/hundredfold/template
+  rg --pcre2 -n "^import(?! type\\b).*work-items/(store|transitions|approvals)" packages/hundredfold/src/workflows
+  rg -n 'T[B]D|FIXM[E]|X{3}|implement lat[e]r|same as abov[e]|similar t[o]|placehold[e]r' docs/superpowers/plans/2026-07-12-jinn-chat-workflow-todo-kiss.md packages/hundredfold/src packages/web/src packages/hundredfold/template
   ```
 
   The coupling-symbol grep, parallel-delivery/alias grep, and runtime WorkItem-import grep must have no current production hit. `approvalWorkItemId` is accepted only in the schema-1 trigger migration adapter and its fixture; `engine:"workflow"` only in named read-compatibility fixtures/helpers that never create or mutate a Session; `todoTransition` only in the named legacy definition read adapter and fixture. Remove every accidental incomplete marker before handoff.
@@ -1305,7 +1305,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 - `WorkItemSource` keeps `"workflow"` solely so historical rows satisfy TypeScript and SQLite constraints. It is absent from public provenance creation and has no live Workflow projection. Removing it requires a separate rollback-safe WorkItem table rebuild and is not part of this change.
 - Trigger store schema 1 is migrated once to schema 2. After the minimum supported instance version is 0.27.0, delete `approvalWorkItemId` parsing and its migration fixture in a dedicated cleanup change.
 - Historical synthetic run Sessions, messages, queue items, and callback deliveries remain intact and read-only. Existing Workflow provenance supplies direct redirects; no alias/snapshot table or destructive cleanup belongs in this change. Cleanup may be proposed separately only after retention evidence, rollback design, and explicit approval exist.
-- Keep legacy Workflow-run provenance parsing and legacy callback suppression until that separately approved cleanup removes the historical rows. Delete `packages/jinn/src/work-items/workflow-bridge.ts`, its two bridge suites, every current synthetic-parent creation helper, and dead compatibility exports that invite new callers.
+- Keep legacy Workflow-run provenance parsing and legacy callback suppression until that separately approved cleanup removes the historical rows. Delete `packages/hundredfold/src/work-items/workflow-bridge.ts`, its two bridge suites, every current synthetic-parent creation helper, and dead compatibility exports that invite new callers.
 - Keep the strict same-turn one-block/one-tool-name correlation fallback only for transcripts created before `meta.activityReceiptId`. Remove it only after the oldest supported transcript schema always carries explicit correlation and telemetry shows no fallback use for the published retention window.
 
 ## Scoped Commit Sequence
@@ -1327,16 +1327,16 @@ Each commit must be independently focused, GREEN for its named tests, reviewed b
 
 This plan is based on the current monorepo rather than obsolete package-layout or Next.js examples. The implementation owner should re-open these exact files before editing if main has advanced:
 
-- `package.json`, `packages/jinn/package.json`, `packages/web/package.json`, `packages/web/vite.config.ts`
-- `packages/jinn/src/shared/types.ts`, `packages/jinn/src/shared/blocks.ts`
-- `packages/jinn/src/sessions/registry.ts`, `packages/jinn/src/sessions/callbacks.ts`, `packages/jinn/src/sessions/manager.ts`
-- `packages/jinn/src/gateway/api.ts`, `packages/jinn/src/gateway/server.ts`, `packages/jinn/src/gateway/approval-authority.ts`, `packages/jinn/src/gateway/status-reconciler.ts`, `packages/jinn/src/gateway/manager-visibility.ts`
-- `packages/jinn/src/workflows/definition.ts`, `schema.ts`, `sop.ts`, `definition-store.ts`, `advance.ts`, `run-store.ts`, `run-idempotency.ts`, `run-reconciler.ts`, `todo-status-trigger.ts`, `custom-triggers.ts`, `poll-trigger.ts`, `cron-sync.ts`, `trigger-dispatch.ts`
-- `packages/jinn/src/work-items/store.ts`, `migrate.ts`, `transitions.ts`, `approvals.ts`, `reconcile.ts`, `workflow-bridge.ts`
-- `packages/jinn/src/cron/runner.ts`, `packages/jinn/src/cron/scheduler.ts`
-- `packages/jinn/src/mcp/toolkit.ts`, `server.ts`, `identity.ts`, `workflow-tools.ts`, `work-item-tools.ts`, `approval-tools.ts`
-- `packages/jinn/src/engines/claude-interactive.ts`, `codex-interactive.ts`, `pi.ts`, `grok.ts`, `hermes-protocol.ts`
-- `packages/jinn/src/cli/workflow.ts`, `packages/jinn/bin/jinn.ts`
+- `package.json`, `packages/hundredfold/package.json`, `packages/web/package.json`, `packages/web/vite.config.ts`
+- `packages/hundredfold/src/shared/types.ts`, `packages/hundredfold/src/shared/blocks.ts`
+- `packages/hundredfold/src/sessions/registry.ts`, `packages/hundredfold/src/sessions/callbacks.ts`, `packages/hundredfold/src/sessions/manager.ts`
+- `packages/hundredfold/src/gateway/api.ts`, `packages/hundredfold/src/gateway/server.ts`, `packages/hundredfold/src/gateway/approval-authority.ts`, `packages/hundredfold/src/gateway/status-reconciler.ts`, `packages/hundredfold/src/gateway/manager-visibility.ts`
+- `packages/hundredfold/src/workflows/definition.ts`, `schema.ts`, `sop.ts`, `definition-store.ts`, `advance.ts`, `run-store.ts`, `run-idempotency.ts`, `run-reconciler.ts`, `todo-status-trigger.ts`, `custom-triggers.ts`, `poll-trigger.ts`, `cron-sync.ts`, `trigger-dispatch.ts`
+- `packages/hundredfold/src/work-items/store.ts`, `migrate.ts`, `transitions.ts`, `approvals.ts`, `reconcile.ts`, `workflow-bridge.ts`
+- `packages/hundredfold/src/cron/runner.ts`, `packages/hundredfold/src/cron/scheduler.ts`
+- `packages/hundredfold/src/mcp/toolkit.ts`, `server.ts`, `identity.ts`, `workflow-tools.ts`, `work-item-tools.ts`, `approval-tools.ts`
+- `packages/hundredfold/src/engines/claude-interactive.ts`, `codex-interactive.ts`, `pi.ts`, `grok.ts`, `hermes-protocol.ts`
+- `packages/hundredfold/src/cli/workflow.ts`, `packages/hundredfold/bin/jinn.ts`
 - `packages/web/src/lib/api.ts`, `packages/web/src/lib/blocks.ts`
 - `packages/web/src/hooks/use-live-session.ts`, `packages/web/src/hooks/use-query-invalidation.ts`, `packages/web/src/hooks/__tests__/use-query-invalidation-todos.test.tsx`
 - `packages/web/src/lib/query-keys.ts`, `packages/web/src/routes/todos/todo-edit-request.ts`
@@ -1344,7 +1344,7 @@ This plan is based on the current monorepo rather than obsolete package-layout o
 - `packages/web/src/routes/chat/page.tsx`
 - `packages/web/src/routes/workflow/page.tsx`, `run-view.tsx`, `edit.tsx`
 - `packages/web/src/routes/todos/page.tsx`, `row.tsx`, `detail-sheet.tsx`, `needs-you-view.tsx`, `todo-private-state.ts`
-- `packages/jinn/template/CLAUDE.md`, `packages/jinn/template/docs/company-doctrine.md`, `packages/jinn/template/docs/org.md`, `packages/jinn/template/skills/workflow/SKILL.md`, `packages/jinn/template/skills/todo-handling/SKILL.md`
+- `packages/hundredfold/template/CLAUDE.md`, `packages/hundredfold/template/docs/company-doctrine.md`, `packages/hundredfold/template/docs/org.md`, `packages/hundredfold/template/skills/workflow/SKILL.md`, `packages/hundredfold/template/skills/todo-handling/SKILL.md`
 - `docs/superpowers/plans/2026-07-12-callback-delivery-idempotency.md`
 - `docs/superpowers/plans/2026-07-10-workflow-session-grouping.md`
 - `docs/superpowers/specs/2026-07-10-workflow-session-grouping-design.md`

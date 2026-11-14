@@ -189,9 +189,9 @@ that the turn was free.
 - Driver routing, approvals, retry, barge-in, and cues:
   `packages/web/src/components/talk/transport/__tests__/`
 - Manifest/company inventory and durable runtime:
-  `packages/jinn/src/talk/control/__tests__/`
-- Voice transcript evidence: `packages/jinn/src/talk/approval/__tests__/`
-- Topic lifecycle and GC: `packages/jinn/src/talk/topics/__tests__/`
-- Proactive policy and delivery: `packages/jinn/src/talk/proactive/__tests__/`
-  and `packages/jinn/src/gateway/__tests__/talk-proactive-*.test.ts`
-- Persistent normal chat/reload: `packages/jinn/src/gateway/__tests__/talk-persistence-api.test.ts`
+  `packages/hundredfold/src/talk/control/__tests__/`
+- Voice transcript evidence: `packages/hundredfold/src/talk/approval/__tests__/`
+- Topic lifecycle and GC: `packages/hundredfold/src/talk/topics/__tests__/`
+- Proactive policy and delivery: `packages/hundredfold/src/talk/proactive/__tests__/`
+  and `packages/hundredfold/src/gateway/__tests__/talk-proactive-*.test.ts`
+- Persistent normal chat/reload: `packages/hundredfold/src/gateway/__tests__/talk-persistence-api.test.ts`

@@ -8,7 +8,7 @@ a run log that the dashboard's **Hooks** page shows.
 
 Not to be confused with `gateway/hook-registry.ts` / `hook-endpoint.ts`, which relay
 Claude Code's own tool hooks (SessionStart, Stop, ...). Board hook code lives in
-`packages/jinn/src/board-hooks/` and its tables are prefixed `board_hook_`.
+`packages/hundredfold/src/board-hooks/` and its tables are prefixed `board_hook_`.
 
 ## Guarantees
 

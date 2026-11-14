@@ -22,9 +22,9 @@
 ### Task 1: Derive delegated activity from the session tree
 
 **Files:**
-- Create: `packages/jinn/src/sessions/delegated-activity.ts`
-- Create: `packages/jinn/src/sessions/__tests__/delegated-activity.test.ts`
-- Modify: `packages/jinn/src/shared/types.ts`
+- Create: `packages/hundredfold/src/sessions/delegated-activity.ts`
+- Create: `packages/hundredfold/src/sessions/__tests__/delegated-activity.test.ts`
+- Modify: `packages/hundredfold/src/shared/types.ts`
 
 **Interfaces:**
 - Consumes: `Session[]` and a `ReadonlySet<string>` of active session IDs.
@@ -53,8 +53,8 @@ Expected: PASS.
 ### Task 2: Add the summary to session API payloads
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/session-serialization.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/session-serialization.test.ts`
 
 **Interfaces:**
 - Consumes: `buildDelegatedActivityIndex`, queue transport state, stored waiting state, and runtime `backgroundActivity`.

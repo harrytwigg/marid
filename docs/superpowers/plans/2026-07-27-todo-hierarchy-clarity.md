@@ -21,8 +21,8 @@
 ### Task 1: Hierarchy-aware Todo activity receipts
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/chat-activity.ts`
-- Create: `packages/jinn/src/gateway/__tests__/chat-activity.test.ts`
+- Modify: `packages/hundredfold/src/gateway/chat-activity.ts`
+- Create: `packages/hundredfold/src/gateway/__tests__/chat-activity.test.ts`
 
 **Interfaces:**
 - Consumes: `WorkItem.parentId`, `WorkItem.rootId`, and `WorkItem.depth`.
@@ -118,9 +118,9 @@ Expected: PASS.
 ### Task 3: MCP hierarchy summaries and filters
 
 **Files:**
-- Modify: `packages/jinn/src/mcp/work-item-tools.ts`
-- Test: `packages/jinn/src/mcp/__tests__/work-item-tools.test.ts`
-- Test: `packages/jinn/src/mcp/__tests__/tool-manifest-budget.test.ts`
+- Modify: `packages/hundredfold/src/mcp/work-item-tools.ts`
+- Test: `packages/hundredfold/src/mcp/__tests__/work-item-tools.test.ts`
+- Test: `packages/hundredfold/src/mcp/__tests__/tool-manifest-budget.test.ts`
 
 **Interfaces:**
 - Consumes: gateway compact rows containing `parentId`, `rootId`, and `depth`; existing `/api/work-items` `parent` and `root` query parameters.
@@ -159,12 +159,12 @@ Expected: PASS.
 ### Task 4: Agent doctrine
 
 **Files:**
-- Modify: `packages/jinn/template/CLAUDE.md`
-- Modify: `packages/jinn/template/skills/todo-handling/SKILL.md`
+- Modify: `packages/hundredfold/template/CLAUDE.md`
+- Modify: `packages/hundredfold/template/skills/todo-handling/SKILL.md`
 - Modify: `~/.jinn/CLAUDE.md`
 - Modify: `~/.jinn/skills/todo-handling/SKILL.md`
-- Test: `packages/jinn/src/mcp/__tests__/work-item-tools.test.ts`
-- Test: `packages/jinn/src/shared/__tests__/template-company-doctrine.test.ts`
+- Test: `packages/hundredfold/src/mcp/__tests__/work-item-tools.test.ts`
+- Test: `packages/hundredfold/src/shared/__tests__/template-company-doctrine.test.ts`
 
 **Interfaces:**
 - Produces: one-root-per-outcome doctrine, an explicit parent-first creation recipe, and a rule that procedural checklist steps remain body/checklist/activity unless independently owned or reviewed.
@@ -223,6 +223,6 @@ Use a fixture gateway with `authRequired:false`, start Vite on a scratch port, a
 
 Run: `git diff --check`
 
-Run: `git diff -- packages/jinn/src/gateway/chat-activity.ts packages/jinn/src/gateway/__tests__/chat-activity.test.ts packages/jinn/src/mcp/work-item-tools.ts packages/jinn/src/mcp/__tests__/work-item-tools.test.ts packages/web/src/components/chat/chat-messages.tsx packages/web/src/components/chat/todo-activity-burst.tsx packages/web/src/components/chat/company-activity-card.tsx packages/web/src/components/chat/__tests__/chat-messages-tool-group.test.tsx packages/web/src/components/chat/__tests__/company-activity-card.test.tsx packages/jinn/template/CLAUDE.md packages/jinn/template/skills/todo-handling/SKILL.md`
+Run: `git diff -- packages/hundredfold/src/gateway/chat-activity.ts packages/hundredfold/src/gateway/__tests__/chat-activity.test.ts packages/hundredfold/src/mcp/work-item-tools.ts packages/hundredfold/src/mcp/__tests__/work-item-tools.test.ts packages/web/src/components/chat/chat-messages.tsx packages/web/src/components/chat/todo-activity-burst.tsx packages/web/src/components/chat/company-activity-card.tsx packages/web/src/components/chat/__tests__/chat-messages-tool-group.test.tsx packages/web/src/components/chat/__tests__/company-activity-card.test.tsx packages/hundredfold/template/CLAUDE.md packages/hundredfold/template/skills/todo-handling/SKILL.md`
 
 Leak scan the scoped diff for personal names, projects, emails, Slack IDs, and absolute home paths.

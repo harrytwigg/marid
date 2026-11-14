@@ -6,7 +6,7 @@
 
 **Architecture:** Track 1 hardens the existing per-engine completion detection (no state-machine refactor): a grace window + late-recovery supersede in `TurnResolver`, deterministic `task_complete` parsing in codex-interactive, and a periodic gateway status reconciler. Track 2 makes `buildContext()` audience-aware (COO vs manager vs employee) and moves static content (API table, connector recipes) into the engine-ingested CLAUDE.md/AGENTS.md.
 
-**Tech Stack:** TypeScript (Node), vitest, node-pty. Repo: `~/Projects/jinn`, package `packages/jinn` (run tests with `pnpm --filter jinn-cli exec vitest run <file>`; typecheck with `pnpm --filter jinn-cli typecheck`).
+**Tech Stack:** TypeScript (Node), vitest, node-pty. Repo: `~/Projects/jinn`, package `packages/hundredfold` (run tests with `pnpm --filter jinn-cli exec vitest run <file>`; typecheck with `pnpm --filter jinn-cli typecheck`).
 
 **Spec:** `docs/superpowers/specs/2026-06-10-engine-stability-context-hygiene-design.md`
 
@@ -22,12 +22,12 @@
 The `TurnResolver` currently settles a turn as failed the instant a `StopFailure` hook arrives (`claude-interactive.ts:259-271`). The interactive CLI survives `invalid_request`/`server_error`/`unknown` API errors and usually retries, so the turn shows "failed" in chat while the CLI finishes the work. Add a 20s grace window for those error types; `rate_limit`, `billing_error`, `authentication_failed`, `max_output_tokens` keep settling immediately (the manager's wait/retry/fallback machinery depends on it).
 
 **Files:**
-- Modify: `packages/jinn/src/engines/claude-interactive.ts` (TurnResolver, ~lines 223-314)
-- Test: `packages/jinn/src/engines/__tests__/turn-resolver-grace.test.ts` (create)
+- Modify: `packages/hundredfold/src/engines/claude-interactive.ts` (TurnResolver, ~lines 223-314)
+- Test: `packages/hundredfold/src/engines/__tests__/turn-resolver-grace.test.ts` (create)
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `packages/jinn/src/engines/__tests__/turn-resolver-grace.test.ts`:
+Create `packages/hundredfold/src/engines/__tests__/turn-resolver-grace.test.ts`:
 
 ```ts
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -139,7 +139,7 @@ Expected: FAIL — "does NOT settle immediately" fails (settles instantly), `not
 
 - [ ] **Step 3: Implement the grace window in TurnResolver**
 
-In `packages/jinn/src/engines/claude-interactive.ts`:
+In `packages/hundredfold/src/engines/claude-interactive.ts`:
 
 Add constants above `TurnResolverOpts` (~line 222):
 
@@ -281,7 +281,7 @@ The existing test "settles immediately on StopFailure … and exposes it" uses `
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/jinn/src/engines/claude-interactive.ts packages/jinn/src/engines/__tests__/turn-resolver-grace.test.ts packages/jinn/src/engines/__tests__/claude-interactive.test.ts
+git add packages/hundredfold/src/engines/claude-interactive.ts packages/hundredfold/src/engines/__tests__/turn-resolver-grace.test.ts packages/hundredfold/src/engines/__tests__/claude-interactive.test.ts
 git commit -m "fix(engines): hold StopFailure in a grace window so a retrying CLI isn't declared failed"
 ```
 
@@ -292,7 +292,7 @@ git commit -m "fix(engines): hold StopFailure in a grace window so a retrying CL
 The grace window re-arms on hooks (Task 1 handles PreToolUse/PostToolUse inside `onHook`), but the strongest proof-of-life is the SSE stream itself (text deltas while the CLI retries/continues). Wire `handleSseEvent` → `resolver.noteActivity()`. Raw PTY output is deliberately NOT used — the TUI redraws its spinner even when idle, which would re-arm grace forever.
 
 **Files:**
-- Modify: `packages/jinn/src/engines/claude-interactive.ts:592-598` (`handleSseEvent`)
+- Modify: `packages/hundredfold/src/engines/claude-interactive.ts:592-598` (`handleSseEvent`)
 
 - [ ] **Step 1: Implement**
 
@@ -322,7 +322,7 @@ Expected: PASS
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/jinn/src/engines/claude-interactive.ts
+git add packages/hundredfold/src/engines/claude-interactive.ts
 git commit -m "fix(engines): SSE stream activity re-arms the StopFailure grace window"
 ```
 
@@ -333,15 +333,15 @@ git commit -m "fix(engines): SSE stream activity re-arms the StopFailure grace w
 If grace expires and the turn settles failed, but the CLI later finishes (Stop arrives after settle), the recovered text currently has nowhere to land. Keep listening for a bounded window after an API-error settle; on a late Stop, hand the recovered text to the gateway, which appends it as a follow-up assistant message and restores a clean idle status.
 
 **Files:**
-- Modify: `packages/jinn/src/shared/types.ts` (EngineRunOpts)
-- Modify: `packages/jinn/src/engines/claude-interactive.ts` (engine class)
-- Modify: `packages/jinn/src/gateway/api.ts` (runWebSession engine.run opts, ~line 2260)
-- Modify: `packages/jinn/src/sessions/manager.ts` (engine.run opts, ~line 380)
-- Test: `packages/jinn/src/engines/__tests__/claude-interactive-late-recovery.test.ts` (create)
+- Modify: `packages/hundredfold/src/shared/types.ts` (EngineRunOpts)
+- Modify: `packages/hundredfold/src/engines/claude-interactive.ts` (engine class)
+- Modify: `packages/hundredfold/src/gateway/api.ts` (runWebSession engine.run opts, ~line 2260)
+- Modify: `packages/hundredfold/src/sessions/manager.ts` (engine.run opts, ~line 380)
+- Test: `packages/hundredfold/src/engines/__tests__/claude-interactive-late-recovery.test.ts` (create)
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/jinn/src/engines/__tests__/claude-interactive-late-recovery.test.ts`:
+Create `packages/hundredfold/src/engines/__tests__/claude-interactive-late-recovery.test.ts`:
 
 ```ts
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -423,7 +423,7 @@ Expected: FAIL — `armLateRecovery` is not a function.
 
 - [ ] **Step 3: Add `onLateRecovery` to EngineRunOpts**
 
-In `packages/jinn/src/shared/types.ts`, inside `EngineRunOpts` (after `source?: string;`):
+In `packages/hundredfold/src/shared/types.ts`, inside `EngineRunOpts` (after `source?: string;`):
 
 ```ts
   /** Interactive engines only: called when a turn that already settled as
@@ -436,7 +436,7 @@ In `packages/jinn/src/shared/types.ts`, inside `EngineRunOpts` (after `source?: 
 
 - [ ] **Step 4: Implement arm/cancel in InteractiveClaudeEngine**
 
-In `packages/jinn/src/engines/claude-interactive.ts`:
+In `packages/hundredfold/src/engines/claude-interactive.ts`:
 
 Add a constant near the other timing constants (~line 322):
 
@@ -518,7 +518,7 @@ Expected: PASS
 
 - [ ] **Step 6: Wire the gateway handler — web path (api.ts)**
 
-In `packages/jinn/src/gateway/api.ts`, inside `runWebSession`'s `engine.run({...})` options object (after `source: currentSession.source,` ~line 2271), add:
+In `packages/hundredfold/src/gateway/api.ts`, inside `runWebSession`'s `engine.run({...})` options object (after `source: currentSession.source,` ~line 2271), add:
 
 ```ts
       // A turn that settled as failed but whose CLI later finished delivers the
@@ -553,7 +553,7 @@ All helpers (`getSession`, `insertMessage`, `updateSession`, `notifyParentSessio
 
 - [ ] **Step 7: Wire the gateway handler — connector path (manager.ts)**
 
-In `packages/jinn/src/sessions/manager.ts`, inside the `engine.run({...})` options object that ends with `source: session.source,` (~line 381), add:
+In `packages/hundredfold/src/sessions/manager.ts`, inside the `engine.run({...})` options object that ends with `source: session.source,` (~line 381), add:
 
 ```ts
         onLateRecovery: ({ result: lateText, sessionId: engineSid }) => {
@@ -581,7 +581,7 @@ Expected: PASS
 - [ ] **Step 9: Commit**
 
 ```bash
-git add packages/jinn/src/shared/types.ts packages/jinn/src/engines/claude-interactive.ts packages/jinn/src/engines/__tests__/claude-interactive-late-recovery.test.ts packages/jinn/src/gateway/api.ts packages/jinn/src/sessions/manager.ts
+git add packages/hundredfold/src/shared/types.ts packages/hundredfold/src/engines/claude-interactive.ts packages/hundredfold/src/engines/__tests__/claude-interactive-late-recovery.test.ts packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/sessions/manager.ts
 git commit -m "feat(engines): late-Stop recovery supersedes a wrongly-failed interactive turn"
 ```
 
@@ -592,12 +592,12 @@ git commit -m "feat(engines): late-Stop recovery supersedes a wrongly-failed int
 Codex rollout transcripts carry explicit terminal markers (verified against live `~/.codex/sessions/**.jsonl`): `event_msg` payload `task_complete` (with `last_agent_message`) and `turn_aborted`. Use them as the primary completion signal; keep the quiet-window debounce only as a fallback, raised 800ms → 3s.
 
 **Files:**
-- Modify: `packages/jinn/src/engines/codex-interactive.ts` (parser + onParsed + constant)
-- Test: `packages/jinn/src/engines/__tests__/codex-interactive.test.ts` (extend)
+- Modify: `packages/hundredfold/src/engines/codex-interactive.ts` (parser + onParsed + constant)
+- Test: `packages/hundredfold/src/engines/__tests__/codex-interactive.test.ts` (extend)
 
 - [ ] **Step 1: Write the failing parser tests**
 
-Append to `packages/jinn/src/engines/__tests__/codex-interactive.test.ts` (inside or alongside the existing `codexTranscriptLineToDeltas` describe block — match the file's existing import of `codexTranscriptLineToDeltas`):
+Append to `packages/hundredfold/src/engines/__tests__/codex-interactive.test.ts` (inside or alongside the existing `codexTranscriptLineToDeltas` describe block — match the file's existing import of `codexTranscriptLineToDeltas`):
 
 ```ts
 describe("codexTranscriptLineToDeltas — terminal markers", () => {
@@ -638,7 +638,7 @@ Expected: FAIL — `taskComplete` undefined on the first two tests.
 
 - [ ] **Step 3: Implement parser + completion wiring**
 
-In `packages/jinn/src/engines/codex-interactive.ts`:
+In `packages/hundredfold/src/engines/codex-interactive.ts`:
 
 1. Change the debounce constant (line 18) and document its new role:
 
@@ -715,7 +715,7 @@ Expected: PASS. If any pre-existing test asserts the 800ms debounce timing, upda
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/engines/codex-interactive.ts packages/jinn/src/engines/__tests__/codex-interactive.test.ts
+git add packages/hundredfold/src/engines/codex-interactive.ts packages/hundredfold/src/engines/__tests__/codex-interactive.test.ts
 git commit -m "fix(engines): codex-interactive completes on task_complete/turn_aborted markers, quiet window is fallback-only"
 ```
 
@@ -726,13 +726,13 @@ git commit -m "fix(engines): codex-interactive completes on task_complete/turn_a
 A session stuck at `status:"running"` (lost completion event, hung `runWebSession`) currently stays stuck until manual intervention. Add a 15s sweep: a `running` session whose `lastActivity` heartbeat is stale (>45s; the live heartbeat writes every 5s) and whose engine reports no active turn gets reset to `idle` + `session:completed` is emitted. One structured log line per fix.
 
 **Files:**
-- Create: `packages/jinn/src/gateway/status-reconciler.ts`
-- Modify: `packages/jinn/src/gateway/server.ts` (start after `resumePendingWebQueueItems`, stop in cleanup)
-- Test: `packages/jinn/src/gateway/__tests__/status-reconciler.test.ts` (create)
+- Create: `packages/hundredfold/src/gateway/status-reconciler.ts`
+- Modify: `packages/hundredfold/src/gateway/server.ts` (start after `resumePendingWebQueueItems`, stop in cleanup)
+- Test: `packages/hundredfold/src/gateway/__tests__/status-reconciler.test.ts` (create)
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/jinn/src/gateway/__tests__/status-reconciler.test.ts` (DB scaffolding mirrors `sessions/__tests__/registry-pagination.test.ts` — JINN_HOME must be set before importing the registry):
+Create `packages/hundredfold/src/gateway/__tests__/status-reconciler.test.ts` (DB scaffolding mirrors `sessions/__tests__/registry-pagination.test.ts` — JINN_HOME must be set before importing the registry):
 
 ```ts
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
@@ -822,7 +822,7 @@ Expected: FAIL — module `../status-reconciler.js` not found.
 
 - [ ] **Step 3: Implement the reconciler**
 
-Create `packages/jinn/src/gateway/status-reconciler.ts`:
+Create `packages/hundredfold/src/gateway/status-reconciler.ts`:
 
 ```ts
 import type { Engine } from "../shared/types.js";
@@ -909,7 +909,7 @@ Expected: PASS. (If `listSessions()` requires a filter argument or `title` doesn
 
 - [ ] **Step 5: Wire into the gateway lifecycle**
 
-In `packages/jinn/src/gateway/server.ts`:
+In `packages/hundredfold/src/gateway/server.ts`:
 
 1. Add the import near the other gateway imports:
 
@@ -939,7 +939,7 @@ Expected: PASS
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/status-reconciler.ts packages/jinn/src/gateway/__tests__/status-reconciler.test.ts packages/jinn/src/gateway/server.ts
+git add packages/hundredfold/src/gateway/status-reconciler.ts packages/hundredfold/src/gateway/__tests__/status-reconciler.test.ts packages/hundredfold/src/gateway/server.ts
 git commit -m "feat(gateway): status reconciler sweep unsticks sessions stuck at running"
 ```
 
@@ -950,12 +950,12 @@ git commit -m "feat(gateway): status reconciler sweep unsticks sessions stuck at
 `buildOrgContext` currently appends a persona-preview line per employee (~120 chars each + formatting). Collapse to `Name (slug) — dept, rank` with one pointer line for details. Applies to both the hierarchy path and the filesystem-fallback path.
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/context.ts:385-456` (`buildOrgContext`)
-- Test: `packages/jinn/src/sessions/__tests__/context.test.ts` (extend/update)
+- Modify: `packages/hundredfold/src/sessions/context.ts:385-456` (`buildOrgContext`)
+- Test: `packages/hundredfold/src/sessions/__tests__/context.test.ts` (extend/update)
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `packages/jinn/src/sessions/__tests__/context.test.ts` (a hierarchy fixture may already exist in the file — reuse its shape; `OrgHierarchy` is `{ nodes: Record<string, OrgNode>, sorted: string[] }` per `shared/types.ts`):
+Add to `packages/hundredfold/src/sessions/__tests__/context.test.ts` (a hierarchy fixture may already exist in the file — reuse its shape; `OrgHierarchy` is `{ nodes: Record<string, OrgNode>, sorted: string[] }` per `shared/types.ts`):
 
 ```ts
 describe("buildContext — compact org roster", () => {
@@ -1024,7 +1024,7 @@ Expected: new tests PASS; fix any pre-existing assertions that expected persona 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/sessions/context.ts packages/jinn/src/sessions/__tests__/context.test.ts
+git add packages/hundredfold/src/sessions/context.ts packages/hundredfold/src/sessions/__tests__/context.test.ts
 git commit -m "perf(context): compact org roster — name/dept/rank only, personas on demand"
 ```
 
@@ -1035,8 +1035,8 @@ git commit -m "perf(context): compact org roster — name/dept/rank only, person
 Employee sessions stop receiving the org roster, the cron list, and the full API table. The API reference becomes audience-specific (COO: one pointer line; managers: 4-line delegation mini-ref; others: attachments only). Connector recipes slim to two lines (full examples move to CLAUDE.md in Task 8).
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/context.ts` (`buildContext`, `buildApiReference`, `buildConnectorContext`)
-- Test: `packages/jinn/src/sessions/__tests__/context.test.ts` (extend)
+- Modify: `packages/hundredfold/src/sessions/context.ts` (`buildContext`, `buildApiReference`, `buildConnectorContext`)
+- Test: `packages/hundredfold/src/sessions/__tests__/context.test.ts` (extend)
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1209,7 +1209,7 @@ Expected: PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/jinn/src/sessions/context.ts packages/jinn/src/sessions/__tests__/context.test.ts
+git add packages/hundredfold/src/sessions/context.ts packages/hundredfold/src/sessions/__tests__/context.test.ts
 git commit -m "perf(context): audience-scope buildContext — employees lose org/cron/API-table, recipes dedupe to CLAUDE.md"
 ```
 
@@ -1220,7 +1220,7 @@ git commit -m "perf(context): audience-scope buildContext — employees lose org
 The injected context now points at CLAUDE.md for the API table and connector recipes — the template must actually contain them, and must tell employee sessions (which auto-ingest the same file via AGENTS.md symlink) which parts apply to them.
 
 **Files:**
-- Modify: `packages/jinn/template/CLAUDE.md`
+- Modify: `packages/hundredfold/template/CLAUDE.md`
 
 - [ ] **Step 1: Add the role marker**
 
@@ -1281,13 +1281,13 @@ curl -X POST <gateway>/api/connectors/slack/send \
 
 - [ ] **Step 3: Check the template renders (placeholder sanity)**
 
-Run: `grep -n "{{" ~/Projects/jinn/packages/jinn/template/CLAUDE.md | grep -v "portalName\|portalSlug"`
+Run: `grep -n "{{" ~/Projects/jinn/packages/hundredfold/template/CLAUDE.md | grep -v "portalName\|portalSlug"`
 Expected: no output (only the two known placeholders are used). Also run the template/setup tests if present: `pnpm --filter jinn-cli exec vitest run src/cli/` — expected PASS.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/jinn/template/CLAUDE.md
+git add packages/hundredfold/template/CLAUDE.md
 git commit -m "docs(template): CLAUDE.md carries the API reference + role marker — injected context dedupes against it"
 ```
 
@@ -1339,7 +1339,7 @@ Expected: PASS (no web changes in this plan; this guards against accidental type
 Run a quick size probe (script, not committed):
 
 ```bash
-cd ~/Projects/jinn/packages/jinn && pnpm exec tsx -e "
+cd ~/Projects/jinn/packages/hundredfold && pnpm exec tsx -e "
 import { buildContext } from './src/sessions/context.js';
 const coo = buildContext({ source: 'web', channel: 'c', user: 'u' });
 const emp = buildContext({ source: 'web', channel: 'c', user: 'u', employee: { name: 'w', displayName: 'W', department: 'd', rank: 'employee', engine: 'claude', model: 'opus', persona: 'You write blogs.' } });

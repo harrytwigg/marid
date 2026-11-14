@@ -24,10 +24,10 @@
 ### Task 1: Persist Workflow-Dispatched Streaming Activity
 
 **Files:**
-- Create: `packages/jinn/src/sessions/partial-stream.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/sessions/manager.ts`
-- Test: `packages/jinn/src/sessions/__tests__/workflow-attempt-turns.test.ts`
+- Create: `packages/hundredfold/src/sessions/partial-stream.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/sessions/manager.ts`
+- Test: `packages/hundredfold/src/sessions/__tests__/workflow-attempt-turns.test.ts`
 
 **Interfaces:**
 - Consumes: `StreamDelta`, registry partial-message primitives, and block-envelope validation.
@@ -97,10 +97,10 @@ Expected: all selected tests PASS.
 
 ```bash
 git add docs/superpowers/plans/2026-07-23-workflow-attempt-interaction-fixes.md \
-  packages/jinn/src/sessions/partial-stream.ts \
-  packages/jinn/src/gateway/api.ts \
-  packages/jinn/src/sessions/manager.ts \
-  packages/jinn/src/sessions/__tests__/workflow-attempt-turns.test.ts
+  packages/hundredfold/src/sessions/partial-stream.ts \
+  packages/hundredfold/src/gateway/api.ts \
+  packages/hundredfold/src/sessions/manager.ts \
+  packages/hundredfold/src/sessions/__tests__/workflow-attempt-turns.test.ts
 git commit -m "fix(workflows): persist live attempt activity"
 ```
 
@@ -109,14 +109,14 @@ git commit -m "fix(workflows): persist live attempt activity"
 ### Task 2: Preserve Attempts Across User-Message Interruptions
 
 **Files:**
-- Create: `packages/jinn/src/sessions/workflow-interruptions.ts`
-- Modify: `packages/jinn/src/shared/types.ts`
-- Modify: `packages/jinn/src/sessions/manager.ts`
-- Modify: `packages/jinn/src/workflows/session-executor.ts`
-- Modify: `packages/jinn/src/workflows/runner.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Test: `packages/jinn/src/workflows/__tests__/reminder-ladder.test.ts`
-- Test: `packages/jinn/src/workflows/__tests__/workflow-vertical.test.ts`
+- Create: `packages/hundredfold/src/sessions/workflow-interruptions.ts`
+- Modify: `packages/hundredfold/src/shared/types.ts`
+- Modify: `packages/hundredfold/src/sessions/manager.ts`
+- Modify: `packages/hundredfold/src/workflows/session-executor.ts`
+- Modify: `packages/hundredfold/src/workflows/runner.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Test: `packages/hundredfold/src/workflows/__tests__/reminder-ladder.test.ts`
+- Test: `packages/hundredfold/src/workflows/__tests__/workflow-vertical.test.ts`
 
 **Interfaces:**
 - Consumes: the durable session attempt receipt (`attemptTurn`, `attemptTerminalVersion`, `attemptOutcome`) and the existing run `cancelRequestedAt` marker.
@@ -226,14 +226,14 @@ Expected: all selected tests PASS, including B1-B5.
 - [ ] **Step 7: Commit Bug B**
 
 ```bash
-git add packages/jinn/src/shared/types.ts \
-  packages/jinn/src/sessions/workflow-interruptions.ts \
-  packages/jinn/src/sessions/manager.ts \
-  packages/jinn/src/workflows/session-executor.ts \
-  packages/jinn/src/workflows/runner.ts \
-  packages/jinn/src/gateway/api.ts \
-  packages/jinn/src/workflows/__tests__/reminder-ladder.test.ts \
-  packages/jinn/src/workflows/__tests__/workflow-vertical.test.ts
+git add packages/hundredfold/src/shared/types.ts \
+  packages/hundredfold/src/sessions/workflow-interruptions.ts \
+  packages/hundredfold/src/sessions/manager.ts \
+  packages/hundredfold/src/workflows/session-executor.ts \
+  packages/hundredfold/src/workflows/runner.ts \
+  packages/hundredfold/src/gateway/api.ts \
+  packages/hundredfold/src/workflows/__tests__/reminder-ladder.test.ts \
+  packages/hundredfold/src/workflows/__tests__/workflow-vertical.test.ts
 git commit -m "fix(workflows): keep attempts alive across user turns"
 ```
 

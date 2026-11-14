@@ -91,7 +91,8 @@ const RULES = [
     find: (text) =>
       matchingLines(
         text,
-        /(?:(?:os\.)?homedir\(\)|process\.env\.(?:HOME|USERPROFILE))[^\n]*["'`]\.hundredfold[\w-]*["'`]/,
+        // The current name and the one an older build used: a home hardcoded under either reads the wrong instance.
+        /(?:(?:os\.)?homedir\(\)|process\.env\.(?:HOME|USERPROFILE))[^\n]*["'`]\.(?:hundredfold|jinn)[\w-]*["'`]/, // rename:keep
       ),
   },
   {

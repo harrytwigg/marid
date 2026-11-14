@@ -29,9 +29,9 @@ instructions: department      # department | department+company (FR-029)
 `open`.
 
 **Scan.** `gateway/department-registry.ts` follows the shape of `refreshOrg`
-(`packages/jinn/src/gateway/org-registry.ts:42`). It runs with the org scan, at boot and from
-the existing `org/` watcher (`packages/jinn/src/gateway/watcher.ts:130`). The org walker keeps
-skipping `department.yaml` as an employee file (`packages/jinn/src/gateway/org.ts:31`). FR-001
+(`packages/hundredfold/src/gateway/org-registry.ts:42`). It runs with the org scan, at boot and from
+the existing `org/` watcher (`packages/hundredfold/src/gateway/watcher.ts:130`). The org walker keeps
+skipping `department.yaml` as an employee file (`packages/hundredfold/src/gateway/org.ts:31`). FR-001
 sets the rules:
 
 - **Identity problems** refuse the file: YAML that does not parse, a `name` that does not
@@ -44,7 +44,7 @@ sets the rules:
 - **No `department.yaml`**: the department keeps its last good scope. With none recorded, it
   is `open`, which is every department today.
 
-**Backup.** `org` is already in `ARCHIVE_INCLUDES` (`packages/jinn/src/backup/archive.ts:9`).
+**Backup.** `org` is already in `ARCHIVE_INCLUDES` (`packages/hundredfold/src/backup/archive.ts:9`).
 
 **Writes from the UI** (FR-042): `PATCH /api/departments/:slug` rewrites that file (or creates
 it in an existing department directory). It is operator-only, like
@@ -54,7 +54,7 @@ rename. The in-memory definitions are refreshed before the response returns.
 ## Registry tables
 
 New tables are additive and registered in `V2_ADDITIVE_TABLES`
-(`packages/jinn/src/work-items/migrate.ts:520`). No column is added to `work_items` or
+(`packages/hundredfold/src/work-items/migrate.ts:520`). No column is added to `work_items` or
 `departments`.
 
 ```sql
@@ -72,14 +72,14 @@ file is `open`. The row is never deleted by the scan. The operator opens a depar
 writing `scope: open`, which upserts `open`.
 
 ```sql
--- sessions: add-column-if-missing path (packages/jinn/src/sessions/migrate.ts:342)
+-- sessions: add-column-if-missing path (packages/hundredfold/src/sessions/migrate.ts:342)
 ALTER TABLE sessions ADD COLUMN scope_department TEXT;   -- enforcement binding; set ONLY for sessions of scoped employees
 CREATE INDEX IF NOT EXISTS idx_sessions_scope_department ON sessions(scope_department);
 ```
 
 - `scope_department` is set once, in `spawnSession` (FR-008), and never updated.
 - The FR-013 requester is the existing `parent_session_id`
-  (`packages/jinn/src/sessions/migrate.ts:26`).
+  (`packages/hundredfold/src/sessions/migrate.ts:26`).
 - Unscoped sessions never carry `scope_department`. Their badge is derived from the linked
   Todo.
 
@@ -117,7 +117,7 @@ persona: ...
 - A PATCH that changes `department` into or out of a non-open department is refused through
   the API; the move is made by hand, by moving the YAML under `org/<slug>` (FR-007).
 
-`claudeConfigDir` is not added to `WRITABLE_FIELDS` (`packages/jinn/src/gateway/org.ts:170`).
+`claudeConfigDir` is not added to `WRITABLE_FIELDS` (`packages/hundredfold/src/gateway/org.ts:170`).
 The department field already is.
 
 A scoped session's engine environment also carries `JINN_DEPARTMENT=<slug>` (FR-028).
@@ -154,7 +154,7 @@ A scoped remote session's `$JINN_HOME` holds only `gateway.json`, `tmp/` and the
 | `.claude.json` (trust) | `claudeJsonPath()`, as today | `<profile>/.claude.json` |
 | Transcripts | `<config>/projects/<slug>` | `<profile>/projects/<slug>` |
 | macOS Keychain entry | `Claude Code-credentials` | `Claude Code-credentials-<first 8 hex of sha256(profile path)>` |
-| Auth outage scope | `local` (`packages/jinn/src/shared/claude-auth-outage.ts:18`) | `local:<profile key>` |
+| Auth outage scope | `local` (`packages/hundredfold/src/shared/claude-auth-outage.ts:18`) | `local:<profile key>` |
 | Engine health and rate-limit memory | Engine key, as today | Engine key plus profile key |
 | Limits reading | As today | Its own live reading, plan and history (Phase 6, FR-071) |
 
@@ -171,7 +171,7 @@ keyed store uses that helper.
 - **Scoped caller**: a capability-verified session whose employee's department is not open.
   Its D is `sessions.scope_department`.
 - **Department spend**: `SUM(sessions.total_cost)` over sessions linked to the department's
-  Todos, read live (`packages/jinn/src/work-items/store.ts:865`).
+  Todos, read live (`packages/hundredfold/src/work-items/store.ts:865`).
 
 ## Wire shapes
 

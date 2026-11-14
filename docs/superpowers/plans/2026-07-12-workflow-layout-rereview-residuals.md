@@ -50,13 +50,13 @@ Expected: one documentation commit, clean checkout, no service interaction.
 ## Task 1: RED — immutable run invocation claims and typed conflict parity
 
 **Files:**
-- Create: packages/jinn/src/workflows/__tests__/run-idempotency.test.ts
-- Modify: packages/jinn/src/workflows/__tests__/run-store.test.ts
-- Modify: packages/jinn/src/workflows/__tests__/run-reconciler.test.ts
-- Modify: packages/jinn/src/gateway/__tests__/workflow-definitions-route.test.ts
-- Modify: packages/jinn/src/gateway/__tests__/workflow-operation-authority-route.test.ts
-- Modify: packages/jinn/src/mcp/__tests__/workflow-tools.test.ts
-- Modify: packages/jinn/src/mcp/__tests__/server.test.ts
+- Create: packages/hundredfold/src/workflows/__tests__/run-idempotency.test.ts
+- Modify: packages/hundredfold/src/workflows/__tests__/run-store.test.ts
+- Modify: packages/hundredfold/src/workflows/__tests__/run-reconciler.test.ts
+- Modify: packages/hundredfold/src/gateway/__tests__/workflow-definitions-route.test.ts
+- Modify: packages/hundredfold/src/gateway/__tests__/workflow-operation-authority-route.test.ts
+- Modify: packages/hundredfold/src/mcp/__tests__/workflow-tools.test.ts
+- Modify: packages/hundredfold/src/mcp/__tests__/server.test.ts
 - Modify: packages/web/src/lib/__tests__/workflow-api.test.ts
 - Modify: packages/web/src/routes/workflow/__tests__/run-view.test.tsx
 
@@ -107,11 +107,11 @@ Expected RED: old mismatched replay/201 behavior, missing persisted claim, missi
 ## Task 2: GREEN — atomic canonical idempotency across store, gateway, MCP, and UI
 
 **Files:**
-- Create: packages/jinn/src/workflows/run-idempotency.ts
-- Modify: packages/jinn/src/workflows/run-store.ts
-- Modify: packages/jinn/src/workflows/run-reconciler.ts
-- Modify: packages/jinn/src/gateway/api.ts
-- Modify: packages/jinn/src/mcp/workflow-tools.ts
+- Create: packages/hundredfold/src/workflows/run-idempotency.ts
+- Modify: packages/hundredfold/src/workflows/run-store.ts
+- Modify: packages/hundredfold/src/workflows/run-reconciler.ts
+- Modify: packages/hundredfold/src/gateway/api.ts
+- Modify: packages/hundredfold/src/mcp/workflow-tools.ts
 - Modify: packages/web/src/lib/api.ts
 - Modify: packages/web/src/routes/workflow/run-view.tsx
 - Modify: tests from Task 1
@@ -180,13 +180,13 @@ Expected RED: retained old lens, focus behind overlay, volatile status refits, a
 ## Task 5: RED — one recursive runtime schema and real manifest tokenizer
 
 **Files:**
-- Create: packages/jinn/src/workflows/__tests__/schema.test.ts
-- Modify: packages/jinn/src/workflows/__tests__/definition-store.test.ts
-- Modify: packages/jinn/src/gateway/__tests__/workflow-definitions-route.test.ts
-- Modify: packages/jinn/src/gateway/__tests__/workflow-operation-authority-route.test.ts
-- Modify: packages/jinn/src/mcp/__tests__/workflow-tools.test.ts
-- Modify: packages/jinn/src/mcp/__tests__/server.test.ts
-- Modify: packages/jinn/src/mcp/__tests__/tool-manifest-budget.test.ts
+- Create: packages/hundredfold/src/workflows/__tests__/schema.test.ts
+- Modify: packages/hundredfold/src/workflows/__tests__/definition-store.test.ts
+- Modify: packages/hundredfold/src/gateway/__tests__/workflow-definitions-route.test.ts
+- Modify: packages/hundredfold/src/gateway/__tests__/workflow-operation-authority-route.test.ts
+- Modify: packages/hundredfold/src/mcp/__tests__/workflow-tools.test.ts
+- Modify: packages/hundredfold/src/mcp/__tests__/server.test.ts
+- Modify: packages/hundredfold/src/mcp/__tests__/tool-manifest-budget.test.ts
 
 **Wished-for interfaces:**
 
@@ -220,18 +220,18 @@ Expected RED: unknowns persist/call handlers, exact payload exceeds the 7000-tok
 ## Task 6: GREEN — shared strict schema, dispatcher enforcement, and <=7000-token manifest
 
 **Files:**
-- Create: packages/jinn/src/workflows/schema.ts
-- Create: packages/jinn/src/mcp/tool-manifest-budget.ts
-- Modify: packages/jinn/src/workflows/definition.ts
-- Modify: packages/jinn/src/workflows/definition-store.ts
-- Modify: packages/jinn/src/workflows/authoring.ts
-- Modify: packages/jinn/src/workflows/sop.ts
-- Modify: packages/jinn/src/gateway/api.ts
-- Modify: packages/jinn/src/mcp/toolkit.ts
-- Modify: packages/jinn/src/mcp/server.ts
-- Modify: packages/jinn/src/mcp/workflow-tools.ts
-- Modify: packages/jinn/src/engines/pi-mcp.ts
-- Modify: packages/jinn/package.json
+- Create: packages/hundredfold/src/workflows/schema.ts
+- Create: packages/hundredfold/src/mcp/tool-manifest-budget.ts
+- Modify: packages/hundredfold/src/workflows/definition.ts
+- Modify: packages/hundredfold/src/workflows/definition-store.ts
+- Modify: packages/hundredfold/src/workflows/authoring.ts
+- Modify: packages/hundredfold/src/workflows/sop.ts
+- Modify: packages/hundredfold/src/gateway/api.ts
+- Modify: packages/hundredfold/src/mcp/toolkit.ts
+- Modify: packages/hundredfold/src/mcp/server.ts
+- Modify: packages/hundredfold/src/mcp/workflow-tools.ts
+- Modify: packages/hundredfold/src/engines/pi-mcp.ts
+- Modify: packages/hundredfold/package.json
 - Modify: pnpm-lock.yaml
 - Modify: tests from Task 5
 

@@ -185,15 +185,15 @@ plumbing for no benefit over the client opening it.
 
 | Area | File | Change |
 |------|------|--------|
-| Gate | `packages/jinn/src/gateway/api.ts` (~1706) | `needed = !onboarded` |
-| Identity | `packages/jinn/src/sessions/context.ts` (378) | second-person `buildIdentity` |
-| Onboarding ctx | `packages/jinn/src/sessions/context.ts` (655) | replace with `buildOnboardingContext`, gate on `onboarded`, instance-safe paths |
-| Skill | `packages/jinn/template/skills/onboarding/SKILL.md` | gamified multi-beat rewrite |
+| Gate | `packages/hundredfold/src/gateway/api.ts` (~1706) | `needed = !onboarded` |
+| Identity | `packages/hundredfold/src/sessions/context.ts` (378) | second-person `buildIdentity` |
+| Onboarding ctx | `packages/hundredfold/src/sessions/context.ts` (655) | replace with `buildOnboardingContext`, gate on `onboarded`, instance-safe paths |
+| Skill | `packages/hundredfold/template/skills/onboarding/SKILL.md` | gamified multi-beat rewrite |
 | Wizard logic | `packages/web/src/components/onboarding-wizard.tsx` | genie icon, engine/model/effort step, launch-into-chat on complete |
 | Wizard visuals | (same) | jinn-designer restyle to `/chat` |
 | Chat filter | `packages/web/src/components/chat/chat-sidebar.tsx` (952, 991) | default "all" + honor stored choice |
 | Defaults persistence | `gateway/api.ts` completeOnboarding + `shared/config` | write engine/model/effort to config |
-| create hardening | `packages/jinn/src/cli/create.ts`, `cli/setup.ts` | verify setup before success; EOF-safe prompt |
+| create hardening | `packages/hundredfold/src/cli/create.ts`, `cli/setup.ts` | verify setup before success; EOF-safe prompt |
 
 ## 6. Note: "skills for the employee"
 

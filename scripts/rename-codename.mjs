@@ -34,18 +34,26 @@ const everything = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding
   .filter((file) => !SELF.test(file));
 /** The package directory moves whole, whatever step owns the files in it: half a package is not a package. */
 const MOVES_WHOLE = /^packages\/jinn\//;
+const PACKAGE_DIR = /packages\/jinn\b/g;
 const outOfScope = (file) =>
   (skipDocs && DOCS_SCOPE.some((scope) => scope.test(file))) ||
   (skipDistribution && DISTRIBUTION_PATHS.some((scope) => scope.test(file)));
-const tracked = everything.filter((file) => MOVES_WHOLE.test(file) || !outOfScope(file));
+const tracked = new Set(everything.filter((file) => MOVES_WHOLE.test(file) || !outOfScope(file)));
 
 const rewrites = [];
 const moves = [];
 const kept = [];
-for (const file of tracked) {
-  const target = renamePath(file, FROZEN_SUBTREES);
+for (const file of everything) {
+  const target = tracked.has(file) ? renamePath(file, FROZEN_SUBTREES) : file;
   if (target !== file) moves.push([file, target]);
-  if (KEEP_CONTENT_PATHS.some((rule) => rule.test(file)) || outOfScope(file)) continue;
+  if (KEEP_CONTENT_PATHS.some((rule) => rule.test(file))) continue;
+  if (outOfScope(file)) {
+    // Their names wait for their step, but the package directory has moved and what points at it follows.
+    const text = fs.readFileSync(path.join(root, file), "utf8");
+    const moved = text.replace(PACKAGE_DIR, "packages/hundredfold");
+    if (moved !== text) rewrites.push([file, moved]);
+    continue;
+  }
   const full = path.join(root, file);
   const stat = fs.lstatSync(full);
   if (!stat.isFile()) continue;

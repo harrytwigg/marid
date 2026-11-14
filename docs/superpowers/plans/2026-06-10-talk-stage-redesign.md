@@ -10,7 +10,7 @@
 
 **Repo/branch:** `<worktree>`, branch `talk-conversation-first`. Run web tests with `pnpm --filter @jinn/web test -- --run`, typecheck with `pnpm --filter @jinn/web exec tsc --noEmit`, build with `pnpm --filter @jinn/web build` (NEVER `--force`).
 
-**Hard rules:** Do not touch backend (`packages/jinn`) except nothing — this is presentation-only. Do not rename exported APIs used by tests. Repo is public: no real names/PII in code or commits. No `Co-Authored-By` lines in commits.
+**Hard rules:** Do not touch backend (`packages/hundredfold`) except nothing — this is presentation-only. Do not rename exported APIs used by tests. Repo is public: no real names/PII in code or commits. No `Co-Authored-By` lines in commits.
 
 ---
 

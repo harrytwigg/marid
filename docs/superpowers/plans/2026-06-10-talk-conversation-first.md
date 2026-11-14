@@ -19,9 +19,9 @@
 ### Task 1: Serialize per-turn TTS chains + fix the audio-death race
 
 **Files:**
-- Modify: `packages/jinn/src/talk/tts-stream.ts`
+- Modify: `packages/hundredfold/src/talk/tts-stream.ts`
 - Modify: `packages/web/src/routes/talk/audio-player.ts` (stale contract comment + turn-boundary reset)
-- Test: `packages/jinn/src/talk/__tests__/tts-stream.test.ts` (extend)
+- Test: `packages/hundredfold/src/talk/__tests__/tts-stream.test.ts` (extend)
 - Test: `packages/web/src/routes/talk/__tests__/audio-player.test.ts` (extend if exists, else create)
 
 **Contract to establish (backend):** all `talk:speak`/audio events for turn N (including its `last:true`) are emitted strictly before any event for turn N+1. Implementation:
@@ -37,9 +37,9 @@
 ### Task 2: Server-side speech sanitizer (`toSpeakable`)
 
 **Files:**
-- Create: `packages/jinn/src/talk/speakable.ts`
-- Modify: `packages/jinn/src/talk/tts-stream.ts` (apply in `queueSentence` on the extracted sentence and on the flush remainder — NOT on raw deltas, since markdown tokens split across delta chunks)
-- Test: `packages/jinn/src/talk/__tests__/speakable.test.ts`
+- Create: `packages/hundredfold/src/talk/speakable.ts`
+- Modify: `packages/hundredfold/src/talk/tts-stream.ts` (apply in `queueSentence` on the extracted sentence and on the flush remainder — NOT on raw deltas, since markdown tokens split across delta chunks)
+- Test: `packages/hundredfold/src/talk/__tests__/speakable.test.ts`
 
 - [ ] **Step 1: Write failing tests** for `toSpeakable(text: string): string`:
   - `**Bold claim** stands` → `Bold claim stands`
@@ -59,8 +59,8 @@
 ### Task 3: Talk-tailored parent wake message (no raw IDs in the stimulus)
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/callbacks.ts` (the `📩` message builder)
-- Test: `packages/jinn/src/sessions/__tests__/callbacks.test.ts` (extend existing test file for callbacks; create if absent)
+- Modify: `packages/hundredfold/src/sessions/callbacks.ts` (the `📩` message builder)
+- Test: `packages/hundredfold/src/sessions/__tests__/callbacks.test.ts` (extend existing test file for callbacks; create if absent)
 
 - [ ] **Step 1: Failing test:** when the PARENT session has `source: "talk"`, the engine-facing `message` must (a) contain the child's label (title, else employee name, else `"a thread"`), (b) contain the reply preview, (c) NOT contain the child session id, (d) NOT contain `GET /api/sessions`, (e) contain the narration instruction. Expected shape:
   ```
@@ -90,8 +90,8 @@
 ### Task 5: FTS5 message search in the registry
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/registry.ts`
-- Test: `packages/jinn/src/sessions/__tests__/registry.test.ts` (extend)
+- Modify: `packages/hundredfold/src/sessions/registry.ts`
+- Test: `packages/hundredfold/src/sessions/__tests__/registry.test.ts` (extend)
 
 - [ ] **Step 1: Failing tests** for `searchMessages(query: string, limit?: number)`:
   - insert sessions + messages (roles user/assistant/notification/tool), search a word present in an assistant message → returns `[{ sessionId, snippet, role, timestamp }]` with `«»` highlight markers in snippet;
@@ -111,9 +111,9 @@
 ### Task 6: `GET /api/talk/search`
 
 **Files:**
-- Create: `packages/jinn/src/talk/search.ts`
-- Modify: `packages/jinn/src/talk/routes.ts`
-- Test: `packages/jinn/src/talk/__tests__/search.test.ts`
+- Create: `packages/hundredfold/src/talk/search.ts`
+- Modify: `packages/hundredfold/src/talk/routes.ts`
+- Test: `packages/hundredfold/src/talk/__tests__/search.test.ts`
 
 - [ ] **Step 1: Failing tests** for `searchTalkSessions(q, deps)` (deps injectable: `searchSessions`, `searchMessages`, `getSession`): merges title hits + content hits, de-dupes by sessionId (title hit wins position, content hits attach as `hits[]`), response per result `{ sessionId, title, employee, source, lastActivity, status, isTalkChild, hits: [{snippet, role, ts}] }` capped 20; empty q → `{ok:false,status:400}`.
 - [ ] **Step 2-3: red → implement** + route `GET /api/talk/search?q=&limit=` in `routes.ts` following the existing route style (the graph route is the model). **Step 4: green. Step 5: Commit** `feat(talk): /api/talk/search merging title + FTS content hits`
@@ -121,10 +121,10 @@
 ### Task 7: Attachments + delegate `attach`/`detach`/`mode`/`utterance`
 
 **Files:**
-- Create: `packages/jinn/src/talk/attachments.ts`
-- Modify: `packages/jinn/src/talk/delegate.ts`
-- Modify: `packages/jinn/src/talk/routes.ts` (pass new deps)
-- Test: `packages/jinn/src/talk/__tests__/attachments.test.ts`, extend `__tests__/delegate.test.ts`
+- Create: `packages/hundredfold/src/talk/attachments.ts`
+- Modify: `packages/hundredfold/src/talk/delegate.ts`
+- Modify: `packages/hundredfold/src/talk/routes.ts` (pass new deps)
+- Test: `packages/hundredfold/src/talk/__tests__/attachments.test.ts`, extend `__tests__/delegate.test.ts`
 
 **attachments.ts API:** `attach(talkId, targetId, mode)`, `detach(talkId, targetId)`, `listAttachments(talkId): {targetId, mode, since}[]`, `talkSessionsAttachedTo(targetId): string[]`, persisted by merging into the talk session's existing `transport_meta` JSON column (key `talkAttachments`) via injected `getSession`/`updateSessionMeta` deps; in-memory map hydrated lazily from meta. Cap 5 per talk session (`attach` returns `{ok:false, error}` at cap).
 
@@ -149,9 +149,9 @@
 ### Task 8: Attachment-aware graph + completion wake for attached sessions
 
 **Files:**
-- Modify: `packages/jinn/src/talk/graph.ts` (`TalkGraphNode` gains `attached?: true; mode?: "observe"|"engage"`; `resolveTalkRoot` ALSO checks `talkSessionsAttachedTo(sessionId)`; `buildGraphSnapshot` appends attachment nodes at depth 1; new change kinds `"attached"|"detached"` emitted from delegate via a new exported `emitAttachmentChange`)
-- Modify: `packages/jinn/src/talk/delegate.ts` (emit attached/detached deltas)
-- Modify: `packages/jinn/src/sessions/callbacks.ts` (after the parent notify, also wake every talk session in `talkSessionsAttachedTo(completedSessionId)` with the Task-3-style talk message — label = the attached session's title/employee)
+- Modify: `packages/hundredfold/src/talk/graph.ts` (`TalkGraphNode` gains `attached?: true; mode?: "observe"|"engage"`; `resolveTalkRoot` ALSO checks `talkSessionsAttachedTo(sessionId)`; `buildGraphSnapshot` appends attachment nodes at depth 1; new change kinds `"attached"|"detached"` emitted from delegate via a new exported `emitAttachmentChange`)
+- Modify: `packages/hundredfold/src/talk/delegate.ts` (emit attached/detached deltas)
+- Modify: `packages/hundredfold/src/sessions/callbacks.ts` (after the parent notify, also wake every talk session in `talkSessionsAttachedTo(completedSessionId)` with the Task-3-style talk message — label = the attached session's title/employee)
 - Modify: `packages/web/src/routes/talk/graph-store.ts` + `packages/web/src/routes/talk/protocol.ts` (accept `attached`/`mode` on nodes; `attached`/`detached` change kinds map to upsert/remove)
 - Test: extend `__tests__/graph.test.ts`, `__tests__/callbacks.test.ts`, web `__tests__/graph-store.test.ts`
 
@@ -230,7 +230,7 @@ export type StreamRow =
 ### Task 14: Persona rewrite (delegation-bias, search/attach, enrichment fidelity)
 
 **Files:**
-- Modify: `packages/jinn/src/talk/orchestrator-persona.ts` (DEFAULT), `packages/jinn/template/talk/orchestrator-persona.md` (keep byte-identical to DEFAULT), `packages/jinn/template/talk/card-reference.md` (document search + attach + utterance)
+- Modify: `packages/hundredfold/src/talk/orchestrator-persona.ts` (DEFAULT), `packages/hundredfold/template/talk/orchestrator-persona.md` (keep byte-identical to DEFAULT), `packages/hundredfold/template/talk/card-reference.md` (document search + attach + utterance)
 - Test: existing persona tests (byte-identity template↔default) must stay green
 
 Persona changes (rewrite, keep ≤ current length budget):
@@ -247,6 +247,6 @@ Persona changes (rewrite, keep ≤ current length budget):
 ### Task 15: Gates + smoke + browser E2E with mocks + screenshots
 
 - [ ] Full backend + web suites green: `pnpm --filter jinn-cli test` and `pnpm --filter @jinn/web test`; `pnpm --filter jinn-cli build` + web build clean; lint/typecheck if configured.
-- [ ] Extend `packages/jinn/scripts/talk-graph-smoke.sh`: after the existing assertions add — `GET /api/talk/search?q=ok` returns 200 with `results` array; attach the grandchild's SIBLING (create a standalone session via POST /api/sessions, then delegate `{attach:true}`) → graph snapshot now includes it with `attached:true`; detach → gone. Run it green (fresh `JINN_HOME`, port 7878).
+- [ ] Extend `packages/hundredfold/scripts/talk-graph-smoke.sh`: after the existing assertions add — `GET /api/talk/search?q=ok` returns 200 with `results` array; attach the grandchild's SIBLING (create a standalone session via POST /api/sessions, then delegate `{attach:true}`) → graph snapshot now includes it with `attached:true`; detach → gone. Run it green (fresh `JINN_HOME`, port 7878).
 - [ ] Browser E2E on an ISOLATED gateway (fresh `mktemp` JINN_HOME, port **7879**, fake engine bin `/tmp/fake-claude` = `#!/bin/bash\nsleep 600` for mocked "running" states, seed sessions/messages directly into `${HOME_DIR}/sessions/registry.db`): scripted via Playwright (1.60.0 cached; `command npm i playwright --no-save` if needed — plain `npm` is broken in this zsh). Scenarios to capture as PNGs: (1) idle with last conversation dimmed; (2) conversation streaming with karaoke highlight + delegated chip; (3) WorkDock with running + done + attached (dashed) nodes incl. mini-dots; (4) inline link card + pinned approval card; (5) SessionSearchSheet with seeded FTS results; (6) light theme of (2) or (3). Drive states by seeding DB + POSTing real talk/card/delegate APIs; WS events must be REAL (no frontend mocking) — only the engine is fake.
 - [ ] Attach screenshots to the chat session via the gateway attachments API; report what each shows + any defects found (fix-or-flag).

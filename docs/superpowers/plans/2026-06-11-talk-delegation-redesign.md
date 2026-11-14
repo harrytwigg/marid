@@ -6,14 +6,14 @@
 
 **Architecture:** The graph store stays the single structural source. A new client-side *thread-activity* store overlays live "now doing" lines + report excerpts, fed from `session:delta` / `session:completed` WS events that already arrive for every tree node but are currently discarded. The `delegated` one-line chip is replaced by a live **ThreadCard** stream row; the WorkDock chips+mini-dots become a **work tree** (real labeled hierarchy); the centered session-peek modal becomes a right-edge **thread drawer** with breadcrumbs + descend navigation. One additive backend field (`TalkGraphNode.briefExcerpt`) carries "what was asked".
 
-**Tech Stack:** React 18 + TypeScript, CSS (Ledger tokens + talk tokens), vitest + @testing-library/react, Node/TS gateway (packages/jinn).
+**Tech Stack:** React 18 + TypeScript, CSS (Ledger tokens + talk tokens), vitest + @testing-library/react, Node/TS gateway (packages/hundredfold).
 
 **Branch:** `talk-conversation-first` in `~/Projects/jinn-mission-control`. Spec: `docs/superpowers/specs/2026-06-11-talk-delegation-redesign-design.md`.
 
 **Hard constraints (carry into every task):**
 - NEVER touch the live gateway (port 7777), `~/Projects/jinn`, or `~/.jinn`. All work in `~/Projects/jinn-mission-control`.
 - The repo is PUBLIC: no PII/real names in code or commit messages. No `Co-Authored-By` lines.
-- Web tests: `cd packages/web && npx vitest run <file>` . Jinn tests: `cd packages/jinn && npx vitest run <file>`. NEVER build web with `--force`.
+- Web tests: `cd packages/web && npx vitest run <file>` . Jinn tests: `cd packages/hundredfold && npx vitest run <file>`. NEVER build web with `--force`.
 
 ---
 
@@ -22,10 +22,10 @@
 The "what was asked" line for every node, at every depth, surviving reload via the snapshot.
 
 **Files:**
-- Modify: `packages/jinn/src/talk/graph.ts` (TalkGraphNode interface ~line 17, `toGraphNode` ~line 47)
+- Modify: `packages/hundredfold/src/talk/graph.ts` (TalkGraphNode interface ~line 17, `toGraphNode` ~line 47)
 - Modify: `packages/web/src/routes/talk/protocol.ts` (the talk graph node type, ~line 68)
 - Modify: `packages/web/src/routes/talk/graph-store.ts` (GraphNode interface, line 14)
-- Test: `packages/jinn/src/talk/graph.test.ts` (or `__tests__` — follow where the existing graph tests live; `grep -rn "toGraphNode" packages/jinn --include="*.test.ts"`)
+- Test: `packages/hundredfold/src/talk/graph.test.ts` (or `__tests__` — follow where the existing graph tests live; `grep -rn "toGraphNode" packages/hundredfold --include="*.test.ts"`)
 
 - [ ] **Step 1: Write the failing test** (add to the existing graph test file)
 
@@ -55,7 +55,7 @@ describe("briefExcerpt", () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify it fails** — `cd packages/jinn && npx vitest run src/talk/graph.test.ts` → FAIL (`briefExcerpt` does not exist).
+- [ ] **Step 2: Run to verify it fails** — `cd packages/hundredfold && npx vitest run src/talk/graph.test.ts` → FAIL (`briefExcerpt` does not exist).
 
 - [ ] **Step 3: Implement** — in `graph.ts`:
 
@@ -917,7 +917,7 @@ export interface ThreadDrawerProps {
 ### Task 8: Persona template — nested-delegation note
 
 **Files:**
-- Modify: `packages/jinn/template/talk/orchestrator-persona.md`
+- Modify: `packages/hundredfold/template/talk/orchestrator-persona.md`
 
 - [ ] **Step 1:** Read the template's delegation section. Add a short paragraph (match the persona's existing voice/format):
 
@@ -930,16 +930,16 @@ appears under your delegation card with its own status, so prefer one lead who
 sub-delegates over three parallel threads you have to relay between yourself.
 ```
 
-- [ ] **Step 2:** Verify no real names/PII added. Run jinn tests touching the persona if any (`grep -rn "orchestrator-persona" packages/jinn --include="*.test.ts"`).
+- [ ] **Step 2:** Verify no real names/PII added. Run jinn tests touching the persona if any (`grep -rn "orchestrator-persona" packages/hundredfold --include="*.test.ts"`).
 - [ ] **Step 3: Commit** — `feat(talk): persona template — encourage nested delegation for multi-part work`
 
 ---
 
 ### Task 9: Gates
 
-- [ ] **Step 1:** `cd packages/jinn && npx vitest run` → all green.
+- [ ] **Step 1:** `cd packages/hundredfold && npx vitest run` → all green.
 - [ ] **Step 2:** `cd packages/web && npx vitest run` → all green.
-- [ ] **Step 3:** `npx tsc --noEmit` in both packages; `cd packages/web && npx vite build` (NO `--force`); jinn build (`npm run build` in packages/jinn or the repo's build script).
+- [ ] **Step 3:** `npx tsc --noEmit` in both packages; `cd packages/web && npx vite build` (NO `--force`); jinn build (`npm run build` in packages/hundredfold or the repo's build script).
 - [ ] **Step 4:** `git status` clean except intended changes; commit anything pending.
 
 ---

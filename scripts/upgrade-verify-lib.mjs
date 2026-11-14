@@ -11,6 +11,11 @@ export const PROTECTED_PORTS = new Set([7777, 7801])
 const STRICT_VERSION = /^\d+\.\d+\.\d+$/
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
 
+// The binary an installed package carries: `hundredfold.js`, or the old name in a release from before the rename.
+const installedCli = (packageRoot) =>
+  ["hundredfold.js", "jinn.js" /* rename:keep */].map((name) => path.join(packageRoot, "dist", "bin", name)).find((file) => fs.existsSync(file)) ??
+  path.join(packageRoot, "dist", "bin", "hundredfold.js")
+
 export function sha256(value) {
   return crypto.createHash("sha256").update(value).digest("hex")
 }
@@ -126,7 +131,7 @@ export function installTarball(tarball, prefix, env) {
     env: { ...env, npm_config_prefix: prefix },
   })
   const packageRoot = path.join(prefix, "lib", "node_modules", "jinn-cli")
-  const cli = path.join(packageRoot, "dist", "bin", "hundredfold.js")
+  const cli = installedCli(packageRoot)
   if (!fs.existsSync(cli)) throw new Error(`installed package has no CLI: ${cli}`)
   const version = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf8")).version
   if (!STRICT_VERSION.test(version)) throw new Error(`installed package has an invalid version: ${String(version)}`)

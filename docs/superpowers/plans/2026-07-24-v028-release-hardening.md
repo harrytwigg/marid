@@ -22,8 +22,8 @@
 ### Task 1: Make the migration prompt self-contained
 
 **Files:**
-- Modify: `packages/jinn/src/migrations/__tests__/service.test.ts`
-- Modify: `packages/jinn/src/migrations/service.ts`
+- Modify: `packages/hundredfold/src/migrations/__tests__/service.test.ts`
+- Modify: `packages/hundredfold/src/migrations/service.ts`
 
 **Interfaces:**
 - Consumes: `composePrompt()` migration key, snapshot root, and changed-file list.
@@ -82,16 +82,16 @@ Expected: all migration tests pass.
 - [ ] **Step 5: Commit the scoped prompt fix**
 
 ```bash
-git add -- packages/jinn/src/migrations/service.ts packages/jinn/src/migrations/__tests__/service.test.ts
+git add -- packages/hundredfold/src/migrations/service.ts packages/hundredfold/src/migrations/__tests__/service.test.ts
 git commit -m "fix(migrations): specify completion receipt contract"
 ```
 
 ### Task 2: Make legacy Workflow conversion conservative and auditable
 
 **Files:**
-- Modify: `packages/jinn/src/workflows/__tests__/import-v1.test.ts`
-- Modify: `packages/jinn/src/workflows/import-v1.ts`
-- Modify: `packages/jinn/template/skills/workflow/SKILL.md`
+- Modify: `packages/hundredfold/src/workflows/__tests__/import-v1.test.ts`
+- Modify: `packages/hundredfold/src/workflows/import-v1.ts`
+- Modify: `packages/hundredfold/template/skills/workflow/SKILL.md`
 - Modify: `CHANGELOG.md`
 
 **Interfaces:**
@@ -145,9 +145,9 @@ Expected: all pass; no lossy legacy conversion remains.
 
 ```bash
 git add -- \
-  packages/jinn/src/workflows/import-v1.ts \
-  packages/jinn/src/workflows/__tests__/import-v1.test.ts \
-  packages/jinn/template/skills/workflow/SKILL.md \
+  packages/hundredfold/src/workflows/import-v1.ts \
+  packages/hundredfold/src/workflows/__tests__/import-v1.test.ts \
+  packages/hundredfold/template/skills/workflow/SKILL.md \
   CHANGELOG.md
 git commit -m "fix(workflows): preserve legacy semantics during v2 import"
 ```
@@ -214,9 +214,9 @@ git commit -m "test(upgrade): cover v0.26 and v0.27 to v0.28"
 ### Task 4: Regenerate and validate the v0.28 release artifact
 
 **Files:**
-- Preserve/modify: `packages/jinn/package.json`
+- Preserve/modify: `packages/hundredfold/package.json`
 - Preserve/modify: `CHANGELOG.md`
-- Regenerate: `packages/jinn/template/migrations/0.28.0/**`
+- Regenerate: `packages/hundredfold/template/migrations/0.28.0/**`
 
 **Interfaces:**
 - Consumes: `v0.27.0`, the current instance template, and all release-hardening commits.
@@ -233,7 +233,7 @@ pnpm --filter jinn-cli migration:check -- --base-ref v0.27.0 --version 0.28.0
 
 ```bash
 pnpm build
-cd packages/jinn
+cd packages/hundredfold
 npm pack --dry-run
 npm pack --pack-destination <nonce-owned-temp-directory>
 ```
@@ -256,7 +256,7 @@ Expected: all packages pass.
 
 - [ ] **Step 5: Inspect package contents and staged release scope**
 
-Confirm `npm pack --dry-run` includes the manifest, every base/target payload, Workflow import/report code, and current frontend assets. Stage only `packages/jinn/package.json`, `CHANGELOG.md`, and `packages/jinn/template/migrations/0.28.0`.
+Confirm `npm pack --dry-run` includes the manifest, every base/target payload, Workflow import/report code, and current frontend assets. Stage only `packages/hundredfold/package.json`, `CHANGELOG.md`, and `packages/hundredfold/template/migrations/0.28.0`.
 
 - [ ] **Step 6: Create the local release commit**
 

@@ -21,8 +21,8 @@
 ### Task 1: MCP-native child completion guidance
 
 **Files:**
-- Modify: `packages/jinn/src/sessions/__tests__/callbacks.test.ts`
-- Modify: `packages/jinn/src/sessions/callbacks.ts`
+- Modify: `packages/hundredfold/src/sessions/__tests__/callbacks.test.ts`
+- Modify: `packages/hundredfold/src/sessions/callbacks.ts`
 
 - [x] Replace the existing test assertion that requires raw HTTP guidance with assertions for `read_session` and `send_to_session` and against `/api/sessions` leakage.
 - [x] Run the focused callback test and observe the expected failure.
@@ -47,7 +47,7 @@
 - Modify: `~/.jinn/config.yaml`
 
 - [x] Back up existing template-owned docs and skills.
-- [x] Copy current reference docs and stock skills from `packages/jinn/template/`.
+- [x] Copy current reference docs and stock skills from `packages/hundredfold/template/`.
 - [x] Preserve every non-template custom skill untouched.
 - [x] Stamp `jinn.version: 0.26.0` and preserve all other config values.
 - [x] Verify skill frontmatter and engine skill links.

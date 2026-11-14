@@ -30,17 +30,17 @@ at the branch head (the lines this change added or moved are cited where they no
 
 | `path:line` | Used for |
 | --- | --- |
-| `packages/jinn/src/mcp/server.ts:201` | `handleMcpRequest`: reused unchanged as the JSON-RPC core |
-| `packages/jinn/src/mcp/server.ts:117` | `buildTools`: the remote profile filters it |
-| `packages/jinn/src/gateway/request-handler.ts:90` | The HTTP handler. `/mcp` and the protected-resource paths branch off before CORS and the SPA fallback |
-| `packages/jinn/src/gateway/api.ts:1261` | The identified-caller gate every tool call passes, *before* the Workflow API. The connector route allow-list goes here |
-| `packages/jinn/src/sessions/registry.ts:1254` | `isPortalAgentSession`: gains "and not a connector session" |
-| `packages/jinn/src/sessions/turn/preflight.ts:48` | `refuseTurn`: the single gate before any engine spawn. It refuses connector sessions |
-| `packages/jinn/src/gateway/api.ts:2542` | The PATCH route's edit authority. A connector may edit only Todos it created (checked just before it) |
-| `packages/jinn/src/gateway/api.ts:2313` | Create-time `autoStart:false` opt-out. Forced for connector Todos, plus the label |
-| `packages/jinn/src/gateway/todo-comment-steering.ts:130` | The steering author skip. Connector authors are skipped too |
-| `packages/jinn/src/work-items/workflow-event-feed.ts:293` | Trigger feed reads only `status_change`/`escalated` events. The connector has no status route in its allow-list, so it cannot produce one (FR-013a(1) holds by construction and is tested) |
-| `packages/jinn/src/mcp/identity.ts:156` | `ensureSessionCapability`: mints the anchor's capability in-process. It never leaves the gateway |
+| `packages/hundredfold/src/mcp/server.ts:201` | `handleMcpRequest`: reused unchanged as the JSON-RPC core |
+| `packages/hundredfold/src/mcp/server.ts:117` | `buildTools`: the remote profile filters it |
+| `packages/hundredfold/src/gateway/request-handler.ts:90` | The HTTP handler. `/mcp` and the protected-resource paths branch off before CORS and the SPA fallback |
+| `packages/hundredfold/src/gateway/api.ts:1261` | The identified-caller gate every tool call passes, *before* the Workflow API. The connector route allow-list goes here |
+| `packages/hundredfold/src/sessions/registry.ts:1254` | `isPortalAgentSession`: gains "and not a connector session" |
+| `packages/hundredfold/src/sessions/turn/preflight.ts:48` | `refuseTurn`: the single gate before any engine spawn. It refuses connector sessions |
+| `packages/hundredfold/src/gateway/api.ts:2542` | The PATCH route's edit authority. A connector may edit only Todos it created (checked just before it) |
+| `packages/hundredfold/src/gateway/api.ts:2313` | Create-time `autoStart:false` opt-out. Forced for connector Todos, plus the label |
+| `packages/hundredfold/src/gateway/todo-comment-steering.ts:130` | The steering author skip. Connector authors are skipped too |
+| `packages/hundredfold/src/work-items/workflow-event-feed.ts:293` | Trigger feed reads only `status_change`/`escalated` events. The connector has no status route in its allow-list, so it cannot produce one (FR-013a(1) holds by construction and is tested) |
+| `packages/hundredfold/src/mcp/identity.ts:156` | `ensureSessionCapability`: mints the anchor's capability in-process. It never leaves the gateway |
 
 ## Technical Context
 

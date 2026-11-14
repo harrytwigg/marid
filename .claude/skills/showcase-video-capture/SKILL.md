@@ -30,7 +30,7 @@ Use this skill to produce deterministic Jinn showcase media without touching a l
    - Do not run against the live gateway unless the user specifically requests it.
 
 3. Build a mock gateway for deterministic captures.
-   - Serve the built web bundle from `packages/jinn/dist/web`.
+   - Serve the built web bundle from `packages/hundredfold/dist/web`.
    - Implement just enough API surface for the UI path being captured.
    - Provide mock WebSocket events for chat streaming.
    - Add a manual trigger endpoint for the demo stream, for example `/api/showcase/start-demo`, so navigation can happen first and the chat stream can be last.
@@ -54,7 +54,7 @@ Use this skill to produce deterministic Jinn showcase media without touching a l
 For a capture-only sandbox, a small Node server is usually enough:
 
 - Static files:
-  - Serve `packages/jinn/dist/web`.
+  - Serve `packages/hundredfold/dist/web`.
   - Fallback unknown paths to `index.html` so client routes load.
 
 - REST endpoints commonly needed by the web UI:
@@ -220,7 +220,7 @@ When the user asks to replace the existing showcase:
 
 1. Locate the README asset reference:
    ```bash
-   rg -n "showcase|\\.gif|assets/" README.md packages/jinn/README.md
+   rg -n "showcase|\\.gif|assets/" README.md packages/hundredfold/README.md
    ```
 
 2. Replace only the tracked asset:

@@ -25,8 +25,8 @@
 ### Task 1: Cause-aware scoped-write refusal
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Test: `packages/jinn/src/gateway/__tests__/browser-operator-authorization.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Test: `packages/hundredfold/src/gateway/__tests__/browser-operator-authorization.test.ts`
 
 **Interfaces:**
 - Consumes: `resolveScopedWriteCallerIdentity(req, context)`, `shouldRequireGatewayAuth(config)`, `FORWARDED_REQUEST_HEADERS`, and `requestHeaderValues(req, name)`.
@@ -66,19 +66,19 @@ Expected: all browser authorization tests pass, including the two new cause-rout
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/jinn/src/gateway/api.ts packages/jinn/src/gateway/__tests__/browser-operator-authorization.test.ts
+git add packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/gateway/__tests__/browser-operator-authorization.test.ts
 git commit -m "fix(auth): diagnose proxied operator failures"
 ```
 
 ### Task 2: Auth-enabled fresh instances with local auto-pair
 
 **Files:**
-- Modify: `packages/jinn/src/cli/setup.ts`
-- Modify: `packages/jinn/src/cli/create.ts`
-- Test: `packages/jinn/src/cli/__tests__/config-seed.test.ts`
-- Test: `packages/jinn/src/cli/__tests__/create-verify.test.ts`
-- Test: `packages/jinn/src/cli/__tests__/start.test.ts`
-- Test: `packages/jinn/src/gateway/__tests__/auth-ux-api.test.ts`
+- Modify: `packages/hundredfold/src/cli/setup.ts`
+- Modify: `packages/hundredfold/src/cli/create.ts`
+- Test: `packages/hundredfold/src/cli/__tests__/config-seed.test.ts`
+- Test: `packages/hundredfold/src/cli/__tests__/create-verify.test.ts`
+- Test: `packages/hundredfold/src/cli/__tests__/start.test.ts`
+- Test: `packages/hundredfold/src/gateway/__tests__/auth-ux-api.test.ts`
 
 **Interfaces:**
 - Consumes: `ensureGatewayAuthToken(home)`, the fresh-install `DEFAULT_CONFIG`, `issueLocalBootstrapGrant()`, and `POST /api/auth/bootstrap`.
@@ -113,16 +113,16 @@ Expected: all tests pass and `validateGatewayExposure` coverage remains green.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/jinn/src/cli/setup.ts packages/jinn/src/cli/create.ts packages/jinn/src/cli/__tests__/config-seed.test.ts packages/jinn/src/cli/__tests__/create-verify.test.ts packages/jinn/src/cli/__tests__/start.test.ts packages/jinn/src/gateway/__tests__/auth-ux-api.test.ts
+git add packages/hundredfold/src/cli/setup.ts packages/hundredfold/src/cli/create.ts packages/hundredfold/src/cli/__tests__/config-seed.test.ts packages/hundredfold/src/cli/__tests__/create-verify.test.ts packages/hundredfold/src/cli/__tests__/start.test.ts packages/hundredfold/src/gateway/__tests__/auth-ux-api.test.ts
 git commit -m "feat(auth): secure new gateways by default"
 ```
 
 ### Task 3: Remove the unproven Claude parent-env fallback
 
 **Files:**
-- Revert: `packages/jinn/src/engines/claude-interactive.ts`
-- Revert: `packages/jinn/src/mcp/__tests__/engine-wiring.test.ts`
-- Verify: `packages/jinn/src/mcp/__tests__/server-bootstrap.test.ts`
+- Revert: `packages/hundredfold/src/engines/claude-interactive.ts`
+- Revert: `packages/hundredfold/src/mcp/__tests__/engine-wiring.test.ts`
+- Verify: `packages/hundredfold/src/mcp/__tests__/server-bootstrap.test.ts`
 
 **Interfaces:**
 - Consumes: per-session non-secret argv from `attachSessionIdentity` and capability derivation in `resolveMcpServerBootstrap`.

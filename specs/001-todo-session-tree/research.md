@@ -17,9 +17,9 @@ first node renders, and the depth is unknown in advance, so the request count is
 construction. That fails SC-005 (a 50-node tree stays interactive) on its own.
 
 The decisive fact is that the server-side cost is **already being paid**:
-`serializeSessionList` (`packages/jinn/src/gateway/api.ts:1159`) calls `listSessions()` — a full
+`serializeSessionList` (`packages/hundredfold/src/gateway/api.ts:1159`) calls `listSessions()` — a full
 session-table read — on *every* call to the route the Todo page already makes
-(`packages/jinn/src/gateway/api.ts:2828`). Indexing that same array by `parentSessionId` and
+(`packages/hundredfold/src/gateway/api.ts:2828`). Indexing that same array by `parentSessionId` and
 walking it is in-memory work over data the request has already loaded. **The tree costs one
 extra pass over an array the endpoint already builds.**
 
@@ -43,7 +43,7 @@ route.
 1. **The Footprint Ladder (Principle IV) prefers rung 1**, "extend something that exists". The
    Todo page already calls this exact route with this exact id; the tree is the same question
    asked with more of the answer.
-2. **`packages/jinn/src/gateway/api.ts` is already over its size baseline.** `pnpm ratchet`
+2. **`packages/hundredfold/src/gateway/api.ts` is already over its size baseline.** `pnpm ratchet`
    reports 24 pre-existing violations on this branch, and `api.ts` is one of them — baseline
    5114 lines, tree 5186. Any new route block makes a red check redder. The `?tree=1` branch is
    a two-line addition inside a handler that already exists, and everything else lives in a new
@@ -66,7 +66,7 @@ which reads the `["work-item-sessions", id]` cache — is untouched.
 
 **Decision**: Breadth-first from the Todo's linked sessions, following `parentSessionId` edges
 downward, carrying a `visited` set. Reuse the rule
-`buildDelegatedActivityIndex` (`packages/jinn/src/sessions/delegated-activity.ts:13`) already
+`buildDelegatedActivityIndex` (`packages/hundredfold/src/sessions/delegated-activity.ts:13`) already
 applies — its own comment states it: *"graph cycles are contained and an active session is never
 counted as its own descendant."*
 
@@ -80,7 +80,7 @@ tree, which is the part the operator can act on.
 - *Depth-first* — rejected: truncation would keep one deep branch and drop the operator's
   siblings, which is the less useful half.
 - *Trusting the data to be acyclic* — rejected: `parentSessionId` is a plain nullable column
-  (`packages/jinn/src/sessions/registry.ts:145`) with no constraint preventing a cycle, and the
+  (`packages/hundredfold/src/sessions/registry.ts:145`) with no constraint preventing a cycle, and the
   existing code already defends against one.
 
 ---
@@ -137,9 +137,9 @@ reported in the `directory` as unresolvable.
 > **Revised during implementation.** This entry originally called for a tombstone node holding
 > the orphaned children of a deleted session. Writing it exposed the premise as false, in two
 > steps. First, the case is nearly unreachable: `deleteSession` and `deleteSessions`
-> (`packages/jinn/src/sessions/registry.ts:1730`, `:1750`) both carry
+> (`packages/hundredfold/src/sessions/registry.ts:1730`, `:1750`) both carry
 > `WHERE ... work_item_id IS NULL`, and the bulk route partitions linked sessions into
-> `preserved` before deleting (`packages/jinn/src/gateway/api.ts:2188`) — a linked session is
+> `preserved` before deleting (`packages/hundredfold/src/gateway/api.ts:2188`) — a linked session is
 > audit evidence and cannot be hard-deleted, which `shared/types.ts:379` states outright.
 > Second, in the residue that *is* reachable — an untracked spawn — the tombstone would be
 > actively wrong: when that row goes, its `parentSessionId` edge goes with it, so nothing
@@ -161,7 +161,7 @@ supplies the id itself and the lookup can therefore fail visibly.
 
 ## R7 — Module placement under the 300-line limit
 
-**Decision**: A new module `packages/jinn/src/sessions/session-tree.ts` holds the traversal,
+**Decision**: A new module `packages/hundredfold/src/sessions/session-tree.ts` holds the traversal,
 bounds, and node shaping. `api.ts` gains only the `?tree=1` branch. The web side gets a new
 `packages/web/src/routes/todos/task-page/session-tree.tsx`.
 
@@ -171,7 +171,7 @@ of the files this feature touches are already at or near their ceilings:
 
 | File | Lines now | Baseline |
 | --- | --- | --- |
-| `packages/jinn/src/gateway/api.ts` | 5186 | 5114 — **already over** |
+| `packages/hundredfold/src/gateway/api.ts` | 5186 | 5114 — **already over** |
 | `packages/web/src/routes/todos/task-page/task-page.tsx` | 586 | 586 — **at ceiling** |
 | `packages/web/src/routes/todos/task-page/props-rail.tsx` | 297 | no budget — **3 lines under the 300 limit** |
 | `packages/web/src/routes/todos/task-page/activity.tsx` | 556 | 556 — **at ceiling** |
@@ -215,8 +215,8 @@ The cost is nil for the same reason as R1: `listSessions()` is already read per 
 
 **Decision**: Surface the existing `workItemRole` on the node. No new model.
 
-**Rationale**: `packages/jinn/src/sessions/registry.ts:136` already maps `work_item_role`, and
-`resolveDelegationLinkRole` (`packages/jinn/src/work-items/link-role.ts:51`) already decides it
+**Rationale**: `packages/hundredfold/src/sessions/registry.ts:136` already maps `work_item_role`, and
+`resolveDelegationLinkRole` (`packages/hundredfold/src/work-items/link-role.ts:51`) already decides it
 per delegation — explicitly, or by inferring `review` from an `in_review` Todo. The field even
 already reaches the browser: `serializeSession` (`api.ts:1128`) spreads the whole session, and
 `LinkedSessionWire` (`packages/web/src/lib/api.ts:677`) absorbs it into its index signature

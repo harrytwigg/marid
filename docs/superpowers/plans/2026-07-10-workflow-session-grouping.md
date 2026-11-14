@@ -20,9 +20,9 @@
 ### Task 1: Persist session provenance
 
 **Files:**
-- Modify: `packages/jinn/src/shared/types.ts`
-- Modify: `packages/jinn/src/sessions/registry.ts`
-- Test: `packages/jinn/src/sessions/__tests__/workflow-provenance.test.ts`
+- Modify: `packages/hundredfold/src/shared/types.ts`
+- Modify: `packages/hundredfold/src/sessions/registry.ts`
+- Test: `packages/hundredfold/src/sessions/__tests__/workflow-provenance.test.ts`
 
 **Interfaces:**
 - Produces: `WorkflowSessionProvenance`, `CreateSessionOpts.workflowProvenance`, and workflow filters on `SearchSessionsFilter`.
@@ -48,9 +48,9 @@ Run the same targeted test and expect all assertions to pass.
 ### Task 2: Synchronize a visible workflow-run parent
 
 **Files:**
-- Modify: `packages/jinn/src/workflows/run-reconciler.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Test: `packages/jinn/src/gateway/__tests__/workflow-session-grouping.test.ts`
+- Modify: `packages/hundredfold/src/workflows/run-reconciler.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Test: `packages/hundredfold/src/gateway/__tests__/workflow-session-grouping.test.ts`
 
 **Interfaces:**
 - Consumes: `WorkflowSessionProvenance` and session registry create/update methods.
@@ -77,11 +77,11 @@ Run the grouping test and expect manual and schedule cases to pass.
 ### Task 3: Attach phase sessions to the parent
 
 **Files:**
-- Modify: `packages/jinn/src/workflows/advance.ts`
-- Modify: `packages/jinn/src/workflows/run-reconciler.ts`
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Test: `packages/jinn/src/gateway/__tests__/workflow-session-grouping.test.ts`
-- Test: `packages/jinn/src/workflows/__tests__/run-reconciler.test.ts`
+- Modify: `packages/hundredfold/src/workflows/advance.ts`
+- Modify: `packages/hundredfold/src/workflows/run-reconciler.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Test: `packages/hundredfold/src/gateway/__tests__/workflow-session-grouping.test.ts`
+- Test: `packages/hundredfold/src/workflows/__tests__/run-reconciler.test.ts`
 
 **Interfaces:**
 - Consumes: workflow run parent key and session provenance.

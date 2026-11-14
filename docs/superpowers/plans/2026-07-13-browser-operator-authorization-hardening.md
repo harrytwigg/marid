@@ -21,7 +21,7 @@
 ### Task 1: Real-network defect reproductions
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/__tests__/browser-operator-authorization.test.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/browser-operator-authorization.test.ts`
 
 **Interfaces:**
 - Consumes: `handleApiRequest(req, res, context)` through a real ephemeral HTTP listener.
@@ -36,9 +36,9 @@
 ### Task 2: Request-bound browser authorization
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts`
-- Modify: `packages/jinn/src/gateway/server.ts`
-- Modify: `packages/jinn/src/gateway/__tests__/upgrade-identity-guard.test.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/gateway/server.ts`
+- Modify: `packages/hundredfold/src/gateway/__tests__/upgrade-identity-guard.test.ts`
 
 **Interfaces:**
 - Consumes: `IncomingMessage.headers`, `rawHeaders`, `socket.remoteAddress`, `socket.localAddress`, and `socket.localPort`.

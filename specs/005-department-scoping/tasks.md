@@ -30,7 +30,7 @@ in PR #93. The phase-to-PR map:
 - Commits, branch names and PRs use no internal tracking numbers.
 - **Docs** (FR-043): update the template docs and skills, and the repository docs, that the
   change affects, in the same PR.
-- **Instance migration** (FR-044): if anything under `packages/jinn/template/` changed, run
+- **Instance migration** (FR-044): if anything under `packages/hundredfold/template/` changed, run
   `pnpm --filter jinn-cli migration:generate -- --base-ref <latest release tag> --version <next version> --allow-unreleased`,
   add this phase's paragraph to the release rationale, and pass the same command with
   `migration:check`. If another phase merged first, rebase and regenerate.
@@ -138,7 +138,7 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
   row, including the `ids=`, `pinned` and `q` branches and the hidden counts.
 - [x] T045 Write `mayHoldTodo` (FR-015).
   - Add a guard at every SQL writer of `assignee`. Enumerate them first with
-    `git grep -n "SET assignee\|assignee = ?\|INSERT INTO work_items" packages/jinn/src`.
+    `git grep -n "SET assignee\|assignee = ?\|INSERT INTO work_items" packages/hundredfold/src`.
     On `main` that finds the `store.ts` insert, the two dynamic update paths in `store.ts`, and
     `work-items/assignment.ts:98`. Then enumerate their callers, including
     `cron/runner.ts:101`, `plugins/host/todos.ts:31` and `gateway/api.ts:3450`.

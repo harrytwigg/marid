@@ -13,10 +13,10 @@
 ### Task 1: Host workspace directory and legacy migration
 
 **Files:**
-- Create: `packages/jinn/src/instances/directory.ts`
-- Modify: `packages/jinn/src/shared/paths.ts`
-- Modify: `packages/jinn/src/cli/instances.ts`
-- Test: `packages/jinn/src/instances/directory.test.ts`
+- Create: `packages/hundredfold/src/instances/directory.ts`
+- Modify: `packages/hundredfold/src/shared/paths.ts`
+- Modify: `packages/hundredfold/src/cli/instances.ts`
+- Test: `packages/hundredfold/src/instances/directory.test.ts`
 
 - [ ] Write failing tests for macOS, Windows, and XDG paths; v1 array import from `~/.jinn/instances.json`; immutable IDs; atomic schema-v2 writes; and registry override compatibility.
 - [ ] Run the focused test and confirm it fails because the host directory module does not exist.
@@ -27,12 +27,12 @@
 ### Task 2: Workspace naming, creation, startup, and access discovery
 
 **Files:**
-- Create: `packages/jinn/src/instances/create.ts`
-- Create: `packages/jinn/src/instances/access.ts`
-- Modify: `packages/jinn/src/cli/create.ts`
-- Modify: `packages/jinn/bin/jinn.ts`
-- Test: `packages/jinn/src/instances/create.test.ts`
-- Test: `packages/jinn/src/instances/access.test.ts`
+- Create: `packages/hundredfold/src/instances/create.ts`
+- Create: `packages/hundredfold/src/instances/access.ts`
+- Modify: `packages/hundredfold/src/cli/create.ts`
+- Modify: `packages/hundredfold/bin/jinn.ts`
+- Test: `packages/hundredfold/src/instances/create.test.ts`
+- Test: `packages/hundredfold/src/instances/access.test.ts`
 
 - [ ] Write failing tests showing `John` becomes display name `John`, slug `john`, instance id/name `jinn-john`, and home `~/.jinn-john`, while invalid/path-traversal names are rejected.
 - [ ] Write failing tests for available-port selection, subprocess setup/start arguments, rollback before registration, and existing registry-based `-i` home resolution.
@@ -45,10 +45,10 @@
 ### Task 3: Gateway workspace API and seamless browser handoff
 
 **Files:**
-- Modify: `packages/jinn/src/gateway/api.ts`
+- Modify: `packages/hundredfold/src/gateway/api.ts`
 - Modify: `packages/web/src/lib/auth.ts`
 - Modify: `packages/web/src/routes/auth-provider.tsx`
-- Test: `packages/jinn/src/gateway/__tests__/instances-api.test.ts`
+- Test: `packages/hundredfold/src/gateway/__tests__/instances-api.test.ts`
 - Test: `packages/web/src/lib/__tests__/auth.test.ts`
 - Test: `packages/web/src/routes/auth-provider.test.tsx`
 

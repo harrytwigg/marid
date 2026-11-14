@@ -12,16 +12,16 @@ the Todos half. Every "shipped" row below cites a path that resolves at the base
 | Asked for | State | Evidence |
 | --- | --- | --- |
 | Linear-type experience, a board | Shipped | `packages/web/src/routes/todos/board/` |
-| Comments on a Todo | Shipped | `packages/jinn/src/work-items/comments.ts` |
-| Comments with attachments, images included | Shipped | `packages/jinn/src/work-items/attachments.ts` |
-| Sub-issues | Shipped | `packages/jinn/src/work-items/store.ts` (`parent_id` / `root_id`) |
-| Relations between Todos | Shipped | `packages/jinn/src/work-items/relations.ts` |
-| Labels, priority | Shipped | `packages/jinn/src/work-items/labels.ts` |
+| Comments on a Todo | Shipped | `packages/hundredfold/src/work-items/comments.ts` |
+| Comments with attachments, images included | Shipped | `packages/hundredfold/src/work-items/attachments.ts` |
+| Sub-issues | Shipped | `packages/hundredfold/src/work-items/store.ts` (`parent_id` / `root_id`) |
+| Relations between Todos | Shipped | `packages/hundredfold/src/work-items/relations.ts` |
+| Labels, priority | Shipped | `packages/hundredfold/src/work-items/labels.ts` |
 | Hide employee-created noise, see only my own | Shipped | `packages/web/src/routes/todos/board/` — Home = `kept=true` + `rootsOnly`, filled by the operator's pin alone |
-| System employees that cannot be deleted or altered | **Missing** | `scanOrg()` in `packages/jinn/src/gateway/org.ts:44` treats every YAML alike; the constructed `Employee` has no system or protected field |
+| System employees that cannot be deleted or altered | **Missing** | `scanOrg()` in `packages/hundredfold/src/gateway/org.ts:44` treats every YAML alike; the constructed `Employee` has no system or protected field |
 | Todo Dispatcher + a Dispatch button | **Missing** | no dispatch affordance on any Todo surface; `delegate_task` exists but is agent-invoked, not a Todo action |
 | Request-update button | **Missing** | — |
-| Shipped system workflows, disableable | **Missing** | `packages/jinn/template/` ships `org/`, `skills/`, `knowledge/`, `docs/`, `migrations/` — no `workflows/` |
+| Shipped system workflows, disableable | **Missing** | `packages/hundredfold/template/` ships `org/`, `skills/`, `knowledge/`, `docs/`, `migrations/` — no `workflows/` |
 
 **So the unbuilt request is three things:** system employees, Todo dispatch (plus request
 update), and shipped system workflows.
@@ -30,11 +30,11 @@ update), and shipped system workflows.
 
 - `delegate_task` / `spawn_session` already create a child session bound to an employee with a
   chosen engine, model, and effort. Dispatch does not need a new session mechanism.
-- The workflow runner (`packages/jinn/src/workflows/runner.ts`) already executes multi-node
+- The workflow runner (`packages/hundredfold/src/workflows/runner.ts`) already executes multi-node
   procedures with typed step outputs and approval gates. The `jinn-build` pipeline this very
   round is running on is the proof.
 - Workflow definitions persist as rows in `workflow_definitions`
-  (`packages/jinn/src/workflows/repository-migrations.ts:22`), not as files. Shipping a system
+  (`packages/hundredfold/src/workflows/repository-migrations.ts:22`), not as files. Shipping a system
   workflow therefore means seeding the database, not copying a template file.
 
 ### Two facts that constrain every variant
@@ -106,7 +106,7 @@ there is no file to open and no prompt to tweak — the fix is a Jinn release. T
 
 ### Variant B — System employees are seeded, protected files
 
-**Persistence.** `packages/jinn/template/org/system/*.yaml`, copied into `~/.jinn/org/system/`
+**Persistence.** `packages/hundredfold/template/org/system/*.yaml`, copied into `~/.jinn/org/system/`
 at init, each carrying `system: true`. `scanOrg()` reads the flag; the PATCH route refuses to
 edit a system employee and the UI renders it locked.
 

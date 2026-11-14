@@ -45,8 +45,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          PACKAGE_VERSION="$(node -p "require('./packages/jinn/package.json').version")"
-          PACKAGE_REPOSITORY="$(node -p "require('./packages/jinn/package.json').repository.url")"
+          PACKAGE_VERSION="$(node -p "require('./packages/hundredfold/package.json').version")"
+          PACKAGE_REPOSITORY="$(node -p "require('./packages/hundredfold/package.json').repository.url")"
           EXPECTED_TAG="v${PACKAGE_VERSION}"
 
           if [[ "$RELEASE_TAG" != "$EXPECTED_TAG" ]]; then
@@ -117,15 +117,15 @@ jobs:
           set -euo pipefail
           CANDIDATE_DIR="$(mktemp -d "${RUNNER_TEMP}/jinn-upgrade-candidate.XXXXXX")"
           trap 'rm -rf "$CANDIDATE_DIR"' EXIT
-          (cd packages/jinn && npm pack --pack-destination "$CANDIDATE_DIR")
+          (cd packages/hundredfold && npm pack --pack-destination "$CANDIDATE_DIR")
           CANDIDATE_TARBALL="$CANDIDATE_DIR/jinn-cli-$PACKAGE_VERSION.tgz"
           test -f "$CANDIDATE_TARBALL"
           pnpm upgrade-verify -- --candidate-tarball "$CANDIDATE_TARBALL"
 
       - name: Verify npm package contents
-        working-directory: packages/jinn
+        working-directory: packages/hundredfold
         run: npm pack --dry-run
 
       - name: Publish through npm Trusted Publishing
-        working-directory: packages/jinn
+        working-directory: packages/hundredfold
         run: npm publish

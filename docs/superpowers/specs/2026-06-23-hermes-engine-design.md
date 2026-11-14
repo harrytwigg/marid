@@ -85,7 +85,7 @@ this exact version. ACP is a stable, versioned protocol (`initialize` negotiates
 ### 3.1 New modules
 
 ```
-packages/jinn/src/engines/
+packages/hundredfold/src/engines/
   hermes-protocol.ts   # PURE: JSON-RPC request builders + session/update → StreamDelta
                        # mappers + provider:model helpers. No I/O. Fully unit-testable.
   hermes-jsonrpc.ts    # Minimal ndjson JSON-RPC client over a child_process stdio pair:
@@ -200,7 +200,7 @@ claude/codex/grok run under bypass/--yolo.
   + `SetupEngine` union.
 - `cli/migrate.ts`: `buildMigrateArgs` hermes case (if applicable).
 - `talk/routes.ts` + valid-engine lists: include `hermes`.
-- **README** (root + `packages/jinn`): add Hermes to the engines table (what it is, install
+- **README** (root + `packages/hundredfold`): add Hermes to the engines table (what it is, install
   hint, Chat vs CLI mode, auto-approve note, metered-cost caveat).
 - `docs/`: short `docs/engines-hermes.md` (or a section) — invocation contract, ACP event
   map, model/effort behavior, troubleshooting.
@@ -223,7 +223,7 @@ the registry / `GET /api/engines`.
    set_model, prompt streaming, settle on stop_reason, watchdog/exit backstop, kill. Then
    `HermesAcpEngine`. Then `HermesInteractiveEngine` (PTY args + ready detection; reuse the
    grok-interactive test shape).
-4. **Registry/config/wiring** per §4; `pnpm -C packages/jinn test` + typecheck green.
+4. **Registry/config/wiring** per §4; `pnpm -C packages/hundredfold test` + typecheck green.
 5. **Live integration test** (real binary): a script that does `initialize` → `session/new` →
    one tiny `session/prompt` ("reply with the single word: ok"), asserts streamed `text`
    deltas + final result + a `usage_update`, then `session/load` + a second prompt to prove
