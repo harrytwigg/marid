@@ -6,7 +6,7 @@ description: Use when cutting a new hundredfold release for this repo - bumping 
 # Releasing hundredfold
 
 The published npm package is **`hundredfold`** (lives in `packages/hundredfold`). The root
-package (`hundredfold`) is private; `packages/web` is internal (its version isn't shipped).
+package (`hundredfold-workspace`) is private; `packages/web` is internal (its version isn't shipped).
 Version lives in **one place**: `packages/hundredfold/package.json`.
 
 ## How the pieces connect
