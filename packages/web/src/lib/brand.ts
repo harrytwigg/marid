@@ -1,5 +1,5 @@
-/** The product name users see. "Hundredfold" stays the internal codename (identifiers,
- *  env vars, paths); only user-visible strings read from here. */
+/** The product name users see. Names the app builds for itself (storage keys, headers, the
+ *  plugin SDK specifier) come from the codename instead (codename.ts); only user-visible strings read from here. */
 export const PRODUCT_NAME = "Hundredfold"
 
 /** What the server files the portal (COO) under when `portal.portalName` is unset: the internal
