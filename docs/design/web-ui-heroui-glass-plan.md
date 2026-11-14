@@ -94,13 +94,13 @@ of slices 1a and 1c):
 
 | Collision | Effect | Resolution |
 |---|---|---|
-| HeroUI `@utility focus-ring` (always-on ring) vs Marid's `.focus-ring` class (focus-visible outline, 109 uses) | every card and button drew a 2px accent ring | rename Marid's class to `focus-outline` |
-| `--color-accent` / `--color-muted`: shadcn meaning (hover fill) vs HeroUI meaning (brand colour, muted text) | 44 Marid call sites would change colour | HeroUI's vocabulary wins; the 44 call sites move to `[var(--fill-*)]` / `[var(--text-primary)]` |
-| HeroUI's `dark` variant falls back to `prefers-color-scheme` even when the app is set to light | `dark:` styles on a light page under a dark OS | do not import HeroUI's variants file; keep Marid's `dark` variant |
+| HeroUI `@utility focus-ring` (always-on ring) vs Hundredfold's `.focus-ring` class (focus-visible outline, 109 uses) | every card and button drew a 2px accent ring | rename Hundredfold's class to `focus-outline` |
+| `--color-accent` / `--color-muted`: shadcn meaning (hover fill) vs HeroUI meaning (brand colour, muted text) | 44 Hundredfold call sites would change colour | HeroUI's vocabulary wins; the 44 call sites move to `[var(--fill-*)]` / `[var(--text-primary)]` |
+| HeroUI's `dark` variant falls back to `prefers-color-scheme` even when the app is set to light | `dark:` styles on a light page under a dark OS | do not import HeroUI's variants file; keep Hundredfold's `dark` variant |
 | Radius scale (`--radius-sm…xl`) | small shifts | HeroUI derives radii from `--radius`; the bridge sets it and the identity sets the scale |
 | HeroUI `base.css` sets every element's border colour to `--border` | unstyled borders pick up the separator colour | wanted; bridged to `--separator` |
 | `@heroui/styles` exports its theme files under a two-wildcard pattern resolvers reject | build error | import that one file by path |
-| React Aria overlays sit at `z-index: 100000` | above Marid's `z-50`/`z-[100]` layers | audit in the overlay slices |
+| React Aria overlays sit at `z-index: 100000` | above Hundredfold's `z-50`/`z-[100]` layers | audit in the overlay slices |
 
 ---
 
@@ -108,8 +108,8 @@ of slices 1a and 1c):
 
 **Direction.** The product is an organisation of agents doing real work, so
 the identity should feel like precise, fast, coordinated engineering, not
-folklore. Jinn's look is warm charcoal and amber over a flat tonal staircase,
-set in Hanken Grotesk; the current Marid palette is that same structure
+folklore. Hundredfold's look is warm charcoal and amber over a flat tonal staircase,
+set in Hanken Grotesk; the current Hundredfold palette is that same structure
 recoloured teal. Aero changes the structure, not just the hue: a luminous
 ambient backdrop (high-altitude daylight by day, the sky at altitude after
 dark) with the interface floating on it as glass: translucent chrome, a
@@ -159,13 +159,13 @@ names (`--bg`, `--material-*`, `--fill-*`, `--text-*`, `--accent`,
 so untouched screens follow automatically.
 
 **Typography.** A new family throughout, so the product no longer reads as
-Jinn's Hanken Grotesk / IBM Plex Mono pairing: **Geist** for the UI
+Hundredfold's Hanken Grotesk / IBM Plex Mono pairing: **Geist** for the UI
 (variable 100–900, 29 KB latin), **Sora** for headings and the wordmark
 (variable 100–800, 34 KB latin; wide, geometric, a little aeronautical) and
 **Geist Mono** for code (23 KB latin). All SIL OFL, self-hosted. The fluid
 HIG scale and the Text size setting are unchanged; titles move to weight 700.
 
-**Iconography.** Phosphor **duotone** replaces Lucide (Jinn's set): rounder
+**Iconography.** Phosphor **duotone** replaces Lucide (Hundredfold's set): rounder
 glyphs with a soft 20% fill layer that picks up the glass. The prototype
 swaps all 140 icons at once by aliasing `lucide-react` to a module of
 Phosphor glyphs under Lucide's names (`src/lib/icon-shim.ts`, one module per
@@ -237,13 +237,13 @@ still wins.
 
 1. **One stylesheet root.** `src/routes/app.css` imports `globals.css`,
    HeroUI's theme map, utilities and base, then only the component CSS in
-   use, then the Marid palette, identity and bridge. One Tailwind compile, so
-   HeroUI's `@apply`s resolve against Marid's theme. `main.tsx` imports only
+   use, then the Hundredfold palette, identity and bridge. One Tailwind compile, so
+   HeroUI's `@apply`s resolve against Hundredfold's theme. `main.tsx` imports only
    this file.
 2. **Token bridge** (`heroui-bridge.css`). HeroUI's default theme is not
    imported. Every variable its components read (`--background`, `--surface`,
    `--overlay`, `--default`, `--field-*`, `--success` … and the derived
-   hovers and soft tints) is defined from Marid tokens. A HeroUI control and
+   hovers and soft tints) is defined from Hundredfold tokens. A HeroUI control and
    a legacy control side by side share one palette, and theme or accent
    changes move both.
 3. **Adapters, not call-site churn.** App code keeps importing
@@ -298,7 +298,7 @@ slice the same method:
 - `gh pr edit <PR> --attach './shots/sheets/<screen>.png#<Screen>: before and
   after, light and dark, desktop and narrow'`.
 
-"Before" comes from a built worktree of main (`JINN_CAPTURE_REPO`), "after"
+"Before" comes from a built worktree of main (`HUNDREDFOLD_CAPTURE_REPO`), "after"
 from the branch. A slice that touches a screen not yet listed adds it to
 `screens.mjs` in the same pull request. Shots never go into the repository.
 
@@ -395,7 +395,7 @@ A product rename would be decided and sequenced separately from these
 slices. The identity here takes the name from one place (`lib/brand.ts`), so
 no slice waits on it.
 
-If a name is chosen, the rename replaces every "Jinn" and "Marid" reference
+If a name is chosen, the rename replaces every "Hundredfold" and "Hundredfold" reference
 in the repository, the internal codename included. Some things are kept:
 
 - the fork attribution in `LICENSE`/`NOTICE`, which the MIT licence requires;

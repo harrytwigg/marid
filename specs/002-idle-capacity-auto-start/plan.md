@@ -16,7 +16,7 @@ Verified against the worktree on the date above, at the commit that carries this
 | `packages/hundredfold/src/shared/engine-limits-claude.ts:232` | `collectClaudeLimits` — the account's real windows: OAuth usage API (`:72`) with the CLI statusline snapshot as fallback, `stale` after 30 min (`:161`) | **The reading.** Called directly by the loop; the ticket's "expose as a callable" was already true. |
 | `packages/hundredfold/src/shared/engine-limits-claude-usage.ts:17` | `"session"` → `5h`, `"weekly_all"` → `7d`, scoped buckets → `7d <model>` | The window names the verdict keys on; every `7d*` bucket is held to the weekly ceiling. |
 | `packages/hundredfold/src/shared/engine-limits.ts:320` | `collectEngineLimits` — per-engine dispatch; `UNSUPPORTED_REASONS` at `:301` | OpenCode's not-applicable reason lands in the table (FR-015). |
-| `packages/hundredfold/src/cli/limits.ts:78` | `jinn limits [--json] [--engine]` | Already a script-callable reading; nothing added. |
+| `packages/hundredfold/src/cli/limits.ts:78` | `hundredfold limits [--json] [--engine]` | Already a script-callable reading; nothing added. |
 | `packages/hundredfold/src/gateway/api.ts:4499` | `GET /api/engine-limits` | Already an HTTP reading; nothing added. |
 | `packages/hundredfold/src/gateway/background-refresh.ts:41` | 15-minute engine-health refresh, config read at fire time, unref'd | The pattern the loop follows (cadence read each fire, unref'd timer). |
 | `packages/hundredfold/src/gateway/api.ts:2846` | `POST /api/work-items/:id/dispatch` — the Todo Dispatcher spawn recipe, previously inline | **Extracted** to `gateway/todo-dispatch.ts::startTodoDispatcher`; the route is the HTTP face. |
@@ -29,9 +29,9 @@ Verified against the worktree on the date above, at the commit that carries this
 | `packages/hundredfold/src/work-items/labels.ts:48` | `normalizeLabelName` — throws without a letter or digit | The config validator mirrors the rule so a bad `requireLabel` is refused at load. |
 | `packages/hundredfold/src/work-items/frozen-schemas.ts:32` | `priority BETWEEN 0 AND 3`; `packages/web/src/lib/todos.ts:186` says 3 is High | Ordering: priority descending, then oldest. |
 | `packages/hundredfold/src/gateway/api.ts:1096` | `sessionsHoldingEngineCapacity` — `waiting`, or transport `running`/`queued` | FR-007's definition of "holds engine capacity"; the busy guard. |
-| `packages/hundredfold/src/sessions/registry.ts:1112` | `listSessions` with `lastActivity`, `parentSessionId`, `source`, `employee` | FR-006a: an operator-driven session's activity; and "was Jinn active since the last reading" for the usage-delta signal (FR-006c). |
-| `packages/hundredfold/src/shared/claude-settings.ts:43` | `buildStatusLineRecorderCommand` — writes `<session>.json` into the limits dir on every statusline call | FR-006b: the newest file's mtime is the operator's last Jinn interactive turn. |
-| `packages/hundredfold/src/engines/claude-interactive.ts:1259` | The only caller that sets `statusLineDir: CLAUDE_LIMITS_DIR` (`paths.ts:79`) | Confirms signal (b) covers exactly Jinn's interactive PTY sessions; `remote-stage.ts:1250` deliberately does not install it remotely. |
+| `packages/hundredfold/src/sessions/registry.ts:1112` | `listSessions` with `lastActivity`, `parentSessionId`, `source`, `employee` | FR-006a: an operator-driven session's activity; and "was Hundredfold active since the last reading" for the usage-delta signal (FR-006c). |
+| `packages/hundredfold/src/shared/claude-settings.ts:43` | `buildStatusLineRecorderCommand` — writes `<session>.json` into the limits dir on every statusline call | FR-006b: the newest file's mtime is the operator's last Hundredfold interactive turn. |
+| `packages/hundredfold/src/engines/claude-interactive.ts:1259` | The only caller that sets `statusLineDir: CLAUDE_LIMITS_DIR` (`paths.ts:79`) | Confirms signal (b) covers exactly Hundredfold's interactive PTY sessions; `remote-stage.ts:1250` deliberately does not install it remotely. |
 | `packages/hundredfold/src/shared/models.ts:151` | `engineAvailable` — bin-on-PATH check | The "Claude is installed" guard (not an auth check; an unauthenticated CLI yields a non-live reading, which holds). |
 | `packages/hundredfold/src/shared/engine-health.ts:75` | `isEngineExhausted`; `recordExhaustedWindows` at `:179` written by the collector | Hold before reading when Claude is already recorded as out. |
 | `packages/hundredfold/src/shared/config.ts:70` / `config-types.ts:56` | `gateway.todoRecovery` — the precedent for a gateway-level feature block with a validator | `gateway.idleCapacity` follows it. |
@@ -55,7 +55,7 @@ Dispatcher, the claim gate, the opt-out flag, the park state and the busy-sessio
 in the tree. The feature is one pure decision (`shared/idle-capacity.ts`), one timer that
 applies it (`gateway/idle-capacity.ts`), and one extraction so the timer and the button share a
 spawn. The one thing the tree could not tell us — whether the operator is live on a machine
-Jinn cannot see — is answered by the reading itself: usage that rose while Jinn was quiet;
+Hundredfold cannot see — is answered by the reading itself: usage that rose while Hundredfold was quiet;
 the common case, the operator mid-chat with an employee, is a top-level session's `lastActivity`.
 
 ### Numbers, with their source
@@ -92,7 +92,7 @@ lines per function on every new file.
 **Primary Dependencies**: none added; `Intl.DateTimeFormat` for the zone
 **Storage**: none added — the per-window ledger and operator sighting are in-memory by design
 (a restart errs towards one extra start, which the live ceiling check then gates)
-**Testing**: Vitest, real SQLite store in a throwaway `JINN_HOME`, injected collector/clock/
+**Testing**: Vitest, real SQLite store in a throwaway `HUNDREDFOLD_HOME`, injected collector/clock/
 dispatch/operator signals
 **Target Platform**: the gateway process
 **Performance Goals**: one collector call per tick (an HTTPS GET + a `claude auth status`

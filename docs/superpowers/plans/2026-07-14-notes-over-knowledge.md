@@ -1,8 +1,8 @@
 # Notes over Knowledge Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use the applicable Jinn design, Jinn platform, and test-driven-development skills to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use the applicable Hundredfold design, Hundredfold platform, and test-driven-development skills to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a first-class Apple Notes-inspired Notes surface backed directly by the existing `~/.jinn/knowledge/` Markdown tree, with revision-safe web editing, local speech-to-text, and session-accessible MCP tools.
+**Goal:** Add a first-class Apple Notes-inspired Notes surface backed directly by the existing `~/.hundredfold/knowledge/` Markdown tree, with revision-safe web editing, local speech-to-text, and session-accessible MCP tools.
 
 **Architecture:** Markdown remains the source of truth. A focused notes store recursively projects safe regular `.md` files below `knowledge/` into folder, summary, and document records; the first Markdown heading is the title and the remaining document is the editable body. HTTP and MCP wrappers share that store, while the Vite/React page uses an Apple-style folder → note list → editor hierarchy on mobile and three panes on desktop.
 
@@ -12,13 +12,13 @@
 
 - Work on `main`; do not restart or deploy the live gateway.
 - Keep every shipped file generic: no operator names, client names, emails, keys, Slack IDs, or personal absolute home-directory paths.
-- Use only `~/.jinn/knowledge/` as the editable Notes root; `docs/` remains read-only and outside this page.
+- Use only `~/.hundredfold/knowledge/` as the editable Notes root; `docs/` remains read-only and outside this page.
 - Recursively include nested Markdown files as folders; ignore hidden entries, non-Markdown files, and all symlinks.
 - Use the first Markdown heading as the note title; fall back to the filename stem only when no heading exists.
 - Preserve YAML frontmatter/preamble and heading level when editing an existing note.
 - Require a content revision for every update so concurrent human/session writes return HTTP 409 instead of clobbering.
 - Use atomic same-directory writes and realpath containment; never accept absolute paths, traversal, backslashes, control bytes, or an escaped symlink.
-- Match Apple Notes information architecture while using Jinn Ledger tokens, no hardcoded colors, no hairline cards, and complete dark/light × desktop/mobile verification.
+- Match Apple Notes information architecture while using Hundredfold Ledger tokens, no hardcoded colors, no hairline cards, and complete dark/light × desktop/mobile verification.
 - Reuse the existing local STT hook and model-download modal. Dictation inserts at the editor selection and never auto-sends anything.
 - Follow TDD: every production behavior is preceded by a focused failing test and an observed expected failure.
 
@@ -207,7 +207,7 @@ Assert `/notes` is lazy-routed, desktop navigation order is Chat → Todos → N
 
 - [ ] **Step 2: Run tests and verify RED**
 
-Run: `pnpm --filter @jinn/web exec vitest run src/routes/notes/__tests__/navigation.test.tsx src/components/chat/__tests__/mobile-tab-bar.test.tsx src/routes/todos/__tests__/redirect.test.tsx`
+Run: `pnpm --filter @hundredfold/web exec vitest run src/routes/notes/__tests__/navigation.test.tsx src/components/chat/__tests__/mobile-tab-bar.test.tsx src/routes/todos/__tests__/redirect.test.tsx`
 
 Expected: FAIL because Notes is not a route or navigation item.
 
@@ -252,13 +252,13 @@ it("inserts a transcript at the editor selection", () => {
 
 - [ ] **Step 2: Run page/editor tests and verify RED**
 
-Run: `pnpm --filter @jinn/web exec vitest run src/routes/notes/__tests__/note-content.test.ts src/routes/notes/__tests__/page.test.tsx src/routes/notes/__tests__/note-mic.test.tsx`
+Run: `pnpm --filter @hundredfold/web exec vitest run src/routes/notes/__tests__/note-content.test.ts src/routes/notes/__tests__/page.test.tsx src/routes/notes/__tests__/note-mic.test.tsx`
 
 Expected: FAIL because the Notes components are absent.
 
 - [ ] **Step 3: Implement the desktop and mobile information architecture**
 
-Desktop: keep the existing Jinn rail, then render a quiet folder sidebar, a grouped-inset note list, and a borderless editor canvas. Mobile: show one level at a time with native large titles and reversible browser/history navigation. Use title, timestamp, and two-line preview rows; selected state uses `--accent-fill`, never a hard border.
+Desktop: keep the existing Hundredfold rail, then render a quiet folder sidebar, a grouped-inset note list, and a borderless editor canvas. Mobile: show one level at a time with native large titles and reversible browser/history navigation. Use title, timestamp, and two-line preview rows; selected state uses `--accent-fill`, never a hard border.
 
 - [ ] **Step 4: Implement revision-safe autosave**
 
@@ -277,9 +277,9 @@ Run the Step 2 command; expected PASS with no accessibility warnings.
 ### Task 5: Visual proof and repository gate
 
 **Files:**
-- Create outside the repo: `~/.jinn-audits/design-notes.md`
-- Create outside the repo: `~/.jinn-audits/design-notes-mock.html`
-- Create outside the repo: `~/.jinn-audits/design-notes-*.png`
+- Create outside the repo: `~/.hundredfold-audits/design-notes.md`
+- Create outside the repo: `~/.hundredfold-audits/design-notes-mock.html`
+- Create outside the repo: `~/.hundredfold-audits/design-notes-*.png`
 - Modify only if needed: `packages/web/src/routes/globals.css`
 
 - [ ] **Step 1: Produce and critique the token-accurate mock**
@@ -290,7 +290,7 @@ Capture desktop 1440×900 and mobile 390×844 in dark and light before final UI 
 
 Serve `/api/auth/state`, Notes list/read/create/update, STT status, and the shell endpoints the page requests. Start Vite on a scratch port and capture the real route in dark/light × desktop/mobile, including list, selected note, recording, empty folder, and conflict states. Use Playwright for 390px mobile.
 
-- [ ] **Step 3: Inspect every screenshot against Jinn design**
+- [ ] **Step 3: Inspect every screenshot against Hundredfold design**
 
 Verify no hardcoded colors, no rest-state hairline cards, correct theme contrast, ≥40px controls, centered/optically balanced mic, safe-area clearance, no clipped editor/list, no mobile horizontal overflow, and no `transition: all`.
 
@@ -312,7 +312,7 @@ Expected: all commands exit 0.
 ```bash
 git add docs/superpowers/plans/2026-07-14-notes-over-knowledge.md packages/hundredfold/src/notes packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/gateway/__tests__/notes-routes.test.ts packages/hundredfold/src/mcp packages/hundredfold/src/shared/types.ts packages/hundredfold/src/shared/__tests__/template-company-doctrine.test.ts packages/hundredfold/template packages/web/src
 git diff --cached --check
-pnpm --filter jinn test -- src/shared/__tests__/privacy-guard.test.ts
+pnpm --filter hundredfold test -- src/shared/__tests__/privacy-guard.test.ts
 ```
 
 Expected: `git diff --cached --check` is silent and the privacy guard passes.
@@ -327,6 +327,6 @@ Expected: one scoped commit on `main`, with the worktree clean afterward.
 
 ## Self-Review
 
-- Spec coverage: existing/nested knowledge files, heading titles, create/edit, desktop/mobile Apple Notes model, Jinn design system, centered STT, MCP read/write, revision safety, visual proof, full verification, main-branch commit, and privacy gate are each mapped to a task.
+- Spec coverage: existing/nested knowledge files, heading titles, create/edit, desktop/mobile Apple Notes model, Hundredfold design system, centered STT, MCP read/write, revision safety, visual proof, full verification, main-branch commit, and privacy gate are each mapped to a task.
 - Placeholder scan: no deferred implementation markers or unspecified test steps remain.
 - Type consistency: `NoteSummary`, `NoteDocument`, `NoteFolder`, `listNotes`, `readNote`, `createNote`, and `updateNote` use the same names and field shapes across store, HTTP, MCP, and web tasks.

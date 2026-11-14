@@ -1,6 +1,6 @@
 # Platform capabilities
 
-Jinn's product code asks for typed platform intents. It does not read browser or
+Hundredfold's product code asks for typed platform intents. It does not read browser or
 native globals directly. The contract lives in
 `packages/web/src/platform/contracts.ts`; adapters live under
 `packages/web/src/platform/adapters/`.
@@ -58,7 +58,7 @@ change that implements and verifies a capability.
    directly.
 5. Update the capability matrix and add platform-specific verification. Device
    or signing gaps stay `unverified`; compilation is not device proof.
-6. Build the production web output and run `pnpm --filter @jinn/web perf:budget`
+6. Build the production web output and run `pnpm --filter @hundredfold/web perf:budget`
    so forbidden native dependencies cannot enter emitted assets.
 
 The product-boundary test enforces step 4. Runtime detection remains centralized

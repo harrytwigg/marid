@@ -1,36 +1,36 @@
 # Seamless Instance Upgrades Implementation Plan
 
-> For agentic workers: REQUIRED SUB-SKILL: Use test-driven-development to implement this plan task-by-task. Use jinn-platform for gateway/web conventions, jinn-sandbox for isolation rules, and skill-creator when adding the reusable upgrade-lab skill.
+> For agentic workers: REQUIRED SUB-SKILL: Use test-driven-development to implement this plan task-by-task. Use hundredfold-platform for gateway/web conventions, hundredfold-sandbox for isolation rules, and skill-creator when adding the reusable upgrade-lab skill.
 
-**Goal:** Make a Jinn package upgrade automatically detect instance-template changes, present an unmistakable migration handoff in the terminal and web UI, and let the user's COO safely merge v0.25 customizations into v0.26 without requiring `jinn migrate` or touching unrelated user content.
+**Goal:** Make a Hundredfold package upgrade automatically detect instance-template changes, present an unmistakable migration handoff in the terminal and web UI, and let the user's COO safely merge v0.25 customizations into v0.26 without requiring `hundredfold migrate` or touching unrelated user content.
 
-**Architecture:** Release automation creates a deterministic, versioned migration bundle from the previous release tag and the candidate template. On first v0.26 gateway boot, a read-only migration service compares `config.yaml`'s `jinn.version` with the installed package, composes the applicable bundles, and exposes one canonical pending-migration contract to the CLI and web UI. The UI automatically opens a prominent, accessible migration dialog and can dispatch the exact prompt to an idempotent COO session; the terminal prints the same event as a colored banner while keeping the copyable prompt plain. The COO performs a three-way, snapshot-first merge and advances the marker only after verification. A separate upgrade lab installs real v0.25 and candidate v0.26 packages into disposable homes and random ports, with an optional Docker wrapper and a guarded local-process fallback.
+**Architecture:** Release automation creates a deterministic, versioned migration bundle from the previous release tag and the candidate template. On first v0.26 gateway boot, a read-only migration service compares `config.yaml`'s `hundredfold.version` with the installed package, composes the applicable bundles, and exposes one canonical pending-migration contract to the CLI and web UI. The UI automatically opens a prominent, accessible migration dialog and can dispatch the exact prompt to an idempotent COO session; the terminal prints the same event as a colored banner while keeping the copyable prompt plain. The COO performs a three-way, snapshot-first merge and advances the marker only after verification. A separate upgrade lab installs real v0.25 and candidate v0.26 packages into disposable homes and random ports, with an optional Docker wrapper and a guarded local-process fallback.
 
 **Tech Stack:** Node.js 24, TypeScript, Commander, Vite, React 19, React Router, TanStack Query, Tailwind CSS, Vitest, Playwright, npm tarballs, optional Docker.
 
 ## Global Constraints
 
-- Never read from, write to, start, stop, or restart the operator's live `~/.jinn` instance or port `7777` during implementation or QA.
-- The only authorized personalized-instance write is the new reusable skill at `~/.jinn/skills/jinn-upgrade-lab/`; its test runs must use disposable homes outside `~/.jinn`.
+- Never read from, write to, start, stop, or restart the operator's live `~/.hundredfold` instance or port `7777` during implementation or QA.
+- The only authorized personalized-instance write is the new reusable skill at `~/.hundredfold/skills/hundredfold-upgrade-lab/`; its test runs must use disposable homes outside `~/.hundredfold`.
 - Preserve the existing uncommitted edits in `.claude/skills/release-jinn-cli/SKILL.md` and `packages/hundredfold/package.json`; inspect and merge around them rather than reverting or overwriting them.
 - Do not publish npm packages, create GitHub releases, push branches, restart the live gateway, or perform any other external/shared mutation.
 - The installed package is read-only. Migration may mutate only the selected instance home after an explicit `Open with COO` action or a user-approved terminal handoff.
 - A user customization always wins over a stock template default. No user file is deleted without an explicit migration instruction and a backup.
 - The migration notification cannot be permanently dismissed while the marker remains behind. `Later` may close the modal for the current page load, but a persistent banner remains and the modal returns after the next gateway/UI reconnect.
 - ANSI color is decoration only: honor `NO_COLOR`, disable escape sequences for non-TTY output, never use red for a routine upgrade, and keep the actual agent prompt plain text.
-- Tests must prove isolation before they start a gateway: resolved home must not equal or be nested inside the real `~/.jinn`, selected port must not be `7777`, and no real secret store may be mounted or copied.
+- Tests must prove isolation before they start a gateway: resolved home must not equal or be nested inside the real `~/.hundredfold`, selected port must not be `7777`, and no real secret store may be mounted or copied.
 - Upgrade-lab tests must also protect port `7801`, derive the disposable port deterministically from the nonce-owned lab root, fail if that exact port is occupied, and persist it to the disposable `config.yaml` before any v0.25 gateway start or self-restart can occur.
-- Before the lab signals any process, it must prove both that the PID owns the disposable port and that the PID environment identifies the disposable `JINN_HOME`; unknown or foreign ownership is a hard abort.
+- Before the lab signals any process, it must prove both that the PID owns the disposable port and that the PID environment identifies the disposable `HUNDREDFOLD_HOME`; unknown or foreign ownership is a hard abort.
 
 ## User Experience Contract
 
-1. The user updates `jinn-cli` through npm/Homebrew and restarts or opens Jinn normally.
+1. The user updates `jinn-cli` through npm/Homebrew and restarts or opens Hundredfold normally.
 2. If no instance-facing template changed between the instance marker and the installed version, the gateway/web UI starts normally with no migration interruption.
 3. If a migration is pending, the terminal prints a compact violet/amber upgrade banner automatically, and the web UI opens a high-contrast violet/amber dialog automatically on its first successful status query.
 4. The dialog explains that the update is installed and the user's custom setup is safe. Its primary action is `Open with COO`; its secondary action is `Copy migration prompt`; `Later` closes only the dialog while leaving a persistent `Finish v0.26.0 setup` banner.
 5. `Open with COO` creates or reuses one direct COO web session for the exact `(instance, fromVersion, toVersion)` tuple, dispatches the canonical prompt, and navigates to `/?session=<id>`. Repeated clicks never create duplicate migration sessions.
 6. The prompt tells the COO to snapshot first, perform a three-way merge from old stock + user instance + new stock, preserve custom content, verify the bundle's postconditions, report changes, then mark completion.
-7. The banner/dialog disappears only after `jinn.version` equals the installed package version. Failed or interrupted COO work leaves the marker and reminder intact.
+7. The banner/dialog disappears only after `hundredfold.version` equals the installed package version. Failed or interrupted COO work leaves the marker and reminder intact.
 
 ## Task 1: Create deterministic release migration bundles
 
@@ -40,7 +40,7 @@
 - Create: `packages/hundredfold/src/cli/__tests__/instance-migration-bundle.test.ts`
 - Modify: `packages/hundredfold/package.json`
 - Modify: `.claude/skills/release-jinn-cli/SKILL.md`
-- Modify: `~/.jinn/skills/release/SKILL.md`
+- Modify: `~/.hundredfold/skills/release/SKILL.md`
 - Regenerate: `packages/hundredfold/template/migrations/0.26.0/manifest.json`
 - Regenerate: `packages/hundredfold/template/migrations/0.26.0/MIGRATION.md`
 - Create as needed: `packages/hundredfold/template/migrations/0.26.0/files/base/**`
@@ -156,7 +156,7 @@ Move range scanning and prompt composition behind `getPendingInstanceMigration({
 - user file: current customized instance,
 - target payload: stock v0.26 content.
 
-Remove language that implies engine exit code alone means success. Keep `jinn migrate` as a compatibility/fallback command that prints the same service response, but it must no longer be required for discovery.
+Remove language that implies engine exit code alone means success. Keep `hundredfold migrate` as a compatibility/fallback command that prints the same service response, but it must no longer be required for discovery.
 
 ### Step 3: Add snapshot-first support
 
@@ -170,7 +170,7 @@ Copy only affected instance paths plus `config.yaml`, `CLAUDE.md`/`AGENTS.md`, a
 
 ### Step 4: Make completion explicit and verifiable
 
-Keep `jinn migrate --mark-done 0.26.0`, but require the expected `migrationKey` when called by the automatic COO flow. Before writing, re-read the installed package version, validate all target paths remain inside the instance, confirm the snapshot exists, and require a completion receipt written by the `migrate` skill with the reviewed files and skipped items. Preserve YAML formatting and comments. Remove or deprecate `--apply` auto-stamping on engine exit zero; an interrupted or failed session must leave `jinn.version` unchanged.
+Keep `hundredfold migrate --mark-done 0.26.0`, but require the expected `migrationKey` when called by the automatic COO flow. Before writing, re-read the installed package version, validate all target paths remain inside the instance, confirm the snapshot exists, and require a completion receipt written by the `migrate` skill with the reviewed files and skipped items. Preserve YAML formatting and comments. Remove or deprecate `--apply` auto-stamping on engine exit zero; an interrupted or failed session must leave `hundredfold.version` unchanged.
 
 ### Step 5: Verify Task 2
 
@@ -204,11 +204,11 @@ Use a deterministic `sourceRef`/`sessionKey` of `instance-migration:<migrationKe
 
 ### Step 2: Implement the endpoints through existing session dispatch
 
-Reuse the same validated selection, queue, attempt, and `runWebSession` machinery as `POST /api/sessions`. Do not shell out to `jinn migrate --apply`. Return the session ID so the web UI can navigate to `/?session=<encoded-id>`.
+Reuse the same validated selection, queue, attempt, and `runWebSession` machinery as `POST /api/sessions`. Do not shell out to `hundredfold migrate --apply`. Return the session ID so the web UI can navigate to `/?session=<encoded-id>`.
 
 ### Step 3: Make the COO capable by default in v0.26
 
-Change `JINN_ATTACH_DEFAULT` to `true`, update its documentation, and prove an explicit instance config value of `false` still wins as a kill switch. Update resolver/setup tests so an upgraded v0.25 instance without a newly added MCP block receives the built-in Jinn MCP by default, while an operator who explicitly disabled it stays disabled.
+Change `HUNDREDFOLD_ATTACH_DEFAULT` to `true`, update its documentation, and prove an explicit instance config value of `false` still wins as a kill switch. Update resolver/setup tests so an upgraded v0.25 instance without a newly added MCP block receives the built-in Hundredfold MCP by default, while an operator who explicitly disabled it stays disabled.
 
 ### Step 4: Verify Task 3
 
@@ -240,7 +240,7 @@ Test TTY, non-TTY, `NO_COLOR=1`, narrow terminals, Unicode-disabled terminals, n
 Render a compact bordered notice before the ordinary “gateway ready” output:
 
 ```text
-╭─ Jinn update installed ─────────────────────────╮
+╭─ Hundredfold update installed ─────────────────────────╮
 │ v0.25.0 → v0.26.0 needs one safe setup merge.   │
 │ Your custom files are preserved. Open the UI or │
 │ hand the prompt below to your COO.               │
@@ -326,12 +326,12 @@ pnpm exec playwright test e2e/instance-migration.spec.ts
 The harness must refuse to run unless all checks pass before installation or process spawn:
 
 - lab root is a newly created directory under `os.tmpdir()` or an explicit disposable path,
-- lab root and home realpaths are neither equal to nor inside the real `~/.jinn`,
-- `HOME`, `JINN_HOME`, npm prefix/cache, XDG paths, instance registry, logs, and attachments all resolve inside the lab root,
-- no source path under `~/.jinn/secrets` is copied or mounted,
+- lab root and home realpaths are neither equal to nor inside the real `~/.hundredfold`,
+- `HOME`, `HUNDREDFOLD_HOME`, npm prefix/cache, XDG paths, instance registry, logs, and attachments all resolve inside the lab root,
+- no source path under `~/.hundredfold/secrets` is copied or mounted,
 - port is deterministically derived from the nonce-owned lab root, bound on `127.0.0.1`, and asserted not to equal protected ports `7777` or `7801`,
 - setup's generated `config.yaml` is rewritten atomically so `gateway.port` equals the chosen disposable port before the first gateway start,
-- a start preflight refuses an occupied port, and a signal preflight refuses any PID whose `JINN_HOME` is unknown or differs from the disposable home,
+- a start preflight refuses an occupied port, and a signal preflight refuses any PID whose `HUNDREDFOLD_HOME` is unknown or differs from the disposable home,
 - a regression fixture proves a simulated self-restart cannot signal a foreign listener and leaves that listener alive,
 - child processes receive an explicit minimal environment rather than inheriting all host environment variables,
 - cleanup only deletes a directory containing a lab-owned nonce file.
@@ -350,10 +350,10 @@ The default mode must work without Docker:
 2. `npm pack jinn-cli@0.25.0` into a lab-local cache.
 3. `pnpm --filter jinn-cli pack --pack-destination <lab-cache>` for the candidate v0.26 tarball.
 4. Install each tarball into a distinct lab-local npm prefix with lifecycle scripts disabled.
-5. Run v0.25 `jinn setup` against the lab home and seed the selected fixture.
+5. Run v0.25 `hundredfold setup` against the lab home and seed the selected fixture.
 6. Atomically persist the chosen lab port into the generated `config.yaml`, verify it reads back exactly, and only then release the port reservation.
 7. Run the ownership/availability preflight and start the v0.25 gateway on the persisted port; create representative sessions/cron/org state and record a baseline.
-8. Stop only a PID proven to own both the disposable port and disposable `JINN_HOME`, switch the executable to the candidate package, preflight again, and start v0.26 on the same lab home/port.
+8. Stop only a PID proven to own both the disposable port and disposable `HUNDREDFOLD_HOME`, switch the executable to the candidate package, preflight again, and start v0.26 on the same lab home/port.
 9. Exercise the status and migration APIs, open the COO handoff using a stub engine that records the prompt, simulate a verified migration receipt, then mark done.
 10. Save JSON results, logs, prompt, manifest audit, and Playwright screenshots under `<lab-root>/artifacts`.
 11. Stop only the ownership-verified lab PID and clean the root unless `--keep` is set.
@@ -376,7 +376,7 @@ Required scenarios:
 | `interrupted` | customized fixture | killed COO session leaves marker/reminder intact; retry reuses the migration session |
 | `no-instance-change` | current marker plus internal-only candidate fixture | no prompt, banner, snapshot, or migration session |
 
-For every scenario also prove existing sessions, Todos, workflows, cron definitions, org employees, and gateway data survive the package swap; the v0.25 PID is gone before v0.26 binds; the live port `7777` was never contacted; and the live `~/.jinn` mtimes/hashes for a preselected sentinel set are unchanged before/after.
+For every scenario also prove existing sessions, Todos, workflows, cron definitions, org employees, and gateway data survive the package swap; the v0.25 PID is gone before v0.26 binds; the live port `7777` was never contacted; and the live `~/.hundredfold` mtimes/hashes for a preselected sentinel set are unchanged before/after.
 
 ### Step 5: Verify Task 6
 
@@ -389,13 +389,13 @@ pnpm upgrade-lab -- --scenario interrupted
 pnpm upgrade-lab -- --scenario no-instance-change
 ```
 
-## Task 7: Package the lab as a reusable Jinn skill
+## Task 7: Package the lab as a reusable Hundredfold skill
 
 **Files:**
 
-- Create: `~/.jinn/skills/jinn-upgrade-lab/SKILL.md`
-- Create: `~/.jinn/skills/jinn-upgrade-lab/scripts/run.sh`
-- Create: `~/.jinn/skills/jinn-upgrade-lab/references/scenario-contract.md`
+- Create: `~/.hundredfold/skills/hundredfold-upgrade-lab/SKILL.md`
+- Create: `~/.hundredfold/skills/hundredfold-upgrade-lab/scripts/run.sh`
+- Create: `~/.hundredfold/skills/hundredfold-upgrade-lab/references/scenario-contract.md`
 
 ### Step 1: Create the skill with discovery-grade frontmatter
 
@@ -403,26 +403,26 @@ Use:
 
 ```yaml
 ---
-name: jinn-upgrade-lab
-description: Safely test Jinn package upgrades such as v0.25 to v0.26 in a disposable home and random port without touching the live ~/.jinn instance or port 7777. Use for release migration QA, rollback checks, and reproducible upgrade regressions.
+name: hundredfold-upgrade-lab
+description: Safely test Hundredfold package upgrades such as v0.25 to v0.26 in a disposable home and random port without touching the live ~/.hundredfold instance or port 7777. Use for release migration QA, rollback checks, and reproducible upgrade regressions.
 ---
 ```
 
-The skill must tell `jinn-dev` to prefer an exact candidate tarball, choose Docker when available, fall back to guarded process isolation, run the relevant scenario matrix, inspect artifacts, and report `PASS`, `FAIL`, or `BLOCKED` with artifact paths. It must explicitly prohibit live gateway restarts and direct edits to the operator's instance.
+The skill must tell `hundredfold-dev` to prefer an exact candidate tarball, choose Docker when available, fall back to guarded process isolation, run the relevant scenario matrix, inspect artifacts, and report `PASS`, `FAIL`, or `BLOCKED` with artifact paths. It must explicitly prohibit live gateway restarts and direct edits to the operator's instance.
 
 ### Step 2: Add a thin safe wrapper
 
-`scripts/run.sh` may only locate `~/Projects/jinn`, validate the requested scenario/candidate arguments, and invoke the repository's canonical harness. It must not duplicate upgrade logic. Use strict shell mode, quote every path, and forward no secret-bearing environment variables.
+`scripts/run.sh` may only locate `~/Projects/hundredfold`, validate the requested scenario/candidate arguments, and invoke the repository's canonical harness. It must not duplicate upgrade logic. Use strict shell mode, quote every path, and forward no secret-bearing environment variables.
 
 ### Step 3: Validate skill discovery and behavior
 
 ```bash
-test -f ~/.jinn/skills/jinn-upgrade-lab/SKILL.md
-sed -n '1,20p' ~/.jinn/skills/jinn-upgrade-lab/SKILL.md
-~/.jinn/skills/jinn-upgrade-lab/scripts/run.sh --scenario stock --dry-run
+test -f ~/.hundredfold/skills/hundredfold-upgrade-lab/SKILL.md
+sed -n '1,20p' ~/.hundredfold/skills/hundredfold-upgrade-lab/SKILL.md
+~/.hundredfold/skills/hundredfold-upgrade-lab/scripts/run.sh --scenario stock --dry-run
 ```
 
-Confirm both `.claude/skills/jinn-upgrade-lab` and `.agents/skills/jinn-upgrade-lab` resolve through Jinn's normal skill synchronization; do not restart the live gateway to force this.
+Confirm both `.claude/skills/hundredfold-upgrade-lab` and `.agents/skills/hundredfold-upgrade-lab` resolve through Hundredfold's normal skill synchronization; do not restart the live gateway to force this.
 
 ## Task 8: Full regression, adversarial review, and release gate
 
@@ -457,18 +457,18 @@ Create one candidate tarball after the clean build and pass that exact file to e
 
 ### Step 4: Perform independent code review and QA
 
-The reviewer must inspect the implementation against this plan, review every migration/security/isolation diff, run at least the `customized`, `interrupted`, and `no-instance-change` scenarios independently, inspect desktop/mobile screenshots, and confirm the live `~/.jinn` sentinel hashes plus port `7777` remained untouched. Findings must include severity, exact file/line, reproduction, and required fix. The implementer fixes valid findings; the reviewer reruns targeted QA and issues a final `PASS` only when no blocking/high-severity finding remains.
+The reviewer must inspect the implementation against this plan, review every migration/security/isolation diff, run at least the `customized`, `interrupted`, and `no-instance-change` scenarios independently, inspect desktop/mobile screenshots, and confirm the live `~/.hundredfold` sentinel hashes plus port `7777` remained untouched. Findings must include severity, exact file/line, reproduction, and required fix. The implementer fixes valid findings; the reviewer reruns targeted QA and issues a final `PASS` only when no blocking/high-severity finding remains.
 
 ## Final Acceptance Checklist
 
 - A release cannot ship an uncovered instance-template change.
-- Updating and reopening Jinn automatically reveals a pending migration; the user never needs to discover or type `jinn migrate`.
+- Updating and reopening Hundredfold automatically reveals a pending migration; the user never needs to discover or type `hundredfold migrate`.
 - The terminal notice is eye-catching in color and clean in `NO_COLOR`/non-TTY environments.
 - The web UI automatically opens an accessible, attractive migration dialog and keeps a persistent reminder until completion.
 - One click opens exactly one COO session with the canonical prompt and a verified snapshot.
 - v0.25 custom doctrine, config, skills, org, docs, and state survive the v0.26 transition.
 - Failed/interrupted work never advances the marker or suppresses the reminder.
 - Gateway/web/database/internal migrations require no manual user action.
-- The real `~/.jinn`, live gateway PID, secrets, and port `7777` are untouched by every lab run.
-- `jinn-dev` can rerun the packaged `jinn-upgrade-lab` skill for later releases.
+- The real `~/.hundredfold`, live gateway PID, secrets, and port `7777` are untouched by every lab run.
+- `hundredfold-dev` can rerun the packaged `hundredfold-upgrade-lab` skill for later releases.
 - All scoped tests, typechecks, builds, lab scenarios, and independent review pass before v0.26 release work resumes.

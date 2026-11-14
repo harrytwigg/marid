@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Let a capability-bound agent request a routed, idempotent approval on a Todo through the built-in Jinn MCP surface.
+**Goal:** Let a capability-bound agent request a routed, idempotent approval on a Todo through the built-in Hundredfold MCP surface.
 
 **Architecture:** Add one thin MCP adapter that posts to a dedicated gateway route. The route authenticates the caller, permits the Todo owner/assignee, linked executor, authorized manager/root, or operator, then delegates persistence and default routing to the existing `requestApproval` primitive; decision and escalation authority remain untouched.
 
@@ -10,8 +10,8 @@
 
 ## Global Constraints
 
-- Build from `main` HEAD `185564bc3a96e6776b747b3537b15f875b19d3e0` in `/private/tmp/jinn-apreq`.
-- Never access port `7777`, `~/.jinn/`, or port `7788` while implementing or verifying.
+- Build from `main` HEAD `185564bc3a96e6776b747b3537b15f875b19d3e0` in `/private/tmp/hundredfold-apreq`.
+- Never access port `7777`, `~/.hundredfold/`, or port `7788` while implementing or verifying.
 - Reuse `requestApproval`; do not change approval decision/escalation authority or persistence semantics.
 - Preserve repository privacy and unrelated changes; no `Co-Authored-By` trailer.
 - Run all verification with Node.js `24.13.0` and pnpm.
@@ -136,7 +136,7 @@ if (method === "POST" && params) {
 - [ ] **Step 2: Add the MCP tool**
 
 ```ts
-const request: JinnMcpTool = {
+const request: HundredfoldMcpTool = {
   name: "request_work_item_approval",
   description: "Request an idempotent routed approval on a Todo you own or execute.",
   inputSchema: {
@@ -182,4 +182,4 @@ Stage only intended files, run the required staged-diff leak grep, and commit wi
 
 - [ ] **Step 3: Fast-forward `main`, prove ancestry, and remove the worktree**
 
-Confirm `main` has not diverged, fast-forward it to the task commit, run `git merge-base --is-ancestor <commit> main`, record the exit status and main SHA, then remove `/private/tmp/jinn-apreq`.
+Confirm `main` has not diverged, fast-forward it to the task commit, run `git merge-base --is-ancestor <commit> main`, record the exit status and main SHA, then remove `/private/tmp/hundredfold-apreq`.

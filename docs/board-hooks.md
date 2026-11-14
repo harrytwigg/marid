@@ -190,7 +190,7 @@ does `match: { actor: <that employee> }`.
 A hook's `spawn` action starts its session with provenance `source: "hook"`,
 `sourceRef: "hook:<fireId>"`. The run row for that fire records the chain:
 the event's upstream chain plus this hook (the same value as `payload.chain` and
-`JINN_HOOK_CHAIN`).
+`HUNDREDFOLD_HOOK_CHAIN`).
 
 When an event's actor resolves to a session (see `actor` above), the dispatcher walks that session and its
 `parentSessionId` ancestors (at most 10 levels). Every ancestor with `source: "hook"`
@@ -207,7 +207,7 @@ example above does not trigger itself. A hook that matches `to: done` does fire 
 with the closing employee as the actor.
 
 Limits: a `command` action's own API calls carry no session, so they are not
-chain-tracked; its environment carries `JINN_HOOK_CHAIN` for scripts that want to
+chain-tracked; its environment carries `HUNDREDFOLD_HOOK_CHAIN` for scripts that want to
 guard themselves. Moves the gateway derives on its own (the reconciler, park expiry)
 carry no session either, even when a hook session's work caused them. `notify`
 cannot write to the board. Nothing caps how many hooks fire at once: a cascade that
@@ -220,10 +220,10 @@ closes many Todos fires a hook for each.
   must not wake the actor's session), and hook provenance. Run outcome: `ok` with
   the session id, or `error`.
 - **command**: `/bin/sh -c <run>`, payload JSON on stdin; environment is the
-  scrubbed child env plus `JINN_HOOK_NAME`, `JINN_HOOK_EVENT`, `JINN_HOOK_FIRE_ID`,
-  `JINN_HOOK_TODO_ID`, `JINN_HOOK_FROM`, `JINN_HOOK_TO`, `JINN_HOOK_ACTOR`,
-  `JINN_HOOK_CHAIN` (comma-separated) and `JINN_HOOK_PAYLOAD` (the JSON, omitted when
-  it is over 64 KB; stdin always carries it). `JINN_HOOK_ACTOR` is the actor's
+  scrubbed child env plus `HUNDREDFOLD_HOOK_NAME`, `HUNDREDFOLD_HOOK_EVENT`, `HUNDREDFOLD_HOOK_FIRE_ID`,
+  `HUNDREDFOLD_HOOK_TODO_ID`, `HUNDREDFOLD_HOOK_FROM`, `HUNDREDFOLD_HOOK_TO`, `HUNDREDFOLD_HOOK_ACTOR`,
+  `HUNDREDFOLD_HOOK_CHAIN` (comma-separated) and `HUNDREDFOLD_HOOK_PAYLOAD` (the JSON, omitted when
+  it is over 64 KB; stdin always carries it). `HUNDREDFOLD_HOOK_ACTOR` is the actor's
   employee when there is one, else its kind, so an operator's close an employee
   carried out reads as that employee: a script that tells the operator apart reads
   `actor.kind` from the payload instead. The command

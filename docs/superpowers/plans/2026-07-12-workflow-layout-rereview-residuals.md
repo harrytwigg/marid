@@ -6,14 +6,14 @@
 
 **Architecture:** The gateway owns an immutable run invocation claim keyed by workflow, stable principal, and idempotency key. A canonical request fingerprint is claimed atomically before execution and replayed only on exact equality; mismatches surface one sanitized typed conflict through HTTP, MCP, and React. Workflow definition structure moves to one shared recursive schema consumed by runtime validation and the four authoring manifests. The web route derives its committed lens from workflow ID plus search state, uses the existing Radix dialog primitive for blocked navigation, and separates volatile run status from hard viewport identity while explicitly recording user viewport ownership.
 
-**Tech Stack:** TypeScript, Node file-backed stores, Vitest, Zod 4/shared JSON Schema, React 19, React Router, Radix Dialog, XyFlow, Tailwind/Ledger tokens, Playwright, pinned js-tiktoken o200k_base, Jinn sandbox gateway.
+**Tech Stack:** TypeScript, Node file-backed stores, Vitest, Zod 4/shared JSON Schema, React 19, React Router, Radix Dialog, XyFlow, Tailwind/Ledger tokens, Playwright, pinned js-tiktoken o200k_base, Hundredfold sandbox gateway.
 
 ## Global constraints
 
 - Use Codex GPT-5.6-sol xhigh only for implementation and review. The final five author probes alone use fresh GPT-5.5-low sandbox children.
 - Observe strict RED before production code for every finding and retain compact failing output under bounded /tmp evidence files.
 - Work only in this isolated Workflow worktree; preserve unrelated worktrees and scratch files.
-- Use fresh sanitized throwaway JINN_HOME instances and pinned ports 8060+. Never contact, inspect, mutate, restart, or test production :7777.
+- Use fresh sanitized throwaway HUNDREDFOLD_HOME instances and pinned ports 8060+. Never contact, inspect, mutate, restart, or test production :7777.
 - Do not merge, deploy, restart production, or add authorship/sign-off trailers.
 - Keep commits scoped: plan, idempotency, route/dialog, viewport, schema/token budget, sandbox verification evidence.
 - Before every commit run git diff --check, staged privacy/secret/port scans, and staged trailer scan.
@@ -238,12 +238,12 @@ Expected RED: unknowns persist/call handlers, exact payload exceeds the 7000-tok
 - [ ] Define every recursive envelope once with z.strictObject and path-aware errors. Export runtime parsing and JSON Schema from the same Zod 4 module; do not keep a second MCP-only allowlist.
 - [ ] Parse and reject unknowns; never use default object stripping. Patches may omit root fields, but any supplied nested object remains strict.
 - [ ] Validate before compilation/normalization/authorization spreading/state capture/mutation at every raw route. Validate direct store inputs/candidates as defense in depth.
-- [ ] Extend JinnMcpTool with a runtime parser. Generic tools/call validates arguments before handler invocation; workflow handlers consume the validated shared type.
+- [ ] Extend HundredfoldMcpTool with a runtime parser. Generic tools/call validates arguments before handler invocation; workflow handlers consume the validated shared type.
 - [ ] Keep validateDefinition as semantic graph validation; structural parsing complements it.
 - [ ] Pin js-tiktoken 1.0.21 exactly, use bundled local o200k_base ranks, and document tokenizer/version/wrapper fixture in the budget helper.
 - [ ] Reduce the manifest below 7000 by deduplicating prose, using compact enums where equivalent, and reducing duplicated authoring declarations or safely consolidating aliases while preserving all committing-tool contracts. Do not weaken schema parity to hit budget.
 - [ ] Run Task 5 suites GREEN, then mutations opening nested additionalProperties, bypassing dispatcher validation, reverting a route to raw spread, replacing tokenizer with chars/4, and appending 310 characters. Each fails.
-- [ ] Run the full focused workflow gateway set and forced Jinn typecheck/build.
+- [ ] Run the full focused workflow gateway set and forced Hundredfold typecheck/build.
 - [ ] Commit schema enforcement and token-budget work separately.
 
 ---
@@ -271,7 +271,7 @@ Expected RED: unknowns persist/call handlers, exact payload exceeds the 7000-tok
 ## Task 8: Full gates, audits, ancestry, and reviewer handoff
 
 - [ ] Focused gateway/web suites from Tasks 1-6 GREEN.
-- [ ] Full gateway/Jinn and web suites GREEN with bounded reporters.
+- [ ] Full gateway/Hundredfold and web suites GREEN with bounded reporters.
 - [ ] Forced uncached typechecks and production builds for both packages GREEN.
 - [ ] Re-run all prior workflow property/mutation/performance gates, including near-limit timer-delay responsiveness.
 - [ ] Run whitespace, privacy, secrets, credential, :7777, Ledger/style, dependency, diff, and commit-trailer audits.

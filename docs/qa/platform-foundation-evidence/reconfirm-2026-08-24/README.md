@@ -4,8 +4,8 @@ Head: `58908f607b2661e935996c3b5c69494fad483f33`
 
 This run used fresh, isolated gateways `Alpha` on 7778 and `Beta` on
 7779, an isolated browser profile, and a freshly built and ad-hoc signed
-`Jinn.app`. It did not connect to 7777 or 7788 and did not use the installed
-Jinn home.
+`Hundredfold.app`. It did not connect to 7777 or 7788 and did not use the installed
+Hundredfold home.
 
 The gateways were originally named after the work item that prompted the run.
 The native captures below were made with those names. A fresh capture needs the
@@ -20,7 +20,7 @@ Everything else in each capture is the original.
 | --- | --- | --- |
 | 1 | Pass | Browser A paired with a one-time code; `/api/sessions` returned 200, `document.cookie` was empty, and no pairing screen remained. |
 | 2 | Pass | The in-app Todos link navigated with the SPA to `/todos/b/home`; A's origin and HttpOnly session remained intact. Browser screenshots below. |
-| 3 | Pass | The release bundle opened bundled assets at the native `Connect Jinn` screen with no saved profile. A complete ad-hoc signature was required before Keychain storage could be exercised. |
+| 3 | Pass | The release bundle opened bundled assets at the native `Connect Hundredfold` screen with no saved profile. A complete ad-hoc signature was required before Keychain storage could be exercised. |
 | 4 | Pass | A paired, became ready, displayed `Alpha`, and rendered A's settings/data. |
 | 5 | Pass | B paired as a second profile while A stayed current; exact-origin Keychain accounts existed independently for ports 7778 and 7779. |
 | 6 | Pass | A→B preserved the Settings route and changed the rendered company identity to `Beta`. |

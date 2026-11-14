@@ -1,6 +1,6 @@
 # Auto-compaction of long sessions
 
-Off by default. When it is on, Jinn compacts a long session **before** running its next turn if the session has sat idle past its engine's prompt-cache window. With a context budget set, it also compacts a session whose context has reached that budget, even if the session has not gone idle.
+Off by default. When it is on, Hundredfold compacts a long session **before** running its next turn if the session has sat idle past its engine's prompt-cache window. With a context budget set, it also compacts a session whose context has reached that budget, even if the session has not gone idle.
 
 ## Why
 
@@ -10,11 +10,11 @@ For a long session that has gone cold, it is cheaper to compact first. The compa
 
 The saving comes on the turns **after** the compaction, not on the compaction itself. A session that goes cold and then gets only one more short message saves little. A session that is picked back up for real work saves a lot.
 
-A session that keeps taking turns never goes cold, so the cache-window trigger never fires for it. The engine's own compaction then decides, and it waits for the model's context ceiling. opencode compacts at `limit.context − maxOutput`, which is about 968k tokens on a 1M-token model with the default 32k output. Its `compaction.reserved` setting does not lower that threshold unless the provider declares `limit.input`, and most do not. The context budget (`maxContextTokens`) is the threshold Jinn applies itself: once a session's context reaches it, the next turn compacts first, cache warm or not.
+A session that keeps taking turns never goes cold, so the cache-window trigger never fires for it. The engine's own compaction then decides, and it waits for the model's context ceiling. opencode compacts at `limit.context − maxOutput`, which is about 968k tokens on a 1M-token model with the default 32k output. Its `compaction.reserved` setting does not lower that threshold unless the provider declares `limit.input`, and most do not. The context budget (`maxContextTokens`) is the threshold Hundredfold applies itself: once a session's context reaches it, the next turn compacts first, cache warm or not.
 
 ## Configuration
 
-Set it per engine, in `~/.jinn/config.yaml`. Only `claude` and `opencode` support it; putting the block on another engine is a config error.
+Set it per engine, in `~/.hundredfold/config.yaml`. Only `claude` and `opencode` support it; putting the block on another engine is a config error.
 
 ```yaml
 engines:
@@ -39,12 +39,12 @@ engines:
 | `minContextTokens` | `100000` | The cache-window trigger leaves sessions whose last turn read fewer tokens than this alone. At least 1000. |
 | `maxContextTokens` | none | The context budget. A session whose last turn read at least this many tokens is compacted before its next turn, whether its cache is warm or cold. At least 1000. Unset, warm sessions are left to the engine's own compaction. |
 
-Picking `maxContextTokens`: set it well above the size a session compacts down to. That size is the system prompt and tool definitions, plus the summary, plus whatever recent turns the engine keeps word for word. For a Jinn session on opencode that is often 50k–100k tokens. If the budget is below it, compaction cannot get the session under the budget. The hold described below then limits it to one compaction per quarter-budget of growth rather than one on every turn, but most of those compactions buy little.
+Picking `maxContextTokens`: set it well above the size a session compacts down to. That size is the system prompt and tool definitions, plus the summary, plus whatever recent turns the engine keeps word for word. For a Hundredfold session on opencode that is often 50k–100k tokens. If the budget is below it, compaction cannot get the session under the budget. The hold described below then limits it to one compaction per quarter-budget of growth rather than one on every turn, but most of those compactions buy little.
 
 Picking `cacheWindowSeconds`:
 
 - **Claude**: the prompt cache lasts 5 minutes by default (`300`). If your Claude Code requests the 1-hour cache tier, use `3600`. A window shorter than the real cache TTL wastes compactions on sessions that were still warm. A longer one misses some cold ones.
-- **opencode**: set it to your provider's cache lifetime. `300` is a conservative guess. opencode in `run` mode has no compaction Jinn can call, so the setting does nothing there.
+- **opencode**: set it to your provider's cache lifetime. `300` is a conservative guess. opencode in `run` mode has no compaction Hundredfold can call, so the setting does nothing there.
 
 The config is validated when it loads and when it is saved from the dashboard. A quoted number, a negative value, an unknown key, or the block on an engine that cannot compact are all reported as errors.
 
@@ -62,7 +62,7 @@ Then the turn compacts first if either trigger applies.
 **Cold cache.** Both of these are true:
 
 - The meter is at least `minContextTokens`.
-- The engine's last activity on this conversation is at least `cacheWindowSeconds` ago. "Last activity" is the latest turn Jinn completed on it or, for Claude, the latest turn typed straight into its terminal that Jinn has synced. With no record of activity, the session is not treated as cold.
+- The engine's last activity on this conversation is at least `cacheWindowSeconds` ago. "Last activity" is the latest turn Hundredfold completed on it or, for Claude, the latest turn typed straight into its terminal that Hundredfold has synced. With no record of activity, the session is not treated as cold.
 
 **Context budget.** `maxContextTokens` is set, the meter is at least that, and the session is not on hold. `minContextTokens` and the cache window do not apply to this trigger.
 
@@ -132,13 +132,13 @@ Each auto-compaction writes one line to `logs/gateway.log`:
 [auto-compact] session=<id> engine=opencode outcome=compacted trigger=budget budget=300000 context=320000 pre=320000 post=- costUsd=0.0200 durationMs=41230
 ```
 
-`budget`, `context`, `pre` and `post` are sizes in tokens; `-` means the engine reported none (opencode reports no size after compacting). The keys avoid the word "token" because the logger redacts any `…token…=` value. `outcome` is one of `compacted`, `unconfirmed`, `failed`, `rate-limited`, `preempted` or `not-planned`. Outcomes other than `compacted` and `preempted` are logged at `warn` level with the error. `grep '\[auto-compact\]'` lists every compaction. Compare the session's spend before and after in the ledger (`jinn limits`, or `cost_report`) to see the effect. A session left alone is logged at `debug` level with the reason (`context-small`, `cache-warm`, `budget-held`, …), except that a session at or over `minContextTokens` skipped for any other reason (`engine-switch`, `no-engine-session`, `activity-unknown`, an engine that cannot compact) is logged at `info` as `[auto-compact] session=… engine=… outcome=skipped skip=… context=…`.
+`budget`, `context`, `pre` and `post` are sizes in tokens; `-` means the engine reported none (opencode reports no size after compacting). The keys avoid the word "token" because the logger redacts any `…token…=` value. `outcome` is one of `compacted`, `unconfirmed`, `failed`, `rate-limited`, `preempted` or `not-planned`. Outcomes other than `compacted` and `preempted` are logged at `warn` level with the error. `grep '\[auto-compact\]'` lists every compaction. Compare the session's spend before and after in the ledger (`hundredfold limits`, or `cost_report`) to see the effect. A session left alone is logged at `debug` level with the reason (`context-small`, `cache-warm`, `budget-held`, …), except that a session at or over `minContextTokens` skipped for any other reason (`engine-switch`, `no-engine-session`, `activity-unknown`, an engine that cannot compact) is logged at `info` as `[auto-compact] session=… engine=… outcome=skipped skip=… context=…`.
 
 ## Limits
 
 - **Idleness is inferred, not read from the provider.** Nothing reports when a provider actually evicted a cache, so the window is a setting.
 - **A turn that failed before filing its conversation doesn't count as activity.** The session can then look colder than it is and compact one turn early.
-- **Claude turns typed into the terminal count once Jinn has synced them.** One typed moments before a message and not yet synced is missed.
+- **Claude turns typed into the terminal count once Hundredfold has synced them.** One typed moments before a message and not yet synced is missed.
 - **The meter is the last turn's input size, not the next turn's.** A session with a huge prompt waiting but a short history is not compacted.
 - **On opencode, a heavy turn straight after a compaction sets the floor.** opencode reports no size after compacting, so the floor is the reading at the end of the message turn the compaction ran in front of, and that includes the turn's own growth. If one turn takes a session from the compacted ~80k to 600k, the floor is 600k, and the budget waits until 675k. Claude reports the compacted size, so the same turn there is compacted on the next turn. The cost is bounded at a quarter of the budget past that reading, and it applies only when a single turn grows past the budget.
-- **The budget is checked between turns, not during one.** A single long agentic turn can grow well past the budget. Jinn compacts before the turn after it. Within the turn, the engine's own compaction still applies at the model's ceiling. On opencode that compaction does fire in server mode below the raw context limit, at `limit.context − maxOutput` (`engines/__tests__/opencode-native-compaction-e2e.test.ts`).
+- **The budget is checked between turns, not during one.** A single long agentic turn can grow well past the budget. Hundredfold compacts before the turn after it. Within the turn, the engine's own compaction still applies at the model's ceiling. On opencode that compaction does fire in server mode below the raw context limit, at `limit.context − maxOutput` (`engines/__tests__/opencode-native-compaction-e2e.test.ts`).

@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Follow strict red-green-refactor: no production behavior without a test that first failed for the expected reason.
-- Use disposable `JINN_HOME` directories and non-default ports for process-level verification.
+- Use disposable `HUNDREDFOLD_HOME` directories and non-default ports for process-level verification.
 - Preserve unrelated Activity, Workflow, Todo, chat, and operator scratch changes.
 - Keep every repository fixture generic and leak-check the staged diff before commit.
 - Do not deduplicate by message text, timestamp, or child session alone.

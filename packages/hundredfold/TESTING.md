@@ -13,20 +13,20 @@ root.** The root has no Vitest config, so Vitest falls back to defaults — no
 
 ## The invariant
 
-> **A test run must never read or write the live gateway home (`~/.jinn`).**
-> Every suite runs against a throwaway `JINN_HOME` under the OS temp dir.
+> **A test run must never read or write the live gateway home (`~/.hundredfold`).**
+> Every suite runs against a throwaway `HUNDREDFOLD_HOME` under the OS temp dir.
 
 This is not a style preference. The live home holds `sessions/registry.db`, which
 carries the operator's real sessions, messages, and Todos.
 
 ### Why it is enforced in two places
 
-1. **`vitest.global-setup.ts` + `vitest.setup.ts`** — redirect `JINN_HOME` to a
+1. **`vitest.global-setup.ts` + `vitest.setup.ts`** — redirect `HUNDREDFOLD_HOME` to a
    fresh temp dir before workers start, then re-assert inside each worker.
    Registered via `vitest.config.ts`.
 
 2. **`src/shared/paths.ts`** — `assertTestRunIsIsolated()` throws at module load
-   when `process.env.VITEST` is set and `JINN_HOME` is not under the temp root.
+   when `process.env.VITEST` is set and `HUNDREDFOLD_HOME` is not under the temp root.
 
 Layer 1 alone is not sufficient, and this is the whole lesson: it only arms when
 Vitest actually loads `vitest.config.ts`. Layer 2 sits at the boundary that every
@@ -37,8 +37,8 @@ unless `VITEST`/`VITEST_WORKER_ID` is set.
 ### What happens when you get it wrong
 
 ```
-Refusing to run tests against a non-temp JINN_HOME=/Users/you/.jinn.
-Tests must never touch the live gateway registry (/Users/you/.jinn/sessions/registry.db).
+Refusing to run tests against a non-temp HUNDREDFOLD_HOME=/Users/you/.hundredfold.
+Tests must never touch the live gateway registry (/Users/you/.hundredfold/sessions/registry.db).
 Run the suite with the repo's own script — `pnpm test`, or `pnpm --filter jinn-cli test` — ...
 ```
 
@@ -58,9 +58,9 @@ Cleanup after the fact is not a fix. That is why layer 2 exists.
 
 ## Ambient environment
 
-`vitest.setup.ts` scrubs gateway/engine env vars (`JINN_SESSION_ID`,
+`vitest.setup.ts` scrubs gateway/engine env vars (`HUNDREDFOLD_SESSION_ID`,
 `_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL`, `CODEX_HOME`, …). Running the suite
-from inside a live Jinn session otherwise leaks them into every worker, making
+from inside a live Hundredfold session otherwise leaks them into every worker, making
 results depend on who ran them — this genuinely broke
 `claude-interactive-compact-window.test.ts`.
 
@@ -73,8 +73,8 @@ Prefer letting the harness supply the home. If a test needs its own, set it
 **before** importing anything that reads `paths.ts`:
 
 ```ts
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-my-feature-"));
-process.env.JINN_HOME = tmp;
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-my-feature-"));
+process.env.HUNDREDFOLD_HOME = tmp;
 const reg = await import("../registry.js");   // dynamic import, after the env is set
 ```
 

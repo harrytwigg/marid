@@ -63,14 +63,14 @@ new violation. Every new file ≤ 300 lines; `api.ts` must not grow (it shrinks 
 - [x] T010 [US2] `localMinuteOfDay` / `isQuietHour` (IANA zone, midnight wrap) / `selectTier`
   (operator live > clock) — `packages/hundredfold/src/shared/idle-capacity.ts`
 - [x] T011 [US2] Operator detection: operator-driven session activity + statusline mtime +
-  usage-delta-outside-Jinn (tick-only reference), `idleMinutes` expiry —
+  usage-delta-outside-Hundredfold (tick-only reference), `idleMinutes` expiry —
   `packages/hundredfold/src/gateway/idle-capacity-operator.ts`, registry-backed test in
   `gateway/__tests__/idle-capacity-operator.test.ts`
 - [x] T012 [US2] Per-tier `enabled`, ceilings, lookaheads, `maxDispatchesPerWindow`,
   `maxActiveSessions` applied by the loop
 - [x] T013 [US2] Tests: overnight spends deep and keeps the floor; daytime holds on the same
   reading; interactive at any hour, barely acts, can be switched off; presence expiry; delta
-  attribution (Jinn's own spend vs the operator's; a new window's lower number) —
+  attribution (Hundredfold's own spend vs the operator's; a new window's lower number) —
   `gateway/__tests__/idle-capacity-tiers.test.ts`
 
 ## Phase 4: User Story 3 — preview (P2)
@@ -95,7 +95,7 @@ new violation. Every new file ≤ 300 lines; `api.ts` must not grow (it shrinks 
 - [x] T021 `docs/idle-capacity.md`: tiers, the precise "operator live" and "holds capacity"
   definitions, what a ceiling is and is not, config, observing
 - [x] T022 Spec artefacts: this directory
-- [x] T023 Gates: `pnpm typecheck`, `pnpm lint`, `pnpm build`, targeted suites, full jinn suite;
+- [x] T023 Gates: `pnpm typecheck`, `pnpm lint`, `pnpm build`, targeted suites, full hundredfold suite;
   `pnpm ratchet --check` shows no violation introduced by this branch
 
 ## Deferred (recorded, not built)

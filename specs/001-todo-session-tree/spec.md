@@ -47,7 +47,7 @@ plan is handed over.
 | `packages/hundredfold/src/sessions/migrate.ts:87` | `idx_sessions_parent` on `parent_session_id` | Walking the tree by parent is an indexed read. |
 | `packages/hundredfold/src/sessions/delegated-activity.ts:13` | `buildDelegatedActivityIndex` — walks the ancestor chain, `visited` set, "graph cycles are contained" | The existing, tested cycle-containment precedent. The tree walk follows its rule rather than inventing a second one. |
 | `packages/hundredfold/src/mcp/delegation-tools.ts:95` | `delegate_task` → `POST /api/delegations` (`packages/hundredfold/src/gateway/api.ts:3625`) | One call mints/resolves a Todo, spawns the child session, links the two. This is what puts a *second* Todo under the first one's tree. |
-| `packages/hundredfold/src/mcp/delegation-tools.ts:26` | "`jinn_request_review` is deliberately ABSENT" | Review is delegation with a reviewer-shaped brief, so it arrives on the same edges — nothing new to traverse. |
+| `packages/hundredfold/src/mcp/delegation-tools.ts:26` | "`hundredfold_request_review` is deliberately ABSENT" | Review is delegation with a reviewer-shaped brief, so it arrives on the same edges — nothing new to traverse. |
 | `packages/web/src/components/peek/peek-stack.tsx` | existing stacked-peek surface | Considered and **rejected** for this feature: the ask is to *switch* to the session, and the rail's existing affordance already navigates. |
 
 The join that does not exist: nothing in the product composes the Todo→sessions edge with the

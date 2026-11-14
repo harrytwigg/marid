@@ -1,4 +1,4 @@
-# Jinn Chat Workflow Todo KISS Implementation Plan
+# Hundredfold Chat Workflow Todo KISS Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -14,8 +14,8 @@
 - Do not use parallel agents. After every scoped implementation commit, stop and wait for COO verification or a concrete follow-up before starting the next task.
 - After COO accepts this plan, Task 0 commits this plan document before any production edit. The plan must not remain untracked during implementation.
 - Before each production edit, add the named failing test and capture the exact failing assertion or missing symbol. A compile failure counts as RED only when the test intentionally imports the not-yet-created contract.
-- Use the focused commands written under each task. The live package filters are `jinn-cli` and `@jinn/web`; do not substitute obsolete package filters.
-- Run tests only with disposable `JINN_HOME` directories and non-default gateway ports. Never point implementation verification at an installed instance or port 7777.
+- Use the focused commands written under each task. The live package filters are `jinn-cli` and `@hundredfold/web`; do not substitute obsolete package filters.
+- Run tests only with disposable `HUNDREDFOLD_HOME` directories and non-default gateway ports. Never point implementation verification at an installed instance or port 7777.
 - Preserve all unrelated dirty files. Stage only paths named by the current task and inspect `git diff --cached --name-only` before each commit.
 - Do not add `Co-Authored-By` trailers.
 - Keep every shipped path generic. No personal names, products, email addresses, Slack identifiers, API keys, or absolute personal home-directory paths may enter the repository.
@@ -38,10 +38,10 @@
 
 | Entry path | Current implementation | Persisted invocation | Target reporting | Todo effect |
 |---|---|---|---|---|
-| MCP `start_workflow_run` | `packages/hundredfold/src/mcp/workflow-tools.ts` → `POST /api/workflow-definitions/:id/run` | Verified `x-jinn-caller-session` | `reportMode` defaults to `resume`; `silent` only suppresses resumption | None |
-| MCP `run_workflow_by_name` | `packages/hundredfold/src/mcp/workflow-tools.ts` → `POST /api/workflow-runs/by-name` | Verified `x-jinn-caller-session` | Same behavior as every other invoking Session | None |
+| MCP `start_workflow_run` | `packages/hundredfold/src/mcp/workflow-tools.ts` → `POST /api/workflow-definitions/:id/run` | Verified `x-hundredfold-caller-session` | `reportMode` defaults to `resume`; `silent` only suppresses resumption | None |
+| MCP `run_workflow_by_name` | `packages/hundredfold/src/mcp/workflow-tools.ts` → `POST /api/workflow-runs/by-name` | Verified `x-hundredfold-caller-session` | Same behavior as every other invoking Session | None |
 | Browser Run composer | `packages/web/src/routes/workflow/run-view.tsx` → definition run route | None; authenticated operator is not a Session | Durable run and visible UI result, no session callback | None |
-| CLI `jinn workflow run` | `packages/hundredfold/src/cli/workflow.ts` → by-name route | None | Durable run printed by CLI, no session callback | None |
+| CLI `hundredfold workflow run` | `packages/hundredfold/src/cli/workflow.ts` → by-name route | None | Durable run printed by CLI, no session callback | None |
 | Managed schedule tick | `packages/hundredfold/src/cron/runner.ts` → `workflowCronFireHandler` | None | Durable run only | None |
 | Manual cron fire | `POST /api/cron/:id/trigger` → the same managed Workflow fire | None | Durable run only | None |
 | Webhook/event | `POST /api/workflow-events` → `fireWorkflowEvent` | None | Durable run only | None |
@@ -55,7 +55,7 @@
 | Surface | Exact current path or signature | Planned authority and receipt/report behavior |
 |---|---|---|
 | Workflow definition create/update/duplicate/retire | `POST /api/workflow-definitions`, `PUT /api/workflow-definitions/:id`, `POST /api/workflow-definitions/:id/duplicate`, `POST /api/workflow-definitions/:id/retire`; MCP `create_workflow`, `update_workflow`, `retire_workflow`; Workflow list/editor | Definition store commits first, then one definition activity receipt and one `company:changed`; read-only plan/validate/list/get stay generic-tool-only. |
-| Workflow run start | `runWorkflowDefinitionFromHttp`, `POST /api/workflow-definitions/:id/run`, `POST /api/workflow-runs/by-name`; MCP `start_workflow_run`/`run_workflow_by_name`; browser run composer; CLI `jinn workflow run` | One durable run. Verified Session caller writes `invocation`; browser/CLI do not. Replay returns the original run/relation and never creates a second episode or receipt row. |
+| Workflow run start | `runWorkflowDefinitionFromHttp`, `POST /api/workflow-definitions/:id/run`, `POST /api/workflow-runs/by-name`; MCP `start_workflow_run`/`run_workflow_by_name`; browser run composer; CLI `hundredfold workflow run` | One durable run. Verified Session caller writes `invocation`; browser/CLI do not. Replay returns the original run/relation and never creates a second episode or receipt row. |
 | Schedule/manual cron | `workflowCronFireHandler` in `packages/hundredfold/src/gateway/api.ts`, installed into the cron runner by `setWorkflowCronFire` in `gateway/server.ts`, and `POST /api/cron/:id/trigger` | Invocation-less independent run, no Todo. It updates run activity surfaces through `company:changed`, not a Session callback. |
 | Event/webhook | `POST /api/workflow-events` → `fireWorkflowEvent` | Invocation-less independent run keyed by existing event/fire reference; exact replay returns the existing run. |
 | Poll | `startPollTriggerRunner` → `runPollTriggerOnce` | Invocation-less independent run. Activation approval is stored on the trigger binding and never delegated to a Todo. |
@@ -63,7 +63,7 @@
 | Trigger create/delete/activation decision | `/api/workflow-triggers`, `/api/workflow-triggers/:name`, planned `/activation-approval` and `/activation-approval/escalate`; MCP `create_trigger`/`delete_trigger`; Workflow editor | Trigger store commits first, patches the definition activity receipt when Session-invoked, and emits `company:changed`; activation decisions remain native trigger records. |
 | Pending-step edit | `PATCH /api/workflow-definitions/:id/runs/:runId/pending-steps/:nodeId`; MCP `edit_workflow_run_step_prompt`; run UI | Run mutation lock commits a new run revision, patches the stable run activity block, and creates no report episode unless this mutation itself crosses a reportable state boundary. |
 | Gate approval/escalation | Current `/resolve-gate` becomes native run approval plus planned `/gate-approval/escalate`; Workflow run UI; `escalate_workflow_gate` only for escalation | Stored Workflow approval authority decides. Approve resumes, reject terminalizes, escalation changes approval routing; no path calls Todo approval APIs. Park entry and terminalization stamp stable report episodes. |
-| Cancellation | Planned `POST /api/workflow-definitions/:id/runs/:runId/cancel`; MCP `cancel_workflow_run`; CLI `jinn workflow cancel`; run UI | Run authority stops real phase Sessions, persists `cancelled`, patches activity, and claims the one terminal episode when report mode is `resume`. |
+| Cancellation | Planned `POST /api/workflow-definitions/:id/runs/:runId/cancel`; MCP `cancel_workflow_run`; CLI `hundredfold workflow cancel`; run UI | Run authority stops real phase Sessions, persists `cancelled`, patches activity, and claims the one terminal episode when report mode is `resume`. |
 | Retry and timeout | `advanceWorkflowRunById`, `sweepWorkflowRuns`, `driveRunLocked`, existing step retry/onError/timeout receipts | Intermediate retries/timeouts patch activity only. Retry exhaustion, terminal timeout, and non-retriable spawn/dispatch failure append the single terminal episode. |
 | Callback acceptance/retry/recovery | `sessions/callbacks.ts`; `POST /api/sessions/:id/message` with `callbackDeliveryId`; `callback_deliveries`; current dead-letter/requeue routes; startup callback recovery | One generalized delivery identity and worker serves delegation plus Workflow episodes. Acceptance stays atomic; response loss is idempotent; one lease/retry cap, recovery pass, dead-letter list, and requeue action remain. |
 | Chat/list live update | Existing `session:created`, `session:delta`; new `company:changed`; `use-query-invalidation.ts` | Persisted block is patched surgically in chat; list/detail/run/trigger caches patch or invalidate the smallest keys and refresh without reload. |
@@ -123,13 +123,13 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 ### Task 0: Persist the COO-accepted plan before production work
 
 **Files:**
-- Add: `docs/superpowers/plans/2026-07-12-jinn-chat-workflow-todo-kiss.md`
+- Add: `docs/superpowers/plans/2026-07-12-hundredfold-chat-workflow-todo-kiss.md`
 
 - [ ] **Step 1: Confirm acceptance and stage only the plan**
 
   ```bash
-  git status --short -- docs/superpowers/plans/2026-07-12-jinn-chat-workflow-todo-kiss.md
-  git add docs/superpowers/plans/2026-07-12-jinn-chat-workflow-todo-kiss.md
+  git status --short -- docs/superpowers/plans/2026-07-12-hundredfold-chat-workflow-todo-kiss.md
+  git add docs/superpowers/plans/2026-07-12-hundredfold-chat-workflow-todo-kiss.md
   git diff --cached --name-only
   git diff --cached --check
   ```
@@ -226,7 +226,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
   Run:
 
   ```bash
-  pnpm --filter @jinn/web test -- src/lib/__tests__/company-activity-blocks.test.ts
+  pnpm --filter @hundredfold/web test -- src/lib/__tests__/company-activity-blocks.test.ts
   ```
 
   Expected RED says the new block type is unsupported. After implementing the mirrored wire guards and fallback branches, expected GREEN is the Vitest summary with all listed tests passing.
@@ -643,7 +643,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 
   ```bash
   pnpm --filter jinn-cli test -- src/sessions/__tests__/legacy-workflow-session-compat.test.ts src/sessions/__tests__/workflow-provenance.test.ts src/sessions/__tests__/callbacks.test.ts src/gateway/__tests__/workflow-session-grouping.test.ts src/gateway/__tests__/callback-reliability.test.ts src/gateway/__tests__/status-reconciler.test.ts src/gateway/__tests__/manager-visibility.test.ts
-  pnpm --filter @jinn/web test -- src/routes/chat/__tests__/legacy-workflow-session-redirect.test.tsx src/components/chat/__tests__/chat-route-helpers.test.ts
+  pnpm --filter @hundredfold/web test -- src/routes/chat/__tests__/legacy-workflow-session-redirect.test.tsx src/components/chat/__tests__/chat-route-helpers.test.ts
   rg -n "createSession\\(\\{[^}]*engine: ['\"]workflow|syncWorkflowRunSession|workflowRunParentSessionKey|legacy_workflow_run_session_aliases" packages/hundredfold/src packages/web/src
   ```
 
@@ -814,7 +814,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 - Modify: `packages/hundredfold/src/gateway/api.ts`
 - Modify: `packages/hundredfold/src/mcp/workflow-tools.ts`
 - Modify: `packages/hundredfold/src/cli/workflow.ts`
-- Modify: `packages/hundredfold/bin/jinn.ts`
+- Modify: `packages/hundredfold/bin/hundredfold.ts`
 - Modify: `packages/web/src/lib/api.ts`
 - Modify: `packages/web/src/routes/workflow/run-view.tsx`
 - Modify: `packages/hundredfold/src/workflows/__tests__/run-reconciler.test.ts`
@@ -830,7 +830,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 - Add `WorkflowRun.cancellation?: { requestedAt: string; requestedBy: string; reason: string | null }`.
 - Add `POST /api/workflow-definitions/:id/runs/:runId/cancel`.
 - Add MCP `cancel_workflow_run { workflowId, runId, reason? }`.
-- Add CLI `jinn workflow cancel release-review run-20260712010101-abcd1234 --reason "superseded" --json` with positional Workflow id/run id and optional reason/JSON flags.
+- Add CLI `hundredfold workflow cancel release-review run-20260712010101-abcd1234 --reason "superseded" --json` with positional Workflow id/run id and optional reason/JSON flags.
 - Add web `api.cancelWorkflowRun` and an accessible Cancel action for `running`, `dispatched`, and `parked` runs.
 
 - [ ] **Step 1: Write cancellation RED**
@@ -841,7 +841,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 
   ```bash
   pnpm --filter jinn-cli test -- src/workflows/__tests__/run-reconciler.test.ts src/gateway/__tests__/workflow-definitions-route.test.ts src/mcp/__tests__/workflow-tools.test.ts src/cli/__tests__/workflow.test.ts
-  pnpm --filter @jinn/web test -- src/routes/workflow/__tests__/run-view.test.tsx
+  pnpm --filter @hundredfold/web test -- src/routes/workflow/__tests__/run-view.test.tsx
   ```
 
   Expected RED includes a missing cancel route/tool/API and a run remaining nonterminal.
@@ -905,7 +905,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 - Add `persistAndEmitActivityBlock(context, sessionId, envelope)`.
 - Add pure builders `todoActivityBlock(item, action)`, `workflowDefinitionActivityBlock(definition, action)`, and reuse `workflowRunActivityBlock(run, action)` from Task 5.
 - Resolve the acting Session from verified caller headers. Never accept a body field naming the transcript.
-- Add `JinnMcpContext.activityOperation?: { id: string; toolName: string }`. `handleMcpRequest` generates a UUID for each `tools/call`, clones the context with the operation/tool name, and `gatewayRequest` forwards signed-session-only `x-jinn-activity-operation` and `x-jinn-activity-tool` headers.
+- Add `HundredfoldMcpContext.activityOperation?: { id: string; toolName: string }`. `handleMcpRequest` generates a UUID for each `tools/call`, clones the context with the operation/tool name, and `gatewayRequest` forwards signed-session-only `x-hundredfold-activity-operation` and `x-hundredfold-activity-tool` headers.
 - Add `extractActivityReceiptId(value): string | undefined` and `StreamDelta.activityReceiptId?: string`. A successful mutation response contains `{ activityReceiptId }`; engine adapters preserve it on the matching `tool_result` delta.
 - Add one discriminated `CompanyChangedEvent` union emitted as `company:changed` after durable mutation:
 
@@ -990,7 +990,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 
 - [ ] **Step 6: Implement MCP/engine/partial-row correlation**
 
-  The gateway trusts activity headers only after `resolveScopedWriteCallerIdentity` verifies a Session capability and `x-jinn-tool-call` marks the built-in MCP. Persist `activityReceipt` inside the block and return its id. Each named engine adapter calls the shared extractor on raw tool output and copies the id to `StreamDelta`; `persistPartialDelta` and `use-live-session` patch the exact tool row's `meta.activityReceiptId`.
+  The gateway trusts activity headers only after `resolveScopedWriteCallerIdentity` verifies a Session capability and `x-hundredfold-tool-call` marks the built-in MCP. Persist `activityReceipt` inside the block and return its id. Each named engine adapter calls the shared extractor on raw tool output and copies the id to `StreamDelta`; `persistPartialDelta` and `use-live-session` patch the exact tool row's `meta.activityReceiptId`.
 
   If the HTTP response is lost after the mutation committed, the tool retains its error feedback even though the durable activity block exists. That is not a duplicate successful tool result. Retrying the idempotent mutation returns the same activity receipt id and patches the same block.
 
@@ -998,7 +998,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 
   ```bash
   pnpm --filter jinn-cli test -- src/shared/__tests__/activity-receipts.test.ts src/gateway/__tests__/chat-activity-route.test.ts src/gateway/__tests__/streamed-turn-settlement.test.ts src/gateway/__tests__/work-items-route.test.ts src/gateway/__tests__/workflow-definitions-route.test.ts src/mcp/__tests__/work-item-tools.test.ts src/mcp/__tests__/workflow-tools.test.ts src/mcp/__tests__/server.test.ts src/mcp/__tests__/toolkit.test.ts src/engines/__tests__/claude-interactive.test.ts src/engines/__tests__/codex-interactive.test.ts src/engines/__tests__/pi.test.ts src/engines/__tests__/grok.test.ts src/engines/__tests__/hermes-protocol.test.ts
-  pnpm --filter @jinn/web test -- src/hooks/__tests__/use-live-session.test.ts
+  pnpm --filter @hundredfold/web test -- src/hooks/__tests__/use-live-session.test.ts
   ```
 
   Expected GREEN includes browser/operator requests without a caller Session producing `company:changed` for durable mutations but no transcript block, while bound MCP mutations produce one receipt and correlated tool metadata. Commit, report evidence against `wi_6921c5ff3693`, and stop for COO review:
@@ -1055,14 +1055,14 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
   Start a standalone Vite preview and capture desktop with system Chrome plus true mobile through Playwright:
 
   ```bash
-  pnpm --filter @jinn/web exec vite --port 5199 --strictPort
+  pnpm --filter @hundredfold/web exec vite --port 5199 --strictPort
   CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-  "$CHROME" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 --window-size=1440,860 --screenshot=/tmp/jinn-activity-mock-dark-desktop.png "http://127.0.0.1:5199/company-activity.mock.html?theme=dark"
-  "$CHROME" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 --window-size=1440,860 --screenshot=/tmp/jinn-activity-mock-light-desktop.png "http://127.0.0.1:5199/company-activity.mock.html?theme=light"
-  pnpm --filter @jinn/web exec node company-activity.mock-shot.mjs
+  "$CHROME" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 --window-size=1440,860 --screenshot=/tmp/hundredfold-activity-mock-dark-desktop.png "http://127.0.0.1:5199/company-activity.mock.html?theme=dark"
+  "$CHROME" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 --window-size=1440,860 --screenshot=/tmp/hundredfold-activity-mock-light-desktop.png "http://127.0.0.1:5199/company-activity.mock.html?theme=light"
+  pnpm --filter @hundredfold/web exec node company-activity.mock-shot.mjs
   ```
 
-  `company-activity.mock-shot.mjs` creates Playwright contexts with `{ viewport:{ width:390, height:844 }, deviceScaleFactor:2, colorScheme:"dark" }` and the light equivalent, opens the two theme URLs, and writes `/tmp/jinn-activity-mock-dark-mobile.png` and `/tmp/jinn-activity-mock-light-mobile.png`. Inspect all four PNGs at original resolution and record card width, wrapping, tap targets, theme contrast, disclosure hierarchy, and absence of borders/clipping.
+  `company-activity.mock-shot.mjs` creates Playwright contexts with `{ viewport:{ width:390, height:844 }, deviceScaleFactor:2, colorScheme:"dark" }` and the light equivalent, opens the two theme URLs, and writes `/tmp/hundredfold-activity-mock-dark-mobile.png` and `/tmp/hundredfold-activity-mock-light-mobile.png`. Inspect all four PNGs at original resolution and record card width, wrapping, tap targets, theme contrast, disclosure hierarchy, and absence of borders/clipping.
 
 - [ ] **Step 3: Stop for the pre-code design checkpoint**
 
@@ -1089,14 +1089,14 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 - [ ] **Step 5: Run web RED**
 
   ```bash
-  pnpm --filter @jinn/web test -- src/components/chat/__tests__/company-activity-card.test.tsx src/components/chat/__tests__/chat-messages-tool-group.test.tsx src/hooks/__tests__/use-query-invalidation-company.test.tsx src/hooks/__tests__/use-query-invalidation-todos.test.tsx src/routes/workflow/__tests__/list.test.tsx src/routes/workflow/__tests__/page.test.tsx src/routes/workflow/__tests__/run-view.test.tsx src/routes/workflow/__tests__/edit.test.tsx
+  pnpm --filter @hundredfold/web test -- src/components/chat/__tests__/company-activity-card.test.tsx src/components/chat/__tests__/chat-messages-tool-group.test.tsx src/hooks/__tests__/use-query-invalidation-company.test.tsx src/hooks/__tests__/use-query-invalidation-todos.test.tsx src/routes/workflow/__tests__/list.test.tsx src/routes/workflow/__tests__/page.test.tsx src/routes/workflow/__tests__/run-view.test.tsx src/routes/workflow/__tests__/edit.test.tsx
   ```
 
   Expected RED says `workflow-run` falls through to the task-list renderer, correlated tool rows remain visible, `session:created`/`company:changed` are ignored, and the `run` query is ignored.
 
 - [ ] **Step 6: Implement the approved card and deterministic tool suppression**
 
-  Follow the Jinn design tokens already used by chat: content-led spacing, no decorative nested card border, `var(--text-primary/secondary/tertiary)`, `var(--fill-secondary)`, and system colors only for semantic failure/success. Use a 34px minimum control height, visible `:focus-visible`, tabular numbers for versions/progress, optical icon alignment, and no hover-only information.
+  Follow the Hundredfold design tokens already used by chat: content-led spacing, no decorative nested card border, `var(--text-primary/secondary/tertiary)`, `var(--fill-secondary)`, and system colors only for semantic failure/success. Use a 34px minimum control height, visible `:focus-visible`, tabular numbers for versions/progress, optical icon alignment, and no hover-only information.
 
   Preview is an inline disclosure containing bounded status, actor/assignee, progress, approval ask, timestamps, and latest error already present in the block payload. It performs no network fetch. Open is a separate button; the entire row is not a hidden link.
 
@@ -1127,7 +1127,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 - [ ] **Step 10: Run web GREEN and commit Task 8**
 
   ```bash
-  pnpm --filter @jinn/web test -- src/lib/__tests__/company-activity-blocks.test.ts src/components/chat/__tests__/company-activity-card.test.tsx src/components/chat/__tests__/chat-messages-tool-group.test.tsx src/components/chat/__tests__/comms-v2.test.tsx src/hooks/__tests__/use-query-invalidation-company.test.tsx src/hooks/__tests__/use-query-invalidation-todos.test.tsx src/routes/workflow/__tests__/list.test.tsx src/routes/workflow/__tests__/page.test.tsx src/routes/workflow/__tests__/run-view.test.tsx src/routes/workflow/__tests__/edit.test.tsx
+  pnpm --filter @hundredfold/web test -- src/lib/__tests__/company-activity-blocks.test.ts src/components/chat/__tests__/company-activity-card.test.tsx src/components/chat/__tests__/chat-messages-tool-group.test.tsx src/components/chat/__tests__/comms-v2.test.tsx src/hooks/__tests__/use-query-invalidation-company.test.tsx src/hooks/__tests__/use-query-invalidation-todos.test.tsx src/routes/workflow/__tests__/list.test.tsx src/routes/workflow/__tests__/page.test.tsx src/routes/workflow/__tests__/run-view.test.tsx src/routes/workflow/__tests__/edit.test.tsx
   ```
 
   Expected GREEN: all listed tests pass with no React act, key, or accessibility warnings; four real-component screenshots and axe/reduced-motion logs are attached to review. Commit only durable component/test files, confirm temporary mock and screenshot files are unstaged, report evidence against `wi_6921c5ff3693`, and stop for COO review:
@@ -1223,7 +1223,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 - [ ] **Step 2: Run the complete focused web matrix**
 
   ```bash
-  pnpm --filter @jinn/web test -- src/lib/__tests__/company-activity-blocks.test.ts src/components/chat/__tests__/company-activity-card.test.tsx src/components/chat/__tests__/chat-messages-tool-group.test.tsx src/components/chat/__tests__/chat-route-helpers.test.ts src/components/chat/__tests__/comms-v2.test.tsx src/hooks/__tests__/use-live-session.test.ts src/hooks/__tests__/use-query-invalidation-company.test.tsx src/hooks/__tests__/use-query-invalidation-todos.test.tsx src/routes/chat/__tests__/legacy-workflow-session-redirect.test.tsx src/routes/workflow/__tests__/list.test.tsx src/routes/workflow/__tests__/page.test.tsx src/routes/workflow/__tests__/run-view.test.tsx src/routes/workflow/__tests__/edit.test.tsx src/routes/todos/__tests__/row.test.tsx src/routes/todos/__tests__/needs-you-view.test.tsx src/routes/todos/__tests__/detail-sheet.test.tsx
+  pnpm --filter @hundredfold/web test -- src/lib/__tests__/company-activity-blocks.test.ts src/components/chat/__tests__/company-activity-card.test.tsx src/components/chat/__tests__/chat-messages-tool-group.test.tsx src/components/chat/__tests__/chat-route-helpers.test.ts src/components/chat/__tests__/comms-v2.test.tsx src/hooks/__tests__/use-live-session.test.ts src/hooks/__tests__/use-query-invalidation-company.test.tsx src/hooks/__tests__/use-query-invalidation-todos.test.tsx src/routes/chat/__tests__/legacy-workflow-session-redirect.test.tsx src/routes/workflow/__tests__/list.test.tsx src/routes/workflow/__tests__/page.test.tsx src/routes/workflow/__tests__/run-view.test.tsx src/routes/workflow/__tests__/edit.test.tsx src/routes/todos/__tests__/row.test.tsx src/routes/todos/__tests__/needs-you-view.test.tsx src/routes/todos/__tests__/detail-sheet.test.tsx
   ```
 
   Expected GREEN: all listed files pass with no console warnings.
@@ -1263,7 +1263,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
   rg -n "engine: ['\"]workflow" packages/hundredfold/src packages/web/src
   rg -n "todoTransition" packages/hundredfold/src packages/web/src packages/hundredfold/template
   rg --pcre2 -n "^import(?! type\\b).*work-items/(store|transitions|approvals)" packages/hundredfold/src/workflows
-  rg -n 'T[B]D|FIXM[E]|X{3}|implement lat[e]r|same as abov[e]|similar t[o]|placehold[e]r' docs/superpowers/plans/2026-07-12-jinn-chat-workflow-todo-kiss.md packages/hundredfold/src packages/web/src packages/hundredfold/template
+  rg -n 'T[B]D|FIXM[E]|X{3}|implement lat[e]r|same as abov[e]|similar t[o]|placehold[e]r' docs/superpowers/plans/2026-07-12-hundredfold-chat-workflow-todo-kiss.md packages/hundredfold/src packages/web/src packages/hundredfold/template
   ```
 
   The coupling-symbol grep, parallel-delivery/alias grep, and runtime WorkItem-import grep must have no current production hit. `approvalWorkItemId` is accepted only in the schema-1 trigger migration adapter and its fixture; `engine:"workflow"` only in named read-compatibility fixtures/helpers that never create or mutate a Session; `todoTransition` only in the named legacy definition read adapter and fixture. Remove every accidental incomplete marker before handoff.
@@ -1336,7 +1336,7 @@ This plan is based on the current monorepo rather than obsolete package-layout o
 - `packages/hundredfold/src/cron/runner.ts`, `packages/hundredfold/src/cron/scheduler.ts`
 - `packages/hundredfold/src/mcp/toolkit.ts`, `server.ts`, `identity.ts`, `workflow-tools.ts`, `work-item-tools.ts`, `approval-tools.ts`
 - `packages/hundredfold/src/engines/claude-interactive.ts`, `codex-interactive.ts`, `pi.ts`, `grok.ts`, `hermes-protocol.ts`
-- `packages/hundredfold/src/cli/workflow.ts`, `packages/hundredfold/bin/jinn.ts`
+- `packages/hundredfold/src/cli/workflow.ts`, `packages/hundredfold/bin/hundredfold.ts`
 - `packages/web/src/lib/api.ts`, `packages/web/src/lib/blocks.ts`
 - `packages/web/src/hooks/use-live-session.ts`, `packages/web/src/hooks/use-query-invalidation.ts`, `packages/web/src/hooks/__tests__/use-query-invalidation-todos.test.tsx`
 - `packages/web/src/lib/query-keys.ts`, `packages/web/src/routes/todos/todo-edit-request.ts`

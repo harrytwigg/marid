@@ -6,7 +6,7 @@
 
 **Architecture:** Preserve the existing normalized Todo tree and audit rows. Enrich server-authored Todo activity blocks and MCP compact summaries with `parentId`, `rootId`, and `depth`; let the web transcript compose consecutive same-root creation receipts into one grouped collection; and strengthen shipped/live doctrine so hierarchy is chosen intentionally.
 
-**Tech Stack:** TypeScript, React 19, React Router, Tailwind CSS 4, Vitest, Testing Library, SQLite-backed Jinn Todo APIs.
+**Tech Stack:** TypeScript, React 19, React Router, Tailwind CSS 4, Vitest, Testing Library, SQLite-backed Hundredfold Todo APIs.
 
 ## Global Constraints
 
@@ -93,7 +93,7 @@ Also assert a standalone child receipt says `Sub-task · JIN-2` and exposes `Par
 
 - [ ] **Step 2: Run the two focused web suites and confirm the new assertions fail**
 
-Run: `pnpm --filter @jinn/web exec vitest run src/components/chat/__tests__/chat-messages-tool-group.test.tsx src/components/chat/__tests__/company-activity-card.test.tsx`
+Run: `pnpm --filter @hundredfold/web exec vitest run src/components/chat/__tests__/chat-messages-tool-group.test.tsx src/components/chat/__tests__/company-activity-card.test.tsx`
 
 Expected: FAIL because receipts remain independent and the card has no parent treatment.
 
@@ -111,7 +111,7 @@ For `todo-activity` blocks with a non-null `parentId`, change the noun from `Tod
 
 - [ ] **Step 6: Run focused web tests**
 
-Run: `pnpm --filter @jinn/web exec vitest run src/components/chat/__tests__/chat-messages-tool-group.test.tsx src/components/chat/__tests__/company-activity-card.test.tsx`
+Run: `pnpm --filter @hundredfold/web exec vitest run src/components/chat/__tests__/chat-messages-tool-group.test.tsx src/components/chat/__tests__/company-activity-card.test.tsx`
 
 Expected: PASS.
 
@@ -161,8 +161,8 @@ Expected: PASS.
 **Files:**
 - Modify: `packages/hundredfold/template/CLAUDE.md`
 - Modify: `packages/hundredfold/template/skills/todo-handling/SKILL.md`
-- Modify: `~/.jinn/CLAUDE.md`
-- Modify: `~/.jinn/skills/todo-handling/SKILL.md`
+- Modify: `~/.hundredfold/CLAUDE.md`
+- Modify: `~/.hundredfold/skills/todo-handling/SKILL.md`
 - Test: `packages/hundredfold/src/mcp/__tests__/work-item-tools.test.ts`
 - Test: `packages/hundredfold/src/shared/__tests__/template-company-doctrine.test.ts`
 

@@ -6,7 +6,7 @@ Each entry: the question, what was found (with where), and the decision it led t
 
 **Found**: yes, three ways before this feature. `collectClaudeLimits`
 (`packages/hundredfold/src/shared/engine-limits-claude.ts:232`) is a plain async function; the CLI
-runs it as `jinn limits --json --engine claude` (`cli/limits.ts:78`); the gateway serves it at
+runs it as `hundredfold limits --json --engine claude` (`cli/limits.ts:78`); the gateway serves it at
 `GET /api/engine-limits` (`gateway/api.ts:4499`) and re-reads it every 15 minutes for the
 health store (`gateway/background-refresh.ts:41`). Each window carries `resetsAt` (unix
 seconds) and `resetsAtIso`.
@@ -15,7 +15,7 @@ seconds) and `resetsAtIso`.
 
 ## R2. Cron job or gateway loop?
 
-**Found**: a Jinn cron job is a prompt run by an engine (`cron/runner.ts:42`). The decision
+**Found**: a Hundredfold cron job is a prompt run by an engine (`cron/runner.ts:42`). The decision
 here is "is `used ≤ ceiling` and `minutesToReset ≤ lookahead`" — numeric. An LLM cron would
 spend Claude capacity to decide whether Claude capacity is spare, on the window being measured,
 and would be non-deterministic about a threshold.
@@ -53,14 +53,14 @@ holds, or when they start, exists anywhere.
 
 **Found**:
 
-- Jinn's interactive Claude sessions (dashboard CLI mode, a PTY) install a statusline recorder
+- Hundredfold's interactive Claude sessions (dashboard CLI mode, a PTY) install a statusline recorder
   (`shared/claude-settings.ts:43`) that writes `<session>.json` into `CLAUDE_LIMITS_DIR` on
   every turn; `engines/claude-interactive.ts:1259` is the only place that sets it, and
   `engines/remote-stage.ts:1250` deliberately does not for remote sessions. The newest file's
-  mtime is the last moment the operator drove Claude from inside Jinn.
+  mtime is the last moment the operator drove Claude from inside Hundredfold.
 - The operator's own Claude Code sessions run on other machines; the gateway has no file or
   process to inspect. What it does have is the account reading, which includes that use.
-- Jinn's own sessions are visible: `sessionsHoldingEngineCapacity` (`gateway/api.ts:1096`)
+- Hundredfold's own sessions are visible: `sessionsHoldingEngineCapacity` (`gateway/api.ts:1096`)
   and `lastActivity` on every session (`sessions/registry.ts:1112`).
 
 **Decision**: three signals, any marks the operator seen, live for `idleMinutes` after:
@@ -69,8 +69,8 @@ holds, or when they start, exists anywhere.
 common case of the operator mid-conversation with the COO or an employee via the dashboard or
 Telegram, turn finished, reading and typing (review round 2); (b) statusline snapshot mtime;
 (c) five-hour used share rising by ≥ `usageDeltaPercent`
-between two readings of the same window while no Jinn session was active in between — usage
-the system did not spend is the operator's, wherever they spent it. False positives (a Jinn
+between two readings of the same window while no Hundredfold session was active in between — usage
+the system did not spend is the operator's, wherever they spent it. False positives (a Hundredfold
 session too brief to be caught between ticks) back the loop off, which is the safe direction.
 A fourth candidate (gateway-host `~/.claude/projects` mtimes) was rejected as speculative: the
 operator does not work on the gateway host.
@@ -86,7 +86,7 @@ source in the cache references `https://opencode.ai/zen/go/v1` and `/zen/v1` as 
 endpoints only. A live authenticated probe of the Go API for a usage route was blocked by the
 remote secrets hook and not attempted another way.
 
-**Decision**: not applicable — there is no "unused before reset" reading. `jinn limits
+**Decision**: not applicable — there is no "unused before reset" reading. `hundredfold limits
 --engine opencode` now says so (`shared/engine-limits.ts:301`).
 
 ## R7. What does a ceiling actually guarantee?

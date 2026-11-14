@@ -50,7 +50,7 @@ against `origin/main` at `3c032251`.
 | `packages/hundredfold/src/sessions/turn/engine-run.ts:46` | cwd becomes the stage dir for scoped sessions |
 | `packages/hundredfold/src/sessions/turn/preflight.ts:52` | `refuseTurn`: lost binding, wrong engine, profile not signed in |
 | `packages/hundredfold/src/gateway/watcher.ts:38` | `syncSkillSymlinks`: the regeneration trigger for stage dirs |
-| `packages/hundredfold/src/gateway/server.ts:565` | The only local trust seed today: boot-time, default profile, `$JINN_HOME` |
+| `packages/hundredfold/src/gateway/server.ts:565` | The only local trust seed today: boot-time, default profile, `$HUNDREDFOLD_HOME` |
 | `packages/hundredfold/src/shared/home.ts:34` / `:42` | `resolveClaudeConfigDir` / `claudeJsonPath`: gain a profile argument |
 | `packages/hundredfold/src/shared/child-env.ts:41` | `buildEngineChildEnv`: the profile's `CLAUDE_CONFIG_DIR` goes in here |
 | `packages/hundredfold/src/shared/remote-target.ts:114` / `:230` | The remote profile's validation and precedence: the pattern for the local field |
@@ -84,7 +84,7 @@ PR (FR-043 to FR-045).
    - `mayHoldTodo` with `dedicated` and the last-good fallback;
    - FR-018 path limits;
    - the filtered MCP profile, which carries the note tools, and the scoped roster;
-   - `JINN_DEPARTMENT`;
+   - `HUNDREDFOLD_DEPARTMENT`;
    - web: session badges, and scope editing in the department panel.
 
    Until Phase 3, scoped employees still load the company `CLAUDE.md` and skills, on whatever
@@ -110,7 +110,7 @@ PR (FR-043 to FR-045).
    - pushing the stage dir to each remote host a scoped member uses (FR-060);
    - the remote stage dir as cwd on every remote launch path (FR-061);
    - a scoped variant of the remote home that links nothing from the company home (FR-062);
-   - the remote trust seed, binding and `JINN_DEPARTMENT` (FR-063, FR-064);
+   - the remote trust seed, binding and `HUNDREDFOLD_DEPARTMENT` (FR-063, FR-064);
    - the FR-018 path limit in the remote MCP server (FR-065);
    - lifting the Phase 2 refusal of scoped employees with a `remoteHost`.
 6. **Phase 6: limits and auto-dispatch per account.** This covers:
@@ -383,7 +383,7 @@ Senior, because it is the enforcement itself.
 - FR-018 path checks. `list_files` and `read_file` are refused.
 - `mcp/department-profile.ts`. It removes the refused tools and always includes the note tools,
   rooted at D's folder, even when `notesEnabled` is off.
-- `JINN_DEPARTMENT` in scoped sessions' engine environment.
+- `HUNDREDFOLD_DEPARTMENT` in scoped sessions' engine environment.
 - `sessions/context/department-scope.ts`: a members-only roster and a department section.
 - The `refuseTurn` lost-binding check.
 - An `escalated` event when a Todo leaves D.
@@ -409,7 +409,7 @@ Senior, because it is the enforcement itself.
 
 ### Phase 3: scoped context (junior-developer, then senior QA)
 
-The stage dir lives at `<parent of home>/.jinn-departments/.instances/<basename of home>/<slug>/` (the root is keyed by instance by the stage-hardening follow-up, below; Phase 3 as first built used `<parent of home>/.jinn-departments/<slug>/`).
+The stage dir lives at `<parent of home>/.hundredfold-departments/.instances/<basename of home>/<slug>/` (the root is keyed by instance by the stage-hardening follow-up, below; Phase 3 as first built used `<parent of home>/.hundredfold-departments/<slug>/`).
 
 - **Contents.** It holds copies of the allowed skills and a generated `CLAUDE.md`. The
   `CLAUDE.md` is built from `INSTRUCTIONS.md`, plus the company `CLAUDE.md` if
@@ -425,7 +425,7 @@ The stage dir lives at `<parent of home>/.jinn-departments/.instances/<basename 
 - **Use.** A cwd helper (session or employee to cwd) gives the stage dir for scoped sessions.
   All four local spawn sites use it: `engine-run.ts:46`, the rate-limit handler's Branch A
   (`:185`) and Branch B (`:301`), and `pty-ws.ts:139`. A grep test, with an allow-list,
-  catches any new `cwd: JINN_HOME` at a session-spawn site (FR-020b). Scoped sessions skip
+  catches any new `cwd: HUNDREDFOLD_HOME` at a session-spawn site (FR-020b). Scoped sessions skip
   engine fallback entries (FR-026a). A trust seed for the stage
   dir is written when the dir is generated, under the session's profile once Phase 4 exists.
 - **Transcripts.** Resume, fork and auto-compaction resolve the stage-dir transcript slug.
@@ -442,11 +442,11 @@ The stage dir lives at `<parent of home>/.jinn-departments/.instances/<basename 
 
 Four residual risks from Phase 3, closed after Phase 5 merged:
 
-- **Per-instance stage root (FR-020, FR-020a).** The root is `<parent of home>/.jinn-departments/.instances/<basename of home>/`.
+- **Per-instance stage root (FR-020, FR-020a).** The root is `<parent of home>/.hundredfold-departments/.instances/<basename of home>/`.
   `prepareDepartmentStage` first runs `migrateLegacyStageDir` (`department-stage/legacy-stage.ts`): a
   stage dir at the old path is renamed to the new one (inode kept), its Claude transcripts are moved to the
   new project key in every profile, and it is never moved again. FR-033 protects the whole
-  `.jinn-departments/` directory. The remote path (`shared/remote-department.ts`) is deliberately **not**
+  `.hundredfold-departments/` directory. The remote path (`shared/remote-department.ts`) is deliberately **not**
   re-keyed: `remote.root` is already the instance's own on a host, and re-keying would strand the existing
   remote stage dirs and their transcripts.
 - **`INSTRUCTIONS.md` is the operator's (FR-029a).** The scoped note routes refuse a write to it, by name in any
@@ -496,7 +496,7 @@ Senior, because it changes the SSH staging every remote session goes through.
   `CLAUDE.md` is linked into its `remoteCwd`.
 - **Sync** (`engines/remote-department-stage.ts`): before every scoped spawn on a host, the
   file set from Phase 3's generator goes as a tar stream over `sshRun`'s stdin into
-  `<remote.root>/.jinn-departments/.<slug>.incoming-<random>/`. A sync script then applies
+  `<remote.root>/.hundredfold-departments/.<slug>.incoming-<random>/`. A sync script then applies
   FR-020a file by file: changed files are renamed over the old ones, directories are made with
   `mkdir -p` and never renamed over an existing one, type changes are removed first, extras
   (including files gone from a kept skill) are removed, and the incoming directory is deleted.
@@ -514,7 +514,7 @@ Senior, because it changes the SSH staging every remote session goes through.
     inside the per-host stage root (`facts.stageDir`, `engines/remote-stage.ts:418`). It fails
     closed when the facts are missing.
   - The trust seed takes the remote stage dir as its cwd.
-  - The session environment file gains `JINN_DEPARTMENT`.
+  - The session environment file gains `HUNDREDFOLD_DEPARTMENT`.
 - **cwd.** `employeeRemoteTarget` (`shared/remote-target.ts:207`) takes the scope resolver as
   a required argument and returns the remote stage dir as `remoteCwd` for a scoped employee.
   Three sites read `employee.remoteCwd` directly and move onto the helper by hand:
@@ -527,7 +527,7 @@ Senior, because it changes the SSH staging every remote session goes through.
   `cli/remote.ts:58` (shows the stage dir and the work area). Fork has no remote path. The
   employee's own `remoteCwd` goes into the scoped prompt section as the work area.
 - **Validation.** In `gateway/org.ts`: a scoped employee's `remoteCwd` must not be, contain or
-  lie inside `<remote.root>/.jinn-departments` or `remote.mount`. Phase 2's refusal of scoped
+  lie inside `<remote.root>/.hundredfold-departments` or `remote.mount`. Phase 2's refusal of scoped
   remote employees is removed.
 - **File reads.** Both MCP tools that read a path themselves, `publish_attachment`
   (`mcp/file-tools.ts:98`) and `uploadWorkItemAttachment` (`mcp/work-item-attachments.ts:103`),
@@ -536,7 +536,7 @@ Senior, because it changes the SSH staging every remote session goes through.
   The gateway's JSON `{path}` route refuses remote scoped sessions.
 - **Tests (junior sub-Todo).**
   - Per `employeeRemoteTarget` caller, the rate-limit retry included: the cwd, and
-    `JINN_DEPARTMENT` in the environment file. A scoped retry with no employee record is
+    `HUNDREDFOLD_DEPARTMENT` in the environment file. A scoped retry with no employee record is
     refused.
   - The grep test: no read of an employee's `remoteCwd` outside `remote-target.ts`.
   - The scoped farm script, run under `sh` against temporary directories standing in for the

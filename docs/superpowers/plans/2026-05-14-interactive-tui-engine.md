@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add an `InteractiveClaudeEngine` that drives the real interactive `claude` binary inside a PTY so Jinn bills against interactive subscription limits instead of the post-June-15 Agent SDK credit, with a PTY lifecycle manager, hook-based turn completion, cost/rate-limit reconstruction, and a web "CLI mode".
+**Goal:** Add an `InteractiveClaudeEngine` that drives the real interactive `claude` binary inside a PTY so Hundredfold bills against interactive subscription limits instead of the post-June-15 Agent SDK credit, with a PTY lifecycle manager, hook-based turn completion, cost/rate-limit reconstruction, and a web "CLI mode".
 
 **Architecture:** One engine core spawns the genuine `claude` binary via `node-pty` (no `-p` → `cc_entrypoint=cli`). Turn results arrive via a Claude Code `Stop` hook that POSTs to a new gateway endpoint; mid-turn progress comes from tailing the session transcript JSONL. A PTY lifecycle manager keyed on `session.id` owns process lifetime (kill-after-turn default / KEEP ALIVE / web grace period). The web UI gets a per-session Chat↔CLI toggle; CLI mode streams raw PTY bytes over a dedicated WebSocket into xterm.js.
 
@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-05-14-interactive-tui-engine-design.md`
 
-**Test commands:** single file - `npx tsx --test packages/hundredfold/src/<path>.test.ts`; full daemon suite - `pnpm --filter @jinnjinn-cli test`; typecheck - `pnpm --filter @jinnjinn-cli typecheck`.
+**Test commands:** single file - `npx tsx --test packages/hundredfold/src/<path>.test.ts`; full daemon suite - `pnpm --filter @hundredfoldjinn-cli test`; typecheck - `pnpm --filter @hundredfoldjinn-cli typecheck`.
 
 > **Assumptions to revisit after Phase 0** are tagged **[SPIKE-DEP]**. If a Phase 0 finding contradicts an assumption, update the affected task before implementing it.
 
@@ -18,16 +18,16 @@
 
 ## Phase 0 - Validation Spike
 
-Exploratory, not TDD. Each task runs a real `claude` (v2.1.141 is installed) and records findings into the spec's "Open Questions / Validation Steps" section (mark each line RESOLVED/CHANGED with the finding). Reuse `/tmp/jinn-tui-poc/` from the original POC (hook scripts + settings.json already exist there; trust is seeded under `/private/tmp/jinn-tui-poc`).
+Exploratory, not TDD. Each task runs a real `claude` (v2.1.141 is installed) and records findings into the spec's "Open Questions / Validation Steps" section (mark each line RESOLVED/CHANGED with the finding). Reuse `/tmp/hundredfold-tui-poc/` from the original POC (hook scripts + settings.json already exist there; trust is seeded under `/private/tmp/hundredfold-tui-poc`).
 
 ### Task 0.1: Confirm `--resume "<prompt>"` auto-submits + bracketed-paste follow-ups
 
 **Files:**
 - Modify: `docs/superpowers/specs/2026-05-14-interactive-tui-engine-design.md` (Open Questions section)
 
-- [ ] **Step 1: Resume auto-submit test.** Run a fresh POC turn (as in the original POC), capture the `session_id` from `result-stop-payload.json`. Then run `script -q /dev/null claude --resume <session_id> --settings /private/tmp/jinn-tui-poc/settings.json --dangerously-skip-permissions "Reply with exactly RESUME_OK"` in the background; wait for `STOP_FIRED`; confirm `last_assistant_message` is `RESUME_OK`. Record result.
+- [ ] **Step 1: Resume auto-submit test.** Run a fresh POC turn (as in the original POC), capture the `session_id` from `result-stop-payload.json`. Then run `script -q /dev/null claude --resume <session_id> --settings /private/tmp/hundredfold-tui-poc/settings.json --dangerously-skip-permissions "Reply with exactly RESUME_OK"` in the background; wait for `STOP_FIRED`; confirm `last_assistant_message` is `RESUME_OK`. Record result.
 
-- [ ] **Step 2: Bracketed-paste follow-up test.** Spawn `script -q /dev/null claude --settings .../settings.json --dangerously-skip-permissions` with NO prompt arg, keeping stdin open (use a FIFO: `mkfifo /tmp/jinn-tui-poc/in; script -q /dev/null ... < /tmp/jinn-tui-poc/in &`). After ~3s, write `printf '\033[200~Reply with exactly PASTE_OK\033[201~\r' > /tmp/jinn-tui-poc/in`. Wait for `STOP_FIRED`; confirm `last_assistant_message` is `PASTE_OK`. Then write a second paste with a `/`-prefixed line to confirm paste-mode neutralizes it. Record results.
+- [ ] **Step 2: Bracketed-paste follow-up test.** Spawn `script -q /dev/null claude --settings .../settings.json --dangerously-skip-permissions` with NO prompt arg, keeping stdin open (use a FIFO: `mkfifo /tmp/hundredfold-tui-poc/in; script -q /dev/null ... < /tmp/hundredfold-tui-poc/in &`). After ~3s, write `printf '\033[200~Reply with exactly PASTE_OK\033[201~\r' > /tmp/hundredfold-tui-poc/in`. Wait for `STOP_FIRED`; confirm `last_assistant_message` is `PASTE_OK`. Then write a second paste with a `/`-prefixed line to confirm paste-mode neutralizes it. Record results.
 
 - [ ] **Step 3: Record findings** in the spec, marking the two relevant Open Questions RESOLVED or CHANGED. If resume-with-prompt does NOT auto-submit, note that every turn must use the FIFO/paste path and update Task 4.3.
 
@@ -85,7 +85,7 @@ git commit -m "spike: identify cost and rate-limit data sources for interactive 
 - Modify: `packages/hundredfold/src/shared/config.ts`
 - Test: `packages/hundredfold/src/shared/config.test.ts`
 
-- [ ] **Step 1: Extend the `JinnConfig` types.** In `types.ts`, change the `claude` engine type and add interactive knobs:
+- [ ] **Step 1: Extend the `HundredfoldConfig` types.** In `types.ts`, change the `claude` engine type and add interactive knobs:
 
 ```ts
 claude: {
@@ -144,8 +144,8 @@ Expected: FAIL - `normalizeClaudeEngineConfig` not exported.
 - [ ] **Step 4: Implement `normalizeClaudeEngineConfig`** in `config.ts`:
 
 ```ts
-import type { JinnConfig } from "./types.js";
-type ClaudeEngineConfig = JinnConfig["engines"]["claude"];
+import type { HundredfoldConfig } from "./types.js";
+type ClaudeEngineConfig = HundredfoldConfig["engines"]["claude"];
 
 export function normalizeClaudeEngineConfig(raw: ClaudeEngineConfig): Required<Pick<ClaudeEngineConfig,
   "mode" | "idleTimeoutMs" | "graceWindowMs" | "turnTimeoutMs" | "maxLivePtys">> & ClaudeEngineConfig {
@@ -170,7 +170,7 @@ Expected: PASS (3 tests).
 - [ ] **Step 6: Apply normalization in `loadConfig`.** In `config.ts`, after `yaml.load`, normalize the claude engine block:
 
 ```ts
-const config = yaml.load(raw) as JinnConfig;
+const config = yaml.load(raw) as HundredfoldConfig;
 config.engines.claude = normalizeClaudeEngineConfig(config.engines.claude);
 return config;
 ```
@@ -187,7 +187,7 @@ Then update the two `engine.run({...})` call sites to pass it: `manager.ts` `run
 - [ ] **Step 8: Run typecheck + commit**
 
 ```bash
-pnpm --filter @jinnjinn-cli typecheck
+pnpm --filter @hundredfoldjinn-cli typecheck
 git add packages/hundredfold/src/shared/types.ts packages/hundredfold/src/shared/config.ts packages/hundredfold/src/shared/config.test.ts packages/hundredfold/src/sessions/manager.ts packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(config): interactive engine config keys + normalization + EngineRunOpts.source"
 ```
@@ -202,7 +202,7 @@ git commit -m "feat(config): interactive engine config keys + normalization + En
 - [ ] **Step 2: Typecheck + commit**
 
 ```bash
-pnpm --filter @jinnjinn-cli typecheck
+pnpm --filter @hundredfoldjinn-cli typecheck
 git add packages/hundredfold/src/cli/setup.ts
 git commit -m "feat(setup): emit explicit engines.claude.mode in default config"
 ```
@@ -213,17 +213,17 @@ git commit -m "feat(setup): emit explicit engines.claude.mode in default config"
 - Modify: `packages/hundredfold/package.json` (dependencies)
 - Modify: `packages/hundredfold/src/shared/paths.ts`
 
-- [ ] **Step 1: Add dependency.** Run `pnpm --filter @jinnjinn-cli add node-pty`. Verify it installs a prebuild (no compiler error). Record the resolved version.
+- [ ] **Step 1: Add dependency.** Run `pnpm --filter @hundredfoldjinn-cli add node-pty`. Verify it installs a prebuild (no compiler error). Record the resolved version.
 
 - [ ] **Step 2: Add paths.** In `paths.ts`, after `PID_FILE`:
 
 ```ts
 /** Gateway connection info (port + hook secret + pids) for hook-relay discovery. */
-export const GATEWAY_INFO_FILE = path.join(JINN_HOME, "gateway.json");
+export const GATEWAY_INFO_FILE = path.join(HUNDREDFOLD_HOME, "gateway.json");
 /** Per-session Claude Code --settings files. */
-export const CLAUDE_SETTINGS_DIR = path.join(JINN_HOME, "tmp", "settings");
+export const CLAUDE_SETTINGS_DIR = path.join(HUNDREDFOLD_HOME, "tmp", "settings");
 /** The hook-relay script written once at boot. */
-export const HOOK_RELAY_SCRIPT = path.join(JINN_HOME, "hook-relay.mjs");
+export const HOOK_RELAY_SCRIPT = path.join(HUNDREDFOLD_HOME, "hook-relay.mjs");
 ```
 
 - [ ] **Step 3: Commit**
@@ -345,18 +345,18 @@ import path from "node:path";
 import { buildSessionSettings, writeSessionSettings, sessionSettingsPath, seedTrust } from "./claude-settings.js";
 
 test("buildSessionSettings registers Stop/SessionStart/StopFailure hooks pointing at the relay with the session id", () => {
-  const s = buildSessionSettings({ sessionId: "jinn-abc", relayScript: "/h/relay.mjs", appendSystemPrompt: "SYS" });
+  const s = buildSessionSettings({ sessionId: "hundredfold-abc", relayScript: "/h/relay.mjs", appendSystemPrompt: "SYS" });
   const stop = s.hooks.Stop[0].hooks[0];
   assert.equal(stop.type, "command");
-  assert.match(stop.command, /relay\.mjs.*jinn-abc/);
+  assert.match(stop.command, /relay\.mjs.*hundredfold-abc/);
   assert.ok(s.hooks.SessionStart && s.hooks.PreToolUse && s.hooks.PostToolUse && s.hooks.StopFailure);
   assert.equal(s.appendSystemPrompt, "SYS");
 });
 
 test("writeSessionSettings writes atomically and is readable", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cs-"));
-  const p = writeSessionSettings(dir, "jinn-xyz", { sessionId: "jinn-xyz", relayScript: "/h/relay.mjs" });
-  assert.equal(p, sessionSettingsPath(dir, "jinn-xyz"));
+  const p = writeSessionSettings(dir, "hundredfold-xyz", { sessionId: "hundredfold-xyz", relayScript: "/h/relay.mjs" });
+  assert.equal(p, sessionSettingsPath(dir, "hundredfold-xyz"));
   const parsed = JSON.parse(fs.readFileSync(p, "utf-8"));
   assert.ok(parsed.hooks.Stop);
   assert.ok(!fs.existsSync(`${p}.tmp`));
@@ -403,7 +403,7 @@ export interface ClaudeSettings {
 }
 
 export function buildSessionSettings(opts: SessionSettingsOpts): ClaudeSettings {
-  // Relay is invoked as: node <relayScript> <jinnSessionId>
+  // Relay is invoked as: node <relayScript> <hundredfoldSessionId>
   // It reads the hook JSON on stdin and POSTs to the gateway.
   const cmd = (): HookMatcher => ({
     hooks: [{ type: "command", command: `node ${opts.relayScript} ${opts.sessionId}` }],
@@ -469,20 +469,20 @@ git commit -m "feat: per-session Claude settings file + trust seeding helpers"
 ### Task 2.2: The hook-relay script
 
 **Files:**
-- Create: `packages/hundredfold/assets/hook-relay.mjs` (source-of-truth, copied to `JINN_HOME` at boot)
+- Create: `packages/hundredfold/assets/hook-relay.mjs` (source-of-truth, copied to `HUNDREDFOLD_HOME` at boot)
 
-- [ ] **Step 1: Write the relay script.** It is invoked by Claude Code as `node hook-relay.mjs <jinnSessionId>`, reads the hook JSON on stdin, and POSTs to the gateway. It must never throw (exit 0 always) and must not block Claude.
+- [ ] **Step 1: Write the relay script.** It is invoked by Claude Code as `node hook-relay.mjs <hundredfoldSessionId>`, reads the hook JSON on stdin, and POSTs to the gateway. It must never throw (exit 0 always) and must not block Claude.
 
 ```js
 #!/usr/bin/env node
-// Jinn hook relay. Invoked by Claude Code hooks as: node hook-relay.mjs <jinnSessionId>
+// Hundredfold hook relay. Invoked by Claude Code hooks as: node hook-relay.mjs <hundredfoldSessionId>
 // Reads hook JSON on stdin, POSTs to the gateway's /api/internal/hook. Always exits 0.
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-const jinnSessionId = process.argv[2];
-const JINN_HOME = process.env.JINN_HOME || path.join(os.homedir(), `.${process.env.JINN_INSTANCE || "jinn"}`);
+const hundredfoldSessionId = process.argv[2];
+const HUNDREDFOLD_HOME = process.env.HUNDREDFOLD_HOME || path.join(os.homedir(), `.${process.env.HUNDREDFOLD_INSTANCE || "hundredfold"}`);
 
 async function main() {
   let raw = "";
@@ -491,12 +491,12 @@ async function main() {
   try { payload = JSON.parse(raw); } catch { return; }
 
   let info;
-  try { info = JSON.parse(fs.readFileSync(path.join(JINN_HOME, "gateway.json"), "utf-8")); } catch { return; }
+  try { info = JSON.parse(fs.readFileSync(path.join(HUNDREDFOLD_HOME, "gateway.json"), "utf-8")); } catch { return; }
 
-  const body = JSON.stringify({ jinnSessionId, hook: payload });
+  const body = JSON.stringify({ hundredfoldSessionId, hook: payload });
   await fetch(`http://127.0.0.1:${info.port}/api/internal/hook`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-jinn-hook-secret": info.secret },
+    headers: { "content-type": "application/json", "x-hundredfold-hook-secret": info.secret },
     body,
   }).catch(() => {});
 }
@@ -504,7 +504,7 @@ async function main() {
 main().catch(() => {}).finally(() => process.exit(0));
 ```
 
-- [ ] **Step 2: Manual smoke test.** `echo '{"hook_event_name":"Stop","session_id":"x"}' | JINN_HOME=/tmp node packages/hundredfold/assets/hook-relay.mjs jinn-test` - confirm it exits 0 cleanly even with no gateway running (the `fetch` rejection is swallowed).
+- [ ] **Step 2: Manual smoke test.** `echo '{"hook_event_name":"Stop","session_id":"x"}' | HUNDREDFOLD_HOME=/tmp node packages/hundredfold/assets/hook-relay.mjs hundredfold-test` - confirm it exits 0 cleanly even with no gateway running (the `fetch` rejection is swallowed).
 
 - [ ] **Step 3: Commit**
 
@@ -593,11 +593,11 @@ export class HookRegistry {
   private buffer = new Map<string, Buffered[]>();
   constructor(private ttlMs = 30_000) {}
 
-  register(jinnSessionId: string, listener: HookListener): void {
-    this.listeners.set(jinnSessionId, listener);
-    const pending = this.buffer.get(jinnSessionId);
+  register(hundredfoldSessionId: string, listener: HookListener): void {
+    this.listeners.set(hundredfoldSessionId, listener);
+    const pending = this.buffer.get(hundredfoldSessionId);
     if (pending) {
-      this.buffer.delete(jinnSessionId);
+      this.buffer.delete(hundredfoldSessionId);
       const now = Date.now();
       for (const b of pending) {
         if (now - b.at <= this.ttlMs) listener(b.payload);
@@ -605,17 +605,17 @@ export class HookRegistry {
     }
   }
 
-  unregister(jinnSessionId: string): void {
-    this.listeners.delete(jinnSessionId);
-    this.buffer.delete(jinnSessionId);
+  unregister(hundredfoldSessionId: string): void {
+    this.listeners.delete(hundredfoldSessionId);
+    this.buffer.delete(hundredfoldSessionId);
   }
 
-  deliver(jinnSessionId: string, payload: HookPayload): void {
-    const listener = this.listeners.get(jinnSessionId);
+  deliver(hundredfoldSessionId: string, payload: HookPayload): void {
+    const listener = this.listeners.get(hundredfoldSessionId);
     if (listener) { listener(payload); return; }
-    const arr = this.buffer.get(jinnSessionId) ?? [];
+    const arr = this.buffer.get(hundredfoldSessionId) ?? [];
     arr.push({ payload, at: Date.now() });
-    this.buffer.set(jinnSessionId, arr);
+    this.buffer.set(hundredfoldSessionId, arr);
   }
 }
 ```
@@ -657,14 +657,14 @@ function ctx() {
 test("handleHookPost rejects a wrong secret with 403", () => {
   const { reg } = ctx();
   const res = handleHookPost({ reg, secret: "sek", remoteAddress: "127.0.0.1" },
-    "nope", { jinnSessionId: "s1", hook: { hook_event_name: "Stop" } });
+    "nope", { hundredfoldSessionId: "s1", hook: { hook_event_name: "Stop" } });
   assert.equal(res.status, 403);
 });
 
 test("handleHookPost rejects a non-loopback remote with 403", () => {
   const { reg } = ctx();
   const res = handleHookPost({ reg, secret: "sek", remoteAddress: "10.0.0.5" },
-    "sek", { jinnSessionId: "s1", hook: { hook_event_name: "Stop" } });
+    "sek", { hundredfoldSessionId: "s1", hook: { hook_event_name: "Stop" } });
   assert.equal(res.status, 403);
 });
 
@@ -673,7 +673,7 @@ test("handleHookPost delivers a valid hook to the registry and returns 200", () 
   const seen: string[] = [];
   reg.register("s1", (h) => seen.push(h.hook_event_name));
   const res = handleHookPost({ reg, secret: "sek", remoteAddress: "127.0.0.1" },
-    "sek", { jinnSessionId: "s1", hook: { hook_event_name: "Stop", last_assistant_message: "hi" } });
+    "sek", { hundredfoldSessionId: "s1", hook: { hook_event_name: "Stop", last_assistant_message: "hi" } });
   assert.equal(res.status, 200);
   assert.deepEqual(seen, ["Stop"]);
 });
@@ -700,7 +700,7 @@ const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 export function handleHookPost(
   ctx: HookEndpointCtx,
   providedSecret: string | undefined,
-  body: { jinnSessionId?: string; hook?: HookPayload },
+  body: { hundredfoldSessionId?: string; hook?: HookPayload },
 ): { status: number; body: string } {
   if (!ctx.remoteAddress || !LOOPBACK.has(ctx.remoteAddress)) {
     return { status: 403, body: "forbidden" };
@@ -708,10 +708,10 @@ export function handleHookPost(
   if (providedSecret !== ctx.secret) {
     return { status: 403, body: "forbidden" };
   }
-  if (!body.jinnSessionId || !body.hook?.hook_event_name) {
+  if (!body.hundredfoldSessionId || !body.hook?.hook_event_name) {
     return { status: 400, body: "bad request" };
   }
-  ctx.reg.deliver(body.jinnSessionId, body.hook);
+  ctx.reg.deliver(body.hundredfoldSessionId, body.hook);
   return { status: 200, body: "ok" };
 }
 ```
@@ -728,7 +728,7 @@ if (method === "POST" && pathname === "/api/internal/hook") {
   const body = await readJsonBody(req);
   const res = handleHookPost(
     { reg: context.hookRegistry, secret: context.hookSecret, remoteAddress: req.socket.remoteAddress },
-    req.headers["x-jinn-hook-secret"] as string | undefined,
+    req.headers["x-hundredfold-hook-secret"] as string | undefined,
     body,
   );
   return sendJson(sendResponse ?? res, res.status, { ok: res.status === 200 });
@@ -740,7 +740,7 @@ if (method === "POST" && pathname === "/api/internal/hook") {
 - [ ] **Step 7: Typecheck + commit**
 
 ```bash
-pnpm --filter @jinnjinn-cli typecheck
+pnpm --filter @hundredfoldjinn-cli typecheck
 git add packages/hundredfold/src/gateway/hook-endpoint.ts packages/hundredfold/src/gateway/hook-endpoint.test.ts packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(gateway): /api/internal/hook endpoint with loopback+secret auth"
 ```
@@ -1386,7 +1386,7 @@ import os from "node:os";
 import path from "node:path";
 import type { InterruptibleEngine, EngineRunOpts, EngineResult, StreamDelta } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
-import { JINN_HOME, CLAUDE_SETTINGS_DIR, HOOK_RELAY_SCRIPT } from "../shared/paths.js";
+import { HUNDREDFOLD_HOME, CLAUDE_SETTINGS_DIR, HOOK_RELAY_SCRIPT } from "../shared/paths.js";
 import { writeSessionSettings } from "../shared/claude-settings.js";
 import { buildInteractiveArgs } from "./interactive-args.js";
 import { tailTranscript, type TranscriptTailer } from "./transcript-tail.js";
@@ -1478,7 +1478,7 @@ const CLAUDE_JSON = path.join(os.homedir(), ".claude.json");
 
 export class InteractiveClaudeEngine implements InterruptibleEngine {
   name = "claude" as const;
-  /** Active turn resolvers keyed by Jinn session id. */
+  /** Active turn resolvers keyed by Hundredfold session id. */
   private active = new Map<string, { resolver: TurnResolver; tailer?: TranscriptTailer }>();
 
   constructor(
@@ -1488,26 +1488,26 @@ export class InteractiveClaudeEngine implements InterruptibleEngine {
   ) {}
 
   async run(opts: EngineRunOpts): Promise<EngineResult> {
-    const jinnSessionId = opts.sessionId;
-    if (!jinnSessionId) throw new Error("InteractiveClaudeEngine.run requires opts.sessionId");
+    const hundredfoldSessionId = opts.sessionId;
+    if (!hundredfoldSessionId) throw new Error("InteractiveClaudeEngine.run requires opts.sessionId");
 
     // Guard: refuse a second concurrent turn for the same session.
-    if (this.active.has(jinnSessionId)) {
+    if (this.active.has(hundredfoldSessionId)) {
       return { sessionId: opts.resumeSessionId ?? "", result: "", error: "Interactive engine: a turn is already running for this session" };
     }
 
-    const settingsPath = writeSessionSettings(CLAUDE_SETTINGS_DIR, jinnSessionId, {
-      sessionId: jinnSessionId,
+    const settingsPath = writeSessionSettings(CLAUDE_SETTINGS_DIR, hundredfoldSessionId, {
+      sessionId: hundredfoldSessionId,
       relayScript: HOOK_RELAY_SCRIPT,
       appendSystemPrompt: opts.systemPrompt, // [SPIKE-DEP] argv vs settings - see Task 0.2
     });
 
     const resolver = new TurnResolver({ turnTimeoutMs: this.cfg.turnTimeoutMs, fallbackSessionId: opts.resumeSessionId });
     const entry: { resolver: TurnResolver; tailer?: TranscriptTailer } = { resolver };
-    this.active.set(jinnSessionId, entry);
+    this.active.set(hundredfoldSessionId, entry);
 
     // Register BEFORE spawning so a fast SessionStart is buffered+drained, not lost.
-    this.hookRegistry.register(jinnSessionId, (h) => {
+    this.hookRegistry.register(hundredfoldSessionId, (h) => {
       resolver.onHook(h);
       if (h.hook_event_name === "SessionStart" && typeof h.transcript_path === "string" && !entry.tailer) {
         entry.tailer = tailTranscript(h.transcript_path, (d) => opts.onStream?.(d));
@@ -1521,14 +1521,14 @@ export class InteractiveClaudeEngine implements InterruptibleEngine {
       }
     });
 
-    const warm = this.lifecycle.getWarm(jinnSessionId);
+    const warm = this.lifecycle.getWarm(hundredfoldSessionId);
     if (warm) {
       this.injectPrompt(warm, opts);
-      this.lifecycle.turnStarted(jinnSessionId);
+      this.lifecycle.turnStarted(hundredfoldSessionId);
     } else {
-      const handle = this.spawn(jinnSessionId, opts, settingsPath);
-      this.lifecycle.adopt(jinnSessionId, handle, { cronOrigin: opts.source === "cron" });
-      this.lifecycle.turnStarted(jinnSessionId);
+      const handle = this.spawn(hundredfoldSessionId, opts, settingsPath);
+      this.lifecycle.adopt(hundredfoldSessionId, handle, { cronOrigin: opts.source === "cron" });
+      this.lifecycle.turnStarted(hundredfoldSessionId);
     }
 
     let result: EngineResult;
@@ -1536,9 +1536,9 @@ export class InteractiveClaudeEngine implements InterruptibleEngine {
       result = await resolver.promise;
     } finally {
       entry.tailer?.stop();
-      this.hookRegistry.unregister(jinnSessionId);
-      this.active.delete(jinnSessionId);
-      this.lifecycle.turnEnded(jinnSessionId); // manager decides kill vs keep-warm
+      this.hookRegistry.unregister(hundredfoldSessionId);
+      this.active.delete(hundredfoldSessionId);
+      this.lifecycle.turnEnded(hundredfoldSessionId); // manager decides kill vs keep-warm
     }
 
     // Task 5.3 inserts cost + rate-limit reconstruction here, using
@@ -1547,7 +1547,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine {
   }
 
   /** node-pty spawn of the genuine claude binary (no -p → cc_entrypoint=cli). */
-  private spawn(jinnSessionId: string, opts: EngineRunOpts, settingsPath: string): PtyHandle {
+  private spawn(hundredfoldSessionId: string, opts: EngineRunOpts, settingsPath: string): PtyHandle {
     const args = buildInteractiveArgs({
       prompt: opts.prompt,
       settingsPath,
@@ -1570,7 +1570,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine {
       name: "xterm-256color",
       cols: 120,
       rows: 40,
-      cwd: opts.cwd || JINN_HOME,
+      cwd: opts.cwd || HUNDREDFOLD_HOME,
       env,
     });
     const handle: PtyHandle = {
@@ -1580,7 +1580,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine {
     } as PtyHandle;
     proc.onExit(() => {
       // PTY exited without a Stop hook (crash / early exit) - settle as interrupted.
-      const e = this.active.get(jinnSessionId);
+      const e = this.active.get(hundredfoldSessionId);
       e?.resolver.interrupt("Interrupted: claude process exited");
     });
     (handle as any)._proc = proc;
@@ -1634,7 +1634,7 @@ Expected: PASS (4 `TurnResolver` tests). The engine itself is integration-tested
 - [ ] **Step 6: Typecheck + commit**
 
 ```bash
-pnpm --filter @jinnjinn-cli typecheck
+pnpm --filter @hundredfoldjinn-cli typecheck
 git add packages/hundredfold/src/engines/claude-interactive.ts packages/hundredfold/src/engines/claude-interactive.test.ts
 git commit -m "feat(engine): InteractiveClaudeEngine + TurnResolver completion contract"
 ```
@@ -1871,7 +1871,7 @@ import { rateLimitFromStopFailure } from "./interactive-ratelimit.js";
   }
 ```
 
-- [ ] **Step 3: Typecheck.** `pnpm --filter @jinnjinn-cli typecheck` - clean (the modules from 5.1/5.2 now resolve).
+- [ ] **Step 3: Typecheck.** `pnpm --filter @hundredfoldjinn-cli typecheck` - clean (the modules from 5.1/5.2 now resolve).
 
 - [ ] **Step 4: Run the engine's unit test** to confirm no regression: `npx tsx --test packages/hundredfold/src/engines/claude-interactive.test.ts` - PASS.
 
@@ -1905,7 +1905,7 @@ import { HookRegistry } from "./hook-registry.js";
 import { PtyLifecycleManager } from "../engines/pty-lifecycle.js";
 import { InteractiveClaudeEngine } from "../engines/claude-interactive.js";
 import { seedTrust, cleanupSessionSettings } from "../shared/claude-settings.js";
-import { GATEWAY_INFO_FILE, HOOK_RELAY_SCRIPT, JINN_HOME, CLAUDE_SETTINGS_DIR } from "../shared/paths.js";
+import { GATEWAY_INFO_FILE, HOOK_RELAY_SCRIPT, HUNDREDFOLD_HOME, CLAUDE_SETTINGS_DIR } from "../shared/paths.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -1916,9 +1916,9 @@ const hookRegistry = new HookRegistry();
 
 let claudeEngine;
 if (claudeCfg.mode === "interactive") {
-  // copy the hook-relay script into JINN_HOME (idempotent)
+  // copy the hook-relay script into HUNDREDFOLD_HOME (idempotent)
   fs.copyFileSync(path.join(import.meta.dirname, "../../assets/hook-relay.mjs"), HOOK_RELAY_SCRIPT);
-  seedTrust(path.join(os.homedir(), ".claude.json"), JINN_HOME);
+  seedTrust(path.join(os.homedir(), ".claude.json"), HUNDREDFOLD_HOME);
   const lifecycle = new PtyLifecycleManager({
     graceWindowMs: claudeCfg.graceWindowMs,
     idleTimeoutMs: claudeCfg.idleTimeoutMs,
@@ -1937,12 +1937,12 @@ if (claudeCfg.mode === "interactive") {
 
 - [ ] **Step 5: In `cleanup()`**, ensure `claudeEngine.killAll()` runs (it already does via the engines map - confirm the interactive engine is in that map) and delete `GATEWAY_INFO_FILE`.
 
-- [ ] **Step 6: Typecheck + manual boot test.** `pnpm --filter @jinnjinn-cli build && JINN_HOME=~/.jinn node packages/hundredfold/dist/bin/jinn.js start` with `engines.claude.mode: interactive` in config - confirm the log says "INTERACTIVE mode", `~/.jinn/gateway.json` exists with a `secret`, `~/.jinn/hook-relay.mjs` exists, and `~/.claude.json` has the JINN_HOME trust entry. Stop the gateway; confirm `gateway.json` is removed.
+- [ ] **Step 6: Typecheck + manual boot test.** `pnpm --filter @hundredfoldjinn-cli build && HUNDREDFOLD_HOME=~/.hundredfold node packages/hundredfold/dist/bin/hundredfold.js start` with `engines.claude.mode: interactive` in config - confirm the log says "INTERACTIVE mode", `~/.hundredfold/gateway.json` exists with a `secret`, `~/.hundredfold/hook-relay.mjs` exists, and `~/.claude.json` has the HUNDREDFOLD_HOME trust entry. Stop the gateway; confirm `gateway.json` is removed.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-pnpm --filter @jinnjinn-cli typecheck
+pnpm --filter @hundredfoldjinn-cli typecheck
 git add packages/hundredfold/src/gateway/server.ts packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(gateway): boot wiring for interactive engine (gateway.json, trust, relay)"
 ```
@@ -1954,7 +1954,7 @@ git commit -m "feat(gateway): boot wiring for interactive engine (gateway.json, 
 
 - [ ] **Step 1: Confirm the route block** added in Task 2.4 references the now-populated `context.hookRegistry` and `context.hookSecret`. Fix any reference.
 
-- [ ] **Step 2: Manual end-to-end smoke.** With the interactive gateway running, `curl -s -X POST localhost:7777/api/internal/hook -H "x-jinn-hook-secret: $(jq -r .secret ~/.jinn/gateway.json)" -H 'content-type: application/json' -d '{"jinnSessionId":"nope","hook":{"hook_event_name":"Stop"}}'` → expect `200 {"ok":true}`. Then same `curl` with a wrong secret → expect `403`.
+- [ ] **Step 2: Manual end-to-end smoke.** With the interactive gateway running, `curl -s -X POST localhost:7777/api/internal/hook -H "x-hundredfold-hook-secret: $(jq -r .secret ~/.hundredfold/gateway.json)" -H 'content-type: application/json' -d '{"hundredfoldSessionId":"nope","hook":{"hook_event_name":"Stop"}}'` → expect `200 {"ok":true}`. Then same `curl` with a wrong secret → expect `403`.
 
 - [ ] **Step 3: Commit** (only if Step 1 required a change)
 
@@ -1983,7 +1983,7 @@ git commit -m "fix(gateway): wire hook endpoint to populated context"
 - [ ] **Step 6: Commit**
 
 ```bash
-pnpm --filter @jinnjinn-cli typecheck
+pnpm --filter @hundredfoldjinn-cli typecheck
 git add packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/sessions/manager.ts packages/hundredfold/src/gateway/server.ts
 git commit -m "feat: route session teardown through releaseSession; fix resetSession engine kill"
 ```
@@ -2007,7 +2007,7 @@ git commit -m "docs(manager): note --settings file is PTY-lifetime not turn-life
 **Files:**
 - Test: manual / scripted smoke (no unit test - needs a real `claude`)
 
-- [ ] **Step 1:** Set `engines.claude.mode: interactive` in `~/.jinn/config.yaml`. Build + start the gateway.
+- [ ] **Step 1:** Set `engines.claude.mode: interactive` in `~/.hundredfold/config.yaml`. Build + start the gateway.
 
 - [ ] **Step 2:** POST a web session message: `curl -s -X POST localhost:7777/api/sessions -H 'content-type: application/json' -d '{"prompt":"Reply with exactly E2E_OK"}'`. Capture the `sessionId`.
 
@@ -2073,7 +2073,7 @@ Implement the body fully: maintain a per-session ring buffer of recent PTY outpu
 - [ ] **Step 6: Commit**
 
 ```bash
-pnpm --filter @jinnjinn-cli typecheck
+pnpm --filter @hundredfoldjinn-cli typecheck
 git add packages/hundredfold/src/gateway/pty-ws.ts packages/hundredfold/src/gateway/server.ts packages/hundredfold/src/engines/claude-interactive.ts
 git commit -m "feat(gateway): dedicated /ws/pty channel + per-session scrollback buffer"
 ```
@@ -2085,7 +2085,7 @@ git commit -m "feat(gateway): dedicated /ws/pty channel + per-session scrollback
 - Create: `packages/web/src/lib/view-mode.ts`
 - Test: `packages/web/src/lib/view-mode.test.ts`
 
-- [ ] **Step 1: Add deps.** `pnpm --filter @jinn/web add @xterm/xterm @xterm/addon-fit @xterm/addon-serialize`.
+- [ ] **Step 1: Add deps.** `pnpm --filter @hundredfold/web add @xterm/xterm @xterm/addon-fit @xterm/addon-serialize`.
 
 - [ ] **Step 2: Write the failing test**
 
@@ -2095,7 +2095,7 @@ import assert from "node:assert/strict";
 import { viewModeKey, readViewMode, writeViewMode } from "./view-mode.js";
 
 test("viewModeKey is namespaced per session id", () => {
-  assert.equal(viewModeKey("s1"), "jinn-view-mode-s1");
+  assert.equal(viewModeKey("s1"), "hundredfold-view-mode-s1");
 });
 
 test("readViewMode defaults to chat for an unknown session", () => {
@@ -2117,7 +2117,7 @@ test("writeViewMode round-trips per session", () => {
 Run: `npx tsx --test packages/web/src/lib/view-mode.test.ts`
 Expected: FAIL - module not found.
 
-- [ ] **Step 4: Implement** (a thin localStorage wrapper, injectable store for testing - mirrors the `jinn-<key>-<sessionId>` pattern in `conversations.ts`):
+- [ ] **Step 4: Implement** (a thin localStorage wrapper, injectable store for testing - mirrors the `hundredfold-<key>-<sessionId>` pattern in `conversations.ts`):
 
 ```ts
 export type ViewMode = "chat" | "cli";
@@ -2125,7 +2125,7 @@ export type ViewMode = "chat" | "cli";
 interface KVStore { getItem(k: string): string | null; setItem(k: string, v: string): void; }
 
 export function viewModeKey(sessionId: string): string {
-  return `jinn-view-mode-${sessionId}`;
+  return `hundredfold-view-mode-${sessionId}`;
 }
 
 function defaultStore(): KVStore | Map<string, string> {
@@ -2315,7 +2315,7 @@ git commit -m "feat(web): keep recently-viewed chats mounted for snappy switchin
 - [ ] **Step 5: Typecheck + commit**
 
 ```bash
-pnpm --filter @jinnjinn-cli typecheck
+pnpm --filter @hundredfoldjinn-cli typecheck
 git add packages/hundredfold/src/sessions/registry.ts packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/engines/claude-interactive.ts packages/web/src/app/chat/page.tsx
 git commit -m "feat: per-session KEEP ALIVE control (DB column + API + web toggle)"
 ```
@@ -2340,7 +2340,7 @@ git commit -m "feat: per-session KEEP ALIVE control (DB column + API + web toggl
 - [ ] **Step 5: Commit**
 
 ```bash
-pnpm --filter @jinnjinn-cli typecheck
+pnpm --filter @hundredfoldjinn-cli typecheck
 git add packages/hundredfold/src/sessions/fork.ts
 git commit -m "feat(fork): interactive-mode fork bills as cli and releases source PTY"
 ```
@@ -2369,7 +2369,7 @@ git commit -m "feat(gateway): reap orphaned PTYs on boot via gateway.json pids"
 
 ### Task 9.2: Full suite + typecheck green
 
-- [ ] **Step 1: Run the full daemon test suite.** `pnpm --filter @jinnjinn-cli test` - all green.
+- [ ] **Step 1: Run the full daemon test suite.** `pnpm --filter @hundredfoldjinn-cli test` - all green.
 - [ ] **Step 2: Typecheck both packages.** `pnpm typecheck` - clean.
 - [ ] **Step 3: Run the existing e2e if present.** `pnpm test:e2e` - no regressions.
 - [ ] **Step 4: Final commit** (if any fixes were needed)

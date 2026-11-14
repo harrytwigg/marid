@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 🏷️ Renamed
+- **The product is now Hundredfold** (it was Marid, built on Jinn; the attribution stays in the README, LICENSE and NOTICE). The name changes in the UI, the CLI, the docs, the packages and every name an install is built from.
+  - **What moves, once, on the first start of an old install:** the home `~/.jinn` to `~/.hundredfold` (a link is left at the old path, after a snapshot), the Claude Code conversations filed under it, the host registry, the stage directories, browser storage. Nothing is copied: the sessions database keeps its inode. A home that is a container volume stays where it is.
+  - **What keeps working:** the old `JINN_*` variables and `x-jinn-*` headers (read, never written), the `jinn` command (a forwarder with a notice), the old cookie names, `@jinn/plugin-sdk` for plugins already installed, the registered MCP name `jinn`, the `jinn://` scheme.
+  - **What an instance does itself:** `hundredfold doctor --rename --apply` (gateway stopped) rewrites the instance's own files that name the old tools, keys its config block by the new name and flips the registered MCP name, in one step, after a snapshot. Until then the built-in tools stay `mcp__jinn__*`. See `docs/codename-compatibility.md` for rollback.
+  - **Breaking:** a script that spawns `jinn` or sets `JINN_*` still works for now; plan to move to `hundredfold` and `HUNDREDFOLD_*`. The compatibility names are removed two minor releases after this one.
+
 ### ✨ Features
 - **A Todo's parent can now be changed after creation.** `PUT /api/work-items/:id/parent` with `{ "parentId": "<Todo id>" }` makes a Todo a sub-task of another, and `{ "parentId": null }` detaches a sub-task to a root; the Todo's own sub-tasks move with it and `rootId` and `depth` are recomputed for the whole subtree. Agents do the same with `parentId` on `edit_work_item`. It needs the standing that assigns a Todo, over the Todo and over the new parent, and the change is recorded in the history of the Todo, the Todos that moved with it and both parents.
   - **Refused:** a cycle, a closed parent, a subtree that would pass the depth cap of 3, a root that still sits in a sprint (take it out first), a finished Todo leaving a closed sprint or anything joining one, a move across a non-open department's boundary or into an archived one, and a Todo in review going under a parent whose owner would not be told.

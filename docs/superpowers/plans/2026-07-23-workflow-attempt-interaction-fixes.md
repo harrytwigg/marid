@@ -10,12 +10,12 @@
 
 ## Global Constraints
 
-- Work only in the dedicated `jinn-wf-interaction-fix` worktree; do not modify the main working tree.
+- Work only in the dedicated `hundredfold-wf-interaction-fix` worktree; do not modify the main working tree.
 - Do not start or restart a gateway.
-- Do not use any personal Jinn instance as `JINN_HOME`.
+- Do not use any personal Hundredfold instance as `HUNDREDFOLD_HOME`.
 - Do not bind ports 7777, 7788, 7801, 7850, or 7910.
 - Do not kill any process that this test run did not start.
-- Turn-end never completes a workflow Employee node; only `workflow_submit_output` or a valid `jinn-output` fenced block completes it.
+- Turn-end never completes a workflow Employee node; only `workflow_submit_output` or a valid `hundredfold-output` fenced block completes it.
 - Commit Bug A and Bug B separately, with their regression tests in the same commit as each fix.
 - After the final edit, run the complete backend and web test suites and retain their verbatim output tails.
 
@@ -262,7 +262,7 @@ pnpm --filter jinn-cli test
 - [ ] **Step 3: Run the complete web suite**
 
 ```bash
-pnpm --filter @jinn/web test
+pnpm --filter @hundredfold/web test
 ```
 
 Use the actual package name reported by `packages/web/package.json` if it differs.

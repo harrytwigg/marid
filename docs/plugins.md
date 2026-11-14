@@ -1,19 +1,19 @@
 # Plugins
 
-A Jinn plugin is a directory you drop into your instance home. There is no package to publish, no build to run, and no registry to talk to: the gateway finds the directory, the dashboard evaluates one JavaScript file, and the plugin starts adding pages, sidebar rows, and status chips to the app you already have running. A plugin may also ship a second file that runs inside the gateway, giving it HTTP routes and a supervised background task.
+A Hundredfold plugin is a directory you drop into your instance home. There is no package to publish, no build to run, and no registry to talk to: the gateway finds the directory, the dashboard evaluates one JavaScript file, and the plugin starts adding pages, sidebar rows, and status chips to the app you already have running. A plugin may also ship a second file that runs inside the gateway, giving it HTTP routes and a supervised background task.
 
 The design goal is that an agent can write a working plugin by writing one file. Everything below follows from that.
 
-> **Error isolation, not a sandbox.** A loaded plugin runs with the app's full authority in both halves. The boundaries described here stop a plugin from crashing Jinn; they do not stop it from acting as Jinn. Read [Security posture](#security-posture) before you install anything you did not write.
+> **Error isolation, not a sandbox.** A loaded plugin runs with the app's full authority in both halves. The boundaries described here stop a plugin from crashing Hundredfold; they do not stop it from acting as Hundredfold. Read [Security posture](#security-posture) before you install anything you did not write.
 
 ---
 
 ## Anatomy
 
-A plugin is a directory under `~/.jinn/plugins/`, named for its id:
+A plugin is a directory under `~/.hundredfold/plugins/`, named for its id:
 
 ```
-~/.jinn/plugins/<id>/
+~/.hundredfold/plugins/<id>/
   plugin.json      required   manifest
   client.js        required   plain ESM, evaluated in the dashboard
   server.js        optional   plain ESM, imported into the gateway
@@ -34,7 +34,7 @@ The folder name is the id. `plugin.json` repeats it as a consistency check, not 
 
 | Field | Required | Default | Validated at discovery |
 |-------|----------|---------|------------------------|
-| `id` | yes | | matches the folder name, matches `/^[a-z0-9][a-z0-9-]{1,38}$/`, and is not `jinn` (reserved for the gateway) |
+| `id` | yes | | matches the folder name, matches `/^[a-z0-9][a-z0-9-]{1,38}$/`, and is not `hundredfold` (reserved for the gateway) |
 | `name` | no | the id | non-empty string, shown in the settings list |
 | `version` | no | `"0.0.0"` | non-empty string |
 | `client` | no | `client.js` | relative path, resolving inside the plugin directory |
@@ -44,7 +44,7 @@ The `client` field is optional; the file it names is not. A directory with no lo
 
 Absolute paths and paths that escape the plugin directory are rejected, and containment is re-checked against the resolved real path so a symlink cannot smuggle an entry out. If only the `server` entry fails containment, the plugin still loads its client half and carries the rejection on its inventory row. A manifest that points both entries at one file fails as a whole, because keeping the client half is precisely what would publish the gateway-side source over `GET /api/plugins/<id>/client`.
 
-The worked reference plugin lives at [`examples/plugins/inbox-demo/`](../examples/plugins/inbox-demo/), with all three files in the shape described here. Copy that directory into `~/.jinn/plugins/` to start from something that runs.
+The worked reference plugin lives at [`examples/plugins/inbox-demo/`](../examples/plugins/inbox-demo/), with all three files in the shape described here. Copy that directory into `~/.hundredfold/plugins/` to start from something that runs.
 
 ---
 
@@ -62,7 +62,7 @@ Two constraints come with it:
 A file that will not parse is not served as a blank module. The route answers `422` with the file, the line and the reason, and the plugin keeps its place in Settings › Plugins carrying that message on its row — so a typo shows up as something to fix rather than as a plugin that vanished.
 
 ```jsx
-import { AREAS, Card, CardContent, CardHeader, CardTitle, React } from '@jinn/plugin-sdk'
+import { AREAS, Card, CardContent, CardHeader, CardTitle, React } from '@hundredfold/plugin-sdk'
 
 function InboxPage() {
   const [count] = React.useState(0)
@@ -91,10 +91,10 @@ export default {
 
 ### Calling the runtime by hand
 
-The form JSX compiles to is still first-class, and a file written this way takes the byte-for-byte path — no compile, and nothing between your file and the browser. `jsx`, `jsxs`, and `Fragment` are re-exported from `@jinn/plugin-sdk` for it: `jsx(type, props)` for an element with zero or one child, `jsxs(type, props)` when `props.children` is an array, and `Fragment` when you need to return siblings without a wrapper element.
+The form JSX compiles to is still first-class, and a file written this way takes the byte-for-byte path — no compile, and nothing between your file and the browser. `jsx`, `jsxs`, and `Fragment` are re-exported from `@hundredfold/plugin-sdk` for it: `jsx(type, props)` for an element with zero or one child, `jsxs(type, props)` when `props.children` is an array, and `Fragment` when you need to return siblings without a wrapper element.
 
 ```js
-import { AREAS, Card, CardContent, CardHeader, CardTitle, React, jsx, jsxs } from '@jinn/plugin-sdk'
+import { AREAS, Card, CardContent, CardHeader, CardTitle, React, jsx, jsxs } from '@hundredfold/plugin-sdk'
 
 function InboxPage() {
   const [count, setCount] = React.useState(0)
@@ -127,7 +127,7 @@ The default export is checked field by field before anything is registered. `id`
 
 ## The SDK surface
 
-`@jinn/plugin-sdk` is the app's own live namespace, not a copy that happens to look alike. That matters most for React: a plugin that resolved a second React instance would get a second dispatcher, and every hook it called would throw. The loader installs the running instances on globals and rewrites the plugin's import specifiers to small shim modules that read them back, so the bundled path and the disk path land on the same objects.
+`@hundredfold/plugin-sdk` is the app's own live namespace, not a copy that happens to look alike. That matters most for React: a plugin that resolved a second React instance would get a second dispatcher, and every hook it called would throw. The loader installs the running instances on globals and rewrites the plugin's import specifiers to small shim modules that read them back, so the bundled path and the disk path land on the same objects.
 
 What the module exports:
 
@@ -207,7 +207,7 @@ Inside the page, `useRouteParams()` returns what the path captured, keyed by the
 
 ### Only three specifiers resolve
 
-A disk plugin may import `@jinn/plugin-sdk`, `react`, and `react/jsx-runtime`, and nothing else. Relative paths and full URLs resolve normally against the plugin's own module, but any other bare specifier is rejected **before evaluation**, with a named `PluginLoadError` that lists the offending specifiers and the three that are allowed. Failing up front is the point: the alternative is a cryptic native "Failed to resolve module specifier" arriving from inside a blob import, after the module has already started running.
+A disk plugin may import `@hundredfold/plugin-sdk`, `react`, and `react/jsx-runtime`, and nothing else. Relative paths and full URLs resolve normally against the plugin's own module, but any other bare specifier is rejected **before evaluation**, with a named `PluginLoadError` that lists the offending specifiers and the three that are allowed. Failing up front is the point: the alternative is a cryptic native "Failed to resolve module specifier" arriving from inside a blob import, after the module has already started running.
 
 The rewrite is anchored to import and export syntax and runs over a comment-masked copy of the source, so a string literal that merely reads `'react'` is never touched.
 
@@ -215,7 +215,7 @@ The rewrite is anchored to import and export syntax and runs over a comment-mask
 
 ## Lifecycle
 
-**Discovery.** The gateway creates `~/.jinn/plugins/` if it is absent and scans it, reading one manifest per directory (symlinked directories included). Absent is zero plugins, not an error. Every directory produces an inventory row, `{ id, name, version, kind, status }` plus `error` when something is wrong, where `kind` is `client` or `client+server`. Concurrent callers share one in-flight scan, so an inventory is never assembled from two different moments.
+**Discovery.** The gateway creates `~/.hundredfold/plugins/` if it is absent and scans it, reading one manifest per directory (symlinked directories included). Absent is zero plugins, not an error. Every directory produces an inventory row, `{ id, name, version, kind, status }` plus `error` when something is wrong, where `kind` is `client` or `client+server`. Concurrent callers share one in-flight scan, so an inventory is never assembled from two different moments.
 
 **Enable.** Discovery says what exists. `config.yaml` says what runs. See the next section.
 
@@ -227,7 +227,7 @@ register(ctx) {
   ctx.contribute(contribution)     // returns a disposer; ids are namespaced for you
   ctx.contributeMany([...])        // one disposer for the whole batch
   ctx.onDispose(fn)                // clean up a timer or subscription on unload
-  ctx.storage.get(key, fallback)   // JSON persistence under jinn.plugin.<id>.
+  ctx.storage.get(key, fallback)   // JSON persistence under hundredfold.plugin.<id>.
   ctx.storage.set(key, value)
   ctx.backend('/items')            // fetch against this plugin's own mount
   ctx.events(handler, options)     // this plugin's own event stream
@@ -320,7 +320,7 @@ Everything under `/api/plugins/<id>/` reaches your routes except `client`, `asse
 
 **This is error isolation. It is explicitly not a capability boundary.**
 
-A loaded `client.js` is evaluated as ESM in the dashboard's own realm, with the app's full authority: the React singleton, the whole SDK, the host verbs, and the gateway token the dashboard already holds. A loaded `server.js` is imported into the gateway process and can do anything the gateway can do, including reaching the filesystem, the network, and the company database. The per-contribution error boundaries, the per-listener try/catch, and the watcher supervisor stop a plugin from *crashing* Jinn. Not one of them stops a plugin from *acting as* Jinn.
+A loaded `client.js` is evaluated as ESM in the dashboard's own realm, with the app's full authority: the React singleton, the whole SDK, the host verbs, and the gateway token the dashboard already holds. A loaded `server.js` is imported into the gateway process and can do anything the gateway can do, including reaching the filesystem, the network, and the company database. The per-contribution error boundaries, the per-listener try/catch, and the watcher supervisor stop a plugin from *crashing* Hundredfold. Not one of them stops a plugin from *acting as* Hundredfold.
 
 The namespacing is real and worth having, and it is not a security control either. `ctx.storage`, `ctx.backend`, and `ctx.events` take no plugin id, so a plugin cannot *accidentally* reach another's namespace through the SDK, and `source` is stamped by the host so a contribution cannot claim provenance it does not have. A plugin that wants to bypass all of it can simply call `fetch` directly, because it is ordinary code in the page.
 
@@ -337,7 +337,7 @@ Several guards do exist, and they are worth knowing because they shape what a pl
 
 ## Gotchas
 
-**Do not put a watched directory inside the plugins directory.** This is the one that catches everybody. The gateway watches `~/.jinn/plugins/` recursively, and *any* write under it triggers a rescan and a plugin reload. A file-drop inbox at `~/.jinn/plugins/inbox-demo/inbox/` therefore reloads the plugin every time a file lands in it, which at best is wasted work and at worst is a loop where the reload's own bookkeeping writes another file. Put the directory somewhere else entirely and point at it from `plugins.settings.<id>`, the way the `inboxDir` example above does. The only paths excluded from the watch are `node_modules` and `.git`, and that list is not for application data.
+**Do not put a watched directory inside the plugins directory.** This is the one that catches everybody. The gateway watches `~/.hundredfold/plugins/` recursively, and *any* write under it triggers a rescan and a plugin reload. A file-drop inbox at `~/.hundredfold/plugins/inbox-demo/inbox/` therefore reloads the plugin every time a file lands in it, which at best is wasted work and at worst is a loop where the reload's own bookkeeping writes another file. Put the directory somewhere else entirely and point at it from `plugins.settings.<id>`, the way the `inboxDir` example above does. The only paths excluded from the watch are `node_modules` and `.git`, and that list is not for application data.
 
 **`when()` is not reactive.** A contribution's visibility predicate is evaluated when its area's snapshot is rebuilt, which happens on a register or a removal *in that area*, not when your external state changes. If visibility has to follow live state, contribute unconditionally and render a component that returns `null`.
 

@@ -6,12 +6,12 @@
 
 **Architecture:** Keep explicit bearer/cookie authentication unchanged. For the browser-only fallback, validate one strict Host authority and complete browser Fetch Metadata, reject proxy/forwarding evidence, and require both ends of the actual socket to be loopback with the authority port matching the listener port. Parse API request targets against a fixed internal base only after authority validation so raw Host can never throw through the server.
 
-**Tech Stack:** Node.js HTTP/raw TCP, TypeScript strict mode, Vitest, existing Jinn gateway authorization helpers.
+**Tech Stack:** Node.js HTTP/raw TCP, TypeScript strict mode, Vitest, existing Hundredfold gateway authorization helpers.
 
 ## Global Constraints
 
 - Work directly on `main`; path-stage only scoped files and preserve unrelated dirty/untracked work.
-- Use disposable `JINN_HOME` directories and ephemeral non-production ports; never access or restart `:7777`.
+- Use disposable `HUNDREDFOLD_HOME` directories and ephemeral non-production ports; never access or restart `:7777`.
 - Strict RED→GREEN TDD: deterministic failing real-network tests precede production edits.
 - Do not add proxy trust or touch Todo/Workflow lifecycle semantics, approvals, or unrelated UI.
 - Keep public repository content generic and add no commit co-author trailer.

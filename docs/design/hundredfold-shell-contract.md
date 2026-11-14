@@ -1,4 +1,4 @@
-# Jinn Shell contract
+# Hundredfold Shell contract
 
 Page chrome is a contract, not a convention. Every headed route under
 `packages/web/src/routes` renders through the primitives in
@@ -6,7 +6,7 @@ Page chrome is a contract, not a convention. Every headed route under
 
 The design spec that settled the four open questions (keep `PageLayout`,
 icon-only 56px FAB, scaffold-owned scrollport, CSS `animation-timeline`
-collapse) is `docs/design/jinn-shell-primitives.md`. This file is
+collapse) is `docs/design/hundredfold-shell-primitives.md`. This file is
 the shipped surface: the three primitives, the gate, and the escape hatch.
 
 Composition:
@@ -45,7 +45,7 @@ Below `lg`, bottom padding and the FAB offset both derive from
 not render.
 
 `contentWidth` is the route's measure (`"640px"`). The scrollport centres on
-it through its own `--jinn-gutter`, so the header and the body it heads share
+it through its own `--hundredfold-gutter`, so the header and the body it heads share
 one left edge; a route that wraps its children in `mx-auto max-w-*` instead
 puts the two on different spines. Unset, the column is the full width.
 
@@ -63,7 +63,7 @@ it lives in, and the header's box ends just under the subtitle.
 
 Collapse is CSS-only, and only where `PageScaffold` owns the scrollport:
 `animation-timeline: scroll(nearest block)` on
-`.jinn-large-title` / `.jinn-inline-title`. No scroll listener, no
+`.hundredfold-large-title` / `.hundredfold-inline-title`. No scroll listener, no
 `IntersectionObserver`, no collapsed `useState`. Unsupported engines and
 `prefers-reduced-motion: reduce` take the permanently-inline fallback.
 Carries no `--safe-top` — `PageLayout` already pays that inset.
@@ -99,7 +99,7 @@ on the migrated tree.
 
 ## Escape hatch
 
-`// jinn-shell: ok <reason>` on the offending line, matching
+`// hundredfold-shell: ok <reason>` on the offending line, matching
 `// footgun: ok <reason>`. The reason is required — a hatch with no reason
 does not suppress. Use it for dialog submits, editor FABs, and error
 retries this contract is not chartered to rewrite. Never a blanket

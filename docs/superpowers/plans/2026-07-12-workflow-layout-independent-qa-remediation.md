@@ -2,7 +2,7 @@
 
 > **For agentic workers:** Execute this plan task-by-task under strict RED → GREEN TDD. Steps use checkbox syntax for tracking.
 
-**Goal:** Remediate all eight findings in `/tmp/jinn-workflow-layout-review-report.md` without weakening layout authority, execution safety, approval routing, SPA navigation safety, responsive framing, or the MCP authoring contract.
+**Goal:** Remediate all eight findings in `/tmp/hundredfold-workflow-layout-review-report.md` without weakening layout authority, execution safety, approval routing, SPA navigation safety, responsive framing, or the MCP authoring contract.
 
 **Architecture:** Geometry intent is inferred only from node identity/positions and edge identity/endpoints; execution metadata is orthogonal. Structural validation becomes the shared fail-fast boundary for graph complexity and non-loop DAG safety, while the layout evaluator uses bounded port-to-port segment analysis. Run reads project caller-specific approval capability without persisting it. The web moves to React Router's data-router API so a single blocked-navigation dialog can preserve the intended destination across Save, Discard, and Stay. Canvas framing observes only meaningful breakpoint/orientation class changes, preserving user viewport ownership between those changes.
 
@@ -13,7 +13,7 @@
 - Work only in the existing isolated workflow-layout worktree on `feat/wi-c239479ad914-workflow-layout`.
 - Preserve the existing 25-commit range and add scoped remediation commits.
 - No merge, deploy, push, or production `:7777` access/mutation/restart/test.
-- Final sandbox must use a fresh sanitized `JINN_HOME` and a pinned free port `7920+`.
+- Final sandbox must use a fresh sanitized `HUNDREDFOLD_HOME` and a pinned free port `7920+`.
 - Every production change requires a targeted test observed failing for the expected reason first.
 - Keep public repo content generic; no private names, paths, credentials, or customer/project data.
 - No `Co-Authored-By` trailers.
@@ -188,7 +188,7 @@ Authorized parked runs render Approve/Reject. Unauthorized runs render no active
 ```bash
 pnpm --filter jinn-cli test -- src/gateway/__tests__/workflow-definitions-route.test.ts src/gateway/__tests__/work-item-approval-route.test.ts \
   > /tmp/workflow-layout-remediation-approval-server-red.txt 2>&1
-pnpm --filter @jinn/web test -- src/routes/workflow/__tests__/run-view.test.tsx \
+pnpm --filter @hundredfold/web test -- src/routes/workflow/__tests__/run-view.test.tsx \
   > /tmp/workflow-layout-remediation-approval-web-red.txt 2>&1
 ```
 
@@ -223,7 +223,7 @@ Use a real `createMemoryRouter` to exercise Link/sidebar, breadcrumb, global-sea
 - [ ] **Step 2: Run RED and retain evidence**
 
 ```bash
-pnpm --filter @jinn/web test -- src/routes/workflow/__tests__/page.test.tsx src/routes/workflow/__tests__/edit-graph.test.tsx \
+pnpm --filter @hundredfold/web test -- src/routes/workflow/__tests__/page.test.tsx src/routes/workflow/__tests__/edit-graph.test.tsx \
   > /tmp/workflow-layout-remediation-navigation-red.txt 2>&1
 ```
 
@@ -257,7 +257,7 @@ Mock `ResizeObserver`, emit controlled dimensions, and assert exactly one refram
 - [ ] **Step 2: Run RED and retain evidence**
 
 ```bash
-pnpm --filter @jinn/web test -- src/routes/workflow/__tests__/canvas-model.test.ts src/routes/workflow/__tests__/canvas.test.tsx \
+pnpm --filter @hundredfold/web test -- src/routes/workflow/__tests__/canvas-model.test.ts src/routes/workflow/__tests__/canvas.test.tsx \
   > /tmp/workflow-layout-remediation-framing-red.txt 2>&1
 ```
 
@@ -310,7 +310,7 @@ git commit -m "fix(mcp): close every workflow authoring schema"
 
 ```bash
 pnpm --filter jinn-cli test -- src/workflows src/gateway/__tests__/workflow-definitions-route.test.ts src/gateway/__tests__/work-item-approval-route.test.ts src/mcp/__tests__/workflow-tools.test.ts
-pnpm --filter @jinn/web test -- src/routes/workflow
+pnpm --filter @hundredfold/web test -- src/routes/workflow
 pnpm typecheck --force
 pnpm build --force
 ```
@@ -318,7 +318,7 @@ pnpm build --force
 - [ ] **Step 2: Run five fresh GPT-5.5-low authors and the new browser matrix on 7920**
 
 ```bash
-JINN_VERIFY_PORT=7920 JINN_IMPLEMENTATION_GREEN=1 \
+HUNDREDFOLD_VERIFY_PORT=7920 HUNDREDFOLD_IMPLEMENTATION_GREEN=1 \
   ./scripts/verify-workflow-layout.sh --with-authors \
   > /tmp/workflow-layout-remediation-browser-final.txt 2>&1
 ```
@@ -329,7 +329,7 @@ Required browser additions: authorized/unauthorized approval, Needs-you guidance
 
 ```bash
 pnpm --filter jinn-cli test
-pnpm --filter @jinn/web test
+pnpm --filter @hundredfold/web test
 pnpm typecheck --force
 pnpm build --force
 git diff --check main...HEAD

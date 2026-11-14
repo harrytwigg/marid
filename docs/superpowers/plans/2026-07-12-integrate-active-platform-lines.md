@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Consolidate the four active, session-scoped Jinn feature lines into local `main`, verify the combined product, deploy it safely, and remove only proven-integrated temporary Git state.
+**Goal:** Consolidate the four active, session-scoped Hundredfold feature lines into local `main`, verify the combined product, deploy it safely, and remove only proven-integrated temporary Git state.
 
 **Architecture:** Use an isolated `main` worktree so the active Todo designer can finish without losing its uncommitted files. Merge the shared platform line first, then the backend CAS, callback lifecycle, and Workflow lines; resolve conflicts by preserving the newest compatible contracts from both sides rather than choosing one branch wholesale.
 
@@ -14,7 +14,7 @@
 - Never merge unrelated historical, release, PR, or experimental branches.
 - Never add a `Co-Authored-By` trailer.
 - Keep all shipped repository content generic; run the privacy firewall before the final commit.
-- Use `jinn restart` semantics, never stop/start, after the combined tree is verified.
+- Use `hundredfold restart` semantics, never stop/start, after the combined tree is verified.
 
 ---
 
@@ -72,7 +72,7 @@ Expected: normalized layouts, persistent editor geometry, accessible navigation,
 - [ ] **Step 1: Confirm the designer committed its two active files**
 
 ```bash
-git -C ../../jinn status --short
+git -C ../../hundredfold status --short
 git log -1 --oneline feat/wi-cce21d70992a-activity-ledger
 ```
 
@@ -103,8 +103,8 @@ pnpm --filter jinn-cli typecheck
 - [ ] **Step 2: Run web tests and typecheck**
 
 ```bash
-pnpm --filter @jinn/web test
-pnpm --filter @jinn/web typecheck
+pnpm --filter @hundredfold/web test
+pnpm --filter @hundredfold/web typecheck
 ```
 
 - [ ] **Step 3: Run the production build**
@@ -130,10 +130,10 @@ pnpm --filter jinn-cli exec vitest run src/shared/__tests__/privacy-guard.test.t
 - Consumes: verified local `main`.
 - Produces: live gateway on verified main plus a compact worktree/branch set.
 
-- [ ] **Step 1: Restart through the Jinn CLI**
+- [ ] **Step 1: Restart through the Hundredfold CLI**
 
 ```bash
-node packages/hundredfold/dist/bin/jinn.js restart
+node packages/hundredfold/dist/bin/hundredfold.js restart
 ```
 
 - [ ] **Step 2: Verify the gateway returns**

@@ -307,7 +307,7 @@ function buildSessionContext(opts: {
   }
   if (opts.thread) ctx += `- Thread: ${opts.thread}\n`;
   ctx += `- User: ${opts.user}\n`;
-  ctx += `- Working directory: ${JINN_HOME}`;
+  ctx += `- Working directory: ${HUNDREDFOLD_HOME}`;
   return ctx;
 }
 ```

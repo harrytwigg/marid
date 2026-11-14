@@ -95,7 +95,7 @@ Run:
 
 ```bash
 pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/streamed-turn-settlement.test.ts src/gateway/__tests__/streamed-blocks.test.ts src/sessions/__tests__/messages-partial.test.ts src/gateway/__tests__/block-finalize.test.ts
-pnpm --filter @jinn/web exec vitest run src/hooks/__tests__/use-live-session.test.ts src/components/chat/__tests__/comms-v2.test.tsx
+pnpm --filter @hundredfold/web exec vitest run src/hooks/__tests__/use-live-session.test.ts src/components/chat/__tests__/comms-v2.test.tsx
 ```
 
 Expected: all focused tests pass; reload rows match the existing live completion expectations.

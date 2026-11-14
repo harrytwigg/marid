@@ -33,7 +33,7 @@ Verified against the worktree on the date above. **References rot — re-verify 
 | `packages/web/src/lib/api.ts:796` | `getSessionChildren` — plumbed to the browser, **zero callers in `packages/web/src`** | Walking the tree with it is one round trip per node, unbounded in depth (R1). It stays uncalled. |
 | `packages/hundredfold/src/gateway/api.ts:2216` | `GET /api/sessions/:id/children` | Same reason — it is the per-node route; the tree is assembled server-side in one pass instead. |
 | `packages/web/src/components/peek/peek-stack.tsx` | stacked peek surface | The ask is to *switch* to the session; the rail already navigates (R10). |
-| `packages/hundredfold/src/mcp/delegation-tools.ts:26` | *"`jinn_request_review` is deliberately ABSENT"* | Confirms review arrives on the delegation edge — there is no second edge to traverse (R9). |
+| `packages/hundredfold/src/mcp/delegation-tools.ts:26` | *"`hundredfold_request_review` is deliberately ABSENT"* | Confirms review arrives on the delegation edge — there is no second edge to traverse (R9). |
 
 ### The finding that shapes the plan
 
@@ -75,7 +75,7 @@ tree component whose query key inherits the existing live-invalidation prefix.
 
 **Storage**: SQLite (`sessions`, `work_items`). **No migration** — every field exists.
 
-**Testing**: Vitest per package (`pnpm --filter @jinn/web test`, `pnpm --filter jinn test`), Playwright for e2e
+**Testing**: Vitest per package (`pnpm --filter @hundredfold/web test`, `pnpm --filter hundredfold test`), Playwright for e2e
 
 **Target Platform**: local gateway + browser UI
 

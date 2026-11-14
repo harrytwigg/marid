@@ -12,7 +12,7 @@
 
 - Backend only: do not modify `packages/web`.
 - Work from local `main` HEAD in an isolated worktree and fast-forward local `main` after verification.
-- Never touch gateway ports 7777/7788 or personal `~/.jinn` runtime data.
+- Never touch gateway ports 7777/7788 or personal `~/.hundredfold` runtime data.
 - Public repository content must stay generic and pass the privacy leak scan.
 - No `Co-Authored-By` commit trailers.
 - Every behavior change follows a witnessed red-green-refactor cycle.

@@ -1,10 +1,10 @@
-# Jinn Pair Filesystem Challenge Implementation Plan
+# Hundredfold Pair Filesystem Challenge Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Restore `jinn pair` code minting by proving same-owner write access to `JINN_HOME` without allowing bearer-authenticated pairing-code creation.
+**Goal:** Restore `hundredfold pair` code minting by proving same-owner write access to `HUNDREDFOLD_HOME` without allowing bearer-authenticated pairing-code creation.
 
-**Architecture:** A public-but-loopback-only challenge route creates a ten-second in-memory challenge and names an owner-only file beneath `JINN_HOME`. The CLI writes the nonce to that file and submits only the challenge ID; the gateway validates regular-file type, exact `0600` mode, same owner as `JINN_HOME`, exact nonce, TTL, and single-use state before minting a pairing code.
+**Architecture:** A public-but-loopback-only challenge route creates a ten-second in-memory challenge and names an owner-only file beneath `HUNDREDFOLD_HOME`. The CLI writes the nonce to that file and submits only the challenge ID; the gateway validates regular-file type, exact `0600` mode, same owner as `HUNDREDFOLD_HOME`, exact nonce, TTL, and single-use state before minting a pairing code.
 
 **Tech Stack:** TypeScript, Node.js `fs`/`crypto`, gateway REST routes, Vitest
 
@@ -26,8 +26,8 @@
 - Create: `packages/hundredfold/src/gateway/__tests__/pairing-challenge.test.ts`
 
 **Interfaces:**
-- Produces: `PAIRING_CHALLENGE_TTL_MS`, `PairingChallengeStore`, `issuePairingChallenge(jinnHome, store?, now?, idFactory?, nonceFactory?)`, and `consumePairingChallenge(jinnHome, challengeId, store?, now?)`.
-- Consumes: a POSIX `JINN_HOME` owned by the gateway process user.
+- Produces: `PAIRING_CHALLENGE_TTL_MS`, `PairingChallengeStore`, `issuePairingChallenge(hundredfoldHome, store?, now?, idFactory?, nonceFactory?)`, and `consumePairingChallenge(hundredfoldHome, challengeId, store?, now?)`.
+- Consumes: a POSIX `HUNDREDFOLD_HOME` owned by the gateway process user.
 
 - [ ] **Step 1: Write failing primitive tests**
 
@@ -105,15 +105,15 @@ Run the Task 2 Vitest command and expect all auth security/UX tests to pass.
 - Modify: `packages/hundredfold/src/cli/pair.ts`
 - Modify: `packages/hundredfold/src/cli/__tests__/pair.test.ts`
 - Modify: `packages/hundredfold/src/gateway/__tests__/auth-ux-api.test.ts`
-- Modify: `packages/hundredfold/bin/jinn.ts`
+- Modify: `packages/hundredfold/bin/hundredfold.ts`
 
 **Interfaces:**
 - Consumes: the two routes from Task 2 and the server-returned proof-file path.
-- Produces: `requestPairingCode({ port, jinnHome?, fetchImpl? })` returning `{ code, expiresAt, ttlSeconds? }`.
+- Produces: `requestPairingCode({ port, hundredfoldHome?, fetchImpl? })` returning `{ code, expiresAt, ttlSeconds? }`.
 
 - [ ] **Step 1: Write failing CLI and cross-layer tests**
 
-Test the two POST requests, absence of any Authorization header, exact `0600` file write, cleanup on failure, response-path confinement to the selected `JINN_HOME`, and an adapter that runs the real CLI helper against `handleApiRequest` with a shared temporary home.
+Test the two POST requests, absence of any Authorization header, exact `0600` file write, cleanup on failure, response-path confinement to the selected `HUNDREDFOLD_HOME`, and an adapter that runs the real CLI helper against `handleApiRequest` with a shared temporary home.
 
 - [ ] **Step 2: Run RED**
 
@@ -123,11 +123,11 @@ Expected: FAIL because the CLI still prints browser instructions and never execu
 
 - [ ] **Step 3: Implement the CLI exchange**
 
-POST to `http://127.0.0.1:<port>/api/auth/pairing-challenges`, validate the returned path equals `JINN_HOME/pair-challenge-<challengeId>`, write the exact nonce with `flag: "wx"` and mode `0o600`, POST `{ challengeId }` to `/api/auth/pairing-codes`, and remove only a file the CLI itself created in `finally`.
+POST to `http://127.0.0.1:<port>/api/auth/pairing-challenges`, validate the returned path equals `HUNDREDFOLD_HOME/pair-challenge-<challengeId>`, write the exact nonce with `flag: "wx"` and mode `0o600`, POST `{ challengeId }` to `/api/auth/pairing-codes`, and remove only a file the CLI itself created in `finally`.
 
 - [ ] **Step 4: Restore user-facing code output**
 
-Restore `formatPairingInstructions(pairing, port)`, JSON code output, and the CLI help text that says `jinn pair` creates a one-time code.
+Restore `formatPairingInstructions(pairing, port)`, JSON code output, and the CLI help text that says `hundredfold pair` creates a one-time code.
 
 - [ ] **Step 5: Run GREEN**
 
@@ -149,7 +149,7 @@ Expected: all commands exit 0.
 
 - [ ] **Step 2: Verify live behavior**
 
-Restart only through `jinn restart` if deployment is required, then verify the built CLI prints a usable code, direct bearer remains `403`, and no challenge file remains.
+Restart only through `hundredfold restart` if deployment is required, then verify the built CLI prints a usable code, direct bearer remains `403`, and no challenge file remains.
 
 - [ ] **Step 3: Stage isolated hunks and privacy-check**
 

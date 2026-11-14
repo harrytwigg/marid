@@ -8,16 +8,16 @@
 
 Starting **June 15, 2026**, `claude -p` and the Claude Agent SDK on subscription
 plans draw from a separate, small monthly "Agent SDK credit" (Pro $20 / Max 5x
-$100 / Max 20x $200) instead of the generous interactive usage limits. Jinn today
-spawns `claude -p` per message, so all of Jinn's usage - web chat, connectors,
+$100 / Max 20x $200) instead of the generous interactive usage limits. Hundredfold today
+spawns `claude -p` per message, so all of Hundredfold's usage - web chat, connectors,
 cron, the agent org - would land in that small credit pool.
 
 The **interactive Claude Code TUI keeps using normal subscription limits,
 unchanged**. This spec adds an `InteractiveClaudeEngine` that drives the real
-interactive `claude` binary inside a pseudo-terminal (PTY) so Jinn's usage bills
+interactive `claude` binary inside a pseudo-terminal (PTY) so Hundredfold's usage bills
 as `cli` (interactive) rather than `sdk-cli` (headless credit).
 
-Jinn stays a bus, not a brain. No connectors, no org logic, no cron logic
+Hundredfold stays a bus, not a brain. No connectors, no org logic, no cron logic
 changes. Only the Claude engine's process model changes, plus a new hook-relay
 endpoint and an optional embedded-TUI web chat.
 
@@ -88,7 +88,7 @@ varies is how the session's output is *consumed*.
         (Stop hook + transcript) │              │  (web "CLI" mode only)
                                  ▼              ▼
                     ┌─────────────────┐  ┌──────────────────────┐
-                    │ Jinn's own UI   │  │ xterm.js              │
+                    │ Hundredfold's own UI   │  │ xterm.js              │
                     │ - connectors    │  │ + CSS-overlay textarea│
                     │ - cron / org    │  │ → native streaming TUI│
                     │ - web "Chat"    │  └──────────────────────┘
@@ -123,7 +123,7 @@ claude [--resume <id>] "<prompt>" \
   --model <model> \
   --append-system-prompt <sys> \
   --dangerously-skip-permissions \
-  --settings <jinn-settings> \
+  --settings <hundredfold-settings> \
   <...employee.cliFlags> \                # raw splat, per-employee
   --mcp-config <path>                     # variadic - MUST come after the positional prompt
 ```
@@ -142,7 +142,7 @@ the structured channel and means a session can be toggled into CLI mode at any
 time without a respawn.
 
 **Turn execution.** On `run()`, the engine asks the **PTY lifecycle manager**
-(below) for a process for this Jinn session:
+(below) for a process for this Hundredfold session:
 - **No warm PTY** → spawn `claude --resume <id> "<prompt>"` in a PTY; the binary
   auto-submits the positional-arg prompt.
 - **Warm PTY exists** (KEEP ALIVE or grace period) → inject the prompt into the
@@ -155,8 +155,8 @@ viewed in the web UI) is kill-after-turn, mirroring today's `claude -p` lifecycl
 
 **`run()` resolution - the turn-completion contract.** This is subtle and several
 audit blockers live here:
-- Correlation: each Jinn session gets a per-session `--settings` file whose hook
-  commands embed the **Jinn session id** (`session.id`, not `sessionKey`). The
+- Correlation: each Hundredfold session gets a per-session `--settings` file whose hook
+  commands embed the **Hundredfold session id** (`session.id`, not `sessionKey`). The
   engine registers a pending resolver keyed by `session.id`; the hook endpoint
   resolves it.
 - **`run()` must not resolve until BOTH `SessionStart` (Claude session id
@@ -199,8 +199,8 @@ matters), but state it explicitly rather than "reused unchanged".
 
 ### Component: hook relay + endpoint
 
-**Settings file.** Jinn writes a per-session settings JSON to
-`JINN_HOME/tmp/settings/<session-id>.json` (mirroring `writeMcpConfigFile`, but
+**Settings file.** Hundredfold writes a per-session settings JSON to
+`HUNDREDFOLD_HOME/tmp/settings/<session-id>.json` (mirroring `writeMcpConfigFile`, but
 with an **atomic `.tmp`+rename** write - a hook relay must never read a
 half-written file). It registers hooks:
 - `SessionStart` → learn Claude's `session_id` + `transcript_path`.
@@ -209,7 +209,7 @@ half-written file). It registers hooks:
 
 It should also carry `appendSystemPrompt` (ARG_MAX, see Spawn model) and **must
 not drop** the permissions allowlist that `cli/setup.ts` already writes to
-`$JINN_HOME/.claude/settings.local.json` - verify Claude Code's settings-merge
+`$HUNDREDFOLD_HOME/.claude/settings.local.json` - verify Claude Code's settings-merge
 keeps both, or fold those permissions into this file.
 
 **Lifecycle: PTY-lifetime, not turn-lifetime.** The `--settings` file is read on
@@ -218,14 +218,14 @@ owned and cleaned up by the **PTY lifecycle manager** when the PTY dies - **not*
 in `runSession`'s `finally` (which fires the instant a turn ends). `--mcp-config`
 is read only at spawn, so that one can still be cleaned up post-spawn.
 
-Each hook `command` is the **Jinn hook-relay script** (written once to
-`JINN_HOME`), invoked with the Jinn `session.id` as an arg.
+Each hook `command` is the **Hundredfold hook-relay script** (written once to
+`HUNDREDFOLD_HOME`), invoked with the Hundredfold `session.id` as an arg.
 
 **Relay script.** A tiny script: reads the hook JSON from stdin, wraps it with the
-Jinn `session.id`, reads the gateway URL + secret from `JINN_HOME/gateway.json`,
+Hundredfold `session.id`, reads the gateway URL + secret from `HUNDREDFOLD_HOME/gateway.json`,
 `POST`s to `/api/internal/hook` with the secret header. Exits 0.
 
-**`gateway.json`.** New file written to `JINN_HOME` on gateway boot, containing
+**`gateway.json`.** New file written to `HUNDREDFOLD_HOME` on gateway boot, containing
 `{ port, secret, pid }`. Solves three problems: (a) the relay script - a separate
 process spawned by `claude` - has no other way to discover the port (it lives
 only in config/memory and is `-p`-overridable); (b) the shared secret needs a
@@ -235,11 +235,11 @@ restart-only (see Configuration).
 
 **Endpoint.** New internal route in `gateway/api.ts`: `POST /api/internal/hook`,
 matched in the existing `handleApiRequest` chain, body via `readJsonBody`.
-**There is no HTTP auth in Jinn today** - this guard is net-new: require the
+**There is no HTTP auth in Hundredfold today** - this guard is net-new: require the
 `gateway.json` secret as a header **and** independently assert
 `req.socket.remoteAddress` is loopback (don't trust `config.gateway.host`, which
 operators can set to `0.0.0.0`). Routes by `hook_event_name`:
-- `Stop` → resolve the pending `run()` promise for that Jinn session.
+- `Stop` → resolve the pending `run()` promise for that Hundredfold session.
 - `SessionStart` → record Claude session id + transcript path.
 - `Pre/PostToolUse` → emit `StreamDelta` progress via the existing
   `context.emit("session:delta", …)`.
@@ -247,7 +247,7 @@ operators can set to `0.0.0.0`). Routes by `hook_event_name`:
 
 ### Component: gateway WebSocket - raw PTY channel
 
-Jinn's existing WebSocket (`gateway/server.ts`) is a **single global broadcast
+Hundredfold's existing WebSocket (`gateway/server.ts`) is a **single global broadcast
 bus**: one flat `Set<WebSocket>`, every event `JSON.stringify`'d to every client,
 **no inbound `message` handling, no per-session routing**. Clients self-filter by
 `sessionId`. CLI mode cannot reuse it - raw PTY bytes are high-volume and would
@@ -279,7 +279,7 @@ emitting **exactly the delta shapes the web Chat UI already consumes**
 - `user` message `tool_result` block → `{ type: "tool_result" }`
 
 Block-level granularity. Used by **all structured-channel consumers** - connectors,
-cron, and the web UI's "Chat" mode - to drive Jinn's existing "thinking…" /
+cron, and the web UI's "Chat" mode - to drive Hundredfold's existing "thinking…" /
 tool-use UI and reactions. Stops on the `Stop` hook. CLI mode does not need it
 (xterm.js shows the TUI directly).
 
@@ -364,14 +364,14 @@ against the new id.
 HTML - **not a live terminal**. `xterm.js` / `node-pty` are not dependencies
 anywhere in the web package. So this work is: (a) make the toggle **per-session,
 persisted in `localStorage`** (drop the reset-on-switch logic; use the existing
-`jinn-<key>-<sessionId>` localStorage pattern from `conversations.ts`), and
+`hundredfold-<key>-<sessionId>` localStorage pattern from `conversations.ts`), and
 (b) **replace `CliTranscript`** with a live xterm.js view. `getSessionTranscript`
 can stay as a non-xterm fallback.
 
 Both modes render the *same* TUI-backed session; the toggle only changes the
 consumer.
 
-**"Chat" mode** - Jinn's own chat UI, the existing component, rendered from the
+**"Chat" mode** - Hundredfold's own chat UI, the existing component, rendered from the
 structured channel (`Stop` hook + transcript tailer) exactly as connectors and
 cron consume it. No xterm.js. This is the default and the lighter-weight mode.
 
@@ -434,17 +434,17 @@ budget enforcement becomes a no-op.
   `message.message.id`** (required: when `--effort high` is set, thinking mode
   produces two `assistant` lines with the same `message.id` - one with a
   `thinking` block and one with the `text` block; they carry identical `usage`,
-  so the second must be skipped). Compute cost via Jinn's existing model-cost
+  so the second must be skipped). Compute cost via Hundredfold's existing model-cost
   tables (`gateway/costs.ts`, `additionalModelCostsCache`) using the `message.model`
   field on the assistant line.
 
 - **`~/.claude.json` `lastCost` / `lastModelUsage` / `lastTotalInputTokens` etc.:
-  UNRELIABLE for Jinn's use case.** These fields are populated only when the
+  UNRELIABLE for Hundredfold's use case.** These fields are populated only when the
   interactive `claude` process exits *gracefully* (via `/exit` or Ctrl+D). When
-  Jinn kills the process after the `Stop` hook fires (SIGTERM or SIGKILL), these
+  Hundredfold kills the process after the `Stop` hook fires (SIGTERM or SIGKILL), these
   fields remain zero from the previous normal exit. **Do not use as primary or
   fallback.** They exist in `~/.claude.json` under `projects[cwd]` but will
-  always be stale in Jinn's kill-after-turn model.
+  always be stale in Hundredfold's kill-after-turn model.
 
 - The interactive `EngineResult` populates `cost` from the transcript-parsed
   usage and `numTurns: ≥1`. The transcript is available at `transcript_path` from
@@ -482,10 +482,10 @@ Claude Code fires **`StopFailure` instead of `Stop`**. The hook payload carries:
 `free-code/src/utils/hooks.ts:3594-3627`.)
 
 This is structured, reliable, and requires no transcript scanning or PTY banner
-parsing. The Jinn hook-relay settings file must register a `StopFailure` hook
+parsing. The Hundredfold hook-relay settings file must register a `StopFailure` hook
 alongside `Stop`. The hook endpoint (`/api/internal/hook`) routes `StopFailure`
 events to reconstruct an `EngineRateLimitInfo` and reject `run()` with a
-rate-limit error - matching the contract Jinn's `manager.ts` wait-retry loop
+rate-limit error - matching the contract Hundredfold's `manager.ts` wait-retry loop
 already handles.
 
 **`Notification` hook does NOT fire for rate-limit events.** It fires only for
@@ -518,11 +518,11 @@ checks `hook_event_name` and routes accordingly. No existing `manager.ts` /
 ### Component: trust pre-seeding
 
 On gateway startup, ensure the **real** `~/.claude.json` (the user's home, *not*
-the existing `$JINN_HOME/.claude/settings.local.json` that `cli/setup.ts` writes)
-has `projects[realpath(JINN_HOME)].hasTrustDialogAccepted = true` and
+the existing `$HUNDREDFOLD_HOME/.claude/settings.local.json` that `cli/setup.ts` writes)
+has `projects[realpath(HUNDREDFOLD_HOME)].hasTrustDialogAccepted = true` and
 `hasCompletedProjectOnboarding = true`. Idempotent, atomic write. `realpath` is
-mandatory (the `/tmp` → `/private/tmp` gotcha). Jinn runs all engine processes
-with `cwd: JINN_HOME` today (`manager.ts` hard-codes it), so this is a single
+mandatory (the `/tmp` → `/private/tmp` gotcha). Hundredfold runs all engine processes
+with `cwd: HUNDREDFOLD_HOME` today (`manager.ts` hard-codes it), so this is a single
 path.
 
 ## Data Flow
@@ -548,10 +548,10 @@ path.
 1. User sends a message from the web UI. Same `run()` path as above - the
    lifecycle manager keeps the PTY warm because the session is currently viewed
    (grace period) and/or KEEP ALIVE is set, so the prompt is injected via stdin.
-2. **Chat mode**: transcript tailer + `Stop` hook drive Jinn's own chat UI.
+2. **Chat mode**: transcript tailer + `Stop` hook drive Hundredfold's own chat UI.
    **CLI mode**: xterm.js renders the live PTY stream; the toggle is read from
    `localStorage`. Both modes observe the same turn.
-3. `Stop` hook → persist `last_assistant_message` to Jinn's DB, update status.
+3. `Stop` hook → persist `last_assistant_message` to Hundredfold's DB, update status.
 4. On switch-away, the UI state is cached and the PTY stays warm for the grace
    window; after it expires both are released.
 
@@ -565,7 +565,7 @@ path.
 - **Native dependency** - `node-pty` (has prebuilds; falls back to node-gyp).
 - **Branding** - showing the verbatim TUI in web chat leans on Anthropic's SDK
   branding guidance ("don't mimic Claude Code visual elements"). Grey for a
-  self-hosted OSS tool; the headless path renders in Jinn's own UI and is clean.
+  self-hosted OSS tool; the headless path renders in Hundredfold's own UI and is clean.
 
 ## Risks
 
@@ -682,7 +682,7 @@ The **step 0 validation spike** must resolve these before the design is locked:
   (thinking block + text block) with the same `message.id` and identical usage.
   `~/.claude.json` `lastCost`/`lastModelUsage` fields are UNRELIABLE: they are
   zero whenever claude is killed (SIGTERM or SIGKILL after the Stop hook), which
-  is Jinn's normal pattern. Do not use.
+  is Hundredfold's normal pattern. Do not use.
 - **RESOLVED** **Rate-limit source**: the **`StopFailure` hook** is the concrete
   mechanism (not `Notification`, not transcript scanning, not PTY banner parsing).
   `StopFailure` fires instead of `Stop` when an API error ends the turn; its

@@ -4,13 +4,14 @@ The review rubric for this repository. It applies to humans and to agents; a rev
 fault a change against a rule written here, and an author may push back on a finding that
 cites nothing here and no stated requirement.
 
-Jinn is a pnpm + turbo monorepo: a gateway daemon and CLI (`packages/hundredfold`), a React web
+Hundredfold is a pnpm + turbo monorepo: a gateway daemon and CLI (`packages/hundredfold`), a React web
 dashboard (`packages/web`), and a shared event contract (`packages/gateway-events`).
 
-**This is a permanent fork. Nothing here goes back upstream.** `harrytwigg/marid` diverges from
+**This is a permanent fork. Nothing here goes back upstream.** `hundredfoldhq/hundredfold` diverges from
 `hristo2612/jinn` on purpose and forever: there is no upstreaming plan and no eventual pull
-request. The `upstream` remote is read-only — a source of changes to merge *in*, never a push
-or pull-request target. Divergence from upstream is therefore not a defect and not a finding.
+request. The upstream project is unmaintained and nothing is merged in from it any more; if a
+`upstream` remote exists it is read-only, never a push or pull-request target. Divergence from upstream
+is therefore not a defect and not a finding.
 Do not argue a change down to what upstream would accept; argue it against the rules below.
 What it is aimed at instead is Principle II: an org that operates itself — work that starts
 without a human starting it, and capacity spent by the system rather than watched by the
@@ -86,7 +87,7 @@ new value in an existing enum, a new branch in an existing handler. Cost: a few 
 none. This is the right answer far more often than it feels like it is.
 
 **Rung 2 — a CLI command, or a skill.** Both cost zero context.
-A command goes in `packages/hundredfold/bin/jinn.ts`; every handler is lazily `import()`ed inside its
+A command goes in `packages/hundredfold/bin/hundredfold.ts`; every handler is lazily `import()`ed inside its
 action (`:79`), so adding one loads nothing until it runs.
 A skill is a Markdown file at `packages/hundredfold/template/skills/<name>/SKILL.md` — 12 ship today.
 `packages/hundredfold/src/cli/setup.ts:622` copies them into the instance home and
@@ -111,7 +112,7 @@ company until personas scope it out. Documented in
 lives outside it entirely.
 
 *Plugins now exist, but this ladder has no rung for them.* An enabled directory under
-`~/.jinn/plugins/` adds dashboard pages, sidebar rows and status chips, and may mount gateway
+`~/.hundredfold/plugins/` adds dashboard pages, sidebar rows and status chips, and may mount gateway
 routes and a supervised background task (`packages/hundredfold/src/plugins/`,
 [`docs/plugins.md`](docs/plugins.md)); the design is `.plans/plugins.md`. Skills are still
 Markdown with no plugin API. Whether a plugin belongs on this ladder is rubric policy, not
@@ -165,7 +166,7 @@ only knows what it currently says. Every one is a tax on the next refactor.
 The specimens in this repo, so you can recognise the shape:
 
 - `packages/hundredfold/src/mcp/__tests__/attachment.test.ts:45-49` — an entire `describe` whose body
-  is `expect(JINN_ATTACH_DEFAULT).toBe(true)`. It restates a constant. The `describe` directly
+  is `expect(HUNDREDFOLD_ATTACH_DEFAULT).toBe(true)`. It restates a constant. The `describe` directly
   below it at `:51` tests what the default actually *does*, across every engine, and would
   catch a real flip.
 - `packages/web/src/lib/__tests__/nav.test.ts:35-43` — a hand-copied, order-sensitive array of
@@ -290,14 +291,14 @@ change to how it looks is faulted against these rules.
 **One stylesheet root, one palette.**
 
 - `packages/web/src/routes/app.css` is the only stylesheet `main.tsx` loads before the identity,
-  so Tailwind compiles one tree and HeroUI's component CSS can `@apply` Marid's theme.
+  so Tailwind compiles one tree and HeroUI's component CSS can `@apply` Hundredfold's theme.
 - The palette is written once per token in `routes/glass-identity.css`, as `light-dark(<light>,
   <dark>)`; the root's `color-scheme` picks the side. Only what `light-dark()` cannot take
   (shadows, gradients) keeps a block per theme. `globals.css` holds no colour.
 - A token that script reads back (`getComputedStyle`: the Talk orb, the title bar's `--bg`) is
   registered with `@property` in `globals.css`, or it reads back as the literal `light-dark(...)`.
 - HeroUI's own default theme and variants file are not imported. `routes/heroui-bridge.css` defines
-  every variable HeroUI components read from Marid's tokens, so a theme or accent change moves a
+  every variable HeroUI components read from Hundredfold's tokens, so a theme or accent change moves a
   HeroUI control and a legacy one together.
 
 **Adapters.**

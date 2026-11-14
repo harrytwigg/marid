@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Never write the live `~/.jinn/CLAUDE.md` or its `AGENTS.md` alias.
+- Never write the live `~/.hundredfold/CLAUDE.md` or its `AGENTS.md` alias.
 - Public repository content must stay generic and contain no personal names, projects, credentials, Slack IDs, emails, or absolute user-home paths.
 - Use MCP as the primary company-state surface; Todos are the live ledger; Workflows are reusable HOW; Triggers wake Workflows.
 - Remove stale board-first, raw-HTTP-first, and unimplemented service-routing claims.
@@ -84,10 +84,10 @@ Run the same focused Vitest command. Expected: PASS.
 ### Task 3: Produce the operator reconciliation artifact
 
 **Files:**
-- Create outside repo: `~/.jinn-audits/prod-claude-md-reconciliation.md`
+- Create outside repo: `~/.hundredfold-audits/prod-claude-md-reconciliation.md`
 
 **Interfaces:**
-- Consumes: read-only live `~/.jinn/CLAUDE.md` line anchors and the current shipped template doctrine.
+- Consumes: read-only live `~/.hundredfold/CLAUDE.md` line anchors and the current shipped template doctrine.
 - Produces: a reviewable, manually applicable replacement plan that preserves all custom/operator sections.
 
 - [ ] **Step 1: Write exact replacements**

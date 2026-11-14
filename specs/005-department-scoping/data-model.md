@@ -7,7 +7,7 @@ and gains one small table for last good scopes, plus one `sessions` column for t
 ## Department YAML
 
 ```yaml
-# $JINN_HOME/org/side-project/department.yaml
+# $HUNDREDFOLD_HOME/org/side-project/department.yaml
 name: side-project            # must equal the directory name
 displayName: Side project
 description: Friend's side project
@@ -15,7 +15,7 @@ scope: scoped                 # open (default, also when absent) | scoped | dedi
 workdirs:                     # FR-033; realpath-normalised at scan time
   - ~/Projects/side-project
 skills: [review, speckit-specify, speckit-plan]   # allow-list for scoped sessions; [] or absent = none
-sharedNotes: []               # paths relative to $JINN_HOME (knowledge/... or docs/...); a directory shares its subtree
+sharedNotes: []               # paths relative to $HUNDREDFOLD_HOME (knowledge/... or docs/...); a directory shares its subtree
 instructions: department      # department | department+company (FR-029)
 ```
 
@@ -96,7 +96,7 @@ name: side-dev
 department: side-project            # optional: defaults to the directory; must match it when either is non-open
 engine: claude
 claudeConfigDir: /Users/operator/.claude-friend   # optional, local employees only (FR-050)
-mcp: false                          # optional: no third-party MCP servers; the jinn server still attaches
+mcp: false                          # optional: no third-party MCP servers; the hundredfold server still attaches
 persona: ...
 ```
 
@@ -107,10 +107,10 @@ persona: ...
   agree (FR-007).
 - A scoped employee must use the `claude` engine (FR-026). It may set `remoteHost`; until
   Phase 5 that is refused. Its `remoteCwd` must not be, contain or lie inside
-  `<remote.root>/.jinn-departments` or `remote.mount`, nor (checked at spawn) the per-host
+  `<remote.root>/.hundredfold-departments` or `remote.mount`, nor (checked at spawn) the per-host
   stage root (FR-061).
 - `claudeConfigDir` must be absolute, must not start with `~`, must not lie inside
-  `$JINN_HOME`, must not equal the default profile's directory, and is refused alongside
+  `$HUNDREDFOLD_HOME`, must not equal the default profile's directory, and is refused alongside
   `remoteHost` (FR-050). It is canonicalised at load: no trailing slash, no `.` or `..`. It
   does not depend on the employee's department (FR-059).
 - A cron job cannot target a scoped employee.
@@ -120,12 +120,12 @@ persona: ...
 `claudeConfigDir` is not added to `WRITABLE_FIELDS` (`packages/hundredfold/src/gateway/org.ts:170`).
 The department field already is.
 
-A scoped session's engine environment also carries `JINN_DEPARTMENT=<slug>` (FR-028).
+A scoped session's engine environment also carries `HUNDREDFOLD_DEPARTMENT=<slug>` (FR-028).
 
 ## Stage directory
 
 ```
-<parent of $JINN_HOME>/.jinn-departments/.instances/<basename of $JINN_HOME>/<slug>/
+<parent of $HUNDREDFOLD_HOME>/.hundredfold-departments/.instances/<basename of $HUNDREDFOLD_HOME>/<slug>/
   CLAUDE.md            # generated: INSTRUCTIONS.md (+ company CLAUDE.md if department+company) + the fixed scope paragraph (FR-029)
   .claude/skills/<s>/  # copies of skills/<s> for each allow-listed skill
 ```
@@ -133,17 +133,17 @@ A scoped session's engine environment also carries `JINN_DEPARTMENT=<slug>` (FR-
 The stage directory is synced (FR-020a) on the same triggers as `syncSkillSymlinks`, on a
 department scan change, when an instructions file changes, and before every scoped spawn. A
 sync keeps its path and inode: changed files are renamed in from
-`.jinn-departments/.instances/<basename of $JINN_HOME>/.<slug>.incoming-<random>/`, and extras are removed
+`.hundredfold-departments/.instances/<basename of $HUNDREDFOLD_HOME>/.<slug>.incoming-<random>/`, and extras are removed
 afterwards. Nobody edits it by hand. The root is the instance's own, so two instances under one
 parent do not share a stage directory. A stage directory made at the old path,
-`.jinn-departments/<slug>/`, is renamed to the new one once (its inode kept) and its Claude
+`.hundredfold-departments/<slug>/`, is renamed to the new one once (its inode kept) and its Claude
 transcripts follow it to the new project key (FR-020a). `INSTRUCTIONS.md` is written by the
 operator only (FR-029a).
 
 **On a remote host** (FR-060), the same content is synced the same way to
-`<remote.root>/.jinn-departments/<slug>/` before every scoped spawn there. Nothing is cached.
+`<remote.root>/.hundredfold-departments/<slug>/` before every scoped spawn there. Nothing is cached.
 The remote path is not keyed by instance: `remote.root` is the instance's own on that host (FR-020).
-A scoped remote session's `$JINN_HOME` holds only `gateway.json`, `tmp/` and the stage marker
+A scoped remote session's `$HUNDREDFOLD_HOME` holds only `gateway.json`, `tmp/` and the stage marker
 (FR-062).
 
 ## Claude profiles
@@ -183,7 +183,7 @@ scope: DepartmentScope;
 displayName: string | null;
 description: string | null;
 members: string[];
-definitionFile: string | null;   // path relative to $JINN_HOME, for "edit in YAML"
+definitionFile: string | null;   // path relative to $HUNDREDFOLD_HOME, for "edit in YAML"
 definitionError: string | null;  // set when department.yaml was refused; scope is then the last good one
 
 // GET /api/departments/:slug (new, operator and unscoped callers):

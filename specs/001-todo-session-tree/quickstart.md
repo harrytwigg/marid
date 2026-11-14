@@ -45,8 +45,8 @@ New behaviour goes in new modules; new tests go in new `__tests__` files.
 ## Targeted suites
 
 ```bash
-pnpm --filter @jinn/web test
-pnpm --filter jinn test
+pnpm --filter @hundredfold/web test
+pnpm --filter hundredfold test
 ```
 
 ## Manual validation — build a real tree

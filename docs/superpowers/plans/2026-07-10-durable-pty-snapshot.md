@@ -10,13 +10,13 @@
 
 ## Global Constraints
 
-- Work only in `/private/tmp/jinn-bug2`, based on current `main` with `29df488` in its ancestry.
+- Work only in `/private/tmp/hundredfold-bug2`, based on current `main` with `29df488` in its ancestry.
 - Do not touch the TLS proxy warning path.
 - Use Node `24.13.0` and pnpm.
 - Keep snapshots between 1,000-2,000 lines and no larger than 256-512 KiB.
 - Persist with debounced atomic replacement beneath the active instance home.
 - Delete durable state on session reset/delete.
-- Never touch the production gateway on ports `7777`/`7788` or the production `~/.jinn` state.
+- Never touch the production gateway on ports `7777`/`7788` or the production `~/.hundredfold` state.
 
 ---
 
@@ -173,7 +173,7 @@
 
 - [ ] **Step 2: Run the focused web test and verify RED**
 
-  Run: `pnpm --filter @jinn/web exec vitest run src/components/__tests__/cli-terminal.test.tsx`
+  Run: `pnpm --filter @hundredfold/web exec vitest run src/components/__tests__/cli-terminal.test.tsx`
 
 - [ ] **Step 3: Implement the protocol-driven UI**
 

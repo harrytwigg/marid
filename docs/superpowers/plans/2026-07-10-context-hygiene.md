@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Keep the relationship-scoped roster and built-in Jinn MCP tool belt.
+- Keep the relationship-scoped roster and built-in Hundredfold MCP tool belt.
 - Do not change employee role, engine, rank, department, or reporting relationships except removing invalid virtual-root references.
 - Keep repository content generic; personal employee edits belong only in the live workspace.
 - Do not restart or touch gateway processes.

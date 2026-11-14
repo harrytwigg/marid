@@ -6,11 +6,11 @@
 
 ### Raw session/org HTTP in active skills
 
-Fix: `skills/management/SKILL.md` taught promoted managers to use raw session/org endpoints and described child sessions as a gateway API. Replaced those instructions with `jinn_delegate_task`, `jinn_spawn_session`, `jinn_send_to_session`, `jinn_read_session`, `jinn_list_employees`, `jinn_find_employees`, and `jinn_get_employee`; added end-turn-after-spawn discipline and the orchestrate-at-scale stance.
+Fix: `skills/management/SKILL.md` taught promoted managers to use raw session/org endpoints and described child sessions as a gateway API. Replaced those instructions with `hundredfold_delegate_task`, `hundredfold_spawn_session`, `hundredfold_send_to_session`, `hundredfold_read_session`, `hundredfold_list_employees`, `hundredfold_find_employees`, and `hundredfold_get_employee`; added end-turn-after-spawn discipline and the orchestrate-at-scale stance.
 
-Fix: `skills/onboarding/SKILL.md` used raw child-session creation with parent linkage in the live delegation demo. Replaced it with `jinn_spawn_session` and explicit callback/read discipline.
+Fix: `skills/onboarding/SKILL.md` used raw child-session creation with parent linkage in the live delegation demo. Replaced it with `hundredfold_spawn_session` and explicit callback/read discipline.
 
-Fix: `skills/sync/SKILL.md` used raw session/org fetches. Replaced it with `jinn_list_sessions`, `jinn_read_session`, and org discovery tools. Also removed the unbounded full-transcript assumption because `jinn_read_session` is intentionally capped.
+Fix: `skills/sync/SKILL.md` used raw session/org fetches. Replaced it with `hundredfold_list_sessions`, `hundredfold_read_session`, and org discovery tools. Also removed the unbounded full-transcript assumption because `hundredfold_read_session` is intentionally capped.
 
 ### Shared doctrine gaps
 
@@ -22,7 +22,7 @@ Fix: `CLAUDE.md` now codifies the domain-agnostic PLAN -> REFINE -> IMPLEMENT ->
 
 ### Talk-specific HTTP surface
 
-Defer: `talk/card-reference.md` and `talk/orchestrator-persona.md` still name `/api/talk/*` endpoints. This is an intentional talk-mode exception, not deprecated company/session/org operation. The talk surface currently has no equivalent Jinn MCP card/delegate/search tools, and the files explicitly prohibit direct `/api/sessions` use.
+Defer: `talk/card-reference.md` and `talk/orchestrator-persona.md` still name `/api/talk/*` endpoints. This is an intentional talk-mode exception, not deprecated company/session/org operation. The talk surface currently has no equivalent Hundredfold MCP card/delegate/search tools, and the files explicitly prohibit direct `/api/sessions` use.
 
 ### Historical migrations
 
@@ -44,6 +44,6 @@ Defer: `skills.json` contains an empty `installed` registry. That matches the cu
 
 ## Follow-up Gaps
 
-Defer: There is no MCP org-write tool for creating/editing/removing employee YAML files, so `management` still uses local file edits for roster mutation. The MCP-first contract allows filesystem work when no MCP tool covers the operation. A future `jinn_create_employee` / `jinn_update_employee` / `jinn_delete_employee` tool would let the management skill become fully company-tool driven.
+Defer: There is no MCP org-write tool for creating/editing/removing employee YAML files, so `management` still uses local file edits for roster mutation. The MCP-first contract allows filesystem work when no MCP tool covers the operation. A future `hundredfold_create_employee` / `hundredfold_update_employee` / `hundredfold_delete_employee` tool would let the management skill become fully company-tool driven.
 
-Defer: There are no MCP tools for the talk card surface. A future `jinn_talk_card_*` group would let talk prompts stop naming `/api/talk/*` endpoints.
+Defer: There are no MCP tools for the talk card surface. A future `hundredfold_talk_card_*` group would let talk prompts stop naming `/api/talk/*` endpoints.

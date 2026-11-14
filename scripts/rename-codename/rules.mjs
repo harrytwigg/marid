@@ -7,7 +7,7 @@
  */
 export const KEEP_PATTERNS = [
   // Attribution the licence asks for, and the links to upstream.
-  /built on Jinn/g,
+  /built on Jinn/gi,
   /fork of \[?Jinn\]?/g,
   /upstream Jinn/g,
   /Jinn upstream/g,
@@ -101,6 +101,8 @@ export const LEGACY_FIXTURE_TESTS = [
 /** Paths whose content is never rewritten (a path in this list is still allowed to hold the old name). */
 export const KEEP_CONTENT_PATHS = [
   { test: (file) => LEGACY_FIXTURE_TESTS.includes(file) },
+  // The page that explains what an install made before the rename carries: it names the old spellings on purpose.
+  /^docs\/codename-compatibility\.md$/,
   // Released history: past sections, and the bundles an installed instance upgrades from.
   /^CHANGELOG\.md$/,
   /^packages\/[^/]+\/template\/migrations\//,

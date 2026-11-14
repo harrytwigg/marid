@@ -69,7 +69,7 @@ export interface OrgHierarchy {
 
 - [ ] **Step 3: Run typecheck**
 
-Run: `cd ~/Projects/jinn && pnpm typecheck`
+Run: `cd ~/Projects/hundredfold && pnpm typecheck`
 Expected: PASS (new types are additive, no consumers yet)
 
 - [ ] **Step 4: Commit**
@@ -100,7 +100,7 @@ Check if `mcp` is parsed - it's in the Employee interface but may be missing fro
 
 - [ ] **Step 3: Run typecheck**
 
-Run: `cd ~/Projects/jinn && pnpm typecheck`
+Run: `cd ~/Projects/hundredfold && pnpm typecheck`
 Expected: PASS
 
 - [ ] **Step 4: Commit**
@@ -410,7 +410,7 @@ describe("resolveOrgHierarchy", () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/Projects/jinn && pnpm --filter jinn-cli test -- --run src/gateway/__tests__/org-hierarchy.test.ts`
+Run: `cd ~/Projects/hundredfold && pnpm --filter jinn-cli test -- --run src/gateway/__tests__/org-hierarchy.test.ts`
 Expected: FAIL - module `../org-hierarchy.js` does not exist
 
 - [ ] **Step 3: Commit failing tests**
@@ -686,12 +686,12 @@ export function resolveOrgHierarchy(
 
 - [ ] **Step 2: Run tests to verify they pass**
 
-Run: `cd ~/Projects/jinn && pnpm --filter jinn-cli test -- --run src/gateway/__tests__/org-hierarchy.test.ts`
+Run: `cd ~/Projects/hundredfold && pnpm --filter jinn-cli test -- --run src/gateway/__tests__/org-hierarchy.test.ts`
 Expected: ALL PASS
 
 - [ ] **Step 3: Run full typecheck**
 
-Run: `cd ~/Projects/jinn && pnpm typecheck`
+Run: `cd ~/Projects/hundredfold && pnpm typecheck`
 Expected: PASS
 
 - [ ] **Step 4: Commit**
@@ -760,7 +760,7 @@ The handler uses dynamic imports already (`await import("./org.js")`), so the `r
 
 - [ ] **Step 3: Run typecheck**
 
-Run: `cd ~/Projects/jinn && pnpm typecheck`
+Run: `cd ~/Projects/hundredfold && pnpm typecheck`
 Expected: PASS
 
 - [ ] **Step 4: Commit**
@@ -804,7 +804,7 @@ if (method === "GET" && params) {
 
 - [ ] **Step 2: Run typecheck**
 
-Run: `cd ~/Projects/jinn && pnpm typecheck`
+Run: `cd ~/Projects/hundredfold && pnpm typecheck`
 Expected: PASS
 
 - [ ] **Step 3: Commit**
@@ -999,7 +999,7 @@ content: buildEmployeeIdentity(
 
 - [ ] **Step 6: Run typecheck**
 
-Run: `cd ~/Projects/jinn && pnpm typecheck`
+Run: `cd ~/Projects/hundredfold && pnpm typecheck`
 Expected: PASS
 
 - [ ] **Step 7: Commit**
@@ -1093,7 +1093,7 @@ Note: `registry` is already available from the `scanOrg()` call at line 1905.
 
 - [ ] **Step 3: Run typecheck**
 
-Run: `cd ~/Projects/jinn && pnpm typecheck`
+Run: `cd ~/Projects/hundredfold && pnpm typecheck`
 Expected: PASS
 
 - [ ] **Step 4: Commit**
@@ -1154,7 +1154,7 @@ export interface OrgData {
 
 - [ ] **Step 2: Run typecheck**
 
-Run: `cd ~/Projects/jinn && pnpm typecheck`
+Run: `cd ~/Projects/hundredfold && pnpm typecheck`
 Expected: There will be type errors in consumers that still treat `employees` as `string[]` - these will be fixed in subsequent tasks.
 
 - [ ] **Step 3: Commit**
@@ -1183,8 +1183,8 @@ const loadData = useCallback(() => {
     .getOrg()
     .then((data: OrgData) => {
       const coo: Employee = {
-        name: (settings.portalName ?? "Jinn").toLowerCase(),
-        displayName: settings.portalName ?? "Jinn",
+        name: (settings.portalName ?? "Hundredfold").toLowerCase(),
+        displayName: settings.portalName ?? "Hundredfold",
         department: "",
         rank: "executive",
         engine: "claude",
@@ -1400,7 +1400,7 @@ git commit -m "fix(web): update global search to extract employee names from obj
 
 However, verify that all consumers of `useOrg()` handle the new shape. The main consumer is `global-search.tsx` (fixed in Task 16). Run a grep to find any other consumers:
 
-Run: `cd ~/Projects/jinn && grep -r "useOrg\(\)" packages/web/src/ --include="*.tsx" --include="*.ts"`
+Run: `cd ~/Projects/hundredfold && grep -r "useOrg\(\)" packages/web/src/ --include="*.tsx" --include="*.ts"`
 
 Fix any other consumers that treat `employees` as `string[]`.
 
@@ -1855,17 +1855,17 @@ git commit -m "feat(web): add direct reports count badge to employee node"
 
 - [ ] **Step 1: Run full typecheck**
 
-Run: `cd ~/Projects/jinn && pnpm typecheck`
+Run: `cd ~/Projects/hundredfold && pnpm typecheck`
 Expected: PASS
 
 - [ ] **Step 2: Run full build**
 
-Run: `cd ~/Projects/jinn && pnpm build`
+Run: `cd ~/Projects/hundredfold && pnpm build`
 Expected: PASS
 
 - [ ] **Step 3: Run tests**
 
-Run: `cd ~/Projects/jinn && pnpm test`
+Run: `cd ~/Projects/hundredfold && pnpm test`
 Expected: ALL PASS (including org-hierarchy tests from Phase 1)
 
 - [ ] **Step 4: Commit build verification**
@@ -1879,7 +1879,7 @@ No commit needed - build verification is a check, not a code change.
 ### Task 21: Update management skill with hierarchy operations
 
 **Files:**
-- Modify: `~/.jinn/skills/management/SKILL.md`
+- Modify: `~/.hundredfold/skills/management/SKILL.md`
 
 - [ ] **Step 1: Add reportsTo logic to hiring section**
 
@@ -1936,7 +1936,7 @@ When moving an employee to a different department:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add ~/.jinn/skills/management/SKILL.md
+git add ~/.hundredfold/skills/management/SKILL.md
 git commit -m "feat(skill): add hierarchy-aware hiring, firing, promotion to management skill"
 ```
 
@@ -1945,7 +1945,7 @@ git commit -m "feat(skill): add hierarchy-aware hiring, firing, promotion to man
 ### Task 22: Write MIGRATION.md
 
 **Files:**
-- Create: `~/.jinn/migrations/hierarchical-org/MIGRATION.md` (per spec convention)
+- Create: `~/.hundredfold/migrations/hierarchical-org/MIGRATION.md` (per spec convention)
 
 - [ ] **Step 1: Create migration document**
 
@@ -1954,7 +1954,7 @@ Use the content from the spec's Section 8 (already written in the spec). Copy it
 - [ ] **Step 2: Commit**
 
 ```bash
-git add ~/.jinn/migrations/hierarchical-org/MIGRATION.md
+git add ~/.hundredfold/migrations/hierarchical-org/MIGRATION.md
 git commit -m "docs: add migration guide for hierarchical org system"
 ```
 
@@ -1963,7 +1963,7 @@ git commit -m "docs: add migration guide for hierarchical org system"
 ### Task 23: Optionally add `reportsTo` to existing employee YAMLs
 
 **Files:**
-- Modify: `~/.jinn/org/**/*.yaml` (existing employee files)
+- Modify: `~/.hundredfold/org/**/*.yaml` (existing employee files)
 
 - [ ] **Step 1: Add reportsTo to employees with clear reporting lines**
 
@@ -1987,7 +1987,7 @@ Expected: Empty array or only informational warnings
 - [ ] **Step 3: Commit**
 
 ```bash
-git add ~/.jinn/org/
+git add ~/.hundredfold/org/
 git commit -m "chore(org): add explicit reportsTo fields to existing employee YAMLs"
 ```
 
@@ -1997,12 +1997,12 @@ git commit -m "chore(org): add explicit reportsTo fields to existing employee YA
 
 - [ ] **Step 1: Run full build**
 
-Run: `cd ~/Projects/jinn && pnpm build`
+Run: `cd ~/Projects/hundredfold && pnpm build`
 Expected: PASS
 
 - [ ] **Step 2: Run all tests**
 
-Run: `cd ~/Projects/jinn && pnpm test`
+Run: `cd ~/Projects/hundredfold && pnpm test`
 Expected: ALL PASS
 
 - [ ] **Step 3: Verify API response**

@@ -155,7 +155,7 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
 - [x] T047 Write `mcp/department-profile.ts` and its resolver selection. The profile removes
   the refused tools, and always includes the note tools rooted at D, even when `notesEnabled`
   is off. Serve the note routes to scoped callers regardless of that flag
-  (`gateway/api.ts:1207`). Set `JINN_DEPARTMENT` in scoped sessions' environment. Then:
+  (`gateway/api.ts:1207`). Set `HUNDREDFOLD_DEPARTMENT` in scoped sessions' environment. Then:
   - write `sessions/context/department-scope.ts`, covering the members-only roster and the
     department section, and pay for its call site in `context.ts`;
   - add a lost-binding check to `refuseTurn`;
@@ -185,7 +185,7 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
 
 **Shipped in PR #109.**
 
-- [x] T060 Generate the stage dir at `<parent of home>/.jinn-departments/.instances/<basename of home>/<slug>/`. It contains
+- [x] T060 Generate the stage dir at `<parent of home>/.hundredfold-departments/.instances/<basename of home>/<slug>/`. It contains
   copies of the allowed skills and a `CLAUDE.md` built from `INSTRUCTIONS.md`, plus the
   company file if `department+company` is set, plus the FR-029 scope paragraph. Sync it by
   FR-020a (stable path and inode; changed files renamed in from an incoming directory beside
@@ -200,7 +200,7 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
   regression test for each.
 - [x] T061a Add the local cwd helper (FR-020b) and use it at `engine-run.ts:46`,
   `rate-limit-handler.ts:185` and `:301`, and `pty-ws.ts:139`. Add the grep test for
-  `cwd: JINN_HOME` at session-spawn sites, with its allow-list. Make scoped sessions skip
+  `cwd: HUNDREDFOLD_HOME` at session-spawn sites, with its allow-list. Make scoped sessions skip
   engine fallback entries (FR-026a). Test a scoped session's Branch B retry, its terminal
   attach, and a rate limit with `engines.claude.fallback: [codex]` (it waits).
 - [x] T062 Apply the skill allow-list to the copies, the prompt and `dispatchConfig.skills`.
@@ -275,7 +275,7 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
   its `remoteCwd`.
 - [x] T081 Write `engines/remote-department-stage.ts`: before every scoped spawn on a host,
   send Phase 3's file set as a tar stream over `sshRun` into
-  `<remote.root>/.jinn-departments/.<slug>.incoming-<random>/`, then run a sync script that
+  `<remote.root>/.hundredfold-departments/.<slug>.incoming-<random>/`, then run a sync script that
   applies FR-020a (rename changed files over the old ones, remove extras, delete the incoming
   directory) file by file: rename only files, `mkdir -p` directories, remove type changes
   first, remove extras including files gone from a kept skill, and reap stale incoming dirs.
@@ -285,7 +285,7 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
   dir. The scoped farm script keeps reaping, the per-session lock, the marker, the real `tmp/`
   and the `asset=` report, and makes no mount links and no `CLAUDE.md` link. Before writing
   anything, refuse a `remoteCwd` that is, contains or lies inside `facts.stageDir`, failing
-  closed without facts. Add `JINN_DEPARTMENT` to the environment file. Leave `FARM_SCRIPT`
+  closed without facts. Add `HUNDREDFOLD_DEPARTMENT` to the environment file. Leave `FARM_SCRIPT`
   untouched (FR-061 to FR-064).
 - [x] T083 Give `employeeRemoteTarget` the scope resolver as a required argument, returning the
   remote stage dir as `remoteCwd` for a scoped employee. Move `engine-run.ts:55` onto it and
@@ -296,9 +296,9 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
   caller). Put the employee's own
   `remoteCwd` in the scoped prompt section as the work area. In `gateway/org.ts`, refuse a
   scoped employee's `remoteCwd` that is, contains or lies inside
-  `<remote.root>/.jinn-departments` or `remote.mount`, and remove Phase 2's refusal of scoped
+  `<remote.root>/.hundredfold-departments` or `remote.mount`, and remove Phase 2's refusal of scoped
   remote employees (FR-026, FR-061).
-- [x] T084 Tests (junior sub-Todo), as listed in plan.md Phase 5: cwd and `JINN_DEPARTMENT` per
+- [x] T084 Tests (junior sub-Todo), as listed in plan.md Phase 5: cwd and `HUNDREDFOLD_DEPARTMENT` per
   `employeeRemoteTarget` caller, the rate-limit retry included; the scoped farm script and the sync script under `sh` against
   temporary directories (no mount link, no `CLAUDE.md`, `asset=` report present, inode
   unchanged, dropped skill removed, edited file restored, a kept skill that changed and lost a
@@ -393,7 +393,7 @@ now presents the gateway's capability instead of one it minted.
 
 ## Follow-ups outside this feature
 
-- [ ] F1 (instance, not this repository) Make `~/.jinn/bin/mem` respect `JINN_DEPARTMENT`, so
+- [ ] F1 (instance, not this repository) Make `~/.hundredfold/bin/mem` respect `HUNDREDFOLD_DEPARTMENT`, so
   it defaults to `departments/<slug>/state.md` and refuses other files.
   Not done here, and not doable here: `mem` lives in the instance's own home, outside this
   repository, so it stays unchecked until someone changes it on the instance.

@@ -52,7 +52,7 @@ by hand.
   config keys, and the Claude Code and claude.ai steps
 - [ ] T018 Run `pnpm typecheck`, `lint`, `test`, `build` and `ratchet --check`
   (no new violations)
-- [ ] T019 Draft PR, merge, then deploy via `skills/upgrade-jinn`
+- [ ] T019 Draft PR, merge, then deploy via `skills/upgrade-hundredfold`
 - [ ] T020 Configure the instance and verify live: disabled 404, then enabled, the curl
   test from R5, Claude Code
 - [ ] T021 senior-developer-qa review, after deploy, at the operator's request

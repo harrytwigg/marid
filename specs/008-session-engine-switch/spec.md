@@ -294,11 +294,11 @@ target now in use, and the selector agrees with it.
   as `compact_session` does. Nothing changes while the asking turn runs.
 - **FR-014**: After the asking turn ends, a switch that keeps engine and account (a model
   change only) runs the engine's native compaction and then the resume turn on the
-  new model, in the same conversation. Where the engine has no native compaction Jinn can
+  new model, in the same conversation. Where the engine has no native compaction Hundredfold can
   drive, it starts a new conversation from the handoff instead.
 - **FR-015**: After the asking turn ends, a switch to another engine or profile first runs the
   native compaction on the conversation being left, on the target being left (engine,
-  account and model unchanged). Engines without a native compaction Jinn can drive skip
+  account and model unchanged). Engines without a native compaction Hundredfold can drive skip
   this step and go straight to FR-015b.
 - **FR-015a**: When that compaction succeeds (it finishes and its summary can be read back),
   the session moves to the target and the resume turn runs there in a new conversation whose

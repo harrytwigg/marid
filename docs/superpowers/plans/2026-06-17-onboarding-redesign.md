@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- **Never touch live `~/.jinn` or the `:7777` gateway.** Validate only on a throwaway instance (e.g. `~/.test-onboarding`) on a non-7777 port, started from a worktree build. Copied verbatim from spec §8.
+- **Never touch live `~/.hundredfold` or the `:7777` gateway.** Validate only on a throwaway instance (e.g. `~/.test-onboarding`) on a non-7777 port, started from a worktree build. Copied verbatim from spec §8.
 - **Privacy firewall:** repo code/templates must stay generic — no real names, project names, emails, keys, or `/Users/...` paths. `template/**` is most safety-critical.
 - **Node pinned to 24.13.0** for all pnpm/build/run (`.npmrc use-node-version`).
 - **Gateway tests use vitest** (`import { test, expect } from "vitest"`), co-located `*.test.ts`. Run: `cd packages/hundredfold && pnpm test`.
@@ -149,7 +149,7 @@ export function buildIdentity(portalName: string, operatorName?: string, languag
 
   return `# You are ${portalName}
 
-You are ${portalName}, COO of ${operatorName ? `${operatorName}'s` : "the user's"} AI organization. Your full operating manual is in \`CLAUDE.md\` / \`AGENTS.md\` at \`~/.jinn\` (${JINN_HOME}) — auto-loaded by your engine. Follow it.${operatorLine}${languageInstruction}`;
+You are ${portalName}, COO of ${operatorName ? `${operatorName}'s` : "the user's"} AI organization. Your full operating manual is in \`CLAUDE.md\` / \`AGENTS.md\` at \`~/.hundredfold\` (${HUNDREDFOLD_HOME}) — auto-loaded by your engine. Follow it.${operatorLine}${languageInstruction}`;
 }
 ```
 
@@ -344,7 +344,7 @@ git commit -m "feat(onboarding): completeOnboarding persists engine/model/effort
 
 ---
 
-## Task 5: `jinn create` success-verification + EOF-safe prompt
+## Task 5: `hundredfold create` success-verification + EOF-safe prompt
 
 **Files:**
 - Modify: `packages/hundredfold/src/cli/create.ts` (after `execFileSync(setup)`, before register/success)
@@ -366,9 +366,9 @@ import path from "node:path";
 import { instanceHomeIsPopulated } from "../create.js";
 
 test("empty/half-built home is not considered populated", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-create-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-create-"));
   expect(instanceHomeIsPopulated(dir)).toBe(false);
-  fs.writeFileSync(path.join(dir, "config.yaml"), "jinn: {}\n");
+  fs.writeFileSync(path.join(dir, "config.yaml"), "hundredfold: {}\n");
   expect(instanceHomeIsPopulated(dir)).toBe(true);
   fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -419,7 +419,7 @@ function prompt(question: string, defaultValue?: string): Promise<string> {
 - [ ] **Step 5: Run test + manual EOF check**
 
 Run: `cd packages/hundredfold && pnpm test create-verify` → PASS.
-Manual: `printf '' | node dist/bin/jinn.js create eoftest` (after build) must NOT print "created successfully" with an empty home; clean up with `jinn nuke eoftest`.
+Manual: `printf '' | node dist/bin/hundredfold.js create eoftest` (after build) must NOT print "created successfully" with an empty home; clean up with `hundredfold nuke eoftest`.
 
 - [ ] **Step 6: Commit**
 
@@ -479,7 +479,7 @@ Ask if there's anything recurring they'd like handled automatically (a weekly su
 Recap what's set up (employee, skill, any cron), point them to where things live (Organization, Cron, Chat), and **set `portal.onboarded: true` in `config.yaml`** so onboarding never repeats. Invite their first real task.
 
 ## Notes
-- Use instance-safe paths (`~/.{{portalSlug}}` or `$JINN_HOME`), not a hardcoded `~/.jinn`.
+- Use instance-safe paths (`~/.{{portalSlug}}` or `$HUNDREDFOLD_HOME`), not a hardcoded `~/.hundredfold`.
 - Keep turns short and human. This should feel like meeting a capable new teammate, not filling a form.
 ````
 
@@ -554,7 +554,7 @@ await api.completeOnboarding({
   model: engineChoice.model,
   effortLevel: engineChoice.effortLevel,
 })
-if (!forceOpen) localStorage.setItem("jinn-onboarded", "true")
+if (!forceOpen) localStorage.setItem("hundredfold-onboarded", "true")
 setVisible(false)
 onClose?.()
 // Launch the live COO setup conversation (employee omitted = COO).
@@ -622,16 +622,16 @@ git commit -m "feat(chat): default sidebar filter to All so delegated sessions a
 
 ---
 
-## Task 9: jinn-designer visual refresh of the wizard
+## Task 9: hundredfold-designer visual refresh of the wizard
 
 **Files:**
 - Modify: `packages/web/src/components/onboarding-wizard.tsx` (styling only)
 
 **Interfaces:** none (visual). Functional structure from Task 7 must not regress.
 
-- [ ] **Step 1: Delegate to jinn-designer**
+- [ ] **Step 1: Delegate to hundredfold-designer**
 
-Brief jinn-designer: restyle the 5-step wizard to match the recent `/chat` redesign — frosted material, tonal layering, spacing, the genie motif, and a polished engine-tier step. Inputs: this plan + `onboarding-wizard.tsx` + the `/chat` components for reference. Constraint: keep all step logic, `TOTAL_STEPS`, state, and the launch-into-chat behavior intact; styling only.
+Brief hundredfold-designer: restyle the 5-step wizard to match the recent `/chat` redesign — frosted material, tonal layering, spacing, the genie motif, and a polished engine-tier step. Inputs: this plan + `onboarding-wizard.tsx` + the `/chat` components for reference. Constraint: keep all step logic, `TOTAL_STEPS`, state, and the launch-into-chat behavior intact; styling only.
 
 - [ ] **Step 2: Build + visual review**
 
@@ -661,12 +661,12 @@ From a worktree build, create `~/.test-onboarding` on port 7788 (host `0.0.0.0` 
 - [ ] Genie greets by name, second person; never re-asks the name; never third-persons the operator.
 - [ ] Genie hatches a real employee (YAML on disk + visible in Organization), scaffolds a skill, spawns a **visible** child session (sidebar on "All"), and creates a real cron — each skippable.
 - [ ] `/chat` opens on "All"; a previously-chosen "Focused" still loads as focused.
-- [ ] `jinn create` with EOF/interrupted setup does not report success or register a half-built instance.
+- [ ] `hundredfold create` with EOF/interrupted setup does not report success or register a half-built instance.
 - [ ] Engine selectors are driven by the config `models` registry (no hardcoded list beyond the three default-engine tiers).
 
 - [ ] **Step 3: Teardown**
 
-Nuke the throwaway instance + remove the worktree. Confirm live `~/.jinn` / 7777 untouched and `~/.jinn/instances.json` pristine.
+Nuke the throwaway instance + remove the worktree. Confirm live `~/.hundredfold` / 7777 untouched and `~/.hundredfold/instances.json` pristine.
 
 ---
 

@@ -2,15 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship focused workflow, Todo, and delegation playbooks so every fresh Jinn install can operate the platform's core company surfaces.
+**Goal:** Ship focused workflow, Todo, and delegation playbooks so every fresh Hundredfold install can operate the platform's core company surfaces.
 
-**Architecture:** Add the playbooks under the existing `packages/hundredfold/template/skills/` seed tree, which `jinn setup` already copies recursively and the gateway skill watcher already mirrors into Claude and Codex discovery directories. Extend the template doctrine test to enforce discoverable frontmatter, setup wiring, MCP-first instructions, and exact current tool/CLI terminology.
+**Architecture:** Add the playbooks under the existing `packages/hundredfold/template/skills/` seed tree, which `hundredfold setup` already copies recursively and the gateway skill watcher already mirrors into Claude and Codex discovery directories. Extend the template doctrine test to enforce discoverable frontmatter, setup wiring, MCP-first instructions, and exact current tool/CLI terminology.
 
 **Tech Stack:** Markdown skill playbooks, YAML frontmatter, TypeScript, Vitest, pnpm.
 
 ## Global Constraints
 
-- Work only in `/private/tmp/jinn-skills` and never touch ports 7777/7788 or `~/.jinn`.
+- Work only in `/private/tmp/hundredfold-skills` and never touch ports 7777/7788 or `~/.hundredfold`.
 - Keep all shipped content generic; no personal names, projects, emails, IDs, keys, or absolute home-directory paths.
 - Use canonical kebab-case workflow names and current MCP/CLI contracts.
 - Do not add `Co-Authored-By` trailers.
@@ -49,7 +49,7 @@ Stage this test together with the playbooks after all checks pass.
 - Create: `packages/hundredfold/template/skills/delegation/SKILL.md`
 
 **Interfaces:**
-- Consumes: workflow tools from `src/mcp/workflow-tools.ts`, Todo tools from `src/mcp/work-item-tools.ts`, delegation/session/org tools, and `jinn workflow run <name>` from `src/cli/workflow.ts`.
+- Consumes: workflow tools from `src/mcp/workflow-tools.ts`, Todo tools from `src/mcp/work-item-tools.ts`, delegation/session/org tools, and `hundredfold workflow run <name>` from `src/cli/workflow.ts`.
 - Produces: skill packages discovered as `workflow`, `todo-handling`, and `delegation`.
 
 - [ ] **Step 1: Write minimal workflow instructions**
@@ -97,4 +97,4 @@ Commit with a focused message, fast-forward the primary worktree's `main` branch
 
 - [ ] **Step 5: Remove the worktree**
 
-Remove `/private/tmp/jinn-skills` after capturing the commit SHA and verification output tails.
+Remove `/private/tmp/hundredfold-skills` after capturing the commit SHA and verification output tails.

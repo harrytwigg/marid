@@ -10,7 +10,7 @@ verified on this branch.
 
 ## 1. Existing infrastructure
 
-Six places decide whether Jinn can host a plugin at all, and today every one of them is
+Six places decide whether Hundredfold can host a plugin at all, and today every one of them is
 closed by a literal: a fixed interface, a hardcoded `switch`, a static array, a single-entry
 `Map`. That is the finding. Nothing here needs to be invented from scratch; it needs to be
 opened, and the table records exactly where.
@@ -19,10 +19,10 @@ opened, and the table records exactly where.
 
 | `path:line` | What it is | Why it matters here |
 | --- | --- | --- |
-| `packages/hundredfold/src/mcp/resolver.ts:113` | `buildAvailableServers(config, attachJinn)`, the built-in plus custom server map | The closest thing to a registry the repo has. A plugin registry should rhyme with it, not diverge for its own sake. |
+| `packages/hundredfold/src/mcp/resolver.ts:113` | `buildAvailableServers(config, attachHundredfold)`, the built-in plus custom server map | The closest thing to a registry the repo has. A plugin registry should rhyme with it, not diverge for its own sake. |
 | `packages/hundredfold/src/mcp/resolver.ts:175` | The `config.custom` loop | The config-driven install precedent: a user names a thing in `config.yaml` and the gateway resolves it at startup. |
-| `packages/hundredfold/src/mcp/resolver.ts:183` | Reserved-name guard: a custom server named `jinn` is refused with a warning | Namespace-collision prior art. Plugin ids need the same treatment, and for the same reason: a caller that trusts a well-known id must not be reachable by a user-supplied one. |
-| `packages/hundredfold/src/mcp/resolver.ts:219` | `wrapServersWithScrub(servers)`, strips `JINN_GATEWAY_TOKEN` out of third-party subprocess env | Any process a plugin causes to be spawned flows through this. §9 keeps it. |
+| `packages/hundredfold/src/mcp/resolver.ts:183` | Reserved-name guard: a custom server named `hundredfold` is refused with a warning | Namespace-collision prior art. Plugin ids need the same treatment, and for the same reason: a caller that trusts a well-known id must not be reachable by a user-supplied one. |
+| `packages/hundredfold/src/mcp/resolver.ts:219` | `wrapServersWithScrub(servers)`, strips `HUNDREDFOLD_GATEWAY_TOKEN` out of third-party subprocess env | Any process a plugin causes to be spawned flows through this. §9 keeps it. |
 | `packages/hundredfold/src/gateway/watcher.ts:28` | `syncSkillSymlinks()` | The "install by dropping a directory in the instance home" precedent, already shipped and already understood by users. Plugins copy the shape. |
 | `packages/hundredfold/src/gateway/watcher.ts:78` | `startWatchers(callbacks)`, chokidar with `awaitWriteFinish` | The watch mechanics to reuse verbatim. |
 | `packages/hundredfold/src/gateway/watcher.ts:79` | `const DEBOUNCE_MS = 500` | The debounce interval plugin discovery inherits, so a multi-file save is one rescan. |
@@ -64,7 +64,7 @@ A plugin is a directory in the instance home. Nothing is installed, compiled, or
 anywhere else.
 
 ```
-~/.jinn/plugins/<id>/
+~/.hundredfold/plugins/<id>/
   plugin.json      required   manifest
   client.js        required   plain ESM, loaded in the dashboard
   server.js        optional   plain ESM, loaded in the gateway
@@ -73,11 +73,11 @@ anywhere else.
 The folder name is the id. `plugin.json` repeating it is a consistency check, not a second
 source of truth: a manifest whose `id` differs from its folder is a load error naming both,
 not a silent preference for one. This follows the reserved-name precedent at
-`packages/hundredfold/src/mcp/resolver.ts:183`, and `jinn` is likewise reserved.
+`packages/hundredfold/src/mcp/resolver.ts:183`, and `hundredfold` is likewise reserved.
 
 | Field | Required | Default | Validated at discovery |
 | --- | --- | --- | --- |
-| `id` | yes | | matches folder name, matches `/^[a-z0-9][a-z0-9-]{1,38}$/`, not `jinn` |
+| `id` | yes | | matches folder name, matches `/^[a-z0-9][a-z0-9-]{1,38}$/`, not `hundredfold` |
 | `name` | no | `id` | string |
 | `version` | no | `"0.0.0"` | string |
 | `client` | no | `"client.js"` | relative path, contained, distinct from `server` (§9). The field is optional; the file it names is not — a plugin with no loadable client half is an `error` record. |
@@ -177,7 +177,7 @@ This is the whole of the isolation story, and §9 is blunt about what it does no
 
 ## 4. The SDK import surface
 
-One module, `@jinn/plugin-sdk`, is the only thing a plugin may import. It re-exports:
+One module, `@hundredfold/plugin-sdk`, is the only thing a plugin may import. It re-exports:
 
 - React and the jsx runtime, **the app's instances**. A second React would break hooks, so this
   is not a convenience re-export, it is the mechanism.
@@ -195,7 +195,7 @@ Two delivery modes resolve to the same object:
    drift from what the SDK actually exports.
 
 The loader rejects unsupported bare specifiers **up front, with a named error**, before
-evaluating anything. Only `@jinn/plugin-sdk`, `react`, and `react/jsx-runtime` resolve. The
+evaluating anything. Only `@hundredfold/plugin-sdk`, `react`, and `react/jsx-runtime` resolve. The
 specifier rewrite is anchored to import and export syntax so a matching string literal inside
 the plugin is never touched. A lint fence keeps bundled plugins to the same list, so the two
 modes cannot diverge into "works bundled, fails on disk".
@@ -217,7 +217,7 @@ Plugins do not get raw RPC. **"Upstream" throughout this document is Hermes, and
 citation is a path relative to the Hermes repository root, never to this one.** Hermes exposes
 `host.request(method, params)` and calls it "the plugin's real power"
 (`apps/desktop/src/sdk/index.ts:16`); it is also the reason a permission model there has to be
-retrofitted against an untyped surface. Jinn ships typed verbs from day one:
+retrofitted against an untyped surface. Hundredfold ships typed verbs from day one:
 
 ```
 host.todos.list(query) / .create(input) / .comment(id, body)
@@ -240,7 +240,7 @@ copying upstream, and the reason is that an untyped door cannot be narrowed afte
 breaking every plugin at once.
 
 Note the interaction with `packages/hundredfold/src/mcp/resolver.ts:219`: anything a plugin causes to
-be spawned still flows through `wrapServersWithScrub`, so `JINN_GATEWAY_TOKEN` does not reach a
+be spawned still flows through `wrapServersWithScrub`, so `HUNDREDFOLD_GATEWAY_TOKEN` does not reach a
 third-party subprocess by way of a plugin.
 
 ---
@@ -260,7 +260,7 @@ in `handleApiRequest` as one more link. No new dispatch mechanism, no route tabl
 previous incarnation's routes are dropped. This is a strict improvement over upstream, where the
 plugin backends are mounted once from module scope at process start
 (`hermes_cli/web_server.py:17315`), so a code change needs a restart and a rescan will not do it.
-Jinn gets it for free by being one language on both sides.
+Hundredfold gets it for free by being one language on both sides.
 
 **Namespacing by construction.** The client-side helper takes a path relative to the plugin's own
 prefix and builds `/api/plugins/<id><suffix>`. A `..` segment in the path (checked on the portion
@@ -293,7 +293,7 @@ route therefore never reaches the auth gate at `packages/hundredfold/src/gateway
 would be served to anyone who can reach the port. Upstream accepts an asset path that is
 unauthenticated in its default loopback mode, and says why in the route's own docstring: its SPA
 loads plugin code through `<script src>` and `<link href>`, neither of which can attach a header
-(`hermes_cli/web_server.py:17121`). Jinn's loader (§4) `fetch`es the module and imports a blob URL, so it *can*
+(`hermes_cli/web_server.py:17121`). Hundredfold's loader (§4) `fetch`es the module and imports a blob URL, so it *can*
 attach the gateway token, and the namespace that gets auth for free is the one under `/api/`.
 
 The suffix allowlist in §9 stays regardless. Auth and the allowlist answer different questions:
@@ -342,7 +342,7 @@ The gateway owns the lifecycle:
    id it happens to load under can never become two rows.
 3. **Re-entrant scans.** A rescan must not overlap a slow in-flight scan; reads and dynamic
    imports can exceed the debounce interval. A `scanning` guard, not a shorter interval.
-4. **Unwatchable or absent directory.** `~/.jinn/plugins/` may not exist. Absent is not an error,
+4. **Unwatchable or absent directory.** `~/.hundredfold/plugins/` may not exist. Absent is not an error,
    it is zero plugins. Unwatchable degrades to an explicit rescan action in the settings page
    rather than a silent no-op.
 5. **Folder deleted mid-flight.** Discovery reads a manifest that disappears before the import.
@@ -503,7 +503,7 @@ satisfy, and it is what shrank the area list to four.
 
 | Not in v1 | Why deferred |
 | --- | --- |
-| Themes | Jinn's theming is CSS custom properties in two theme blocks, not a registry. A theme contribution would be a second theming system competing with the tokens, and nothing has asked for one. |
+| Themes | Hundredfold's theming is CSS custom properties in two theme blocks, not a registry. A theme contribution would be a second theming system competing with the tokens, and nothing has asked for one. |
 | Keybinds | There is no global keybinding layer to contribute into; building one is its own design, and a plugin-only shortcut registry would be the speculative half of it. |
 | Command palette | The app has global search, not a command palette. Contributing commands requires the palette to exist first. |
 | Panes | The shell is one route at a time (`packages/web/src/main.tsx:106`). A dockable pane tree is a shell rewrite that dwarfs the plugin system and must not be smuggled in as a plugin area. |
@@ -521,7 +521,7 @@ Each slice is graded against its section.
 | Slice | Section | Deliverable |
 | --- | --- | --- |
 | Registry | §3 | Contribution registry, area-scoped invalidation, `Slot`, error boundaries, and the status bar host |
-| SDK | §4, §5 | `@jinn/plugin-sdk`: the single import surface and the hand-authored `.d.ts` |
+| SDK | §4, §5 | `@hundredfold/plugin-sdk`: the single import surface and the hand-authored `.d.ts` |
 | Loader | §4 | Runtime loader: specifier rejection, shims, blob import, validation, hot reload |
 | Discovery and assets | §2, §6, §8, §9 | Discovery, manifest validation, `GET /api/plugins`, asset route with the three guards, config lists |
 | Backend mount | §6, §8, §9 | Backend mount, hot reload, runtime enable gate after auth, per-plugin error isolation |

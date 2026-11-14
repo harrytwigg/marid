@@ -6,12 +6,12 @@
 
 **Architecture:** Store effective phase prompt overrides and their append-only edit audit at the run-record top level, separate from immutable `invocation.input` and the frozen definition snapshot. Serialize pending-step edits with the existing per-run advance lock so a prompt cannot be edited while the reconciler dispatches it. Represent handoff-driven loop exits as the existing deterministic `WorkflowCondition[]` language on a loop edge and evaluate those conditions against the final settled receipt at the round boundary.
 
-**Tech Stack:** TypeScript, file-backed JSON workflow evidence, Vitest, gateway REST API, Jinn MCP tools.
+**Tech Stack:** TypeScript, file-backed JSON workflow evidence, Vitest, gateway REST API, Hundredfold MCP tools.
 
 ## Global Constraints
 
 - Work from Node 24.13.0 with pnpm.
-- Do not read from or write to the live gateway on ports 7777/7788 or the live `~/.jinn` runtime state.
+- Do not read from or write to the live gateway on ports 7777/7788 or the live `~/.hundredfold` runtime state.
 - Keep the public repository generic and leak-check the staged diff before commit.
 - Never add `Co-Authored-By` commit trailers.
 - Preserve frozen per-run input byte-for-byte; prompt overrides and edits are a separate run-local layer.

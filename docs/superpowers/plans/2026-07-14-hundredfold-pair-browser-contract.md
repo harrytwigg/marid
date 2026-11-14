@@ -1,18 +1,18 @@
-# Jinn Pair Browser Contract Implementation Plan
+# Hundredfold Pair Browser Contract Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make `jinn pair` give accurate browser-based pairing instructions without attempting the bearer-authenticated request that the gateway intentionally rejects.
+**Goal:** Make `hundredfold pair` give accurate browser-based pairing instructions without attempting the bearer-authenticated request that the gateway intentionally rejects.
 
-**Architecture:** Keep pairing-code minting owned by an authenticated, loopback browser cookie. The CLI becomes a pure guidance surface for Settings > Pairing, while `jinn unpair` continues using bearer auth against the device routes that accept it.
+**Architecture:** Keep pairing-code minting owned by an authenticated, loopback browser cookie. The CLI becomes a pure guidance surface for Settings > Pairing, while `hundredfold unpair` continues using bearer auth against the device routes that accept it.
 
-**Tech Stack:** TypeScript, Commander.js, Vitest, Jinn gateway REST handlers
+**Tech Stack:** TypeScript, Commander.js, Vitest, Hundredfold gateway REST handlers
 
 ## Global Constraints
 
 - Direct bearer requests to `POST /api/auth/pairing-codes` must remain forbidden.
 - The CLI must not send the gateway bearer token to the pairing-code mint route.
-- `GET` and `DELETE /api/auth/devices` remain bearer-authenticated for `jinn unpair`.
+- `GET` and `DELETE /api/auth/devices` remain bearer-authenticated for `hundredfold unpair`.
 - Public repository content must stay generic and contain no operator-specific data.
 
 ---
@@ -55,7 +55,7 @@ Stage only this ticket's test hunks together with the implementation in Task 2; 
 
 **Files:**
 - Modify: `packages/hundredfold/src/cli/pair.ts`
-- Modify: `packages/hundredfold/bin/jinn.ts`
+- Modify: `packages/hundredfold/bin/hundredfold.ts`
 
 **Interfaces:**
 - Consumes: gateway port from the existing gateway-info/config lookup.
@@ -85,7 +85,7 @@ Make `runPair()` print that object for `--json`, otherwise print steps to open t
 
 - [ ] **Step 2: Keep unpair behavior explicit**
 
-Retain the bearer headers in `requestPairedDevices()` and `requestUnpairDevice()`. Update empty-list copy so it no longer claims `jinn pair` directly creates a code.
+Retain the bearer headers in `requestPairedDevices()` and `requestUnpairDevice()`. Update empty-list copy so it no longer claims `hundredfold pair` directly creates a code.
 
 - [ ] **Step 3: Update command help**
 

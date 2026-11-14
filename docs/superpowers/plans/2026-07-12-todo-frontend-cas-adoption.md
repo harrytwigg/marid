@@ -6,12 +6,12 @@
 
 **Architecture:** Every logical Todo edit is an immutable request containing the editable patch, a positive expected version, and one cryptographically random idempotency key. The request is persisted before dispatch and replayed byte-for-byte after ambiguous transport; confirmed results advance the authoritative version, while typed conflicts enter one shared Reload/Rebase/Overwrite recovery surface. Detail edits use the per-item detail version; row edits preflight a detail read and compare it with the maximum version across duplicate query caches.
 
-**Tech Stack:** React 19, TypeScript, TanStack Query, Vitest, Testing Library, Playwright, Tailwind/Ledger tokens, canonical Jinn Todo REST wire.
+**Tech Stack:** React 19, TypeScript, TanStack Query, Vitest, Testing Library, Playwright, Tailwind/Ledger tokens, canonical Hundredfold Todo REST wire.
 
 ## Global Constraints
 
 - Frontend base is `a3c0a8cc26dccadce237bfb4032544fcb8393495`; frontend commits must remain separately cherry-pickable.
-- Integrated verification uses backend `3633f634… → 62f877f… → 9fdf73e… → 55dfcd74… → ee6d307…` in `/private/tmp/jinn-todo-cas-frontend-integrated-a3c0`.
+- Integrated verification uses backend `3633f634… → 62f877f… → 9fdf73e… → 55dfcd74… → ee6d307…` in `/private/tmp/hundredfold-todo-cas-frontend-integrated-a3c0`.
 - The supplied `55dfcd7c…` object does not exist; `55dfcd74ed371272a11fd9a9bd0cab79ffc652a1` is the actual parent of `ee6d307…`.
 - Do not edit gateway files in the frontend commit. No force/missing-precondition path.
 - `WorkItem.version` is a positive monotonic whole-row revision. `updatedAt` is display-only.
@@ -53,7 +53,7 @@ it("chooses the maximum Todo version across adversarial duplicate caches", () =>
 
 - [ ] **Step 2: Run focused tests and verify RED**
 
-Run: `pnpm --filter @jinn/web exec vitest run src/lib/__tests__/api-errors.test.ts src/routes/todos/__tests__/todo-edit-request.test.ts`
+Run: `pnpm --filter @hundredfold/web exec vitest run src/lib/__tests__/api-errors.test.ts src/routes/todos/__tests__/todo-edit-request.test.ts`
 
 Expected: FAIL because version/replayed/request helpers do not exist and `updateWorkItem` still sends a blind patch.
 
@@ -106,7 +106,7 @@ Cover dispatched/uncertain/failed/conflict states, reload, malformed keys/versio
 
 - [ ] **Step 2: Run focused tests and verify RED**
 
-Run: `pnpm --filter @jinn/web exec vitest run src/routes/todos/__tests__/todo-private-state.test.ts`
+Run: `pnpm --filter @hundredfold/web exec vitest run src/routes/todos/__tests__/todo-private-state.test.ts`
 
 Expected: FAIL because numeric baseline versions and exact request metadata are not accepted or persisted.
 
@@ -181,7 +181,7 @@ Mutate key reuse, key rotation, expectedVersion advancement, replay ordering, sa
 - Create: `packages/web/src/routes/todos/conflict-actions.tsx`
 - Modify: `packages/web/src/routes/todos/detail-sheet.tsx`
 - Modify: `packages/web/src/routes/todos/__tests__/detail-sheet.test.tsx`
-- Create outside repo: `/tmp/jinn-todo-cas-conflict-mock.html`
+- Create outside repo: `/tmp/hundredfold-todo-cas-conflict-mock.html`
 
 **Interfaces:**
 - Produces `TodoConflictActions` with Reload remote, Rebase edits, and Overwrite remote.
@@ -251,7 +251,7 @@ Mutate max→last version, remove preflight, reuse a key after content/version c
 
 **Files:**
 - Update: `docs/superpowers/plans/2026-07-12-todo-frontend-cas-adoption.md`
-- Artifacts only: fresh sanitized `JINN_HOME` and `/tmp/.../sandbox-artifacts/final/`
+- Artifacts only: fresh sanitized `HUNDREDFOLD_HOME` and `/tmp/.../sandbox-artifacts/final/`
 
 **Interfaces:**
 - Consumes frontend-only commit(s) and the isolated backend merge worktree.

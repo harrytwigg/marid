@@ -1,14 +1,14 @@
-# Jinn Implementation Plan
+# Hundredfold Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Build Jinn - a lightweight AI gateway daemon that orchestrates Claude Code CLI and Codex SDK as an autonomous, self-organizing AI workforce.
+**Goal:** Build Hundredfold - a lightweight AI gateway daemon that orchestrates Claude Code CLI and Codex SDK as an autonomous, self-organizing AI workforce.
 
-**Architecture:** Monorepo with two packages (`jinn-cli` core + `@jinn/web` dashboard). Single Node.js process gateway that spawns engine child processes, routes messages from connectors, runs cron jobs, and serves a static Next.js web UI. All state lives in `~/.jinn/` as YAML, JSON, and SQLite files.
+**Architecture:** Monorepo with two packages (`jinn-cli` core + `@hundredfold/web` dashboard). Single Node.js process gateway that spawns engine child processes, routes messages from connectors, runs cron jobs, and serves a static Next.js web UI. All state lives in `~/.hundredfold/` as YAML, JSON, and SQLite files.
 
 **Tech Stack:** Node.js, TypeScript, pnpm, Turborepo, better-sqlite3, node-cron, @slack/bolt, @openai/codex-sdk, commander, chokidar, ws, Next.js 15, Tailwind CSS
 
-**Design Doc:** `docs/plans/2026-03-06-jinn-design.md`
+**Design Doc:** `docs/plans/2026-03-06-hundredfold-design.md`
 
 ---
 
@@ -31,7 +31,7 @@ Get the project structure buildable and testable with zero functionality.
 
 ```json
 {
-  "name": "jinn",
+  "name": "hundredfold",
   "private": true,
   "packageManager": "pnpm@10.6.4",
   "scripts": {
@@ -141,7 +141,7 @@ git commit -m "chore: initialize monorepo with pnpm + turborepo"
 **Files:**
 - Create: `packages/hundredfold/package.json`
 - Create: `packages/hundredfold/tsconfig.json`
-- Create: `packages/hundredfold/bin/jinn.ts`
+- Create: `packages/hundredfold/bin/hundredfold.ts`
 - Create: `packages/hundredfold/src/shared/types.ts`
 - Create: `packages/hundredfold/src/shared/paths.ts`
 - Create: `packages/hundredfold/src/shared/config.ts`
@@ -156,7 +156,7 @@ git commit -m "chore: initialize monorepo with pnpm + turborepo"
   "description": "Lightweight AI gateway daemon orchestrating Claude Code and Codex",
   "license": "MIT",
   "bin": {
-    "jinn": "./dist/bin/jinn.js"
+    "hundredfold": "./dist/bin/hundredfold.js"
   },
   "main": "./dist/src/index.js",
   "types": "./dist/src/index.d.ts",
@@ -208,12 +208,12 @@ git commit -m "chore: initialize monorepo with pnpm + turborepo"
 
 **Step 3: Create shared types (`src/shared/types.ts`)**
 
-Define all core interfaces: `Engine`, `EngineResult`, `EngineRunOpts`, `Connector`, `IncomingMessage`, `Attachment`, `Target`, `Session`, `CronJob`, `CronDelivery`, `Employee`, `Department`, `JinnConfig`.
+Define all core interfaces: `Engine`, `EngineResult`, `EngineRunOpts`, `Connector`, `IncomingMessage`, `Attachment`, `Target`, `Session`, `CronJob`, `CronDelivery`, `Employee`, `Department`, `HundredfoldConfig`.
 
 See design doc sections 3-7 for exact shapes. Use the interfaces defined in the design for Engine, EngineResult, Connector, IncomingMessage, Attachment, Target. Add:
 
 ```typescript
-export interface JinnConfig {
+export interface HundredfoldConfig {
   gateway: { port: number; host: string };
   engines: {
     default: "claude" | "codex";
@@ -273,29 +273,29 @@ export interface Employee {
 import path from "node:path";
 import os from "node:os";
 
-export const JINN_HOME = path.join(os.homedir(), ".jinn");
-export const CONFIG_PATH = path.join(JINN_HOME, "config.yaml");
-export const SESSIONS_DB = path.join(JINN_HOME, "sessions", "registry.db");
-export const CRON_JOBS = path.join(JINN_HOME, "cron", "jobs.json");
-export const CRON_RUNS = path.join(JINN_HOME, "cron", "runs");
-export const ORG_DIR = path.join(JINN_HOME, "org");
-export const SKILLS_DIR = path.join(JINN_HOME, "skills");
-export const DOCS_DIR = path.join(JINN_HOME, "docs");
-export const LOGS_DIR = path.join(JINN_HOME, "logs");
-export const TMP_DIR = path.join(JINN_HOME, "tmp");
-export const PID_FILE = path.join(JINN_HOME, "gateway.pid");
+export const HUNDREDFOLD_HOME = path.join(os.homedir(), ".hundredfold");
+export const CONFIG_PATH = path.join(HUNDREDFOLD_HOME, "config.yaml");
+export const SESSIONS_DB = path.join(HUNDREDFOLD_HOME, "sessions", "registry.db");
+export const CRON_JOBS = path.join(HUNDREDFOLD_HOME, "cron", "jobs.json");
+export const CRON_RUNS = path.join(HUNDREDFOLD_HOME, "cron", "runs");
+export const ORG_DIR = path.join(HUNDREDFOLD_HOME, "org");
+export const SKILLS_DIR = path.join(HUNDREDFOLD_HOME, "skills");
+export const DOCS_DIR = path.join(HUNDREDFOLD_HOME, "docs");
+export const LOGS_DIR = path.join(HUNDREDFOLD_HOME, "logs");
+export const TMP_DIR = path.join(HUNDREDFOLD_HOME, "tmp");
+export const PID_FILE = path.join(HUNDREDFOLD_HOME, "gateway.pid");
 export const TEMPLATE_DIR = path.join(__dirname, "..", "..", "template");
 ```
 
 **Step 5: Create config loader (`src/shared/config.ts`)**
 
-Reads and parses `~/.jinn/config.yaml` using js-yaml. Returns typed `JinnConfig`. Throws helpful error if file doesn't exist (suggests running `jinn setup`).
+Reads and parses `~/.hundredfold/config.yaml` using js-yaml. Returns typed `HundredfoldConfig`. Throws helpful error if file doesn't exist (suggests running `hundredfold setup`).
 
 **Step 6: Create logger (`src/shared/logger.ts`)**
 
-Simple logger that writes to both `~/.jinn/logs/gateway.log` (append) and stdout. Supports levels: debug, info, warn, error. Timestamps each line. Respects config `logging.level` and `logging.stdout` settings.
+Simple logger that writes to both `~/.hundredfold/logs/gateway.log` (append) and stdout. Supports levels: debug, info, warn, error. Timestamps each line. Respects config `logging.level` and `logging.stdout` settings.
 
-**Step 7: Create CLI entry point (`bin/jinn.ts`)**
+**Step 7: Create CLI entry point (`bin/hundredfold.ts`)**
 
 ```typescript
 #!/usr/bin/env node
@@ -303,11 +303,11 @@ import { Command } from "commander";
 
 const program = new Command();
 program
-  .name("jinn")
+  .name("hundredfold")
   .description("Lightweight AI gateway daemon")
   .version("0.1.0");
 
-program.command("setup").description("Initialize Jinn and install dependencies").action(() => {
+program.command("setup").description("Initialize Hundredfold and install dependencies").action(() => {
   console.log("TODO: setup");
 });
 
@@ -331,7 +331,7 @@ program.parse();
 Run: `cd packages/hundredfold && pnpm build`
 Expected: compiles to `dist/` without errors
 
-Run: `node dist/bin/jinn.js --help`
+Run: `node dist/bin/hundredfold.js --help`
 Expected: shows help text with setup/start/stop/status commands
 
 **Step 9: Commit**
@@ -355,9 +355,9 @@ Build the core: SQLite session registry and both engine wrappers.
 **Step 1: Write registry module**
 
 Implements:
-- `initDb()` - creates SQLite database at `~/.jinn/sessions/registry.db`, runs CREATE TABLE IF NOT EXISTS
+- `initDb()` - creates SQLite database at `~/.hundredfold/sessions/registry.db`, runs CREATE TABLE IF NOT EXISTS
 - `createSession(opts)` - inserts new session, returns Session
-- `getSession(id)` - get by Jinn session ID
+- `getSession(id)` - get by Hundredfold session ID
 - `getSessionBySourceRef(sourceRef)` - look up by source_ref (for routing)
 - `updateSession(id, updates)` - update fields (engine_session_id, status, last_activity, last_error)
 - `listSessions(filter?)` - list all, optionally filter by status/source/engine
@@ -552,7 +552,7 @@ export function buildContext(opts: {
   user: string;
   employee?: Employee;
 }): string {
-  let ctx = `You are Jinn, a personal AI assistant.\n`;
+  let ctx = `You are Hundredfold, a personal AI assistant.\n`;
   ctx += `Session source: ${opts.source}, channel: ${opts.channel}`;
   if (opts.thread) ctx += `, thread: ${opts.thread}`;
   ctx += `\nUser: ${opts.user}\n`;
@@ -660,7 +660,7 @@ Debounce all watchers (500ms) to avoid rapid-fire reloads.
 
 Handles:
 - `startForeground()` - start server, register SIGINT/SIGTERM handlers for graceful shutdown
-- `startDaemon()` - fork child process, write PID to `~/.jinn/gateway.pid`, parent exits
+- `startDaemon()` - fork child process, write PID to `~/.hundredfold/gateway.pid`, parent exits
 - `stop()` - read PID file, send SIGTERM, remove PID file
 - `getStatus()` - check if PID file exists and process is alive
 - Graceful shutdown: stop connectors, stop cron, close HTTP server, close DB
@@ -682,7 +682,7 @@ git commit -m "feat: add gateway server with API, file watcher, and lifecycle ma
 ### Task 3.2: Wire CLI commands
 
 **Files:**
-- Modify: `packages/hundredfold/bin/jinn.ts`
+- Modify: `packages/hundredfold/bin/hundredfold.ts`
 - Create: `packages/hundredfold/src/cli/setup.ts`
 - Create: `packages/hundredfold/src/cli/start.ts`
 - Create: `packages/hundredfold/src/cli/stop.ts`
@@ -694,15 +694,15 @@ git commit -m "feat: add gateway server with API, file watcher, and lifecycle ma
 2. Check for `claude` binary - if missing, prompt to install via `npm install -g @anthropic-ai/claude-code`
 3. Check for `codex` binary - if missing, prompt to install via `npm install -g @openai/codex`
 4. Check auth: run `claude --version` and `codex --version` to verify
-5. Create `~/.jinn/` directory structure by copying from `template/`
+5. Create `~/.hundredfold/` directory structure by copying from `template/`
 6. Initialize empty SQLite database with schema
 7. Create empty `cron/jobs.json` with `[]`
-8. Install LaunchAgent plist to `~/Library/LaunchAgents/com.jinn.gateway.plist`
+8. Install LaunchAgent plist to `~/Library/LaunchAgents/com.hundredfold.gateway.plist`
 9. Print summary
 
 **Step 2: Write start command (`cli/start.ts`)**
 
-Check if `~/.jinn/` exists (suggest `jinn setup` if not). If `--daemon` flag, call `lifecycle.startDaemon()`. Otherwise call `lifecycle.startForeground()`.
+Check if `~/.hundredfold/` exists (suggest `hundredfold setup` if not). If `--daemon` flag, call `lifecycle.startDaemon()`. Otherwise call `lifecycle.startForeground()`.
 
 **Step 3: Write stop command (`cli/stop.ts`)**
 
@@ -712,22 +712,22 @@ Call `lifecycle.stop()`. Print confirmation or "not running".
 
 Call `lifecycle.getStatus()`. Print running/stopped, PID, uptime, port. If running, also call `/api/status` via HTTP to get live stats.
 
-**Step 5: Wire into bin/jinn.ts**
+**Step 5: Wire into bin/hundredfold.ts**
 
 Replace TODO placeholders with actual imports and calls.
 
 **Step 6: Build and test end-to-end**
 
-Run: `pnpm build && node dist/bin/jinn.js setup`
-Expected: creates `~/.jinn/` directory with all template files
+Run: `pnpm build && node dist/bin/hundredfold.js setup`
+Expected: creates `~/.hundredfold/` directory with all template files
 
-Run: `node dist/bin/jinn.js start`
+Run: `node dist/bin/hundredfold.js start`
 Expected: gateway starts on port 7777, logs to stdout
 
 Run (in another terminal): `curl http://localhost:7777/api/status`
 Expected: JSON response with gateway status
 
-Run: `node dist/bin/jinn.js status`
+Run: `node dist/bin/hundredfold.js status`
 Expected: shows "running" with PID and port
 
 Ctrl+C the gateway.
@@ -743,7 +743,7 @@ git commit -m "feat: wire CLI commands (setup, start, stop, status)"
 
 ## Phase 4: Template Files (CLAUDE.md, AGENTS.md, Skills, Docs)
 
-Create the brain - the files that make engines understand Jinn.
+Create the brain - the files that make engines understand Hundredfold.
 
 ### Task 4.1: Write CLAUDE.md and AGENTS.md
 
@@ -753,11 +753,11 @@ Create the brain - the files that make engines understand Jinn.
 
 **Step 1: Write CLAUDE.md**
 
-This is the most important file in the project. It tells every Claude Code session who they are and how Jinn works. Contents:
+This is the most important file in the project. It tells every Claude Code session who they are and how Hundredfold works. Contents:
 
-- Identity: "You are Jinn, a personal AI assistant and COO of an AI organization"
-- The `~/.jinn/` folder structure and what each part does
-- How to use skills (read SKILL.md from `~/.jinn/skills/`)
+- Identity: "You are Hundredfold, a personal AI assistant and COO of an AI organization"
+- The `~/.hundredfold/` folder structure and what each part does
+- How to use skills (read SKILL.md from `~/.hundredfold/skills/`)
 - How the org system works (employees, departments, ranks, boards, personas)
 - How to create/manage cron jobs (edit `cron/jobs.json`, gateway auto-reloads)
 - How to self-modify (edit config, org files, create skills - gateway watches and reacts)
@@ -797,7 +797,7 @@ Instructions for: creating cron jobs (append to jobs.json), editing (modify in p
 
 **Step 3: Write skill-creator skill**
 
-Thin wrapper: defer to Claude Code's native `/skill` command or Codex native capabilities. Ensure output lands in `~/.jinn/skills/<name>/SKILL.md`. Include conventions for writing good SKILL.md files.
+Thin wrapper: defer to Claude Code's native `/skill` command or Codex native capabilities. Ensure output lands in `~/.hundredfold/skills/<name>/SKILL.md`. Include conventions for writing good SKILL.md files.
 
 **Step 4: Write self-heal skill**
 
@@ -829,14 +829,14 @@ git commit -m "feat: add pre-packaged skills (management, cron-manager, skill-cr
 
 **Step 1: Write each doc**
 
-These are for Jinn's self-awareness. Each doc should be concise and technical:
-- `overview.md` - what Jinn is, core principles, how it differs from OpenClaw
+These are for Hundredfold's self-awareness. Each doc should be concise and technical:
+- `overview.md` - what Hundredfold is, core principles, how it differs from OpenClaw
 - `architecture.md` - gateway, sessions, engines, connectors, cron, file watchers
 - `skills.md` - how skills work, conventions, how to create them
 - `cron.md` - job schema, scheduling, delivery, hot-reload
 - `connectors.md` - connector interface, Slack specifics, future platforms
 - `org.md` - employee personas, departments, ranks, boards, communication rules
-- `self-modification.md` - what Jinn can edit, how file watchers react, safety considerations
+- `self-modification.md` - what Hundredfold can edit, how file watchers react, safety considerations
 
 **Step 2: Write default config.yaml template**
 
@@ -873,7 +873,7 @@ Logic: if `event.channel_type === "im"` -> DM. Else if `event.thread_ts && event
 
 Functions:
 - `formatResponse(text)` - truncate if > 3000 chars (Slack limit), split into multiple messages if needed
-- `downloadAttachment(url, token, destDir)` - download Slack file to `~/.jinn/tmp/`, return local path
+- `downloadAttachment(url, token, destDir)` - download Slack file to `~/.hundredfold/tmp/`, return local path
 
 **Step 3: Write Slack connector (`index.ts`)**
 
@@ -900,7 +900,7 @@ export class SlackConnector implements Connector {
       // Skip bot's own messages
       if (event.bot_id) return;
 
-      // Check for Jinn commands
+      // Check for Hundredfold commands
       // Build IncomingMessage from event
       // Download attachments if present
       // Call handler
@@ -930,7 +930,7 @@ Expected: compiles without errors
 
 **Step 6: Manual test with Slack**
 
-Configure Slack tokens in `~/.jinn/config.yaml`. Start gateway. Send a DM to the bot. Verify: eyes reaction appears, Claude Code runs, result posted, checkmark reaction added.
+Configure Slack tokens in `~/.hundredfold/config.yaml`. Start gateway. Send a DM to the bot. Verify: eyes reaction appears, Claude Code runs, result posted, checkmark reaction added.
 
 **Step 7: Commit**
 
@@ -952,7 +952,7 @@ git commit -m "feat: add Slack connector with thread mapping and reactions"
 
 **Step 1: Write job loader (`jobs.ts`)**
 
-Reads and writes `~/.jinn/cron/jobs.json`. Functions:
+Reads and writes `~/.hundredfold/cron/jobs.json`. Functions:
 - `loadJobs()` - parse JSON, return typed CronJob array
 - `saveJobs(jobs)` - write back to file
 - `appendRunLog(jobId, entry)` - append JSONL to `runs/<jobId>.jsonl`
@@ -1006,7 +1006,7 @@ git commit -m "feat: add cron scheduler with job loader and runner"
 **Step 1: Write org scanner**
 
 Functions:
-- `scanOrg()` - recursively scan `~/.jinn/org/`, parse all `.yaml` files, return `Map<string, Employee>`
+- `scanOrg()` - recursively scan `~/.hundredfold/org/`, parse all `.yaml` files, return `Map<string, Employee>`
 - `findEmployee(name, registry)` - look up by name (exact match)
 - `extractMention(text, registry)` - scan message text for `@employee-name` patterns, return first match
 
@@ -1098,7 +1098,7 @@ git commit -m "feat: scaffold web UI with Next.js, dashboard page"
 
 **Step 1: Build chat sidebar**
 
-List of conversations. "New Chat" button. Jinn always at top. Conversations from `/api/sessions?source=web`.
+List of conversations. "New Chat" button. Hundredfold always at top. Conversations from `/api/sessions?source=web`.
 
 **Step 2: Build chat messages area**
 
@@ -1160,7 +1160,7 @@ git commit -m "feat: add sessions page"
 
 **Step 1: Build org tree**
 
-Interactive collapsible tree from `/api/org`. Jinn at top, departments as nodes, employees as leaves with rank badges.
+Interactive collapsible tree from `/api/org`. Hundredfold at top, departments as nodes, employees as leaves with rank badges.
 
 **Step 2: Build employee detail panel**
 
@@ -1193,7 +1193,7 @@ Job list with toggle switches, schedule display, last run status. Click for run 
 
 **Step 2: Skills page**
 
-Grid of skill cards from `/api/skills`. Click to view SKILL.md content (rendered markdown). "Create Skill" button opens chat with Jinn.
+Grid of skill cards from `/api/skills`. Click to view SKILL.md content (rendered markdown). "Create Skill" button opens chat with Hundredfold.
 
 **Step 3: Logs page**
 
@@ -1221,7 +1221,7 @@ git commit -m "feat: add cron, skills, logs, and settings pages"
 
 **Step 1: Add build pipeline**
 
-In turbo.json, ensure `@jinn/web` builds first (static export), then `jinn-cli` copies the `out/` directory into its own dist.
+In turbo.json, ensure `@hundredfold/web` builds first (static export), then `jinn-cli` copies the `out/` directory into its own dist.
 
 **Step 2: Serve static files in gateway**
 
@@ -1230,7 +1230,7 @@ In `server.ts`, if request doesn't match `/api/*` or `/ws`, serve from the bundl
 **Step 3: End-to-end test**
 
 Run: `pnpm build` (builds both packages)
-Run: `node dist/bin/jinn.js start`
+Run: `node dist/bin/hundredfold.js start`
 Open: `http://localhost:7777`
 Expected: web UI loads, dashboard shows gateway status
 
@@ -1249,8 +1249,8 @@ git commit -m "feat: bundle web UI into CLI package and serve from gateway"
 
 **Step 1: Full setup flow**
 
-Run: `jinn setup` (fresh `~/.jinn/`)
-Run: `jinn start`
+Run: `hundredfold setup` (fresh `~/.hundredfold/`)
+Run: `hundredfold start`
 Open: `http://localhost:7777`
 Verify: dashboard loads, shows connected status
 
@@ -1268,7 +1268,7 @@ Add a test cron job via the web UI settings or by editing `jobs.json`. Wait for 
 
 **Step 5: Org**
 
-Via chat, tell Jinn "Hire an SEO specialist for marketing." Verify: org files created, employee appears in web UI org page.
+Via chat, tell Hundredfold "Hire an SEO specialist for marketing." Verify: org files created, employee appears in web UI org page.
 
 **Step 6: Fix any issues found**
 
@@ -1320,5 +1320,5 @@ git commit -m "docs: add README, CI workflow, and contributing guide"
 | 9 | 9.1-9.2 | Integration testing + README + CI |
 
 **After Phase 3** you have a working gateway you can talk to via the API.
-**After Phase 5** you can talk to Jinn on Slack.
+**After Phase 5** you can talk to Hundredfold on Slack.
 **After Phase 8** you have the full product.

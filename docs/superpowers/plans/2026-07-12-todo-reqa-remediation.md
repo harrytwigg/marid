@@ -15,7 +15,7 @@ Keep the Todo ledger visually calm and unchanged while making its hidden state m
 5. Add a failing responsive crossover test. Close/reset the mobile filter sheet on desktop crossover and restore focus to the desktop trigger without resurrecting the sheet on return to mobile.
 6. Strengthen row semantic-activation tests with user-level Enter, Space, pointer, touch, and long-press interactions, asserting exactly one intended action and zero detail opens.
 7. Run focused tests after each implementation slice, then full web tests, typecheck, build, whitespace and privacy/storage scans.
-8. Start only a fresh sanitized preview with a pinned `JINN_HOME` and ports `7900+`; capture 390×844 and 1440×900 in dark/light and normal/reduced-motion, plus the required navigation, offline, two-tab, orientation, and lifecycle states.
+8. Start only a fresh sanitized preview with a pinned `HUNDREDFOLD_HOME` and ports `7900+`; capture 390×844 and 1440×900 in dark/light and normal/reduced-motion, plus the required navigation, offline, two-tab, orientation, and lifecycle states.
 9. Commit only scoped frontend/tests/artifacts changes, attach the finding-by-finding evidence, and request independent re-QA without marking the work done.
 
 ## Conflict semantics

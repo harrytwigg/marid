@@ -1,4 +1,4 @@
-# Hermes as a Jinn Engine — Design Spec
+# Hermes as a Hundredfold Engine — Design Spec
 
 **Date:** 2026-06-23
 **Branch:** `feat/hermes-engine`
@@ -7,10 +7,10 @@
 ## 1. Goal
 
 Add **Hermes Agent** (NousResearch, `hermes` CLI) as a first-class, selectable **engine** in
-the Jinn gateway, with **real token streaming** in the web chat and a **live CLI terminal
+the Hundredfold gateway, with **real token streaming** in the web chat and a **live CLI terminal
 view** in the dashboard.
 
-**Version- and path-agnostic.** Jinn runs on other people's machines. The engine must use
+**Version- and path-agnostic.** Hundredfold runs on other people's machines. The engine must use
 **whatever `hermes` binary is found on the user's PATH** (resolved via `resolveBin("hermes",
 opts.bin)`, like every other engine), regardless of version or install location. We do **not**
 hardcode a version, an absolute path, or a fixed model list. Capabilities and models are
@@ -56,7 +56,7 @@ this exact version. ACP is a stable, versioned protocol (`initialize` negotiates
   - `_meta.hermes.sessionProvenance` (session lineage).
 - **`session/update` notifications** stream automatically and during turns:
   - `usage_update` → `{ size: 272000, used: 11833 }` = **context window + tokens used**
-    → maps to Jinn `EngineResult.contextTokens` / a `context` `StreamDelta`.
+    → maps to Hundredfold `EngineResult.contextTokens` / a `context` `StreamDelta`.
   - `available_commands_update` → Hermes slash commands.
   - During a turn (from `acp_adapter/events.py`): `update_agent_message_text(text)` =
     streamed **answer** text; `update_agent_thought_text(text)` = **reasoning**;
@@ -101,17 +101,17 @@ packages/hundredfold/src/engines/
 ```
 
 We **hand-roll** the minimal ndjson JSON-RPC client (no `@zed-industries/agent-client-protocol`
-dependency) — the wire subset we need is tiny, it keeps Jinn dependency-free and matches the
+dependency) — the wire subset we need is tiny, it keeps Hundredfold dependency-free and matches the
 repo's hand-rolled style (the smoke test already proved raw ndjson works). `hermes-protocol.ts`
 isolates all wire knowledge behind pure functions, exactly as `antigravity-protocol.ts` does.
 
 ### 3.2 Chat Mode — `HermesAcpEngine.run()` flow
 
-1. **Get/warm the process.** Keep `Map<jinnSessionId, HermesProc>` of long-lived `hermes acp`
+1. **Get/warm the process.** Keep `Map<hundredfoldSessionId, HermesProc>` of long-lived `hermes acp`
    children (warm per-session). Spawn lazily on first turn with env
    `{ ...scrubbed, HERMES_YOLO_MODE:1, HERMES_ACCEPT_HOOKS:1 }`, cwd `opts.cwd`. On spawn:
    send `initialize`.
-2. **Session.** If we have a Hermes `sessionId` for this Jinn session (from a prior turn or
+2. **Session.** If we have a Hermes `sessionId` for this Hundredfold session (from a prior turn or
    persisted `engineSessionId`) and the process is fresh → `session/load`; else
    `session/new { cwd, mcpServers:[] }`. Capture `result.sessionId`, seed the model registry
    from `result.models` (first time), and `session/set_mode → dont_ask`.
@@ -142,7 +142,7 @@ isolates all wire knowledge behind pure functions, exactly as `antigravity-proto
 Spawns `hermes chat --cli --yolo --accept-hooks` (classic REPL — avoids alt-screen parsing
 pain vs `--tui`). Provides `subscribeOutput` / `getScrollback` / `writeStdin` / `resizePty`
 for the xterm tab. **v1: the xterm is a live terminal into Hermes; turns typed there are NOT
-synced into the Jinn message DB** (transcript-tail sync is Claude-only and out of scope here —
+synced into the Hundredfold message DB** (transcript-tail sync is Claude-only and out of scope here —
 noted as a v2 follow-up). Registered in `ptyViewEngines["hermes"]`.
 
 ### 3.4 The Engine / Model / Effort picker
@@ -194,7 +194,7 @@ claude/codex/grok run under bypass/--yolo.
 - `shared/engine-limits.ts`: register hermes as `collectUnsupported` (no quota endpoint).
 
 **Config + docs**
-- `~/.jinn/config.yaml`: add `engines.hermes: { bin: hermes, model: openai-codex:gpt-5.5 }`
+- `~/.hundredfold/config.yaml`: add `engines.hermes: { bin: hermes, model: openai-codex:gpt-5.5 }`
   (optional — synthesizes if omitted).
 - `cli/setup.ts`: add `engines.hermes` to the emitted default template + doctor binary check
   + `SetupEngine` union.
@@ -204,7 +204,7 @@ claude/codex/grok run under bypass/--yolo.
   hint, Chat vs CLI mode, auto-approve note, metered-cost caveat).
 - `docs/`: short `docs/engines-hermes.md` (or a section) — invocation contract, ACP event
   map, model/effort behavior, troubleshooting.
-- New employee persona `~/.jinn/org/<dept>/hermes-operator.yaml` with `engine: hermes`
+- New employee persona `~/.hundredfold/org/<dept>/hermes-operator.yaml` with `engine: hermes`
   (opt-in usage), per the existing Codex `code-reviewer` precedent.
 
 **No change needed:** session/cron engine resolution (`manager.ts`, `cron/runner.ts`),
@@ -228,7 +228,7 @@ the registry / `GET /api/engines`.
    one tiny `session/prompt` ("reply with the single word: ok"), asserts streamed `text`
    deltas + final result + a `usage_update`, then `session/load` + a second prompt to prove
    resume. (Costs a few tokens — acceptable.)
-6. **Isolated gateway on :7788.** Launch a throwaway Jinn instance
+6. **Isolated gateway on :7788.** Launch a throwaway Hundredfold instance
    (`PORT=7788`, isolated home) with the new build; create a session with `engine:"hermes"`;
    confirm: (a) engine + model picker list Hermes + its models, (b) a real prompt **streams
    live** in the web chat, (c) resume works across turns, (d) the **CLI Mode** xterm tab opens
@@ -243,7 +243,7 @@ the registry / `GET /api/engines`.
 
 ## 6. Risks & mitigations
 
-- **Warm-process leak / restart recovery:** track children per Jinn session; `killIdle`
+- **Warm-process leak / restart recovery:** track children per Hundredfold session; `killIdle`
   recycles idle acp processes; on gateway restart the process is gone → next turn re-spawns +
   `session/load` from persisted `engineSessionId`. Hard timeout + `exit` handler prevent hung
   `run()` promises.
@@ -252,7 +252,7 @@ the registry / `GET /api/engines`.
 - **Provider/model coupling:** available models depend on `~/.hermes` provider config; the
   registry is refreshed live so it always reflects reality, with a static fallback.
 - **CLI-typed turns not in web DB (v1):** the xterm view is a live terminal only; syncing
-  those turns into Jinn's message store is a v2 follow-up (would need Hermes transcript-tail).
+  those turns into Hundredfold's message store is a v2 follow-up (would need Hermes transcript-tail).
 - **Version variance across machines:** the binary is PATH-resolved and capabilities are
   read from the live `initialize`/`session/new` handshake, so different Hermes versions adapt
   automatically. `initialize` negotiates `protocolVersion`; if a build ever predates ACP or
@@ -263,9 +263,9 @@ the registry / `GET /api/engines`.
 
 ## 7. Out of scope (v1)
 
-- Syncing CLI-Mode (xterm) turns into the Jinn message DB.
-- Mapping Jinn's effort control to Hermes `modes`.
-- Multi-provider model management inside Jinn (we surface whatever Hermes's active provider
+- Syncing CLI-Mode (xterm) turns into the Hundredfold message DB.
+- Mapping Hundredfold's effort control to Hermes `modes`.
+- Multi-provider model management inside Hundredfold (we surface whatever Hermes's active provider
   offers).
-- Hermes's own memory/skills curation (Jinn owns org/product knowledge; Hermes owns its
+- Hermes's own memory/skills curation (Hundredfold owns org/product knowledge; Hermes owns its
   procedural memory) — left to Hermes.

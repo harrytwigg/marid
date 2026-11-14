@@ -1,4 +1,4 @@
-# `jinn restart` - detached, in-session-safe gateway restart
+# `hundredfold restart` - detached, in-session-safe gateway restart
 
 **Date:** 2026-06-04
 **Status:** Approved (design)
@@ -6,18 +6,18 @@
 
 ## Problem
 
-Restarting the gateway from *inside* a Jinn chat session (the normal workflow:
+Restarting the gateway from *inside* a Hundredfold chat session (the normal workflow:
 "rebuild the web UI and restart the gateway") breaks. Root cause:
 
 - The gateway runs as a daemon. Every chat session is a `claude` PTY **child of
   that daemon**.
-- An agent running `jinn stop && jinn start` runs it as a subprocess of its own
+- An agent running `hundredfold stop && hundredfold start` runs it as a subprocess of its own
   session.
-- `jinn stop` sends `SIGTERM` to the daemon (`lifecycle.ts` `stop()`).
+- `hundredfold stop` sends `SIGTERM` to the daemon (`lifecycle.ts` `stop()`).
 - The daemon's shutdown calls `interactiveClaudeEngine.killAll()`
   (`server.ts`), which kills **every** PTY - including the session running the
   command.
-- The session dies → the `&& jinn start` half never runs → the gateway stays
+- The session dies → the `&& hundredfold start` half never runs → the gateway stays
   down.
 
 "Sawing off the branch you're sitting on": the restarter is a descendant of the
@@ -25,7 +25,7 @@ thing it kills, so `stop` takes the restarter down with it.
 
 ## Solution (KISS)
 
-Add a single `jinn restart` command that performs the stop→start from a
+Add a single `hundredfold restart` command that performs the stop→start from a
 **detached, reparented helper process** that is *not* owned by the gateway, so
 the gateway's `killAll()` cannot kill it.
 
@@ -41,12 +41,12 @@ This reuses two patterns already in the codebase:
 **`stop` is unchanged.** `start` gets one added guard (see Component 5): if a
 gateway is already running, `start` routes to the same race-free restart path
 instead of the current racy double-boot. No env detection, no lockfile. Habit:
-use `jinn restart` (or just re-run `jinn start`) instead of `jinn stop && jinn
+use `hundredfold restart` (or just re-run `hundredfold start`) instead of `hundredfold stop && hundredfold
 start`.
 
 ### Why `start`-before-`stop` is broken today
 
-Running `jinn start` while the gateway is already up is a race that can leave you
+Running `hundredfold start` while the gateway is already up is a race that can leave you
 fully down:
 
 1. `startDaemon()` forks a new daemon and **immediately overwrites
@@ -81,7 +81,7 @@ Compiled to `dist/src/gateway/restart-entry.js` (tsc picks it up automatically).
 
 Mirrors `startDaemon()`: resolves `restart-entry.js` via the same
 candidate-path lookup, forks it detached with `stdio:"ignore"`,
-`disconnect()` + `unref()`, passing `JINN_HOME` through the env. Returns
+`disconnect()` + `unref()`, passing `HUNDREDFOLD_HOME` through the env. Returns
 immediately.
 
 ### 3. `runRestart()` (new) - `packages/hundredfold/src/cli/restart.ts`
@@ -94,7 +94,7 @@ export async function runRestart(opts: { port?: number }): Promise<void> {
 }
 ```
 
-### 4. Command registration - `packages/hundredfold/bin/jinn.ts`
+### 4. Command registration - `packages/hundredfold/bin/hundredfold.ts`
 
 Add alongside `start`/`stop`:
 
@@ -139,14 +139,14 @@ if (getStatus().running) {
 }
 ```
 
-So `jinn start` on an already-running gateway becomes a clean restart instead of
+So `hundredfold start` on an already-running gateway becomes a clean restart instead of
 the racy double-boot. `stop` and `restart` both reuse `waitForPortFree`.
 
 ## Flow after the change
 
-1. Agent (inside a session) runs `jinn restart`.
+1. Agent (inside a session) runs `hundredfold restart`.
 2. `runRestart` forks the detached helper and exits immediately (0).
-3. The gateway tears down sessions, killing the agent's PTY and the `jinn
+3. The gateway tears down sessions, killing the agent's PTY and the `hundredfold
    restart` foreground process - **but the helper is already reparented and
    unref'd, so it keeps running.**
 4. Helper: `stop()` → wait for port free → `startDaemon()` → exit.
@@ -159,13 +159,13 @@ the racy double-boot. `stop` and `restart` both reuse `waitForPortFree`.
   nothing-on-port); helper proceeds straight to start.
 - **Port never frees (timeout):** after ~10s the helper attempts `startDaemon()`
   anyway; if the port is still bound, `startGateway` fails to bind and the
-  helper logs + exits non-zero (visible in `~/.jinn/logs`). No worse than today.
+  helper logs + exits non-zero (visible in `~/.hundredfold/logs`). No worse than today.
 - **Helper crashes:** logged via the uncaught-exception guards to the gateway
-  log file; the user can re-run `jinn restart` or `jinn start`.
+  log file; the user can re-run `hundredfold restart` or `hundredfold start`.
 
 ## Out of scope (explicitly not doing)
 
-- Env-var (`JINN_IN_SESSION`) detection to auto-harden naive `stop && start`.
+- Env-var (`HUNDREDFOLD_IN_SESSION`) detection to auto-harden naive `stop && start`.
 - Lockfile coordination between `stop` and `start` (the `waitForPortFree` gate
   makes it unnecessary).
 - Web rebuild folded into the command (`redeploy`).
@@ -175,8 +175,8 @@ These were considered and dropped as over-engineering for a dev-convenience fix.
 
 ## Replication note
 
-Per ops reality: the live daemon runs from `~/Projects/jinn-sprint` (branch
-`integration/engine-sprint-and-file-viewer`), while `~/Projects/jinn` (`main`)
+Per ops reality: the live daemon runs from `~/Projects/hundredfold-sprint` (branch
+`integration/engine-sprint-and-file-viewer`), while `~/Projects/hundredfold` (`main`)
 is canonical. The change must be applied to **both** repos, then the daemon
 rebuilt + restarted to take effect.
 
@@ -184,9 +184,9 @@ rebuilt + restarted to take effect.
 
 - Unit: `restartDetached` forks the expected entry path (mirror any existing
   `startDaemon` test pattern).
-- Manual: from inside a session, run `jinn restart`; confirm the gateway goes
+- Manual: from inside a session, run `hundredfold restart`; confirm the gateway goes
   down and comes back and the web UI reconnects/resumes the conversation.
-- Manual (terminal): run `jinn restart` from a plain terminal; confirm it
+- Manual (terminal): run `hundredfold restart` from a plain terminal; confirm it
   restarts cleanly with no session attached.
-- Manual: run `jinn start -d` while the gateway is already up; confirm it
+- Manual: run `hundredfold start -d` while the gateway is already up; confirm it
   cleanly restarts (no `EADDRINUSE`, no stale PID) instead of racing.

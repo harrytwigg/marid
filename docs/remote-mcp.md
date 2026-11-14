@@ -1,6 +1,6 @@
 # Remote MCP connector
 
-Jinn can serve a subset of its tools as a remote MCP server at `/mcp`. That lets the
+Hundredfold can serve a subset of its tools as a remote MCP server at `/mcp`. That lets the
 operator add the instance as a **custom connector** in claude.ai, Claude Desktop / Cowork
 and Claude Code. Spec: `specs/004-remote-mcp-connector/`.
 
@@ -9,14 +9,14 @@ Cloudflare Access application in front of its hostname. Placeholders used throug
 
 | Placeholder | Meaning |
 | --- | --- |
-| `<host>` | The public hostname the tunnel serves, e.g. `jinn.example.com` |
+| `<host>` | The public hostname the tunnel serves, e.g. `hundredfold.example.com` |
 | `<team>` | Your Zero Trust team domain, e.g. `acme.cloudflareaccess.com` |
 | `<aud>` | The Access application's **Application Audience (AUD) tag** |
 | `<you@example.com>` | The identity allowed by the Access policy |
 
 ## What it exposes, and what it cannot do
 
-The connector is the operator's own door into Jinn, so it acts with the operator's
+The connector is the operator's own door into Hundredfold, so it acts with the operator's
 standing on the Todo ledger. It sees **reads** (Todos, sessions metadata, org, Notes,
 cron, cost, managed files), **ledger writes**, and **session control**:
 
@@ -104,7 +104,7 @@ claude.ai calls from Anthropic's servers, which cannot solve a challenge page.
 **Claude Code** (test here first):
 
 ```bash
-claude mcp add --transport http jinn https://<host>/mcp
+claude mcp add --transport http hundredfold https://<host>/mcp
 ```
 
 Then run `/mcp` in Claude Code to authenticate. A browser opens the Access login.
@@ -134,8 +134,8 @@ authenticate.
 On the gateway host:
 
 ```bash
-grep '\[remote-mcp\]' <JINN_HOME>/logs/gateway.log | tail   # one line per request, reason codes on refusals
-curl -s -H "Authorization: Bearer $(jq -r .token <JINN_HOME>/gateway.json)" http://127.0.0.1:7777/api/remote-mcp
+grep '\[remote-mcp\]' <HUNDREDFOLD_HOME>/logs/gateway.log | tail   # one line per request, reason codes on refusals
+curl -s -H "Authorization: Bearer $(jq -r .token <HUNDREDFOLD_HOME>/gateway.json)" http://127.0.0.1:7777/api/remote-mcp
 ```
 
 Refusal reason codes: `method`, `origin-refused`, `content-type`, `misconfigured`,
@@ -155,7 +155,7 @@ Any of these works without a restart:
   already issued stay valid until the token lifetime ends, unless one of the two above is
   also in place.
 
-## Identity inside Jinn
+## Identity inside Hundredfold
 
 Each allowed email gets one **connector anchor session** (source `remote-mcp`, titled
 "Remote MCP connector (<email>)"). It shows in the dashboard's direct group, and every

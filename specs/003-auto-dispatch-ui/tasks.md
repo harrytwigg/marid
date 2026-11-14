@@ -52,7 +52,7 @@ not cover for a new violation. Every new file ≤ 300 lines; `gateway/api.ts` mu
   `packages/hundredfold/src/gateway/idle-capacity-history.ts`
 - [x] T005 [US2] Domain route module: `GET /api/idle-capacity` moved verbatim,
   `GET /api/idle-capacity/history?limit=` added, `GET /api/idle-capacity/policy` added
-  (`{ policy, configured }` + `X-Jinn-Config-Revision`, no collector, no loop); one
+  (`{ policy, configured }` + `X-Hundredfold-Config-Revision`, no collector, no loop); one
   delegation line replaces the preview block in `api.ts` —
   `packages/hundredfold/src/gateway/idle-capacity-api.ts`, `api.ts`
 - [x] T006 [US2] Tests against the real store: a start's comment appears with every field; a
@@ -164,7 +164,7 @@ not cover for a new violation. Every new file ≤ 300 lines; `gateway/api.ts` mu
 
 - [x] T022 `docs/idle-capacity.md`: the dashboard in "Configuration" and "Observing it"
 - [ ] T023 Spec artefacts current; plan's Post-Design re-check run
-- [ ] T024 Gates: `pnpm typecheck`, `pnpm lint`, `pnpm build`, targeted suites, full jinn and
+- [ ] T024 Gates: `pnpm typecheck`, `pnpm lint`, `pnpm build`, targeted suites, full hundredfold and
   web suites; `pnpm ratchet --check` shows no violation introduced by this branch
 - [x] T025 Design/plan review by senior-developer-qa round 0 (2026-09-21): REVISE FIRST —
   findings 1–13 and the projection addendum folded in; re-check of 1–5: PROCEED with the

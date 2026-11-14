@@ -10,12 +10,12 @@
 
 ## Global Constraints
 
-- Build from `main` HEAD `149dd005f4127cbbd88e93aed1630a1de7879821` in the isolated `/private/tmp/jinn-mgraware` worktree.
+- Build from `main` HEAD `149dd005f4127cbbd88e93aed1630a1de7879821` in the isolated `/private/tmp/hundredfold-mgraware` worktree.
 - Skip-level delegation remains allowed and dispatches to the originally requested employee.
 - Emit at most one manager-visibility signal per new delegation; idempotent delegation replays emit none.
 - Direct-report and same-manager delegations emit no manager-visibility signal.
 - Visibility failures never block, reroute, or change the delegation response.
-- Never access gateway ports 7777 or 7788, and never write to an installed Jinn home.
+- Never access gateway ports 7777 or 7788, and never write to an installed Hundredfold home.
 - Keep all shipped fixtures and documentation generic; no personal names, projects, paths, identifiers, or credentials.
 - Use Node.js 24.13.0 and pnpm; do not add `Co-Authored-By` trailers.
 
@@ -204,14 +204,14 @@ Expected: the full workspace suite passes.
 
 ```bash
 git commit -m "feat(delegation): surface skip-level work to managers"
-git -C ~/Projects/jinn merge --ff-only feat/manager-aware-routing
-git -C ~/Projects/jinn merge-base --is-ancestor <commit> main
+git -C ~/Projects/hundredfold merge --ff-only feat/manager-aware-routing
+git -C ~/Projects/hundredfold merge-base --is-ancestor <commit> main
 ```
 
 Expected: `main` points at the feature commit and the ancestry command exits 0.
 
 - [ ] **Step 4: Remove the worktree**
 
-Run: `git -C ~/Projects/jinn worktree remove /private/tmp/jinn-mgraware && git -C ~/Projects/jinn branch -d feat/manager-aware-routing`
+Run: `git -C ~/Projects/hundredfold worktree remove /private/tmp/hundredfold-mgraware && git -C ~/Projects/hundredfold branch -d feat/manager-aware-routing`
 
 Expected: the worktree path and temporary branch are gone while the commit remains on `main`.

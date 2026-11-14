@@ -1,4 +1,4 @@
-# Jinn Growth Marketing - "Jinn Markets Itself"
+# Hundredfold Growth Marketing - "Hundredfold Markets Itself"
 
 > Date: 2026-03-12
 > Status: Approved
@@ -6,7 +6,7 @@
 
 ## Summary
 
-Make jinn public and popular by building a self-marketing automation system using jinn's own multi-agent architecture. The marketing pipeline is both the go-to-market strategy AND the product demo - jinn proves its own value by orchestrating its own growth.
+Make hundredfold public and popular by building a self-marketing automation system using hundredfold's own multi-agent architecture. The marketing pipeline is both the go-to-market strategy AND the product demo - hundredfold proves its own value by orchestrating its own growth.
 
 ## Competitive Positioning
 
@@ -15,7 +15,7 @@ Frustrated OpenClaw users + Claude Code / Codex power users who want multi-agent
 
 ### Key Differentiators vs OpenClaw
 
-| Pain Point | OpenClaw | Jinn |
+| Pain Point | OpenClaw | Hundredfold |
 |------------|----------|------|
 | Cost | $300-750/mo API bills, runaway loops | $200/mo flat (Anthropic Max via Claude Code CLI) |
 | Max subscription | Banned since Jan 2026 (OAuth block) | Works natively (first-party CLI) |
@@ -37,20 +37,20 @@ Frustrated OpenClaw users + Claude Code / Codex power users who want multi-agent
 ## Repo Foundation
 
 ### Rename
-- GitHub: `<owner>/legacy-cli` → `<owner>/jinn`
+- GitHub: `<owner>/legacy-cli` → `<owner>/hundredfold`
 - npm package already `jinn-cli` - no change needed
 
 ### README Updates
 - Keep current intro (already good)
-- Add demo GIF (`assets/jinn-showcase.gif` - converted from desktop recording)
-- Fix dev clone URL placeholder (`<owner>/jinn` → `<owner>/jinn`)
-- Add "Why Jinn?" or "vs OpenClaw" comparison section (factual, link-backed)
+- Add demo GIF (`assets/hundredfold-showcase.gif` - converted from desktop recording)
+- Fix dev clone URL placeholder (`<owner>/hundredfold` → `<owner>/hundredfold`)
+- Add "Why Hundredfold?" or "vs OpenClaw" comparison section (factual, link-backed)
 
 ## Marketing Architecture
 
 ### Growth Department (new)
 
-Three employees in `~/.jinn/org/growth/`:
+Three employees in `~/.hundredfold/org/growth/`:
 
 | Employee | Role | Engine |
 |----------|------|--------|
@@ -61,7 +61,7 @@ Three employees in `~/.jinn/org/growth/`:
 ### Content Tones (A/B/C testing)
 
 **Tone A - Subtle Infiltrator:**
-Helpful technical answers in AI agent threads. Mention jinn only when organically relevant.
+Helpful technical answers in AI agent threads. Mention hundredfold only when organically relevant.
 Example: *"I ended up wrapping Claude Code CLI in a lightweight gateway so I could add cron + Slack routing. Open sourced it: [link]"*
 
 **Tone B - Direct Challenger:**
@@ -101,7 +101,7 @@ Example: *"I built an AI gateway that uses its own multi-agent system to market 
 09:00  reddit-scout → scan subreddits for fresh opportunities (posts < 24h old)
 09:30  x-scout → scan X for relevant threads
 10:00  growth-writer → draft responses for top 3-5 opportunities
-       → output posted to Slack #jinn-growth for approval
+       → output posted to Slack #hundredfold-growth for approval
 ```
 
 ### Approval Flow
@@ -116,7 +116,7 @@ Example: *"I built an AI gateway that uses its own multi-agent system to market 
 **Reddit:**
 - Reddit API search for keywords across target subreddits
 - Apify Reddit monitoring actor (already configured) for real-time keyword alerts
-- Filter: posts < 24h old, > 3 upvotes (has traction), no existing jinn mention
+- Filter: posts < 24h old, > 3 upvotes (has traction), no existing hundredfold mention
 
 **X/Twitter:**
 - X API search (OAuth 1.0a, creds in `skills/x-karma/secrets/`)
@@ -140,7 +140,7 @@ Example: *"I built an AI gateway that uses its own multi-agent system to market 
 - Analyze which tone (A/B/C) performed best by engagement metrics
 - Update growth-writer's skill with learnings
 - Adjust subreddit/keyword priorities based on where engagement is highest
-- Report summary to Slack #jinn-growth
+- Report summary to Slack #hundredfold-growth
 
 ### Adaptation Rules
 - Tone with highest avg engagement → increase frequency

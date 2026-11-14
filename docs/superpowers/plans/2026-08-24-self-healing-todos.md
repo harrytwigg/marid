@@ -58,7 +58,7 @@
 **Do not touch**
 - the COO land-gate files listed above
 - `packages/hundredfold/template/**` personalization
-- production `~/.jinn` workflow definitions in this PR (applying the deliver failure-End is rollout)
+- production `~/.hundredfold` workflow definitions in this PR (applying the deliver failure-End is rollout)
 
 ---
 
@@ -158,7 +158,7 @@ it("ordinary backlog never classifies as recovering", () => {
 
 - [ ] **Step 2: Run tests — they fail because `classifyRecovery` is missing**
 
-Run: `pnpm --filter @jinn/jinn exec vitest run src/work-items/__tests__/self-healing-replay.test.ts`
+Run: `pnpm --filter @hundredfold/hundredfold exec vitest run src/work-items/__tests__/self-healing-replay.test.ts`
 
 Expected: FAIL, cannot find `classifyRecovery` or it returns undefined.
 

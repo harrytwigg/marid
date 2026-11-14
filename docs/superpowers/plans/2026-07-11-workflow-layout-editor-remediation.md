@@ -6,7 +6,7 @@
 
 **Architecture:** The gateway becomes the sole layout authority through a pure `workflows/layout.ts` normalizer and quality evaluator. Definitions carry server-owned layout provenance; all generated/unknown writes normalize before the existing atomic store write, while manual writes are preserved only when structurally valid and otherwise return actionable geometry errors. The web editor keeps a real mutable graph draft, requests the same server plan for Tidy preview, applies that preview explicitly, and persists geometry/topology through the existing optimistic-lock save path.
 
-**Tech Stack:** TypeScript, Vitest, Node file-backed workflow store, React 19, XyFlow/React Flow, Tailwind/Ledger tokens, Playwright, Jinn sandbox gateway.
+**Tech Stack:** TypeScript, Vitest, Node file-backed workflow store, React 19, XyFlow/React Flow, Tailwind/Ledger tokens, Playwright, Hundredfold sandbox gateway.
 
 ## Global Constraints
 
@@ -21,7 +21,7 @@
 - Mobile opens the first/current/failed/approval node at readable zoom; Fit all remains explicit. Desktop fits only when the result stays readable.
 - The Executions lens has a first-class Run action with JSON input and stable idempotency key; no raw POST instructions remain. Failure evidence and approval actions remain intact.
 - Use only Ledger tokens; no hardcoded colors, no gratuitous chrome, no rest hairlines, 40–44px interactive hit areas, and reduced-motion-safe transitions.
-- Use a fresh sanitized throwaway `JINN_HOME`, ports 7800+, and never access, mutate, restart, or test production `:7777` or production `~/.jinn` data.
+- Use a fresh sanitized throwaway `HUNDREDFOLD_HOME`, ports 7800+, and never access, mutate, restart, or test production `:7777` or production `~/.hundredfold` data.
 - Preserve unrelated dirty worktree changes; commit only scoped files; no `Co-Authored-By` trailers.
 - Before every commit run staged privacy grep and whitespace audit.
 
@@ -255,7 +255,7 @@ pnpm --filter jinn-cli test -- src/workflows/__tests__/layout.test.ts src/workfl
 pnpm --filter jinn-cli typecheck
 git diff --check
 git add packages/hundredfold/src/workflows/layout.ts packages/hundredfold/src/workflows/definition.ts packages/hundredfold/src/workflows/authoring.ts packages/hundredfold/src/workflows/sop.ts packages/hundredfold/src/workflows/definition-store.ts packages/hundredfold/src/mcp/workflow-tools.ts packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/workflows/__tests__/layout.test.ts packages/hundredfold/src/workflows/__tests__/definition.test.ts packages/hundredfold/src/workflows/__tests__/definition-store.test.ts packages/hundredfold/src/mcp/__tests__/workflow-tools.test.ts
-test -n "$JINN_PUBLIC_LEAK_PATTERN"; git diff --cached | grep -iE "$JINN_PUBLIC_LEAK_PATTERN" && exit 1 || true
+test -n "$HUNDREDFOLD_PUBLIC_LEAK_PATTERN"; git diff --cached | grep -iE "$HUNDREDFOLD_PUBLIC_LEAK_PATTERN" && exit 1 || true
 git commit -m "feat(workflows): normalize generated graph layouts"
 ```
 Expected: focused tests and typecheck PASS; staged privacy grep returns no matches.
@@ -319,7 +319,7 @@ expect(screen.queryByText(/POST \/api\/workflow-definitions/)).toBeNull()
 
 Run:
 ```bash
-pnpm --filter @jinn/web test -- src/routes/workflow/__tests__/edit-graph.test.tsx src/routes/workflow/__tests__/canvas-model.test.ts src/routes/workflow/__tests__/canvas.test.tsx src/routes/workflow/__tests__/run-view.test.tsx src/routes/workflow/__tests__/page.test.tsx 2>&1 | tee /tmp/workflow-layout-red-web.txt
+pnpm --filter @hundredfold/web test -- src/routes/workflow/__tests__/edit-graph.test.tsx src/routes/workflow/__tests__/canvas-model.test.ts src/routes/workflow/__tests__/canvas.test.tsx src/routes/workflow/__tests__/run-view.test.tsx src/routes/workflow/__tests__/page.test.tsx 2>&1 | tee /tmp/workflow-layout-red-web.txt
 ```
 Expected: FAIL on missing graph operations, editable props, layout plan/apply actions, readable framing, and Run API/action.
 
@@ -394,11 +394,11 @@ Use the existing `onDirtyChange` signal for property, geometry, topology, and Ap
 
 Run:
 ```bash
-pnpm --filter @jinn/web test -- src/routes/workflow/__tests__/edit-graph.test.tsx src/routes/workflow/__tests__/canvas-model.test.ts src/routes/workflow/__tests__/canvas.test.tsx src/routes/workflow/__tests__/run-view.test.tsx src/routes/workflow/__tests__/page.test.tsx
-pnpm --filter @jinn/web typecheck
+pnpm --filter @hundredfold/web test -- src/routes/workflow/__tests__/edit-graph.test.tsx src/routes/workflow/__tests__/canvas-model.test.ts src/routes/workflow/__tests__/canvas.test.tsx src/routes/workflow/__tests__/run-view.test.tsx src/routes/workflow/__tests__/page.test.tsx
+pnpm --filter @hundredfold/web typecheck
 git diff --check
 git add packages/web/src/lib/api.ts packages/web/src/routes/workflow packages/web/src/routes/globals.css
-test -n "$JINN_PUBLIC_LEAK_PATTERN"; git diff --cached | grep -iE "$JINN_PUBLIC_LEAK_PATTERN" && exit 1 || true
+test -n "$HUNDREDFOLD_PUBLIC_LEAK_PATTERN"; git diff --cached | grep -iE "$HUNDREDFOLD_PUBLIC_LEAK_PATTERN" && exit 1 || true
 git commit -m "feat(web): make workflow graphs editable and runnable"
 ```
 
@@ -423,7 +423,7 @@ Start twice with the same idempotency key and assert one run id; start with JSON
 Run:
 ```bash
 pnpm --filter jinn-cli test -- src/workflows src/mcp/__tests__/workflow-tools.test.ts src/gateway/__tests__/workflow-run-fanout-route.test.ts
-pnpm --filter @jinn/web test -- src/routes/workflow
+pnpm --filter @hundredfold/web test -- src/routes/workflow
 ```
 Expected: PASS with no snapshots as the sole proof of geometry.
 
@@ -431,7 +431,7 @@ Expected: PASS with no snapshots as the sole proof of geometry.
 
 ```bash
 git add packages/hundredfold/src/mcp/__tests__/workflow-tools.test.ts packages/hundredfold/src/gateway/__tests__/workflow-run-fanout-route.test.ts packages/web/src/routes/workflow/__tests__
-test -n "$JINN_PUBLIC_LEAK_PATTERN"; git diff --cached | grep -iE "$JINN_PUBLIC_LEAK_PATTERN" && exit 1 || true
+test -n "$HUNDREDFOLD_PUBLIC_LEAK_PATTERN"; git diff --cached | grep -iE "$HUNDREDFOLD_PUBLIC_LEAK_PATTERN" && exit 1 || true
 git commit -m "test(workflows): gate layout editor and run integration"
 ```
 
@@ -450,23 +450,23 @@ git commit -m "test(workflows): gate layout editor and run integration"
 
 ```bash
 export REPO=$(pwd)
-export VERIFY_ROOT=$(mktemp -d /tmp/jinn-workflow-layout.XXXXXX)
+export VERIFY_ROOT=$(mktemp -d /tmp/hundredfold-workflow-layout.XXXXXX)
 export HOST_HOME="$VERIFY_ROOT/host"
 export CODEX_HOME="$HOST_HOME/.codex"
-export JINN_HOME="$HOST_HOME/.jinn-workflow-layout-verification"
-export JINN_PORT=7800
-export ARTIFACTS="$JINN_HOME/sandbox-artifacts/$(date -u +%Y%m%dT%H%M%SZ)-workflow-layout"
-test -z "$(lsof -nP -iTCP:$JINN_PORT -sTCP:LISTEN -t)"
+export HUNDREDFOLD_HOME="$HOST_HOME/.hundredfold-workflow-layout-verification"
+export HUNDREDFOLD_PORT=7800
+export ARTIFACTS="$HUNDREDFOLD_HOME/sandbox-artifacts/$(date -u +%Y%m%dT%H%M%SZ)-workflow-layout"
+test -z "$(lsof -nP -iTCP:$HUNDREDFOLD_PORT -sTCP:LISTEN -t)"
 mkdir -p "$HOST_HOME" "$CODEX_HOME" "$ARTIFACTS"
 pnpm build
-env HOME="$HOST_HOME" CODEX_HOME="$CODEX_HOME" JINN_REPO="$REPO" \
-  "$HOME/.jinn/skills/jinn-sandbox/scripts/jinn-sandbox.sh" create workflow-layout-verification --port "$JINN_PORT" --build --seed
-env HOME="$HOST_HOME" CODEX_HOME="$CODEX_HOME" JINN_REPO="$REPO" \
-  "$HOME/.jinn/skills/jinn-sandbox/scripts/jinn-sandbox.sh" start workflow-layout-verification
-curl -fsS "http://127.0.0.1:$JINN_PORT/api/status"
+env HOME="$HOST_HOME" CODEX_HOME="$CODEX_HOME" HUNDREDFOLD_REPO="$REPO" \
+  "$HOME/.hundredfold/skills/hundredfold-sandbox/scripts/hundredfold-sandbox.sh" create workflow-layout-verification --port "$HUNDREDFOLD_PORT" --build --seed
+env HOME="$HOST_HOME" CODEX_HOME="$CODEX_HOME" HUNDREDFOLD_REPO="$REPO" \
+  "$HOME/.hundredfold/skills/hundredfold-sandbox/scripts/hundredfold-sandbox.sh" start workflow-layout-verification
+curl -fsS "http://127.0.0.1:$HUNDREDFOLD_PORT/api/status"
 ```
 
-The wrapper redirects `HOME` before invoking the helper so the real instance registry is unreachable. It asserts `JINN_PORT >= 7800`, rejects any base URL containing `:7777`, installs an exit trap that stops only `workflow-layout-verification`, and retains the stopped sandbox home for inspection.
+The wrapper redirects `HOME` before invoking the helper so the real instance registry is unreachable. It asserts `HUNDREDFOLD_PORT >= 7800`, rejects any base URL containing `:7777`, installs an exit trap that stops only `workflow-layout-verification`, and retains the stopped sandbox home for inspection.
 
 - [x] **Step 2: Seed canonical/new/invalid/manual/run states**
 
@@ -474,11 +474,11 @@ Seed linear, branch, merge, approval, supported error lane, and bounded loop def
 
 - [x] **Step 3: Launch five fresh GPT-5.5-low sandbox children**
 
-Use the sandbox gateway session API with `engine:'codex'`, `model:'gpt-5.5'`, `effortLevel:'low'`, five generic sandbox employees, and prompts for representative linear, branch+merge, approval+wait, supported error-lane, and bounded-loop workflows. Each prompt explicitly uses the sandbox MCP endpoint/config and writes only under `$JINN_HOME`; assert every returned session id exists in the sandbox registry and no external gateway URL appears in its context. Poll only `http://127.0.0.1:7800` with an eight-minute bound; preserve failed transcripts rather than substituting hand-authored graphs.
+Use the sandbox gateway session API with `engine:'codex'`, `model:'gpt-5.5'`, `effortLevel:'low'`, five generic sandbox employees, and prompts for representative linear, branch+merge, approval+wait, supported error-lane, and bounded-loop workflows. Each prompt explicitly uses the sandbox MCP endpoint/config and writes only under `$HUNDREDFOLD_HOME`; assert every returned session id exists in the sandbox registry and no external gateway URL appears in its context. Poll only `http://127.0.0.1:7800` with an eight-minute bound; preserve failed transcripts rather than substituting hand-authored graphs.
 
 - [x] **Step 4: Run browser matrix**
 
-For every canonical and child-authored graph capture 1440×900 and 390×844, dark/light, normal/reduced motion: initial Editor, Tidy preview, Apply, Save, reload, Executions empty/run success/failure/approval. Use one fresh context per cell and abort every HTTP(S)/WebSocket origin except exactly `http://127.0.0.1:7800`. Record screenshots, console errors, viewport zoom, focus node, scroll positions, and accessibility results under `$JINN_HOME/sandbox-artifacts/<timestamp>/`. Disable Playwright tracing because traces can retain authorization headers.
+For every canonical and child-authored graph capture 1440×900 and 390×844, dark/light, normal/reduced motion: initial Editor, Tidy preview, Apply, Save, reload, Executions empty/run success/failure/approval. Use one fresh context per cell and abort every HTTP(S)/WebSocket origin except exactly `http://127.0.0.1:7800`. Record screenshots, console errors, viewport zoom, focus node, scroll positions, and accessibility results under `$HUNDREDFOLD_HOME/sandbox-artifacts/<timestamp>/`. Disable Playwright tracing because traces can retain authorization headers.
 
 - [x] **Step 5: Enforce geometry/readability measurements**
 
@@ -490,11 +490,11 @@ Fail the script on any expanded-envelope overlap, non-loop `target.x < source.ri
 
 ```bash
 pnpm --filter jinn-cli typecheck
-pnpm --filter @jinn/web typecheck
+pnpm --filter @hundredfold/web typecheck
 pnpm --filter jinn-cli test
-pnpm --filter @jinn/web test
+pnpm --filter @hundredfold/web test
 pnpm --filter jinn-cli build
-pnpm --filter @jinn/web build
+pnpm --filter @hundredfold/web build
 ```
 
 - [x] **Step 2: Run audits**
@@ -502,7 +502,7 @@ pnpm --filter @jinn/web build
 ```bash
 git diff --check main...HEAD
 git log --format=%B main..HEAD | rg -i 'Co-Authored-By' && exit 1 || true
-test -n "$JINN_PUBLIC_LEAK_PATTERN"; git diff main...HEAD | grep -iE "$JINN_PUBLIC_LEAK_PATTERN" && exit 1 || true
+test -n "$HUNDREDFOLD_PUBLIC_LEAK_PATTERN"; git diff main...HEAD | grep -iE "$HUNDREDFOLD_PUBLIC_LEAK_PATTERN" && exit 1 || true
 rg -n 'transition: all|transition-all|rgba\(' packages/web/src/routes/workflow packages/web/src/routes/globals.css
 ```
 
@@ -512,9 +512,9 @@ Adjudicate each result: no new workflow hardcoded color/transition-all; existing
 
 Review requirements against commits and RED/GREEN logs, inspect every browser screenshot in both themes/breakpoints, compare API/file/browser coordinates, and fix every Critical/Important finding with a covering test before re-review.
 
-- [x] **Step 4: Update the Jinn design skill with learned durable rules**
+- [x] **Step 4: Update the Hundredfold design skill with learned durable rules**
 
-If verification confirms new durable rules, append concise generic guidance to `~/.jinn/skills/jinn-design/SKILL.md`: server-owned layout provenance, expanded-envelope normalization, Tidy preview versus Apply, and readable focus framing. Do not place private sandbox paths in the public repo.
+If verification confirms new durable rules, append concise generic guidance to `~/.hundredfold/skills/hundredfold-design/SKILL.md`: server-owned layout provenance, expanded-envelope normalization, Tidy preview versus Apply, and readable focus framing. Do not place private sandbox paths in the public repo.
 
 - [x] **Step 5: Final report and Todo handoff**
 

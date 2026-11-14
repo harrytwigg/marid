@@ -13,7 +13,7 @@ Verified against `origin/main` @ `11c3fc36`.
 | --- | --- | --- |
 | `packages/hundredfold/src/mcp/server.ts:201` | `handleMcpRequest`: pure JSON-RPC dispatch for `initialize` / `ping` / `tools/list` / `tools/call`, with tool errors returned as results rather than protocol errors | **Reuse as is.** The HTTP transport is a new caller of this function, not a second implementation |
 | `packages/hundredfold/src/mcp/server.ts:117` | `buildTools`: the default 75-tool set (pinned by name at `packages/hundredfold/src/mcp/__tests__/server.test.ts:90`), plus two attempt-only Workflow tools | The remote profile (FR-010) is a filter over this list, so there is no second copy of any tool |
-| `packages/hundredfold/src/mcp/server.ts:273` | `runJinnMcpServer`: the stdio transport (newline-delimited JSON-RPC) | Stays as is. The HTTP transport sits beside it |
+| `packages/hundredfold/src/mcp/server.ts:273` | `runHundredfoldMcpServer`: the stdio transport (newline-delimited JSON-RPC) | Stays as is. The HTTP transport sits beside it |
 | `packages/hundredfold/src/mcp/server.ts:96` | `DEFAULT_PROTOCOL_VERSION = "2025-06-18"`, echoing whatever version the client asks for | Streamable HTTP is defined from 2025-03-26 onwards. Claude's connectors build against 2025-11-25, and the current spec revision is 2026-07-28. Echoing an unknown version is a latent bug over HTTP (plan: negotiate against a supported list) |
 | `packages/hundredfold/src/mcp/server.ts:41` | `resolveServerToken`: the stdio server reads the **gateway bearer** from env or `gateway.json` | Must **not** be the remote credential (FR-004) |
 | `packages/hundredfold/src/mcp/identity.ts:73` | `TOOL_CALL_HEADER`: marks a gateway call as coming from an MCP tool | Remote calls carry it, so the gateway never treats them as the operator |
@@ -133,7 +133,7 @@ by suppressing them for connector Todos.
 
 - *Put the connector on `/api/mcp`.* That would inherit the gateway-token middleware at
   `auth.ts:250`, which is the wrong credential (FR-004) and the wrong principal (operator).
-- *Spawn `runJinnMcpServer` per HTTP session and pipe to it.* That means a process per
+- *Spawn `runHundredfoldMcpServer` per HTTP session and pipe to it.* That means a process per
   chat, identity forced through env, and a second JSON-RPC framing. `handleMcpRequest` is
   already transport-free.
 - *`@modelcontextprotocol/sdk` for the HTTP transport.* `server.ts` records why the repo
@@ -205,7 +205,7 @@ Two layouts to try in the plan:
 For an extra Claude Code credential (if R2 fails), a **service token** with a `Service Auth`
 policy on the same application keeps Access in front, and Claude Code can send the
 `CF-Access-Client-Id` / `CF-Access-Client-Secret` headers. This is preferred over a bypass
-policy plus a Jinn-only bearer.
+policy plus a Hundredfold-only bearer.
 
 ### R4: Claude connector facts
 

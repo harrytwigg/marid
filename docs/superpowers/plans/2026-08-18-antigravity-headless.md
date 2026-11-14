@@ -2,16 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Move Jinn Antigravity work turns onto agy's supported stream-JSON protocol so terminal success, quota/network failure, cancellation, and bounded timeout always settle the Jinn queue without restarting the gateway.
+**Goal:** Move Hundredfold Antigravity work turns onto agy's supported stream-JSON protocol so terminal success, quota/network failure, cancellation, and bounded timeout always settle the Hundredfold queue without restarting the gateway.
 
 **Architecture:** Keep the existing PTY/transcript adapter as the dashboard terminal view, and add a batch `AntigravityHeadlessEngine` for queued work turns. The batch engine owns a detached agy process group, parses explicit `init`, `step_update`, and terminal `result` events, returns the upstream conversation id for resume persistence, and terminates only its own process tree on terminal settlement, cancellation, or a two-hour hard backstop.
 
-**Tech Stack:** TypeScript ES2022, Node `child_process`, Vitest, existing Jinn engine/MCP interfaces.
+**Tech Stack:** TypeScript ES2022, Node `child_process`, Vitest, existing Hundredfold engine/MCP interfaces.
 
 ## Global Constraints
 
-- Never read from or write to the live `~/.jinn` instance during implementation or verification.
-- Never bind ports 7777 or 7788 and never kill a process Jinn did not spawn for this test.
+- Never read from or write to the live `~/.hundredfold` instance during implementation or verification.
+- Never bind ports 7777 or 7788 and never kill a process Hundredfold did not spawn for this test.
 - Preserve the existing interactive Antigravity terminal view.
 - Keep public code, tests, comments, and fixtures generic; no personal identifiers, customer data, secrets, workspace ids, emails, absolute home-directory paths, or incident payloads.
 - Complete focused tests plus `pnpm typecheck`, `pnpm test`, `pnpm lint`, `pnpm build`, `pnpm ratchet`, and `pnpm footguns`.
@@ -27,7 +27,7 @@
 | `packages/hundredfold/src/engines/antigravity.ts:150` | Settlement requires a non-empty `latestAnswer`; terminal upstream errors and empty planner rows never arm completion. |
 | `packages/hundredfold/src/engines/antigravity.ts:176` | Current work completion is inferred from private disk transcript rows rather than the supported stdout protocol. |
 | `packages/hundredfold/src/engines/antigravity-protocol.ts:207` | Only a non-tool, non-empty planner `DONE` row is terminal; the incident's quota error plus empty planner rows are invisible. |
-| `packages/hundredfold/src/engines/antigravity-mcp.ts:69` | Existing per-process Jinn identity/capability environment builder is reusable by headless agy. |
+| `packages/hundredfold/src/engines/antigravity-mcp.ts:69` | Existing per-process Hundredfold identity/capability environment builder is reusable by headless agy. |
 | `packages/hundredfold/src/engines/antigravity-mcp.ts:81` | Existing global Gemini MCP config attachment is guarded and reference-counted across concurrent processes. |
 | `packages/hundredfold/src/gateway/server.ts:659` | Codex already separates a headless work engine from an interactive PTY view; Antigravity should follow this proven seam. |
 | `packages/hundredfold/src/gateway/server.ts:667` | Antigravity currently creates one shared PTY engine and registers it for both work and terminal routing. |
@@ -39,7 +39,7 @@
 Rejected alternatives:
 
 - Extending the disk-transcript terminal heuristic is rejected because the incident's actionable `model unreachable` state never appears as a terminal planner row, while supported stream-JSON already reports the exact error.
-- Relying only on `agy --print-timeout` is rejected because the isolated repro proved agy 1.1.14 can return timeout while leaving a managed subprocess orphaned. Jinn must own and signal the detached process group.
+- Relying only on `agy --print-timeout` is rejected because the isolated repro proved agy 1.1.14 can return timeout while leaving a managed subprocess orphaned. Hundredfold must own and signal the detached process group.
 - Removing the PTY adapter is rejected because the dashboard terminal is an existing named consumer.
 
 ---
@@ -148,7 +148,7 @@ git commit -m "fix(antigravity): parse terminal stream events"
 - Modify: `packages/hundredfold/src/engines/__tests__/antigravity-headless.test.ts`
 
 **Interfaces:**
-- Consumes: Task 1 parser/args plus `ensureAntigravityJinnMcpConfig`, `cleanupAntigravityJinnMcpConfig`, and `antigravityJinnSessionEnv`.
+- Consumes: Task 1 parser/args plus `ensureAntigravityHundredfoldMcpConfig`, `cleanupAntigravityHundredfoldMcpConfig`, and `antigravityHundredfoldSessionEnv`.
 - Produces: `class AntigravityHeadlessEngine implements InterruptibleEngine` with `run`, `kill`, `killAll`, `killIdle`, and `isAlive`.
 
 - [ ] **Step 1: Write failing lifecycle regressions with a complete child-process double**
@@ -175,7 +175,7 @@ Use this lifecycle:
 const ANTIGRAVITY_TURN_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 const proc = spawn(bin, args, {
   cwd: opts.cwd,
-  env: { ...buildEngineChildEnv(process.env), ...antigravityJinnSessionEnv(opts.resolvedMcp) },
+  env: { ...buildEngineChildEnv(process.env), ...antigravityHundredfoldSessionEnv(opts.resolvedMcp) },
   stdio: ["ignore", "pipe", "pipe"],
   detached: process.platform !== "win32",
 });

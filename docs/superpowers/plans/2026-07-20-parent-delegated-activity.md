@@ -101,7 +101,7 @@ Assert that idle parents with delegated activity receive the orange activity sta
 
 - [ ] **Step 2: Run the focused web tests and verify RED**
 
-Run: `pnpm --filter @jinn/web test -- src/components/chat/__tests__/background-activity-status.test.tsx src/components/chat/__tests__/chat-sidebar-helpers.test.ts src/components/chat/__tests__/chat-pane.test.tsx`
+Run: `pnpm --filter @hundredfold/web test -- src/components/chat/__tests__/background-activity-status.test.tsx src/components/chat/__tests__/chat-sidebar-helpers.test.ts src/components/chat/__tests__/chat-pane.test.tsx`
 
 Expected: FAIL because the UI ignores `delegatedActivity`.
 
@@ -111,7 +111,7 @@ Generalize the toolbar status component to prefer delegated copy when present, r
 
 - [ ] **Step 4: Run the focused web tests and verify GREEN**
 
-Run: `pnpm --filter @jinn/web test -- src/components/chat/__tests__/background-activity-status.test.tsx src/components/chat/__tests__/chat-sidebar-helpers.test.ts src/components/chat/__tests__/chat-pane.test.tsx`
+Run: `pnpm --filter @hundredfold/web test -- src/components/chat/__tests__/background-activity-status.test.tsx src/components/chat/__tests__/chat-sidebar-helpers.test.ts src/components/chat/__tests__/chat-pane.test.tsx`
 
 Expected: PASS.
 

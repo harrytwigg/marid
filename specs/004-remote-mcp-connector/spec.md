@@ -16,9 +16,9 @@ operator's standing to assign, re-delegate, label and unlink any Todo. Its Todo 
 the content fields any session may edit; ownership fields change through assignment. It is still not portal-shaped and holds no approval
 authority (FR-011, FR-012 unchanged). Where the text below says otherwise, this wins.
 
-**Input**: The originating Todo. The operator wants to use Jinn from inside ordinary Claude
+**Input**: The originating Todo. The operator wants to use Hundredfold from inside ordinary Claude
 chat: claude.ai on the web first, then Claude Desktop/Cowork and Claude Code. That means
-adding Jinn as a **custom connector**, which needs a remote MCP server reachable at one
+adding Hundredfold as a **custom connector**, which needs a remote MCP server reachable at one
 public HTTPS URL. The operator already runs a Cloudflare Tunnel with Cloudflare Access in
 front of the gateway's hostname (Todo, live since 2026-09-22) and wants that tunnel
 reused rather than a second one stood up. The operator's brief proposed a static
@@ -45,10 +45,10 @@ second transport.
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1: The operator uses Jinn from Claude Code over the network (Priority: P1)
+### User Story 1: The operator uses Hundredfold from Claude Code over the network (Priority: P1)
 
 The operator is on a machine that is neither the gateway host nor on the LAN. They run
-`claude mcp add --transport http jinn https://<public-host>/mcp` with whatever credentials
+`claude mcp add --transport http hundredfold https://<public-host>/mcp` with whatever credentials
 the chosen auth mode requires (Q1). They ask Claude Code "what's in executing on the Todo
 board?" and get the real list back from the live instance.
 
@@ -57,7 +57,7 @@ headers and OAuth natively, so it separates "is the server correct?" from "does 
 connector UI accept it?". It is also the operator's stated first test.
 
 **Independent Test**: from a machine outside the LAN and the tailnet, `claude mcp list`
-shows `jinn` as connected. A prompt that calls `list_work_items` returns rows that match the
+shows `hundredfold` as connected. A prompt that calls `list_work_items` returns rows that match the
 dashboard.
 
 **Acceptance Scenarios**:
@@ -75,7 +75,7 @@ dashboard.
 
 ---
 
-### User Story 2: The operator uses Jinn from claude.ai on the web (Priority: P1)
+### User Story 2: The operator uses Hundredfold from claude.ai on the web (Priority: P1)
 
 In claude.ai the operator opens Settings → Connectors → Add custom connector, pastes
 `https://<public-host>/mcp`, and completes whatever sign-in the chosen auth mode requires.
@@ -133,7 +133,7 @@ names the cause.
 ### User Story 4: A delegation started from Claude comes back somewhere (Priority: P3)
 
 From a claude.ai chat, the operator says "get the senior developer to look at X". The
-connector starts or delegates the work. Because claude.ai cannot receive Jinn's session
+connector starts or delegates the work. Because claude.ai cannot receive Hundredfold's session
 callbacks, the result is found later: by asking in the same or a new chat ("how did that
 go?"), or on the dashboard, where the work is attributed to the connector.
 
@@ -206,7 +206,7 @@ requester. A follow-up `read_session` from a *new* chat returns the result.
 **Transport**
 
 - **FR-001**: The gateway MUST serve an MCP endpoint at the single path `/mcp` using the
-  **streamable HTTP** transport. Every Jinn tool is request/response, so the endpoint MAY
+  **streamable HTTP** transport. Every Hundredfold tool is request/response, so the endpoint MAY
   answer every POST with a single JSON response and MAY decline the optional GET stream
   (405). Legacy HTTP+SSE is out of scope for v1.
 - **FR-002**: The endpoint MUST be reachable through the operator's **existing** tunnel and
@@ -315,7 +315,7 @@ requester. A follow-up `read_session` from a *new* chat returns the result.
   5. Experiment writes that create or rewrite a check-in schedule are not in L at all
      (see Q2, class X).
   The operator turns a connector-created Todo into running work the normal way: assign
-  it, or remove the label, from the dashboard or a Jinn chat.
+  it, or remove the label, from the dashboard or a Hundredfold chat.
 
 **Observability and control**
 
@@ -356,8 +356,8 @@ requester. A follow-up `read_session` from a *new* chat returns the result.
   stable name shown in the dashboard, the tool profile it may use, and its current and
   revoked credentials.
 - **Connector credential**: what a client presents. Under Q1-A it is an Access-issued
-  assertion. Jinn stores nothing, and keeps only the allow-list and deny-list of
-  identities (FR-006, FR-016). Under Q1-B it is a static token that Jinn issues. Jinn
+  assertion. Hundredfold stores nothing, and keeps only the allow-list and deny-list of
+  identities (FR-006, FR-016). Under Q1-B it is a static token that Hundredfold issues. Hundredfold
   stores it only as a hash, with when it was issued and last used, and whether it has been
   revoked.
 - **Remote tool profile**: the closed list of tool names the endpoint serves. It is part of
@@ -432,12 +432,12 @@ it can (research.md R1).
 | Option | What it is | Work | claude.ai | Claude Code | Risk |
 | --- | --- | --- | --- | --- | --- |
 | **A. Access Managed OAuth** (recommended) | Turn on Access's *Managed OAuth* for `/mcp`. Access serves the OAuth discovery metadata, answers non-browser clients with `401` + `WWW-Authenticate`, and runs DCR against a redirect-URI allowlist. The login screen is the existing Access login. The origin validates the `Cf-Access-Jwt-Assertion` JWT (signature against the team JWKS, `aud` = the app's tag, issuer, expiry) on every request. | Low: dashboard config plus JWT validation | Yes (`oauth_dcr`) | Documented: Managed OAuth has "Allow localhost/loopback clients" toggles, and Claude falls back to DCR. To confirm live (R2) | Depends on a Cloudflare feature. JWT validation must be exact |
-| **B. Access bypass on `/mcp` + static bearer** | An Access bypass policy on `/mcp` only. Jinn checks its own connector token in `Authorization: Bearer`. | Low | Beta "static headers" only | Yes (`--header`) | `/mcp` is guarded by one secret alone, with no identity check in front |
+| **B. Access bypass on `/mcp` + static bearer** | An Access bypass policy on `/mcp` only. Hundredfold checks its own connector token in `Authorization: Bearer`. | Low | Beta "static headers" only | Yes (`--header`) | `/mcp` is guarded by one secret alone, with no identity check in front |
 | **C. Access bypass + key in URL path** (`/mcp/<key>`) | Same as B, but the key rides in the URL so claude.ai uses "No auth". | Lowest | Yes | Yes | Key sits in every URL log (edge, claude.ai config). Needs rotation discipline |
-| **D. Jinn implements OAuth 2.1 + PKCE + DCR itself** | Jinn becomes an authorization server. | High | Yes | Yes | The most code in the auth path, which is the code this repo should write least of |
+| **D. Hundredfold implements OAuth 2.1 + PKCE + DCR itself** | Hundredfold becomes an authorization server. | High | Yes | Yes | The most code in the auth path, which is the code this repo should write least of |
 
 **Recommendation**: **A for claude.ai**, because it keeps an identity check in front of the
-door (the principle: Jinn's own credential is never the only thing between the internet
+door (the principle: Hundredfold's own credential is never the only thing between the internet
 and a shell) and needs no auth server written here. Claude Code should use the same path through the
 localhost/loopback toggles. The caveat: with those on, any local process can register a
 client, so the Access login is the thing that still gates it. If the live test fails,
@@ -470,7 +470,7 @@ Every row below comes from the route audit in research.md, not from tool names.
 | Option | Classes | Implication |
 | --- | --- | --- |
 | **A. Read-only** | R | Company data exfiltration is the only risk. FR-013a is not needed. US4 moves to v2 |
-| **B. Read + ledger, hardened** (**recommended**) | R, L + FR-013a (add T only if you accept that transcripts can hold printed secrets) | The operator can capture and annotate work from any chat. Connector Todos are born non-startable, and its comments never steer. Anything *running* still needs a human to assign it, on the dashboard or in a Jinn chat. No code executes on the connector's say-so. Costs four gateway rules (FR-013a clauses 1–4). US4 (delegating from claude.ai) moves to v2, and FR-013's durable anchor is needed only if X is chosen |
+| **B. Read + ledger, hardened** (**recommended**) | R, L + FR-013a (add T only if you accept that transcripts can hold printed secrets) | The operator can capture and annotate work from any chat. Connector Todos are born non-startable, and its comments never steer. Anything *running* still needs a human to assign it, on the dashboard or in a Hundredfold chat. No code executes on the connector's say-so. Costs four gateway rules (FR-013a clauses 1–4). US4 (delegating from claude.ai) moves to v2, and FR-013's durable anchor is needed only if X is chosen |
 | **C. Read + ledger + code-executing** | R, T, L, X | US4 works, and so does "get the senior dev on it" from claude.ai. **This is remote code execution by proxy from any chat that also reads untrusted content.** Take it only knowingly, ideally with the connector enabled only in chats that read nothing else |
 | **D. Everything except approvals** | R, T, L, X, D, A, C, P | Not recommended |
 

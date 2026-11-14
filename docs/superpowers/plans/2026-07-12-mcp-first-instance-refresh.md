@@ -2,18 +2,18 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use test-driven-development and systematic-debugging while executing these steps.
 
-**Goal:** Make child-session callbacks MCP-native and reconcile the operator's personalized Jinn instance with the current MCP-first template without losing private customizations.
+**Goal:** Make child-session callbacks MCP-native and reconcile the operator's personalized Hundredfold instance with the current MCP-first template without losing private customizations.
 
 **Architecture:** Change the callback's engine-facing guidance at its source and pin the behavior with focused tests. Refresh only template-owned workspace material: selectively reconcile the canonical manual, replace reference docs and stock skills from the current template after backups, and leave custom business skills and private operating procedures untouched.
 
-**Tech Stack:** TypeScript, Vitest, Markdown, YAML, Jinn MCP/company tools.
+**Tech Stack:** TypeScript, Vitest, Markdown, YAML, Hundredfold MCP/company tools.
 
 ## Global Constraints
 
 - Preserve all unrelated and untracked repository work.
 - Keep the public repository generic and privacy-scan the staged diff.
 - Back up every existing personal file before replacing or materially editing it.
-- Use Jinn MCP for normal company operations; retain HTTP only as a labeled maintenance fallback.
+- Use Hundredfold MCP for normal company operations; retain HTTP only as a labeled maintenance fallback.
 - Do not restart the gateway unless verification proves it is required.
 
 ---
@@ -32,7 +32,7 @@
 ### Task 2: Personalized MCP-first manual reconciliation
 
 **Files:**
-- Modify: `~/.jinn/CLAUDE.md` (`AGENTS.md` remains its symlink)
+- Modify: `~/.hundredfold/CLAUDE.md` (`AGENTS.md` remains its symlink)
 
 - [x] Back up the manual.
 - [x] Replace boards with Todos, raw HTTP child mechanics with MCP session tools, and stale ticket delegation with `delegate_task`.
@@ -42,14 +42,14 @@
 ### Task 3: Template-owned docs and skills refresh
 
 **Files:**
-- Refresh: `~/.jinn/docs/*.md`
-- Refresh/add: current stock skills under `~/.jinn/skills/`
-- Modify: `~/.jinn/config.yaml`
+- Refresh: `~/.hundredfold/docs/*.md`
+- Refresh/add: current stock skills under `~/.hundredfold/skills/`
+- Modify: `~/.hundredfold/config.yaml`
 
 - [x] Back up existing template-owned docs and skills.
 - [x] Copy current reference docs and stock skills from `packages/hundredfold/template/`.
 - [x] Preserve every non-template custom skill untouched.
-- [x] Stamp `jinn.version: 0.26.0` and preserve all other config values.
+- [x] Stamp `hundredfold.version: 0.26.0` and preserve all other config values.
 - [x] Verify skill frontmatter and engine skill links.
 
 ### Task 4: Verification

@@ -92,7 +92,7 @@ bubbleFrame  169926.9   → same frame
 Computed style on the inserted bubble, read from that same microtask:
 
 ```
-animation-name        jinn-msg-send-in
+animation-name        hundredfold-msg-send-in
 animation-duration    0.18s              (= --duration-base, 180ms)
 animation-timing      cubic-bezier(0.4, 0, 0.2, 1)   (= --ease-smooth)
 animation-fill-mode   backwards
@@ -147,7 +147,7 @@ One send in an existing session, watched for 20 seconds (1202 frames) across the
 
 ```
 bubble node swaps                    0
-distinct jinn-msg-send-in startTimes 1   (329953.9; the earlier "null" is the same animation before it started)
+distinct hundredfold-msg-send-in startTimes 1   (329953.9; the earlier "null" is the same animation before it started)
 animation currentTime regressions    0
 distinct data-message-id values      1   (8ce58c6a-…) — the optimistic id survives the reconcile
 bubbles carrying the sent text       min 1 / max 1
@@ -205,15 +205,15 @@ Run all three from a checkout of this branch:
 ```bash
 # 1. create a throwaway sandbox on a free port ≥7778 (never 7777, never 7788), do not start it.
 #    --seed is what materialises the registry tables step 2 writes into.
-JINN_REPO="$(git rev-parse --show-toplevel)" \
-  pnpm exec ~/.jinn/skills/jinn-sandbox/scripts/jinn-sandbox.sh create qa-flick --port 7782 --build --seed
+HUNDREDFOLD_REPO="$(git rev-parse --show-toplevel)" \
+  pnpm exec ~/.hundredfold/skills/hundredfold-sandbox/scripts/hundredfold-sandbox.sh create qa-flick --port 7782 --build --seed
 
 # 2. seed a transcript long enough to flick, open the bind so the phone can route to it, and
 #    print the URL.
-pnpm exec node scripts/device-scroll-fixture.mjs --home ~/.jinn-qa-flick
+pnpm exec node scripts/device-scroll-fixture.mjs --home ~/.hundredfold-qa-flick
 
 # 3. start it
-pnpm exec ~/.jinn/skills/jinn-sandbox/scripts/jinn-sandbox.sh start qa-flick
+pnpm exec ~/.hundredfold/skills/hundredfold-sandbox/scripts/hundredfold-sandbox.sh start qa-flick
 ```
 
 Step 2 prints the URL and the pairing command, e.g.:
@@ -225,7 +225,7 @@ Bind opened to 0.0.0.0 — start the sandbox, then open this on the phone:
   http://198.51.100.24:7782/?session=device-scroll-check
 
 A non-loopback bind always requires auth. Pair the phone with the code from:
-  jinn -i jinn-qa-flick pair
+  hundredfold -i hundredfold-qa-flick pair
 ```
 
 (That address is RFC 5737 documentation space standing in for whatever the command prints on the
@@ -234,7 +234,7 @@ day; the real one comes from the machine's own interfaces, tailnet — 100.64/10
 Two things worth knowing before you run it. A non-loopback bind turns authentication on by
 itself — `shouldRequireGatewayAuth` returns true for `0.0.0.0` — so the phone will ask to pair,
 and that is the sandbox refusing to sit unauthenticated on the network rather than something
-going wrong. And run the `pair` command with `JINN_PORT` and `JINN_HOME` unset: both leak from a
+going wrong. And run the `pair` command with `HUNDREDFOLD_PORT` and `HUNDREDFOLD_HOME` unset: both leak from a
 gateway session's environment and beat `-i`, which would point the CLI at the live instance.
 
 All three commands above were run in sequence from this checkout, deliberately with a foreign
@@ -244,7 +244,7 @@ rewritten to `0.0.0.0`, the command printed the tailnet URL ahead of the LAN one
 gateway answered `200` on the seeded session, and the sandbox was destroyed afterwards.
 
 `scripts/__tests__/device-scroll-fixture.test.mjs` covers what the script refuses and what it
-must not do halfway. It will not rewrite a home named `.jinn` or one configured on 7777 or 7788;
+must not do halfway. It will not rewrite a home named `.hundredfold` or one configured on 7777 or 7788;
 it ranks only Tailscale's 100.64/10 ahead of the LAN and the LAN ahead of everything else, with
 both enumeration orders asserted because a rank the LAN shares with public space is settled by
 `os.networkInterfaces()` rather than by the sort, so a public 100/8 address is never offered as
@@ -265,7 +265,7 @@ Four steps:
 Then destroy it, pass or fail:
 
 ```bash
-~/.jinn/skills/jinn-sandbox/scripts/jinn-sandbox.sh destroy qa-flick --yes
+~/.hundredfold/skills/hundredfold-sandbox/scripts/hundredfold-sandbox.sh destroy qa-flick --yes
 ```
 
 ---
@@ -436,9 +436,9 @@ off as a control:
 
 | | reduce | control |
 | --- | --- | --- |
-| `.user-msg-bubble[data-msg-enter]` `animation-name` | **none** | `jinn-msg-send-in` (0.18s) |
-| `.assistant-transcript[data-msg-enter]` `animation-name` | **none** | `jinn-msg-receive-in` (0.26s) |
-| `[data-chat-pane-session]` `animation-name` | **none** | `jinn-chat-open` (0.18s) |
+| `.user-msg-bubble[data-msg-enter]` `animation-name` | **none** | `hundredfold-msg-send-in` (0.18s) |
+| `.assistant-transcript[data-msg-enter]` `animation-name` | **none** | `hundredfold-msg-receive-in` (0.26s) |
+| `[data-chat-pane-session]` `animation-name` | **none** | `hundredfold-chat-open` (0.18s) |
 
 Nothing else regressed under reduce:
 
@@ -487,10 +487,10 @@ $ pnpm lint
 > eslint e2e scripts tools
 
 $ pnpm test
-@jinn/shell-desktop:test   Test Files  1 passed (1)
-@jinn/gateway-events:test  Test Files  2 passed (2)
+@hundredfold/shell-desktop:test   Test Files  1 passed (1)
+@hundredfold/gateway-events:test  Test Files  2 passed (2)
 jinn-cli:test              Test Files  451 passed (451)
-@jinn/web:test             Test Files  253 passed (253)
+@hundredfold/web:test             Test Files  253 passed (253)
 root (node:test)           tests 183   pass 183   fail 0
  Tasks:    6 successful, 6 total
 

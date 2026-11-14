@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-06-10-talk-mission-control-design.md`
 
-**Working directory:** `<worktree>` (git worktree, branch `talk-mission-control`). NEVER touch `~/Projects/jinn` (live 7777 gateway) or `~/.jinn/talk/orchestrator-persona.md` (hot-reloads into production).
+**Working directory:** `<worktree>` (git worktree, branch `talk-mission-control`). NEVER touch `~/Projects/hundredfold` (live 7777 gateway) or `~/.hundredfold/talk/orchestrator-persona.md` (hot-reloads into production).
 
 ---
 
@@ -26,7 +26,7 @@ Expected: completes without errors.
 - [ ] **Step 2: Baseline test run**
 
 Run: `pnpm -C packages/hundredfold test -- --run 2>&1 | tail -5 && pnpm -C packages/web test -- --run 2>&1 | tail -5`
-Expected: all existing tests pass (jinn ~440+, web ~220+). If the invocation form is wrong, check `packages/*/package.json` scripts (`test` runs vitest) and adapt; record the working command for later steps.
+Expected: all existing tests pass (hundredfold ~440+, web ~220+). If the invocation form is wrong, check `packages/*/package.json` scripts (`test` runs vitest) and adapt; record the working command for later steps.
 
 ---
 
@@ -250,7 +250,7 @@ Expected: FAIL — module not found.
 
 ```ts
 /**
- * Jinn Talk — server-owned delegation (Mission Control).
+ * Hundredfold Talk — server-owned delegation (Mission Control).
  *
  * One endpoint owns spawn-vs-continue so the orchestrator LLM never decides it
  * from prose: `thread:"new"` spawns a COO child; `thread:"<id>"` validates the
@@ -394,7 +394,7 @@ In `routes.ts`, add imports (`delegateToThread` from `./delegate.js`; `getSessio
 
 Note: `config.gateway.host` may be `0.0.0.0`; loopback `127.0.0.1` is correct for self-calls (same pattern as `sessions/callbacks.ts` — verify how it builds its URL and copy that if it differs).
 
-- [ ] **Step 6: Typecheck + full jinn tests**
+- [ ] **Step 6: Typecheck + full hundredfold tests**
 
 Run: `pnpm -C packages/hundredfold exec tsc --noEmit && pnpm -C packages/hundredfold test -- --run`
 Expected: clean.
@@ -615,7 +615,7 @@ describe("maybeEmitTalkGraph", () => {
 
 ```ts
 /**
- * Jinn Talk — server-authoritative session graph (Mission Control).
+ * Hundredfold Talk — server-authoritative session graph (Mission Control).
  *
  * The talk UI renders the WHOLE delegation tree under the voice orchestrator —
  * AURA → COO children → employee grandchildren (any depth). The gateway owns
@@ -943,7 +943,7 @@ export interface Tts {
 
 ```ts
 /**
- * Jinn Talk — server-side TTS streaming (Mission Control: per-sentence).
+ * Hundredfold Talk — server-side TTS streaming (Mission Control: per-sentence).
  *
  * As the orchestrator streams its reply, the run loop feeds each text delta via
  * feedTalkText(); complete sentences are synthesized IMMEDIATELY (killing the
@@ -1110,7 +1110,7 @@ git commit -m "feat(talk): per-sentence TTS streaming — kill the whole-turn de
 - Modify: `packages/hundredfold/template/talk/orchestrator-persona.md` (same text)
 - Modify: `packages/hundredfold/template/talk/card-reference.md` (restored card types + delegate endpoint)
 
-⚠️ Do NOT touch `~/.jinn/talk/orchestrator-persona.md` — it hot-reloads into the LIVE 7777 gateway. Swapping the live file is a deploy step for the operator.
+⚠️ Do NOT touch `~/.hundredfold/talk/orchestrator-persona.md` — it hot-reloads into the LIVE 7777 gateway. Swapping the live file is a deploy step for the operator.
 
 - [ ] **Step 1: Model default**
 
@@ -1253,7 +1253,7 @@ describe("selectors", () => {
 
 ```ts
 /**
- * Jinn Talk — delegation-graph store (Mission Control).
+ * Hundredfold Talk — delegation-graph store (Mission Control).
  *
  * Pure reducer + selectors over the server-authoritative session tree under the
  * voice orchestrator (talk:graph WS deltas + GET /api/talk/graph snapshots).
@@ -1502,7 +1502,7 @@ describe("miniDotsFor", () => {
 
 ```ts
 /**
- * Jinn Talk — pure constellation layout helpers (Mission Control).
+ * Hundredfold Talk — pure constellation layout helpers (Mission Control).
  *
  * Satellites never auto-hide: every COO thread renders (idle = dimmed), capped
  * for layout sanity with an explicit overflow count. Each satellite can carry a
@@ -1690,7 +1690,7 @@ describe("splitLinks", () => {
 
 ```tsx
 /**
- * Jinn Talk — linkify plain transcript text (Mission Control).
+ * Hundredfold Talk — linkify plain transcript text (Mission Control).
  *
  * The voice pipeline strips markdown, so URLs arrive as bare text. splitLinks()
  * is the pure splitter (unit-tested); <Linkified> renders the segments with
@@ -1782,7 +1782,7 @@ export interface TranscriptEntry {
 
 ```tsx
 /**
- * Jinn Talk — conversation history rail (Mission Control).
+ * Hundredfold Talk — conversation history rail (Mission Control).
  *
  * The live caption stays cinematic (latest exchange only); this collapsible
  * overlay is the memory — every exchange of the talk session, scrollable, with
@@ -1873,7 +1873,7 @@ git commit -m "feat(talk-web): history rail with tappable links; finalize entrie
 - [ ] **Step 1: Build the worktree**
 
 Run: `cd <worktree> && pnpm build`
-Expected: clean. ⚠️ Never `pnpm --filter @jinn/web build --force` (vite rejects `--force` and ships a stale web/out). The jinn-cli build copies `web/out` → `dist/web`.
+Expected: clean. ⚠️ Never `pnpm --filter @hundredfold/web build --force` (vite rejects `--force` and ships a stale web/out). The jinn-cli build copies `web/out` → `dist/web`.
 
 - [ ] **Step 2: Write the smoke script**
 
@@ -1881,19 +1881,19 @@ Expected: clean. ⚠️ Never `pnpm --filter @jinn/web build --force` (vite reje
 
 ```bash
 #!/usr/bin/env bash
-# Talk Mission Control smoke: boots an ISOLATED gateway (throwaway JINN_HOME,
+# Talk Mission Control smoke: boots an ISOLATED gateway (throwaway HUNDREDFOLD_HOME,
 # non-7777 port), builds a 2-level delegation tree via the talk APIs, and
 # asserts the graph snapshot + delegate validation behave. Engine turns may
 # error in the throwaway home — irrelevant; this tests session/graph plumbing.
 set -euo pipefail
 
 PORT="${PORT:-7878}"
-HOME_DIR="$(mktemp -d /tmp/jinn-mc-smoke.XXXXXX)"
-DIST="$(cd "$(dirname "$0")/.." && pwd)/dist/bin/jinn.js"
+HOME_DIR="$(mktemp -d /tmp/hundredfold-mc-smoke.XXXXXX)"
+DIST="$(cd "$(dirname "$0")/.." && pwd)/dist/bin/hundredfold.js"
 BASE="http://127.0.0.1:${PORT}"
 
-echo "JINN_HOME=${HOME_DIR} port=${PORT}"
-JINN_HOME="${HOME_DIR}" GATEWAY_PORT="${PORT}" node "${DIST}" start &
+echo "HUNDREDFOLD_HOME=${HOME_DIR} port=${PORT}"
+HUNDREDFOLD_HOME="${HOME_DIR}" GATEWAY_PORT="${PORT}" node "${DIST}" start &
 GW_PID=$!
 trap 'kill ${GW_PID} 2>/dev/null || true; rm -rf "${HOME_DIR}"' EXIT
 
@@ -1943,7 +1943,7 @@ echo "SMOKE PASSED"
 
 `chmod +x packages/hundredfold/scripts/talk-graph-smoke.sh`
 
-Note: verify the env var names first — check how the gateway reads home/port (`grep -rn "JINN_HOME\|GATEWAY_PORT" packages/hundredfold/src/shared/paths.ts packages/hundredfold/src/bin packages/hundredfold/src/gateway/server.ts | head`). If the port comes only from config.yaml, pre-seed `${HOME_DIR}/config.yaml` with `gateway: { port: 7878 }` before starting instead of the env var. Also: a fresh JINN_HOME may trigger onboarding seeding — that's fine (it's template-seeded automatically on start).
+Note: verify the env var names first — check how the gateway reads home/port (`grep -rn "HUNDREDFOLD_HOME\|GATEWAY_PORT" packages/hundredfold/src/shared/paths.ts packages/hundredfold/src/bin packages/hundredfold/src/gateway/server.ts | head`). If the port comes only from config.yaml, pre-seed `${HOME_DIR}/config.yaml` with `gateway: { port: 7878 }` before starting instead of the env var. Also: a fresh HUNDREDFOLD_HOME may trigger onboarding seeding — that's fine (it's template-seeded automatically on start).
 
 - [ ] **Step 3: Run the smoke**
 
@@ -1966,8 +1966,8 @@ git commit -m "test(talk): isolated-gateway smoke for delegate + graph snapshot"
 - [ ] **Step 1: Boot the isolated gateway for manual use**
 
 ```bash
-HOME_DIR=$(mktemp -d /tmp/jinn-mc-ui.XXXXXX)
-JINN_HOME="${HOME_DIR}" GATEWAY_PORT=7878 node packages/hundredfold/dist/bin/jinn.js start &
+HOME_DIR=$(mktemp -d /tmp/hundredfold-mc-ui.XXXXXX)
+HUNDREDFOLD_HOME="${HOME_DIR}" GATEWAY_PORT=7878 node packages/hundredfold/dist/bin/hundredfold.js start &
 ```
 
 (Same port-config caveat as Task 10. Rebuild first if any source changed: `pnpm build`.)
@@ -1991,7 +1991,7 @@ Expected: everything green.
 - [ ] **Step 4: Kill the test gateway, clean tmp dirs**
 
 ```bash
-pkill -f "jinn-mc-ui" 2>/dev/null; pkill -f "GATEWAY_PORT=7878" 2>/dev/null || true
+pkill -f "hundredfold-mc-ui" 2>/dev/null; pkill -f "GATEWAY_PORT=7878" 2>/dev/null || true
 ```
 
 (Verify with `lsof -ti :7878` — must be empty. NEVER touch port 7777.)
@@ -2006,8 +2006,8 @@ git add -A && git commit -m "fix(talk): mission-control verification fixes" # on
 
 ## Deploy notes (NOT part of this plan — the operator's call)
 
-- Merge `talk-mission-control` → main, rebuild, restart the 7777 daemon (`npm run jinn start -- --daemon` from `~/Projects/jinn` after `jinn stop` — never `jinn restart`).
-- Swap the live `~/.jinn/talk/orchestrator-persona.md` with the new template (hot-reloads instantly).
+- Merge `talk-mission-control` → main, rebuild, restart the 7777 daemon (`npm run hundredfold start -- --daemon` from `~/Projects/hundredfold` after `hundredfold stop` — never `hundredfold restart`).
+- Swap the live `~/.hundredfold/talk/orchestrator-persona.md` with the new template (hot-reloads instantly).
 - `config.yaml` currently pins `talk.orchestratorModel`; if it says `haiku`, change to `sonnet` (the new default only applies when unset).
 
 ## Self-review notes

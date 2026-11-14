@@ -1,4 +1,4 @@
-# Jinn Shell primitives
+# Hundredfold Shell primitives
 
 Design spec. No product code. Base SHA `76be9932`.
 
@@ -11,7 +11,7 @@ refresh spinner's rotation period, which §9 writes as a literal and justifies w
 
 Four questions were left open by the design task's dispatch and blocked the first two implementation slices from starting.
 §1 answers all four, one answer each, no hedging. §10 enumerates every place a borrowed idiom
-collides with a settled Jinn rule and names the winner.
+collides with a settled Hundredfold rule and names the winner.
 
 The grammar here is borrowed from Ionic, Konsta UI v5, Apple HIG and Material 3. **No package
 is.** Nothing in the design task's tree adds a dependency on Ionic or Konsta; the citations exist so a
@@ -23,8 +23,8 @@ sentence names a file by its bare file name alone, that is a back-reference to t
 given earlier, not a second citation.
 
 Two authorities cited below are **not** files in this repository, and are therefore named rather
-than pathed: **Jinn taste**, the shared standard the planner, implementer and verifier all read,
-and the **Jinn design skill**, the workspace playbook in the Jinn home that settles the Shared
+than pathed: **Hundredfold taste**, the shared standard the planner, implementer and verifier all read,
+and the **Hundredfold design skill**, the workspace playbook in the Hundredfold home that settles the Shared
 Visual Language and the editable-sheet contract. Neither is quotable by path from a checkout, so
 every rule this document takes from either is quoted inline and verbatim instead. A reader who
 has only this repository can still check every rule that binds a primitive here.
@@ -124,9 +124,9 @@ Not the extended FAB. Not shrink-on-scroll.
 
 - **Icon-only, not extended.** Material 3's extended FAB pairs the icon with a text label. On a
   page whose whole point is a large title, a labelled pill is a second piece of loud typography
-  competing with the first. Jinn taste §2: *quiet beats loud; when in doubt, remove.* The icon
+  competing with the first. Hundredfold taste §2: *quiet beats loud; when in doubt, remove.* The icon
   carries the meaning; the `aria-label` carries it for assistive tech.
-- **56px, which is Material 3's standard FAB.** Comfortably over both the Jinn ≥34px floor and
+- **56px, which is Material 3's standard FAB.** Comfortably over both the Hundredfold ≥34px floor and
   HIG's 44pt, and it is a thumb target at the bottom of a phone (§10.4).
 - **Persistent, not shrink-on-scroll.** Shrinking on scroll needs to know the scroll position.
   Doing that in JS is a scroll listener, which the design task forbids; doing it in CSS burns the one
@@ -137,7 +137,7 @@ Not the extended FAB. Not shrink-on-scroll.
   and a circle floating over a 1440px page is a phone idiom stranded on a desktop.
 
 *Source: Material 3 (FAB sizing, placement, elevation, extended-FAB variant). Colour roles and
-elevation are Jinn's, not Material's — see §10.2 and §10.3.*
+elevation are Hundredfold's, not Material's — see §10.2 and §10.3.*
 
 ### 1.3 Decision — scrollport ownership: **`PageScaffold` owns the element; consumers receive it.**
 
@@ -197,22 +197,22 @@ No scroll listener, no `IntersectionObserver`, no `useState` holding a collapsed
 is driven by the scrollport's own progress:
 
 ```css
-@keyframes jinn-title-collapse {
+@keyframes hundredfold-title-collapse {
   from { opacity: 1; transform: translateY(0) scale(1); }
   to   { opacity: 0; transform: translateY(-6px) scale(0.92); }
 }
 
-.jinn-large-title {
-  animation: jinn-title-collapse linear both;
+.hundredfold-large-title {
+  animation: hundredfold-title-collapse linear both;
   animation-timeline: scroll(nearest block);
-  animation-range: 0 var(--jinn-collapse-distance);
+  animation-range: 0 var(--hundredfold-collapse-distance);
 }
 ```
 
 `scroll(nearest block)` resolves to the scaffold's own scrollport, which is why §1.3 requires the
 title to sit *inside* it.
 
-`--jinn-collapse-distance` is the one custom property in this document that does **not** exist at
+`--hundredfold-collapse-distance` is the one custom property in this document that does **not** exist at
 the base SHA. It is not a Ledger token and is not added to `globals.css`: the scaffold sets it
 inline, per instance, from the large title's own rendered height (§11.2). Every other custom
 property named anywhere in this spec resolves in `web/routes/globals.css` today. And the distance
@@ -223,8 +223,8 @@ listener this decision exists to avoid.
 
 ```css
 @supports not (animation-timeline: scroll()) {
-  .jinn-large-title { display: none; }
-  .jinn-inline-title { opacity: 1; }
+  .hundredfold-large-title { display: none; }
+  .hundredfold-inline-title { opacity: 1; }
 }
 ```
 
@@ -319,7 +319,7 @@ as the same boundary. Verification viewports are 1440×900 and 390×844, both th
 `--keyboard-inset`.
 
 *Source: Ionic (`IonPage`/`IonContent` — the page is a fixed-height column and exactly one
-descendant scrolls). The `IonContent` shadow-DOM scroll host is not borrowed; Jinn exposes a plain
+descendant scrolls). The `IonContent` shadow-DOM scroll host is not borrowed; Hundredfold exposes a plain
 element so the existing anchoring and virtualization keep working against a node they can read.*
 
 ---
@@ -378,7 +378,7 @@ but kept for consistency of surface, leading-aligned.
 *Source: Ionic (`IonHeader collapse="condense"` — the large-title-to-nav-bar collapse, and the
 rule that the large title scrolls with content while the bar stays). Apple HIG (large vs inline
 nav-bar titles; the inline title is centred on iPhone). The **mechanism** is neither: Ionic drives
-its collapse from a JS scroll callback, Jinn drives it from `animation-timeline: scroll()` (§1.4).
+its collapse from a JS scroll callback, Hundredfold drives it from `animation-timeline: scroll()` (§1.4).
 No 1px separator appears in any state (§10.1).*
 
 ---
@@ -459,7 +459,7 @@ the contract below) · `exiting` (`--animate-sheet-out` / `--animate-pop-out`) �
 All four enter/exit animations are wrapped in `motion-safe:`, as both reference implementations
 already do.
 
-**Editable sheets acknowledge revisions, not requests.** This is settled law in the Jinn design
+**Editable sheets acknowledge revisions, not requests.** This is settled law in the Hundredfold design
 skill, quoted verbatim: *"Persist item-scoped drafts before transport; serialize/coalesce saves
 against the last acknowledged revision; a close may complete only when the latest local revision is
 durably acknowledged. Browser history owns one reversible detail entry, while opaque transport IDs
@@ -513,7 +513,7 @@ segments, with a thumb sliding beneath the active label. Thumb: `--bg-secondary`
 `--radius-sm`, `--shadow-subtle`, plus `--inset-shine`. Labels: `--text-subheadline`,
 `--weight-medium`, `--text-secondary` at rest and `--text-primary` when active.
 
-**Height is 34px**, which is the Jinn tap-target floor exactly (§10.4). Segments are equal
+**Height is 34px**, which is the Hundredfold tap-target floor exactly (§10.4). Segments are equal
 fractions of the track; a control with segments narrower than 34px has too many segments.
 
 **States.** `rest` · `hover` (label steps to `--text-primary`; the track does not change) ·
@@ -537,7 +537,7 @@ two-line segment breaks the 34px height.
 `--text-quaternary`, `--accent`, `--duration-fast`, `--ease-snappy`.
 
 *Source: Apple HIG (segmented control — equal widths, one active segment, the sliding thumb).
-Konsta UI v5 (iOS segmented). Both draw a hairline around the track and around the thumb; Jinn
+Konsta UI v5 (iOS segmented). Both draw a hairline around the track and around the thumb; Hundredfold
 draws neither, and separates by fill and `--shadow-subtle` instead (§10.1).*
 
 ---
@@ -545,7 +545,7 @@ draws neither, and separates by fill and `--shadow-subtle` instead (§10.1).*
 ## 7. `ListSection`
 
 A collection of rows. This primitive **reuses the settled Shared Visual Language and does not
-redefine it** — the Jinn design skill's § "Shared Visual Language" is authoritative for the
+redefine it** — the Hundredfold design skill's § "Shared Visual Language" is authoritative for the
 grouped-inset grammar, and the design-skill slice owns any update to it.
 
 **Anatomy.** Quoting the settled rule: a collection is *ONE grouped-inset container
@@ -604,12 +604,12 @@ to restyle or reimplement it:
   monogram, and never a shell-local variant of it.
 - **StateLine** — *not applicable to chrome, and one near-miss is called out so it stays that way.*
   `PullToRefresh`'s indicator (§9) is deliberately **not** a StateLine: a StateLine reports live
-  work (`--system-blue` dot, `jinn-pulse`, `Working · 12m`), and a refresh spinner is a transient
+  work (`--system-blue` dot, `hundredfold-pulse`, `Working · 12m`), and a refresh spinner is a transient
   gesture affordance with no work to report. A `ListSection` row whose content *is* live work
   renders the settled StateLine unchanged.
 
 *Source: Apple HIG (grouped inset lists — the inset container, the section header above it, the
-footer caption below). HIG's separators between rows are declined (§10.1); the settled Jinn
+footer caption below). HIG's separators between rows are declined (§10.1); the settled Hundredfold
 grouped-inset grammar wins, and it predates this document.*
 
 ---
@@ -677,7 +677,7 @@ translucent route never shows the page behind it mid-drag), `--text-primary`, `-
 
 *Source: Ionic (page-transition model — incoming from the trailing edge, outgoing parallaxed and
 dimmed, nav bar cross-fading independently). Apple HIG (interactive pop as the system gesture).
-Ionic's iOS timing is ~540ms on a custom curve; Jinn's numbers are Jinn's (§10.5).*
+Ionic's iOS timing is ~540ms on a custom curve; Hundredfold's numbers are Hundredfold's (§10.5).*
 
 ---
 
@@ -731,25 +731,25 @@ trailing slot as an explicit control.
 
 *Source: Ionic (`ion-refresher` — the pull/arm/refresh/settle state machine and its thresholds).
 Material 3 (pull-to-refresh indicator). Both render the indicator as an elevated surface floating
-over the content; Jinn renders a bare glyph (§10.2).*
+over the content; Hundredfold renders a bare glyph (§10.2).*
 
 ---
 
-## 10. Conflicts — borrowed idiom versus Jinn rule
+## 10. Conflicts — borrowed idiom versus Hundredfold rule
 
-Each row: what the source does, what Jinn says, who wins, why.
+Each row: what the source does, what Hundredfold says, who wins, why.
 
-### 10.1 Hairlines — **Jinn wins.**
+### 10.1 Hairlines — **Hundredfold wins.**
 
 **Borrowed.** Apple HIG and Konsta UI v5 both draw 1px separators as basic structure: under a nav
 bar once content scrolls beneath it, between rows of a grouped inset list, around a segmented
 control's track and its thumb.
 
-**Jinn.** Taste §2, restated verbatim from the design skill: *"No hairlines at rest. Separation comes from
+**Hundredfold.** Taste §2, restated verbatim from the design skill: *"No hairlines at rest. Separation comes from
 soft fills + shadow + whitespace — never a 1px border on the input, buttons, chips, or cards.
 (Elevated menus may carry the shadow's built-in ~0.5px ring; that's it.)"*
 
-**Winner: Jinn**, everywhere in this document, with no exception granted to any of the eight
+**Winner: Hundredfold**, everywhere in this document, with no exception granted to any of the eight
 primitives.
 
 - `LargeTitleHeader` never gains a bottom border on scroll. It carries `--material-thick` plus a
@@ -767,15 +767,15 @@ primitives.
 `--separator` and `--separator-opaque` exist and remain the only acceptable hairline, *only where
 genuinely needed*. No primitive in this document needs one.
 
-### 10.2 Material elevation versus Jinn shadow tokens — **Jinn wins.**
+### 10.2 Material elevation versus Hundredfold shadow tokens — **Hundredfold wins.**
 
 **Borrowed.** Material 3 defines elevation as a dp scale (levels 0–5) and, in its dark scheme,
 *tints* a surface by its elevation.
 
-**Jinn.** Five shadow tokens, no scale and no tinting: `--shadow-subtle`, `--shadow-ambient`,
+**Hundredfold.** Five shadow tokens, no scale and no tinting: `--shadow-subtle`, `--shadow-ambient`,
 `--shadow-key`, `--shadow-card`, `--shadow-overlay`.
 
-**Winner: Jinn.** Depth is chosen by *what the thing is*, not by a dp number: cards get
+**Winner: Hundredfold.** Depth is chosen by *what the thing is*, not by a dp number: cards get
 `--shadow-card`, floating menus and pills get `--shadow-overlay`, the FAB gets `--shadow-key`,
 the segmented thumb gets `--shadow-subtle`. Surface tint-by-elevation is not adopted at all — a
 surface's colour comes from `--bg-secondary` or a `--fill-*`, and both themes are authored, so a
@@ -783,27 +783,27 @@ tint computed from elevation would fight the token that already answered the que
 also why `PullToRefresh` renders a bare glyph rather than Material's elevated indicator circle:
 there is no elevation level to give it.
 
-### 10.3 Material FAB colour roles versus Ledger `--accent` — **Jinn wins.**
+### 10.3 Material FAB colour roles versus Ledger `--accent` — **Hundredfold wins.**
 
 **Borrowed.** Material 3 assigns the FAB a container role — primary / secondary / tertiary
 container, each with its matched on-container colour — and treats the choice as an emphasis dial.
 
-**Jinn.** `--accent`, `--accent-fill`, `--accent-contrast`. One accent, themed, plus the
+**Hundredfold.** `--accent`, `--accent-fill`, `--accent-contrast`. One accent, themed, plus the
 `--system-*` family reserved for status meaning.
 
-**Winner: Jinn.** `PrimaryAction` is `--accent` with an `--accent-contrast` glyph, at every
+**Winner: Hundredfold.** `PrimaryAction` is `--accent` with an `--accent-contrast` glyph, at every
 breakpoint and in both themes. No container taxonomy, and no per-page emphasis choice: a page has
 exactly one primary action, so an emphasis dial has nothing to dial between. A destructive primary
 action does not recolour the FAB either — it uses `--danger-fill` on the confirming control inside
 the `Sheet` it opens, which is where a destructive choice belongs.
 
-### 10.4 iOS 44pt tap target versus Jinn's ≥34px minimum — **Jinn wins on the floor.**
+### 10.4 iOS 44pt tap target versus Hundredfold's ≥34px minimum — **Hundredfold wins on the floor.**
 
 **Borrowed.** Apple HIG specifies 44×44pt as the minimum comfortable tap target.
 
-**Jinn.** *"Every change fits narrow widths and feels native — real tap targets (≥34px)."*
+**Hundredfold.** *"Every change fits narrow widths and feels native — real tap targets (≥34px)."*
 
-**Winner: Jinn.** 34px is the floor and this document does not raise it. `SegmentedControl` sits
+**Winner: Hundredfold.** 34px is the floor and this document does not raise it. `SegmentedControl` sits
 exactly on it at 34px, and that is correct, not a violation.
 
 HIG's 44 is adopted as the *specified size* for three controls only, and the reason is the same in
@@ -818,39 +818,39 @@ all three: they are reached by a thumb rather than aimed at with a cursor.
 That is a per-control specification, not a raised global minimum. Anything not in that table
 answers to 34px.
 
-### 10.5 Ionic page-transition motion versus Jinn motion rules — **Jinn wins.**
+### 10.5 Ionic page-transition motion versus Hundredfold motion rules — **Hundredfold wins.**
 
 **Borrowed.** Ionic's iOS page transition runs ~540ms on its own cubic curve, with a parallaxed
 outgoing view, a dimming overlay, and a nav bar that cross-fades independently of the content.
 
-**Jinn.** Motion is transform/opacity, short and smooth; `--duration-slow` is `260ms` and is the
+**Hundredfold.** Motion is transform/opacity, short and smooth; `--duration-slow` is `260ms` and is the
 longest thing available; `--ease-spring|smooth|snappy` are the only curves.
 
-**Winner: Jinn.** The *grammar* is borrowed wholesale — incoming from the trailing edge, outgoing
+**Winner: Hundredfold.** The *grammar* is borrowed wholesale — incoming from the trailing edge, outgoing
 parallaxed, a scrim over the outgoing view, the nav bar's titles cross-fading on their own clock.
-The *numbers* are Jinn's, and specifically they are the numbers `edge-back-layer.tsx` already
+The *numbers* are Hundredfold's, and specifically they are the numbers `edge-back-layer.tsx` already
 uses: `PARALLAX = 0.25` and `TRANSITION = "var(--duration-base) var(--ease-smooth)"`. §8 restates
 those rather than minting new ones precisely so that a tapped back and a dragged back cannot
 diverge. Ionic's 540ms would also break the reduced-motion contract for free, since it is not a
 token and would not collapse at `web/routes/globals.css:847-849`.
 
-### 10.6 Ionic's `IonContent` scroll host versus the existing scrollport contract — **Jinn wins.**
+### 10.6 Ionic's `IonContent` scroll host versus the existing scrollport contract — **Hundredfold wins.**
 
 **Borrowed.** `IonContent` owns scrolling inside its own shadow DOM and exposes it through
 component methods (`getScrollElement()`, `scrollToTop()`).
 
-**Jinn.** Three existing consumers read the scrolling element as a plain DOM node:
+**Hundredfold.** Three existing consumers read the scrolling element as a plain DOM node:
 `useScrollAnchor`, `useBoardScroll`, and TanStack Virtual via `getScrollElement`.
 
-**Winner: Jinn.** `PageScaffold` owns the scrollport but exposes a real element (§1.3). An opaque
+**Winner: Hundredfold.** `PageScaffold` owns the scrollport but exposes a real element (§1.3). An opaque
 scroll host would break all three, and `useVirtualBlockOffset` — which measures
 `block.top - node.top + node.scrollTop` — cannot be expressed against a component API at all.
 
-### 10.7 Konsta UI's iOS/Material theme split versus one Jinn surface — **Jinn wins.**
+### 10.7 Konsta UI's iOS/Material theme split versus one Hundredfold surface — **Hundredfold wins.**
 
 **Borrowed.** Konsta UI v5 ships every component twice, iOS and Material, and switches on platform.
 
-**Winner: Jinn.** One set of primitives, switched on **breakpoint**, never on platform. Jinn's web
+**Winner: Hundredfold.** One set of primitives, switched on **breakpoint**, never on platform. Hundredfold's web
 UI runs in a Tauri shell and in a browser on the same machine; a platform switch would make the
 same page look like two products. Where this document takes a form factor from iOS (the sheet
 grabber, the centred inline title) and another from Material (the FAB), it takes it at *all*
@@ -869,7 +869,7 @@ the third is settled here as a non-gap, so the foundation slice inherits a decis
    `min-h-[49px]` (`web/components/chat/mobile-tab-bar.tsx:85`) plus `py-1.5` (same file, `:58`).
    One token, declared next to `--safe-bottom`, removes the literal from at least three call
    sites — the FAB, the scaffold's below-`lg` bottom padding, and `todo-list.tsx`'s `pb-24`.
-2. **A large-title collapse distance — settled, and not a token.** `--jinn-collapse-distance`
+2. **A large-title collapse distance — settled, and not a token.** `--hundredfold-collapse-distance`
    stays the inline per-instance property §1.4 sets from the large title's own measured height.
    The foundation slice declares no Ledger token for it. A fixed global distance would be wrong rather than
    merely coarser: `--text-large-title` is a `clamp()` multiplied by `--text-scale`, so the
@@ -880,7 +880,7 @@ the third is settled here as a non-gap, so the foundation slice inherits a decis
    indicator. That reads correctly, but a spinner is not text, and the next spinner in the app
    will make the same borrow independently.
 
-Neither gap blocks the later slices. Each is a one-line addition to both theme blocks, and per Jinn
+Neither gap blocks the later slices. Each is a one-line addition to both theme blocks, and per Hundredfold
 taste every new token ships in *both*.
 
 ---
@@ -890,7 +890,7 @@ taste every new token ships in *both*.
 - All code, components, tests and CI gates. This document is a contract; the implementation slices build against it.
 - Any dependency on Ionic or Konsta UI. Settled: steal the grammar, not the package.
 - New tokens or colours beyond the two gaps named in §11.
-- Rewriting the Jinn design skill. The design-skill slice owns that update; §5 and §7 quote the settled
+- Rewriting the Hundredfold design skill. The design-skill slice owns that update; §5 and §7 quote the settled
   editable-sheet contract and Shared Visual Language verbatim and change neither.
 - Chat. It stays chromeless and draws its own rail and pills.
 - Drag-between-detents on `Sheet` (§5), and any second gesture recogniser.

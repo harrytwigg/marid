@@ -160,7 +160,7 @@ it('treats a restored chat as active', () => {
 
 - [ ] **Step 2: Run the web test to verify it fails**
 
-Run: `pnpm --filter @jinn/web exec vitest run src/components/chat/__tests__/chat-sidebar-helpers.test.ts`
+Run: `pnpm --filter @hundredfold/web exec vitest run src/components/chat/__tests__/chat-sidebar-helpers.test.ts`
 
 Expected: FAIL because the archive helper and UI state do not exist.
 
@@ -175,7 +175,7 @@ Add archive/unarchive mutations that remove an archived chat from the normal cac
 
 - [ ] **Step 4: Run the web test to verify it passes**
 
-Run: `pnpm --filter @jinn/web exec vitest run src/components/chat/__tests__/chat-sidebar-helpers.test.ts`
+Run: `pnpm --filter @hundredfold/web exec vitest run src/components/chat/__tests__/chat-sidebar-helpers.test.ts`
 
 Expected: PASS.
 
@@ -185,9 +185,9 @@ Run:
 
 ```bash
 pnpm --filter jinn-cli typecheck
-pnpm --filter @jinn/web typecheck
+pnpm --filter @hundredfold/web typecheck
 pnpm --filter jinn-cli test
-pnpm --filter @jinn/web test
+pnpm --filter @hundredfold/web test
 ```
 
 Expected: all commands pass.

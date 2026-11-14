@@ -37,7 +37,7 @@ Add a hook regression that hydrates an older completed turn, emits a current err
 
 - [x] **Step 2: Run the focused test to verify RED**
 
-Run: `pnpm --filter @jinn/web exec vitest run src/hooks/__tests__/use-live-session.test.ts`
+Run: `pnpm --filter @hundredfold/web exec vitest run src/hooks/__tests__/use-live-session.test.ts`
 
 Expected: FAIL because terminal errors still append to the entire previous array and the shared reconciliation helper does not exist.
 

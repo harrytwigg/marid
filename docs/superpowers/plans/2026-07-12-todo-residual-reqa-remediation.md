@@ -13,7 +13,7 @@
 - Frontend only: do not edit gateway files or fake conditional-write/CAS support.
 - Preserve user-authored dirty draft text in same-origin `sessionStorage`; never persist an internally generated opaque Todo ID.
 - Use exact 390×844 and 1440×900 at dark/light and normal/reduced motion.
-- Start only a fresh sanitized `JINN_HOME` pinned to ports 7970+ before any lifecycle command; never access or mutate production `:7777`.
+- Start only a fresh sanitized `HUNDREDFOLD_HOME` pinned to ports 7970+ before any lifecycle command; never access or mutate production `:7777`.
 - Preserve unrelated shared changes and scratch files.
 - Commit scoped remediation, report RED/GREEN evidence, and request independent re-QA without marking the work complete.
 
@@ -104,7 +104,7 @@
 
 **Files:**
 - Modify only scoped frontend/tests/plan files found above.
-- Artifacts: `/tmp/jinn-todo-remediation-20260712-02/sandbox-artifacts/`
+- Artifacts: `/tmp/hundredfold-todo-remediation-20260712-02/sandbox-artifacts/`
 
 **Interfaces:**
 - Consumes: all green focused behavior and existing prior contracts.

@@ -1,6 +1,6 @@
-# @jinn/shell
+# @hundredfold/shell
 
-The Tauri 2 shell for Jinn desktop and mobile targets. It bundles the production
+The Tauri 2 shell for Hundredfold desktop and mobile targets. It bundles the production
 web dashboard; it never navigates the main webview to a gateway URL.
 
 ## Security boundary
@@ -28,17 +28,17 @@ in `connect-src`. External HTTP(S) links open in the system browser.
 ## Build
 
 Prerequisites are pnpm, Rust, and Tauri CLI 2. Every command below stages the
-production web output first, so run `pnpm --filter @jinn/web build` once before
+production web output first, so run `pnpm --filter @hundredfold/web build` once before
 `test` in a fresh clone.
 
 ```sh
-pnpm --filter @jinn/shell test
-pnpm --filter @jinn/shell desktop:build
-pnpm --filter @jinn/shell ios:init
-pnpm --filter @jinn/shell android:init
+pnpm --filter @hundredfold/shell test
+pnpm --filter @hundredfold/shell desktop:build
+pnpm --filter @hundredfold/shell ios:init
+pnpm --filter @hundredfold/shell android:init
 ```
 
-`desktop:build` first builds `@jinn/web`, atomically stages that output with the
+`desktop:build` first builds `@hundredfold/web`, atomically stages that output with the
 refresh probe, then creates the native bundle. The macOS unsigned app is written
 under `src-tauri/target/release/bundle/macos/`.
 
@@ -54,5 +54,5 @@ and a real credential-store backend before release.
 
 The native menu, icon, restored window geometry, `jinn://` deep links, and the
 opt-in refresh-rate probe from the desktop spike remain. `jinn://org` and other
-custom-scheme routes resolve inside bundled assets. Set `JINN_SHELL_PROBE=1`
+custom-scheme routes resolve inside bundled assets. Set `HUNDREDFOLD_SHELL_PROBE=1`
 when launching the shell to open the local probe window.

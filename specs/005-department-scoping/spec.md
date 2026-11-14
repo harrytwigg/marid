@@ -14,12 +14,12 @@ still at 0.33.3. The one open item is F1 in tasks.md, instance
 work outside this repository. The operator's decisions are recorded below and folded into
 the text.
 
-**Input**: Marid issue #90 (upstream proposal hristo2612/jinn#81). The operator wants a scope
+**Input**: Hundredfold issue #90 (upstream proposal hristo2612/jinn#81). The operator wants a scope
 for a set of employees and their work:
 
 - Todos are raised inside the scope, with their own board and numbering.
 - An employee can be confined to that scope.
-- A confined employee cannot reach the company setup through Jinn.
+- A confined employee cannot reach the company setup through Hundredfold.
 - Skills can be restricted per scope.
 - A scope's employees can run on a different Claude account.
 
@@ -83,11 +83,11 @@ bounded by that account's own plan limits.
 
 ## Scope of the boundary *(read this first)*
 
-Scoping is enforced **in the gateway and in the jinn MCP tools**. The gateway refuses a scoped
+Scoping is enforced **in the gateway and in the hundredfold MCP tools**. The gateway refuses a scoped
 session's out-of-scope requests whichever tool makes them.
 
 It is **not** an OS boundary. Every engine runs as the operator's macOS user and has a shell.
-A scoped employee that deliberately uses its shell can still read `$JINN_HOME`, other repos
+A scoped employee that deliberately uses its shell can still read `$HUNDREDFOLD_HOME`, other repos
 and credential directories. It can see other processes' environments, including the gateway
 token, and call the gateway with that token. research.md ("Containment") records the full
 list for the future sandbox work.
@@ -96,7 +96,7 @@ This feature responds in three ways:
 
 - **It discourages shell access.** The department's instructions file says not to (FR-029).
 - **It removes the easy paths.** The company `CLAUDE.md`, the company skills directory and the
-  company state files are not loaded (FR-020, FR-027, FR-028), and the jinn tools refuse.
+  company state files are not loaded (FR-020, FR-027, FR-028), and the hundredfold tools refuse.
   What follows the **Claude profile** rather than the cwd still loads: the profile's own
   user-level skills and plugins, and the claude.ai connectors of that account. On the default
   profile those are the operator's (for example Slack, Gmail, Drive and Jira). Excluding them
@@ -115,7 +115,7 @@ beside the profile field.
 **Remote hosts.** A remote session runs over SSH with the gateway's home mounted on the remote
 host (`packages/hundredfold/src/shared/config-types.ts:274`). A scoped remote session is held to the
 same guardrail as a local one (FR-060 to FR-066). Its shell can still reach that mount, just
-as a local scoped session's shell can reach `$JINN_HOME`.
+as a local scoped session's shell can reach `$HUNDREDFOLD_HOME`.
 
 ## What the tree does today *(facts the spec depends on)*
 
@@ -138,9 +138,9 @@ research.md has the full audit, with `path:line` citations against `origin/main`
    - Authority comes from the reporting tree, never from departments
      (`packages/hundredfold/src/gateway/work-item-authority.ts:25`).
 2. **The only per-employee allow-list is `mcp`** (`packages/hundredfold/src/shared/types.ts:529`).
-   Every skill is linked into one shared `~/.jinn/.claude/skills`
+   Every skill is linked into one shared `~/.hundredfold/.claude/skills`
    (`packages/hundredfold/src/gateway/watcher.ts:38`), and local engines always run with cwd
-   `$JINN_HOME` (`packages/hundredfold/src/sessions/turn/engine-run.ts:46`). So every session loads
+   `$HUNDREDFOLD_HOME` (`packages/hundredfold/src/sessions/turn/engine-run.ts:46`). So every session loads
    the company `CLAUDE.md` and every skill.
 3. **The Claude account is global for local sessions.**
    - `resolveClaudeConfigDir` and `claudeJsonPath` read the gateway's own `CLAUDE_CONFIG_DIR`
@@ -156,7 +156,7 @@ research.md has the full audit, with `path:line` citations against `origin/main`
 4. **Claude Code keeps one Keychain entry per profile.** The installed Claude Code (2.1.291)
    names its macOS Keychain entry `Claude Code-credentials` when `CLAUDE_CONFIG_DIR` is unset,
    and `Claude Code-credentials-<first 8 hex of sha256(config dir)>` when it is set. Signing a
-   second profile in therefore does not overwrite the operator's login. Jinn reads only the
+   second profile in therefore does not overwrite the operator's login. Hundredfold reads only the
    unsuffixed name (`packages/hundredfold/src/shared/claude-models.ts:262`).
 
 ## User Scenarios & Testing *(mandatory)*
@@ -190,7 +190,7 @@ prefix. No other department changes.
 
 ### User Story 2: A scoped employee works only inside its department (Priority: P1)
 
-From a `side-dev` session, the jinn tools return only `side-project`'s Todos, sessions bound
+From a `side-dev` session, the hundredfold tools return only `side-project`'s Todos, sessions bound
 to it, and its members.
 
 - Company Todos read as *not found*.
@@ -274,7 +274,7 @@ includes the department's own state file.
 
 - A scoped session's engine sees only the allowed skills and the department's instructions,
   never the company `CLAUDE.md`.
-- The jinn knowledge tools reach only the department's Notes and state, plus anything D
+- The hundredfold knowledge tools reach only the department's Notes and state, plus anything D
   explicitly shares. They never reach the company `state.md` or the employee state files.
 
 **Independent Test**: from a scoped session:
@@ -295,14 +295,14 @@ scoped session.
 **Acceptance Scenarios**:
 
 1. **Given** `side-dev` is remote and scoped, **When** it starts, **Then** its cwd is
-   `<remote.root>/.jinn-departments/side-project/`, holding exactly the allowed skills and the
+   `<remote.root>/.hundredfold-departments/side-project/`, holding exactly the allowed skills and the
    generated `CLAUDE.md` (FR-060, FR-061).
-2. **Given** the same session, **Then** its `$JINN_HOME` has no links into the company home,
+2. **Given** the same session, **Then** its `$HUNDREDFOLD_HOME` has no links into the company home,
    and no company `CLAUDE.md` is linked into any directory for it (FR-062).
 3. **Given** the operator edits D's `INSTRUCTIONS.md`, or a session edited the remote stage
    dir, **When** `side-dev` next starts on that host, **Then** the remote stage dir holds the
    generated `CLAUDE.md`, and its path and inode are unchanged (FR-020a, FR-060).
-4. **Given** `side-dev` calls a jinn tool, **Then** the gateway applies D's scope exactly as for
+4. **Given** `side-dev` calls a hundredfold tool, **Then** the gateway applies D's scope exactly as for
    a local scoped session (FR-064).
 5. **Given** an unscoped remote employee, **Then** its staging is unchanged from `main`.
 
@@ -558,7 +558,7 @@ scoped employee; D is that session's binding)
   path-based `attach_to_work_item` and the JSON `{path}` attachment route accept only
   realpaths inside D's working directories or D's stage dir. `list_files` and `read_file` are
   refused. Unscoped callers are unchanged (Q6-b).
-  - The two MCP tools read the file themselves, in the session's jinn MCP server, and upload
+  - The two MCP tools read the file themselves, in the session's hundredfold MCP server, and upload
     the bytes (`packages/hundredfold/src/mcp/file-tools.ts:98`,
     `packages/hundredfold/src/mcp/work-item-attachments.ts:103`). They never use the JSON `{path}`
     route. So the check runs **in each tool**, with the allowed roots taken from the scoped
@@ -569,20 +569,20 @@ scoped employee; D is that session's binding)
 **Scoped context** (what a scoped session's engine loads)
 
 - **FR-020**: A scoped session MUST run with cwd set to a generated stage dir outside
-  `$JINN_HOME`: `<parent of home>/.jinn-departments/.instances/<basename of home>/<slug>/`. This is the
+  `$HUNDREDFOLD_HOME`: `<parent of home>/.hundredfold-departments/.instances/<basename of home>/<slug>/`. This is the
   only way to stop Claude Code loading the company `CLAUDE.md` (it reads from the cwd and its
   ancestors) and the company skills directory.
   - **The stage root is the instance's own.** Every instance under one parent keeps its stage
-    dirs in a root named for its home (`~/.jinn` is `~/.jinn-departments/.instances/.jinn/`,
-    `~/.jinn-staging` is `~/.jinn-departments/.instances/.jinn-staging/`). The roots sit under a
+    dirs in a root named for its home (`~/.hundredfold` is `~/.hundredfold-departments/.instances/.hundredfold/`,
+    `~/.hundredfold-staging` is `~/.hundredfold-departments/.instances/.hundredfold-staging/`). The roots sit under a
     dot-named directory because no department slug can start with a dot (the org scan skips such
     directories), so an instance's root can never be the same path as a department's old-layout
     stage dir, whatever its home is called. Two instances with a
     department of the same slug therefore never share, or overwrite, a stage dir.
-    `<parent of home>/.jinn-departments/` itself holds no stage dir, and FR-033 treats the
+    `<parent of home>/.hundredfold-departments/` itself holds no stage dir, and FR-033 treats the
     whole of it as protected.
   - **Remote hosts are not re-keyed.** The remote stage dir stays
-    `<remote.root>/.jinn-departments/<slug>/` (FR-060). `remote.root` is the operator's own
+    `<remote.root>/.hundredfold-departments/<slug>/` (FR-060). `remote.root` is the operator's own
     setting for that host, and an instance already has to have a root of its own there: the
     company `CLAUDE.md` link an unscoped remote session gets points at one instance's
     mounted home, and the first link wins. Two instances sharing a host give each its own
@@ -595,7 +595,7 @@ scoped employee; D is that session's binding)
   `packages/hundredfold/src/engines/remote-stage.ts:912`) both derive from the cwd. An update
   **syncs** it to the generated file set:
   - the new file set is written to an incoming directory beside the stage dir, on the same
-    filesystem (`.jinn-departments/.instances/<basename of home>/.<slug>.incoming-<random>/`);
+    filesystem (`.hundredfold-departments/.instances/<basename of home>/.<slug>.incoming-<random>/`);
   - the sync works **file by file**. Only files are renamed: each file whose content differs is
     renamed over the old one, which is atomic. Directories are created with `mkdir -p` and are
     never renamed over an existing directory (a skill is a directory, and that rename fails on
@@ -613,7 +613,7 @@ scoped employee; D is that session's binding)
   validation make the same judgement, from the same code (FR-027).
 
   **Moving a stage dir made at the old path (once).** Before the stage root was keyed by
-  instance (FR-020), a stage dir lived at `<parent of home>/.jinn-departments/<slug>/`. The
+  instance (FR-020), a stage dir lived at `<parent of home>/.hundredfold-departments/<slug>/`. The
   first prepare of a department that finds one there, and none at the new path, **renames** it
   to the new path. A rename on one filesystem keeps the directory's inode, so a session
   running in it keeps its cwd; nothing is copied. The Claude transcripts filed under the old
@@ -639,7 +639,7 @@ scoped employee; D is that session's binding)
   spawns a session can still edit it; this is a guardrail. No hash cache is kept, so there is
   no cache to outlive the directory. Local and remote stage dirs follow this rule identically.
 - **FR-020b**: **Every local spawn of a scoped session uses the stage dir.** Today four local
-  session-spawn sites hard-code `cwd: JINN_HOME`:
+  session-spawn sites hard-code `cwd: HUNDREDFOLD_HOME`:
   - `packages/hundredfold/src/sessions/turn/engine-run.ts:46`: turns, and auto-compaction through it;
   - `packages/hundredfold/src/sessions/rate-limit-handler.ts:185`: the substitute (Branch A);
   - `packages/hundredfold/src/sessions/rate-limit-handler.ts:301`: the wait-and-retry (Branch B), which
@@ -647,12 +647,12 @@ scoped employee; D is that session's binding)
   - `packages/hundredfold/src/gateway/pty-ws.ts:139`: the terminal attach.
 
   All four MUST take the cwd from one helper (session or employee to cwd), the local twin of
-  FR-061, so a scoped session never retries or attaches in `$JINN_HOME`. A grep test fails on
-  any `cwd: JINN_HOME` at a session-spawn site outside an allow-list. The allow-list covers the
+  FR-061, so a scoped session never retries or attaches in `$HUNDREDFOLD_HOME`. A grep test fails on
+  any `cwd: HUNDREDFOLD_HOME` at a session-spawn site outside an allow-list. The allow-list covers the
   ssh process's own local cwd (`packages/hundredfold/src/engines/claude-interactive.ts:3102`, `:3240`)
   and engines a scoped employee cannot use (opencode, pi).
 - **FR-026a**: **No engine substitute for a scoped session.** Another engine cannot use the stage
-  dir's Claude layout, and in `$JINN_HOME` it would read the company `AGENTS.md`. So a scoped
+  dir's Claude layout, and in `$HUNDREDFOLD_HOME` it would read the company `AGENTS.md`. So a scoped
   session MUST skip engine entries in any fallback chain, its account's own (FR-079) or
   `engines.claude.fallback`, and accept only Claude-account entries. With none left, it waits
   for its reset. Until Phase 6, a scoped session skips engine fallback entirely. This applies
@@ -687,7 +687,7 @@ scoped employee; D is that session's binding)
     and the note routes serve scoped callers, even when `gateway.notesEnabled` is off
     (`packages/hundredfold/src/gateway/api.ts:1207`). This is safe because they are rooted at the
     department folder.
-  - **Session marker.** The gateway sets `JINN_DEPARTMENT` in a scoped session's environment.
+  - **Session marker.** The gateway sets `HUNDREDFOLD_DEPARTMENT` in a scoped session's environment.
 
   Excluded unless shared: the company `knowledge/state.md`, `knowledge/employees/`, `docs/`
   and every other company path.
@@ -696,8 +696,8 @@ scoped employee; D is that session's binding)
   (`instructions: department+company`). The default is department only. The generated file
   always ends with a fixed paragraph saying that:
   - the session is scoped to D;
-  - it uses the jinn tools for company state;
-  - it does not read `$JINN_HOME`, other repos or other sessions' transcripts with its shell;
+  - it uses the hundredfold tools for company state;
+  - it does not read `$HUNDREDFOLD_HOME`, other repos or other sessions' transcripts with its shell;
   - it keeps state in `knowledge/departments/<slug>/state.md` through the note tools.
 - **FR-029a**: **A scoped session cannot write its department's `INSTRUCTIONS.md`.** The file
   becomes the stage dir's `CLAUDE.md` (FR-029), so a session able to write it would write what
@@ -714,10 +714,10 @@ scoped employee; D is that session's binding)
   does not reach ("Scope of the boundary").
 - **FR-033**: **Working-directory validation.** A department working directory MUST:
   - be inside a git work tree whose top level is neither `$HOME` nor an ancestor of it;
-  - not be, or be an ancestor of, `$HOME`, `$JINN_HOME`, `<parent of home>/.jinn-departments`
+  - not be, or be an ancestor of, `$HOME`, `$HUNDREDFOLD_HOME`, `<parent of home>/.hundredfold-departments`
     (every instance's stage roots, this one's included), `~/.claude`, the
     gateway's own `CLAUDE_CONFIG_DIR` or any employee's `claudeConfigDir`;
-  - not lie inside `$JINN_HOME`, `<parent of home>/.jinn-departments`, `~/.claude`, the gateway's `CLAUDE_CONFIG_DIR`,
+  - not lie inside `$HUNDREDFOLD_HOME`, `<parent of home>/.hundredfold-departments`, `~/.claude`, the gateway's `CLAUDE_CONFIG_DIR`,
     any `claudeConfigDir`, `~/.ssh`, `~/.config`, `~/.aws`, `~/.gnupg` or `~/Library`.
 
   The scan and the department panel refuse a violating entry.
@@ -732,7 +732,7 @@ scoped employee; D is that session's binding)
     string is what the session gets as `CLAUDE_CONFIG_DIR`, what the Keychain name is hashed
     from, and what the login hint prints. Claude Code hashes the raw string, so two spellings
     of one directory are two logins.
-  - It must not lie inside `$JINN_HOME`, and must not equal the default profile's directory:
+  - It must not lie inside `$HUNDREDFOLD_HOME`, and must not equal the default profile's directory:
     naming the default explicitly gives a suffixed Keychain entry, not the operator's login.
   - It is refused on a remote employee, which uses `remoteClaudeConfigDir`. One field per
     target, so there is never a question of which applies.
@@ -825,14 +825,14 @@ scoped employee; D is that session's binding)
 
 **Scoped employees on remote hosts** (D5, Phase 5)
 
-A remote session today runs in the employee's `remoteCwd`. Its `$JINN_HOME` is a symlink farm
+A remote session today runs in the employee's `remoteCwd`. Its `$HUNDREDFOLD_HOME` is a symlink farm
 over the gateway's home, which is mounted on the remote host, and the company `CLAUDE.md` is
 linked into its cwd (`packages/hundredfold/src/engines/remote-stage.ts:966`, the farm script). For a
 scoped employee each of those would undo FR-020, FR-027 and FR-028, so a scoped remote session
 is staged differently. Unscoped remote sessions are unchanged.
 
 - **FR-060**: **Remote stage dir.** For each remote host a scoped member uses, the gateway MUST
-  keep a copy of D's stage dir at `<remote.root>/.jinn-departments/<slug>/` on that host. The
+  keep a copy of D's stage dir at `<remote.root>/.hundredfold-departments/<slug>/` on that host. The
   path is not keyed by instance, unlike the local one (FR-020): `remote.root` is already one
   instance's own on a host, and two instances sharing a host use different roots.
   - Its content is exactly the local stage dir's: the same generator (Phase 3) produces it.
@@ -870,14 +870,14 @@ is staged differently. Unscoped remote sessions are unchanged.
     - `gateway/session-file-read.ts:67`: the operator's chat file links. Relative links
       resolve against the stage dir, which is the session's real cwd. Absolute links work as
       today;
-    - `cli/remote.ts:58`: `jinn remote` status, which shows both the stage dir and the work
+    - `cli/remote.ts:58`: `hundredfold remote` status, which shows both the stage dir and the work
       area for a scoped employee.
 
     Fork has no remote path today.
   - The employee's `remoteCwd` stays its work area. The session's prompt names it, because the
     stage dir is shared by the whole department and cannot. FR-065 uses it.
   - **Validation at load** (`gateway/org.ts`): a scoped employee's `remoteCwd` must not be,
-    contain or lie inside `<remote.root>/.jinn-departments` or `remote.mount`. Nothing today
+    contain or lie inside `<remote.root>/.hundredfold-departments` or `remote.mount`. Nothing today
     stops the mount sitting under `remote.root`
     (`packages/hundredfold/src/shared/remote-target.ts:156`), and a work area over the mount would make
     the whole company home an FR-065 root.
@@ -886,7 +886,7 @@ is staged differently. Unscoped remote sessions are unchanged.
     session's `gateway.json` and bearer token, and is known only from the host's facts. A
     scoped spawn whose `remoteCwd` is, contains or lies inside it is refused. The check fails
     closed: if the facts are missing, the spawn is refused.
-- **FR-062**: **No company home on the remote host.** A scoped remote session's `$JINN_HOME`
+- **FR-062**: **No company home on the remote host.** A scoped remote session's `$HUNDREDFOLD_HOME`
   MUST hold only what reaches the gateway: `gateway.json`, `tmp/` (settings, MCP config and the
   environment file) and the stage marker. The farm links to the company home are not made, and
   the company `CLAUDE.md` is not linked into any cwd. The scoped variant of the farm script
@@ -900,12 +900,12 @@ is staged differently. Unscoped remote sessions are unchanged.
   and cwd).
 - **FR-064**: **Binding and marker.** A scoped remote session is bound to D in `spawnSession`
   exactly as a local one is (FR-008), and the remote environment file carries
-  `JINN_DEPARTMENT=<slug>`. The gateway's scope checks (FR-010 to FR-019) do not depend on where
+  `HUNDREDFOLD_DEPARTMENT=<slug>`. The gateway's scope checks (FR-010 to FR-019) do not depend on where
   the session runs.
 - **FR-065**: **File reads on the remote host.** For a scoped remote session, the FR-018 check
   runs in the same two tools, `publish_attachment` (`packages/hundredfold/src/mcp/file-tools.ts:98`)
   and path-based `attach_to_work_item` (`uploadWorkItemAttachment`,
-  `packages/hundredfold/src/mcp/work-item-attachments.ts:103`). Both run in the session's jinn MCP
+  `packages/hundredfold/src/mcp/work-item-attachments.ts:103`). Both run in the session's hundredfold MCP
   server on the remote host. The allowed roots come from its staged MCP config: the employee's
   `remoteCwd` and the remote stage dir. Each tool has a test. The gateway's JSON `{path}`
   attachment route refuses a remote scoped session, because the path names a file on another
@@ -1171,7 +1171,7 @@ lists the ten places that assume one account.
 These items belong to the operator's separate sandboxing work and are not built here.
 research.md keeps the findings, so that work does not start from zero.
 
-- An allow-listed engine environment without `JINN_GATEWAY_TOKEN`, plus secret references by
+- An allow-listed engine environment without `HUNDREDFOLD_GATEWAY_TOKEN`, plus secret references by
   name.
 - Default-deny reads under `$HOME`, plus blocking process inspection.
 - `--strict-mcp-config` and connector exclusion.
@@ -1191,9 +1191,9 @@ research.md keeps the findings, so that work does not start from zero.
 - **Session department binding** (registry): present only on sessions of scoped employees, and
   fixed at creation.
 - **Department stage directory**: a generated cwd for each non-open department, outside
-  `$JINN_HOME`.
+  `$HUNDREDFOLD_HOME`.
 - **Remote department stage directory**: a pushed copy of the stage directory on each remote
-  host a scoped member uses, at `<remote.root>/.jinn-departments/<slug>/`.
+  host a scoped member uses, at `<remote.root>/.hundredfold-departments/<slug>/`.
 - **Employee Claude profile** (employee YAML, `claudeConfigDir`): the profile its local
   sessions run as. Remote employees keep `remoteClaudeConfigDir`.
 
@@ -1223,7 +1223,7 @@ research.md keeps the findings, so that work does not start from zero.
   (FR-078).
 - **SC-007**: For a scoped remote employee, a test per `employeeRemoteTarget` caller, the
   rate-limit retry included, asserts the remote stage dir as cwd, and the environment file
-  carries `JINN_DEPARTMENT`. The grep test in FR-061 passes. A sync test
+  carries `HUNDREDFOLD_DEPARTMENT`. The grep test in FR-061 passes. A sync test
   shows the stage dir's inode unchanged across an update, with a dropped skill removed. The scoped farm script,
   run under `sh` against temporary directories, makes no link into the company home and no
   `CLAUDE.md` link. The unscoped remote staging scripts are byte-identical to `main`.

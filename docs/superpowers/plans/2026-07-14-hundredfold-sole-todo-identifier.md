@@ -8,7 +8,7 @@
 
 Operator decision A is accepted:
 
-- `^[A-Z]{3}-[1-9][0-9]*$` is the only Todo grammar; suffixes above `Number.MAX_SAFE_INTEGER` are invalid. Normalize the configured company name with NFKD, uppercase, discard non-`A-Z` letters, and treat hyphens, dots, slashes, ampersands, and whitespace as word separators. Three or more parts use initials (`Build Sprint Labs` → `BSL`); a single part uses its first three letters (`Jinn` → `JIN`); two parts use the intuitive first-word fallback, with a short leading acronym completed from the next part (`Acme Corp` → `ACM`, `AC-MEDIA` → `ACM`). Names unable to produce three letters are invalid. An explicit `portal.companyPrefix` wins and must match `^[A-Z]{3}$`.
+- `^[A-Z]{3}-[1-9][0-9]*$` is the only Todo grammar; suffixes above `Number.MAX_SAFE_INTEGER` are invalid. Normalize the configured company name with NFKD, uppercase, discard non-`A-Z` letters, and treat hyphens, dots, slashes, ampersands, and whitespace as word separators. Three or more parts use initials (`Build Sprint Labs` → `BSL`); a single part uses its first three letters (`Hundredfold` → `JIN`); two parts use the intuitive first-word fallback, with a short leading acronym completed from the next part (`Acme Corp` → `ACM`, `AC-MEDIA` → `ACM`). Names unable to produce three letters are invalid. An explicit `portal.companyPrefix` wins and must match `^[A-Z]{3}$`.
 - Before the prefix freezes, onboarding/settings display the concrete derived or overridden sequence and state that the first allocation makes it permanent. After freeze, they display the allocator's actual prefix and cannot select a second one.
 - The first committed allocation freezes the prefix in the singleton allocator. Later company-name changes never rewrite IDs or change that instance's prefix.
 - `work_items.id` is the database primary key and the visible/internal ID in REST, MCP, UI, URLs, search, logs, accessibility, copy/share, DOM state, and browser storage.
@@ -39,7 +39,7 @@ This proves the public registry/tag boundary, not manually installed untagged bu
 | **Public, shipped** | `packages/hundredfold/src/**`, `packages/web/src/**`, compiled `dist/` | Clean company-prefix schema, parser, allocator, routes/surfaces, authorization, legacy-input rejection, and read-only startup refusal for nonempty prerelease data |
 | **Private, disposable** | repository root `tools/prerelease-todo-converter/**` only | Generic offline inventory/conversion/rehearsal tool; excluded from package `files`, bins, templates, migrations, startup, and installed assets |
 
-No public module imports the converter. It has no `jinn` command, runtime hook, network/listen code, or installed migration. `npm pack --dry-run` must prove it is absent. After the separately authorized private conversion, remove it from the release branch or archive it outside the shipped repository artifact.
+No public module imports the converter. It has no `hundredfold` command, runtime hook, network/listen code, or installed migration. `npm pack --dry-run` must prove it is absent. After the separately authorized private conversion, remove it from the release branch or archive it outside the shipped repository artifact.
 
 ## Public First Todo Release
 

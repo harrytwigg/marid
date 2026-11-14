@@ -4,18 +4,18 @@
 
 **Goal:** Make fresh gateways authentication-enabled without adding localhost friction, route proxy-caused scoped-write failures to an actionable error, and remove the speculative Claude capability fallback.
 
-**Architecture:** Keep caller classification unchanged and add one refusal-message classifier at the API boundary: only an unauthenticated, forwarded request on an auth-disabled/not-required gateway receives the proxy diagnosis; tool-marked identity loss keeps the existing MCP error. Fresh setup config enables auth, `jinn create` finalization materializes the existing owner-only gateway token, and the existing single-use URL-fragment bootstrap remains the only automatic localhost browser pairing path.
+**Architecture:** Keep caller classification unchanged and add one refusal-message classifier at the API boundary: only an unauthenticated, forwarded request on an auth-disabled/not-required gateway receives the proxy diagnosis; tool-marked identity loss keeps the existing MCP error. Fresh setup config enables auth, `hundredfold create` finalization materializes the existing owner-only gateway token, and the existing single-use URL-fragment bootstrap remains the only automatic localhost browser pairing path.
 
 **Tech Stack:** TypeScript ES2022, Node HTTP, YAML configuration, React browser auth client, Vitest, pnpm/Turborepo.
 
 ## Global Constraints
 
-- Work only in the dedicated `jinn-wt-gateway-auth` worktree based on `origin/main`; do not alter the canonical checkout.
+- Work only in the dedicated `hundredfold-wt-gateway-auth` worktree based on `origin/main`; do not alter the canonical checkout.
 - Do not use or restart ports 7777, 7850, 7788.
 - Existing instances receive no migration or config rewrite.
 - Local auto-pair must require the CLI-authored, single-use, 60-second URL-fragment grant; loopback address alone is not operator identity.
 - Forwarded requests without configured auth fail closed with HTTP 403 and an actionable proxy/auth message.
-- Genuine tool identity loss retains `UNIDENTIFIED_TOOL_CALL_ERROR` and its `JINN_SESSION_ID` / `JINN_SESSION_CAPABILITY` guidance.
+- Genuine tool identity loss retains `UNIDENTIFIED_TOOL_CALL_ERROR` and its `HUNDREDFOLD_SESSION_ID` / `HUNDREDFOLD_SESSION_CAPABILITY` guidance.
 - Public shipped source, tests, templates, and docs remain generic and contain no operator-specific data.
 - Git commits use the repository-configured maintainer identity and no co-author trailer.
 - Full build, typecheck, test, and lint must pass before pushing and fast-forwarding `origin/main`.
@@ -34,9 +34,9 @@
 
 - [ ] **Step 1: Write failing proxy-cause tests**
 
-Add a real HTTP `POST /api/sessions` test with same-origin browser metadata plus `x-forwarded-for`. Assert status 403, assert the body explains forwarded headers, no configured gateway auth, `gateway.authRequired: true`, and pairing, and assert it does not mention `JINN_SESSION_ID` or `JINN_SESSION_CAPABILITY`.
+Add a real HTTP `POST /api/sessions` test with same-origin browser metadata plus `x-forwarded-for`. Assert status 403, assert the body explains forwarded headers, no configured gateway auth, `gateway.authRequired: true`, and pairing, and assert it does not mention `HUNDREDFOLD_SESSION_ID` or `HUNDREDFOLD_SESSION_CAPABILITY`.
 
-Add a second test with the same forwarded header plus `x-jinn-tool-call: jinn-mcp`. Assert status 403 and the unchanged MCP identity-loss message containing both environment variable names. This pins cause precedence.
+Add a second test with the same forwarded header plus `x-hundredfold-tool-call: hundredfold-mcp`. Assert status 403 and the unchanged MCP identity-loss message containing both environment variable names. This pins cause precedence.
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
@@ -130,7 +130,7 @@ git commit -m "feat(auth): secure new gateways by default"
 
 - [ ] **Step 1: Record reachability verdict**
 
-Trace the Claude production launch from `resolveEngineRunMcp` through `attachSessionIdentity`, `--mcp-config`, and `server-entry`. Confirm the child receives `--jinn-session-id`, `--jinn-home`, and `--jinn-gateway-url`, and derives its bound capability from the per-instance key even when server env is stripped. Since no reachable launch path was found that loses those arguments while preserving only the PTY parent env, classify `f49f8df4` as speculative.
+Trace the Claude production launch from `resolveEngineRunMcp` through `attachSessionIdentity`, `--mcp-config`, and `server-entry`. Confirm the child receives `--hundredfold-session-id`, `--hundredfold-home`, and `--hundredfold-gateway-url`, and derives its bound capability from the per-instance key even when server env is stripped. Since no reachable launch path was found that loses those arguments while preserving only the PTY parent env, classify `f49f8df4` as speculative.
 
 - [ ] **Step 2: Revert the commit**
 
@@ -172,7 +172,7 @@ Review `git diff origin/main...HEAD`, `git diff --check`, and run the required s
 
 - [ ] **Step 3: Create an isolated throwaway instance**
 
-Use a `mktemp -d` HOME and a verified-free port in 7800-7899 excluding 7850, 7788, and 7777. Build first, then run the built `jinn create jinn-authtest --port <port>`. Assert its config contains `authRequired: true`, `gateway.json` already contains an owner-only token, and `validateGatewayExposure` permits the loopback config.
+Use a `mktemp -d` HOME and a verified-free port in 7800-7899 excluding 7850, 7788, and 7777. Build first, then run the built `hundredfold create hundredfold-authtest --port <port>`. Assert its config contains `authRequired: true`, `gateway.json` already contains an owner-only token, and `validateGatewayExposure` permits the loopback config.
 
 - [ ] **Step 4: Verify local bootstrap and proxied behavior**
 

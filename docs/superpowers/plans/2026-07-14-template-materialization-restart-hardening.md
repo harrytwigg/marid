@@ -4,7 +4,7 @@
 
 **Goal:** Make setup and migrations share deterministic placeholder materialization, then ensure detached restarts retain the gateway's effective runtime port.
 
-**Architecture:** A pure shared module derives `portalName` and `portalSlug` from instance config and materializes only `.md`, `.yaml`, and `.yml` payloads. Pending migration discovery hashes those inputs into its key and describes materialized payload paths under the migration snapshot; snapshot creation writes and audits those read-only payloads atomically before the COO session is created. Detached restart argv carries the effective port into `restart-entry`, while lifecycle signaling retains the resolved-`JINN_HOME` ownership proof.
+**Architecture:** A pure shared module derives `portalName` and `portalSlug` from instance config and materializes only `.md`, `.yaml`, and `.yml` payloads. Pending migration discovery hashes those inputs into its key and describes materialized payload paths under the migration snapshot; snapshot creation writes and audits those read-only payloads atomically before the COO session is created. Detached restart argv carries the effective port into `restart-entry`, while lifecycle signaling retains the resolved-`HUNDREDFOLD_HOME` ownership proof.
 
 **Tech Stack:** TypeScript, Node filesystem/crypto APIs, js-yaml, Vitest, Node native test runner, disposable upgrade harness.
 
@@ -28,9 +28,9 @@
 
 **Interfaces:**
 - Produces: `deriveTemplateMaterialization(config)`, `materializeTemplateText(filePath, content, inputs)`, and `findUnresolvedTemplatePlaceholders(content)`.
-- Consumes: `{ portal?: { portalName?: string } }`; defaults the name to `Jinn` and derives the slug with setup's existing lowercase/whitespace-to-hyphen rule.
+- Consumes: `{ portal?: { portalName?: string } }`; defaults the name to `Hundredfold` and derives the slug with setup's existing lowercase/whitespace-to-hyphen rule.
 
-- [ ] Write failing tests for default Jinn, mixed-case names with spaces, unknown placeholders, and non-Markdown/YAML files.
+- [ ] Write failing tests for default Hundredfold, mixed-case names with spaces, unknown placeholders, and non-Markdown/YAML files.
 - [ ] Run `pnpm --filter jinn-cli exec vitest run src/shared/__tests__/template-materialization.test.ts` and verify RED because the module does not exist.
 - [ ] Implement the three pure functions and replace setup's local replacement function and slug derivation with them.
 - [ ] Re-run the focused test and verify GREEN.

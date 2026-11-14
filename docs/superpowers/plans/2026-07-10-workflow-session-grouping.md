@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Work only in `/private/tmp/jinn-wfgroup` from current `main`.
+- Work only in `/private/tmp/hundredfold-wfgroup` from current `main`.
 - Do not touch live gateways, ports 7777/7788, or the installed workspace.
 - Do not redesign the chat-list UI.
 - Keep shipped content generic and add no co-author trailer.

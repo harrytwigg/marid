@@ -1,6 +1,6 @@
-# Jinn Fork Constitution
+# Hundredfold Fork Constitution
 
-This document governs **`harrytwigg/marid`**, a permanent fork of `hristo2612/jinn`.
+This document governs **`hundredfoldhq/hundredfold`**, a permanent fork of `hristo2612/jinn`.
 It is the ratified statement of what this fork is for and how work is proposed, reviewed, and
 accepted here.
 
@@ -41,7 +41,7 @@ the wrong repository. Say what is right for this fork — which is Principle II.
 
 Principle I says what this fork is not. This says what it is for.
 
-Upstream Jinn is an org that a person operates: the human decides what runs, when it runs, and
+Upstream Hundredfold is an org that a person operates: the human decides what runs, when it runs, and
 what it costs. **This fork is aimed at an org that operates itself** — one that picks up work,
 decides when to do it, and manages what it spends doing it, with the human setting policy
 rather than pressing start. The centre of gravity is autonomous development: agents doing the
