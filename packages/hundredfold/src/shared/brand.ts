@@ -1,5 +1,5 @@
-/** The product name users see. "Hundredfold" stays the internal codename (identifiers,
- *  env vars, paths, the `hundredfold` binary); only human-facing output reads from here. */
+/** The product name users see. Names the program builds for itself (identifiers, environment variables, paths,
+ *  headers) come from the codename instead (codename.ts); only human-facing output reads from here. */
 export const PRODUCT_NAME = "Hundredfold";
 
 /** The portal (COO) and company name an instance that never set `portal.portalName` or
