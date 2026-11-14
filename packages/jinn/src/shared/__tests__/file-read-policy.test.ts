@@ -12,7 +12,7 @@ import { protectedEntryCandidates } from "../protected-home-entries.js";
  * where `secrets/` is reachable by the mount's own path as well as by name.
  */
 describe("shared file-read policy", () => {
-  it("refuses a Jinn secret by the home's name for it AND by the directory it resolves to", () => {
+  it("refuses a Hundredfold secret by the home's name for it AND by the directory it resolves to", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "gen140-policy-"));
     const mount = path.join(root, "mnt-jinn-home");
     fs.mkdirSync(path.join(mount, "secrets"), { recursive: true });
@@ -23,7 +23,7 @@ describe("shared file-read policy", () => {
 
     expect(assessFileRead(path.join(stage, "secrets", "api-keys.json"), { jinnHome: stage }).allowed).toBe(false);
     const viaMount = assessFileRead(path.join(mount, "secrets", "api-keys.json"), { jinnHome: stage });
-    expect(viaMount).toEqual({ allowed: false, reason: "Refusing to read Jinn secrets" });
+    expect(viaMount).toEqual({ allowed: false, reason: "Refusing to read Hundredfold secrets" });
     expect(readLocalFileForIngestion(path.join(mount, "secrets", "api-keys.json"), 1024, { jinnHome: stage })).toMatchObject({ ok: false, status: 403 });
 
     const benign = path.join(mount, "notes.md");
@@ -46,7 +46,7 @@ describe("shared file-read policy", () => {
         fs.writeFileSync(path.join(home, rel), "x");
         expect(assessFileRead(path.join(home, rel), { jinnHome: home }), `${label}:${rel}`).toEqual({
           allowed: false,
-          reason: "Refusing to read Jinn credential or session-config files",
+          reason: "Refusing to read Hundredfold credential or session-config files",
         });
       }
       // Ordinary scratch output in tmp/ stays attachable.
@@ -55,7 +55,7 @@ describe("shared file-read policy", () => {
     }
   });
 
-  it("protects every Jinn home a remote host can reach: its own stage, the gateway mount, sibling stages (review R1, R2)", () => {
+  it("protects every Hundredfold home a remote host can reach: its own stage, the gateway mount, sibling stages (review R1, R2)", () => {
     // The real layout: a mount, and a stage root whose session homes link most
     // entries into the mount but keep gateway.json and tmp/ as real files.
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "gen140-farm-"));
@@ -97,7 +97,7 @@ describe("shared file-read policy", () => {
     const allowed = [
       path.join(mount, "notes.md"), path.join(mount, "tmp", "evidence.log"), path.join(mine, "uploads", "shot.png"),
     ];
-    // Outside any Jinn home a config.yaml or settings.json is an ordinary file.
+    // Outside any Hundredfold home a config.yaml or settings.json is an ordinary file.
     const repo = path.join(root, "repo");
     write(path.join(repo, "config.yaml"));
     write(path.join(repo, "tmp", "settings.json"));
@@ -194,7 +194,7 @@ describe("shared file-read policy", () => {
     }) as typeof fs.openSync);
     try {
       const read = readLocalFileForIngestion(link, 1024, { jinnHome: home });
-      expect(read).toMatchObject({ ok: false, status: 403, error: "Refusing to read Jinn secrets" });
+      expect(read).toMatchObject({ ok: false, status: 403, error: "Refusing to read Hundredfold secrets" });
       expect(spy).toHaveBeenCalledTimes(1);
     } finally {
       spy.mockRestore();

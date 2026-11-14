@@ -430,7 +430,7 @@ export class AntigravityEngine implements InterruptibleEngine, PtyViewEngine {
     let text = opts.prompt;
     // Inject the system prompt only on the FIRST turn of a conversation. agy
     // persists the conversation (resume via --conversation retains it), so on a
-    // resume / warm follow-up re-sending it just re-logs the whole Jinn system
+    // resume / warm follow-up re-sending it just re-logs the whole Hundredfold system
     // prompt as a fresh USER_INPUT step every turn (context bloat).
     if (opts.systemPrompt && !opts.resumeSessionId) text = `${opts.systemPrompt}\n\n---\n\n${text}`;
     if (opts.attachments?.length) {
@@ -581,7 +581,7 @@ export class AntigravityEngine implements InterruptibleEngine, PtyViewEngine {
  * GEMINI_* (agy shares the ~/.gemini account dir for its cached credential).
  *
  * Antigravity reads MCP servers from Gemini's config file, while per-session
- * Jinn identity rides the agy child env. This full-inherit env builder keeps
+ * Hundredfold identity rides the agy child env. This full-inherit env builder keeps
  * agy's cached Google credential path intact and adds the caller id/capability
  * only when the resolved built-in jinn MCP server is attached.
  */

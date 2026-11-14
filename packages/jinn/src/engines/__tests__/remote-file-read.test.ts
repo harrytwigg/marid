@@ -39,7 +39,7 @@ beforeAll(async () => {
   fs.writeFileSync(path.join(shared, "file-read-policy.js"), `
 import fs from "node:fs";
 export const expandPath = (p) => p.startsWith("~/") ? ${JSON.stringify(path.join(root, "home"))} + p.slice(1) : p;
-const refuse = (p) => p.split("/").includes("secrets") ? { ok: false, status: 403, error: "Refusing to read Jinn secrets" } : null;
+const refuse = (p) => p.split("/").includes("secrets") ? { ok: false, status: 403, error: "Refusing to read Hundredfold secrets" } : null;
 export function vetLocalFileForIngestion(p, max, opts) {
   const r = refuse(p); if (r) return r;
   if (!fs.existsSync(p)) return { ok: false, status: 404, error: "file not found: " + p };

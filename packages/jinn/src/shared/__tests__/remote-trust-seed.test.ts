@@ -72,7 +72,7 @@ describe("remote-trust-seed asset", () => {
     fs.writeFileSync(claudeJson, original);
 
     runSeed(configDir, tmpDir("proj-"));
-    expect(fs.readFileSync(backup, "utf-8")).toBe(original); // pristine pre-Jinn copy
+    expect(fs.readFileSync(backup, "utf-8")).toBe(original); // pristine pre-Hundredfold copy
 
     runSeed(configDir, tmpDir("proj-")); // a second modification must not overwrite it
     expect(fs.readFileSync(backup, "utf-8")).toBe(original);

@@ -55,7 +55,7 @@ const BLOCKED_TERMS = [
 
 // The fork must keep its MIT attribution to the upstream project, which names
 // the upstream author's handle both in the repository link and in the "by ..."
-// credit (see docs/marid-vs-jinn.md). That handle is also one of the personal
+// credit (see docs/hundredfold-vs-jinn.md). That handle is also one of the personal
 // terms the guard blocks, so allow exactly those two attribution forms through
 // while still scanning the rest of the tree, and the rest of that same file.
 const UPSTREAM_OWNER = ["hris", "to", "2612"].join("");
@@ -123,18 +123,18 @@ describe("privacy guard", () => {
     const repo = mkdtempSync(join(tmpdir(), "jinn-privacy-guard-"));
     try {
       mkdirSync(join(repo, "docs"));
-      const file = join(repo, "docs", "marid-vs-jinn.md");
+      const file = join(repo, "docs", "hundredfold-vs-jinn.md");
       writeFileSync(
         file,
         [
-          `Marid is a fork of [Jinn](https://github.com/${UPSTREAM_OWNER}/jinn) by ${UPSTREAM_OWNER} and contributors.`,
+          `Hundredfold is a fork of [Jinn](https://github.com/${UPSTREAM_OWNER}/jinn) by ${UPSTREAM_OWNER} and contributors.`,
           `Same file, outside the attribution: ${BLOCKED_TERMS[0]}.`,
         ].join("\n"),
       );
 
       const findings = findBlockedTerms([file], repo);
       expect(findings).toHaveLength(1);
-      expect(findings[0]).toContain(`${join("docs", "marid-vs-jinn.md")}:2 contains`);
+      expect(findings[0]).toContain(`${join("docs", "hundredfold-vs-jinn.md")}:2 contains`);
     } finally {
       rmSync(repo, { recursive: true, force: true });
     }

@@ -74,7 +74,7 @@ describe('web static asset fallback', () => {
   it('serves the web manifest as application/manifest+json', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'jinn-web-'))
     try {
-      writeFileSync(join(dir, 'manifest.webmanifest'), JSON.stringify({ name: 'Jinn' }))
+      writeFileSync(join(dir, 'manifest.webmanifest'), JSON.stringify({ name: 'Hundredfold' }))
 
       const { handled, res } = await callServeStatic('/manifest.webmanifest', dir)
 

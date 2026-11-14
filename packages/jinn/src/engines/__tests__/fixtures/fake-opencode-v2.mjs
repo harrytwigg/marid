@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// A stand-in for the OpenCode 2 CLI, speaking the surface Jinn uses, in the
+// A stand-in for the OpenCode 2 CLI, speaking the surface Hundredfold uses, in the
 // shapes a real 2.0.29 server answers with (captured event streams, a message
 // store listing and the server's own OpenAPI document):
 //   --version                       prints `opencode v2.0.29`
@@ -29,7 +29,7 @@
 //     `connected` for every server of the OPENCODE_CONFIG file afterwards.
 //
 // Turn behaviour is steered by the directive words in the prompt text AFTER ITS
-// LAST `---` (Jinn puts its notices and the system prompt before it):
+// LAST `---` (Hundredfold puts its notices and the system prompt before it):
 //   TOOL        one shell tool step (finish tool-calls), then the text "tool done"
 //   SLOWTOOL    the same, with a tool that runs 1.5 s (time to steer an input in)
 //   SLOW        a text step that takes 2 s
@@ -59,7 +59,7 @@
 // carries the directive FAILCOMPACT.
 //
 // Test hooks:
-//   FAKE_V2_OPERATOR_BUSY_MS  an operator input (no Jinn metadata) is already
+//   FAKE_V2_OPERATOR_BUSY_MS  an operator input (no Hundredfold metadata) is already
 //                             running in the session for that long whenever a
 //                             prompt arrives at an idle session
 //   FAKE_V2_LOG               a file each verb appends `<verb> <args>` to

@@ -193,12 +193,12 @@ describe("InteractiveClaudeEngine — settings file survives model-switch cold r
     await flush();
     expect(ptys).toHaveLength(1);
     expect(ptys[0]._writes.at(-1)).toContain("turn two");
-    expect(ptys[0]._writes.at(-1)).not.toContain("## Jinn platform context refresh");
+    expect(ptys[0]._writes.at(-1)).not.toContain("## Hundredfold platform context refresh");
     hookCb!({ hook_event_name: "UserPromptSubmit" });
     hookCb!({ hook_event_name: "Stop", last_assistant_message: "done2" });
     await unchanged;
 
-    const refresh = "## Jinn platform context refresh\n- Active model: opus";
+    const refresh = "## Hundredfold platform context refresh\n- Active model: opus";
     const dirty = engine.run({
       sessionId: SID,
       prompt: "turn three",
@@ -232,7 +232,7 @@ describe("InteractiveClaudeEngine — settings file survives model-switch cold r
     await unchanged;
 
     lifecycle.releaseSession(SID);
-    const refresh = "## Jinn platform context refresh\n- Active model: sonnet";
+    const refresh = "## Hundredfold platform context refresh\n- Active model: sonnet";
     const dirty = engine.run({
       sessionId: SID,
       prompt: "cold dirty",

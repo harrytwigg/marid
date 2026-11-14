@@ -159,11 +159,11 @@ function whoIsAround(policy: LegacyIdleCapacityPolicy): string[] {
   const { idleMinutes, usageDeltaPercent } = policy.operatorActivity;
   return [
     "**Who is around.** The operator is live when the snapshot shows any of these",
-    `within the last ${plural(idleMinutes, "minute", "minutes")}: activity on a session they drive, a turn in a Jinn`,
+    `within the last ${plural(idleMinutes, "minute", "minutes")}: activity on a session they drive, a turn in a Hundredfold`,
     `interactive Claude session, or the Claude five-hour usage rising by ${plural(usageDeltaPercent, "point", "points")} or`,
-    "more since the previous tick while no Jinn session ran. The quiet hours are",
+    "more since the previous tick while no Hundredfold session ran. The quiet hours are",
     `${policy.quietHours.start} to ${policy.quietHours.end} local time. The operator's activity is about the default`,
-    "account; an account only Jinn uses has the operator not live, unless its own",
+    "account; an account only Hundredfold uses has the operator not live, unless its own",
     "usage rose while none of its sessions ran.",
   ];
 }

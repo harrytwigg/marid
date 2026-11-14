@@ -180,7 +180,7 @@ describe('dispatch rows', () => {
           payload: {
             targetSessionId: 'child-9',
             employee: 'jinn-dev',
-            employeeDisplay: 'Jinn Dev',
+            employeeDisplay: 'Hundredfold Dev',
             preview: 'Also check the mobile breakpoint.',
             sentAt: 101,
           },
@@ -197,7 +197,7 @@ describe('dispatch rows', () => {
     const linked = container.querySelector('[data-dispatch="linked"]')
     expect(linked).toBeTruthy()
     expect(linked!.textContent).toContain('Followed up')
-    expect(linked!.textContent).toContain('Jinn Dev')
+    expect(linked!.textContent).toContain('Hundredfold Dev')
     expect(linked!.textContent).toContain('Also check the mobile breakpoint.')
     fireEvent.click(linked as HTMLElement)
     expect(onPeek).toHaveBeenCalledWith(expect.objectContaining({ kind: 'dispatch', sessionId: 'child-9' }))

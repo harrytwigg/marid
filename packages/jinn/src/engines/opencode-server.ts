@@ -48,11 +48,11 @@ import { ServerHolds, type HoldKind } from "./opencode-server-holds.js";
 import type { OpencodeAccountsReader, OpencodeAccountStaging } from "./opencode-accounts.js";
 
 /**
- * opencode server mode: one `opencode serve` per Jinn session.
+ * opencode server mode: one `opencode serve` per Hundredfold session.
  *
  * opencode is client/server. Its TUI is a client of an HTTP server, and
  * `opencode attach <url>` is the TUI on its own. So one server per session lets
- * a Jinn turn (sent over the API, `opencode-server-turn.ts`) and the operator's
+ * a Hundredfold turn (sent over the API, `opencode-server-turn.ts`) and the operator's
  * terminal view share a session live, the way the interactive Claude engine's
  * do, without screen-scraping anything: the turn is still parsed by
  * `OpencodeTurn`, and interrupts go through the server's own API.
@@ -87,7 +87,7 @@ export interface OpencodeServerSpec extends RemoteTarget {
 }
 
 export interface OpencodeServer {
-  /** The Jinn session this server belongs to. */
+  /** The Hundredfold session this server belongs to. */
   sessionId: string;
   /** `local`, or the employee's `remoteHost` as written — the key the per-host
    *  idle cap is configured by. */
@@ -724,7 +724,7 @@ export class OpencodeServerPool {
     return this.deps.disableFff?.() ?? true;
   }
 
-  /** What Marid's settings put on the server's process (opencode-launch.ts). */
+  /** What Hundredfold's settings put on the server's process (opencode-launch.ts). */
   private processOptions(): OpencodeProcessOptions {
     const commandTimeoutMs = this.deps.commandTimeoutMs?.() ?? 0;
     return { disableFff: this.disableFff(), ...(commandTimeoutMs > 0 ? { commandTimeoutMs } : {}) };

@@ -372,7 +372,7 @@ export async function refreshOpencodeModels(
 
 /**
  * Discover Grok's authenticated model list (`grok models`) and refresh the registry.
- * Never throws; until discovery succeeds the registry uses Jinn's known Grok model
+ * Never throws; until discovery succeeds the registry uses Hundredfold's known Grok model
  * catalog so the UI still shows the public Grok choices.
  */
 export async function refreshGrokModels(config: JinnConfig): Promise<void> {
@@ -395,7 +395,7 @@ export async function refreshGrokModels(config: JinnConfig): Promise<void> {
 
 /**
  * Discover Hermes's available model list and refresh the registry.
- * Never throws; until discovery succeeds the registry uses Jinn's known Hermes model
+ * Never throws; until discovery succeeds the registry uses Hundredfold's known Hermes model
  * catalog so the UI still shows the public Hermes choices.
  */
 export async function refreshHermesModels(config: JinnConfig): Promise<void> {

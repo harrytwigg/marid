@@ -13,7 +13,7 @@ import type { OpencodeApi } from "./opencode-version.js";
  * at its timeout and tell the model (verified on 1.19.0 and 2.0.29), so the
  * ceiling caps that timeout: a small opencode plugin, shipped in this package
  * (`assets/opencode/command-timeout/`), rewrites each shell call's timeout to
- * at most the ceiling, and 2.x background commands are left alone. Marid lists
+ * at most the ceiling, and 2.x background commands are left alone. Hundredfold lists
  * the plugin in the session's staged config, and passes the ceiling in
  * {@link COMMAND_TIMEOUT_ENV}.
  *

@@ -80,7 +80,7 @@ export function unsupportedServerFlags(flags: readonly string[] | undefined): st
   return out;
 }
 
-/** The variant Jinn adds to a `run` argv: the turn's effort, unless the
+/** The variant Hundredfold adds to a `run` argv: the turn's effort, unless the
  *  operator's cliFlags already carry a `--variant`, which then wins. */
 export function runVariantOf(opts: Pick<EngineRunOpts, "effortLevel" | "cliFlags">): string | undefined {
   return variantFromCliFlags(opts.cliFlags) ? undefined : variantOf(opts);

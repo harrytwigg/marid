@@ -85,7 +85,7 @@ find "$home" -maxdepth 1 -type l -exec rm -f {} + 2>/dev/null || true
 for dir in ${FARM_FILTERED_DIRS.join(" ")}; do
   if [ -d "$home/$dir" ] && [ ! -L "$home/$dir" ]; then rm -rf "$home/$dir"; fi
 done
-# Marks this as a remote session's stage, so Marid code started here refuses to
+# Marks this as a remote session's stage, so Hundredfold code started here refuses to
 # start a gateway or open a database (shared/local-db-guard.ts).
 printf 'remote session stage: department-scoped, nothing here leads to the gateway home\\n' > "$home/${REMOTE_STAGE_MARKER}"
 for a in hook-relay.mjs remote-trust-seed.mjs; do

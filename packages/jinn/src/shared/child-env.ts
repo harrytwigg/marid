@@ -106,7 +106,7 @@ const ENGINE_SCRUB_RULES: ReadonlyArray<{
  * MCP servers its department allow-lists, and those reach it with their values already
  * resolved into its MCP config, so it inherits none of those variables, only these:
  * the login basics, locale, terminal and temp dirs, outbound proxy and CA settings,
- * Claude Code's own model and feature switches, and the Jinn variables its hooks and
+ * Claude Code's own model and feature switches, and the Hundredfold variables its hooks and
  * `jinn` MCP server find the gateway with. Its own `JINN_SESSION_ID` and
  * `JINN_DEPARTMENT` and `JINN_EMPLOYEE` are set on top by the engine.
  *
@@ -131,7 +131,7 @@ const SCOPED_SESSION_ENV_EXACT: ReadonlySet<string> = new Set([
   "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL",
   "MAX_THINKING_TOKENS", "MAX_MCP_OUTPUT_TOKENS", "MCP_TIMEOUT", "MCP_TOOL_TIMEOUT",
   "BASH_DEFAULT_TIMEOUT_MS", "BASH_MAX_TIMEOUT_MS", "BASH_MAX_OUTPUT_LENGTH", "USE_BUILTIN_RIPGREP",
-  // Jinn: where the hook relay and the `jinn` MCP server find the gateway, and which instance those belong to
+  // Hundredfold: where the hook relay and the `jinn` MCP server find the gateway, and which instance those belong to
   // (so a `jinn` run against another home drops them, sandbox-env.ts). Under either codename: a session an
   // older gateway started carries the older names.
   ...envNamesFor(["HOME", "INSTANCE", "GATEWAY_URL", "GATEWAY_TOKEN", "BINDING_HOME"]),

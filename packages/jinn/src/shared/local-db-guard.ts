@@ -3,7 +3,7 @@ import path from "node:path";
 import { LEGACY_REMOTE_STAGE_MARKER, REMOTE_STAGE_MARKER } from "./remote-farm.js";
 
 /**
- * Refuse to open a Marid SQLite database that is not on a local filesystem.
+ * Refuse to open a Hundredfold SQLite database that is not on a local filesystem.
  *
  * The registry runs in WAL mode. WAL needs a shared-memory index (`-shm`) and
  * POSIX locks that every process using the database can see; SQLite's own

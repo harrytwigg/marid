@@ -397,7 +397,7 @@ export class GrokInteractiveEngine implements InterruptibleEngine, PtyViewEngine
     if (sessionId) env.JINN_SESSION_ID = sessionId;
     Object.assign(env, employeeSessionEnv(sessionId));
     // The TUI blocks prompt execution while inherited MCP compatibility servers
-    // initialize. Jinn exposes its own MCP/connectors; keep the Grok PTY clean
+    // initialize. Hundredfold exposes its own MCP/connectors; keep the Grok PTY clean
     // and deterministic unless the operator explicitly opts back in.
     env.GROK_CLAUDE_MCPS_ENABLED = "false";
     env.GROK_CURSOR_MCPS_ENABLED = "false";

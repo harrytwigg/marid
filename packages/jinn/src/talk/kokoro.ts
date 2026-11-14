@@ -1,5 +1,5 @@
 /**
- * Jinn Talk — Kokoro-82M TTS engine (Phase 2 voice loop).
+ * Hundredfold Talk — Kokoro-82M TTS engine (Phase 2 voice loop).
  *
  * Implements the `Tts` interface from ./context.js. Mirrors the STT sidecar
  * pattern (src/stt/stt.ts): weights live under JINN_HOME/models/kokoro, a Python

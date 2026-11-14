@@ -3,7 +3,7 @@ import { parseVersionOutput, productBanner } from "../brand.js";
 
 describe("parseVersionOutput", () => {
   it("reads the version out of the current banner", () => {
-    expect(parseVersionOutput("Marid 0.33.3 (built on Jinn)")).toBe("0.33.3");
+    expect(parseVersionOutput("Hundredfold 0.33.3 (built on Jinn)")).toBe("0.33.3");
   });
 
   it("round-trips whatever productBanner prints", () => {
@@ -18,7 +18,8 @@ describe("parseVersionOutput", () => {
   });
 
   it("tolerates surrounding whitespace", () => {
-    expect(parseVersionOutput("  Marid 0.33.3 (built on Jinn)\r")).toBe("0.33.3");
+    expect(parseVersionOutput("  Hundredfold 0.33.3 (built on Jinn)\r")).toBe("0.33.3");
+    expect(parseVersionOutput("Marid 0.33.3 (built on Jinn)")).toBe("0.33.3");
     expect(parseVersionOutput("0.33.3\n")).toBe("0.33.3");
   });
 
@@ -26,11 +27,11 @@ describe("parseVersionOutput", () => {
     for (const line of [
       "",
       "   ",
-      "Marid",
-      "Marid (built on Jinn)",
-      "Marid 0.33 (built on Jinn)",
-      "Marid 0.33.3",
-      "Marid 0.33.3 (built on Jinn) extra",
+      "Hundredfold",
+      "Hundredfold (built on Jinn)",
+      "Hundredfold 0.33 (built on Jinn)",
+      "Hundredfold 0.33.3",
+      "Hundredfold 0.33.3 (built on Jinn) extra",
       "Other 0.33.3 (built on Jinn)",
       "jinn: command not found",
       "v0.33.3",

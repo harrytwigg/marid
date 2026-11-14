@@ -100,7 +100,7 @@ export type OpencodeMcpServer = OpencodeLocalMcpServer | OpencodeRemoteMcpServer
 export interface OpencodeSessionConfig {
   $schema: string;
   mcp: Record<string, OpencodeMcpServer>;
-  /** Plugins Marid adds to the operator's own (opencode-command-timeout.ts). */
+  /** Plugins Hundredfold adds to the operator's own (opencode-command-timeout.ts). */
   plugin?: string[];
   /** Only for a purpose-built toolset session: the confined agent below. */
   agent?: Record<string, OpencodeConfinedAgent>;

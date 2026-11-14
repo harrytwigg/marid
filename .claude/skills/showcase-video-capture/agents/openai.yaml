@@ -1,4 +1,4 @@
 interface:
   display_name: "Showcase Video Capture"
-  short_description: "Capture polished Jinn showcase GIFs"
-  default_prompt: "Use $showcase-video-capture to create a polished Jinn showcase GIF from an isolated mock instance."
+  short_description: "Capture polished Hundredfold showcase GIFs"
+  default_prompt: "Use $showcase-video-capture to create a polished Hundredfold showcase GIF from an isolated mock instance."

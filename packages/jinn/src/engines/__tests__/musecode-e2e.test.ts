@@ -114,9 +114,9 @@ describe.skipIf(!ENABLED)("Muse Code (real binary)", () => {
   }, 60_000);
 
   it("adds the system prompt on a fresh session only", async () => {
-    const first = await engine.run(opts({ prompt: "do it", systemPrompt: "You are Marid." }));
-    expect(first.result).toBe("echo: You are Marid.\n\n---\n\ndo it");
-    const second = await engine.run(opts({ prompt: "again", systemPrompt: "You are Marid.", resumeSessionId: first.sessionId }));
+    const first = await engine.run(opts({ prompt: "do it", systemPrompt: "You are Hundredfold." }));
+    expect(first.result).toBe("echo: You are Hundredfold.\n\n---\n\ndo it");
+    const second = await engine.run(opts({ prompt: "again", systemPrompt: "You are Hundredfold.", resumeSessionId: first.sessionId }));
     expect(second.result).toBe("echo: again");
   }, 60_000);
 

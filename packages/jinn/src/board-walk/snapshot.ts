@@ -56,7 +56,7 @@ export interface SnapshotEngine {
 export interface OperatorSignals {
   /** Newest activity on a session the operator drives (top-level, not cron, not a system employee). */
   lastOperatorSessionActivity?: { at: string; minutesAgo: number };
-  /** Newest turn in a Jinn Claude session the operator drives (its statusline snapshot). */
+  /** Newest turn in a Hundredfold Claude session the operator drives (its statusline snapshot). */
   lastInteractiveCliTurn?: { at: string; minutesAgo: number };
   /** The Claude five-hour usage since the previous tick's reading of the same window. */
   claudeUsageSincePreviousTick?: {
@@ -64,8 +64,8 @@ export interface OperatorSignals {
     previousUsedPercent: number;
     usedPercentNow: number;
     risePoints: number;
-    /** Whether any Jinn session was running or active in between — when none
-     *  was, the rise was spent outside Jinn, i.e. by the operator. */
+    /** Whether any Hundredfold session was running or active in between — when none
+     *  was, the rise was spent outside Hundredfold, i.e. by the operator. */
     jinnSessionActiveInBetween: boolean;
   };
 }
@@ -120,7 +120,7 @@ export function newestOperatorSessionActivity(sessions: readonly Session[]): num
 }
 
 /** The newest statusline snapshot written by a session the operator drives.
- *  Every Jinn Claude session installs the recorder and writes
+ *  Every Hundredfold Claude session installs the recorder and writes
  *  `<session id>.json` on each turn — the walk's own turn, cron and delegated
  *  work included — so a snapshot only says "the operator" when its session is
  *  one they drive. A file whose session the registry does not list is not
@@ -137,7 +137,7 @@ export function newestOperatorStatuslineMtime(sessions: readonly Session[], dir 
   }
 }
 
-/** Was any Jinn session active at or after `sinceMs` — holding capacity now,
+/** Was any Hundredfold session active at or after `sinceMs` — holding capacity now,
  *  or with activity since? */
 export function jinnActiveSince(sessions: readonly Session[], sinceMs: number, holding: readonly Session[]): boolean {
   if (holding.length > 0) return true;

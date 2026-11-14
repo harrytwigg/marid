@@ -56,8 +56,8 @@ function assessLocation(resolved: string, base: string, guard: HomeGuard): FileR
   const home = realpathOrResolved(os.homedir());
   if (isInsidePath(resolved, path.join(home, ".ssh"))) return { allowed: false, reason: "Refusing to read SSH secrets" };
   const protectedEntry = protectedHomeEntry(resolved, guard);
-  if (protectedEntry === "secrets") return { allowed: false, reason: "Refusing to read Jinn secrets" };
-  if (protectedEntry) return { allowed: false, reason: "Refusing to read Jinn credential or session-config files" };
+  if (protectedEntry === "secrets") return { allowed: false, reason: "Refusing to read Hundredfold secrets" };
+  if (protectedEntry) return { allowed: false, reason: "Refusing to read Hundredfold credential or session-config files" };
   // A literal ".claude" segment covers project-local dirs; the resolved config dir
   // covers the real one, which CLAUDE_CONFIG_DIR can move anywhere (the container
   // does exactly that).

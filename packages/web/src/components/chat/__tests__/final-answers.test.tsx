@@ -45,7 +45,7 @@ describe('completed answers with a callback queued during work', () => {
     expect(finalAnswerIndices(history)).toEqual([-1, 2, 2])
   })
 
-  it('counts native agents separately from Jinn teammates in completed work', () => {
+  it('counts native agents separately from Hundredfold teammates in completed work', () => {
     const native: Message = { id: 'native', role: 'assistant', content: 'Native Codex agents', timestamp: T0 + 4_500, blocks: [{
       id: 'native-block', type: 'task-list', version: 2, status: 'completed', payload: {
         kind: 'native-agents', items: [{ id: 'research', text: 'research: Completed', status: 'completed' }],

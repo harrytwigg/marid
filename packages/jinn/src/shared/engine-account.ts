@@ -104,7 +104,7 @@ export function employeeClaudeAccount(name: string): string {
 }
 
 /**
- * Which account a Jinn session's Claude turns run as, by session id. The
+ * Which account a Hundredfold session's Claude turns run as, by session id. The
  * gateway registers this at boot (it needs the session registry and the
  * roster, which this module cannot import). With nothing registered every
  * session is the default account, which is how a single-account instance and

@@ -956,7 +956,7 @@ async function executeScenario({ scenario, candidateTarball, baselineTarball, ro
         }
       } else {
         if (fs.existsSync(path.join(layout.home, ".migration-snapshots"))) throw new Error("no-handoff candidate created a snapshot")
-        if (fs.readFileSync(path.join(layout.logs, "candidate-gateway.log"), "utf8").includes("Jinn update installed")) throw new Error("no-handoff candidate printed a migration banner")
+        if (fs.readFileSync(path.join(layout.logs, "candidate-gateway.log"), "utf8").includes("Hundredfold update installed")) throw new Error("no-handoff candidate printed a migration banner")
         summary.checks.noPromptBannerSnapshotOrSession = "PASS"
       }
     } finally {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // codename: __CODENAME__
-// Jinn hook relay. Invoked by Claude Code hooks as: node hook-relay.mjs <sessionId>
+// Hundredfold hook relay. Invoked by Claude Code hooks as: node hook-relay.mjs <sessionId>
 // Reads hook JSON on stdin, POSTs to the gateway's /api/internal/hook.
 // Most relay failures exit 0 so Claude is not interrupted; policy hard-blocks exit non-zero.
 //
@@ -42,8 +42,8 @@ async function main() {
     body,
   }).catch((err) => { logBestEffort(err); return null; });
   if (response && response.status === 451) {
-    const text = await response.text().catch(() => "Command blocked by Jinn security policy");
-    process.stderr.write(text || "Command blocked by Jinn security policy");
+    const text = await response.text().catch(() => "Command blocked by Hundredfold security policy");
+    process.stderr.write(text || "Command blocked by Hundredfold security policy");
     process.exitCode = 2;
   }
 }

@@ -221,7 +221,7 @@ function App() {
 }
 
 /**
- * The precached shell is what makes an installed Jinn open on its own paint
+ * The precached shell is what makes an installed Hundredfold open on its own paint
  * instead of on a network round trip. Production only: in `vite dev` a worker
  * would sit in front of the gateway proxy and serve yesterday's bundle.
  */

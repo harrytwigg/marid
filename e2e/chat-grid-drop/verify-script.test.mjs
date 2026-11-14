@@ -8,7 +8,7 @@ const script = fs.readFileSync(path.resolve("scripts/verify-chat-grid-drop.sh"),
 const UNSET = /^unset (JINN_(?:[A-Z_]+ )*JINN_[A-Z_]+)$/m
 
 /**
- * A Jinn session exports JINN_HOME, JINN_PORT, JINN_INSTANCE and friends pointing at the
+ * A Hundredfold session exports JINN_HOME, JINN_PORT, JINN_INSTANCE and friends pointing at the
  * operator's live gateway. resolveJinnHome() honours JINN_HOME over HOME and
  * applyGatewayEnvOverrides() honours JINN_PORT over the sandbox's own config.yaml, so an
  * inherited environment aims create/start/stop/destroy at production. The verifier only

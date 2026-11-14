@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 describe("workspace naming", () => {
-  it("derives a stable Jinn instance name and home suffix from a friendly name", () => {
+  it("derives a stable Hundredfold instance name and home suffix from a friendly name", () => {
     expect(normalizeWorkspaceName("John")).toEqual({
       displayName: "John",
       slug: "john",
@@ -62,7 +62,7 @@ describe("workspace creation", () => {
       legacyRegistryPath: path.join(root, "missing.json"),
       execFile,
       isPortAvailable: async () => true,
-    })).rejects.toThrow(/Docker image supports one Jinn instance/i);
+    })).rejects.toThrow(/Docker image supports one Hundredfold instance/i);
     expect(execFile).not.toHaveBeenCalled();
   });
 
@@ -76,7 +76,7 @@ describe("workspace creation", () => {
       if (args[1] === "setup") {
         const home = options?.env?.JINN_HOME as string;
         fs.mkdirSync(home, { recursive: true });
-        fs.writeFileSync(path.join(home, "config.yaml"), "gateway:\n  port: 7777\nportal:\n  companyName: Jinn\n");
+        fs.writeFileSync(path.join(home, "config.yaml"), "gateway:\n  port: 7777\nportal:\n  companyName: Hundredfold\n");
       }
       return { stdout: "", stderr: "" };
     });

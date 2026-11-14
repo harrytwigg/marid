@@ -27,7 +27,7 @@ beforeEach(() => {
 });
 
 describe("the stage directory", () => {
-  it("lives beside the Jinn home, outside it, in a root of this instance's own", () => {
+  it("lives beside the Hundredfold home, outside it, in a root of this instance's own", () => {
     expect(departmentStageDir(SLUG)).toBe(path.join(path.dirname(JINN_HOME), ".jinn-departments", ".instances", path.basename(JINN_HOME), SLUG));
     expect(path.relative(JINN_HOME, departmentStageDir(SLUG)).startsWith("..")).toBe(true);
   });
@@ -63,7 +63,7 @@ describe("the stage directory", () => {
 });
 
 describe("the cwd of a local session", () => {
-  it("is the Jinn home for an unscoped session, and for no session at all", () => {
+  it("is the Hundredfold home for an unscoped session, and for no session at all", () => {
     expect(spawnCwd(unscoped)).toBe(JINN_HOME);
     expect(spawnCwd(undefined)).toBe(JINN_HOME);
     expect(sessionScopeDepartment(unscoped)).toBeNull();
@@ -88,7 +88,7 @@ describe("the cwd of a local session", () => {
     expect(fs.existsSync(path.join(stage(), "scratch.txt"))).toBe(false);
   });
 
-  it("never falls back to the Jinn home when the stage directory cannot be prepared", () => {
+  it("never falls back to the Hundredfold home when the stage directory cannot be prepared", () => {
     // A file where the stage root belongs: nothing can be created under it.
     const root = path.dirname(departmentStageDir(SLUG));
     fs.rmSync(root, { recursive: true, force: true });

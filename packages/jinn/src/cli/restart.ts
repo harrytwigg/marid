@@ -10,7 +10,7 @@ import { missingAccountKeyWarning } from "./restart-account-keys.js";
  *
  * Forks a detached helper that does stop → wait-for-port-free → start out of
  * band, so it survives the gateway killing its own sessions. Safe to run from
- * inside a Jinn chat session: this command returns immediately, the helper
+ * inside a Hundredfold chat session: this command returns immediately, the helper
  * brings the gateway back, and the gateway resumes the interrupted session.
  */
 export interface RestartOptions {

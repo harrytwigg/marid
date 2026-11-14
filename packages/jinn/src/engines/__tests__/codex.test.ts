@@ -164,7 +164,7 @@ describe("CodexEngine — systemPrompt / developer_instructions injection", () =
     );
     // Resume args: ["exec", "resume", ..., <resumeId>, <prompt>] — prompt last.
     const finalArg = call.args[call.args.length - 1];
-    expect(finalArg).not.toContain("## Jinn platform context refresh");
+    expect(finalArg).not.toContain("## Hundredfold platform context refresh");
     expect(finalArg).not.toContain("- Session ID: duplicated-jinn-session");
     expect(finalArg).not.toContain("- Gateway: http://127.0.0.1:7777");
     expect(finalArg).not.toContain("YOU ARE JIMBO");
@@ -176,7 +176,7 @@ describe("CodexEngine — systemPrompt / developer_instructions injection", () =
   });
 
   it("includes an explicitly supplied platform context refresh on resume", async () => {
-    const refresh = "## Jinn platform context refresh\n- Active engine: codex";
+    const refresh = "## Hundredfold platform context refresh\n- Active engine: codex";
     const { call } = await runWith(
       {
         systemPrompt: "# Full system context",
@@ -577,7 +577,7 @@ describe("CodexEngine — error / failure handling", () => {
 });
 
 describe("CodexEngine — process lifecycle", () => {
-  it("exports the Jinn session id to spawned commands", async () => {
+  it("exports the Hundredfold session id to spawned commands", async () => {
     const engine = new CodexEngine({
       codexSessionsDir: fs.mkdtempSync(path.join(os.tmpdir(), "codex-env-")),
     });

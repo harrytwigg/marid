@@ -32,7 +32,7 @@ export function findTranscriptForSession(
 /** The transcript of a Claude session that ran on `profile` in `cwd`. Claude Code
  *  writes it under the profile's own config dir, so a session on another profile is
  *  not under the gateway's `~/.claude/projects`; undefined means the gateway's
- *  own profile. `cwd` is where the session ran: the Jinn home unless it is scoped. */
+ *  own profile. `cwd` is where the session ran: the Hundredfold home unless it is scoped. */
 export function findSessionTranscript(claudeSessionId: string, profile: ClaudeProfile | undefined, cwd: string = JINN_HOME): string | undefined {
   return findTranscriptForSession(claudeSessionId, cwd, claudeProjectsDirFor(profile ?? null));
 }

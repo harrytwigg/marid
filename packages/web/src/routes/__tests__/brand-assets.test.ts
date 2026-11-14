@@ -7,10 +7,10 @@ const read = (path: string) => readFileSync(join(root, path))
 const text = (path: string) => read(path).toString("utf8")
 
 const SVGS = [
-  "public/icons/marid-mark.svg",
-  "public/icons/marid-mark-maskable.svg",
-  "public/icons/marid-mark-mono.svg",
-  "public/icons/marid-favicon.svg",
+  "public/icons/hundredfold-mark.svg",
+  "public/icons/hundredfold-mark-maskable.svg",
+  "public/icons/hundredfold-mark-mono.svg",
+  "public/icons/hundredfold-favicon.svg",
 ]
 
 const png = (path: string) => {
@@ -36,7 +36,7 @@ describe("brand assets", () => {
   })
 
   it("keeps the maskable tile full-bleed", () => {
-    expect(text("public/icons/marid-mark-maskable.svg")).not.toContain("rx=")
+    expect(text("public/icons/hundredfold-mark-maskable.svg")).not.toContain("rx=")
   })
 
   it("takes the manifest colours from the dark sheet of the glass palette", () => {
@@ -54,7 +54,7 @@ describe("brand assets", () => {
 
   it("points the tab icon at the lead delta, with a PNG fallback", () => {
     const html = text("index.html")
-    expect(html).toContain('href="/icons/marid-favicon.svg"')
+    expect(html).toContain('href="/icons/hundredfold-favicon.svg"')
     expect(html).toContain('href="/icons/favicon-32.png"')
   })
 

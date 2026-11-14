@@ -139,7 +139,7 @@ describe("switching an instance over", () => {
   });
 
   it("is refused when this build has not been renamed", async () => {
-    const same = { codename: "jinn", upper: "JINN", title: "Jinn", renamed: false };
+    const same = { codename: "jinn", upper: "JINN", title: "Hundredfold", renamed: false };
     const report = await switchOver({ ...options, apply: true, names: same });
     expect(report.blockers[0]).toContain("nothing to switch over");
   });

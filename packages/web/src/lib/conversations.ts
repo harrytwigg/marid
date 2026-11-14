@@ -1,5 +1,5 @@
 /**
- * Conversation storage and utility functions for the Jinn chat.
+ * Conversation storage and utility functions for the Hundredfold chat.
  * Conversations are keyed by sessionId (not agentId).
  */
 

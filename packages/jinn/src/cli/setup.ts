@@ -32,7 +32,7 @@ import {
   materializeTemplateContent,
   type TemplateMaterializationInputs,
 } from "../shared/template-materialization.js";
-import { PRODUCT_NAME } from "../shared/brand.js";
+import { LEGACY_PORTAL_NAME, PRODUCT_NAME } from "../shared/brand.js";
 import { settleGatewayPort } from "./setup-port.js";
 import { NAMES } from "../shared/codename.js";
 
@@ -295,7 +295,7 @@ models:
       - { id: "GPT-OSS 120B (Medium)", label: "GPT-OSS 120B Medium", supportsEffort: false, effortLevels: [], contextWindow: 131072 }
 connectors: {}
 portal:
-  companyName: "Jinn"
+  companyName: "${PRODUCT_NAME}"
 
 # ── Optional blocks (uncomment to customize) ──────────────────────────────
 # MCP servers give employees browser, search, fetch, and messaging tools.
@@ -475,13 +475,13 @@ export async function runSetup(opts?: { force?: boolean; port?: number }): Promi
   const isFreshSetup = !fs.existsSync(CONFIG_PATH);
   const isInteractive = process.stdin.isTTY && isFreshSetup;
 
-  // Derive default COO name from instance name if set, otherwise "Jinn"
+  // Derive default COO name from instance name if set, otherwise the product name
   const instanceName = process.env.JINN_INSTANCE;
   const setupName = process.env.JINN_SETUP_NAME?.trim();
   const instanceLabel = instanceName?.replace(/^jinn-/, "");
   const defaultName = setupName || (instanceLabel
     ? instanceLabel.charAt(0).toUpperCase() + instanceLabel.slice(1)
-    : "Jinn");
+    : PRODUCT_NAME);
 
   let chosenName = defaultName;
   let chosenCompanyName = defaultName;
@@ -561,7 +561,7 @@ export async function runSetup(opts?: { force?: boolean; port?: number }): Promi
     } else {
       source += `\nportal:\n${companyLine}\n`;
     }
-    if (chosenName !== "Jinn") {
+    if (chosenName !== LEGACY_PORTAL_NAME) {
       const portalNameLine = `  portalName: ${JSON.stringify(chosenName)}`;
       if (/^\s*portalName:/m.test(source)) source = source.replace(/^\s*portalName:.*$/m, portalNameLine);
       else source = source.replace(/^portal:\s*$/m, `portal:\n${portalNameLine}`);

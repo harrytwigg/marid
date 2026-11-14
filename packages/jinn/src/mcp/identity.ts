@@ -44,7 +44,7 @@ export function stripMcpBootstrapArgs(args: readonly string[] = []): string[] {
  *
  * The session id is descriptive; the capability is the server-minted proof that
  * this particular built-in MCP process was provisioned for that session. It is
- * defense-in-depth for local, single-user Jinn: it prevents a prompt-injected
+ * defense-in-depth for local, single-user Hundredfold: it prevents a prompt-injected
  * tool caller from spoofing another session's id on scoped writes. It is not an
  * internet auth boundary; the operator/global-token path remains unchanged.
  *

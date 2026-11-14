@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# The caller's shell usually carries its own live instance: a Jinn session exports
+# The caller's shell usually carries its own live instance: a Hundredfold session exports
 # JINN_HOME, JINN_PORT, JINN_HOST, JINN_INSTANCE and the gateway URL/token/session id.
 # Those are not inert here. resolveJinnHome() (packages/jinn/src/shared/home.ts) returns
 # $JINN_HOME outright and otherwise names the directory after $JINN_INSTANCE, so setting

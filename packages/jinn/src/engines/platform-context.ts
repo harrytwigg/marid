@@ -6,7 +6,7 @@ import {
   type PlatformContextSnapshot,
 } from "../sessions/context.js";
 
-export const PLATFORM_CONTEXT_REFRESH_HEADING = "## Jinn platform context refresh";
+export const PLATFORM_CONTEXT_REFRESH_HEADING = "## Hundredfold platform context refresh";
 
 export function buildPromptWithPlatformContext(
   opts: Pick<EngineRunOpts, "prompt" | "systemPrompt" | "resumeSessionId" | "platformContextRefresh">,

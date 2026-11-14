@@ -1,5 +1,5 @@
 /**
- * Jinn Talk — server-side speech sanitizer.
+ * Hundredfold Talk — server-side speech sanitizer.
  *
  * Converts a sentence (or flush remainder) into clean spoken text before
  * handing it to the TTS engine. Strips Markdown syntax, bare URLs, UUIDs,

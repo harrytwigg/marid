@@ -108,7 +108,7 @@ beforeEach(() => {
 });
 
 describe("a scoped session that hits the limit and waits (Branch B)", () => {
-  it("retries in the stage directory, not the Jinn home", async () => {
+  it("retries in the stage directory, not the Hundredfold home", async () => {
     let seen: EngineRunOpts | undefined;
     const run = vi.fn(async (o: EngineRunOpts) => { seen = o; return { result: "ok", sessionId: "claude-thread-1" } as EngineResult; });
     const outcome = await handleRateLimit(opts({}, run, {}));
@@ -155,7 +155,7 @@ describe("a scoped session moved onto another Claude account (Branch A)", () => 
     expect(run.mock.calls[0]![0].cwd).toBe(stageDir());
   });
 
-  it("an unscoped session still runs in the Jinn home, and still falls back to codex", async () => {
+  it("an unscoped session still runs in the Hundredfold home, and still falls back to codex", async () => {
     let seen: EngineRunOpts | undefined;
     const codex = vi.fn(async (o: EngineRunOpts) => { seen = o; return { result: "from-codex", sessionId: "c1" } as EngineResult; });
     const outcome = await handleRateLimit(opts({}, vi.fn(), { codex }, false));

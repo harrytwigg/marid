@@ -322,7 +322,7 @@ function signalGateway(port?: number, options: LifecycleKillOptions = {}): numbe
           : portOwner.status === "none"
           ? `PID file points to ${pid}, but no process owns port ${targetPort}. Cleaning up stale PID file.`
           : portOwner.status === "unknown"
-            ? `PID file points to ${pid}, but port ${targetPort} ownership could not be verified and the process does not look like Jinn. Cleaning up stale PID file.`
+            ? `PID file points to ${pid}, but port ${targetPort} ownership could not be verified and the process does not look like Hundredfold. Cleaning up stale PID file.`
             : `PID file points to ${pid}, but port ${targetPort} is owned by ${portOwner.pid}. Cleaning up stale PID file.`,
       );
       fs.unlinkSync(PID_FILE);

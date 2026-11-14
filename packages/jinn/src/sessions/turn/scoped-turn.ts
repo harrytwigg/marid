@@ -9,7 +9,7 @@ import { sessionScopeDepartment } from "../session-scope.js";
  * The department-scope gates on a turn (FR-008, FR-020, FR-026): no turn starts in a
  * session whose department binding is lost, a scoped session runs only on the claude
  * engine, whatever a spawn, delegation or fallback asked for, and it starts only once
- * its stage directory is in place: it never falls back to the Jinn home. For a session on
+ * its stage directory is in place: it never falls back to the Hundredfold home. For a session on
  * a remote host that is the host's copy, which the remote staging prepares.
  */
 export function refuseScopedTurn(session: Session, engineOverride: string | undefined, remote = false, claudeBin = "claude"): string | undefined {

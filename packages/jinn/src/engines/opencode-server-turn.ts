@@ -9,14 +9,14 @@ import { abandonedRetryError, providerFailureReason, providerRetryOf, SettleWait
 import { metadataTag, readMetadataTag } from "./opencode-metadata-tag.js";
 
 /**
- * One Jinn turn, sent straight to the session's opencode server over HTTP.
+ * One Hundredfold turn, sent straight to the session's opencode server over HTTP.
  *
  * Not `opencode run --attach`, although that was the first design: opencode
  * 1.18.31's attached client prints `step_start` and exits 0 before the answer
  * whenever the session's directory is not a git repository (5/5 reproduced on
  * a remote host, 0/5 in a repo; `--dir` does not help), while the server itself
  * finishes the turn correctly. A remote employee's working root is exactly such
- * a directory. So Jinn is the client:
+ * a directory. So Hundredfold is the client:
  *
  *   1. subscribe to the server's `/event` stream, and wait for it to connect;
  *   2. create the opencode session, or resume the one named;
@@ -51,17 +51,17 @@ import { metadataTag, readMetadataTag } from "./opencode-metadata-tag.js";
  *
  * One thing crosses that line on purpose: a request the operator STOPPED. A
  * prompt the operator typed and then Esc-aborted stays in the session's history
- * unanswered, and a model reads the next prompt as a follow-up to it (* 10 of 11 live runs carried an aborted read out in the next Jinn turn's own
+ * unanswered, and a model reads the next prompt as a follow-up to it (* 10 of 11 live runs carried an aborted read out in the next Hundredfold turn's own
  * reply, with that turn's permissions granted). So before posting, a resumed
  * turn reads the session's recent history, and if it ends in requests the
  * operator cancelled, the prompt carries a synthetic part telling the model so
  * (the operator's chosen fix: tell the model, rather than refuse the
- * turn's permissions or revert the operator's messages). Jinn's own prompts are
+ * turn's permissions or revert the operator's messages). Hundredfold's own prompts are
  * told apart by the metadata they are posted with.
  *
- * A Jinn prompt the user stopped (the chat's Stop, or a parent session's
+ * A Hundredfold prompt the user stopped (the chat's Stop, or a parent session's
  * stop_session) is left in the history the same way, and a model carries that
- * out too. Jinn also stops its own turns for reasons that are not the
+ * out too. Hundredfold also stops its own turns for reasons that are not the
  * user's — a restart, a timeout, a new message cutting in — so the reason is
  * recorded where the next turn will read it: once a stop by the user has
  * aborted the turn, the turn marks its prompt in opencode's store as stopped by
@@ -123,8 +123,8 @@ const HISTORY_LIMIT = 100;
 /** How much of one cancelled request the notice quotes. */
 const QUOTE_LIMIT = 500;
 
-/** Metadata on every text part Jinn posts, which is how a later turn tells
- *  Jinn's prompts in the history from the operator's. opencode stores a text
+/** Metadata on every text part Hundredfold posts, which is how a later turn tells
+ *  Hundredfold's prompts in the history from the operator's. opencode stores a text
  *  part's metadata and returns it with the message (verified on 1.18.32). */
 export const JINN_PROMPT_METADATA = metadataTag("prompt");
 const JINN_NOTICE_METADATA = metadataTag("cancelled-requests");
@@ -303,7 +303,7 @@ function textParts(message: StoredMessage): Array<Record<string, unknown>> {
   return (message.parts ?? []).map(record).filter((p): p is Record<string, unknown> => p?.type === "text");
 }
 
-/** A prompt Jinn posted (it marks every text part it sends). */
+/** A prompt Hundredfold posted (it marks every text part it sends). */
 function isJinnPrompt(message: StoredMessage): boolean {
   return textParts(message).some((p) => readMetadataTag(record(p.metadata)) !== undefined);
 }
@@ -313,17 +313,17 @@ function requestText(message: StoredMessage): string {
   return textParts(message).filter((p) => !p.synthetic && typeof p.text === "string").map((p) => p.text as string).join("\n").trim();
 }
 
-/** The metadata of a Jinn prompt's own text part (the one {@link JINN_PROMPT_METADATA} marks). */
+/** The metadata of a Hundredfold prompt's own text part (the one {@link JINN_PROMPT_METADATA} marks). */
 function jinnPromptMetadata(message: StoredMessage): Record<string, unknown> | undefined {
   return textParts(message).map((p) => record(p.metadata)).find((m) => readMetadataTag(m) === "prompt");
 }
 
-/** A Jinn prompt the user stopped: marked so by the turn the stop ended. */
+/** A Hundredfold prompt the user stopped: marked so by the turn the stop ended. */
 function isStoppedByUser(message: StoredMessage): boolean {
   return jinnPromptMetadata(message)?.stopped === "user";
 }
 
-/** What a stopped Jinn prompt asked: the request the turn recorded when it was
+/** What a stopped Hundredfold prompt asked: the request the turn recorded when it was
  *  stopped, even an empty one (a first turn's text also carries the system
  *  prompt, which is never what to quote), or else its text. */
 function stoppedRequestText(message: StoredMessage): string {
@@ -332,14 +332,14 @@ function stoppedRequestText(message: StoredMessage): string {
   return request.trim() || "(a request with no text)";
 }
 
-/** A Jinn prompt that carried a notice: everything older was named there, and
+/** A Hundredfold prompt that carried a notice: everything older was named there, and
  *  the model still has that notice in the history it reads. */
 function carriedNotice(message: StoredMessage): boolean {
   return textParts(message).some((p) => p.synthetic && readMetadataTag(record(p.metadata)) !== undefined);
 }
 
 /** What the history says was cancelled, oldest first in each list: the
- *  operator's requests aborted in opencode itself, and Jinn prompts
+ *  operator's requests aborted in opencode itself, and Hundredfold prompts
  *  the user stopped. */
 export interface CancelledRequests {
   cancelled: string[];
@@ -359,17 +359,17 @@ export interface CancelledRequests {
  * dropped by it. Oldest first. Walking back from the newest user message:
  *
  * - such an operator request is collected;
- * - a Jinn prompt the user stopped, that was aborted or never got a reply, is
+ * - a Hundredfold prompt the user stopped, that was aborted or never got a reply, is
  *   collected too, as `stopped`: its turn marked it so;
- * - any other Jinn prompt that was aborted or never got a reply is stepped
- *   over. Jinn stops its own turns for reasons that are not the user's (a
+ * - any other Hundredfold prompt that was aborted or never got a reply is stepped
+ *   over. Hundredfold stops its own turns for reasons that are not the user's (a
  *   restart, a timeout, a new message), so it never calls one of them
- *   cancelled — and a Jinn prompt dropped by the same abort (it was queued
+ *   cancelled — and a Hundredfold prompt dropped by the same abort (it was queued
  *   behind the operator's) must not hide the request that was;
  * - anything else ends the walk: a request that was answered, failed some other
  *   way, is still running, or (the session busy) waits to run is not a
  *   cancelled one;
- * - and past a Jinn prompt that carried a notice, only what was cancelled after
+ * - and past a Hundredfold prompt that carried a notice, only what was cancelled after
  *   that prompt was made is still collected: whatever was cancelled before it
  *   was named there once, and is still in front of the model, so the walk ends
  *   at the first such request. Naming it again after, say, a restart cut that
@@ -464,7 +464,7 @@ function walkStep(
 /** What the model is told about requests the user cancelled. */
 export function cancelledRequestsNotice(requests: string[]): string {
   return [
-    "[Jinn] Before this message, the user cancelled the request(s) below by stopping them before they were answered:",
+    "[Hundredfold] Before this message, the user cancelled the request(s) below by stopping them before they were answered:",
     "",
     quoteRequests(requests),
     "",
@@ -473,7 +473,7 @@ export function cancelledRequestsNotice(requests: string[]): string {
 }
 
 /**
- * What the model is told about Jinn prompts the user stopped. Unlike
+ * What the model is told about Hundredfold prompts the user stopped. Unlike
  * a request cancelled in the terminal, the message after a Stop comes from the
  * same person in the same conversation, so a "continue" there means the
  * stopped request, and is let through. Both notices point at "the final
@@ -482,7 +482,7 @@ export function cancelledRequestsNotice(requests: string[]): string {
  */
 export function stoppedRequestsNotice(requests: string[]): string {
   return [
-    "[Jinn] Before this message, the user stopped the request(s) below before they were finished:",
+    "[Hundredfold] Before this message, the user stopped the request(s) below before they were finished:",
     "",
     quoteRequests(requests),
     "",
@@ -653,7 +653,7 @@ export class OpencodeServerTurn {
   }
 
   /**
-   * Give the stopped copy the metadata every Jinn prompt carries. A later turn's
+   * Give the stopped copy the metadata every Hundredfold prompt carries. A later turn's
    * history walk reads an unmarked user message as the operator's request and, the
    * copy being unanswered, tells the model it was cancelled and quotes it. Best effort.
    */
@@ -668,7 +668,7 @@ export class OpencodeServerTurn {
     }
   }
 
-  /** The text parts of one user message that repeat `prompt` without a Jinn tag, tagged. */
+  /** The text parts of one user message that repeat `prompt` without a Hundredfold tag, tagged. */
   private async markCopyParts(message: StoredMessage, prompt: string): Promise<void> {
     const copies = textParts(message).filter((part) => part.text === prompt && readMetadataTag(record(part.metadata)) === undefined);
     for (const part of copies) {
@@ -760,7 +760,7 @@ export class OpencodeServerTurn {
       const message = record(await this.request("GET", route, undefined, signal)) as StoredMessage | undefined;
       const part = textParts(message ?? {}).find((p) => readMetadataTag(record(p.metadata)) === "prompt");
       const partId = str(part?.id);
-      if (!part || !partId) throw new Error("the stored prompt has no Jinn text part");
+      if (!part || !partId) throw new Error("the stored prompt has no Hundredfold text part");
       const metadata = { ...record(part.metadata), stopped: "user", request: this.opts.prompt.slice(0, QUOTE_LIMIT + 1) };
       await this.request("PATCH", `${route}/part/${encodeURIComponent(partId)}`, { ...part, metadata }, signal);
     } catch (err) {

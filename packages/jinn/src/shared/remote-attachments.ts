@@ -47,7 +47,7 @@ export function remoteAttachmentsDir(sessionId: string, now: Date = new Date()):
 export interface RemoteAttachmentOpts {
   /** The remote session's staged home, as that host names it (a posix path). */
   sessionHome: string;
-  /** The Jinn session id, which scopes any copies made. */
+  /** The Hundredfold session id, which scopes any copies made. */
   sessionId: string;
   /** The gateway's instance home. Defaults to the running one. */
   gatewayHome?: string;

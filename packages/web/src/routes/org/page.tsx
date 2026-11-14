@@ -9,7 +9,7 @@ import { isConfined, type DepartmentScopeWire } from "@/lib/department-api";
 import { Button } from "@/components/ui/button";
 import { PageLayout } from "@/components/page-layout";
 import { useSettings } from "@/routes/settings-provider";
-import { PRODUCT_NAME } from "@/lib/brand"
+import { PRODUCT_NAME, LEGACY_PORTAL_NAME } from "@/lib/brand"
 
 const OrgMap = lazy(() =>
   import("@/components/org/org-map").then((m) => ({ default: m.OrgMap })),
@@ -78,7 +78,7 @@ export default function OrgPage() {
       .getOrg()
       .then((data: OrgData) => {
         const coo: Employee = {
-          name: (settings.portalName ?? "Jinn").toLowerCase(), // internal COO slug, not a display string
+          name: (settings.portalName ?? LEGACY_PORTAL_NAME).toLowerCase(), // internal COO slug, not a display string
           displayName: settings.portalName ?? PRODUCT_NAME,
           department: "",
           rank: "executive",

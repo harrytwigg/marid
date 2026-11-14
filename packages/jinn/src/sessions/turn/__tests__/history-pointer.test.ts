@@ -115,7 +115,7 @@ describe("the pasted catch-up", () => {
   });
 
   const EXPECTED = [
-    "We switched engines in this Jinn session. Sync your context with this transcript (most recent last), then respond to the current message.",
+    "We switched engines in this Hundredfold session. Sync your context with this transcript (most recent last), then respond to the current message.",
     "USER: an earlier question about turnips\n\nASSISTANT: an earlier answer about turnips",
     "CURRENT MESSAGE:\nwhat next?",
   ].join("\n\n");

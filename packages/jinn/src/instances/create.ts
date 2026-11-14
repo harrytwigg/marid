@@ -54,7 +54,7 @@ export interface CreateInstanceDependencies extends DirectoryOptions {
 export function assertSecondaryInstancesSupported(env: NodeJS.ProcessEnv = process.env): void {
   if (env.JINN_CONTAINER !== "1") return;
   throw new Error(
-    "The Docker image supports one Jinn instance. Run each additional instance in its own container with dedicated jinn-home and jinn-claude volumes and a separately published port.",
+    "The Docker image supports one Hundredfold instance. Run each additional instance in its own container with dedicated jinn-home and jinn-claude volumes and a separately published port.",
   );
 }
 
@@ -72,7 +72,7 @@ export function normalizeWorkspaceName(input: string): NormalizedWorkspaceName {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
   if (!/^[a-z][a-z0-9-]*$/.test(slug) || isDefaultInstanceName(slug)) {
-    throw new Error("Workspace name must begin with a Latin letter and include a name other than Jinn");
+    throw new Error(`Workspace name must begin with a Latin letter and include a name other than ${NAMES.codename}`);
   }
   const displayName = withoutPrefix.charAt(0).toUpperCase() + withoutPrefix.slice(1);
   return { displayName, slug, instanceName: instanceNameFor(slug), homeName: `.${instanceNameFor(slug)}` };

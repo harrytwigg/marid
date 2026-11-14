@@ -74,7 +74,7 @@ function fakeSandbox(host, name, { port = 8089, config } = {}) {
   return home
 }
 
-/** Stands in for node when the helper runs the Marid CLI, and records the environment it was given. */
+/** Stands in for node when the helper runs the Hundredfold CLI, and records the environment it was given. */
 function envStub(root) {
   const stub = path.join(root, "node-stub.sh")
   fs.writeFileSync(stub, `#!/bin/sh\nenv > "$STUB_ENV_OUT"\nexit 0\n`, { mode: 0o755 })
@@ -166,7 +166,7 @@ test("a case-variant spelling of the operator's home or instance home is refused
   }
 })
 
-/** Stands in for node when the helper runs the Marid CLI, and appends each argv it was given. */
+/** Stands in for node when the helper runs the Hundredfold CLI, and appends each argv it was given. */
 function argvStub(root) {
   const stub = path.join(root, "node-argv-stub.sh")
   fs.writeFileSync(stub, `#!/bin/sh\necho "$*" >> "$STUB_ARGV_OUT"\nexit 0\n`, { mode: 0o755 })

@@ -12,7 +12,7 @@ import type { EngineRunOpts } from "../../shared/types.js";
 
 /**
  * e2e: a pre-stream provider 400 is retried transparently at the
- * provider fetch layer, through Jinn's OpencodeEngine server mode — so it goes
+ * provider fetch layer, through Hundredfold's OpencodeEngine server mode — so it goes
  * through OpencodeServerTurn and its settlement rules.
  *
  * Skipped unless OPENCODE_RETRY_E2E=1 (it spawns a real opencode server).
@@ -192,7 +192,7 @@ async function runOnce(
   }
 }
 
-describe.skipIf(!RUN)("opencode transparent retry (Jinn path)", () => {
+describe.skipIf(!RUN)("opencode transparent retry (Hundredfold path)", () => {
   it(
     "retries the pre-stream 400 in place: one side effect, three requests, identical body, turn succeeds",
     async () => {

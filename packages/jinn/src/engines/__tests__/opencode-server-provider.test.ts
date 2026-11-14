@@ -172,7 +172,7 @@ describe("a host whose opencode has a model-fallback plugin", { timeout: 20_000 
     expect((await serverLog(pool)).some((e) => /^\/session\/[^/]+\/abort$/.test(e.url))).toBe(true);
   });
 
-  it("marks the stopped copy as a Jinn prompt, so the next turn is not told the request was cancelled", async () => {
+  it("marks the stopped copy as a Hundredfold prompt, so the next turn is not told the request was cancelled", async () => {
     SERVER_TURN_TIMING.closeWaitMs = 300;
     pluginOnHost.value = true;
     const { pool, engine } = harness();
@@ -185,7 +185,7 @@ describe("a host whose opencode has a model-fallback plugin", { timeout: 20_000 
       headers: { authorization: basicAuthHeader(server.password) },
     })).json() as Array<{ info: Record<string, unknown>; parts: Array<{ text?: string; metadata?: Record<string, unknown> }> }>;
     const prompts = stored.filter((m) => m.info.role === "user");
-    // the turn's own prompt, the plugin's copy (now a Jinn prompt), and the second turn's
+    // the turn's own prompt, the plugin's copy (now a Hundredfold prompt), and the second turn's
     expect(prompts).toHaveLength(3);
     expect(prompts[1]!.parts[0]!.metadata).toEqual({ jinn: "prompt" });
     expect(prompts.flatMap((m) => m.parts).some((p) => /cancelled the request/.test(p.text ?? ""))).toBe(false);

@@ -5,7 +5,7 @@ import { envAliases, envNamesFor, readEnv, setEnv } from "./codename-env.js";
 import { nameAliases } from "./codename.js";
 
 /**
- * The variables that name WHICH Jinn instance a process belongs to: its home, its
+ * The variables that name WHICH Hundredfold instance a process belongs to: its home, its
  * binding, and the credentials of the gateway session that launched it. A process
  * pointed at a different instance must inherit none of them — read against another
  * home they route the work straight back to the instance they came from.

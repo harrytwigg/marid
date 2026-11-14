@@ -43,7 +43,7 @@ vi.mock('@/lib/api', () => ({
 }))
 
 vi.mock('@/routes/settings-provider', () => ({
-  useSettings: () => ({ settings: { portalName: 'Jinn' } }),
+  useSettings: () => ({ settings: { portalName: 'Hundredfold' } }),
 }))
 
 // Stub Radix context menu to avoid portal issues in tests

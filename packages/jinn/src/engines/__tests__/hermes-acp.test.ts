@@ -296,7 +296,7 @@ describe("HermesAcpEngine.run", () => {
         "- Should not be repeated on resume",
       ].join("\n"),
     });
-    expect(capturedPromptText).not.toContain("## Jinn platform context refresh");
+    expect(capturedPromptText).not.toContain("## Hundredfold platform context refresh");
     expect(capturedPromptText).not.toContain("- Session ID: duplicated-jinn-session");
     expect(capturedPromptText).not.toContain("- Gateway: http://127.0.0.1:7777");
     expect(capturedPromptText).not.toContain("PERSONA-XYZ");
@@ -320,7 +320,7 @@ describe("HermesAcpEngine.run", () => {
       }
     }
 
-    const refresh = "## Jinn platform context refresh\n- Active engine: hermes";
+    const refresh = "## Hundredfold platform context refresh\n- Active engine: hermes";
     await new ExplicitRefreshEngine().run({
       prompt: "user question",
       cwd: "/tmp",

@@ -10,7 +10,7 @@ export function departmentScopeParagraph(slug: string): string {
     `This session is scoped to the **${slug}** department.`,
     "",
     "- Use the jinn tools for company state: Todos, members, sessions and Notes. They reach only this department.",
-    "- Do not use your shell to read the Jinn home, other repositories, or other sessions' transcripts.",
+    "- Do not use your shell to read the Hundredfold home, other repositories, or other sessions' transcripts.",
     `- Keep your working state in \`knowledge/departments/${slug}/state.md\` through the note tools.`,
   ].join("\n");
 }

@@ -20,7 +20,7 @@ import { runMigrate } from "../migrate.js";
 const mockSync = vi.mocked(syncTemplateSkills);
 const noChange = { added: [], updated: [], removed: [], backupDir: null };
 
-describe("migrate: sync the skills Marid ships", () => {
+describe("migrate: sync the skills Hundredfold ships", () => {
   let printed: string[];
 
   beforeEach(() => {
@@ -38,7 +38,7 @@ describe("migrate: sync the skills Marid ships", () => {
     expect(output).toContain("added    notes");
     expect(output).toContain("updated  cron-manager");
     expect(output).toContain("removed  retired");
-    expect(output).toContain("Synced the skills Marid ships to 1.1.0.");
+    expect(output).toContain("Synced the skills Hundredfold ships to 1.1.0.");
     expect(output).toContain("/home/.migration-backups/1.1.0-x");
   });
 

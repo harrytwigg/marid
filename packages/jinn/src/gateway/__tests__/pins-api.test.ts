@@ -15,7 +15,7 @@ let registry: Registry;
 
 const emit = vi.fn();
 const context = {
-  getConfig: () => ({ gateway: {}, engines: { default: "codex" }, sessions: {}, portal: { portalName: "Jinn" } }),
+  getConfig: () => ({ gateway: {}, engines: { default: "codex" }, sessions: {}, portal: { portalName: "Hundredfold" } }),
   connectors: new Map(),
   startTime: Date.now(),
   gatewayAuthToken: "test-token",

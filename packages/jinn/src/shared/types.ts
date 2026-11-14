@@ -113,7 +113,7 @@ export interface Engine {
 }
 
 export interface InterruptibleEngine extends Engine {
-  /** Kill a running engine process for a specific Jinn session. */
+  /** Kill a running engine process for a specific Hundredfold session. */
   kill(sessionId: string, reason?: string): void;
   /** Check if a live engine process is still running for this session. */
   isAlive(sessionId: string): boolean;
@@ -215,7 +215,7 @@ export interface EngineRunOpts extends SessionRemoteTarget {
    *  engines), so this does not extend the resolver's temp-file secret exposure. */
   resolvedMcp?: ResolvedMcpConfig;
   onStream?: (delta: StreamDelta) => void;
-  /** Unique Jinn session ID for tracking the spawned process. */
+  /** Unique Hundredfold session ID for tracking the spawned process. */
   sessionId?: string;
   /** Session source ("cron", "web", "slack", …) — used by the interactive engine for lifecycle policy. */
   source?: string;

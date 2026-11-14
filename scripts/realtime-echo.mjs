@@ -141,7 +141,7 @@ async function roundTripWithRetry(createRealtimeProvider, apiKey, model) {
 
 async function main() {
   const apiKey = flag("key", process.env.OPENAI_API_KEY);
-  if (!apiKey) unverified("no API key — pass --key or set OPENAI_API_KEY. This script never reads a Jinn home.");
+  if (!apiKey) unverified("no API key — pass --key or set OPENAI_API_KEY. This script never reads a Hundredfold home.");
   if (!fs.existsSync(PROVIDER_MODULE)) unverified(`${PROVIDER_MODULE} is missing — run "pnpm build" first.`);
 
   const { createRealtimeProvider } = await import(PROVIDER_MODULE);

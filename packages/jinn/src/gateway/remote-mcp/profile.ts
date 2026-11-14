@@ -23,7 +23,7 @@ export const REMOTE_MCP_LEDGER_TOOLS = [
 ] as const;
 
 /**
- * Session control: the operator driving Jinn from the connector —
+ * Session control: the operator driving Hundredfold from the connector —
  * tail a session, prod it, hand an employee new work, reassign a Todo. The
  * existing tools, unchanged, because the gateway routes behind them already
  * carry the guards (lateral send cap and hop budget, roster validation).
@@ -60,7 +60,7 @@ const REMOTE_MCP_HINTS: Partial<Record<string, (result: Record<string, unknown>)
     `Todo ${String(result.workItemId ?? "?")} tracks this; session ${String(result.sessionId ?? "?")} is working it. ` +
     "Read progress with read_session or get_work_item.",
   list_work_item_attachments: () =>
-    "Metadata only: attachment bytes are not readable over this connector. Open the Todo in the Jinn web UI to view or download them.",
+    "Metadata only: attachment bytes are not readable over this connector. Open the Todo in the Hundredfold web UI to view or download them.",
 };
 
 /** The agent-lane schemas speak to an engine session (`asOperator` is the

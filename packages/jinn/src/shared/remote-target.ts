@@ -23,7 +23,7 @@ import { LEGACY_CODENAME, NAMES } from "./codename.js";
  * `$JINN_HOME/knowledge/x.md` as an instance-home write outside the mount and
  * block it — wedging the exact operation the mount exists to allow.
  *
- * Deliberately NOT `.jinn`: if a real Jinn instance is ever installed on that
+ * Deliberately NOT `.jinn`: if a real Hundredfold instance is ever installed on that
  * machine, staging into its home would overwrite its gateway.json and point its
  * hook relay at our tunnel.
  */
@@ -33,7 +33,7 @@ export const REMOTE_STAGE_DIR_NAME = `.${NAMES.codename}-remote-stage`;
 export const LEGACY_REMOTE_STAGE_DIR_NAME = `.${LEGACY_CODENAME}-remote-stage`;
 
 /** Name of the file whose content proves the mount is live, on both ends. Every
- *  remote session stage links it, so it also marks a directory as a Jinn home
+ *  remote session stage links it, so it also marks a directory as a Hundredfold home
  *  for the file-read policy (shared/file-read-policy.ts). */
 export const MOUNT_SENTINEL = ".jinn-mount-sentinel";
 

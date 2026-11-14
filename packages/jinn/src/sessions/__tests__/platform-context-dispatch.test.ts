@@ -114,7 +114,7 @@ function incoming(text: string, channel = "channel-a"): IncomingMessage {
 }
 
 function headingCount(run: EngineRunOpts): number {
-  return run.platformContextRefresh?.match(/## Jinn platform context refresh/g)?.length ?? 0;
+  return run.platformContextRefresh?.match(/## Hundredfold platform context refresh/g)?.length ?? 0;
 }
 
 function makeRes() {

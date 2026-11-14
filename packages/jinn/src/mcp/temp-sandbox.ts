@@ -68,7 +68,7 @@ export function reapStaleMcpTempSandboxes(
  *
  * Some browser drivers create launch artifacts before their own cleanup has
  * been registered. Keeping those artifacts below one launcher-owned root lets
- * Jinn remove the whole tree when the MCP process exits instead of leaking
+ * Hundredfold remove the whole tree when the MCP process exits instead of leaking
  * thousands of siblings into the machine-wide temporary directory.
  */
 export function createMcpTempSandbox(env: NodeJS.ProcessEnv = process.env): McpTempSandbox {

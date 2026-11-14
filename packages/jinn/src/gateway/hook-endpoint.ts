@@ -107,7 +107,7 @@ function preToolUseRefusal(ctx: HookEndpointCtx, hook: HookPayload): { status: n
   if (hook.tool_name === "Bash") {
     const decision = evaluateCommandPolicy(field("command"), opts);
     if (decision.action === "block") {
-      return { status: 451, body: decision.reason || "Command blocked by Jinn security policy" };
+      return { status: 451, body: decision.reason || "Command blocked by Hundredfold security policy" };
     }
   } else if (hook.tool_name === "Write" || hook.tool_name === "Edit" || hook.tool_name === "MultiEdit") {
     // Write/Edit carry a path, not a command line. Without this branch a
@@ -115,7 +115,7 @@ function preToolUseRefusal(ctx: HookEndpointCtx, hook: HookPayload): { status: n
     // check but could still reach the same path with the file tools.
     const decision = evaluateWritePathPolicy(field("file_path"), opts);
     if (decision.action === "block") {
-      return { status: 451, body: decision.reason || "Write blocked by Jinn security policy" };
+      return { status: 451, body: decision.reason || "Write blocked by Hundredfold security policy" };
     }
   }
   return undefined;

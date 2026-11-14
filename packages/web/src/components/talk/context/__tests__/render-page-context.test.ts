@@ -21,7 +21,7 @@ function crowdedBoard(count: number): VisibleObject[] {
 }
 
 describe("rendering the page context", () => {
-  it("names the instance and the port, so the orb never guesses which Jinn it is on", () => {
+  it("names the instance and the port, so the orb never guesses which Hundredfold it is on", () => {
     const text = renderPageContext(board(), [], HERE)
 
     expect(text).toContain("acme")

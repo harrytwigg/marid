@@ -47,7 +47,7 @@ import { recordRemoteInternalFallback } from "./opencode-internal-fallback.js";
  */
 
 /** Directory on the remote host that acts as the session's JINN_HOME.
- *  Deliberately NOT `~/.jinn`: if a real Jinn instance is ever installed on
+ *  Deliberately NOT `~/.jinn`: if a real Hundredfold instance is ever installed on
  *  that machine, staging into its home would overwrite its gateway.json and
  *  point its hook relay at our tunnel. A distinct name makes that collision
  *  impossible rather than unlikely. */
@@ -1062,7 +1062,7 @@ trap 'exit 1' HUP INT TERM
 # before the filtered directories existed linked sessions/ whole; that link goes
 # here, and the directory is rebuilt as a real one below.)
 find "$home" -maxdepth 1 -type l -exec rm -f {} + 2>/dev/null || true
-# Marks this as a remote session's stage, so Marid code started here refuses to
+# Marks this as a remote session's stage, so Hundredfold code started here refuses to
 # start a gateway or open a database (shared/local-db-guard.ts).
 printf 'remote session stage: linked entries lead to the gateway home\\n' > "$home/${REMOTE_STAGE_MARKER}"
 for entry in "$mount"/* "$mount"/.[!.]*; do
@@ -1157,7 +1157,7 @@ done
  *    sidecars and `backups/`. A WAL database opened from this host through
  *    the mount is corrupted by the open, so each database is a directory
  *    here and any open of it fails (shared/remote-farm.ts).
- *  - `.jinn-remote-stage` (REMOTE_STAGE_MARKER), a real file that tells Marid
+ *  - `.jinn-remote-stage` (REMOTE_STAGE_MARKER), a real file that tells Hundredfold
  *    code started inside the session that this home is not one to start a
  *    gateway or open a database from.
  *
@@ -1234,7 +1234,7 @@ export interface PrepareRemoteSessionOpts {
    *  authenticate without the secret ever reaching a remote command line. Pi's
    *  own belt is computed below and ignores this. */
   sessionEnv?: Record<string, string>;
-  /** opencode only: list Marid's command-timeout plugin in the staged config
+  /** opencode only: list Hundredfold's command-timeout plugin in the staged config
    *  (opencode-command-timeout.ts), from this host's own jinn-cli install. */
   opencodeCommandTimeout?: boolean;
   /** opencode only: the declared accounts. Each gets a `provider` block in the staged config, and its key

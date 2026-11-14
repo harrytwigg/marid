@@ -108,7 +108,7 @@ function viewOf(view: SwitchTargetView): { engine: string; profile: string | nul
   return { engine: view.engine, profile: view.profile, model: view.model };
 }
 
-/** Whether the engine the compaction would run on has one Jinn can drive (opencode only in server mode). */
+/** Whether the engine the compaction would run on has one Hundredfold can drive (opencode only in server mode). */
 export function compactsNatively(session: Session, opencodeMode: string | undefined): boolean {
   return compactionUnsupported(session.engine, opencodeMode) === undefined;
 }

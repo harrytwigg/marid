@@ -1,5 +1,6 @@
 import { compactEmployeeRole } from "../../shared/employee-role.js";
 import type { Employee, OrgHierarchy, OrgNode } from "../../shared/types.js";
+import { LEGACY_PORTAL_NAME } from "../../shared/brand.js";
 
 const WORKING_ROSTER_HEADING = "## Working roster (scoped orientation; not exhaustive)";
 const FULL_ROSTER_HINT = "Use `find_employees` / `list_employees` for the full roster and `get_employee` for a finalist's full persona.";
@@ -168,7 +169,7 @@ function renderScopedRoster(
 export function buildScopedRosterSection(
   employee: Employee | undefined,
   hierarchy: OrgHierarchy | undefined,
-  portalName = "Jinn",
+  portalName = LEGACY_PORTAL_NAME,
   jinnMcpAttached = false,
 ): string | null {
   return renderScopedRoster(employee, hierarchy, portalName, false, jinnMcpAttached);

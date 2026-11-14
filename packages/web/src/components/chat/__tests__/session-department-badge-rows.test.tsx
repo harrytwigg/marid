@@ -23,7 +23,7 @@ vi.mock("@/hooks/use-sessions", () => ({
 }))
 vi.mock("@/hooks/use-pins", () => ({ usePins: () => ({ data: new Set<string>() }), useTogglePin: () => ({ mutate: vi.fn() }) }))
 vi.mock("@/lib/api", () => ({ api: { getOrg: () => Promise.resolve({ employees: [] }), getEmployee: () => Promise.resolve({}) } }))
-vi.mock("@/routes/settings-provider", () => ({ useSettings: () => ({ settings: { portalName: "Jinn", employeeOverrides: {} } }) }))
+vi.mock("@/routes/settings-provider", () => ({ useSettings: () => ({ settings: { portalName: "Hundredfold", employeeOverrides: {} } }) }))
 vi.mock("@/components/ui/context-menu", () => ({
   ContextMenu: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   ContextMenuTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,

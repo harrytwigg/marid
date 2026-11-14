@@ -27,7 +27,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>) -> tau
 fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let application = Submenu::with_items(
         app,
-        "Jinn",
+        "Hundredfold",
         true,
         &[
             &PredefinedMenuItem::about(app, None, Some(AboutMetadata::default()))?,

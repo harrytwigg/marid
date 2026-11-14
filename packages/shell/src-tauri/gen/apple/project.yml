@@ -10,7 +10,7 @@ configs:
 settingGroups:
   app:
     base:
-      PRODUCT_NAME: Jinn
+      PRODUCT_NAME: Hundredfold
       PRODUCT_BUNDLE_IDENTIFIER: run.jinn.shell
 targetTemplates:
   app:

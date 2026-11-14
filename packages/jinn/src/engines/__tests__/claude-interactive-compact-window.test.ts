@@ -19,7 +19,7 @@ function buildPtyEnv(proxyPort?: number): Record<string, string> {
 
 const ORIGINAL = process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
 // buildPtyEnv inherits process.env, so an ambient value fails these assertions.
-// That is not hypothetical: running the suite from inside a Jinn claude PTY
+// That is not hypothetical: running the suite from inside a Hundredfold claude PTY
 // exports _CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL=1, which made the
 // "no proxy → no first-party assertion" case fail with a bogus '1'. Scrub the
 // vars under test so the result depends on buildPtyEnv, not on who ran it.

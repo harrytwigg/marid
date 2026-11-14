@@ -17,12 +17,12 @@ import { firefox } from "@playwright/test"
 const publicDir = join(dirname(fileURLToPath(import.meta.url)), "..", "public")
 
 const OUTPUTS = [
-  { svg: "icons/marid-mark.svg", png: "icons/icon-192.png", size: 192 },
-  { svg: "icons/marid-mark.svg", png: "icons/icon-512.png", size: 512 },
-  { svg: "icons/marid-mark-maskable.svg", png: "icons/icon-maskable-512.png", size: 512 },
+  { svg: "icons/hundredfold-mark.svg", png: "icons/icon-192.png", size: 192 },
+  { svg: "icons/hundredfold-mark.svg", png: "icons/icon-512.png", size: 512 },
+  { svg: "icons/hundredfold-mark-maskable.svg", png: "icons/icon-maskable-512.png", size: 512 },
   // iOS rounds the corners itself and paints transparency black, so it gets the full-bleed square.
-  { svg: "icons/marid-mark-maskable.svg", png: "apple-touch-icon.png", size: 180 },
-  { svg: "icons/marid-favicon.svg", png: "icons/favicon-32.png", size: 32 },
+  { svg: "icons/hundredfold-mark-maskable.svg", png: "apple-touch-icon.png", size: 180 },
+  { svg: "icons/hundredfold-favicon.svg", png: "icons/favicon-32.png", size: 32 },
 ]
 
 const browser = await firefox.launch()

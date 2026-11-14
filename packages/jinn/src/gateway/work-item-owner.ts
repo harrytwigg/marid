@@ -5,6 +5,7 @@ import type { Employee } from "../shared/types.js";
 import type { WorkItem } from "../work-items/store.js";
 import { resolveOrgHierarchy } from "./org-hierarchy.js";
 import { orgRegistry } from "./org-registry.js";
+import { LEGACY_PORTAL_NAME } from "../shared/brand.js";
 
 /**
  * Who a Todo belongs to, and who sits at the top of the org. The standing
@@ -30,7 +31,7 @@ function configuredPortalName(): string {
   } catch {
     // Tests and partially-seeded homes may not have a complete config yet.
   }
-  return "Jinn";
+  return LEGACY_PORTAL_NAME;
 }
 
 /** With no employee at the top of the tree, the portal is the root: a virtual
@@ -44,7 +45,7 @@ function portalRoot(registry: Map<string, Employee>): OrgRoot | null {
     logger.warn(`portal.portalName "${configuredName}" collides with an org employee; ignoring it as the org root so employee authority cannot inherit virtual COO authority`);
   }
 
-  for (const candidate of ["Jinn", "Portal COO", "operator", "COO"]) {
+  for (const candidate of [LEGACY_PORTAL_NAME, "Portal COO", "operator", "COO"]) {
     if (candidate !== configuredName && !registry.has(candidate)) {
       return { name: candidate, department: null, kind: "virtual" };
     }

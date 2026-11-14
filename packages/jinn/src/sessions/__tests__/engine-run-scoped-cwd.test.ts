@@ -50,7 +50,7 @@ describe("a turn's engine cwd", () => {
     expect(fs.readFileSync(path.join(opts.cwd!, "CLAUDE.md"), "utf-8")).toContain("scoped to the **engine-run-dept** department");
   });
 
-  it("is the Jinn home for an unscoped session", async () => {
+  it("is the Hundredfold home for an unscoped session", async () => {
     const opts = await attempt(makeSession({ employee: "engine-run-eng" }), { name: "engine-run-eng" });
     expect(opts.cwd).toBe(JINN_HOME);
   });

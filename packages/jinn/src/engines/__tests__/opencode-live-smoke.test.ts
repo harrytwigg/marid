@@ -172,7 +172,7 @@ function flow(label: string, target: RemoteTarget, remote?: { root: string; moun
     // 3c. QA B2: an operator prompt put into the same session mid-turn is not
     //     the turn's answer. step 3's request is not named again —
     //     3b's prompt, which named it, is still in the history the model reads
-    //     (and 3b's own stop was Jinn's, which is not named). A model told
+    //     (and 3b's own stop was Hundredfold's, which is not named). A model told
     //     nothing took the `sleep 45` up here (3/16 runs on 2026-09-27), which
     //     also cost the turn its answer.
     let jinnParts: Array<{ text?: string; synthetic?: boolean }> = [];
@@ -226,10 +226,10 @@ function flow(label: string, target: RemoteTarget, remote?: { root: string; moun
     // 4. The same server keeps serving: a third turn, shown live in the terminal.
     //    The operator's aborted request is still unanswered in the history, and
     //    the model may take it up in this turn's own reply saw one
-    //    answer just "a remote host". What Jinn owes is THIS turn's reply, so the
+    //    answer just "a remote host". What Hundredfold owes is THIS turn's reply, so the
     //    result must be exactly the last text of the replies to its own prompt
-    //    in the server's store; whether the model obeyed is not Jinn's to test.
-    //    What IS Jinn's: telling the model that request was cancelled,
+    //    in the server's store; whether the model obeyed is not Hundredfold's to test.
+    //    What IS Hundredfold's: telling the model that request was cancelled,
     //    in a synthetic part ahead of the prompt.
     let threePrompt: string | undefined;
     let threeParts: Array<{ text?: string; synthetic?: boolean }> = [];

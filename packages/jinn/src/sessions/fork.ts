@@ -37,7 +37,7 @@ export interface ForkCodexOpts {
  * headless pool.
  */
 export interface InteractiveForkCtx {
-  /** Jinn session id of the SOURCE session — used to release its warm PTY before forking. */
+  /** Hundredfold session id of the SOURCE session — used to release its warm PTY before forking. */
   sourceJinnSessionId: string;
   /** The interactive engine — used to release the source PTY. */
   engine: InteractiveClaudeEngine;
@@ -240,7 +240,7 @@ export async function findNewJsonl(projectDir: string, known: ReadonlySet<string
 
 /**
  * Fork a Codex CLI session by copying its JSONL file with a new UUID.
- * Explicit roots support Jinn's per-session CODEX_HOME overlays; the legacy
+ * Explicit roots support Hundredfold's per-session CODEX_HOME overlays; the legacy
  * global Codex home remains the default and source fallback.
  * Returns the new engine session ID.
  */
@@ -295,9 +295,9 @@ export function forkCodexSession(engineSessionId: string, opts: ForkCodexOpts = 
 /**
  * Fork a Hermes ACP session using Hermes's own `session/fork` primitive.
  *
- * This keeps Jinn's duplicate semantics aligned with Hermes itself: the new
- * Jinn session points at a distinct Hermes session id whose transcript/history
- * was copied by Hermes's SessionManager, rather than merely copying Jinn's
+ * This keeps Hundredfold's duplicate semantics aligned with Hermes itself: the new
+ * Hundredfold session points at a distinct Hermes session id whose transcript/history
+ * was copied by Hermes's SessionManager, rather than merely copying Hundredfold's
  * registry rows or reusing the source Hermes id.
  */
 export async function forkHermesSession(engineSessionId: string, cwd: string): Promise<ForkResult> {

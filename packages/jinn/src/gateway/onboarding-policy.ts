@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { LEGACY_PORTAL_NAME } from "../shared/brand.js";
 
 /**
  * Onboarding gate policy.
@@ -39,7 +40,7 @@ export function applyEngineChoice<T extends { engines: Record<string, any> }>(
 /**
  * Personalizes the instance's operating manual with the chosen COO name and
  * language. The shipped identity line is bold, e.g.
- *   "You are **Jinn**, a personal AI assistant and COO of an AI organization."
+ *   "You are **Hundredfold**, a personal AI assistant and COO of an AI organization."
  * (The previous CLAUDE.md regex expected unbolded "...the COO of the user's AI
  * organization." and never matched, so the rename silently no-op'd.)
  *
@@ -50,7 +51,7 @@ export function personalizeOperatingManual(
   home: string,
   opts: { portalName?: string; language?: string }
 ): void {
-  const effectiveName = opts.portalName || "Jinn";
+  const effectiveName = opts.portalName || LEGACY_PORTAL_NAME;
   const languageSection = opts.language && opts.language !== "English"
     ? `\n\n## Language\nAlways respond in ${opts.language}. All communication with the user must be in ${opts.language}.`
     : "";

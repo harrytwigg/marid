@@ -162,9 +162,9 @@ function expectedTemplateBytes(file, portalName) {
 
 function instancePortalName(home) {
   const config = path.join(home, "config.yaml")
-  if (!fs.existsSync(config)) return "Jinn"
+  if (!fs.existsSync(config)) return "Jinn" // rename:keep
   const match = /^\s+portalName:\s*["']?([^"'\n]+?)["']?\s*$/m.exec(fs.readFileSync(config, "utf8"))
-  return match?.[1] ?? "Jinn"
+  return match?.[1] ?? "Jinn" // rename:keep
 }
 
 export function assertShippedSkillsConverged(home, candidateRoot, candidateSkills) {

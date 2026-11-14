@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Jinn Talk — Kokoro-82M TTS sidecar (Phase 2 voice loop).
+"""Hundredfold Talk — Kokoro-82M TTS sidecar (Phase 2 voice loop).
 
 A tiny long-running HTTP server (stdlib only) that wraps `kokoro-onnx`.
 Mirrors the STT model-dir convention: weights live next to this process in

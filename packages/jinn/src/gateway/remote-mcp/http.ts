@@ -11,7 +11,7 @@ import { buildRemoteMcpTools } from "./profile.js";
 
 /**
  * The remote MCP endpoint (specs/004): MCP streamable HTTP at `/mcp`,
- * JSON responses only — every Jinn tool is request/response, so there is no
+ * JSON responses only — every Hundredfold tool is request/response, so there is no
  * stream to hold open through Cloudflare's proxy. Stateless: no `Mcp-Session-Id`.
  *
  * Checks run cheapest-first and every refusal is logged with a reason code
