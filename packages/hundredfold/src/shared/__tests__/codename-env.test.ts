@@ -9,7 +9,7 @@ import {
   readEnv,
   setEnv,
 } from "../codename-env.js";
-import { OLD } from "../legacy-names.js";
+import { OLD } from "../legacy/names.js";
 
 const acme = namesFor("acme");
 const same = namesFor(OLD.codename);
@@ -59,7 +59,7 @@ describe("adoptLegacyEnv", () => {
     expect(adoptLegacyEnv(env, { names: acme, ...sink }).sort()).toEqual([`${OLD.upper}_HOME`, `${OLD.upper}_PORT`]);
     expect(env).toEqual({ [`${OLD.upper}_HOME`]: "/old", [`${OLD.upper}_PORT`]: "7000", ACME_HOME: "/old", ACME_PORT: "7000", PATH: "/bin" });
     expect(sink.lines).toEqual([
-      "Environment variable HUNDREDFOLD_HOME is deprecated: set ACME_HOME instead.",
+      `Environment variable ${OLD.upper}_HOME is deprecated: set ACME_HOME instead.`,
       `Environment variable ${OLD.upper}_PORT is deprecated: set ACME_PORT instead.`,
     ]);
     adoptLegacyEnv(env, { names: acme, ...sink });

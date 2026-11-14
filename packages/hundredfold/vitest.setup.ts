@@ -1,4 +1,4 @@
-import { LEGACY_ENV_PREFIXES } from './src/shared/legacy-names.js';
+import { LEGACY_ENV_PREFIXES } from './src/shared/legacy/names.js';
 import {
   assertIsolatedClaudeConfigDir,
   assertIsolatedTestHome,

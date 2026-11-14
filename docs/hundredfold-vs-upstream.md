@@ -1,6 +1,6 @@
 # Hundredfold vs upstream
 
-Hundredfold is a fork of [Jinn](https://github.com/hristo2612/jinn) by hristo2612 and contributors, released under the MIT License. Most of the code here is theirs: the gateway, the org model, Todos, the web dashboard and most of the engine adapters. Hundredfold keeps the internal codename ("Hundredfold": the `hundredfold` command, `hundredfold`, `~/.hundredfold`, `HUNDREDFOLD_*`) so upstream fixes can still be merged. See [`NOTICE`](../NOTICE) and the [README](../README.md#built-on-hundredfold).
+Most of the code here comes from the upstream project: the gateway, the org model, Todos, the web dashboard and most of the engine adapters. Hundredfold keeps the upstream internals recognisable so upstream fixes can still be merged. See [`NOTICE`](../NOTICE) for the credit.
 
 This page lists the headline features Hundredfold has that upstream does not, and is just as plain about where upstream already has the feature. It is not an exhaustive changelog; smaller fixes and hardening are in [`CHANGELOG.md`](../CHANGELOG.md).
 

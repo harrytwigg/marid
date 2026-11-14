@@ -1,8 +1,8 @@
 /**
  * The names an install made before the rename carries, as the compatibility layer reads them. The values live in
- * `legacy-names.json` so that code, tests and scripts alike take them from one file; nothing else spells them.
+ * `names.json` so that code, tests and scripts alike take them from one file; nothing else spells them.
  */
-import legacy from "./legacy-names.json" with { type: "json" };
+import legacy from "./names.json" with { type: "json" };
 
 /** The lower-case codename an old install is built from: its home, instance names, headers and variables. */
 export const LEGACY_CODENAME: string = legacy.codename;

@@ -5,7 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import Database from 'better-sqlite3';
 import type { SessionDelivery, SessionDeliveryIdentity, SessionDeliveryPayload } from '../shared/types.js';
-import { LEGACY_SQL_FUNCTIONS } from "../shared/legacy-names.js";
+import { LEGACY_SQL_FUNCTIONS } from "../shared/legacy/names.js";
 
 export const CREATE_TABLE = `
 CREATE TABLE IF NOT EXISTS sessions (

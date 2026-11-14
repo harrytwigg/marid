@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { evaluateCommandPolicy, evaluateWritePathPolicy } from "../command-policy.js";
-import { OLD } from "../legacy-names.js";
+import { OLD } from "../legacy/names.js";
 
 /** Where the gateway's HUNDREDFOLD_HOME is sshfs-mounted on the remote host. */
 const MOUNT = `/mnt/gateway-${OLD.codename}`;

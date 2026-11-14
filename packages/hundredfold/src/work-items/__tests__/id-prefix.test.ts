@@ -8,7 +8,7 @@ import {
   todoIdOrdinal,
   todoIdPrefix,
 } from "../id.js";
-import { OLD } from "../../shared/legacy-names.js";
+import { OLD } from "../../shared/legacy/names.js";
 
 describe("company-derived Todo identity", () => {
   it("uses intuitive word initials and single-word letter prefixes", () => {

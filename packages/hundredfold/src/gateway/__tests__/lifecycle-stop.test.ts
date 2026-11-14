@@ -4,6 +4,7 @@ import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { envAliases } from "../../shared/codename-env.js";
 
 // Point HUNDREDFOLD_HOME at a temp dir BEFORE importing the module under test so
 // PID_FILE resolves inside it.
@@ -360,8 +361,7 @@ describe("foreground gateway ownership (no HUNDREDFOLD_HOME in env)", { timeout:
       setInterval(() => {}, 1000);
     `;
     const env = { ...process.env };
-    delete env.HUNDREDFOLD_HOME;
-    delete env.HUNDREDFOLD_HOME_IDENTITY;
+    for (const key of [...envAliases("HOME"), ...envAliases("HOME_IDENTITY")]) delete env[key];
     return spawn(process.execPath, ["-e", script], { stdio: "ignore", env });
   }
 

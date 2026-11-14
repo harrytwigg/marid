@@ -20,7 +20,7 @@ import { normalizeWorkspaceName, resolveInstanceHome } from "../create.js";
 import { isDefaultHome, resolveHundredfoldInstance, resolveHomeIdentity } from "../../shared/home.js";
 import { assertContainerPrimaryCommand } from "../../cli/container-contract.js";
 import { formatPairingInstructions } from "../../cli/pair.js";
-import { OLD } from "../../shared/legacy-names.js";
+import { OLD } from "../../shared/legacy/names.js";
 
 let root: string;
 beforeEach(() => { root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "identity-"))); });

@@ -35,7 +35,7 @@
         "../hundredfold/src/shared/codename-constant.ts"
       ],
       "@hundredfold/legacy-names": [
-        "../hundredfold/src/shared/legacy-names.ts"
+        "../hundredfold/src/shared/legacy/names.ts"
       ]
     }
   },

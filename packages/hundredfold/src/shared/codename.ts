@@ -17,7 +17,7 @@
 
 import path from "node:path";
 import { CODENAME } from "./codename-constant.js";
-import { LEGACY_CODENAME } from "./legacy-names.js";
+import { LEGACY_CODENAME } from "./legacy/names.js";
 
 export { CODENAME };
 

@@ -10,7 +10,7 @@
  */
 import type { OpencodeAccountConfig } from "./config-types.js";
 import { NAMES } from "./codename.js";
-import { LEGACY_ENV_PREFIXES } from "./legacy-names.js";
+import { LEGACY_ENV_PREFIXES } from "./legacy/names.js";
 
 export type { OpencodeAccountConfig } from "./config-types.js";
 

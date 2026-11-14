@@ -53,8 +53,8 @@ describe("buildSandboxChildEnv", () => {
       .map((key) => ({ key, value: env[key] }))
       .filter(({ key, value }) => {
         if (value === undefined) return false;
-        if (key === "HUNDREDFOLD_HOME") return value !== home;
-        if (key === "HUNDREDFOLD_PORT") return value !== "7899";
+        if (key.endsWith("_HOME")) return value !== home;
+        if (key.endsWith("_PORT")) return value !== "7899";
         return true;
       });
 
@@ -150,7 +150,7 @@ describe("dropForeignInstanceEnv", () => {
     expect(dropped).not.toContain("HUNDREDFOLD_HOME");
     expect(env.HUNDREDFOLD_HOME).toBe(home);
     for (const key of HUNDREDFOLD_INSTANCE_IDENTITY_ENV_KEYS) {
-      if (key !== "HUNDREDFOLD_HOME") expect(env[key], key).toBeUndefined();
+      if (!key.endsWith("_HOME")) expect(env[key], key).toBeUndefined();
     }
     expect(env.PATH).toBe("/usr/bin:/bin");
   });

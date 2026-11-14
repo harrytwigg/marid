@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 // The old names (the ones before the rename) for the scripts that have to protect or scrub an install still carrying
-// them. The values are in one file, packages/hundredfold/src/shared/legacy-names.json; this reads it so no script spells them.
+// them. The values are in one file, packages/hundredfold/src/shared/legacy/names.json; this reads it so no script spells them.
 //
 //   import { LEGACY, legacyEnv } from "./legacy-names.mjs"
 //   node scripts/legacy-names.mjs unset HOME PORT   prints `unset <OLD>_HOME <OLD>_PORT ...` for a shell to eval
 //   node scripts/legacy-names.mjs home-name         prints the old default home directory name
+//   node scripts/legacy-names.mjs adopt             prints `export` lines giving old-prefix variables the current prefix
 import fs from "node:fs"
 import { fileURLToPath } from "node:url"
 
-export const LEGACY = JSON.parse(fs.readFileSync(new URL("../packages/hundredfold/src/shared/legacy-names.json", import.meta.url), "utf8"))
+// In a checkout the file is under src/; in an installed package (the container image) only the built copy ships.
+const NAMES_FILES = ["src", "dist/src"].map((dir) => new URL(`../packages/hundredfold/${dir}/shared/legacy/names.json`, import.meta.url))
+export const LEGACY = JSON.parse(fs.readFileSync(NAMES_FILES.find((file) => fs.existsSync(file)) ?? NAMES_FILES[0], "utf8"))
 
 /** `<OLD>_HOME` for each old prefix: `legacyEnv("HOME")`. */
 export const legacyEnv = (suffix) => LEGACY.envPrefixes.map((prefix) => `${prefix}_${suffix}`)
@@ -35,5 +38,15 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     if (keys.length > 0) console.log(`unset ${keys.join(" ")}`)
   } else if (process.argv[2] === "home-name") {
     console.log(legacyHomeName)
+  } else if (process.argv[2] === "adopt") {
+    // `export` lines giving each variable that carries an old prefix the current prefix, unless the current one is set.
+    const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`
+    for (const prefix of LEGACY.envPrefixes) {
+      for (const [key, value] of Object.entries(process.env)) {
+        if (!key.startsWith(`${prefix}_`) || value === undefined) continue
+        const current = `HUNDREDFOLD_${key.slice(prefix.length + 1)}`
+        if (process.env[current] === undefined) console.log(`export ${current}=${quote(value)}`)
+      }
+    }
   }
 }

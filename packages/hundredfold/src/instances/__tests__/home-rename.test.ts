@@ -14,7 +14,7 @@ import { HOME_MOVE_RECEIPT, readHomeMoveReceipt, renameHomeIfNeeded, type HomeRe
 import { inspectHome } from "../home-state.js";
 import { HOME_MOVE_PENDING, writePendingMove } from "../home-pending.js";
 import { settleInstanceEnv } from "../canonical-env.js";
-import { OLD } from "../../shared/legacy-names.js";
+import { OLD } from "../../shared/legacy/names.js";
 
 /** A real-shaped host: an older build's home with a sessions database, an attachment, a department stage
  *  directory beside it, Claude conversations filed under both working directories, a registry entry and

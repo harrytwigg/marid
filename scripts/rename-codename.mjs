@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Replaces every Jinn and Marid reference with the product name, case-preserving: jinn/marid -> hundredfold,
-// Jinn/Marid -> Hundredfold, JINN/MARID -> HUNDREDFOLD. Rerunnable; the rules are in scripts/rename-codename/.
+// Replaces every reference to the product's earlier names with the current name, case-preserving (lower, Title, UPPER).
+// The earlier names are read from packages/hundredfold/src/shared/legacy/names.json. Rerunnable; the rules are in
+// scripts/rename-codename/.
 //
 //   node scripts/rename-codename.mjs              report what would change, by area
 //   node scripts/rename-codename.mjs --apply      rewrite the files, then move the paths
@@ -12,7 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { isBinary, renamePath, renameText } from "./rename-codename/engine.mjs";
+import { hasOldName, isBinary, renamePath, renameText } from "./rename-codename/engine.mjs";
 import { FROZEN_SUBTREES, KEEP_CONTENT_PATHS, KEEP_PATTERNS } from "./rename-codename/rules.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -22,13 +23,9 @@ const check = args.has("--check");
 const list = args.has("--list");
 const residue = args.has("--residue");
 
-/** This script and its rules name the old words to say what they are: they are the one place that may. */
-const SELF = /^scripts\/(?:rename-codename\.mjs|rename-codename\/|__tests__\/rename-codename\.test\.mjs)/;
-
 const everything = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8", maxBuffer: 1 << 28 })
   .split("\0")
-  .filter(Boolean)
-  .filter((file) => !SELF.test(file));
+  .filter(Boolean);
 const tracked = new Set(everything);
 
 const rewrites = [];
@@ -64,8 +61,8 @@ if (residue) {
     if (!fs.lstatSync(full).isFile()) continue;
     const buffer = fs.readFileSync(full);
     if (isBinary(buffer)) continue;
-    const n = buffer.toString("utf8").split("\n").filter((line) => /jinn|marid/i.test(line)).length;
-    if (n > 0 || /jinn|marid/i.test(file)) {
+    const n = buffer.toString("utf8").split("\n").filter((line) => hasOldName(line)).length;
+    if (n > 0 || hasOldName(file)) {
       const key = why(file);
       counts[key] ??= { files: 0, lines: 0 };
       counts[key].files += 1;
@@ -88,7 +85,7 @@ if (check) {
   console.error(`rename-codename: ${rewrites.length} files still carry an old name and ${moves.length} paths still carry one.`);
   for (const [file] of rewrites.slice(0, 40)) console.error(`  content  ${file}`);
   for (const [file] of moves.slice(0, 20)) console.error(`  path     ${file}`);
-  console.error("Run `node scripts/rename-codename.mjs --apply`, or add the case to scripts/rename-codename/rules.mjs / mark the line `rename:keep` with a reason.");
+  console.error("Run `node scripts/rename-codename.mjs --apply`, or add the case to scripts/rename-codename/rules.mjs.");
   process.exit(1);
 }
 

@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { Database as DatabaseType } from "better-sqlite3";
 import { formatTodoId, parseTodoIdPrefix, resolveTodoIdPrefix } from "./id.js";
 import { LEGACY_PORTAL_NAME } from "../shared/brand.js";
-import { LEGACY_SQL_FUNCTIONS } from "../shared/legacy-names.js";
+import { LEGACY_SQL_FUNCTIONS } from "../shared/legacy/names.js";
 
 /**
  * Todo id allocation: burn an ordinal, hand back a one-time claim, and let the

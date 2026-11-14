@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { NAMES, type Names } from "./codename.js";
-import { LEGACY_CODENAME } from "./legacy-names.js";
+import { LEGACY_CODENAME } from "./legacy/names.js";
 
 /**
  * The hook relay runs outside this package (beside the home, and staged onto remote hosts),

@@ -4,6 +4,7 @@ import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { envAliases } from "../../shared/codename-env.js";
 
 // Point HUNDREDFOLD_HOME at a temp dir BEFORE importing the module under test so
 // PID_FILE resolves inside it.
@@ -70,8 +71,7 @@ async function waitForListening(port: number): Promise<void> {
  *  home at all, as a gateway started in the foreground from a plain shell. */
 function spawnListeningGatewayChild(port: number, opts: { hundredfoldHome?: string }): ChildProcess {
   const env = { ...process.env };
-  delete env.HUNDREDFOLD_HOME;
-  delete env.HUNDREDFOLD_HOME_IDENTITY;
+  for (const key of [...envAliases("HOME"), ...envAliases("HOME_IDENTITY")]) delete env[key];
   if (opts.hundredfoldHome) env.HUNDREDFOLD_HOME = opts.hundredfoldHome;
   return spawn(process.execPath, ["-e", `require("node:net").createServer().listen(${port}, "127.0.0.1"); setInterval(() => {}, 1000);`], {
     stdio: "ignore",

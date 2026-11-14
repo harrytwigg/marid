@@ -22,7 +22,7 @@
 
 Hundredfold is a fork of [Jinn](https://github.com/hristo2612/jinn) by hristo2612 and contributors (MIT). Most of the code here is theirs: the gateway, the org, Todos, the web dashboard and the engine adapters. Hundredfold has its own name and release line and adds features on top of it - see [What Hundredfold adds](#what-hundredfold-adds). The original copyright is preserved in [LICENSE](LICENSE) and the credit is repeated in [NOTICE](NOTICE).
 
-An install made before the rename keeps working: its first start moves the old home directory to `~/.hundredfold` (a link is left at the old path, after a snapshot), the old environment variables, headers and browser storage keys are still read, and the old command name forwards to `hundredfold` with a notice. [`docs/codename-compatibility.md`](docs/codename-compatibility.md) says what moves, when, and how to roll back.
+An install made before the rename keeps working: its first start moves the old home directory to `~/.hundredfold` (a link is left at the old path, after a snapshot), the old environment variables, headers and browser storage keys are still read, and the old command name forwards to `hundredfold` with a notice. [`docs/upgrading.md`](docs/upgrading.md) says what moves, when, and how to roll back.
 
 ---
 

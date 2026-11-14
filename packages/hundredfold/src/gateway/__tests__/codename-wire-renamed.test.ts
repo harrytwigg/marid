@@ -26,7 +26,7 @@ import { rejectNonOperatorPtyUpgradeCaller, rejectUnverifiedIdentifiedUpgradeCal
 import { WRITE_ORIGIN_HEADER, readWriteOrigin } from "../../work-items/origin.js";
 import { CALLER_SESSION_HEADER, TOOL_CALL_HEADER, TOOL_CALL_HEADER_VALUE } from "../../mcp/identity.js";
 import { isToolCallMarker } from "../../shared/wire-names.js";
-import { OLD } from "../../shared/legacy-names.js";
+import { OLD } from "../../shared/legacy/names.js";
 
 type Headers = Record<string, string | string[] | undefined>;
 const request = (headers: Headers, remote = "100.64.1.2"): Pick<IncomingMessage, "headers" | "socket"> =>
@@ -93,7 +93,7 @@ describe("what an upgraded gateway accepts from a peer that has not upgraded", (
     try {
       const delivered: string[] = [];
       reg.register("s1", (hook) => { delivered.push(hook.hook_event_name); });
-      const legacy = handleHookPost({ reg, secret: "sek", remoteAddress: "127.0.0.1" }, "sek", { hundredfoldSessionId: "s1", hook: { hook_event_name: "Stop" } });
+      const legacy = handleHookPost({ reg, secret: "sek", remoteAddress: "127.0.0.1" }, "sek", { [`${OLD.codename}SessionId`]: "s1", hook: { hook_event_name: "Stop" } });
       const current = handleHookPost({ reg, secret: "sek", remoteAddress: "127.0.0.1" }, "sek", { acmeSessionId: "s1", hook: { hook_event_name: "Stop" } });
       const neither = handleHookPost({ reg, secret: "sek", remoteAddress: "127.0.0.1" }, "sek", { hook: { hook_event_name: "Stop" } });
       expect([legacy.status, current.status, neither.status]).toEqual([200, 200, 400]);

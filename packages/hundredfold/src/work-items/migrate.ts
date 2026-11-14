@@ -30,7 +30,7 @@ import {
   workItemCreateReceiptRowsAreSound,
   workItemDispatchRowsAreSound,
 } from "./dispatch-schema.js";
-import { LEGACY_SQL_FUNCTIONS } from "../shared/legacy-names.js";
+import { LEGACY_SQL_FUNCTIONS } from "../shared/legacy/names.js";
 import {
   CANONICAL_ID_SQL,
   PRERELEASE_WORK_ITEMS_TABLE_SQL,

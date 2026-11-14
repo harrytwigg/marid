@@ -7,10 +7,11 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { namesFor } from "../codename.js";
 import { hostAssetStamp, readHostAsset, relayStampShellCheck, renderHostAsset } from "../host-assets.js";
+import { OLD } from "../legacy/names.js";
 
 const RELAY = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "assets", "hook-relay.mjs");
 const acme = namesFor("acme");
-const same = namesFor("hundredfold");
+const same = namesFor(OLD.codename);
 const quote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
 
 describe("rendering the hook relay", () => {
@@ -70,7 +71,7 @@ describe("the relay a rebuilt gateway writes, run against a gateway", () => {
   });
 
   it("still finds the home a session started by the old gateway names", async () => {
-    expect(await relay({ HUNDREDFOLD_HOME: dir })).toBe(0);
+    expect(await relay({ [`${OLD.upper}_HOME`]: dir })).toBe(0);
     expect(received).toHaveLength(1);
     expect(received[0].headers["x-acme-hook-secret"]).toBe("sek");
   });

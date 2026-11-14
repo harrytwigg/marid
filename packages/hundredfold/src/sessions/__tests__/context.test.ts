@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { buildContext } from "../context.js";
 import type { Employee, HundredfoldConfig, OrgHierarchy } from "../../shared/types.js";
-import { OLD } from "../../shared/legacy-names.js";
+import { OLD } from "../../shared/legacy/names.js";
 
 /**
  * The maxChars trimming test budgets 1200 chars, and `## Current session`

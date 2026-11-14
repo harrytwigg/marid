@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { ChatEmployeePicker } from '../chat-employee-picker'
-import { OLD } from "@hundredfold/legacy-names";
 
 // Mock EmployeeAvatar since it depends on settings context
 vi.mock('@/components/ui/employee-avatar', () => ({
@@ -39,10 +38,10 @@ describe('ChatEmployeePicker', () => {
         employees={mockEmployees}
         selectedEmployee={null}
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
-    const cooRow = screen.getByRole('option', { name: new RegExp(String.rawOLD.codename, "i") })
+    const cooRow = screen.getByRole('option', { name: /hundredfold/i })
     expect(cooRow).toBeDefined()
     expect(cooRow.getAttribute('aria-selected')).toBe('true')
   })
@@ -53,10 +52,10 @@ describe('ChatEmployeePicker', () => {
         employees={mockEmployees}
         selectedEmployee="lead-developer"
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
-    fireEvent.click(screen.getByRole('option', { name: new RegExp(String.rawOLD.codename, "i") }))
+    fireEvent.click(screen.getByRole('option', { name: /hundredfold/i }))
     expect(onChange).toHaveBeenCalledWith(null)
   })
 
@@ -68,7 +67,7 @@ describe('ChatEmployeePicker', () => {
         employees={mockEmployees}
         selectedEmployee={null}
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
     // Department headers should be present
@@ -85,7 +84,7 @@ describe('ChatEmployeePicker', () => {
         employees={mockEmployees}
         selectedEmployee={null}
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
     // All employees should be visible (no more/less toggle)
@@ -104,7 +103,7 @@ describe('ChatEmployeePicker', () => {
         employees={mockEmployees}
         selectedEmployee={null}
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
     fireEvent.click(screen.getByText('Lead Developer'))
@@ -117,11 +116,11 @@ describe('ChatEmployeePicker', () => {
         employees={mockEmployees}
         selectedEmployee="lead-developer"
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
     // COO should NOT be selected
-    const cooRow = screen.getByRole('option', { name: new RegExp(String.rawOLD.codename, "i") })
+    const cooRow = screen.getByRole('option', { name: /hundredfold/i })
     expect(cooRow.getAttribute('aria-selected')).toBe('false')
 
     // Lead Developer should be selected
@@ -140,7 +139,7 @@ describe('ChatEmployeePicker', () => {
         employees={mockEmployees}
         selectedEmployee={null}
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
     // No prominent text input at rest (so it can't be mistaken for the composer)
@@ -155,7 +154,7 @@ describe('ChatEmployeePicker', () => {
         employees={mockEmployees}
         selectedEmployee={null}
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
     fireEvent.click(screen.getByRole('button', { name: /search employees/i }))
@@ -168,7 +167,7 @@ describe('ChatEmployeePicker', () => {
         employees={mockEmployees}
         selectedEmployee={null}
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
     const listbox = screen.getByRole('listbox')
@@ -188,7 +187,7 @@ describe('ChatEmployeePicker', () => {
         employees={mockEmployees}
         selectedEmployee={null}
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
     fireEvent.keyDown(screen.getByRole('listbox'), { key: '/' })
@@ -202,7 +201,7 @@ describe('ChatEmployeePicker', () => {
         employees={mockEmployees}
         selectedEmployee={null}
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
     fireEvent.click(screen.getByRole('button', { name: /search employees/i }))
@@ -224,7 +223,7 @@ describe('ChatEmployeePicker', () => {
         employees={mockEmployees}
         selectedEmployee={null}
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
     fireEvent.click(screen.getByRole('button', { name: /search employees/i }))
@@ -243,7 +242,7 @@ describe('ChatEmployeePicker', () => {
         employees={mockEmployees}
         selectedEmployee={null}
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
     fireEvent.click(screen.getByRole('button', { name: /search employees/i }))
@@ -263,7 +262,7 @@ describe('ChatEmployeePicker', () => {
         employees={mockEmployees}
         selectedEmployee={null}
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
     fireEvent.click(screen.getByRole('button', { name: /search employees/i }))
@@ -279,7 +278,7 @@ describe('ChatEmployeePicker', () => {
         employees={mockEmployees}
         selectedEmployee={null}
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
     fireEvent.click(screen.getByRole('button', { name: /search employees/i }))
@@ -287,7 +286,7 @@ describe('ChatEmployeePicker', () => {
     fireEvent.change(searchInput, { target: { value: 'developer' } })
 
     // COO always visible
-    expect(screen.getByRole('option', { name: new RegExp(String.rawOLD.codename, "i") })).toBeDefined()
+    expect(screen.getByRole('option', { name: /hundredfold/i })).toBeDefined()
   })
 
   // --- Scrollable container ---
@@ -298,7 +297,7 @@ describe('ChatEmployeePicker', () => {
         employees={mockEmployees}
         selectedEmployee={null}
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
     const listbox = screen.getByRole('listbox')
@@ -315,7 +314,7 @@ describe('ChatEmployeePicker', () => {
         employees={mockEmployees}
         selectedEmployee={null}
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
     // Managers get "Mgr" badge, seniors get "Sr"
@@ -331,7 +330,7 @@ describe('ChatEmployeePicker', () => {
         employees={mockEmployees.slice(0, 3)}
         selectedEmployee={null}
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
     expect(screen.getByTestId('avatar-lead-developer')).toBeDefined()
@@ -346,7 +345,7 @@ describe('ChatEmployeePicker', () => {
         employees={mockEmployees}
         selectedEmployee={null}
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
     const listbox = screen.getByRole('listbox')
@@ -363,7 +362,7 @@ describe('ChatEmployeePicker', () => {
         employees={mockEmployees}
         selectedEmployee={null}
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
     fireEvent.click(screen.getByRole('button', { name: /search employees/i }))
@@ -381,7 +380,7 @@ describe('ChatEmployeePicker', () => {
         employees={mockEmployees}
         selectedEmployee={null}
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
     const listbox = screen.getByRole('listbox')
@@ -401,10 +400,10 @@ describe('ChatEmployeePicker', () => {
         employees={[]}
         selectedEmployee={null}
         onSelect={onChange}
-        portalName={OLD.portalName}
+        portalName="Hundredfold"
       />
     )
-    expect(screen.getByRole('option', { name: new RegExp(String.rawOLD.codename, "i") })).toBeDefined()
+    expect(screen.getByRole('option', { name: /hundredfold/i })).toBeDefined()
     const allOptions = screen.getAllByRole('option')
     expect(allOptions).toHaveLength(1)
   })

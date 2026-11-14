@@ -6,7 +6,7 @@ import os from "node:os"
 import path from "node:path"
 
 // The name an instance that never set its own portal name is materialized under (the compatibility layer's one source).
-const LEGACY = JSON.parse(fs.readFileSync(new URL("../src/shared/legacy-names.json", import.meta.url), "utf8"))
+const LEGACY = JSON.parse(fs.readFileSync(new URL("../src/shared/legacy/names.json", import.meta.url), "utf8"))
 
 const RATIONALE_START = "<!-- BEGIN RELEASE RATIONALE -->"
 const RATIONALE_END = "<!-- END RELEASE RATIONALE -->"

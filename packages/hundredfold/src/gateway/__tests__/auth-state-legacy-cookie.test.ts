@@ -11,7 +11,7 @@ vi.mock("../../shared/codename-constant.js", () => ({ CODENAME: "acme" }));
 import { handleApiRequest, type ApiContext } from "../api.js";
 import { authCookieName, authDeviceCookieName, createAuthSession } from "../auth.js";
 import { enforceOwnerOnlyDirectory } from "../../shared/owner-only.js";
-import { OLD } from "../../shared/legacy-names.js";
+import { OLD } from "../../shared/legacy/names.js";
 
 /** A browser paired by a build before the codename changed, asking a renamed build who it is. The route is the
  *  one that moves its cookies onto the new names; what a unit of the cookie helpers proves is not that it runs. */

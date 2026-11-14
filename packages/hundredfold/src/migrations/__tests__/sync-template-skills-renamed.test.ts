@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 vi.mock("../../shared/codename-constant.js", () => ({ CODENAME: "acme" }))
 
 import { syncTemplateSkills } from "../sync-template-skills.js"
-import { OLD } from "../../shared/legacy-names.js";
+import { OLD } from "../../shared/legacy/names.js";
 
 const roots: string[] = []
 afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }) })

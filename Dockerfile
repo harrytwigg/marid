@@ -95,6 +95,7 @@ ENV DISABLE_AUTOUPDATER=1
 # agent running without the permission gate should not rewrite the gateway serving it.
 COPY --from=builder --chown=root:node /deploy /opt/hundredfold/packages/hundredfold
 COPY --from=builder --chown=root:node /src/scripts/docker-configure.mjs /opt/hundredfold/scripts/
+COPY --from=builder --chown=root:node /src/scripts/legacy-names.mjs /opt/hundredfold/scripts/
 
 # A shell wrapper rather than a symlink into dist/bin/hundredfold.js: that file's shebang
 # is rewritten at publish time, so depending on it would couple us to packaging.

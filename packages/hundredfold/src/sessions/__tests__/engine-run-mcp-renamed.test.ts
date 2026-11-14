@@ -6,7 +6,7 @@ vi.mock("../../shared/codename-constant.js", () => ({ CODENAME: "acme" }));
 import type { Employee, HundredfoldConfig } from "../../shared/types.js";
 import { setHundredfoldAttachGate } from "../../mcp/attachment.js";
 import { resolveEngineRunMcp } from "../engine-run-mcp.js";
-import { OLD } from "../../shared/legacy-names.js";
+import { OLD } from "../../shared/legacy/names.js";
 
 /** What the engine run is handed: the built-in server under the name the instance records, whichever path
  *  chose it (the belt, or a purpose-built toolset). */

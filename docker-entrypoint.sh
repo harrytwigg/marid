@@ -4,6 +4,12 @@
 # that into a stopped container rather than an unreachable gateway.
 set -eu
 
+# A compose file or `docker run` written for an older release sets variables under the old prefix. Give each one the
+# current name unless the current one is set (the gateway does the same for itself once it runs).
+if [ -f /opt/hundredfold/scripts/legacy-names.mjs ]; then
+  eval "$(node /opt/hundredfold/scripts/legacy-names.mjs adopt)"
+fi
+
 # Mirrors resolveHundredfoldHome() in packages/hundredfold/src/shared/home.ts. Resolved to an
 # absolute path so the shell and the two Node consumers agree.
 HUNDREDFOLD_HOME="${HUNDREDFOLD_HOME:-$HOME/.${HUNDREDFOLD_INSTANCE:-hundredfold}}"

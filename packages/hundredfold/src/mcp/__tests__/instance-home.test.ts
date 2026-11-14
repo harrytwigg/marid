@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { envAliases } from "../../shared/codename-env.js";
 
 /**
  * The MCP stdio server must follow the ACTIVE instance's home.
@@ -32,7 +33,7 @@ function withInstanceHome(instance: string): { root: string; instanceHome: strin
   fs.mkdirSync(decoyHome, { recursive: true });
   process.env.HOME = root;
   process.env.USERPROFILE = root;
-  delete process.env.HUNDREDFOLD_HOME;
+  for (const key of envAliases("HOME")) delete process.env[key];
   process.env.HUNDREDFOLD_INSTANCE = instance;
   return { root, instanceHome, decoyHome };
 }

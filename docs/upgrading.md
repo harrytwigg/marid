@@ -1,13 +1,13 @@
-# Surviving a change of codename
+# Upgrading from an earlier release
 
 The codename is the lower-case word that names an instance's home (`~/.hundredfold`), its instance name (`hundredfold-<slug>`),
 its environment variables (`HUNDREDFOLD_*`), its wire headers (`x-hundredfold-*`), its cookies, its stage directories, the
-built-in MCP server (`mcp__hundredfold__*`) and a browser's stored keys. `packages/hundredfold/src/shared/codename-constant.ts`
+built-in MCP server (`mcp__hundredfold__*`) and a browser's stored keys. `packages/hundredfold/src/shared/codename.ts`
 holds it as one literal, and everything else is built from that.
 
 Throughout this page `<old>` is the codename an install was made under before the rename (and `<OLD>` its upper-case
 form for variables). The names a build reads from older installs are written in exactly one file,
-`packages/hundredfold/src/shared/legacy-names.json`; the compatibility layer is whatever imports it, and removing the
+`packages/hundredfold/src/shared/legacy/names.json`; the compatibility layer is whatever imports it, and removing the
 layer is deleting that file and its importers.
 
 An install made before a change carries the old word in all of those places. The compatibility layer is the
@@ -85,6 +85,51 @@ Two things are never renamed because renaming them would invalidate stored data:
 key capabilities, auth sessions and bootstrap grants, and the SQLite function names a database's schema refers to
 (the callback and Todo-claim functions). The `.claude.json` backup and lock suffixes and the mount sentinel
 stay as they are too: the first is a one-time backup, the second is regenerated.
+
+## Installing the new package over the old one
+
+The package was renamed with the product. The old package is not removed by installing the new one, and both want a
+command named after the old product, so a global install of one over the other can stop with `EEXIST`. The new package
+ships a small forwarder under the old command name that prints a notice and runs the new command, so scripts that call
+the old name keep working. To switch cleanly, remove the old global package first, then install the new one:
+
+```bash
+npm uninstall -g <old package>
+npm install -g hundredfold
+```
+
+Your home, configuration and conversations are untouched by either command; the first start of the new build moves
+the home over as described above.
+
+## Docker
+
+The Compose project, its volumes and the home inside the container were renamed with the product. A volume is looked
+up by its name, so the first `docker compose up` of this release creates **empty** volumes beside the old ones, and
+the gateway would start a fresh instance. Keep your data by doing one of these before the first start:
+
+- Copy each old volume into its new one. Stop the old stack (`docker compose down`, without `-v`), list the old volumes
+  with `docker volume ls` (they are named `<old project>_<old name>-home`, `-claude` and `-codex`), create the new
+  ones (`docker compose create`), then copy one volume at a time:
+
+  ```bash
+  docker run --rm -v <old volume>:/from -v hundredfold_hundredfold-home:/to alpine sh -c 'cp -a /from/. /to/'
+  ```
+
+  Repeat with `hundredfold_hundredfold-claude` and `hundredfold_hundredfold-codex`.
+- Or keep using the old volumes: declare them `external: true` in your Compose file under their old names and mount
+  them where the new ones are mounted.
+
+Then `docker compose up -d`. The first start finds the old layout in the copied home and moves it over. A home that is
+a mount point is never moved, so the names change inside it and the path stays.
+
+Variables in your `.env` file or `docker run` command that carry the old prefix are still honoured: the entrypoint
+gives each one the new prefix, unless the new name is already set. Moving to the new names is still the way to stop
+the warning. The old command is not installed inside the image; use `hundredfold`.
+
+## Desktop and mobile apps
+
+The desktop and mobile apps use new application identifiers and a new URL scheme, so they install as new apps.
+Add your gateways again in the new app and remove the old one when you are ready. Nothing is deleted from the old app.
 
 ## Checking an upgrade
 

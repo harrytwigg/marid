@@ -14,7 +14,7 @@ import { LEGACY_REMOTE_STAGE_DIR_NAME, REMOTE_STAGE_DIR_NAME, validateRemoteTarg
 import { isRemoteStagedHome } from "../../shared/local-db-guard.js";
 import { evaluateWritePathPolicy } from "../../shared/command-policy.js";
 import { claudeProjectSlug } from "../../shared/claude-project-slug.js";
-import { OLD } from "../../shared/legacy-names.js";
+import { OLD } from "../../shared/legacy/names.js";
 
 let root: string;
 beforeEach(() => { root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "remote-rename-"))); });

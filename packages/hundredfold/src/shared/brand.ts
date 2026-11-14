@@ -1,4 +1,4 @@
-import { LEGACY_PORTAL_NAME, LEGACY_PRODUCT_NAME, LEGACY_UPSTREAM_NAME } from "./legacy-names.js";
+import { LEGACY_PORTAL_NAME, LEGACY_PRODUCT_NAME, LEGACY_UPSTREAM_NAME } from "./legacy/names.js";
 
 export { LEGACY_PORTAL_NAME };
 

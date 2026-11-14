@@ -7,7 +7,7 @@ import {
   nameAliases,
   namesFor,
 } from "../codename.js";
-import { OLD } from "../legacy-names.js";
+import { OLD } from "../legacy/names.js";
 
 const acme = namesFor("acme");
 const same = namesFor(LEGACY_CODENAME);

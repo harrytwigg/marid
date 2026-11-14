@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { forwarderNotice, forwardTarget } from "../legacy-forwarder.js";
 import { namesFor } from "../../shared/codename.js";
-import { OLD } from "../../shared/legacy-names.js";
+import { OLD } from "../../shared/legacy/names.js";
 
 describe("legacy forwarder", () => {
   it("stays silent while the program still has the legacy name", () => {

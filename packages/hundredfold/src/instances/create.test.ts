@@ -4,16 +4,16 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadInstances, saveInstances } from "./directory.js";
 import { expectPosixMode } from "../shared/test-support/posix-mode.js";
+import { OLD } from "../shared/legacy/names.js";
 import {
   createInstance,
   normalizeWorkspaceName,
   resolveInstanceHome,
 } from "./create.js";
-import { OLD } from "../shared/legacy-names.js";
 
 const scratch: string[] = [];
 function tempDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `${OLD.codename}-create-instance-`));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-create-instance-"));
   scratch.push(dir);
   return dir;
 }
@@ -27,33 +27,37 @@ describe("workspace naming", () => {
     expect(normalizeWorkspaceName("John")).toEqual({
       displayName: "John",
       slug: "john",
-      instanceName: `${OLD.codename}-john`,
-      homeName: `.${OLD.codename}-john`,
+      instanceName: "hundredfold-john",
+      homeName: ".hundredfold-john",
     });
-    expect(normalizeWorkspaceName("Acme Studio").instanceName).toBe(`${OLD.codename}-acme-studio`);
+    expect(normalizeWorkspaceName("Acme Studio").instanceName).toBe("hundredfold-acme-studio");
+  });
+
+  it("reads a name typed with the old codename's prefix as the same workspace", () => {
+    expect(normalizeWorkspaceName(`${OLD.codename}-john`).instanceName).toBe("hundredfold-john");
   });
 
   it("rejects empty, traversal, numeric-only, and reserved names", () => {
-    for (const name of ["", "../other", "123", OLD.codename]) {
+    for (const name of ["", "../other", "123", "hundredfold"]) {
       expect(() => normalizeWorkspaceName(name)).toThrow(/workspace name/i);
     }
   });
 
   it("resolves legacy and prefixed selectors through registered homes", () => {
-    const instances = [{ id: "id", name: `${OLD.codename}-john`, displayName: "John", port: 7788, home: "/custom/john", createdAt: "now" }];
+    const instances = [{ id: "id", name: "hundredfold-john", displayName: "John", port: 7788, home: "/custom/john", createdAt: "now" }];
     // A registered home is returned verbatim, so it stays exactly as stored.
     expect(resolveInstanceHome("john", instances, "/home/operator")).toBe("/custom/john");
-    expect(resolveInstanceHome(`${OLD.codename}-john`, instances, "/home/operator")).toBe("/custom/john");
+    expect(resolveInstanceHome("hundredfold-john", instances, "/home/operator")).toBe("/custom/john");
     // An unregistered selector is derived with path.join, which correctly yields
     // native separators — backslashes on Windows. Build the expectation the same
     // way rather than hard-coding a POSIX path.
-    expect(resolveInstanceHome("newco", [], "/home/operator")).toBe(path.join("/home/operator", `.${OLD.codename}-newco`));
+    expect(resolveInstanceHome("newco", [], "/home/operator")).toBe(path.join("/home/operator", ".hundredfold-newco"));
   });
 });
 
 describe("workspace creation", () => {
   it("rejects secondary workspace creation in the single-instance Docker image", async () => {
-    vi.stubEnv(`${OLD.upper}_CONTAINER`, "1");
+    vi.stubEnv("HUNDREDFOLD_CONTAINER", "1");
     const root = tempDir();
     const execFile = vi.fn(async () => ({ stdout: "", stderr: "" }));
 
@@ -91,7 +95,7 @@ describe("workspace creation", () => {
       homeDir: root,
       registryPath,
       legacyRegistryPath,
-      cliEntry: `/package/dist/bin/${OLD.codename}.js`,
+      cliEntry: "/package/dist/bin/hundredfold.js",
       execFile,
       isPortAvailable: async () => true,
       waitForHealth: async () => true,
@@ -100,26 +104,26 @@ describe("workspace creation", () => {
     });
 
     expect(result.instance).toMatchObject({
-      name: `${OLD.codename}-john`,
+      name: "hundredfold-john",
       displayName: "John",
       port: 7778,
-      home: path.join(root, `.${OLD.codename}-john`),
+      home: path.join(root, ".hundredfold-john"),
       accessUrls: { remote: "https://machine.example.ts.net:7778" },
     });
     expect(result.warning).toBeUndefined();
     expect(calls.map((call) => call.args)).toEqual([
-      [`/package/dist/bin/${OLD.codename}.js`, "setup"],
-      [`/package/dist/bin/${OLD.codename}.js`, "start", "--daemon"],
+      ["/package/dist/bin/hundredfold.js", "setup"],
+      ["/package/dist/bin/hundredfold.js", "start", "--daemon"],
     ]);
     expect(calls[0].env).toMatchObject({
-      [`${OLD.upper}_HOME`]: path.join(root, `.${OLD.codename}-john`),
-      [`${OLD.upper}_INSTANCE`]: "hundredfold-john",
-      [`${OLD.upper}_SETUP_NAME`]: "John",
+      HUNDREDFOLD_HOME: path.join(root, ".hundredfold-john"),
+      HUNDREDFOLD_INSTANCE: "hundredfold-john",
+      HUNDREDFOLD_SETUP_NAME: "John",
     });
-    expect(fs.readFileSync(path.join(root, `.${OLD.codename}-john`, "config.yaml"), "utf8")).toContain("port: 7778");
-    expect(fs.readFileSync(path.join(root, `.${OLD.codename}-john`, "config.yaml"), "utf8")).toContain("host: 0.0.0.0");
-    expect(fs.readFileSync(path.join(root, `.${OLD.codename}-john`, "config.yaml"), "utf8")).toContain("authRequired: true");
-    const gatewayPath = path.join(root, `.${OLD.codename}-john`, "gateway.json");
+    expect(fs.readFileSync(path.join(root, ".hundredfold-john", "config.yaml"), "utf8")).toContain("port: 7778");
+    expect(fs.readFileSync(path.join(root, ".hundredfold-john", "config.yaml"), "utf8")).toContain("host: 0.0.0.0");
+    expect(fs.readFileSync(path.join(root, ".hundredfold-john", "config.yaml"), "utf8")).toContain("authRequired: true");
+    const gatewayPath = path.join(root, ".hundredfold-john", "gateway.json");
     const gateway = JSON.parse(fs.readFileSync(gatewayPath, "utf8")) as { token?: string };
     expect(gateway.token?.length).toBeGreaterThanOrEqual(32);
     expectPosixMode(fs.statSync(gatewayPath), 0o600);
@@ -127,10 +131,10 @@ describe("workspace creation", () => {
   });
 
   it("bootstraps the new workspace without the parent instance's gateway session", async () => {
-    vi.stubEnv(`${OLD.upper}_GATEWAY_URL`, "http://127.0.0.1:7802");
-    vi.stubEnv(`${OLD.upper}_GATEWAY_TOKEN`, "parent-token");
-    vi.stubEnv(`${OLD.upper}_SESSION_ID`, "parent-session");
-    vi.stubEnv(`${OLD.upper}_SESSION_CAPABILITY`, "parent-capability");
+    vi.stubEnv("HUNDREDFOLD_GATEWAY_URL", "http://127.0.0.1:7802");
+    vi.stubEnv("HUNDREDFOLD_GATEWAY_TOKEN", "parent-token");
+    vi.stubEnv("HUNDREDFOLD_SESSION_ID", "parent-session");
+    vi.stubEnv("HUNDREDFOLD_SESSION_CAPABILITY", "parent-capability");
     const root = tempDir();
     const calls: Array<{ args: string[]; env?: NodeJS.ProcessEnv }> = [];
     const execFile = vi.fn(async (_file: string, args: string[], options?: { env?: NodeJS.ProcessEnv }) => {
@@ -147,7 +151,7 @@ describe("workspace creation", () => {
       homeDir: root,
       registryPath: path.join(root, "host", "instances.json"),
       legacyRegistryPath: path.join(root, "missing.json"),
-      cliEntry: `/package/dist/bin/${OLD.codename}.js`,
+      cliEntry: "/package/dist/bin/hundredfold.js",
       execFile,
       isPortAvailable: async () => true,
       waitForHealth: async () => true,
@@ -160,8 +164,8 @@ describe("workspace creation", () => {
       expect(call.env?.HUNDREDFOLD_GATEWAY_TOKEN).toBeUndefined();
       expect(call.env?.HUNDREDFOLD_SESSION_ID).toBeUndefined();
       expect(call.env?.HUNDREDFOLD_SESSION_CAPABILITY).toBeUndefined();
-      expect(call.env?.HUNDREDFOLD_HOME).toBe(path.join(root, `.${OLD.codename}-john`));
-      expect(call.env?.HUNDREDFOLD_INSTANCE).toBe(`${OLD.codename}-john`);
+      expect(call.env?.HUNDREDFOLD_HOME).toBe(path.join(root, ".hundredfold-john"));
+      expect(call.env?.HUNDREDFOLD_INSTANCE).toBe("hundredfold-john");
     }
   });
 
@@ -170,9 +174,9 @@ describe("workspace creation", () => {
     const registryPath = path.join(root, "host", "instances.json");
     const legacyRegistryPath = path.join(root, "missing.json");
     saveInstances([{
-      name: `${OLD.codename}-main`,
+      name: "hundredfold-main",
       port: 7777,
-      home: path.join(root, `.${OLD.codename}-main`),
+      home: path.join(root, ".hundredfold-main"),
       createdAt: "2026-01-01T00:00:00.000Z",
     }], { registryPath });
     const checked: number[] = [];
@@ -186,7 +190,7 @@ describe("workspace creation", () => {
       homeDir: root,
       registryPath,
       legacyRegistryPath,
-      cliEntry: `/package/dist/bin/${OLD.codename}.js`,
+      cliEntry: "/package/dist/bin/hundredfold.js",
       execFile,
       isPortAvailable: async (port) => { checked.push(port); return port !== 7778; },
       waitForHealth: async () => false,
@@ -194,7 +198,7 @@ describe("workspace creation", () => {
     })).rejects.toThrow("setup failed");
 
     expect(checked).toEqual([7778, 7779]);
-    expect(fs.existsSync(path.join(root, `.${OLD.codename}-john`))).toBe(false);
+    expect(fs.existsSync(path.join(root, ".hundredfold-john"))).toBe(false);
     expect(loadInstances({ registryPath, legacyRegistryPath })).toHaveLength(1);
   });
 });

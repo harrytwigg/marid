@@ -6,6 +6,7 @@ import os from "node:os"
 import path from "node:path"
 import test from "node:test"
 import { fileURLToPath, pathToFileURL } from "node:url"
+import { LEGACY } from "../legacy-names.mjs"
 import { createDisposableRoot, NONCE_FILE, removeDisposableRoot, stopGateway } from "../upgrade-verify-lib.mjs"
 
 const library = new URL("../upgrade-verify-lib.mjs", import.meta.url).href
@@ -189,7 +190,7 @@ function runCliWithLeak(t, assertionFailure) {
 test("a green CLI exits zero with both PASS results and reports a guarded leak by path", (t) => {
   const child = runCliWithLeak(t, false)
   assert.equal(child.status, 0, child.stdout + child.stderr)
-  assert.match(child.stdout, /PASS published hundredfold@1.0.0 -> candidate hundredfold@1.0.1/) // rename:keep: the baseline is the release from before the rename
+  assert.ok(child.stdout.includes(`PASS published ${LEGACY.package}@1.0.0 -> candidate hundredfold@1.0.1`), child.stdout) // the baseline is the release from before the rename
   assert.match(child.stdout, /PASS stock /)
   assert.match(child.stdout, /PASS customized /)
   assert.match(child.stderr, /CLEANUP LEAK: disposable root .*ENOTEMPTY.*verification result unchanged/)

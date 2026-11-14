@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { parseVersionOutput, productBanner } from "../brand.js";
-import { OLD } from "../legacy-names.js";
+import { OLD } from "../legacy/names.js";
 
 const olderBanner = (version: string): string => `${OLD.productName} ${version} (built on ${OLD.upstreamName})`;
 

@@ -14,6 +14,7 @@ import {
   readGatewayJsonToken,
 } from "../attachment.js";
 import type { Employee, McpGlobalConfig } from "../../shared/types.js";
+import { envAliases } from "../../shared/codename-env.js";
 
 /**
  * GRS-017e — default-attachment MACHINERY (built; default NOT flipped), plus
@@ -305,7 +306,7 @@ describe("readGatewayJsonToken", () => {
       // operator's actual ~/.hundredfold instead of the fixture. Redirect both.
       process.env.HOME = fakeHomeRoot;
       process.env.USERPROFILE = fakeHomeRoot;
-      delete process.env.HUNDREDFOLD_HOME;
+      for (const key of envAliases("HOME")) delete process.env[key];
       process.env.HUNDREDFOLD_INSTANCE = "qafoo";
       vi.resetModules();
       const fresh = (await import("../attachment.js")) as typeof import("../attachment.js");

@@ -7,6 +7,12 @@
 # reported, not restarted.
 set -eu
 
+# A compose file or `docker run` written for an older release sets variables under the old prefix. Give each one the
+# current name unless the current one is set (the gateway does the same for itself once it runs).
+if [ -f /opt/hundredfold/scripts/legacy-names.mjs ]; then
+  eval "$(node /opt/hundredfold/scripts/legacy-names.mjs adopt)"
+fi
+
 # Mirrors resolveHundredfoldHome() in shared/home.ts, absolutization included: a probe that
 # disagrees about the home finds no gateway.json and reports a healthy container sick.
 HUNDREDFOLD_HOME="${HUNDREDFOLD_HOME:-$HOME/.${HUNDREDFOLD_INSTANCE:-hundredfold}}"

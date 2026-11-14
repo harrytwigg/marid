@@ -14,7 +14,7 @@ import { HOME_MOVE_PENDING, writePendingMove } from "../home-pending.js";
 import { settleInstanceEnv } from "../canonical-env.js";
 import { settleBeforeRestart } from "../../gateway/restart-settle.js";
 import { departmentStageRoot } from "../../gateway/department-workdirs.js";
-import { OLD } from "../../shared/legacy-names.js";
+import { OLD } from "../../shared/legacy/names.js";
 
 /** Moves that die half way, race a gateway, or fail a step, and a home that has to stay put. A real-shaped host: an older build's home with a sessions database, an attachment, a department stage
  *  directory beside it, Claude conversations filed under both working directories, a registry entry and

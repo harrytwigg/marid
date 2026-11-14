@@ -13,7 +13,7 @@ import {
   wireHeaderDisplay,
   wireHeaderDisplayAliases,
 } from "../wire-names.js";
-import { OLD } from "../legacy-names.js";
+import { OLD } from "../legacy/names.js";
 
 const acme = namesFor("acme");
 const same = namesFor(OLD.codename);
@@ -76,8 +76,8 @@ describe("launch flags, org key and hook body", () => {
   });
 
   it("reads a hook's session id from a relay of either build", () => {
-    expect(readHookSessionId({ hundredfoldSessionId: "s1", hook: {} }, acme)).toBe("s1");
-    expect(readHookSessionId({ acmeSessionId: "s2", hundredfoldSessionId: "s1" }, acme)).toBe("s2");
+    expect(readHookSessionId({ [`${OLD.codename}SessionId`]: "s1", hook: {} }, acme)).toBe("s1");
+    expect(readHookSessionId({ acmeSessionId: "s2", [`${OLD.codename}SessionId`]: "s1" }, acme)).toBe("s2");
     expect(readHookSessionId({ acmeSessionId: "" }, acme)).toBeUndefined();
     expect(readHookSessionId({ acmeSessionId: 7 }, acme)).toBeUndefined();
     expect(readHookSessionId(null, acme)).toBeUndefined();

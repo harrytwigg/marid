@@ -29,7 +29,7 @@ vi.mock("../../shared/logger.js", () => ({
 
 import { DISPATCHER, EDGES, PERSONA, SHAPER, WORKER, home, seedHome } from "./domain-router-home.js";
 import { call } from "./domain-router-harness.js";
-import { OLD } from "../../shared/legacy-names.js";
+import { OLD } from "../../shared/legacy/names.js";
 
 beforeEach(() => {
   seedHome();

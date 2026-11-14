@@ -5,7 +5,7 @@ import {
   materializeTemplateBytes,
   materializeTemplateContent,
 } from "../template-materialization.js"
-import { OLD } from "../legacy-names.js";
+import { OLD } from "../legacy/names.js";
 
 describe("template materialization", () => {
   it(`derives the default ${OLD.portalName} replacements`, () => {

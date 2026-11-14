@@ -182,7 +182,7 @@ export default defineConfig(() => {
         // The codename is one literal for the whole repo: the gateway's names and the
         // browser's are built from the same line, so they cannot disagree.
         '@hundredfold/codename': path.resolve(__dirname, '../hundredfold/src/shared/codename-constant.ts'),
-        '@hundredfold/legacy-names': path.resolve(__dirname, '../hundredfold/src/shared/legacy-names.ts'),
+        '@hundredfold/legacy-names': path.resolve(__dirname, '../hundredfold/src/shared/legacy/names.ts'),
       },
     },
     build: {

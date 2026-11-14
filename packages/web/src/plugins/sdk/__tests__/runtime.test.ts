@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { installPluginSdk, sdkImportMap, shimSource } from '../runtime'
+import { LEGACY_CODENAME } from '@/lib/codename'
 
 describe('shim source', () => {
   it('derives its export names from the namespace it is given', () => {
@@ -76,7 +77,7 @@ describe('sdkImportMap', () => {
   it('maps exactly the supported specifiers: the SDK under its current and its old name, react and its JSX runtime', () => {
     expect(Object.keys(sdkImportMap()).sort()).toEqual([
       '@hundredfold/plugin-sdk',
-      '@hundredfold/plugin-sdk', // rename:keep: plugins installed before the rename import the SDK by its old name
+      `@${LEGACY_CODENAME}/plugin-sdk`, // plugins installed before the rename import the SDK by its old name
       'react',
       'react/jsx-runtime',
     ])

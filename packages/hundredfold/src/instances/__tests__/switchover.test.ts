@@ -11,7 +11,7 @@ import { builtinMcpServerName } from "../../mcp/builtin-name.js";
 import { doctorFindings } from "../../cli/doctor.js";
 import { SWITCHOVER_RECEIPT, planSwitchover, readSwitchoverReceipt, switchOver, type SwitchoverOptions } from "../switchover.js";
 import { stampVersionInYaml } from "../../migrations/version-marker.js";
-import { OLD } from "../../shared/legacy-names.js";
+import { OLD } from "../../shared/legacy/names.js";
 
 let root: string;
 let home: string;
@@ -22,7 +22,7 @@ const snapshots: string[] = [];
 const write = (file: string, text: string): void => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); };
 const read = (...segments: string[]): string => fs.readFileSync(path.join(home, ...segments), "utf-8");
 
-/** An instance as an older build left it: its own block in config.yaml, rosters that say `hundredfoldMcp` and list the built-in
+/** An instance as an older build left it: its own block in config.yaml, rosters that say the old org key and list the built-in
  *  server by name, a skill, a cron prompt and a permission list that call its tools `mcp__<old>__*`, a note, and a session. */
 beforeEach(() => {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "switchover-")));
@@ -164,7 +164,7 @@ describe("switching an instance over", () => {
     expect(report.blockers[0]).toContain("rolled back");
     expect(report.applied).toBeUndefined();
     expect(read("skills", "triage", "SKILL.md")).toContain(`mcp__${OLD.codename}__list_employees`);
-    expect(read("org", "ops", "lead.yaml")).toContain("hundredfoldMcp: true");
+    expect(read("org", "ops", "lead.yaml")).toContain(`${OLD.codename}Mcp: true`);
     expect(read("config.yaml")).toContain(`${OLD.codename}:`);
     expect(fs.readdirSync(path.join(home, "org", "ops")).filter((name) => name.endsWith(".rename-tmp"))).toEqual([]);
   });

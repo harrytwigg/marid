@@ -4,8 +4,9 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, type PinsResponse } from "@/lib/api";
 import { usePins, useTogglePin } from "../use-pins";
+import { OLD } from '@hundredfold/legacy-names';
 
-const LEGACY_KEY = "hundredfold-pinned-sessions"; // rename:keep: the key a browser used before the product had its name
+const LEGACY_KEY = OLD.storageKeys.pinnedSessions; // the key a browser used before the product had its name
 
 function setup() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });

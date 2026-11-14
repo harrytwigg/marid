@@ -13,7 +13,7 @@ import { backupRootFor, legacyBackupRootFor, renameBackupDirs } from "../backup-
 import { doctorFindings } from "../../cli/doctor.js";
 import { tryAcquireHomeLock } from "../home-lock.js";
 import { writePendingMove } from "../home-pending.js";
-import { OLD } from "../../shared/legacy-names.js";
+import { OLD } from "../../shared/legacy/names.js";
 
 let root: string;
 beforeEach(() => { root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "stage-rename-"))); });

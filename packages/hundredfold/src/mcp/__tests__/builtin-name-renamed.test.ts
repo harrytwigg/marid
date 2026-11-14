@@ -16,7 +16,7 @@ import { prepareGrokProjectMcpConfig, cleanupGrokProjectMcpConfig } from "../../
 import { ensureAntigravityHundredfoldMcpConfig } from "../../engines/antigravity-mcp.js";
 import { prepareCodexSessionHome } from "../../engines/codex.js";
 import { boardWalkAgentPermission } from "../../engines/opencode-mcp.js";
-import { OLD } from "../../shared/legacy-names.js";
+import { OLD } from "../../shared/legacy/names.js";
 
 const GATEWAY_ON: McpGlobalConfig = { gateway: { enabled: true } };
 const employee = (over: Partial<Employee> = {}): Employee => ({ name: "e", displayName: "E", department: "d", rank: "employee", engine: "claude", model: "sonnet", persona: "p", ...over });
@@ -55,7 +55,7 @@ describe("resolving the set under a per-instance name", () => {
   });
 
   it("registers it under the instance's name with no mcp section at all, for a force-on pilot", () => {
-    expect(Object.keys(resolveMcpServers(undefined, employee({ hundredfoldMcp: true }), "claude", "acme").mcpServers)).toEqual(["acme"]);
+    expect(Object.keys(resolveMcpServers(undefined, employee({ [`${OLD.codename}Mcp`]: true } as Partial<Employee>), "claude", "acme").mcpServers)).toEqual(["acme"]);
   });
 
   it("honours an allowlist that still names the built-in by the other reserved name", () => {
