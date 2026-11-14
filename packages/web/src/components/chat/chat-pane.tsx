@@ -20,7 +20,7 @@ import { FallbackModeChip } from './fallback-mode-chip'
 import { parseFallbackView, servedByInfoLine } from './fallback-mode-model'
 import { newChatFallbackParams, useNewChatFallback } from './use-new-chat-fallback'
 import { ModelSelectorRow, type SelectorValue } from '@/components/chat/model-selector-row'
-import { isRetryableLoadError, useLiveSession } from '@/hooks/use-live-session'
+import { useLiveSession } from '@/hooks/use-live-session'
 import { SessionLoadNotice } from './session-load-notice'
 import type { Session } from '@/components/chat/session-signals'
 import { useStaleChatNotice, type FreshChatSourceSession } from '@/components/chat/use-stale-chat-notice'
@@ -167,6 +167,7 @@ export function ChatPane({
     reset: resetPane,
     reload: reloadSession,
     error: loadError,
+    loadRetrying,
   } = live
   const sessionQueue = useSessionQueue(sessionId, subscribe)
   // A message cancelled out of the queue never ran: it leaves the transcript.
@@ -541,7 +542,7 @@ export function ChatPane({
           the first message has created the session). Mounting it up front is what
           lets the first message land in a node that was already on screen. */}
       {loadError && sessionId && !terminalPane && (
-        <SessionLoadNotice retrying={isRetryableLoadError(loadError)} onRetry={() => void reloadSession(sessionId)} />
+        <SessionLoadNotice retrying={Boolean(loadRetrying)} onRetry={() => void reloadSession(sessionId)} />
       )}
       {terminalPane ? <TerminalPaneBody sessionId={terminalPane} /> : viewMode === 'cli' && sessionId ? (
         // Reserve flex space during lazy-chunk load so the ChatInput below stays

@@ -2254,3 +2254,27 @@ describe("a load that fails while the gateway restarts", () => {
     expect(result.current.error).not.toBeNull()
   })
 })
+
+describe("a load whose answer cannot be processed", () => {
+  it("blanks the pane and does not retry, since a retry would fail the same way", async () => {
+    vi.useFakeTimers()
+    // A 200 carrying a null row: the fetch worked, the processing throws.
+    getSession.mockResolvedValue({ id: "s-bad", status: "idle", messages: [null] })
+    const bus = makeBus()
+    const { result } = renderHook(() => useLiveSession("s-bad", { subscribe: bus.subscribe }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(result.current.error).not.toBeNull()
+    expect(result.current.loadRetrying).toBe(false)
+    await act(async () => { await vi.advanceTimersByTimeAsync(60000) })
+    expect(getSession).toHaveBeenCalledTimes(1)
+  })
+
+  it("reports a failed fetch as being retried", async () => {
+    vi.useFakeTimers()
+    getSession.mockRejectedValue(new TypeError("Failed to fetch"))
+    const bus = makeBus()
+    const { result } = renderHook(() => useLiveSession("s-down", { subscribe: bus.subscribe }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(result.current.loadRetrying).toBe(true)
+  })
+})

@@ -64,6 +64,17 @@ describe("resolveLostConversationPrompt", () => {
     expect(carriedInterruptedPrompts).toBe(false);
   });
 
+  it("leaves out the chat's own notice that the conversation could not be resumed, which is for the operator", () => {
+    messages.rows = [
+      { role: "user", content: "fix the parser", timestamp: at(1) },
+      { role: "assistant", content: "On it.", timestamp: at(2) },
+      { role: "notification", content: "⚠️ Claude no longer has the conversation this chat was running", meta: { kind: "lost-conversation" }, timestamp: at(3) },
+      { role: "user", content: "status?", timestamp: at(4) },
+    ];
+    const { promptToRun } = resolveLostConversationPrompt(session(), "status?");
+    expect(promptToRun).toBe([INTRO, "USER: fix the parser", "ASSISTANT: On it.", "CURRENT MESSAGE:\nstatus?"].join("\n\n"));
+  });
+
   it("leaves out this turn's own message from another session, and anything queued behind it", () => {
     const verdict = "QA verdict: pass, merge it.";
     messages.rows = [

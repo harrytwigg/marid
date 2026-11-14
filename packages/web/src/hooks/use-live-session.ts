@@ -43,16 +43,25 @@ import {
 import { beginSendMessages, clearPendingSend, markSendFailed } from '@/components/chat/message-send-state'
 import type { GatewayEvent, GatewayEventListener } from '@hundredfold/gateway-events'
 
-/** A session fetch that failed for a reason a later attempt can clear: the
- *  gateway is down or restarting (a network error, a 5xx from the proxy in front
- *  of it) or briefly overloaded. A 4xx names a request that will keep failing
- *  (the session is gone, the caller is not signed in), so retrying it only
- *  repeats the answer. */
-export function isRetryableLoadError(err: unknown): boolean {
+/** Errors from a session fetch that a later attempt can clear: the gateway is
+ *  down or restarting (a network error, a 5xx from the proxy in front of it) or
+ *  briefly overloaded. Only the fetch is ever classed this way. An exception
+ *  while processing an answer that did arrive is the same on every attempt, so it
+ *  is never retried. A 4xx names a request that will keep failing (the session is
+ *  gone, the caller is not signed in), so retrying it only repeats the answer. */
+const retryableLoadErrors = new WeakSet<Error>()
+
+/** Whether a failed session fetch is one a later attempt can clear. */
+export function isTransientFetchFailure(err: unknown): boolean {
   // An ApiError carries the HTTP status; anything else (a fetch that never got an answer) is a network failure.
   const status = (err as { status?: unknown } | null)?.status
   if (typeof status !== 'number') return true
   return status >= 500 || status === 408 || status === 429
+}
+
+/** Whether this load error was a transient fetch failure the hook retries. */
+export function isRetryableLoadError(err: unknown): boolean {
+  return err instanceof Error && retryableLoadErrors.has(err)
 }
 
 /** Pause before re-fetching a session whose load failed, doubling per attempt. */
@@ -140,8 +149,10 @@ export interface UseLiveSessionResult {
   hydrating: boolean
   session: Record<string, unknown> | null
   /** Set when the last load failed (so read-only consumers don't hang on a
-   *  "Loading…" state forever). Cleared at the start of each load attempt. */
+   *  "Loading…" state forever). Cleared when a load succeeds. */
   error: Error | null
+  /** The failed load is one the hook is retrying by itself (see isRetryableLoadError). */
+  loadRetrying: boolean
   liveContextTokens: number | null
   /** Background work (subagents/background tasks) still running while the
    *  session is officially idle. null = none. Seeded from the session fetch,
@@ -1056,8 +1067,12 @@ export function useLiveSession(
   const loadSession = useCallback(async (id: string, options?: { suppressHydrating?: boolean }) => {
     const myToken = ++loadTokenRef.current
     if (!options?.suppressHydrating && !readLiveSessionSnapshot(id)) setHydrating(true)
+    // Whether the failure came from the fetch (transient, retried) or from
+    // processing what it returned (deterministic, so not retried).
+    let fetched = false
     try {
       const session = (await api.getSession(id, { last: INITIAL_MESSAGE_PAGE_SIZE })) as Record<string, unknown>
+      fetched = true
       if (myToken !== loadTokenRef.current) {
         return
       }
@@ -1176,13 +1191,16 @@ export function useLiveSession(
       // header) rather than blank a conversation that is still there, and let
       // the retry below fetch it once the gateway answers. Only a failure that
       // will not clear (the session is gone, the caller is refused) empties it.
-      if (!isRetryableLoadError(err)) {
+      const failure = err instanceof Error ? err : new Error("Failed to load session")
+      if (!fetched && isTransientFetchFailure(err)) {
+        retryableLoadErrors.add(failure)
+      } else {
         setMessages([])
         setCurrentSession(null)
         setHasOlderMessages(false)
         intermediateStartRef.current = -1
       }
-      setLoadError(err instanceof Error ? err : new Error("Failed to load session"))
+      setLoadError(failure)
     }
   }, [])
 
@@ -1495,6 +1513,7 @@ export function useLiveSession(
     hydrating,
     session: currentSession,
     error: loadError,
+    loadRetrying: loadError !== null && isRetryableLoadError(loadError),
     liveContextTokens,
     backgroundActivity,
     hasOlderMessages,

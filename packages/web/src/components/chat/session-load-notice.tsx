@@ -3,7 +3,8 @@
  * transcript that reads as "this chat has no history". It sits above the
  * transcript (not in its footer, which turns off virtualization) and goes away
  * the moment a load succeeds. The hook retries by itself; the button only
- * brings the next attempt forward.
+ * brings the next attempt forward. It makes no claim about the history: the
+ * client cannot know it is saved, only that this fetch failed.
  */
 export function SessionLoadNotice({ retrying, onRetry }: { retrying: boolean; onRetry: () => void }) {
   return (
@@ -14,7 +15,7 @@ export function SessionLoadNotice({ retrying, onRetry }: { retrying: boolean; on
     >
       <span>
         {retrying
-          ? "Couldn't load this conversation. The history is still saved; retrying."
+          ? "Couldn't refresh this conversation. Retrying."
           : "Couldn't load this conversation."}
       </span>
       <button type="button" onClick={onRetry} className="underline underline-offset-2 text-[var(--text-primary)]">

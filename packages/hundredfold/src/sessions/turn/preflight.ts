@@ -26,7 +26,7 @@ import type { TurnHierarchy, TurnInput, TurnPlan, TurnPreflight } from "./types.
 export { warnIfNearUsageLimit } from "./usage-warning.js";
 
 import { SYNC_TRANSCRIPT_MESSAGES, syncTranscriptPrompt } from "./sync-transcript.js";
-import { LOST_CONVERSATION_META_KEY, SYNC_MODE_META_KEY, withoutCatchUpMarkers } from "../sync-markers.js";
+import { LOST_CONVERSATION_META_KEY, LOST_CONVERSATION_NOTICE_KIND, SYNC_MODE_META_KEY, withoutCatchUpMarkers } from "../sync-markers.js";
 import { historyPointerPrompt } from "./history-pointer.js";
 
 /**
@@ -376,6 +376,7 @@ function transcriptLines(messages: LoggedMessage[], unseen: string[]): string[] 
 /** One message as a transcript line, or nothing for a row the transcript leaves out. */
 function transcriptLine(message: LoggedMessage, unseen: string[]): string | undefined {
   if (message.partial || message.toolCall) return undefined;
+  if (message.role === "notification" && message.meta?.["kind"] === LOST_CONVERSATION_NOTICE_KIND) return undefined;
   const label = message.role === "notification" ? notificationLabel(message) : TRANSCRIPT_LABELS.get(message.role);
   const text = engineText(message);
   // A held interrupted prompt is asked for after the transcript instead.

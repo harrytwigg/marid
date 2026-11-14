@@ -1,4 +1,5 @@
 import { logger } from "../../shared/logger.js";
+import { LOST_CONVERSATION_NOTICE_KIND } from "../sync-markers.js";
 import { detectRateLimit, isDeadSessionError, rateLimitEngineLabel, type RateLimitDetection } from "../../shared/rateLimit.js";
 import { observeClaudeTurnOutcome } from "../claude-auth-watch.js";
 import type { EngineResult, Session } from "../../shared/types.js";
@@ -152,7 +153,7 @@ async function runEngineOrStartAfresh(run: TurnRun): Promise<{ attempt: EngineAt
   // Say so in the chat: the engine now holds a rebuilt copy of the session, not the
   // conversation it had, and the operator should not have to infer that from the
   // answers. The messages above stay as they are.
-  await run.surface.notice(lostConversationNotice(run.plan.engineName)).catch((err: unknown) => {
+  await run.surface.notice(lostConversationNotice(run.plan.engineName), { kind: LOST_CONVERSATION_NOTICE_KIND }).catch((err: unknown) => {
     logger.warn(`Session ${sessionId}: could not post the lost-conversation notice: ${err instanceof Error ? err.message : String(err)}`);
   });
   deletePartialMessages(sessionId);
