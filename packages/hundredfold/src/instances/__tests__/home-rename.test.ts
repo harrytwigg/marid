@@ -201,7 +201,10 @@ describe("leaving a home where it is", () => {
       return file;
     };
     const oldHomeFile = filed(legacyHome(), "home-session");
+    fs.mkdirSync(path.join(currentHome(), "org", "ops"), { recursive: true });
     const oldStageFile = filed(path.join(root, `.${OLD.codename}-departments`, ".instances", `.${OLD.codename}-john`, "ops"), "stage-session");
+    // Another instance of the old name, beside this one: its department conversations are not this home's.
+    const siblingFile = filed(path.join(root, `.${OLD.codename}-departments`, ".instances", `.${OLD.codename}-john-staging`, "ops"), "sibling-session");
 
     const outcome = await renameHomeIfNeeded(currentHome(), deps);
 
@@ -210,6 +213,7 @@ describe("leaving a home where it is", () => {
     expect(fs.existsSync(oldStageFile)).toBe(false);
     expect(fs.existsSync(path.join(projectDir(currentHome()), "home-session.jsonl"))).toBe(true);
     expect(fs.existsSync(path.join(projectDir(path.join(root, ".acme-departments", ".instances", ".acme-john", "ops")), "stage-session.jsonl"))).toBe(true);
+    expect(fs.existsSync(siblingFile)).toBe(true);
     // Once: a conversation filed under the old key later is left alone.
     const later = filed(legacyHome(), "later-session");
     await renameHomeIfNeeded(currentHome(), deps);

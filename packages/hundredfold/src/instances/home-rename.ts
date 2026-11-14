@@ -6,7 +6,7 @@ import { acquireHomeLock } from "./home-lock.js";
 import { decide, kindOf, linkToCurrent, pairFor } from "./home-state.js";
 import { clearPendingMove, readPendingMove, writePendingMove } from "./home-pending.js";
 import { claudeConfigDirsOf } from "./claude-profile-dirs.js";
-import { moveTranscripts, moveTranscriptsBelow } from "../shared/claude-transcript-move.js";
+import { moveTranscripts } from "../shared/claude-transcript-move.js";
 import { renameStageRoot, stageRootFor } from "./stage-rename.js";
 import { recordInstanceRenamed, type DirectoryOptions } from "./directory.js";
 import { backupRootFor, renameBackupDirs } from "./backup-rename.js";
@@ -154,6 +154,15 @@ export async function renameHomeIfNeeded(home: string, deps: HomeRenameDeps = {}
   return moveHome(legacy, current, deps, names, log);
 }
 
+/** The departments an instance home has: one directory each under `org/`. */
+function departmentsOf(home: string): string[] {
+  try {
+    return fs.readdirSync(path.join(home, "org"), { withFileTypes: true }).filter((entry) => entry.isDirectory() && !entry.name.startsWith(".")).map((entry) => entry.name);
+  } catch {
+    return [];
+  }
+}
+
 const TRANSCRIPTS_ADOPTED = path.join("state", "legacy-transcripts-checked");
 
 /**
@@ -169,7 +178,11 @@ function adoptOrphanedTranscripts(legacy: string, current: string, names: Names,
     const configDirs = (deps.claudeConfigDirs ?? claudeConfigDirsOf)(current);
     const warn = (message: string): void => log(message);
     const home = moveTranscripts(legacy, current, configDirs, warn).length;
-    const stage = moveTranscriptsBelow(stageRootFor(legacy, names, true), stageRootFor(current, names, false), configDirs, warn).length;
+    // Exact keys, one per department this home has: another instance's stage directories share the old root's
+    // prefix, and its conversations are not this home's to move.
+    const legacyStage = stageRootFor(legacy, names, true);
+    const currentStage = stageRootFor(current, names, false);
+    const stage = departmentsOf(current).reduce((count, department) => count + moveTranscripts(path.join(legacyStage, department), path.join(currentStage, department), configDirs, warn).length, 0);
     fs.mkdirSync(path.dirname(marker), { recursive: true });
     fs.writeFileSync(marker, `${new Date().toISOString()}\n`);
     if (home + stage > 0) log(`Re-keyed ${home + stage} conversation director${home + stage === 1 ? "y" : "ies"} filed under ${legacy}, so sessions resume at ${current}.`);
