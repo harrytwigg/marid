@@ -43,7 +43,7 @@ test("migrateQueueItemsSchema adds an internal flag to legacy queue tables", () 
 
 - [ ] **Step 2: Run the focused registry test and verify RED**
 
-Run: `PATH=~/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter jinn-cli exec vitest run src/sessions/registry.test.ts`
+Run: `PATH=~/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter hundredfold exec vitest run src/sessions/registry.test.ts`
 
 Expected: FAIL because `migrateQueueItemsSchema` and the internal option do not exist.
 
@@ -62,7 +62,7 @@ Call the migration after creating `queue_items`; write `internal=1` for callback
 
 - [ ] **Step 4: Run the focused registry test and verify GREEN**
 
-Run: `PATH=~/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter jinn-cli exec vitest run src/sessions/registry.test.ts`
+Run: `PATH=~/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter hundredfold exec vitest run src/sessions/registry.test.ts`
 
 Expected: PASS.
 
@@ -100,7 +100,7 @@ it("delivers two rapid child callbacks exactly once each", async () => {
 
 - [ ] **Step 2: Run the callback reliability test and verify RED**
 
-Run: `PATH=~/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/callback-reliability.test.ts`
+Run: `PATH=~/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter hundredfold exec vitest run src/gateway/__tests__/callback-reliability.test.ts`
 
 Expected: the restart test fails because notification-role messages have no durable `queue_items` row.
 
@@ -117,7 +117,7 @@ Keep notification banners/messages unchanged, keep notification turns non-interr
 
 - [ ] **Step 4: Run callback, sessions, and gateway tests and verify GREEN**
 
-Run: `PATH=~/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/callback-reliability.test.ts src/sessions/__tests__/callbacks.test.ts src/sessions/queue.test.ts src/gateway/__tests__/workflow-queue-replay.test.ts`
+Run: `PATH=~/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter hundredfold exec vitest run src/gateway/__tests__/callback-reliability.test.ts src/sessions/__tests__/callbacks.test.ts src/sessions/queue.test.ts src/gateway/__tests__/workflow-queue-replay.test.ts`
 
 Expected: PASS with both callback prompts observed once and the pending callback replayed.
 

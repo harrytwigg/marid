@@ -59,4 +59,4 @@ jobs:
             echo "::error::No release tag (v*) is reachable from this commit, so there is no base to diff the template against. The release tags must be present in this repository for the check to run."
             exit 1
           fi
-          pnpm --filter jinn-cli migration:check -- --base-ref "$BASE" --version "$VERSION" --allow-unreleased
+          pnpm --filter hundredfold migration:check -- --base-ref "$BASE" --version "$VERSION" --allow-unreleased

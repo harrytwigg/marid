@@ -34,7 +34,7 @@ Add table-driven cases where `findManagerSession` returns `idle`/`succeeded`, `i
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `pnpm --filter jinn-cli test -- packages/hundredfold/src/gateway/__tests__/manager-visibility.test.ts`
+Run: `pnpm --filter hundredfold test -- packages/hundredfold/src/gateway/__tests__/manager-visibility.test.ts`
 
 Expected: terminal-session cases fail because `surfaceManagerVisibility` currently accepts any injected session and the default finder only excludes `error`.
 
@@ -63,7 +63,7 @@ Call `notifyManagerVisibility` repeatedly with identical details. Assert every c
 
 - [ ] **Step 2: Run the focused tests and verify RED**
 
-Run: `pnpm --filter jinn-cli test -- packages/hundredfold/src/sessions/__tests__/callbacks.test.ts packages/hundredfold/src/gateway/__tests__/callback-reliability.test.ts`
+Run: `pnpm --filter hundredfold test -- packages/hundredfold/src/sessions/__tests__/callbacks.test.ts packages/hundredfold/src/gateway/__tests__/callback-reliability.test.ts`
 
 Expected: manager visibility performs repeated raw posts without `callbackDeliveryId`, creating no stable outbox receipt.
 

@@ -564,7 +564,7 @@ CREATE TABLE budget_events (
 - `@playwright/test` v1.x
 - `@testing-library/react` v16.x (React 19 support)
 
-**Turborepo integration**: Add `test` and `test:e2e` scripts to both `packages/hundredfold/package.json` and `packages/web/package.json`. Update `turbo.json` pipeline to include `test` task. Update root `package.json` `test` script to run both packages (currently only runs `jinn-cli`).
+**Turborepo integration**: Add `test` and `test:e2e` scripts to both `packages/hundredfold/package.json` and `packages/web/package.json`. Update `turbo.json` pipeline to include `test` task. Update root `package.json` `test` script to run both packages (currently only runs `hundredfold`).
 
 ### 5.3 GitHub Actions CI
 

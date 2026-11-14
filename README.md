@@ -24,8 +24,6 @@ Hundredfold is a fork of [Jinn](https://github.com/hristo2612/jinn) by hristo261
 
 An install made before the rename keeps working: the first start moves its `~/.jinn` home to `~/.hundredfold` (a link is left at the old path), the old `JINN_*` variables are still read, and the old `jinn` command forwards to `hundredfold` with a notice. [`docs/codename-compatibility.md`](docs/codename-compatibility.md) says what moves, when, and how to roll back. <!-- rename:keep -->
 
-> The `npm install -g jinn-cli` and Homebrew installs below ship the **upstream** Jinn package, not Hundredfold. To run Hundredfold's features, [build from this repository](#development). <!-- rename:keep -->
-
 ---
 
 ## Why Hundredfold?
@@ -67,8 +65,8 @@ The full feature-by-feature table, with what upstream already has, is in [`docs/
 > **Prerequisites:** Node.js **22 or newer** (the repository pins **24.13.0** in `.nvmrc`), and at least one agent CLI installed **and signed in**. Hundredfold orchestrates your engines and can't run a session without one.
 
 ```bash
-# 1. Install (upstream Jinn package - see "Built on Jinn" above)
-npm install -g jinn-cli
+# 1. Install
+npm install -g hundredfold
 
 # 2. Install + sign in to at least one engine (example: Claude Code)
 npm install -g @anthropic-ai/claude-code
@@ -86,7 +84,7 @@ Open **[http://localhost:7777](http://localhost:7777)** and send your first mess
 Or install via **Homebrew**:
 
 ```bash
-brew tap hristo2612/jinn https://github.com/hristo2612/jinn
+brew tap hundredfoldhq/hundredfold https://github.com/hundredfoldhq/hundredfold
 brew install hundredfold
 hundredfold setup && hundredfold start
 ```
@@ -378,8 +376,8 @@ workers.
 > **Prerequisites:** Node.js **22 or newer** (the repository pins **24.13.0** in `.nvmrc`), and at least one agent CLI installed **and signed in**. Hundredfold orchestrates your engines and can't run a session without one.
 
 ```bash
-# 1. Install (upstream Jinn package - see "Built on Jinn" above)
-npm install -g jinn-cli
+# 1. Install
+npm install -g hundredfold
 
 # 2. Install + sign in to at least one engine (example: Claude Code)
 npm install -g @anthropic-ai/claude-code
@@ -397,7 +395,7 @@ Open **[http://localhost:7777](http://localhost:7777)** and send your first mess
 Or install via **Homebrew**:
 
 ```bash
-brew tap hristo2612/jinn https://github.com/hristo2612/jinn
+brew tap hundredfoldhq/hundredfold https://github.com/hundredfoldhq/hundredfold
 brew install hundredfold
 hundredfold setup && hundredfold start
 ```

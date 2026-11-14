@@ -94,7 +94,7 @@ it("refuses a stale revision without changing bytes", () => {
 
 - [ ] **Step 2: Run the store test and verify RED**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/notes/__tests__/store.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/notes/__tests__/store.test.ts`
 
 Expected: FAIL because `src/notes/store.ts` and its exports do not exist.
 
@@ -104,7 +104,7 @@ Use `lstatSync` to reject symlinks, `realpathSync` containment for the root/pare
 
 - [ ] **Step 4: Run the focused store test and verify GREEN**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/notes/__tests__/store.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/notes/__tests__/store.test.ts`
 
 Expected: PASS with no warnings.
 
@@ -165,7 +165,7 @@ it("reads then appends through the bound note tools", async () => {
 
 - [ ] **Step 2: Run route/tool tests and verify RED**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/notes-routes.test.ts src/mcp/__tests__/note-tools.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/notes-routes.test.ts src/mcp/__tests__/note-tools.test.ts`
 
 Expected: FAIL because Notes routes and tools are absent.
 
@@ -179,7 +179,7 @@ Keep legacy `search_knowledge`/`read_knowledge` for compatibility. Add the four 
 
 - [ ] **Step 5: Run all focused backend tests and verify GREEN**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/notes/__tests__/store.test.ts src/gateway/__tests__/notes-routes.test.ts src/mcp/__tests__/note-tools.test.ts src/mcp/__tests__/server.test.ts src/mcp/__tests__/tool-manifest-budget.test.ts src/mcp/__tests__/context-diet.test.ts src/shared/__tests__/template-company-doctrine.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/notes/__tests__/store.test.ts src/gateway/__tests__/notes-routes.test.ts src/mcp/__tests__/note-tools.test.ts src/mcp/__tests__/server.test.ts src/mcp/__tests__/tool-manifest-budget.test.ts src/mcp/__tests__/context-diet.test.ts src/shared/__tests__/template-company-doctrine.test.ts`
 
 Expected: PASS with the exact expanded MCP manifest under its explicitly justified cap.
 

@@ -38,7 +38,7 @@ Assert a single exact streamed result row is removed before the canonical final 
 
 - [ ] **Step 3: Run focused tests to verify RED**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/streamed-turn-settlement.test.ts src/gateway/__tests__/streamed-blocks.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/streamed-turn-settlement.test.ts src/gateway/__tests__/streamed-blocks.test.ts`
 
 Expected: completed-evidence and concatenated-fragment assertions fail because `shouldPreserveStreamedBlocks()` returns `false`; safety cases remain green.
 
@@ -58,7 +58,7 @@ Insert prose, tool, and transient rows; settle with only prose/tool ids; assert 
 
 - [ ] **Step 2: Run the registry test to verify RED**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/sessions/__tests__/messages-partial.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/sessions/__tests__/messages-partial.test.ts`
 
 Expected: FAIL because `settlePartialMessages` does not exist.
 
@@ -94,7 +94,7 @@ Detect rate limiting before partial settlement, selectively settle preserved evi
 Run:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/streamed-turn-settlement.test.ts src/gateway/__tests__/streamed-blocks.test.ts src/sessions/__tests__/messages-partial.test.ts src/gateway/__tests__/block-finalize.test.ts
+pnpm --filter hundredfold exec vitest run src/gateway/__tests__/streamed-turn-settlement.test.ts src/gateway/__tests__/streamed-blocks.test.ts src/sessions/__tests__/messages-partial.test.ts src/gateway/__tests__/block-finalize.test.ts
 pnpm --filter @hundredfold/web exec vitest run src/hooks/__tests__/use-live-session.test.ts src/components/chat/__tests__/comms-v2.test.tsx
 ```
 

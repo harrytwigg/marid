@@ -6,7 +6,7 @@
 
 **Architecture:** Track 1 hardens the existing per-engine completion detection (no state-machine refactor): a grace window + late-recovery supersede in `TurnResolver`, deterministic `task_complete` parsing in codex-interactive, and a periodic gateway status reconciler. Track 2 makes `buildContext()` audience-aware (COO vs manager vs employee) and moves static content (API table, connector recipes) into the engine-ingested CLAUDE.md/AGENTS.md.
 
-**Tech Stack:** TypeScript (Node), vitest, node-pty. Repo: `~/Projects/hundredfold`, package `packages/hundredfold` (run tests with `pnpm --filter jinn-cli exec vitest run <file>`; typecheck with `pnpm --filter jinn-cli typecheck`).
+**Tech Stack:** TypeScript (Node), vitest, node-pty. Repo: `~/Projects/hundredfold`, package `packages/hundredfold` (run tests with `pnpm --filter hundredfold exec vitest run <file>`; typecheck with `pnpm --filter hundredfold typecheck`).
 
 **Spec:** `docs/superpowers/specs/2026-06-10-engine-stability-context-hygiene-design.md`
 
@@ -134,7 +134,7 @@ describe("TurnResolver — StopFailure grace window", () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/Projects/hundredfold && pnpm --filter jinn-cli exec vitest run src/engines/__tests__/turn-resolver-grace.test.ts`
+Run: `cd ~/Projects/hundredfold && pnpm --filter hundredfold exec vitest run src/engines/__tests__/turn-resolver-grace.test.ts`
 Expected: FAIL — "does NOT settle immediately" fails (settles instantly), `noteActivity` not a function, `stopFailureGraceMs` unknown option (TS may also complain).
 
 - [ ] **Step 3: Implement the grace window in TurnResolver**
@@ -270,12 +270,12 @@ Replace `settle` so the timer can't leak:
 
 - [ ] **Step 4: Run the new tests**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/engines/__tests__/turn-resolver-grace.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/engines/__tests__/turn-resolver-grace.test.ts`
 Expected: PASS (9 tests)
 
 - [ ] **Step 5: Update any existing tests that assumed immediate settle**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/engines/__tests__/claude-interactive.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/engines/__tests__/claude-interactive.test.ts`
 The existing test "settles immediately on StopFailure … and exposes it" uses `error: "rate_limit"` — rate_limit still settles immediately, so it should PASS unchanged. If any other existing test feeds a grace-eligible error (`invalid_request`/`server_error`/`unknown`) and expects an immediate settle, pass `stopFailureGraceMs: 0` plus a `await new Promise(r => setTimeout(r, 1))` flush, or switch the fixture to `rate_limit`. Make the full file green.
 
 - [ ] **Step 6: Commit**
@@ -316,7 +316,7 @@ Replace `handleSseEvent`:
 
 - [ ] **Step 2: Run the engine test files**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/engines/__tests__/claude-interactive.test.ts src/engines/__tests__/turn-resolver-grace.test.ts src/engines/__tests__/claude-interactive-race.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/engines/__tests__/claude-interactive.test.ts src/engines/__tests__/turn-resolver-grace.test.ts src/engines/__tests__/claude-interactive-race.test.ts`
 Expected: PASS
 
 - [ ] **Step 3: Commit**
@@ -418,7 +418,7 @@ Note: `HookRegistry.deliver()` buffers when no listener is registered — that's
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/engines/__tests__/claude-interactive-late-recovery.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/engines/__tests__/claude-interactive-late-recovery.test.ts`
 Expected: FAIL — `armLateRecovery` is not a function.
 
 - [ ] **Step 3: Add `onLateRecovery` to EngineRunOpts**
@@ -513,7 +513,7 @@ Wire into the turn lifecycle:
 
 - [ ] **Step 5: Run the tests**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/engines/__tests__/claude-interactive-late-recovery.test.ts src/engines/__tests__/claude-interactive.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/engines/__tests__/claude-interactive-late-recovery.test.ts src/engines/__tests__/claude-interactive.test.ts`
 Expected: PASS
 
 - [ ] **Step 6: Wire the gateway handler — web path (api.ts)**
@@ -575,7 +575,7 @@ Check the imports at the top of manager.ts: `getSession`, `insertMessage`, `upda
 
 - [ ] **Step 8: Typecheck + full engine/gateway test files**
 
-Run: `pnpm --filter jinn-cli typecheck && pnpm --filter jinn-cli exec vitest run src/engines/ src/gateway/__tests__/run-web-session-connector-reply.test.ts`
+Run: `pnpm --filter hundredfold typecheck && pnpm --filter hundredfold exec vitest run src/engines/ src/gateway/__tests__/run-web-session-connector-reply.test.ts`
 Expected: PASS
 
 - [ ] **Step 9: Commit**
@@ -633,7 +633,7 @@ describe("codexTranscriptLineToDeltas — terminal markers", () => {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/engines/__tests__/codex-interactive.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/engines/__tests__/codex-interactive.test.ts`
 Expected: FAIL — `taskComplete` undefined on the first two tests.
 
 - [ ] **Step 3: Implement parser + completion wiring**
@@ -709,7 +709,7 @@ export function codexTranscriptLineToDeltas(line: string): {
 
 - [ ] **Step 4: Run the test file**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/engines/__tests__/codex-interactive.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/engines/__tests__/codex-interactive.test.ts`
 Expected: PASS. If any pre-existing test asserts the 800ms debounce timing, update it to 3000 (or to use the constant via a timer advance).
 
 - [ ] **Step 5: Commit**
@@ -817,7 +817,7 @@ describe("status reconciler sweepOnce", () => {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/status-reconciler.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/status-reconciler.test.ts`
 Expected: FAIL — module `../status-reconciler.js` not found.
 
 - [ ] **Step 3: Implement the reconciler**
@@ -904,7 +904,7 @@ export function startStatusReconciler(deps: StatusReconcilerDeps): () => void {
 
 - [ ] **Step 4: Run the test**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/status-reconciler.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/status-reconciler.test.ts`
 Expected: PASS. (If `listSessions()` requires a filter argument or `title` doesn't exist on Session, adapt to the actual signatures in `sessions/registry.ts` / `shared/types.ts` — `listSessions()` with no args returns all sessions per `api.ts:460` usage.)
 
 - [ ] **Step 5: Wire into the gateway lifecycle**
@@ -933,7 +933,7 @@ import { startStatusReconciler } from "./status-reconciler.js";
 
 - [ ] **Step 6: Typecheck + run gateway tests**
 
-Run: `pnpm --filter jinn-cli typecheck && pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/`
+Run: `pnpm --filter hundredfold typecheck && pnpm --filter hundredfold exec vitest run src/gateway/__tests__/`
 Expected: PASS
 
 - [ ] **Step 7: Commit**
@@ -987,7 +987,7 @@ describe("buildContext — compact org roster", () => {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/sessions/__tests__/context.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/sessions/__tests__/context.test.ts`
 Expected: the two new tests FAIL (persona preview present, pointer line absent).
 
 - [ ] **Step 3: Implement**
@@ -1018,7 +1018,7 @@ and replace its trailing line (451) with the same pointer line as above.
 
 - [ ] **Step 4: Run the context tests**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/sessions/__tests__/context.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/sessions/__tests__/context.test.ts`
 Expected: new tests PASS; fix any pre-existing assertions that expected persona previews in the org section.
 
 - [ ] **Step 5: Commit**
@@ -1099,7 +1099,7 @@ describe("buildContext — audience scoping", () => {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/sessions/__tests__/context.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/sessions/__tests__/context.test.ts`
 Expected: new tests FAIL.
 
 - [ ] **Step 3: Implement scoping in `buildContext`**
@@ -1198,12 +1198,12 @@ and update its call site (line 196) to `buildConnectorContext(opts.connectors, g
 
 - [ ] **Step 4: Run the context tests + fix pre-existing assertions**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/sessions/__tests__/context.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/sessions/__tests__/context.test.ts`
 Pre-existing tests asserting the full API table, connector recipes, or org/cron presence for employee sessions will fail — update them to the new contract (they are locking the OLD output by design; the file's header comment says so).
 
 - [ ] **Step 5: Typecheck + full sessions tests**
 
-Run: `pnpm --filter jinn-cli typecheck && pnpm --filter jinn-cli exec vitest run src/sessions/`
+Run: `pnpm --filter hundredfold typecheck && pnpm --filter hundredfold exec vitest run src/sessions/`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
@@ -1282,7 +1282,7 @@ curl -X POST <gateway>/api/connectors/slack/send \
 - [ ] **Step 3: Check the template renders (placeholder sanity)**
 
 Run: `grep -n "{{" ~/Projects/hundredfold/packages/hundredfold/template/CLAUDE.md | grep -v "portalName\|portalSlug"`
-Expected: no output (only the two known placeholders are used). Also run the template/setup tests if present: `pnpm --filter jinn-cli exec vitest run src/cli/` — expected PASS.
+Expected: no output (only the two known placeholders are used). Also run the template/setup tests if present: `pnpm --filter hundredfold exec vitest run src/cli/` — expected PASS.
 
 - [ ] **Step 4: Commit**
 
@@ -1324,9 +1324,9 @@ cd ~/.hundredfold && git add CLAUDE.md && git commit -m "docs: role marker + gat
 
 ### Task 10: Full verification
 
-- [ ] **Step 1: Full jinn-cli suite + typecheck**
+- [ ] **Step 1: Full hundredfold suite + typecheck**
 
-Run: `cd ~/Projects/hundredfold && pnpm --filter jinn-cli exec vitest run && pnpm --filter jinn-cli typecheck`
+Run: `cd ~/Projects/hundredfold && pnpm --filter hundredfold exec vitest run && pnpm --filter hundredfold typecheck`
 Expected: all tests PASS (was 444 + new ones), typecheck clean.
 
 - [ ] **Step 2: Web package untouched but verify it still builds/tests**

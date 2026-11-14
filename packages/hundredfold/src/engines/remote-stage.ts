@@ -234,7 +234,7 @@ export interface RemoteFacts {
  * read directly.
  *
  * Honouring nvm's `default` alias matters rather than taking the newest
- * version: a global `jinn-cli` lives under ONE version's tree, so a host with
+ * version: a global `hundredfold` lives under ONE version's tree, so a host with
  * both v22 (default, where hundredfold was installed) and v24 would otherwise resolve
  * to v24 and report hundredfold missing.
  */
@@ -417,8 +417,8 @@ export function assertRemoteVersion(destination: string, versionLine: string, lo
   const remote = parseVersionOutput(versionLine);
   if (remote !== local) {
     throw new Error(
-      `${destination} runs jinn-cli ${remote ?? `(unrecognised \`hundredfold --version\` output: ${JSON.stringify(versionLine)})`} but this gateway is ${local} — `
-      + `run \`npm install -g jinn-cli@${local}\` there`,
+      `${destination} runs hundredfold ${remote ?? `(unrecognised \`hundredfold --version\` output: ${JSON.stringify(versionLine)})`} but this gateway is ${local} — `
+      + `run \`npm install -g hundredfold@${local}\` there`,
     );
   }
   return remote;
@@ -449,7 +449,7 @@ export async function gatherFacts(destination: string): Promise<RemoteFacts> {
   recordRemoteInternalFallback(destination, remoteFallbackSources(kv));
   if (!kv.hundredfoldversion) {
     throw new Error(
-      `${destination} has no \`hundredfold\` on PATH — run \`npm install -g jinn-cli@${getPackageVersion()}\` there `
+      `${destination} has no \`hundredfold\` on PATH — run \`npm install -g hundredfold@${getPackageVersion()}\` there `
       + `(the remote install supplies the MCP server entrypoints; the daemon is never started)`,
     );
   }
@@ -540,7 +540,7 @@ export async function probeReachable(destination: string): Promise<boolean> {
 
 /**
  * Bring a remote host to the point where a session can be spawned on it:
- * reachable, running a matching jinn-cli, with the gateway's HUNDREDFOLD_HOME mounted.
+ * reachable, running a matching hundredfold, with the gateway's HUNDREDFOLD_HOME mounted.
  *
  * Waiting is BOUNDED on purpose. A desktop that is off for the weekend must
  * fail the turn with something the operator can read, not pin the session at
@@ -1235,7 +1235,7 @@ export interface PrepareRemoteSessionOpts {
    *  own belt is computed below and ignores this. */
   sessionEnv?: Record<string, string>;
   /** opencode only: list Hundredfold's command-timeout plugin in the staged config
-   *  (opencode-command-timeout.ts), from this host's own jinn-cli install. */
+   *  (opencode-command-timeout.ts), from this host's own hundredfold install. */
   opencodeCommandTimeout?: boolean;
   /** opencode only: the declared accounts. Each gets a `provider` block in the staged config, and its key
    *  goes into a 0600 file of its own (never the command line, never the session-env file the terminal

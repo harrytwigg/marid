@@ -43,7 +43,7 @@ Extend the gateway bearer-rejection test to assert the same helper selects `crea
 
 - [ ] **Step 2: Run tests to verify RED**
 
-Run: `pnpm --filter jinn-cli test -- --run packages/hundredfold/src/cli/__tests__/pair.test.ts packages/hundredfold/src/gateway/__tests__/auth-ux-api.test.ts`
+Run: `pnpm --filter hundredfold test -- --run packages/hundredfold/src/cli/__tests__/pair.test.ts packages/hundredfold/src/gateway/__tests__/auth-ux-api.test.ts`
 
 Expected: FAIL because `pairingSetupResponse` and `formatPairingSetupInstructions` do not exist yet.
 

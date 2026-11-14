@@ -37,7 +37,7 @@ try {
   nodePtyRoot = dirname(require.resolve("node-pty/package.json"));
 } catch {
   process.stderr.write(
-    "jinn-cli postinstall: node-pty not resolvable, skipping spawn-helper repair\n",
+    "hundredfold postinstall: node-pty not resolvable, skipping spawn-helper repair\n",
   );
   process.exit(0);
 }
@@ -70,7 +70,7 @@ for (const helper of new Set(candidates)) {
     repaired += 1;
   } catch (error) {
     process.stderr.write(
-      `jinn-cli postinstall: could not chmod ${helper} (${error?.message ?? error}); ` +
+      `hundredfold postinstall: could not chmod ${helper} (${error?.message ?? error}); ` +
         "hundredfold will retry this at startup\n",
     );
   }
@@ -78,13 +78,13 @@ for (const helper of new Set(candidates)) {
 
 if (seen === 0) {
   process.stderr.write(
-    `jinn-cli postinstall: no node-pty spawn-helper found under ${nodePtyRoot}; ` +
+    `hundredfold postinstall: no node-pty spawn-helper found under ${nodePtyRoot}; ` +
       "hundredfold will retry this at startup\n",
   );
 }
 
 if (process.env.npm_config_loglevel === "verbose") {
   process.stdout.write(
-    `jinn-cli postinstall: ${repaired} spawn-helper(s) repaired of ${seen} found\n`,
+    `hundredfold postinstall: ${repaired} spawn-helper(s) repaired of ${seen} found\n`,
   );
 }

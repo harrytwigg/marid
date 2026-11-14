@@ -1873,7 +1873,7 @@ git commit -m "feat(talk-web): history rail with tappable links; finalize entrie
 - [ ] **Step 1: Build the worktree**
 
 Run: `cd <worktree> && pnpm build`
-Expected: clean. ⚠️ Never `pnpm --filter @hundredfold/web build --force` (vite rejects `--force` and ships a stale web/out). The jinn-cli build copies `web/out` → `dist/web`.
+Expected: clean. ⚠️ Never `pnpm --filter @hundredfold/web build --force` (vite rejects `--force` and ships a stale web/out). The hundredfold build copies `web/out` → `dist/web`.
 
 - [ ] **Step 2: Write the smoke script**
 

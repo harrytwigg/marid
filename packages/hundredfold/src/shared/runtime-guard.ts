@@ -138,7 +138,7 @@ function spawnHelperCandidates(nodePtyRoot: string): string[] {
  * failed.` — a message that names neither the file nor the permission problem,
  * so it reads as if the spawned CLI were missing.
  *
- * `jinn-cli`'s postinstall already fixes this, but postinstall is precisely what
+ * `hundredfold`'s postinstall already fixes this, but postinstall is precisely what
  * such installs skip (Homebrew's `std_npm_args` passes `--ignore-scripts` by
  * default). Repairing at startup is therefore the only layer that holds for an
  * install we never got to run scripts in — including one already on disk, where

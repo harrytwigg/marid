@@ -43,7 +43,7 @@ export function compareSemver(a: string, b: string): number {
   return 0;
 }
 
-/** Read the package version from jinn-cli's package.json. */
+/** Read the package version from hundredfold's package.json. */
 export function getPackageVersion(): string {
   // TEMPLATE_DIR resolves against the built layout; the second candidate finds the same
   // manifest when this module runs straight from src, as it does under the test runner.
@@ -56,7 +56,7 @@ export function getPackageVersion(): string {
       return JSON.parse(fs.readFileSync(pkgPath, "utf-8")).version;
     }
   }
-  throw new Error("jinn-cli package.json not found");
+  throw new Error("hundredfold package.json not found");
 }
 
 /** Read the instance version from config.yaml. Returns "0.0.0" if not set. */

@@ -4,7 +4,7 @@
 
 **Goal:** Build Hundredfold - a lightweight AI gateway daemon that orchestrates Claude Code CLI and Codex SDK as an autonomous, self-organizing AI workforce.
 
-**Architecture:** Monorepo with two packages (`jinn-cli` core + `@hundredfold/web` dashboard). Single Node.js process gateway that spawns engine child processes, routes messages from connectors, runs cron jobs, and serves a static Next.js web UI. All state lives in `~/.hundredfold/` as YAML, JSON, and SQLite files.
+**Architecture:** Monorepo with two packages (`hundredfold` core + `@hundredfold/web` dashboard). Single Node.js process gateway that spawns engine child processes, routes messages from connectors, runs cron jobs, and serves a static Next.js web UI. All state lives in `~/.hundredfold/` as YAML, JSON, and SQLite files.
 
 **Tech Stack:** Node.js, TypeScript, pnpm, Turborepo, better-sqlite3, node-cron, @slack/bolt, @openai/codex-sdk, commander, chokidar, ws, Next.js 15, Tailwind CSS
 
@@ -136,7 +136,7 @@ git commit -m "chore: initialize monorepo with pnpm + turborepo"
 
 ---
 
-### Task 1.2: Create jinn-cli package scaffold
+### Task 1.2: Create hundredfold package scaffold
 
 **Files:**
 - Create: `packages/hundredfold/package.json`
@@ -151,7 +151,7 @@ git commit -m "chore: initialize monorepo with pnpm + turborepo"
 
 ```json
 {
-  "name": "jinn-cli",
+  "name": "hundredfold",
   "version": "0.1.0",
   "description": "Lightweight AI gateway daemon orchestrating Claude Code and Codex",
   "license": "MIT",
@@ -338,7 +338,7 @@ Expected: shows help text with setup/start/stop/status commands
 
 ```bash
 git add -A
-git commit -m "feat: scaffold jinn-cli package with shared types"
+git commit -m "feat: scaffold hundredfold package with shared types"
 ```
 
 ---
@@ -1217,11 +1217,11 @@ git commit -m "feat: add cron, skills, logs, and settings pages"
 **Files:**
 - Modify: `packages/hundredfold/package.json` (add build script that copies web output)
 - Modify: `packages/hundredfold/src/gateway/server.ts` (serve static files from bundled web)
-- Modify: `turbo.json` (ensure web builds before jinn-cli)
+- Modify: `turbo.json` (ensure web builds before hundredfold)
 
 **Step 1: Add build pipeline**
 
-In turbo.json, ensure `@hundredfold/web` builds first (static export), then `jinn-cli` copies the `out/` directory into its own dist.
+In turbo.json, ensure `@hundredfold/web` builds first (static export), then `hundredfold` copies the `out/` directory into its own dist.
 
 **Step 2: Serve static files in gateway**
 

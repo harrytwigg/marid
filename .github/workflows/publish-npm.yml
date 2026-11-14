@@ -54,7 +54,7 @@ jobs:
             exit 1
           fi
 
-          if [[ "$PACKAGE_REPOSITORY" != "git+https://github.com/hristo2612/jinn.git" ]]; then
+          if [[ "$PACKAGE_REPOSITORY" != "git+https://github.com/hundredfoldhq/hundredfold.git" ]]; then
             echo "Refusing publish: package repository identity changed to '$PACKAGE_REPOSITORY'." >&2
             exit 1
           fi
@@ -115,10 +115,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          CANDIDATE_DIR="$(mktemp -d "${RUNNER_TEMP}/jinn-upgrade-candidate.XXXXXX")"
+          CANDIDATE_DIR="$(mktemp -d "${RUNNER_TEMP}/hundredfold-upgrade-candidate.XXXXXX")"
           trap 'rm -rf "$CANDIDATE_DIR"' EXIT
           (cd packages/hundredfold && npm pack --pack-destination "$CANDIDATE_DIR")
-          CANDIDATE_TARBALL="$CANDIDATE_DIR/jinn-cli-$PACKAGE_VERSION.tgz"
+          CANDIDATE_TARBALL="$CANDIDATE_DIR/hundredfold-$PACKAGE_VERSION.tgz"
           test -f "$CANDIDATE_TARBALL"
           pnpm upgrade-verify -- --candidate-tarball "$CANDIDATE_TARBALL"
 

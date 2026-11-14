@@ -5,7 +5,7 @@ import test from "node:test"
 import { fileURLToPath } from "node:url"
 
 import { mapWord, renamePath, renameText } from "../rename-codename/engine.mjs"
-import { DISTRIBUTION_PATTERNS, FROZEN_SUBTREES, KEEP_PATTERNS } from "../rename-codename/rules.mjs"
+import { FROZEN_SUBTREES, KEEP_PATTERNS } from "../rename-codename/rules.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 
@@ -45,9 +45,9 @@ test("a marked line, and a marked block, are kept whole", () => {
   assert.equal(renameText(source, KEEP_PATTERNS).text, ["a hundredfold", "b jinn // rename:keep", "# rename:keep-begin", "c jinn", "d jinn", "# rename:keep-end", "e hundredfold"].join("\n"))
 })
 
-test("the install and publish names wait for their step", () => {
-  assert.equal(renameText("npm i -g jinn-cli && jinn start", [...KEEP_PATTERNS, ...DISTRIBUTION_PATTERNS]).text, "npm i -g jinn-cli && hundredfold start")
-  assert.equal(renameText("npm i -g jinn-cli", KEEP_PATTERNS).text, "npm i -g hundredfold-cli")
+test("the old package name becomes the new one, not a name with a suffix", () => {
+  assert.equal(renameText("npm i -g jinn-cli && jinn start", KEEP_PATTERNS).text, "npm i -g hundredfold && hundredfold start")
+  assert.equal(renamePath(".claude/skills/release-jinn-cli/SKILL.md", FROZEN_SUBTREES), ".claude/skills/release-hundredfold/SKILL.md")
 })
 
 test("a path moves with the package, and what a released bundle holds does not", () => {
@@ -60,7 +60,7 @@ test("a path moves with the package, and what a released bundle holds does not",
   assert.equal(renamePath("packages/shell/src-tauri/gen/apple/jinn-shell.xcodeproj/x", FROZEN_SUBTREES), "packages/shell/src-tauri/gen/apple/jinn-shell.xcodeproj/x")
 })
 
-test("the repository has nothing left to rename outside the steps still to come", () => {
-  const out = execFileSync("node", ["scripts/rename-codename.mjs", "--check", "--skip-distribution"], { cwd: root, encoding: "utf8" })
+test("the repository has nothing left to rename outside the allowed places", () => {
+  const out = execFileSync("node", ["scripts/rename-codename.mjs", "--check"], { cwd: root, encoding: "utf8" })
   assert.match(out, /clean/)
 })

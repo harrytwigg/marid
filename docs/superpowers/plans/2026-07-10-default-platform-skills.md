@@ -33,7 +33,7 @@ Add a test that expects all three files, parses their `name` and `description` f
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/shared/__tests__/template-company-doctrine.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/shared/__tests__/template-company-doctrine.test.ts`
 
 Expected: FAIL because the three template skills do not exist yet.
 
@@ -66,7 +66,7 @@ Document roster-first selection, tracked `delegate_task` versus untracked `spawn
 
 - [ ] **Step 4: Run the focused test to verify it passes**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/shared/__tests__/template-company-doctrine.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/shared/__tests__/template-company-doctrine.test.ts`
 
 Expected: PASS.
 

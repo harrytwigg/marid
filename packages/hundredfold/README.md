@@ -2,9 +2,9 @@
 
 > Run your AI agents as a company. Hundredfold is a bus, not a brain.
 
-[![npm version](https://img.shields.io/npm/v/jinn-cli.svg)](https://www.npmjs.com/package/jinn-cli)
-[![license: MIT](https://img.shields.io/npm/l/jinn-cli.svg)](https://github.com/hristo2612/jinn)
-[![node](https://img.shields.io/node/v/jinn-cli.svg)](https://github.com/hristo2612/jinn)
+[![npm version](https://img.shields.io/npm/v/hundredfold.svg)](https://www.npmjs.com/package/hundredfold)
+[![license: MIT](https://img.shields.io/npm/l/hundredfold.svg)](https://github.com/hristo2612/jinn)
+[![node](https://img.shields.io/node/v/hundredfold.svg)](https://github.com/hristo2612/jinn)
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/hristo2612/jinn/main/assets/hundredfold-showcase.gif" alt="Hundredfold web dashboard" width="800" />
@@ -31,7 +31,7 @@ Mix the eight shipped engines. Hundredfold hides unavailable binaries and lets e
 
 ```bash
 # 1. Install Hundredfold
-npm install -g jinn-cli
+npm install -g hundredfold
 
 # 2. Install + sign in to at least one engine (example: Claude Code)
 npm install -g @anthropic-ai/claude-code

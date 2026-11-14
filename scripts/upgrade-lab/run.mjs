@@ -480,17 +480,26 @@ function packCandidate(repo, cache, env) {
   return path.join(cache, created[0])
 }
 
+// The published package a candidate is measured against: the last release before the rename, which is what an install
+// being upgraded is running. Switch to the new name once it has a release of its own.
+const BASELINE_PACKAGE = "jinn-cli" // rename:keep
+
+// Where a global install put the package: under the new name, or under the old one for the baseline.
+const installedPackageRoot = (prefix) =>
+  ["hundredfold", BASELINE_PACKAGE].map((name) => path.join(prefix, "lib", "node_modules", name)).find((dir) => fs.existsSync(dir)) ??
+  path.join(prefix, "lib", "node_modules", "hundredfold")
+
 function previousReleaseVersion(env) {
   // Baseline is npm's published latest, never a git tag: a tag can name a version that never published (v0.31.0), and on a merge commit `HEAD^` walks the local first-parent lineage instead of the released one.
-  const version = run("npm", ["view", "jinn-cli", "version"], { env })
+  const version = run("npm", ["view", BASELINE_PACKAGE, "version"], { env })
   if (!STRICT_VERSION.test(version)) throw new Error(`npm did not report a plain published version: ${version}`)
   return version
 }
 
 function packPublicBaseline(cache, env) {
   const version = previousReleaseVersion(env)
-  run("npm", ["pack", `jinn-cli@${version}`, "--pack-destination", cache], { env })
-  const name = fs.readdirSync(cache).find((entry) => entry === `jinn-cli-${version}.tgz`)
+  run("npm", ["pack", `${BASELINE_PACKAGE}@${version}`, "--pack-destination", cache], { env })
+  const name = fs.readdirSync(cache).find((entry) => entry === `${BASELINE_PACKAGE}-${version}.tgz`)
   if (!name) throw new Error(`npm did not produce the v${version} baseline tarball`)
   return path.join(cache, name)
 }
@@ -498,7 +507,7 @@ function packPublicBaseline(cache, env) {
 function installTarball(tarball, prefix, env) {
   fs.mkdirSync(prefix, { recursive: true })
   run("npm", ["install", "--global", "--prefix", prefix, "--ignore-scripts", "--no-audit", "--no-fund", tarball], { env: { ...env, npm_config_prefix: prefix } })
-  const packageRoot = path.join(prefix, "lib", "node_modules", "jinn-cli")
+  const packageRoot = installedPackageRoot(prefix)
   // `hundredfold.js`, or the old name in a release from before the rename.
   const cli = ["hundredfold.js", "jinn.js" /* rename:keep */].map((name) => path.join(packageRoot, "dist", "bin", name)).find((file) => fs.existsSync(file))
   if (!cli) throw new Error(`Installed package has no CLI under ${packageRoot}/dist/bin`)

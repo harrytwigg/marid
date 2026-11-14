@@ -52,7 +52,7 @@ it("does not notify for a direct report or same-manager delegation", () => {
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/manager-visibility.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/manager-visibility.test.ts`
 
 Expected: FAIL because `manager-visibility.ts` does not exist.
 
@@ -105,7 +105,7 @@ export function surfaceManagerVisibility(input: ManagerVisibilityInput): void {
 
 - [ ] **Step 4: Run the focused test and verify GREEN**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/manager-visibility.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/manager-visibility.test.ts`
 
 Expected: PASS with skip-level, direct-report, same-manager, no-session fallback, and failure-open cases covered.
 
@@ -143,7 +143,7 @@ it("dispatches a skip-level delegation to the requested IC and notifies its mana
 
 - [ ] **Step 2: Run both focused suites and verify RED**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/sessions/__tests__/callbacks.test.ts src/gateway/__tests__/delegations-route.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/sessions/__tests__/callbacks.test.ts src/gateway/__tests__/delegations-route.test.ts`
 
 Expected: FAIL because the callback sender and route hook are missing.
 
@@ -166,7 +166,7 @@ The visibility hook is after dispatch and catches every error internally, so the
 
 - [ ] **Step 4: Run delegation and sessions scope and verify GREEN**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/delegations-route.test.ts src/gateway/__tests__/manager-visibility.test.ts src/sessions/__tests__/callbacks.test.ts src/gateway/__tests__/callback-reliability.test.ts src/sessions/registry.test.ts src/sessions/queue.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/delegations-route.test.ts src/gateway/__tests__/manager-visibility.test.ts src/sessions/__tests__/callbacks.test.ts src/gateway/__tests__/callback-reliability.test.ts src/sessions/registry.test.ts src/sessions/queue.test.ts`
 
 Expected: PASS with one skip-level signal, no direct-report signal, unchanged employee dispatch, and restart-safe notification coverage.
 

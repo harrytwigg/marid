@@ -453,7 +453,7 @@ describe.skipIf(process.platform === "win32")("FACTS_SCRIPT node resolution", ()
     fakeNode("v24.14.1");
     fs.mkdirSync(path.join(home, ".nvm", "alias"), { recursive: true });
     fs.writeFileSync(path.join(home, ".nvm", "alias", "default"), "22\n");
-    // This is the case that matters: a global jinn-cli lives under ONE version's
+    // This is the case that matters: a global hundredfold lives under ONE version's
     // tree, so resolving to v24 here would report hundredfold missing on a host where
     // it is installed perfectly well under v22.
     expect(runFacts().node).toContain("v22.22.3");
@@ -1072,12 +1072,12 @@ describe("requireRemoteEngineBin", () => {
  * regenerated against that host's own install.
  */
 describe("remotePiExtensionSource", () => {
-  const ENTRY_DIR = "/home/u/.nvm/versions/node/v22.22.3/lib/node_modules/jinn-cli/dist/src/mcp";
+  const ENTRY_DIR = "/home/u/.nvm/versions/node/v22.22.3/lib/node_modules/hundredfold/dist/src/mcp";
   const source = remotePiExtensionSource(ENTRY_DIR);
 
   it("imports the built-in server and the tool projection from the REMOTE install", () => {
     expect(source).toContain(`"file://${ENTRY_DIR}/server.js"`);
-    expect(source).toContain(`"file:///home/u/.nvm/versions/node/v22.22.3/lib/node_modules/jinn-cli/dist/src/engines/pi-mcp.js"`);
+    expect(source).toContain(`"file:///home/u/.nvm/versions/node/v22.22.3/lib/node_modules/hundredfold/dist/src/engines/pi-mcp.js"`);
   });
 
   it("names no path belonging to the gateway that generated it", () => {
@@ -1439,7 +1439,7 @@ describe("assertRemoteVersion", () => {
   it("refuses a different version in either format, with the install hint", () => {
     for (const line of [productBanner("0.32.0"), "0.32.0"]) {
       expect(() => assertRemoteVersion("build-box", line, "0.33.3"))
-        .toThrow("build-box runs jinn-cli 0.32.0 but this gateway is 0.33.3 — run `npm install -g jinn-cli@0.33.3` there");
+        .toThrow("build-box runs hundredfold 0.32.0 but this gateway is 0.33.3 — run `npm install -g hundredfold@0.33.3` there");
     }
   });
 
@@ -1448,12 +1448,12 @@ describe("assertRemoteVersion", () => {
       expect(() => assertRemoteVersion("build-box", line, "0.33.3"))
         .toThrow(`unrecognised \`hundredfold --version\` output: ${JSON.stringify(line)}`);
       expect(() => assertRemoteVersion("build-box", line, "0.33.3"))
-        .toThrow("run `npm install -g jinn-cli@0.33.3` there");
+        .toThrow("run `npm install -g hundredfold@0.33.3` there");
     }
   });
 
   it("does not accept a version that merely contains the gateway's", () => {
-    expect(() => assertRemoteVersion("build-box", productBanner("10.33.3"), "0.33.3")).toThrow("runs jinn-cli 10.33.3");
-    expect(() => assertRemoteVersion("build-box", "0.33.30", "0.33.3")).toThrow("runs jinn-cli 0.33.30");
+    expect(() => assertRemoteVersion("build-box", productBanner("10.33.3"), "0.33.3")).toThrow("runs hundredfold 10.33.3");
+    expect(() => assertRemoteVersion("build-box", "0.33.30", "0.33.3")).toThrow("runs hundredfold 0.33.30");
   });
 });

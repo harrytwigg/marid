@@ -5,8 +5,6 @@
 //   node scripts/rename-codename.mjs              report what would change, by area
 //   node scripts/rename-codename.mjs --apply      rewrite the files, then move the paths
 //   node scripts/rename-codename.mjs --check      exit 1 if anything would still change: the CI guard
-//   --skip-docs                                   leave docs, specs and READMEs to the documentation step
-//   --skip-distribution                           leave install and publish names to the distribution step
 //   --list                                        with --report or --check, print each file
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -14,16 +12,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { isBinary, renamePath, renameText } from "./rename-codename/engine.mjs";
-import { DISTRIBUTION_PATHS, DISTRIBUTION_PATTERNS, DOCS_SCOPE, FROZEN_SUBTREES, KEEP_CONTENT_PATHS, KEEP_PATTERNS } from "./rename-codename/rules.mjs";
+import { FROZEN_SUBTREES, KEEP_CONTENT_PATHS, KEEP_PATTERNS } from "./rename-codename/rules.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = new Set(process.argv.slice(2));
 const apply = args.has("--apply");
 const check = args.has("--check");
-const skipDocs = args.has("--skip-docs");
-const skipDistribution = args.has("--skip-distribution");
 const list = args.has("--list");
-const keepPatterns = skipDistribution ? [...KEEP_PATTERNS, ...DISTRIBUTION_PATTERNS] : KEEP_PATTERNS;
 
 /** This script and its rules name the old words to say what they are: they are the one place that may. */
 const SELF = /^scripts\/(?:rename-codename\.mjs|rename-codename\/|__tests__\/rename-codename\.test\.mjs)/;
@@ -32,13 +27,7 @@ const everything = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding
   .split("\0")
   .filter(Boolean)
   .filter((file) => !SELF.test(file));
-/** The package directory moves whole, whatever step owns the files in it: half a package is not a package. */
-const MOVES_WHOLE = /^packages\/jinn\//;
-const PACKAGE_DIR = /packages\/jinn\b/g;
-const outOfScope = (file) =>
-  (skipDocs && DOCS_SCOPE.some((scope) => scope.test(file))) ||
-  (skipDistribution && DISTRIBUTION_PATHS.some((scope) => scope.test(file)));
-const tracked = new Set(everything.filter((file) => MOVES_WHOLE.test(file) || !outOfScope(file)));
+const tracked = new Set(everything);
 
 const rewrites = [];
 const moves = [];
@@ -47,19 +36,12 @@ for (const file of everything) {
   const target = tracked.has(file) ? renamePath(file, FROZEN_SUBTREES) : file;
   if (target !== file) moves.push([file, target]);
   if (KEEP_CONTENT_PATHS.some((rule) => rule.test(file))) continue;
-  if (outOfScope(file)) {
-    // Their names wait for their step, but the package directory has moved and what points at it follows.
-    const text = fs.readFileSync(path.join(root, file), "utf8");
-    const moved = text.replace(PACKAGE_DIR, "packages/hundredfold");
-    if (moved !== text) rewrites.push([file, moved]);
-    continue;
-  }
   const full = path.join(root, file);
   const stat = fs.lstatSync(full);
   if (!stat.isFile()) continue;
   const buffer = fs.readFileSync(full);
   if (isBinary(buffer)) continue;
-  const result = renameText(buffer.toString("utf8"), keepPatterns);
+  const result = renameText(buffer.toString("utf8"), KEEP_PATTERNS);
   if (result.changed) rewrites.push([file, result.text]);
   if (result.left.length > 0) kept.push([file, result.left.length]);
 }

@@ -33,7 +33,7 @@ Create a run parent and phase child with `workflowProvenance`, then assert `getS
 
 - [ ] **Step 2: Run the test to verify RED**
 
-Run: `pnpm --filter jinn-cli test -- src/sessions/__tests__/workflow-provenance.test.ts`
+Run: `pnpm --filter hundredfold test -- src/sessions/__tests__/workflow-provenance.test.ts`
 
 Expected: TypeScript/build failure because `workflowProvenance` and workflow filters do not exist.
 
@@ -62,7 +62,7 @@ Assert deterministic parent titles/keys, trigger provenance, list visibility, pa
 
 - [ ] **Step 2: Run the tests to verify RED**
 
-Run: `pnpm --filter jinn-cli test -- src/gateway/__tests__/workflow-session-grouping.test.ts`
+Run: `pnpm --filter hundredfold test -- src/gateway/__tests__/workflow-session-grouping.test.ts`
 
 Expected: missing synchronizer/export and absent parent/provenance assertions.
 

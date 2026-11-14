@@ -1,6 +1,6 @@
 # {{portalName}} Overview
 
-{{portalName}} is a lightweight AI gateway daemon that wraps professional AI CLI tools as "engines." It is published as `jinn-cli`.
+{{portalName}} is a lightweight AI gateway daemon that wraps professional AI CLI tools as "engines." It is published as `hundredfold`.
 
 ## Core Principle
 

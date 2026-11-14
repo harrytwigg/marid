@@ -52,7 +52,7 @@ Resolve the turn and assert that the retained activity rows are non-partial and 
 Run:
 
 ```bash
-pnpm --filter jinn-cli test -- src/sessions/__tests__/workflow-attempt-turns.test.ts
+pnpm --filter hundredfold test -- src/sessions/__tests__/workflow-attempt-turns.test.ts
 ```
 
 Expected: FAIL because `runs[0].onStream` is undefined and no partial rows exist.
@@ -88,7 +88,7 @@ In `SessionManager.runSession`, normalize each engine delta, update context/last
 Run:
 
 ```bash
-pnpm --filter jinn-cli test -- src/sessions/__tests__/workflow-attempt-turns.test.ts src/gateway/__tests__/block-finalize.test.ts src/gateway/__tests__/streamed-turn-settlement.test.ts
+pnpm --filter hundredfold test -- src/sessions/__tests__/workflow-attempt-turns.test.ts src/gateway/__tests__/block-finalize.test.ts src/gateway/__tests__/streamed-turn-settlement.test.ts
 ```
 
 Expected: all selected tests PASS.
@@ -162,7 +162,7 @@ Exercise B1, B2, and B5 through the actual `/api/sessions/:id/message` route and
 Run:
 
 ```bash
-pnpm --filter jinn-cli test -- src/workflows/__tests__/reminder-ladder.test.ts src/workflows/__tests__/workflow-vertical.test.ts
+pnpm --filter hundredfold test -- src/workflows/__tests__/reminder-ladder.test.ts src/workflows/__tests__/workflow-vertical.test.ts
 ```
 
 Expected: user-message interruption settles the attempt/run instead of scheduling the ladder, and API follow-up turns do not advance `lastProcessedTurn`.
@@ -218,7 +218,7 @@ to `resolveEngineRunMcp` so user follow-up turns retain `workflow_submit_output`
 Run:
 
 ```bash
-pnpm --filter jinn-cli test -- src/workflows/__tests__/reminder-ladder.test.ts src/workflows/__tests__/workflow-vertical.test.ts src/sessions/__tests__/workflow-attempt-turns.test.ts
+pnpm --filter hundredfold test -- src/workflows/__tests__/reminder-ladder.test.ts src/workflows/__tests__/workflow-vertical.test.ts src/sessions/__tests__/workflow-attempt-turns.test.ts
 ```
 
 Expected: all selected tests PASS, including B1-B5.
@@ -256,7 +256,7 @@ pnpm build
 - [ ] **Step 2: Run the complete backend suite**
 
 ```bash
-pnpm --filter jinn-cli test
+pnpm --filter hundredfold test
 ```
 
 - [ ] **Step 3: Run the complete web suite**
@@ -274,7 +274,7 @@ git status --short
 git log --oneline main..HEAD
 git diff --stat main...HEAD
 git diff main...HEAD --check
-pnpm --filter jinn-cli exec vitest run src/shared/__tests__/privacy-guard.test.ts
+pnpm --filter hundredfold exec vitest run src/shared/__tests__/privacy-guard.test.ts
 ```
 
 Expected: no committed diff contains any personal identifier or path.

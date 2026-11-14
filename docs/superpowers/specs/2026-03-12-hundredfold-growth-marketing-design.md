@@ -38,7 +38,7 @@ Frustrated OpenClaw users + Claude Code / Codex power users who want multi-agent
 
 ### Rename
 - GitHub: `<owner>/legacy-cli` → `<owner>/hundredfold`
-- npm package already `jinn-cli` - no change needed
+- npm package already `hundredfold` - no change needed
 
 ### README Updates
 - Keep current intro (already good)

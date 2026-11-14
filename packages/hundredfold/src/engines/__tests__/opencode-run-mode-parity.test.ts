@@ -72,7 +72,7 @@ vi.mock("../remote-stage.js", async (importOriginal) => {
         nodeBin: "/home/builder/.nvm/versions/node/v22.22.3/bin/node",
         opencodeBin: REMOTE_BIN,
         hundredfoldVersion: "0.33.3",
-        entryDir: "/home/builder/.nvm/versions/node/v22.22.3/lib/node_modules/jinn-cli/dist/src/mcp",
+        entryDir: "/home/builder/.nvm/versions/node/v22.22.3/lib/node_modules/hundredfold/dist/src/mcp",
       },
     })),
     prepareRemoteSession: vi.fn(async () => ({

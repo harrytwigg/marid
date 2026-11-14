@@ -36,7 +36,7 @@
 
 - [ ] **Step 2: Run the focused test and record RED**
 
-  Run `pnpm --filter jinn-cli test -- src/sessions/__tests__/callback-deliveries.test.ts` and confirm failure because the schema/functions do not exist.
+  Run `pnpm --filter hundredfold test -- src/sessions/__tests__/callback-deliveries.test.ts` and confirm failure because the schema/functions do not exist.
 
 - [ ] **Step 3: Add the minimal schema and attempt version support**
 
@@ -67,7 +67,7 @@
 
 - [ ] **Step 2: Run the focused tests and record RED**
 
-  Run `pnpm --filter jinn-cli test -- src/sessions/__tests__/callbacks.test.ts` and confirm duplicate fetches or missing claim/recovery behavior.
+  Run `pnpm --filter hundredfold test -- src/sessions/__tests__/callbacks.test.ts` and confirm duplicate fetches or missing claim/recovery behavior.
 
 - [ ] **Step 3: Claim before POST and recover pending rows**
 
@@ -93,7 +93,7 @@
 
 - [ ] **Step 2: Run the gateway reliability test and record RED**
 
-  Run `pnpm --filter jinn-cli test -- src/gateway/__tests__/callback-reliability.test.ts` and confirm the current route creates duplicate queue/message/execution state.
+  Run `pnpm --filter hundredfold test -- src/gateway/__tests__/callback-reliability.test.ts` and confirm the current route creates duplicate queue/message/execution state.
 
 - [ ] **Step 3: Route callback deliveries through transactional acceptance**
 

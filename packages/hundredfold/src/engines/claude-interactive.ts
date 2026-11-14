@@ -3101,7 +3101,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
 
   /**
    * Everything that has to be true, and true again, before a remote session is
-   * spawned: the host is up, its jinn-cli matches, and the gateway's HUNDREDFOLD_HOME
+   * spawned: the host is up, its hundredfold matches, and the gateway's HUNDREDFOLD_HOME
    * is genuinely mounted there.
    *
    * `allowWake` is false on both spawn paths. The turn runner has already woken

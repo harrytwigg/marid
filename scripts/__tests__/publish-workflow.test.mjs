@@ -5,7 +5,7 @@ import test from "node:test"
 
 const workflowPath = path.resolve(".github/workflows/publish-npm.yml")
 
-test("publishes jinn-cli from an exact version tag through npm Trusted Publishing", () => {
+test("publishes hundredfold from an exact version tag through npm Trusted Publishing", () => {
   assert.equal(fs.existsSync(workflowPath), true, "publish-npm.yml must exist")
 
   const workflow = fs.readFileSync(workflowPath, "utf8")
@@ -23,7 +23,7 @@ test("publishes jinn-cli from an exact version tag through npm Trusted Publishin
 
   assert.match(workflow, /github\.ref_name/)
   assert.match(workflow, /packages\/hundredfold\/package\.json/)
-  assert.match(workflow, /git\+https:\/\/github\.com\/hristo2612\/jinn\.git/)
+  assert.match(workflow, /git\+https:\/\/github\.com\/hundredfoldhq\/hundredfold\.git/)
   assert.match(workflow, /merge-base --is-ancestor "\$TAGGED_COMMIT" refs\/remotes\/origin\/main/)
   assert.match(workflow, /npm CLI 11\.5\.1 or newer/)
 

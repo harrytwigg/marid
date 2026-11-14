@@ -119,7 +119,7 @@ Assert that init captures the conversation id, ACTIVE/DONE map to one `tool_use`
 Run:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/engines/__tests__/antigravity-headless.test.ts
+pnpm --filter hundredfold exec vitest run src/engines/__tests__/antigravity-headless.test.ts
 ```
 
 Expected: FAIL because `antigravity-headless.ts` and its parser/arg behavior do not exist on current main.
@@ -190,7 +190,7 @@ Build the first-turn prompt as `systemPrompt + separator + prompt`; resumed turn
 Run:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/engines/__tests__/antigravity-headless.test.ts src/mcp/__tests__/engine-wiring.test.ts
+pnpm --filter hundredfold exec vitest run src/engines/__tests__/antigravity-headless.test.ts src/mcp/__tests__/engine-wiring.test.ts
 ```
 
 Expected: PASS with no warnings or leaked handles.
@@ -223,7 +223,7 @@ Update the existing Antigravity shape coverage so the headless class is required
 Run:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/engines/__tests__/antigravity.test.ts src/engines/__tests__/antigravity-headless.test.ts src/engines/__tests__/antigravity-startup-retry.test.ts
+pnpm --filter hundredfold exec vitest run src/engines/__tests__/antigravity.test.ts src/engines/__tests__/antigravity-headless.test.ts src/engines/__tests__/antigravity-startup-retry.test.ts
 ```
 
 Expected: FAIL until the separate headless/interactive instances are wired and imports updated.
@@ -244,7 +244,7 @@ Register the headless instance in the work `engines` map and the interactive ins
 Run the focused command from Step 2 plus:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/engines/__tests__/antigravity-protocol.test.ts src/mcp/__tests__/engine-wiring.test.ts
+pnpm --filter hundredfold exec vitest run src/engines/__tests__/antigravity-protocol.test.ts src/mcp/__tests__/engine-wiring.test.ts
 ```
 
 Expected: PASS; existing terminal-view retries and MCP wiring remain unchanged.
@@ -270,7 +270,7 @@ git commit -m "fix(antigravity): split work and terminal adapters"
 - [ ] **Step 1: Run the focused incident regression set**
 
 ```bash
-pnpm --filter jinn-cli exec vitest run \
+pnpm --filter hundredfold exec vitest run \
   src/engines/__tests__/antigravity-headless.test.ts \
   src/engines/__tests__/antigravity.test.ts \
   src/engines/__tests__/antigravity-startup-retry.test.ts \
@@ -300,7 +300,7 @@ git diff --check
 git status --short
 git diff --stat main...HEAD
 git diff main...HEAD -- packages/hundredfold/src/engines packages/hundredfold/src/gateway/server.ts
-pnpm --filter jinn-cli exec vitest run src/shared/__tests__/privacy-guard.test.ts
+pnpm --filter hundredfold exec vitest run src/shared/__tests__/privacy-guard.test.ts
 ```
 
 The privacy grep must return no hits. Stage first if the final Task 3 commit has not already captured every intended file.

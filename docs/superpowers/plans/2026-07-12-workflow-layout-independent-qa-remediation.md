@@ -50,7 +50,7 @@ for (const mutate of PROPERTY_ONLY_MUTATIONS) {
 
 Run:
 ```bash
-pnpm --filter jinn-cli test -- src/workflows/__tests__/definition-store.test.ts \
+pnpm --filter hundredfold test -- src/workflows/__tests__/definition-store.test.ts \
   > /tmp/workflow-layout-remediation-manual-red.txt 2>&1
 ```
 Expected: lane/kind mutations return normalized coordinates/provenance.
@@ -107,7 +107,7 @@ expect(timerDelay).toBeLessThan(500)
 - [ ] **Step 3: Run and retain RED**
 
 ```bash
-pnpm --filter jinn-cli test -- \
+pnpm --filter hundredfold test -- \
   src/workflows/__tests__/definition.test.ts \
   src/workflows/__tests__/complexity.test.ts \
   src/gateway/__tests__/workflow-definitions-route.test.ts \
@@ -147,7 +147,7 @@ expect(evaluateWorkflowLayout(sharedEndpointFanout()).reasons.map((r) => r.code)
 - [ ] **Step 2: Run RED and retain evidence**
 
 ```bash
-pnpm --filter jinn-cli test -- src/workflows/__tests__/layout.test.ts \
+pnpm --filter hundredfold test -- src/workflows/__tests__/layout.test.ts \
   > /tmp/workflow-layout-remediation-crossing-red.txt 2>&1
 ```
 
@@ -186,7 +186,7 @@ Authorized parked runs render Approve/Reject. Unauthorized runs render no active
 - [ ] **Step 3: Run RED and retain evidence**
 
 ```bash
-pnpm --filter jinn-cli test -- src/gateway/__tests__/workflow-definitions-route.test.ts src/gateway/__tests__/work-item-approval-route.test.ts \
+pnpm --filter hundredfold test -- src/gateway/__tests__/workflow-definitions-route.test.ts src/gateway/__tests__/work-item-approval-route.test.ts \
   > /tmp/workflow-layout-remediation-approval-server-red.txt 2>&1
 pnpm --filter @hundredfold/web test -- src/routes/workflow/__tests__/run-view.test.tsx \
   > /tmp/workflow-layout-remediation-approval-web-red.txt 2>&1
@@ -290,7 +290,7 @@ For all four authoring tools assert closed nested options/session/retry/gate/con
 - [ ] **Step 2: Run RED and retain evidence**
 
 ```bash
-pnpm --filter jinn-cli test -- src/mcp/__tests__/workflow-tools.test.ts src/mcp/__tests__/tool-manifest-budget.test.ts \
+pnpm --filter hundredfold test -- src/mcp/__tests__/workflow-tools.test.ts src/mcp/__tests__/tool-manifest-budget.test.ts \
   > /tmp/workflow-layout-remediation-schema-red.txt 2>&1
 ```
 
@@ -309,7 +309,7 @@ git commit -m "fix(mcp): close every workflow authoring schema"
 - [ ] **Step 1: Run focused suites, both typechecks, and both builds**
 
 ```bash
-pnpm --filter jinn-cli test -- src/workflows src/gateway/__tests__/workflow-definitions-route.test.ts src/gateway/__tests__/work-item-approval-route.test.ts src/mcp/__tests__/workflow-tools.test.ts
+pnpm --filter hundredfold test -- src/workflows src/gateway/__tests__/workflow-definitions-route.test.ts src/gateway/__tests__/work-item-approval-route.test.ts src/mcp/__tests__/workflow-tools.test.ts
 pnpm --filter @hundredfold/web test -- src/routes/workflow
 pnpm typecheck --force
 pnpm build --force
@@ -328,13 +328,13 @@ Required browser additions: authorized/unauthorized approval, Needs-you guidance
 - [ ] **Step 3: Run full suites and audits**
 
 ```bash
-pnpm --filter jinn-cli test
+pnpm --filter hundredfold test
 pnpm --filter @hundredfold/web test
 pnpm typecheck --force
 pnpm build --force
 git diff --check main...HEAD
 git log --format=%B main..HEAD | grep -i 'Co-Authored-By'
-pnpm --filter jinn-cli test -- src/shared/__tests__/privacy-guard.test.ts
+pnpm --filter hundredfold test -- src/shared/__tests__/privacy-guard.test.ts
 ```
 
 - [ ] **Step 4: Re-run exact integration analysis**

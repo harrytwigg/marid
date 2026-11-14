@@ -12,7 +12,7 @@
 
 - Never read from, write to, start, stop, or restart the operator's live `~/.hundredfold` instance or port `7777` during implementation or QA.
 - The only authorized personalized-instance write is the new reusable skill at `~/.hundredfold/skills/hundredfold-upgrade-lab/`; its test runs must use disposable homes outside `~/.hundredfold`.
-- Preserve the existing uncommitted edits in `.claude/skills/release-jinn-cli/SKILL.md` and `packages/hundredfold/package.json`; inspect and merge around them rather than reverting or overwriting them.
+- Preserve the existing uncommitted edits in `.claude/skills/release-hundredfold/SKILL.md` and `packages/hundredfold/package.json`; inspect and merge around them rather than reverting or overwriting them.
 - Do not publish npm packages, create GitHub releases, push branches, restart the live gateway, or perform any other external/shared mutation.
 - The installed package is read-only. Migration may mutate only the selected instance home after an explicit `Open with COO` action or a user-approved terminal handoff.
 - A user customization always wins over a stock template default. No user file is deleted without an explicit migration instruction and a backup.
@@ -24,7 +24,7 @@
 
 ## User Experience Contract
 
-1. The user updates `jinn-cli` through npm/Homebrew and restarts or opens Hundredfold normally.
+1. The user updates `hundredfold` through npm/Homebrew and restarts or opens Hundredfold normally.
 2. If no instance-facing template changed between the instance marker and the installed version, the gateway/web UI starts normally with no migration interruption.
 3. If a migration is pending, the terminal prints a compact violet/amber upgrade banner automatically, and the web UI opens a high-contrast violet/amber dialog automatically on its first successful status query.
 4. The dialog explains that the update is installed and the user's custom setup is safe. Its primary action is `Open with COO`; its secondary action is `Copy migration prompt`; `Later` closes only the dialog while leaving a persistent `Finish v0.26.0 setup` banner.
@@ -39,7 +39,7 @@
 - Create: `packages/hundredfold/scripts/instance-migration-bundle.mjs`
 - Create: `packages/hundredfold/src/cli/__tests__/instance-migration-bundle.test.ts`
 - Modify: `packages/hundredfold/package.json`
-- Modify: `.claude/skills/release-jinn-cli/SKILL.md`
+- Modify: `.claude/skills/release-hundredfold/SKILL.md`
 - Modify: `~/.hundredfold/skills/release/SKILL.md`
 - Regenerate: `packages/hundredfold/template/migrations/0.26.0/manifest.json`
 - Regenerate: `packages/hundredfold/template/migrations/0.26.0/MIGRATION.md`
@@ -74,7 +74,7 @@ Reject an empty bundle unless `--allow-empty` is explicit. Reject a dirty/unreso
 Run and confirm failure:
 
 ```bash
-pnpm --filter jinn-cli test -- src/cli/__tests__/instance-migration-bundle.test.ts
+pnpm --filter hundredfold test -- src/cli/__tests__/instance-migration-bundle.test.ts
 ```
 
 ### Step 2: Implement the generator and checker
@@ -98,7 +98,7 @@ Add package scripts named `migration:generate` and `migration:check`. Ensure `np
 Replace the manual “decide and hand-audit every template path” step with:
 
 1. Resolve the previous release tag.
-2. Run `pnpm --filter jinn-cli migration:generate -- --base-ref <tag> --version <version>`.
+2. Run `pnpm --filter hundredfold migration:generate -- --base-ref <tag> --version <version>`.
 3. If the generator reports no instance changes, record that fact and do not create an empty bundle.
 4. If it generates a bundle, review only the preserved rationale section and the exact manifest paths.
 5. Run `migration:check`, `npm pack --dry-run`, and the upgrade lab before release commit/publish.
@@ -112,8 +112,8 @@ Generate from `v0.25.0` to the candidate v0.26 template. Specifically prove the 
 ### Step 5: Verify Task 1
 
 ```bash
-pnpm --filter jinn-cli migration:check -- --base-ref v0.25.0 --version 0.26.0
-pnpm --filter jinn-cli test -- src/cli/__tests__/instance-migration-bundle.test.ts
+pnpm --filter hundredfold migration:check -- --base-ref v0.25.0 --version 0.26.0
+pnpm --filter hundredfold test -- src/cli/__tests__/instance-migration-bundle.test.ts
 cd packages/hundredfold && npm pack --dry-run && cd ../..
 ```
 
@@ -175,7 +175,7 @@ Keep `hundredfold migrate --mark-done 0.26.0`, but require the expected `migrati
 ### Step 5: Verify Task 2
 
 ```bash
-pnpm --filter jinn-cli test -- src/migrations/__tests__/service.test.ts src/migrations/__tests__/snapshot.test.ts src/cli/__tests__/migrate.test.ts src/cli/__tests__/migrate-prompt.test.ts
+pnpm --filter hundredfold test -- src/migrations/__tests__/service.test.ts src/migrations/__tests__/snapshot.test.ts src/cli/__tests__/migrate.test.ts src/cli/__tests__/migrate-prompt.test.ts
 ```
 
 ## Task 3: Expose the migration through the gateway and an idempotent COO handoff
@@ -213,7 +213,7 @@ Change `HUNDREDFOLD_ATTACH_DEFAULT` to `true`, update its documentation, and pro
 ### Step 4: Verify Task 3
 
 ```bash
-pnpm --filter jinn-cli test -- src/gateway/__tests__/instance-migration-api.test.ts src/mcp/__tests__/attachment.test.ts
+pnpm --filter hundredfold test -- src/gateway/__tests__/instance-migration-api.test.ts src/mcp/__tests__/attachment.test.ts
 ```
 
 ## Task 4: Add automatic, eye-catching terminal presentation
@@ -252,7 +252,7 @@ After the colored notice, print the canonical prompt as plain text only when the
 ### Step 3: Verify Task 4
 
 ```bash
-pnpm --filter jinn-cli test -- src/cli/__tests__/migration-notice.test.ts src/cli/__tests__/migrate.test.ts
+pnpm --filter hundredfold test -- src/cli/__tests__/migration-notice.test.ts src/cli/__tests__/migrate.test.ts
 ```
 
 ## Task 5: Add the automatic web migration dialog and persistent banner
@@ -347,8 +347,8 @@ node --test scripts/upgrade-lab/__tests__/guards.test.mjs
 The default mode must work without Docker:
 
 1. Create the guarded temp root.
-2. `npm pack jinn-cli@0.25.0` into a lab-local cache.
-3. `pnpm --filter jinn-cli pack --pack-destination <lab-cache>` for the candidate v0.26 tarball.
+2. `npm pack hundredfold@0.25.0` into a lab-local cache.
+3. `pnpm --filter hundredfold pack --pack-destination <lab-cache>` for the candidate v0.26 tarball.
 4. Install each tarball into a distinct lab-local npm prefix with lifecycle scripts disabled.
 5. Run v0.25 `hundredfold setup` against the lab home and seed the selected fixture.
 6. Atomically persist the chosen lab port into the generated `config.yaml`, verify it reads back exactly, and only then release the port reservation.
@@ -433,8 +433,8 @@ Confirm both `.claude/skills/hundredfold-upgrade-lab` and `.agents/skills/hundre
 ### Step 1: Run scoped suites first
 
 ```bash
-pnpm --filter jinn-cli typecheck
-pnpm --filter jinn-cli test -- src/migrations src/cli/__tests__/migration-notice.test.ts src/gateway/__tests__/instance-migration-api.test.ts src/mcp/__tests__/attachment.test.ts
+pnpm --filter hundredfold typecheck
+pnpm --filter hundredfold test -- src/migrations src/cli/__tests__/migration-notice.test.ts src/gateway/__tests__/instance-migration-api.test.ts src/mcp/__tests__/attachment.test.ts
 pnpm --filter web typecheck
 pnpm --filter web test -- src/components/migration/__tests__/instance-migration-gate.test.tsx
 node --test scripts/upgrade-lab/__tests__/guards.test.mjs

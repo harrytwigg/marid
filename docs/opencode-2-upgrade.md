@@ -32,10 +32,10 @@ opencode fallback all work on 2.x as they are.
 ## Before you start
 
 - The gateway runs a Hundredfold release with OpenCode 2 support, and every remote
-  host has the same `jinn-cli` version (the usual remote requirement).
+  host has the same `hundredfold` version (the usual remote requirement).
 - `npm` on each host, to fetch the binary (step 3).
 - `error-retry.js` from `examples/opencode-plugins/` at the release tag, if the
-  host used the 1.x `error-retry.js`. The `jinn-cli` npm package does not ship
+  host used the 1.x `error-retry.js`. The `hundredfold` npm package does not ship
   `examples/`, so take it from a checkout of the repository at that tag, or
   download the file from it.
 - Plan a restart. The gateway's opencode servers are stopped by it, and a

@@ -161,7 +161,7 @@ TDD (vitest) throughout:
 - Reconciler: fake-clock tests for both drift directions, no-op on healthy sessions.
 - `buildContext`: scoping snapshots for COO / manager / non-manager; dedupe assertions
   (API table absent from injection; dynamic connector values present).
-- Full existing `jinn-cli` + `@hundredfold/web` suites stay green; typecheck both packages.
+- Full existing `hundredfold` + `@hundredfold/web` suites stay green; typecheck both packages.
 
 ## Rollout
 

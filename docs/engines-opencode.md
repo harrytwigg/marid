@@ -127,7 +127,7 @@ So a hung command, or one waiting for input, can hold a turn indefinitely. Upgra
 
 **How it is enforced:** a small opencode plugin in this package (`assets/opencode/command-timeout/`) caps each shell call's timeout before it runs. Hundredfold lists it in the config it stages for each session, beside the operator's own plugins: as a module on 1.x (`plugin`) and as a package on 2.x (`plugins`). The ceiling travels in `HUNDREDFOLD_OPENCODE_COMMAND_TIMEOUT_MS`.
 
-- A remote host uses the plugin from its own `jinn-cli` install, so it needs no setup.
+- A remote host uses the plugin from its own `hundredfold` install, so it needs no setup.
 - The value is read each time a process starts, as for `disableFff`. A server already running keeps the ceiling it started with.
 - An opencode run by hand in a terminal does not get the ceiling.
 

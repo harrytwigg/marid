@@ -16,6 +16,15 @@ const installedCli = (packageRoot) =>
   ["hundredfold.js", "jinn.js" /* rename:keep */].map((name) => path.join(packageRoot, "dist", "bin", name)).find((file) => fs.existsSync(file)) ??
   path.join(packageRoot, "dist", "bin", "hundredfold.js")
 
+// The published package a candidate is measured against: the last release before the rename, which is what an install
+// being upgraded is running. Switch to the new name once it has a release of its own.
+export const BASELINE_PACKAGE = "jinn-cli" // rename:keep
+
+// Where a global install put the package: under the new name, or under the old one for the baseline.
+const installedPackageRoot = (prefix) =>
+  ["hundredfold", BASELINE_PACKAGE].map((name) => path.join(prefix, "lib", "node_modules", name)).find((dir) => fs.existsSync(dir)) ??
+  path.join(prefix, "lib", "node_modules", "hundredfold")
+
 export function sha256(value) {
   return crypto.createHash("sha256").update(value).digest("hex")
 }
@@ -113,12 +122,12 @@ export function buildEnvironment(root, scenario, port) {
 }
 
 export function latestPublishedTarball(root, env) {
-  const version = run("npm", ["view", "jinn-cli", "version"], { env })
+  const version = run("npm", ["view", BASELINE_PACKAGE, "version"], { env })
   if (!STRICT_VERSION.test(version)) throw new Error(`npm did not report a plain published latest version: ${version}`)
   const destination = path.join(root, "published")
   fs.mkdirSync(destination)
-  run("npm", ["pack", `jinn-cli@${version}`, "--pack-destination", destination], { env })
-  const tarball = path.join(destination, `jinn-cli-${version}.tgz`)
+  run("npm", ["pack", `${BASELINE_PACKAGE}@${version}`, "--pack-destination", destination], { env })
+  const tarball = path.join(destination, `${BASELINE_PACKAGE}-${version}.tgz`)
   if (!fs.existsSync(tarball)) throw new Error(`npm did not produce the published latest tarball for ${version}`)
   return { version, tarball }
 }
@@ -130,7 +139,7 @@ export function installTarball(tarball, prefix, env) {
   run("npm", ["install", "--global", "--prefix", prefix, "--ignore-scripts=false", "--no-audit", "--no-fund", tarball], {
     env: { ...env, npm_config_prefix: prefix },
   })
-  const packageRoot = path.join(prefix, "lib", "node_modules", "jinn-cli")
+  const packageRoot = installedPackageRoot(prefix)
   const cli = installedCli(packageRoot)
   if (!fs.existsSync(cli)) throw new Error(`installed package has no CLI: ${cli}`)
   const version = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf8")).version

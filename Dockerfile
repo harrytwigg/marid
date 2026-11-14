@@ -47,13 +47,13 @@ RUN sed -i '/^use-node-version=/d' .npmrc
 RUN pnpm build
 
 # Ship the build, not the tree that produced it: `deploy` writes a self-contained
-# jinn-cli at 215MB against 650MB of workspace. The difference is the build toolchain —
+# hundredfold at 215MB against 650MB of workspace. The difference is the build toolchain —
 # nothing opens it at runtime, and an agent running without the permission gate should
 # not find one here. Lifecycle scripts still run, so the native addons stay loadable.
 #
 # --legacy because the workspace does not set inject-workspace-packages; pnpm 10
 # refuses to deploy without one or the other (ERR_PNPM_DEPLOY_NONINJECTED_WORKSPACE).
-RUN pnpm deploy --legacy --filter=jinn-cli --prod /deploy
+RUN pnpm deploy --legacy --filter=hundredfold --prod /deploy
 
 
 FROM node:24-bookworm-slim AS runtime
@@ -100,6 +100,11 @@ COPY --from=builder --chown=root:node /src/scripts/docker-configure.mjs /opt/hun
 # is rewritten at publish time, so depending on it would couple us to packaging.
 RUN printf '#!/bin/sh\nexec node /opt/hundredfold/packages/hundredfold/dist/bin/hundredfold.js "$@"\n' > /usr/local/bin/hundredfold \
   && chmod 0755 /usr/local/bin/hundredfold
+# The old command, for scripts and habit: it says the name has changed, then runs the current binary.
+# rename:keep-begin
+RUN printf '#!/bin/sh\nexec node /opt/hundredfold/packages/hundredfold/dist/bin/legacy-forwarder.js "$@"\n' > /usr/local/bin/jinn \
+  && chmod 0755 /usr/local/bin/jinn
+# rename:keep-end
 
 COPY docker-entrypoint.sh /usr/local/bin/hundredfold-entrypoint
 COPY docker-healthcheck.sh /usr/local/bin/hundredfold-healthcheck

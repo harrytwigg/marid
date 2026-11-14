@@ -46,7 +46,7 @@ expect(new URL(calls[0].url).pathname).toBe("/api/work-items/wi_approval/approva
 
 - [ ] **Step 2: Run the focused MCP tests and verify RED**
 
-Run: `PATH=$HOME/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter jinn-cli exec vitest run src/mcp/__tests__/work-item-tools.test.ts src/mcp/__tests__/server.test.ts src/mcp/__tests__/tool-manifest-budget.test.ts`
+Run: `PATH=$HOME/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter hundredfold exec vitest run src/mcp/__tests__/work-item-tools.test.ts src/mcp/__tests__/server.test.ts src/mcp/__tests__/tool-manifest-budget.test.ts`
 
 Expected: FAIL because `request_work_item_approval` is not registered.
 
@@ -76,7 +76,7 @@ await expect(requestTool.handler({ id: "wi_missing", request: "Missing" }, ctxFo
 
 - [ ] **Step 2: Run the integration test and verify RED**
 
-Run: `PATH=$HOME/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter jinn-cli exec vitest run src/mcp/__tests__/work-item-tools.test.ts`
+Run: `PATH=$HOME/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter hundredfold exec vitest run src/mcp/__tests__/work-item-tools.test.ts`
 
 Expected: FAIL because the request route/tool do not exist.
 
@@ -159,7 +159,7 @@ const request: HundredfoldMcpTool = {
 
 - [ ] **Step 3: Run focused tests and verify GREEN**
 
-Run: `PATH=$HOME/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter jinn-cli exec vitest run src/mcp/__tests__/work-item-tools.test.ts src/mcp/__tests__/server.test.ts src/mcp/__tests__/tool-manifest-budget.test.ts src/gateway/__tests__/work-item-approval-route.test.ts src/work-items/__tests__/approvals.test.ts`
+Run: `PATH=$HOME/.nvm/versions/node/v24.13.0/bin:$PATH pnpm --filter hundredfold exec vitest run src/mcp/__tests__/work-item-tools.test.ts src/mcp/__tests__/server.test.ts src/mcp/__tests__/tool-manifest-budget.test.ts src/gateway/__tests__/work-item-approval-route.test.ts src/work-items/__tests__/approvals.test.ts`
 
 Expected: PASS.
 

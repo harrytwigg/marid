@@ -1,6 +1,6 @@
 # Prerelease Todo converter
 
-This root-only tool inventories the operator's unsupported prerelease `wi_*` Todo data before a separately authorized offline conversion. It is not part of `jinn-cli`, has no installed command, has no instance default paths, and must never be imported from `packages/`.
+This root-only tool inventories the operator's unsupported prerelease `wi_*` Todo data before a separately authorized offline conversion. It is not part of `hundredfold`, has no installed command, has no instance default paths, and must never be imported from `packages/`.
 
 Current boundary: **dry run only**. There is deliberately no apply or rewrite entry point.
 

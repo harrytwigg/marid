@@ -43,7 +43,7 @@ Test `AC-MEDIA → ACM`, `Build Sprint Labs → BSL`, `Acme Corp → ACM`, `Hund
 Run:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/work-items/__tests__/phase-a-identity.test.ts
+pnpm --filter hundredfold exec vitest run src/work-items/__tests__/phase-a-identity.test.ts
 pnpm --filter @hundredfold/web exec vitest run src/routes/todos/__tests__/todo-public-state.test.ts
 ```
 
@@ -79,7 +79,7 @@ Cover first allocation `AC-MEDIA -> ACM-1`, continued allocation after a config 
 Run:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/work-items/__tests__/identity-schema.test.ts src/work-items/__tests__/migrate.test.ts src/work-items/__tests__/store.test.ts
+pnpm --filter hundredfold exec vitest run src/work-items/__tests__/identity-schema.test.ts src/work-items/__tests__/migrate.test.ts src/work-items/__tests__/store.test.ts
 ```
 
 Expected: failures because the allocator has no prefix column and still formats fixed `JIN-N` IDs.
@@ -119,7 +119,7 @@ Require a valid derivation or explicit override during first-run completion, per
 Run:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/onboarding.test.ts
+pnpm --filter hundredfold exec vitest run src/gateway/__tests__/onboarding.test.ts
 pnpm --filter @hundredfold/web exec vitest run src/components/__tests__/onboarding-wizard.test.tsx
 ```
 
@@ -184,7 +184,7 @@ Run the Todo identity, store, API/MCP, Workflow Todo ingress, onboarding, Todo w
 - [ ] **Step 2: Run broad gates**
 
 ```bash
-pnpm --filter jinn-cli typecheck
+pnpm --filter hundredfold typecheck
 pnpm --filter @hundredfold/web typecheck
 pnpm exec turbo build --force
 ```

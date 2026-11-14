@@ -40,7 +40,7 @@ Add a second test with the same forwarded header plus `x-hundredfold-tool-call: 
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/browser-operator-authorization.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/browser-operator-authorization.test.ts`
 
 Expected: the proxied browser request returns the current `caller identity unavailable` MCP error, so the actionable proxy-message assertions fail.
 
@@ -59,7 +59,7 @@ Add a helper that returns this constant only when all conditions hold: caller ki
 
 - [ ] **Step 4: Run the focused test and verify GREEN**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/browser-operator-authorization.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/browser-operator-authorization.test.ts`
 
 Expected: all browser authorization tests pass, including the two new cause-routing cases.
 
@@ -92,7 +92,7 @@ In `create-verify.test.ts`, write a representative setup-created config to a tem
 
 - [ ] **Step 2: Run the focused CLI tests and verify RED**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/cli/__tests__/config-seed.test.ts src/cli/__tests__/create-verify.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/cli/__tests__/config-seed.test.ts src/cli/__tests__/create-verify.test.ts`
 
 Expected: the default-auth assertion fails and `finalizeCreatedInstance` is not exported.
 
@@ -106,7 +106,7 @@ Change the `start.test.ts` config fixture to `authRequired: true` and keep the e
 
 - [ ] **Step 5: Run focused auth tests and verify GREEN**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/cli/__tests__/config-seed.test.ts src/cli/__tests__/create-verify.test.ts src/cli/__tests__/start.test.ts src/gateway/__tests__/auth-security.test.ts src/gateway/__tests__/auth-ux-api.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/cli/__tests__/config-seed.test.ts src/cli/__tests__/create-verify.test.ts src/cli/__tests__/start.test.ts src/gateway/__tests__/auth-security.test.ts src/gateway/__tests__/auth-ux-api.test.ts`
 
 Expected: all tests pass and `validateGatewayExposure` coverage remains green.
 
@@ -140,7 +140,7 @@ Expected: the `ResolvedMcpConfig`/identity-env additions disappear from `claude-
 
 - [ ] **Step 3: Verify the supported fallback**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/mcp/__tests__/server-bootstrap.test.ts src/mcp/__tests__/engine-wiring.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/mcp/__tests__/server-bootstrap.test.ts src/mcp/__tests__/engine-wiring.test.ts`
 
 Expected: both suites pass without copying a capability into the parent PTY environment.
 

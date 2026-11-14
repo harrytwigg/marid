@@ -56,7 +56,7 @@ afterEach(() => {
 describe("newest shipped migration bundle", () => {
   const version = newestBundleVersion()
   const manifest = readManifest(version)
-  const remedy = "regenerate the newest bundle if it is unreleased, otherwise add one for the next version (release-jinn-cli step 4); generate refuses a released bundle"
+  const remedy = "regenerate the newest bundle if it is unreleased, otherwise add one for the next version (release-hundredfold step 4); generate refuses a released bundle"
 
   // An edit to a file the newest bundle lists shows up here as a stale target
   // hash. This needs no release tag, so it runs in every checkout; unlisted and

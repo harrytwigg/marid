@@ -93,7 +93,7 @@ describe.skipIf(process.platform === "win32")("a remote opencode session's stage
     return staging.opencodeConfigPath ? JSON.parse(fs.readFileSync(staging.opencodeConfigPath, "utf-8")) as Record<string, unknown> : undefined;
   }
 
-  it("lists the command-timeout plugin from the host's own jinn-cli install, in the API's shape", async () => {
+  it("lists the command-timeout plugin from the host's own hundredfold install, in the API's shape", async () => {
     const assets = path.posix.join(facts.entryDir, "..", "..", "..", "assets");
     expect(await stagedConfig("2.0.29", true)).toMatchObject({ plugins: [`file:${assets}/opencode/command-timeout/v2`], mcp: { servers: {} } });
     expect(await stagedConfig("1.19.0", true)).toMatchObject({ plugin: [`file://${assets}/opencode/command-timeout/v1.js`] });

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const PKG = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 // repo root — the tap and the source repo are the same repository, so the
 // Homebrew formula is version-controlled here and is ours to keep correct.
-const FORMULA = join(PKG, "..", "..", "Formula", "jinn.rb");
+const FORMULA = join(PKG, "..", "..", "Formula", "hundredfold.rb");
 
 const formula = () => readFileSync(FORMULA, "utf-8");
 
@@ -52,7 +52,7 @@ describe("Homebrew formula", () => {
     });
 
     // The block previously asserted require('classic-level'), which is a root
-    // workspace dependency and is not published inside jinn-cli — so the
+    // workspace dependency and is not published inside hundredfold — so the
     // assertion could only ever fail once someone actually ran `brew test`.
     it("only requires modules the published package actually depends on", () => {
       const pkg = JSON.parse(readFileSync(join(PKG, "package.json"), "utf-8")) as {

@@ -489,7 +489,7 @@ $ pnpm lint
 $ pnpm test
 @hundredfold/shell-desktop:test   Test Files  1 passed (1)
 @hundredfold/gateway-events:test  Test Files  2 passed (2)
-jinn-cli:test              Test Files  451 passed (451)
+hundredfold:test              Test Files  451 passed (451)
 @hundredfold/web:test             Test Files  253 passed (253)
 root (node:test)           tests 183   pass 183   fail 0
  Tasks:    6 successful, 6 total

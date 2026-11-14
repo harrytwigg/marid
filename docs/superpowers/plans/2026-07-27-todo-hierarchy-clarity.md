@@ -42,7 +42,7 @@ expect(block.payload).toMatchObject({
 
 - [ ] **Step 2: Run the test and confirm it fails because the hierarchy fields are absent**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/chat-activity.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/chat-activity.test.ts`
 
 Expected: FAIL with a payload mismatch naming `parentId`, `rootId`, or `depth`.
 
@@ -64,7 +64,7 @@ payload: {
 
 - [ ] **Step 4: Run the focused test and confirm it passes**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/chat-activity.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/chat-activity.test.ts`
 
 Expected: PASS.
 
@@ -142,7 +142,7 @@ expect(calls[0].url).toContain("root=JIN-1");
 
 - [ ] **Step 2: Run focused MCP tests and confirm they fail for missing schema/summary fields**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/mcp/__tests__/work-item-tools.test.ts src/mcp/__tests__/tool-manifest-budget.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/mcp/__tests__/work-item-tools.test.ts src/mcp/__tests__/tool-manifest-budget.test.ts`
 
 Expected: FAIL on absent hierarchy properties.
 
@@ -152,7 +152,7 @@ Add `parentId`, `rootId`, and `depth` to `summarize`. Add canonical `parentId` a
 
 - [ ] **Step 4: Run focused MCP tests**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/mcp/__tests__/work-item-tools.test.ts src/mcp/__tests__/tool-manifest-budget.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/mcp/__tests__/work-item-tools.test.ts src/mcp/__tests__/tool-manifest-budget.test.ts`
 
 Expected: PASS.
 
@@ -179,7 +179,7 @@ expect(todoSkill).toContain('"parentId": "ACM-42"');
 
 - [ ] **Step 2: Run the focused doctrine suites and confirm the copy assertions fail**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/mcp/__tests__/work-item-tools.test.ts src/shared/__tests__/template-company-doctrine.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/mcp/__tests__/work-item-tools.test.ts src/shared/__tests__/template-company-doctrine.test.ts`
 
 Expected: FAIL because the current doctrine says one Todo per durable sub-task and has no parent-first example.
 
@@ -193,7 +193,7 @@ Patch the live `CLAUDE.md` and `skills/todo-handling/SKILL.md` without copying a
 
 - [ ] **Step 5: Run focused doctrine suites**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/mcp/__tests__/work-item-tools.test.ts src/shared/__tests__/template-company-doctrine.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/mcp/__tests__/work-item-tools.test.ts src/shared/__tests__/template-company-doctrine.test.ts`
 
 Expected: PASS.
 

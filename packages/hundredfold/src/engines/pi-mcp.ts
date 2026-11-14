@@ -111,7 +111,7 @@ export function cleanupPiHundredfoldMcpExtension(handle: PiMcpExtensionHandle | 
  * The remote counterpart of the two module URLs above.
  *
  * The extension runs INSIDE pi on the other machine, so both imports have to
- * name that host's own jinn-cli install — the gateway's `dist` is not on it, and
+ * name that host's own hundredfold install — the gateway's `dist` is not on it, and
  * the mount deliberately carries the instance home rather than the package.
  * `entryDir` is `<install>/dist/src/mcp` (probed by the facts script from the
  * real path of that host's `hundredfold` bin), which is what makes both siblings

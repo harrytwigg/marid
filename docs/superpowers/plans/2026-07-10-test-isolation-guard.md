@@ -41,7 +41,7 @@ expect(isTempPath(result.home)).toBe(true);
 
 - [ ] **Step 2: Run the focused test with an explicit throwaway launch home**
 
-Run: `HUNDREDFOLD_HOME="$(mktemp -d /tmp/hundredfold-red-XXXXXX)" pnpm --filter jinn-cli exec vitest run src/shared/__tests__/test-home-guard.test.ts`
+Run: `HUNDREDFOLD_HOME="$(mktemp -d /tmp/hundredfold-red-XXXXXX)" pnpm --filter hundredfold exec vitest run src/shared/__tests__/test-home-guard.test.ts`
 
 Expected: FAIL because `vitest.test-home.ts` does not exist.
 
@@ -138,7 +138,7 @@ Run: `pnpm typecheck`, then `git diff --check`.
 
 - [ ] **Step 5: Stage and run the repository privacy guard**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/shared/__tests__/privacy-guard.test.ts`; expected: PASS with no shipped-source privacy findings.
+Run: `pnpm --filter hundredfold exec vitest run src/shared/__tests__/privacy-guard.test.ts`; expected: PASS with no shipped-source privacy findings.
 
 - [ ] **Step 6: Commit and fast-forward main**
 

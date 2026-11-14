@@ -1,10 +1,12 @@
-name: jinn
+# The project name prefixes the volumes below, so it keeps the name they were created under: a new one would start
+# with empty volumes beside the old ones.
+name: jinn # rename:keep
 
 services:
-  jinn:
+  hundredfold:
     build:
       context: .
-    image: jinn:local
+    image: hundredfold:local
     # Private image/entrypoint handshake. `docker compose run ... <command>` replaces
     # this value, so one-off commands cannot accidentally enter the service boot path.
     command: ["__jinn_service_start__"]
@@ -15,17 +17,17 @@ services:
 
     # Loopback on the HOST, deliberately: the dashboard authenticates with a shared
     # gateway token, so publishing on 0.0.0.0 would expose agent control — with the
-    # permission gate disabled — to the whole network. Both sides read JINN_PORT, and so
+    # permission gate disabled — to the whole network. Both sides read HUNDREDFOLD_PORT, and so
     # does the gateway; set it in a .env file beside this one to move them together.
     ports:
-      - "127.0.0.1:${JINN_PORT:-7777}:${JINN_PORT:-7777}"
+      - "127.0.0.1:${HUNDREDFOLD_PORT:-${JINN_PORT:-7777}}:${HUNDREDFOLD_PORT:-${JINN_PORT:-7777}}" # rename:keep: an .env file written for an older release
 
     environment:
       # The container is UTC. Shells do not normally export TZ, so set it here or in
       # a .env file beside this one; a cron job with no explicit timezone fires in
       # the container's zone, not yours.
       TZ: ${TZ:-UTC}
-      JINN_PORT: ${JINN_PORT:-7777}
+      HUNDREDFOLD_PORT: ${HUNDREDFOLD_PORT:-${JINN_PORT:-7777}} # rename:keep
 
     volumes:
       # Writable blast radius: config, secrets, OAuth-adjacent connector state,

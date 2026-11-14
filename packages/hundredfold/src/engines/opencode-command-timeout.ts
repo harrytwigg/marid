@@ -53,7 +53,7 @@ export function localAssetsDir(): string {
   return found;
 }
 
-/** A remote host's `assets/`, from its jinn-cli install: the facts name that
+/** A remote host's `assets/`, from its hundredfold install: the facts name that
  *  install's `dist/src/mcp`. */
 export function remoteAssetsDir(entryDir: string): string {
   return path.posix.join(entryDir, "..", "..", "..", "assets");

@@ -35,7 +35,7 @@ Cover exact `0600` same-owner success, replay, expiry, nonce mismatch, broad mod
 
 - [ ] **Step 2: Run RED**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/pairing-challenge.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/pairing-challenge.test.ts`
 
 Expected: FAIL because `pairing-challenge.ts` does not exist.
 
@@ -81,7 +81,7 @@ Add tests for loopback challenge issuance plus valid redemption, direct bearer `
 
 - [ ] **Step 2: Run RED**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/auth-security.test.ts src/gateway/__tests__/auth-ux-api.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/auth-security.test.ts src/gateway/__tests__/auth-ux-api.test.ts`
 
 Expected: FAIL because the challenge route and route-local challenge redemption do not exist.
 
@@ -117,7 +117,7 @@ Test the two POST requests, absence of any Authorization header, exact `0600` fi
 
 - [ ] **Step 2: Run RED**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/cli/__tests__/pair.test.ts src/gateway/__tests__/auth-ux-api.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/cli/__tests__/pair.test.ts src/gateway/__tests__/auth-ux-api.test.ts`
 
 Expected: FAIL because the CLI still prints browser instructions and never executes the challenge exchange.
 

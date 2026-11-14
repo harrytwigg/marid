@@ -7,7 +7,7 @@ test-results/
 *.tsbuildinfo
 .env
 .env.local
-# npm publish token (jinn-cli) — local only, never commit
+# npm publish token (hundredfold) — local only, never commit
 packages/hundredfold/.npmrc
 .worktrees/
 .DS_Store

@@ -40,7 +40,7 @@
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-  Run: `pnpm --filter jinn-cli exec vitest run src/engines/__tests__/pty-snapshot.test.ts`
+  Run: `pnpm --filter hundredfold exec vitest run src/engines/__tests__/pty-snapshot.test.ts`
 
   Expected: fail because `pty-snapshot.ts` and its exports do not exist.
 
@@ -70,7 +70,7 @@
 
 - [ ] **Step 2: Run focused tests and verify RED**
 
-  Run: `pnpm --filter jinn-cli exec vitest run src/engines/__tests__/pty-stream.test.ts`
+  Run: `pnpm --filter hundredfold exec vitest run src/engines/__tests__/pty-stream.test.ts`
 
   Expected: fail because the atomic subscription and structured lifecycle events are absent.
 
@@ -128,7 +128,7 @@
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-  Run: `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/pty-ws.test.ts`
+  Run: `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/pty-ws.test.ts`
 
 - [ ] **Step 3: Implement framing/deadline/restart**
 

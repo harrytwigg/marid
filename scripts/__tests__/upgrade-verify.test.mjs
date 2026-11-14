@@ -121,6 +121,6 @@ test("idempotency surface includes skills, receipt, version, and backups", (t) =
 test("standalone verifier never imports the retired migration harness", () => {
   const source = fs.readFileSync(entrypoint, "utf8")
   assert.doesNotMatch(source, /upgrade-lab\/run|migrations\/(service|snapshot|completion)\.js|getPendingInstanceMigration/)
-  assert.match(source, /published jinn-cli@/)
+  assert.match(source, /published \$\{BASELINE_PACKAGE\}@/)
   assert.match(source, /candidate-second-boot/)
 })

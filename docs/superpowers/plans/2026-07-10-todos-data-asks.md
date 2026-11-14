@@ -55,7 +55,7 @@ Seed distinct `status`, `assignee`, `department`, `source`, `updated_at`, title,
 Run:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/work-items/__tests__/list-limit.test.ts
+pnpm --filter hundredfold exec vitest run src/work-items/__tests__/list-limit.test.ts
 ```
 
 Expected: FAIL because `queryWorkItems`, `offset`, date filters, and true totals do not exist.
@@ -122,7 +122,7 @@ Assert fresh schema and an already-migrated schema both expose nullable `rank`, 
 - [ ] **Step 2: Run migration tests and verify RED**
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/work-items/__tests__/migrate.test.ts
+pnpm --filter hundredfold exec vitest run src/work-items/__tests__/migrate.test.ts
 ```
 
 Expected: FAIL because `rank` and its index are absent.
@@ -146,7 +146,7 @@ Assert ranked rows sort by ascending rank within a status, rank persists across 
 - [ ] **Step 6: Run store tests and verify RED**
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/work-items/__tests__/store.test.ts src/work-items/__tests__/list-limit.test.ts
+pnpm --filter hundredfold exec vitest run src/work-items/__tests__/store.test.ts src/work-items/__tests__/list-limit.test.ts
 ```
 
 Expected: FAIL because work-item updates and rank mapping are absent.
@@ -216,7 +216,7 @@ Assert both endpoints accept `status`, `assignee`, `department`, `source`, `sinc
 - [ ] **Step 2: Run route tests and verify RED**
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/work-items-route.test.ts
+pnpm --filter hundredfold exec vitest run src/gateway/__tests__/work-items-route.test.ts
 ```
 
 Expected: FAIL because list/search do not expose pagination metadata, `q`, or date filters.
@@ -257,7 +257,7 @@ Assert `PATCH { status: "done" }` is rejected and leaves status unchanged; then 
 - [ ] **Step 3: Run route tests and verify RED**
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/work-items-route.test.ts
+pnpm --filter hundredfold exec vitest run src/gateway/__tests__/work-items-route.test.ts
 ```
 
 Expected: FAIL because the PATCH route does not exist.
@@ -289,7 +289,7 @@ git commit -m "feat(todos): add operator metadata editing"
 - [ ] **Step 1: Run focused work-items/gateway tests**
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/work-items src/gateway/__tests__/work-items-route.test.ts
+pnpm --filter hundredfold exec vitest run src/work-items src/gateway/__tests__/work-items-route.test.ts
 ```
 
 - [ ] **Step 2: Run typecheck and full monorepo suite**

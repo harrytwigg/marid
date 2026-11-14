@@ -8,7 +8,7 @@ let dir: string;
 let counter = 0;
 
 beforeAll(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-client-transform-"));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfoldent-transform-"));
 });
 
 afterAll(() => {

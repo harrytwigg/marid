@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-06
 **Status:** Approved
-**Package:** `jinn-cli`
+**Package:** `hundredfold`
 
 ---
 
@@ -30,7 +30,7 @@ You are the CEO. Hundredfold is your COO. He hires, manages, and orchestrates a 
 - **Database:** SQLite (better-sqlite3) for session registry
 - **Slack:** Bolt SDK (socket mode)
 - **Cron:** node-cron
-- **Package:** `jinn-cli` on npm
+- **Package:** `hundredfold` on npm
 
 ---
 
@@ -40,7 +40,7 @@ You are the CEO. Hundredfold is your COO. He hires, manages, and orchestrates a 
 
 | Component | Package | Purpose |
 |-----------|---------|---------|
-| Core | `jinn-cli` | CLI + gateway daemon + engines + connectors + cron |
+| Core | `hundredfold` | CLI + gateway daemon + engines + connectors + cron |
 | Web UI | `@hundredfold/web` | Next.js + Tailwind dashboard, statically exported |
 | Template | `template/` | Init files copied to `~/.hundredfold/` on setup |
 
@@ -712,7 +712,7 @@ hundredfold/                              # Monorepo root
   turbo.json
 
   packages/
-    hundredfold/                           # jinn-cli
+    hundredfold/                           # hundredfold
       package.json
       tsconfig.json
       bin/

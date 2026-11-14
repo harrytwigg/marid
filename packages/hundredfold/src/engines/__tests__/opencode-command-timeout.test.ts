@@ -50,8 +50,8 @@ describe("where the plugin is listed", () => {
     expect(commandTimeoutPluginEntry(2, "/opt/hundredfold/assets", path.posix.join)).toBe("file:/opt/hundredfold/assets/opencode/command-timeout/v2");
   });
 
-  it("finds a remote host's assets from its jinn-cli install's MCP entry directory", () => {
-    expect(remoteAssetsDir("/usr/lib/node_modules/jinn-cli/dist/src/mcp")).toBe("/usr/lib/node_modules/jinn-cli/assets");
+  it("finds a remote host's assets from its hundredfold install's MCP entry directory", () => {
+    expect(remoteAssetsDir("/usr/lib/node_modules/hundredfold/dist/src/mcp")).toBe("/usr/lib/node_modules/hundredfold/assets");
   });
 
   it("lists this install's plugin only when the ceiling is on", () => {

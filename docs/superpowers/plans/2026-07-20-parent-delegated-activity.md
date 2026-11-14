@@ -36,7 +36,7 @@ Cover direct children, transitive grandchildren, multiple active descendants, du
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `pnpm --filter jinn-cli test -- src/sessions/__tests__/delegated-activity.test.ts`
+Run: `pnpm --filter hundredfold test -- src/sessions/__tests__/delegated-activity.test.ts`
 
 Expected: FAIL because `buildDelegatedActivityIndex` does not exist.
 
@@ -46,7 +46,7 @@ For every active session, walk `parentSessionId` links with a per-walk visited s
 
 - [ ] **Step 4: Run the focused test and verify GREEN**
 
-Run: `pnpm --filter jinn-cli test -- src/sessions/__tests__/delegated-activity.test.ts`
+Run: `pnpm --filter hundredfold test -- src/sessions/__tests__/delegated-activity.test.ts`
 
 Expected: PASS.
 
@@ -66,7 +66,7 @@ Assert that a parent serializes a transitive summary while preserving `status: "
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `pnpm --filter jinn-cli test -- src/gateway/__tests__/session-serialization.test.ts`
+Run: `pnpm --filter hundredfold test -- src/gateway/__tests__/session-serialization.test.ts`
 
 Expected: FAIL because session serialization does not expose delegated activity.
 
@@ -76,7 +76,7 @@ Build the activity index once for list payloads and once for individual session 
 
 - [ ] **Step 4: Run gateway tests and verify GREEN**
 
-Run: `pnpm --filter jinn-cli test -- src/gateway/__tests__/session-serialization.test.ts src/sessions/__tests__/delegated-activity.test.ts`
+Run: `pnpm --filter hundredfold test -- src/gateway/__tests__/session-serialization.test.ts src/sessions/__tests__/delegated-activity.test.ts`
 
 Expected: PASS.
 

@@ -14,7 +14,7 @@
 - Do not use parallel agents. After every scoped implementation commit, stop and wait for COO verification or a concrete follow-up before starting the next task.
 - After COO accepts this plan, Task 0 commits this plan document before any production edit. The plan must not remain untracked during implementation.
 - Before each production edit, add the named failing test and capture the exact failing assertion or missing symbol. A compile failure counts as RED only when the test intentionally imports the not-yet-created contract.
-- Use the focused commands written under each task. The live package filters are `jinn-cli` and `@hundredfold/web`; do not substitute obsolete package filters.
+- Use the focused commands written under each task. The live package filters are `hundredfold` and `@hundredfold/web`; do not substitute obsolete package filters.
 - Run tests only with disposable `HUNDREDFOLD_HOME` directories and non-default gateway ports. Never point implementation verification at an installed instance or port 7777.
 - Preserve all unrelated dirty files. Stage only paths named by the current task and inspect `git diff --cached --name-only` before each commit.
 - Do not add `Co-Authored-By` trailers.
@@ -202,7 +202,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
   Run:
 
   ```bash
-  pnpm --filter jinn-cli test -- src/shared/__tests__/company-activity-blocks.test.ts src/sessions/__tests__/messages-partial.test.ts
+  pnpm --filter hundredfold test -- src/shared/__tests__/company-activity-blocks.test.ts src/sessions/__tests__/messages-partial.test.ts
   ```
 
   Expected RED contains `block type is invalid` for `workflow-run` and a stale-version assertion showing version 2 replaced version 3.
@@ -302,7 +302,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 - [ ] **Step 2: Run Task 2 RED**
 
   ```bash
-  pnpm --filter jinn-cli test -- src/workflows/__tests__/run-store.test.ts src/workflows/__tests__/run-reconciler.test.ts src/workflows/__tests__/run-idempotency.test.ts src/gateway/__tests__/workflow-definitions-route.test.ts src/mcp/__tests__/workflow-tools.test.ts
+  pnpm --filter hundredfold test -- src/workflows/__tests__/run-store.test.ts src/workflows/__tests__/run-reconciler.test.ts src/workflows/__tests__/run-idempotency.test.ts src/gateway/__tests__/workflow-definitions-route.test.ts src/mcp/__tests__/workflow-tools.test.ts
   ```
 
   Expected RED includes missing `WorkflowRunParameters`/`reportMode` properties and the route body not forwarding `reportMode`.
@@ -411,7 +411,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 - [ ] **Step 2: Run native gate RED**
 
   ```bash
-  pnpm --filter jinn-cli test -- src/workflows/__tests__/native-approvals.test.ts src/gateway/__tests__/work-item-approval-route.test.ts
+  pnpm --filter hundredfold test -- src/workflows/__tests__/native-approvals.test.ts src/gateway/__tests__/work-item-approval-route.test.ts
   ```
 
   Expected RED shows `run.parked.approval` is absent and `/resolve-gate` refuses to proceed without a mirrored Todo.
@@ -461,7 +461,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
   Run and require GREEN before removing the Workflow–Todo bridge:
 
   ```bash
-  pnpm --filter jinn-cli test -- src/workflows/__tests__/poll-trigger.test.ts src/workflows/__tests__/event-trigger.test.ts src/gateway/__tests__/workflow-events-route.test.ts
+  pnpm --filter hundredfold test -- src/workflows/__tests__/poll-trigger.test.ts src/workflows/__tests__/event-trigger.test.ts src/gateway/__tests__/workflow-events-route.test.ts
   ```
 
 - [ ] **Step 6: Write a failing negative-capability test**
@@ -487,7 +487,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 - [ ] **Step 7: Run decoupling RED**
 
   ```bash
-  pnpm --filter jinn-cli test -- src/workflows/__tests__/todo-decoupling.test.ts
+  pnpm --filter hundredfold test -- src/workflows/__tests__/todo-decoupling.test.ts
   ```
 
   Expected RED records calls from `createWorkflowTodoBridge`, `applyTodoTransitions`, parked-gate mirroring, and terminal reflection.
@@ -530,7 +530,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 - [ ] **Step 12: Run Task 3 aggregate GREEN, import audit, and commit**
 
   ```bash
-  pnpm --filter jinn-cli test -- src/workflows/__tests__/todo-decoupling.test.ts src/workflows/__tests__/native-approvals.test.ts src/workflows/__tests__/definition.test.ts src/workflows/__tests__/definition-store.test.ts src/workflows/__tests__/schema.test.ts src/workflows/__tests__/todo-status-trigger.test.ts src/workflows/__tests__/todo-replay-watermark.test.ts src/workflows/__tests__/poll-trigger.test.ts src/workflows/__tests__/event-trigger.test.ts src/gateway/__tests__/work-item-approval-route.test.ts src/gateway/__tests__/workflow-events-route.test.ts src/mcp/__tests__/workflow-tools.test.ts
+  pnpm --filter hundredfold test -- src/workflows/__tests__/todo-decoupling.test.ts src/workflows/__tests__/native-approvals.test.ts src/workflows/__tests__/definition.test.ts src/workflows/__tests__/definition-store.test.ts src/workflows/__tests__/schema.test.ts src/workflows/__tests__/todo-status-trigger.test.ts src/workflows/__tests__/todo-replay-watermark.test.ts src/workflows/__tests__/poll-trigger.test.ts src/workflows/__tests__/event-trigger.test.ts src/gateway/__tests__/work-item-approval-route.test.ts src/gateway/__tests__/workflow-events-route.test.ts src/mcp/__tests__/workflow-tools.test.ts
   rg -n "createWorkflowTodoBridge|WorkflowTodoBridge|todoTransition|approvalWorkItemId|workflow-gate:|applyTodoTransitions" packages/hundredfold/src packages/web/src
   rg --pcre2 -n "^import(?! type\\b).*work-items/(store|transitions|approvals)" packages/hundredfold/src/workflows
   ```
@@ -593,7 +593,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 - [ ] **Step 2: Run compatibility RED**
 
   ```bash
-  pnpm --filter jinn-cli test -- src/sessions/__tests__/legacy-workflow-session-compat.test.ts src/sessions/__tests__/workflow-provenance.test.ts src/gateway/__tests__/workflow-session-grouping.test.ts
+  pnpm --filter hundredfold test -- src/sessions/__tests__/legacy-workflow-session-compat.test.ts src/sessions/__tests__/workflow-provenance.test.ts src/gateway/__tests__/workflow-session-grouping.test.ts
   ```
 
   Expected RED reports missing `isLegacyWorkflowRunSession` and `legacyWorkflowRunLocation`; the seeded row counts must already stay unchanged.
@@ -642,7 +642,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 - [ ] **Step 6: Verify GREEN, non-deletion checks, and commit Task 4**
 
   ```bash
-  pnpm --filter jinn-cli test -- src/sessions/__tests__/legacy-workflow-session-compat.test.ts src/sessions/__tests__/workflow-provenance.test.ts src/sessions/__tests__/callbacks.test.ts src/gateway/__tests__/workflow-session-grouping.test.ts src/gateway/__tests__/callback-reliability.test.ts src/gateway/__tests__/status-reconciler.test.ts src/gateway/__tests__/manager-visibility.test.ts
+  pnpm --filter hundredfold test -- src/sessions/__tests__/legacy-workflow-session-compat.test.ts src/sessions/__tests__/workflow-provenance.test.ts src/sessions/__tests__/callbacks.test.ts src/gateway/__tests__/workflow-session-grouping.test.ts src/gateway/__tests__/callback-reliability.test.ts src/gateway/__tests__/status-reconciler.test.ts src/gateway/__tests__/manager-visibility.test.ts
   pnpm --filter @hundredfold/web test -- src/routes/chat/__tests__/legacy-workflow-session-redirect.test.tsx src/components/chat/__tests__/chat-route-helpers.test.ts
   rg -n "createSession\\(\\{[^}]*engine: ['\"]workflow|syncWorkflowRunSession|workflowRunParentSessionKey|legacy_workflow_run_session_aliases" packages/hundredfold/src packages/web/src
   ```
@@ -707,7 +707,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 - [ ] **Step 2: Run shared-delivery migration RED**
 
   ```bash
-  pnpm --filter jinn-cli test -- src/sessions/__tests__/callback-deliveries.test.ts src/gateway/__tests__/callback-reliability.test.ts
+  pnpm --filter hundredfold test -- src/sessions/__tests__/callback-deliveries.test.ts src/gateway/__tests__/callback-reliability.test.ts
   ```
 
   Expected RED is a missing `getSessionDelivery` export/generic columns while every pre-existing delegation expectation remains GREEN.
@@ -783,7 +783,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 - [ ] **Step 8: Run shared reliability GREEN and mutation check**
 
   ```bash
-  pnpm --filter jinn-cli test -- src/workflows/__tests__/reporting.test.ts src/gateway/__tests__/workflow-report-reliability.test.ts src/gateway/__tests__/server-boot-ordering.test.ts src/sessions/__tests__/callback-deliveries.test.ts
+  pnpm --filter hundredfold test -- src/workflows/__tests__/reporting.test.ts src/gateway/__tests__/workflow-report-reliability.test.ts src/gateway/__tests__/server-boot-ordering.test.ts src/sessions/__tests__/callback-deliveries.test.ts
   ```
 
   Expected GREEN includes unchanged delegation behavior plus one Workflow message, one queue item, one accepted delivery, and one resumed invoking turn under six concurrent/retried producers and restart recovery.
@@ -840,7 +840,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 - [ ] **Step 2: Run cancellation RED**
 
   ```bash
-  pnpm --filter jinn-cli test -- src/workflows/__tests__/run-reconciler.test.ts src/gateway/__tests__/workflow-definitions-route.test.ts src/mcp/__tests__/workflow-tools.test.ts src/cli/__tests__/workflow.test.ts
+  pnpm --filter hundredfold test -- src/workflows/__tests__/run-reconciler.test.ts src/gateway/__tests__/workflow-definitions-route.test.ts src/mcp/__tests__/workflow-tools.test.ts src/cli/__tests__/workflow.test.ts
   pnpm --filter @hundredfold/web test -- src/routes/workflow/__tests__/run-view.test.tsx
   ```
 
@@ -946,7 +946,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 - [ ] **Step 2: Run activity RED**
 
   ```bash
-  pnpm --filter jinn-cli test -- src/gateway/__tests__/chat-activity-route.test.ts src/gateway/__tests__/work-items-route.test.ts src/gateway/__tests__/workflow-definitions-route.test.ts
+  pnpm --filter hundredfold test -- src/gateway/__tests__/chat-activity-route.test.ts src/gateway/__tests__/work-items-route.test.ts src/gateway/__tests__/workflow-definitions-route.test.ts
   ```
 
   Expected RED finds no activity block after a successful mutation.
@@ -997,7 +997,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 - [ ] **Step 7: Verify GREEN and commit Task 7**
 
   ```bash
-  pnpm --filter jinn-cli test -- src/shared/__tests__/activity-receipts.test.ts src/gateway/__tests__/chat-activity-route.test.ts src/gateway/__tests__/streamed-turn-settlement.test.ts src/gateway/__tests__/work-items-route.test.ts src/gateway/__tests__/workflow-definitions-route.test.ts src/mcp/__tests__/work-item-tools.test.ts src/mcp/__tests__/workflow-tools.test.ts src/mcp/__tests__/server.test.ts src/mcp/__tests__/toolkit.test.ts src/engines/__tests__/claude-interactive.test.ts src/engines/__tests__/codex-interactive.test.ts src/engines/__tests__/pi.test.ts src/engines/__tests__/grok.test.ts src/engines/__tests__/hermes-protocol.test.ts
+  pnpm --filter hundredfold test -- src/shared/__tests__/activity-receipts.test.ts src/gateway/__tests__/chat-activity-route.test.ts src/gateway/__tests__/streamed-turn-settlement.test.ts src/gateway/__tests__/work-items-route.test.ts src/gateway/__tests__/workflow-definitions-route.test.ts src/mcp/__tests__/work-item-tools.test.ts src/mcp/__tests__/workflow-tools.test.ts src/mcp/__tests__/server.test.ts src/mcp/__tests__/toolkit.test.ts src/engines/__tests__/claude-interactive.test.ts src/engines/__tests__/codex-interactive.test.ts src/engines/__tests__/pi.test.ts src/engines/__tests__/grok.test.ts src/engines/__tests__/hermes-protocol.test.ts
   pnpm --filter @hundredfold/web test -- src/hooks/__tests__/use-live-session.test.ts
   ```
 
@@ -1174,7 +1174,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 - [ ] **Step 2: Run docs RED**
 
   ```bash
-  pnpm --filter jinn-cli test -- src/shared/__tests__/template-company-doctrine.test.ts src/cli/__tests__/migrate-prompt.test.ts src/mcp/__tests__/context-diet.test.ts src/mcp/__tests__/template-diet-tranche.test.ts
+  pnpm --filter hundredfold test -- src/shared/__tests__/template-company-doctrine.test.ts src/cli/__tests__/migrate-prompt.test.ts src/mcp/__tests__/context-diet.test.ts src/mcp/__tests__/template-diet-tranche.test.ts
   ```
 
   Expected RED identifies the current auto-mint and mirrored-gate wording.
@@ -1215,7 +1215,7 @@ Todo status is never advanced by Workflow execution. The COO/reviewer updates ea
 - [ ] **Step 1: Run the complete focused backend matrix**
 
   ```bash
-  pnpm --filter jinn-cli test -- src/shared/__tests__/company-activity-blocks.test.ts src/shared/__tests__/activity-receipts.test.ts src/sessions/__tests__/messages-partial.test.ts src/sessions/__tests__/workflow-provenance.test.ts src/sessions/__tests__/legacy-workflow-session-compat.test.ts src/sessions/__tests__/callback-deliveries.test.ts src/sessions/__tests__/callbacks.test.ts src/workflows/__tests__/run-store.test.ts src/workflows/__tests__/run-idempotency.test.ts src/workflows/__tests__/todo-decoupling.test.ts src/workflows/__tests__/native-approvals.test.ts src/workflows/__tests__/reporting.test.ts src/workflows/__tests__/todo-status-trigger.test.ts src/workflows/__tests__/todo-replay-watermark.test.ts src/workflows/__tests__/poll-trigger.test.ts src/workflows/__tests__/event-trigger.test.ts src/workflows/__tests__/run-reconciler.test.ts src/gateway/__tests__/workflow-definitions-route.test.ts src/gateway/__tests__/workflow-events-route.test.ts src/gateway/__tests__/workflow-session-grouping.test.ts src/gateway/__tests__/workflow-report-reliability.test.ts src/gateway/__tests__/chat-activity-route.test.ts src/gateway/__tests__/streamed-turn-settlement.test.ts src/gateway/__tests__/callback-reliability.test.ts src/gateway/__tests__/status-reconciler.test.ts src/gateway/__tests__/manager-visibility.test.ts src/gateway/__tests__/work-item-approval-route.test.ts src/gateway/__tests__/work-items-route.test.ts src/gateway/__tests__/server-boot-ordering.test.ts src/mcp/__tests__/workflow-tools.test.ts src/mcp/__tests__/work-item-tools.test.ts src/mcp/__tests__/tool-manifest-budget.test.ts src/mcp/__tests__/server.test.ts src/mcp/__tests__/toolkit.test.ts src/engines/__tests__/claude-interactive.test.ts src/engines/__tests__/codex-interactive.test.ts src/engines/__tests__/pi.test.ts src/engines/__tests__/grok.test.ts src/engines/__tests__/hermes-protocol.test.ts src/cli/__tests__/workflow.test.ts src/shared/__tests__/template-company-doctrine.test.ts src/cli/__tests__/migrate-prompt.test.ts
+  pnpm --filter hundredfold test -- src/shared/__tests__/company-activity-blocks.test.ts src/shared/__tests__/activity-receipts.test.ts src/sessions/__tests__/messages-partial.test.ts src/sessions/__tests__/workflow-provenance.test.ts src/sessions/__tests__/legacy-workflow-session-compat.test.ts src/sessions/__tests__/callback-deliveries.test.ts src/sessions/__tests__/callbacks.test.ts src/workflows/__tests__/run-store.test.ts src/workflows/__tests__/run-idempotency.test.ts src/workflows/__tests__/todo-decoupling.test.ts src/workflows/__tests__/native-approvals.test.ts src/workflows/__tests__/reporting.test.ts src/workflows/__tests__/todo-status-trigger.test.ts src/workflows/__tests__/todo-replay-watermark.test.ts src/workflows/__tests__/poll-trigger.test.ts src/workflows/__tests__/event-trigger.test.ts src/workflows/__tests__/run-reconciler.test.ts src/gateway/__tests__/workflow-definitions-route.test.ts src/gateway/__tests__/workflow-events-route.test.ts src/gateway/__tests__/workflow-session-grouping.test.ts src/gateway/__tests__/workflow-report-reliability.test.ts src/gateway/__tests__/chat-activity-route.test.ts src/gateway/__tests__/streamed-turn-settlement.test.ts src/gateway/__tests__/callback-reliability.test.ts src/gateway/__tests__/status-reconciler.test.ts src/gateway/__tests__/manager-visibility.test.ts src/gateway/__tests__/work-item-approval-route.test.ts src/gateway/__tests__/work-items-route.test.ts src/gateway/__tests__/server-boot-ordering.test.ts src/mcp/__tests__/workflow-tools.test.ts src/mcp/__tests__/work-item-tools.test.ts src/mcp/__tests__/tool-manifest-budget.test.ts src/mcp/__tests__/server.test.ts src/mcp/__tests__/toolkit.test.ts src/engines/__tests__/claude-interactive.test.ts src/engines/__tests__/codex-interactive.test.ts src/engines/__tests__/pi.test.ts src/engines/__tests__/grok.test.ts src/engines/__tests__/hermes-protocol.test.ts src/cli/__tests__/workflow.test.ts src/shared/__tests__/template-company-doctrine.test.ts src/cli/__tests__/migrate-prompt.test.ts
   ```
 
   Expected GREEN: every listed file passes. Record the Vitest file/test counts and duration in the implementation handoff.

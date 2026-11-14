@@ -35,7 +35,7 @@ Replace the universal no-self-approval string expectation with assertions requir
 
 - [ ] **Step 2: Run the focused test to verify RED**
 
-Run: `pnpm --filter jinn-cli exec vitest run src/shared/__tests__/template-company-doctrine.test.ts`
+Run: `pnpm --filter hundredfold exec vitest run src/shared/__tests__/template-company-doctrine.test.ts`
 
 Expected: FAIL because the current playbooks do not contain the corrected contract wording.
 

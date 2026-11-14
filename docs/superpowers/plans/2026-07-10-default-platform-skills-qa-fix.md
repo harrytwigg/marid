@@ -33,7 +33,7 @@ Require `request_work_item_approval`, `decide_work_item_approval`, and `escalate
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run `pnpm --filter jinn-cli exec vitest run src/shared/__tests__/template-company-doctrine.test.ts` and confirm failure on missing approval-tool/attachment prose.
+Run `pnpm --filter hundredfold exec vitest run src/shared/__tests__/template-company-doctrine.test.ts` and confirm failure on missing approval-tool/attachment prose.
 
 ### Task 2: Correct the three playbooks
 

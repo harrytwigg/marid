@@ -16,6 +16,8 @@ export const KEEP_PATTERNS = [
   // App identity: a new bundle id is a new app, so the ids, the Java package dirs and the old URL scheme stay.
   /run\.jinn\.shell(?:\.gateway)?/g,
   /run\/jinn\/shell/g,
+  // The old command a package still installs, so a script that runs it keeps working for the compatibility window.
+  /"jinn": "\.\/dist\/bin\/legacy-forwarder\.js"/g,
   /jinn:\/\//g,
   // Names a database schema or a stored value refers to. Renaming them would invalidate stored data.
   /jinn_callback_identity/g,
@@ -27,17 +29,6 @@ export const KEEP_PATTERNS = [
   /__jinn_service_start__/g,
 ];
 
-/**
- * Names that belong to how the product is installed and published. The distribution step moves them; until
- * it has, `--skip-distribution` leaves them as they are.
- */
-export const DISTRIBUTION_PATTERNS = [/jinn-cli/g, /release-jinn-cli/g];
-export const DISTRIBUTION_PATHS = [
-  /^Formula\//,
-  /^\.github\/workflows\/(?:bump-formula|publish-npm)\.yml$/,
-  /^\.claude\/skills\/release-jinn-cli\//,
-  /^docker-compose\.yml$/,
-];
 
 /**
  * Tests whose subject is the old name: an install made before the rename, or a build that says another codename and
@@ -78,7 +69,6 @@ export const LEGACY_FIXTURE_TESTS = [
   "packages/hundredfold/src/shared/__tests__/codename.test.ts",
   "packages/hundredfold/src/shared/__tests__/command-policy.test.ts",
   "packages/hundredfold/src/shared/__tests__/engine-health-opencode.test.ts",
-  "packages/hundredfold/src/shared/__tests__/homebrew-formula.test.ts",
   "packages/hundredfold/src/shared/__tests__/host-assets.test.ts",
   "packages/hundredfold/src/shared/__tests__/opencode-subscription.test.ts",
   "packages/hundredfold/src/shared/__tests__/sandbox-env.test.ts",
@@ -94,7 +84,6 @@ export const LEGACY_FIXTURE_TESTS = [
   "packages/web/src/lib/__tests__/legacy-storage.test.ts",
   "packages/web/src/plugins/__tests__/runtime-loader-renamed.test.ts",
   "scripts/__tests__/check-footguns.test.mjs",
-  "scripts/__tests__/publish-workflow.test.mjs",
   "scripts/__tests__/upgrade-verify.test.mjs",
 ];
 
@@ -129,21 +118,3 @@ export const FROZEN_SUBTREES = [
 /** Name-keeping subtrees: the part after the match keeps its file and directory names. */
 FROZEN_SUBTREES.push(/^packages\/shell\/src-tauri\/gen\//);
 
-/**
- * The documentation step moves these. While it has not run, `--skip-docs` leaves them out of both the rewrite
- * and the guard; once it has, the flag goes from the CI step.
- */
-export const DOCS_SCOPE = [
-  /^docs\//,
-  /^specs\//,
-  /^\.specify\//,
-  /^\.plans\//,
-  /^\.claude\/skills\//,
-  /^AGENTS\.md$/,
-  /^README\.md$/,
-  /^TESTING\.md$/,
-  /^THIRD-PARTY-NOTICES\.md$/,
-  /^\.github\/CONTRIBUTING\.md$/,
-  /^packages\/[^/]+\/(?:README|TESTING|THIRD-PARTY-NOTICES)\.md$/,
-  /^examples\/.*\.md$/,
-];

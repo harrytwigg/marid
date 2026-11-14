@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-05-14-interactive-tui-engine-design.md`
 
-**Test commands:** single file - `npx tsx --test packages/hundredfold/src/<path>.test.ts`; full daemon suite - `pnpm --filter @hundredfoldjinn-cli test`; typecheck - `pnpm --filter @hundredfoldjinn-cli typecheck`.
+**Test commands:** single file - `npx tsx --test packages/hundredfold/src/<path>.test.ts`; full daemon suite - `pnpm --filter @hundredfoldhundredfold test`; typecheck - `pnpm --filter @hundredfoldhundredfold typecheck`.
 
 > **Assumptions to revisit after Phase 0** are tagged **[SPIKE-DEP]**. If a Phase 0 finding contradicts an assumption, update the affected task before implementing it.
 
@@ -187,7 +187,7 @@ Then update the two `engine.run({...})` call sites to pass it: `manager.ts` `run
 - [ ] **Step 8: Run typecheck + commit**
 
 ```bash
-pnpm --filter @hundredfoldjinn-cli typecheck
+pnpm --filter @hundredfoldhundredfold typecheck
 git add packages/hundredfold/src/shared/types.ts packages/hundredfold/src/shared/config.ts packages/hundredfold/src/shared/config.test.ts packages/hundredfold/src/sessions/manager.ts packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(config): interactive engine config keys + normalization + EngineRunOpts.source"
 ```
@@ -202,7 +202,7 @@ git commit -m "feat(config): interactive engine config keys + normalization + En
 - [ ] **Step 2: Typecheck + commit**
 
 ```bash
-pnpm --filter @hundredfoldjinn-cli typecheck
+pnpm --filter @hundredfoldhundredfold typecheck
 git add packages/hundredfold/src/cli/setup.ts
 git commit -m "feat(setup): emit explicit engines.claude.mode in default config"
 ```
@@ -213,7 +213,7 @@ git commit -m "feat(setup): emit explicit engines.claude.mode in default config"
 - Modify: `packages/hundredfold/package.json` (dependencies)
 - Modify: `packages/hundredfold/src/shared/paths.ts`
 
-- [ ] **Step 1: Add dependency.** Run `pnpm --filter @hundredfoldjinn-cli add node-pty`. Verify it installs a prebuild (no compiler error). Record the resolved version.
+- [ ] **Step 1: Add dependency.** Run `pnpm --filter @hundredfoldhundredfold add node-pty`. Verify it installs a prebuild (no compiler error). Record the resolved version.
 
 - [ ] **Step 2: Add paths.** In `paths.ts`, after `PID_FILE`:
 
@@ -740,7 +740,7 @@ if (method === "POST" && pathname === "/api/internal/hook") {
 - [ ] **Step 7: Typecheck + commit**
 
 ```bash
-pnpm --filter @hundredfoldjinn-cli typecheck
+pnpm --filter @hundredfoldhundredfold typecheck
 git add packages/hundredfold/src/gateway/hook-endpoint.ts packages/hundredfold/src/gateway/hook-endpoint.test.ts packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(gateway): /api/internal/hook endpoint with loopback+secret auth"
 ```
@@ -1634,7 +1634,7 @@ Expected: PASS (4 `TurnResolver` tests). The engine itself is integration-tested
 - [ ] **Step 6: Typecheck + commit**
 
 ```bash
-pnpm --filter @hundredfoldjinn-cli typecheck
+pnpm --filter @hundredfoldhundredfold typecheck
 git add packages/hundredfold/src/engines/claude-interactive.ts packages/hundredfold/src/engines/claude-interactive.test.ts
 git commit -m "feat(engine): InteractiveClaudeEngine + TurnResolver completion contract"
 ```
@@ -1871,7 +1871,7 @@ import { rateLimitFromStopFailure } from "./interactive-ratelimit.js";
   }
 ```
 
-- [ ] **Step 3: Typecheck.** `pnpm --filter @hundredfoldjinn-cli typecheck` - clean (the modules from 5.1/5.2 now resolve).
+- [ ] **Step 3: Typecheck.** `pnpm --filter @hundredfoldhundredfold typecheck` - clean (the modules from 5.1/5.2 now resolve).
 
 - [ ] **Step 4: Run the engine's unit test** to confirm no regression: `npx tsx --test packages/hundredfold/src/engines/claude-interactive.test.ts` - PASS.
 
@@ -1937,12 +1937,12 @@ if (claudeCfg.mode === "interactive") {
 
 - [ ] **Step 5: In `cleanup()`**, ensure `claudeEngine.killAll()` runs (it already does via the engines map - confirm the interactive engine is in that map) and delete `GATEWAY_INFO_FILE`.
 
-- [ ] **Step 6: Typecheck + manual boot test.** `pnpm --filter @hundredfoldjinn-cli build && HUNDREDFOLD_HOME=~/.hundredfold node packages/hundredfold/dist/bin/hundredfold.js start` with `engines.claude.mode: interactive` in config - confirm the log says "INTERACTIVE mode", `~/.hundredfold/gateway.json` exists with a `secret`, `~/.hundredfold/hook-relay.mjs` exists, and `~/.claude.json` has the HUNDREDFOLD_HOME trust entry. Stop the gateway; confirm `gateway.json` is removed.
+- [ ] **Step 6: Typecheck + manual boot test.** `pnpm --filter @hundredfoldhundredfold build && HUNDREDFOLD_HOME=~/.hundredfold node packages/hundredfold/dist/bin/hundredfold.js start` with `engines.claude.mode: interactive` in config - confirm the log says "INTERACTIVE mode", `~/.hundredfold/gateway.json` exists with a `secret`, `~/.hundredfold/hook-relay.mjs` exists, and `~/.claude.json` has the HUNDREDFOLD_HOME trust entry. Stop the gateway; confirm `gateway.json` is removed.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-pnpm --filter @hundredfoldjinn-cli typecheck
+pnpm --filter @hundredfoldhundredfold typecheck
 git add packages/hundredfold/src/gateway/server.ts packages/hundredfold/src/gateway/api.ts
 git commit -m "feat(gateway): boot wiring for interactive engine (gateway.json, trust, relay)"
 ```
@@ -1983,7 +1983,7 @@ git commit -m "fix(gateway): wire hook endpoint to populated context"
 - [ ] **Step 6: Commit**
 
 ```bash
-pnpm --filter @hundredfoldjinn-cli typecheck
+pnpm --filter @hundredfoldhundredfold typecheck
 git add packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/sessions/manager.ts packages/hundredfold/src/gateway/server.ts
 git commit -m "feat: route session teardown through releaseSession; fix resetSession engine kill"
 ```
@@ -2073,7 +2073,7 @@ Implement the body fully: maintain a per-session ring buffer of recent PTY outpu
 - [ ] **Step 6: Commit**
 
 ```bash
-pnpm --filter @hundredfoldjinn-cli typecheck
+pnpm --filter @hundredfoldhundredfold typecheck
 git add packages/hundredfold/src/gateway/pty-ws.ts packages/hundredfold/src/gateway/server.ts packages/hundredfold/src/engines/claude-interactive.ts
 git commit -m "feat(gateway): dedicated /ws/pty channel + per-session scrollback buffer"
 ```
@@ -2315,7 +2315,7 @@ git commit -m "feat(web): keep recently-viewed chats mounted for snappy switchin
 - [ ] **Step 5: Typecheck + commit**
 
 ```bash
-pnpm --filter @hundredfoldjinn-cli typecheck
+pnpm --filter @hundredfoldhundredfold typecheck
 git add packages/hundredfold/src/sessions/registry.ts packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/engines/claude-interactive.ts packages/web/src/app/chat/page.tsx
 git commit -m "feat: per-session KEEP ALIVE control (DB column + API + web toggle)"
 ```
@@ -2340,7 +2340,7 @@ git commit -m "feat: per-session KEEP ALIVE control (DB column + API + web toggl
 - [ ] **Step 5: Commit**
 
 ```bash
-pnpm --filter @hundredfoldjinn-cli typecheck
+pnpm --filter @hundredfoldhundredfold typecheck
 git add packages/hundredfold/src/sessions/fork.ts
 git commit -m "feat(fork): interactive-mode fork bills as cli and releases source PTY"
 ```
@@ -2369,7 +2369,7 @@ git commit -m "feat(gateway): reap orphaned PTYs on boot via gateway.json pids"
 
 ### Task 9.2: Full suite + typecheck green
 
-- [ ] **Step 1: Run the full daemon test suite.** `pnpm --filter @hundredfoldjinn-cli test` - all green.
+- [ ] **Step 1: Run the full daemon test suite.** `pnpm --filter @hundredfoldhundredfold test` - all green.
 - [ ] **Step 2: Typecheck both packages.** `pnpm typecheck` - clean.
 - [ ] **Step 3: Run the existing e2e if present.** `pnpm test:e2e` - no regressions.
 - [ ] **Step 4: Final commit** (if any fixes were needed)

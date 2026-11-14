@@ -399,13 +399,13 @@ test("derives baseline and candidate versions instead of hard-coding an obsolete
   assert.equal(typeof upgradeLab.readInstalledPackageVersion, "function")
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "hundredfold-upgrade-version-"))
   try {
-    fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "jinn-cli", version: "0.28.0" }))
+    fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "hundredfold", version: "0.28.0" }))
     assert.equal(upgradeLab.readInstalledPackageVersion(root), "0.28.0")
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }
   const runner = fs.readFileSync(path.resolve("scripts/upgrade-lab/run.mjs"), "utf8")
-  assert.doesNotMatch(runner, /jinn-cli@0\.25\.0/)
+  assert.doesNotMatch(runner, /hundredfold@0\.25\.0/)
   assert.doesNotMatch(runner, /packageVersion:\s*"0\.26\.0"/)
   assert.doesNotMatch(runner, /migrations",\s*"0\.26\.0"/)
 })

@@ -4,7 +4,7 @@
 
 **Goal:** Make the shipped operating manual fully MCP/Todo/Workflow/Trigger-first and make the 0.26.0 autonomy migration reachable and accurate without overwriting a customized live instance.
 
-**Architecture:** Keep the canonical fresh-install doctrine in `template/CLAUDE.md`; setup continues to expose the same content to Codex through the `AGENTS.md` symlink/copy path. Keep version-range migration mechanics unchanged, but align `jinn-cli`'s package version with the already-staged 0.26.0 migration so `(instance, package]` scanning reaches it. Strengthen release-facing tests against real template and package files, and place the operator-specific proposed reconciliation outside the public repository.
+**Architecture:** Keep the canonical fresh-install doctrine in `template/CLAUDE.md`; setup continues to expose the same content to Codex through the `AGENTS.md` symlink/copy path. Keep version-range migration mechanics unchanged, but align `hundredfold`'s package version with the already-staged 0.26.0 migration so `(instance, package]` scanning reaches it. Strengthen release-facing tests against real template and package files, and place the operator-specific proposed reconciliation outside the public repository.
 
 **Tech Stack:** TypeScript, Vitest, Markdown templates, pnpm, Node.js 24.13.0
 
@@ -34,7 +34,7 @@ Add expectations that `CLAUDE.md` contains a dedicated `### Triggers` section wi
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `pnpm --filter jinn-cli test -- src/shared/__tests__/template-company-doctrine.test.ts`
+Run: `pnpm --filter hundredfold test -- src/shared/__tests__/template-company-doctrine.test.ts`
 
 Expected: FAIL because the dedicated Trigger doctrine is absent and stale service-routing claims remain.
 
@@ -69,7 +69,7 @@ Read `packages/hundredfold/package.json`, scan the real template migrations from
 
 - [ ] **Step 2: Run the focused migration test and verify RED**
 
-Run: `pnpm --filter jinn-cli test -- src/cli/__tests__/migrate-prompt.test.ts`
+Run: `pnpm --filter hundredfold test -- src/cli/__tests__/migrate-prompt.test.ts`
 
 Expected: FAIL because package `0.25.0` cannot reach migration `0.26.0` and the prompt lacks some reconciliation clauses.
 

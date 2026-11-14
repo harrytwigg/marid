@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 /**
- * Build a throwaway package that looks like an installed jinn-cli: the real
+ * Build a throwaway package that looks like an installed hundredfold: the real
  * postinstall script under scripts/, and a fake node-pty next door in
  * node_modules/ so the script's require.resolve finds it by walking up.
  */
@@ -64,7 +64,7 @@ function runPostinstall(script: string): string {
 
 const modeOf = (path: string) => statSync(path).mode & 0o777;
 
-describe.skipIf(process.platform === "win32")("jinn-cli postinstall: node-pty permissions", () => {
+describe.skipIf(process.platform === "win32")("hundredfold postinstall: node-pty permissions", () => {
   it("repairs a shipped prebuild left at 0644", () => {
     const { script, helpers } = stagePackage([
       { dir: `prebuilds/${process.platform}-${process.arch}`, mode: 0o644 },

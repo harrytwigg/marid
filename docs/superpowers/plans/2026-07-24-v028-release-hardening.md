@@ -47,7 +47,7 @@ expect(first.prompt).toContain('"verifiedAt"')
 Run:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/migrations/__tests__/service.test.ts
+pnpm --filter hundredfold exec vitest run src/migrations/__tests__/service.test.ts
 ```
 
 Expected: failure because the current prompt only says “completion receipt” without the filename or schema.
@@ -71,7 +71,7 @@ The prompt must show this contract with the live migration key:
 Run:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run \
+pnpm --filter hundredfold exec vitest run \
   src/migrations/__tests__/service.test.ts \
   src/migrations/__tests__/snapshot.test.ts \
   src/migrations/__tests__/completion.test.ts
@@ -111,7 +111,7 @@ The report must include schema version, source path, SHA-256 for every source de
 Run:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run src/workflows/__tests__/import-v1.test.ts
+pnpm --filter hundredfold exec vitest run src/workflows/__tests__/import-v1.test.ts
 ```
 
 Expected: current code imports conditional/loop edges lossily and writes no report.
@@ -133,7 +133,7 @@ State that imported drafts are disabled, unsupported definitions and legacy run 
 Run:
 
 ```bash
-pnpm --filter jinn-cli exec vitest run \
+pnpm --filter hundredfold exec vitest run \
   src/workflows/__tests__/import-v1.test.ts \
   src/workflows/__tests__/repository-migrations.test.ts \
   src/workflows/__tests__/workflow-recovery.test.ts
@@ -225,8 +225,8 @@ git commit -m "test(upgrade): cover v0.26 and v0.27 to v0.28"
 - [ ] **Step 1: Regenerate and check the migration bundle**
 
 ```bash
-pnpm --filter jinn-cli migration:generate -- --base-ref v0.27.0 --version 0.28.0
-pnpm --filter jinn-cli migration:check -- --base-ref v0.27.0 --version 0.28.0
+pnpm --filter hundredfold migration:generate -- --base-ref v0.27.0 --version 0.28.0
+pnpm --filter hundredfold migration:check -- --base-ref v0.27.0 --version 0.28.0
 ```
 
 - [ ] **Step 2: Build once and pack the exact candidate**

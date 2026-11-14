@@ -410,7 +410,7 @@ describe("resolveOrgHierarchy", () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/Projects/hundredfold && pnpm --filter jinn-cli test -- --run src/gateway/__tests__/org-hierarchy.test.ts`
+Run: `cd ~/Projects/hundredfold && pnpm --filter hundredfold test -- --run src/gateway/__tests__/org-hierarchy.test.ts`
 Expected: FAIL - module `../org-hierarchy.js` does not exist
 
 - [ ] **Step 3: Commit failing tests**
@@ -686,7 +686,7 @@ export function resolveOrgHierarchy(
 
 - [ ] **Step 2: Run tests to verify they pass**
 
-Run: `cd ~/Projects/hundredfold && pnpm --filter jinn-cli test -- --run src/gateway/__tests__/org-hierarchy.test.ts`
+Run: `cd ~/Projects/hundredfold && pnpm --filter hundredfold test -- --run src/gateway/__tests__/org-hierarchy.test.ts`
 Expected: ALL PASS
 
 - [ ] **Step 3: Run full typecheck**

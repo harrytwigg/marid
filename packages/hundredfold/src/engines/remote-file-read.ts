@@ -13,7 +13,7 @@ import { gatherFacts, remoteSessionHome, shq, sshRun, SSH_CONNECTION_FAILED, typ
  * already uses to stage sessions.
  *
  * The standing file-read policy is applied ON the remote host, by the remote's
- * own jinn-cli install (whose version {@link gatherFacts} has already pinned to
+ * own hundredfold install (whose version {@link gatherFacts} has already pinned to
  * ours): `vetLocalFileForIngestion` / `readLocalFileForIngestion` from
  * `shared/file-read-policy.js`, with the session's stage dir as its home. That
  * is the same function, judged against the same filesystem, that the remote

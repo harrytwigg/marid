@@ -31,7 +31,7 @@ in PR #93. The phase-to-PR map:
 - **Docs** (FR-043): update the template docs and skills, and the repository docs, that the
   change affects, in the same PR.
 - **Instance migration** (FR-044): if anything under `packages/hundredfold/template/` changed, run
-  `pnpm --filter jinn-cli migration:generate -- --base-ref <latest release tag> --version <next version> --allow-unreleased`,
+  `pnpm --filter hundredfold migration:generate -- --base-ref <latest release tag> --version <next version> --allow-unreleased`,
   add this phase's paragraph to the release rationale, and pass the same command with
   `migration:check`. If another phase merged first, rebase and regenerate.
 

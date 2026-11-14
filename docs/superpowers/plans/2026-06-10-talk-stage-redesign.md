@@ -794,8 +794,8 @@ git commit -m "feat(talk): content-stage focus — card focal ring, transcript d
 
 - [ ] **Step 4: Full gates**
 
-Run: `pnpm --filter @hundredfold/web exec tsc --noEmit && pnpm --filter @hundredfold/web test -- --run && pnpm --filter @hundredfold/web build && pnpm --filter jinn-cli test -- --run`
-Expected: all green (jinn-cli untouched; `messages-partial.test.ts` is a known pre-existing flake — rerun isolated if it trips).
+Run: `pnpm --filter @hundredfold/web exec tsc --noEmit && pnpm --filter @hundredfold/web test -- --run && pnpm --filter @hundredfold/web build && pnpm --filter hundredfold test -- --run`
+Expected: all green (hundredfold untouched; `messages-partial.test.ts` is a known pre-existing flake — rerun isolated if it trips).
 
 - [ ] **Step 5: Commit**
 

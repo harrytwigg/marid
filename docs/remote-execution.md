@@ -52,8 +52,8 @@ locally.
      See *Running Muse Code remotely* below.
 2. **Node.js**. Note the PATH caveat below — this is the single most likely
    thing to bite you.
-3. **`jinn-cli` at the gateway's exact version**, installed globally:
-   `npm install -g jinn-cli@<version>`. It is never started as a daemon there —
+3. **`hundredfold` at the gateway's exact version**, installed globally:
+   `npm install -g hundredfold@<version>`. It is never started as a daemon there —
    it supplies the MCP server entrypoints, which are absolute paths that must
    exist on that machine. A version mismatch is refused at spawn with the
    command that fixes it.
@@ -82,7 +82,7 @@ would ever arrive and the turn would hang forever with nothing reported.
 
 Hundredfold resolves nvm's layout directly rather than sourcing `nvm.sh` (which is
 bash-only, and `/bin/sh` is `dash` on Debian-family systems including Raspberry
-Pi OS), honouring nvm's `default` alias — a global `jinn-cli` lives under one
+Pi OS), honouring nvm's `default` alias — a global `hundredfold` lives under one
 version's tree, so taking the newest version instead would report hundredfold missing
 on a host where it is installed perfectly well. The resolved directory is then
 prepended to the session's PATH so the hook relay runs.
@@ -308,7 +308,7 @@ session, all of them consequences of Pi being a batch engine rather than a TUI:
 - **The company toolset arrives as a generated extension, not an
   `--mcp-config`.** Pi loads the built-in `hundredfold` server as a module running
   in-process, and that module's imports are absolute paths. The remote copy is
-  regenerated against the remote install's own `jinn-cli` — which is why the
+  regenerated against the remote install's own `hundredfold` — which is why the
   version match is enforced there too — and reaches the gateway over the same
   reverse tunnel. The bearer *and* this session's capability are staged into a
   0600 file the remote command sources, never put on the command line, which is

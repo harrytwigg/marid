@@ -1,5 +1,5 @@
 {
-  "name": "jinn-cli",
+  "name": "hundredfold",
   "version": "0.33.3",
   "description": "Lightweight AI gateway daemon orchestrating Claude Code, Codex, Grok, and Antigravity CLI",
   "license": "MIT",
@@ -8,7 +8,8 @@
     "node": ">=22"
   },
   "bin": {
-    "hundredfold": "./dist/bin/hundredfold.js"
+    "hundredfold": "./dist/bin/hundredfold.js",
+    "jinn": "./dist/bin/legacy-forwarder.js"
   },
   "main": "./dist/src/index.js",
   "types": "./dist/src/index.d.ts",
@@ -100,13 +101,13 @@
     "cron",
     "slack"
   ],
-  "homepage": "https://github.com/hristo2612/jinn#readme",
+  "homepage": "https://github.com/hundredfoldhq/hundredfold#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hristo2612/jinn.git",
+    "url": "git+https://github.com/hundredfoldhq/hundredfold.git",
     "directory": "packages/hundredfold"
   },
   "bugs": {
-    "url": "https://github.com/hristo2612/jinn/issues"
+    "url": "https://github.com/hundredfoldhq/hundredfold/issues"
   }
 }

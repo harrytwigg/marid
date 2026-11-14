@@ -1,12 +1,12 @@
-class Jinn < Formula
+class Hundredfold < Formula
   desc "Lightweight AI gateway daemon orchestrating Claude Code and Codex"
-  homepage "https://github.com/hristo2612/jinn"
-  url "https://registry.npmjs.org/jinn-cli/-/jinn-cli-0.33.3.tgz"
+  homepage "https://github.com/hundredfoldhq/hundredfold"
+  url "https://registry.npmjs.org/hundredfold/-/hundredfold-0.33.3.tgz"
   sha256 "fb1f9e471878603c286fb5fa25791cb3a1a98f4ad427dddde1f45a9681f9a5c8"
   license "MIT"
 
   livecheck do
-    url "https://registry.npmjs.org/jinn-cli"
+    url "https://registry.npmjs.org/hundredfold"
     regex(/"latest":\s*"(\d+(?:\.\d+)+)"/)
   end
 
@@ -35,20 +35,20 @@ class Jinn < Formula
   def caveats
     <<~EOS
       To get started, run:
-        jinn setup
+        hundredfold setup
 
       Then start the gateway daemon:
-        jinn start
+        hundredfold start
 
       The web dashboard will be available at http://localhost:7777
     EOS
   end
 
   test do
-    assert_match version.to_s, shell_output("#{bin}/jinn --version")
-    assert_match "Usage", shell_output("#{bin}/jinn --help")
+    assert_match version.to_s, shell_output("#{bin}/hundredfold --version")
+    assert_match "Usage", shell_output("#{bin}/hundredfold --help")
 
-    cd libexec/"lib/node_modules/jinn-cli" do
+    cd libexec/"lib/node_modules/hundredfold" do
       # Must OPEN a database, not just require the module. better-sqlite3
       # resolves its binding lazily inside the Database constructor, so a bare
       # require('better-sqlite3') passes even when no compiled addon exists

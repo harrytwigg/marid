@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Cross-platform build for jinn-cli.
+ * Cross-platform build for hundredfold.
  *
  * This was a shell one-liner (`rm -rf … && tsc && mkdir -p … && cp …`). npm and
  * pnpm run package scripts through the platform shell, which on Windows is cmd —
@@ -66,7 +66,7 @@ if (emittedFiles.length === 0) throw new Error("build: tsc reported no emitted f
 
 // 4. Embed the neutral gateway protocol runtime and declaration. Backend source
 //    consumes the workspace package through src/shared/gateway-events.ts, but
-//    jinn-cli is published independently. Copying both canonical artifacts into
+//    hundredfold is published independently. Copying both canonical artifacts into
 //    that relative module keeps shipped JavaScript and declarations aligned.
 const gatewayEventsRuntime = path.join(gatewayEventsRoot, "dist", "index.js");
 const gatewayEventsDeclaration = path.join(gatewayEventsRoot, "dist", "index.d.ts");

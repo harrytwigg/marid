@@ -1140,7 +1140,7 @@ lists the ten places that assume one account.
 - **FR-044**: **Instance migration.** A phase that changes anything under
   `packages/hundredfold/template/` MUST include the instance migration bundle for the next
   unreleased version in the same PR. It is generated with
-  `pnpm --filter jinn-cli migration:generate -- --base-ref <latest release tag> --version <next version> --allow-unreleased`
+  `pnpm --filter hundredfold migration:generate -- --base-ref <latest release tag> --version <next version> --allow-unreleased`
   (`packages/hundredfold/scripts/instance-migration-bundle.mjs:29`), and it passes the same command
   with `migration:check`, which the "Migration bundle" workflow runs. When two phases are in
   flight together (Phase 4 beside Phases 1 to 3), the one that merges second rebases and

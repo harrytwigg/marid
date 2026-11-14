@@ -51,7 +51,7 @@ export function assertTestRunIsIsolated(home: string, env: NodeJS.ProcessEnv = p
   throw new Error(
     `Refusing to run tests against a non-temp HUNDREDFOLD_HOME=${home}.\n` +
     `Tests must never touch the live gateway registry (${path.join(home, "sessions", "registry.db")}).\n` +
-    `Run the suite with the repo's own script — \`pnpm test\`, or \`pnpm --filter jinn-cli test\` — ` +
+    `Run the suite with the repo's own script — \`pnpm test\`, or \`pnpm --filter hundredfold test\` — ` +
     `which loads packages/hundredfold/vitest.config.ts and redirects HUNDREDFOLD_HOME to a temp dir.\n` +
     `Running \`npx vitest\` from the repo root bypasses that config and is what caused ` +
     `fixture data to be written into ~/.hundredfold on 2026-07-06 and 2026-07-25.`,

@@ -4,7 +4,7 @@
 
 ```bash
 pnpm test                      # whole repo, via turbo
-pnpm --filter jinn-cli test    # just this package
+pnpm --filter hundredfold test    # just this package
 ```
 
 Both load `packages/hundredfold/vitest.config.ts`. **Do not run `npx vitest` from the repo
@@ -39,7 +39,7 @@ unless `VITEST`/`VITEST_WORKER_ID` is set.
 ```
 Refusing to run tests against a non-temp HUNDREDFOLD_HOME=/Users/you/.hundredfold.
 Tests must never touch the live gateway registry (/Users/you/.hundredfold/sessions/registry.db).
-Run the suite with the repo's own script — `pnpm test`, or `pnpm --filter jinn-cli test` — ...
+Run the suite with the repo's own script — `pnpm test`, or `pnpm --filter hundredfold test` — ...
 ```
 
 The run fails at import time, before any test body executes and before any write.

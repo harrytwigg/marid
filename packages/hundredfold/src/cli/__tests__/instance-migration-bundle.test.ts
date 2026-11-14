@@ -42,7 +42,7 @@ function fixture(): string {
 
   fs.writeFileSync(
     path.join(root, "packages/hundredfold/package.json"),
-    JSON.stringify({ name: "jinn-cli", version: "0.26.0" }, null, 2) + "\n",
+    JSON.stringify({ name: "hundredfold", version: "0.26.0" }, null, 2) + "\n",
   )
 
   write(root, "CLAUDE.md", "target doctrine\n")
@@ -185,7 +185,7 @@ describe("instance migration bundle generator", () => {
     expect(run(root, "generate", ...args).status).toBe(0)
     fs.writeFileSync(
       path.join(root, "packages/hundredfold/package.json"),
-      JSON.stringify({ name: "jinn-cli", version: "0.25.0" }, null, 2) + "\n",
+      JSON.stringify({ name: "hundredfold", version: "0.25.0" }, null, 2) + "\n",
     )
 
     expect(run(root, "check", ...args).status).toBe(1)
@@ -225,7 +225,7 @@ describe("instance migration bundle generator", () => {
     git(root, "clean", "-fdq")
     fs.writeFileSync(
       path.join(root, "packages/hundredfold/package.json"),
-      JSON.stringify({ name: "jinn-cli", version: "0.26.0" }, null, 2) + "\n",
+      JSON.stringify({ name: "hundredfold", version: "0.26.0" }, null, 2) + "\n",
     )
     expect(run(root, "generate", "--base-ref", "v0.25.0", "--version", "0.26.0").status).toBe(1)
     expect(run(root, "generate", "--base-ref", "v0.25.0", "--version", "0.26.0", "--allow-empty").status).toBe(0)

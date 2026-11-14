@@ -31,7 +31,7 @@
 - Consumes: `{ portal?: { portalName?: string } }`; defaults the name to `Hundredfold` and derives the slug with setup's existing lowercase/whitespace-to-hyphen rule.
 
 - [ ] Write failing tests for default Hundredfold, mixed-case names with spaces, unknown placeholders, and non-Markdown/YAML files.
-- [ ] Run `pnpm --filter jinn-cli exec vitest run src/shared/__tests__/template-materialization.test.ts` and verify RED because the module does not exist.
+- [ ] Run `pnpm --filter hundredfold exec vitest run src/shared/__tests__/template-materialization.test.ts` and verify RED because the module does not exist.
 - [ ] Implement the three pure functions and replace setup's local replacement function and slug derivation with them.
 - [ ] Re-run the focused test and verify GREEN.
 

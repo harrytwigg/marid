@@ -31,7 +31,7 @@
 - [ ] Add a proxy-shaped Origin-less request with same-origin Fetch Metadata and rewritten loopback Host; expect fixed 403.
 - [ ] Add a malformed Host request; expect fixed non-reflective 400, no handler rejection, and a healthy follow-up request.
 - [ ] Add the fail-closed matrix for missing/invalid metadata, forwarding headers, wrong listener port, duplicate/ambiguous Host, DNS-rebinding-style Host, and auth-enabled anonymous access.
-- [ ] Run `pnpm --filter jinn-cli exec vitest run src/gateway/__tests__/browser-operator-authorization.test.ts` and record the expected authorization 200-vs-403 and malformed-authority 500/rejection-vs-400 failures.
+- [ ] Run `pnpm --filter hundredfold exec vitest run src/gateway/__tests__/browser-operator-authorization.test.ts` and record the expected authorization 200-vs-403 and malformed-authority 500/rejection-vs-400 failures.
 
 ### Task 2: Request-bound browser authorization
 

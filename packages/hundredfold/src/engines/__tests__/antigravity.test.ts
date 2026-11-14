@@ -40,7 +40,7 @@ describe("AntigravityEngine (shape)", () => {
 /**
  * Real spawn→answer smoke test. Gated behind AGY_E2E=1 because it needs `agy`
  * installed and an authenticated Google session on the host (CI/other machines
- * have neither). Run locally with: AGY_E2E=1 pnpm --filter jinn-cli exec vitest run antigravity
+ * have neither). Run locally with: AGY_E2E=1 pnpm --filter hundredfold exec vitest run antigravity
  */
 describe.skipIf(!process.env.AGY_E2E)("AntigravityEngine (e2e: real agy)", () => {
   it("spawns agy, sends a prompt, and reads the answer from the transcript", async () => {

@@ -9,6 +9,7 @@ import {
   deriveScenarioPort,
   hashUpgradeSurface,
   installTarball,
+  BASELINE_PACKAGE,
   latestPublishedTarball,
   listFiles,
   listSkillNames,
@@ -219,7 +220,7 @@ export async function main(argv = process.argv.slice(2)) {
     const scenarios = []
     for (const scenario of SCENARIOS) scenarios.push(await verifyScenario({ scenario, root, baseline, candidate }))
     result = { baselineVersion: baseline.version, candidateSha256: candidate.sha256, scenarios }
-    console.log(`PASS published jinn-cli@${baseline.version} -> candidate jinn-cli@${scenarios[0].candidateVersion} sha256=${candidate.sha256}`)
+    console.log(`PASS published ${BASELINE_PACKAGE}@${baseline.version} -> candidate hundredfold@${scenarios[0].candidateVersion} sha256=${candidate.sha256}`)
     for (const item of scenarios) console.log(`PASS ${item.scenario} port=${item.port} rewritten=${item.rewritten} added=${item.added.length} restoredMissing=${item.restoredMissing ?? "n/a"} retired=${item.retired.length} preservedModified=${item.preservedModified ?? "n/a"} backup=${item.backup}`)
     return result
   } finally {

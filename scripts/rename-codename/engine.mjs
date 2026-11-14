@@ -5,6 +5,9 @@ import path from "node:path";
 export const TARGET = "hundredfold";
 const WORD = /jinn|marid/gi;
 
+/** Names that are one phrase, not a word inside one: the old package is the new package, not `hundredfold-cli`. */
+export const PHRASES = [[/jinn-cli/g, "hundredfold"], [/Jinn-cli/g, "Hundredfold"]];
+
 /** `jinn` becomes `hundredfold`, `Jinn` `Hundredfold`, `JINN` `HUNDREDFOLD`; the same for `marid`. */
 export function mapWord(word) {
   if (word === word.toLowerCase()) return TARGET;
@@ -50,18 +53,24 @@ export function renameText(text, keep) {
       });
     }
     if (held.length > 0 && /jinn|marid/i.test(held.join(" "))) left.push({ line: index + 1, text: line, why: "pattern" });
+    for (const [pattern, replacement] of PHRASES) work = work.replace(pattern, replacement);
     return work.replace(WORD, mapWord).replace(/\u0000(\d+)\u0000/g, (_, i) => held[Number(i)]);
   });
   return { text: out.join("\n"), changed: out.some((line, i) => line !== lines[i]), left };
+}
+
+function renameSegment(text) {
+  for (const [pattern, replacement] of PHRASES) text = text.replace(pattern, replacement);
+  return text.replace(WORD, mapWord);
 }
 
 /** Rewrite a path, segment by segment. Under a frozen subtree the part after the matched prefix keeps its names. */
 export function renamePath(relPath, frozenSubtrees) {
   for (const subtree of frozenSubtrees) {
     const match = subtree.exec(relPath);
-    if (match) return relPath.slice(0, match[0].length).replace(WORD, mapWord) + relPath.slice(match[0].length);
+    if (match) return renameSegment(relPath.slice(0, match[0].length)) + relPath.slice(match[0].length);
   }
-  return relPath.replace(WORD, mapWord);
+  return renameSegment(relPath);
 }
 
 export function isBinary(buffer) {

@@ -2,7 +2,7 @@
 /**
  * Generates packages/hundredfold/THIRD-PARTY-NOTICES.md.
  *
- * jinn-cli publishes the web dashboard (dist/web) with its dependencies bundled
+ * hundredfold publishes the web dashboard (dist/web) with its dependencies bundled
  * in, so their licence notices have to travel with the tarball. This scans the
  * dependency set the web build bundles and writes one notices file:
  *

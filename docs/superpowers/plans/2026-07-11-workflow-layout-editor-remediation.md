@@ -133,7 +133,7 @@ expect(rawDefinitionSchema.additionalProperties).toBe(false)
 
 Run:
 ```bash
-pnpm --filter jinn-cli test -- src/workflows/__tests__/layout.test.ts src/workflows/__tests__/definition.test.ts src/workflows/__tests__/definition-store.test.ts src/mcp/__tests__/workflow-tools.test.ts 2>&1 | tee /tmp/workflow-layout-red-server.txt
+pnpm --filter hundredfold test -- src/workflows/__tests__/layout.test.ts src/workflows/__tests__/definition.test.ts src/workflows/__tests__/definition-store.test.ts src/mcp/__tests__/workflow-tools.test.ts 2>&1 | tee /tmp/workflow-layout-red-server.txt
 ```
 Expected: FAIL because `layout.ts`, `layout` metadata, unsupported edge-field validation, normalization policy, and plan diagnostics do not exist.
 
@@ -251,8 +251,8 @@ Use nested `additionalProperties:false` schemas for definition, nodes, edges, op
 
 Run:
 ```bash
-pnpm --filter jinn-cli test -- src/workflows/__tests__/layout.test.ts src/workflows/__tests__/definition.test.ts src/workflows/__tests__/definition-store.test.ts src/mcp/__tests__/workflow-tools.test.ts
-pnpm --filter jinn-cli typecheck
+pnpm --filter hundredfold test -- src/workflows/__tests__/layout.test.ts src/workflows/__tests__/definition.test.ts src/workflows/__tests__/definition-store.test.ts src/mcp/__tests__/workflow-tools.test.ts
+pnpm --filter hundredfold typecheck
 git diff --check
 git add packages/hundredfold/src/workflows/layout.ts packages/hundredfold/src/workflows/definition.ts packages/hundredfold/src/workflows/authoring.ts packages/hundredfold/src/workflows/sop.ts packages/hundredfold/src/workflows/definition-store.ts packages/hundredfold/src/mcp/workflow-tools.ts packages/hundredfold/src/gateway/api.ts packages/hundredfold/src/workflows/__tests__/layout.test.ts packages/hundredfold/src/workflows/__tests__/definition.test.ts packages/hundredfold/src/workflows/__tests__/definition-store.test.ts packages/hundredfold/src/mcp/__tests__/workflow-tools.test.ts
 test -n "$HUNDREDFOLD_PUBLIC_LEAK_PATTERN"; git diff --cached | grep -iE "$HUNDREDFOLD_PUBLIC_LEAK_PATTERN" && exit 1 || true
@@ -422,7 +422,7 @@ Start twice with the same idempotency key and assert one run id; start with JSON
 
 Run:
 ```bash
-pnpm --filter jinn-cli test -- src/workflows src/mcp/__tests__/workflow-tools.test.ts src/gateway/__tests__/workflow-run-fanout-route.test.ts
+pnpm --filter hundredfold test -- src/workflows src/mcp/__tests__/workflow-tools.test.ts src/gateway/__tests__/workflow-run-fanout-route.test.ts
 pnpm --filter @hundredfold/web test -- src/routes/workflow
 ```
 Expected: PASS with no snapshots as the sole proof of geometry.
@@ -489,11 +489,11 @@ Fail the script on any expanded-envelope overlap, non-loop `target.x < source.ri
 - [x] **Step 1: Run full builds/typechecks/tests**
 
 ```bash
-pnpm --filter jinn-cli typecheck
+pnpm --filter hundredfold typecheck
 pnpm --filter @hundredfold/web typecheck
-pnpm --filter jinn-cli test
+pnpm --filter hundredfold test
 pnpm --filter @hundredfold/web test
-pnpm --filter jinn-cli build
+pnpm --filter hundredfold build
 pnpm --filter @hundredfold/web build
 ```
 
