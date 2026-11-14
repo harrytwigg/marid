@@ -98,6 +98,8 @@ npm uninstall -g <old package>
 npm install -g hundredfold
 ```
 
+Installing the new package while the old one is still there fails with `EEXIST` on the old command's link (npm's own message), and nothing is changed; uninstall the old package and run the install again.
+
 Your home, configuration and conversations are untouched by either command; the first start of the new build moves
 the home over as described above.
 
